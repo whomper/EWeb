@@ -60,8 +60,69 @@ What follows from it:
   stops at ES5, so modern code bundles don't even parse. The engines in real browsers rely on
   just-in-time compilers that have no 68k version.
 
-The HTML and CSS cost per page isn't measured yet; that is the first milestone's job (see Order of
-work).
+What HTML and CSS cost is in the next section.
+
+## What NetSurf's HTML and CSS cost (first milestone, 16 Oct 2026)
+
+NetSurf's HTML parser (Hubbub) and CSS engine (LibCSS) were ported to plain TOS on `common/`, and
+`nsbench` (in `tests/bench`) measures them page by page: it parses the page into a tree, parses the
+stylesheets, then selects and composes every element's style the way NetSurf does. As
+`NSBENCH.TTP` it is 740 KB, of which NetSurf's code is about 700 KB.
+
+**The page set:** 258 real saved pages (the htmlparser-benchmark corpus: BBC, NYT, GitHub and
+others, 13–396 KB; the median page is 84 KB with 743 elements). The corpus keeps no linked
+stylesheets, so two real ones stand in for them: Pico (82 KB, rules on elements and attributes) and
+Bootstrap (233 KB, rules on classes). Each page's own `<style>` and `style=""` count too.
+
+**How:** every phase's 68030 instructions were counted under QEMU (`tests/bench/measure.py`), and the
+times use 5–8 million instructions a second, as above.
+
+| Phase (per page) | Median | Time | 90th percentile | Time |
+|---|---|---|---|---|
+| HTML parse | 15.9 M | 2.0–3.2 s | 31.3 M | 3.9–6.3 s |
+| CSS parse, Pico (once per site, if kept) | 33.0 M | 4.1–6.6 s | 36.0 M | 4.5–7.2 s |
+| CSS parse, Bootstrap | 103 M | 13–21 s | 105 M | 13–21 s |
+| Style for every element, Pico | 50.7 M | 6.3–10 s | 105 M | 13–21 s |
+| Style for every element, Bootstrap | 42.3 M | 5.3–8.5 s | 87.4 M | 11–17 s |
+| **All three, Pico, first visit** | **99.9 M** | **12–20 s** | **168 M** | **21–34 s** |
+| **HTML and styles, Pico already parsed** | **65.8 M** | **8–13 s** | **132 M** | **16–26 s** |
+
+Layout, drawing, images and the network come on top; they aren't measured yet.
+
+**Cross-check on an emulated Falcon** (`tests/bench/hatari.py`: Hatari 2.4.1, EmuTOS 1.4, a 68030
+at 32 MHz, Hatari's fastest, with a 68882 and TT-RAM, cycle-exact), one BBC News page (100 KB, 862
+elements) with Pico:
+
+| Phase | Emulated Falcon, 32 MHz | 68030 instructions | Rate |
+|---|---|---|---|
+| HTML parse | 4.15 s | 22.1 M | 5.3 M/s |
+| CSS parse | 7.29 s | 32.9 M | 4.5 M/s |
+| Style for every element | 14.58 s | 58.9 M | 4.0 M/s |
+
+The QEMU count is the Linux build's (glibc's `malloc`, not `common/`'s), so the rates are close, not
+exact. Scaled to 50 MHz they give about 6–8 M/s, if the DFB1's memory keeps up.
+
+**Standards:** Hubbub passes 1,139 of the 1,679 current tree-construction tests (the Web Platform
+Tests' `html/syntax/parsing`, 15 Oct 2026; `make h5test`): 67.8%, and the same as 68030 code. 198
+fragment tests don't apply (Hubbub has no fragment parsing). Without the two newest features,
+`<template>` (121 failures) and processing instructions (84, a 2026 change), it passes 76.6%. The
+rest are edge cases: script text cut short at the end of a file, `<ruby>`, newer elements such as
+`<search>`.
+
+**Where the time goes** (callgrind, the BBC page with Pico): selection is about half, close to a third
+of that composing each element's style with its parent's; parsing the CSS is a quarter; parsing the
+HTML a fifth. Two fifths of the HTML parse, and part of the CSS parse, is libparserutils turning UTF-8
+into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code is under 2%.
+
+**The first NetSurf-or-fresh calls:**
+- **HTML parser: Hubbub stays.** It costs 2–3 seconds on a median page, and a fresh parser would have
+  to match its 1,139 passing tests before it could count as better. The first gain is a UTF-8 path
+  that skips the decode and re-encode (HTML and CSS both read through it), measured on the page set.
+  `<template>` needs adding.
+- **CSS: where fresh code can win most.** Parsing and selection cost 3–9 times what the HTML does (5
+  times on the median page with Pico). LibCSS computes every property it knows, the spoken-media ones
+  too, for every element. A fresh engine that computes only what EWeb draws, and keeps parsed sheets
+  per site, is the first candidate; LibCSS stays as the yardstick until one beats it on the page set.
 
 ## The design
 
@@ -264,12 +325,17 @@ These break site terms, sites actively fight them, and this design doesn't need 
    CAPTCHAs first, before EWeb exists.
 2. **EWeb's first milestone:** port Hubbub and LibCSS, fetch a page directly, parse its HTML and lay
    out the text on the real Falcon, and measure what HTML and CSS cost there. That makes the first
-   NetSurf-or-fresh calls.
+   NetSurf-or-fresh calls. *Done so far (16 Oct 2026):* the port, the measurements on emulated
+   68030s and the first calls (above). *Still to do:* the timed run on your Falcon, fetching and
+   laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 
 ## Open questions
+
+- **Timing on your Falcon:** the family's rule is that only releases leave the build machine, so
+  `NSBENCH.TTP` needs EWeb's release workflow and a v0.1 release. Say if you want it.
 
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.
@@ -282,5 +348,7 @@ These break site terms, sites actively fight them, and this design doesn't need 
 - [Debian QuickJS package, built for m68k](https://packages.debian.org/sid/quickjs)
 - [NetUSBee (hardware.atari.org)](https://hardware.atari.org/netusbee/index.htm)
 - [debian-68k: NetUSBee throughput, about 300 KB/s](https://lists.debian.org/debian-68k/2026/07/msg00018.html)
+- [htmlparser-benchmark (the page set)](https://www.npmjs.com/package/htmlparser-benchmark)
+- [Web Platform Tests: html/syntax/parsing](https://github.com/web-platform-tests/wpt/tree/master/html/syntax/parsing)
 - [Cloudflare: detect a challenge page response](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response)
 - [Google reCAPTCHA: verifying the user's response (token valid for two minutes)](https://developers.google.com/recaptcha/docs/verify/)
