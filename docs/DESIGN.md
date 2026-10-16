@@ -8,7 +8,8 @@ it, and how EWeb gets past CAPTCHAs. There is no code yet.
 
 | Question | Your decision | What it means |
 |---|---|---|
-| Hardware | A **DFB1** board | A 68030 at 32–50 MHz (tested range), 64 or 128 MB of TT-RAM, and an optional FPU at half the CPU clock or on its own oscillator. EWeb is designed for 50 MHz. |
+| Hardware | A **DFB1** at **50 MHz** with an **FPU** and **128 MB of TT-RAM**, plus the Falcon's own **DSP** | EWeb is designed for exactly this Falcon. It uses the FPU for JavaScript's maths and the DSP for heavy number work (below). |
+| Network | A **NetUSBee** | An NE2000-style Ethernet adapter on the cartridge port. About 300 KB/s at best (one report, measured under Linux, not STinG); EFTP on your Falcon gives the real figure. |
 | Gateway | **An option, as in the other apps** | EWeb talks to sites itself by default. AERA-Gateway's `web` service is the alternative, and is the only way past CAPTCHAs (below). |
 | Code | **Our own code base** | Our own HTML parser, CSS engine, layout and GEM front end, built on AERA-Atari's `common/`. No NetSurf code. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM. There are no threads and no memory protection, so the code has to be careful with memory. |
@@ -43,13 +44,14 @@ What follows from it:
   The median web page ships about 0.6 MB of compressed JavaScript (Web Almanac 2024), well over 1 MB
   unpacked. Just compiling it would take roughly **2–5 minutes, before any of it runs**, and every click
   re-renders through the same slow path.
-- **Memory is not the problem.** The engine's heap stayed under about 3 MB in these tests. 64–128 MB
-  of TT-RAM is generous for a lean browser.
+- **Memory is not the problem.** The engine's heap stayed under about 3 MB in these tests. 128 MB of
+  TT-RAM is generous for a lean browser.
 - **The FPU helps less than you might hope.** All JavaScript numbers are floating point, so it speeds
   up script maths. Layout and image decoding can use integer arithmetic, so it doesn't change the
   picture.
-- **The DSP is the more useful helper.** `common/` already uses it for RSA in TLS; it could also scale
-  and dither images.
+- **The DSP is the more useful helper.** `common/` already uses it for RSA in TLS. EWeb's candidates
+  to move there are scaling and dithering images and the colour conversion in JPEG decoding, each
+  measured against the 68030 first.
 - **Engine choice.** QuickJS understands modern JavaScript syntax. Duktape, the engine NetSurf uses,
   stops at ES5, so modern code bundles don't even parse. The engines in real browsers rely on
   just-in-time compilers that have no 68k version.
@@ -182,8 +184,10 @@ These break site terms, sites actively fight them, and this design doesn't need 
 
 - **Some sites will still refuse** or ask more than once, especially banks and ticket sellers with
   strict scoring.
-- **Speed:** live view has to beat the two-minute limit. Expect a second or two per picture update,
-  depending on the Falcon's network adapter; to be measured.
+- **Speed:** live view has to beat the two-minute limit. At the NetUSBee's 300 KB/s or so, a whole
+  reCAPTCHA picture (about 230 KB before compression) arrives in under a second, and later updates
+  send only the tiles that change. Expect a second or two per update, decoding included; to be
+  measured.
 - **Google sign-in (optional):** signing into Google in the gateway's browser usually means fewer
   reCAPTCHAs, but that profile then holds your Google login.
 
@@ -221,9 +225,6 @@ These break site terms, sites actively fight them, and this design doesn't need 
 
 ## Open questions
 
-- **The DFB1 you have:** its clock, how much TT-RAM, and whether an FPU is fitted.
-- **The Falcon's network adapter** (EtherNEC, NetUSBee or other): it sets how fast pages and live view
-  arrive.
 - **Our own code base:** this page reads it as our own HTML parser and CSS engine too, not NetSurf's
   Hubbub and LibCSS. Confirm.
 - **JavaScript engine:** QuickJS carried in the repo, as above. Confirm.
@@ -234,5 +235,7 @@ These break site terms, sites actively fight them, and this design doesn't need 
 - [Web Almanac 2024: page weight](https://almanac.httparchive.org/en/2024/page-weight)
 - [NetSurf on Wikipedia (Duktape, licence)](https://en.wikipedia.org/wiki/NetSurf)
 - [Debian QuickJS package, built for m68k](https://packages.debian.org/sid/quickjs)
+- [NetUSBee (hardware.atari.org)](https://hardware.atari.org/netusbee/index.htm)
+- [debian-68k: NetUSBee throughput, about 300 KB/s](https://lists.debian.org/debian-68k/2026/07/msg00018.html)
 - [Cloudflare: detect a challenge page response](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response)
 - [Google reCAPTCHA: verifying the user's response (token valid for two minutes)](https://developers.google.com/recaptcha/docs/verify/)
