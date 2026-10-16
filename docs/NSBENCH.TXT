@@ -17,11 +17,19 @@ page wants a few megabytes of free memory.
 
 How to use it
 -------------
-1. Copy NSBENCH.TTP to a folder on your hard disk, with a page to test.
-   SAMPLE.HTM comes with it. To test a real page, save it on another
-   computer ("Save page as", HTML only) and copy it over with a short
-   name, such as BBC.HTM; its stylesheet too if you have it (BBC.CSS).
+1. Copy NSBENCH.TTP to a folder on your hard disk, with the pages that
+   come with it:
+     SAMPLE.HTM   a small page (1 KB)
+     NEWS.HTM     a made-up news front page with a Hebrew section, built
+                  to cost what the web's median page does (72 KB, 816
+                  elements)
+     NEWS.CSS     its stylesheet (83 KB), like a news site's
+   To test a real page too, save it on another computer ("Save page as",
+   HTML only) and copy it over with a short name, such as BBC.HTM; its
+   stylesheet too if you have it (BBC.CSS).
 2. Double-click NSBENCH.TTP and type the file names in the box:
+       NEWS.HTM NEWS.CSS
+   or
        SAMPLE.HTM
    or
        BBC.HTM BBC.CSS
@@ -31,7 +39,8 @@ How to use it
 Options (type them before the file names)
 -----------------------------------------
    -r 5      run it five times and show the average (good for small
-             pages: the timer counts in steps of 5 ms)
+             pages such as SAMPLE.HTM: the timer counts in steps of 5 ms;
+             NEWS.HTM takes long enough once)
    -P 1      the HTML only; -P 2 adds the stylesheets; -P 3 (the
              default) also gives every element its style
    -c 1460   feed the parser in pieces of this many bytes, as from the

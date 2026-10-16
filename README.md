@@ -21,11 +21,12 @@ and unpack it. It contains:
 | `NSBENCH.TTP` | the measuring tool, for any Falcon (TT-RAM used when there is some) |
 | `NSBENCH.TXT` | how to use it |
 | `SAMPLE.HTM` | a small page to try it on |
+| `NEWS.HTM`, `NEWS.CSS` | a made-up news front page and its stylesheet, built to cost what the web's median page does |
 
-1. Copy the three files to a folder on your hard disk, with any page you
-   want to test saved as a file.
-2. Double-click `NSBENCH.TTP` and type `SAMPLE.HTM` (or your page's name,
-   then its stylesheet's).
+1. Copy the files to a folder on your hard disk, with any page you want to
+   test saved as a file.
+2. Double-click `NSBENCH.TTP` and type `NEWS.HTM NEWS.CSS` (or `SAMPLE.HTM`,
+   or your page's name, then its stylesheet's).
 3. The results show on the screen and go into `NSBENCH.LOG`.
 
 **Needs:** an Atari Falcon; plain TOS, MagiC or MiNT.
@@ -54,7 +55,8 @@ the files.
 docs/DESIGN.md        the design
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
-                      the page set, the counting and the Hatari rig
+                      the page set, the counting, the Hatari rig and mkpage.py
+                      (NEWS.HTM and NEWS.CSS)
 tests/html5lib/       Hubbub against the Web Platform Tests' tree-construction tests
 tests/hebrew/         a Hebrew page in every Hebrew encoding
 atari/                the C library pieces NetSurf needs beyond common/

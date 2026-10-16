@@ -70,10 +70,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions; `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
   `NSBENCH.TTP` on an emulated 32 MHz Falcon (EmuTOS's `etos1024k.img`).
-- **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample page, and the
+- **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, and the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (Hubbub against the
   Web Platform Tests' tree-construction tests, here and as 68030 code).
 - **A release** carries `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
-  (`docs/NSBENCH.TXT`, CR/LF in the zip) and `SAMPLE.HTM`, from `make dist`.
+  (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, from
+  `make dist`. `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it
+  changes, measure the shipped files again and change their figures in DESIGN.md.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.

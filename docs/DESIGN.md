@@ -118,6 +118,19 @@ are in TT-RAM or ST-RAM, the 68030's caches, a loop's speed and each RAM's read 
 measured 1,116 bytes on the Falcon, not 1,088: its line ends were converted once more on the way,
 which changes nothing that matters.)
 
+**A page to compare with:** from 0.2, the release has `NEWS.HTM` and `NEWS.CSS`, a made-up news front
+page (72 KB, 816 elements, with a Hebrew section) and its stylesheet (83 KB), written by
+`tests/bench/mkpage.py` to cost what the page set's median does. As shipped:
+
+| | HTML | CSS | Styles | All |
+|---|---|---|---|---|
+| 68030 instructions | 15.7 M | 49.0 M | 46.7 M | 111 M |
+| Emulated: 68030 at 32 MHz, TT-RAM | 3.08 s | 11.19 s | 10.43 s | 24.7 s |
+| Emulated: stock Falcon, 16 MHz, ST-RAM | 6.53 s | 23.15 s | 21.06 s | 50.7 s |
+
+At the rate your DFB1 ran `SAMPLE.HTM` (6 M a second, 1.15 times the emulated 32 MHz Falcon), it
+would take about 19–22 s.
+
 **Standards:** Hubbub passes 1,139 of the 1,679 current tree-construction tests (the Web Platform
 Tests' `html/syntax/parsing`, 15 Oct 2026; `make h5test`): 67.8%, and the same as 68030 code. 198
 fragment tests don't apply (Hubbub has no fragment parsing). Without the two newest features,

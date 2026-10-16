@@ -15,7 +15,7 @@
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
 #   make dist        a release's files in dist/: NSBENCH.TTP, NSBENCH.TXT,
-#                    SAMPLE.HTM and EWEB-x.y.zip
+#                    SAMPLE.HTM, NEWS.HTM, NEWS.CSS and EWEB-x.y.zip
 #
 # Needs: gcc-m68k-linux-gnu, perl, gperf, python3.
 #
@@ -223,9 +223,15 @@ build/m68k/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
 build/m68k/hebtest: build/m68k/hebrew/hebtest.o build/m68k/bench/dom.o $(m68k_PU) $(m68k_WAP) $(m68k_HUB)
 	$(M68KCC) -m68030 -static -o $@ $^
 
+# a made-up news front page the size of the page set's median, and its
+# stylesheet (tests/bench/mkpage.py writes the same bytes every time)
+build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
+	python3 tests/bench/mkpage.py build/news
+
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
-test: build/asan/nsbench build/asan/hebtest
+test: build/asan/nsbench build/asan/hebtest build/news/NEWS.HTM
 	build/asan/nsbench tests/bench/sample.html > /dev/null
+	build/asan/nsbench build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null
 	tests/hebrew/run.sh build/asan/hebtest
 
 # the Hebrew pages as 68030 code too (qemu-user)
@@ -235,13 +241,15 @@ hebtest68k: build/m68k/hebtest
 
 # a release's files: each on its own, and all of them in EWEB-x.y.zip
 # (the Atari's text files with CR/LF)
-dist: binary/NSBENCH.TTP docs/NSBENCH.TXT tests/bench/sample.html
+dist: binary/NSBENCH.TTP docs/NSBENCH.TXT tests/bench/sample.html build/news/NEWS.HTM
 	rm -rf dist
 	mkdir -p dist/zip
 	cp binary/NSBENCH.TTP dist/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
-	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/SAMPLE.HTM dist/zip/
+	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
+	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
+	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist
