@@ -1,0 +1,5 @@
+<html dir=rtl>
+text: שלום עולם
+text: אטארי פלקון 030 עם DFB1 - 50 מגה-הרץ.
+<p dir=ltr>
+text: Mixed: עברית and English, "ציטוט" (סוגריים) 1990

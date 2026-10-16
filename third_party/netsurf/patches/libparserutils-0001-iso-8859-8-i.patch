@@ -1,0 +1,47 @@
+From c95a480ba14a440b258468e7580d7456b15dbcb3 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Fri, 16 Oct 2026 06:55:09 +0000
+Subject: [PATCH] charset: decode ISO-8859-8-I, and the WHATWG labels "logical"
+ and "visual"
+
+ISO-8859-8-I is ISO-8859-8 in logical order: the same bytes, so the
+8859 codec can use t8 for it too. Without it a page labelled
+iso-8859-8-i (or "logical", its WHATWG label) found no codec and was
+read as Windows-1252, turning its Hebrew into Latin letters. "visual"
+is the WHATWG label for ISO-8859-8.
+---
+ build/Aliases                   | 4 ++--
+ src/charset/codecs/codec_8859.c | 1 +
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/build/Aliases b/build/Aliases
+index 8978ede..feb8696 100644
+--- a/build/Aliases
++++ b/build/Aliases
+@@ -81,9 +81,9 @@ ISO-8859-6-E		81		csISO88596E ISO_8859-6-E
+ ISO-8859-6-I		82		csISO88596I ISO_8859-6-I
+ ISO-8859-7		10		iso-ir-126 ISO_8859-7 ISO_8859-7:1987 ELOT_928 ECMA-118 greek greek8 csISOLatinGreek 8859_7 ISO8859-7
+ T.101-G2		83		iso-ir-128 csISO128T101G2
+-ISO-8859-8		11		iso-ir-138 ISO_8859-8 ISO_8859-8:1988 hebrew csISOLatinHebrew 8859_8 ISO8859-8
++ISO-8859-8		11		iso-ir-138 ISO_8859-8 ISO_8859-8:1988 hebrew csISOLatinHebrew 8859_8 ISO8859-8 visual
+ ISO-8859-8-E		84		csISO88598E ISO_8859-8-E
+-ISO-8859-8-I		85		csISO88598I ISO_8859-8-I
++ISO-8859-8-I		85		csISO88598I ISO_8859-8-I logical
+ CSN_369103		86		iso-ir-139 csISO139CSN369103
+ JUS_I.B1.002		87		iso-ir-141 ISO646-YU js yu csISO141JUSIB1002
+ ISO_6937-2-add		14		iso-ir-142 csISOTextComm
+diff --git a/src/charset/codecs/codec_8859.c b/src/charset/codecs/codec_8859.c
+index fb8fbd3..8027d3b 100644
+--- a/src/charset/codecs/codec_8859.c
++++ b/src/charset/codecs/codec_8859.c
+@@ -31,6 +31,7 @@ static struct {
+ 	{ 0, "ISO-8859-6", SLEN("ISO-8859-6"), t6 },
+ 	{ 0, "ISO-8859-7", SLEN("ISO-8859-7"), t7 },
+ 	{ 0, "ISO-8859-8", SLEN("ISO-8859-8"), t8 },
++	{ 0, "ISO-8859-8-I", SLEN("ISO-8859-8-I"), t8 },
+ 	{ 0, "ISO-8859-9", SLEN("ISO-8859-9"), t9 },
+ 	{ 0, "ISO-8859-10", SLEN("ISO-8859-10"), t10 },
+ 	{ 0, "ISO-8859-11", SLEN("ISO-8859-11"), t11 },
+-- 
+2.43.0
+

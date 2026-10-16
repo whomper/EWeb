@@ -14,6 +14,7 @@ it, and how EWeb gets past CAPTCHAs. There is no code yet.
 | Machines | **Every Falcon; the most from a fast one** | One program, in a build with the FPU and one without, that checks at start what the Falcon has (accelerator, TT-RAM, FPU) and uses it. Tuned for your DFB1. |
 | Code | **NetSurf's code where we can't do better; fresh code where we can** | Each part (HTML parser, CSS engine, DOM, layout, image decoders) uses NetSurf's version unless fresh code written for a fast 68030 is faster and at least as standards-compliant. How it's decided is below. The GEM front end and everything Atari-side are ours, on AERA-Atari's `common/`. |
 | JavaScript | **QuickJS** | The best fit measured: modern syntax, small, portable C, MIT licence. |
+| Hebrew | **Supported** | Hebrew pages in every Hebrew encoding, right to left, mixed with English. It makes layout fresh code: NetSurf's reorders no text (below). |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -123,6 +124,10 @@ into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code 
   times on the median page with Pico). LibCSS computes every property it knows, the spoken-media ones
   too, for every element. A fresh engine that computes only what EWeb draws, and keeps parsed sheets
   per site, is the first candidate; LibCSS stays as the yardstick until one beats it on the page set.
+- **Layout: fresh code, decided by Hebrew.** NetSurf's layout uses `direction` only for default
+  alignment and margins, and nothing in NetSurf reorders text, so a line mixing Hebrew and English
+  would come out backwards. Fresh layout with the bidirectional algorithm built in is both more
+  compliant and needed (see Hebrew, below).
 
 ## The design
 
@@ -179,14 +184,40 @@ AERA guidelines.
   servers for JPEG and PNG only, so image servers don't send AVIF or WebP.
 - **First-party content only by default:** no third-party scripts, ads, trackers or web fonts. This also
   saves a slow TLS handshake for each extra domain.
-- **The rest:** forms, bookmarks, history, Hebrew and other right-to-left text through `common/`'s bidi
-  code, and a GEM interface that follows the AERA guidelines.
+- **The rest:** forms, bookmarks, history, Hebrew (below), and a GEM interface that follows the AERA
+  guidelines.
 - **Sites that should work well:** Wikipedia, Hacker News, Atari-Forum and other phpBB forums, blogs,
   documentation, text-only news (lite.cnn.com, text.npr.org), DuckDuckGo's HTML version, FrogFind and
   GitHub READMEs.
 
 What to expect: pages load in seconds to tens of seconds, and scrolling moves in steps. The screen sits
 in ST-RAM on the original 16 MHz bus, so redrawing it is slow even with the accelerator.
+
+### Hebrew
+
+Your decision: EWeb reads and shows Hebrew. The HTML parser stays NetSurf's: it doesn't care what
+language the text is in, and `dir`, `lang`, `<bdi>` and `<bdo>` reach the tree as they are. Hebrew
+lives in the other parts:
+
+- **Decoding** (NetSurf's libparserutils): UTF-8, Windows-1255 and ISO-8859-8, with no iconv.
+  ISO-8859-8-I, the logical-order label some older Israeli sites use, was read as Windows-1252, its
+  Hebrew turned into Latin letters; one line fixes it (`third_party/netsurf/patches`, ready to send
+  upstream), with the web's labels "logical" and "visual". `tests/hebrew` checks the same page in all
+  six labels, on this computer and as 68030 code (`make test`, `make hebtest68k`).
+- **CSS** (LibCSS): `direction` and `unicode-bidi` are there. EWeb's UA sheet adds the HTML rules for
+  `dir="rtl"`, `dir="ltr"`, `<bdi>` and `<bdo>`; `dir="auto"` is layout's, from the first strong
+  letter.
+- **Layout and drawing** (fresh code): the Unicode bidirectional algorithm (UAX #9) on each line after
+  it is broken, across links and bold, with numbers kept left to right, brackets mirrored and the
+  levels `dir`, `<bdi>` and `<bdo>` set; right-to-left blocks align right and put list markers on the
+  right. `common/bidi.c` (from ClaudeST) is the start: it handles one line of Atari-charset text, so
+  EWeb needs the fuller algorithm, which can move to `common/` for every app.
+- **Visual Hebrew:** a page labelled plain ISO-8859-8 (or "visual") is already in display order, so
+  layout shows it as it is, without reordering. EWeb knows which kind it has from the page's charset.
+- **Fonts:** Hebrew is drawn through the Atari character set (letters at 0xC2-0xDC), as the other apps
+  draw it (`common/`'s charset code). Vowel points (niqqud) have no glyphs there and are dropped unless
+  EWeb gets fonts of its own.
+- **Typing:** Hebrew in forms comes with the keyboard handling.
 
 ### 2. A little JavaScript on the Falcon
 

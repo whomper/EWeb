@@ -59,7 +59,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   code written for a fast 68030 is faster on the page set and at least as standards-compliant. Port
   NetSurf's part first, measure it, and only then write a replacement.
 - **`third_party/netsurf/`** holds four NetSurf libraries (MIT) at the commits its README lists. Don't
-  edit them; a change goes in that README as a patch with its reason, so an update can carry it.
+  edit them on their own: a change also goes in `third_party/netsurf/patches/` as a patch against
+  upstream (ready to send to NetSurf) and in its README with the reason, so an update can carry it.
   Their generated sources are made in `build/gen` (perl, gperf), never committed. NetSurf's own core
   is GPL-2.0-only: taking any of it is the owner's call (DESIGN.md, Open questions).
 - **The Atari build is freestanding**, on `common/`'s runtime; `atari/include/` and
@@ -69,7 +70,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions; `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
   `NSBENCH.TTP` on an emulated 32 MHz Falcon (EmuTOS's `etos1024k.img`).
-- **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample page); after a
+- **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample page, and the
+  Hebrew pages in every Hebrew encoding, `tests/hebrew`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (Hubbub against the
   Web Platform Tests' tree-construction tests, here and as 68030 code).
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.

@@ -203,9 +203,27 @@ h5test: build/host/h5test build/m68k/h5test
 	qemu-m68k -cpu m68030 build/m68k/h5test $(H5DATA) | tail -1
 .PHONY: h5test
 
+# Hebrew pages in every Hebrew encoding (tests/hebrew)
+build/asan/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
+	@mkdir -p $(@D)
+	$(HOSTCC) $(ASAN_CFLAGS) $(NSINC) -Itests/bench -c $< -o $@
+build/asan/hebtest: build/asan/hebrew/hebtest.o build/asan/bench/dom.o $(asan_PU) $(asan_WAP) $(asan_HUB)
+	$(HOSTCC) $(SAN) -o $@ $^
+build/m68k/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(M68K_CFLAGS) $(NSINC) -Itests/bench -c $< -o $@
+build/m68k/hebtest: build/m68k/hebrew/hebtest.o build/m68k/bench/dom.o $(m68k_PU) $(m68k_WAP) $(m68k_HUB)
+	$(M68KCC) -m68030 -static -o $@ $^
+
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
-test: build/asan/nsbench
+test: build/asan/nsbench build/asan/hebtest
 	build/asan/nsbench tests/bench/sample.html > /dev/null
+	tests/hebrew/run.sh build/asan/hebtest
+
+# the Hebrew pages as 68030 code too (qemu-user)
+hebtest68k: build/m68k/hebtest
+	tests/hebrew/run.sh build/m68k/hebtest qemu-m68k -cpu m68030
+.PHONY: hebtest68k
 
 clean:
 	rm -rf build binary dist

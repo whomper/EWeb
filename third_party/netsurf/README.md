@@ -19,4 +19,12 @@ files were taken: no tests, documentation or upstream Makefiles. EWeb's
 (`aliases.inc`, `entities.inc`, the gperf element table, LibCSS's property
 parsers) are made in `build/gen`.
 
-**Local changes:** none.
+## Local changes
+
+Each is in `patches/` as a patch against the upstream library, ready to send
+to NetSurf (git am applies it), and is carried again after an update until
+upstream has it.
+
+| Patch | Why |
+|---|---|
+| `libparserutils-0001-iso-8859-8-i.patch` | Hebrew: ISO-8859-8-I, the logical-order Hebrew charset (and its web label "logical"), had no codec, so such a page was read as Windows-1252 and its Hebrew came out as Latin letters. It is ISO-8859-8's table. Also adds "visual", the web label for ISO-8859-8. `tests/hebrew` checks every Hebrew encoding. |
