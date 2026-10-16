@@ -8,11 +8,13 @@ it, and how EWeb gets past CAPTCHAs. There is no code yet.
 
 | Question | Your decision | What it means |
 |---|---|---|
-| Hardware | A **DFB1** at **50 MHz** with an **FPU** and **128 MB of TT-RAM**, plus the Falcon's own **DSP** | EWeb is designed for exactly this Falcon. It uses the FPU for JavaScript's maths and the DSP for heavy number work (below). |
+| Hardware | A **DFB1** at **50 MHz** with an **FPU** and **128 MB of TT-RAM**, plus the Falcon's own **DSP** | The machine EWeb is tuned and measured on. It uses the FPU for JavaScript's maths and the DSP for heavy number work (below). |
 | Network | A **NetUSBee** | An NE2000-style Ethernet adapter on the cartridge port. About 300 KB/s at best (one report, measured under Linux, not STinG); EFTP on your Falcon gives the real figure. |
 | Gateway | **An option, as in the other apps** | EWeb talks to sites itself by default. AERA-Gateway's `web` service is the alternative, and is the only way past CAPTCHAs (below). |
-| Code | **Our own code base** | Our own HTML parser, CSS engine, layout and GEM front end, built on AERA-Atari's `common/`. No NetSurf code. |
-| System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM. There are no threads and no memory protection, so the code has to be careful with memory. |
+| Machines | **Every Falcon; the most from a fast one** | One program, in a build with the FPU and one without, that checks at start what the Falcon has (accelerator, TT-RAM, FPU) and uses it. Tuned for your DFB1. |
+| Code | **NetSurf's code where we can't do better; fresh code where we can** | Each part (HTML parser, CSS engine, DOM, layout, image decoders) uses NetSurf's version unless fresh code written for a fast 68030 is faster and at least as standards-compliant. How it's decided is below. The GEM front end and everything Atari-side are ours, on AERA-Atari's `common/`. |
+| JavaScript | **QuickJS** | The best fit measured: modern syntax, small, portable C, MIT licence. |
+| System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
 
@@ -61,12 +63,53 @@ work).
 
 ## The design
 
+### Every Falcon, fastest on an accelerated one
+
+- **Two builds from one source,** as the family has ST editions: one uses the FPU, for Falcons that
+  have one; the other doesn't, and runs JavaScript's maths in software, several times slower. Nothing
+  else in EWeb needs floating point.
+- **At start,** EWeb reads the system cookies (`_CPU`, `_FPU`, `_MCH`), asks TOS for TT-RAM, and times
+  a short loop to see how fast the CPU is.
+- **With TT-RAM,** the program, the pages, the caches and decoded images live there. Only the screen
+  stays in ST-RAM.
+- **Defaults follow the speed:** how large images are decoded, how big the caches are, and whether
+  JavaScript is offered. On a stock 16 MHz Falcon images are decoded smaller and JavaScript is off.
+- **The DSP is in every Falcon,** so the work it takes on helps all of them.
+
+### NetSurf's code or fresh code
+
+NetSurf's version of each part is ported first and measured. Fresh code is written only where the
+measurements show a cost it can remove: by using the 68030's and the DSP's strengths and TT-RAM, or by
+leaving out what EWeb never needs.
+
+1. **Port** NetSurf's part to plain TOS on `common/`, adding the C library calls it needs.
+2. **Measure** it on a fixed set of saved pages (a long Wikipedia article, the Hacker News front page,
+   an Atari-Forum thread, a lite news page): instructions on the emulated 68030, as in the
+   measurements above, then a timed run on your Falcon.
+3. **Check compliance** with the standard tests: html5lib-tests for the HTML parser, a chosen part of
+   the Web Platform Tests for CSS and layout.
+4. **Replace** NetSurf's part with fresh code only when the fresh code is faster on the page set and at
+   least as compliant. When the two are close, NetSurf's stays: it is already written and tested.
+
+| Part | NetSurf's version | Licence |
+|---|---|---|
+| HTML5 parser | Hubbub, with libparserutils | MIT |
+| CSS engine | LibCSS, with libwapcaplet | MIT |
+| DOM | libdom | MIT |
+| GIF and BMP decoders | libnsgif, libnsbmp | MIT |
+| Layout and page handling | NetSurf's own core | GPL-2.0-only |
+
+The MIT parts fit EWeb's GPL-2.0-or-later licence. NetSurf's core is GPL version 2 only: if any of it
+is used, EWeb as a whole program becomes GPL-2.0-only, while EWeb's own files keep "or later". NetSurf
+also has an Atari front end, under the same terms; EWeb's front end is ours, built on `common/` to the
+AERA guidelines.
+
 ### 1. Direct: EWeb's own engine on the Falcon
 
 - **Networking:** HTTP/1.1 and TLS 1.2 through `common/` (BearSSL, the connection code, DNS), with
   gzip, cookies, redirects and a disk cache.
-- **HTML and CSS:** our own HTML5 parser and CSS engine, with selectors, media queries, CSS variables
-  and flexbox.
+- **HTML and CSS:** an HTML5 parser and a CSS engine, NetSurf's or fresh by the rule below, with
+  selectors, media queries, CSS variables and flexbox.
 - **A narrow screen:** EWeb tells sites its screen is about 640 px wide, so responsive sites send their
   simpler mobile layout, which also fits the Falcon's screen.
 - **Images:** GIF, PNG and JPEG. JPEGs decode at 1/2, 1/4 or 1/8 size, which is much faster. EWeb asks
@@ -217,17 +260,17 @@ These break site terms, sites actively fight them, and this design doesn't need 
 
 1. **The gateway's `web` service, in AERA-Gateway,** with live view for CAB. This gets you past
    CAPTCHAs first, before EWeb exists.
-2. **EWeb's first milestone:** fetch a page directly, parse its HTML and lay out the text, on the real
-   Falcon, and measure what HTML and CSS cost there.
+2. **EWeb's first milestone:** port Hubbub and LibCSS, fetch a page directly, parse its HTML and lay
+   out the text on the real Falcon, and measure what HTML and CSS cost there. That makes the first
+   NetSurf-or-fresh calls.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 
 ## Open questions
 
-- **Our own code base:** this page reads it as our own HTML parser and CSS engine too, not NetSurf's
-  Hubbub and LibCSS. Confirm.
-- **JavaScript engine:** QuickJS carried in the repo, as above. Confirm.
+- **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
+  (its own files keep "or later"). Decide when it comes up.
 
 ## Sources
 
