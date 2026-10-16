@@ -1,0 +1,28 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     nsbench's own small test page: a bit of everything the parser and the
+     selector meet (misnested tags, an unclosed list, a table, inline style). -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nsbench sample</title>
+<style>
+body { font-family: sans-serif; color: #222 }
+.story h2 a { color: #04a; text-decoration: none }
+nav > a + a { margin-left: 1em }
+p.meta, ul.tags li { font-size: 80% }
+</style>
+</head>
+<body>
+<nav><a href="/">Home</a><a href="/retro">Retro</a><a href="/music">Music</a></nav>
+<main>
+<article class="story" id="s1"><h2><a href="/s/1">The Falcon reads the web</a></h2>
+<p class="meta">By AERA &middot; <time>2026-10-16</time></p>
+<p>A 68030 at 50&nbsp;MHz, 128&nbsp;MB of TT-RAM and a DSP.<br>Unclosed <b>bold <i>and italic</b> text</i>.
+<ul class="tags"><li><a href="/t/falcon">falcon</a><li><a href="/t/retro">retro</a></ul>
+<table><tr><td>one<td style="color: red">two</table>
+</article>
+</main>
+</body>
+</html>

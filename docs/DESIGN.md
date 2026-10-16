@@ -30,19 +30,21 @@ for the 68030 with FPU (`m68k-linux-gnu-gcc` 13, `-O2 -m68030 -m68881`) and run 
 (`qemu-m68k -cpu m68030`, one instruction per block). Every executed instruction was counted, less the
 1.14 million the engine takes to start.
 
-The counts are exact. The times assume the DFB1 achieves 5–10 million instructions per second at
-50 MHz, because the 68030's 256-byte caches hurt an interpreter. Real hardware will confirm the figure.
-The last column is Chrome's engine (V8, in Node 22) on one 2.8 GHz Xeon core, from cold.
+The counts are exact. The times assume the DFB1 runs 5–8 million instructions a second at 50 MHz: an
+emulated 32 MHz Falcon with TT-RAM ran NetSurf's code at 4.0–5.3 million (see the first milestone,
+below), and the 68030's 256-byte caches hurt an interpreter. Real hardware will confirm the figure. The
+last column is Chrome's engine (V8, in Node 22) on one 2.8 GHz Xeon core, from cold.
 
 | Workload | 68030 instructions | DFB1 at 50 MHz | V8 |
 |---|---|---|---|
-| Parse a 146 KB JSON API response | 16 M | 1.6–3.2 s | 0.65 ms |
-| Compile jQuery 3.7.1 (87 KB) | 65 M | 6.5–13 s | 3.7 ms |
-| Compile react-dom 18.3.1 (132 KB) | 103 M | 10–21 s | 5.8 ms |
-| Load React and render a 100-story front page (1,709 elements, HTML only, no layout) | 171 M | 17–34 s | 22 ms |
+| Parse a 146 KB JSON API response | 16 M | 2.0–3.2 s | 0.65 ms |
+| Compile jQuery 3.7.1 (87 KB) | 65 M | 8.1–13 s | 3.7 ms |
+| Compile react-dom 18.3.1 (132 KB) | 103 M | 13–21 s | 5.8 ms |
+| Compile three.js 0.160 (670 KB) | 361 M | 45–72 s | |
+| Load React and render a 100-story front page (1,709 elements, HTML only, no layout) | 171 M | 21–34 s | 22 ms |
 
 What follows from it:
-- **JavaScript is the wall.** Compiling minified JavaScript costs about 650–780 instructions per byte.
+- **JavaScript is the wall.** Compiling minified JavaScript costs about 540–780 instructions per byte.
   The median web page ships about 0.6 MB of compressed JavaScript (Web Almanac 2024), well over 1 MB
   unpacked. Just compiling it would take roughly **2–5 minutes, before any of it runs**, and every click
   re-renders through the same slow path.
