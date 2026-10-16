@@ -33,8 +33,8 @@ for the 68030 with FPU (`m68k-linux-gnu-gcc` 13, `-O2 -m68030 -m68881`) and run 
 
 The counts are exact. The times assume the DFB1 runs 5–8 million instructions a second at 50 MHz: an
 emulated 32 MHz Falcon with TT-RAM ran NetSurf's code at 4.0–5.3 million (see the first milestone,
-below), and the 68030's 256-byte caches hurt an interpreter. Real hardware will confirm the figure. The
-last column is Chrome's engine (V8, in Node 22) on one 2.8 GHz Xeon core, from cold.
+below), and the 68030's 256-byte caches hurt an interpreter. Your DFB1 ran NetSurf's code at 5.2 million
+(below), so expect the low end of each range. The last column is Chrome's engine (V8, in Node 22) on one 2.8 GHz Xeon core, from cold.
 
 | Workload | 68030 instructions | DFB1 at 50 MHz | V8 |
 |---|---|---|---|
@@ -128,14 +128,22 @@ page (72 KB, 816 elements, with a Hebrew section) and its stylesheet (83 KB), wr
 | Emulated: 68030 at 32 MHz, TT-RAM | 3.08 s | 11.19 s | 10.43 s | 24.7 s |
 | Emulated: stock Falcon, 16 MHz, ST-RAM | 6.53 s | 23.15 s | 21.06 s | 50.7 s |
 
-At the rate your DFB1 ran `SAMPLE.HTM` (6 M a second, 1.15 times the emulated 32 MHz Falcon), it
-would take about 19–22 s.
+| Your Falcon, DFB1 at 50 MHz, caches on | 2.47 s | 9.37 s | 9.46 s | 21.3 s |
+| Your Falcon, DFB1 at 50 MHz, caches off | 3.39 s | 12.23 s | 12.99 s | 28.6 s |
 
-**NSBENCH 0.2 on your DFB1** (16 Oct 2026) found why: the 68030's caches were **off** (CACR 0000).
-The program and its heap were in TT-RAM; TT-RAM read at 20,000 KB/s and ST-RAM at 5,200. The loop ran
-2.7 million rounds a second, where 6.2–8.3 million is expected with the caches on. `NEWS.HTM` with
-`NEWS.CSS` took 28.6 s (HTML 3.39 s, CSS 12.23 s, styles 12.99 s), about 3.9 M instructions a second:
-slower than the emulated 32 MHz Falcon with its caches on. A run with the caches on is next.
+**NSBENCH 0.2 on your DFB1** (16 Oct 2026). The first run found the 68030's caches **off** (CACR
+0000): the loop ran 2.7 million rounds a second and the page took 28.6 s, 3.9 M instructions a second.
+With both caches on, with burst (CACR 3111), the loop ran 6.1 million, just under the 6.2–8.3 million
+Motorola's timings give at 50 MHz, so the CPU runs at its clock. The page took 21.3 s: 5.2 M
+instructions a second, 2.4 times a stock Falcon and 1.16 times the emulated 32 MHz one. The caches
+made the loop 2.25 times faster but the page only 1.34 times: NetSurf's code and data are far larger
+than the 256-byte caches, so it mostly runs from TT-RAM, which reads at 20,000 KB/s (Hatari's reads at
+24,200; ST-RAM 5,000 on your Falcon). The program and its heap were in TT-RAM.
+
+So **plan on about 5 M instructions a second** for this kind of code on your DFB1, and a median page
+costs **21 s** to parse and style with NetSurf's libraries: 2.5 s of HTML and **19 s of CSS**, nine
+tenths of it. CSS is what has to get faster (below). A browser at a usable speed wants that page in
+2–3 s, so the CSS work has to cost about a tenth of what LibCSS's does, or be done once and kept.
 
 **Standards:** Hubbub passes 1,139 of the 1,679 current tree-construction tests (the Web Platform
 Tests' `html/syntax/parsing`, 15 Oct 2026; `make h5test`): 67.8%, and the same as 68030 code. 198
@@ -155,7 +163,7 @@ into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code 
   that skips the decode and re-encode (HTML and CSS both read through it), measured on the page set.
   `<template>` needs adding.
 - **CSS: where fresh code can win most.** Parsing and selection cost 3–9 times what the HTML does (5
-  times on the median page with Pico). LibCSS computes every property it knows, the spoken-media ones
+  times on the median page with Pico; 19 of `NEWS.HTM`'s 21 s on your DFB1). LibCSS computes every property it knows, the spoken-media ones
   too, for every element. A fresh engine that computes only what EWeb draws, and keeps parsed sheets
   per site, is the first candidate; LibCSS stays as the yardstick until one beats it on the page set.
 - **Layout: fresh code, decided by Hebrew.** NetSurf's layout uses `direction` only for default
@@ -171,7 +179,8 @@ into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code 
   have one; the other doesn't, and runs JavaScript's maths in software, several times slower. Nothing
   else in EWeb needs floating point.
 - **At start,** EWeb reads the system cookies (`_CPU`, `_FPU`, `_MCH`), asks TOS for TT-RAM, and times
-  a short loop to see how fast the CPU is.
+  a short loop to see how fast the CPU is. It checks that the 68030's caches are on and says so if they
+  aren't: your DFB1 ran with them off at first, which made it a quarter slower.
 - **With TT-RAM,** the program, the pages, the caches and decoded images live there. Only the screen
   stays in ST-RAM.
 - **Defaults follow the speed:** how large images are decoded, how big the caches are, and whether
@@ -393,8 +402,8 @@ These break site terms, sites actively fight them, and this design doesn't need 
    NetSurf-or-fresh calls. *Done so far (16 Oct 2026):* the port, the measurements on emulated
    68030s and the first calls (above), and `NSBENCH.TTP` in release v0.1 for your Falcon (it runs on
    an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM), timed on your DFB1 with `SAMPLE.HTM`
-   (above). *Still to do:* NSBENCH 0.2's machine report and a real page on your DFB1, fetching and
-   laying out text.
+   (above), and NSBENCH 0.2's machine report and `NEWS.HTM` on your DFB1: 21.3 s with the caches on,
+   nine tenths of it CSS. *Still to do:* a real page on your DFB1, fetching and laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
