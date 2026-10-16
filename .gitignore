@@ -1,0 +1,19 @@
+# build output: programs are published on the Releases page, not committed
+build/
+binary/
+dist/
+*.o
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# files the program writes when it runs (e.g. in a test run from binary/):
+# settings may hold server names, the key file decrypts passwords
+*.KEY
+CRASH.LOG
+
+# test rigs
+tests/**/work/
+*.log
