@@ -1,5 +1,7 @@
 # build output: programs are published on the Releases page, not committed
-build/
+# (/build/ only at the top: NetSurf's libraries keep their generators in a
+# build/ folder of their own)
+/build/
 binary/
 dist/
 *.o
