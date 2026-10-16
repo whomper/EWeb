@@ -131,6 +131,12 @@ page (72 KB, 816 elements, with a Hebrew section) and its stylesheet (83 KB), wr
 At the rate your DFB1 ran `SAMPLE.HTM` (6 M a second, 1.15 times the emulated 32 MHz Falcon), it
 would take about 19–22 s.
 
+**NSBENCH 0.2 on your DFB1** (16 Oct 2026) found why: the 68030's caches were **off** (CACR 0000).
+The program and its heap were in TT-RAM; TT-RAM read at 20,000 KB/s and ST-RAM at 5,200. The loop ran
+2.7 million rounds a second, where 6.2–8.3 million is expected with the caches on. `NEWS.HTM` with
+`NEWS.CSS` took 28.6 s (HTML 3.39 s, CSS 12.23 s, styles 12.99 s), about 3.9 M instructions a second:
+slower than the emulated 32 MHz Falcon with its caches on. A run with the caches on is next.
+
 **Standards:** Hubbub passes 1,139 of the 1,679 current tree-construction tests (the Web Platform
 Tests' `html/syntax/parsing`, 15 Oct 2026; `make h5test`): 67.8%, and the same as 68030 code. 198
 fragment tests don't apply (Hubbub has no fragment parsing). Without the two newest features,
