@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gperf
+      - name: make test
+        run: make test
+
+  atari:
+    name: Atari build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The m68k cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu gperf
+      - name: Build the programs
+        run: make
+      - name: The build changed no tracked file
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+      # no artifact: only formal releases leave the build machine

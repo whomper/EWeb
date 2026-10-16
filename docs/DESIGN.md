@@ -357,16 +357,14 @@ These break site terms, sites actively fight them, and this design doesn't need 
 2. **EWeb's first milestone:** port Hubbub and LibCSS, fetch a page directly, parse its HTML and lay
    out the text on the real Falcon, and measure what HTML and CSS cost there. That makes the first
    NetSurf-or-fresh calls. *Done so far (16 Oct 2026):* the port, the measurements on emulated
-   68030s and the first calls (above). *Still to do:* the timed run on your Falcon, fetching and
-   laying out text.
+   68030s and the first calls (above), and `NSBENCH.TTP` in release v0.1 for your Falcon (it runs on
+   an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM). *Still to do:* the timed run on your
+   Falcon, fetching and laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 
 ## Open questions
-
-- **Timing on your Falcon:** the family's rule is that only releases leave the build machine, so
-  `NSBENCH.TTP` needs EWeb's release workflow and a v0.1 release. Say if you want it.
 
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.

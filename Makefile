@@ -10,8 +10,12 @@
 #   make bench       build/host/nsbench, for this computer
 #   make bench68k    build/m68k/nsbench, a Linux 68030 program for counting
 #                    instructions under QEMU (tools/count68k.sh)
-#   make test        nsbench on a test page, and Hubbub against the
-#                    html5lib tree-construction tests (tests/html5lib)
+#   make test        nsbench on a test page, and the Hebrew pages, with
+#                    AddressSanitizer and UBSan
+#   make h5test      Hubbub against the HTML tree-construction tests
+#                    (tests/html5lib/fetch.sh first)
+#   make dist        a release's files in dist/: NSBENCH.TTP, NSBENCH.TXT,
+#                    SAMPLE.HTM and EWEB-x.y.zip
 #
 # Needs: gcc-m68k-linux-gnu, perl, gperf, python3.
 #
@@ -19,6 +23,10 @@
 # COPYING). Their generated sources (character set aliases, HTML entities,
 # the element-type hash, LibCSS's property parsers) are made in build/gen,
 # so a build changes no tracked file.
+
+# the version: VERSION holds the last release (major.minor) and the build
+# never writes it; tools/bump.py starts a release
+VERSION_STR := $(shell cat VERSION)
 
 CROSS    ?= m68k-linux-gnu-
 HOSTCC   ?= gcc
@@ -122,9 +130,9 @@ build/$(1)/ns/libcss/%.o: $(NS)/libcss/%.c $$(GENERATED)
 build/$(1)/ns/libcss/gen/%.o: $(GEN)/libcss/%.c
 	@mkdir -p $$(@D)
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(CSS_INC) -I$(NS)/libcss/src/parse/properties -c $$< -o $$@
-build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h
+build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h VERSION
 	@mkdir -p $$(@D)
-	$(2) $(3) -Wall -Wextra -Wno-unused-parameter $$(NSINC) -c $$< -o $$@
+	$(2) $(3) -Wall -Wextra -Wno-unused-parameter -DEWEB_VERSION='"$$(VERSION_STR)"' $$(NSINC) -c $$< -o $$@
 endef
 
 HOST_CFLAGS := -O2 -g -std=gnu99 -DNDEBUG -w
@@ -140,10 +148,10 @@ $(eval $(call target_rules,asan,$(HOSTCC),$(ASAN_CFLAGS)))
 # the Atari: freestanding, with common/'s runtime (crt0, libc, tos) and
 # EWeb's additions in atari/ (the C headers and calls NetSurf needs beyond it)
 GCCINC     := $(shell $(M68KCC) -print-file-name=include)
-TOS_CFLAGS := -m68030 -m68881 -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
+TOS_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
-TOS_LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+TOS_LDFLAGS := -m68030 -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
               -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 $(eval $(call target_rules,tos,$(M68KCC),$(TOS_CFLAGS)))
 tos_BENCH  := $(subst plat_posix,plat_tos,$(tos_BENCH))
@@ -224,6 +232,19 @@ test: build/asan/nsbench build/asan/hebtest
 hebtest68k: build/m68k/hebtest
 	tests/hebrew/run.sh build/m68k/hebtest qemu-m68k -cpu m68030
 .PHONY: hebtest68k
+
+# a release's files: each on its own, and all of them in EWEB-x.y.zip
+# (the Atari's text files with CR/LF)
+dist: binary/NSBENCH.TTP docs/NSBENCH.TXT tests/bench/sample.html
+	rm -rf dist
+	mkdir -p dist/zip
+	cp binary/NSBENCH.TTP dist/
+	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
+	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
+	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/SAMPLE.HTM dist/zip/
+	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
+	rm -rf dist/zip
+.PHONY: dist
 
 clean:
 	rm -rf build binary dist

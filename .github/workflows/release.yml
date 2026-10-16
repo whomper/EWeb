@@ -1,0 +1,70 @@
+name: Release
+
+# Builds NSBENCH.TTP and publishes it as a GitHub Release: each file on its
+# own, and all of them in EWEB-x.y.zip. Two ways to start it:
+# - Actions > Release > Run workflow, on main, with the notes: it tags
+#   main's commit vX.Y, from VERSION;
+# - push a tag vX.Y that matches VERSION: the tag's message
+#   (git tag -a) is the notes.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "What is new (Markdown): the release's notes"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Which release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(cat VERSION)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            TAG=$GITHUB_REF_NAME
+            if [ "$TAG" != "v$V" ]; then
+              echo "::error::tag $TAG, but VERSION says $V"
+              exit 1
+            fi
+          else
+            TAG=v$V
+            if [ "$GITHUB_REF_NAME" != main ]; then
+              echo "::error::run it on main"
+              exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+              echo "::error::$TAG is out already: tools/bump.py and commit first"
+              exit 1
+            fi
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu gperf zip
+      - name: Test
+        run: make test
+      - name: Build
+        run: make dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            git fetch -q --force origin "refs/tags/$TAG:refs/tags/$TAG"
+            git tag -l --format='%(contents)' "$TAG" > "$RUNNER_TEMP/notes.md"
+          else
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          fi
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "${GITHUB_REPOSITORY#*/} $(cat VERSION)" \
+            --notes-file "$RUNNER_TEMP/notes.md"

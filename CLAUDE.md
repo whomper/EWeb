@@ -74,4 +74,6 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   Hebrew pages in every Hebrew encoding, `tests/hebrew`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (Hubbub against the
   Web Platform Tests' tree-construction tests, here and as 68030 code).
+- **A release** carries `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
+  (`docs/NSBENCH.TXT`, CR/LF in the zip) and `SAMPLE.HTM`, from `make dist`.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
