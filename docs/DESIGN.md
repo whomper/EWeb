@@ -103,6 +103,21 @@ elements) with Pico:
 The QEMU count is the Linux build's (glibc's `malloc`, not `common/`'s), so the rates are close, not
 exact. Scaled to 50 MHz they give about 6–8 M/s, if the DFB1's memory keeps up.
 
+**On your DFB1** (NSBENCH 0.1, `SAMPLE.HTM`, 16 Oct 2026), against Hatari running the same program:
+
+| Machine | HTML | CSS | Styles | All | Against a stock Falcon |
+|---|---|---|---|---|---|
+| Your Falcon, DFB1 at 50 MHz | 59 ms | 362 ms | 122 ms | 543 ms | 2.4× |
+| Emulated: 68030 at 32 MHz, TT-RAM | 63 ms | 427 ms | 133 ms | 623 ms | 2.1× |
+| Emulated: stock Falcon, 16 MHz, ST-RAM | 138 ms | 905 ms | 270 ms | 1,313 ms | 1× |
+
+The run is about 3.3 M instructions, so your DFB1 ran about 6 M a second: inside the 5–8 M assumed,
+and the estimates above stand. It is only 1.15 times the emulated 32 MHz machine, though, where the
+clocks would give 1.56. NSBENCH 0.2 reports what decides that: whether the program and its memory
+are in TT-RAM or ST-RAM, the 68030's caches, a loop's speed and each RAM's read speed. (The page
+measured 1,116 bytes on the Falcon, not 1,088: its line ends were converted once more on the way,
+which changes nothing that matters.)
+
 **Standards:** Hubbub passes 1,139 of the 1,679 current tree-construction tests (the Web Platform
 Tests' `html/syntax/parsing`, 15 Oct 2026; `make h5test`): 67.8%, and the same as 68030 code. 198
 fragment tests don't apply (Hubbub has no fragment parsing). Without the two newest features,
@@ -358,8 +373,9 @@ These break site terms, sites actively fight them, and this design doesn't need 
    out the text on the real Falcon, and measure what HTML and CSS cost there. That makes the first
    NetSurf-or-fresh calls. *Done so far (16 Oct 2026):* the port, the measurements on emulated
    68030s and the first calls (above), and `NSBENCH.TTP` in release v0.1 for your Falcon (it runs on
-   an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM). *Still to do:* the timed run on your
-   Falcon, fetching and laying out text.
+   an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM), timed on your DFB1 with `SAMPLE.HTM`
+   (above). *Still to do:* NSBENCH 0.2's machine report and a real page on your DFB1, fetching and
+   laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

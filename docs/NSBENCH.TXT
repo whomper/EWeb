@@ -37,6 +37,17 @@ Options (type them before the file names)
    -c 1460   feed the parser in pieces of this many bytes, as from the
              network (the default is 4096)
 
+What the first lines say about your Atari
+-----------------------------------------
+   machine   the machine (_MCH), the CPU and whether there is an FPU
+   caches    the 68030's caches: both should be on
+   loop      a short loop's speed: a 68030 at 50 MHz with its caches on
+             manages about 6.2 to 8.3 million rounds a second
+   program   whether NSBENCH runs in TT-RAM (an accelerator's, fast) or
+             ST-RAM (the Falcon's own), and how much of each is free
+   reading   how fast each kind of RAM reads, in KB a second
+   heap      (at the end) where NSBENCH's memory for the page came from
+
 What the numbers mean
 ---------------------
    html      parsing the page into a tree of elements

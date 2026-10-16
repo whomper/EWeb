@@ -18,6 +18,95 @@
 
 static long logh = -1;		/* NSBENCH.LOG, appended to */
 
+extern long heap_tt, heap_st;	/* common/atari/libc.c: what the heap took */
+
+/* ---------------------------------------------------------------- the machine
+ * What a timing means depends on the machine: where the program and its
+ * memory are (TT-RAM is the accelerator's, ST-RAM sits on the Falcon's
+ * 16 MHz bus), how fast the CPU really runs, and how fast each RAM reads. */
+
+/* the loop below: one subq.l and one taken bne.s, from the instruction
+ * cache. Motorola's 68030 timing tables give it 6 to 8 cycles a round, so a
+ * 68030 at 50 MHz with its cache on runs about 6.2 to 8.3 million rounds a
+ * second (Hatari's cycle-exact 68030 counts fewer cycles: its rates are
+ * no measure of the clock) */
+
+static void spin(long n)
+{
+	__asm__ volatile("1:\tsubq.l #1,%0\n\tbne.s 1b" : "+d"(n) : : "cc");
+}
+
+/* reads n48 * 48 bytes from p, twelve longs at a time */
+static void read_block(const void *p, long n48)
+{
+	__asm__ volatile("1:\tmovem.l (%0)+,%%d1-%%d7/%%a1-%%a5\n\tsubq.l #1,%1\n\tbne.s 1b"
+		: "+a"(p), "+d"(n48) : : "d1", "d2", "d3", "d4", "d5", "d6", "d7",
+		"a1", "a2", "a3", "a4", "a5", "memory", "cc");
+}
+
+/* rounds of the loop a second */
+static unsigned long loop_rate(void)
+{
+	unsigned long t0, t, rounds = 0;
+
+	t0 = tos_hz200();
+	do {
+		spin(250000);
+		rounds += 250000;
+		t = tos_hz200() - t0;
+	} while (t < 200);	/* at least a second */
+	return rounds / t * 200;
+}
+
+/* KB a second read from a 240 KB block of the given RAM (Mxalloc mode:
+ * 0 ST, 1 TT), or 0 when there is none */
+static unsigned long read_rate(short mode)
+{
+	const long size = 240L * 1024;
+	char *b = Mxalloc(size, mode);
+	unsigned long t0, t, bytes = 0;
+
+	if ((long) b <= 0)
+		return 0;
+	t0 = tos_hz200();
+	do {
+		read_block(b, size / 48);
+		bytes += size;
+		t = tos_hz200() - t0;
+	} while (t < 100);	/* at least half a second */
+	Mfree(b);
+	return bytes / 1024 / t * 200;
+}
+
+static long cacr;
+
+static void sup_cacr(void)
+{
+	__asm__ volatile("movec %%cacr,%0" : "=d"(cacr));
+}
+
+static void machine_report(void)
+{
+	long cpu = get_cookie(0x5F435055L), fpu = get_cookie(0x5F465055L);	/* _CPU, _FPU */
+	long mch = get_cookie(0x5F4D4348L);					/* _MCH */
+	long st_free = (long) Mxalloc(-1, 0), tt_free = (long) Mxalloc(-1, 1);
+	unsigned long loops = loop_rate(), st, tt;
+
+	out("machine: _MCH %08lx, CPU 680%02ld, FPU %s\n", mch, cpu,
+		(fpu >> 16) ? "yes" : "none");
+	Supexec(sup_cacr);
+	out("caches: CACR %04lx: instructions %s%s, data %s%s\n", cacr & 0xffff,
+		cacr & 0x0001 ? "on" : "off", cacr & 0x0010 ? " with burst" : "",
+		cacr & 0x0100 ? "on" : "off", cacr & 0x1000 ? " with burst" : "");
+	out("loop: %lu rounds a second (6.2 to 8.3 million at 50 MHz)\n", loops);
+	out("program in %s; free ST-RAM %ld KB, TT-RAM %ld KB\n",
+		(unsigned long) &machine_report >= 0x01000000UL ? "TT-RAM" : "ST-RAM",
+		st_free > 0 ? st_free / 1024 : 0, tt_free > 0 ? tt_free / 1024 : 0);
+	st = read_rate(0);
+	tt = read_rate(1);
+	out("reading: ST-RAM %lu KB/s, TT-RAM %lu KB/s\n", st, tt);
+}
+
 static void log_open(void)
 {
 	logh = Fopen("NSBENCH.LOG", 1);
@@ -63,7 +152,9 @@ int main(void)
 	argv[argc] = NULL;
 	log_open();
 	out("EWeb nsbench %s\n", EWEB_VERSION);
+	machine_report();
 	rc = nsbench(argc, argv);
+	out("heap: %ld KB from TT-RAM, %ld KB from ST-RAM\n", heap_tt / 1024, heap_st / 1024);
 	out("done (%d)\n", rc);
 	if (logh >= 0)
 		Fclose((short) logh);
