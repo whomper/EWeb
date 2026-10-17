@@ -203,6 +203,11 @@ about 4 s instead of 21. At the DFB1's 5.2 M instructions a second the page set'
 1.8 s with Bootstrap and 2.3 s with Pico (90th percentile 2.2 and 3.6 s). The HTML parser is now
 the larger part; a UTF-8 path for Hubbub (above) is next in line.
 
+**On your DFB1** (NSBENCH 0.3, 17 Oct 2026; the caches were off again, CACR 0000): `NEWS.HTM`
+with `NEWS.CSS` took LibCSS 12.21 + 12.99 s and EWeb's engine 0.76 + 1.55 s: **10.9 times
+faster**, as on the emulators. With the HTML's 3.40 s the page took EWeb 5.7 s where it took
+NetSurf's libraries 28.6 s. With the caches on it should be about 4 s.
+
 **Standards.** `make csscmp` compares the two engines value by value on all 258 pages, each with
 Bootstrap and then with Pico: 53.8 million values a run, every element, every property both have.
 A difference counts only if it is one of LibCSS's known gaps, most of them found exactly: the page
@@ -477,8 +482,18 @@ FireBee, without GDOS. Read from its source (17 Oct 2026; not yet measured):
 
 Worth taking as ideas: dithering through a table of the screen's own colours, decoding a JPEG
 straight at a half, quarter or eighth when it is shown that small, and laying out once per burst
-of arriving images. A head-to-head on your DFB1 (HighWire's log of its parse, layout and drawing
-times, against `NSBENCH.TTP -E both`, on `NEWS.HTM`) is the next measurement.
+of arriving images.
+
+**Head to head on your DFB1** (17 Oct 2026, `NEWS.HTM` with `NEWS.CSS` from the disk, the caches
+off for both): HighWire 0.4.8 logged **7.18 s** for its parse of the page, which reads the page,
+loads and applies the part of `NEWS.CSS` it understands, and builds its boxes; laying them out
+and drawing come after, and are not in that figure. EWeb took **5.7 s** for a full HTML5 parse
+(3.40 s) and the whole stylesheet with every element's computed style (2.31 s). So EWeb is the
+faster of the two already, while doing the whole job: HighWire leaves out what it doesn't know of
+`NEWS.CSS` (its custom properties, flex layout, attribute selectors and most pseudo-classes, and
+its media queries' conditions). The figures aren't quite the same work: HighWire's includes
+reading `NEWS.CSS` from the disk and making boxes, EWeb's neither. The page's images were left
+out of both (their paths lead nowhere on the Atari).
 
 ## Order of work
 
