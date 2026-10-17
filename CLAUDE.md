@@ -76,10 +76,16 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (Hubbub against the
   Web Platform Tests' tree-construction tests, here and as 68030 code), and after one to libparserutils'
   input, `make hebtest68k` too.
+- **EWeb's network code** is `src/net/` (URL parser, HTTP client, gzip) on `common/`'s connections and TLS,
+  with `src/plat.h` (`atari/plat_tos.c`, `tests/host/plat_posix.c`); `tests/net/ewget.c` is `EWGET.TTP`.
+  After changing it: `make test` (nettest, the fuzz seeds and finds), `make itest`, `make urltest`
+  (`tests/url/fetch.sh` first) after a change to `url.c`, and `make hatarinet` for the Atari side; run
+  `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
 - **A release** carries `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
-  (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, from
-  `make dist`. `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it
-  changes, measure the shipped files again and change their figures in DESIGN.md.
+  (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
+  `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.
+  `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it changes, measure the
+  shipped files again and change their figures in DESIGN.md.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). After changing it, `make test` (its cases, `tests/css/cases.txt`, worked out from the

@@ -1,0 +1,12 @@
+HTTP/1.1 100 Continue
+
+HTTP/1.1 303 See Other
+Content-Type: text/html; charset=utf-8
+Location: /x
+Content-Length: 0
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 2
+
+ok

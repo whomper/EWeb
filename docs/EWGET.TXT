@@ -1,0 +1,76 @@
+EWGET.TTP - EWeb's page fetcher
+===============================
+
+What it does
+------------
+EWGET fetches a web page from the internet with EWeb's own HTTP client,
+the one the browser will use, and says how long each part took: finding
+the server and connecting to it, the secure (TLS) handshake, waiting for
+the answer, receiving it, and unpacking it. It can save the page to a
+file. It doesn't show the page itself.
+
+What it needs
+-------------
+- Any Atari Falcon (no FPU needed), with plain TOS, MagiC or MiNT. With
+  TT-RAM (an accelerator such as the DFB1) it loads and works there.
+- STinG (or MiNTnet) running, with a working connection and a name
+  server: the same set-up EMail and ECal use.
+- CACERT.PEM and ROOTS.DAT in the same folder as EWGET.TTP. They hold
+  the certificates of the authorities that vouch for secure sites;
+  without them no https:// address works. EWGET writes SEED.DAT there
+  too, the start of its random numbers, kept between runs.
+
+How to use it
+-------------
+1. Copy EWGET.TTP, CACERT.PEM and ROOTS.DAT to a folder on your hard
+   disk.
+2. Double-click EWGET.TTP and type an address in the box, for example
+       https://en.wikipedia.org/wiki/Atari_Falcon
+   or, to fetch it twice (the second time over the connection kept
+   open) and save it,
+       -n 2 -o FALCON.HTM https://en.wikipedia.org/wiki/Atari_Falcon
+   Others worth trying: https://news.ycombinator.com/,
+   https://lite.cnn.com/, http://frogfind.com/
+3. It prints what it found and how long each part took, then waits for
+   a key. The same lines go into EWGET.LOG, in the same folder.
+
+The box takes about 120 characters. For a longer address, write the
+whole line into a file EWGET.CMD next to EWGET.TTP and start EWGET with
+nothing typed: it reads the line from there (and doesn't wait for a key
+at the end).
+
+Options (type them before the address)
+--------------------------------------
+   -o FILE     save the page in FILE
+   -n 2        fetch it twice: the second time shows what a page's
+               next request costs, with the connection kept open
+   -z 120      your time zone, in minutes east of UTC (Israel: 120 in
+               winter, 180 in summer), so certificate dates are checked
+               against the right time; the default is 0
+   -r          check the server's signature on the 68030 instead of the
+               DSP (to compare the two)
+   -A          show the answer's headers too
+   -l NET.LOG  write everything said on the connection to NET.LOG
+
+What the numbers mean
+---------------------
+   connect   finding the server's address (DNS) and connecting to it
+   TLS       the secure handshake, and how the connection is protected
+             (TLS 1.2, the key exchange and the cipher). RSA signatures
+             are checked on the DSP when there is one
+   wait      from sending the request to the first line of the answer:
+             mostly the server and the distance to it
+   body      receiving the page, as it came (most servers pack it)
+   unpack    unpacking it (gzip or deflate), and its size unpacked
+   total     all of it, redirects included
+The times are in milliseconds; the timer counts in steps of 5 ms.
+
+Please send EWGET.LOG back, with your Atari's details and how it is
+connected (for example as an issue on github.com/whomper/EWeb): it shows
+what fetching a page costs on a real Falcon, before EWeb has to draw it.
+
+EWeb is free software under the GNU General Public License, version 2
+or later; BearSSL is under the MIT licence, and CACERT.PEM is Mozilla's
+list of authorities (MPL 2.0). The source is on github.com/whomper/EWeb.
+
+Copyright (C) 2026 AERA | Erez Yaary

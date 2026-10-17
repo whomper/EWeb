@@ -1,0 +1,15 @@
+@HTTP/1.1 301 Moved
+Content-Type: text/html; charset=utf-8
+Location: ../c?q#f
+Content-Length: 0
+
+HTTP/1.1 302 Found
+Content-Type: text/html; charset=utf-8
+Location: //x.test/d
+Content-Length: 0
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 4
+
+here

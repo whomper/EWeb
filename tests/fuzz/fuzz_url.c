@@ -1,0 +1,40 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * Addresses in pages, from the fuzz input: hrefs that may be anything,
+ * resolved against a base (src/net/url.c). The input is the href, then
+ * after the first newline the base (none, if there is no newline); each
+ * result is parsed again, and must come out the same (the standard's
+ * serialisation is idempotent).
+ */
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "url.h"
+
+int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
+{
+	static URL base, u, again;
+	static char s[2 * URL_MAX];
+	char *nl, t[300];
+	int have_base = 0;
+	if (n >= sizeof(s))
+		return 0;
+	memcpy(s, d, n);
+	s[n] = 0;
+	if (strlen(s) != n)
+		return 0;		/* a NUL inside: not something a C string carries */
+	nl = strchr(s, '\n');
+	if (nl) {
+		*nl = 0;
+		have_base = url_parse(&base, nl + 1, 0);
+	}
+	if (!url_parse(&u, s, have_base ? &base : 0))
+		return 0;
+	url_target(&u, t, sizeof(t));
+	url_hostport(&u, t, sizeof(t));
+	url_host(&u, t, sizeof(t));
+	if (!url_parse(&again, u.href, 0) || strcmp(again.href, u.href))
+		abort();
+	return 0;
+}

@@ -293,6 +293,61 @@ at a time, a function call and a `memcpy` each. That is now the largest cost in 
 `NEWS.HTM`). Pages in Windows-1252 and Windows-1255 could copy their ASCII the same way UTF-8 is
 copied now.
 
+## Fetching pages: EWeb's HTTP client (17 Oct 2026)
+
+`src/net/` fetches a page straight from the Atari: the URL parser, the HTTP/1.1 client and gzip, on
+`common/`'s connections and TLS (BearSSL, RSA on the DSP), through STinG or MiNTnet. NetSurf fetches
+through libcurl and its own core (GPL-2.0-only), neither of which is in the port; the AERA family
+already has an HTTP client on `common/` (ECal's and EContact's, for CalDAV and CardDAV), so EWeb's
+grew from that one. When it has settled, it can move into `common/` for those apps too.
+
+What it does:
+- **Addresses** as the WHATWG URL Standard parses them: links resolved against the page, `.` and `..`,
+  backslashes, IPv4 and IPv6 addresses, percent-encoding as UTF-8, and names that aren't ASCII
+  (Hebrew ones too) in punycode, with the part of UTS #46's mapping pages meet.
+- **HTTP/1.1:** answers by length, in chunks, or up to the close; gzip and deflate unpacked; redirects
+  (up to 20, a POST answered with 301, 302 or 303 becoming a GET, as browsers do); the charset of the
+  answer from Content-Type; four connections kept open (a page, its stylesheets and images come from
+  two or three hosts), and a request that finds its kept connection closed goes again on a new one.
+- **Limits** on everything a server says (the AERA guidelines, 7.1): a header line 16 KB, all of them
+  64 KB and 200 lines, lengths and chunk sizes checked, a body 8 MB unpacked, a gzip bomb stopped at the
+  limit.
+- **How long each part took**, for `EWGET.TTP`, the tool that fetches a page and times it (in the next
+  release, with `CACERT.PEM` and `ROOTS.DAT`).
+
+**On an emulated Falcon** (Hatari, a 68030 at 32 MHz with TT-RAM and the DSP emulated, `EWGET.TTP`
+through `FAKESTNG.PRG`, a stand-in for STinG over the serial port, against a server on the same
+computer):
+
+| | Time |
+|---|---|
+| The root certificates, from `ROOTS.DAT` (121 authorities) | 0.30 s, once |
+| TLS 1.2 handshake: ECDHE-RSA, ChaCha20-Poly1305, the signature on the DSP | 1.75 s |
+| The next request over the kept connection: no handshake | 0 s |
+| Unpacking a 36 KB page (4 KB gzip) | 0.13 s |
+
+The serial line runs at about 20 KB a second, so the times for the body aren't the network's. On your
+DFB1, `EWGET.TTP` will say what a real connection costs. A new connection to a server seen before
+resumes its TLS session, which leaves out the key exchange (tested on this computer).
+
+**Standards and safety:**
+- **URLs:** all 448 of the URL Standard's tests (the Web Platform Tests' `urltestdata.json`) whose
+  answer is an http or https URL, or a failure for one, pass (`make urltest`). The 7 with a NUL in them
+  are left out: a C string ends there, and HTML turns NUL into U+FFFD before an href gets here.
+- **HTTP:** 102 cases in `make test` (`tests/net/nettest.c`), with `common/`'s `fuzz_net.c` playing the
+  server in pieces of 1 to 97 bytes. They cover the lengths, chunks, gzip, redirects and kept
+  connections, and the lengths, lines, chunks and bombs a hostile server might send.
+- **Over TCP and TLS:** `make itest`, against servers on this computer with a test authority. It checks
+  pages plain and packed, a kept connection, a resumed session, redirects from HTTP to HTTPS, and that
+  a certificate for another name, or one nobody signed, is refused. `make hatarinet` does it on the
+  emulated Falcon, and with the release's certificates.
+- **Fuzzing:** `make fuzz` (libFuzzer, AddressSanitizer, UBSan) on the HTTP client and the URL parser.
+  It found one fault within a minute, now fixed and kept in `tests/fuzz/found`: a long name that isn't
+  ASCII could write past the buffer its punycode went into.
+
+`common/` came up to date from AERA-Atari for this (`tools/sync-common.sh`): EWeb's copy predated
+`tos_ms()`, the millisecond timer that stays right where timer C runs fast.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -559,8 +614,9 @@ out of both (their paths lead nowhere on the Atari).
    an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM), timed on your DFB1 with `SAMPLE.HTM`
    (above), and NSBENCH 0.2's machine report and `NEWS.HTM` on your DFB1: 21.3 s with the caches on,
    nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster, timed on your DFB1 in
-   NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse. *Still to do:* a
-   real page on your DFB1, fetching and laying out text.
+   NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse; then EWeb's HTTP
+   client and `EWGET.TTP` (above), tested on an emulated Falcon. *Still to do:* real pages fetched on
+   your DFB1 with `EWGET.TTP`, then laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

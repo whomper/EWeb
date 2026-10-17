@@ -1,21 +1,30 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 # EWeb - a web browser for the Atari Falcon. There is no browser yet: this
-# builds the first milestone's measuring tool, nsbench, which parses a
-# saved page with NetSurf's HTML parser (Hubbub) and selects every
-# element's style with NetSurf's CSS engine (LibCSS). See docs/DESIGN.md.
+# builds the first milestone's tools: nsbench, which parses a saved page
+# with NetSurf's HTML parser (Hubbub) and selects every element's style
+# with LibCSS and with EWeb's own CSS engine, and ewget, which fetches a
+# page with EWeb's HTTP client and times it. See docs/DESIGN.md.
 #
-#   make             binary/NSBENCH.TTP: nsbench for the Atari (plain TOS,
-#                    68030 with FPU), with common/'s freestanding runtime
+#   make             binary/NSBENCH.TTP and binary/EWGET.TTP for the Atari
+#                    (plain TOS, any Falcon), with common/'s freestanding
+#                    runtime, and the root certificates (CACERT.PEM, ROOTS.DAT)
 #   make bench       build/host/nsbench, for this computer
 #   make bench68k    build/m68k/nsbench, a Linux 68030 program for counting
 #                    instructions under QEMU (tools/count68k.sh)
-#   make test        nsbench on a test page, and the Hebrew pages, with
-#                    AddressSanitizer and UBSan
+#   make test        nsbench on the test pages, the Hebrew pages, the CSS
+#                    engine's cases, the input stream, the HTTP client and
+#                    the fuzz targets' inputs, with AddressSanitizer and UBSan
+#   make itest       ewget against servers on this computer (TCP, TLS)
+#   make hatarinet   EWGET.TTP in Hatari through FAKESTNG, against them
+#   make urltest     the URL parser against the URL Standard's tests
+#                    (tests/url/fetch.sh first)
+#   make fuzz        the HTTP client and the URL parser under libFuzzer
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
 #   make dist        a release's files in dist/: NSBENCH.TTP, NSBENCH.TXT,
-#                    SAMPLE.HTM, NEWS.HTM, NEWS.CSS and EWEB-x.y.zip
+#                    EWGET.TTP, EWGET.TXT, CACERT.PEM, ROOTS.DAT, SAMPLE.HTM,
+#                    NEWS.HTM, NEWS.CSS and EWEB-x.y.zip
 #
 # Needs: gcc-m68k-linux-gnu, perl, gperf, python3.
 #
@@ -74,9 +83,9 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/NSBENCH.TTP
+all: binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
 
-bench: build/host/nsbench
+bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
 
 .PHONY: all bench bench68k test clean
@@ -196,6 +205,178 @@ build/asan/nsbench: $(asan_BENCH) $(asan_EC) $(asan_NS)
 build/m68k/nsbench: $(m68k_BENCH) $(m68k_EC) $(m68k_NS)
 	$(M68KCC) -m68030 -static -o $@ $^ -lm
 
+# ---------------------------------------------------------------- the network
+
+# EWeb's URL parser and HTTP client (src/net), on common/'s connections,
+# TLS (BearSSL 0.6, RSA on the DSP) and STinG; ewget fetches a page with
+# them and times it (EWGET.TTP on the Atari)
+BSSL      := common/third_party/bearssl
+BSSL_SRC  := $(sort $(wildcard $(BSSL)/src/*/*.c))
+BSSL_DEF  := -DBR_USE_URANDOM=0 -DBR_USE_GETENTROPY=0 -DBR_USE_UNIX_TIME=0 -DBR_USE_WIN32_TIME=0 \
+             -DBR_USE_WIN32_RAND=0 -DBR_RDRAND=0
+NET_SRC   := $(sort $(wildcard src/net/*.c))
+NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c
+NET_HDRS  := $(wildcard src/*.h src/net/*.h ui/*.h tests/net/*.h common/src/*.h common/atari/*.h \
+             common/atari/include/*.h common/ui/*.h atari/include/*.h)
+NET_INC   := -Isrc -Isrc/net -Icommon/src -Iatari -Icommon/atari -Iui -Icommon/ui -Itests/net -I$(BSSL)/inc
+# EWeb's own files: no warning passes
+NET_WARN  := -Wall -Wextra -Wno-unused-parameter -Werror
+NET_VER   := -DEWEB_VERSION='"$(VERSION_STR)"'
+
+# this computer: ewget, and the same with AddressSanitizer and UBSan for
+# make itest; nettest (make test) plays the servers with fuzz_net.c
+HOSTNET_SRC := $(NET_SRC) $(NETC_SRC) tests/host/plat_posix.c
+build/host/bssl/%.o: $(BSSL)/src/%.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -w -I$(BSSL)/inc -I$(BSSL)/src -c $< -o $@
+build/host/libbearssl.a: $(patsubst $(BSSL)/src/%.c,build/host/bssl/%.o,$(BSSL_SRC))
+	rm -f $@
+	ar rcs $@ $^
+build/host/ewget: tests/net/ewget.c tests/net/main_posix.c tests/host/dsp_none.c $(HOSTNET_SRC) $(NET_HDRS) \
+		build/host/libbearssl.a VERSION
+	$(HOSTCC) -O2 -g -std=gnu99 $(NET_WARN) $(NET_VER) $(NET_INC) -o $@ $(filter %.c,$^) build/host/libbearssl.a
+build/asan/ewget: tests/net/ewget.c tests/net/main_posix.c tests/host/dsp_none.c $(HOSTNET_SRC) $(NET_HDRS) \
+		build/host/libbearssl.a VERSION
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) $(NET_VER) $(NET_INC) -o $@ $(filter %.c,$^) \
+		build/host/libbearssl.a
+$(GEN)/net/vectors.h: tests/net/mkvec.py
+	@mkdir -p $(@D)
+	python3 tests/net/mkvec.py $@
+build/asan/nettest: tests/net/nettest.c common/tests/fuzz/fuzz_net.c $(HOSTNET_SRC) $(NET_HDRS) \
+		$(GEN)/net/vectors.h build/host/libbearssl.a
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -DFUZZ_NET $(NET_INC) \
+		-Icommon/tests/fuzz -I$(GEN)/net -o $@ $(filter %.c,$^) build/host/libbearssl.a
+build/asan/urltest: tests/url/urltest.c src/net/url.c src/net/url.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) -Isrc/net -o $@ $(filter %.c,$^)
+build/host/mkroots: common/tools/mkroots.c $(HOSTNET_SRC) $(NET_HDRS) build/host/libbearssl.a
+	$(HOSTCC) -O2 -std=gnu99 -w $(NET_INC) -o $@ common/tools/mkroots.c $(HOSTNET_SRC) build/host/libbearssl.a
+
+# the Atari: 68030 code (no FPU instructions), on common/'s runtime
+TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
+                 -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc -isystem $(GCCINC) \
+                 -Iatari/include -Icommon/atari/include $(NET_INC)
+# common/'s files as the other AERA apps build them
+COMMON_WARN   := -Wall -Wno-pointer-sign
+TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
+              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o net_tos.o sting.o sting_s.o dsprsa.o \
+              dsp.o plat_tos.o)
+build/tos/net/%.o: src/net/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) -c $< -o $@
+build/tos/net/%.o: atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) -c $< -o $@
+build/tos/net/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/net/%.o: common/atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/net/%.o: common/ui/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/net/sting_s.o: common/atari/sting.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
+build/tos/ewget/%.o: tests/net/%.c $(NET_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
+build/tos/bssl/%.o: $(BSSL)/src/%.c
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+		-fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -w -nostdinc -isystem $(GCCINC) \
+		-Iatari/include -Icommon/atari/include -I$(BSSL)/inc -I$(BSSL)/src $(BSSL_DEF) -c $< -o $@
+build/tos/libbearssl.a: $(patsubst $(BSSL)/src/%.c,build/tos/bssl/%.o,$(BSSL_SRC))
+	rm -f $@
+	$(CROSS)ar rcs $@ $^
+build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ) \
+		build/tos/libbearssl.a
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
+binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
+# the root certificates: Mozilla's list (common/certs), and the same read
+# once into ROOTS.DAT, which the Atari loads in a moment
+binary/CACERT.PEM: common/certs/CACERT.PEM
+	@mkdir -p binary
+	cp $< $@
+binary/ROOTS.DAT: binary/CACERT.PEM build/host/mkroots
+	build/host/mkroots binary/CACERT.PEM $@
+
+# fuzzing (the AERA guidelines, 7.1): what servers send, and the
+# addresses in pages. Needs clang with libFuzzer; make fuzz runs each
+# target FUZZTIME seconds from tests/fuzz/seeds (tests/fuzz/mkseeds.py) and
+# what once broke them (tests/fuzz/found); make test runs those again
+# without libFuzzer (common/tests/fuzz/replay.c)
+FUZZCC    ?= clang
+FUZZTIME  ?= 60
+FUZZERS   := http url
+FUZZ_SRC  = $(HOSTNET_SRC) common/tests/fuzz/fuzz_net.c
+build/fuzz/fuzz_%: tests/fuzz/fuzz_%.c $(HOSTNET_SRC) $(NET_HDRS) build/host/libbearssl.a
+	@mkdir -p $(@D)
+	$(FUZZCC) -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -DFUZZ_NET \
+		$(NET_INC) -Icommon/tests/fuzz -o $@ $< $(FUZZ_SRC) build/host/libbearssl.a
+build/asan/replay_%: tests/fuzz/fuzz_%.c common/tests/fuzz/replay.c $(HOSTNET_SRC) $(NET_HDRS) build/host/libbearssl.a
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -DFUZZ_NET $(NET_INC) -Icommon/tests/fuzz \
+		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_SRC) build/host/libbearssl.a
+fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
+	@for f in $(FUZZERS); do \
+	  mkdir -p build/fuzz/corpus/$$f; \
+	  echo "fuzz_$$f: $(FUZZTIME) s"; \
+	  build/fuzz/fuzz_$$f -max_total_time=$(FUZZTIME) -timeout=10 -rss_limit_mb=1024 \
+	    -artifact_prefix=build/fuzz/crash-$$f- build/fuzz/corpus/$$f tests/fuzz/seeds/$$f \
+	    $$(ls -d tests/fuzz/found/$$f 2>/dev/null) \
+	    > build/fuzz/fuzz_$$f.log 2>&1 || { tail -40 build/fuzz/fuzz_$$f.log; exit 1; }; \
+	  grep -E "^#[0-9]+.*DONE" build/fuzz/fuzz_$$f.log | tail -1; \
+	done
+.PHONY: fuzz
+
+# FAKESTNG.PRG (tools/fakesting, from EMail): a stand-in for STinG that
+# carries the emulated Atari's connections over its serial port to
+# tests/hatari/serial_bridge.py. For Hatari only, never a real Atari.
+FAKE_CFLAGS := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+               -fno-tree-loop-distribute-patterns -fno-store-merging -fno-asynchronous-unwind-tables -Wall \
+               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include
+build/fakesting/%.o: tools/fakesting/%.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(FAKE_CFLAGS) -c $< -o $@
+build/fakesting/%.o: tools/fakesting/%.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -c $< -o $@
+build/fakesting/tos.o: common/atari/tos.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(FAKE_CFLAGS) -c $< -o $@
+build/fakesting/nf.o: common/atari/nf.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -c $< -o $@
+build/fakesting/FAKESTNG.PRG: $(addprefix build/fakesting/,fstart.o fakesting.o tos.o nf.o fstr.o) tools/fakesting/link.ld
+	$(M68KCC) -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,tools/fakesting/link.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $(@:.PRG=.elf) $(filter %.o,$^)
+	python3 common/tools/elf2tos.py $(@:.PRG=.elf) $@
+
+# EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
+# build/), through FAKESTNG, against tests/net/server.py: TLS on the 68030,
+# RSA on the emulated DSP
+hatarinet: binary/EWGET.TTP build/fakesting/FAKESTNG.PRG
+	python3 tests/hatari/ewget_test.py build/etos1024k.img
+.PHONY: hatarinet
+
+# against servers on this computer: plain, TLS, redirects, refused certificates
+itest: build/asan/ewget
+	python3 tests/net/itest.py build/asan/ewget build/itest
+.PHONY: itest
+
+# the URL Standard's tests (tests/url/fetch.sh first)
+urltest: build/asan/urltest
+	@test -f build/wpt/url/resources/urltestdata.json || { echo "no tests: run tests/url/fetch.sh"; exit 1; }
+	python3 tests/url/run.py build/asan/urltest
+.PHONY: urltest
+
 # ---------------------------------------------------------------- tests
 
 # Hubbub against the tree-construction tests (tests/html5lib/fetch.sh puts
@@ -283,8 +464,10 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
-		build/news/NEWS.HTM
+		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM
 	build/asan/streamtest
+	build/asan/nettest
+	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null
 	tests/hebrew/run.sh build/asan/hebtest
@@ -300,15 +483,18 @@ hebtest68k: build/m68k/hebtest build/m68k/streamtest
 
 # a release's files: each on its own, and all of them in EWEB-x.y.zip
 # (the Atari's text files with CR/LF)
-dist: binary/NSBENCH.TTP docs/NSBENCH.TXT tests/bench/sample.html build/news/NEWS.HTM
+dist: binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT docs/NSBENCH.TXT \
+		docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM
 	rm -rf dist
 	mkdir -p dist/zip
-	cp binary/NSBENCH.TTP dist/
+	cp binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT dist/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
+	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
 	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
 	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
-	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
+	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT \
+		dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist
