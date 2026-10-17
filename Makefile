@@ -263,13 +263,28 @@ build/m68k/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
 build/m68k/hebtest: build/m68k/hebrew/hebtest.o build/m68k/bench/dom.o $(m68k_PU) $(m68k_WAP) $(m68k_HUB)
 	$(M68KCC) -m68030 -static -o $@ $^
 
+# libparserutils' input stream: UTF-8 and other charsets in random chunks
+# (tests/input)
+build/asan/input/streamtest.o: tests/input/streamtest.c
+	@mkdir -p $(@D)
+	$(HOSTCC) $(filter-out -w,$(ASAN_CFLAGS)) -Wall -Wextra $(NSINC) -c $< -o $@
+build/asan/streamtest: build/asan/input/streamtest.o $(asan_PU)
+	$(HOSTCC) $(SAN) -o $@ $^
+build/m68k/input/streamtest.o: tests/input/streamtest.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(M68K_CFLAGS) $(NSINC) -c $< -o $@
+build/m68k/streamtest: build/m68k/input/streamtest.o $(m68k_PU)
+	$(M68KCC) -m68030 -static -o $@ $^
+
 # a made-up news front page the size of the page set's median, and its
 # stylesheet (tests/bench/mkpage.py writes the same bytes every time)
 build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 	python3 tests/bench/mkpage.py build/news
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
-test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/news/NEWS.HTM
+test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
+		build/news/NEWS.HTM
+	build/asan/streamtest
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null
 	tests/hebrew/run.sh build/asan/hebtest
@@ -277,9 +292,10 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 
-# the Hebrew pages as 68030 code too (qemu-user)
-hebtest68k: build/m68k/hebtest
+# the Hebrew pages and the input stream as 68030 code too (qemu-user)
+hebtest68k: build/m68k/hebtest build/m68k/streamtest
 	tests/hebrew/run.sh build/m68k/hebtest qemu-m68k -cpu m68030
+	qemu-m68k -cpu m68030 build/m68k/streamtest
 .PHONY: hebtest68k
 
 # a release's files: each on its own, and all of them in EWEB-x.y.zip

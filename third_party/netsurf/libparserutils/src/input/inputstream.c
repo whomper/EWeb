@@ -26,6 +26,8 @@ typedef struct parserutils_inputstream_private {
 
 	bool done_first_chunk;		/**< Whether the first chunk has 
 					 * been processed */
+	bool flushed;			/**< Whether the filter has been
+					 * flushed at the end of input */
 
 	uint16_t mibenum;		/**< MIB enum for charset, or 0 */
 	uint32_t encsrc;		/**< Charset source */
@@ -86,6 +88,7 @@ parserutils_error parserutils_inputstream_create(const char *enc,
 	s->public.cursor = 0;
 	s->public.had_eof = false;
 	s->done_first_chunk = false;
+	s->flushed = false;
 
 	error = parserutils__filter_create("UTF-8", &s->input);
 	if (error != PARSERUTILS_OK) {
@@ -243,9 +246,13 @@ parserutils_error parserutils_inputstream_peek_slow(
 
 	/* There's insufficient data in the buffer, so read some more */
 	if (s->raw->length == 0) {
-		/* No more data to be had */
-		return s->public.had_eof ? PARSERUTILS_EOF
-					 : PARSERUTILS_NEEDDATA;
+		/* No more data to be had, once the filter has written out
+		 * what it still holds (refilling with no raw data flushes
+		 * it) */
+		if (s->public.had_eof == false)
+			return PARSERUTILS_NEEDDATA;
+		if (s->flushed)
+			return PARSERUTILS_EOF;
 	}
 
 	/* Refill utf8 buffer from raw buffer */
@@ -254,8 +261,14 @@ parserutils_error parserutils_inputstream_peek_slow(
 		return error;
 
 	/* Refill may have succeeded, but not actually produced any new data */
-	if (s->public.cursor + offset == s->public.utf8->length)
+	if (s->public.cursor + offset == s->public.utf8->length) {
+		if (s->raw->length == 0 && s->public.had_eof) {
+			s->flushed = true;
+			return PARSERUTILS_EOF;
+		}
+
 		return PARSERUTILS_NEEDDATA;
+	}
 
 	/* Now try the read */
 	if (IS_ASCII(s->public.utf8->data[s->public.cursor + offset])) {
@@ -472,10 +485,12 @@ parserutils_error parserutils_inputstream_refill_buffer(
 		return error;
 
 	/* Remove the raw data we've processed from the raw buffer */
-	error = parserutils_buffer_discard(stream->raw, 0, 
-			stream->raw->length - raw_length);
-	if (error != PARSERUTILS_OK)
-		return error;
+	if (raw_length < stream->raw->length) {
+		error = parserutils_buffer_discard(stream->raw, 0,
+				stream->raw->length - raw_length);
+		if (error != PARSERUTILS_OK)
+			return error;
+	}
 
 	/* Fix up the utf8 buffer information */
 	stream->public.utf8->length = 

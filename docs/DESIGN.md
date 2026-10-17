@@ -90,6 +90,11 @@ times use 5–8 million instructions a second, as above.
 
 Layout, drawing, images and the network come on top; they aren't measured yet.
 
+(Corrected 17 Oct 2026: `nsbench` didn't yet do what NetSurf does when the tree builder finds a
+`<meta charset>` that the first look missed, which is to parse the page again in that charset, so 101
+of the pages were read as Windows-1252. Measured that way, NetSurf's HTML parse costs 17.7 M at the
+median and 32.4 M at the 90th percentile. The UTF-8 copy below brings it to 12.8 and 24.4 M.)
+
 **Cross-check on an emulated Falcon** (`tests/bench/hatari.py`: Hatari 2.4.1, EmuTOS 1.4, a 68030
 at 32 MHz, Hatari's fastest, with a 68882 and TT-RAM, cycle-exact), one BBC News page (100 KB, 862
 elements) with Pico:
@@ -155,12 +160,13 @@ rest are edge cases: script text cut short at the end of a file, `<ruby>`, newer
 **Where the time goes** (callgrind, the BBC page with Pico): selection is about half, close to a third
 of that composing each element's style with its parent's; parsing the CSS is a quarter; parsing the
 HTML a fifth. Two fifths of the HTML parse, and part of the CSS parse, is libparserutils turning UTF-8
-into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code is under 2%.
+into UTF-8, decoding and re-encoding every character (now copied: see Hubbub's input, below).
+`nsbench`'s own tree code is under 2%.
 
 **The first NetSurf-or-fresh calls:**
 - **HTML parser: Hubbub stays.** It costs 2–3 seconds on a median page, and a fresh parser would have
-  to match its 1,139 passing tests before it could count as better. The first gain is a UTF-8 path
-  that skips the decode and re-encode (HTML and CSS both read through it), measured on the page set.
+  to match its 1,139 passing tests before it could count as better. Its first gain, copying UTF-8
+  instead of decoding and re-encoding it, took 28% off on the page set (Hubbub's input, below).
   `<template>` needs adding.
 - **CSS: fresh code, decided (17 Oct 2026).** Parsing and selection cost 3–9 times what the HTML
   does (19 of `NEWS.HTM`'s 21 s on your DFB1). EWeb's own engine (below) is 7–15 times faster on the
@@ -201,7 +207,7 @@ Your DFB1 ran LibCSS's part of `NEWS.HTM` in 18.8 s, 0.87 of the emulated 32 MHz
 so EWeb's engine should take about **1.7 s** there, and the whole page (with the HTML's 2.5 s)
 about 4 s instead of 21. At the DFB1's 5.2 M instructions a second the page set's median page is
 1.8 s with Bootstrap and 2.3 s with Pico (90th percentile 2.2 and 3.6 s). The HTML parser is now
-the larger part; a UTF-8 path for Hubbub (above) is next in line.
+the larger part; copying its UTF-8 input (next section) took 28% off it.
 
 **On your DFB1** (NSBENCH 0.3, 17 Oct 2026; the caches were off again, CACR 0000): `NEWS.HTM`
 with `NEWS.CSS` took LibCSS 12.21 + 12.99 s and EWeb's engine 0.76 + 1.55 s: **10.9 times
@@ -238,6 +244,53 @@ viewport's width for `vh` and its height for `vw`.
 need), keeping parsed sheets per site (a site's stylesheet is parsed once, not on every page), and
 Pico's cost per element (11,000 instructions against Bootstrap's 3,100: `:where()` and custom
 properties).
+
+## Hubbub's input: UTF-8 copied (17 Oct 2026)
+
+Hubbub reads the page through libparserutils, which turned every character into UCS-4 and back into
+UTF-8, even when the page was UTF-8 already. Now valid UTF-8 is copied, checked as it goes
+(`third_party/netsurf/patches`, ready to send upstream). What isn't UTF-8 becomes U+FFFD as the
+WHATWG Encoding Standard says, one for each broken sequence, wherever the page is split into chunks.
+libparserutils' own decoder didn't do that: it let through 5- and 6-byte forms and code points past
+U+10FFFF, and at a chunk boundary it could swallow the rest of the chunk or drop a character. Two
+bugs were found on the way and fixed. A document that ended 64n+1 characters into its last chunk lost
+its last character, and the input was never flushed at the end. Hubbub's first look for a
+`<meta charset>` now reads 1,024 bytes, as the HTML standard says, not 512.
+
+`nsbench` now does what NetSurf does with a `<meta charset>` found while parsing: it parses the page
+again in that charset. Before, it kept going in Windows-1252, and 101 of the 258 pages were measured
+in the wrong charset.
+
+**Speed**, the HTML parse in 68030 instructions:
+
+| | NetSurf's libparserutils | Copying UTF-8 | Fewer |
+|---|---|---|---|
+| `NEWS.HTM` | 15.76 M | 11.03 M | 30% |
+| The page set, median page | 17.7 M | 12.8 M | 28% |
+| The page set, 90th percentile | 32.4 M | 24.4 M | 25% |
+
+From 216 instructions per byte of HTML to 154 at the median. The 62 pages that gain less than 5%
+aren't UTF-8 (Windows-1252, ISO-8859-1 or no charset given) and still go through the old decoder.
+Copying costs six 68030 instructions a byte of ASCII. LibCSS reads its sheets the same way, so its
+parse is about 15% cheaper too: Bootstrap from 103 to 87.5 M, Pico from 33.0 to 27.4 M. The comparison
+with EWeb's engine above is with NetSurf's libparserutils, as released.
+
+Timed on Hatari, `NEWS.HTM`'s HTML took 2.29 s on the emulated 32 MHz machine, down from 3.08, and
+4.99 s on the emulated stock Falcon, down from 6.53. On your DFB1 that should be about 2.5 s with the
+caches off, down from 3.40, and about 1.8 s with them on. The whole page with EWeb's CSS engine would
+then take about 4.8 s with the caches off and about 3.5 s with them on.
+
+**Standards:** Hubbub's tree-construction tests are unchanged (1,139 of 1,679, here and as 68030
+code). `tests/input` feeds libparserutils documents in random chunks, valid UTF-8 and not, and
+checks the output against a plain version of the WHATWG decoder. It also checks every length around
+the 64-character and 4,096-byte limits, here and as 68030 code (`make test`, `make hebtest68k`).
+NetSurf's libparserutils fails 5,999 of its 10,420 cases. All 258 pages ran clean under
+AddressSanitizer and UBSan.
+
+**Next for the HTML parser:** the tokeniser appends an attribute's value to a buffer one character
+at a time, a function call and a `memcpy` each. That is now the largest cost in the parse (17% on
+`NEWS.HTM`). Pages in Windows-1252 and Windows-1255 could copy their ASCII the same way UTF-8 is
+copied now.
 
 ## The design
 
@@ -505,8 +558,9 @@ out of both (their paths lead nowhere on the Atari).
    68030s and the first calls (above), and `NSBENCH.TTP` in release v0.1 for your Falcon (it runs on
    an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM), timed on your DFB1 with `SAMPLE.HTM`
    (above), and NSBENCH 0.2's machine report and `NEWS.HTM` on your DFB1: 21.3 s with the caches on,
-   nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster (above). *Still to do:*
-   EWeb's engine timed on your DFB1, a real page there, fetching and laying out text.
+   nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster, timed on your DFB1 in
+   NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse. *Still to do:* a
+   real page on your DFB1, fetching and laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

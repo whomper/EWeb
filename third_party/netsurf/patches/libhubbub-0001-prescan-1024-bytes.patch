@@ -1,0 +1,33 @@
+From e3dc98c01360647482f820ad01782e6d73b3d573 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Sat, 17 Oct 2026 10:00:04 +0000
+Subject: [PATCH] charset: prescan the first 1024 bytes for a meta charset
+
+The HTML standard's prescan of a byte stream reads its first 1024
+bytes (it was 512 in early drafts, which Hubbub followed). Many pages
+put their meta charset between the two, after long xmlns attributes or
+other meta elements. Hubbub's prescan missed it there, so the page was
+first read as Windows-1252; the client then has to parse it again when
+the tree builder reports the meta, or reads UTF-8 as Windows-1252 if it
+doesn't.
+---
+ src/charset/detect.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/charset/detect.c b/src/charset/detect.c
+index d2d6816..8d0823c 100644
+--- a/src/charset/detect.c
++++ b/src/charset/detect.c
+@@ -216,7 +216,8 @@ uint16_t hubbub_charset_scan_meta(const uint8_t *data, size_t len)
+ 	if (data == NULL)
+ 		return 0;
+ 
+-	end = pos + min(512, len);
++	/* The HTML standard's prescan reads the first 1024 bytes */
++	end = pos + min(1024, len);
+ 
+ 	/* 1. */
+ 	while (pos < end) {
+-- 
+2.43.0
+

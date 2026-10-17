@@ -216,7 +216,8 @@ uint16_t hubbub_charset_scan_meta(const uint8_t *data, size_t len)
 	if (data == NULL)
 		return 0;
 
-	end = pos + min(512, len);
+	/* The HTML standard's prescan reads the first 1024 bytes */
+	end = pos + min(1024, len);
 
 	/* 1. */
 	while (pos < end) {

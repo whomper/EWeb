@@ -43,7 +43,7 @@ sudo apt install gcc-m68k-linux-gnu python3 perl gperf   # Debian/Ubuntu
 make            # binary/NSBENCH.TTP, for plain TOS on a Falcon (68030 with FPU)
 make bench      # build/host/nsbench, for this computer
 make bench68k   # build/m68k/nsbench, a 68030 Linux program for tools/count68k.sh
-make test       # nsbench, the CSS engine's cases, the Hebrew pages, with AddressSanitizer and UBSan
+make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, with ASan and UBSan
 make h5test     # Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
 make csscmp     # EWeb's CSS engine against LibCSS on the page set (tests/bench/pages.sh first)
 make dist       # dist/EWEB-x.y.zip, as on the Releases page
@@ -70,6 +70,7 @@ tests/css/            the CSS engine's cases (from the specifications), and
                       csscmp, which compares it with LibCSS value by value
 tests/html5lib/       Hubbub against the Web Platform Tests' tree-construction tests
 tests/hebrew/         a Hebrew page in every Hebrew encoding
+tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 atari/                the C library pieces NetSurf needs beyond common/
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT)
 tools/                QEMU with plugins, and counting 68030 instructions
@@ -80,8 +81,11 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 
 - `make test`: nsbench with both CSS engines on `tests/bench/sample.html` and
   `NEWS.HTM`, the Hebrew pages in every Hebrew encoding (`tests/hebrew`), the
-  CSS engine's cases (`tests/css/cases.txt`), and csscmp on the test pages,
-  with AddressSanitizer and UBSan.
+  CSS engine's cases (`tests/css/cases.txt`), csscmp on the test pages, and
+  the input stream that feeds Hubbub (`tests/input`: documents in random
+  chunks, valid UTF-8 and not, against the WHATWG UTF-8 decoder), with
+  AddressSanitizer and UBSan. `make hebtest68k` runs the Hebrew pages and the
+  input stream as 68030 code.
 - `make csscmp`: EWeb's CSS engine against LibCSS on the whole page set: every
   difference must be one of LibCSS's known gaps.
 - `make h5test`: Hubbub against the Web Platform Tests' tree-construction

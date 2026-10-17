@@ -17,6 +17,7 @@
 #include <parserutils/charset/mibenum.h>
 #include <parserutils/charset/codec.h>
 
+#include "charset/codecs/codec_impl.h"
 #include "input/filter.h"
 #include "utils/utils.h"
 
@@ -36,6 +37,13 @@ struct parserutils_filter {
 	size_t pivot_len;		/**< Length of pivot remaining */
 #endif
 
+	bool utf8_out;			/**< The document is wanted in UTF-8 */
+	bool utf8;			/**< And it is in UTF-8: copy it */
+	uint8_t part[4];		/**< Sequence cut short by a chunk */
+	uint8_t part_len;		/**< Its length in bytes */
+	uint8_t need;			/**< Bytes it still needs */
+	uint8_t lo, hi;			/**< Range of the next of them */
+
 	struct {
 		uint16_t encoding;	/**< Input encoding */
 	} settings;			/**< Filter settings */
@@ -44,6 +52,10 @@ struct parserutils_filter {
 static parserutils_error filter_set_defaults(parserutils_filter *input);
 static parserutils_error filter_set_encoding(parserutils_filter *input,
 		const char *enc);
+static uint16_t filter_utf8_mibenum(void);
+static parserutils_error filter_utf8(parserutils_filter *input,
+		const uint8_t **data, size_t *len,
+		uint8_t **output, size_t *outlen);
 
 /**
  * Create an input filter
@@ -76,11 +88,17 @@ parserutils_error parserutils__filter_create(const char *int_enc,
 		free(f);
 		return PARSERUTILS_BADENCODING;
 	}
+	f->utf8_out = f->int_enc == filter_utf8_mibenum();
 #else
 	f->leftover = false;
 	f->pivot_left = NULL;
 	f->pivot_len = 0;
+	f->utf8_out = false;	/* until the write codec is made, below */
 #endif
+
+	f->utf8 = false;
+	f->part_len = 0;
+	f->need = 0;
 
 	error = filter_set_defaults(f);
 	if (error != PARSERUTILS_OK) {
@@ -98,6 +116,10 @@ parserutils_error parserutils__filter_create(const char *int_enc,
 		free(f);
 		return error;
 	}
+
+	f->utf8_out = f->write_codec->mibenum == filter_utf8_mibenum();
+	f->utf8 = f->utf8_out &&
+			f->settings.encoding == filter_utf8_mibenum();
 #endif
 
 	*filter = f;
@@ -184,6 +206,9 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
 			output == NULL || *output == NULL || outlen == NULL)
 		return PARSERUTILS_BADPARM;
 
+	if (input->utf8)
+		return filter_utf8(input, data, len, output, outlen);
+
 #ifndef WITHOUT_ICONV_FILTER
 	if (iconv(input->cd, (void *) data, len, 
 			(char **) output, outlen) == (size_t) -1) {
@@ -255,7 +280,9 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
 		input->leftover = false;
 	}
 
-	while (*len > 0) {
+	/* With no input, this still runs once: the read codec may hold a
+	 * character it decoded when the pivot buffer was full */
+	do {
 		parserutils_error read_error, write_error;
 		size_t pivot_len = sizeof(input->pivot_buf);
 		uint8_t *pivot = (uint8_t *) input->pivot_buf;
@@ -286,7 +313,7 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
 		if (read_error != PARSERUTILS_OK && 
 				read_error != PARSERUTILS_NOMEM)
 			return read_error;
-	}
+	} while (*len > 0);
 
 	return PARSERUTILS_OK;
 #endif
@@ -304,6 +331,9 @@ parserutils_error parserutils__filter_reset(parserutils_filter *input)
 
 	if (input == NULL)
 		return PARSERUTILS_BADPARM;
+
+	input->part_len = 0;
+	input->need = 0;
 
 #ifndef WITHOUT_ICONV_FILTER
 	iconv(input->cd, NULL, 0, NULL, 0);
@@ -403,6 +433,206 @@ parserutils_error filter_set_encoding(parserutils_filter *input,
 
 	input->settings.encoding = mibenum;
 
+	input->utf8 = input->utf8_out && mibenum == filter_utf8_mibenum();
+	input->part_len = 0;
+	input->need = 0;
+
 	return error;
 
+}
+
+/**
+ * UTF-8's MIB enum, looked up once
+ */
+uint16_t filter_utf8_mibenum(void)
+{
+	static uint16_t utf8;
+
+	if (utf8 == 0)
+		utf8 = parserutils_charset_mibenum_from_name("UTF-8",
+				SLEN("UTF-8"));
+
+	return utf8;
+}
+
+/**
+ * Append U+REPLACEMENT CHARACTER, in UTF-8
+ */
+static inline uint8_t *filter_fffd(uint8_t *o)
+{
+	o[0] = 0xef;
+	o[1] = 0xbf;
+	o[2] = 0xbd;
+
+	return o + 3;
+}
+
+/**
+ * Process a chunk of UTF-8 for UTF-8 output, by copying it
+ *
+ * \param input   Pointer to filter instance
+ * \param data    Pointer to pointer to input buffer
+ * \param len     Pointer to length of input buffer
+ * \param output  Pointer to pointer to output buffer
+ * \param outlen  Pointer to length of output buffer
+ * \return PARSERUTILS_OK on success,
+ *         PARSERUTILS_NOMEM if the output buffer filled first
+ *
+ * Decoding UTF-8 to UCS-4 and encoding it again costs dearly for what it
+ * does. This copies what is UTF-8 and replaces what isn't as the WHATWG
+ * Encoding Standard's UTF-8 decoder does: each byte that can't start a
+ * sequence, and each sequence that ends too soon (at an unexpected byte,
+ * or at the end of the input), becomes one U+FFFD. Overlong forms,
+ * surrogates and code points beyond U+10FFFF are caught by the range of a
+ * sequence's second byte. A sequence split between chunks is held over;
+ * calling this with no input (at the end of the input) writes it out as
+ * U+FFFD.
+ */
+parserutils_error filter_utf8(parserutils_filter *input,
+		const uint8_t **data, size_t *len,
+		uint8_t **output, size_t *outlen)
+{
+	const uint8_t *s = *data;
+	const uint8_t *end = s + *len;
+	uint8_t *o = *output;
+	uint8_t *oend = o + *outlen;
+	parserutils_error error = PARSERUTILS_OK;
+
+	/* Room for the longest thing one step writes: a character or
+	 * U+FFFD */
+#define ROOM (oend - o >= 4)
+
+	if (s == end) {
+		/* The end of the input: a sequence cut short by it */
+		if (input->need > 0) {
+			if (oend - o < 3)
+				return PARSERUTILS_NOMEM;
+
+			o = filter_fffd(o);
+			input->need = 0;
+			input->part_len = 0;
+		}
+	} else if (input->need > 0) {
+		/* Finish the sequence the last chunk ended in */
+		if (!ROOM)
+			return PARSERUTILS_NOMEM;
+
+		while (input->need > 0 && s < end) {
+			uint8_t b = *s;
+
+			if (b < input->lo || b > input->hi) {
+				/* Read b again, below */
+				o = filter_fffd(o);
+				input->need = 0;
+				input->part_len = 0;
+				break;
+			}
+
+			input->part[input->part_len++] = b;
+			s++;
+			input->lo = 0x80;
+			input->hi = 0xbf;
+
+			if (--input->need == 0) {
+				memcpy(o, input->part, input->part_len);
+				o += input->part_len;
+				input->part_len = 0;
+			}
+		}
+	}
+
+	while (s < end) {
+		uint8_t b = *s;
+		uint8_t lo = 0x80, hi = 0xbf;
+		size_t n, i;
+
+		if (b < 0x80) {
+			/* Most of a page: a run of ASCII */
+			n = min((size_t) (end - s), (size_t) (oend - o));
+			if (n == 0) {
+				error = PARSERUTILS_NOMEM;
+				break;
+			}
+
+			do {
+				*o++ = b;
+				s++;
+			} while (--n > 0 && (b = *s) < 0x80);
+
+			continue;
+		}
+
+		if (!ROOM) {
+			error = PARSERUTILS_NOMEM;
+			break;
+		}
+
+		if (b >= 0xc2 && b <= 0xdf) {
+			n = 2;
+		} else if (b >= 0xe0 && b <= 0xef) {
+			n = 3;
+			if (b == 0xe0)
+				lo = 0xa0;
+			else if (b == 0xed)
+				hi = 0x9f;
+		} else if (b >= 0xf0 && b <= 0xf4) {
+			n = 4;
+			if (b == 0xf0)
+				lo = 0x90;
+			else if (b == 0xf4)
+				hi = 0x8f;
+		} else {
+			/* Can't start a sequence */
+			o = filter_fffd(o);
+			s++;
+			continue;
+		}
+
+		for (i = 1; i < n; i++) {
+			uint8_t c;
+
+			if (s + i == end) {
+				/* Cut short by the chunk: hold it over */
+				memcpy(input->part, s, i);
+				input->part_len = i;
+				input->need = n - i;
+				input->lo = lo;
+				input->hi = hi;
+				s = end;
+				break;
+			}
+
+			c = s[i];
+			if (c < lo || c > hi) {
+				/* Read c again */
+				o = filter_fffd(o);
+				s += i;
+				break;
+			}
+
+			lo = 0x80;
+			hi = 0xbf;
+		}
+
+		if (i == n) {
+			o[0] = b;
+			o[1] = s[1];
+			if (n > 2) {
+				o[2] = s[2];
+				if (n > 3)
+					o[3] = s[3];
+			}
+			o += n;
+			s += n;
+		}
+	}
+
+#undef ROOM
+
+	*len -= s - *data;
+	*data = s;
+	*outlen -= o - *output;
+	*output = o;
+
+	return error;
 }

@@ -1,0 +1,125 @@
+From e5c5c431747f8b07dca00a8af16397b0a9c08d1c Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Sat, 17 Oct 2026 09:52:21 +0000
+Subject: [PATCH] input: don't lose the end of a document
+
+Three things lost characters at the end of the input:
+
+- The filter decodes into a pivot buffer of 64 characters. When the
+  pivot fills just as the input runs out, the read codec keeps the
+  next character in its own buffer and the filter's loop ends, since
+  no input is left. Nothing calls the codec again at the end of the
+  input, so a document whose last chunk was 64n+1 characters long lost
+  its last character. A flush (a call with no input) now runs the
+  decode once, which writes it out.
+- The input stream never flushed the filter at the end of the input:
+  peek returned EOF as soon as the raw buffer was empty, dropping
+  whatever the filter still held (that character, or output it kept
+  back when the UTF-8 buffer was full). Now it refills once more with
+  no raw data, and returns EOF when that gives nothing new.
+- Refilling with an empty raw buffer discarded 0 bytes from it, which
+  parserutils_buffer_discard refuses (BADPARM). It is now skipped when
+  nothing was read.
+---
+ src/input/filter.c      |  6 ++++--
+ src/input/inputstream.c | 31 +++++++++++++++++++++++--------
+ 2 files changed, 27 insertions(+), 10 deletions(-)
+
+diff --git a/src/input/filter.c b/src/input/filter.c
+index 00ee7eb..ad14869 100644
+--- a/src/input/filter.c
++++ b/src/input/filter.c
+@@ -255,7 +255,9 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
+ 		input->leftover = false;
+ 	}
+ 
+-	while (*len > 0) {
++	/* With no input, this still runs once: the read codec may hold a
++	 * character it decoded when the pivot buffer was full */
++	do {
+ 		parserutils_error read_error, write_error;
+ 		size_t pivot_len = sizeof(input->pivot_buf);
+ 		uint8_t *pivot = (uint8_t *) input->pivot_buf;
+@@ -286,7 +288,7 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
+ 		if (read_error != PARSERUTILS_OK && 
+ 				read_error != PARSERUTILS_NOMEM)
+ 			return read_error;
+-	}
++	} while (*len > 0);
+ 
+ 	return PARSERUTILS_OK;
+ #endif
+diff --git a/src/input/inputstream.c b/src/input/inputstream.c
+index 120ae88..270dc41 100644
+--- a/src/input/inputstream.c
++++ b/src/input/inputstream.c
+@@ -26,6 +26,8 @@ typedef struct parserutils_inputstream_private {
+ 
+ 	bool done_first_chunk;		/**< Whether the first chunk has 
+ 					 * been processed */
++	bool flushed;			/**< Whether the filter has been
++					 * flushed at the end of input */
+ 
+ 	uint16_t mibenum;		/**< MIB enum for charset, or 0 */
+ 	uint32_t encsrc;		/**< Charset source */
+@@ -86,6 +88,7 @@ parserutils_error parserutils_inputstream_create(const char *enc,
+ 	s->public.cursor = 0;
+ 	s->public.had_eof = false;
+ 	s->done_first_chunk = false;
++	s->flushed = false;
+ 
+ 	error = parserutils__filter_create("UTF-8", &s->input);
+ 	if (error != PARSERUTILS_OK) {
+@@ -243,9 +246,13 @@ parserutils_error parserutils_inputstream_peek_slow(
+ 
+ 	/* There's insufficient data in the buffer, so read some more */
+ 	if (s->raw->length == 0) {
+-		/* No more data to be had */
+-		return s->public.had_eof ? PARSERUTILS_EOF
+-					 : PARSERUTILS_NEEDDATA;
++		/* No more data to be had, once the filter has written out
++		 * what it still holds (refilling with no raw data flushes
++		 * it) */
++		if (s->public.had_eof == false)
++			return PARSERUTILS_NEEDDATA;
++		if (s->flushed)
++			return PARSERUTILS_EOF;
+ 	}
+ 
+ 	/* Refill utf8 buffer from raw buffer */
+@@ -254,8 +261,14 @@ parserutils_error parserutils_inputstream_peek_slow(
+ 		return error;
+ 
+ 	/* Refill may have succeeded, but not actually produced any new data */
+-	if (s->public.cursor + offset == s->public.utf8->length)
++	if (s->public.cursor + offset == s->public.utf8->length) {
++		if (s->raw->length == 0 && s->public.had_eof) {
++			s->flushed = true;
++			return PARSERUTILS_EOF;
++		}
++
+ 		return PARSERUTILS_NEEDDATA;
++	}
+ 
+ 	/* Now try the read */
+ 	if (IS_ASCII(s->public.utf8->data[s->public.cursor + offset])) {
+@@ -472,10 +485,12 @@ parserutils_error parserutils_inputstream_refill_buffer(
+ 		return error;
+ 
+ 	/* Remove the raw data we've processed from the raw buffer */
+-	error = parserutils_buffer_discard(stream->raw, 0, 
+-			stream->raw->length - raw_length);
+-	if (error != PARSERUTILS_OK)
+-		return error;
++	if (raw_length < stream->raw->length) {
++		error = parserutils_buffer_discard(stream->raw, 0,
++				stream->raw->length - raw_length);
++		if (error != PARSERUTILS_OK)
++			return error;
++	}
+ 
+ 	/* Fix up the utf8 buffer information */
+ 	stream->public.utf8->length = 
+-- 
+2.43.0
+

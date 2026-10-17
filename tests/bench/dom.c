@@ -11,6 +11,7 @@
 #include <hubbub/hubbub.h>
 #include <hubbub/parser.h>
 #include <hubbub/tree.h>
+#include <parserutils/charset/mibenum.h>
 
 #include "dom.h"
 
@@ -381,12 +382,32 @@ static hubbub_error t_complete_script(void *ctx, void *script)
 	return HUBBUB_OK;
 }
 
+static hubbub_parser *cur_parser;
+static const char *new_charset;
+
+/* a <meta charset> found while parsing: start again in that charset unless
+ * the one in use is certain or the same (what libdom's binding tells
+ * NetSurf, which then parses the page again) */
+static hubbub_error t_encoding_change(void *ctx, const char *name)
+{
+	hubbub_charset_source source;
+	const char *cur = hubbub_parser_read_charset(cur_parser, &source);
+
+	if (cur == NULL || source == HUBBUB_CHARSET_CONFIDENT)
+		return HUBBUB_OK;
+	if (parserutils_charset_mibenum_from_name(name, strlen(name)) ==
+			parserutils_charset_mibenum_from_name(cur, strlen(cur)))
+		return HUBBUB_OK;
+	new_charset = name;
+	return HUBBUB_ENCODINGCHANGE;
+}
+
 static hubbub_tree_handler handler = {
 	t_create_comment, t_create_doctype, t_create_element, t_create_text,
 	t_ref_node, t_unref_node, t_append_child, t_insert_before,
 	t_remove_child, t_clone_node, t_reparent_children, t_get_parent,
 	t_has_children, t_form_associate, t_add_attributes, t_set_quirks_mode,
-	NULL, t_complete_script, NULL
+	t_encoding_change, t_complete_script, NULL
 };
 
 static node *parse_with(const uint8_t *data, size_t len, size_t chunk,
@@ -404,6 +425,7 @@ static node *parse_with(const uint8_t *data, size_t len, size_t chunk,
 		free(doc);
 		return NULL;
 	}
+	cur_parser = parser;
 	params.tree_handler = &handler;
 	hubbub_parser_setopt(parser, HUBBUB_PARSER_TREE_HANDLER, &params);
 	params.document_node = doc;
@@ -414,9 +436,7 @@ static node *parse_with(const uint8_t *data, size_t len, size_t chunk,
 		err = hubbub_parser_parse_chunk(parser, data + off, n);
 	}
 	if (err == HUBBUB_ENCODINGCHANGE && changed != NULL) {
-		hubbub_charset_source source;
-		const char *cs = hubbub_parser_read_charset(parser, &source);
-		strncpy(changed, cs != NULL ? cs : "UTF-8", changed_size - 1);
+		strncpy(changed, new_charset, changed_size - 1);
 		changed[changed_size - 1] = 0;
 		hubbub_parser_destroy(parser);
 		free_node(doc);
