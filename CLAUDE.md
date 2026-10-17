@@ -60,7 +60,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   NetSurf's part first, measure it, and only then write a replacement.
 - **`third_party/netsurf/`** holds four NetSurf libraries (MIT) at the commits its README lists. Don't
   edit them on their own: a change also goes in `third_party/netsurf/patches/` as a patch against
-  upstream (ready to send to NetSurf) and in its README with the reason, so an update can carry it.
+  upstream (git am applies it; the owner takes no part in NetSurf's development, so nothing is sent
+  to NetSurf) and in its README with the reason, so an update can carry it.
   Their generated sources are made in `build/gen` (perl, gperf), never committed. NetSurf's own core
   is GPL-2.0-only: taking any of it is the owner's call (DESIGN.md, Open questions).
 - **The Atari build is freestanding**, on `common/`'s runtime; `atari/include/` and

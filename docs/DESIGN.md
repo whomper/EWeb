@@ -237,8 +237,9 @@ LibCSS lacks, and the difference is put down to that only if the values then agr
 selectors, shorthands, values, `var()`, `@media`, `@supports`, `@layer`, error recovery, sharing),
 with AddressSanitizer and UBSan, and the engine ran clean under them on every page of the set.
 
-**Worth sending to NetSurf:** `css_unit__px_per_unit()` in LibCSS's `select/unit.c` uses the
-viewport's width for `vh` and its height for `vw`.
+**A LibCSS fault, for the record:** `css_unit__px_per_unit()` in LibCSS's `select/unit.c` uses the
+viewport's width for `vh` and its height for `vw`. (EWeb takes no part in NetSurf's development: its
+changes to NetSurf's libraries stay here.)
 
 **Next for the engine:** logical properties (`margin-inline-start` and the rest, which Hebrew pages
 need), keeping parsed sheets per site (a site's stylesheet is parsed once, not on every page), and
@@ -249,7 +250,7 @@ properties).
 
 Hubbub reads the page through libparserutils, which turned every character into UCS-4 and back into
 UTF-8, even when the page was UTF-8 already. Now valid UTF-8 is copied, checked as it goes
-(`third_party/netsurf/patches`, ready to send upstream). What isn't UTF-8 becomes U+FFFD as the
+(`third_party/netsurf/patches`). What isn't UTF-8 becomes U+FFFD as the
 WHATWG Encoding Standard says, one for each broken sequence, wherever the page is split into chunks.
 libparserutils' own decoder didn't do that: it let through 5- and 6-byte forms and code points past
 U+10FFFF, and at a chunk boundary it could swallow the rest of the chunk or drop a character. Two
@@ -365,8 +366,7 @@ lives in the other parts:
 
 - **Decoding** (NetSurf's libparserutils): UTF-8, Windows-1255 and ISO-8859-8, with no iconv.
   ISO-8859-8-I, the logical-order label some older Israeli sites use, was read as Windows-1252, its
-  Hebrew turned into Latin letters; one line fixes it (`third_party/netsurf/patches`, ready to send
-  upstream), with the web's labels "logical" and "visual". `tests/hebrew` checks the same page in all
+  Hebrew turned into Latin letters; one line fixes it (`third_party/netsurf/patches`), with the web's labels "logical" and "visual". `tests/hebrew` checks the same page in all
   six labels, on this computer and as 68030 code (`make test`, `make hebtest68k`).
 - **CSS** (LibCSS): `direction` and `unicode-bidi` are there. EWeb's UA sheet adds the HTML rules for
   `dir="rtl"`, `dir="ltr"`, `<bdi>` and `<bdo>`; `dir="auto"` is layout's, from the first strong

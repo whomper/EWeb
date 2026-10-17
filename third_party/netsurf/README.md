@@ -21,9 +21,9 @@ parsers) are made in `build/gen`.
 
 ## Local changes
 
-Each is in `patches/` as a patch against the upstream library, ready to send
-to NetSurf (git am applies it), and is carried again after an update until
-upstream has it.
+Each is in `patches/` as a patch against the upstream library (git am applies
+it), so that an update of a library can carry it again. They are EWeb's own:
+EWeb takes no part in NetSurf's development and doesn't send them upstream.
 
 | Patch | Why |
 |---|---|
