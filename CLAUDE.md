@@ -79,3 +79,9 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `make dist`. `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it
   changes, measure the shipped files again and change their figures in DESIGN.md.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
+- **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
+  (DESIGN.md). After changing it, `make test` (its cases, `tests/css/cases.txt`, worked out from the
+  specifications) and `make csscmp` (against LibCSS on the page set: no difference may be left
+  without a reason); after a change meant for speed, count it (`tools/count68k.sh`,
+  `tests/bench/measure.py -E ewcss`) and change DESIGN.md's figures. `EC_COMPAT_*` options exist
+  only for csscmp.

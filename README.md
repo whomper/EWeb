@@ -2,14 +2,19 @@
 
 A web browser for the Atari Falcon, written in C for GEM, made for a Falcon
 with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and fine on
-any Falcon. **There is no browser yet**: this repository holds the design and
-the first milestone's measuring tools.
+any Falcon. **There is no browser yet**: this repository holds the design,
+the first milestone's measuring tools and EWeb's own CSS engine, its first
+part.
 
 - [`docs/DESIGN.md`](docs/DESIGN.md): what a Falcon can do with today's web,
   the decisions made, the design, how EWeb gets past CAPTCHAs, and the order of
   work.
-- `NSBENCH.TTP`: parses a saved page with NetSurf's HTML parser and CSS
-  engine on the Atari and says how long each part took.
+- [`docs/CSS.md`](docs/CSS.md): EWeb's CSS engine, written for the 68030:
+  about a tenth of NetSurf's LibCSS's time on the same pages, and closer to
+  today's CSS.
+- `NSBENCH.TTP`: parses a saved page with NetSurf's HTML parser, and styles
+  it with NetSurf's CSS engine and with EWeb's, on the Atari, and says how
+  long each part took.
 
 ## Getting started
 
@@ -25,8 +30,8 @@ and unpack it. It contains:
 
 1. Copy the files to a folder on your hard disk, with any page you want to
    test saved as a file.
-2. Double-click `NSBENCH.TTP` and type `NEWS.HTM NEWS.CSS` (or `SAMPLE.HTM`,
-   or your page's name, then its stylesheet's).
+2. Double-click `NSBENCH.TTP` and type `-E both NEWS.HTM NEWS.CSS` (or
+   `SAMPLE.HTM`, or your page's name, then its stylesheet's).
 3. The results show on the screen and go into `NSBENCH.LOG`.
 
 **Needs:** an Atari Falcon; plain TOS, MagiC or MiNT.
@@ -38,8 +43,9 @@ sudo apt install gcc-m68k-linux-gnu python3 perl gperf   # Debian/Ubuntu
 make            # binary/NSBENCH.TTP, for plain TOS on a Falcon (68030 with FPU)
 make bench      # build/host/nsbench, for this computer
 make bench68k   # build/m68k/nsbench, a 68030 Linux program for tools/count68k.sh
-make test       # nsbench with AddressSanitizer and UBSan
+make test       # nsbench, the CSS engine's cases, the Hebrew pages, with AddressSanitizer and UBSan
 make h5test     # Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
+make csscmp     # EWeb's CSS engine against LibCSS on the page set (tests/bench/pages.sh first)
 make dist       # dist/EWEB-x.y.zip, as on the Releases page
 ```
 
@@ -53,10 +59,15 @@ the files.
 
 ```
 docs/DESIGN.md        the design
+docs/CSS.md           EWeb's CSS engine
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
+src/css/              EWeb's CSS engine
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
-                      the page set, the counting, the Hatari rig and mkpage.py
-                      (NEWS.HTM and NEWS.CSS)
+                      EWeb's engine on the same tree, the page set, the
+                      counting, the Hatari rig and mkpage.py (NEWS.HTM and
+                      NEWS.CSS)
+tests/css/            the CSS engine's cases (from the specifications), and
+                      csscmp, which compares it with LibCSS value by value
 tests/html5lib/       Hubbub against the Web Platform Tests' tree-construction tests
 tests/hebrew/         a Hebrew page in every Hebrew encoding
 atari/                the C library pieces NetSurf needs beyond common/
@@ -67,12 +78,17 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 
 ## Tests
 
-- `make test`: nsbench on `tests/bench/sample.html` and the Hebrew pages in
-  every Hebrew encoding (`tests/hebrew`), with AddressSanitizer and UBSan.
+- `make test`: nsbench with both CSS engines on `tests/bench/sample.html` and
+  `NEWS.HTM`, the Hebrew pages in every Hebrew encoding (`tests/hebrew`), the
+  CSS engine's cases (`tests/css/cases.txt`), and csscmp on the test pages,
+  with AddressSanitizer and UBSan.
+- `make csscmp`: EWeb's CSS engine against LibCSS on the whole page set: every
+  difference must be one of LibCSS's known gaps.
 - `make h5test`: Hubbub against the Web Platform Tests' tree-construction
   tests, here and as 68030 code under QEMU.
-- `tests/bench/measure.py`: 68030 instructions per phase for the whole page
-  set; `tests/bench/hatari.py`: `NSBENCH.TTP` timed on an emulated Falcon.
+- `tests/bench/measure.py [-E ewcss]`: 68030 instructions per phase for the
+  whole page set; `tests/bench/hatari.py [--stock]`: `NSBENCH.TTP` timed on an
+  emulated Falcon.
 
 ## Licence
 

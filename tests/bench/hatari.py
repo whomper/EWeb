@@ -3,9 +3,9 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """NSBENCH.TTP on an emulated Falcon: Hatari, EmuTOS, a 68030 at 32 MHz
 (Hatari's fastest) with a 68882, 14 MB of ST-RAM and 64 MB of TT-RAM, and
-cycle-exact timing.
+cycle-exact timing; or with --stock, a stock Falcon: 16 MHz, no FPU, no TT-RAM.
 
-    tests/bench/hatari.py ETOS1024K.IMG PAGE.HTML [SHEET.CSS ...] [-- NSBENCH-ARGS]
+    tests/bench/hatari.py [--stock] ETOS1024K.IMG PAGE.HTML [SHEET.CSS ...] [-- NSBENCH-ARGS]
 
 It prints what nsbench printed (its times are the emulated machine's).
 """
@@ -21,6 +21,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def main():
     args = sys.argv[1:]
     extra = []
+    stock = "--stock" in args
+    if stock:
+        args.remove("--stock")
     if "--" in args:
         extra = args[args.index("--") + 1:]
         args = args[:args.index("--")]
@@ -40,13 +43,14 @@ def main():
     log = os.path.join(work, "hatari.log")
     cmd = ["hatari", "--machine", "falcon", "--tos", tos, "--harddrive", work,
            "--auto", "C:\\NSBENCH.TTP", "--fast-boot", "yes", "--natfeats", "yes",
-           "--cpuclock", "32", "--fpu", "68882", "--addr24", "off",
-           "--memsize", "14", "--ttram", "64", "--cpu-exact", "yes",
+           "--cpuclock", "16" if stock else "32", "--fpu", "none" if stock else "68882",
+           "--addr24", "off", "--memsize", "14", "--ttram", "0" if stock else "64",
+           "--cpu-exact", "yes",
            "--fast-forward", "yes", "--sound", "off", "--confirm-quit", "no",
            "--statusbar", "no", "--monitor", "vga", "--log-level", "fatal"]
     env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
     h = subprocess.Popen(cmd, env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
-    end = time.time() + 1800
+    end = time.time() + 3000
     try:
         while time.time() < end and h.poll() is None:
             time.sleep(1)

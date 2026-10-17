@@ -31,6 +31,7 @@ struct node {
 	uint32_t len, cap;
 	void *css_data;			/* LibCSS's per-node data */
 	void *style;			/* css_select_results, after selection */
+	void *ecn;			/* the node as EWeb's CSS engine sees it */
 };
 
 typedef struct dom_stats {

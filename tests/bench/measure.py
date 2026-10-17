@@ -3,14 +3,15 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """Counts the 68030 instructions nsbench needs per phase, page by page.
 
-    tests/bench/measure.py [build/pages] > results.csv
+    tests/bench/measure.py [-E libcss|ewcss] [build/pages] > results.csv
 
 For every page in PAGES/pages it runs build/m68k/nsbench under QEMU
 (tools/count68k.sh) once per step: an empty page (the program's own start),
 the HTML alone (-P 1), and with each stylesheet in PAGES/css the CSS parse
 (-P 2) and the selection (-P 3). The CSV has the page's size and counts,
 then each step's instructions less the step before it. A summary goes to
-stderr: the median and the 90th percentile, and instructions per byte."""
+stderr: the median and the 90th percentile, and instructions per byte. -E
+picks the CSS engine: LibCSS (the default) or EWeb's own."""
 import csv
 import os
 import re
@@ -39,24 +40,32 @@ def stats(out):
     return [int(x) for x in m.groups()]
 
 
+ENGINE = ["-E", "libcss"]
+
+
 def page_row(page, sheets, base):
-    p1, out = run(["-P", "1", page])
+    p1, out = run(ENGINE + ["-P", "1", page])
     row = [os.path.basename(page)] + stats(out) + [p1 - base]
     for sheet in sheets:
-        p2, _ = run(["-P", "2", page, sheet])
-        p3, out3 = run(["-P", "3", page, sheet])
+        p2, _ = run(ENGINE + ["-P", "2", page, sheet])
+        p3, out3 = run(ENGINE + ["-P", "3", page, sheet])
         sel = re.search(r"styles: (\d+) elements, (\d+) inline", out3)
         row += [p2 - p1, p3 - p2]
     return row
 
 
 def main():
-    pages_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build/pages")
+    global ENGINE
+    args = sys.argv[1:]
+    if len(args) >= 2 and args[0] == "-E":
+        ENGINE = ["-E", args[1]]
+        args = args[2:]
+    pages_dir = args[0] if args else os.path.join(ROOT, "build/pages")
     pages = sorted(os.path.join(pages_dir, "pages", f) for f in os.listdir(os.path.join(pages_dir, "pages")))
     sheets = sorted(os.path.join(pages_dir, "css", f) for f in os.listdir(os.path.join(pages_dir, "css")))
     empty = os.path.join(ROOT, "build/empty.html")
     open(empty, "w").close()
-    base, _ = run(["-P", "1", empty])
+    base, _ = run(ENGINE + ["-P", "1", empty])
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as ex:
         rows = list(ex.map(lambda p: page_row(p, sheets, base), pages))

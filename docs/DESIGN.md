@@ -162,14 +162,77 @@ into UTF-8, decoding and re-encoding every character. `nsbench`'s own tree code 
   to match its 1,139 passing tests before it could count as better. The first gain is a UTF-8 path
   that skips the decode and re-encode (HTML and CSS both read through it), measured on the page set.
   `<template>` needs adding.
-- **CSS: where fresh code can win most.** Parsing and selection cost 3–9 times what the HTML does (5
-  times on the median page with Pico; 19 of `NEWS.HTM`'s 21 s on your DFB1). LibCSS computes every property it knows, the spoken-media ones
-  too, for every element. A fresh engine that computes only what EWeb draws, and keeps parsed sheets
-  per site, is the first candidate; LibCSS stays as the yardstick until one beats it on the page set.
+- **CSS: fresh code, decided (17 Oct 2026).** Parsing and selection cost 3–9 times what the HTML
+  does (19 of `NEWS.HTM`'s 21 s on your DFB1). EWeb's own engine (below) is 7–15 times faster on the
+  page set and closer to today's specifications, so it replaces LibCSS; LibCSS stays in nsbench as
+  the yardstick.
 - **Layout: fresh code, decided by Hebrew.** NetSurf's layout uses `direction` only for default
   alignment and margins, and nothing in NetSurf reorders text, so a line mixing Hebrew and English
   would come out backwards. Fresh layout with the bidirectional algorithm built in is both more
   compliant and needed (see Hebrew, below).
+
+## EWeb's own CSS engine (17 Oct 2026)
+
+`src/css/`, described in [CSS.md](CSS.md): written for the 68030 from the start. It reads a rule's
+declarations only when the rule first matches, skips `@media` blocks that don't apply, finds an
+element's rules through its own atoms with no callbacks, rejects most descendant selectors with a
+filter of the ancestors, shares styles between siblings and caches them between cousins, applies
+each property once, and uses integer fixed point throughout. It computes the 83 properties EWeb
+draws (LibCSS computes over a hundred, the spoken-media ones too), and has what LibCSS lacks:
+`var()`, `calc()`, Selectors 4, Media Queries 4, `@supports`, `@layer`, CSS Color 4's syntax, `gap`,
+`inset`, gradients.
+
+**Speed.** 68030 instructions for the CSS (sheets and every element's style), counted under QEMU:
+
+| | LibCSS | EWeb's engine | Fewer |
+|---|---|---|---|
+| `NEWS.HTM` with `NEWS.CSS` | 95.6 M | 8.7 M | 11× |
+| The page set with Bootstrap, median page | 145.8 M | 9.6 M | 15× (10–20×) |
+| The page set with Pico, median page | 84.4 M | 12.0 M | 7× (6–9×) |
+
+And timed on Hatari (`NSBENCH.TTP -E both`, `NEWS.HTM`):
+
+| Machine | LibCSS (css + styles) | EWeb's engine | Faster |
+|---|---|---|---|
+| Emulated: 68030 at 32 MHz, TT-RAM | 11.12 + 10.43 s | 0.65 + 1.34 s | 10.9× |
+| Emulated: stock Falcon, 16 MHz, ST-RAM | 23.11 + 20.96 s | 1.39 + 2.96 s | 10.1× |
+
+Your DFB1 ran LibCSS's part of `NEWS.HTM` in 18.8 s, 0.87 of the emulated 32 MHz machine's time,
+so EWeb's engine should take about **1.7 s** there, and the whole page (with the HTML's 2.5 s)
+about 4 s instead of 21. At the DFB1's 5.2 M instructions a second the page set's median page is
+1.8 s with Bootstrap and 2.3 s with Pico (90th percentile 2.2 and 3.6 s). The HTML parser is now
+the larger part; a UTF-8 path for Hubbub (above) is next in line.
+
+**Standards.** `make csscmp` compares the two engines value by value on all 258 pages, each with
+Bootstrap and then with Pico: 53.8 million values a run, every element, every property both have.
+A difference counts only if it is one of LibCSS's known gaps, most of them found exactly: the page
+is styled again with one of the engine's `EC_COMPAT_*` switches on, each leaving out one thing
+LibCSS lacks, and the difference is put down to that only if the values then agree. What is left:
+
+- With Bootstrap, 4.0 million differences, all LibCSS falling short: mostly CSS 3 initial values and
+  computed-value rules (`min-width: auto`, no border width without a style, flex items blockified,
+  `bolder` computed), then `calc()` (26,597 values), `text-align: start` (1,035), `text-decoration`
+  with a style (76), and LibCSS's own px conversion, which rounds the pixels in a unit down and swaps
+  `vw` and `vh` (`unit.c`; 267).
+- With Pico, 4.2 million, the same kinds, with Selectors 4 (`:where()`, `:is()`, `:not()` of a list;
+  207,694 values) the largest of the new ones.
+- 171 and 137 values on three pages with no reason found by the tools. Each was traced by hand, and
+  in each EWeb's value is the right one: LibCSS doesn't end a bad `url(` where CSS Syntax 3 does; on
+  two pages LibCSS leaves out style attributes, and on one it misses a rule that plainly matches,
+  both only in the whole page (the cause is inside LibCSS's selection). Separately, the engine's
+  switch for style attributes finds about 118 values a run where LibCSS left one out.
+
+`make test` runs 39 cases worked out from the specifications (`tests/css/cases.txt`: the cascade,
+selectors, shorthands, values, `var()`, `@media`, `@supports`, `@layer`, error recovery, sharing),
+with AddressSanitizer and UBSan, and the engine ran clean under them on every page of the set.
+
+**Worth sending to NetSurf:** `css_unit__px_per_unit()` in LibCSS's `select/unit.c` uses the
+viewport's width for `vh` and its height for `vw`.
+
+**Next for the engine:** logical properties (`margin-inline-start` and the rest, which Hebrew pages
+need), keeping parsed sheets per site (a site's stylesheet is parsed once, not on every page), and
+Pico's cost per element (11,000 instructions against Bootstrap's 3,100: `:where()` and custom
+properties).
 
 ## The design
 
@@ -403,7 +466,8 @@ These break site terms, sites actively fight them, and this design doesn't need 
    68030s and the first calls (above), and `NSBENCH.TTP` in release v0.1 for your Falcon (it runs on
    an emulated stock Falcon too: 16 MHz, no FPU, no TT-RAM), timed on your DFB1 with `SAMPLE.HTM`
    (above), and NSBENCH 0.2's machine report and `NEWS.HTM` on your DFB1: 21.3 s with the caches on,
-   nine tenths of it CSS. *Still to do:* a real page on your DFB1, fetching and laying out text.
+   nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster (above). *Still to do:*
+   EWeb's engine timed on your DFB1, a real page there, fetching and laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

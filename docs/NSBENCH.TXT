@@ -1,13 +1,14 @@
-NSBENCH.TTP - EWeb's first measuring tool
-==========================================
+NSBENCH.TTP - EWeb's measuring tool
+===================================
 
 What it does
 ------------
 NSBENCH reads a web page saved as a file and runs on it the parts of
 NetSurf that EWeb starts from: the HTML parser (Hubbub) and the CSS
-engine (LibCSS). It times each part on your Atari, so we can see how a
-real Falcon compares with the emulators EWeb's design was measured on.
-It doesn't show the page itself.
+engine (LibCSS), and EWeb's own CSS engine, which is meant to replace
+LibCSS. It times each part on your Atari, so we can see how a real
+Falcon compares with the emulators EWeb's design was measured on. It
+doesn't show the page itself.
 
 What it needs
 -------------
@@ -28,6 +29,8 @@ How to use it
    HTML only) and copy it over with a short name, such as BBC.HTM; its
    stylesheet too if you have it (BBC.CSS).
 2. Double-click NSBENCH.TTP and type the file names in the box:
+       -E both NEWS.HTM NEWS.CSS
+   (both CSS engines, one after the other), or
        NEWS.HTM NEWS.CSS
    or
        SAMPLE.HTM
@@ -38,6 +41,8 @@ How to use it
 
 Options (type them before the file names)
 -----------------------------------------
+   -E both   time both CSS engines: LibCSS, then EWeb's own; -E ewcss
+             EWeb's alone; -E libcss (the default) LibCSS alone
    -r 5      run it five times and show the average (good for small
              pages such as SAMPLE.HTM: the timer counts in steps of 5 ms;
              NEWS.HTM takes long enough once)
@@ -63,7 +68,12 @@ What the numbers mean
    css       parsing the stylesheets: a small built-in one, the files
              you name and the page's own <style> blocks
    select    working out every element's style
-The times are in milliseconds.
+The times are in milliseconds. "time per run" is LibCSS's; "time per
+run, EWeb's CSS" is EWeb's own engine's, on the same page and sheets.
+The "EWeb's CSS" lines before them say what it did: how many rules,
+how many of their declarations it had to read, and how many elements
+took a style from a sibling ("shared") or one already worked out
+("cached") instead of working it out again.
 
 Please send NSBENCH.LOG back, with your Atari's details (for example as
 an issue on github.com/whomper/EWeb): it shows how a real DFB1 compares.

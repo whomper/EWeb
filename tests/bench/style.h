@@ -17,6 +17,9 @@ typedef struct style_stats {
 
 struct css_select_ctx;
 
+/* the UA sheet both engines start from */
+extern const char nsbench_ua_css[];
+
 /* Parses the UA sheet, the author sheets (files[], data and lengths) and
  * the page's <style> elements into a selection context. */
 struct css_select_ctx *style_sheets(node *doc, const char **data, const size_t *len,

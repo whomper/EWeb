@@ -1,0 +1,714 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
+#
+# EWeb's CSS engine against the specifications: tests/css/ectest.c reads
+# this. Each case: === name, then --- css, --- html, --- expect (and
+# --- options N for ec_create's options). The values expected are worked
+# out from the specifications named; where the engine's fixed point (1/1024)
+# rounds, the comment says so. The UA sheet is nsbench's
+# (tests/bench/style.c), the viewport 640x480, the default font 16px.
+
+=== the cascade: specificity, then order (CSS Cascade 4, 6.4)
+--- css
+p { color: red }
+.a { color: green }
+#b { color: blue }
+p.a { color: yellow }
+--- html
+<p id=t1 class=a>x</p><p id=b class=a>y</p><p id=t3>z</p>
+--- expect
+#t1 color #ffff00
+#b color #0000ff
+#t3 color #ff0000
+
+=== !important, and the style attribute above author rules
+--- css
+#i { color: red !important }
+p { color: blue }
+#j { color: red !important }
+--- html
+<p id=i style="color: green">x</p><p id=j style="color: green !important">y</p><p id=k style="color: green">z</p>
+--- expect
+#i color #ff0000
+#j color #008000
+#k color #008000
+
+=== the last valid declaration in a block wins
+--- css
+p { margin-left: 5px; margin-left: 7px; margin-left: bogus }
+--- html
+<p id=a>x</p>
+--- expect
+#a margin-left 7px
+
+=== combinators (Selectors 4, 16)
+--- css
+div p { color: red }
+div > p { margin-left: 1px }
+h1 + p { margin-right: 2px }
+h1 ~ p { padding-left: 3px }
+--- html
+<div><h1 id=h>x</h1><p id=a>a</p><p id=b>b</p></div><p id=c>c</p>
+--- expect
+#a color #ff0000
+#a margin-left 1px
+#a margin-right 2px
+#a padding-left 3px
+#b margin-right 0px
+#b padding-left 3px
+#c color #000000
+#c padding-left 0px
+
+=== child-indexed pseudo-classes, and elements that mustn't share a style
+--- css
+li:first-child { color: red }
+li:nth-child(2n+1) { margin-left: 1px }
+li:last-child { color: blue }
+li:nth-last-child(2) { padding-left: 2px }
+li:only-child { color: green }
+--- html
+<ul><li id=l1>1</li><li id=l2>2</li><li id=l3>3</li></ul><ul><li id=o>only</li></ul>
+--- expect
+#l1 color #ff0000
+#l2 color #000000
+#l3 color #0000ff
+#l1 margin-left 1px
+#l2 margin-left 0px
+#l3 margin-left 1px
+#l2 padding-left 2px
+#l1 padding-left 0px
+#o color #008000
+
+=== typed child-indexed pseudo-classes
+--- css
+p:first-of-type { color: red }
+p:last-of-type { color: blue }
+span:nth-of-type(2) { color: green }
+--- html
+<div><span>a</span><p id=p1>b</p><span id=s2>c</span><p id=p2>d</p><p id=p3>e</p></div>
+--- expect
+#p1 color #ff0000
+#p2 color #000000
+#p3 color #0000ff
+#s2 color #008000
+
+=== attribute selectors (Selectors 4, 6)
+--- css
+[data-x] { margin-left: 1px }
+[data-x="a b"] { margin-right: 1px }
+[data-x~="b"] { padding-left: 1px }
+[lang|="en"] { padding-right: 1px }
+[href^="http:"] { margin-top: 1px }
+[href$=".pdf"] { margin-bottom: 1px }
+[href*="ex"] { padding-top: 1px }
+[type="TEXT" i] { padding-bottom: 1px }
+--- html
+<p id=a data-x="a b" lang="en-GB">x</p><a id=l href="http://example.com/x.pdf">l</a><input id=i type=text>
+--- expect
+#a margin-left 1px
+#a margin-right 1px
+#a padding-left 1px
+#a padding-right 1px
+#l margin-top 1px
+#l margin-bottom 1px
+#l padding-top 1px
+#i padding-bottom 1px
+
+=== :not(), :is() and :where(), and their specificity (Selectors 4, 17)
+--- css
+p:not(.x, .y) { color: red }
+:is(#a, .b) { margin-left: 1px }
+p:where(#a) { margin-left: 2px }
+:where(#a) { color: blue }
+--- html
+<p id=a>x</p><p id=b class=x>y</p><p id=c class=b>z</p>
+--- expect
+#a margin-left 1px
+#a color #ff0000
+#b color #000000
+#c margin-left 1px
+#c color #ff0000
+
+=== an invalid selector drops its whole rule; :is() forgives
+--- css
+p, p::-webkit-whatever { color: red }
+p:unknown-pc { color: blue }
+.ok { margin-left: 1px }
+:is(p, ::-webkit-x) { margin-right: 2px }
+--- html
+<p id=a class=ok>x</p><p id=b>y</p>
+--- expect
+#a margin-left 1px
+#b color #000000
+#b margin-right 2px
+
+=== :root, :empty and :link
+--- css
+:root { color: green }
+p:empty { margin-left: 5px }
+a:link { margin-right: 3px }
+a:visited { margin-right: 9px }
+--- html
+<p id=e></p><p id=f>x</p><a id=l href=x>l</a><a id=n>n</a>
+--- expect
+#e margin-left 5px
+#f margin-left 0px
+#l margin-right 3px
+#n margin-right 0px
+#f color #008000
+#l color #0000ee
+
+=== :lang() and :dir() for Hebrew (Selectors 4, 7)
+--- css
+:lang(he) { direction: rtl }
+p:dir(rtl) { margin-left: 1px }
+--- html
+<div lang="he-IL"><p id=h>שלום</p></div><p id=e>x</p><div dir=rtl><p id=d>x</p></div>
+--- expect
+#h direction rtl
+#e direction ltr
+#d margin-left 1px
+#h margin-left 0px
+
+=== form pseudo-classes (HTML, 4.16.3)
+--- css
+input:disabled { margin-left: 1px }
+input:enabled { margin-left: 2px }
+input:checked { margin-right: 1px }
+input:required { padding-left: 1px }
+input:optional { padding-left: 2px }
+input:placeholder-shown { padding-right: 1px }
+input:read-only { padding-top: 5px }
+--- html
+<input id=a disabled><input id=b type=checkbox checked><input id=c required placeholder=x><input id=d type=checkbox readonly>
+--- expect
+#a margin-left 1px
+#b margin-left 2px
+#b margin-right 1px
+#c padding-left 1px
+#b padding-left 2px
+#c padding-right 1px
+#d padding-top 5px
+#c padding-top 0px
+
+=== margin and padding: one to four values
+--- css
+#a { margin: 1px }
+#b { margin: 1px 2px }
+#c { margin: 1px 2px 3px }
+#d { padding: 1px 2px 3px 4px }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div>
+--- expect
+#a margin-left 1px
+#b margin-left 2px
+#b margin-bottom 1px
+#c margin-left 2px
+#c margin-bottom 3px
+#d padding-left 4px
+#d padding-top 1px
+
+=== border, and widths with no style (CSS Backgrounds 3, 4)
+--- css
+#a { border: 2px solid red }
+#b { border-top: dashed }
+#c { border-width: thin medium thick 7px; border-style: solid }
+#d { border-width: 5px }
+#e { border-width: 5px; border-style: none solid hidden double }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div>
+--- expect
+#a border-left-width 2px
+#a border-left-style solid
+#a border-left-color #ff0000
+#b border-top-width 3px
+#b border-top-color currentcolor
+#b border-left-width 0px
+#c border-top-width 1px
+#c border-right-width 3px
+#c border-bottom-width 5px
+#c border-left-width 7px
+#d border-top-width 0px
+#e border-top-width 0px
+#e border-right-width 5px
+#e border-bottom-width 0px
+#e border-left-width 5px
+
+=== background (CSS Backgrounds 3, 3.10)
+--- css
+#a { background: url(x.png) no-repeat right 10px top / cover #abc }
+#b { background: linear-gradient(red, blue) }
+#c { background: red; background-image: url("y.gif") }
+#d { background-position: center }
+#e { background: url(a.png) repeat-y, url(b.png) green }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div>
+--- expect
+#a background-color #aabbcc
+#a background-image url(x.png)
+#a background-repeat no-repeat
+#a background-position-x calc(-10px + 100%)
+#a background-position-y 0%
+#b background-image gradient
+#b background-color #00000000
+#c background-color #ff0000
+#c background-image url(y.gif)
+#d background-position-x 50%
+#d background-position-y 50%
+#e background-image url(a.png)
+#e background-repeat repeat-y
+#e background-color #008000
+
+=== font (CSS Fonts 4, 2.8)
+--- css
+#a { font: italic bold 12px/1.5 "Helvetica Neue", Arial, sans-serif }
+#b { font: 2em monospace }
+#c { font: caption }
+#d { font: bold }
+--- html
+<div id=a>x</div><div id=b>y</div><div id=c>z</div><div id=d>w</div>
+--- expect
+#a font-style italic
+#a font-weight 700
+#a font-size 12px
+#a line-height 1.5
+#a font-family Helvetica Neue,Arial|sans-serif
+#b font-size 32px
+#b font-family |monospace
+#b line-height normal
+#b font-weight 400
+#c font-family |sans-serif
+#c font-size 16px
+# font: bold has no size: invalid, so the body's line-height (UA 1.33) stays
+#d font-weight 400
+#d line-height 1.33
+
+=== font-size: keywords, larger and smaller, percentages, em and rem
+--- css
+#a { font-size: small }
+#b { font-size: larger }
+#c { font-size: 150% }
+#d { font-size: 2em }
+#e { font-size: 1.5rem }
+#f { font-size: smaller }
+--- html
+<div id=a>x</div><div style="font-size: 20px"><span id=b>x</span><span id=c>x</span><span id=d>x</span><span id=e>x</span><span id=f>x</span></div>
+--- expect
+#a font-size 13px
+#b font-size 24px
+#c font-size 30px
+#d font-size 40px
+#e font-size 24px
+# 20px / 1.2 is 16.67; 1.2 in fixed point is 1.2002
+#f font-size 16.66px
+
+=== font-weight: bolder and lighter (CSS Fonts 4, 2.2)
+--- css
+#p { font-weight: 300 }
+#a { font-weight: bolder }
+#q { font-weight: 600 }
+#b { font-weight: bolder }
+#c { font-weight: lighter }
+--- html
+<div id=p><span id=a>x</span></div><div id=q><span id=b>x</span><span id=c>x</span></div>
+--- expect
+#a font-weight 400
+#b font-weight 900
+#c font-weight 400
+
+=== line-height: numbers inherit as numbers, the rest as lengths
+--- css
+#a { line-height: 1.5 }
+#b { line-height: 150% }
+#c { line-height: 2em; font-size: 10px }
+#d { line-height: 0 }
+--- html
+<div id=a><span id=a2>x</span></div><div id=b style="font-size: 20px"><span id=b2 style="font-size: 10px">x</span></div><div id=c>x</div><div id=d>x</div>
+--- expect
+#a line-height 1.5
+#a2 line-height 1.5
+#b line-height 30px
+#b2 line-height 30px
+#c line-height 20px
+#d line-height 0
+
+=== calc(), min(), max() and clamp() (CSS Values 4, 10)
+--- css
+#a { width: calc(100% - 2rem) }
+#b { width: calc(1rem + 2px) }
+#c { font-size: clamp(10px, 5vw, 20px) }
+#d { width: min(50%, 300px) }
+#e { margin-left: calc(2 * 3px) }
+#f { width: max(10px, 1em) }
+#g { width: calc(10px +5px) }
+#h { width: calc((1px + 2px) * 3) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div><div id=g></div><div id=h></div>
+--- expect
+#a width calc(-32px + 100%)
+#b width 18px
+#c font-size 20px
+#d width min(0px + 50%, 300px + 0%)
+#e margin-left 6px
+#f width 16px
+# + needs whitespace on both sides: invalid
+#g width auto
+#h width 9px
+
+=== units (CSS Values 4, 6)
+--- css
+#a { width: 1in }
+#b { width: 12pt }
+#c { width: 2.54cm }
+#d { width: 10vw }
+#e { height: 10vh }
+#f { width: 2ex }
+#g { width: 3ch }
+#h { width: 1pc }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div><div id=g></div><div id=h></div>
+--- expect
+#a width 96px
+#b width 16px
+#c width 96px
+#d width 64px
+#e height 48px
+# ex is 0.6em and ch 0.4em without a font to measure (as LibCSS); 0.6 and 0.4 round in fixed point
+#f width 19.19px
+#g width 19.22px
+#h width 16px
+
+=== colours (CSS Color 4)
+--- css
+#a { color: #abc }
+#b { color: #11223344 }
+#c { color: rgb(255 0 0 / 50%) }
+#d { color: rgba(0, 0, 255, .5) }
+#e { color: hsl(120, 100%, 25%) }
+#f { color: transparent }
+#g { color: rebeccapurple }
+#h { color: rgb(300, -5, 0) }
+#i { color: hsl(0deg 0% 100%) }
+#j { color: rgb(10%, 20%, 30%) }
+#k { color: RED }
+--- html
+<p id=a></p><p id=b></p><p id=c></p><p id=d></p><p id=e></p><p id=f></p><p id=g></p><p id=h></p><p id=i></p><p id=j></p><p id=k></p>
+--- expect
+#a color #aabbcc
+#b color #11223344
+#c color #ff000080
+#d color #0000ff80
+#e color #008000
+#f color #00000000
+#g color #663399
+#h color #ff0000
+#i color #ffffff
+#j color #1a334d
+#k color #ff0000
+
+=== inherit, initial, unset and currentcolor (CSS Cascade 4, 7)
+--- css
+#p { color: red; border: 1px solid; margin-left: 5px }
+#a { margin-left: inherit; color: initial }
+#b { color: unset; margin-left: unset }
+#c { border: 1px solid currentcolor; color: blue }
+--- html
+<div id=p><span id=a>a</span><span id=b>b</span><span id=c>c</span></div>
+--- expect
+#a margin-left 5px
+#a color #000000
+#b color #ff0000
+#b margin-left 0px
+#p border-left-color currentcolor
+#c border-top-color currentcolor
+#c color #0000ff
+
+=== custom properties and var() (CSS Variables 1)
+--- css
+:root { --gap: 10px; --c: red; --both: var(--gap) var(--gap); --loop: var(--loop) }
+div { margin-left: 9px }
+#a { margin-left: var(--gap) }
+#b { color: var(--c) }
+#c { margin: var(--both) }
+#d { margin-left: var(--nope, 7px) }
+#e { margin-left: var(--nope) }
+#f { --gap: 3px; padding-left: var(--gap) }
+#g { width: calc(var(--gap) * 2) }
+#h { margin-left: var(--loop, 4px); color: var(--nope) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div><div id=g></div><div id=h></div>
+--- expect
+#a margin-left 10px
+#b color #ff0000
+#c margin-top 10px
+#c margin-left 10px
+#d margin-left 7px
+# invalid at computed-value time: unset, not the 9px a weaker rule gave
+#e margin-left 0px
+#f padding-left 3px
+#g width 20px
+# a cycle makes --loop invalid, so the fallback is used
+#h margin-left 4px
+#h color #000000
+
+=== custom properties inherit
+--- css
+#p { --x: 5px }
+#c { margin-left: var(--x) }
+#q { --x: 6px }
+--- html
+<div id=p><div id=c><div id=q><span id=s style="margin-left: var(--x)">x</span></div></div></div>
+--- expect
+#c margin-left 5px
+#s margin-left 6px
+
+=== var() off: as LibCSS, a declaration with var() is dropped
+--- options 1
+--- css
+p { margin-left: 3px }
+p { margin-left: var(--x, 5px) }
+--- html
+<p id=a>x</p>
+--- expect
+#a margin-left 3px
+
+=== @media (Media Queries 4) on the Falcon's 640x480 screen
+--- css
+@media (min-width: 600px) { #a { margin-left: 1px } }
+@media (min-width: 700px) { #a { margin-right: 1px } }
+@media screen and (orientation: landscape) { #b { margin-left: 1px } }
+@media print { #b { margin-right: 1px } }
+@media (400px <= width <= 700px) { #c { margin-left: 1px } }
+@media not all and (monochrome) { #c { margin-right: 1px } }
+@media (prefers-reduced-motion: reduce) { #d { margin-left: 1px } }
+@media (min-width: 30em) { #d { margin-right: 1px } }
+@media (width > 640px), (height: 480px) { #e { margin-left: 1px } }
+@media (hover: hover) and (pointer: fine) { #e { margin-right: 1px } }
+@media (unknown-feature) { #f { margin-left: 1px } }
+@media not (unknown-feature) { #f { margin-right: 1px } }
+@media (min-width: 600px) or (unknown-feature) { #g { margin-left: 1px } }
+--- html
+<p id=a></p><p id=b></p><p id=c></p><p id=d></p><p id=e></p><p id=f></p><p id=g></p>
+--- expect
+#a margin-left 1px
+#a margin-right 0px
+#b margin-left 1px
+#b margin-right 0px
+#c margin-left 1px
+#c margin-right 1px
+#d margin-left 1px
+#d margin-right 1px
+#e margin-left 1px
+#e margin-right 1px
+# an unknown feature is unknown, and so is not unknown: neither applies
+#f margin-left 0px
+#f margin-right 0px
+#g margin-left 1px
+
+=== @supports and @layer
+--- css
+@supports (display: flex) { #a { margin-left: 1px } }
+@supports (display: nonsense) { #a { margin-right: 1px } }
+@supports not (foo: bar) { #b { margin-left: 1px } }
+@supports selector(:is(a)) { #b { margin-right: 1px } }
+@layer base { #c { color: red } p { margin-left: 2px } }
+p { color: blue }
+--- html
+<p id=a></p><p id=b></p><p id=c></p>
+--- expect
+#a margin-left 1px
+#a margin-right 0px
+#b margin-left 1px
+#b margin-right 1px
+# a rule in a layer is below every rule outside one (CSS Cascade 5)
+#c color #0000ff
+#c margin-left 2px
+
+=== error recovery (CSS Syntax 3)
+--- css
+p { color: red; color: ; margin-left: 1px }
+p { margin-right: 2px ; }
+garbage ; #x { }
+p { padding-left: 3px !ie }
+} p { padding-right: 4px }
+@media screen { p { margin-top: 5px } p { margin-bottom: 6px
+--- html
+<p id=a>x</p>
+--- expect
+#a color #ff0000
+#a margin-left 1px
+#a margin-right 2px
+#a padding-left 0px
+# a stray } starts a rule that isn't valid: it goes, with its block
+#a padding-right 0px
+# the end of the sheet closes what is open
+#a margin-top 5px
+#a margin-bottom 6px
+
+=== a bad url runs to the next ) (CSS Syntax 3, 4.3.6)
+--- css
+.a { background: url(x .b { color: red } .c ) ; margin-left: 1px }
+.d { margin-right: 2px }
+--- html
+<p id=a class=a>x</p><p id=d class=d>y</p>
+--- expect
+#a margin-left 1px
+#a color #000000
+#d margin-right 2px
+
+=== display, position and float (CSS 2.1, 9.7; CSS Flexbox 4)
+--- css
+#a { float: left }
+#b { position: absolute; float: right }
+#f { display: flex }
+#c { display: inline-flex; position: fixed }
+.n { display: none; float: left }
+--- html
+<span id=a>x</span><span id=b>y</span><div id=f><span id=i>z</span></div><span id=c></span><span id=n class=n></span>
+--- expect
+#a display block
+#b display block
+#b float none
+#i display block
+#c display flex
+#n display none
+#n float left
+
+=== ::before and ::after
+--- css
+p::before { content: "a" }
+p.x::after { content: none; color: red }
+p:hover::before { color: blue }
+--- html
+<p id=a>x</p><p id=b class=x>y</p><div id=c>z</div>
+--- expect
+#a::before exists yes
+#a::before content set
+#a::after exists no
+#b::after exists yes
+#b::after color #ff0000
+#b::after content none
+#a::before color #000000
+#c::before exists no
+
+=== siblings share a style only when nothing tells them apart
+--- css
+.x { color: red }
+.x:first-child { color: blue }
+.y + .x { margin-left: 1px }
+[data-k="1"] { padding-left: 1px }
+--- html
+<div><p id=a class=x>1</p><p id=b class=x>2</p><p id=c class=y>3</p><p id=d class=x>4</p><p id=e class=x data-k=1>5</p><p id=f class=x data-k=2>6</p><p id=g class=x style="margin-right: 3px">7</p><p id=h class=x>8</p></div>
+--- expect
+#a color #0000ff
+#b color #ff0000
+#d margin-left 1px
+#b margin-left 0px
+#h margin-left 0px
+#e padding-left 1px
+#f padding-left 0px
+#g margin-right 3px
+#h margin-right 0px
+#h color #ff0000
+
+=== descendants deep down, and the ancestor filter
+--- css
+.a .b .c { color: red }
+.a > .c { color: blue }
+#x .c { margin-left: 1px }
+--- html
+<div class=a><div class=b><div><p id=p class=c>x</p></div></div><p id=q class=c>y</p></div><div class=b><p id=r class=c>z</p></div><div id=x><div><span id=s class=c></span></div></div><p id=t class=c>w</p>
+--- expect
+#p color #ff0000
+#q color #0000ff
+#r color #000000
+#s margin-left 1px
+#t margin-left 0px
+
+=== text-decoration, list-style, flex, overflow, gap and inset
+--- css
+#a { text-decoration: underline dotted red }
+#b { list-style: square inside }
+#c { list-style: none }
+#d { flex: 1 }
+#e { flex: 2 3 10px }
+#f { flex: none }
+#g { overflow: hidden auto }
+#h { gap: 1px 2px }
+#i { inset: 1px 2px }
+#j { flex-flow: column wrap }
+--- html
+<div id=a></div><ul id=b></ul><ul id=c></ul><div id=d></div><div id=e></div><div id=f></div><div id=g></div><div id=h></div><div id=i></div><div id=j></div>
+--- expect
+#a text-decoration-line 1
+#b list-style-type square
+#b list-style-position inside
+#c list-style-type none
+#c list-style-image none
+#d flex-grow 1
+#d flex-shrink 1
+#d flex-basis 0%
+#e flex-grow 2
+#e flex-shrink 3
+#e flex-basis 10px
+#f flex-grow 0
+#f flex-shrink 0
+#f flex-basis auto
+#g overflow-x hidden
+#g overflow-y auto
+#h row-gap 1px
+#h column-gap 2px
+#i top 1px
+#i left 2px
+#j flex-direction column
+#j flex-wrap wrap
+
+=== text-align: start, end and match-parent (CSS Text 3)
+--- css
+#p { text-align: right }
+#c { text-align: match-parent }
+#d { text-align: end }
+--- html
+<div id=p><p id=c>x</p><p id=d>y</p></div><p id=e>z</p>
+--- expect
+#c text-align right
+#d text-align end
+#e text-align start
+
+=== font-family (CSS Fonts 4, 2.1)
+--- css
+#a { font-family: "Times New Roman", Times, serif }
+#b { font-family: Open   Sans }
+#c { font-family: system-ui, sans-serif }
+#d { font-family: inherit }
+--- html
+<p id=a></p><p id=b></p><p id=c></p><p id=d></p>
+--- expect
+#a font-family Times New Roman,Times|serif
+#b font-family Open Sans|
+#c font-family |system-ui
+#d font-family |sans-serif
+
+=== url() and gradients as images
+--- css
+#a { background-image: url("a b.png") }
+#b { list-style-image: url(i.gif) }
+#c { background-image: radial-gradient(red, blue) }
+--- html
+<div id=a></div><ul id=b></ul><div id=c></div>
+--- expect
+#a background-image url(a b.png)
+#b list-style-image url(i.gif)
+#c background-image gradient
+
+=== escapes in selectors (CSS Syntax 3, 4.3.7)
+--- css
+.a\:b { margin-left: 1px }
+#\31 23 { margin-right: 1px }
+.\65 x { padding-left: 1px }
+--- html
+<p id=a class="a:b">x</p><p id=123>y</p><p id=c class=ex>z</p>
+--- expect
+#a margin-left 1px
+#123 margin-right 1px
+#c padding-left 1px

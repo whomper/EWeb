@@ -16,7 +16,7 @@
 
 /* The parts of the HTML rendering rules a text browser needs, written for
  * nsbench: enough that the UA sheet costs about what a real one does. */
-static const char ua_css[] =
+const char nsbench_ua_css[] =
 	"html, address, blockquote, body, center, dialog, div, figure, figcaption,"
 	" footer, form, header, hr, legend, listing, main, p, plaintext, pre,"
 	" search, xmp, article, aside, h1, h2, h3, h4, h5, h6, hgroup, nav,"
@@ -156,7 +156,7 @@ css_select_ctx *style_sheets(node *doc, const char **data, const size_t *len, in
 
 	if (css_select_ctx_create(&ctx) != CSS_OK)
 		return NULL;
-	add_sheet(ctx, ua_css, sizeof ua_css - 1, CSS_ORIGIN_UA, st);
+	add_sheet(ctx, nsbench_ua_css, sizeof nsbench_ua_css - 1, CSS_ORIGIN_UA, st);
 	for (i = 0; i < n; i++)
 		add_sheet(ctx, data[i], len[i], CSS_ORIGIN_AUTHOR, st);
 	style_elements(ctx, doc, st);
