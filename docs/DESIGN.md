@@ -456,6 +456,30 @@ These break site terms, sites actively fight them, and this design doesn't need 
   icon fonts, colour emoji, and scripts that need glyph shaping such as Arabic. Hebrew is fine.
 - TLS 1.3 on the Falcon (BearSSL stops at 1.2; the gateway covers it), and smooth scrolling.
 
+## Other Atari browsers
+
+**HighWire** (github.com/neilrackett/atarist-highwire), revived by Neil Rackett in August 2026
+(0.4.8, 1 Oct 2026), is the browser Atari users have today: a complete GEM program with layout,
+tables, forms, frames, images, bookmarks, a cache and cookies, for every Atari from a 68000 ST to a
+FireBee, without GDOS. Read from its source (17 Oct 2026; not yet measured):
+
+- **HTML:** its own one-pass tag scanner that turns tags straight into words and boxes, with none of
+  HTML5's parsing rules.
+- **CSS:** about 57 properties at CSS 1 and 2's level, no flexbox; selectors of a type, one class or
+  id and descendants (attribute selectors and most pseudo-classes drop the rule); `@media` for
+  `screen` and `all` only; no `var()`, `calc()`, `@supports` or `@layer`. Every tag walks the whole
+  list of rules (for the tag, each class and the id) comparing names as strings, so its cost grows
+  with rules times elements: light on old pages, heavy on a framework's sheet such as Bootstrap's.
+- **No Hebrew** (no Windows-1255 or ISO-8859-8, no bidirectional text), **no JavaScript**, and
+  **https only through a proxy** that ends TLS for it.
+- **Licence:** GPL-3.0-or-later since 0.4.6; code from before the change is also under its old
+  zlib-style licence. EWeb is GPL-2.0-or-later, so it could take from the old code only.
+
+Worth taking as ideas: dithering through a table of the screen's own colours, decoding a JPEG
+straight at a half, quarter or eighth when it is shown that small, and laying out once per burst
+of arriving images. A head-to-head on your DFB1 (HighWire's log of its parse, layout and drawing
+times, against `NSBENCH.TTP -E both`, on `NEWS.HTM`) is the next measurement.
+
 ## Order of work
 
 1. **The gateway's `web` service, in AERA-Gateway,** with live view for CAB. This gets you past
@@ -486,6 +510,7 @@ These break site terms, sites actively fight them, and this design doesn't need 
 - [NetUSBee (hardware.atari.org)](https://hardware.atari.org/netusbee/index.htm)
 - [debian-68k: NetUSBee throughput, about 300 KB/s](https://lists.debian.org/debian-68k/2026/07/msg00018.html)
 - [htmlparser-benchmark (the page set)](https://www.npmjs.com/package/htmlparser-benchmark)
+- [HighWire (Neil Rackett's revival)](https://github.com/neilrackett/atarist-highwire)
 - [Web Platform Tests: html/syntax/parsing](https://github.com/web-platform-tests/wpt/tree/master/html/syntax/parsing)
 - [Cloudflare: detect a challenge page response](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response)
 - [Google reCAPTCHA: verifying the user's response (token valid for two minutes)](https://developers.google.com/recaptcha/docs/verify/)
