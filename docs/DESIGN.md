@@ -584,8 +584,8 @@ releases.
   | 10 pages, a page with 10 pictures, back 4 and forward 4, 5 minutes idle | 0 | 0 |
   | The page size changed (^+ ^- ^0) | 0 (saved at quit) | a safe save each time |
   | Quit, nothing changed | 2 opens, 1 lookup, a safe save | 0 |
-  | First secure page of a session | 3 opens, 5 lookups | 2, 2 (`ROOTS.DAT`; `SEED.DAT` read and written over) |
-  | The same, the first session after installing | 5 opens, 7 lookups, 61 reads | 5, 5, 31 |
+  | First secure page of a session | 3 opens, 5 lookups | 3, 2 (`ROOTS.DAT`; `SEED.DAT` read, then written over) |
+  | The same, the first session after installing | 5 opens, 7 lookups, 61 reads | 5, 2, 31 |
   | `EWGET.TTP`, 1 MB | 4 opens, 2 lookups, the file made once | the same |
 
   Pages, stylesheets, history and Back go through memory (the cache), never the disk. `EWEB.FNT`
@@ -593,7 +593,7 @@ releases.
   changed by the user (the page size, the home page) is saved then, the window's place at quit if it
   moved, and nothing is written when nothing changed. The secure connections' files (`CACERT.PEM`,
   `ROOTS.DAT`, `SEED.DAT`) are `common/`'s (`tls_file_info`: `CACERT.PEM` looked up once; the seed
-  read and written over through one open, which is why `PF_UPDATE` opens read and write). Reads and writes go
+  read, then written over in place, with no look at the folder). Reads and writes go
   through 8 KB in ST-RAM (`atari/plat_tos.c`) until it is known whether the Falcon's crashes come
   from DMA to and from TT-RAM; then 32 KB pieces.
 
