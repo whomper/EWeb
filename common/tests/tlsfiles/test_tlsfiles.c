@@ -11,7 +11,7 @@
  *                  CACERT.PEM with tls_file_info; 32 KB pieces through
  *                  tls_read_at; the anchors the same each way
  *   seed DIR N     a handshake's seed: run N of a session (1: SEED.DAT is
- *                  made; later: one open, read and written over in place)
+ *                  made; later: read, then written over in place; no looks)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,8 +39,9 @@ static int is_watched(const char *path)
 
 int pf_open(const char *path, int mode)
 {
+	/* PF_UPDATE write-only, as the apps' plat opens it (TOS mode 1) */
 	int fl = mode == PF_READ ? O_RDONLY : mode == PF_WRITE ? O_WRONLY | O_CREAT | O_TRUNC
-		: mode == PF_APPEND ? O_WRONLY | O_CREAT | O_APPEND : O_RDWR;
+		: mode == PF_APPEND ? O_WRONLY | O_CREAT | O_APPEND : O_WRONLY;
 	if (is_watched(path))
 		opens++;
 	return open(path, fl, 0644);
@@ -251,9 +252,9 @@ static int seed(const char *dir, int run)
 		fclose(f);
 	check(memcmp(before, after, sizeof(after)) != 0, "a new seed written");
 	if (run == 1)
-		check(r == 0, "there was none before");
+		check(r == 0 && looks == 0, "there was none before; made with no look at the directory");
 	else
-		check(opens == 1 && looks == 0, "one open, no look, for two handshakes");
+		check(opens == 2 && looks == 0, "two opens (read, then written over), no look, for two handshakes");
 	return 0;
 }
 
