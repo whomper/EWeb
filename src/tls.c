@@ -37,6 +37,21 @@ void (*tls_note)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
 		     const unsigned char *e, size_t elen);
 
+/* the elliptic curves: BearSSL's own, or ecdsp.c's on the DSP */
+static const br_ec_impl *ec_impl = &br_ec_all_m31;
+static br_ecdsa_vrfy ec_vrfy;
+
+void tls_set_ec(const br_ec_impl *impl, br_ecdsa_vrfy vrfy)
+{
+	ec_impl = impl ? impl : &br_ec_all_m31;
+	ec_vrfy = vrfy;
+}
+
+int tls_ec_fast(void)
+{
+	return ec_vrfy != 0;
+}
+
 struct TLS {
 	br_ssl_client_context cc;
 	br_x509_minimal_context xc;
@@ -699,8 +714,11 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 		br_ssl_engine_set_suites(&t->cc.eng, suites_all, sizeof(suites_all) / sizeof(suites_all[0]));
 	if (rsa_only)
 		br_ssl_engine_set_ecdsa(&t->cc.eng, 0);
-	/* the fastest code for a 32-bit CPU without fast 64-bit products */
-	br_ssl_engine_set_ec(&t->cc.eng, &br_ec_all_m31);
+	else if (ec_vrfy)
+		br_ssl_engine_set_ecdsa(&t->cc.eng, ec_vrfy);
+	/* BearSSL's: the fastest code for a 32-bit CPU without fast 64-bit
+	   products */
+	br_ssl_engine_set_ec(&t->cc.eng, ec_impl);
 	/* AES with tables: half the instructions of the constant-time code
 	   on a 68030 (205 a byte for AES-256-GCM against 394), and nobody
 	   times an Atari's cache */
@@ -712,7 +730,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	br_ssl_engine_set_rsavrfy(&t->cc.eng, rsa_vrfy);
 	br_ssl_client_set_rsapub(&t->cc, rsa_public);
 	br_x509_minimal_set_rsa(&t->xc, rsa_vrfy);
-	br_x509_minimal_set_ecdsa(&t->xc, &br_ec_all_m31, br_ecdsa_i31_vrfy_asn1);
+	br_x509_minimal_set_ecdsa(&t->xc, ec_impl, ec_vrfy ? ec_vrfy : br_ecdsa_i31_vrfy_asn1);
 	set_time(&t->xc);
 	br_ssl_engine_set_buffer(&t->cc.eng, t->iobuf, sizeof(t->iobuf), 0);
 	get_seed(seed);

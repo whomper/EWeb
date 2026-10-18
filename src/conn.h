@@ -18,7 +18,8 @@
 typedef struct {
 	int h;
 	void *tls;		/* TLS *, when encrypted */
-	unsigned long tls_ms;	/* how long the handshake took */
+	unsigned long tls_ms;	/* how long the handshake took, tries the server refused included */
+	int tls_tries;		/* connections it took (another cipher, ECDSA) */
 	char *buf;		/* right after the CONN: small for commands, more for data */
 	long bufsize, pos, len;
 	long timeout_ms;
