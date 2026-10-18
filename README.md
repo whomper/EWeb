@@ -137,12 +137,14 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
   with only an ECDSA certificate, the handshake's steps in the log, the seed
   and the remembered signatures (`SEED.DAT`, `SIGS.DAT`), the test
-  authorities among Mozilla's roots, and the certificates that must be
-  refused (one a remembered signature can't rescue).
+  authorities among Mozilla's roots, `ROOTS.DAT` told by `CACERT.PEM`'s
+  date, the answer's times, and the certificates that must be refused (one
+  a remembered signature can't rescue).
 - `make hatarinet`: `EWGET.TTP` on an emulated Falcon (Hatari, 68030 at
   32 MHz, the DSP emulated), through `FAKESTNG.PRG`, against the same
-  servers (an ECDSA one too, its curves on the DSP), with a `.CMD` file
-  dropped on it, and with the release's `CACERT.PEM` and `ROOTS.DAT`.
+  servers (an ECDSA one too, its curves on the DSP, twice), with a `.CMD`
+  file dropped on it, and with the release's `CACERT.PEM` and `ROOTS.DAT`
+  (twice: the second time `ROOTS.DAT` knows `CACERT.PEM`'s date).
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
 - `make urltest`: the URL parser against the URL Standard's tests (Web

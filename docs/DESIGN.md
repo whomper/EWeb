@@ -461,6 +461,29 @@ So in 0.8 (AERA-Atari's `src/tls.c`):
   authority that isn't trusted changes nothing (`make itest` checks it). The server's signature on its
   key exchange is new every time and isn't looked up. ECDSA only: RSA takes 0.1 s on the DSP.
 
+**On your DFB1 with 0.8** (the caches on, the log on): the first visit's handshake took 8.0 s, of
+which about 1.9 s was making `SIGS.DAT` (once); the seed took 0.55 s instead of 2.9, and decoding the
+certificates 0.73 to 0.77 s instead of 0.92. The second visit knew all three P-384 signatures: the
+handshake took 3.15 s (8.5 s in 0.7), and the whole fetch 9.6 s:
+
+| Second visit, 0.8 | Time |
+|---|---|
+| Finding the host and connecting | 1.1 s |
+| Reading the root certificates | 1.5 s |
+| The handshake: the DSP 1.2 s (self-test 0.25, P-256 0.44, X25519 0.48), the certificates 0.73 s, the seed 0.55 s, the network 0.21 s | 3.15 s |
+| The log written out after the handshake (`-l` only) | 1.0 s |
+| From the request to the answer's first line | 1.0 s |
+| The page (29 KB) and unpacking it | 2.0 s |
+
+So in 0.9: **`ROOTS.DAT` is told by `CACERT.PEM`'s date.** Most of the 1.5 s was reading all 186 KB of
+`CACERT.PEM` for its checksum, every run, to be sure `ROOTS.DAT` was made from it. `ROOTS.DAT` (now
+layout 2) also keeps the file's date: a release's has none, so the first run checks the checksum as
+before and then writes the date in, in place; later runs compare the size and the date only (an app
+opts in with `tls_file_stamp`). On Hatari's Falcon: 285 ms, then 25. **The answer's second** gets
+two lines in the log: when its first bytes came and when they were decrypted, after the request; the
+server answered the hello in 0.1 s, so the 1.0 s wait is the server's own time or ours, and the next
+log will say which.
+
 **Faster arithmetic on the DSP** is the next step for the handshake: after the above a repeat visit
 leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 s both ways), and a
 first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around

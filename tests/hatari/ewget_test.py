@@ -36,6 +36,9 @@ RUNS = [
     # it on this computer): read from the cache, and the test authority
     # isn't among them
     ("Mozilla's list", "-l NET.LOG https://127.0.0.1:%d/page" % HTTPS),
+    # again: ROOTS.DAT now has CACERT.PEM's date, so the 186 KB file
+    # isn't read for its checksum
+    ("Mozilla's list again", "-l NET2.LOG https://127.0.0.1:%d/page" % HTTPS),
 ]
 
 
@@ -105,11 +108,13 @@ def main():
             print("---- %s: EWGET.TTP %s" % (name, cmdline))
             print("\n".join(l for l in text.splitlines() if l.strip()))
             ok = "done (0)" in text and "200 OK" in text
-            if name == "Mozilla's list":
-                net = open(os.path.join(hd, "NET.LOG"), errors="replace").read()
+            if name.startswith("Mozilla's list"):
+                net = open(os.path.join(hd, "NET.LOG" if name == "Mozilla's list" else "NET2.LOG"),
+                           errors="replace").read()
                 m = re.search(r"(\d+) root certificates read in (\d+) ms", net)
+                roots = open(os.path.join(hd, "ROOTS.DAT"), "rb").read(22)
                 ok = "done (1)" in text and "isn't signed by any authority" in text and m is not None \
-                     and int(m.group(1)) > 100
+                     and int(m.group(1)) > 100 and roots[:10] == b"MAILROOTS2" and roots[18:22] != bytes(4)
                 if m:
                     print("---- %s root certificates read from ROOTS.DAT in %s ms" % m.groups())
             elif name == "ECDSA":
@@ -119,9 +124,10 @@ def main():
                      and "ECDSA P-384 on the DSP" in net and "ECDSA P-256 on the DSP" in net \
                      and "the server's first answer" in net and "the handshake: " in net \
                      and "0 of 1 ECDSA signatures checked before" in net \
+                     and "the answer's first bytes came" in net and "bytes decrypted" in net \
                      and open(os.path.join(hd, "EC.HTM"), "rb").read() == server.PAGE
                 for l in net.splitlines():
-                    if "TLS --" in l:
+                    if "TLS --" in l or "TLS .." in l:
                         print("---- " + l.strip())
             elif name == "ECDSA again":
                 net = open(os.path.join(hd, "EC2.LOG"), errors="replace").read()

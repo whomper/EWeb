@@ -136,6 +136,38 @@ try:
         check("among Mozilla's roots (%s)" % ("CACERT.PEM", "ROOTS.DAT")[k],
               rc1 == 0 and rc2 == 0 and "ECDHE-ECDSA" in out2, out1 + out2)
 
+    # ROOTS.DAT as a release has it (made on this computer, CACERT.PEM's
+    # date unknown): the first run checks the checksum and puts the date
+    # in it; the next is told by the date; another CACERT.PEM, whatever
+    # its date, is read again
+    import struct
+    mz3 = os.path.join(work, "mz3")
+    shutil.rmtree(mz3, ignore_errors=True)
+    os.makedirs(mz3)
+    shutil.copy(os.path.join(mz, "CACERT.PEM"), mz3)
+    subprocess.run([os.path.join(os.path.dirname(ewget), "..", "host", "mkroots"),
+                    os.path.join(mz3, "CACERT.PEM"), os.path.join(mz3, "ROOTS.DAT")], check=True)
+    def stamp_of():
+        b = open(os.path.join(mz3, "ROOTS.DAT"), "rb").read(22)
+        return b[:10], struct.unpack(">I", b[18:22])[0]
+    before = stamp_of()
+    rc1, out1 = run("https://localhost:%d/page" % HTTPS, cwd=mz3)
+    after = stamp_of()
+    rc2, out2 = run("https://localhost:%d/page" % HTTPS, cwd=mz3)
+    pem = os.path.join(mz3, "CACERT.PEM")
+    data = bytearray(open(pem, "rb").read())
+    data[data.index(b"-----BEGIN CERTIFICATE-----") + 40] ^= 1    # one root spoiled, same size
+    open(pem, "wb").write(bytes(data))
+    rc3, out3 = run("https://localhost:%d/page" % HTTPS, cwd=mz3)
+    check("ROOTS.DAT told by CACERT.PEM's date", before == (b"MAILROOTS2", 0) and after[1] != 0
+          and rc1 == 0 and rc2 == 0 and rc3 == 0 and stamp_of() != after, out1 + out2 + out3)
+
+    # the request's answer: when its first bytes came, when they were read
+    rc, out = run("-l", "ans.log", "https://localhost:%d/page" % HTTPS)
+    log = saved("ans.log").decode("latin-1") if rc == 0 else ""
+    at = [log.find(w) for w in (">> GET /page", "the answer's first", "bytes decrypted", "<< HTTP/1.1 200")]
+    check("the answer's times in the log", -1 not in at and at == sorted(at), out + log)
+
     # and without them, a remembered signature changes nothing
     mz2 = os.path.join(work, "mz2")
     shutil.rmtree(mz2, ignore_errors=True)

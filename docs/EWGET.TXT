@@ -67,7 +67,8 @@ Options (type them before the address)
    -l NET.LOG  write everything said on the connection to NET.LOG,
                and the handshake's steps: how long each signature and
                key exchange took, the server's first answer, its
-               certificates, and the time spent waiting for the network
+               certificates, the time spent waiting for the network,
+               and when the answer's first bytes came and were read
                (the handshake's lines are written out when it ends, so
                writing them doesn't slow it down)
 

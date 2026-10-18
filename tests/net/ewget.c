@@ -80,6 +80,7 @@ int ewget(int argc, char **argv)
 	str_copy(tls_roots_cache, "ROOTS.DAT", sizeof(tls_roots_cache));
 	str_copy(tls_seed_path, "SEED.DAT", sizeof(tls_seed_path));
 	str_copy(tls_sigs_path, "SIGS.DAT", sizeof(tls_sigs_path));
+	tls_file_stamp = pf_stamp;
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
 	out("network: %s; RSA on the %s, elliptic curves on the %s\n", net_stack(), falcon_dsp_state(),
