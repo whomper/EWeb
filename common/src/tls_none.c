@@ -20,6 +20,7 @@
 const int tls_available = 0;
 int tls_tz_minutes;
 char tls_seed_path[200];
+char tls_sigs_path[200];
 char tls_roots_cache[200];
 void (*tls_note)(const char *msg);
 void (*tls_log)(const char *msg);

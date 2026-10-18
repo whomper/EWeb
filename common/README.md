@@ -270,6 +270,24 @@ the server's certificates (how many, their bytes, the time spent decoding and ch
 the time they took to arrive), and how much of the handshake was waiting for the network.
 `dsp_ec.c`'s self-test line gives its own time, and leaves it out of the first operation's.
 
+## Handshakes: the seed, the roots' names, the signatures already checked (18 Oct 2026, from EWeb)
+
+From the DFB1's log (EWeb 0.7, Wikipedia): saving `SEED.DAT` took 2.9 s of an 8.5 s handshake, and
+BearSSL spent 3.8 million 68030 instructions finding each certificate's issuer among the 121 roots.
+In `src/tls.c`:
+
+- **`SEED.DAT`** is written once a session, over the old one in place when the app's `plat.h`
+  defines `PF_UPDATE` ("an existing file, written over from the start, not truncated": `Fopen(path,
+  1)` on TOS, `O_WRONLY` on POSIX); otherwise with `pf_save` as before. An app adds `PF_UPDATE` to
+  its `plat.h` and `pf_open` to get it.
+- **The roots' names** are hashed once a session: the X.509 engine's name hash is `tls.c`'s own
+  SHA-256, which remembers a root's (BearSSL itself unchanged).
+- **Signatures already checked** (ECDSA, of certificates) are remembered: 64 SHA-256 keys of the
+  curve, key, signed hash and signature, after a check that succeeded; `tls_sigs_path` keeps them
+  between sessions (EWeb: `SIGS.DAT`), empty keeps them for the session. Names, dates, uses and the
+  chain to a root are still BearSSL's to decide. The log's certificates line says how many were
+  known.
+
 `tests/ec`: `make test` checks `ecdsp.c` against BearSSL with a C model of `ec.a56` (key exchanges and
 signature checks on every curve, RFC 7748's vectors, doublings and the point at infinity inside a
 check, points off the curve, good and bad signatures with short and long hashes: 902 checks);
