@@ -39,6 +39,10 @@ extern unsigned long (*tls_file_stamp)(const char *path);
    CACERT.PEM is never open while pf_idle lets the program in front run
    (the guidelines, 2.2) */
 extern long (*tls_read_at)(const char *path, long off, void *buf, long n);
+/* a file's date (as tls_file_stamp) and its size in *size (-1 if
+   missing) from one look at the directory (pf_info); or NULL: then
+   tls_file_stamp and pf_size, two looks (the guidelines, 6.5) */
+extern unsigned long (*tls_file_info)(const char *path, long *size);
 /* a word for the status line while something slow happens, or NULL */
 extern void (*tls_note)(const char *msg);
 /* the handshake's steps and their times, for the log (conn.c), or NULL */
