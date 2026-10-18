@@ -35,6 +35,7 @@ int tls_tz_minutes;
 char tls_seed_path[200];
 char tls_sigs_path[200];
 char tls_roots_cache[200];
+unsigned long (*tls_file_stamp)(const char *path);
 void (*tls_note)(const char *msg);
 void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
@@ -70,6 +71,8 @@ struct TLS {
 	XTIME xt;
 	int hs;				/* the handshake: its times are logged */
 	unsigned long sent, waited, wait0;	/* the hello sent; waiting for data */
+	unsigned long asked;		/* a request sent: when */
+	int answer;			/* 1 waiting for its first bytes, 2 for them readable */
 	int sock;
 	char desc[80];
 	int offered, resumed;		/* a kept session offered; taken up */
@@ -317,7 +320,10 @@ static void add_anchor(const unsigned char *der, size_t len)
 /* ---- the decoded list, cached: decoding 120 certificates takes a
  * 68030 a minute, reading them back a moment. The cache remembers the
  * PEM file's size and checksum and is made again when they change. */
+/* 1: size and checksum of CACERT.PEM; 2: and its date, once a check of
+   the checksum on this machine said the file is the same */
 #define CACHE_MAGIC "MAILROOTS1"
+#define CACHE_MAGIC2 "MAILROOTS2"
 
 static unsigned long file_sum(const char *path, long *size)
 {
@@ -384,7 +390,7 @@ static void put_blob(OUTF *o, const unsigned char *p, size_t n)
 	out_bytes(o, p, n);
 }
 
-static void save_cache(long size, unsigned long sum)
+static void save_cache(long size, unsigned long sum, unsigned long stamp)
 {
 	static OUTF o;
 	size_t i;
@@ -395,9 +401,10 @@ static void save_cache(long size, unsigned long sum)
 		return;
 	o.ok = 1;
 	o.n = 0;
-	out_bytes(&o, CACHE_MAGIC, 10);
+	out_bytes(&o, CACHE_MAGIC2, 10);
 	put32(&o, (unsigned long)size);
 	put32(&o, sum);
+	put32(&o, stamp);
 	put32(&o, (unsigned long)nanchors);
 	for (i = 0; i < nanchors; i++) {
 		br_x509_trust_anchor *ta = &anchors[i];
@@ -446,23 +453,31 @@ static unsigned char *get_blob(const unsigned char **p, const unsigned char *end
 	return d;
 }
 
-static int load_cache(long size, unsigned long sum)
+/* the cache's anchors, if it was made from a CACERT.PEM of this size and
+   date (stamp, not 0: the checksum isn't looked at) or of this size and
+   checksum (stamp 0). Returns its version, or 0 */
+static int load_cache(long size, unsigned long sum, unsigned long stamp)
 {
 	long len;
 	unsigned char *buf = tls_roots_cache[0] ? (unsigned char *)pf_load(tls_roots_cache, &len) : 0;
 	const unsigned char *p, *end;
-	unsigned long count, i;
-	int bad = 0;
+	unsigned long count, i, csize, csum, cstamp = 0;
+	int bad = 0, ver;
 	if (!buf)
 		return 0;
 	p = buf;
 	end = buf + len;
-	if (len < 22 || memcmp(p, CACHE_MAGIC, 10)) {
+	ver = len < 22 ? 0 : !memcmp(p, CACHE_MAGIC, 10) ? 1 : !memcmp(p, CACHE_MAGIC2, 10) ? 2 : 0;
+	if (!ver) {
 		free(buf);
 		return 0;
 	}
 	p += 10;
-	if (get32(&p, end, &bad) != (unsigned long)size || get32(&p, end, &bad) != sum || bad) {
+	csize = get32(&p, end, &bad);
+	csum = get32(&p, end, &bad);
+	if (ver == 2)
+		cstamp = get32(&p, end, &bad);
+	if (bad || csize != (unsigned long)size || (stamp ? cstamp != stamp : csum != sum)) {
 		free(buf);
 		return 0;
 	}
@@ -493,7 +508,33 @@ static int load_cache(long size, unsigned long sum)
 			nanchors++;
 	}
 	free(buf);
-	return !bad && nanchors == count;
+	return !bad && nanchors == count ? ver : 0;
+}
+
+/* this machine checked the cache against CACERT.PEM's checksum: put the
+   file's date in it, so the next time a look at the directory will do */
+static void cache_stamp(int ver, long size, unsigned long sum, unsigned long stamp)
+{
+	unsigned char b[4];
+	int h;
+	if (ver == 1) {
+		save_cache(size, sum, stamp);	/* the old layout: once */
+		return;
+	}
+#ifdef PF_UPDATE
+	b[0] = (unsigned char)(stamp >> 24);
+	b[1] = (unsigned char)(stamp >> 16);
+	b[2] = (unsigned char)(stamp >> 8);
+	b[3] = (unsigned char)stamp;
+	if ((h = pf_open(tls_roots_cache, PF_UPDATE)) >= 0) {
+		if (pf_seek(h, 18) == 18)
+			pf_write(h, b, 4);
+		pf_close(h);
+	}
+#else
+	(void)b;
+	(void)h;
+#endif
 }
 
 int tls_load_anchors(const char *path, char *err, int errlen)
@@ -502,17 +543,28 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	GROW der;
 	char chunk[4096];
 	long got, size;
-	unsigned long sum;
-	int h, in_cert = 0;
+	unsigned long sum, stamp;
+	int h, ver, in_cert = 0;
 	if (nanchors)
 		return (int)nanchors;
+	/* the cache is good for this CACERT.PEM if it says the same size and
+	   date; else if the checksum of the whole file (186 KB, a second on
+	   a DFB1) is the one it says */
+	stamp = tls_file_stamp ? tls_file_stamp(path) : 0;
+	size = pf_size(path);
+	if (stamp && size >= 0 && load_cache(size, 0, stamp))
+		return (int)nanchors;
+	nanchors = 0;
 	sum = file_sum(path, &size);
 	if (size < 0) {
 		snprintf(err, errlen, "no root certificates: %s is missing", path);
 		return 0;
 	}
-	if (load_cache(size, sum))
+	if ((ver = load_cache(size, sum, 0)) != 0) {
+		if (stamp)
+			cache_stamp(ver, size, sum, stamp);
 		return (int)nanchors;
+	}
 	nanchors = 0;
 	if (tls_note)
 		tls_note("Reading the root certificates (only this once, it takes a while)...");
@@ -559,7 +611,7 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	if (!nanchors && der.p)
 		snprintf(err, errlen, "no root certificates found in %s", path);
 	if (nanchors)
-		save_cache(size, sum);
+		save_cache(size, sum, stamp);
 	return (int)nanchors;
 }
 
@@ -1002,6 +1054,10 @@ static int pump(TLS *t, unsigned want, int blocking)
 					step("the server's first answer, %lu ms after the hello", start - t->sent);
 					t->hs = 2;
 				}
+				if (t->answer == 1) {
+					step("the answer's first bytes came %lu ms after the request", start - t->asked);
+					t->answer = 2;
+				}
 				continue;
 			}
 			if (!blocking)
@@ -1158,6 +1214,11 @@ long tls_read(TLS *t, void *buf, long max)
 	p = br_ssl_engine_recvapp_buf(eng, &len);
 	if (!p)
 		return r < 0 ? -1 : 0;
+	if (t->answer) {
+		step("its first %lu bytes decrypted %lu ms after the request", (unsigned long)len,
+		     pf_ms() - t->asked);
+		t->answer = 0;
+	}
 	if ((long)len > max)
 		len = (size_t)max;
 	memcpy(buf, p, len);
@@ -1169,6 +1230,9 @@ long tls_write(TLS *t, const void *buf, long n)
 {
 	br_ssl_engine_context *eng = &t->cc.eng;
 	long done = 0;
+	/* the times of the answer, for the log */
+	t->asked = pf_ms();
+	t->answer = 1;
 	while (done < n) {
 		size_t len;
 		unsigned char *p;
