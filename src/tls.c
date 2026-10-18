@@ -37,6 +37,7 @@ char tls_sigs_path[200];
 char tls_roots_cache[200];
 unsigned long (*tls_file_stamp)(const char *path);
 long (*tls_read_at)(const char *path, long off, void *buf, long n);
+unsigned long (*tls_file_info)(const char *path, long *size);
 void (*tls_note)(const char *msg);
 void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
@@ -326,17 +327,29 @@ static void add_anchor(const unsigned char *der, size_t len)
 #define CACHE_MAGIC "MAILROOTS1"
 #define CACHE_MAGIC2 "MAILROOTS2"
 
+/* CACERT.PEM is read in pieces this big when the memory is there (the
+   guidelines, 6.5: 186 KB in 6 reads, not 47), else in 4 KB ones */
+#define BIG_PIECE (32L * 1024)
+
+static char *piece_buf(char *small, long *n)
+{
+	char *p = malloc(BIG_PIECE);
+	*n = p ? BIG_PIECE : 4096;
+	return p ? p : small;
+}
+
 static unsigned long file_sum(const char *path, long *size)
 {
-	char chunk[4096];
+	char small[4096], *chunk;
 	unsigned long h = 2166136261UL;		/* FNV-1a */
-	long got;
+	long got, n;
 	int f = pf_open(path, PF_READ);
 	*size = -1;
 	if (f < 0)
 		return 0;
 	*size = 0;
-	while ((got = pf_read(f, chunk, sizeof(chunk))) > 0) {
+	chunk = piece_buf(small, &n);
+	while ((got = pf_read(f, chunk, n)) > 0) {
 		long i;
 		for (i = 0; i < got; i++) {
 			/* times the FNV prime 2^24 + 403 in shifts: the 68000 has
@@ -347,6 +360,8 @@ static unsigned long file_sum(const char *path, long *size)
 		*size += got;
 	}
 	pf_close(f);
+	if (chunk != small)
+		free(chunk);
 	return h & 0xffffffffUL;
 }
 
@@ -454,13 +469,13 @@ static unsigned char *get_blob(const unsigned char **p, const unsigned char *end
 	return d;
 }
 
-/* the cache's anchors, if it was made from a CACERT.PEM of this size and
-   date (stamp, not 0: the checksum isn't looked at) or of this size and
+/* the cache's anchors, from ROOTS.DAT's bytes (read once, for both
+   checks), if it was made from a CACERT.PEM of this size and date
+   (stamp, not 0: the checksum isn't looked at) or of this size and
    checksum (stamp 0). Returns its version, or 0 */
-static int load_cache(long size, unsigned long sum, unsigned long stamp)
+static int load_cache(const unsigned char *buf, long len, long size, unsigned long sum,
+		      unsigned long stamp)
 {
-	long len;
-	unsigned char *buf = tls_roots_cache[0] ? (unsigned char *)pf_load(tls_roots_cache, &len) : 0;
 	const unsigned char *p, *end;
 	unsigned long count, i, csize, csum, cstamp = 0;
 	int bad = 0, ver;
@@ -469,25 +484,19 @@ static int load_cache(long size, unsigned long sum, unsigned long stamp)
 	p = buf;
 	end = buf + len;
 	ver = len < 22 ? 0 : !memcmp(p, CACHE_MAGIC, 10) ? 1 : !memcmp(p, CACHE_MAGIC2, 10) ? 2 : 0;
-	if (!ver) {
-		free(buf);
+	if (!ver)
 		return 0;
-	}
 	p += 10;
 	csize = get32(&p, end, &bad);
 	csum = get32(&p, end, &bad);
 	if (ver == 2)
 		cstamp = get32(&p, end, &bad);
-	if (bad || csize != (unsigned long)size || (stamp ? cstamp != stamp : csum != sum)) {
-		free(buf);
+	if (bad || csize != (unsigned long)size || (stamp ? cstamp != stamp : csum != sum))
 		return 0;
-	}
 	count = get32(&p, end, &bad);
 	anchors = calloc(count ? count : 1, sizeof(*anchors));
-	if (!anchors) {
-		free(buf);
+	if (!anchors)
 		return 0;
-	}
 	maxanchors = count;
 	for (i = 0; i < count && !bad; i++) {
 		br_x509_trust_anchor *ta = &anchors[i];
@@ -508,7 +517,6 @@ static int load_cache(long size, unsigned long sum, unsigned long stamp)
 		if (!bad)
 			nanchors++;
 	}
-	free(buf);
 	return !bad && nanchors == count ? ver : 0;
 }
 
@@ -542,35 +550,49 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 {
 	br_pem_decoder_context pc;
 	GROW der;
-	char chunk[4096];
-	long got, size, off = 0;
-	unsigned long sum, stamp;
+	char small[4096], *chunk;
+	long got, size, off = 0, cachelen = 0, piece;
+	unsigned long sum, stamp = 0;
+	unsigned char *cache;
 	int h = -1, ver, in_cert = 0;
 	if (nanchors)
 		return (int)nanchors;
 	/* the cache is good for this CACERT.PEM if it says the same size and
 	   date; else if the checksum of the whole file (186 KB, a second on
-	   a DFB1) is the one it says */
-	stamp = tls_file_stamp ? tls_file_stamp(path) : 0;
-	size = pf_size(path);
-	if (stamp && size >= 0 && load_cache(size, 0, stamp))
+	   a DFB1) is the one it says. ROOTS.DAT is read once for both, and
+	   CACERT.PEM looked up once where the app gives tls_file_info */
+	if (tls_file_info) {
+		stamp = tls_file_info(path, &size);
+	} else {
+		stamp = tls_file_stamp ? tls_file_stamp(path) : 0;
+		size = pf_size(path);
+	}
+	cache = size >= 0 && tls_roots_cache[0] ? (unsigned char *)pf_load(tls_roots_cache, &cachelen) : 0;
+	if (stamp && size >= 0 && load_cache(cache, cachelen, size, 0, stamp)) {
+		free(cache);
 		return (int)nanchors;
-	nanchors = 0;
+	}
+	tls_free_anchors();
 	sum = file_sum(path, &size);
 	if (size < 0) {
+		free(cache);
 		snprintf(err, errlen, "no root certificates: %s is missing", path);
 		return 0;
 	}
-	if ((ver = load_cache(size, sum, 0)) != 0) {
+	ver = load_cache(cache, cachelen, size, sum, 0);
+	free(cache);
+	if (ver) {
 		if (stamp)
 			cache_stamp(ver, size, sum, stamp);
 		return (int)nanchors;
 	}
-	nanchors = 0;
+	tls_free_anchors();
 	if (tls_note)
 		tls_note("Reading the root certificates (only this once, it takes a while)...");
 	/* read in pieces: the whole list is about 190 KB, more than a
-	   1 MB Falcon wants to hold at once next to the program */
+	   1 MB Falcon wants to hold at once next to the program. 32 KB
+	   pieces where the memory is there (6.5), decoded 4 KB at a time
+	   with pf_idle between (2.2's 50 ms) */
 	if (!tls_read_at && (h = pf_open(path, PF_READ)) < 0) {
 		snprintf(err, errlen, "no root certificates: can't open %s", path);
 		return 0;
@@ -578,13 +600,22 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	der.max = 4096;
 	der.len = 0;
 	der.p = malloc(der.max);
+	chunk = piece_buf(small, &piece);
 	br_pem_decoder_init(&pc);
-	while (der.p && (got = tls_read_at ? tls_read_at(path, off, chunk, sizeof(chunk))
-				       : pf_read(h, chunk, sizeof(chunk))) > 0) {
-		long pos = 0;
+	while (der.p && (got = tls_read_at ? tls_read_at(path, off, chunk, piece)
+				       : pf_read(h, chunk, piece)) > 0) {
+		long pos = 0, slice = 0;
 		off += got;
 		while (pos < got) {
-			pos += (long)br_pem_decoder_push(&pc, chunk + pos, (size_t)(got - pos));
+			long n = got - pos;
+			if (pos - slice >= 4096) {
+				slice = pos;
+				if (pf_idle)
+					pf_idle();
+			}
+			if (n > slice + 4096 - pos)
+				n = slice + 4096 - pos;
+			pos += (long)br_pem_decoder_push(&pc, chunk + pos, (size_t)n);
 			switch (br_pem_decoder_event(&pc)) {
 			case BR_PEM_BEGIN_OBJ:
 				in_cert = !strcmp(br_pem_decoder_name(&pc), "CERTIFICATE");
@@ -608,6 +639,8 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	}
 	if (h >= 0)
 		pf_close(h);
+	if (chunk != small)
+		free(chunk);
 	if (!der.p)
 		snprintf(err, errlen, "not enough memory to read %s", path);
 	free(der.p);
@@ -706,15 +739,29 @@ static void get_seed(unsigned char out[48])
 	static unsigned long count;
 	unsigned char raw[128], old[32], h[32];
 	br_sha256_context sc;
+	int sh = -1;
 	memset(old, 0, sizeof(old));
 	if (seed_have) {
 		memcpy(old, seed_kept, sizeof(old));
 	} else if (tls_seed_path[0]) {
-		long len = 0;
-		char *f = pf_load(tls_seed_path, &len);
-		if (f) {
-			memcpy(old, f, len < 32 ? len : 32);
-			free(f);
+#ifdef PF_UPDATE
+		/* one open for the session's seed: read it, and write the next
+		   over it below (no event call between: 2.2) */
+		if ((sh = pf_open(tls_seed_path, PF_UPDATE)) >= 0 &&
+		    pf_read(sh, old, sizeof(old)) != (long)sizeof(old)) {
+			pf_close(sh);
+			sh = -1;
+			memset(old, 0, sizeof(old));
+		}
+		if (sh < 0)
+#endif
+		{
+			long len = 0;
+			char *f = pf_load(tls_seed_path, &len);
+			if (f) {
+				memcpy(old, f, len < 32 ? len : 32);
+				free(f);
+			}
 		}
 	}
 	pf_entropy(raw, sizeof(raw));
@@ -732,8 +779,16 @@ static void get_seed(unsigned char out[48])
 	br_sha256_update(&sc, raw, sizeof(raw));
 	br_sha256_update(&sc, &count, sizeof(count));
 	br_sha256_out(&sc, h);
-	if (!seed_have && tls_seed_path[0])
+	if (sh >= 0) {
+#ifdef PF_UPDATE
+		long w = pf_seek(sh, 0) == 0 ? pf_write(sh, h, sizeof(h)) : -1;
+		pf_close(sh);
+		if (w != (long)sizeof(h))
+			put_file(tls_seed_path, h, sizeof(h));
+#endif
+	} else if (!seed_have && tls_seed_path[0]) {
 		put_file(tls_seed_path, h, sizeof(h));
+	}
 	/* the next handshake's, not the next session's */
 	br_sha256_init(&sc);
 	br_sha256_update(&sc, "kept", 4);
