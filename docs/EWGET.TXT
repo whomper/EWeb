@@ -34,10 +34,20 @@ How to use it
 3. It prints what it found and how long each part took, then waits for
    a key. The same lines go into EWGET.LOG, in the same folder.
 
-The box takes about 120 characters. For a longer address, write the
-whole line into a file EWGET.CMD next to EWGET.TTP and start EWGET with
-nothing typed: it reads the line from there (and doesn't wait for a key
-at the end).
+The desktop's box is short: it takes only a few dozen characters. For a
+longer line, write the whole of it into a text file EWGET.CMD next to
+EWGET.TTP, for example
+       -z 180 -n 2 -l NET.LOG https://en.wikipedia.org
+and start EWGET with nothing typed: it reads the line from there, says
+so on its second line, and doesn't wait for a key at the end (the
+results are in EWGET.LOG). Or give the file another name ending in
+.CMD and drop it on EWGET.TTP. If EWGET finds no EWGET.CMD, it says in
+which folder it looked.
+
+EWGET's second line says whether the 68030's caches are on. With them
+off, everything the 68030 does (reading the root certificates, hashing,
+decrypting, unpacking) takes much longer: turn them on for a fair
+measurement.
 
 Options (type them before the address)
 --------------------------------------
@@ -50,13 +60,18 @@ Options (type them before the address)
    -r          do the handshake's arithmetic (RSA signatures, elliptic
                curves) on the 68030 instead of the DSP, to compare the two
    -A          show the answer's headers too
-   -l NET.LOG  write everything said on the connection to NET.LOG
-               (and how long each signature and key exchange took)
+   -l NET.LOG  write everything said on the connection to NET.LOG,
+               and the handshake's steps: how long each signature and
+               key exchange took, the server's first answer, its
+               certificates, and the time spent waiting for the network
+               (the handshake's lines are written out when it ends, so
+               writing them doesn't slow it down)
 
 What the numbers mean
 ---------------------
    connect   finding the server's address (DNS) and connecting to it
-             (each time, when a redirect needed a new connection)
+             (each time, when a redirect needed a new connection); the
+             first time, reading the root certificates too
    TLS       the secure handshake, and how the connection is protected
              (TLS 1.2, the key exchange and the cipher). Its arithmetic
              (RSA and ECDSA signatures, the X25519 key exchange) is done

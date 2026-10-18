@@ -36,7 +36,13 @@ RUNS = [
 ]
 
 
-def run_atari(tos, hd, cmdline, log):
+def run_atari(tos, hd, cmdline, log, dropped=None):
+    """dropped: the line goes in that .CMD file, and EWGET.CMD names it, as
+    the desktop does when the file is dropped on EWGET.TTP"""
+    if dropped:
+        with open(os.path.join(hd, dropped), "w") as f:
+            f.write(cmdline + "\r\n")
+        cmdline = "C:\\" + dropped
     with open(os.path.join(hd, "EWGET.CMD"), "w") as f:
         f.write(cmdline)
     fifo_out, fifo_in = os.path.join(hd, "..", "rs_out"), os.path.join(hd, "..", "rs_in")
@@ -91,7 +97,8 @@ def main():
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
-            text = run_atari(tos, hd, cmdline, os.path.join(work, "hatari-%s.log" % name.replace(" ", "-")))
+            text = run_atari(tos, hd, cmdline, os.path.join(work, "hatari-%s.log" % name.replace(" ", "-")),
+                             "MOVED.CMD" if name == "http to https" else None)
             print("---- %s: EWGET.TTP %s" % (name, cmdline))
             print("\n".join(l for l in text.splitlines() if l.strip()))
             ok = "done (0)" in text and "200 OK" in text
@@ -107,15 +114,17 @@ def main():
                 ok = ok and "ECDHE-ECDSA" in text and "elliptic curves on the DSP" in text \
                      and "(3 tries)" not in text and "passed its elliptic-curve self-test" in net \
                      and "ECDSA P-384 on the DSP" in net and "ECDSA P-256 on the DSP" in net \
+                     and "the server's first answer" in net and "the handshake: " in net \
                      and open(os.path.join(hd, "EC.HTM"), "rb").read() == server.PAGE
                 for l in net.splitlines():
-                    if " on the " in l and "TLS" in l:
+                    if "TLS --" in l:
                         print("---- " + l.strip())
             elif name == "https":
                 ok = ok and "TLS 1.2" in text and "the connection was kept open" in text \
                      and "RSA on the DSP" in text and open(os.path.join(hd, "PAGE.HTM"), "rb").read() == server.PAGE
             else:
                 ok = ok and "after 1 redirect: https://127.0.0.1:%d/page" % HTTPS in text \
+                     and "command line from C:\\MOVED.CMD" in text \
                      and open(os.path.join(hd, "MOVED.HTM"), "rb").read() == server.PAGE
             print("---- %s: %s" % (name, "ok" if ok else "FAILED"))
             fails += not ok

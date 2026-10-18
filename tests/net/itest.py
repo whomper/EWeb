@@ -92,6 +92,18 @@ try:
     check("ECDSA", rc == 0 and "ECDHE-ECDSA" in out and "(3 tries)" in out and saved("ec.htm") == server.PAGE,
           out)
 
+    # the handshake's steps in the log, in order, written out once it ended
+    try:
+        os.remove(os.path.join(work, "hs.log"))
+    except OSError:
+        pass
+    rc, out = run("-l", "hs.log", "https://localhost:%d/page" % HTTPS)
+    log = saved("hs.log").decode("latin-1") if rc == 0 else ""
+    steps = ["root certificates read", "random seed ready in", "the server's first answer, ",
+             "decoding and checking them", "the handshake: ", "secure: TLS 1.2"]
+    at = [log.find(w) for w in steps]
+    check("the handshake's log lines", rc == 0 and -1 not in at and at == sorted(at), out + log)
+
     rc, out = run("http://localhost:1/page")
     check("nobody listening", rc != 0 and "localhost" in out, out)
 finally:

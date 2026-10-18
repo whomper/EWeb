@@ -403,6 +403,30 @@ Checked: `common/tests/ec` (902 checks against BearSSL on a C model of `ec.a56`,
 computer, which has no DSP), `make hatarinet` with it (the curves on the emulated DSP, ECDSA at the
 first try).
 
+**On your DFB1** `EWGET.TTP` 0.6 fetched `https://www.wikipedia.org` (29 KB gzip) in 21.1 s, the
+handshake 12.8 s of it instead of 85.7, ECDSA at the first try, with the 68030's caches off:
+
+| On the DSP, on the DFB1 | Time |
+|---|---|
+| ECDSA P-384 check (three of them in Wikipedia's chain) | 0.94 s, 0.96 s |
+| ECDSA P-256 check | 0.44 s |
+| X25519 (each half) | 0.24 s |
+
+That is a fifth more than the counts above for P-384, a tenth for P-256; the first P-384 check took 1.7 s because its time held the
+self-test and the line about it. The DSP's 4.5 s were a third of the handshake. Its log (`-l`) took
+about 3.5 s more: each line of a handshake was written out at once, opening and closing the file, about
+half a second a line on that disk (the two X25519 halves, 240 ms each, are 760 ms apart). The rest,
+about 4.8 s, mostly before the first signature check, the log didn't explain.
+
+So in 0.7 the handshake's lines stay in the log's buffer until it ends (AERA-Atari's `src/conn.c`),
+the self-test's time is its own, and `src/tls.c` logs the handshake's steps: the random seed (read and
+written in `SEED.DAT`), the server's first answer after the hello, the server's certificates (how many,
+their bytes, and the time spent decoding and checking them against the time they took to arrive), and
+how much of the handshake was waiting for the network. `EWGET.TTP` finds `EWGET.CMD` whatever the
+desktop passes when nothing is typed (a space, or ARGV), in its own folder when it knows it, takes a
+`.CMD` file dropped on it, and says where it looked when there is none: the desktop's box takes only a
+few dozen characters.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

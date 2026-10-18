@@ -135,11 +135,12 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
-  with only an ECDSA certificate, and the certificates that must be refused.
+  with only an ECDSA certificate, the handshake's steps in the log, and the
+  certificates that must be refused.
 - `make hatarinet`: `EWGET.TTP` on an emulated Falcon (Hatari, 68030 at
   32 MHz, the DSP emulated), through `FAKESTNG.PRG`, against the same
-  servers (an ECDSA one too, its curves on the DSP), and with the release's
-  `CACERT.PEM` and `ROOTS.DAT`.
+  servers (an ECDSA one too, its curves on the DSP), with a `.CMD` file
+  dropped on it, and with the release's `CACERT.PEM` and `ROOTS.DAT`.
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
 - `make urltest`: the URL parser against the URL Standard's tests (Web
