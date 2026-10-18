@@ -262,7 +262,8 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
 COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
               $(addprefix build/tos/net/,conn.o tls.o util.o futil.o net_tos.o sting.o sting_s.o dsprsa.o \
-              dsp.o plat_tos.o)
+              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o)
+build/tos/net/dspec.o: common/dsp/ec_prog.h
 build/tos/net/%.o: src/net/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) -c $< -o $@
@@ -361,7 +362,7 @@ build/fakesting/FAKESTNG.PRG: $(addprefix build/fakesting/,fstart.o fakesting.o 
 
 # EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
 # build/), through FAKESTNG, against tests/net/server.py: TLS on the 68030,
-# RSA on the emulated DSP
+# RSA and the elliptic curves on the emulated DSP
 hatarinet: binary/EWGET.TTP build/fakesting/FAKESTNG.PRG
 	python3 tests/hatari/ewget_test.py build/etos1024k.img
 .PHONY: hatarinet

@@ -54,7 +54,8 @@ What follows from it:
 - **The FPU helps less than you might hope.** All JavaScript numbers are floating point, so it speeds
   up script maths. Layout and image decoding can use integer arithmetic, so it doesn't change the
   picture.
-- **The DSP is the more useful helper.** `common/` already uses it for RSA in TLS. EWeb's candidates
+- **The DSP is the more useful helper.** `common/` already uses it for RSA in TLS, and since 18 Oct
+  2026 for the handshake's elliptic curves too (below). EWeb's candidates
   to move there are scaling and dithering images and the colour conversion in JPEG decoding, each
   measured against the 68030 first.
 - **Engine choice.** QuickJS understands modern JavaScript syntax. Duktape, the engine NetSurf uses,
@@ -349,6 +350,59 @@ resumes its TLS session, which leaves out the key exchange (tested on this compu
 `common/` came up to date from AERA-Atari for this (`tools/sync-common.sh`): EWeb's copy predated
 `tos_ms()`, the millisecond timer that stays right where timer C runs fast.
 
+## The TLS handshake: elliptic curves on the DSP (18 Oct 2026)
+
+**On your DFB1** `EWGET.TTP` 0.5 fetched `https://en.wikipedia.org` (a redirect to the Main Page, 50 KB
+gzip, 254 KB unpacked) in 99.4 s the first time and 2.5 s the second, over the kept connection (body
+65 KB/s, unpacking 1.2 s). The handshake took 85.7 s of the first. Wikipedia turned down both hellos
+that asked for an RSA certificate, and the third, which took its ECDSA one, left BearSSL to do the
+elliptic curves on the 68030. Counted on a 68030 (`tools/count68k.sh`, BearSSL as `EWGET.TTP` builds
+it):
+
+| BearSSL on the 68030 (`br_ec_all_m31`) | Instructions |
+|---|---|
+| X25519 key exchange (both halves) | 8.2 M |
+| ECDSA P-256 signature check | 21 M, of which 2.2 M are 1/s modulo the order |
+| ECDSA P-384 signature check (BearSSL's P-384 code is generic) | 119 M, of which 6.2 M are 1/s |
+| RSA-2048 signature check (the DSP does it, 0.1 s) | 7.4 M |
+
+The P-384 check, of the authority's signature on Wikipedia's certificate, was most of the 86 s. Asking
+for RSA isn't a way round it: more and more sites have only ECDSA certificates (Let's Encrypt's default
+since 2022).
+
+**So the DSP does the curves now** (AERA-Atari's `common/`, opt-in, which EWeb takes):
+`dsp/ec.a56` keeps 128 numbers modulo the curve's prime on the DSP and multiplies (Montgomery, a column
+of 23-bit digit products a time, one product an instruction), adds and subtracts them, a 24-bit command
+word each; `src/ecdsp.c` is BearSSL's `br_ec_impl` with the formulas as streams of those commands
+(P-256, P-384, P-521 in Jacobian coordinates with 4-bit windows; Curve25519 by RFC 7748's ladder), and
+checks a whole ECDSA signature there, 1/s modulo the order included. A curve it doesn't know, or a DSP
+another program holds, goes back to BearSSL. Counted on Hatari's DSP core (the DSP's own time, 32 MHz):
+
+| On the DSP | Time |
+|---|---|
+| X25519 (each half), and the self-test the first time | 0.23 s |
+| ECDSA P-256 check | 0.40 s |
+| ECDSA P-384 check | 0.78 s |
+| ECDSA P-521 check | 1.7 s |
+
+A handshake like Wikipedia's (X25519, a P-256 signature, a P-384 one, an RSA one) should take about 2 s
+instead of 86. With the curves this cheap, the first hello offers ECDSA as well as RSA, so a server
+with only ECDSA isn't connected to three times. In the Hatari rig (`make hatarinet`, a P-256 key signed
+with P-384) the handshake takes 1.1 s, but Hatari runs the DSP more than twice as fast as a real one
+when the 68030 is set to 32 MHz, so that figure is too good. The product is mostly overhead around the
+columns (2,240 cycles for P-256, of which 620 are the products themselves): there is room to make it
+faster if a measurement on the DFB1 says it matters.
+
+**The report** hid about 10 s of that first fetch: with the redirect served over the kept connection,
+`connect` wasn't shown, and the two refused hellos were counted as connecting. `connect` is now shown
+whenever a connection was made, and the TLS line counts the refused tries and says how many there were
+(`(3 tries)`).
+
+Checked: `common/tests/ec` (902 checks against BearSSL on a C model of `ec.a56`, the same through
+`ec.a56` itself on Hatari's DSP core), `make itest` with an ECDSA-only server (the third try, on this
+computer, which has no DSP), `make hatarinet` with it (the curves on the emulated DSP, ECDSA at the
+first try).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -616,8 +670,9 @@ out of both (their paths lead nowhere on the Atari).
    (above), and NSBENCH 0.2's machine report and `NEWS.HTM` on your DFB1: 21.3 s with the caches on,
    nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster, timed on your DFB1 in
    NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse; then EWeb's HTTP
-   client and `EWGET.TTP` (above), tested on an emulated Falcon. *Still to do:* real pages fetched on
-   your DFB1 with `EWGET.TTP`, then laying out text.
+   client and `EWGET.TTP` (above), tested on an emulated Falcon, and Wikipedia fetched on your DFB1
+   (18 Oct 2026), whose 86-second handshake moved the elliptic curves to the DSP (above). *Still to
+   do:* the handshake timed on your DFB1 again, then laying out text.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

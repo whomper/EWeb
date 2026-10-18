@@ -6,9 +6,10 @@ same pages over plain HTTP and HTTPS, the HTTPS one with a certificate for
 "localhost" and "127.0.0.1" (the emulated Atari can't look names up) from a
 test authority made here (WORK/CACERT.PEM), the same server on 127.0.0.2
 (not a name in its certificate), and a second HTTPS server whose certificate
-nobody signed.
+nobody signed; and one with only an ECDSA certificate (a P-256 key signed
+by a P-384 test authority, as Wikipedia's are), for the elliptic curves.
 
-    server.py WORK [--http PORT] [--https PORT] [--untrusted PORT]
+    server.py WORK [--http PORT] [--https PORT] [--untrusted PORT] [--ecdsa PORT]
 
 Pages:
   /page          a page of text (gzip when it is asked for), keep-alive
@@ -41,10 +42,11 @@ BIG = bytes(rnd.randrange(256) for _ in range(2 << 20))
 
 def make_certs(work):
     """A test authority and a certificate for localhost signed by it, and a
-    self-signed one; RSA, as the Falcon's DSP checks those."""
+    self-signed one, RSA; an ECDSA authority and certificate. CACERT.PEM
+    holds both authorities."""
     def run(*a):
         subprocess.run(["openssl"] + list(a), cwd=work, check=True, capture_output=True)
-    if os.path.exists(os.path.join(work, "host.pem")):
+    if os.path.exists(os.path.join(work, "ec.pem")):
         return
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "CACERT.PEM",
         "-days", "3650", "-subj", "/CN=EWeb test authority",
@@ -58,6 +60,15 @@ def make_certs(work):
         "-out", "host.pem", "-days", "825", "-extfile", "ext.cnf")
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "self.key", "-out", "self.pem",
         "-days", "825", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost")
+    run("req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-384", "-nodes", "-keyout", "ecca.key",
+        "-out", "ecca.pem", "-days", "3650", "-sha384", "-subj", "/CN=EWeb test ECDSA authority",
+        "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign")
+    run("req", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-keyout", "ec.key",
+        "-out", "ec.csr", "-subj", "/CN=localhost")
+    run("x509", "-req", "-in", "ec.csr", "-CA", "ecca.pem", "-CAkey", "ecca.key", "-CAcreateserial",
+        "-out", "ec.pem", "-days", "825", "-sha384", "-extfile", "ext.cnf")
+    with open(os.path.join(work, "CACERT.PEM"), "a") as f:
+        f.write(open(os.path.join(work, "ecca.pem")).read())
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -148,6 +159,7 @@ def main():
     ap.add_argument("--http", type=int, default=18080)
     ap.add_argument("--https", type=int, default=18443)
     ap.add_argument("--untrusted", type=int, default=18444)
+    ap.add_argument("--ecdsa", type=int, default=18445)
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
@@ -156,6 +168,7 @@ def main():
     serve(a.https, tls_context(a.work, "host.pem", "host.key"))
     serve(a.https, tls_context(a.work, "host.pem", "host.key"), "127.0.0.2")
     serve(a.untrusted, tls_context(a.work, "self.pem", "self.key"))
+    serve(a.ecdsa, tls_context(a.work, "ec.pem", "ec.key"))
     print("ready", flush=True)
     try:
         sys.stdin.read()		# until whoever started us closes our stdin

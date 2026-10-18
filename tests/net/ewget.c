@@ -80,7 +80,9 @@ int ewget(int argc, char **argv)
 	str_copy(tls_roots_cache, "ROOTS.DAT", sizeof(tls_roots_cache));
 	str_copy(tls_seed_path, "SEED.DAT", sizeof(tls_seed_path));
 	falcon_dsp_init();
-	out("network: %s; RSA on the %s\n", net_stack(), falcon_dsp_state());
+	falcon_dsp_ec_init();
+	out("network: %s; RSA on the %s, elliptic curves on the %s\n", net_stack(), falcon_dsp_state(),
+	    falcon_dsp_ec_state());
 	for (i = 0; i < times; i++) {
 		HTTPREQ rq;
 		HTTPRESP rs;
@@ -98,11 +100,14 @@ int ewget(int argc, char **argv)
 			    rs.charset[0] ? ", charset " : "", rs.charset);
 			if (rs.redirects)
 				out("  after %d redirect%s: %s\n", rs.redirects, rs.redirects > 1 ? "s" : "", rs.url.href);
-			if (rs.reused)
+			/* a redirect may have connected before a kept connection */
+			if (rs.reused && !rs.t.connect_ms)
 				out("  connect      0 ms   (the connection was kept open)\n");
 			else
 				out("  connect %6lu ms   (finding the host and connecting)\n", rs.t.connect_ms);
-			if (rs.security[0])
+			if (rs.security[0] && rs.t.tls_tries > 1)
+				out("  TLS     %6lu ms   %s (%d tries)\n", rs.t.tls_ms, rs.security, rs.t.tls_tries);
+			else if (rs.security[0])
 				out("  TLS     %6lu ms   %s\n", rs.t.tls_ms, rs.security);
 			out("  wait    %6lu ms   (from the request to the answer's first line)\n", rs.t.wait_ms);
 			if (rs.t.body_ms >= 10)

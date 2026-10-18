@@ -26,11 +26,12 @@
 
 typedef struct {
 	unsigned long connect_ms;	/* finding the host and connecting (DNS, TCP) */
-	unsigned long tls_ms;		/* the TLS handshakes */
+	unsigned long tls_ms;		/* the TLS handshakes, tries the server refused included */
 	unsigned long wait_ms;		/* from sending a request to the answer's first line */
 	unsigned long body_ms;		/* from there to the answer's last byte */
 	unsigned long unpack_ms;	/* gzip or deflate */
 	unsigned long total_ms;		/* all of it, redirects included */
+	int tls_tries;			/* connections the last handshake took */
 } HTTPTIME;
 
 typedef struct {

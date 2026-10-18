@@ -89,6 +89,7 @@ static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int err
 	}
 	t->tls_ms += k->c->tls_ms;
 	t->connect_ms += pf_ms() - t0 - k->c->tls_ms;
+	t->tls_tries = k->c->tls_tries;
 	k->c->timeout_ms = 60000;
 	str_copy(k->key, key, sizeof(k->key));
 	k->used = ++kept_clock;

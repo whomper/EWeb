@@ -47,17 +47,21 @@ Options (type them before the address)
    -z 120      your time zone, in minutes east of UTC (Israel: 120 in
                winter, 180 in summer), so certificate dates are checked
                against the right time; the default is 0
-   -r          check the server's signature on the 68030 instead of the
-               DSP (to compare the two)
+   -r          do the handshake's arithmetic (RSA signatures, elliptic
+               curves) on the 68030 instead of the DSP, to compare the two
    -A          show the answer's headers too
    -l NET.LOG  write everything said on the connection to NET.LOG
+               (and how long each signature and key exchange took)
 
 What the numbers mean
 ---------------------
    connect   finding the server's address (DNS) and connecting to it
+             (each time, when a redirect needed a new connection)
    TLS       the secure handshake, and how the connection is protected
-             (TLS 1.2, the key exchange and the cipher). RSA signatures
-             are checked on the DSP when there is one
+             (TLS 1.2, the key exchange and the cipher). Its arithmetic
+             (RSA and ECDSA signatures, the X25519 key exchange) is done
+             on the DSP when there is one. "(3 tries)": the server turned
+             down the first offers, and those tries are counted here
    wait      from sending the request to the first line of the answer:
              mostly the server and the distance to it
    body      receiving the page, as it came (most servers pack it)

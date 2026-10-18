@@ -81,6 +81,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   After changing it: `make test` (nettest, the fuzz seeds and finds), `make itest`, `make urltest`
   (`tests/url/fetch.sh` first) after a change to `url.c`, and `make hatarinet` for the Atari side; run
   `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
+  The handshake's RSA and elliptic curves run on the DSP through `common/` (`ui/dsp.c`, `ui/dsp_ec.c`,
+  `src/ecdsp.c`, `dsp/ec.a56`): change those in AERA-Atari and test them there (`common/tests/ec`).
+  `make clean` deletes `build/etos1024k.img` (EmuTOS 1.4's 1024k image, from SourceForge), which the
+  Hatari rigs need.
 - **A release** carries `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.

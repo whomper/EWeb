@@ -20,9 +20,9 @@ import server  # noqa: E402
 ewget = os.path.abspath(sys.argv[1])
 work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
 os.makedirs(work, exist_ok=True)
-HTTP, HTTPS, BAD = 18080, 18443, 18444
+HTTP, HTTPS, BAD, EC = 18080, 18443, 18444, 18445
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
-                        "--https", str(HTTPS), "--untrusted", str(BAD)],
+                        "--https", str(HTTPS), "--untrusted", str(BAD), "--ecdsa", str(EC)],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 if srv.stdout.readline().strip() != "ready":
     sys.exit("itest: the servers didn't start")
@@ -85,6 +85,12 @@ try:
 
     rc, out = run("https://localhost:%d/page" % BAD)
     check("a certificate nobody signed", rc != 0 and "failed" in out, out)
+
+    # ECDSA only: RSA asked for first (no DSP here), so the third try takes
+    # it, and the report counts the tries the server turned down as TLS
+    rc, out = run("-o", "ec.htm", "https://localhost:%d/page" % EC)
+    check("ECDSA", rc == 0 and "ECDHE-ECDSA" in out and "(3 tries)" in out and saved("ec.htm") == server.PAGE,
+          out)
 
     rc, out = run("http://localhost:1/page")
     check("nobody listening", rc != 0 and "localhost" in out, out)

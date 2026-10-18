@@ -16,7 +16,8 @@ engine, and its URL parser and HTTP client.
   it with NetSurf's CSS engine and with EWeb's, on the Atari, and says how
   long each part took.
 - `EWGET.TTP`: fetches a page from the web with EWeb's HTTP client (TLS 1.2
-  on the Atari, RSA on the DSP, gzip, redirects, kept connections), and says
+  on the Atari, RSA and the elliptic curves on the DSP, gzip, redirects, kept
+  connections), and says
   how long each part took.
 
 ## Getting started
@@ -51,7 +52,9 @@ network connection through STinG or MiNTnet.
 Straight from the Atari, through STinG or MiNTnet: EWeb resolves the name
 and connects itself, and for `https://` does TLS 1.2 on the 68030
 (BearSSL, ChaCha20-Poly1305 first, which is twice as fast as AES there),
-with the server's RSA signature checked on the DSP. Every certificate is
+with the server's RSA or ECDSA signatures and the key exchange worked out
+on the DSP (about 2 s for a handshake with ECDSA certificates, which took
+86 s on the 68030). Every certificate is
 checked against the authorities in `CACERT.PEM` (Mozilla's list; `ROOTS.DAT`
 is the same list read in advance), with its name and dates; there is no way
 to skip the check. A kept connection serves the next requests to the same
@@ -131,11 +134,14 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   might send), and the fuzz targets' seeds and past finds (`tests/fuzz`).
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
-  connection, a resumed TLS session, redirects from HTTP to HTTPS, and the
-  certificates that must be refused.
+  connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
+  with only an ECDSA certificate, and the certificates that must be refused.
 - `make hatarinet`: `EWGET.TTP` on an emulated Falcon (Hatari, 68030 at
   32 MHz, the DSP emulated), through `FAKESTNG.PRG`, against the same
-  servers, and with the release's `CACERT.PEM` and `ROOTS.DAT`.
+  servers (an ECDSA one too, its curves on the DSP), and with the release's
+  `CACERT.PEM` and `ROOTS.DAT`.
+- `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
+  test, run there).
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
 - `make fuzz`: the HTTP client and the URL parser under libFuzzer.

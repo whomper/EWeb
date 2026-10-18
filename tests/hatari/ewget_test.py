@@ -22,10 +22,13 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import server  # noqa: E402
 
-HTTP, HTTPS = 18180, 18543
+HTTP, HTTPS, EC = 18180, 18543, 18545
 RUNS = [
     ("https", "-n 2 -o PAGE.HTM https://127.0.0.1:%d/page" % HTTPS),
     ("http to https", "-o MOVED.HTM http://127.0.0.1:%d/secure" % HTTP),
+    # an ECDSA certificate (P-256, signed with P-384): the elliptic curves
+    # on the DSP, ECDSA offered at once
+    ("ECDSA", "-l EC.LOG -o EC.HTM https://127.0.0.1:%d/page" % EC),
     # the release's certificates (Mozilla's list, and ROOTS.DAT made from
     # it on this computer): read from the cache, and the test authority
     # isn't among them
@@ -74,7 +77,8 @@ def main():
     os.makedirs(os.path.join(hd, "AUTO"))
     srv_dir = os.path.join(work, "srv")
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "net", "server.py"), srv_dir,
-                            "--http", str(HTTP), "--https", str(HTTPS), "--untrusted", str(HTTPS + 1)],
+                            "--http", str(HTTP), "--https", str(HTTPS), "--untrusted", str(HTTPS + 1),
+                            "--ecdsa", str(EC)],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         sys.exit("ewget_test: the servers didn't start")
@@ -98,6 +102,15 @@ def main():
                      and int(m.group(1)) > 100
                 if m:
                     print("---- %s root certificates read from ROOTS.DAT in %s ms" % m.groups())
+            elif name == "ECDSA":
+                net = open(os.path.join(hd, "EC.LOG"), errors="replace").read()
+                ok = ok and "ECDHE-ECDSA" in text and "elliptic curves on the DSP" in text \
+                     and "(3 tries)" not in text and "passed its elliptic-curve self-test" in net \
+                     and "ECDSA P-384 on the DSP" in net and "ECDSA P-256 on the DSP" in net \
+                     and open(os.path.join(hd, "EC.HTM"), "rb").read() == server.PAGE
+                for l in net.splitlines():
+                    if " on the " in l and "TLS" in l:
+                        print("---- " + l.strip())
             elif name == "https":
                 ok = ok and "TLS 1.2" in text and "the connection was kept open" in text \
                      and "RSA on the DSP" in text and open(os.path.join(hd, "PAGE.HTM"), "rb").read() == server.PAGE
