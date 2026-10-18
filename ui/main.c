@@ -622,9 +622,6 @@ int main(void)
 		extern int mem_unaligned_ok;
 		mem_unaligned_ok = get_cookie(0x5F435055L) >= 20;	/* _CPU */
 	}
-	/* NatFeats found now (an empty line): asked first after the GEM and
-	   the crash handler were set up, the emulator's console stayed silent */
-	nf_debug("");
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
