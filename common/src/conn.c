@@ -61,7 +61,9 @@ static int start_tls(CONN *c, const char *host, char *err, int errlen)
 		conn_log("TLS", " -- ", msg, strlen(msg));
 	}
 	t0 = pf_ms();
-	t = tls_start(c->h, host, (listed(ecdsa_hosts, host) ? 0 : TLS_RSA_ONLY) |
+	/* RSA certificates first, as the DSP checks them fast; unless it
+	   does the elliptic curves as well (tls_ec_fast) */
+	t = tls_start(c->h, host, (listed(ecdsa_hosts, host) || tls_ec_fast() ? 0 : TLS_RSA_ONLY) |
 		      (listed(aes_hosts, host) ? 0 : TLS_CHACHA_ONLY), &retry, err, errlen);
 	c->tls_ms = pf_ms() - t0;
 	if (!t) {
@@ -223,12 +225,17 @@ CONN *conn_open(const char *name, const char *host, unsigned short port, long bu
 		char *err, int errlen)
 {
 	int attempt;
+	unsigned long refused = 0;	/* the handshakes of the tries before */
 	for (attempt = 0; attempt < 3; attempt++) {	/* ChaCha20 alone, then ECDSA */
 		CONN *c = open_plain(name, host, port, bufsize, err, errlen);
 		if (!c || sec != SEC_TLS)
 			return c;
-		if (start_tls(c, host, err, errlen))
+		if (start_tls(c, host, err, errlen)) {
+			c->tls_ms += refused;
+			c->tls_tries = attempt + 1;
 			return c;
+		}
+		refused += c->tls_ms;
 		conn_close(c);
 		if (!conn_tls_retry)
 			return 0;

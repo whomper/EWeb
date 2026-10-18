@@ -39,6 +39,7 @@ int tls_anchor_count(void) { return 0; }
 void tls_free_anchors(void) { }
 
 void tls_forget_sessions(void) { }
+int tls_ec_fast(void) { return 0; }
 
 TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int errlen)
 {

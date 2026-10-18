@@ -10,7 +10,7 @@ CC      := $(CROSS)gcc
 GCCINC  := $(shell $(CC) -print-file-name=include 2>/dev/null)
 A       := ../../atari
 ACFLAGS := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
-           -fno-tree-loop-distribute-patterns -fno-store-merging -fno-asynchronous-unwind-tables \
+           -fno-tree-loop-distribute-patterns -fno-store-merging -fdisable-tree-bswap -fno-asynchronous-unwind-tables \
            -Wall -nostdinc -isystem $(GCCINC) -I$(A)/include -I$(A)
 LDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
@@ -30,8 +30,8 @@ $(B)/crt0.o: $(A)/crt0.S | $(B)
 	$(CC) -m68000 -DSTACK_SIZE=4096 -c -o $@ $<
 $(B)/nf.o: $(A)/nf.S | $(B)
 	$(CC) -m68000 -c -o $@ $<
-$(B)/test_av: test_av.c ../../ui/av.c ../../ui/av.h | $(B)
-	cc $(CFLAGS) -o $@ test_av.c ../../ui/av.c
+$(B)/test_av: test_av.c ../../ui/av.c ../../ui/av_people.c ../../ui/av.h | $(B)
+	cc $(CFLAGS) -o $@ test_av.c ../../ui/av.c ../../ui/av_people.c
 $(B):
 	mkdir -p $@
 test: $(B)/test_av

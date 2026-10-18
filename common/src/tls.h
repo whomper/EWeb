@@ -66,4 +66,9 @@ extern int (*tls_rsa_accel)(unsigned char *x, size_t xlen,
 			    const unsigned char *n, size_t nlen,
 			    const unsigned char *e, size_t elen);
 
+/* the elliptic curves are done elsewhere (the Falcon's DSP): set by
+   tls_set_ec() (declared in ecdsp.h, where BearSSL's types are). Then
+   ECDSA is about as cheap as RSA, and a server is offered both at once */
+int tls_ec_fast(void);
+
 #endif
