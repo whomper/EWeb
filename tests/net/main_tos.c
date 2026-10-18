@@ -105,6 +105,7 @@ int main(void)
 	const char *av = argv_env(bp);
 	int argc, len = bp[0x80], rc, k, from_cmd = 0, unread = 0, missing = 0;
 	long cpu = get_cookie(0x5F435055L);	/* _CPU */
+	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first (6.5) */
 	dir[0] = 0;
 	if (av) {
 		/* the program's folder from argv[0]; the arguments after it */

@@ -12,7 +12,8 @@ through FAKESTNG, against tests/net/server.py and a site served here:
 - EWGET.TTP: 1 MB over http, written in one go.
 
 Each case's Fopen, Fcreate and Fsfirst are counted between the events
-EWEB.PRG gives through NatFeats, and must stay within the case's budget:
+EWEB.PRG gives through NatFeats, those the program makes itself (at a PC
+in its TPA, not the desktop's), and must stay within the case's budget:
 about one open per file the job touches, plus a safe save's. A quit with
 nothing changed writes nothing; pages, history and idle touch nothing.
 
@@ -43,21 +44,21 @@ CALLS = ("Fopen", "Fcreate", "Fsfirst")
 
 # the most each case may do: Fopen, Fcreate, Fsfirst
 BUDGET = {
-    "start": (2, 0, 1),             # EWEB.INF (looked up, read), EWEB.FNT
+    "start": (2, 0, 0),             # EWEB.INF, EWEB.FNT
     "pictures": (0, 0, 0),          # v0.11 shows a picture's description
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
     # the first ever: CACERT.PEM (read twice: no ROOTS.DAT yet), ROOTS.DAT
-    # and SEED.DAT made (SEED.DAT tried first)
-    "first secure page": (3, 2, 3),
+    # (tried first) and SEED.DAT made (the release brings a ROOTS.DAT)
+    "first secure page": (4, 2, 3),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     "quit": (0, 0, 0),              # nothing changed since the page size
-    "start again": (2, 0, 1),
-    "secure page again": (3, 0, 2),  # ROOTS.DAT; SEED.DAT read, then written over
+    "start again": (2, 0, 0),
+    "secure page again": (3, 0, 1),  # CACERT.PEM's date; ROOTS.DAT; SEED.DAT read, then written over
     "quit again": (0, 0, 0),
-    "EWGET 1 MB": (2, 2, 2),        # EWGET.CMD, EWGET.LOG, CRASH.LOG, the file
+    "EWGET 1 MB": (2, 2, 1),        # EWGET.CMD, EWGET.LOG, the file; CRASH.LOG looked for (is there a report to show?)
 }
 
 fails = 0
@@ -108,20 +109,31 @@ def serve(d):
     return s
 
 
-def counts(lines):
-    """GEMDOS calls by name and by file; the desktop's own files (EMU*,
-    DESKTOP, NEWDESK) left out"""
+def tpa(lines, prog):
+    """where prog is in memory: its basepage to the end of what its start
+    code keeps (its first Mshrink), from the trace"""
+    at = next(i for i, l in enumerate(lines) if "now loading 'C:\\%s'" % prog in l)
+    for l in lines[at:]:
+        m = re.search(r"Mshrink\(0x([0-9A-F]+), 0x([0-9A-F]+)\)", l)
+        if m:
+            return int(m.group(1), 16), int(m.group(1), 16) + int(m.group(2), 16)
+    raise RuntimeError("no Mshrink for " + prog)
+
+
+def counts(lines, where):
+    """GEMDOS calls by name and by file, those the program itself made (at a
+    PC in its TPA): not the desktop's, before and after it"""
     c, files = collections.Counter(), collections.Counter()
     for l in lines:
-        m = re.match(r'GEMDOS 0x\w+ (\w+)\("([^"]*)"', l)
-        if m and m.group(1) in CALLS and not re.search(r"\\(EMU|DESKTOP|NEWDESK)", m.group(2)):
+        m = re.match(r'GEMDOS 0x\w+ (\w+)\("([^"]*)".* at PC=? ?0x([0-9A-F]+)', l)
+        if m and m.group(1) in CALLS and where[0] <= int(m.group(3), 16) < where[1]:
             c[m.group(1)] += 1
             files["%s %s" % (m.group(1), m.group(2))] += 1
     return c, files
 
 
-def judge(case, lines):
-    c, files = counts(lines)
+def judge(case, lines, where):
+    c, files = counts(lines, where)
     got = tuple(c[k] for k in CALLS)
     over = [k for k, g, b in zip(CALLS, got, BUDGET[case]) if g > b]
     check("%-18s Fopen %d, Fcreate %d, Fsfirst %d (at most %d, %d, %d)" % ((case,) + got + BUDGET[case]),
@@ -162,7 +174,8 @@ class Run:
         lines = self.lines()
         if self.at is None:
             self.at = next((i for i, l in enumerate(lines) if "Pexec(0, \"C:\\EWEB.PRG\"" in l), 0)
-        judge(name, lines[self.at:])
+            self.where = tpa(lines, "EWEB.PRG")
+        judge(name, lines[self.at:], self.where)
         self.at = len(lines)
 
     def send(self, cmd):
@@ -274,7 +287,7 @@ def ewget(hd):
         time.sleep(3)
         lines = r.lines()
         at = next((i for i, l in enumerate(lines) if "Pexec(0, \"C:\\EWGET.TTP\"" in l), 0)
-        judge("EWGET 1 MB", lines[at:])
+        judge("EWGET 1 MB", lines[at:], tpa(lines, "EWGET.TTP"))
         big = os.path.join(hd, "BIG.BIN")
         same = os.path.exists(big) and open(big, "rb").read() == open(os.path.join(OUT, "site", "big.bin"),
                                                                         "rb").read()

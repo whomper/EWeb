@@ -579,17 +579,18 @@ releases.
 
   | Case | 0.11 | Now |
   |---|---|---|
-  | Start | 5 opens, 1 lookup (`EWEB.INF`; `EWEB.FNT` 4 times) | 2, 1 (`EWEB.INF`, `EWEB.FNT`) |
+  | Start | 5 opens, 1 lookup (`EWEB.INF`; `EWEB.FNT` 4 times) | 2, 0 (`EWEB.INF`, `EWEB.FNT`) |
   | A page with a face not used before | 1 open (`EWEB.FNT`) | 0 |
   | 10 pages, a page with 10 pictures, back 4 and forward 4, 5 minutes idle | 0 | 0 |
   | The page size changed (^+ ^- ^0) | 0 (saved at quit) | a safe save each time |
   | Quit, nothing changed | 2 opens, 1 lookup, a safe save | 0 |
-  | First secure page of a session | 3 opens, 5 lookups | 3, 2 (`ROOTS.DAT`; `SEED.DAT` read, then written over) |
-  | The same, the first session after installing | 5 opens, 7 lookups, 61 reads | 5, 2, 31 |
-  | `EWGET.TTP`, 1 MB | 4 opens, 2 lookups, the file made once | the same |
+  | First secure page of a session | 3 opens, 5 lookups | 3, 1 (`ROOTS.DAT`; `SEED.DAT` read, then written over) |
+  | The same, the first session after installing | 5 opens, 7 lookups, 61 reads | 5, 1, 31 |
+  | `EWGET.TTP`, 1 MB | 4 opens, 2 lookups, the file made once | 4, 1 (`CRASH.LOG`: a report to show?) |
 
   Pages, stylesheets, history and Back go through memory (the cache), never the disk. `EWEB.FNT`
-  stays open while EWeb runs, a face read with one seek. `EWEB.INF` is read once and kept: a setting
+  stays open while EWeb runs, a face read with one seek. A file read whole is opened and its size
+  taken with a seek (`pf_size_open`), not looked up first. `EWEB.INF` is read once and kept: a setting
   changed by the user (the page size, the home page) is saved then, the window's place at quit if it
   moved, and nothing is written when nothing changed. The secure connections' files (`CACERT.PEM`,
   `ROOTS.DAT`, `SEED.DAT`) are `common/`'s (`tls_file_info`: `CACERT.PEM` looked up once; the seed

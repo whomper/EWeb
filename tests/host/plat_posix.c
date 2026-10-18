@@ -34,6 +34,12 @@ long pf_write(int h, const void *buf, long n) { return write(h, buf, n); }
 void pf_close(int h) { close(h); }
 long pf_seek(int h, long off) { return (long)lseek(h, off, SEEK_SET); }
 
+long pf_open_size(int h)
+{
+	off_t n = lseek(h, 0, SEEK_END);
+	return n >= 0 && lseek(h, 0, SEEK_SET) == 0 ? (long)n : -1;
+}
+
 long pf_size(const char *path)
 {
 	struct stat st;

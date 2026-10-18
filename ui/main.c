@@ -661,6 +661,7 @@ int main(void)
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	graf_mouse(BUSYBEE, 0);
 
+	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first (6.5) */
 	work_dir(opt.workdir, sizeof opt.workdir);
 	crash_install(opt.workdir, "EWeb", EWEB_VERSION);
 	crash_cleanup = crash_quit;

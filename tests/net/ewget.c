@@ -82,6 +82,7 @@ int ewget(int argc, char **argv)
 	str_copy(tls_sigs_path, "SIGS.DAT", sizeof(tls_sigs_path));
 	tls_file_stamp = pf_stamp;
 	tls_file_info = pf_info;	/* CACERT.PEM looked up once (6.5) */
+	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first */
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
 	out("network: %s; RSA on the %s, elliptic curves on the %s\n", net_stack(), falcon_dsp_state(),

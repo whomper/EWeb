@@ -94,6 +94,12 @@ long pf_write(int h, const void *buf, long n)
 void pf_close(int h) { Fclose((short)h); }
 long pf_seek(int h, long off) { return Fseek(off, (short)h, 0); }
 
+long pf_open_size(int h)
+{
+	long n = Fseek(0, (short)h, 2);
+	return n >= 0 && Fseek(0, (short)h, 0) == 0 ? n : -1;
+}
+
 static DTA dta;
 
 long pf_size(const char *path)
