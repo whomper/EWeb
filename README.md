@@ -257,6 +257,19 @@ P-384 0.78 s, P-521 1.7 s (for P-384: 40 s or more on the 68030). In EWeb's Hata
 an ECDSA certificate (a P-256 key, signed with P-384) took 1.1 s, but Hatari runs the DSP more than
 twice as fast as a real one when the 68030 is set to 32 MHz: count on about 2 s.
 
+On a DFB1 (EWeb 0.6, Wikipedia, the 68030's caches off): P-384 0.94 s, P-256 0.44 s, X25519 0.24 s;
+the handshake 12.8 s, of which 4.5 s on the DSP.
+
+## The handshake in the log (18 Oct 2026, from EWeb)
+
+Every app with a connection log gets these. `conn.c` keeps a TLS handshake's lines in the log's buffer
+until the handshake ends: written out one at a time, each cost about half a second on a DFB1's disk,
+which was a quarter of the handshake. `tls.c` logs the handshake's steps through `tls_log` (conn.c sets
+it): the random seed ready (`SEED.DAT` read and written), the server's first answer after the hello,
+the server's certificates (how many, their bytes, the time spent decoding and checking them against
+the time they took to arrive), and how much of the handshake was waiting for the network.
+`dsp_ec.c`'s self-test line gives its own time, and leaves it out of the first operation's.
+
 `tests/ec`: `make test` checks `ecdsp.c` against BearSSL with a C model of `ec.a56` (key exchanges and
 signature checks on every curve, RFC 7748's vectors, doublings and the point at infinity inside a
 check, points off the curve, good and bad signatures with short and long hashes: 902 checks);

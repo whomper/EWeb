@@ -22,6 +22,7 @@ int tls_tz_minutes;
 char tls_seed_path[200];
 char tls_roots_cache[200];
 void (*tls_note)(const char *msg);
+void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
 		     const unsigned char *e, size_t elen);
 

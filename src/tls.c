@@ -16,6 +16,7 @@
  *  - One 16 KB buffer per connection (half duplex): mail protocols
  *    wait for the answer before they send again.
  */
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -34,6 +35,7 @@ int tls_tz_minutes;
 char tls_seed_path[200];
 char tls_roots_cache[200];
 void (*tls_note)(const char *msg);
+void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
 		     const unsigned char *e, size_t elen);
 
@@ -52,9 +54,21 @@ int tls_ec_fast(void)
 	return ec_vrfy != 0;
 }
 
+/* br_x509_minimal_context with the time it takes and the bytes it sees,
+   for the log */
+typedef struct {
+	const br_x509_class *vtable;
+	br_x509_minimal_context *in;
+	unsigned long t0, busy, bytes;
+	int certs;
+} XTIME;
+
 struct TLS {
 	br_ssl_client_context cc;
 	br_x509_minimal_context xc;
+	XTIME xt;
+	int hs;				/* the handshake: its times are logged */
+	unsigned long sent, waited, wait0;	/* the hello sent; waiting for data */
 	int sock;
 	char desc[80];
 	int offered, resumed;		/* a kept session offered; taken up */
@@ -636,6 +650,76 @@ static void explain(int e, const char *host, char *err, int errlen)
 	snprintf(err, errlen, "%s: %s", host, m);
 }
 
+static void step(const char *fmt, ...)
+{
+	char msg[160];
+	va_list ap;
+	if (!tls_log)
+		return;
+	va_start(ap, fmt);
+	vsnprintf(msg, sizeof(msg), fmt, ap);
+	va_end(ap);
+	tls_log(msg);
+}
+
+#define XT(ctx) ((XTIME *)(void *)(ctx))
+#define XIN(ctx) (&XT(ctx)->in->vtable)
+#define XBEGIN(ctx) unsigned long xt_t = pf_ms()
+#define XEND(ctx) (XT(ctx)->busy += pf_ms() - xt_t)
+
+static void xt_start_chain(const br_x509_class **ctx, const char *server_name)
+{
+	XBEGIN(ctx);
+	XT(ctx)->t0 = xt_t;
+	(*XIN(ctx))->start_chain(XIN(ctx), server_name);
+	XEND(ctx);
+}
+
+static void xt_start_cert(const br_x509_class **ctx, uint32_t length)
+{
+	XBEGIN(ctx);
+	XT(ctx)->certs++;
+	XT(ctx)->bytes += length;
+	(*XIN(ctx))->start_cert(XIN(ctx), length);
+	XEND(ctx);
+}
+
+static void xt_append(const br_x509_class **ctx, const unsigned char *buf, size_t len)
+{
+	XBEGIN(ctx);
+	(*XIN(ctx))->append(XIN(ctx), buf, len);
+	XEND(ctx);
+}
+
+static void xt_end_cert(const br_x509_class **ctx)
+{
+	XBEGIN(ctx);
+	(*XIN(ctx))->end_cert(XIN(ctx));
+	XEND(ctx);
+}
+
+static unsigned xt_end_chain(const br_x509_class **ctx)
+{
+	unsigned r;
+	XBEGIN(ctx);
+	r = (*XIN(ctx))->end_chain(XIN(ctx));
+	XEND(ctx);
+	step("the server's %d certificate%s, %lu bytes: %lu ms decoding and checking them, over %lu ms",
+	     XT(ctx)->certs, XT(ctx)->certs == 1 ? "" : "s", XT(ctx)->bytes, XT(ctx)->busy,
+	     pf_ms() - XT(ctx)->t0);
+	return r;
+}
+
+static const br_x509_pkey *xt_get_pkey(const br_x509_class *const *ctx, unsigned *usages)
+{
+	const XTIME *x = (const XTIME *)(const void *)ctx;
+	return x->in->vtable->get_pkey(&x->in->vtable, usages);
+}
+
+static const br_x509_class xt_vtable = {
+	sizeof(XTIME), xt_start_chain, xt_start_cert, xt_append, xt_end_cert, xt_end_chain, xt_get_pkey
+};
+
 /* move records between BearSSL and the socket until `want` (a state
    bit) is possible. blocking: wait for it (with a timeout); otherwise
    return after one look at the socket. 1 ok, 0 not yet, -1 closed */
@@ -657,6 +741,7 @@ static int pump(TLS *t, unsigned want, int blocking)
 			}
 			br_ssl_engine_sendrec_ack(eng, (size_t)w);
 			start = pf_ms();
+			t->sent = start;
 			continue;
 		}
 		if (st & want)
@@ -672,10 +757,20 @@ static int pump(TLS *t, unsigned want, int blocking)
 			if (r > 0) {
 				br_ssl_engine_recvrec_ack(eng, (size_t)r);
 				start = pf_ms();
+				if (t->wait0) {
+					t->waited += start - t->wait0;
+					t->wait0 = 0;
+				}
+				if (t->hs == 1) {
+					step("the server's first answer, %lu ms after the hello", start - t->sent);
+					t->hs = 2;
+				}
 				continue;
 			}
 			if (!blocking)
 				return 0;
+			if (!t->wait0)
+				t->wait0 = pf_ms();
 			if (pf_ms() - start > 60000UL)
 				return -1;
 			if (pf_idle)
@@ -691,6 +786,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 {
 	TLS *t;
 	unsigned char seed[48];
+	unsigned long t0;
 	int r, rsa_only = flags & TLS_RSA_ONLY, chacha_only = flags & TLS_CHACHA_ONLY;
 	if (retry)
 		*retry = 0;
@@ -733,7 +829,12 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	br_x509_minimal_set_ecdsa(&t->xc, ec_impl, ec_vrfy ? ec_vrfy : br_ecdsa_i31_vrfy_asn1);
 	set_time(&t->xc);
 	br_ssl_engine_set_buffer(&t->cc.eng, t->iobuf, sizeof(t->iobuf), 0);
+	t->xt.vtable = &xt_vtable;
+	t->xt.in = &t->xc;
+	br_ssl_engine_set_x509(&t->cc.eng, &t->xt.vtable);
+	t0 = pf_ms();
 	get_seed(seed);
+	step("random seed ready in %lu ms", pf_ms() - t0);
 	br_ssl_engine_inject_entropy(&t->cc.eng, seed, sizeof(seed));
 	memset(seed, 0, sizeof(seed));
 	{
@@ -749,7 +850,12 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 		free(t);
 		return 0;
 	}
+	t->hs = 1;
+	t->sent = t0 = pf_ms();
 	r = pump(t, BR_SSL_SENDAPP, 1);
+	t->hs = 0;
+	t0 = pf_ms() - t0;
+	step("the handshake: %lu ms waiting for the network, %lu ms working", t->waited, t0 - t->waited);
 	if (r <= 0) {
 		int e = br_ssl_engine_last_error(&t->cc.eng);
 		if (!e)
