@@ -39,9 +39,15 @@ static void note_host(char list[8][64], int *next, const char *host)
 	*next = (*next + 1) % 8;
 }
 
+static int log_hold;
+static void log_tls_step(const char *msg)
+{
+	conn_log("TLS", " -- ", msg, strlen(msg));
+}
+
 /* TLS on the open socket of c; host names the server for its
    certificate and for the session kept to resume */
-static int start_tls(CONN *c, const char *host, char *err, int errlen)
+static int handshake(CONN *c, const char *host, char *err, int errlen)
 {
 	static int next_ecdsa, next_aes;
 	TLS *t;
@@ -86,6 +92,20 @@ static int start_tls(CONN *c, const char *host, char *err, int errlen)
 	return 1;
 }
 
+/* the handshake's lines stay in the log's buffer until it ends: written
+   out one at a time, they cost about half a second each on an Atari disk,
+   and the times in them would be the disk's */
+static int start_tls(CONN *c, const char *host, char *err, int errlen)
+{
+	int ok;
+	log_hold = 1;
+	tls_log = log_tls_step;
+	ok = handshake(c, host, err, errlen);
+	log_hold = 0;
+	conn_log_flush();
+	return ok;
+}
+
 int conn_starttls(CONN *c, const char *host, char *err, int errlen)
 {
 	return start_tls(c, host, err, errlen);
@@ -102,7 +122,8 @@ void (*conn_tick)(void);
 
 /* the log is written in blocks: opening the file for every line made a
    big download crawl on an Atari disk. Milestones (" -- ", " !! ")
-   write it out at once, so a crash loses little */
+   write it out at once, so a crash loses little; but not those of a TLS
+   handshake (start_tls) */
 static char logbuf[4096];
 static int loglen;
 
@@ -180,7 +201,7 @@ void conn_log(const char *who, const char *dir, const char *text, long n)
 		log_add(text, n);
 	}
 	log_add("\r\n", 2);
-	if (dir[1] == '-' || dir[1] == '!')
+	if (dir[1] == '!' || (dir[1] == '-' && !log_hold))
 		conn_log_flush();
 }
 

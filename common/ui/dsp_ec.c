@@ -17,10 +17,12 @@
 #include "../src/tls.h"
 #include "../src/conn.h"
 #include "../src/plat.h"
+#include "../src/util.h"
 #include "../src/ecdsp.h"
 #include "../atari/dspec.h"
 
 static int have_dsp, checked, trusted;
+static unsigned long test_ms;		/* the self-test's, left out of the first job's time */
 static ECDSP_PORT checked_port;		/* dspec_port, with the self-test first */
 
 static const unsigned char st_k[32] = {
@@ -39,6 +41,9 @@ static const unsigned char st_out[32] = {
 static void note(const char *what, int on_dsp, unsigned long ms)
 {
 	char msg[80];
+	if (test_ms && ms >= test_ms)
+		ms -= test_ms;
+	test_ms = 0;
 	snprintf(msg, sizeof(msg), "%s on the %s, %lu ms", what, on_dsp ? "DSP" : "68030 (DSP busy)", ms);
 	conn_log("TLS", " -- ", msg, strlen(msg));
 }
@@ -56,11 +61,15 @@ static int self_test(void)
 static int run(void (*fn)(void *), void *ctx)
 {
 	if (!checked) {
-		const char *m;
+		char m[80];
+		unsigned long t0 = pf_ms();
 		checked = 1;
 		trusted = self_test();
-		m = trusted ? "the DSP passed its elliptic-curve self-test" :
-			      "the DSP failed its elliptic-curve self-test: curves on the 68030";
+		test_ms = pf_ms() - t0;
+		if (trusted)
+			snprintf(m, sizeof(m), "the DSP passed its elliptic-curve self-test (%lu ms)", test_ms);
+		else
+			str_copy(m, "the DSP failed its elliptic-curve self-test: curves on the 68030", sizeof(m));
 		conn_log("TLS", " -- ", m, strlen(m));
 		ecdsp_port = &checked_port;
 		ecdsp_note = note;

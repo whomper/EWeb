@@ -29,6 +29,8 @@ extern char tls_seed_path[200];
 extern char tls_roots_cache[200];
 /* a word for the status line while something slow happens, or NULL */
 extern void (*tls_note)(const char *msg);
+/* the handshake's steps and their times, for the log (conn.c), or NULL */
+extern void (*tls_log)(const char *msg);
 
 /* load the root certificates from a PEM file (once; later calls are
    cheap). Returns how many, or 0 with err filled in */
