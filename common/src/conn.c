@@ -40,9 +40,11 @@ static void note_host(char list[8][64], int *next, const char *host)
 }
 
 static int log_hold;
+/* a step of a handshake; or a time after it, written with the next
+   milestone (" .. "): written out at once, it would add the disk's time */
 static void log_tls_step(const char *msg)
 {
-	conn_log("TLS", " -- ", msg, strlen(msg));
+	conn_log("TLS", log_hold ? " -- " : " .. ", msg, strlen(msg));
 }
 
 /* TLS on the open socket of c; host names the server for its

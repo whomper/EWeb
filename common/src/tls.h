@@ -30,6 +30,10 @@ extern char tls_seed_path[200];
 extern char tls_sigs_path[200];
 /* the decoded root certificates are kept here (ROOTS.DAT, next to CACERT.PEM) */
 extern char tls_roots_cache[200];
+/* a file's date and time (pf_stamp), 0 if missing; or NULL. With it, a
+   ROOTS.DAT checked once against CACERT.PEM's checksum is afterwards
+   checked against its size and date only */
+extern unsigned long (*tls_file_stamp)(const char *path);
 /* a word for the status line while something slow happens, or NULL */
 extern void (*tls_note)(const char *msg);
 /* the handshake's steps and their times, for the log (conn.c), or NULL */
