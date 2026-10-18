@@ -484,6 +484,24 @@ two lines in the log: when its first bytes came and when they were decrypted, af
 server answered the hello in 0.1 s, so the 1.0 s wait is the server's own time or ours, and the next
 log will say which.
 
+**On your DFB1 with 0.9:** three runs of 7.2 to 8.7 s (9.6 s with 0.8): the root certificates
+80 to 550 ms instead of 1.5 s. The second of wait for the answer isn't the server's: its first bytes
+came 100 to 110 ms after the request, but the first 15 KB record took 0.9 to 1.55 s more to arrive,
+while the next 15 KB took 0.17 s; how STinG takes data in at a transfer's start is the next thing to
+look at.
+
+**Crashes after EWGET ends** (18 Oct 2026): with ECal, EContact and EHypView loaded, the machine hung
+after EWGET's last key, with 2 or 3 bombs or none, though not every time; and one run's connection
+log had 450 bytes of binary where five lines should be. The accessories install no vectors and can't
+run while EWGET does (the hub read their code). The disk is an SD card on SCSI with HDDRIVER 13.2:
+DMA, which reaches ST-RAM only, while EWGET and its buffers are in TT-RAM. HDDRIVER is meant to
+handle that, but a sector moved to or from the wrong memory would explain both the junk and a
+corrupted ST-RAM (where TOS, the desktop and the accessories live). So from 0.10 EWGET moves every
+read or write of a sector or more from TT-RAM through 8 KB of its own in ST-RAM (`atari/plat_tos.c`),
+says so on its "files" line with the `_FRB` cookie, and has the family's crash recorder
+(`common/atari/crash.c`): a crash in EWGET is written to `CRASH.LOG`; one in the system after it
+ended is found in TOS's record at the next start.
+
 **Faster arithmetic on the DSP** is the next step for the handshake: after the above a repeat visit
 leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 s both ways), and a
 first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around

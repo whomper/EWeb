@@ -27,8 +27,70 @@ int pf_open(const char *path, int mode)
 	return (int)h;
 }
 
-long pf_read(int h, void *buf, long n) { return Fread((short)h, n, buf); }
-long pf_write(int h, const void *buf, long n) { return Fwrite((short)h, n, buf); }
+/* Files and DMA. A Falcon's SCSI and ACSI disks work by DMA, and the DMA
+   chip reaches ST-RAM only, while GEMDOS moves whole sectors straight
+   between the disk and the caller's buffer. With the buffer in TT-RAM it
+   is up to the hard disk driver to go through ST-RAM (HDDRIVER does); a
+   driver that doesn't reads into the wrong memory, or writes whatever is
+   there. So reads and writes of a sector or more from TT-RAM go through a
+   buffer of our own in ST-RAM: a few copies, and nothing left to the
+   driver */
+#define BOUNCE 8192
+static char *bounce;			/* in ST-RAM; (char *)-1: none to be had */
+
+/* the buffer's size, 0 when there is none (it is made the first time) */
+long pf_bounce_size(void)
+{
+	if (!bounce) {
+		long b = (long)Mxalloc(BOUNCE, 0);	/* ST-RAM only */
+		bounce = b > 0 ? (char *)b : (char *)-1;
+	}
+	return bounce != (char *)-1 ? BOUNCE : 0;
+}
+
+static char *bounce_for(const void *buf, long n)
+{
+	if (n < 512 || (unsigned long)buf < 0x01000000UL || !pf_bounce_size())
+		return 0;
+	return bounce;
+}
+
+long pf_read(int h, void *buf, long n)
+{
+	char *b = bounce_for(buf, n);
+	long done = 0;
+	if (!b)
+		return Fread((short)h, n, buf);
+	while (done < n) {
+		long k = n - done < BOUNCE ? n - done : BOUNCE, r = Fread((short)h, k, b);
+		if (r < 0)
+			return done ? done : r;
+		memcpy((char *)buf + done, b, r);
+		done += r;
+		if (r < k)
+			break;
+	}
+	return done;
+}
+
+long pf_write(int h, const void *buf, long n)
+{
+	char *b = bounce_for(buf, n);
+	long done = 0;
+	if (!b)
+		return Fwrite((short)h, n, buf);
+	while (done < n) {
+		long k = n - done < BOUNCE ? n - done : BOUNCE, w;
+		memcpy(b, (const char *)buf + done, k);
+		w = Fwrite((short)h, k, b);
+		if (w < 0)
+			return done ? done : w;
+		done += w;
+		if (w < k)
+			break;
+	}
+	return done;
+}
 void pf_close(int h) { Fclose((short)h); }
 long pf_seek(int h, long off) { return Fseek(off, (short)h, 0); }
 

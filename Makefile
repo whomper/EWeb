@@ -262,7 +262,7 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
 COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
               $(addprefix build/tos/net/,conn.o tls.o util.o futil.o net_tos.o sting.o sting_s.o dsprsa.o \
-              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o)
+              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o)
 build/tos/net/dspec.o: common/dsp/ec_prog.h
 build/tos/net/%.o: src/net/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
@@ -280,6 +280,9 @@ build/tos/net/%.o: common/ui/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
 build/tos/net/sting_s.o: common/atari/sting.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
+build/tos/net/crash_s.o: common/atari/crash.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
 build/tos/ewget/%.o: tests/net/%.c $(NET_HDRS) VERSION

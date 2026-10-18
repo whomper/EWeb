@@ -17,6 +17,9 @@
 #include "http.h"
 #include "plat.h"
 #include "util.h"
+#include "crash.h"
+
+long pf_bounce_size(void);	/* plat_tos.c */
 
 #define MAXARG 20
 
@@ -46,7 +49,7 @@ void out(const char *fmt, ...)
 	*d = 0;
 	Cconws(crlf);
 	if (logh >= 0)
-		Fwrite((short)logh, d - crlf, crlf);
+		pf_write((int)logh, crlf, d - crlf);
 }
 
 /* the ARGV convention (MiNT and some desktops): a command line of length
@@ -165,6 +168,10 @@ int main(void)
 		}
 	}
 	argv[argc] = NULL;
+	/* a crash in EWGET writes CRASH.LOG and ends it cleanly; one in the
+	   system, or after EWGET ended, is reported from TOS's record the
+	   next time */
+	crash_install("", "EWGET", EWEB_VERSION);
 	logh = Fopen("EWGET.LOG", 1);
 	if (logh >= 0)
 		Fseek(0, (short)logh, 2);
@@ -179,6 +186,13 @@ int main(void)
 		    cacr & 0x0001 ? "on" : "off", cacr & 0x0100 ? "on" : "off",
 		    (unsigned long)&main >= 0x01000000UL ? "TT-RAM" : "ST-RAM");
 	}
+	out("files: %s; _FRB cookie %s\n",
+	    pf_bounce_size() ? "to and from TT-RAM through EWGET's 8 KB in ST-RAM" : "straight (no ST-RAM for a buffer)",
+	    get_cookie(0x5F465242L) ? "set" : "not set");
+	if (crash_previous())
+		out("the last run ended with %s in EWGET: see CRASH.LOG\n", crash_previous());
+	else if (crash_log()[0] && pf_size(crash_log()) > 0)
+		out("there is a CRASH.LOG from an earlier run\n");
 	if (unread)
 		out("can't read %s\n", name);
 	else if (missing)
@@ -189,6 +203,7 @@ int main(void)
 	out("done (%d)\n", rc);
 	if (logh >= 0)
 		Fclose((short)logh);
+	crash_remove();
 	if (!from_cmd) {
 		Cconws("The results are in EWGET.LOG too. Press a key.\r\n");
 		Bconin(2);

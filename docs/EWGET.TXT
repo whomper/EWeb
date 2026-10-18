@@ -53,6 +53,17 @@ off, everything the 68030 does (reading the root certificates, hashing,
 decrypting, unpacking) takes much longer: turn them on for a fair
 measurement.
 
+The "files" line says how EWGET reads and writes its files. A Falcon's
+SCSI (and ACSI) disks work by DMA, which reaches ST-RAM only; EWGET runs
+in TT-RAM, so it moves its files through 8 KB of its own in ST-RAM
+rather than leave that to the hard disk driver. "_FRB cookie" says
+whether the driver keeps such a buffer for other programs.
+
+If EWGET crashes (the bombs), it writes what happened to CRASH.LOG in
+its folder and ends. If the machine crashes after EWGET has ended, the
+next run of EWGET finds TOS's record of it and adds it to CRASH.LOG.
+Please send CRASH.LOG with EWGET.LOG when there is one.
+
 Options (type them before the address)
 --------------------------------------
    -o FILE     save the page in FILE
