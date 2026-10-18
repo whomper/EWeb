@@ -118,6 +118,13 @@ class Run:
             b[48], b[49] = ~s & 0xFF, s
             open(nv, "wb").write(b)
             args[args.index("--monitor") + 1] = "rgb"
+            # TOS 4's desktop takes the mode from NEWDESK.INF's #E line
+            # (machines.py writes one for a real TOS): the same mode there
+            inf = os.path.join(hd, "NEWDESK.INF")
+            if os.path.exists(inf):
+                t = open(inf, newline="").read()
+                t = re.sub(r"#E (\w\w) (\w\w) (\w\w) (\w\w) \w\w \w\w", r"#E \1 \2 \3 \4 00 2C", t)
+                open(inf, "w", newline="").write(t)
         if network:
             args += self.m.network()
         env = self.m.env()
@@ -298,6 +305,10 @@ def screens():
             ev = r.wait(r"shown ", 120)
             check("screens: %s (%s)" % (name, ready.split(" ", 1)[1] if ready else "?"),
                   ev is not None and ev.startswith("shown file:///C:/TABLES.HTM "), str(r.events()))
+            if tc:
+                # a mode TOS didn't take must not pass as true colour
+                check("screens: %s is true colour" % name, ready is not None and "true colour" in ready,
+                      ready or "no ready line")
             time.sleep(2)
             r.shot(0)
             r.key(Q, (CTRL,))
