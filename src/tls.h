@@ -25,6 +25,9 @@ extern const int tls_available;
 extern int tls_tz_minutes;
 /* where the random seed is kept between sessions (SEED.DAT) */
 extern char tls_seed_path[200];
+/* where the certificate signatures already checked are kept (SIGS.DAT);
+   empty: for this session only */
+extern char tls_sigs_path[200];
 /* the decoded root certificates are kept here (ROOTS.DAT, next to CACERT.PEM) */
 extern char tls_roots_cache[200];
 /* a word for the status line while something slow happens, or NULL */
