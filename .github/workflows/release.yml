@@ -50,7 +50,8 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu gperf zip
+          sudo apt-get install -y gcc-m68k-linux-gnu gperf zip fonts-dejavu-core fonts-dejavu-extra
+          python3 -m pip install --break-system-packages -r tools/requirements.txt
       - name: Test
         run: make test
       - name: Build

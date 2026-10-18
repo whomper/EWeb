@@ -59,6 +59,12 @@ BENCH_SRC := tests/bench/nsbench.c tests/bench/dom.c tests/bench/style.c tests/b
 # EWeb's own CSS engine
 EC_SRC   := $(sort $(wildcard src/css/*.c))
 EC_FLAGS := -Wall -Wextra -Wno-unused-parameter -Werror -Isrc/css
+# EWeb's browser: the document, the layout, the drawing, the browsing
+# (src/doc, src/layout, src/gfx, src/browse: this on the network's code)
+EWB_SRC  := $(sort $(wildcard src/doc/*.c src/layout/*.c src/gfx/*.c src/browse/*.c))
+EWB_HDRS = $(wildcard src/doc/*.h src/layout/*.h src/gfx/*.h src/browse/*.h src/css/*.h) $(NET_HDRS)
+EWB_INC  = -Isrc -Isrc/doc -Isrc/layout -Isrc/gfx -Isrc/browse -Isrc/css $(NET_INC)
+EWB_FLAGS = -Wall -Wextra -Wno-unused-parameter -Werror $(EWB_INC) $(NET_VER)
 
 # what NetSurf's build system defines for its libraries; and no iconv: the
 # Atari has none, so every build converts character sets with
@@ -83,7 +89,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
+all: binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT binary/EWEB.FNT
 
 bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
@@ -128,6 +134,7 @@ $(1)_CSS  := $$(patsubst $(NS)/%.c,build/$(1)/ns/%.o,$$(CSS_SRC)) \
 $(1)_NS   := $$($(1)_PU) $$($(1)_WAP) $$($(1)_HUB) $$($(1)_CSS)
 $(1)_BENCH := $$(patsubst tests/bench/%.c,build/$(1)/bench/%.o,$$(BENCH_SRC))
 $(1)_EC   := $$(patsubst src/css/%.c,build/$(1)/ec/%.o,$$(EC_SRC))
+$(1)_EWB  := $$(patsubst src/%.c,build/$(1)/ewb/%.o,$$(EWB_SRC))
 
 build/$(1)/ns/libparserutils/%.o: $(NS)/libparserutils/%.c $$(GENERATED)
 	@mkdir -p $$(@D)
@@ -150,6 +157,9 @@ build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h src/css/*.h VERSION
 build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) -c $$< -o $$@
+build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
+	@mkdir -p $$(@D)
+	$(2) $$(filter-out -w,$(3)) $(if $(filter tos,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
 endef
 
 HOST_CFLAGS := -O2 -g -std=gnu99 -DNDEBUG -w
@@ -311,6 +321,21 @@ binary/CACERT.PEM: common/certs/CACERT.PEM
 binary/ROOTS.DAT: binary/CACERT.PEM build/host/mkroots
 	build/host/mkroots binary/CACERT.PEM $@
 
+# EWeb's fonts, drawn from DejaVu (fonts-dejavu-core and fonts-dejavu-extra)
+binary/EWEB.FNT: tools/mkfont.py
+	@mkdir -p binary
+	python3 tools/mkfont.py $@
+
+# a page drawn on this computer as EWeb draws it on the Falcon (PNG),
+# loaded as EWeb loads it: a file, or a URL
+EWR_SRC := tests/host/ewrender.c tests/host/dsp_none.c $(HOSTNET_SRC)
+build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(host_HUB) $(NET_HDRS) build/host/libbearssl.a
+	$(HOSTCC) -O2 -g -std=gnu99 $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) \
+		$(host_HUB) build/host/libbearssl.a
+build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
+		$(asan_PU) $(asan_HUB) build/host/libbearssl.a
+
 # fuzzing (the AERA guidelines, 7.1): what servers send, and the
 # addresses in pages. Needs clang with libFuzzer; make fuzz runs each
 # target FUZZTIME seconds from tests/fuzz/seeds (tests/fuzz/mkseeds.py) and
@@ -371,8 +396,8 @@ hatarinet: binary/EWGET.TTP build/fakesting/FAKESTNG.PRG
 .PHONY: hatarinet
 
 # against servers on this computer: plain, TLS, redirects, refused certificates
-itest: build/asan/ewget
-	python3 tests/net/itest.py build/asan/ewget build/itest
+itest: build/asan/ewget build/asan/ewrender binary/EWEB.FNT
+	python3 tests/net/itest.py build/asan/ewget build/itest build/asan/ewrender binary/EWEB.FNT
 .PHONY: itest
 
 # the URL Standard's tests (tests/url/fetch.sh first)
@@ -468,7 +493,8 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
-		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM
+		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
+		build/asan/ewrender binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
@@ -478,6 +504,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/ectest tests/css/cases.txt
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
+	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
 
 # the Hebrew pages and the input stream as 68030 code too (qemu-user)
 hebtest68k: build/m68k/hebtest build/m68k/streamtest

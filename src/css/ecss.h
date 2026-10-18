@@ -111,6 +111,11 @@ typedef struct ec_node {
 	uint16_t index, nsib;		/* place among its element siblings from 1; their number */
 	uint16_t flags;			/* EC_NODE_* */
 	const ec_style *style;		/* ec_select()'s result */
+	/* presentational hints: declarations made from the element's HTML
+	   attributes (width, bgcolor, align...), or NULL. They cascade as
+	   author rules of specificity zero before every author sheet. */
+	const char *hint;
+	uint32_t nhint;
 } ec_node;
 
 #define EC_NODE_LINK	1		/* an a or area with an href */

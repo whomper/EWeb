@@ -1,0 +1,16 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     EWeb's layout test: tables (columns shared by the rows, colspan,
+     border-spacing, a width, shrink to fit) and HTML's attributes that
+     stand for CSS (border, bgcolor, cellpadding, align, width). -->
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Tables</title></head>
+<body>
+<table border=1><tr><th>Name<th>Score<th>Notes</tr>
+<tr><td>Falcon<td>030<td>a long note that goes on for a while</tr>
+<tr><td colspan=2>spanning two<td>x</tr></table>
+<p>Then a table as wide as the page:</p>
+<table width="100%" bgcolor="#eeeeee" cellpadding=4><tr><td>left<td align=right>right</table>
+<table align=center cellspacing=0 border=0><tr><td bgcolor=ccddee>centred<td>table</table>
+<table><tr><td>outer<td><table border=1><tr><td>inner<td>cells</table></table>
+</body></html>

@@ -2,7 +2,7 @@
 
 EWeb is a web browser for the Atari Falcon with a DFB1 accelerator, part of the AERA family. This
 page holds the decisions made so far, what the Falcon was measured to do, the design that follows from
-it, and how EWeb gets past CAPTCHAs. There is no code yet.
+it, and how EWeb gets past CAPTCHAs.
 
 ## Decisions (16 Oct 2026)
 
@@ -507,6 +507,49 @@ leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 
 first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around
 its columns.
 
+## Showing pages: fonts, layout, drawing (18 Oct 2026)
+
+Your decisions (18 Oct 2026): **fresh layout code** (NetSurf's core is GPL-2.0-only and reorders no
+text), **EWeb's own bitmap fonts** drawn from DejaVu, the same on every Falcon with or without GDOS,
+and **a text browser first**: text, links, lists and tables, with pictures and forms in later
+releases.
+
+- **Fonts** (`tools/mkfont.py`, `src/gfx/font.c`): `EWEB.FNT` holds DejaVu Sans, Serif and Sans
+  Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 395
+  characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB. FreeType draws them
+  without smoothing, with its hinted advances, so the spacing matches the pixels; letters a face
+  lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb reads the file's directory at start and each
+  face from the disk the first time a page uses it. Hebrew vowel points take no room and are not
+  drawn yet.
+- **The document** (`src/doc`): Hubbub's tree as EWeb's nodes, each carrying the CSS engine's node,
+  with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
+  CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
+  hints, a new part of EWeb's CSS engine: author rules of specificity zero before every sheet, as
+  the standard has them.
+- **The layout** (`src/layout`, fresh): blocks with collapsing margins, padding, borders and
+  backgrounds, widths with `min`/`max` and `box-sizing`, `margin: auto` centring; lines broken at
+  spaces (a word too long for its line is split), `text-align` (justify too), `line-height`,
+  `white-space`, `text-transform`, `text-decoration`, sub and superscripts; lists with every common
+  marker and `start`, `reversed` and `value`; `::before` and `::after` text; tables with shared column
+  widths, `colspan`, `border-spacing`, shrinking to fit, and flex rows side by side; Hebrew words
+  reordered right to left within each line (a word-level form of the bidirectional algorithm), with
+  right-to-left paragraphs aligned right. Pictures show their `alt` text; form controls are drawn as
+  boxes. Not yet: floats, positioning, `rowspan`, vertical alignment in cells, pictures, forms.
+- **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
+  pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
+  byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the
+  screen through ST-RAM (the screen can't be fed from TT-RAM).
+- **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
+  the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
+  and for a site's stylesheets, 50 pages of history with where each was scrolled, a page's anchors,
+  and EWeb's own pages (the start page; "can't open", with the reason).
+- **Checked:** every page of the page set (258) laid out and drawn with AddressSanitizer and UBSan,
+  with no fault; `tests/layout` keeps the display lists of three pages (`make test`), and the Hebrew
+  test page lays out the same in each encoding; `make itest` loads a page and its stylesheet over
+  HTTP and HTTPS from the test server, follows a redirect and an anchor, and shows EWeb's own page for
+  a server that isn't there and for a file that isn't a page. `tests/host/ewrender.c` draws a page or
+  URL into a PNG as the Falcon would.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -585,16 +628,16 @@ lives in the other parts:
 - **CSS** (LibCSS): `direction` and `unicode-bidi` are there. EWeb's UA sheet adds the HTML rules for
   `dir="rtl"`, `dir="ltr"`, `<bdi>` and `<bdo>`; `dir="auto"` is layout's, from the first strong
   letter.
-- **Layout and drawing** (fresh code): the Unicode bidirectional algorithm (UAX #9) on each line after
-  it is broken, across links and bold, with numbers kept left to right, brackets mirrored and the
-  levels `dir`, `<bdi>` and `<bdo>` set; right-to-left blocks align right and put list markers on the
-  right. `common/bidi.c` (from ClaudeST) is the start: it handles one line of Atari-charset text, so
-  EWeb needs the fuller algorithm, which can move to `common/` for every app.
+- **Layout and drawing** (fresh code): today Hebrew words are put right to left within each line
+  after it is broken, across links and bold, and right-to-left blocks align right and put list
+  markers on the right (above). Still to come: the full Unicode bidirectional algorithm (UAX #9),
+  with numbers kept left to right, brackets mirrored and the levels `dir`, `<bdi>` and `<bdo>` set.
+  `common/bidi.c` (from ClaudeST) handles one line of Atari-charset text, so EWeb needs the fuller
+  algorithm, which can move to `common/` for every app.
 - **Visual Hebrew:** a page labelled plain ISO-8859-8 (or "visual") is already in display order, so
   layout shows it as it is, without reordering. EWeb knows which kind it has from the page's charset.
-- **Fonts:** Hebrew is drawn through the Atari character set (letters at 0xC2-0xDC), as the other apps
-  draw it (`common/`'s charset code). Vowel points (niqqud) have no glyphs there and are dropped unless
-  EWeb gets fonts of its own.
+- **Fonts:** EWeb's own fonts have the Hebrew letters (DejaVu's), so pages don't go through the Atari
+  character set. Vowel points (niqqud) take no room and aren't drawn yet.
 - **Typing:** Hebrew in forms comes with the keyboard handling.
 
 ### 2. A little JavaScript on the Falcon
@@ -775,8 +818,9 @@ out of both (their paths lead nowhere on the Atari).
    nine tenths of it CSS; then EWeb's own CSS engine, about ten times faster, timed on your DFB1 in
    NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse; then EWeb's HTTP
    client and `EWGET.TTP` (above), tested on an emulated Falcon, and Wikipedia fetched on your DFB1
-   (18 Oct 2026), whose 86-second handshake moved the elliptic curves to the DSP (above). *Still to
-   do:* the handshake timed on your DFB1 again, then laying out text.
+   (18 Oct 2026), whose 86-second handshake moved the elliptic curves to the DSP (above), timed again
+   on your DFB1 (v0.7 to v0.9); then EWeb's fonts, the document, the layout and browsing (above).
+   *Still to do:* the GEM window, `EWEB.PRG`, as the first text browser.
 3. **The document web:** CSS, images, forms, bookmarks and history.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.

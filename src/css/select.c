@@ -461,27 +461,29 @@ typedef struct istyle {
 
 static istyle icache[64];
 
-static ec_block *inline_block(ec_ctx *c, const ec_attr *a)
+/* a style attribute's or a hint's declarations as a block, the same
+   block for the same text */
+static ec_block *inline_block(ec_ctx *c, const char *val, uint32_t len)
 {
-	uint32_t h = ec_hash(a->val, a->len);
+	uint32_t h = ec_hash(val, len);
 	istyle *e = &icache[h & 63];
 	char *copy;
 	ec_block *b;
 
-	if (e->b != NULL && e->hash == h && e->len == a->len && memcmp(e->s, a->val, a->len) == 0)
+	if (e->b != NULL && e->hash == h && e->len == len && memcmp(e->s, val, len) == 0)
 		return e->b;
-	copy = ec_alloc(&c->smem, a->len + 1);
+	copy = ec_alloc(&c->smem, len + 1);
 	b = ec_alloc(&c->smem, sizeof *b);
 	if (copy == NULL || b == NULL)
 		return NULL;
-	memcpy(copy, a->val, a->len);
-	copy[a->len] = 0;
+	memcpy(copy, val, len);
+	copy[len] = 0;
 	memset(b, 0, sizeof *b);
 	b->src = copy;
-	b->len = a->len;
+	b->len = len;
 	ec_parse_block(c, b);
 	e->hash = h;
-	e->len = a->len;
+	e->len = len;
 	e->s = copy;
 	e->b = b;
 	return b;
@@ -1204,7 +1206,8 @@ static const ec_style *shared_from(ec_ctx *c, const ec_node *e, uint32_t sig, co
 			continue;
 		for (k = 0; k < e->ncls && s->cls[k] == e->cls[k]; k++)
 			;
-		if (k < e->ncls || !same_ref_attrs(s, e))
+		if (k < e->ncls || !same_ref_attrs(s, e) || s->nhint != e->nhint ||
+				(e->nhint > 0 && memcmp(s->hint, e->hint, e->nhint) != 0))
 			continue;
 		/* s matched no rule that looks at siblings; nor must e */
 		if (any_sib_match(c, e))
@@ -1238,10 +1241,21 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	collect(c, &c->universal, e, mf);
 	sa = find_attr(e, c->a_style);
 	if (sa != NULL && nhits < MAX_HITS && !(c->opts & EC_COMPAT_NOINLINE)) {
-		ec_block *b = inline_block(c, sa);
+		ec_block *b = inline_block(c, sa->val, sa->len);
 		if (b != NULL) {
 			hits[nhits].prio = (uint32_t) EC_ORIGIN_AUTHOR << 28 | 1u << 27 | 0x1000000;
 			hits[nhits].order = 0xffffffff;
+			hits[nhits].b = b;
+			hits[nhits].pseudo = PE_NONE;
+			nhits++;
+		}
+	}
+	if (e->hint != NULL && e->nhint > 0 && nhits < MAX_HITS) {
+		/* author level, below every author rule: specificity zero, first */
+		ec_block *b = inline_block(c, e->hint, e->nhint);
+		if (b != NULL) {
+			hits[nhits].prio = (uint32_t) EC_ORIGIN_AUTHOR << 28;
+			hits[nhits].order = 0;
 			hits[nhits].b = b;
 			hits[nhits].pseudo = PE_NONE;
 			nhits++;

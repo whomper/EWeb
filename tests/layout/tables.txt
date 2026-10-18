@@ -1,0 +1,67 @@
+page 608 x 200, background ffffff, 66 items, 0 links, title "Tables"
+text 11,24 43x17 #000000 sans13 bold link 0 "Name"
+fill 9,9 47x1 #808080
+fill 9,28 47x1 #808080
+fill 9,10 1x18 #808080
+fill 55,10 1x18 #808080
+text 60,24 41x17 #000000 sans13 bold link 0 "Score"
+fill 58,9 45x1 #808080
+fill 58,28 45x1 #808080
+fill 58,10 1x18 #808080
+fill 102,10 1x18 #808080
+text 198,24 43x17 #000000 sans13 bold link 0 "Notes"
+fill 105,9 229x1 #808080
+fill 105,28 229x1 #808080
+fill 105,10 1x18 #808080
+fill 333,10 1x18 #808080
+text 11,46 41x17 #000000 sans13 link 0 "Falcon"
+fill 9,31 47x1 #808080
+fill 9,50 47x1 #808080
+fill 9,32 1x18 #808080
+fill 55,32 1x18 #808080
+text 60,46 24x17 #000000 sans13 link 0 "030"
+fill 58,31 45x1 #808080
+fill 58,50 45x1 #808080
+fill 58,32 1x18 #808080
+fill 102,32 1x18 #808080
+text 107,46 225x17 #000000 sans13 link 0 "a long note that goes on for a while"
+fill 105,31 229x1 #808080
+fill 105,50 229x1 #808080
+fill 105,32 1x18 #808080
+fill 333,32 1x18 #808080
+text 11,68 84x17 #000000 sans13 link 0 "spanning two"
+fill 9,53 94x1 #808080
+fill 9,72 94x1 #808080
+fill 9,54 1x18 #808080
+fill 102,54 1x18 #808080
+text 107,68 7x17 #000000 sans13 link 0 "x"
+fill 105,53 229x1 #808080
+fill 105,72 229x1 #808080
+fill 105,54 1x18 #808080
+fill 333,54 1x18 #808080
+fill 6,6 331x1 #808080
+fill 6,75 331x1 #808080
+fill 6,7 1x68 #808080
+fill 336,7 1x68 #808080
+text 6,102 214x17 #000000 sans13 link 0 "Then a table as wide as the page:"
+fill 6,118 596x26 #eeeeee
+text 11,136 20x17 #000000 sans13 link 0 "left"
+text 568,136 29x17 #000000 sans13 link 0 "right"
+fill 261,144 51x18 #ccddee
+text 262,158 49x17 #000000 sans13 link 0 "centred"
+text 313,158 32x17 #000000 sans13 link 0 "table"
+text 9,178 34x17 #000000 sans13 link 0 "outer"
+text 52,183 32x17 #000000 sans13 link 0 "inner"
+fill 50,168 36x1 #808080
+fill 50,187 36x1 #808080
+fill 50,169 1x18 #808080
+fill 85,169 1x18 #808080
+text 90,183 28x17 #000000 sans13 link 0 "cells"
+fill 88,168 32x1 #808080
+fill 88,187 32x1 #808080
+fill 88,169 1x18 #808080
+fill 119,169 1x18 #808080
+fill 47,165 76x1 #808080
+fill 47,190 76x1 #808080
+fill 47,166 1x24 #808080
+fill 122,166 1x24 #808080

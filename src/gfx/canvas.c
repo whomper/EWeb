@@ -1,0 +1,137 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/* canvas.c - the display list drawn into memory (see canvas.h). */
+#include <string.h>
+
+#include "canvas.h"
+
+static void put(canvas *c, int32_t x, int32_t y, uint32_t pv)
+{
+	if (c->bpp == 8) {
+		c->pix[y * c->stride + x] = (uint8_t) pv;
+	} else {
+		uint8_t *p = c->pix + y * c->stride + 2 * x;
+		p[0] = (uint8_t) (pv >> 8);
+		p[1] = (uint8_t) pv;
+	}
+}
+
+static uint32_t pixel(canvas *c, uint32_t rgb)
+{
+	return c->bpp == 8 ? c->pen(c->ud, rgb) : RGB565(rgb);
+}
+
+/* (x, y, w, h) in canvas pixels, clipped */
+static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
+{
+	int32_t i, j;
+	if (x < 0) {
+		w += x;
+		x = 0;
+	}
+	if (y < 0) {
+		h += y;
+		y = 0;
+	}
+	if (x + w > c->w)
+		w = c->w - x;
+	if (y + h > c->h)
+		h = c->h - y;
+	if (w <= 0 || h <= 0)
+		return;
+	for (j = 0; j < h; j++) {
+		if (c->bpp == 8) {
+			memset(c->pix + (y + j) * c->stride + x, (int) pv, (size_t) w);
+		} else {
+			uint8_t *p = c->pix + (y + j) * c->stride + 2 * x;
+			for (i = 0; i < w; i++) {
+				*p++ = (uint8_t) (pv >> 8);
+				*p++ = (uint8_t) pv;
+			}
+		}
+	}
+}
+
+void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb)
+{
+	fill_px(c, x - c->ox, y - c->oy, w, h, pixel(c, rgb));
+}
+
+static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
+{
+	int32_t gx = x + g->x, gy = y + g->y, row, col, stride = (g->w + 7) / 8;
+	int32_t c0 = 0, c1 = g->w, r0 = 0, r1 = g->h;
+	if (g->bits == NULL)
+		return;
+	if (gx < 0)
+		c0 = -gx;
+	if (gx + c1 > c->w)
+		c1 = c->w - gx;
+	if (gy < 0)
+		r0 = -gy;
+	if (gy + r1 > c->h)
+		r1 = c->h - gy;
+	for (row = r0; row < r1; row++) {
+		const uint8_t *b = g->bits + row * stride;
+		for (col = c0; col < c1; col++)
+			if (b[col >> 3] & (0x80 >> (col & 7)))
+				put(c, gx + col, gy + row, pv);
+	}
+}
+
+void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint32_t n,
+	     uint32_t rgb, int flags)
+{
+	const char *e = s + n, *p = s;
+	uint32_t pv = pixel(c, rgb);
+	int32_t px = x - c->ox, py = base - c->oy, x0 = px;
+	GLYPH g;
+
+	if (py - f->ascent - 2 >= c->h || py + f->descent + 2 < 0)
+		return;
+	if (flags & DLF_RTL) {
+		/* letters last to first: a Hebrew word read right to left */
+		uint32_t cps[64];
+		int k = 0;
+		while (p < e && k < 64)
+			cps[k++] = utf8_next(&p, e);
+		while (k-- > 0) {
+			font_glyph(f, cps[k], &g);
+			glyph(c, &g, px, py, pv);
+			px += g.adv;
+		}
+	} else {
+		while (p < e && px < c->w) {
+			font_glyph(f, utf8_next(&p, e), &g);
+			if (px + g.adv + 8 > 0)
+				glyph(c, &g, px, py, pv);
+			px += g.adv;
+		}
+	}
+	if (flags & (DLF_UNDER | DLF_OVER | DLF_STRIKE)) {
+		int32_t t = f->px >= 20 ? 2 : 1, w = px - x0;
+		if (flags & DLF_UNDER)
+			fill_px(c, x0, py + 1 + (f->descent > 3 ? 1 : 0), w, t, pv);
+		if (flags & DLF_STRIKE)
+			fill_px(c, x0, py - f->ascent / 3, w, t, pv);
+		if (flags & DLF_OVER)
+			fill_px(c, x0, py - f->ascent, w, t, pv);
+	}
+}
+
+void cv_page(canvas *c, const page *p)
+{
+	long i;
+	int32_t top = c->oy, bottom = c->oy + c->h, left = c->ox, right = c->ox + c->w;
+
+	fill_px(c, 0, 0, c->w, c->h, pixel(c, p->bg));
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
+			continue;
+		if (d->type == DL_FILL)
+			cv_fill(c, d->x, d->y, d->w, d->h, d->rgb);
+		else
+			cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, d->rgb, d->flags);
+	}
+}

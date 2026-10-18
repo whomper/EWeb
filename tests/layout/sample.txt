@@ -1,0 +1,25 @@
+page 608 x 212, background ffffff, 18 items, 6 links, title "nsbench sample"
+text 6,19 39x17 #0000ee sans13 link 1 "Home"
+text 58,19 34x17 #0000ee sans13 link 2 "Retro"
+text 105,19 36x17 #0000ee sans13 link 3 "Music"
+text 6,55 259x22 #0044aa sans18 bold link 4 "The Falcon reads the web"
+text 6,87 53x13 #222222 sans10 link 0 "By AERA · "
+text 59,87 56x13 #222222 sans10 link 0 "2026-10-16"
+text 6,115 320x17 #222222 sans13 link 0 "A 68030 at 50 MHz, 128 MB of TT-RAM and a DSP."
+text 6,131 63x17 #222222 sans13 link 0 "Unclosed "
+text 69,131 38x17 #222222 sans13 bold link 0 "bold "
+text 107,131 67x17 #222222 sans13 bold italic link 0 "and italic"
+text 178,131 26x17 #222222 sans13 italic link 0 "text"
+text 204,131 4x17 #222222 sans13 link 0 "."
+text 38,157 29x13 #0000ee sans10 link 5 "falcon"
+text 27,157 6x13 #222222 sans10 link 0 "•"
+text 38,169 24x13 #0000ee sans10 link 6 "retro"
+text 27,169 6x13 #222222 sans10 link 0 "•"
+text 9,200 24x17 #222222 sans13 link 0 "one"
+text 37,200 22x17 #ff0000 sans13 link 0 "two"
+link 1 file:///
+link 2 file:///retro
+link 3 file:///music
+link 4 file:///s/1
+link 5 file:///t/falcon
+link 6 file:///t/retro

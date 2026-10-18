@@ -1,0 +1,309 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * ewrender - EWeb's page drawing on this computer: a saved page through
+ * the document (src/doc), the layout (src/layout) and the canvas
+ * (src/gfx) into a PNG, as the Falcon would show it, for checking the
+ * layout by eye and for make test's comparisons. The page is loaded as
+ * EWeb loads it (src/browse): a file, or a URL over the network.
+ *
+ *   ewrender [-w WIDTH] [-z ZOOM] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT]
+ *            PAGE.HTM|URL [SHEET.CSS...]
+ *
+ * -w the page's width in pixels (608), -z device pixels per CSS pixel
+ * in 1024ths (819), -d the display list as text instead of a picture,
+ * -t the document tree with each element's display first, -v what
+ * the browser says while it loads (its status line), -c the root
+ * certificates for https (binary/CACERT.PEM),
+ * -y and -H the part of the page drawn (all of it).
+ */
+#define _DEFAULT_SOURCE		/* realpath */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "browse.h"
+#include "canvas.h"
+#include "conn.h"
+#include "font.h"
+#include "http.h"
+#include "plat.h"
+#include "ui.h"
+#include "util.h"
+
+EWOPT opt = { 1, 1 };
+
+static char *slurp(const char *path, size_t *len)
+{
+	FILE *f = fopen(path, "rb");
+	char *buf;
+	long n;
+	if (f == NULL)
+		return NULL;
+	fseek(f, 0, SEEK_END);
+	n = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	buf = malloc(n + 1);
+	if (buf == NULL || fread(buf, 1, n, f) != (size_t) n) {
+		fclose(f);
+		free(buf);
+		return NULL;
+	}
+	fclose(f);
+	buf[n] = 0;
+	*len = (size_t) n;
+	return buf;
+}
+
+/* ---------------------------------------------------------------- PNG, stored */
+
+static unsigned long crc_table[256];
+
+static unsigned long crc(unsigned long c, const unsigned char *p, size_t n)
+{
+	size_t i;
+	if (crc_table[1] == 0) {
+		unsigned long k, v;
+		for (k = 0; k < 256; k++) {
+			v = k;
+			for (i = 0; i < 8; i++)
+				v = v & 1 ? 0xedb88320UL ^ (v >> 1) : v >> 1;
+			crc_table[k] = v;
+		}
+	}
+	c ^= 0xffffffffUL;
+	for (i = 0; i < n; i++)
+		c = crc_table[(c ^ p[i]) & 0xff] ^ (c >> 8);
+	return c ^ 0xffffffffUL;
+}
+
+static void be32(unsigned char *p, unsigned long v)
+{
+	p[0] = (unsigned char) (v >> 24);
+	p[1] = (unsigned char) (v >> 16);
+	p[2] = (unsigned char) (v >> 8);
+	p[3] = (unsigned char) v;
+}
+
+static void chunk(FILE *f, const char *type, const unsigned char *data, size_t n)
+{
+	unsigned char h[8];
+	unsigned long c;
+	be32(h, (unsigned long) n);
+	memcpy(h + 4, type, 4);
+	fwrite(h, 1, 8, f);
+	fwrite(data, 1, n, f);
+	c = crc(0, h + 4, 4);
+	c = crc(c, data, n);
+	be32(h, c);
+	fwrite(h, 1, 4, f);
+}
+
+static int write_png(const char *path, const canvas *c)
+{
+	FILE *f = fopen(path, "wb");
+	size_t row = 1 + 3 * (size_t) c->w, raw = row * c->h, i, z = 0, nblocks = (raw + 65534) / 65535;
+	unsigned char *rawbuf = malloc(raw), *zbuf = malloc(raw + 5 * nblocks + 6), head[13];
+	unsigned long a = 1, b = 0;
+	int32_t x, y;
+
+	if (f == NULL || rawbuf == NULL || zbuf == NULL)
+		return 0;
+	for (y = 0; y < c->h; y++) {
+		unsigned char *r = rawbuf + y * row;
+		const unsigned char *p = c->pix + y * c->stride;
+		r[0] = 0;
+		for (x = 0; x < c->w; x++) {
+			unsigned v = (unsigned) p[2 * x] << 8 | p[2 * x + 1];
+			r[1 + 3 * x] = (unsigned char) ((v >> 8 & 0xf8) | (v >> 13));
+			r[2 + 3 * x] = (unsigned char) ((v >> 3 & 0xfc) | (v >> 9 & 3));
+			r[3 + 3 * x] = (unsigned char) ((v << 3 & 0xf8) | (v >> 2 & 7));
+		}
+	}
+	zbuf[z++] = 0x78;
+	zbuf[z++] = 0x01;
+	for (i = 0; i < raw; i += 65535) {
+		size_t n = raw - i < 65535 ? raw - i : 65535;
+		zbuf[z++] = i + n >= raw;
+		zbuf[z++] = (unsigned char) n;
+		zbuf[z++] = (unsigned char) (n >> 8);
+		zbuf[z++] = (unsigned char) ~n;
+		zbuf[z++] = (unsigned char) (~n >> 8);
+		memcpy(zbuf + z, rawbuf + i, n);
+		z += n;
+	}
+	for (i = 0; i < raw; i++) {
+		a = (a + rawbuf[i]) % 65521;
+		b = (b + a) % 65521;
+	}
+	be32(zbuf + z, b << 16 | a);
+	z += 4;
+	fwrite("\x89PNG\r\n\x1a\n", 1, 8, f);
+	be32(head, (unsigned long) c->w);
+	be32(head + 4, (unsigned long) c->h);
+	head[8] = 8;
+	head[9] = 2;
+	head[10] = head[11] = head[12] = 0;
+	chunk(f, "IHDR", head, 13);
+	chunk(f, "IDAT", zbuf, z);
+	chunk(f, "IEND", head, 0);
+	fclose(f);
+	free(rawbuf);
+	free(zbuf);
+	return 1;
+}
+
+/* ---------------------------------------------------------------- the tree, with each element's display */
+
+static void tree(const dnode *n, int depth)
+{
+	const dnode *c;
+	for (c = n->first; c != NULL; c = c->next) {
+		if (c->type == DN_ELEMENT) {
+			size_t len;
+			const char *name = ec_atom_text(c->e.name, &len);
+			const ec_style *st = c->e.style;
+			printf("%*s<%.*s> %s\n", 2 * depth, "", (int) len, name,
+			       st == NULL ? "(no style)" : ec_kw_name(st->v[EP_DISPLAY].i));
+			tree(c, depth + 1);
+		} else if (c->type == DN_TEXT) {
+			printf("%*s\"%.*s\"\n", 2 * depth, "", (int) (c->len > 40 ? 40 : c->len), c->text);
+		}
+	}
+}
+
+/* ---------------------------------------------------------------- the page */
+
+static void said(void *ud, const char *what)
+{
+	if (*(int *) ud)
+		fprintf(stderr, "%s\n", what);
+}
+
+int main(int argc, char **argv)
+{
+	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
+	int32_t width = 608, zoom = 819, top = 0, height = -1;
+	int dump = 0, show_tree = 0, verbose = 0, i, r;
+	char where[4096];
+	browser b;
+	page *p;
+	SBUF extra;
+
+	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
+		if (!strcmp(argv[i], "-w") && i + 1 < argc)
+			width = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-z") && i + 1 < argc)
+			zoom = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-f") && i + 1 < argc)
+			fnt = argv[++i];
+		else if (!strcmp(argv[i], "-o") && i + 1 < argc)
+			out = argv[++i];
+		else if (!strcmp(argv[i], "-y") && i + 1 < argc)
+			top = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-H") && i + 1 < argc)
+			height = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-d"))
+			dump = 1;
+		else if (!strcmp(argv[i], "-t"))
+			show_tree = 1;
+		else if (!strcmp(argv[i], "-v"))
+			verbose = 1;
+		else if (!strcmp(argv[i], "-c") && i + 1 < argc)
+			cacert = argv[++i];
+		else
+			break;
+	}
+	if (i >= argc) {
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] "
+			"PAGE|URL [SHEET...]\n");
+		return 2;
+	}
+	page_arg = argv[i++];
+	if (!font_init(fnt)) {
+		fprintf(stderr, "ewrender: can't read %s\n", fnt);
+		return 1;
+	}
+	/* a file named as it is here is made absolute: an address typed
+	   without a scheme would be taken for a host */
+	if (strstr(page_arg, "://") == NULL && strncmp(page_arg, "about:", 6) != 0 && page_arg[0] != '/') {
+		if (realpath(page_arg, where) == NULL) {
+			perror(page_arg);
+			return 1;
+		}
+	} else {
+		snprintf(where, sizeof where, "%s", page_arg);
+	}
+	sb_init(&extra);
+	for (; i < argc; i++) {
+		size_t n;
+		char *css = slurp(argv[i], &n);
+		if (css != NULL) {
+			sb_add(&extra, css, (long) n);
+			sb_addc(&extra, '\n');
+			free(css);
+		}
+	}
+	net_init();
+	str_copy(conn_cacert, cacert, sizeof conn_cacert);
+	br_init(&b, width, zoom);
+	b.say = said;
+	b.ud = &verbose;
+	b.extra_css = extra.s;
+	r = br_go(&b, where);
+	if (r != BR_SHOWN || b.p == NULL) {
+		fprintf(stderr, "ewrender: nothing shown (%d)\n", r);
+		return 1;
+	}
+	p = b.p;
+	if (show_tree)
+		tree(b.d->root, 0);
+	if (dump) {
+		long k;
+		printf("page %d x %d, background %06lx, %ld items, %d links, title \"%s\"\n", (int) p->width,
+		       (int) p->height, (unsigned long) p->bg, p->nitems, p->nlinks, b.d->title);
+		for (k = 0; k < p->nitems; k++) {
+			const dl_item *it = &p->items[k];
+			if (it->type == DL_FILL)
+				printf("fill %d,%d %dx%d #%06lx\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
+				       (unsigned long) it->rgb);
+			else
+				printf("text %d,%d %dx%d #%06lx %s%d%s%s%s link %d \"%.*s\"\n", (int) it->x,
+				       (int) (it->y + it->base), (int) it->w, (int) it->h, (unsigned long) it->rgb,
+				       it->font->family == FF_SANS ? "sans" : it->font->family == FF_SERIF ? "serif" : "mono",
+				       it->font->px, it->font->style & FS_BOLD ? " bold" : "",
+				       it->font->style & FS_ITALIC ? " italic" : "", it->flags & DLF_RTL ? " rtl" : "",
+				       it->link, (int) it->len, it->text);
+		}
+		for (k = 0; k < p->nlinks; k++) {
+			char u[4096];
+			br_link_url(&b, (int) k, u, sizeof u);
+			printf("link %ld %s\n", k + 1, u);
+		}
+	} else {
+		canvas c;
+		memset(&c, 0, sizeof c);
+		c.w = width;
+		c.h = height > 0 ? height : (p->height > 0 ? p->height : 1);
+		if (c.h > 30000)
+			c.h = 30000;
+		c.bpp = 16;
+		c.stride = 2L * c.w;
+		c.oy = top;
+		c.pix = malloc(c.stride * c.h);
+		if (c.pix == NULL)
+			return 1;
+		cv_page(&c, p);
+		if (!write_png(out, &c)) {
+			perror(out);
+			return 1;
+		}
+		free(c.pix);
+	}
+	br_free(&b);
+	br_cache_clear();
+	http_close_all();
+	sb_free(&extra);
+	font_free();
+	return 0;
+}

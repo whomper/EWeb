@@ -19,6 +19,9 @@ Pages:
   /redirect      302 to /page; /secure 301 to the HTTPS server's /page (on
                  the host the request named)
   /deflate       the page, deflated
+  /site/         a page for the browser (make itest's ewrender checks): a
+                 stylesheet linked (/site/style.css), links to /site/two.html
+                 and an anchor on it
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -37,6 +40,13 @@ WORDS = ["Falcon", "Atari", "EWeb", "page", "TT-RAM", "68030", "DSP", "שלום"
 PAGE = ("<!DOCTYPE html><html><head><meta charset=utf-8><title>EWeb test</title></head><body>"
         + " ".join(rnd.choice(WORDS) for _ in range(6000)) + "</body></html>\n").encode("utf-8")
 HEBREW = "<html><body>שלום עולם</body></html>\n".encode("cp1255")
+SITE = (b"<!DOCTYPE html><html><head><title>EWeb site</title><link rel=stylesheet href=style.css>"
+        b"</head><body><h1>Welcome</h1><p>See <a href=two.html>the second page</a> or "
+        b"<a href=two.html#end>its end</a>.</p></body></html>\n")
+SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
+SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
+            b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
+            b"</body></html>\n")
 BIG = bytes(rnd.randrange(256) for _ in range(2 << 20))
 
 
@@ -106,6 +116,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PAGE, close=True)
         elif p == "/hebrew":
             self.send(200, HEBREW, "text/html; charset=windows-1255")
+        elif p == "/site/":
+            self.send(200, SITE)
+        elif p == "/site/style.css":
+            self.send(200, SITE_CSS, "text/css")
+        elif p == "/site/two.html":
+            self.send(200, SITE_TWO)
         elif p == "/redirect":
             self.send(302, b"", extra=[("Location", "/page")])
         elif p == "/secure":

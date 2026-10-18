@@ -1,0 +1,4 @@
+# Python packages EWeb's build needs (pip install -r tools/requirements.txt):
+# Pillow draws EWEB.FNT (tools/mkfont.py) with the FreeType in its wheel;
+# tests/layout's lists were made with this one's, so it is pinned
+pillow==12.3.0

@@ -1,0 +1,30 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     EWeb's layout test: text (alignment, white space, breaks, decoration,
+     sub and superscripts), lists of every kind, Hebrew words right to
+     left, font and center. -->
+<!DOCTYPE html>
+<html lang=en><head><meta charset="utf-8"><title>Text</title>
+<style>
+body { font-family: serif; max-width: 400px }
+.r { text-align: right } .c { text-align: center } .j { text-align: justify }
+.u { text-decoration: underline } .s { text-decoration: line-through }
+h2::before { content: "\00A7  " }
+</style></head>
+<body>
+<h1>A heading that is long enough to wrap onto a second line</h1>
+<h2>With a mark before it</h2>
+<p class=r>Right.</p><p class=c>Centre.</p>
+<p class=j>Justified text runs from one edge to the other when there are enough words on the line to fill it.</p>
+<pre>  pre    keeps
+spaces	and tabs</pre>
+<p>Line<br>break, <span class=u>under</span> <span class=s>struck</span> H<sub>2</sub>O and E=mc<sup>2</sup>.</p>
+<ol start=3><li>three<li>four<ol type=a><li>a<li>b</ol></ol>
+<ul><li>disc<ul><li>circle<ul><li>square</ul></ul></ul>
+<ol reversed><li>two<li>one</ol>
+<p dir=rtl>שלום עולם and English</p>
+<p>Mixed: the word שלום in English.</p>
+<center>centred</center>
+<p><font color=red size=5 face="Courier New, monospace">big red mono</font> <font size=-1>small</font></p>
+<p><a href="#top">a link</a> and <a href="page.html">another</a>.</p>
+</body></html>

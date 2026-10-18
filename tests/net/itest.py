@@ -5,9 +5,12 @@
 against the local servers of server.py, over TCP and TLS: pages plain and
 packed, kept connections, a resumed TLS session, redirects from HTTP to
 HTTPS, chunks, a charset in Content-Type, and the certificates that must be
-refused (another host's, one nobody signed).
+refused (another host's, one nobody signed). With EWRENDER, the browser
+too (src/browse, through tests/host/ewrender.c): a page and its
+stylesheet over HTTP and HTTPS, its links made absolute, EWeb's own page
+when a server isn't there and when what came isn't a page.
 
-    tests/net/itest.py EWGET [WORK]"""
+    tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
 import re
 import shutil
@@ -20,6 +23,8 @@ import server  # noqa: E402
 
 ewget = os.path.abspath(sys.argv[1])
 work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
+ewrender = os.path.abspath(sys.argv[3]) if len(sys.argv) > 4 else None
+font = os.path.abspath(sys.argv[4]) if len(sys.argv) > 4 else None
 os.makedirs(work, exist_ok=True)
 HTTP, HTTPS, BAD, EC = 18080, 18443, 18444, 18445
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
@@ -180,6 +185,32 @@ try:
 
     rc, out = run("http://localhost:1/page")
     check("nobody listening", rc != 0 and "localhost" in out, out)
+
+    if ewrender:
+        def browse(url):
+            p = subprocess.run([ewrender, "-f", font, "-c", os.path.join(work, "CACERT.PEM"), "-d", url],
+                               cwd=work, capture_output=True, text=True, timeout=120)
+            return p.returncode, p.stdout + p.stderr
+
+        for scheme, port in (("http", HTTP), ("https", HTTPS)):
+            rc, out = browse("%s://localhost:%d/site/" % (scheme, port))
+            check("the browser: a page and its stylesheet (%s)" % scheme, rc == 0
+                  and "background ffeedd" in out and re.search(r'#aa0000 \S+ bold link 0 "Welcome"', out)
+                  and "link 1 %s://localhost:%d/site/two.html\n" % (scheme, port) in out
+                  and "link 2 %s://localhost:%d/site/two.html#end\n" % (scheme, port) in out, out)
+        rc, out = browse("http://localhost:%d/site/two.html#end" % HTTP)
+        check("the browser: a page's anchor", rc == 0 and '"The end"' in out
+              and "link 1 http://localhost:%d/site/\n" % HTTP in out, out)
+        rc, out = browse("http://localhost:%d/redirect" % HTTP)
+        check("the browser: a redirect", rc == 0 and 'title "EWeb test"' in out, out)
+        rc, out = browse("http://localhost:%d/hebrew" % HTTP)
+        check("the browser: a page in windows-1255", rc == 0 and re.search(r'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"', out),
+              out)
+        rc, out = browse("http://localhost:1/")
+        check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
+        rc, out = browse("http://localhost:%d/chunked" % HTTP)
+        check("the browser: not a page", rc == 0 and "EWeb can't show this" in out
+              and "application/octet-stream" in out, out)
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)
