@@ -135,8 +135,10 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
-  with only an ECDSA certificate, the handshake's steps in the log, and the
-  certificates that must be refused.
+  with only an ECDSA certificate, the handshake's steps in the log, the seed
+  and the remembered signatures (`SEED.DAT`, `SIGS.DAT`), the test
+  authorities among Mozilla's roots, and the certificates that must be
+  refused (one a remembered signature can't rescue).
 - `make hatarinet`: `EWGET.TTP` on an emulated Falcon (Hatari, 68030 at
   32 MHz, the DSP emulated), through `FAKESTNG.PRG`, against the same
   servers (an ECDSA one too, its curves on the DSP), with a `.CMD` file

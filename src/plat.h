@@ -21,6 +21,7 @@
 #define PF_READ   0
 #define PF_WRITE  1	/* create or truncate */
 #define PF_APPEND 2
+#define PF_UPDATE 3	/* an existing file, written over from the start, not truncated */
 
 int  pf_open(const char *path, int mode);	/* handle >= 0, < 0 on error */
 long pf_read(int h, void *buf, long n);

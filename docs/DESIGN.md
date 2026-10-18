@@ -427,6 +427,45 @@ desktop passes when nothing is typed (a space, or ARGV), in its own folder when 
 `.CMD` file dropped on it, and says where it looked when there is none: the desktop's box takes only a
 few dozen characters.
 
+**On your DFB1 with 0.7** and the caches on, the same fetch took 12.8 s (the handshake 7.6 s; with
+the log, 14.4 s and 8.5 s). The download went from 29 to 163 KB/s and unpacking from 930 to 675 ms with
+the caches. The handshake's steps, from the log:
+
+| Step | Time |
+|---|---|
+| The random seed: `SEED.DAT` read, and saved the safe way (a new file, the old one deleted, a rename) | 2.9 s |
+| The server's first answer after the hello | 0.1 s |
+| The server's 4 certificates (4,115 bytes): three P-384 checks on the DSP (2.8 s), its self-test (0.25 s), decoding and hashing them on the 68030 (about 0.9 s) | 4.3 s |
+| The P-256 signature, X25519 both ways, the end of the handshake | 1.2 s |
+
+Waiting for the network was 0.26 s of it all. Counted on a 68030 (`tools/count68k.sh`, a chain shaped
+like Wikipedia's, four certificates and three ECDSA signatures, 2.5 KB): BearSSL takes 5.8 million
+instructions for it, the signature arithmetic aside, of which 3.8 million are spent finding each
+certificate's issuer among the 121 root certificates: it hashes every root's name again for each
+certificate.
+
+So in 0.8 (AERA-Atari's `src/tls.c`):
+
+- **`SEED.DAT`** is written once a session, over the old one in place (`PF_UPDATE`, an app's
+  `plat.h` opts in): no new file, no rename, no search of the FAT. Later handshakes in a session go on
+  from a seed kept in memory.
+- **The root certificates' names** are hashed once: the X.509 engine's name hash is ours to choose,
+  and `tls.c`'s remembers a root's. The chain above takes 3.5 million instructions the first time in a
+  session and 2.2 million after.
+- **Signatures already checked are remembered** (`SIGS.DAT`, 64 of them, about 2 KB): a SHA-256 of
+  the curve, the key, the hash of the signed data and the signature, kept only after the check
+  succeeded. A certificate's signature is the same bytes every time it is sent, so an authority's
+  signature on its intermediate, or on a site's certificate until it is renewed, is checked once:
+  after the first visit Wikipedia's three P-384 checks (2.8 s) go. BearSSL still decides everything
+  else: names, dates, uses, and the chain up to a root certificate, so a remembered signature from an
+  authority that isn't trusted changes nothing (`make itest` checks it). The server's signature on its
+  key exchange is new every time and isn't looked up. ECDSA only: RSA takes 0.1 s on the DSP.
+
+**Faster arithmetic on the DSP** is the next step for the handshake: after the above a repeat visit
+leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 s both ways), and a
+first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around
+its columns.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

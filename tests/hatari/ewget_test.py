@@ -29,6 +29,9 @@ RUNS = [
     # an ECDSA certificate (P-256, signed with P-384): the elliptic curves
     # on the DSP, ECDSA offered at once
     ("ECDSA", "-l EC.LOG -o EC.HTM https://127.0.0.1:%d/page" % EC),
+    # again: the certificate's signature remembered in SIGS.DAT, so the
+    # DSP does only the key exchange and its signature
+    ("ECDSA again", "-l EC2.LOG https://127.0.0.1:%d/page" % EC),
     # the release's certificates (Mozilla's list, and ROOTS.DAT made from
     # it on this computer): read from the cache, and the test authority
     # isn't among them
@@ -115,7 +118,15 @@ def main():
                      and "(3 tries)" not in text and "passed its elliptic-curve self-test" in net \
                      and "ECDSA P-384 on the DSP" in net and "ECDSA P-256 on the DSP" in net \
                      and "the server's first answer" in net and "the handshake: " in net \
+                     and "0 of 1 ECDSA signatures checked before" in net \
                      and open(os.path.join(hd, "EC.HTM"), "rb").read() == server.PAGE
+                for l in net.splitlines():
+                    if "TLS --" in l:
+                        print("---- " + l.strip())
+            elif name == "ECDSA again":
+                net = open(os.path.join(hd, "EC2.LOG"), errors="replace").read()
+                ok = ok and "1 of 1 ECDSA signatures checked before" in net and "ECDSA P-384" not in net \
+                     and "ECDSA P-256 on the DSP" in net
                 for l in net.splitlines():
                     if "TLS --" in l:
                         print("---- " + l.strip())

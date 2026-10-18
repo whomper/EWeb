@@ -18,7 +18,11 @@ What it needs
 - CACERT.PEM and ROOTS.DAT in the same folder as EWGET.TTP. They hold
   the certificates of the authorities that vouch for secure sites;
   without them no https:// address works. EWGET writes SEED.DAT there
-  too, the start of its random numbers, kept between runs.
+  too, the start of its random numbers, kept between runs, and
+  SIGS.DAT, the certificate signatures it has already checked: a site
+  whose certificates it has seen before takes seconds less the next
+  time. Deleting SIGS.DAT is harmless; it only makes the next
+  handshakes slower again.
 
 How to use it
 -------------

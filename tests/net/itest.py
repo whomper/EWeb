@@ -10,6 +10,7 @@ refused (another host's, one nobody signed).
     tests/net/itest.py EWGET [WORK]"""
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -30,8 +31,8 @@ fails = 0
 checks = 0
 
 
-def run(*args):
-    p = subprocess.run([ewget] + list(args), cwd=work, capture_output=True, text=True, timeout=120)
+def run(*args, cwd=None):
+    p = subprocess.run([ewget] + list(args), cwd=cwd or work, capture_output=True, text=True, timeout=120)
     return p.returncode, p.stdout + p.stderr
 
 
@@ -88,9 +89,25 @@ try:
 
     # ECDSA only: RSA asked for first (no DSP here), so the third try takes
     # it, and the report counts the tries the server turned down as TLS
-    rc, out = run("-o", "ec.htm", "https://localhost:%d/page" % EC)
+    for f in ("SIGS.DAT", "ec.log", "ec2.log"):
+        try:
+            os.remove(os.path.join(work, f))
+        except OSError:
+            pass
+    seed = saved("SEED.DAT")
+    rc, out = run("-l", "ec.log", "-o", "ec.htm", "https://localhost:%d/page" % EC)
     check("ECDSA", rc == 0 and "ECDHE-ECDSA" in out and "(3 tries)" in out and saved("ec.htm") == server.PAGE,
           out)
+    # the seed written over in place, a new one each session; the
+    # certificate's signature remembered (SIGS.DAT), and taken from there
+    # the next time
+    check("SEED.DAT", len(saved("SEED.DAT")) == 32 and saved("SEED.DAT") != seed, "")
+    log = saved("ec.log").decode("latin-1")
+    rc, out = run("-l", "ec2.log", "https://localhost:%d/page" % EC)
+    log2 = saved("ec2.log").decode("latin-1") if rc == 0 else ""
+    check("signatures checked before", "0 of 1 ECDSA signatures checked before" in log
+          and "1 of 1 ECDSA signatures checked before" in log2 and len(saved("SIGS.DAT")) == 8 + 64 * 32,
+          out + log + log2)
 
     # the handshake's steps in the log, in order, written out once it ended
     try:
@@ -103,6 +120,31 @@ try:
              "decoding and checking them", "the handshake: ", "secure: TLS 1.2"]
     at = [log.find(w) for w in steps]
     check("the handshake's log lines", rc == 0 and -1 not in at and at == sorted(at), out + log)
+
+    # the test authorities after Mozilla's 121: their names are found
+    # among the others (tls.c remembers the roots' name hashes), from
+    # CACERT.PEM and then from ROOTS.DAT
+    mz = os.path.join(work, "mz")
+    shutil.rmtree(mz, ignore_errors=True)
+    os.makedirs(mz)
+    with open(os.path.join(mz, "CACERT.PEM"), "wb") as f:
+        f.write(open(os.path.join(HERE, "..", "..", "common", "certs", "CACERT.PEM"), "rb").read())
+        f.write(saved("CACERT.PEM"))
+    for k in range(2):
+        rc1, out1 = run("https://localhost:%d/page" % HTTPS, cwd=mz)
+        rc2, out2 = run("https://localhost:%d/page" % EC, cwd=mz)
+        check("among Mozilla's roots (%s)" % ("CACERT.PEM", "ROOTS.DAT")[k],
+              rc1 == 0 and rc2 == 0 and "ECDHE-ECDSA" in out2, out1 + out2)
+
+    # and without them, a remembered signature changes nothing
+    mz2 = os.path.join(work, "mz2")
+    shutil.rmtree(mz2, ignore_errors=True)
+    os.makedirs(mz2)
+    shutil.copy(os.path.join(HERE, "..", "..", "common", "certs", "CACERT.PEM"), mz2)
+    shutil.copy(os.path.join(mz, "SIGS.DAT"), mz2)
+    rc, out = run("https://localhost:%d/page" % EC, cwd=mz2)
+    check("a known signature from an authority not trusted", rc != 0 and "isn't signed by any authority" in out,
+          out)
 
     rc, out = run("http://localhost:1/page")
     check("nobody listening", rc != 0 and "localhost" in out, out)

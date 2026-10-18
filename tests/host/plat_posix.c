@@ -25,7 +25,7 @@ void (*pf_idle)(void);
 int pf_open(const char *path, int mode)
 {
 	int fl = mode == PF_READ ? O_RDONLY : mode == PF_WRITE ? O_WRONLY | O_CREAT | O_TRUNC
-		: O_WRONLY | O_CREAT | O_APPEND;
+		: mode == PF_UPDATE ? O_WRONLY : O_WRONLY | O_CREAT | O_APPEND;
 	return open(path, fl, 0644);
 }
 
