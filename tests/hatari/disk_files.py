@@ -48,14 +48,14 @@ BUDGET = {
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
-    # CACERT.PEM (read twice without a cache), ROOTS.DAT made, SEED.DAT
-    # made: common/src/tls.c's lookups, to come down with AERA-Atari's change
-    "first secure page": (2, 2, 9),
+    # the first ever: CACERT.PEM (read twice: no ROOTS.DAT yet), ROOTS.DAT
+    # and SEED.DAT made (SEED.DAT tried first)
+    "first secure page": (3, 2, 6),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     "quit": (0, 0, 0),              # nothing changed since the page size
     "start again": (2, 0, 1),
-    "secure page again": (3, 0, 5),  # ROOTS.DAT; SEED.DAT read and written
+    "secure page again": (2, 0, 2),  # ROOTS.DAT; SEED.DAT read and written over, one open
     "quit again": (0, 0, 0),
     "EWGET 1 MB": (2, 2, 2),        # EWGET.CMD, EWGET.LOG, CRASH.LOG, the file
 }

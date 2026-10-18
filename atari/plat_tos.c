@@ -18,7 +18,7 @@ int pf_open(const char *path, int mode)
 	if (mode == PF_WRITE)
 		return (int)Fcreate(path, 0);
 	if (mode == PF_UPDATE)
-		return (int)Fopen(path, 1);
+		return (int)Fopen(path, 2);	/* read and write: the TLS seed is read through it too */
 	h = Fopen(path, mode == PF_APPEND ? 2 : 0);
 	if (h < 0 && mode == PF_APPEND)
 		h = Fcreate(path, 0);

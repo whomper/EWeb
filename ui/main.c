@@ -690,6 +690,7 @@ int main(void)
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
 	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
 	tls_file_stamp = pf_stamp;
+	tls_file_info = pf_info;	/* CACERT.PEM looked up once (6.5) */
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
 	pf_idle = idle;
