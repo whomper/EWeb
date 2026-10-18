@@ -34,6 +34,11 @@ extern char tls_roots_cache[200];
    ROOTS.DAT checked once against CACERT.PEM's checksum is afterwards
    checked against its size and date only */
 extern unsigned long (*tls_file_stamp)(const char *path);
+/* up to n bytes of a file from offset off, opening and closing it (open,
+   seek, read, close), < 0 on error; or NULL. An accessory sets it: then
+   CACERT.PEM is never open while pf_idle lets the program in front run
+   (the guidelines, 2.2) */
+extern long (*tls_read_at)(const char *path, long off, void *buf, long n);
 /* a word for the status line while something slow happens, or NULL */
 extern void (*tls_note)(const char *msg);
 /* the handshake's steps and their times, for the log (conn.c), or NULL */

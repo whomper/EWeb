@@ -36,6 +36,7 @@ char tls_seed_path[200];
 char tls_sigs_path[200];
 char tls_roots_cache[200];
 unsigned long (*tls_file_stamp)(const char *path);
+long (*tls_read_at)(const char *path, long off, void *buf, long n);
 void (*tls_note)(const char *msg);
 void (*tls_log)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
@@ -542,9 +543,9 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	br_pem_decoder_context pc;
 	GROW der;
 	char chunk[4096];
-	long got, size;
+	long got, size, off = 0;
 	unsigned long sum, stamp;
-	int h, ver, in_cert = 0;
+	int h = -1, ver, in_cert = 0;
 	if (nanchors)
 		return (int)nanchors;
 	/* the cache is good for this CACERT.PEM if it says the same size and
@@ -570,8 +571,7 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 		tls_note("Reading the root certificates (only this once, it takes a while)...");
 	/* read in pieces: the whole list is about 190 KB, more than a
 	   1 MB Falcon wants to hold at once next to the program */
-	h = pf_open(path, PF_READ);
-	if (h < 0) {
+	if (!tls_read_at && (h = pf_open(path, PF_READ)) < 0) {
 		snprintf(err, errlen, "no root certificates: can't open %s", path);
 		return 0;
 	}
@@ -579,8 +579,10 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	der.len = 0;
 	der.p = malloc(der.max);
 	br_pem_decoder_init(&pc);
-	while (der.p && (got = pf_read(h, chunk, sizeof(chunk))) > 0) {
+	while (der.p && (got = tls_read_at ? tls_read_at(path, off, chunk, sizeof(chunk))
+				       : pf_read(h, chunk, sizeof(chunk))) > 0) {
 		long pos = 0;
+		off += got;
 		while (pos < got) {
 			pos += (long)br_pem_decoder_push(&pc, chunk + pos, (size_t)(got - pos));
 			switch (br_pem_decoder_event(&pc)) {
@@ -604,7 +606,8 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 		if (pf_idle)
 			pf_idle();
 	}
-	pf_close(h);
+	if (h >= 0)
+		pf_close(h);
 	if (!der.p)
 		snprintf(err, errlen, "not enough memory to read %s", path);
 	free(der.p);
