@@ -1,32 +1,40 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-# EWeb - a web browser for the Atari Falcon. There is no browser yet: this
-# builds the first milestone's tools: nsbench, which parses a saved page
-# with NetSurf's HTML parser (Hubbub) and selects every element's style
-# with LibCSS and with EWeb's own CSS engine, and ewget, which fetches a
-# page with EWeb's HTTP client and times it. See docs/DESIGN.md.
+# EWeb - a web browser for the Atari Falcon: EWEB.PRG, its fonts, and the
+# tools its first milestone measured with (nsbench, which parses a saved
+# page with NetSurf's HTML parser and styles it with LibCSS and with
+# EWeb's own CSS engine; ewget, which fetches a page and times it). See
+# docs/DESIGN.md.
 #
-#   make             binary/NSBENCH.TTP and binary/EWGET.TTP for the Atari
-#                    (plain TOS, any Falcon), with common/'s freestanding
-#                    runtime, and the root certificates (CACERT.PEM, ROOTS.DAT)
+#   make             binary/EWEB.PRG (the browser), binary/EWEB.FNT (its
+#                    fonts, from DejaVu), NSBENCH.TTP and EWGET.TTP for the
+#                    Atari (plain TOS, any Falcon), with common/'s
+#                    freestanding runtime, and the root certificates
+#                    (CACERT.PEM, ROOTS.DAT)
+#   make help        binary/EWEB.HYP, the guide (HCP=/path/to/hcp)
 #   make bench       build/host/nsbench, for this computer
 #   make bench68k    build/m68k/nsbench, a Linux 68030 program for counting
 #                    instructions under QEMU (tools/count68k.sh)
 #   make test        nsbench on the test pages, the Hebrew pages, the CSS
-#                    engine's cases, the input stream, the HTTP client and
-#                    the fuzz targets' inputs, with AddressSanitizer and UBSan
-#   make itest       ewget against servers on this computer (TCP, TLS)
+#                    engine's cases, the input stream, the HTTP client, the
+#                    fuzz targets' inputs and the layout's pages
+#                    (tests/layout), with AddressSanitizer and UBSan
+#   make itest       ewget and the browser against servers on this computer
+#                    (TCP, TLS)
 #   make hatarinet   EWGET.TTP in Hatari through FAKESTNG, against them
+#   make hatarigui   EWEB.PRG in Hatari (tests/hatari/gui_test.py)
 #   make urltest     the URL parser against the URL Standard's tests
 #                    (tests/url/fetch.sh first)
 #   make fuzz        the HTTP client and the URL parser under libFuzzer
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
-#   make dist        a release's files in dist/: NSBENCH.TTP, NSBENCH.TXT,
-#                    EWGET.TTP, EWGET.TXT, CACERT.PEM, ROOTS.DAT, SAMPLE.HTM,
-#                    NEWS.HTM, NEWS.CSS and EWEB-x.y.zip
+#   make dist        a release's files in dist/: EWEB.PRG, EWEB.FNT, EWEB.HYP,
+#                    NSBENCH.TTP, NSBENCH.TXT, EWGET.TTP, EWGET.TXT,
+#                    CACERT.PEM, ROOTS.DAT, SAMPLE.HTM, NEWS.HTM, NEWS.CSS and
+#                    EWEB-x.y.zip (with the desktop icon, icons/)
 #
-# Needs: gcc-m68k-linux-gnu, perl, gperf, python3.
+# Needs: gcc-m68k-linux-gnu, perl, gperf, python3, Pillow (tools/requirements.txt),
+# fonts-dejavu-core and fonts-dejavu-extra; hatari, Xvfb and xdotool for the rigs.
 #
 # NetSurf's libraries are in third_party/netsurf (MIT licence, see each
 # COPYING). Their generated sources (character set aliases, HTML entities,
@@ -89,7 +97,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT binary/EWEB.FNT
+all: binary/EWEB.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
@@ -313,6 +321,33 @@ binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
+# EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
+# blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
+# engine, Hubbub, and the network as EWGET.TTP has it
+GEM_UI     := main draw screen win about
+GEM_COMMON := aboutbox alert popup dialog help av iconify clip mbar dd
+GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
+GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
+              $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
+build/tos/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
+build/tos/gem/common/%.o: common/ui/%.c ui/*.h $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(tos_HUB) $(TOSNET_OBJ) \
+		build/tos/libbearssl.a
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
+binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
 # the root certificates: Mozilla's list (common/certs), and the same read
 # once into ROOTS.DAT, which the Atari loads in a moment
 binary/CACERT.PEM: common/certs/CACERT.PEM
@@ -391,6 +426,13 @@ build/fakesting/FAKESTNG.PRG: $(addprefix build/fakesting/,fstart.o fakesting.o 
 # EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
 # build/), through FAKESTNG, against tests/net/server.py: TLS on the 68030,
 # RSA and the elliptic curves on the emulated DSP
+# EWEB.PRG on the family's machines in Hatari: pages over the network
+# (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
+# screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
+hatarigui: binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender
+	python3 tests/hatari/gui_test.py build/gui
+.PHONY: hatarigui
+
 hatarinet: binary/EWGET.TTP build/fakesting/FAKESTNG.PRG
 	python3 tests/hatari/ewget_test.py build/etos1024k.img
 .PHONY: hatarinet
@@ -514,18 +556,36 @@ hebtest68k: build/m68k/hebtest build/m68k/streamtest
 
 # a release's files: each on its own, and all of them in EWEB-x.y.zip
 # (the Atari's text files with CR/LF)
-dist: binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT docs/NSBENCH.TXT \
-		docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM
+# EWEB.HYP, the guide (the AERA guidelines, 4.3): docs/GUIDE.md through
+# tools/mkhelp.py, the family's front page (common/tools/helpfront.py),
+# then hcp, ST-Guide's compiler (common/tools/build-hcp.sh builds it):
+#   make help HCP=/path/to/hcp
+HCP ?= hcp
+help: binary/EWEB.HYP
+.PHONY: help
+binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help/WINDOW.IMG \
+		common/help/EWEB.IMG common/tools/helpfront.py
+	@mkdir -p binary build
+	python3 tools/mkhelp.py docs/GUIDE.md VERSION build/EWEB.STG
+	python3 common/tools/helpfront.py page docs/front.json build/EWEB.STG build/EWEB.STG
+	$(HCP) -o $@ build/EWEB.STG
+
+# a release's files: EWeb (the program, its fonts, its guide, the
+# certificates, the desktop icon) and the measuring tools
+dist: binary/EWEB.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
+		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM
 	rm -rf dist
-	mkdir -p dist/zip
-	cp binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT dist/
+	mkdir -p dist/zip/icons
+	cp binary/EWEB.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
+		binary/ROOTS.DAT dist/
+	cp icons/EWEB.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
 	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
 	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
-	cp dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT \
-		dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
+	cp dist/EWEB.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
+		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

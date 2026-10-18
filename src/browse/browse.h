@@ -41,6 +41,9 @@ typedef struct browser {
 	int status;		/* the server's answer (200...), 0 for a file or EWeb's own page */
 	int32_t scroll_to;	/* after a load: where to scroll (device px), -1 the top */
 	char elsewhere[1024];	/* BR_ELSEWHERE: the address */
+	/* how long the last page took, ms: fetching it (its stylesheets
+	   too), parsing, styling, laying out */
+	unsigned long ms_fetch, ms_parse, ms_style, ms_layout;
 
 	/* the window */
 	int32_t width;		/* device px */

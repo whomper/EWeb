@@ -22,7 +22,7 @@
 #include "plat.h"
 #include "ui.h"
 
-EWOPT opt = { 1, 1 };
+EWOPT opt = { .falcon = 1, .dsp = 1 };
 
 static void usage(void)
 {

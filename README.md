@@ -2,50 +2,58 @@
 
 A web browser for the Atari Falcon, written in C for GEM, made for a Falcon
 with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and fine on
-any Falcon. **There is no browser yet**: this repository holds the design,
-the first milestone's measuring tools, and EWeb's first parts: its own CSS
-engine, and its URL parser and HTTP client.
+any Falcon or TT. This first browser shows the text of the web: pages laid
+out with their stylesheets, links, lists and tables, in EWeb's own fonts.
+Pictures and forms come next.
 
-- [`docs/DESIGN.md`](docs/DESIGN.md): what a Falcon can do with today's web,
-  the decisions made, the design, how EWeb gets past CAPTCHAs, and the order of
-  work.
-- [`docs/CSS.md`](docs/CSS.md): EWeb's CSS engine, written for the 68030:
-  about a tenth of NetSurf's LibCSS's time on the same pages, and closer to
-  today's CSS.
-- `NSBENCH.TTP`: parses a saved page with NetSurf's HTML parser, and styles
-  it with NetSurf's CSS engine and with EWeb's, on the Atari, and says how
-  long each part took.
-- `EWGET.TTP`: fetches a page from the web with EWeb's HTTP client (TLS 1.2
-  on the Atari, RSA and the elliptic curves on the DSP, gzip, redirects, kept
-  connections), and says
-  how long each part took.
+![EWeb on a Falcon](docs/screenshot.png)
+
+## Highlights
+
+- **`EWEB.PRG`**: one GEM window, as a browser has it: Back, Forward,
+  Reload or Stop, Home and the address; links followed with a click,
+  scrolling with the slider and the keys, 50 pages of history, the page's
+  text to the clipboard, larger and smaller text. Words typed in the address
+  go to FrogFind, the search engine made for vintage computers.
+- **EWeb's own engine**: NetSurf's HTML parser (Hubbub), EWeb's CSS engine
+  (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
+  and fresh layout code: blocks, lines, lists, tables, colours, borders, and
+  Hebrew right to left.
+- **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
+  styles and twelve sizes, the same on every Atari, with or without GDOS.
+- **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
+  colour, through ST-RAM so that it runs from TT-RAM.
+- **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP.
+- **The family's ways**: the About box, menus, shortcuts, right-click menus,
+  VA_START and drag and drop, the help file, iconify, the crash report.
+- And the first milestone's tools: `NSBENCH.TTP` times the HTML parser and
+  both CSS engines on the Atari, `EWGET.TTP` fetches a page and times it.
+  [`docs/DESIGN.md`](docs/DESIGN.md) has what was measured, the decisions
+  and the plan.
 
 ## Getting started
 
 Download the latest `EWEB-x.y.zip` from **[Releases](../../releases/latest)**
-and unpack it. It contains:
+and unpack it into a folder of its own. It contains:
 
 | File | What it is |
 |---|---|
-| `NSBENCH.TTP` | the measuring tool, for any Falcon (TT-RAM used when there is some) |
-| `NSBENCH.TXT` | how to use it |
-| `SAMPLE.HTM` | a small page to try it on |
-| `NEWS.HTM`, `NEWS.CSS` | a made-up news front page and its stylesheet, built to cost what the web's median page does |
-| `EWGET.TTP` | fetches a page from the web and times it, for any Falcon with STinG or MiNTnet |
-| `EWGET.TXT` | how to use it |
-| `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list), for `EWGET.TTP` |
+| `EWEB.PRG` | the browser |
+| `EWEB.FNT` | its fonts (keep it next to `EWEB.PRG`) |
+| `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
+| `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list) |
+| `icons/` | EWeb's desktop icon, for DESKICON.RSC |
+| `NSBENCH.TTP`, `NSBENCH.TXT`, `SAMPLE.HTM`, `NEWS.HTM`, `NEWS.CSS` | the measuring tool, its guide and two pages to try it on |
+| `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
 
-1. Copy the files to a folder on your hard disk, with any page you want to
-   test saved as a file.
-2. Double-click `NSBENCH.TTP` and type `-E both NEWS.HTM NEWS.CSS` (or
-   `SAMPLE.HTM`, or your page's name, then its stylesheet's).
-3. The results show on the screen and go into `NSBENCH.LOG`.
-4. With STinG (or MiNTnet) running, double-click `EWGET.TTP` and type an
-   address, such as `-n 2 https://en.wikipedia.org/wiki/Atari_Falcon`. The
-   results go into `EWGET.LOG`.
+1. With STinG running, double-click `EWEB.PRG`. Its start page has a few
+   sites that read well on an Atari.
+2. Click in the address (or press ^L), type one such as `68k.news` and press
+   Return. Click a link to follow it; Undo goes back.
+3. Pages on your disks open too: ^O, or drop one on `EWEB.PRG`.
 
-**Needs:** an Atari Falcon; plain TOS, MagiC or MiNT; for `EWGET.TTP`, a
-network connection through STinG or MiNTnet.
+**Needs:** a Falcon or TT, plain TOS, EmuTOS or MagiC, a screen 640 pixels
+wide, about 2 MB free; STinG for the network.
 
 ## How it reaches the servers
 
@@ -65,13 +73,16 @@ later ([`docs/DESIGN.md`](docs/DESIGN.md)).
 ## Building
 
 ```sh
-sudo apt install gcc-m68k-linux-gnu python3 perl gperf   # Debian/Ubuntu
-make            # binary/NSBENCH.TTP, for plain TOS on a Falcon (68030 with FPU)
+sudo apt install gcc-m68k-linux-gnu python3 perl gperf fonts-dejavu-core fonts-dejavu-extra   # Debian/Ubuntu
+pip install -r tools/requirements.txt   # Pillow, which draws EWEB.FNT
+make            # binary/EWEB.PRG and EWEB.FNT, NSBENCH.TTP, EWGET.TTP, for plain TOS on a Falcon
+make help HCP=/path/to/hcp   # binary/EWEB.HYP (common/tools/build-hcp.sh builds hcp)
 make bench      # build/host/nsbench, for this computer
 make bench68k   # build/m68k/nsbench, a 68030 Linux program for tools/count68k.sh
-make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, the HTTP client, with ASan and UBSan
-make itest      # ewget against servers on this computer, over TCP and TLS
+make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, the HTTP client, the layout, with ASan and UBSan
+make itest      # ewget and the browser against servers on this computer, over TCP and TLS
 make hatarinet  # EWGET.TTP on an emulated Falcon, through FAKESTNG, against those servers
+make hatarigui  # EWEB.PRG on emulated Falcons and TTs: browsing over the network, every screen mode
 make urltest    # the URL parser against the URL Standard's tests (tests/url/fetch.sh first)
 make fuzz       # the HTTP client and the URL parser under libFuzzer (clang)
 make h5test     # Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
@@ -90,11 +101,17 @@ the files.
 ```
 docs/DESIGN.md        the design
 docs/CSS.md           EWeb's CSS engine
+docs/GUIDE.md         the guide, made into EWEB.HYP (tools/mkhelp.py, docs/front.json)
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
+ui/                   EWEB.PRG's GEM side: the window, the toolbar, the page on the
+                      screen in every mode, the menus, the About box
+src/browse/           browsing: addresses, loading, history, EWeb's own pages
+src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hints
+src/layout/           the layout: boxes, lines, tables, a display list
+src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
 src/net/              EWeb's URL parser and HTTP client, and gzip
 src/plat.h            what EWeb needs from the machine (atari/plat_tos.c, tests/host/plat_posix.c)
-ui/                   EWeb's GEM layer (so far, what common/ui/dsp.c takes from it)
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
                       EWeb's engine on the same tree, the page set, the
                       counting, the Hatari rig and mkpage.py (NEWS.HTM and
@@ -106,12 +123,15 @@ tests/hebrew/         a Hebrew page in every Hebrew encoding
 tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py)
 tests/url/            the URL parser against the URL Standard's tests
 tests/fuzz/           fuzz targets for the HTTP client and the URL parser, their seeds
-tests/hatari/         EWGET.TTP in Hatari (serial_bridge.py, from EMail)
+tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (serial_bridge.py, from EMail)
+tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
+tests/layout/         the layout's test pages and their display lists
 tools/fakesting/      FAKESTNG.PRG, STinG over Hatari's serial port (from EMail)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 atari/                the C library pieces NetSurf needs beyond common/, and plat_tos.c
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT)
-tools/                QEMU with plugins, and counting 68030 instructions
+tools/                mkfont.py (EWEB.FNT), mkhelp.py, icon/ (the icon), QEMU with
+                      plugins and counting 68030 instructions
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here
 ```
 
@@ -147,6 +167,17 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   (twice: the second time `ROOTS.DAT` knows `CACERT.PEM`'s date).
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
+- `make test` also lays out three pages (`tests/layout`) and compares their
+  display lists with the ones kept, and the Hebrew test page in each of its
+  encodings, with AddressSanitizer and UBSan; `make itest` loads a site from
+  `tests/net/server.py` in the browser over HTTP and HTTPS (its stylesheet,
+  its links, a redirect, an anchor, EWeb's own pages for a server that isn't
+  there and a file that isn't a page).
+- `make hatarigui`: `EWEB.PRG` on an emulated Falcon through FAKESTNG, the
+  mouse moved by xdotool: a page and its stylesheet, a link clicked, Undo,
+  an address typed with an anchor, a secure page, Esc stopping a download;
+  and a page drawn on the Falcon in 256 colours and true colour and on the
+  TT in 16 colours and monochrome.
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
 - `make fuzz`: the HTTP client and the URL parser under libFuzzer.
@@ -157,7 +188,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 ## Licence
 
 EWeb is free software under the GNU General Public License, version 2 or (at
-your option) any later version; see [`COPYING`](COPYING). NetSurf's libraries
+your option) any later version; see [`COPYING`](COPYING). `EWEB.FNT` is drawn
+from the DejaVu fonts (Bitstream Vera's licence, free to use and to change,
+not to sell alone). NetSurf's libraries
 in `third_party/netsurf/`, `tests/html5lib/h5test.c` and BearSSL
 (`common/third_party/bearssl`) are under the MIT licence; `CACERT.PEM` is
 Mozilla's list of authorities (MPL 2.0).

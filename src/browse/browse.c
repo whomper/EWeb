@@ -367,7 +367,7 @@ static const char own_style[] =
 
 static void start_page(SBUF *s)
 {
-	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>EWeb</title>");
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>Start</title>");
 	sb_adds(s, own_style);
 	sb_adds(s, "</head><body><h1>EWeb ");
 	sb_adds(s, EWEB_VERSION);
@@ -582,11 +582,14 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	char base[4096];
 	SHEETS sh;
 
+	unsigned long t = pf_ms(), t_sheets;
+
 	say(b, "%s", "Reading the page...");
 	d = doc_parse(data, (size_t) len, charset && *charset ? charset : NULL, &m);
 	if (d == NULL)
 		return 0;
 	doc_add_ua(d);
+	b->ms_parse = pf_ms() - t;
 	if (d->base[0] == 0 || !resolve(url, d->base, base, sizeof base))
 		str_copy(base, url, sizeof base);
 	sh.b = b;
@@ -594,15 +597,21 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	sh.base = base;
 	sh.fresh = fresh;
 	sh.n = 0;
+	t_sheets = pf_ms();
 	doc_sheets(d, sheet_cb, &sh);
 	if (b->extra_css != NULL)
 		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
+	t = pf_ms();
+	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
 	say(b, "%s", "Laying the page out...");
 	doc_select(d);
+	b->ms_style = pf_ms() - t;
+	t = pf_ms();
 	memset(&o, 0, sizeof o);
 	o.width = b->width;
 	o.zoom = b->zoom;
 	p = layout_page(d, &o);
+	b->ms_layout = pf_ms() - t;
 	if (p == NULL) {
 		doc_free(d);
 		return 0;
@@ -724,7 +733,10 @@ static int load(browser *b, const char *url, int mode)
 		say(b, "%s", "Reading the file...");
 	else
 		say(b, "Opening %s...", host);
-	if (!fetch(b, url, mode == NAV_RELOAD, NULL, 0, f)) {
+	b->ms_fetch = pf_ms();
+	r = fetch(b, url, mode == NAV_RELOAD, NULL, 0, f);
+	b->ms_fetch = pf_ms() - b->ms_fetch;
+	if (!r) {
 		if (conn_stop) {
 			conn_stop = 0;
 			free(f);

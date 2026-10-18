@@ -1,9 +1,9 @@
 # Notes for working on EWeb
 
 EWeb is the AERA family's web browser for the Atari Falcon, tuned for a DFB1 (68030 at 50 MHz, FPU,
-128 MB of TT-RAM). There is no browser yet: the repo holds the design (`docs/DESIGN.md`) and the first
-milestone's measuring tools. The other AERA apps (ECal, EContact, EMail, EFTP, EHypView, ClaudeST) are
-meant to look and behave as one family, and EWeb will join them.
+128 MB of TT-RAM): `EWEB.PRG`, a text browser so far (pictures and forms come next), with the design
+(`docs/DESIGN.md`) and the first milestone's measuring tools. The other AERA apps (ECal, EContact,
+EMail, EFTP, EHypView, ClaudeST) are meant to look and behave as one family, and EWeb is one of them.
 
 ## For every AERA app
 
@@ -92,7 +92,24 @@ hub stay complete, with the evidence.
   `src/ecdsp.c`, `dsp/ec.a56`): change those in AERA-Atari and test them there (`common/tests/ec`).
   `make clean` deletes `build/etos1024k.img` (EmuTOS 1.4's 1024k image, from SourceForge), which the
   Hatari rigs need.
-- **A release** carries `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
+- **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
+  `win.c`, the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
+  `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
+  (addresses, loading, history, EWeb's own pages), `src/doc` (Hubbub's tree, the UA sheet, HTML's
+  hints), `src/layout` (fresh: boxes, lines, tables, a display list) and `src/gfx` (`EWEB.FNT`,
+  drawing into memory). It is a program only (no accessory). `tests/host/ewrender.c` draws a page or
+  URL as EWeb would (a PNG, or `-d` the display list). After changing the layout or the document:
+  `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
+  `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
+  xdotool), and look at its screenshots in `build/gui`.
+- **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
+  (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
+- **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page
+  (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
+  `docs/help/WINDOW.IMG` (and `docs/screenshot.png`) is a Hatari capture of the start page in 16
+  colours (`helpfront.py thumb`): take it again when the window changes.
+- **A release** carries `EWEB.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`, `tools/icon/make_rsc.py`),
+  `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.
   `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it changes, measure the

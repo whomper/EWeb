@@ -31,7 +31,7 @@
 #include "ui.h"
 #include "util.h"
 
-EWOPT opt = { 1, 1 };
+EWOPT opt = { .falcon = 1, .dsp = 1 };
 
 static char *slurp(const char *path, size_t *len)
 {

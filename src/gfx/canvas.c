@@ -52,8 +52,30 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 	}
 }
 
+/* the ordered dither's thresholds, 4 by 4 (Bayer) */
+static const uint8_t bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+
 void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb)
 {
+	uint8_t dark, light;
+	int level;
+	if (c->bpp == 8 && c->shade != NULL && (level = c->shade(c->ud, rgb, &dark, &light)) >= 0) {
+		/* a pattern fixed to the page, so that it doesn't move as it scrolls */
+		int32_t i, j, x0 = x - c->ox, y0 = y - c->oy, x1, y1;
+		x1 = x0 + w > c->w ? c->w : x0 + w;
+		y1 = y0 + h > c->h ? c->h : y0 + h;
+		if (x0 < 0)
+			x0 = 0;
+		if (y0 < 0)
+			y0 = 0;
+		for (j = y0; j < y1; j++) {
+			const uint8_t *b = bayer[(j + c->oy) & 3];
+			uint8_t *p = c->pix + j * c->stride;
+			for (i = x0; i < x1; i++)
+				p[i] = b[(i + c->ox) & 3] < level ? light : dark;
+		}
+		return;
+	}
 	fill_px(c, x - c->ox, y - c->oy, w, h, pixel(c, rgb));
 }
 
@@ -124,7 +146,7 @@ void cv_page(canvas *c, const page *p)
 	long i;
 	int32_t top = c->oy, bottom = c->oy + c->h, left = c->ox, right = c->ox + c->w;
 
-	fill_px(c, 0, 0, c->w, c->h, pixel(c, p->bg));
+	cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
 	for (i = 0; i < p->nitems; i++) {
 		const dl_item *d = &p->items[i];
 		if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)

@@ -543,12 +543,36 @@ releases.
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets, 50 pages of history with where each was scrolled, a page's anchors,
   and EWeb's own pages (the start page; "can't open", with the reason).
+- **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar (Back, Forward, Reload or Stop, Home,
+  the address, typed into in place), the page under it with the window's slider, the status on the
+  info line (a link's address under the mouse, what a load is doing, how a secure page came), the
+  family's menu bar, About box, shortcuts, right-click menus, VA_START and drag and drop, help,
+  iconify and crash report. The page is drawn into memory a band of 32 rows at a time and copied
+  to the screen from ST-RAM: in the planar modes each colour is the screen's nearest (EWeb sets no
+  pens), the bytes made planes and `vr_trnfm`'d; on a monochrome screen fills are greys dithered
+  from black and white; in true colour the canvas is the screen's own pixels. Scrolling moves what
+  is on the screen and draws only the new rows. While a page loads, the network's waits keep the
+  window alive, and Esc, Undo or Stop stop the load, the page before staying.
+- **First timings,** on the emulated Falcon (Hatari 2.4.1, EmuTOS 1.4, a 68030 at 32 MHz with
+  TT-RAM, 640x480 in 16 colours; `EWEB.PRG` logs each page's phases), saved pages from the disk
+  without their stylesheets:
+
+  | Page | Size | Total | Parse | Style | Layout | Drawn |
+  |---|---|---|---|---|---|---|
+  | BBC News (4,965 px tall, 121 links) | 100 KB | 4.35 s | 2.68 s | 0.16 s | 0.83 s | 0.48 s |
+  | WSJ (10,000 px, 260 links) | 186 KB | 9.49 s | 7.08 s | 0.31 s | 1.50 s | 0.48 s |
+
+  The parse is Hubbub's, as measured before (4.15 s on the same BBC page before its UTF-8 copy): its
+  tokeniser is the next thing to make faster. "Drawn" is the first screen in 16 colours.
 - **Checked:** every page of the page set (258) laid out and drawn with AddressSanitizer and UBSan,
   with no fault; `tests/layout` keeps the display lists of three pages (`make test`), and the Hebrew
   test page lays out the same in each encoding; `make itest` loads a page and its stylesheet over
   HTTP and HTTPS from the test server, follows a redirect and an anchor, and shows EWeb's own page for
   a server that isn't there and for a file that isn't a page. `tests/host/ewrender.c` draws a page or
-  URL into a PNG as the Falcon would.
+  URL into a PNG as the Falcon would. `make hatarigui` runs `EWEB.PRG` on emulated Falcons and TTs:
+  a site over the network through FAKESTNG, a link clicked with the mouse, Undo, an address typed
+  with an anchor, a secure page (the TLS handshake on the emulated 68030 and DSP), Esc stopping a
+  download, and a page in 256 colours, true colour, TT medium and TT monochrome.
 
 ## The design
 
@@ -819,9 +843,9 @@ out of both (their paths lead nowhere on the Atari).
    NSBENCH 0.3 (above), and Hubbub's UTF-8 input copied, 28% off the HTML parse; then EWeb's HTTP
    client and `EWGET.TTP` (above), tested on an emulated Falcon, and Wikipedia fetched on your DFB1
    (18 Oct 2026), whose 86-second handshake moved the elliptic curves to the DSP (above), timed again
-   on your DFB1 (v0.7 to v0.9); then EWeb's fonts, the document, the layout and browsing (above).
-   *Still to do:* the GEM window, `EWEB.PRG`, as the first text browser.
-3. **The document web:** CSS, images, forms, bookmarks and history.
+   on your DFB1 (v0.7 to v0.9); then EWeb's fonts, the document, the layout, browsing and the GEM
+   window (above): `EWEB.PRG`, the first text browser.
+3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 

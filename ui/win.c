@@ -1,0 +1,965 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * win.c - EWeb's window, as a browser's: a toolbar along the top (Back,
+ * Forward, Reload or Stop while a page loads, Home, and the address,
+ * which can be typed into), the page under it with the window's own
+ * slider, and the status on the info line (a link's address under the
+ * mouse, what a load is doing). The page is drawn by screen.c; scrolling
+ * moves what is on the screen and draws only the new rows when it can.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ui.h"
+#include "canvas.h"
+#include "charset.h"
+#include "clip.h"
+#include "iconify.h"
+#include "util.h"
+
+short win_h = -1;
+short win_iconified;
+
+#define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | INFO | UPARROW | DNARROW | VSLIDE)
+#define POINT_HAND 3
+#define TEXT_CRSR  1
+
+static GRECT work, r_tool, r_page, r_addr;
+static int32_t top;			/* the page's row at r_page's top */
+static char info[160];			/* the info line as set (Atari text) */
+static char title[160];
+
+/* ---------------------------------------------------------------- the toolbar */
+
+enum { B_BACK, B_FORWARD, B_RELOAD, B_HOME, NBUT };
+static GRECT but[NBUT];
+
+static const char *label(int i)
+{
+	switch (i) {
+	case B_BACK: return "\x04";		/* the system font's arrows */
+	case B_FORWARD: return "\x03";
+	case B_RELOAD: return loading ? "Stop" : "Reload";
+	case B_HOME: return "Home";
+	}
+	return "";
+}
+
+static int enabled(int i)
+{
+	switch (i) {
+	case B_BACK: return !loading && br_can_back(&br);
+	case B_FORWARD: return !loading && br_can_forward(&br);
+	case B_RELOAD: return loading || br.cur >= 0;
+	case B_HOME: return !loading;
+	}
+	return 0;
+}
+
+/* the address field: Atari text (a URL is ASCII), the cursor, the first
+   character shown, and whether it is all chosen (typing replaces it) */
+static char addr[1024];
+static int a_focus, a_cur, a_first, a_all;
+
+static void layout(void)
+{
+	short x, i, bh = gl_hchar + 4, th = gl_hchar + 10;
+	r_tool = work;
+	r_tool.h = th;
+	x = work.x + 4;
+	for (i = 0; i < NBUT; i++) {
+		short w = i <= B_FORWARD ? 3 * gl_wchar : i == B_RELOAD ? 8 * gl_wchar : 6 * gl_wchar;
+		but[i].x = x;
+		but[i].y = work.y + 3;
+		but[i].w = w;
+		but[i].h = bh;
+		x += w + (i == B_FORWARD || i == B_HOME ? gl_wchar : 2);
+	}
+	r_addr.x = x;
+	r_addr.y = work.y + 3;
+	r_addr.w = work.x + work.w - 4 - x;
+	r_addr.h = bh;
+	r_page = work;
+	r_page.y += th;
+	r_page.h -= th;
+	if (r_page.h < 0)
+		r_page.h = 0;
+}
+
+static short paper(void)
+{
+	return planes >= 4 ? grey_pen() : 0;
+}
+
+static void draw_button(int i)
+{
+	GRECT r = but[i];
+	const char *l = label(i);
+	short n = (short) strlen(l), on = enabled(i);
+	fill(&r, 0);
+	frame(&r, 1);
+	text_at(r.x + (r.w - n * gl_wchar) / 2, r.y + 2, l, n, n,
+		TX_LTR | (on ? 0 : TX_DIM) | (i == B_RELOAD && loading ? TX_BOLD : 0));
+}
+
+static short addr_cols(void)
+{
+	return (r_addr.w - gl_wchar) / gl_wchar;
+}
+
+static void draw_addr(void)
+{
+	GRECT r = r_addr, in;
+	short cols = addr_cols(), n = (short) strlen(addr) - a_first;
+	fill(&r, 0);
+	frame(&r, a_focus ? 1 : (planes >= 4 ? 9 : 1));
+	if (n > cols)
+		n = cols;
+	if (a_focus && a_all && addr[0]) {
+		in.x = r.x + gl_wchar / 2;
+		in.y = r.y + 2;
+		in.w = n * gl_wchar;
+		in.h = gl_hchar;
+		fill(&in, 1);
+		text_at(in.x, in.y, addr + a_first, n, cols, TX_LTR | TX_INVERSE);
+	} else if (n > 0) {
+		text_at(r.x + gl_wchar / 2, r.y + 2, addr + a_first, n, cols, TX_LTR);
+	}
+	if (a_focus && !a_all) {
+		short cx = r.x + gl_wchar / 2 + (a_cur - a_first) * gl_wchar;
+		line_col(cx, r.y + 2, cx, r.y + 1 + gl_hchar, 1);
+	}
+}
+
+static void draw_toolbar(GRECT *clip)
+{
+	GRECT r = r_tool;
+	int i;
+	if (!rect_and(&r, clip))
+		return;
+	fill(&r_tool, paper());
+	for (i = 0; i < NBUT; i++)
+		draw_button(i);
+	draw_addr();
+	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
+}
+
+/* ---------------------------------------------------------------- drawing */
+
+static void draw_page(GRECT *clip)
+{
+	GRECT r = r_page;
+	if (!rect_and(&r, clip))
+		return;
+	scr_page(br.p, &r, r.x - r_page.x, top + (r.y - r_page.y));
+}
+
+/* area of the window, through its rectangle list */
+static void redraw(const GRECT *area, int parts)
+{
+	GRECT r, a;
+	if (win_h <= 0)
+		return;
+	if (win_iconified) {
+		icon_window(area);
+		return;
+	}
+	a = area ? *area : work;
+	if (!rect_and(&a, &work))
+		return;
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w > 0 && r.h > 0) {
+		GRECT c = r;
+		if (rect_and(&c, &a)) {
+			clip_on(&c);
+			if (parts & 1)
+				draw_toolbar(&c);
+			if (parts & 2)
+				draw_page(&c);
+		}
+		wind_get(win_h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	clip_off();
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+}
+
+void win_redraw(const GRECT *area)
+{
+	redraw(area, 3);
+}
+
+void win_redraw_page(void)
+{
+	redraw(&r_page, 2);
+}
+
+void win_toolbar(void)
+{
+	redraw(&r_tool, 1);
+}
+
+static void redraw_addr(void)
+{
+	redraw(&r_addr, 1);
+}
+
+/* ---------------------------------------------------------------- scrolling */
+
+int32_t win_page_w(void)
+{
+	return r_page.w > 0 ? r_page.w : 1;
+}
+
+int32_t win_page_h(void)
+{
+	return r_page.h;
+}
+
+int32_t win_top(void)
+{
+	return top;
+}
+
+void win_page_area(short *x, short *y, short *w, short *h)
+{
+	*x = r_page.x;
+	*y = r_page.y;
+	*w = r_page.w;
+	*h = r_page.h;
+}
+
+static int32_t max_top(void)
+{
+	int32_t h = br.p ? br.p->height : 0, m = h - r_page.h;
+	return m > 0 ? m : 0;
+}
+
+static void sliders(void)
+{
+	int32_t h = br.p ? br.p->height : 0, m = max_top();
+	short size = (short) (h > r_page.h ? (int32_t) ((int64_t) 1000 * r_page.h / h) : 1000);
+	if (win_h <= 0 || win_iconified)
+		return;
+	wind_set(win_h, WF_VSLSIZE, size < 30 ? 30 : size, 0, 0, 0);
+	wind_set(win_h, WF_VSLIDE, (short) (m > 0 ? (int32_t) ((int64_t) 1000 * top / m) : 0), 0, 0, 0);
+}
+
+/* the window is in front and nothing covers it: one rectangle */
+static int all_visible(void)
+{
+	GRECT r;
+	short t, d;
+	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	if (t != win_h)
+		return 0;
+	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	return r.x == work.x && r.y == work.y && r.w == work.w && r.h == work.h;
+}
+
+void win_scroll_to(int32_t y)
+{
+	int32_t m = max_top(), dy;
+	if (y > m)
+		y = m;
+	if (y < 0)
+		y = 0;
+	dy = y - top;
+	if (dy == 0)
+		return;
+	top = y;
+	br_scrolled(&br, top);
+	sliders();
+	if (win_iconified || win_h <= 0)
+		return;
+	if ((dy < 0 ? -dy : dy) < r_page.h && all_visible() &&
+	    r_page.y + r_page.h <= scr_h && r_page.x + r_page.w <= scr_w) {
+		/* what stays on the screen moves; only the new rows are drawn */
+		MFDB s;
+		short pxy[8], d = (short) (dy < 0 ? -dy : dy);
+		GRECT fresh = r_page;
+		memset(&s, 0, sizeof s);
+		wind_update(BEG_UPDATE);
+		graf_mouse(M_OFF, 0);
+		clip_on(&r_page);
+		pxy[0] = pxy[4] = r_page.x;
+		pxy[2] = pxy[6] = r_page.x + r_page.w - 1;
+		if (dy > 0) {
+			pxy[1] = r_page.y + d;
+			pxy[3] = r_page.y + r_page.h - 1;
+			pxy[5] = r_page.y;
+			pxy[7] = r_page.y + r_page.h - 1 - d;
+			fresh.y = r_page.y + r_page.h - d;
+		} else {
+			pxy[1] = r_page.y;
+			pxy[3] = r_page.y + r_page.h - 1 - d;
+			pxy[5] = r_page.y + d;
+			pxy[7] = r_page.y + r_page.h - 1;
+		}
+		fresh.h = d;
+		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
+		draw_page(&fresh);
+		clip_off();
+		graf_mouse(M_ON, 0);
+		wind_update(END_UPDATE);
+		return;
+	}
+	win_redraw_page();
+}
+
+void win_scroll_by(int32_t dy)
+{
+	win_scroll_to(top + dy);
+}
+
+static int32_t line_step(void)
+{
+	return gl_hchar * 3;
+}
+
+/* ---------------------------------------------------------------- titles and status */
+
+void win_title(void)
+{
+	char t[sizeof title], a[140];
+	if (br.title[0]) {
+		atari_text(br.title, a, sizeof a);
+		snprintf(t, sizeof t, " EWeb - %s ", a);
+	} else {
+		snprintf(t, sizeof t, " EWeb ");
+	}
+	if (strcmp(t, title) == 0)
+		return;
+	str_copy(title, t, sizeof title);
+	if (win_h > 0)
+		wind_set_str(win_h, WF_NAME, title);
+}
+
+void win_status(const char *s)
+{
+	char t[sizeof info];
+	if (*s)
+		snprintf(t, sizeof t, " %s", s);
+	else if (br.security[0])
+		snprintf(t, sizeof t, " Secure: %s", br.security);
+	else
+		t[0] = 0;
+	if (strcmp(t, info) == 0)
+		return;
+	str_copy(info, t, sizeof info);
+	if (win_h > 0 && !win_iconified)
+		wind_set_str(win_h, WF_INFO, info);
+}
+
+/* ---------------------------------------------------------------- the address field */
+
+static void addr_show_cursor(void)
+{
+	short cols = addr_cols(), n = (short) strlen(addr);
+	if (a_cur > n)
+		a_cur = n;
+	if (a_cur < a_first)
+		a_first = a_cur;
+	if (a_cur > a_first + cols - 1)
+		a_first = a_cur - cols + 1;
+	if (a_first < 0)
+		a_first = 0;
+}
+
+void win_address(const char *url)
+{
+	char a[sizeof addr];
+	atari_text(url, a, sizeof a);
+	str_copy(addr, a, sizeof addr);
+	a_cur = (int) strlen(addr);
+	a_first = 0;
+	a_all = 0;
+	a_focus = 0;
+	if (win_h > 0)
+		redraw_addr();
+}
+
+void win_address_focus(int all)
+{
+	a_focus = 1;
+	a_all = all;
+	a_cur = (int) strlen(addr);
+	addr_show_cursor();
+	if (all)
+		a_first = 0;
+	redraw_addr();
+}
+
+int win_address_has_focus(void)
+{
+	return a_focus;
+}
+
+static void addr_blur(void)
+{
+	if (!a_focus)
+		return;
+	a_focus = 0;
+	a_all = 0;
+	a_first = 0;
+	redraw_addr();
+}
+
+static void addr_insert(const char *s, long n)
+{
+	long len = (long) strlen(addr);
+	if (a_all) {
+		addr[0] = 0;
+		len = 0;
+		a_cur = 0;
+		a_all = 0;
+	}
+	if (len + n >= (long) sizeof addr)
+		n = (long) sizeof addr - 1 - len;
+	if (n <= 0)
+		return;
+	memmove(addr + a_cur + n, addr + a_cur, len - a_cur + 1);
+	memcpy(addr + a_cur, s, n);
+	a_cur += (int) n;
+}
+
+/* a key for the address field: 1 when taken */
+static int addr_key(short kstate, short key)
+{
+	short scan = KEY_SCAN(key);
+	unsigned char c = KEY_ASCII(key);
+	int len = (int) strlen(addr), shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
+	if (key_ctrl(kstate, key)) {
+		switch (scan) {
+		case 0x1e:		/* ^A: all of it */
+			a_all = 1;
+			break;
+		case 0x2e:		/* ^C */
+			win_clip(CLIP_COPY);
+			return 1;
+		case 0x2d:		/* ^X */
+			win_clip(CLIP_CUT);
+			return 1;
+		case 0x2f:		/* ^V */
+			win_clip(CLIP_PASTE);
+			return 1;
+		default:
+			return 0;
+		}
+	} else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
+		char t[sizeof addr];
+		long n;
+		char *u = atari_to_utf8(addr, (long) strlen(addr), &n);
+		str_copy(t, u ? u : addr, sizeof t);
+		free(u);
+		addr_blur();
+		go(t);
+		return 1;
+	} else if (scan == 0x0f) {			/* Tab: the keyboard to the page */
+		addr_blur();
+		return 1;
+	} else if (scan == 0x01) {			/* Esc: nothing (it never clears text) */
+		return 1;
+	} else if (scan == 0x4b) {			/* Left */
+		if (a_all)
+			a_cur = 0;
+		else if (a_cur > 0)
+			a_cur--;
+		a_all = 0;
+	} else if (scan == 0x4d) {			/* Right */
+		if (a_all)
+			a_cur = len;
+		else if (a_cur < len)
+			a_cur++;
+		a_all = 0;
+	} else if (scan == 0x47) {			/* ClrHome: the start, with Shift the end */
+		a_cur = shift ? len : 0;
+		a_all = 0;
+	} else if (scan == 0x0e) {			/* Backspace */
+		if (a_all) {
+			addr[0] = 0;
+			a_cur = 0;
+			a_all = 0;
+		} else if (a_cur > 0) {
+			memmove(addr + a_cur - 1, addr + a_cur, len - a_cur + 1);
+			a_cur--;
+		}
+	} else if (scan == 0x53) {			/* Delete */
+		if (a_all) {
+			addr[0] = 0;
+			a_cur = 0;
+			a_all = 0;
+		} else if (a_cur < len) {
+			memmove(addr + a_cur, addr + a_cur + 1, len - a_cur);
+		}
+	} else if (c >= 0x20 && c != 0x7f) {
+		char s = (char) c;
+		addr_insert(&s, 1);
+	} else {
+		return 0;
+	}
+	addr_show_cursor();
+	redraw_addr();
+	return 1;
+}
+
+/* ---------------------------------------------------------------- the clipboard */
+
+/* the page as text: its runs in the order they are drawn, a line break
+   where the next run starts lower down */
+static char *page_text(long *n)
+{
+	SBUF s;
+	long i;
+	int32_t last_y = -1, last_x = 0;
+	char *a;
+	sb_init(&s);
+	if (br.p == NULL)
+		return NULL;
+	for (i = 0; i < br.p->nitems; i++) {
+		const dl_item *it = &br.p->items[i];
+		int32_t y = it->y + it->base;
+		if (it->type != DL_TEXT)
+			continue;
+		if (last_y >= 0) {
+			if (y > last_y + 2)
+				sb_add(&s, y > last_y + it->font->px * 2 ? "\r\n\r\n" : "\r\n", y > last_y + it->font->px * 2 ? 4 : 2);
+			else if (it->x > last_x + 1)
+				sb_addc(&s, ' ');
+		}
+		sb_add(&s, it->text, it->len);
+		last_y = y;
+		last_x = it->x + it->w;
+	}
+	sb_add(&s, "\r\n", 2);
+	a = cs_to_atari(s.s, s.len, CS_UTF8, n);
+	sb_free(&s);
+	return a;
+}
+
+void win_clip(int what)
+{
+	if (a_focus) {
+		long len = (long) strlen(addr);
+		if (what == CLIP_COPY || what == CLIP_CUT) {
+			clip_put(addr, len);
+			if (what == CLIP_CUT) {
+				addr[0] = 0;
+				a_cur = 0;
+				a_all = 0;
+				redraw_addr();
+			}
+		} else if (what == CLIP_PASTE) {
+			char buf[sizeof addr];
+			long n = clip_get(buf, sizeof buf);
+			if (n > 0) {
+				clip_line(buf);	/* the first line */
+				addr_insert(buf, (long) strlen(buf));
+				addr_show_cursor();
+				redraw_addr();
+			}
+		}
+		return;
+	}
+	if (what == CLIP_COPY) {
+		long n;
+		char *t = page_text(&n);
+		if (t != NULL) {
+			if (clip_put(t, n))
+				status("The page's text is on the clipboard.");
+			free(t);
+		}
+	}
+}
+
+/* ---------------------------------------------------------------- the mouse */
+
+static int link_at(short mx, short my)
+{
+	if (br.p == NULL || !rect_hit(&r_page, mx, my))
+		return -1;
+	return page_link_at(br.p, mx - r_page.x, my - r_page.y + top);
+}
+
+int win_stop_hit(short mx, short my)
+{
+	return loading && !win_iconified && rect_hit(&but[B_RELOAD], mx, my);
+}
+
+static short pointer = ARROW;
+
+void win_hover(short mx, short my)
+{
+	short h = wind_find(mx, my), t, d, want = ARROW;
+	int l = -1;
+	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	if (h == win_h && t == win_h && !win_iconified && !loading) {
+		l = link_at(mx, my);
+		if (l >= 0)
+			want = POINT_HAND;
+		else if (rect_hit(&r_addr, mx, my))
+			want = TEXT_CRSR;
+	}
+	if (want != pointer) {
+		graf_mouse(want, 0);
+		pointer = want;
+	}
+	if (!loading) {
+		static int shown = -2;
+		if (l != shown) {
+			char u[512], a[160];
+			shown = l;
+			if (l >= 0) {
+				br_link_url(&br, l, u, sizeof u);
+				atari_text(u, a, sizeof a);
+				win_status(a);
+			} else {
+				win_status("");
+			}
+		}
+	}
+	evnt_set_m1(1, mx, my, 1, 1);
+}
+
+static void press(int i)
+{
+	GRECT r = but[i];
+	short p[4];
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	clip_on(&r);
+	p[0] = r.x + 1;
+	p[1] = r.y + 1;
+	p[2] = r.x + r.w - 2;
+	p[3] = r.y + r.h - 2;
+	vswr_mode(vdi_h, MD_XOR);
+	vsf_interior(vdi_h, FIS_SOLID);
+	vsf_color(vdi_h, 1);
+	vr_recfl(vdi_h, p);
+	vswr_mode(vdi_h, MD_REPLACE);
+	clip_off();
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+	evnt_timer_(80);
+	win_toolbar();
+}
+
+/* right-click: the link's commands, or the page's (Back first, as
+   EHypView's) */
+static void context_menu(short mx, short my)
+{
+	int l = link_at(mx, my);
+	if (l >= 0) {
+		static const char *const items[] = { "Open the link", "Copy the link's address" };
+		short r = popup(mx, my, items, 2);
+		if (r == 0) {
+			follow(l);
+		} else if (r == 1) {
+			char u[2048], a[2048];
+			br_link_url(&br, l, u, sizeof u);
+			atari_text(u, a, sizeof a);
+			clip_put(a, (long) strlen(a));
+		}
+	} else if (rect_hit(&r_page, mx, my)) {
+		const char *items[6];
+		static char back[40], fwd[40];
+		short r;
+		snprintf(back, sizeof back, "%sBack           Undo", br_can_back(&br) ? "" : "\x08");
+		snprintf(fwd, sizeof fwd, "%sForward      \x01^Z", br_can_forward(&br) ? "" : "\x08");
+		items[0] = back;
+		items[1] = fwd;
+		items[2] = "Reload           ^R";
+		items[3] = "-";
+		items[4] = "Copy the text    ^C";
+		r = popup(mx, my, items, 5);
+		switch (r) {
+		case 0: command(C_BACK); break;
+		case 1: command(C_FORWARD); break;
+		case 2: command(C_RELOAD); break;
+		case 4: win_clip(CLIP_COPY); break;
+		}
+	}
+}
+
+int win_mouse(short mx, short my, short button, short clicks, short kstate)
+{
+	int i, l;
+	if (win_h <= 0 || wind_find(mx, my) != win_h || win_iconified)
+		return 0;
+	for (i = 0; i < NBUT; i++) {
+		if (!rect_hit(&but[i], mx, my))
+			continue;
+		if (!enabled(i))
+			return 1;
+		press(i);
+		switch (i) {
+		case B_BACK: command(C_BACK); break;
+		case B_FORWARD: command(C_FORWARD); break;
+		case B_RELOAD: command(loading ? C_STOP : C_RELOAD); break;
+		case B_HOME: command(C_HOME); break;
+		}
+		return 1;
+	}
+	if (rect_hit(&r_addr, mx, my)) {
+		if (button & 2) {
+			static const char *const items[] = { "Copy        ^C", "Cut         ^X", "Paste       ^V",
+							     "-", "Select all  ^A" };
+			short r;
+			if (!a_focus)
+				win_address_focus(1);
+			r = popup(mx, my, items, 5);
+			if (r >= 0 && r <= 2)
+				win_clip(r == 0 ? CLIP_COPY : r == 1 ? CLIP_CUT : CLIP_PASTE);
+			else if (r == 4)
+				win_address_focus(1);
+			return 1;
+		}
+		if (!a_focus || clicks >= 2) {
+			win_address_focus(1);
+		} else {
+			a_all = 0;
+			a_cur = a_first + (mx - r_addr.x - gl_wchar / 2 + gl_wchar / 2) / gl_wchar;
+			addr_show_cursor();
+			redraw_addr();
+		}
+		return 1;
+	}
+	if (rect_hit(&r_page, mx, my)) {
+		addr_blur();
+		if (button & 2) {
+			context_menu(mx, my);
+			return 1;
+		}
+		l = link_at(mx, my);
+		if (l >= 0)
+			follow(l);
+		return 1;
+	}
+	(void) kstate;
+	return 1;
+}
+
+/* ---------------------------------------------------------------- keys */
+
+int win_key(short kstate, short key)
+{
+	short scan = KEY_SCAN(key);
+	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
+	int32_t page = r_page.h - line_step();
+	if (win_h <= 0 || win_iconified)
+		return 0;
+	/* up and down scroll the page wherever the keyboard is */
+	switch (scan) {
+	case 0x48:		/* Up */
+		win_scroll_by(shift ? -page : -line_step());
+		return 1;
+	case 0x50:		/* Down */
+		win_scroll_by(shift ? page : line_step());
+		return 1;
+	}
+	if (a_focus)
+		return addr_key(kstate, key);
+	switch (scan) {
+	case 0x39:		/* Space: a page down, with Shift up */
+		if (key_ctrl(kstate, key))
+			return 0;
+		win_scroll_by(shift ? -page : page);
+		return 1;
+	case 0x47:		/* ClrHome: the top, with Shift the end */
+		win_scroll_to(shift ? max_top() : 0);
+		return 1;
+	case 0x0f:		/* Tab: the keyboard to the address */
+		win_address_focus(1);
+		return 1;
+	}
+	return 0;
+}
+
+/* ---------------------------------------------------------------- a new page */
+
+void win_page_changed(void)
+{
+	int32_t y = br.scroll_to >= 0 ? br.scroll_to : 0;
+	win_title();
+	win_address(br.url);
+	win_status("");
+	top = 0;
+	if (y > max_top())
+		y = max_top();
+	top = y;
+	br_scrolled(&br, top);
+	sliders();
+	win_redraw(NULL);
+}
+
+/* ---------------------------------------------------------------- the window */
+
+static void get_work(void)
+{
+	wind_get(win_h, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
+	layout();
+}
+
+static void save_place(void)
+{
+	wind_get(win_h, WF_CURRXYWH, &opt.win_x, &opt.win_y, &opt.win_w, &opt.win_h);
+}
+
+/* the window's size changed: the page laid out for its width again */
+static void resized(void)
+{
+	int32_t old_w = br.width;
+	get_work();
+	save_place();
+	if (br.p != NULL && win_page_w() != old_w) {
+		/* the same place in the text, as near as it can be */
+		int32_t h0 = br.p->height;
+		br_relayout(&br, win_page_w());
+		if (h0 > 0)
+			top = (int32_t) ((int64_t) top * br.p->height / h0);
+	}
+	br.width = win_page_w();
+	if (top > max_top())
+		top = max_top();
+	sliders();
+}
+
+void win_open(void)
+{
+	short x = opt.win_x, y = opt.win_y, w = opt.win_w, h = opt.win_h;
+	if (win_h > 0) {
+		wind_set(win_h, WF_TOP, 0, 0, 0, 0);
+		return;
+	}
+	if (w < 40 * gl_wchar || h < 12 * gl_hchar || x < 0 || y < desk_y ||
+	    x + w > desk_x + desk_w + 4 || y + h > desk_y + desk_h + 4) {
+		x = desk_x;
+		y = desk_y;
+		w = desk_w;
+		h = desk_h;
+	}
+	win_h = wind_create(icon_kind(KIND), desk_x, desk_y, desk_w, desk_h);
+	win_iconified = 0;
+	if (win_h < 0) {
+		alert(1, "[3][No more windows available.][ OK ]");
+		return;
+	}
+	if (!title[0])
+		str_copy(title, " EWeb ", sizeof title);
+	wind_set_str(win_h, WF_NAME, title);
+	wind_set_str(win_h, WF_INFO, info);
+	wind_open(win_h, x, y, w, h);
+	get_work();
+	save_place();
+	br.width = win_page_w();
+	sliders();
+}
+
+void win_close(void)
+{
+	if (win_h <= 0)
+		return;
+	if (!win_iconified)
+		save_place();
+	wind_close(win_h);
+	wind_delete(win_h);
+	win_h = -1;
+}
+
+void win_message(const short *msg)
+{
+	GRECT r;
+	if (win_h <= 0 || msg[3] != win_h)
+		return;
+	switch (msg[0]) {
+	case WM_REDRAW:
+		r.x = msg[4];
+		r.y = msg[5];
+		r.w = msg[6];
+		r.h = msg[7];
+		win_redraw(&r);
+		break;
+	case WM_TOPPED:
+	case WM_NEWTOP:
+		wind_set(win_h, WF_TOP, 0, 0, 0, 0);
+		break;
+	case WM_BOTTOMED:
+		wind_set(win_h, WF_BOTTOM, 0, 0, 0, 0);
+		break;
+	case WM_CLOSED:
+		if (!loading)
+			command(C_QUIT);
+		break;
+	case WM_ICONIFY:
+	case WM_ALLICONIFY:
+		if (win_iconified)
+			break;
+		save_place();
+		win_iconified = 1;
+		wind_set(win_h, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		break;
+	case WM_UNICONIFY:
+		if (!win_iconified)
+			break;
+		wind_set(win_h, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		win_iconified = 0;
+		wind_set_str(win_h, WF_INFO, info);
+		resized();
+		win_redraw(NULL);
+		break;
+	case WM_FULLED: {
+		GRECT c, f, p;
+		if (win_iconified || loading)
+			break;
+		wind_get(win_h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
+		wind_get(win_h, WF_FULLXYWH, &f.x, &f.y, &f.w, &f.h);
+		if (c.x == f.x && c.y == f.y && c.w == f.w && c.h == f.h) {
+			wind_get(win_h, WF_PREVXYWH, &p.x, &p.y, &p.w, &p.h);
+			wind_set(win_h, WF_CURRXYWH, p.x, p.y, p.w, p.h);
+		} else {
+			wind_set(win_h, WF_CURRXYWH, f.x, f.y, f.w, f.h);
+		}
+		resized();
+		win_redraw(NULL);
+		break;
+	}
+	case WM_SIZED:
+	case WM_MOVED: {
+		short w = msg[6], h = msg[7];
+		if (win_iconified) {
+			wind_set(win_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+			break;
+		}
+		if (loading && msg[0] == WM_SIZED)
+			break;		/* the page being laid out keeps its width */
+		if (w < 40 * gl_wchar)
+			w = 40 * gl_wchar;
+		if (h < 12 * gl_hchar)
+			h = 12 * gl_hchar;
+		wind_set(win_h, WF_CURRXYWH, msg[4], msg[5], w, h);
+		resized();
+		if (msg[0] == WM_SIZED)
+			win_redraw(NULL);
+		break;
+	}
+	case WM_ARROWED:
+		if (loading)
+			break;
+		switch (msg[4]) {
+		case WA_UPPAGE: win_scroll_by(-(r_page.h - line_step())); break;
+		case WA_DNPAGE: win_scroll_by(r_page.h - line_step()); break;
+		case WA_UPLINE: win_scroll_by(-line_step()); break;
+		case WA_DNLINE: win_scroll_by(line_step()); break;
+		}
+		break;
+	case WM_VSLID:
+		if (loading)
+			break;
+		win_scroll_to((int32_t) ((int64_t) max_top() * msg[4] / 1000));
+		break;
+	}
+}

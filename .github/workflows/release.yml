@@ -50,12 +50,15 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu gperf zip fonts-dejavu-core fonts-dejavu-extra
+          sudo apt-get install -y gcc-m68k-linux-gnu gperf zip fonts-dejavu-core fonts-dejavu-extra \
+            autoconf automake libtool gettext autopoint pkg-config
           python3 -m pip install --break-system-packages -r tools/requirements.txt
+      - name: hcp, for the help file
+        run: common/tools/build-hcp.sh "$RUNNER_TEMP/hcp"
       - name: Test
         run: make test
       - name: Build
-        run: make dist
+        run: make dist HCP="$RUNNER_TEMP/hcp/hcp"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

@@ -20,6 +20,10 @@ typedef struct canvas {
 	int32_t ox, oy;			/* the page's point at pixel (0, 0) */
 	/* 8 bits: the pixel value for a colour (0xRRGGBB) */
 	uint8_t (*pen)(void *ud, uint32_t rgb);
+	/* 8 bits, optional: a fill's colour as a pattern of two pens (a
+	   monochrome screen's greys), how many of 16 pixels are light; NULL
+	   or -1: solid in pen() */
+	int (*shade)(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light);
 	void *ud;
 } canvas;
 
