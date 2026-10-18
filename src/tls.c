@@ -739,29 +739,19 @@ static void get_seed(unsigned char out[48])
 	static unsigned long count;
 	unsigned char raw[128], old[32], h[32];
 	br_sha256_context sc;
-	int sh = -1;
+	int on_disk = 0;
 	memset(old, 0, sizeof(old));
 	if (seed_have) {
 		memcpy(old, seed_kept, sizeof(old));
 	} else if (tls_seed_path[0]) {
-#ifdef PF_UPDATE
-		/* one open for the session's seed: read it, and write the next
-		   over it below (no event call between: 2.2) */
-		if ((sh = pf_open(tls_seed_path, PF_UPDATE)) >= 0 &&
-		    pf_read(sh, old, sizeof(old)) != (long)sizeof(old)) {
-			pf_close(sh);
-			sh = -1;
-			memset(old, 0, sizeof(old));
-		}
-		if (sh < 0)
-#endif
-		{
-			long len = 0;
-			char *f = pf_load(tls_seed_path, &len);
-			if (f) {
-				memcpy(old, f, len < 32 ? len : 32);
-				free(f);
-			}
+		/* opened, not looked up first (6.5); PF_UPDATE is write-only in
+		   the apps' plat, so the reading is an open of its own */
+		int rh = pf_open(tls_seed_path, PF_READ);
+		if (rh >= 0) {
+			on_disk = pf_read(rh, old, sizeof(old)) == (long)sizeof(old);
+			pf_close(rh);
+			if (!on_disk)
+				memset(old, 0, sizeof(old));
 		}
 	}
 	pf_entropy(raw, sizeof(raw));
@@ -779,15 +769,19 @@ static void get_seed(unsigned char out[48])
 	br_sha256_update(&sc, raw, sizeof(raw));
 	br_sha256_update(&sc, &count, sizeof(count));
 	br_sha256_out(&sc, h);
-	if (sh >= 0) {
+	if (!seed_have && tls_seed_path[0]) {
+		/* written over in place when it was there (its 32 bytes were just
+		   read), else made with pf_save: no look at the directory */
+		int done = 0;
 #ifdef PF_UPDATE
-		long w = pf_seek(sh, 0) == 0 ? pf_write(sh, h, sizeof(h)) : -1;
-		pf_close(sh);
-		if (w != (long)sizeof(h))
-			put_file(tls_seed_path, h, sizeof(h));
+		int wh = on_disk ? pf_open(tls_seed_path, PF_UPDATE) : -1;
+		if (wh >= 0) {
+			done = pf_write(wh, h, sizeof(h)) == (long)sizeof(h);
+			pf_close(wh);
+		}
 #endif
-	} else if (!seed_have && tls_seed_path[0]) {
-		put_file(tls_seed_path, h, sizeof(h));
+		if (!done)
+			pf_save(tls_seed_path, h, sizeof(h));
 	}
 	/* the next handshake's, not the next session's */
 	br_sha256_init(&sc);
