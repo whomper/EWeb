@@ -101,7 +101,8 @@ hub stay complete, with the evidence.
   URL as EWeb would (a PNG, or `-d` the display list). After changing the layout or the document:
   `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
-  xdotool), and look at its screenshots in `build/gui`.
+  xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
+  `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page

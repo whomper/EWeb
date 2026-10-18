@@ -124,7 +124,12 @@ void menu_update(void)
 /* ---------------------------------------------------------------- the settings */
 /* EWEB.INF next to the program (a program without an accessory keeps its
    settings there, the guidelines' 6.1): NAME=value lines, a ';' note
-   above each, other lines kept as they are */
+   above each, other lines kept as they are. The file's text is read once,
+   at start, and kept: a save puts the settings into it and writes it only
+   when that changed it (the guidelines' 6.5) */
+
+static char *inf_text;		/* EWEB.INF as it is on the disk; NULL: none */
+static long inf_len;
 
 static void inf_path(char *out, int size)
 {
@@ -139,6 +144,11 @@ static void settings_load(void)
 	data = pf_load(path, &len);
 	if (data == NULL)
 		return;
+	inf_text = malloc(len + 1);
+	if (inf_text != NULL) {
+		memcpy(inf_text, data, len + 1);
+		inf_len = len;
+	}
 	for (line = data; line && *line; line = next) {
 		char *eq, *end;
 		next = strchr(line, '\n');
@@ -205,19 +215,17 @@ static void put(SBUF *s, const char *key, const char *value, const char *note)
 	sb_printf(s, "; %s\r\n%s=%s\r\n", note, key, value);
 }
 
+/* the settings to EWEB.INF, a safe save when they changed it; 0: it
+   couldn't be written */
 int settings_save(void)
 {
 	char path[256], v[40];
-	long len;
 	SBUF s;
-	char *old;
 	int ok;
 	inf_path(path, sizeof path);
 	sb_init(&s);
-	old = pf_load(path, &len);
-	if (old != NULL) {
-		sb_add(&s, old, len);
-		free(old);
+	if (inf_text != NULL) {
+		sb_add(&s, inf_text, inf_len);
 	} else {
 		sb_adds(&s, "; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n");
 	}
@@ -229,8 +237,18 @@ int settings_save(void)
 	put(&s, "DSP", v, "1: the DSP does the secure connections' arithmetic, 0: the 68030 does");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
-	ok = pf_save(path, s.s, s.len);
-	sb_free(&s);
+	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
+		sb_free(&s);
+		return 1;
+	}
+	ok = pf_save(path, s.s, s.len) == 0;
+	if (ok) {
+		free(inf_text);
+		inf_text = s.s;		/* what is on the disk now */
+		inf_len = s.len;
+	} else {
+		sb_free(&s);
+	}
 	return ok;
 }
 
@@ -413,6 +431,7 @@ static void set_zoom(int z)
 	if (z < 50 || z > 200 || z == opt.zoom)
 		return;
 	opt.zoom = (short) z;
+	settings_save();	/* a setting: on the disk at once (6.5) */
 	br.zoom = (int32_t) (819L * opt.zoom / 100);
 	if (br.d != NULL) {
 		graf_mouse(BUSYBEE, 0);

@@ -154,7 +154,8 @@ what it checked (`SIGS.DAT`). The info line says how a secure page came.
 ## Settings
 
 EWeb keeps its settings in `EWEB.INF`, next to the program, with a note
-above each:
+above each. A setting you change is saved there at once; where the window
+was, when you quit:
 
 - `HOME=` the start page (empty: EWeb's own)
 - `SEARCH=` where words typed in the address go, `%s` for the words

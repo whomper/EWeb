@@ -518,8 +518,8 @@ releases.
   Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 395
   characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB. FreeType draws them
   without smoothing, with its hinted advances, so the spacing matches the pixels; letters a face
-  lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb reads the file's directory at start and each
-  face from the disk the first time a page uses it. Hebrew vowel points take no room and are not
+  lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb opens the file once at start and keeps it
+  open: its directory is read then, and each face the first time a page uses it. Hebrew vowel points take no room and are not
   drawn yet.
 - **The document** (`src/doc`): Hubbub's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
@@ -573,6 +573,27 @@ releases.
   a site over the network through FAKESTNG, a link clicked with the mouse, Undo, an address typed
   with an anchor, a secure page (the TLS handshake on the emulated 68030 and DSP), Esc stopping a
   download, and a page in 256 colours, true colour, TT medium and TT monochrome.
+- **The disk** (the guidelines' 6.5, Erez's rule of 18 Oct 2026: every open costs real time on his
+  disks). Measured with Hatari's GEMDOS trace (`make hatarifiles`, `tests/hatari/disk_files.py`),
+  opens (`Fopen` and `Fcreate`) and lookups (`Fsfirst`) per case:
+
+  | Case | 0.11 | Now |
+  |---|---|---|
+  | Start | 5 opens, 1 lookup (`EWEB.INF`; `EWEB.FNT` 4 times) | 2, 1 (`EWEB.INF`, `EWEB.FNT`) |
+  | A page with a face not used before | 1 open (`EWEB.FNT`) | 0 |
+  | 10 pages, a page with 10 pictures, back 4 and forward 4, 5 minutes idle | 0 | 0 |
+  | The page size changed (^+ ^- ^0) | 0 (saved at quit) | a safe save each time |
+  | Quit, nothing changed | 2 opens, 1 lookup, a safe save | 0 |
+  | First secure page of a session | 3 opens, 5 lookups | the same (`common/src/tls.c`) |
+  | `EWGET.TTP`, 1 MB | 4 opens, 2 lookups, the file made once | the same |
+
+  Pages, stylesheets, history and Back go through memory (the cache), never the disk. `EWEB.FNT`
+  stays open while EWeb runs, a face read with one seek. `EWEB.INF` is read once and kept: a setting
+  changed by the user (the page size, the home page) is saved then, the window's place at quit if it
+  moved, and nothing is written when nothing changed. The secure connections' files (`CACERT.PEM`,
+  `ROOTS.DAT`, `SEED.DAT`) are `common/`'s, and their lookups come down there. Reads and writes go
+  through 8 KB in ST-RAM (`atari/plat_tos.c`) until it is known whether the Falcon's crashes come
+  from DMA to and from TT-RAM; then 32 KB pieces.
 
 ## The design
 

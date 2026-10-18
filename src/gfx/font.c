@@ -3,7 +3,9 @@
 /*
  * font.c - EWEB.FNT: the table of faces is read at start, a face's
  * glyphs when it is first used (all of them take 1.8 MB; a page uses a
- * handful of faces).
+ * handful of faces). The file stays open from font_init to font_free, so
+ * a face is a seek and a read, not a search of the folder (the
+ * guidelines' 6.5).
  */
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +13,7 @@
 #include "font.h"
 #include "plat.h"
 
-static char fpath[200];
+static int fh = -1;			/* EWEB.FNT, open while the fonts are */
 static uint16_t ncodes, nfaces;
 static uint16_t *codes;
 static ew_font *faces;
@@ -38,6 +40,9 @@ void font_free(void)
 	codes = NULL;
 	foff = fsize = NULL;
 	nfaces = ncodes = 0;
+	if (fh >= 0)
+		pf_close(fh);
+	fh = -1;
 }
 
 static int read_at(int h, long off, void *buf, long n)
@@ -51,9 +56,6 @@ int font_init(const char *path)
 	int h, i, ok = 0;
 
 	font_free();
-	if (strlen(path) >= sizeof(fpath))
-		return 0;
-	strcpy(fpath, path);
 	h = pf_open(path, PF_READ);
 	if (h < 0)
 		return 0;
@@ -92,7 +94,7 @@ int font_init(const char *path)
 	ok = 1;
 done:
 	free(dir);
-	pf_close(h);
+	fh = h;
 	if (!ok)
 		font_free();
 	return ok;
@@ -100,12 +102,11 @@ done:
 
 static int load(ew_font *f)
 {
-	int i = (int) (f - faces), h;
+	int i = (int) (f - faces);
 	if (f->data || f->failed)
 		return f->data != NULL;
 	f->data = malloc(fsize[i]);
-	h = pf_open(fpath, PF_READ);
-	if (!f->data || h < 0 || !read_at(h, foff[i], f->data, fsize[i]) || (long) fsize[i] < 4 + 10L * ncodes) {
+	if (!f->data || fh < 0 || !read_at(fh, foff[i], f->data, fsize[i]) || (long) fsize[i] < 4 + 10L * ncodes) {
 		free(f->data);
 		f->data = NULL;
 		f->failed = 1;
@@ -113,8 +114,6 @@ static int load(ew_font *f)
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
 	}
-	if (h >= 0)
-		pf_close(h);
 	return f->data != NULL;
 }
 

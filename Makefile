@@ -23,6 +23,7 @@
 #                    (TCP, TLS)
 #   make hatarinet   EWGET.TTP in Hatari through FAKESTNG, against them
 #   make hatarigui   EWEB.PRG in Hatari (tests/hatari/gui_test.py)
+#   make hatarifiles what they do on the disk, against the budgets (6.5)
 #   make urltest     the URL parser against the URL Standard's tests
 #                    (tests/url/fetch.sh first)
 #   make fuzz        the HTTP client and the URL parser under libFuzzer
@@ -405,32 +406,6 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 	done
 .PHONY: fuzz
 
-# FAKESTNG.PRG (tools/fakesting, from EMail): a stand-in for STinG that
-# carries the emulated Atari's connections over its serial port to
-# tests/hatari/serial_bridge.py. For Hatari only, never a real Atari.
-FAKE_CFLAGS := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
-               -fno-tree-loop-distribute-patterns -fno-store-merging -fno-asynchronous-unwind-tables -Wall \
-               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include
-build/fakesting/%.o: tools/fakesting/%.c
-	@mkdir -p $(@D)
-	$(M68KCC) $(FAKE_CFLAGS) -c $< -o $@
-build/fakesting/%.o: tools/fakesting/%.S
-	@mkdir -p $(@D)
-	$(M68KCC) -m68000 -c $< -o $@
-build/fakesting/tos.o: common/atari/tos.c
-	@mkdir -p $(@D)
-	$(M68KCC) $(FAKE_CFLAGS) -c $< -o $@
-build/fakesting/nf.o: common/atari/nf.S
-	@mkdir -p $(@D)
-	$(M68KCC) -m68000 -c $< -o $@
-build/fakesting/FAKESTNG.PRG: $(addprefix build/fakesting/,fstart.o fakesting.o tos.o nf.o fstr.o) tools/fakesting/link.ld
-	$(M68KCC) -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,tools/fakesting/link.ld \
-		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $(@:.PRG=.elf) $(filter %.o,$^)
-	python3 common/tools/elf2tos.py $(@:.PRG=.elf) $@
-
-# EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
-# build/), through FAKESTNG, against tests/net/server.py: TLS on the 68030,
-# RSA and the elliptic curves on the emulated DSP
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
@@ -438,9 +413,21 @@ hatarigui: binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
-hatarinet: binary/EWGET.TTP build/fakesting/FAKESTNG.PRG
+# EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
+# build/), through the family's FAKESTNG (common/tools/fakesting), against
+# tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
+# emulated DSP
+hatarinet: binary/EWGET.TTP
+	$(MAKE) -s -C common/tools/fakesting
 	python3 tests/hatari/ewget_test.py build/etos1024k.img
 .PHONY: hatarinet
+
+# what EWEB.PRG and EWGET.TTP do on the disk (the guidelines' 6.5), from
+# Hatari's GEMDOS trace: each case's opens and lookups against its budget
+# (tests/hatari/disk_files.py)
+hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
+	python3 tests/hatari/disk_files.py build/files
+.PHONY: hatarifiles
 
 # against servers on this computer: plain, TLS, redirects, refused certificates
 itest: build/asan/ewget build/asan/ewrender binary/EWEB.FNT

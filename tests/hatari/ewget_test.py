@@ -4,7 +4,9 @@
 """EWGET.TTP on an emulated Falcon: Hatari, EmuTOS, a 68030 at 32 MHz with
 TT-RAM and the DSP emulated, against tests/net/server.py on this computer.
 Hatari has no network card, so FAKESTNG.PRG in C:\\AUTO carries the
-Atari's TCP connections over the emulated serial port to serial_bridge.py.
+Atari's TCP connections over the emulated serial port to serial_bridge.py
+(the family's, common/tools/fakesting: what comes to the Atari is paced by
+what it has room for).
 Each run fetches over TLS and plain HTTP: the page must arrive whole, the
 handshake must be TLS 1.2 with the server's certificate checked against the
 test authority, and the second fetch must use the kept connection.
@@ -19,6 +21,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+FAKE = os.path.join(ROOT, "common", "tools", "fakesting")
 sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import server  # noqa: E402
 
@@ -56,7 +59,7 @@ def run_atari(tos, hd, cmdline, log, dropped=None):
         if os.path.exists(p):
             os.remove(p)
         os.mkfifo(p)
-    bridge = subprocess.Popen([sys.executable, os.path.join(HERE, "serial_bridge.py"), fifo_out, fifo_in],
+    bridge = subprocess.Popen([sys.executable, os.path.join(FAKE, "serial_bridge.py"), fifo_out, fifo_in],
                               stderr=open(log + ".bridge", "w"))
     cmd = ["hatari", "--machine", "falcon", "--tos", tos, "--harddrive", hd,
            "--auto", "C:\\EWGET.TTP", "--fast-boot", "yes", "--natfeats", "yes",
@@ -96,7 +99,8 @@ def main():
         sys.exit("ewget_test: the servers didn't start")
     shutil.copy(os.path.join(ROOT, "binary", "EWGET.TTP"), hd)
     shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)	# the test authority
-    shutil.copy(os.path.join(ROOT, "build", "fakesting", "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
+    subprocess.run(["make", "-s", "-C", FAKE], check=True)
+    shutil.copy(os.path.join(FAKE, "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
     fails = 0
     try:
         for name, cmdline in RUNS:

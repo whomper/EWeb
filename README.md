@@ -83,6 +83,7 @@ make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input s
 make itest      # ewget and the browser against servers on this computer, over TCP and TLS
 make hatarinet  # EWGET.TTP on an emulated Falcon, through FAKESTNG, against those servers
 make hatarigui  # EWEB.PRG on emulated Falcons and TTs: browsing over the network, every screen mode
+make hatarifiles  # what EWEB.PRG and EWGET.TTP do on the disk, against each case's budget
 make urltest    # the URL parser against the URL Standard's tests (tests/url/fetch.sh first)
 make fuzz       # the HTTP client and the URL parser under libFuzzer (clang)
 make h5test     # Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
@@ -123,10 +124,9 @@ tests/hebrew/         a Hebrew page in every Hebrew encoding
 tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py)
 tests/url/            the URL parser against the URL Standard's tests
 tests/fuzz/           fuzz targets for the HTTP client and the URL parser, their seeds
-tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (serial_bridge.py, from EMail)
+tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fakesting)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
-tools/fakesting/      FAKESTNG.PRG, STinG over Hatari's serial port (from EMail)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 atari/                the C library pieces NetSurf needs beyond common/, and plat_tos.c
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT)
@@ -178,6 +178,12 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   an address typed with an anchor, a secure page, Esc stopping a download;
   and a page drawn on the Falcon in 256 colours and true colour and on the
   TT in 16 colours and monochrome.
+- `make hatarifiles`: what `EWEB.PRG` and `EWGET.TTP` do on the disk, from
+  Hatari's GEMDOS trace (the guidelines' 6.5): the opens and lookups of
+  each case (start, a page with pictures, five pages, back and forward, the
+  page size changed, secure pages, five minutes idle, quit, a second start,
+  `EWGET.TTP` fetching 1 MB) against its budget. Pages, history and idle
+  touch nothing, and a quit with nothing changed writes nothing.
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
 - `make fuzz`: the HTTP client and the URL parser under libFuzzer.
