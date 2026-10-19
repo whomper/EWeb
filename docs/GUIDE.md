@@ -2,8 +2,8 @@
 
 EWeb is a web browser for the Atari Falcon (and the TT). It fetches pages
 itself over the internet, secure ones too, and shows them with its own
-fonts: text, links, headings, lists, tables and pictures, in colour or
-black and white. Forms come in a later version.
+fonts: text, links, headings, lists, tables, pictures and forms, in
+colour or black and white.
 
 ## What you need
 
@@ -83,6 +83,35 @@ on its own (a `.jpg` link) shows the picture.
 On a slow line, View > Show pictures turns them off: pages then show
 what their pictures are instead, and come quicker.
 
+## Forms
+
+Fields, boxes, lists and buttons work as in any browser. Click in a
+field to type into it (the pointer turns into a text cursor over one);
+**Tab** goes to the next field and **Shift-Tab** back, **Esc** leaves it.
+In a field:
+
+- **Left**, **Right**: a letter back or on; **ClrHome** the start,
+  **Shift-ClrHome** the end (of the line, in a box of several lines)
+- **Up**, **Down**: the line above or below, in a box of several lines
+- **Backspace**, **Delete**: the letter before or after
+- **^C**, **^X**, **^V**: copy, cut or paste the field's text (not a
+  password's)
+- **Return** sends the form, as its first button would (in a box of
+  several lines it starts a new line)
+
+Hebrew can be typed with the Atari's Hebrew keyboard, and shows right to
+left as it is typed.
+
+Click a box (or its words) to tick it, a round button to choose it from
+its group, a list to choose from it (a long list shows a screenful at a
+time, with Earlier and Later), and a button to send the form. On a box,
+a list or a button that has the keyboard (from Tab), **Space** does what
+a click does.
+
+A form goes in the page's own character set, as browsers send it; Back
+after sending shows it as you filled it in. EWeb can't send files yet
+(a file field sends none), and buttons that need JavaScript do nothing.
+
 ## The window
 
 At the top, from the left:
@@ -151,8 +180,9 @@ choose all of it.
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |
 | ^+ ^- ^0 | larger, smaller, as it was |
-| ^C | copy the page's text, or the address |
-| Tab | the keyboard to the address and back |
+| ^C | copy the page's text, the address, or a field's text |
+| Tab, Shift-Tab | the page's next field (or the one before), then the address |
+| Return | in a field: send its form |
 | Help | this guide |
 | ^Q, ^W | quit |
 
@@ -161,11 +191,11 @@ choose all of it.
 EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
-text, positioned boxes, tables with cells over several rows, Hebrew right
-to left. It doesn't yet
+text, positioned boxes, tables with cells over several rows, forms,
+Hebrew right to left. It doesn't yet
 show:
 
-- forms (their fields are drawn, but can't be typed into)
+- file fields (EWeb can't send files yet)
 - pictures in the background of a page or a box (CSS
   `background-image`), WebP and AVIF pictures (EWeb asks servers for
   JPEG, PNG and GIF, which most send then), and SVG drawings

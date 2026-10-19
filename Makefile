@@ -416,6 +416,13 @@ build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
 		$(asan_PU) $(asan_HUB) build/asan/pic.a build/host/libbearssl.a
 
+# the forms: what a form sends (tests/forms/cases.txt)
+FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
+build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a \
+		build/asan/pic.a
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(FT_SRC) $(asan_EWB) $(asan_EC) \
+		$(asan_PU) $(asan_HUB) build/asan/pic.a build/host/libbearssl.a
+
 # fuzzing (the AERA guidelines, 7.1): what servers send, and the
 # addresses in pages. Needs clang with libFuzzer; make fuzz runs each
 # target FUZZTIME seconds from tests/fuzz/seeds (tests/fuzz/mkseeds.py) and
@@ -567,7 +574,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender binary/EWEB.FNT
+		build/asan/ewrender build/asan/formtest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
@@ -578,6 +585,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
+	build/asan/formtest tests/forms/cases.txt > /dev/null
 
 # the Hebrew pages and the input stream as 68030 code too (qemu-user)
 hebtest68k: build/m68k/hebtest build/m68k/streamtest

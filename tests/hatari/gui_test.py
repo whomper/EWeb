@@ -8,7 +8,10 @@
   FAKESTNG, a link clicked, Undo back, an address typed after ^L with an
   anchor on the page, a secure page (TLS on the emulated 68030 and DSP),
   a slow download stopped with Esc, a page of pictures (fetched after the
-  page is shown, the window scrolled meanwhile), ^Q;
+  page is shown, the window scrolled meanwhile), forms (a field clicked
+  and typed into, Return sends it with GET; Back shows it as it was;
+  Tab from field to field, a box ticked with Space and its label clicked,
+  sent with POST by its button clicked), ^Q;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -39,7 +42,7 @@ HTTP, HTTPS = 18280, 18643
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C = 0x26, 0x10, 0x2E
-RETURN, UNDO, DOWN, SPACE = 0x1C, 0x61, 0x50, 0x39
+RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
 # takes letters and digits as they are
@@ -234,6 +237,32 @@ def link_point(url, area, top, text):
     return None
 
 
+def text_point(url, area, top, text):
+    """where on the screen some text of the page is"""
+    x0, y0, w, _ = area
+    p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
+                        "-w", str(w), "-d", url], capture_output=True, text=True, timeout=60)
+    for line in p.stdout.splitlines():
+        m = re.match(r'text (\d+),(\d+) .* "(.*)"$', line)
+        if m and text in m.group(3):
+            return x0 + int(m.group(1)) + 4, y0 + int(m.group(2)) - top - 4
+    return None
+
+
+def ctl_point(url, area, top, n, right=False):
+    """where on the screen the page's control n (in the order drawn) is:
+    its middle, or near its right end"""
+    x0, y0, w, _ = area
+    p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
+                        "-w", str(w), "-d", url], capture_output=True, text=True, timeout=60)
+    ctls = [re.match(r"control (\d+),(\d+) (\d+)x(\d+) ", line) for line in p.stdout.splitlines()
+            if line.startswith("control ")]
+    if n >= len(ctls):
+        return None
+    x, y, cw, ch = (int(ctls[n].group(i)) for i in range(1, 5))
+    return x0 + x + (cw - 4 if right else cw // 2), y0 + y + ch // 2 - top
+
+
 def browse():
     import server  # noqa: F401  (the pages)
     work = os.path.join(OUT, "server")
@@ -341,6 +370,48 @@ def browse():
         r.key(0x47)		# ClrHome: the top
         time.sleep(2)
         r.shot(7)
+        # forms: the search field clicked at its end, typed into, Return
+        # sends it with GET; Back shows it as it was left
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/form.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("forms: the page shown", ev is not None and ev.startswith("shown %sform.html " % site), str(r.events()))
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            pt = ctl_point(site + "form.html", area, int(m.group(5)), 0, right=True)
+            r.mouse.click(*pt)
+            r.type("st")
+            r.shot(8)
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            check("forms: typed into a field, sent with Return", ev is not None and
+                  ev.startswith("shown %secho?q=atarist&go=Find " % site) and
+                  ev.endswith("title GET||q=atarist&go=Find"), str(r.events()))
+            r.key(UNDO)
+            ev = r.wait(r"shown ", 120)
+            check("forms: Back to the form", ev is not None and ev.startswith("shown %sform.html " % site),
+                  str(r.events()))
+            # the login: its name typed, Tab to the password, Tab to the
+            # box, Space ticks it; its button clicked sends it with POST
+            r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 2))
+            r.type("erez")
+            r.key(TAB)
+            r.type("pw")
+            r.key(TAB)
+            r.key(SPACE)
+            # its label's words clicked twice: off, then on again
+            lp = text_point(site + "form.html", area, int(m.group(5)), "Keep me")
+            r.mouse.click(*lp)
+            r.mouse.click(*lp)
+            r.shot(9)
+            r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 7))
+            ev = r.wait(r"shown ", 120)
+            check("forms: a login sent with POST", ev is not None and ev.startswith("shown %secho " % site) and
+                  ev.endswith("title POST|application/x-www-form-urlencoded|user=erez&pw=pw&keep=on&lang=en"
+                              "&note=a&login=Log+in"), str(r.events()))
+            r.shot(10)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

@@ -540,8 +540,7 @@ releases.
   marker and `start`, `reversed` and `value`; `::before` and `::after` text; tables with shared column
   widths, `colspan`, `border-spacing`, shrinking to fit, and flex rows side by side; Hebrew words
   reordered right to left within each line (a word-level form of the bidirectional algorithm), with
-  right-to-left paragraphs aligned right. Pictures (below, 19 Oct 2026); form controls are drawn as
-  boxes. Since 19 Oct 2026 (your order: after pictures, the layout's gaps):
+  right-to-left paragraphs aligned right. Pictures and forms (below, 19 Oct 2026). Since 19 Oct 2026 (your order: after pictures, the layout's gaps):
   - **floats**, left and right, in each block formatting context (the page, a cell, a float, a box
     with `overflow` other than visible, absolute boxes): each at its width (asked for, or its widest
     within the room), as far over as it fits beside those already there, else below them; lines
@@ -559,7 +558,7 @@ releases.
     it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
     default, top, bottom) in cells, and columns too wide for the room keep their longest word,
     sharing what is left by how much more each would take.
-  Not yet: forms, `background-image`, grid. `tests/layout/floats.html` keeps them all; the page set
+  Not yet: `background-image`, grid. `tests/layout/floats.html` keeps them all; the page set
   laid out with AddressSanitizer and UBSan, no fault.
 - **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
@@ -685,7 +684,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   the 68030's own code); true colour has none.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
   those. Not yet: CSS `background-image`, `srcset` and `<picture>`'s sources (the `<img>`'s own
-  `src` is taken), SVG, animation, `<input type=image>`.
+  `src` is taken), SVG, animation. `<input type=image>` shows its picture (forms, below).
 - **Off on a slow line:** View > Show pictures (`PICTURES=` in `EWEB.INF`): pages show their
   pictures' alt text instead.
 - **Checked:** `common/tests/pic` (PngSuite, libjpeg-turbo's and libnsgif's test pictures and more
@@ -696,6 +695,55 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   256 colours, true colour, TT medium and TT monochrome). The rig found a fault in the family's
   FAKESTNG: a connection's number used again at once (a page stopped with Esc, then the next) got
   the last of the old connection's data; fixed in AERA-Atari.
+
+## Forms (19 Oct 2026)
+
+Your order (19 Oct 2026): after pictures and the layout's gaps, forms, then cookies. NetSurf's own
+forms are part of its core (GPL-2.0-only, and laid out by its layout), so this is fresh code, after
+the HTML Standard:
+
+- **State** (`src/doc/form.c`): each control's, kept with the document, so that laying the page
+  out again keeps what was typed and Back shows a form as it was left (a kept page; one fetched
+  again starts afresh, as browsers do without a script). A control belongs to its `form`
+  attribute's form, else the form the parser had open (Hubbub tells it, for forms left open across
+  a table's cells), else the form around it. Values as the page gives them (`value`, a textarea's
+  text, `checked`, `selected`; a list with nothing chosen shows its first option that can be);
+  `disabled` (and a disabled fieldset's, but its first legend's), `readonly`, `maxlength`; reset.
+- **Drawing:** the layout gives each control its size (a field from `size`, a textarea from `cols`
+  and `rows`, a list as wide as its widest option, so that choosing moves nothing) and a display list
+  item of its own (`DL_CTL`) that the canvas draws from the state: typing draws the field again,
+  not the page. A field scrolls sideways to show the caret, a textarea wraps and scrolls its lines.
+  Their text runs right to left where it is Hebrew, by a short form of the bidirectional algorithm
+  (the first strong letter gives the direction; numbers, with their points, commas and signs, stay
+  left to right; brackets mirrored), and the caret goes where the letter is on the screen; this is
+  the fuller algorithm that page text still lacks (Hebrew, above), and can move to `common/`.
+  `<input type=image>` is its picture; a `<label>`'s words stand for its control.
+- **Sending** (the standard's form submission): the entry list (the button that sent it, a picture
+  button's `name.x` and `name.y`, `_charset_`, `dirname`, unticked boxes and disabled controls
+  left out), then `application/x-www-form-urlencoded`, `multipart/form-data` (a file field sends no
+  file: EWeb can't upload yet) or `text/plain`, line breaks as CR LF; `formaction`, `formmethod`,
+  `formenctype`; a dialog's form sends nothing. The text goes in the page's character set (a letter
+  it lacks as `&#N;`, as browsers do; `accept-charset="utf-8"` honoured), so Windows-1255 sites get
+  their Hebrew as they expect. GET puts it in the address, POST through the HTTP client (a 301, 302
+  or 303 answer fetched with GET; a POST's answer isn't cached; Back to it, once it isn't kept,
+  fetches its address with GET rather than sending again). Return in a field sends the form by its
+  first submit button, or without one when the field is the form's only one (implicit submission).
+- **EWEB.PRG** (`ui/win.c`): a click puts the caret in a field (the pointer a text cursor over
+  one); Tab and Shift-Tab go from control to control (then to the address); Left, Right, ClrHome,
+  Up and Down in a textarea, Backspace, Delete; ^C, ^X, ^V; the Atari's keys (Hebrew too) typed as
+  UTF-8. Boxes and round buttons by click or Space; a list's options in the family's pop-up, a
+  screenful at a time (Earlier, Later).
+- **Checked:** `tests/forms/cases.txt` (33 cases worked out from the standard: what each kind of
+  control sends, the encodings, the charsets, implicit submission, typing, reset; `make test`, with
+  AddressSanitizer and UBSan); `make itest` (`/site/form.html` over HTTP: GET, POST urlencoded and
+  multipart, a POST answered with 303, Back to the filled form); `make hatarigui` (a field typed
+  into and sent with Return on the emulated Falcon, Back, Tab, Space and a label's words on a box,
+  a login sent with POST); `tests/layout/forms.html`; the page set (1,580 controls in its 258
+  pages) laid out and drawn with AddressSanitizer and UBSan, no fault.
+- **Cookies,** next, are kept on the disk (your decision, 19 Oct 2026): in memory while EWeb runs,
+  and in one file next to `EWEB.PRG`, read once at the start and written once (safely, a new file
+  then renamed) when a lasting cookie changed, never once for each answer (the guidelines' 6.5);
+  cookies that last only while the browser runs never go to the disk.
 
 ## The design
 
@@ -786,7 +834,8 @@ lives in the other parts:
   layout shows it as it is, without reordering. EWeb knows which kind it has from the page's charset.
 - **Fonts:** EWeb's own fonts have the Hebrew letters (DejaVu's), so pages don't go through the Atari
   character set. Vowel points (niqqud) take no room and aren't drawn yet.
-- **Typing:** Hebrew in forms comes with the keyboard handling.
+- **Typing:** Hebrew is typed into forms with the Atari's Hebrew keyboard, and fields show it right
+  to left (forms, above).
 
 ### 2. A little JavaScript on the Falcon
 
@@ -971,7 +1020,8 @@ out of both (their paths lead nowhere on the Atari).
    window (above): `EWEB.PRG`, the first text browser.
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
-   alignment in cells (your order, above). Next: forms and cookies.
+   alignment in cells (your order, above); forms (above). Next: cookies, kept on the disk (your
+   decision).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 

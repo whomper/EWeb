@@ -3,8 +3,8 @@
 A web browser for the Atari Falcon, written in C for GEM, made for a Falcon
 with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and fine on
 any Falcon or TT. It shows the document web: pages laid out with their
-stylesheets, links, lists, tables and pictures, in EWeb's own fonts.
-Forms come next.
+stylesheets, links, lists, tables, pictures and forms, in EWeb's own fonts.
+Cookies come next.
 
 ![EWeb on a Falcon](docs/screenshot.png)
 
@@ -24,6 +24,10 @@ Forms come next.
   decoded straight at the size shown, dithered to the screen's colours in
   16 and 256 colours and monochrome; off with one menu item on a slow line.
   The decoders are the family's (AERA-Atari's `common/src/pic.c`).
+- **Forms**: fields, boxes, lists and buttons, typed into (Hebrew too,
+  right to left), Tab from one to the next and Return to send; sent with
+  GET or POST, urlencoded, multipart or plain text, in the page's own
+  character set, as the HTML Standard has browsers send them.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
@@ -116,7 +120,7 @@ docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
 ui/                   EWEB.PRG's GEM side: the window, the toolbar, the page on the
                       screen in every mode, the menus, the About box
 src/browse/           browsing: addresses, loading, history, EWeb's own pages, the pages' pictures (img.c)
-src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hints
+src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hints, forms (form.c)
 src/layout/           the layout: boxes, lines, tables, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
@@ -136,6 +140,7 @@ tests/fuzz/           fuzz targets for the HTTP client and the URL parser, their
 tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fakesting)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
+tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 atari/                the C library pieces NetSurf needs beyond common/, and plat_tos.c
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT)
@@ -176,7 +181,10 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   (twice: the second time `ROOTS.DAT` knows `CACERT.PEM`'s date).
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
-- `make test` also lays out three pages (`tests/layout`) and compares their
+- `make test` also sends forms (`tests/forms/cases.txt`, worked out from the
+  HTML Standard: the entry list; urlencoded, multipart and plain text; the
+  page's character set; Return in a field; typing, reset), and lays out five
+  pages (`tests/layout`, forms among them) and compares their
   display lists with the ones kept, and the Hebrew test page in each of its
   encodings, with AddressSanitizer and UBSan; `make itest` loads a site from
   `tests/net/server.py` in the browser over HTTP and HTTPS (its stylesheet,
@@ -185,13 +193,17 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 - `make hatarigui`: `EWEB.PRG` on an emulated Falcon through FAKESTNG, the
   mouse moved by xdotool: a page and its stylesheet, a link clicked, Undo,
   an address typed with an anchor, a secure page, Esc stopping a download,
-  a page of pictures (scrolled while they come); and a page and a page of
+  a page of pictures (scrolled while they come), forms (a field typed into
+  and sent with Return, Back to it, Tab, a box ticked with Space and by its
+  label, a login sent with POST); and a page and a page of
   pictures drawn on the Falcon in 256 colours and true colour and on the
   TT in 16 colours and monochrome.
 - `make itest` also loads a page of pictures (`tests/net/server.py`'s
   `/site/pics.html`): each decoded at the size shown, the page laid out
   again for the one whose size it didn't give, the missing one failed; and
-  a picture on its own. The decoders' own tests (PngSuite, libjpeg-turbo's
+  a picture on its own; and forms (`/site/form.html`) sent with GET and
+  POST, urlencoded and multipart, a POST answered with 303, and Back to the
+  form as it was filled. The decoders' own tests (PngSuite, libjpeg-turbo's
   and libnsgif's pictures against Pillow, the 68030 build under QEMU) are
   AERA-Atari's `common/tests/pic`.
 - `make hatarifiles`: what `EWEB.PRG` and `EWGET.TTP` do on the disk, from

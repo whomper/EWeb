@@ -16,12 +16,14 @@
 #include <parserutils/charset/mibenum.h>
 
 #include "doc.h"
+#include "form.h"
 
 static const char *const tag_names[T_NTAGS] = {
 	"", "html", "head", "body", "title", "base", "link", "meta", "style", "script",
 	"noscript", "a", "img", "br", "hr", "li", "ul", "ol", "table", "tr", "td", "th",
 	"input", "button", "select", "option", "textarea", "pre", "iframe", "svg", "canvas",
-	"video", "audio", "object", "embed", "template", "label", "form", "wbr"
+	"video", "audio", "object", "embed", "template", "label", "form", "wbr",
+	"fieldset", "legend", "optgroup"
 };
 
 typedef struct {
@@ -393,11 +395,12 @@ static hubbub_error t_has_children(void *ctx, void *v, bool *result)
 	return HUBBUB_OK;
 }
 
+/* a control and the form the parser had open (a form left open across a
+   table's cells is not its ancestor) */
 static hubbub_error t_form_associate(void *ctx, void *form, void *v)
 {
 	(void) ctx;
-	(void) form;
-	(void) v;
+	((dnode *) v)->owner = form;
 	return HUBBUB_OK;
 }
 
@@ -886,6 +889,7 @@ doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media
 			c->e.index = c->e.nsib = 1;
 			break;
 		}
+	form_init(d);		/* out of memory: the controls it made */
 	return d;
 }
 
@@ -893,6 +897,7 @@ void doc_free(doc *d)
 {
 	if (d == NULL)
 		return;
+	form_free(d);
 	if (d->root != NULL)
 		free_node(d->root);
 	if (d->css != NULL)

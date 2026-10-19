@@ -93,6 +93,11 @@ void br_free(browser *b);
 int br_go(browser *b, const char *typed);
 /* a link on the page shown (page.links index) */
 int br_follow(browser *b, int link);
+/* a form on the page shown sent (form.h): by the button submitter, or
+   (NULL) from the field from by Return; (x, y) where a picture button
+   was clicked. BR_STOPPED too when nothing is sent */
+struct fctl;
+int br_submit(browser *b, struct fctl *from, struct fctl *submitter, int32_t x, int32_t y);
 int br_back(browser *b);
 int br_forward(browser *b);
 int br_reload(browser *b);

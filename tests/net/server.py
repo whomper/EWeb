@@ -26,6 +26,11 @@ Pages:
                  and no size (the page is laid out again when it comes), a
                  GIF, a progressive JPEG with only its width, a big PNG held
                  to the width, and one that isn't there (made with Pillow)
+  /site/form.html  forms: a search sent with GET, a login sent with POST,
+                 a multipart one with a file field, one whose POST is
+                 answered with 303; /site/echo answers each with a page
+                 whose title is what came: "METHOD|Content-Type|body"
+                 (CR LF as ~; multipart as its parts, name=value;...)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -51,6 +56,40 @@ SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
+FORM_PAGE = ("<!DOCTYPE html><html><head><meta charset=utf-8><title>Forms</title></head><body>"
+             "<form action=/site/echo><p><input name=q value=atari> <input type=submit name=go value=Find></p></form>"
+             "<form action=/site/echo method=post><p><input name=user> <input type=password name=pw> "
+             "<label><input type=checkbox name=keep> Keep me</label> <select name=lang><option value=en>English"
+             "<option value=he>עברית</select> <textarea name=note>a</textarea> "
+             "<input type=submit name=login value='Log in'></p></form>"
+             "<form action=/site/echo method=post enctype=multipart/form-data><p><input name=title value=x> "
+             "<input type=file name=f> <input type=submit name=up value=Send></p></form>"
+             "<form action=/site/after method=post><p><input name=n value=1> <input type=submit name=s value=Go>"
+             "</p></form></body></html>\n").encode("utf-8")
+
+
+def echo_page(method, ctype, body):
+    """a page whose title says what a form sent"""
+    if ctype.startswith("multipart/form-data"):
+        b = ctype.split("boundary=", 1)[1].encode()
+        parts = []
+        for part in body.split(b"--" + b)[1:]:
+            if part.startswith(b"--"):
+                break
+            head, _, value = part[2:].partition(b"\r\n\r\n")
+            disp = head.decode().split("\r\n")[0]
+            name = disp.split('name="', 1)[1].split('"', 1)[0]
+            file = "(file %s)" % disp.split("filename=", 1)[1] if "filename=" in disp else ""
+            parts.append("%s=%s%s" % (name, value[:-2].decode(), file))
+        text = ";".join(parts)
+        ctype = "multipart/form-data"
+    else:
+        text = body.decode("latin-1").replace("\r\n", "~")
+    title = "%s|%s|%s" % (method, ctype, text)
+    return ("<!DOCTYPE html><html><head><title>%s</title></head><body><p>Sent.</p></body></html>\n"
+            % title.replace("&", "&amp;").replace("<", "&lt;")).encode("utf-8")
+
+
 BIG = bytes(rnd.randrange(256) for _ in range(2 << 20))
 PICS_PAGE = (b"<!DOCTYPE html><html><head><title>Pictures</title><style>body{background:#fff;font-family:sans-serif}"
              b".wide{max-width:100%}</style></head><body><h1>Pictures</h1>"
@@ -181,6 +220,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, SITE_TWO)
         elif p == "/site/pics.html":
             self.send(200, PICS_PAGE)
+        elif p == "/site/form.html":
+            self.send(200, FORM_PAGE)
+        elif p.startswith("/site/echo"):
+            self.send(200, echo_page("GET", "", p.partition("?")[2].encode()))
         elif p.startswith("/site/") and p[6:] in PICS:
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
         elif p == "/redirect":
@@ -209,6 +252,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b"0\r\n\r\n")
         else:
             self.send(404, b"not here\n", "text/plain")
+
+
+def _post(self):
+    n = int(self.headers.get("Content-Length", "0"))
+    body = self.rfile.read(n) if n else b""
+    if self.path == "/site/echo":
+        self.send(200, echo_page("POST", self.headers.get("Content-Type", ""), body))
+    elif self.path == "/site/after":
+        # Post/Redirect/Get: the answer is somewhere else, fetched with GET
+        self.send(303, b"", extra=[("Location", "/site/echo?after=1")])
+    else:
+        self.send(404, b"not here\n", "text/plain")
+
+
+Handler.do_POST = _post
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):

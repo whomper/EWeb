@@ -119,6 +119,10 @@ enum {
 void command(int cmd);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
+struct fctl;
+/* a form sent (form.h): by the button by, or from the field from with
+   Return; (x, y) on a picture button */
+void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y);
 void menu_update(void);
 void status(const char *s);
 int  settings_save(void);

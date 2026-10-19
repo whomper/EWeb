@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Forms</title><style>
+body { font-family: sans-serif; background: #fff; margin: 8px }
+fieldset { border: 1px solid #888; margin: 8px 0 }
+</style></head><body>
+<form action="/find" method="get">
+<p>Search: <input name="q" value="atari falcon" size="30"> <input type="submit" value="Find"></p>
+<p><input name="empty" placeholder="Your name"> <input type="password" name="pw" value="secret"></p>
+<p><label><input type="checkbox" name="c1" checked> Remember me</label>
+<label><input type="checkbox" name="c2"> Not this</label></p>
+<p><input type="radio" name="r" value="a"> A <input type="radio" name="r" value="b" checked> B</p>
+<p><select name="s"><option>One</option><option selected>Two two two</option><optgroup label="More"><option value="3">Three, the longest of them</option></optgroup></select>
+<select name="m" multiple><option selected>x</option><option>y</option><option selected>z</option></select></p>
+<p><textarea name="t" rows="4" cols="30">First line
+second line that is rather long and should wrap somewhere along the way
+third</textarea></p>
+<p><button type="submit" name="go" value="1">Send <b>it</b></button> <input type="reset"> <input type="button" value="Nothing">
+<input type="file" name="f"> <input disabled value="disabled field"> <input type="image" alt="Picture button"></p>
+<fieldset disabled><legend>Off</legend><input name="off" value="in a disabled fieldset"></fieldset>
+<p dir="rtl"><input name="he" value="&#1513;&#1500;&#1493;&#1501;"> <input type="submit" value="&#1513;&#1500;&#1495;"></p>
+<table border="1"><tr><td>In a cell: <input size="8" value="cell"></td><td><select><option>a</option></select></td></tr></table>
+</form></body></html>

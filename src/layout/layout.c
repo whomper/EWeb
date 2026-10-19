@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "layout.h"
+#include "form.h"
 
 #define AUTO INT32_MIN
 #define MAXCOLS 64			/* a table's columns that line up; more go as they come */
@@ -79,7 +80,8 @@ static char *astrdup(struct arena *a, const char *s, size_t n)
 /* ---------------------------------------------------------------- boxes */
 
 enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM };
-enum { AT_LABEL, AT_FIELD, AT_BUTTON, AT_IMAGE };	/* an atom: alt text; a text field; a button; a picture */
+/* an atom: alt text; a picture; a form control (drawn from its state, form.h) */
+enum { AT_LABEL, AT_IMAGE, AT_CONTROL };
 
 typedef struct box box;
 struct box {
@@ -94,6 +96,7 @@ struct box {
 	uint8_t table;			/* a table: shrinks to fit, its rows share column widths */
 	uint8_t repl;			/* a picture as a block (floated, display: block): its one child the atom */
 	uint16_t link;			/* 1 + link index, or 0 */
+	uint16_t ctl;			/* 1 + index into page.ctls, or 0 */
 	dnode *n;			/* the element, or NULL */
 	const ec_style *st;		/* its style (an anonymous box or text: the parent's) */
 	box *parent, *first, *last, *next;
@@ -117,6 +120,7 @@ typedef struct {
 	uint8_t hidden;			/* visibility: hidden */
 	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left */
 	uint16_t link;
+	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
 	uint32_t color, bg;		/* 0xAARRGGBB; bg 0: none */
 	const char *text;
@@ -364,6 +368,7 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 	d->rgb = it->color & 0xffffff;
 	d->flags = it->flags;
 	d->link = it->link;
+	d->ctl = it->ctl;
 	d->font = it->font;
 	d->text = s;
 	d->len = n;
@@ -386,6 +391,23 @@ static uint16_t add_link(L *l, const char *href)
 	if (p->links[p->nlinks] == NULL)
 		return 0;
 	return (uint16_t) (++p->nlinks);
+}
+
+static uint16_t add_ctl(L *l, fctl *c)
+{
+	page *p = l->p;
+	if (p->nctls == p->ctlcap) {
+		int cap = p->ctlcap ? p->ctlcap * 2 : 16;
+		fctl **n = realloc(p->ctls, cap * sizeof *n);
+		if (n == NULL)
+			return 0;
+		p->ctls = n;
+		p->ctlcap = cap;
+	}
+	if (p->nctls >= 65534)
+		return 0;
+	p->ctls[p->nctls] = c;
+	return (uint16_t) (++p->nctls);
 }
 
 /* ---------------------------------------------------------------- building */
@@ -427,44 +449,6 @@ static int block_level(int d)
 	}
 }
 
-/* the text of an element's descendants, white space collapsed */
-static char *text_of(L *l, dnode *n, size_t max)
-{
-	char *buf = amalloc(l->a, max + 1);
-	size_t o = 0;
-	dnode *c = n->first;
-	int space = 0;
-	if (buf == NULL)
-		return NULL;
-	while (c != NULL && c != n) {
-		if (c->type == DN_TEXT) {
-			uint32_t i;
-			for (i = 0; i < c->len && o < max; i++) {
-				char ch = c->text[i];
-				if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f') {
-					space = o > 0;
-					continue;
-				}
-				if (space && o < max)
-					buf[o++] = ' ';
-				space = 0;
-				if (o < max)
-					buf[o++] = ch;
-			}
-		}
-		if (c->first != NULL && c->type == DN_ELEMENT && c->tag != T_SCRIPT && c->tag != T_STYLE) {
-			c = c->first;
-			continue;
-		}
-		while (c != n && c->next == NULL)
-			c = c->parent;
-		if (c != n)
-			c = c->next;
-	}
-	buf[o] = 0;
-	return buf;
-}
-
 static void add_text_box(L *l, box *parent, const ec_style *st, const char *s, uint32_t n)
 {
 	box *t = new_box(l, BX_TEXT, NULL, st, parent);
@@ -491,100 +475,88 @@ static int32_t char_w(L *l, const ec_style *st)
 	return font_advance(font_of(l, st), '0');
 }
 
-/* form controls, drawn as boxes with their text (they don't work yet) */
+/* a form control: an atom of its size, drawn from its state (form.h),
+   so that typing in it draws it again without laying the page out */
 static void control(L *l, box *parent, dnode *n, const ec_style *st)
 {
-	const char *type = dn_attr(n, "type"), *v;
-	char buf[80];
-	int size;
+	fctl *c = n->ctl;
+	ew_font *f = font_of(l, st);
+	char lab[256];
+	int32_t w, h = AUTO, line = f->ascent + f->descent + 4;
+	box *b;
 
-	if (n->tag == T_INPUT) {
-		if (type == NULL)
-			type = "text";
-		if (strcmp(type, "hidden") == 0)
-			return;
-		if (strcmp(type, "checkbox") == 0) {
-			atom(l, parent, n, st, AT_BUTTON, dn_attr(n, "checked") ? "\xe2\x9c\x93" : " ", AUTO, AUTO);
-			return;
-		}
-		if (strcmp(type, "radio") == 0) {
-			atom(l, parent, n, st, AT_LABEL, dn_attr(n, "checked") ? "\xe2\x97\x8f" : "\xe2\x97\x8b",
-			     AUTO, AUTO);
-			return;
-		}
-		if (strcmp(type, "submit") == 0 || strcmp(type, "button") == 0 || strcmp(type, "reset") == 0 ||
-		    strcmp(type, "image") == 0) {
-			v = dn_attr(n, "value");
-			if (v == NULL)
-				v = dn_attr(n, "alt");
-			if (v == NULL)
-				v = strcmp(type, "reset") == 0 ? "Reset" : "Submit";
-			atom(l, parent, n, st, AT_BUTTON, v, AUTO, AUTO);
-			return;
-		}
-		v = dn_attr(n, "value");
-		if (v != NULL && strcmp(type, "password") == 0) {
-			size_t i, k = strlen(v);
-			if (k > sizeof buf - 1)
-				k = sizeof buf - 1;
-			for (i = 0; i < k; i++)
-				buf[i] = '*';
-			buf[k] = 0;
-			v = astrdup(l->a, buf, k);
-		}
-		if (v == NULL || *v == 0)
-			v = dn_attr(n, "placeholder");
-		size = dn_attr(n, "size") ? atoi(dn_attr(n, "size")) : 20;
+	if (c == NULL || c->kind == FC_HIDDEN)
+		return;
+	switch (c->kind) {
+	case FC_TEXT:
+	case FC_PASSWORD: {
+		int size = dn_attr(n, "size") ? atoi(dn_attr(n, "size")) : 20;
 		if (size < 1 || size > 200)
 			size = 20;
-		atom(l, parent, n, st, AT_FIELD, v, size * char_w(l, st) + 6, AUTO);
-		return;
+		w = size * char_w(l, st) + 6;
+		break;
 	}
-	if (n->tag == T_TEXTAREA) {
+	case FC_TEXTAREA: {
 		int cols = dn_attr(n, "cols") ? atoi(dn_attr(n, "cols")) : 20;
 		int rows = dn_attr(n, "rows") ? atoi(dn_attr(n, "rows")) : 2;
 		if (cols < 1 || cols > 200)
 			cols = 20;
 		if (rows < 1 || rows > 50)
 			rows = 2;
-		atom(l, parent, n, st, AT_FIELD, text_of(l, n, 120), cols * char_w(l, st) + 6,
-		     rows * line_height(l, st, font_of(l, st)) + 6);
-		return;
+		w = cols * char_w(l, st) + 6;
+		h = rows * line_height(l, st, f) + 6;
+		break;
 	}
-	if (n->tag == T_SELECT) {
-		dnode *o, *pick = NULL;
-		char *t;
-		for (o = n->first; o != NULL; o = o->next) {
-			dnode *k = o;
-			if (o->type == DN_ELEMENT && o->first != NULL && o->tag != T_OPTION)
-				k = o->first;	/* an optgroup's first */
-			for (; k != NULL; k = k->next)
-				if (k->type == DN_ELEMENT && k->tag == T_OPTION) {
-					if (pick == NULL || dn_attr(k, "selected"))
-						pick = k;
-					if (dn_attr(k, "selected"))
-						break;
-				}
-			if (pick != NULL && dn_attr(pick, "selected"))
-				break;
-			if (k != o)
-				continue;
+	case FC_CHECKBOX:
+	case FC_RADIO:
+		w = line - 2;
+		break;
+	case FC_SELECT: {
+		/* as wide as its widest option, so that choosing one moves nothing */
+		int i;
+		w = 0;
+		for (i = 0; i < c->nopt; i++) {
+			int32_t ow;
+			form_option_text(c->opt[i], lab, sizeof lab);
+			ow = (int32_t) font_width(f, lab, (uint32_t) strlen(lab));
+			if (ow > w)
+				w = ow;
 		}
-		t = pick ? text_of(l, pick, 60) : NULL;
-		if (t != NULL) {
-			size_t k = strlen(t);
-			char *u = amalloc(l->a, k + 5);
-			if (u != NULL) {
-				memcpy(u, t, k);
-				memcpy(u + k, " \xe2\x96\xbc", 5);	/* ▼ */
-				t = u;
+		w += (int32_t) font_width(f, " \xe2\x96\xbc", 4) + 8;
+		break;
+	}
+	case FC_IMAGE: {
+		const char *src = dn_attr(n, "src");
+		int32_t iw = 0, ih = 0;
+		void *im = NULL;
+		if (src != NULL && *src && l->p->opt.image != NULL)
+			im = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
+		if (im != NULL) {
+			form_label(c, lab, sizeof lab);
+			atom(l, parent, n, st, AT_IMAGE, astrdup(l->a, lab, strlen(lab)), AUTO, AUTO);
+			if (parent->last != NULL && parent->last->n == n) {
+				parent->last->img = im;
+				parent->last->iw = iw;
+				parent->last->ih = ih;
+				parent->last->ctl = add_ctl(l, c);
 			}
+			return;
 		}
-		atom(l, parent, n, st, AT_BUTTON, t ? t : "\xe2\x96\xbc", AUTO, AUTO);
-		return;
+		/* no picture: a button with its alt text */
+		form_label(c, lab, sizeof lab);
+		w = (int32_t) font_width(f, lab, (uint32_t) strlen(lab)) + 12;
+		break;
 	}
-	if (n->tag == T_BUTTON)
-		atom(l, parent, n, st, AT_BUTTON, text_of(l, n, 80), AUTO, AUTO);
+	default:
+		form_label(c, lab, sizeof lab);
+		w = (int32_t) font_width(f, lab, (uint32_t) strlen(lab)) + 12;
+		if (w < 16)
+			w = 16;
+	}
+	atom(l, parent, n, st, AT_CONTROL, "", w, h);
+	b = parent->last;
+	if (b != NULL && b->n == n)
+		b->ctl = add_ctl(l, c);
 }
 
 static void build(L *l, box *parent, dnode *n);
@@ -916,6 +888,7 @@ typedef struct {
 	uint32_t color, bg;
 	uint8_t deco, hidden;
 	uint16_t link;
+	uint16_t ctl;			/* in a <label>: its control (1 + index into page.ctls) */
 	int32_t asc, desc, shift;
 } RUNSTATE;
 
@@ -930,6 +903,7 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *pare
 	r->font = font_of(l, st);
 	r->color = color(st, EP_COLOR);
 	r->link = link;
+	r->ctl = parent ? parent->ctl : 0;
 	r->deco = parent ? parent->deco : 0;
 	r->bg = parent ? parent->bg : 0;
 	r->shift = parent ? parent->shift : 0;
@@ -970,6 +944,7 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->bg = r->bg;
 	it->flags = r->deco;
 	it->link = r->link;
+	it->ctl = r->ctl;
 	it->hidden = r->hidden;
 	it->asc = r->asc - r->shift;
 	it->desc = r->desc + r->shift;
@@ -1129,8 +1104,42 @@ static int32_t atom_w(L *l, box *b, ew_font *f)
 		w = AUTO;		/* its alt text, until it comes */
 	}
 	if (w == AUTO)
-		w = (int32_t) font_width(f, b->text, b->len) + (b->atom == AT_LABEL || b->atom == AT_IMAGE ? 0 : 8);
+		w = (int32_t) font_width(f, b->text, b->len);
 	return w;
+}
+
+/* the control a <label> is for (its for attribute's, else the first in
+   it): 1 + its index into page.ctls, 0 for none */
+static uint16_t label_for(L *l, dnode *n)
+{
+	const char *id = dn_attr(n, "for");
+	fctl *c = NULL;
+	int k;
+	if (id != NULL) {
+		for (k = 0; k < l->p->nctls; k++) {
+			const char *v = dn_attr(l->p->ctls[k]->n, "id");
+			if (v != NULL && strcmp(v, id) == 0)
+				return (uint16_t) (k + 1);
+		}
+		return 0;
+	} else {
+		dnode *d;
+		for (d = n->first; d != NULL && c == NULL;) {
+			if (d->type == DN_ELEMENT && d->ctl != NULL)
+				c = d->ctl;
+			else if (d->first != NULL)
+				d = d->first;
+			else {
+				while (d != n && d->next == NULL)
+					d = d->parent;
+				d = d != n ? d->next : NULL;
+			}
+		}
+	}
+	for (k = 0; c != NULL && k < l->p->nctls; k++)
+		if (l->p->ctls[k] == c)
+			return (uint16_t) (k + 1);
+	return 0;
 }
 
 static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
@@ -1187,6 +1196,8 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		case BX_INLINE: {
 			int32_t gl, gr;
 			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+			if (c->n != NULL && c->n->tag == T_LABEL && c->n->ns == DN_NS_HTML)
+				r.ctl = label_for(l, c->n);
 			gl = len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_PADDING_LEFT, AUTO) +
 			     (kw(c->st, EP_BORDER_LEFT_STYLE) > KW_HIDDEN ? len0(l, c->st, EP_BORDER_LEFT_WIDTH, AUTO) : 0);
 			gr = len0(l, c->st, EP_MARGIN_RIGHT, AUTO) + len0(l, c->st, EP_PADDING_RIGHT, AUTO) +
@@ -1352,11 +1363,46 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 	d->h = h;
 	d->link = link;
 	d->img = b->img;
+	d->ctl = b->ctl;
 	d->flags = (uint8_t) flags;
 	d->text = b->text;	/* its alt text, while it comes */
 	d->len = b->len;
 	d->font = f;
 	d->rgb = 0x606060;
+}
+
+/* a form control: its frame, then its content as an item drawn from
+   its state */
+static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_t base)
+{
+	box *b = it->atom;
+	fctl *c = l->p->ctls[b->ctl - 1];
+	dl_item *d;
+	int framed = c->kind != FC_RADIO, button = !form_typed(c) && c->kind != FC_CHECKBOX;
+	int32_t in = framed ? 1 : 0;
+	if (framed) {
+		uint32_t edge = 0xff808080;
+		fill(l, x, y, it->w, h, c->disabled ? 0xfff0f0f0 : button ? 0xffe0e0e0 : 0xffffffff);
+		fill(l, x, y, it->w, 1, edge);
+		fill(l, x, y + h - 1, it->w, 1, edge);
+		fill(l, x, y, 1, h, edge);
+		fill(l, x + it->w - 1, y, 1, h, edge);
+	}
+	d = dl_add(l);
+	if (d == NULL)
+		return;
+	d->type = DL_CTL;
+	d->x = x + in;
+	d->y = y + in;
+	d->w = it->w - 2 * in;
+	d->h = h - 2 * in;
+	d->base = (int16_t) (base - d->y);
+	d->rgb = c->disabled ? 0x808080 : it->color & 0xffffff;
+	d->font = it->font;
+	d->ctl = b->ctl;
+	d->link = it->link;
+	if (c->kind == FC_TEXTAREA)
+		d->len = (uint32_t) line_height(l, b->st, it->font);
 }
 
 static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
@@ -1373,23 +1419,8 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 		if (sized)
 			return;
 	}
-	if (b->atom != AT_LABEL && b->atom != AT_IMAGE) {
-		uint32_t edge = 0xff808080;
-		fill(l, x, y, it->w, h, b->atom == AT_BUTTON ? 0xffe0e0e0 : 0xffffffff);
-		fill(l, x, y, it->w, 1, edge);
-		fill(l, x, y + h - 1, it->w, 1, edge);
-		fill(l, x, y, 1, h, edge);
-		fill(l, x + it->w - 1, y, 1, h, edge);
-		if (b->len > 0) {
-			ITEM t = *it;
-			int32_t tw = (int32_t) font_width(it->font, b->text, b->len);
-			int32_t tx = b->atom == AT_BUTTON ? x + (it->w - tw) / 2 : x + 3;
-			if (b->atom == AT_FIELD && b->n && !dn_attr(b->n, "value") && b->n->tag == T_INPUT)
-				t.color = 0xff808080;		/* a placeholder */
-			if (tw > it->w - 6)
-				tw = it->w - 6;
-			text(l, tx, base, &t, b->text, b->len, tw);
-		}
+	if (b->atom == AT_CONTROL && b->ctl) {
+		control_item(l, it, x, y, h, base + it->shift);
 	} else {
 		ITEM t = *it;
 		t.color = 0xff606060;
@@ -2656,6 +2687,7 @@ void page_free(page *p)
 		return;
 	free(p->items);
 	free(p->links);
+	free(p->ctls);
 	if (p->mem != NULL) {
 		afree(p->mem);
 		free(p->mem);
@@ -2672,6 +2704,36 @@ int page_link_at(const page *p, int32_t x, int32_t y)
 			return d->link - 1;
 	}
 	return -1;
+}
+
+fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
+{
+	long i;
+	for (i = p->nitems - 1; i >= 0; i--) {
+		const dl_item *d = &p->items[i];
+		if (d->ctl && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h) {
+			if (it != NULL)
+				*it = d;
+			return p->ctls[d->ctl - 1];
+		}
+	}
+	return NULL;
+}
+
+const dl_item *page_ctl_item(const page *p, const fctl *c)
+{
+	long i;
+	int k;
+	for (k = 0; k < p->nctls; k++)
+		if (p->ctls[k] == c)
+			break;
+	if (k == p->nctls)
+		return NULL;
+	/* the control's own item, not a label's text */
+	for (i = 0; i < p->nitems; i++)
+		if (p->items[i].ctl == k + 1 && (p->items[i].type == DL_CTL || p->items[i].type == DL_IMAGE))
+			return &p->items[i];
+	return NULL;
 }
 
 static int32_t anchor_in(const dnode *n, const char *id)

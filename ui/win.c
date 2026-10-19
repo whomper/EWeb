@@ -16,6 +16,7 @@
 #include "canvas.h"
 #include "charset.h"
 #include "clip.h"
+#include "form.h"
 #include "iconify.h"
 #include "util.h"
 
@@ -411,8 +412,11 @@ void win_address(const char *url)
 		redraw_addr();
 }
 
+static void ctl_blur(void);
+
 void win_address_focus(int all)
 {
+	ctl_blur();
 	a_focus = 1;
 	a_all = all;
 	a_cur = (int) strlen(addr);
@@ -535,6 +539,334 @@ static int addr_key(short kstate, short key)
 	return 1;
 }
 
+/* ---------------------------------------------------------------- the page's forms */
+
+/* the control the keyboard is in (form.h; its state is the page's
+   document), NULL: none */
+static fctl *f_focus;
+
+/* a control's place on the screen, its frame too */
+static int ctl_rect(const fctl *c, GRECT *r)
+{
+	const dl_item *it;
+	if (br.p == NULL || (it = page_ctl_item(br.p, c)) == NULL)
+		return 0;
+	r->x = (short) (r_page.x + it->x - 1);
+	r->y = (short) (r_page.y + it->y - top - 1);
+	r->w = (short) (it->w + 2);
+	r->h = (short) (it->h + 2);
+	return 1;
+}
+
+static void ctl_redraw(const fctl *c)
+{
+	GRECT r;
+	if (ctl_rect(c, &r) && rect_and(&r, &r_page))
+		redraw(&r, 2);
+}
+
+/* the window scrolled so that the control is in it */
+static void ctl_show(const fctl *c)
+{
+	const dl_item *it;
+	if (br.p == NULL || (it = page_ctl_item(br.p, c)) == NULL)
+		return;
+	if (it->y < top)
+		win_scroll_to(it->y - 8);
+	else if (it->y + it->h > top + r_page.h)
+		win_scroll_to(it->y + it->h - r_page.h + 8);
+}
+
+static void ctl_blur(void)
+{
+	fctl *c = f_focus;
+	if (c == NULL)
+		return;
+	c->focus = 0;
+	f_focus = NULL;
+	ctl_redraw(c);
+}
+
+static void addr_blur(void);
+
+static void ctl_focus(fctl *c)
+{
+	if (f_focus == c)
+		return;
+	ctl_blur();
+	addr_blur();
+	f_focus = c;
+	c->focus = 1;
+	ctl_show(c);
+	ctl_redraw(c);
+}
+
+/* a new page: nothing of it has the keyboard (the page before may be
+   gone; a page come back from Back may have been left with it) */
+static void ctl_forget(void)
+{
+	fctl *c;
+	f_focus = NULL;
+	if (br.d != NULL)
+		for (c = br.d->ctls; c != NULL; c = c->next)
+			c->focus = 0;
+}
+
+/* a form sent: the page it goes to replaces this one */
+static void ctl_submit(fctl *from, fctl *by, int32_t x, int32_t y)
+{
+	if (f_focus != NULL)
+		f_focus->focus = 0;
+	f_focus = NULL;
+	submit(from, by, x, y);
+}
+
+/* a list's options in a pop-up, a screenful at a time */
+static void choose(fctl *c, short mx, short my)
+{
+	short rows = (short) ((desk_h - 8) / (ch + 2)) - 2, n, k, r;
+	int first = 0, i;
+	char (*lab)[64];
+	const char *items[64];
+	if (rows > 60)
+		rows = 60;
+	if (rows < 4)
+		rows = 4;
+	if (c->nopt == 0 || (lab = malloc(64 * sizeof *lab)) == NULL)
+		return;
+	for (i = 0; i < c->nopt; i++)
+		if (c->sel[i]) {
+			first = i - rows / 2;
+			break;
+		}
+	for (;;) {
+		if (first > c->nopt - rows)
+			first = c->nopt - rows;
+		if (first < 0)
+			first = 0;
+		n = 0;
+		if (first > 0) {
+			items[n++] = "  \x01 Earlier";
+		}
+		for (i = first; i < c->nopt && n < rows + (first > 0); i++) {
+			char t[200], a[60];
+			form_option_text(c->opt[i], t, sizeof t);
+			atari_text(t, a, sizeof a);
+			snprintf(lab[n], sizeof lab[n], "%s%s%s", dn_attr(c->opt[i], "disabled") ? "~" : "",
+				 c->sel[i] ? "\x08" : "  ", a[0] ? a : " ");
+			items[n] = lab[n];
+			n++;
+		}
+		k = n;
+		if (i < c->nopt)
+			items[n++] = "  \x02 Later";
+		r = popup(mx, my, items, n);
+		if (r < 0)
+			break;
+		if (first > 0 && r == 0) {
+			first -= rows;
+			continue;
+		}
+		if (r == k) {
+			first = i;
+			continue;
+		}
+		form_choose(c, first + r - (first > 0));
+		break;
+	}
+	free(lab);
+	ctl_redraw(c);
+}
+
+/* a button, a box or a list clicked (or Space or Return on it) */
+static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
+{
+	if (c->disabled)
+		return;
+	switch (c->kind) {
+	case FC_CHECKBOX:
+		form_check(br.d, c);
+		ctl_redraw(c);
+		break;
+	case FC_RADIO:
+		form_check(br.d, c);
+		win_redraw_page();	/* the rest of its group */
+		break;
+	case FC_SELECT:
+		choose(c, mx, my);
+		break;
+	case FC_SUBMIT:
+	case FC_IMAGE: {
+		/* where on a picture, in its own pixels */
+		int32_t x = 0, y = 0;
+		if (c->kind == FC_IMAGE && it != NULL && br.zoom > 0) {
+			x = (int32_t) (mx - r_page.x - it->x) * 1024 / br.zoom;
+			y = (int32_t) (my - r_page.y - (it->y - top)) * 1024 / br.zoom;
+			if (x < 0)
+				x = 0;
+			if (y < 0)
+				y = 0;
+		}
+		ctl_submit(NULL, c, x, y);
+		break;
+	}
+	case FC_RESET:
+		form_reset(br.d, c->form);
+		win_redraw_page();
+		break;
+	case FC_FILE:
+		win_status("EWeb doesn't send files yet.");
+		break;
+	}
+}
+
+/* the text of the clipboard's first line (all of it into a textarea) */
+static void ctl_paste(fctl *c)
+{
+	char *buf = malloc(4096), *u;
+	long n;
+	if (buf == NULL)
+		return;
+	n = clip_get(buf, 4096);
+	if (n > 0) {
+		if (c->kind != FC_TEXTAREA)
+			clip_line(buf);
+		u = atari_to_utf8(buf, (long) strlen(buf), &n);
+		if (u != NULL) {
+			form_insert(c, u, n);
+			free(u);
+		}
+	}
+	free(buf);
+}
+
+/* a key for the control with the keyboard: 1 when taken */
+static int ctl_key(short kstate, short key)
+{
+	fctl *c = f_focus;
+	const dl_item *it = br.p ? page_ctl_item(br.p, c) : NULL;
+	short scan = KEY_SCAN(key);
+	unsigned char ch = KEY_ASCII(key);
+	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0, typed = form_typed(c), changed = 0;
+
+	if (it == NULL) {		/* no longer shown */
+		ctl_blur();
+		return 0;
+	}
+	if (key_ctrl(kstate, key)) {
+		switch (scan) {
+		case 0x2e: win_clip(CLIP_COPY); return 1;	/* ^C */
+		case 0x2d: win_clip(CLIP_CUT); return 1;	/* ^X */
+		case 0x2f: win_clip(CLIP_PASTE); return 1;	/* ^V */
+		case 0x1e: return 1;				/* ^A: nothing to choose yet */
+		}
+		return 0;
+	}
+	switch (scan) {
+	case 0x0f: {		/* Tab: the next control, with Shift the one before */
+		fctl *n = c;
+		do
+			n = form_next(br.d, n, shift ? -1 : 1);
+		while (n != NULL && page_ctl_item(br.p, n) == NULL);
+		if (n != NULL) {
+			ctl_focus(n);
+		} else {
+			ctl_blur();
+			win_address_focus(1);
+		}
+		return 1;
+	}
+	case 0x01:		/* Esc: the keyboard back to the page */
+		ctl_blur();
+		return 1;
+	case 0x1c:
+	case 0x72:		/* Return, Enter */
+		if (c->kind == FC_TEXTAREA) {
+			changed = form_insert(c, "\n", 1);
+			break;
+		}
+		if (typed || c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
+			/* the form sent, as by its first button */
+			int send;
+			fctl *by = form_default(br.d, c, &send);
+			if (send)
+				ctl_submit(c, by, 0, 0);
+			return 1;
+		}
+		ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+		return 1;
+	case 0x39:		/* Space: a button pressed, a box ticked */
+		if (!typed) {
+			ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+			return 1;
+		}
+		break;
+	}
+	if (!typed)
+		return 0;
+	switch (scan) {
+	case 0x4b:		/* Left */
+		if (c->cur > 0) {
+			c->cur--;
+			while (c->cur > 0 && ((unsigned char) c->v[c->cur] & 0xc0) == 0x80)
+				c->cur--;
+		}
+		changed = 1;
+		break;
+	case 0x4d:		/* Right */
+		if (c->cur < c->len) {
+			c->cur++;
+			while (c->cur < c->len && ((unsigned char) c->v[c->cur] & 0xc0) == 0x80)
+				c->cur++;
+		}
+		changed = 1;
+		break;
+	case 0x47:		/* ClrHome: the line's start, with Shift its end */
+		c->cur = cv_ctl_line(it, c, shift ? CV_LINE_END : CV_LINE_START);
+		changed = 1;
+		break;
+	case 0x48:		/* Up, Down: a textarea's lines */
+	case 0x50:
+		if (c->kind != FC_TEXTAREA)
+			return 0;
+		c->cur = cv_ctl_line(it, c, scan == 0x48 ? CV_UP : CV_DOWN);
+		changed = 1;
+		break;
+	case 0x0e:		/* Backspace */
+		changed = form_backspace(c);
+		break;
+	case 0x53:		/* Delete */
+		changed = form_delete(c);
+		break;
+	default:
+		if (ch >= 0x20 && ch != 0x7f) {
+			/* the Atari's letter (Hebrew too) as UTF-8 */
+			unsigned long u = atari_to_uni(ch);
+			char b[4];
+			int n;
+			if (u < 0x80) {
+				b[0] = (char) u;
+				n = 1;
+			} else if (u < 0x800) {
+				b[0] = (char) (0xc0 | (u >> 6));
+				b[1] = (char) (0x80 | (u & 0x3f));
+				n = 2;
+			} else {
+				b[0] = (char) (0xe0 | (u >> 12));
+				b[1] = (char) (0x80 | ((u >> 6) & 0x3f));
+				b[2] = (char) (0x80 | (u & 0x3f));
+				n = 3;
+			}
+			changed = form_insert(c, b, n);
+			break;
+		}
+		return 0;
+	}
+	if (changed)
+		ctl_redraw(c);
+	return 1;
+}
+
 /* ---------------------------------------------------------------- the clipboard */
 
 /* the page as text: its runs in the order they are drawn, a line break
@@ -571,6 +903,26 @@ static char *page_text(long *n)
 
 void win_clip(int what)
 {
+	if (f_focus != NULL && form_typed(f_focus)) {
+		fctl *c = f_focus;
+		if (what == CLIP_COPY || what == CLIP_CUT) {
+			long n;
+			char *a;
+			if (c->kind == FC_PASSWORD)
+				return;		/* a password stays where it is */
+			a = cs_to_atari(c->v, c->len, CS_UTF8, &n);
+			if (a != NULL) {
+				clip_put(a, n);
+				free(a);
+			}
+			if (what == CLIP_CUT)
+				form_set(c, "", 0);
+		} else if (what == CLIP_PASTE) {
+			ctl_paste(c);
+		}
+		ctl_redraw(c);
+		return;
+	}
 	if (a_focus) {
 		long len = (long) strlen(addr);
 		if (what == CLIP_COPY || what == CLIP_CUT) {
@@ -626,10 +978,12 @@ void win_hover(short mx, short my)
 	int l = -1;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
 	if (h == win_h && t == win_h && !win_iconified && !loading) {
-		l = link_at(mx, my);
+		fctl *c = br.p && rect_hit(&r_page, mx, my) ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, NULL)
+							     : NULL;
+		l = c == NULL ? link_at(mx, my) : -1;
 		if (l >= 0)
 			want = POINT_HAND;
-		else if (rect_hit(&r_addr, mx, my))
+		else if (rect_hit(&r_addr, mx, my) || (c != NULL && form_typed(c) && !c->disabled))
 			want = TEXT_CRSR;
 	}
 	if (want != pointer) {
@@ -757,11 +1111,32 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		return 1;
 	}
 	if (rect_hit(&r_page, mx, my)) {
+		const dl_item *it = NULL;
+		fctl *c = br.p ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, &it) : NULL;
 		addr_blur();
 		if (button & 2) {
 			context_menu(mx, my);
 			return 1;
 		}
+		if (c != NULL && !loading) {
+			/* a label's text stands for its control */
+			int label = it->type == DL_TEXT;
+			if (c->disabled || (label && (it = page_ctl_item(br.p, c)) == NULL))
+				return 1;
+			if (form_typed(c)) {
+				ctl_focus(c);
+				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - r_page.x, my - r_page.y + top);
+				ctl_redraw(c);
+			} else {
+				ctl_focus(c);
+				if (label && c->kind == FC_SELECT)
+					ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+				else
+					ctl_press(c, it, label ? (short) (r_page.x + it->x) : mx, label ? (short) (r_page.y + it->y - top) : my);
+			}
+			return 1;
+		}
+		ctl_blur();
 		l = link_at(mx, my);
 		if (l >= 0)
 			follow(l);
@@ -780,6 +1155,8 @@ int win_key(short kstate, short key)
 	int32_t page = r_page.h - line_step();
 	if (win_h <= 0 || win_iconified)
 		return 0;
+	if (f_focus != NULL && f_focus->kind == FC_TEXTAREA && (scan == 0x48 || scan == 0x50) && !shift)
+		return ctl_key(kstate, key);	/* a textarea's lines */
 	/* up and down scroll the page wherever the keyboard is */
 	switch (scan) {
 	case 0x48:		/* Up */
@@ -791,6 +1168,8 @@ int win_key(short kstate, short key)
 	}
 	if (a_focus)
 		return addr_key(kstate, key);
+	if (f_focus != NULL)
+		return ctl_key(kstate, key);
 	switch (scan) {
 	case 0x39:		/* Space: a page down, with Shift up */
 		if (key_ctrl(kstate, key))
@@ -800,9 +1179,19 @@ int win_key(short kstate, short key)
 	case 0x47:		/* ClrHome: the top, with Shift the end */
 		win_scroll_to(shift ? max_top() : 0);
 		return 1;
-	case 0x0f:		/* Tab: the keyboard to the address */
-		win_address_focus(1);
+	case 0x0f: {		/* Tab: the keyboard to the page's first control, else the address */
+		fctl *n = NULL;
+		if (br.d != NULL && br.p != NULL) {
+			n = form_next(br.d, NULL, shift ? -1 : 1);
+			while (n != NULL && page_ctl_item(br.p, n) == NULL)
+				n = form_next(br.d, n, shift ? -1 : 1);
+		}
+		if (n != NULL)
+			ctl_focus(n);
+		else
+			win_address_focus(1);
 		return 1;
+	}
 	}
 	return 0;
 }
@@ -812,6 +1201,7 @@ int win_key(short kstate, short key)
 void win_page_changed(void)
 {
 	int32_t y = br.scroll_to >= 0 ? br.scroll_to : 0;
+	ctl_forget();
 	win_title();
 	win_address(br.url);
 	win_status("");

@@ -43,6 +43,17 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y);
 /* the page's background, then every item that falls on the canvas */
 void cv_page(canvas *c, const page *p);
+/* form controls (DL_CTL items) are drawn from their state, form.h: */
+struct fctl;
+/* text in lines at most w wide, broken at its line breaks and spaces
+   (a textarea's): each line's first byte into starts; how many */
+int cv_wrap(const char *s, long n, ew_font *f, int32_t w, long *starts, int max);
+/* the byte of a typed control's value nearest (x, y) on the page */
+long cv_ctl_hit(const dl_item *d, struct fctl *c, int32_t x, int32_t y);
+/* where the caret goes: the start or end of its line, or the line above
+   or below (a field's: its start or end) */
+enum { CV_LINE_START, CV_LINE_END, CV_UP, CV_DOWN };
+long cv_ctl_line(const dl_item *d, struct fctl *c, int how);
 /* one text run at x with its baseline at base, in page coordinates */
 void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint32_t n,
 	     uint32_t rgb, int flags);

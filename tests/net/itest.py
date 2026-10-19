@@ -242,6 +242,36 @@ try:
         rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
         check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
               and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)
+        # forms: filled and sent as the HTML Standard says, the server's
+        # echo page's title what came
+        form = "http://localhost:%d/site/form.html" % HTTP
+
+        def send(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d"] + list(args) + [form], cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            m = re.search(r'^sent: (\d+) "(.*)" (\S+)$', out, re.M)
+            return p.returncode, m.group(2) if m else None, m.group(3) if m else None, out
+
+        rc, title, url, out = send("-F", "q=hello world", "-S", "go")
+        check("forms: a search sent with GET", rc == 0 and title == "GET||q=hello+world&go=Find"
+              and url == "http://localhost:%d/site/echo?q=hello+world&go=Find" % HTTP, out)
+        rc, title, url, out = send("-F", "q=x", "-S", "-")
+        check("forms: Return in the field", rc == 0 and title == "GET||q=x&go=Find", out)
+        rc, title, url, out = send("-F", "user=erez", "-F", "pw=p&ss", "-F", "keep", "-F", "lang=he",
+                                   "-F", "note=line 1\nline 2", "-S", "login")
+        check("forms: a login sent with POST", rc == 0 and title ==
+              "POST|application/x-www-form-urlencoded|user=erez&pw=p%26ss&keep=on&lang=he"
+              "&note=line+1%0D%0Aline+2&login=Log+in"
+              and url == "http://localhost:%d/site/echo" % HTTP, out)
+        rc, title, url, out = send("-F", "title=hi", "-S", "up")
+        check("forms: multipart", rc == 0 and title == 'POST|multipart/form-data|title=hi;f=(file "");up=Send', out)
+        rc, title, url, out = send("-S", "s")
+        check("forms: a POST answered with 303 is fetched with GET", rc == 0 and title == "GET||after=1"
+              and url == "http://localhost:%d/site/echo?after=1" % HTTP, out)
+        rc, title, url, out = send("-F", "user=erez", "-S", "login", "-b")
+        check("forms: Back shows the form as it was filled", rc == 0 and re.search(r'^back: 0 "Forms"', out, re.M)
+              and re.search(r'^control \S+ \S+ #000000 text "erez"$', out, re.M), out)
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)

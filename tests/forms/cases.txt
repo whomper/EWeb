@@ -1,0 +1,231 @@
+# EWeb's forms (tests/forms/formtest.c): what a form sends, worked out
+# from the HTML Standard's form submission (the entry list; the
+# application/x-www-form-urlencoded byte serializer: a space as +, *-._
+# and letters and digits as they are, every other byte %XX; multipart
+# and text/plain) and checked against what browsers send.
+
+case a text field and the button that sent it
+html <form action="/find"><input name=q value="atari falcon"><input type=submit name=go value=Find></form>
+submit go
+expect get /find
+body q=atari+falcon&go=Find
+
+case Return in a field presses the form's first submit button
+html <form action="/find"><input name=q value="x"><input type=submit name=go value=Find><input type=submit name=other value=No></form>
+submit -
+expect get /find
+body q=x&go=Find
+
+case Return with no button sends a form of one field
+html <form action=s><input name=q value=1><input type=checkbox name=c checked></form>
+submit -
+expect get s
+body q=1&c=on
+
+case Return with no button and two fields sends nothing
+html <form action=s><input name=a value=1><input type=password name=b value=2></form>
+submit -
+expect none
+
+case Return when the default button is disabled sends nothing
+html <form action=s><input name=a value=1><input type=submit disabled><input type=submit name=b></form>
+submit -
+expect none
+
+case boxes, buttons, lists and a textarea
+html <form action="a.cgi" method=post><input type=checkbox name=c1 checked><input type=checkbox name=c2 value=yes><input type=radio name=r value=a checked><input type=radio name=r value=b><select name=s><option>One<option value=2 selected>Two</select><select name=m multiple><option selected>x<option>y<option selected value=z>Z</select><textarea name=t>a\nb</textarea><input type=submit></form>
+check c2
+check r b
+label r \xe2\x97\x8b
+label s Two
+label m x, Z
+submit -
+expect post a.cgi application/x-www-form-urlencoded
+body c1=on&c2=yes&r=b&s=2&m=x&m=z&t=a%0D%0Ab
+
+case a checkbox clicked twice, a list's choice changed
+html <form action=x><input type=checkbox name=c><select name=s><option>a<option>b<option disabled>c</select><select name=m multiple><option>p<option selected>q</select><input type=submit name=go value=1></form>
+check c
+check c
+choose s 1
+choose s 2
+choose m 0
+choose m 1
+label c \x20
+submit go
+expect get x
+body s=b&m=p&go=1
+
+case disabled, unnamed and fieldsets
+html <form><input name=a value=1 disabled><input value=noname><fieldset disabled><input name=b value=2><legend>L</legend></fieldset><fieldset disabled><legend><input name=c value=3></legend><input name=e value=5></fieldset><input name=d value=4><input type=submit name=s value=S></form>
+submit s
+expect get ''
+body c=3&d=4&s=S
+
+case a submit button with no value sends its name with nothing
+html <form action=x><input name=q value=1><input type=submit name=s><button name=b>Go</button></form>
+submit s
+expect get x
+body q=1&s=
+
+case a button element sends its value
+html <form action=x><button name=b value=v>Go</button><button type=button name=nope>No</button><button type=reset name=r>R</button></form>
+label b Go
+submit b
+expect get x
+body b=v
+
+case UTF-8 text
+html <meta charset=utf-8><form action=x><input name=n value="&#233; &#1513;"><input name=sym value="*-._~&=+/%"><input type=submit></form>
+submit -
+expect get x
+body n=%C3%A9+%D7%A9&sym=*-._%7E%26%3D%2B%2F%25
+
+case a page in windows-1255: Hebrew as its bytes, what it lacks as a reference
+charset windows-1255
+html <form action=x><input name=h value="&#1488;&#233;"><input type=hidden name=_charset_><input type=submit></form>
+submit -
+expect get x
+body h=%E0%26%23233%3B&_charset_=windows-1255
+
+case accept-charset utf-8 on a windows-1255 page
+charset windows-1255
+html <form action=x accept-charset="utf-8"><input name=h value="&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%D7%90
+
+case a page in ISO-8859-1 is windows-1252 (the Encoding Standard): the euro is 0x80
+charset iso-8859-1
+html <form action=x><input name=n value="&#233;&#8364;&#1513;"><input type=submit></form>
+submit -
+expect get x
+body n=%E9%80%26%231513%3B
+
+case multipart
+html <form method=post enctype=multipart/form-data action=up><input name="a b" value="x"><input type=file name=f><textarea name=t>1\n2</textarea><input name='q"u' value=v><input type=submit name=s value=go></form>
+submit s
+expect post up multipart/form-data;
+body --{B}\r\nContent-Disposition: form-data; name="a b"\r\n\r\nx\r\n--{B}\r\nContent-Disposition: form-data; name="f"; filename=""\r\nContent-Type: application/octet-stream\r\n\r\n\r\n--{B}\r\nContent-Disposition: form-data; name="t"\r\n\r\n1\r\n2\r\n--{B}\r\nContent-Disposition: form-data; name="q%22u"\r\n\r\nv\r\n--{B}\r\nContent-Disposition: form-data; name="s"\r\n\r\ngo\r\n--{B}--\r\n
+
+case text/plain
+html <form method=post enctype=text/plain action=p><input name=a value="1 2"><textarea name=t>x\ny</textarea><input type=submit></form>
+submit -
+expect post p text/plain
+body a=1 2\r\nt=x\r\ny\r\n
+
+case a GET is urlencoded whatever the form says
+html <form enctype=multipart/form-data action=g><input name=a value="1 2"><input type=submit></form>
+submit -
+expect get g
+body a=1+2
+
+case the button's formaction, formmethod and formenctype
+html <form action=a method=get><input name=q value=1><button name=b value=v formaction=/b formmethod=post formenctype=text/plain>B</button><input type=submit name=s value=S></form>
+submit b
+expect post /b text/plain
+body q=1\r\nb=v\r\n
+
+case a dialog's form sends nothing
+html <form method=dialog><input name=q value=1><input type=submit name=s></form>
+submit s
+expect none
+
+case a picture button: where it was clicked
+html <form action=i><input name=q value=1><input type=image name=pos src=x.png alt=Go></form>
+submit pos 10 20
+expect get i
+body q=1&pos.x=10&pos.y=20
+
+case Return pressing a picture button with no name: (0, 0)
+html <form action=i><input name=q value=1><input type=image src=x.png></form>
+submit -
+expect get i
+body q=1&x=0&y=0
+
+case the form attribute
+html <form id=f1 action=one></form><input name=out value=1 form=f1><form action=two><input name=in value=2 form=f1><input name=two value=3><input type=submit name=s form=f1></form>
+submit s
+expect get one
+body out=1&in=2&s=
+
+case a form the parser closed in a table still has its fields
+html <table><form action=t><tr><td><input name=x value=1></td></tr></form></table>
+submit -
+expect get t
+body x=1
+
+case a field outside every form sends nothing
+html <input name=x value=1><form action=f><input type=submit name=s></form>
+submit -
+expect none
+
+case radio buttons: the last ticked of a group wins, groups are per form and name
+html <form action=r><input type=radio name=r value=1 checked><input type=radio name=r value=2 checked><input type=radio name=o value=a checked><input type=submit name=s value=s></form><form><input type=radio name=r value=9 checked></form>
+check o a
+submit s
+expect get r
+body r=2&o=a&s=s
+
+case a list with nothing chosen: its first option that can be
+html <form action=l><select name=s><option disabled>a<option> two   words </option></select><select name=e></select><select name=m multiple><option>x</select><input type=submit name=go value=1></form>
+label s two words
+submit go
+expect get l
+body s=two+words&go=1
+
+case options in a disabled optgroup aren't sent
+html <form action=l><select name=s multiple><optgroup disabled><option selected>a</optgroup><option selected>b</select><input type=submit name=go value=1></form>
+submit go
+expect get l
+body s=b&go=1
+
+case a field's line breaks go, a hidden one keeps them
+html <form action=n><input name=n value="a&#10;b&#13;c"><input type=hidden name=h value="x&#10;y"><input type=submit name=go value=1></form>
+submit go
+expect get n
+body n=abc&h=x%0D%0Ay&go=1
+
+case typing: maxlength, Backspace over a letter of two bytes, a password's bullets
+html <form action=t><input name=m maxlength=3><input name=u value="a"><input type=password name=p value=ab><input type=submit name=go value=1></form>
+type m abcdef
+type u \xc3\xa9\xd7\xa9
+back u 1
+label m abc
+label u a\xc3\xa9
+label p \xe2\x80\xa2\xe2\x80\xa2
+type p c
+submit go
+expect get t
+body m=abc&u=a%C3%A9&p=abc&go=1
+
+case typing into a field that is read only or disabled changes nothing
+html <form action=t><input name=r readonly value=x><input name=d disabled value=y><input type=submit name=go value=1></form>
+type r z
+type d z
+submit go
+expect get t
+body r=x&go=1
+
+case reset brings every field back
+html <form action=r><input name=q value=orig><input type=checkbox name=c checked><select name=s><option>a<option selected>b</select><textarea name=t>text</textarea><input type=submit name=go value=1></form>
+set q changed
+check c
+choose s 0
+set t other
+reset
+submit go
+expect get r
+body q=orig&c=on&s=b&t=text&go=1
+
+case dirname: the field's direction
+html <form action=d><input name=q value="&#1513;&#1500;&#1493;&#1501;" dirname=q.dir><input name=e value=hi dirname=e.dir><input type=submit name=go value=1></form>
+submit go
+expect get d
+body q=%D7%A9%D7%9C%D7%95%D7%9D&q.dir=rtl&e=hi&e.dir=ltr&go=1
+
+case the action's white space goes
+html <form action="  /x?old=1#frag  "><input name=q value=1><input type=submit name=go value=1></form>
+submit go
+expect get /x?old=1#frag
+body q=1&go=1

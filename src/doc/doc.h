@@ -22,7 +22,8 @@ enum {
 	T_OTHER, T_HTML, T_HEAD, T_BODY, T_TITLE, T_BASE, T_LINK, T_META, T_STYLE, T_SCRIPT,
 	T_NOSCRIPT, T_A, T_IMG, T_BR, T_HR, T_LI, T_UL, T_OL, T_TABLE, T_TR, T_TD, T_TH,
 	T_INPUT, T_BUTTON, T_SELECT, T_OPTION, T_TEXTAREA, T_PRE, T_IFRAME, T_SVG, T_CANVAS,
-	T_VIDEO, T_AUDIO, T_OBJECT, T_EMBED, T_TEMPLATE, T_LABEL, T_FORM, T_WBR, T_NTAGS
+	T_VIDEO, T_AUDIO, T_OBJECT, T_EMBED, T_TEMPLATE, T_LABEL, T_FORM, T_WBR,
+	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_NTAGS
 };
 
 typedef struct dnode dnode;
@@ -39,6 +40,8 @@ struct dnode {
 	uint16_t nattr, ncls;
 	uint32_t refs;			/* Hubbub's */
 	int32_t y;			/* where layout put it (for #fragment), -1: nowhere */
+	dnode *owner;			/* a form control: the form the parser put it in */
+	struct fctl *ctl;		/* a form control: its state (form.h) */
 };
 
 typedef struct doc {
@@ -49,6 +52,7 @@ typedef struct doc {
 	char base[1024];		/* <base href>, "" if none */
 	char charset[40];		/* what the page was read as */
 	uint32_t elements;
+	struct fctl *ctls;		/* the form controls, in document order (form.h) */
 } doc;
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or

@@ -28,7 +28,7 @@ typedef struct {
 	void *ud;
 } LAYOUT_OPT;
 
-enum { DL_FILL, DL_TEXT, DL_IMAGE };
+enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
@@ -42,10 +42,13 @@ typedef struct dl_item {
 	uint32_t rgb;			/* 0xRRGGBB */
 	uint8_t type, flags;
 	uint16_t link;			/* 0: none, else 1 + index into page.links */
-	int16_t base;			/* text: the baseline, from y */
+	int16_t base;			/* text and controls: the baseline, from y */
+	uint16_t ctl;			/* 1 + index into page.ctls: a form control's content
+					   (DL_CTL, drawn from its state), or a picture that is
+					   a submit button (DL_IMAGE); 0: none */
 	ew_font *font;
 	const char *text;		/* UTF-8, kept by the page */
-	uint32_t len;
+	uint32_t len;			/* DL_CTL: a textarea's line step */
 	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h */
 } dl_item;
 
@@ -55,6 +58,8 @@ typedef struct page {
 	long nitems, cap;
 	char **links;			/* each link's href as the page has it */
 	int nlinks, linkcap;
+	struct fctl **ctls;		/* the form controls shown (their state is the document's) */
+	int nctls, ctlcap;
 	int32_t width, height;		/* device px */
 	uint32_t bg;			/* what the page is drawn on (0xRRGGBB) */
 	struct arena *mem;
@@ -67,6 +72,11 @@ void page_free(page *p);
 
 /* the link under (x, y) on the page: an index into links, or -1 */
 int page_link_at(const page *p, int32_t x, int32_t y);
+/* the form control under (x, y), and its item; NULL: none */
+struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it);
+/* a control's item on the page (its content's place), or NULL when it
+   isn't shown */
+const dl_item *page_ctl_item(const page *p, const struct fctl *c);
 /* where the element with that id (or an <a name>) is, or -1 */
 int32_t page_anchor(const page *p, const char *id);
 

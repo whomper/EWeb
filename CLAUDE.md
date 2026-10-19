@@ -103,6 +103,11 @@ hub stay complete, with the evidence.
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
   `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
+- **Forms** are `src/doc/form.c` (each control's state, kept with the document; what a form sends,
+  after the HTML Standard), drawn from that state by `src/gfx/canvas.c` (DL_CTL items, Hebrew right
+  to left), sent by `br_submit` (`src/browse`), edited in `ui/win.c`. After changing them: `make test`
+  (`tests/forms/cases.txt`, worked out from the standard), `make itest` (`/site/form.html`), `make
+  hatarigui`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there

@@ -25,7 +25,12 @@
  * band's edge stops it (on the Falcon it would land in ST RAM next to the
  * band, TOS's). The page's pictures are fetched and decoded before it is
  * drawn or dumped, as EWEB.PRG does after showing it (-n: none, their
- * alt text, as before pictures came).
+ * alt text, as before pictures came). -F NAME=VALUE (again for more)
+ * fills a form's field, ticks a box or radio button (NAME=VALUE too:
+ * its value), chooses a list's option (by its value or text); -S
+ * BUTTON then sends the form by that button ("-": Return in the first
+ * field filled), and what comes is drawn or dumped. Back with -S
+ * shows the form again, as it was filled.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -36,6 +41,7 @@
 #include "canvas.h"
 #include "conn.h"
 #include "font.h"
+#include "form.h"
 #include "http.h"
 #include "img.h"
 #include "plat.h"
@@ -277,6 +283,8 @@ int main(int argc, char **argv)
 	browser b;
 	page *p;
 	SBUF extra;
+	const char *fill[32], *send = NULL;
+	int nfill = 0, back_after = 0;
 
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
 		if (!strcmp(argv[i], "-w") && i + 1 < argc)
@@ -305,6 +313,12 @@ int main(int argc, char **argv)
 			nopics = 1;
 		else if (!strcmp(argv[i], "-c") && i + 1 < argc)
 			cacert = argv[++i];
+		else if (!strcmp(argv[i], "-F") && i + 1 < argc && nfill < 32)
+			fill[nfill++] = argv[++i];
+		else if (!strcmp(argv[i], "-S") && i + 1 < argc)
+			send = argv[++i];
+		else if (!strcmp(argv[i], "-b"))
+			back_after = 1;
 		else
 			break;
 	}
@@ -356,6 +370,64 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	pictures(&b);
+	if (nfill > 0 || send != NULL) {
+		fctl *first = NULL, *by = NULL;
+		int k;
+		for (k = 0; k < nfill; k++) {
+			char name[256];
+			const char *eq = strchr(fill[k], '=');
+			fctl *c = NULL;
+			snprintf(name, sizeof name, "%.*s", eq ? (int) (eq - fill[k]) : (int) strlen(fill[k]), fill[k]);
+			for (c = b.d->ctls; c != NULL; c = c->next) {
+				const char *n = dn_attr(c->n, "name"), *v = dn_attr(c->n, "value");
+				if (n == NULL || strcmp(n, name) != 0)
+					continue;
+				if (c->kind == FC_RADIO && eq != NULL && (v == NULL || strcmp(v, eq + 1) != 0))
+					continue;
+				break;
+			}
+			if (c == NULL) {
+				fprintf(stderr, "ewrender: no field %s\n", name);
+				return 1;
+			}
+			if (form_typed(c) || c->kind == FC_HIDDEN) {
+				form_set(c, eq ? eq + 1 : "", eq ? (long) strlen(eq + 1) : 0);
+				if (first == NULL)
+					first = c;
+			} else if (c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
+				form_check(b.d, c);
+			} else if (c->kind == FC_SELECT && eq != NULL) {
+				int o;
+				for (o = 0; o < c->nopt; o++) {
+					char t[256];
+					const char *ov = dn_attr(c->opt[o], "value");
+					form_option_text(c->opt[o], t, sizeof t);
+					if ((ov && !strcmp(ov, eq + 1)) || (!ov && !strcmp(t, eq + 1)))
+						form_choose(c, o);
+				}
+			}
+		}
+		if (send != NULL) {
+			if (strcmp(send, "-") == 0) {
+				int ok;
+				by = form_default(b.d, first, &ok);
+				if (!ok)
+					first = NULL;
+			} else {
+				for (by = b.d->ctls; by != NULL; by = by->next)
+					if (dn_attr(by->n, "name") && !strcmp(dn_attr(by->n, "name"), send))
+						break;
+				first = NULL;
+			}
+			r = br_submit(&b, first, by, 0, 0);
+			printf("sent: %d \"%s\" %s\n", r, b.title, b.url);
+			if (back_after) {
+				r = br_back(&b);
+				printf("back: %d \"%s\" %s\n", r, b.title, b.url);
+			}
+			pictures(&b);
+		}
+	}
 	if (next != NULL) {
 		static const char *const step[] = { "to", "back", "forward", "back", "narrower", "forward", "back" };
 		int k;
@@ -396,7 +468,21 @@ int main(int argc, char **argv)
 				printf("image %d,%d %dx%d%s%s link %d \"%.*s\" %s\n", (int) it->x, (int) it->y, (int) it->w,
 				       (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "", it->flags & DLF_ALT ? " alt" : "",
 				       it->link, (int) it->len, it->text, img_url(it->img));
-			else
+			else if (it->type == DL_CTL) {
+				static const char *const kinds[] = { "text", "password", "hidden", "checkbox", "radio",
+								     "submit", "reset", "button", "image", "file",
+								     "textarea", "select" };
+				const fctl *c = p->ctls[it->ctl - 1];
+				char lab[256], *q;
+				form_label(c, lab, sizeof lab);
+				for (q = lab; *q; q++)
+					if (*q == '\n')
+						*q = '|';	/* a textarea's lines on one line */
+				printf("control %d,%d %dx%d #%06lx %s%s \"%s\"%s%s\n", (int) it->x, (int) it->y, (int) it->w,
+				       (int) it->h, (unsigned long) it->rgb, kinds[c->kind], c->disabled ? " disabled" : "",
+				       lab, form_placeholder(c) ? " placeholder " : "",
+				       form_placeholder(c) ? form_placeholder(c) : "");
+			} else
 				printf("text %d,%d %dx%d #%06lx %s%d%s%s%s link %d \"%.*s\"\n", (int) it->x,
 				       (int) (it->y + it->base), (int) it->w, (int) it->h, (unsigned long) it->rgb,
 				       it->font->family == FF_SANS ? "sans" : it->font->family == FF_SERIF ? "serif" : "mono",

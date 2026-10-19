@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "browse.h"
+#include "form.h"
 #include "img.h"
 #include "http.h"
 #include "conn.h"
@@ -379,9 +380,9 @@ static void start_page(SBUF *s)
 		   "<li><a href=\"http://info.cern.ch/hypertext/WWW/TheProject.html\">The first web page</a>, "
 		   "CERN, 1991</li>"
 		   "<li><a href=\"https://en.wikipedia.org/wiki/Atari_Falcon\">Atari Falcon</a> on Wikipedia</li>"
-		   "</ul><p class=small>EWeb shows text, links, lists, tables and pictures (JPEG, PNG, GIF); "
-		   "forms come in a later version. Esc stops a page that is loading, and its pictures; "
-		   "Undo goes back.</p>"
+		   "</ul><p class=small>EWeb shows text, links, lists, tables, pictures (JPEG, PNG, GIF) "
+		   "and forms (Tab goes from field to field, Return sends). Esc stops a page that is loading, "
+		   "and its pictures; Undo goes back.</p>"
 		   "</body></html>");
 }
 
@@ -446,8 +447,10 @@ static void host_of(const char *url, char *out, int size)
 }
 
 /* 1: f->data has what came (a page, or a server's error page); 0: none,
-   f->err says why (conn_stop: stopped) */
-static int fetch(browser *b, const char *url, int fresh, const char *accept, long maxbody, int keep, FETCH *f)
+   f->err says why (conn_stop: stopped). post: a form sent with POST
+   (its answer isn't kept in the cache), else NULL */
+static int fetch(browser *b, const char *url, int fresh, const char *accept, long maxbody, int keep,
+		 const FSUBMIT *post, FETCH *f)
 {
 	memset(f, 0, sizeof *f);
 	str_copy(f->url, url, sizeof f->url);
@@ -464,6 +467,10 @@ static int fetch(browser *b, const char *url, int fresh, const char *accept, lon
 	if (!has_scheme(url, "http") && !has_scheme(url, "https")) {
 		snprintf(f->err, sizeof f->err, "EWeb opens http and https addresses, and files.");
 		return 0;
+	}
+	if (post != NULL) {
+		fresh = 1;
+		keep = 0;
 	}
 	if (!fresh) {
 		centry *e = cache_get(url);
@@ -493,6 +500,12 @@ static int fetch(browser *b, const char *url, int fresh, const char *accept, lon
 		memset(&rq, 0, sizeof rq);
 		rq.url = url;
 		rq.accept = accept;
+		if (post != NULL) {
+			rq.method = "POST";
+			rq.body = post->body;
+			rq.bodylen = post->len;
+			rq.ctype = post->ctype;
+		}
 		rq.maxbody = maxbody;
 		rq.referrer = b->url[0] && !has_scheme(b->url, "file") && !has_scheme(b->url, "about") ? b->url : NULL;
 		sb_init(&body);
@@ -561,7 +574,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
 		say(sh->b, "%s", msg);
 	}
-	if (fetch(sh->b, url, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, f) &&
+	if (fetch(sh->b, url, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
 	    (f->status == 0 || (f->status >= 200 && f->status < 300)))
 		ec_sheet(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR);
 	free(f->data);
@@ -902,7 +915,8 @@ static int picture_page(SBUF *s, FETCH *f)
 	return 1;
 }
 
-static int load(browser *b, const char *url, int mode)
+/* post: a form sent with POST to url, else NULL */
+static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
 	FETCH *f;
 	SBUF src;
@@ -920,7 +934,7 @@ static int load(browser *b, const char *url, int mode)
 		return BR_ELSEWHERE;
 	}
 	/* a place on the page shown */
-	if (mode == NAV_NEW && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
+	if (mode == NAV_NEW && post == NULL && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
 		hist_push(b, url);
 		str_copy(b->url, url, sizeof b->url);
 		b->scroll_to = anchor_y(b, url);
@@ -945,7 +959,7 @@ static int load(browser *b, const char *url, int mode)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
-	r = fetch(b, url, mode == NAV_RELOAD, NULL, 0, 1, f);
+	r = fetch(b, url, mode == NAV_RELOAD, NULL, 0, 1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {
@@ -1018,6 +1032,11 @@ static int load(browser *b, const char *url, int mode)
 	return BR_SHOWN;
 }
 
+static int load(browser *b, const char *url, int mode)
+{
+	return load_post(b, url, mode, NULL);
+}
+
 /* ---------------------------------------------------------------- what the front end asks */
 
 /* a long decode keeps the window alive, and Esc stops it */
@@ -1086,6 +1105,48 @@ int br_follow(browser *b, int link)
 	if (url[0] == 0)
 		return BR_STOPPED;
 	return load(b, url, NAV_NEW);
+}
+
+int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
+{
+	FSUBMIT s;
+	char base[4096], url[4096];
+	int r;
+	if (b->d == NULL || !form_submit(b->d, from, submitter, x, y, &s))
+		return BR_STOPPED;
+	base_of(b, b->d, b->url, base, sizeof base);
+	/* no action: the page's own address, without its fragment */
+	if (s.action[0] == 0) {
+		str_copy(url, base, sizeof url);
+		url[strcspn(url, "#")] = 0;
+	} else if (!resolve(base, s.action, url, sizeof url)) {
+		form_submit_free(&s);
+		return BR_STOPPED;
+	}
+	if (!s.post || !(has_scheme(url, "http") || has_scheme(url, "https"))) {
+		/* the entries as the address's query, its fragment kept */
+		char frag[1024], *h = strchr(url, '#');
+		size_t q;
+		frag[0] = 0;
+		if (h != NULL) {
+			str_copy(frag, h, sizeof frag);
+			*h = 0;
+		}
+		url[strcspn(url, "?")] = 0;
+		q = strlen(url);
+		if (q + 1 + (size_t) s.len + strlen(frag) + 1 > sizeof url) {
+			form_submit_free(&s);
+			return BR_STOPPED;	/* too long for an address */
+		}
+		url[q] = '?';
+		memcpy(url + q + 1, s.body, (size_t) s.len);
+		strcpy(url + q + 1 + s.len, frag);
+		r = load(b, url, NAV_NEW);
+	} else {
+		r = load_post(b, url, NAV_NEW, &s);
+	}
+	form_submit_free(&s);
+	return r;
 }
 
 static int go_to(browser *b, int i)
@@ -1350,7 +1411,7 @@ static int fetch_picture(browser *b, ew_img *im)
 		snprintf(msg, sizeof msg, "Pictures: %d of %d from %s...", b->pic_done + 1,
 			 b->pic_n > b->pic_done ? b->pic_n : b->pic_done + 1, has_scheme(url, "file") ? "the disk" : host);
 		say(b, "%s", msg);
-		if (!fetch(b, url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, f) ||
+		if (!fetch(b, url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f) ||
 		    (f->status != 0 && (f->status < 200 || f->status >= 300))) {
 			free(f->data);
 			free(f);

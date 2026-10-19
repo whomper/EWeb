@@ -444,9 +444,10 @@ static void loaded(int r)
 			short x, y, w, h;
 			win_page_area(&x, &y, &w, &h);
 			log_event("shown %.400s height %ld links %d area %d %d %d %d top %ld ms %lu "
-				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu)", br.url,
+				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) title %.200s", br.url,
 				  br.p ? (long) br.p->height : 0L, br.p ? br.p->nlinks : 0, x, y, w, h, (long) win_top(),
-				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn);
+				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
+				  br.title);
 		}
 		break;
 	}
@@ -491,6 +492,14 @@ void follow(int link)
 		return;
 	loading_on();
 	loaded(br_follow(&br, link));
+}
+
+void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y)
+{
+	if (loading)
+		return;
+	loading_on();
+	loaded(br_submit(&br, from, by, x, y));
 }
 
 static void home(void)
