@@ -271,9 +271,7 @@ def browse():
                             "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("browse: the test server", False)
-    xvfb = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1)
+    xvfb = machines.xvfb(DISPLAY)    # once it answers (None: one was there)
     site = "http://127.0.0.1:%d/site/" % HTTP
     hd = hd_for("browse", site)
     shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
@@ -418,7 +416,8 @@ def browse():
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:
         r.end()
-        xvfb.terminate()
+        if xvfb is not None:
+            xvfb.terminate()
         srv.stdin.close()
         srv.wait(10)
 
