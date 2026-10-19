@@ -38,6 +38,9 @@ Pages:
                  third.html, opened as localhost (a picture from 127.0.0.1
                  that sets a cookie there: another site's, which EWeb
                  refuses)
+  /site/files.html  files to save: links to /chunked (2 MB), a file that
+                 isn't there, /site/ and /site/small.bin (20 KB; the same
+                 bytes as /site/small.zip, application/zip)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -59,6 +62,10 @@ HEBREW = "<html><body>שלום עולם</body></html>\n".encode("cp1255")
 SITE = (b"<!DOCTYPE html><html><head><title>EWeb site</title><link rel=stylesheet href=style.css>"
         b"</head><body><h1>Welcome</h1><p>See <a href=two.html>the second page</a> or "
         b"<a href=two.html#end>its end</a>.</p></body></html>\n")
+FILES_PAGE = (b"<!DOCTYPE html><html><head><title>Files</title></head><body><p><a href=/chunked>A big "
+              b"file</a> <a href=/site/none.zip>A file that isn't there</a> <a href=/site/>A page</a> "
+              b"<a href=/site/small.bin>A small file</a></p></body></html>")
+SMALL = bytes(range(256)) * 80
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
@@ -229,6 +236,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS_PAGE)
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
+        elif p == "/site/files.html":
+            self.send(200, FILES_PAGE)
+        elif p in ("/site/small.bin", "/site/small.zip"):
+            self.send(200, SMALL, "application/octet-stream" if p.endswith(".bin") else "application/zip")
         elif p.startswith("/site/cookie/") and cookie_get(self, p):
             pass
         elif p.startswith("/site/echo"):

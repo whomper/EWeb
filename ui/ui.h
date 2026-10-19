@@ -111,7 +111,7 @@ void win_clip(int what);		/* CLIP_COPY...: the address field, or the page's text
 /* main.c */
 enum {
 	C_NONE, C_ABOUT,
-	C_OPENURL, C_OPENFILE, C_RELOAD, C_STOP, C_QUIT,
+	C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
 	C_SETHOME, C_COOKIES,
@@ -120,6 +120,7 @@ enum {
 void command(int cmd);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
+void save_link(int link);		/* its file saved (Alternate-click, the link's menu) */
 struct fctl;
 /* a form sent (form.h): by the button by, or from the field from with
    Return; (x, y) on a picture button */

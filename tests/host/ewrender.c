@@ -35,6 +35,10 @@
  * keeps COOKIES.TXT. -l FILE: the connections' log, as EWGET -l writes it.
  * -P PAGE: PAGE is loaded first and kept (history), as when the page is
  * reached from it: what one page's sheets did must not show in the next.
+ * -s FILE saves the page shown at the end as it came (File > Save page
+ * as), or a file EWeb doesn't show (a download); -g LINK saves that
+ * link's file to FILE instead (Alternate-click). Each prints what it
+ * did and the name EWEB.PRG would offer.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -290,7 +294,8 @@ int main(int argc, char **argv)
 	SBUF extra;
 	const char *fill[32], *send = NULL;
 	int rc = 0;
-	int nfill = 0, back_after = 0;
+	int nfill = 0, back_after = 0, save_link = -1;
+	const char *save_to = NULL;
 
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
 		if (!strcmp(argv[i], "-w") && i + 1 < argc)
@@ -327,6 +332,10 @@ int main(int argc, char **argv)
 			send = argv[++i];
 		else if (!strcmp(argv[i], "-b"))
 			back_after = 1;
+		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
+			save_to = argv[++i];
+		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
+			save_link = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
 			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
@@ -392,6 +401,16 @@ int main(int argc, char **argv)
 		pictures(&b);
 	}
 	r = br_go(&b, where);
+	if (r == BR_DOWNLOAD) {
+		char name[16];
+		br_file_name(b.dl.url, b.dl.mime, name, sizeof name);
+		printf("download: %s %ld %s\n", b.dl.mime, b.dl.len, name);
+		if (save_to != NULL && !br_dl_save(&b, save_to))
+			rc = 1;
+		br_dl_free(&b);
+		br_free(&b);
+		return rc;
+	}
 	if (r != BR_SHOWN || b.p == NULL) {
 		fprintf(stderr, "ewrender: nothing shown (%d)\n", r);
 		return 1;
@@ -473,6 +492,20 @@ int main(int argc, char **argv)
 		}
 		if (b.p == NULL)
 			return 1;
+	}
+	if (save_to != NULL) {
+		char name[16];
+		if (save_link >= 0) {
+			char url[4096], err[200];
+			br_link_url(&b, save_link, url, sizeof url);
+			br_file_name(url, "", name, sizeof name);
+			r = br_save_url(&b, url, save_to, err, sizeof err);
+			printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+		} else {
+			br_file_name(b.url, b.mime, name, sizeof name);
+			r = br_save_page(&b, save_to);
+			printf("saved page: %d %ld %s\n", r, b.src_len, name);
+		}
 	}
 	p = b.p;
 	if (show_tree)

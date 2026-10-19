@@ -33,6 +33,9 @@ EWeb's own fonts.
   `COOKIES.TXT` (written once, at quit; their values encrypted, as the
   family keeps passwords); none for other sites' pictures and
   stylesheets; Options > Forget cookies.
+- **Saving**: the page shown as it came (^S), a link's file (Alternate-click,
+  as Safari's Option-click) straight to the disk as it comes, and a file EWeb
+  doesn't show, opened as a page.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true

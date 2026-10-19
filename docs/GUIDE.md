@@ -125,6 +125,22 @@ cookies and can't set any.
 Options > Forget cookies forgets them all at once, the file too: you are
 logged out of every site.
 
+## Saving pages and files
+
+- **File > Save page as** (**^S**) saves the page shown as it came, in
+  the file selector's folder, with a name made from its address
+  (`INDEX.HTM` for a site's front page). Its pictures and stylesheets
+  stay on the server; open the file again with ^O.
+- **A link's file**: Alternate-click the link, or right-click it and
+  choose Save the link's file. It goes straight to the disk as it comes,
+  so it can be bigger than your memory; the info line counts it, and
+  Esc stops it (nothing is left behind).
+- **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
+  page: EWeb asks where to save it, and the page you were on stays.
+
+The file selector offers the name; if there is a file of that name
+already, EWeb asks before replacing it.
+
 ## The window
 
 At the top, from the left:
@@ -140,8 +156,8 @@ doing, or, for a secure page, how it is secured. The window's title is
 the page's.
 
 Click a link to follow it (the pointer turns into a hand over one).
-Right-click a link for its commands (open it, copy its address), or the
-page for Back, Forward, Reload and copying its text.
+Right-click a link for its commands (open it, save its file, copy its
+address), or the page for Back, Forward, Reload and copying its text.
 
 The window can be moved, sized, fulled and iconified as any other; EWeb
 lays the page out again for the new width.
@@ -185,6 +201,8 @@ choose all of it.
 |---|---|
 | ^L | type an address (Return goes there) |
 | ^O | open a page on your disks |
+| ^S | save the page shown |
+| Alternate-click | save a link's file |
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |

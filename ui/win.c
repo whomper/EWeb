@@ -1036,11 +1036,14 @@ static void context_menu(short mx, short my)
 {
 	int l = link_at(mx, my);
 	if (l >= 0) {
-		static const char *const items[] = { "Open the link", "Copy the link's address" };
-		short r = popup(mx, my, items, 2);
+		static const char *const items[] = { "Open the link", "Save the link's file...  Alt-click",
+						     "Copy the link's address" };
+		short r = popup(mx, my, items, 3);
 		if (r == 0) {
 			follow(l);
 		} else if (r == 1) {
+			save_link(l);
+		} else if (r == 2) {
 			char u[2048], a[2048];
 			br_link_url(&br, l, u, sizeof u);
 			atari_text(u, a, sizeof a);
@@ -1138,11 +1141,12 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		ctl_blur();
 		l = link_at(mx, my);
-		if (l >= 0)
+		if (l >= 0 && (kstate & 0x08))
+			save_link(l);	/* Alternate-click (0x08): its file saved, as Safari's Option-click */
+		else if (l >= 0)
 			follow(l);
 		return 1;
 	}
-	(void) kstate;
 	return 1;
 }
 

@@ -11,7 +11,9 @@
   page is shown, the window scrolled meanwhile), forms (a field clicked
   and typed into, Return sends it with GET; Back shows it as it was;
   Tab from field to field, a box ticked with Space and its label clicked,
-  sent with POST by its button clicked), ^Q;
+  sent with POST by its button clicked), saving (^S and the file
+  selector's OK: the page as it came; Alternate-click: a link's file; a
+  file EWeb doesn't show, opened: saved), ^Q;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -41,7 +43,7 @@ WHICH = sys.argv[2:] or ["browse", "screens"]
 HTTP, HTTPS = 18280, 18643
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
-L, Q, C = 0x26, 0x10, 0x2E
+L, Q, C, S, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x38
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
@@ -264,7 +266,7 @@ def ctl_point(url, area, top, n, right=False):
 
 
 def browse():
-    import server  # noqa: F401  (the pages)
+    import server  # the pages and files
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
@@ -412,6 +414,44 @@ def browse():
                   ev.endswith("title POST|application/x-www-form-urlencoded|user=erez&pw=pw&keep=on&lang=en"
                               "&note=a&login=Log+in"), str(r.events()))
             r.shot(10)
+        # saving: the page shown (^S, the file selector's OK), a link's
+        # file (Alternate-click), a file EWeb doesn't show (opened)
+        def saved(name):
+            path = os.path.join(hd, name)
+            return open(path, "rb").read() if os.path.exists(path) else None
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/files.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("saving: the page shown", ev is not None and ev.startswith("shown %sfiles.html " % site),
+              str(r.events()))
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            r.key(S, (CTRL,))
+            time.sleep(3)		# the file selector
+            r.shot(11)
+            r.key(RETURN)
+            ev = r.wait(r"saved ", 60)
+            check("saving: ^S, the page as it came", ev == "saved %d" % len(server.FILES_PAGE) and
+                  saved("FILES.HTM") == server.FILES_PAGE, str(r.events()))
+            r.send("hatari-event keydown 0x%x" % ALT)
+            r.mouse.click(*link_point(site + "files.html", area, int(m.group(5)), "A small file"))
+            r.send("hatari-event keyup 0x%x" % ALT)
+            time.sleep(3)
+            r.key(RETURN)
+            ev = r.wait(r"saved ", 120)
+            check("saving: Alternate-click, a link's file", ev == "saved %d" % len(server.SMALL) and
+                  saved("SMALL.BIN") == server.SMALL, str(r.events()))
+            r.key(L, (CTRL,))
+            r.type("127.0.0.1:%d/site/small.zip" % HTTP)
+            r.key(RETURN)
+            dl = r.wait(r"download ", 120)
+            time.sleep(3)
+            r.key(RETURN)
+            ev = r.wait(r"saved ", 60)
+            check("saving: a file EWeb doesn't show", dl == "download application/zip %d" % len(server.SMALL) and
+                  ev == "saved %d" % len(server.SMALL) and saved("SMALL.ZIP") == server.SMALL, str(r.events()))
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

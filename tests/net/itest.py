@@ -221,9 +221,33 @@ try:
               out)
         rc, out = browse("http://localhost:1/")
         check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
-        rc, out = browse("http://localhost:%d/chunked" % HTTP)
-        check("the browser: not a page", rc == 0 and "EWeb can't show this" in out
-              and "application/octet-stream" in out, out)
+        # saving: a file EWeb doesn't show (kept in memory, saved in one
+        # go), a link's file (streamed to the disk), the page shown
+        def save(*args):
+            path = os.path.join(work, "saved.bin")
+            if os.path.exists(path):
+                os.remove(path)
+            p = subprocess.run([ewrender, "-f", font, "-c", os.path.join(work, "CACERT.PEM"), "-d", "-s", path] +
+                               list(args), cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            data = open(path, "rb").read() if os.path.exists(path) else None
+            return p.returncode, data, p.stdout + p.stderr
+        rc, data, out = save("http://localhost:%d/chunked" % HTTP)
+        check("the browser: not a page, saved", rc == 0 and data == server.BIG and
+              "download: application/octet-stream %d CHUNKED\n" % len(server.BIG) in out, out)
+        files = "http://localhost:%d/site/files.html" % HTTP
+        rc, data, out = save("-g", "0", files)
+        check("the browser: a link's file saved", rc == 0 and data == server.BIG and
+              "saved link: 0 %d CHUNKED \n" % len(server.BIG) in out, out)
+        rc, data, out = save("-g", "1", files)
+        check("the browser: a link's file that isn't there", rc == 0 and data is None and
+              "saved link: 1 0 NONE.ZIP The server answered 404" in out, out)
+        rc, data, out = save("-g", "2", files)
+        check("the browser: a link's page saved", rc == 0 and data == server.SITE and
+              "saved link: 0 %d INDEX.HTM \n" % len(server.SITE) in out, out)
+        rc, data, out = save("https://localhost:%d/site/" % HTTPS)
+        check("the browser: the page shown saved", rc == 0 and data == server.SITE and
+              "saved page: 1 %d INDEX.HTM\n" % len(server.SITE) in out, out)
         # pictures: fetched after the page, decoded at the size shown (a
         # CSS pixel is 0.8 of the Falcon's), the page laid out again for
         # the one whose size it didn't know; the missing one failed

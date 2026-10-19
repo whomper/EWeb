@@ -59,6 +59,7 @@ static const MBAR_ITEM m_desk[] = {
 static const MBAR_ITEM m_file[] = {
 	{ "Open address...", "^L", C_OPENURL },
 	{ "Open file...", "^O", C_OPENFILE },
+	{ "Save page as...", "^S", C_SAVE },
 	{ "-", 0, 0 },
 	{ "Reload", "^R", C_RELOAD },
 	{ "Stop", "Esc", C_STOP },
@@ -125,6 +126,7 @@ void menu_update(void)
 	enable(C_HOME, !loading);
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
+	enable(C_SAVE, !loading && br.src != NULL);
 	enable(C_CUT, addr);
 	enable(C_PASTE, addr);
 	enable(C_COPY, addr || br.p != NULL);
@@ -451,6 +453,40 @@ static void loading_on(void)
 	menu_update();
 }
 
+/* a file to save: the file selector, in the folder last saved to, with
+   name; *full the path chosen. 0: cancelled, or a file there not to be
+   replaced */
+static int ask_save(const char *title, const char *name, char *full, int size)
+{
+	static char path[256];
+	char fname[64], *p;
+	short button = 0;
+	if (!path[0])
+		snprintf(path, sizeof path, "%s\\*.*", opt.workdir);
+	str_copy(fname, name, sizeof fname);
+	if (!fsel_exinput(path, fname, &button, (char *) title) || !button || !fname[0])
+		return 0;
+	str_copy(full, path, size);
+	p = strrchr(full, '\\');
+	if (p != NULL)
+		p[1] = 0;
+	if ((long) (strlen(full) + strlen(fname)) >= (long) size)
+		return 0;
+	strcat(full, fname);
+	return !pf_exists(full) ||
+	       alert(2, "[2][There is a file of that name.|Replace it?][Replace|Cancel]") == 1;
+}
+
+/* said on the status line, and in the log (its size, no path) */
+static void saved(const char *path, long len)
+{
+	char t[120];
+	const char *name = strrchr(path, '\\');
+	snprintf(t, sizeof t, "Saved %.60s (%ld KB).", name != NULL ? name + 1 : path, (len + 1023) >> 10);
+	status(t);
+	log_event("saved %ld", len);
+}
+
 /* what a load came to, on the screen */
 static void loaded(int r)
 {
@@ -482,6 +518,23 @@ static void loaded(int r)
 		win_status("");
 		win_toolbar();
 		break;
+	case BR_DOWNLOAD: {
+		/* a file EWeb doesn't show: saved where the user says */
+		char name[16], full[320];
+		long len = br.dl.len;
+		win_address(br.url);
+		win_status("");
+		win_toolbar();
+		log_event("download %.60s %ld", br.dl.mime, len);
+		br_file_name(br.dl.url, br.dl.mime, name, sizeof name);
+		if (!ask_save("Save the file", name, full, sizeof full))
+			br_dl_free(&br);
+		else if (br_dl_save(&br, full))
+			saved(full, len);
+		else
+			alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+		break;
+	}
 	case BR_ELSEWHERE:
 		/* mailto: to EMail, as the family hands each other work */
 		if (!av_send("EMAIL", br.elsewhere))
@@ -569,6 +622,60 @@ static void open_file(void)
 	go(full);
 }
 
+/* File > Save page as: the page shown as it came */
+static void save_page(void)
+{
+	char name[16], full[320];
+	if (br.src == NULL)
+		return;
+	br_file_name(br.url, br.mime, name, sizeof name);
+	if (!ask_save("Save the page", name, full, sizeof full))
+		return;
+	if (br_save_page(&br, full))
+		saved(full, br.src_len);
+	else
+		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+}
+
+void save_link(int link)
+{
+	char url[2048], name[16], full[320], err[200];
+	int r;
+	if (loading)
+		return;
+	br_link_url(&br, link, url, sizeof url);
+	if (url[0] == 0)
+		return;
+	br_file_name(url, "", name, sizeof name);
+	if (!ask_save("Save the link's file", name, full, sizeof full))
+		return;
+	loading_on();
+	r = br_save_url(&br, url, full, err, sizeof err);
+	loading = 0;
+	graf_mouse(ARROW, 0);
+	said[0] = 0;
+	win_status("");
+	if (r == BRS_SAVED) {
+		saved(full, br_saved);
+	} else if (r == BRS_STOPPED) {
+		keys_flush();
+		log_event("stopped");
+		win_status("Stopped.");
+	} else {
+		char t[220];
+		char *c;
+		atari_text(err, t, sizeof t);
+		for (c = t; *c; c++)		/* the alert's own marks */
+			if (*c == '[' || *c == ']' || *c == '|')
+				*c = ' ';
+		log_event("not saved");
+		alert(1, "[3][EWeb couldn't save the file. %.120s][ OK ]", t);
+	}
+	conn_stop = 0;
+	win_toolbar();
+	menu_update();
+}
+
 void command(int cmd)
 {
 	if (loading && cmd != C_STOP && cmd != C_ABOUT && cmd != C_KEYS && cmd != C_HELP && cmd != C_COPY)
@@ -577,6 +684,7 @@ void command(int cmd)
 	case C_ABOUT: dlg_about(); break;
 	case C_OPENURL: win_address_focus(1); break;
 	case C_OPENFILE: open_file(); break;
+	case C_SAVE: save_page(); break;
 	case C_RELOAD:
 		loading_on();
 		loaded(br_reload(&br));
@@ -667,6 +775,7 @@ static int shortcut(short kstate, short key)
 		switch (scan) {
 		case 0x26: cmd = C_OPENURL; break;		/* L */
 		case 0x18: cmd = C_OPENFILE; break;		/* O */
+		case 0x1f: cmd = C_SAVE; break;			/* S */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */
 		case 0x11: cmd = C_QUIT; break;			/* W: the one window */

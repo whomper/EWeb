@@ -919,6 +919,18 @@ Kept on the disk (your decision, 19 Oct 2026). `src/net/cookie.c`, fresh code af
   `?...`, and never a cookie, a field or a body (`make itest` sends a login with GET and POST, its
   cookie set, and looks for them in the log).
 
+## Saving (19 Oct 2026)
+
+File > Save page as (^S) writes the page shown as it came (the server's bytes, in its own
+encoding), kept with the page for that (a ninth more memory per page kept for Back). A link's
+file (Alternate-click, as Safari's Option-click, or its right-click menu) goes through the HTTP
+client's sink to the disk as it comes: gathered 256 KB at a time in memory (TT RAM first), the file
+open for the job and written a piece at a time (the guidelines' 6.5), so a download can be bigger
+than the memory, and Esc leaves nothing behind. A file EWeb doesn't show, opened as a page, is
+already in memory (up to 8 MB): EWeb asks where to save it and writes it in one safe save; the
+page shown stays. The name offered is 8.3 from the address (`INDEX.HTM` for `/`, the type's
+ending when the address has none). `make itest` and `make hatarigui` save each kind.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1196,7 +1208,8 @@ out of both (their paths lead nowhere on the Atari).
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
    alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
    the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
-   tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above).
+   tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above);
+   saving pages and files (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.

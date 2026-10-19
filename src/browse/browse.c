@@ -772,17 +772,19 @@ static void unkeep(BR_ENTRY *e)
 	if (e->d != NULL)
 		doc_free(e->d);
 	free(e->security);
+	free(e->src);
 	e->p = NULL;
 	e->d = NULL;
 	e->security = NULL;
+	e->src = NULL;
 	e->src_len = 0;
 }
 
 /* what a page laid out keeps, roughly: its tree, styles and display list
-   (about eight times its source, on the page set) */
+   (about eight times its source, on the page set), and the source */
 static long cost(long src_len)
 {
-	return 8 * src_len + 65536L;
+	return 9 * src_len + 65536L;
 }
 
 /* the kept pages within br_keep_max: those farthest from the one shown go
@@ -816,17 +818,21 @@ static void keep_shown(browser *b)
 			pg_free(b->p);
 		if (b->d != NULL)
 			doc_free(b->d);
+		free(b->src);
 	} else {
 		e = &b->hist[b->at];
 		unkeep(e);
 		e->d = b->d;
 		e->p = b->p;
+		e->src = b->src;
 		e->src_len = b->src_len;
+		str_copy(e->mime, b->mime, sizeof e->mime);
 		e->status = b->status;
 		e->security = str_ndup(b->security, (long) strlen(b->security));
 	}
 	b->d = NULL;
 	b->p = NULL;
+	b->src = NULL;
 	b->at = -1;
 }
 
@@ -841,6 +847,8 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 			pg_free(b->p);
 		if (b->d != NULL)
 			doc_free(b->d);
+		free(b->src);
+		b->src = NULL;
 	}
 	b->d = d;
 	b->p = p;
@@ -910,6 +918,8 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 		return BR_STOPPED;
 	show(b, d, p, url, "", 0, mode != NAV_RELOAD);
 	b->src_len = src->len;
+	b->src = sb_steal(src);
+	str_copy(b->mime, "text/html", sizeof b->mime);
 	if (mode == NAV_NEW)
 		hist_push(b, url);
 	b->at = b->cur;
@@ -1018,10 +1028,20 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		   picture_page(&src, f)) {
 		/* a picture on its own: a page that shows it */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
+	} else if (!has_scheme(f->url, "file") && f->status >= 200 && f->status < 300) {
+		/* a file to save: the page shown stays */
+		sb_free(&src);
+		br_dl_free(b);
+		b->dl.data = f->data;
+		b->dl.len = f->len;
+		str_copy(b->dl.url, f->url, sizeof b->dl.url);
+		str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
+		free(f);
+		return BR_DOWNLOAD;
 	} else {
 		char why[200];
 		snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and "
-			 "JPEG, PNG and GIF pictures, not other files yet.", f->mime, f->len);
+			 "JPEG, PNG and GIF pictures; other files it saves.", f->mime, f->len);
 		error_page(&src, f->url, "EWeb can't show this", why, NULL);
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	}
@@ -1047,6 +1067,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		}
 		show(b, d, p, shown, f->security, f->status, mode != NAV_RELOAD);
 		b->src_len = f->len;
+		b->src = f->data;
+		f->data = NULL;
+		str_copy(b->mime, f->mime, sizeof b->mime);
 		if (mode == NAV_NEW)
 			hist_push(b, shown);
 		else
@@ -1100,8 +1123,11 @@ void br_free(browser *b)
 		pg_free(b->p);
 	if (b->d != NULL)
 		doc_free(b->d);
+	free(b->src);
+	br_dl_free(b);
 	b->p = NULL;
 	b->d = NULL;
+	b->src = NULL;
 	for (i = 0; i < b->nhist; i++) {
 		free(b->hist[i].url);
 		unkeep(&b->hist[i]);
@@ -1204,13 +1230,17 @@ static int go_to(browser *b, int i)
 		page *p = e->p;
 		int status = e->status;
 		long src_len = e->src_len;
+		char *src = e->src;
 		char security[96];
 		str_copy(security, e->security ? e->security : "", sizeof security);
 		e->d = NULL;
 		e->p = NULL;
+		e->src = NULL;
 		unkeep(e);
 		show(b, d, p, e->url, security, status, 1);
 		b->src_len = src_len;
+		b->src = src;
+		str_copy(b->mime, e->mime, sizeof b->mime);
 		b->cur = i;
 		b->at = i;
 		b->ms_fetch = b->ms_parse = b->ms_style = b->ms_layout = 0;
@@ -1225,7 +1255,7 @@ static int go_to(browser *b, int i)
 	}
 	b->cur = i;
 	r = load(b, b->hist[i].url, NAV_HISTORY);
-	if (r == BR_STOPPED)
+	if (r == BR_STOPPED || r == BR_DOWNLOAD)
 		b->cur = old;
 	return r;
 }
@@ -1552,4 +1582,218 @@ relayout:
 	if (!br_relayout(b, b->width))
 		return BRP_STOPPED;
 	return BRP_LAYOUT;
+}
+
+/* ---------------------------------------------------------------- saving */
+
+static int name_char(int c)
+{
+	return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+}
+
+static int to_upper(int c)
+{
+	return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
+}
+
+/* n characters of s that a TOS name may hold, in capitals, to out (max
+   of them); '%' and the two digits after it left out */
+static int name_part(const char *s, long n, char *out, int max)
+{
+	int k = 0;
+	long i;
+	for (i = 0; i < n && k < max; i++) {
+		int c = to_upper((unsigned char) s[i]);
+		if (c == '%' && i + 2 < n) {
+			i += 2;
+			continue;
+		}
+		if (name_char(c))
+			out[k++] = (char) c;
+	}
+	out[k] = 0;
+	return k;
+}
+
+void br_file_name(const char *url, const char *mime, char *out, int size)
+{
+	static const char *const by_mime[][2] = {
+		{ "text/html", "HTM" }, { "application/xhtml+xml", "HTM" }, { "text/plain", "TXT" },
+		{ "text/css", "CSS" }, { "image/jpeg", "JPG" }, { "image/png", "PNG" }, { "image/gif", "GIF" },
+		{ "application/zip", "ZIP" }, { "application/pdf", "PDF" }
+	};
+	static const char *const pages[] = { "HTML", "HTM", "XHTML", "SHTML", "PHP", "ASP", "ASPX", "JSP" };
+	const char *p = strstr(url, "://"), *e, *seg, *dot;
+	char base[9], ext[9];
+	int page = strcmp(mime, "text/html") == 0 || strcmp(mime, "application/xhtml+xml") == 0;
+	size_t i;
+
+	/* the path's last part, without its query and fragment */
+	p = p != NULL ? p + 3 : url;
+	e = p + strcspn(p, "?#");
+	seg = e;
+	while (seg > p && seg[-1] != '/')
+		seg--;
+	if (seg == p)		/* the host alone */
+		seg = e;
+	for (dot = e; dot > seg && dot[-1] != '.'; dot--)
+		;
+	if (dot > seg) {
+		name_part(seg, dot - 1 - seg, base, 8);
+		name_part(dot, e - dot, ext, 5);
+	} else {
+		name_part(seg, e - seg, base, 8);
+		ext[0] = 0;
+	}
+	for (i = 0; i < sizeof pages / sizeof pages[0]; i++)
+		if (strcmp(ext, pages[i]) == 0 && (page || mime[0] == 0))
+			page = 1;
+	if (strcmp(ext, "JPEG") == 0)
+		strcpy(ext, "JPG");
+	if (page) {
+		strcpy(ext, "HTM");
+	} else if (ext[0] == 0) {
+		for (i = 0; i < sizeof by_mime / sizeof by_mime[0]; i++)
+			if (strcmp(mime, by_mime[i][0]) == 0)
+				strcpy(ext, by_mime[i][1]);
+		if (mime[0] == 0 && base[0] == 0) {	/* an address ending in / is a page */
+			page = 1;
+			strcpy(ext, "HTM");
+		}
+	}
+	ext[3] = 0;
+	snprintf(out, (size_t) size, "%s%s%s", base[0] ? base : page ? "INDEX" : "DOWNLOAD", ext[0] ? "." : "", ext);
+}
+
+int br_save_page(browser *b, const char *path)
+{
+	return b->src != NULL && pf_save(path, b->src, b->src_len) == 0;
+}
+
+void br_dl_free(browser *b)
+{
+	free(b->dl.data);
+	memset(&b->dl, 0, sizeof b->dl);
+}
+
+int br_dl_save(browser *b, const char *path)
+{
+	int r = b->dl.data != NULL && pf_save(path, b->dl.data, b->dl.len) == 0;
+	br_dl_free(b);
+	return r;
+}
+
+long br_save_buf = 256L << 10, br_saved;
+
+typedef struct {
+	browser *b;
+	int h;
+	char *buf;
+	long n, size;
+	unsigned long said;
+	int failed;		/* the disk wouldn't take it */
+} SAVING;
+
+static int save_out(SAVING *s)
+{
+	if (s->n > 0 && pf_write(s->h, s->buf, s->n) != s->n) {
+		s->failed = 1;
+		return 0;
+	}
+	s->n = 0;
+	return 1;
+}
+
+static int save_sink(void *ud, const char *data, long n)
+{
+	SAVING *s = ud;
+	while (n > 0) {
+		long k = s->size - s->n < n ? s->size - s->n : n;
+		memcpy(s->buf + s->n, data, (size_t) k);
+		s->n += k;
+		data += k;
+		n -= k;
+		br_saved += k;
+		if (s->n == s->size && !save_out(s))
+			return 0;
+	}
+	if (s->b->say != NULL && pf_ms() - s->said >= 500) {
+		char t[64];
+		s->said = pf_ms();
+		snprintf(t, sizeof t, "Saving... %ld KB", br_saved >> 10);
+		s->b->say(s->b->ud, t);
+	}
+	return 1;
+}
+
+int br_save_url(browser *b, const char *url, const char *path, char *err, int errlen)
+{
+	HTTPREQ rq;
+	HTTPRESP *rs;
+	SBUF body;
+	SAVING s;
+	char host[128];
+	int ok;
+
+	br_saved = 0;
+	err[0] = 0;
+	conn_stop = 0;
+	if (!has_scheme(url, "http") && !has_scheme(url, "https")) {
+		snprintf(err, (size_t) errlen, "EWeb saves files from http and https addresses.");
+		return BRS_FAILED;
+	}
+	memset(&s, 0, sizeof s);
+	s.b = b;
+	s.size = br_save_buf > 8192 ? br_save_buf : 8192;
+	while ((s.buf = malloc((size_t) s.size)) == NULL && s.size > 8192)
+		s.size /= 2;
+	rs = malloc(sizeof *rs);
+	if (s.buf == NULL || rs == NULL) {
+		free(s.buf);
+		free(rs);
+		snprintf(err, (size_t) errlen, "Out of memory.");
+		return BRS_FAILED;
+	}
+	s.h = pf_open(path, PF_WRITE);
+	if (s.h < 0) {
+		free(s.buf);
+		free(rs);
+		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
+		return BRS_FAILED;
+	}
+	host_of(url, host, sizeof host);
+	say(b, "Opening %s...", host);
+	memset(&rq, 0, sizeof rq);
+	rq.url = url;
+	rq.sink = save_sink;
+	rq.ud = &s;
+	rq.top = 1;		/* a link followed, for its cookies */
+	rq.site = has_scheme(b->url, "http") || has_scheme(b->url, "https") ? b->url : NULL;
+	rq.referrer = rq.site;
+	sb_init(&body);
+	ok = http_request(&rq, rs, &body, err, errlen);
+	if (ok && (rs->status < 200 || rs->status >= 300)) {
+		snprintf(err, (size_t) errlen, "The server answered %d %.60s.", rs->status, rs->reason);
+		ok = 0;
+	}
+	if (ok)
+		ok = save_out(&s);
+	if (s.failed)
+		snprintf(err, (size_t) errlen, "The disk is full, or %.150s can't be written.", path);
+	pf_close(s.h);
+	sb_free(&body);
+	http_resp_free(rs);
+	free(rs);
+	free(s.buf);
+	if (!ok) {
+		pf_remove(path);
+		if (conn_stop) {
+			conn_stop = 0;
+			return BRS_STOPPED;
+		}
+		if (err[0] == 0)
+			snprintf(err, (size_t) errlen, "Nothing came.");
+		return BRS_FAILED;
+	}
+	return BRS_SAVED;
 }
