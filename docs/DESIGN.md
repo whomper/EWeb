@@ -392,8 +392,8 @@ smaller without Hubbub (715 KB).
 **On the emulated 32 MHz Falcon** (`make hatarigui`), `EWEB.PRG`'s log gives the test server's
 long page (36 KB of words, one text node, where both parsers mostly scan text) 195 ms against
 Hubbub's 205; a small page 90-105 ms with either. Most of that is not the HTML: what the log calls
-the parse also covers the status line and EWeb's UA stylesheet, which is parsed again for every
-page (about 320 K instructions). Parsing it once a program run is the next thing to make faster.
+the parse also covers the status line and EWeb's UA stylesheet, which was parsed again for every
+page (about 320 K instructions). It is now parsed once a program run (below).
 `EWEB.PRG` is built freestanding, where a `memcpy` is a call, so the parser's small copies are
 the compiler's own moves.
 
@@ -401,6 +401,29 @@ the compiler's own moves.
 loop over the bytes costs), then copies into the document, interning names for the CSS engine, and
 clearing new nodes, a few percent each. The first page also looks up a few charset names in
 libparserutils' list (about 50 K instructions), once a program run.
+
+## The UA stylesheet once a program run (19 Oct 2026)
+
+EWeb's UA stylesheet (the HTML Standard's rendering rules) was parsed into each page's CSS
+context, so every page paid for it again. Now the first page parses it once into a context of its
+own (`ec_share`: every block parsed, its names marked shared), and each page's
+context is made on it (`ec_create_on`). A page's own rules on a name the base already has go into
+the page's own table beside the base's, so the base is never written after it is built and stays
+the same however many pages are shown. Selecting styles takes the base's rules and the page's
+together, in the cascade's order.
+
+| | Before | Once a run |
+|---|---|---|
+| A small page after the first (68030 instructions, `docparse -s`) | 341 K | 45 K |
+| The first page of a run (builds the base) | 341 K | 503 K |
+| A small page on the emulated 32 MHz Falcon (`make hatarigui`, the log's parse) | 90-105 ms | 10-40 ms |
+| The test server's long page, the same | 195 ms | 115 ms |
+| The first page of a run, the same | 90-105 ms | 140 ms |
+
+The Hatari figures are the same on EmuTOS 1.4 and on Erez's TOS 4.04 (`common/tools/machines.py`
+takes it from `~/.aera/tos`). Checked: every page of the set gives the same display list alone and
+after another page (after `NEWS.HTM` with its 83 KB stylesheet too), the kept layouts are
+unchanged, and `make csscmp` finds the same differences as before.
 
 ## Fetching pages: EWeb's HTTP client (17 Oct 2026)
 
@@ -1173,7 +1196,7 @@ out of both (their paths lead nowhere on the Atari).
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
    alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
    the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
-   tree-construction tests nearly all passed (above).
+   tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.

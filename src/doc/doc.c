@@ -473,6 +473,27 @@ static void finish(doc *d, dnode *n, dnode *parent)
 		n->e.flags |= EC_NODE_EMPTY;
 }
 
+/* The UA sheet, parsed once a program run into a base context that
+   every document's is made on (ec_share): parsing it for each page cost
+   about 320 K 68030 instructions, most of a small page's time. */
+static ec_ctx *ua;
+
+static int ua_base(const ec_media *media)
+{
+	if (ua == NULL) {
+		ec_ctx *c = ec_create(media, 0);
+		if (c == NULL)
+			return 0;
+		if (ec_sheet(c, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA) != 0) {
+			ec_destroy(c);
+			return 0;
+		}
+		ec_share(c);
+		ua = c;
+	}
+	return 1;
+}
+
 doc *doc_parse_opts(const char *data, size_t len, const html_opts *o, const ec_media *media)
 {
 	doc *d = calloc(1, sizeof *d);
@@ -480,7 +501,9 @@ doc *doc_parse_opts(const char *data, size_t len, const html_opts *o, const ec_m
 
 	if (d == NULL)
 		return NULL;
-	d->css = ec_create(media, 0);
+	d->css = ua_base(media) ? ec_create_on(media, 0, ua) : ec_create(media, 0);
+	if (d->css != NULL && ua != NULL)
+		d->ua = ua;
 	if (d->css == NULL || !html_parse(d, data, len, o)) {
 		doc_free(d);
 		return NULL;
@@ -607,7 +630,9 @@ void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t 
 
 void doc_add_ua(doc *d)
 {
-	ec_sheet(d->css, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA);
+	/* a document on the base has the UA sheet already */
+	if (d->ua == NULL)
+		ec_sheet(d->css, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA);
 }
 
 void doc_select(doc *d)

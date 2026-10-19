@@ -800,25 +800,37 @@ static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
 			vec_push(&c->mem, &c->universal_sib, &e);
 		return;
 	}
-	v = ((ec_atom *) key)->rules[kind];
-	if (v == NULL) {
-		v = ec_alloc(&c->mem, sizeof *v);
-		if (v == NULL)
-			return;
-		memset(v, 0, sizeof *v);
-		((ec_atom *) key)->rules[kind] = v;
-	}
-	vec_push(&c->mem, v, &e);
-	if (e.sib) {
-		v = ((ec_atom *) key)->sibrules[kind];
+	{
+		/* a base's atom keeps the base's rules; this context's go in
+		   its shadow */
+		ec_vec **rules = ((ec_atom *) key)->rules, **sibrules = ((ec_atom *) key)->sibrules;
+		if (key->shared && c->base != NULL) {
+			ec_shadow *sh = ec_shadow_of(c, key, 1);
+			if (sh == NULL)
+				return;
+			rules = sh->rules;
+			sibrules = sh->sibrules;
+		}
+		v = rules[kind];
 		if (v == NULL) {
 			v = ec_alloc(&c->mem, sizeof *v);
 			if (v == NULL)
 				return;
 			memset(v, 0, sizeof *v);
-			((ec_atom *) key)->sibrules[kind] = v;
+			rules[kind] = v;
 		}
 		vec_push(&c->mem, v, &e);
+		if (e.sib) {
+			v = sibrules[kind];
+			if (v == NULL) {
+				v = ec_alloc(&c->mem, sizeof *v);
+				if (v == NULL)
+					return;
+				memset(v, 0, sizeof *v);
+				sibrules[kind] = v;
+			}
+			vec_push(&c->mem, v, &e);
+		}
 	}
 }
 

@@ -111,5 +111,12 @@ ec_select(c, root);                     /* every node's style is set */
 ec_destroy(c);
 ```
 
+A stylesheet every document shares (EWeb's UA sheet) can be parsed once
+and kept: `ec_share(ua)` finishes parsing a context's sheets and marks its
+names shared, and `ec_create_on(&m, 0, ua)` makes a document's context on
+it. The base is only read from then on (a document's rules on its names go
+into the document's own table), so it may be used by every document of a
+program run and is destroyed last.
+
 `tests/bench/ecstyle.c` builds `ec_node`s from nsbench's document tree;
 in EWeb the document's own nodes will be them.

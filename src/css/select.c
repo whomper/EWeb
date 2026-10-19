@@ -1016,7 +1016,7 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo)
 
 	if (st == NULL)
 		return NULL;
-	c->stamp++;
+	c->stamp = ++ec_stamp;
 	memset(k.set, 0, sizeof k.set);
 	k.c = c;
 	k.st = st;
@@ -1134,21 +1134,45 @@ static int sib_matches(ec_ctx *c, const ec_vec *v, const ec_node *e)
 	return 0;
 }
 
+/* an atom's rules that look at siblings: its own (or its base's), and
+   for a base's atom this context's too */
+static int atom_sib_matches(ec_ctx *c, const ec_atom *a, int kind, const ec_node *e)
+{
+	const ec_shadow *sh;
+	if (sib_matches(c, a->sibrules[kind], e))
+		return 1;
+	return a->shared && c->shadow != NULL && (sh = ec_shadow_of(c, a, 0)) != NULL &&
+	       sib_matches(c, sh->sibrules[kind], e);
+}
+
 static int any_sib_match(ec_ctx *c, const ec_node *e)
 {
 	uint16_t k;
 
-	if (e->id && sib_matches(c, e->id->sibrules[EC_B_ID], e))
+	if (e->id && atom_sib_matches(c, e->id, EC_B_ID, e))
 		return 1;
 	for (k = 0; k < e->ncls; k++)
-		if (sib_matches(c, e->cls[k]->sibrules[EC_B_CLASS], e))
+		if (atom_sib_matches(c, e->cls[k], EC_B_CLASS, e))
 			return 1;
-	if (sib_matches(c, e->name->sibrules[EC_B_TAG], e))
+	if (atom_sib_matches(c, e->name, EC_B_TAG, e))
 		return 1;
 	for (k = 0; k < e->nattr; k++)
-		if (sib_matches(c, e->attr[k].name->sibrules[EC_B_ATTR], e))
+		if (atom_sib_matches(c, e->attr[k].name, EC_B_ATTR, e))
 			return 1;
+	if (c->base != NULL && sib_matches(c, &c->base->universal_sib, e))
+		return 1;
 	return sib_matches(c, &c->universal_sib, e);
+}
+
+/* an atom's rules: its own (or its base's), and for a base's atom this
+   context's too */
+static void collect_atom(ec_ctx *c, const ec_atom *a, int kind, const ec_node *e, int *mf)
+{
+	const ec_shadow *sh;
+	if (a->rules[kind])
+		collect(c, a->rules[kind], e, mf);
+	if (a->shared && c->shadow != NULL && (sh = ec_shadow_of(c, a, 0)) != NULL && sh->rules[kind])
+		collect(c, sh->rules[kind], e, mf);
 }
 
 /* the attributes selectors look at, in short: elements that differ here
@@ -1228,16 +1252,15 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 
 	nhits = 0;
 	*mf = 0;
-	if (e->id && e->id->rules[EC_B_ID])
-		collect(c, e->id->rules[EC_B_ID], e, mf);
+	if (e->id)
+		collect_atom(c, e->id, EC_B_ID, e, mf);
 	for (k = 0; k < e->ncls; k++)
-		if (e->cls[k]->rules[EC_B_CLASS])
-			collect(c, e->cls[k]->rules[EC_B_CLASS], e, mf);
-	if (e->name->rules[EC_B_TAG])
-		collect(c, e->name->rules[EC_B_TAG], e, mf);
+		collect_atom(c, e->cls[k], EC_B_CLASS, e, mf);
+	collect_atom(c, e->name, EC_B_TAG, e, mf);
 	for (k = 0; k < e->nattr; k++)
-		if (e->attr[k].name->rules[EC_B_ATTR])
-			collect(c, e->attr[k].name->rules[EC_B_ATTR], e, mf);
+		collect_atom(c, e->attr[k].name, EC_B_ATTR, e, mf);
+	if (c->base != NULL)
+		collect(c, &c->base->universal, e, mf);
 	collect(c, &c->universal, e, mf);
 	sa = find_attr(e, c->a_style);
 	if (sa != NULL && nhits < MAX_HITS && !(c->opts & EC_COMPAT_NOINLINE)) {

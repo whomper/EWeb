@@ -33,6 +33,8 @@
  * shows the form again, as it was filled. -k FILE keeps the cookies
  * that last in FILE (read when needed, written at the end), as EWEB.PRG
  * keeps COOKIES.TXT. -l FILE: the connections' log, as EWGET -l writes it.
+ * -P PAGE: PAGE is loaded first and kept (history), as when the page is
+ * reached from it: what one page's sheets did must not show in the next.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -281,7 +283,7 @@ int main(int argc, char **argv)
 	int32_t width = 608, zoom = 819, top = 0, height = -1;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, i, r;
 	PIC_PAL pal;
-	const char *next = NULL;
+	const char *next = NULL, *prev = NULL;
 	char where[4096];
 	browser b;
 	page *p;
@@ -309,6 +311,8 @@ int main(int argc, char **argv)
 			band = 1;
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
 			next = argv[++i];
+		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
+			prev = argv[++i];
 		else if (!strcmp(argv[i], "-t"))
 			show_tree = 1;
 		else if (!strcmp(argv[i], "-v"))
@@ -376,6 +380,16 @@ int main(int argc, char **argv)
 	if (band) {
 		pic_pal_init(&pal, 16, falcon16);
 		img_pal = &pal;
+	}
+	if (prev != NULL) {
+		char pw[4096];
+		if (strstr(prev, "://") == NULL && realpath(prev, pw) != NULL)
+			prev = pw;
+		if (br_go(&b, prev) != BR_SHOWN) {
+			fprintf(stderr, "ewrender: %s not shown\n", prev);
+			return 1;
+		}
+		pictures(&b);
 	}
 	r = br_go(&b, where);
 	if (r != BR_SHOWN || b.p == NULL) {

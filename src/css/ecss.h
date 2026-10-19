@@ -157,6 +157,14 @@ typedef struct ec_stats {
 ec_ctx *ec_create(const ec_media *media, unsigned opts);
 void ec_destroy(ec_ctx *c);
 
+/* A base context: sheets that every document has (the UA sheet), parsed
+ * once. ec_share() freezes c as one: no sheet may be added to it after,
+ * and it must outlive the contexts made on it. ec_create_on() makes a
+ * context that has base's rules and atoms as if its sheets had been
+ * added to it first (its own sheets cascade after them, as they would). */
+void ec_share(ec_ctx *c);
+ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base);
+
 /* an atom: the same pointer for the same bytes, until ec_destroy() */
 const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len);
 const char *ec_atom_text(const ec_atom *a, size_t *len);

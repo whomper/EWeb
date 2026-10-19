@@ -78,11 +78,18 @@ static int atoms_grow(ec_ctx *c)
 	return 0;
 }
 
+uint32_t ec_stamp;
+
 const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len)
 {
 	uint32_t h = ec_hash(s, len), b;
 	ec_atom *a;
 
+	if (c->base != NULL)
+		/* the base's atom, if it has one: its rules match here */
+		for (a = c->base->atoms[h & c->base->atom_mask]; a != NULL; a = a->next)
+			if (a->hash == h && a->len == len && memcmp(a->s, s, len) == 0)
+				return a;
 	for (a = c->atoms[h & c->atom_mask]; a != NULL; a = a->next)
 		if (a->hash == h && a->len == len && memcmp(a->s, s, len) == 0)
 			return a;
@@ -321,12 +328,23 @@ static const struct { uint8_t kind; int32_t val; } initial[EC_NPROP] = {
 
 ec_ctx *ec_create(const ec_media *media, unsigned opts)
 {
+	return ec_create_on(media, opts, NULL);
+}
+
+ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
+{
 	ec_ctx *c = calloc(1, sizeof *c);
 	int i;
 
 	if (c == NULL)
 		return NULL;
 	names_init();
+	c->base = base;
+	if (base != NULL) {
+		/* its rules come first, as if its sheets had been added here */
+		c->order = base->order;
+		c->sibling_rules = base->sibling_rules;
+	}
 	c->media = *media;
 	c->opts = opts;
 	c->mem.chunk_size = 65536;
@@ -363,7 +381,60 @@ void ec_destroy(ec_ctx *c)
 	ec_arena_free(&c->smem);
 	ec_arena_free(&c->mem);
 	free(c->atoms);
+	free(c->shadow);
 	free(c);
+}
+
+static void parse_all(ec_ctx *c, const ec_vec *v)
+{
+	uint32_t i;
+	for (i = 0; v != NULL && i < v->n; i++) {
+		ec_block *b = (ec_block *) v->e[i].sel->block;
+		if (!b->parsed)
+			ec_parse_block(c, b);
+	}
+}
+
+void ec_share(ec_ctx *c)
+{
+	uint32_t i;
+	int k;
+
+	/* every declaration block parsed now, so that a context on it never
+	   writes into it */
+	parse_all(c, &c->universal);
+	parse_all(c, &c->never);
+	for (i = 0; i <= c->atom_mask; i++) {
+		ec_atom *a;
+		for (a = c->atoms[i]; a != NULL; a = a->next) {
+			for (k = 0; k < EC_NB; k++)
+				parse_all(c, a->rules[k]);
+			a->shared = 1;
+		}
+	}
+}
+
+ec_shadow *ec_shadow_of(ec_ctx *c, const ec_atom *a, int make)
+{
+	uint32_t h = (a->hash ^ (a->hash >> 8)) & (EC_SHADOW_SIZE - 1);
+	ec_shadow *s;
+
+	if (c->shadow != NULL)
+		for (s = c->shadow[h]; s != NULL; s = s->next)
+			if (s->a == a)
+				return s;
+	if (!make)
+		return NULL;
+	if (c->shadow == NULL && (c->shadow = calloc(EC_SHADOW_SIZE, sizeof *c->shadow)) == NULL)
+		return NULL;
+	s = ec_alloc(&c->mem, sizeof *s);
+	if (s == NULL)
+		return NULL;
+	memset(s, 0, sizeof *s);
+	s->a = a;
+	s->next = c->shadow[h];
+	c->shadow[h] = s;
+	return s;
 }
 
 void ec_unstyle(ec_ctx *c)

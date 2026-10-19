@@ -85,7 +85,9 @@ struct ec_atom {
 	uint32_t hash;
 	uint16_t len;
 	uint16_t bloom;			/* its bit in the ancestor filter, never 0 */
-	uint16_t ref;			/* an attribute a selector looks at */
+	uint8_t ref;			/* an attribute a selector looks at */
+	uint8_t shared;			/* a base context's (ec_share): its rules are
+					   the base's, a context's own are in its shadow */
 	uint32_t stamp;			/* the cascade's: a custom property seen */
 	ec_vec *rules[EC_NB];		/* rules whose subject has it, by kind */
 	ec_vec *sibrules[EC_NB];	/* those of them that look at siblings */
@@ -93,6 +95,11 @@ struct ec_atom {
 };
 
 uint32_t ec_hash(const char *s, size_t len);
+
+/* the cascade's stamps, from one counter for every context: atoms shared
+ * between contexts never see the same stamp twice */
+extern uint32_t ec_stamp;
+
 
 /* ------------------------------------------------------------ tokens */
 
@@ -235,9 +242,24 @@ typedef struct ec_sellist {
 
 typedef struct ec_kwent ec_kwent;
 
+/* a context's rules on a base context's atom (ec_create_on) */
+typedef struct ec_shadow {
+	struct ec_shadow *next;
+	const ec_atom *a;
+	ec_vec *rules[EC_NB], *sibrules[EC_NB];
+} ec_shadow;
+
+#define EC_SHADOW_SIZE 256
+
+/* a context's own rules on an atom it shares with its base (NULL: none);
+   make: create the entry */
+ec_shadow *ec_shadow_of(struct ec_ctx *c, const ec_atom *a, int make);
+
 struct ec_ctx {
 	ec_media media;
 	unsigned opts;
+	const struct ec_ctx *base;	/* ec_create_on's, or NULL */
+	ec_shadow **shadow;		/* EC_SHADOW_SIZE lists, or NULL: none yet */
 	ec_arena mem;			/* atoms, sheets, rules */
 	ec_arena smem;			/* styles */
 	ec_atom **atoms;

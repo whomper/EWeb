@@ -53,7 +53,8 @@ struct dnode {
 typedef struct doc {
 	dnode *root;			/* the document node */
 	dnode *html, *body;		/* NULL if the page has none */
-	ec_ctx *css;
+	ec_ctx *css;			/* made on the UA sheet's base (ua) when there is one */
+	const ec_ctx *ua;
 	char title[256];		/* UTF-8, white space collapsed */
 	char base[1024];		/* <base href>, "" if none */
 	char charset[40];		/* what the page was read as */

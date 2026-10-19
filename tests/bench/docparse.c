@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * docparse - a page made into EWeb's document (src/doc: Hubbub's parse
- * into EWeb's own nodes, as EWEB.PRG does it), for counting the 68030
+ * docparse - a page made into EWeb's document (src/doc: EWeb's HTML parse
+ * into its own nodes, as EWEB.PRG does it), for counting the 68030
  * instructions that takes (tools/count68k.sh, tools/prof68k.py):
  *
  *   docparse [-s] [-r N] PAGE.HTM...
  *
- * -s styles it too (the UA sheet and the page's <style>s, as EWEB.PRG
- * without fetching linked sheets); -r N does each page N times. Prints
+ * -s styles it too (the UA sheet, parsed once a run, and the page's
+ * <style>s, as EWEB.PRG without fetching linked sheets); -r N does each page N times. Prints
  * each page's elements.
  */
 #include <stdio.h>
