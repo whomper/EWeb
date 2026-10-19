@@ -138,6 +138,12 @@ static int loglen, logcap = sizeof(logstat), job_hold;
    sets it to 0 and keeps the 4 KB buffer */
 long conn_log_hold_bytes = 16384;
 
+/* STinG's output buffer for each connection (net_tos.c): what may be in
+   flight unacknowledged. 4 KB caps an upload at about 40 KB/s on a LAN
+   (EFTP measured 34 KB/s); an app sending bulk raises it before it
+   connects */
+long net_sendbuf = 4096;
+
 void conn_log_hold(int on)
 {
 	if (on && !job_hold && conn_logfile[0] && logbuf == logstat &&

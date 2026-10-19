@@ -9,6 +9,8 @@
 #include "plat.h"
 
 static unsigned long key[4];
+/* the text being encrypted or read: up to SECRET_MAX, so not on the stack */
+static unsigned char buf[2 + 4 + SECRET_MAX];
 static int have_key, warned;
 static char keyname[128];
 
@@ -73,13 +75,12 @@ static const char hexd[] = "0123456789ABCDEF";
 
 int secret_encode(const char *plain, char *out, int size)
 {
-	unsigned char buf[2 + 4 + 128];
 	int n = (int)strlen(plain), i, o;
 	if (!*plain) {
 		snprintf(out, size, "%s", "");
 		return 1;
 	}
-	if (!have_key || n > 128 || size < (int)strlen(SECRET_TAG) + 2 * (6 + n) + 1) {
+	if (!have_key || n > SECRET_MAX || size < (int)strlen(SECRET_TAG) + 2 * (6 + n) + 1) {
 		snprintf(out, size, "%s", plain);	/* as it is, and said so */
 		if (!warned && secret_warn) {
 			warned = 1;
@@ -115,7 +116,6 @@ static int hexv(char c)
 
 int secret_decode(const char *in, char *out, int size)
 {
-	unsigned char buf[2 + 4 + 128];
 	int t = (int)strlen(SECRET_TAG), len, n, i;
 	if (strncmp(in, SECRET_TAG, t)) {
 		snprintf(out, size, "%s", in);		/* written by an older version */
