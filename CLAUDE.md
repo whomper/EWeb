@@ -83,7 +83,7 @@ hub stay complete, with the evidence.
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions, `tools/prof68k.py` shows where they go function by function, and
   `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
-  `NSBENCH.TTP` on an emulated 32 MHz Falcon (EmuTOS's `etos1024k.img`).
+  `NSBENCH.TTP` on an emulated 32 MHz Falcon.
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and
@@ -97,8 +97,9 @@ hub stay complete, with the evidence.
   `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
   The handshake's RSA and elliptic curves run on the DSP through `common/` (`ui/dsp.c`, `ui/dsp_ec.c`,
   `src/ecdsp.c`, `dsp/ec.a56`): change those in AERA-Atari and test them there (`common/tests/ec`).
-  `make clean` deletes `build/etos1024k.img` (EmuTOS 1.4's 1024k image, from SourceForge), which the
-  Hatari rigs need.
+  Every Hatari rig boots the family's machines (`common/tools/machines.py`): Erez's TOS 4.04 from
+  `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
+  Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
   `win.c`, the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`

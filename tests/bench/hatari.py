@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""NSBENCH.TTP on an emulated Falcon: Hatari, EmuTOS, a 68030 at 32 MHz
-(Hatari's fastest) with a 68882, 14 MB of ST-RAM and 64 MB of TT-RAM, and
+"""NSBENCH.TTP on an emulated Falcon, the family's (common/tools/machines.py:
+Erez's TOS 4.04 when ~/.aera/tos has it, else EmuTOS): a 68030 at 32 MHz
+(Hatari's fastest) with a 68882, 14 MB of ST-RAM and 128 MB of TT-RAM, and
 cycle-exact timing; or with --stock, a stock Falcon: 16 MHz, no FPU, no TT-RAM.
 
-    tests/bench/hatari.py [--stock] ETOS1024K.IMG PAGE.HTML [SHEET.CSS ...] [-- NSBENCH-ARGS]
+    tests/bench/hatari.py [--stock] PAGE.HTML [SHEET.CSS ...] [-- NSBENCH-ARGS]
 
 It prints what nsbench printed (its times are the emulated machine's).
 """
@@ -16,6 +17,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
+import machines  # noqa: E402
 
 
 def main():
@@ -27,7 +30,7 @@ def main():
     if "--" in args:
         extra = args[args.index("--") + 1:]
         args = args[:args.index("--")]
-    tos, page, sheets = os.path.abspath(args[0]), args[1], args[2:]
+    page, sheets = args[0], args[1:]
     work = os.path.join(ROOT, "build", "hatari")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
@@ -41,15 +44,15 @@ def main():
     with open(os.path.join(work, "NSBENCH.CMD"), "w") as f:
         f.write(" ".join(extra + ["PAGE.HTM"] + names))
     log = os.path.join(work, "hatari.log")
-    cmd = ["hatari", "--machine", "falcon", "--tos", tos, "--harddrive", work,
-           "--auto", "C:\\NSBENCH.TTP", "--fast-boot", "yes", "--natfeats", "yes",
-           "--cpuclock", "16" if stock else "32", "--fpu", "none" if stock else "68882",
-           "--addr24", "off", "--memsize", "14", "--ttram", "0" if stock else "64",
-           "--cpu-exact", "yes",
-           "--fast-forward", "yes", "--sound", "off", "--confirm-quit", "no",
-           "--statusbar", "no", "--monitor", "vga", "--log-level", "fatal"]
-    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    h = subprocess.Popen(cmd, env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
+    m = machines.Machine("Falcon:16", work)
+    cmd = ["hatari"] + m.args() + ["--auto", "C:\\NSBENCH.TTP", "--fast-boot", "yes", "--natfeats", "yes",
+                                   "--cpu-exact", "yes", "--fast-forward", "yes", "--statusbar", "no",
+                                   "--log-level", "fatal"]
+    if stock:		# a stock Falcon: its own clock, no FPU, no TT-RAM
+        for opt, val in (("--cpuclock", "16"), ("--fpu", "none"), ("--ttram", "0")):
+            cmd[cmd.index(opt) + 1] = val
+    print(m.describe() + (", stock" if stock else ""))
+    h = subprocess.Popen(cmd, env=m.env(), stdout=open(log, "w"), stderr=subprocess.STDOUT)
     end = time.time() + 3000
     try:
         while time.time() < end and h.poll() is None:

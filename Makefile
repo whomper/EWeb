@@ -502,13 +502,12 @@ hatarigui: binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
-# EWGET.TTP on an emulated Falcon (Hatari, EmuTOS's etos1024k.img in
-# build/), through the family's FAKESTNG (common/tools/fakesting), against
+# EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: Erez's
+# TOS 4.04 from ~/.aera/tos, else EmuTOS), through FAKESTNG, against
 # tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
 # emulated DSP
 hatarinet: binary/EWGET.TTP
-	$(MAKE) -s -C common/tools/fakesting
-	python3 tests/hatari/ewget_test.py build/etos1024k.img
+	python3 tests/hatari/ewget_test.py
 .PHONY: hatarinet
 
 # what EWEB.PRG and EWGET.TTP do on the disk (the guidelines' 6.5), from

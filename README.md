@@ -230,10 +230,13 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   touch nothing, and a quit with nothing changed writes nothing.
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
-- `make fuzz`: the HTTP client, the URL parser and the cookies under libFuzzer.
+- `make fuzz`: the HTTP client, the URL parser, the cookies, the HTML parser and
+  the bookmark file under libFuzzer.
 - `tests/bench/measure.py [-E ewcss]`: 68030 instructions per phase for the
   whole page set; `tests/bench/hatari.py [--stock]`: `NSBENCH.TTP` timed on an
-  emulated Falcon.
+  emulated Falcon. The Hatari rigs boot the family's machines
+  (`common/tools/machines.py`): the owner's own TOS 4.04 when it is in
+  `~/.aera/tos`, else EmuTOS 1.4.
 
 ## Licence
 

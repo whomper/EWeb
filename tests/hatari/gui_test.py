@@ -472,7 +472,9 @@ def browse():
                 area = tuple(int(m.group(i)) for i in range(1, 5))
                 r.mouse.move(8 * len(" EWeb  File  Edit  View  Book"), 5)	# the Bookmarks menu, dropped
                 r.shot(12)
-                r.mouse.move(area[0] + area[2] // 2, area[1] + area[3] - 20)
+                # a click on the page's empty part closes it (TOS 4 holds a
+                # dropped menu until one)
+                r.mouse.click(area[0] + area[2] // 2, area[1] + area[3] - 20)
                 time.sleep(0.5)
                 pt = link_point("about:bookmarks", area, int(m.group(5)), "Remove",
                                 ("-m", os.path.join(hd, "BOOKMARK.HTM")))

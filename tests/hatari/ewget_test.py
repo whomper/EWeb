@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""EWGET.TTP on an emulated Falcon: Hatari, EmuTOS, a 68030 at 32 MHz with
-TT-RAM and the DSP emulated, against tests/net/server.py on this computer.
-Hatari has no network card, so FAKESTNG.PRG in C:\\AUTO carries the
-Atari's TCP connections over the emulated serial port to serial_bridge.py
-(the family's, common/tools/fakesting: what comes to the Atari is paced by
-what it has room for).
+"""EWGET.TTP on an emulated Falcon, the family's (common/tools/machines.py:
+Erez's TOS 4.04 when ~/.aera/tos has it, else EmuTOS; a 68030 at 32 MHz
+with TT-RAM and the DSP emulated), against tests/net/server.py on this
+computer. Hatari has no network card, so FAKESTNG.PRG in C:\\AUTO carries
+the Atari's TCP connections over the emulated serial port to
+serial_bridge.py (the family's, common/tools/fakesting, set up by
+machines.py: what comes to the Atari is paced by what it has room for).
 Each run fetches over TLS and plain HTTP: the page must arrive whole, the
 handshake must be TLS 1.2 with the server's certificate checked against the
 test authority, and the second fetch must use the kept connection.
 
-    tests/hatari/ewget_test.py ETOS1024K.IMG [WORK]"""
+    tests/hatari/ewget_test.py [WORK]"""
 import os
 import re
 import shutil
@@ -21,8 +22,9 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-FAKE = os.path.join(ROOT, "common", "tools", "fakesting")
 sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
+sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
+import machines  # noqa: E402
 import server  # noqa: E402
 
 HTTP, HTTPS, EC = 18180, 18543, 18545
@@ -45,7 +47,7 @@ RUNS = [
 ]
 
 
-def run_atari(tos, hd, cmdline, log, dropped=None):
+def run_atari(hd, cmdline, log, dropped=None):
     """dropped: the line goes in that .CMD file, and EWGET.CMD names it, as
     the desktop does when the file is dropped on EWGET.TTP"""
     if dropped:
@@ -54,22 +56,11 @@ def run_atari(tos, hd, cmdline, log, dropped=None):
         cmdline = "C:\\" + dropped
     with open(os.path.join(hd, "EWGET.CMD"), "w") as f:
         f.write(cmdline)
-    fifo_out, fifo_in = os.path.join(hd, "..", "rs_out"), os.path.join(hd, "..", "rs_in")
-    for p in (fifo_out, fifo_in):
-        if os.path.exists(p):
-            os.remove(p)
-        os.mkfifo(p)
-    bridge = subprocess.Popen([sys.executable, os.path.join(FAKE, "serial_bridge.py"), fifo_out, fifo_in],
-                              stderr=open(log + ".bridge", "w"))
-    cmd = ["hatari", "--machine", "falcon", "--tos", tos, "--harddrive", hd,
-           "--auto", "C:\\EWGET.TTP", "--fast-boot", "yes", "--natfeats", "yes",
-           "--cpuclock", "32", "--fpu", "68882", "--dsp", "emu", "--addr24", "off",
-           "--memsize", "14", "--ttram", "64", "--cpu-exact", "yes",
-           "--rs232-out", fifo_out, "--rs232-in", fifo_in,
-           "--fast-forward", "yes", "--sound", "off", "--confirm-quit", "no",
-           "--statusbar", "no", "--monitor", "vga", "--log-level", "fatal"]
-    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")
-    h = subprocess.Popen(cmd, env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
+    m = machines.Machine("Falcon:16", hd)
+    cmd = ["hatari"] + m.args() + m.network() + \
+          ["--auto", "C:\\EWGET.TTP", "--fast-boot", "yes", "--natfeats", "yes", "--cpu-exact", "yes",
+           "--fast-forward", "yes", "--statusbar", "no", "--log-level", "fatal"]
+    h = subprocess.Popen(cmd, env=m.env(), stdout=open(log, "w"), stderr=subprocess.STDOUT)
     end = time.time() + 900
     try:
         while time.time() < end and h.poll() is None:
@@ -80,13 +71,12 @@ def run_atari(tos, hd, cmdline, log, dropped=None):
         if h.poll() is None:
             h.terminate()
             h.wait()
-        bridge.terminate()
+        m.stop()
     return open(log, errors="replace").read()
 
 
 def main():
-    tos = os.path.abspath(sys.argv[1])
-    work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "build", "hatari-net"))
+    work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "hatari-net"))
     shutil.rmtree(work, ignore_errors=True)
     hd = os.path.join(work, "hd")
     os.makedirs(os.path.join(hd, "AUTO"))
@@ -99,15 +89,14 @@ def main():
         sys.exit("ewget_test: the servers didn't start")
     shutil.copy(os.path.join(ROOT, "binary", "EWGET.TTP"), hd)
     shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)	# the test authority
-    subprocess.run(["make", "-s", "-C", FAKE], check=True)
-    shutil.copy(os.path.join(FAKE, "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
+    print("---- " + machines.Machine("Falcon:16", hd).describe())
     fails = 0
     try:
         for name, cmdline in RUNS:
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
-            text = run_atari(tos, hd, cmdline, os.path.join(work, "hatari-%s.log" % name.replace(" ", "-")),
+            text = run_atari(hd, cmdline, os.path.join(work, "hatari-%s.log" % name.replace(" ", "-")),
                              "MOVED.CMD" if name == "http to https" else None)
             print("---- %s: EWGET.TTP %s" % (name, cmdline))
             print("\n".join(l for l in text.splitlines() if l.strip()))

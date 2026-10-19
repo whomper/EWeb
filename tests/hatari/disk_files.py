@@ -45,9 +45,9 @@ CALLS = ("Fopen", "Fcreate", "Fsfirst")
 
 # the most each case may do: Fopen, Fcreate, Fsfirst
 BUDGET = {
-    # EWEB.INF, EWEB.FNT, BOOKMARK.HTM for the menu (not there: its safe
-    # save's new file looked for too)
-    "start": (3, 0, 1),
+    # EWEB.INF, EWEB.FNT, BOOKMARK.HTM for the menu (a user's; with none
+    # there, pf_load also looks for an unfinished safe save's file once)
+    "start": (3, 0, 0),
     # the first page over the network: COOKIES.TXT read (not there: its
     # safe save's new file looked for too)
     "pictures": (1, 0, 1),
@@ -62,7 +62,7 @@ BUDGET = {
     # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
     # looked for, then made; EWEB.INF unchanged
     "quit": (1, 2, 0),
-    "start again": (3, 0, 1),
+    "start again": (3, 0, 0),
     # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
     # then written over
     "secure page again": (5, 0, 1),
@@ -355,6 +355,9 @@ def main():
         shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
         with open(os.path.join(hd, "EWEB.INF"), "w") as f:
             f.write("HOME=\r\n")
+        with open(os.path.join(hd, "BOOKMARK.HTM"), "w", newline="") as f:     # a user's bookmarks
+            f.write("<!DOCTYPE NETSCAPE-Bookmark-file-1>\r\n<DL><p>\r\n    <DT><A HREF=\"http://68k.news/\">"
+                    "68k.news</A>\r\n</DL><p>\r\n")
         eweb(hd)
         ewget(hd)
     finally:
