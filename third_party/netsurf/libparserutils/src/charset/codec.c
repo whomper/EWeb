@@ -78,6 +78,33 @@ parserutils_error parserutils_charset_codec_create(const char *charset,
 }
 
 /**
+ * EWeb: whether a charset is read a byte a character, ASCII as it is
+ *
+ * \param charset  Charset name
+ * \return true for the 8859, ext8 and ASCII codecs' charsets
+ */
+bool parserutils__charset_codec_single_byte(const char *charset)
+{
+	parserutils_charset_handler **handler;
+	const parserutils_charset_aliases_canon *canon;
+
+	canon = parserutils__charset_alias_canonicalise(charset,
+			strlen(charset));
+	if (canon == NULL)
+		return false;
+
+	/* the handler parserutils_charset_codec_create would pick */
+	for (handler = handler_table; *handler != NULL; handler++) {
+		if ((*handler)->handles_charset(canon->name))
+			return *handler == &charset_8859_codec_handler ||
+				*handler == &charset_ext8_codec_handler ||
+				*handler == &charset_ascii_codec_handler;
+	}
+
+	return false;
+}
+
+/**
  * Destroy a charset codec
  *
  * \param codec  The codec to destroy

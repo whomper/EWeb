@@ -14,5 +14,7 @@ mkdir -p out
 cd out
 ../src/configure --target-list=m68k-linux-user --enable-plugins --disable-system \
     --disable-docs --disable-tools --disable-werror --disable-debug-info > configure.log
-ninja qemu-m68k tests/tcg/plugins/libinsn.so contrib/plugins/libcache.so > ninja.log
+# hotblocks lists 20 blocks; every one, for a profile by function
+sed -i 's/^static guint64 limit = 20;/static guint64 limit = 1000000;/' ../src/contrib/plugins/hotblocks.c
+ninja qemu-m68k tests/tcg/plugins/libinsn.so contrib/plugins/libcache.so contrib/plugins/libhotblocks.so > ninja.log
 echo "$(pwd)/qemu-m68k"

@@ -8,13 +8,17 @@
  *   - any bytes as UTF-8: what the WHATWG Encoding Standard's UTF-8 decoder
  *     gives (each byte that can't start a sequence, and each sequence that
  *     ends too soon, is one U+FFFD), whatever the chunks;
- *   - ISO-8859-1: every byte as its character, the last one too.
+ *   - ISO-8859-1: every byte as its character, the last one too;
+ *   - a charset of a byte a character (Windows-1252, ISO-8859-8, ...):
+ *     what its codec makes of each byte on its own, in UTF-8 (U+FFFD for
+ *     a byte it has no character for).
  * Prints the failures; returns non-zero if there were any. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <parserutils/input/inputstream.h>
+#include <parserutils/charset/codec.h>
 
 static uint32_t seed = 2026;
 
@@ -169,6 +173,59 @@ static uint8_t odd_byte(void)
 	return b[rnd(sizeof b)];
 }
 
+/* the reference for a charset of a byte a character: each byte through
+ * the codec on its own, in UTF-8 */
+static size_t single(const char *enc, const uint8_t *in, size_t n,
+		uint8_t *out)
+{
+	static uint8_t table[256][4], tlen[256];
+	static const char *made;
+	size_t i, o = 0;
+
+	if (made != enc) {
+		parserutils_charset_codec *c;
+		unsigned b;
+
+		if (parserutils_charset_codec_create(enc, &c) !=
+				PARSERUTILS_OK) {
+			fprintf(stderr, "streamtest: no codec for %s\n", enc);
+			exit(1);
+		}
+		for (b = 0; b < 256; b++) {
+			uint8_t byte = (uint8_t) b, ucs[4], *d = ucs;
+			const uint8_t *src = &byte;
+			size_t sl = 1, dl = 4;
+			uint32_t u = 0xfffd;
+
+			parserutils_charset_codec_reset(c);
+			if (parserutils_charset_codec_decode(c, &src, &sl, &d,
+					&dl) == PARSERUTILS_OK && dl == 0)
+				u = (uint32_t) ucs[0] << 24 | (uint32_t) ucs[1] << 16 |
+					(uint32_t) ucs[2] << 8 | ucs[3];
+			if (u < 0x80) {
+				table[b][0] = (uint8_t) u;
+				tlen[b] = 1;
+			} else if (u < 0x800) {
+				table[b][0] = (uint8_t) (0xc0 | u >> 6);
+				table[b][1] = (uint8_t) (0x80 | (u & 0x3f));
+				tlen[b] = 2;
+			} else {
+				table[b][0] = (uint8_t) (0xe0 | u >> 12);
+				table[b][1] = (uint8_t) (0x80 | (u >> 6 & 0x3f));
+				table[b][2] = (uint8_t) (0x80 | (u & 0x3f));
+				tlen[b] = 3;
+			}
+		}
+		parserutils_charset_codec_destroy(c);
+		made = enc;
+	}
+	for (i = 0; i < n; i++) {
+		memcpy(out + o, table[in[i]], tlen[in[i]]);
+		o += tlen[in[i]];
+	}
+	return o;
+}
+
 static int fails;
 
 static void check(const char *what, size_t len, size_t chunk,
@@ -257,6 +314,23 @@ int main(void)
 		c = chunks[rnd(sizeof chunks / sizeof chunks[0])];
 		gn = stream("UTF-8", doc, n, c, got);
 		check("random bytes", n, c, want, wn, got, gn);
+
+		/* the same bytes in a charset of a byte a character, mostly
+		 * ASCII as pages are */
+		{
+			static const char *const sb[] = { "windows-1252",
+				"ISO-8859-8", "windows-1255", "ISO-8859-8-I",
+				"ISO-8859-2", "ISO-8859-15", "US-ASCII",
+				"windows-1251", "windows-1250" };
+			const char *enc = sb[rnd(sizeof sb / sizeof sb[0])];
+
+			for (n = 0; n < len; n++)
+				doc[n] = rnd(4) == 0 ? 0x80 + rnd(128) : rnd(128);
+			wn = single(enc, doc, n, want);
+			c = chunks[rnd(sizeof chunks / sizeof chunks[0])];
+			gn = stream(enc, doc, n, c, got);
+			check(enc, n, c, want, wn, got, gn);
+		}
 	}
 
 	if (fails)

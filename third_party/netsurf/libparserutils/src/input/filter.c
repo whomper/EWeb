@@ -39,6 +39,9 @@ struct parserutils_filter {
 
 	bool utf8_out;			/**< The document is wanted in UTF-8 */
 	bool utf8;			/**< And it is in UTF-8: copy it */
+	bool sb;			/**< Or a byte a character: sb_utf8 */
+	uint8_t sb_utf8[128][4];	/**< Bytes 0x80-0xFF in UTF-8 */
+	uint8_t sb_len[128];		/**< And each one's length */
 	uint8_t part[4];		/**< Sequence cut short by a chunk */
 	uint8_t part_len;		/**< Its length in bytes */
 	uint8_t need;			/**< Bytes it still needs */
@@ -56,6 +59,10 @@ static uint16_t filter_utf8_mibenum(void);
 static parserutils_error filter_utf8(parserutils_filter *input,
 		const uint8_t **data, size_t *len,
 		uint8_t **output, size_t *outlen);
+static parserutils_error filter_sb(parserutils_filter *input,
+		const uint8_t **data, size_t *len,
+		uint8_t **output, size_t *outlen);
+static void filter_sb_table(parserutils_filter *input);
 
 /**
  * Create an input filter
@@ -97,6 +104,7 @@ parserutils_error parserutils__filter_create(const char *int_enc,
 #endif
 
 	f->utf8 = false;
+	f->sb = false;
 	f->part_len = 0;
 	f->need = 0;
 
@@ -120,6 +128,10 @@ parserutils_error parserutils__filter_create(const char *int_enc,
 	f->utf8_out = f->write_codec->mibenum == filter_utf8_mibenum();
 	f->utf8 = f->utf8_out &&
 			f->settings.encoding == filter_utf8_mibenum();
+	if (f->utf8_out && !f->utf8 && parserutils__charset_codec_single_byte(
+			parserutils_charset_mibenum_to_name(
+			f->settings.encoding)))
+		filter_sb_table(f);
 #endif
 
 	*filter = f;
@@ -208,6 +220,9 @@ parserutils_error parserutils__filter_process_chunk(parserutils_filter *input,
 
 	if (input->utf8)
 		return filter_utf8(input, data, len, output, outlen);
+
+	if (input->sb)
+		return filter_sb(input, data, len, output, outlen);
 
 #ifndef WITHOUT_ICONV_FILTER
 	if (iconv(input->cd, (void *) data, len, 
@@ -437,6 +452,13 @@ parserutils_error filter_set_encoding(parserutils_filter *input,
 	input->part_len = 0;
 	input->need = 0;
 
+#ifdef WITHOUT_ICONV_FILTER
+	input->sb = false;
+	if (input->utf8_out && !input->utf8 &&
+			parserutils__charset_codec_single_byte(enc))
+		filter_sb_table(input);
+#endif
+
 	return error;
 
 }
@@ -554,10 +576,21 @@ parserutils_error filter_utf8(parserutils_filter *input,
 				break;
 			}
 
-			do {
-				*o++ = b;
-				s++;
-			} while (--n > 0 && (b = *s) < 0x80);
+			/* EWeb: four bytes at a time while they are ASCII,
+			 * then the run copied in one go */
+			{
+				const uint8_t *r = s + 1;
+				const uint8_t *rend = s + n;
+
+				while (rend - r >= 4 && ((r[0] | r[1] | r[2] |
+						r[3]) & 0x80) == 0)
+					r += 4;
+				while (r < rend && *r < 0x80)
+					r++;
+				memcpy(o, s, (size_t) (r - s));
+				o += r - s;
+				s = r;
+			}
 
 			continue;
 		}
@@ -628,6 +661,127 @@ parserutils_error filter_utf8(parserutils_filter *input,
 	}
 
 #undef ROOM
+
+	*len -= s - *data;
+	*data = s;
+	*outlen -= o - *output;
+	*output = o;
+
+	return error;
+}
+
+/**
+ * EWeb: the table for a charset read a byte a character: each of the bytes
+ * 0x80-0xFF as the read codec decodes it, in UTF-8 (U+FFFD where it
+ * decodes to nothing)
+ */
+void filter_sb_table(parserutils_filter *input)
+{
+#ifdef WITHOUT_ICONV_FILTER
+	unsigned i;
+
+	for (i = 0; i < 128; i++) {
+		uint8_t byte = (uint8_t) (0x80 + i);
+		const uint8_t *src = &byte;
+		size_t srclen = 1;
+		uint32_t ucs4 = 0xfffd;
+		uint8_t *dst = (uint8_t *) &ucs4;
+		size_t dstlen = sizeof(ucs4);
+		uint8_t *u = input->sb_utf8[i];
+
+		parserutils_charset_codec_reset(input->read_codec);
+		if (parserutils_charset_codec_decode(input->read_codec,
+				&src, &srclen, &dst, &dstlen) != PARSERUTILS_OK ||
+				dstlen != 0)
+			ucs4 = 0xfffd;
+		else	/* the pivot is UCS-4, big-endian */
+			ucs4 = ((uint32_t) ((uint8_t *) &ucs4)[0] << 24) |
+				((uint32_t) ((uint8_t *) &ucs4)[1] << 16) |
+				((uint32_t) ((uint8_t *) &ucs4)[2] << 8) |
+				((uint8_t *) &ucs4)[3];
+
+		if (ucs4 < 0x80) {
+			u[0] = (uint8_t) ucs4;
+			input->sb_len[i] = 1;
+		} else if (ucs4 < 0x800) {
+			u[0] = (uint8_t) (0xc0 | (ucs4 >> 6));
+			u[1] = (uint8_t) (0x80 | (ucs4 & 0x3f));
+			input->sb_len[i] = 2;
+		} else if (ucs4 < 0x10000) {
+			u[0] = (uint8_t) (0xe0 | (ucs4 >> 12));
+			u[1] = (uint8_t) (0x80 | ((ucs4 >> 6) & 0x3f));
+			u[2] = (uint8_t) (0x80 | (ucs4 & 0x3f));
+			input->sb_len[i] = 3;
+		} else {
+			u[0] = (uint8_t) (0xf0 | (ucs4 >> 18));
+			u[1] = (uint8_t) (0x80 | ((ucs4 >> 12) & 0x3f));
+			u[2] = (uint8_t) (0x80 | ((ucs4 >> 6) & 0x3f));
+			u[3] = (uint8_t) (0x80 | (ucs4 & 0x3f));
+			input->sb_len[i] = 4;
+		}
+	}
+	parserutils_charset_codec_reset(input->read_codec);
+	input->sb = true;
+#else
+	(void) input;
+#endif
+}
+
+/**
+ * EWeb: a charset read a byte a character, into UTF-8: runs of ASCII
+ * copied, as filter_utf8 does, and each other byte from the table
+ */
+parserutils_error filter_sb(parserutils_filter *input,
+		const uint8_t **data, size_t *len,
+		uint8_t **output, size_t *outlen)
+{
+	const uint8_t *s = *data;
+	const uint8_t *end = s + *len;
+	uint8_t *o = *output;
+	uint8_t *oend = o + *outlen;
+	parserutils_error error = PARSERUTILS_OK;
+
+	while (s < end) {
+		uint8_t b = *s;
+
+		if (b < 0x80) {
+			const uint8_t *r = s + 1, *rend;
+			size_t n = min((size_t) (end - s), (size_t) (oend - o));
+
+			if (n == 0) {
+				error = PARSERUTILS_NOMEM;
+				break;
+			}
+			rend = s + n;
+			while (rend - r >= 4 && ((r[0] | r[1] | r[2] |
+					r[3]) & 0x80) == 0)
+				r += 4;
+			while (r < rend && *r < 0x80)
+				r++;
+			memcpy(o, s, (size_t) (r - s));
+			o += r - s;
+			s = r;
+		} else {
+			const uint8_t *u = input->sb_utf8[b - 0x80];
+			size_t k = input->sb_len[b - 0x80];
+
+			if ((size_t) (oend - o) < k) {
+				error = PARSERUTILS_NOMEM;
+				break;
+			}
+			o[0] = u[0];
+			if (k > 1) {
+				o[1] = u[1];
+				if (k > 2) {
+					o[2] = u[2];
+					if (k > 3)
+						o[3] = u[3];
+				}
+			}
+			o += k;
+			s++;
+		}
+	}
 
 	*len -= s - *data;
 	*data = s;

@@ -42,4 +42,8 @@ typedef struct parserutils_charset_handler {
 			parserutils_charset_codec **codec);
 } parserutils_charset_handler;
 
+/* EWeb: whether charset is read a byte a character, ASCII as it is (the
+ * 8859, ext8 and ASCII codecs) */
+bool parserutils__charset_codec_single_byte(const char *charset);
+
 #endif

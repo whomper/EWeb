@@ -62,6 +62,11 @@ hub stay complete, with the evidence.
 
 - **The design is `docs/DESIGN.md`:** the owner's decisions, what was measured, and the plan. Keep it
   true: when a measurement or a decision changes, change it there in the same commit.
+- **Better than every other Atari browser, and the fastest code** (the owner's rule, 19 Oct 2026):
+  each part is measured (68030 instructions on the page set, then the emulated Falcon and his DFB1)
+  and made as fast as the machine allows. The DSP takes any work it does faster than the 68030, and
+  the code is tuned for the 68030; so there are two releases, `EWEB.PRG` (68030) and the ST edition
+  `EWEBST.PRG` (68000). DESIGN.md, Decisions.
 - **NetSurf's code or fresh code** (the owner's rule): each part uses NetSurf's version unless fresh
   code written for a fast 68030 is faster on the page set and at least as standards-compliant. Port
   NetSurf's part first, measure it, and only then write a replacement.
@@ -76,7 +81,8 @@ hub stay complete, with the evidence.
   out iconv, so the code measured is the code the Falcon runs.
 - **Measuring** (tests/bench): `tests/bench/pages.sh` fetches the page set into `build/pages`;
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
-  68030 instructions; `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
+  68030 instructions, `tools/prof68k.py` shows where they go function by function, and
+  `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
   `NSBENCH.TTP` on an emulated 32 MHz Falcon (EmuTOS's `etos1024k.img`).
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a

@@ -674,6 +674,48 @@ hubbub_error hubbub_tokeniser_run(hubbub_tokeniser *tokeniser)
 	} while (0)
 
 
+/* EWeb: the bytes a state looks at one at a time; a run of any others is
+ * taken at once (parserutils_inputstream_avail): 150 68030 instructions a
+ * byte of HTML were mostly a call, a peek and a buffer append for each */
+static const uint8_t stop_data[256] = {
+	['&'] = 1, ['-'] = 1, ['<'] = 1, ['>'] = 1, ['\0'] = 1, ['\r'] = 1
+};
+static const uint8_t stop_dq[256] = {
+	['"'] = 1, ['&'] = 1, ['\0'] = 1, ['\r'] = 1
+};
+static const uint8_t stop_sq[256] = {
+	['\''] = 1, ['&'] = 1, ['\0'] = 1, ['\r'] = 1
+};
+static const uint8_t stop_uq[256] = {
+	['\t'] = 1, ['\n'] = 1, ['\f'] = 1, [' '] = 1, ['\r'] = 1, ['&'] = 1,
+	['>'] = 1, ['\0'] = 1, ['"'] = 1, ['\''] = 1, ['='] = 1
+};
+
+/* names: their ends, and capitals (made lower case one at a time) */
+#define STOP_NAME ['\t'] = 1, ['\n'] = 1, ['\f'] = 1, [' '] = 1, ['\r'] = 1, \
+	['>'] = 1, ['\0'] = 1, ['/'] = 1, ['A'] = 1, ['B'] = 1, ['C'] = 1, \
+	['D'] = 1, ['E'] = 1, ['F'] = 1, ['G'] = 1, ['H'] = 1, ['I'] = 1, \
+	['J'] = 1, ['K'] = 1, ['L'] = 1, ['M'] = 1, ['N'] = 1, ['O'] = 1, \
+	['P'] = 1, ['Q'] = 1, ['R'] = 1, ['S'] = 1, ['T'] = 1, ['U'] = 1, \
+	['V'] = 1, ['W'] = 1, ['X'] = 1, ['Y'] = 1, ['Z'] = 1
+static const uint8_t stop_tag_name[256] = { STOP_NAME };
+static const uint8_t stop_attr_name[256] = { STOP_NAME, ['='] = 1 };
+
+/* how many bytes from offset on are a run the state can take at once:
+ * the character there (len bytes, known not to stop it) and those after
+ * it up to the next stop */
+static inline size_t run_length(hubbub_tokeniser *tokeniser, size_t offset,
+		size_t len, const uint8_t *stop)
+{
+	const uint8_t *run;
+	size_t n = parserutils_inputstream_avail(tokeniser->input, offset,
+			&run), k = len;
+
+	while (k < n && !stop[run[k]])
+		k++;
+	return k;
+}
+
 /* this should always be called with an empty "chars" buffer */
 hubbub_error hubbub_tokeniser_handle_data(hubbub_tokeniser *tokeniser)
 {
@@ -792,8 +834,10 @@ hubbub_error hubbub_tokeniser_handle_data(hubbub_tokeniser *tokeniser)
 			/* Advance over */
 			parserutils_inputstream_advance(tokeniser->input, 1);
 		} else {
-			/* Just collect into buffer */
-			tokeniser->context.pending += len;
+			/* Just collect into buffer: a run at once */
+			tokeniser->context.pending += run_length(tokeniser,
+					tokeniser->context.pending, len,
+					stop_data);
 		}
 	}
 
@@ -1162,6 +1206,9 @@ hubbub_error hubbub_tokeniser_handle_tag_name(hubbub_tokeniser *tokeniser)
 		COLLECT(ctag->name, &lc, len);
 		tokeniser->context.pending += len;
 	} else {
+		/* a run at once */
+		len = run_length(tokeniser, tokeniser->context.pending, len,
+				stop_tag_name);
 		COLLECT(ctag->name, cptr, len);
 		tokeniser->context.pending += len;
 	}
@@ -1289,6 +1336,9 @@ hubbub_error hubbub_tokeniser_handle_attribute_name(hubbub_tokeniser *tokeniser)
 				&lc, len);
 		tokeniser->context.pending += len;
 	} else {
+		/* a run at once */
+		len = run_length(tokeniser, tokeniser->context.pending, len,
+				stop_attr_name);
 		COLLECT(ctag->attributes[ctag->n_attributes - 1].name,
 				cptr, len);
 		tokeniser->context.pending += len;
@@ -1489,6 +1539,9 @@ hubbub_error hubbub_tokeniser_handle_attribute_value_dq(
 		/* Consume '\r' */
 		tokeniser->context.pending += 1;
 	} else {
+		/* a run at once */
+		len = run_length(tokeniser, tokeniser->context.pending, len,
+				stop_dq);
 		COLLECT_MS(ctag->attributes[ctag->n_attributes - 1].value,
 				cptr, len);
 		tokeniser->context.pending += len;
@@ -1551,6 +1604,9 @@ hubbub_error hubbub_tokeniser_handle_attribute_value_sq(
 		/* Consume \r */
 		tokeniser->context.pending += 1;
 	} else {
+		/* a run at once */
+		len = run_length(tokeniser, tokeniser->context.pending, len,
+				stop_sq);
 		COLLECT_MS(ctag->attributes[ctag->n_attributes - 1].value,
 				cptr, len);
 		tokeniser->context.pending += len;
@@ -1606,6 +1662,10 @@ hubbub_error hubbub_tokeniser_handle_attribute_value_uq(
 			/** \todo parse error */
 		}
 
+		/* a run at once (the characters above one at a time) */
+		if (c != '"' && c != '\'' && c != '=')
+			len = run_length(tokeniser, tokeniser->context.pending,
+					len, stop_uq);
 		COLLECT(ctag->attributes[ctag->n_attributes - 1].value,
 				cptr, len);
 		tokeniser->context.pending += len;

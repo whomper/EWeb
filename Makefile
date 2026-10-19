@@ -167,7 +167,7 @@ build/$(1)/ns/libcss/gen/%.o: $(GEN)/libcss/%.c
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(CSS_INC) -I$(NS)/libcss/src/parse/properties -c $$< -o $$@
 build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h src/css/*.h VERSION
 	@mkdir -p $$(@D)
-	$(2) $(3) -Wall -Wextra -Wno-unused-parameter -DEWEB_VERSION='"$$(VERSION_STR)"' $$(NSINC) -Isrc/css -c $$< -o $$@
+	$(2) $(3) -Wall -Wextra -Wno-unused-parameter -DEWEB_VERSION='"$$(VERSION_STR)"' $$(NSINC) -Isrc/css -Isrc/doc -c $$< -o $$@
 build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) -c $$< -o $$@
@@ -555,6 +555,16 @@ build/asan/hebtest: build/asan/hebrew/hebtest.o build/asan/bench/dom.o $(asan_PU
 build/m68k/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(M68K_CFLAGS) $(NSINC) -Itests/bench -c $< -o $@
+# EWeb's own document from a page, as 68030 code, for counting what it
+# costs (tools/count68k.sh, tools/prof68k.py), on the Atari's heap
+# (common/atari/libc.c) rather than glibc's
+build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build/m68k/atheap/libc.o \
+		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
+		build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU) $(m68k_HUB)
+	$(M68KCC) -m68030 -static -o $@ $^
+build/m68k/atheap/libc.o: common/atari/libc.c common/tests/heap/stub/tos.h
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -O2 -DHEAP_TEST -Icommon/tests/heap/stub -c $< -o $@
 build/m68k/hebtest: build/m68k/hebrew/hebtest.o build/m68k/bench/dom.o $(m68k_PU) $(m68k_WAP) $(m68k_HUB)
 	$(M68KCC) -m68030 -static -o $@ $^
 

@@ -15,6 +15,8 @@ it, and how EWeb gets past CAPTCHAs.
 | Code | **NetSurf's code where we can't do better; fresh code where we can** | Each part (HTML parser, CSS engine, DOM, layout, image decoders) uses NetSurf's version unless fresh code written for a fast 68030 is faster and at least as standards-compliant. How it's decided is below. The GEM front end and everything Atari-side are ours, on AERA-Atari's `common/`. |
 | JavaScript | **QuickJS** | The best fit measured: modern syntax, small, portable C, MIT licence. |
 | Hebrew | **Supported** | Hebrew pages in every Hebrew encoding, right to left, mixed with English. It makes layout fresh code: NetSurf's reorders no text (below). |
+| Speed | **Better than every other Atari browser, and the fastest code** (19 Oct 2026) | EWeb has to outdo the other Atari browsers (below) on what it shows and on how fast it shows it, and each part's code has to be the fastest that can be written for the machine. A part is measured in 68030 instructions on the page set and on the emulated Falcon, and timed on your DFB1; where something faster can be written, it is. NetSurf's code stays only where nothing faster beats it. |
+| DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -289,10 +291,51 @@ the 64-character and 4,096-byte limits, here and as 68030 code (`make test`, `ma
 NetSurf's libparserutils fails 5,999 of its 10,420 cases. All 258 pages ran clean under
 AddressSanitizer and UBSan.
 
-**Next for the HTML parser:** the tokeniser appends an attribute's value to a buffer one character
-at a time, a function call and a `memcpy` each. That is now the largest cost in the parse (17% on
-`NEWS.HTM`). Pages in Windows-1252 and Windows-1255 could copy their ASCII the same way UTF-8 is
-copied now.
+**Next for the HTML parser:** taken up on 19 Oct 2026 (below).
+
+## The HTML parse: runs of characters at once (19 Oct 2026)
+
+Profiled function by function on the 68030 (`tools/prof68k.py`, QEMU's hot-block plugin), most of
+the parse was paid per character: in the data state, tag and attribute names and attribute values,
+Hubbub's tokeniser took one character a turn (a call to the state, a peek at the input, a few tests
+and an append to a buffer). Three changes to NetSurf's code (`third_party/netsurf/patches`):
+
+- **Runs at once:** where a state would only collect a character, it collects the run up to the
+  next character it treats specially (a table of those for each state), in one append. The input
+  stream hands over what it has decoded (`parserutils_inputstream_avail`), whole characters only.
+- **UTF-8 copied four bytes at a time**, each run of ASCII with one `memcpy`.
+- **Single-byte charsets through a table:** a page in Windows-1252, ISO-8859-8, Windows-1255 and
+  the like went through two codecs a character at a time, a third of its parse. Its bytes 0x80-0xFF
+  are now looked up in a table of their UTF-8, made from the charset's codec, and its ASCII is
+  copied as UTF-8's is.
+
+The parse is now measured as `EWEB.PRG` does it: `build/m68k/docparse` makes EWeb's own document
+(`doc_parse`) on the Atari's heap (`common/atari/libc.c`, through `tests/bench/atheap.c`), not on
+glibc's. In 68030 instructions:
+
+| | Before | After | Fewer |
+|---|---|---|---|
+| `NEWS.HTM` | 10.07 M | 6.41 M | 36% |
+| The page set, median page | 11.50 M | 7.58 M | 34% |
+| The page set, 90th percentile | 22.1 M | 13.2 M | 41% |
+| The page set, all 258 pages | 3,493 M | 2,087 M | 40% |
+
+From 140 instructions a byte of HTML to 90 at the median. Every page gains at least 25%; the 63
+pages in a single-byte charset gain another 29% (median) from the table.
+
+**Standards:** the documents are the same. The tree-construction tests are unchanged (1,139 of
+1,679, here and as 68030 code), the 258 pages' display lists are byte for byte what they were
+(`ewrender -d`), and `tests/input` now also feeds nine single-byte charsets in random chunks and
+checks them against their codecs (`make test`, `make hebtest68k`).
+
+**What is left** on `NEWS.HTM`: Hubbub's tokeniser and tree builder 36%, the heap 17% (Hubbub and
+the document take blocks for tokens, nodes and attributes), EWeb's document 12%, `memcpy` 9%,
+libparserutils 8%, interning names for the CSS engine 6%. Hubbub's tree reaches EWeb's document
+through a callback for each node and attribute, and its tokens are copied twice on the way. By
+the owner's rule (the fastest code; Decisions) a parser written for EWeb's document is next: the
+HTML Standard's tokeniser and tree construction writing straight into EWeb's nodes, out of one
+arena. It replaces Hubbub only if it is faster on the page set and passes at least the tests
+Hubbub passes; `<template>` and the 2026 changes Hubbub lacks would count for it.
 
 ## Fetching pages: EWeb's HTTP client (17 Oct 2026)
 
@@ -1063,8 +1106,11 @@ out of both (their paths lead nowhere on the Atari).
    window (above): `EWEB.PRG`, the first text browser.
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
-   alignment in cells (your order, above); forms and cookies (above).
-4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
+   alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
+   the page set (above).
+4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
+   edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
+   editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.
 5. **JavaScript:** QuickJS with the lean DOM.
 
 ## Open questions

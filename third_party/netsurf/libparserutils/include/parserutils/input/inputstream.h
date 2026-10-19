@@ -143,6 +143,40 @@ static inline parserutils_error parserutils_inputstream_peek(
 }
 
 /**
+ * EWeb: the input from offset on that is already decoded, for a caller
+ * that scans a run of characters at once instead of peeking at each
+ *
+ * \param stream  Stream to look in
+ * \param offset  Byte offset from the cursor
+ * \param ptr     Pointer to location to receive pointer to the data
+ * \return the bytes there, whole characters only (0: none yet: peek)
+ */
+static inline size_t parserutils_inputstream_avail(
+		parserutils_inputstream *stream, size_t offset,
+		const uint8_t **ptr)
+{
+	const parserutils_buffer *utf8 = stream->utf8;
+	size_t off = stream->cursor + offset, n, k;
+
+	if (off >= utf8->length)
+		return 0;
+	*ptr = utf8->data + off;
+	n = utf8->length - off;
+	/* not a character cut short at the end */
+	for (k = 1; k <= 3 && k <= n; k++) {
+		uint8_t b = (*ptr)[n - k];
+		if ((b & 0xc0) != 0x80) {
+			size_t need = b < 0x80 ? 1 : b >= 0xf0 ? 4 :
+					b >= 0xe0 ? 3 : 2;
+			if (need > k)
+				n -= k;
+			break;
+		}
+	}
+	return n;
+}
+
+/**
  * Advance the stream's current position
  *
  * \param stream  The stream whose position to advance
