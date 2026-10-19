@@ -15,7 +15,8 @@ EWeb's own fonts.
   scrolling with the slider and the keys, 50 pages of history, the page's
   text to the clipboard, larger and smaller text. Words typed in the address
   go to FrogFind, the search engine made for vintage computers.
-- **EWeb's own engine**: NetSurf's HTML parser (Hubbub), EWeb's CSS engine
+- **EWeb's own engine**: EWeb's HTML parser (the HTML Standard's, nearly three
+  times as fast as NetSurf's on the 68030), EWeb's CSS engine
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
   and fresh layout code: blocks, lines, lists, tables, colours, borders, and
   Hebrew right to left.
@@ -102,8 +103,8 @@ make hatarinet  # EWGET.TTP on an emulated Falcon, through FAKESTNG, against tho
 make hatarigui  # EWEB.PRG on emulated Falcons and TTs: browsing over the network, every screen mode
 make hatarifiles  # what EWEB.PRG and EWGET.TTP do on the disk, against each case's budget
 make urltest    # the URL parser against the URL Standard's tests (tests/url/fetch.sh first)
-make fuzz       # the HTTP client and the URL parser under libFuzzer (clang)
-make h5test     # Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
+make fuzz       # the HTTP client, the URL and HTML parsers, cookies under libFuzzer (clang)
+make h5test     # EWeb's HTML parser and Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
 make csscmp     # EWeb's CSS engine against LibCSS on the page set (tests/bench/pages.sh first)
 make dist       # dist/EWEB-x.y.zip, as on the Releases page
 ```
@@ -124,7 +125,7 @@ docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
 ui/                   EWEB.PRG's GEM side: the window, the toolbar, the page on the
                       screen in every mode, the menus, the About box
 src/browse/           browsing: addresses, loading, history, EWeb's own pages, the pages' pictures (img.c)
-src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hints, forms (form.c)
+src/doc/              the document: EWeb's HTML parser (html.c), the UA stylesheet, HTML's hints, forms (form.c)
 src/layout/           the layout: boxes, lines, tables, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
@@ -136,18 +137,19 @@ tests/bench/          nsbench: the document tree, LibCSS's selection handler,
                       NEWS.CSS)
 tests/css/            the CSS engine's cases (from the specifications), and
                       csscmp, which compares it with LibCSS value by value
-tests/html5lib/       Hubbub against the Web Platform Tests' tree-construction tests
+tests/html5lib/       EWeb's parser (ewh5test.c) and Hubbub against the Web Platform Tests' tree-construction tests
 tests/hebrew/         a Hebrew page in every Hebrew encoding
 tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py), cookies.txt
 tests/url/            the URL parser against the URL Standard's tests
-tests/fuzz/           fuzz targets for the HTTP client and the URL parser, their seeds
+tests/fuzz/           fuzz targets for the HTTP client, the URL and HTML parsers and cookies, their seeds
 tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fakesting)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 atari/                the C library pieces NetSurf needs beyond common/, and plat_tos.c
-third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT)
+third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT; Hubbub and LibCSS
+                      only as nsbench's yardsticks)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py, icon/ (the icon), QEMU with
                       plugins and counting 68030 instructions
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here
@@ -158,14 +160,15 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 - `make test`: nsbench with both CSS engines on `tests/bench/sample.html` and
   `NEWS.HTM`, the Hebrew pages in every Hebrew encoding (`tests/hebrew`), the
   CSS engine's cases (`tests/css/cases.txt`), csscmp on the test pages, and
-  the input stream that feeds Hubbub (`tests/input`: documents in random
+  libparserutils' input stream (`tests/input`: documents in random
   chunks, valid UTF-8 and not, against the WHATWG UTF-8 decoder), with
   AddressSanitizer and UBSan. `make hebtest68k` runs the Hebrew pages and the
   input stream as 68030 code.
 - `make csscmp`: EWeb's CSS engine against LibCSS on the whole page set: every
   difference must be one of LibCSS's known gaps.
-- `make h5test`: Hubbub against the Web Platform Tests' tree-construction
-  tests, here and as 68030 code under QEMU.
+- `make h5test`: EWeb's HTML parser and Hubbub against the Web Platform Tests'
+  tree-construction tests, here (EWeb's with AddressSanitizer and UBSan) and
+  as 68030 code under QEMU: EWeb's passes all but the six that need scripts.
 - `make test` also runs the HTTP client against servers played by
   `common/tests/fuzz/fuzz_net.c` (`tests/net/nettest.c`: lengths, chunks,
   gzip and deflate, redirects, kept connections, and what a hostile server

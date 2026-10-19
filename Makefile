@@ -78,7 +78,7 @@ EC_FLAGS := -Wall -Wextra -Wno-unused-parameter -Werror -Isrc/css
 EWB_SRC  := $(sort $(wildcard src/doc/*.c src/layout/*.c src/gfx/*.c src/browse/*.c))
 EWB_HDRS = $(wildcard src/doc/*.h src/layout/*.h src/gfx/*.h src/browse/*.h src/css/*.h) $(NET_HDRS)
 EWB_INC  = -Isrc -Isrc/doc -Isrc/layout -Isrc/gfx -Isrc/browse -Isrc/css $(NET_INC)
-EWB_FLAGS = -Wall -Wextra -Wno-unused-parameter -Werror $(EWB_INC) $(NET_VER)
+EWB_FLAGS = -Wall -Wextra -Wno-unused-parameter -Werror $(EWB_INC) -I$(GEN) $(NET_VER)
 
 # what NetSurf's build system defines for its libraries; and no iconv: the
 # Atari has none, so every build converts character sets with
@@ -118,6 +118,10 @@ $(GEN)/libparserutils/aliases.inc: $(NS)/libparserutils/build/make-aliases.pl $(
 	cd $(GEN)/pu-stage && $(PERL_FIXED) $(CURDIR)/$(NS)/libparserutils/build/make-aliases.pl >/dev/null
 	mv $(GEN)/pu-stage/src/charset/aliases.inc $@ && rm -rf $(GEN)/pu-stage
 
+# the HTML parser's named character references (src/doc/html.c)
+$(GEN)/entities.h: tools/mkentities.py src/doc/entities.txt
+	@mkdir -p $(@D)
+	python3 tools/mkentities.py src/doc/entities.txt $@
 $(GEN)/libhubbub/entities.inc: $(NS)/libhubbub/build/make-entities.pl $(NS)/libhubbub/build/Entities
 	rm -rf $(GEN)/hub-stage && mkdir -p $(GEN)/hub-stage/build $(GEN)/hub-stage/src/tokeniser $(@D)
 	cp $(NS)/libhubbub/build/Entities $(GEN)/hub-stage/build/
@@ -165,12 +169,13 @@ build/$(1)/ns/libcss/%.o: $(NS)/libcss/%.c $$(GENERATED)
 build/$(1)/ns/libcss/gen/%.o: $(GEN)/libcss/%.c
 	@mkdir -p $$(@D)
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(CSS_INC) -I$(NS)/libcss/src/parse/properties -c $$< -o $$@
-build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h src/css/*.h VERSION
+build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h src/css/*.h src/doc/*.h VERSION
 	@mkdir -p $$(@D)
 	$(2) $(3) -Wall -Wextra -Wno-unused-parameter -DEWEB_VERSION='"$$(VERSION_STR)"' $$(NSINC) -Isrc/css -Isrc/doc -c $$< -o $$@
 build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) -c $$< -o $$@
+build/$(1)/ewb/doc/html.o: $(GEN)/entities.h
 build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $(if $(filter tos,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
@@ -389,7 +394,7 @@ build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(tos_HUB) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
+build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
@@ -412,21 +417,21 @@ binary/EWEB.FNT: tools/mkfont.py
 # a page drawn on this computer as EWeb draws it on the Falcon (PNG),
 # loaded as EWeb loads it: a file, or a URL
 EWR_SRC := tests/host/ewrender.c tests/host/dsp_none.c $(HOSTNET_SRC)
-build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(host_HUB) $(NET_HDRS) build/host/libbearssl.a \
+build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(NET_HDRS) build/host/libbearssl.a \
 		build/host/pic.a
 	$(HOSTCC) -O2 -g -std=gnu99 $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) \
-		$(host_HUB) build/host/pic.a build/host/libbearssl.a
-build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a \
+		build/host/pic.a build/host/libbearssl.a
+build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
 		build/asan/pic.a
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
-		$(asan_PU) $(asan_HUB) build/asan/pic.a build/host/libbearssl.a
+		$(asan_PU) build/asan/pic.a build/host/libbearssl.a
 
 # the forms: what a form sends (tests/forms/cases.txt)
 FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
-build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a \
+build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
 		build/asan/pic.a
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(FT_SRC) $(asan_EWB) $(asan_EC) \
-		$(asan_PU) $(asan_HUB) build/asan/pic.a build/host/libbearssl.a
+		$(asan_PU) build/asan/pic.a build/host/libbearssl.a
 
 # fuzzing (the AERA guidelines, 7.1): what servers send, and the
 # addresses in pages. Needs clang with libFuzzer; make fuzz runs each
@@ -445,6 +450,21 @@ build/asan/replay_%: tests/fuzz/fuzz_%.c common/tests/fuzz/replay.c $(HOSTNET_SR
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -DFUZZ_NET $(NET_INC) -Icommon/tests/fuzz \
 		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_SRC) build/host/libbearssl.a
+# the HTML parser: pages, with the charset, scripting and a fragment's
+# context from the input's first byte
+FUZZ_HTML_SRC = src/doc/doc.c src/doc/form.c src/doc/html.c src/doc/ua.c $(EC_SRC) $(PU_SRC)
+FUZZ_HTML_INC = $(EWB_INC) -I$(GEN) $(NSDEF) $(NSINC) $(PU_INC)
+build/fuzz/fuzz_html: tests/fuzz/fuzz_html.c $(FUZZ_HTML_SRC) $(EWB_HDRS) $(GEN)/entities.h $(GENERATED)
+	@mkdir -p $(@D)
+	$(FUZZCC) -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -w \
+		$(FUZZ_HTML_INC) -o $@ $< $(FUZZ_HTML_SRC)
+build/asan/replay_html: tests/fuzz/fuzz_html.c common/tests/fuzz/replay.c $(FUZZ_HTML_SRC) $(EWB_HDRS) \
+		$(GEN)/entities.h $(GENERATED)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -w $(FUZZ_HTML_INC) \
+		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_HTML_SRC)
+FUZZERS += html
+
 fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 	@for f in $(FUZZERS); do \
 	  mkdir -p build/fuzz/corpus/$$f; \
@@ -508,10 +528,29 @@ build/m68k/h5/h5test.o: tests/html5lib/h5test.c
 build/m68k/h5test: build/m68k/h5/h5test.o $(m68k_PU) $(m68k_WAP) $(m68k_HUB)
 	$(M68KCC) -m68030 -static -o $@ $^
 
-h5test: build/host/h5test build/m68k/h5test
+# EWeb's own parser against the same tests: with AddressSanitizer and
+# UBSan here, and as 68030 code
+EWH5_OBJ = build/$(1)/ewb/doc/doc.o build/$(1)/ewb/doc/form.o build/$(1)/ewb/doc/html.o \
+	build/$(1)/ewb/doc/ua.o
+build/asan/h5/ewh5test.o: tests/html5lib/ewh5test.c $(EWB_HDRS)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -c $< -o $@
+build/asan/ewh5test: build/asan/h5/ewh5test.o $(call EWH5_OBJ,asan) $(asan_EC) $(asan_PU)
+	$(HOSTCC) $(SAN) -o $@ $^
+build/m68k/h5/ewh5test.o: tests/html5lib/ewh5test.c $(EWB_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -O2 -std=gnu99 $(EWB_FLAGS) $(NSINC) -c $< -o $@
+build/m68k/ewh5test: build/m68k/h5/ewh5test.o $(call EWH5_OBJ,m68k) $(m68k_EC) $(m68k_PU)
+	$(M68KCC) -m68030 -static -o $@ $^
+
+h5test: build/host/h5test build/m68k/h5test build/asan/ewh5test build/m68k/ewh5test
 	@test -n "$(H5DATA)" || { echo "no tests: run tests/html5lib/fetch.sh"; exit 1; }
+	@echo "Hubbub:"
 	build/host/h5test $(H5DATA) | tail -1
 	qemu-m68k -cpu m68030 build/m68k/h5test $(H5DATA) | tail -1
+	@echo "EWeb's parser:"
+	build/asan/ewh5test $(H5DATA) | tail -1
+	qemu-m68k -cpu m68030 build/m68k/ewh5test $(H5DATA) | tail -1
 .PHONY: h5test
 
 # EWeb's CSS engine against LibCSS, value by value (tests/css/csscmp.c)
@@ -560,7 +599,7 @@ build/m68k/hebrew/hebtest.o: tests/hebrew/hebtest.c tests/bench/dom.h
 # (common/atari/libc.c) rather than glibc's
 build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build/m68k/atheap/libc.o \
 		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
-		build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU) $(m68k_HUB)
+		build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU)
 	$(M68KCC) -m68030 -static -o $@ $^
 build/m68k/atheap/libc.o: common/atari/libc.c common/tests/heap/stub/tos.h
 	@mkdir -p $(@D)

@@ -1,8 +1,11 @@
 # NetSurf's libraries in EWeb
 
-The HTML parser and CSS engine EWeb measures first, from the NetSurf project
+The HTML parser and CSS engine EWeb measured first, from the NetSurf project
 (https://www.netsurf-browser.org, git.netsurf-browser.org). All four are under
-the MIT licence; each folder keeps its `COPYING`.
+the MIT licence; each folder keeps its `COPYING`. EWeb's own parser and CSS
+engine have replaced Hubbub and LibCSS in `EWEB.PRG` (docs/DESIGN.md), which
+keeps only libparserutils' character set codecs; Hubbub and LibCSS stay as the
+yardsticks of nsbench and `make h5test`.
 
 | Folder | What it is | Commit |
 |---|---|---|

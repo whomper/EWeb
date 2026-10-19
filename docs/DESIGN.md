@@ -167,10 +167,11 @@ into UTF-8, decoding and re-encoding every character (now copied: see Hubbub's i
 `nsbench`'s own tree code is under 2%.
 
 **The first NetSurf-or-fresh calls:**
-- **HTML parser: Hubbub stays.** It costs 2–3 seconds on a median page, and a fresh parser would have
-  to match its 1,139 passing tests before it could count as better. Its first gain, copying UTF-8
-  instead of decoding and re-encoding it, took 28% off on the page set (Hubbub's input, below).
-  `<template>` needs adding.
+- **HTML parser: Hubbub stayed, then fresh code, decided (19 Oct 2026).** Hubbub was made faster
+  first (its UTF-8 input copied, then runs of characters at once, below); then EWeb's own parser
+  passed 1,673 of the tests to Hubbub's 1,139 and took 44% off the parse on the page set (EWeb's
+  own HTML parser, below), so it replaces Hubbub in `EWEB.PRG`; Hubbub stays in nsbench and
+  `make h5test` as the yardstick.
 - **CSS: fresh code, decided (17 Oct 2026).** Parsing and selection cost 3–9 times what the HTML
   does (19 of `NEWS.HTM`'s 21 s on your DFB1). EWeb's own engine (below) is 7–15 times faster on the
   page set and closer to today's specifications, so it replaces LibCSS; LibCSS stays in nsbench as
@@ -335,7 +336,71 @@ through a callback for each node and attribute, and its tokens are copied twice 
 the owner's rule (the fastest code; Decisions) a parser written for EWeb's document is next: the
 HTML Standard's tokeniser and tree construction writing straight into EWeb's nodes, out of one
 arena. It replaces Hubbub only if it is faster on the page set and passes at least the tests
-Hubbub passes; `<template>` and the 2026 changes Hubbub lacks would count for it.
+Hubbub passes; `<template>` and the 2026 changes Hubbub lacks would count for it. (Done the same day:
+EWeb's own HTML parser, below.)
+
+## EWeb's own HTML parser (19 Oct 2026)
+
+After the runs above, what was left of the parse was Hubbub's design: a callback for each node and
+attribute, every token copied twice, and the heap taking a fifth of the time. `src/doc/html.c` is
+the HTML Standard's parser (13.2, as of October 2026) written for EWeb's document and the 68030:
+
+- **The page is decoded once**, before the tokenizer, into one buffer: UTF-8 checked as the WHATWG
+  decoder does, four bytes of ASCII at a time; single-byte charsets through a table made from
+  libparserutils' codecs; UTF-16. Newlines are normalised on the way, and the buffer ends in a 0
+  that every scanning loop stops at, so a loop is a load and a test.
+- **The tokenizer takes runs**: text up to the next character that matters in its state, a tag or
+  attribute name, an attribute value. Text goes to the tree as pointers into the page.
+- **The tree builder writes EWeb's nodes directly**, out of the document's memory: large blocks
+  freed all at once (`doc_alloc`), no reference counts, no callbacks. An element's name is its atom
+  for the CSS engine, looked up once a document for the 128 names the parser knows.
+- **Everything the Standard does now**: `<template>` and its contents, processing instructions
+  (2026), the customizable `<select>` (2025: options, `<hr>` and `<selectedcontent>`), `<search>`,
+  foreign content, the fragment case (for the tests now, `innerHTML` later), the encoding sniffing
+  algorithm with its prescan and a `<meta charset>` that changes the encoding.
+
+**Standards** (`make h5test`, the Web Platform Tests' tree-construction tests of 15 Oct 2026):
+
+| | Documents | Fragments |
+|---|---|---|
+| Hubbub | 1,139 of 1,679 (67.8%) | none (no fragment parsing) |
+| EWeb's parser | 1,673 of 1,679 (99.6%) | 195 of 195 |
+
+The six it fails need a script engine (`scripted_*.dat`: a script that moves nodes as the page is
+parsed). The same as 68030 code. On the page set, each of the 258 pages comes out as the same tree
+as html5lib's (1.1, Python), but for the comments after `</html>` its serialiser leaves out; two
+pages' display lists change from Hubbub's, both for the better (ZDNet's comment thread, which
+Hubbub dropped; a form field one pixel to the side). `make fuzz` has it (`fuzz_html`: the charset,
+scripting and a fragment's context from the first byte, and a check that the tree holds
+together); its first find, an empty DOCTYPE at the very start, is in `tests/fuzz/found/html`.
+
+**Speed**, the parse into EWeb's document (`build/m68k/docparse`, on the Atari's heap) in 68030
+instructions:
+
+| | NetSurf's, as released | Hubbub made faster | EWeb's parser |
+|---|---|---|---|
+| `NEWS.HTM` | 10.07 M | 6.41 M | 3.67 M |
+| The page set, median page | 11.50 M | 7.58 M | 3.94 M |
+| The page set, 90th percentile | 22.1 M | 13.2 M | 7.57 M |
+| The page set, all 258 pages | 3,493 M | 2,087 M | 1,163 M |
+
+From 140 instructions a byte of HTML to 48 at the median: 44% off Hubbub made faster (19% on the
+page that gains least, 63% on the most), and three times as fast as NetSurf's code as released. The document's own work after the parse (the
+presentational hints, now looking attributes up by atom) is in these figures. `EWEB.PRG` is 189 KB
+smaller without Hubbub (715 KB).
+
+**On the emulated 32 MHz Falcon** (`make hatarigui`), `EWEB.PRG`'s log gives the test server's
+long page (36 KB of words, one text node, where both parsers mostly scan text) 195 ms against
+Hubbub's 205; a small page 90-105 ms with either. Most of that is not the HTML: what the log calls
+the parse also covers the status line and EWeb's UA stylesheet, which is parsed again for every
+page (about 320 K instructions). Parsing it once a program run is the next thing to make faster.
+`EWEB.PRG` is built freestanding, where a `memcpy` is a call, so the parser's small copies are
+the compiler's own moves.
+
+**What is left** on `NEWS.HTM`: the tokenizer about a fifth, the decoder a tenth (both near what a
+loop over the bytes costs), then copies into the document, interning names for the CSS engine, and
+clearing new nodes, a few percent each. The first page also looks up a few charset names in
+libparserutils' list (about 50 K instructions), once a program run.
 
 ## Fetching pages: EWeb's HTTP client (17 Oct 2026)
 
@@ -571,7 +636,7 @@ releases.
   HTTP client's inflate (the start page's five faces: its layout 40 ms -> 365 ms on the emulated
   32 MHz Falcon, the first time only). Hebrew vowel points take no room and are not
   drawn yet.
-- **The document** (`src/doc`): Hubbub's tree as EWeb's nodes, each carrying the CSS engine's node,
+- **The document** (`src/doc`): the HTML parser's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
   CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
   hints, a new part of EWeb's CSS engine: author rules of specificity zero before every sheet, as
@@ -646,8 +711,8 @@ releases.
   | BBC News (4,965 px tall, 121 links) | 100 KB | 4.35 s | 2.68 s | 0.16 s | 0.83 s | 0.48 s |
   | WSJ (10,000 px, 260 links) | 186 KB | 9.49 s | 7.08 s | 0.31 s | 1.50 s | 0.48 s |
 
-  The parse is Hubbub's, as measured before (4.15 s on the same BBC page before its UTF-8 copy): its
-  tokeniser is the next thing to make faster. "Drawn" is the first screen in 16 colours.
+  The parse was Hubbub's, as measured before (4.15 s on the same BBC page before its UTF-8 copy);
+  EWeb's own parser has replaced it since (below). "Drawn" is the first screen in 16 colours.
 - **Checked:** every page of the page set (258) laid out and drawn with AddressSanitizer and UBSan,
   with no fault; `tests/layout` keeps the display lists of three pages (`make test`), and the Hebrew
   test page lays out the same in each encoding; `make itest` loads a page and its stylesheet over
@@ -759,8 +824,8 @@ the HTML Standard:
 - **State** (`src/doc/form.c`): each control's, kept with the document, so that laying the page
   out again keeps what was typed and Back shows a form as it was left (a kept page; one fetched
   again starts afresh, as browsers do without a script). A control belongs to its `form`
-  attribute's form, else the form the parser had open (Hubbub tells it, for forms left open across
-  a table's cells), else the form around it. Values as the page gives them (`value`, a textarea's
+  attribute's form, else the form the parser had open (the HTML Standard's form element pointer,
+  for forms left open across a table's cells), else the form around it. Values as the page gives them (`value`, a textarea's
   text, `checked`, `selected`; a list with nothing chosen shows its first option that can be);
   `disabled` (and a disabled fieldset's, but its first legend's), `readonly`, `maxlength`; reset.
 - **Drawing:** the layout gives each control its size (a field from `size`, a textarea from `cols`
@@ -864,8 +929,8 @@ leaving out what EWeb never needs.
 
 | Part | NetSurf's version | Licence |
 |---|---|---|
-| HTML5 parser | Hubbub, with libparserutils | MIT |
-| CSS engine | LibCSS, with libwapcaplet | MIT |
+| HTML5 parser | Hubbub, with libparserutils (replaced: EWeb's own, 19 Oct 2026) | MIT |
+| CSS engine | LibCSS, with libwapcaplet (replaced: EWeb's own, 17 Oct 2026) | MIT |
 | DOM | libdom | MIT |
 | GIF and BMP decoders | libnsgif, libnsbmp | MIT |
 | Layout and page handling | NetSurf's own core | GPL-2.0-only |
@@ -1107,7 +1172,8 @@ out of both (their paths lead nowhere on the Atari).
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
    alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
-   the page set (above).
+   the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
+   tree-construction tests nearly all passed (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.

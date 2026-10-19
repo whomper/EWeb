@@ -86,9 +86,10 @@ hub stay complete, with the evidence.
   `NSBENCH.TTP` on an emulated 32 MHz Falcon (EmuTOS's `etos1024k.img`).
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
-  change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (Hubbub against the
-  Web Platform Tests' tree-construction tests, here and as 68030 code), and after one to libparserutils'
-  input, `make hebtest68k` too.
+  change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and
+  Hubbub against the Web Platform Tests' tree-construction tests, here and as 68030 code: EWeb's
+  must keep all but the six scripted ones), and after one to libparserutils' input, `make hebtest68k`
+  too.
 - **EWeb's network code** is `src/net/` (URL parser, HTTP client, gzip) on `common/`'s connections and TLS,
   with `src/plat.h` (`atari/plat_tos.c`, `tests/host/plat_posix.c`); `tests/net/ewget.c` is `EWGET.TTP`.
   After changing it: `make test` (nettest, the fuzz seeds and finds), `make itest`, `make urltest`
@@ -101,8 +102,8 @@ hub stay complete, with the evidence.
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
   `win.c`, the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
-  (addresses, loading, history, EWeb's own pages), `src/doc` (Hubbub's tree, the UA sheet, HTML's
-  hints), `src/layout` (fresh: boxes, lines, tables, a display list) and `src/gfx` (`EWEB.FNT`,
+  (addresses, loading, history, EWeb's own pages), `src/doc` (EWeb's HTML parser `html.c`, the
+  document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, tables, a display list) and `src/gfx` (`EWEB.FNT`,
   drawing into memory). It is a program only (no accessory). `tests/host/ewrender.c` draws a page or
   URL as EWeb would (a PNG, or `-d` the display list). After changing the layout or the document:
   `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
@@ -136,6 +137,13 @@ hub stay complete, with the evidence.
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.
   `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it changes, measure the
   shipped files again and change their figures in DESIGN.md.
+- **EWeb's HTML parser** is `src/doc/html.c` (fresh, after the HTML Standard's 13.2; DESIGN.md): it
+  replaced Hubbub on speed and standards, and Hubbub stays only in nsbench and `make h5test` as the
+  yardstick. Its named character references are `src/doc/entities.txt` (`tools/mkentities.py`
+  makes `build/gen/entities.h`). After changing it: `make test`, `make h5test`, `make fuzz` for a
+  while (`fuzz_html`; keep what it finds in `tests/fuzz/found/html`), and count it
+  (`tools/count68k.sh build/m68k/docparse`, `tools/prof68k.py`) when the change is meant for speed.
+  `ewh5test -f PAGE` prints a page's tree in the tests' format.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). After changing it, `make test` (its cases, `tests/css/cases.txt`, worked out from the

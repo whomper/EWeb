@@ -255,7 +255,7 @@ was, when you quit:
 
 EWeb is made by AERA | Erez Yaary, free software under the GNU GPL,
 version 2 or later: github.com/whomper/EWeb. Its fonts are drawn from
-DejaVu; its HTML parser is NetSurf's Hubbub (MIT), its GIF decoder
+DejaVu; its character set tables are NetSurf's libparserutils (MIT), its GIF decoder
 NetSurf's libnsgif (MIT), and its JPEG decoder libjpeg-turbo (the IJG's
 and BSD licences). It belongs to the
 AERA family of Atari programs (ECal, EContact, EMail, EFTP, EHypView,

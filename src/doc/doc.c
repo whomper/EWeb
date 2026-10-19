@@ -1,154 +1,73 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * doc.c - Hubbub's tree handler building EWeb's document (after
- * tests/bench/dom.c: adjacent text joins up; a node goes when its last
- * reference does and it has no parent), then the element links, indexes
- * and flags the CSS engine reads.
+ * doc.c - a page's document: its memory, made by EWeb's HTML parser
+ * (html.c); then the element links, indexes, flags and presentational
+ * hints the CSS engine reads, the head's title and base, and the
+ * stylesheets.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <hubbub/hubbub.h>
-#include <hubbub/parser.h>
-#include <hubbub/tree.h>
-#include <parserutils/charset/mibenum.h>
-
 #include "doc.h"
 #include "form.h"
+#include "html.h"
 
-static const char *const tag_names[T_NTAGS] = {
-	"", "html", "head", "body", "title", "base", "link", "meta", "style", "script",
-	"noscript", "a", "img", "br", "hr", "li", "ul", "ol", "table", "tr", "td", "th",
-	"input", "button", "select", "option", "textarea", "pre", "iframe", "svg", "canvas",
-	"video", "audio", "object", "embed", "template", "label", "form", "wbr",
-	"fieldset", "legend", "optgroup"
+/* ---------------------------------------------------------------- memory */
+
+/* blocks of memory, the newest first; small at first, then larger */
+struct dblk {
+	struct dblk *next;
+	size_t used, size;
 };
 
-typedef struct {
-	doc *d;
-	const ec_atom *tags[T_NTAGS];
-	const ec_atom *a_class, *a_id;
-	hubbub_parser *parser;
-	const char *new_charset;
-} BUILD;
+#define DALIGN 8
+#define DHEAD ((sizeof(struct dblk) + DALIGN - 1) & ~(size_t) (DALIGN - 1))
 
-static BUILD *bd;	/* the parse in progress (one at a time) */
-
-static dnode *new_node(int type)
+void *doc_alloc(doc *d, size_t n)
 {
-	dnode *n = calloc(1, sizeof *n);
-	if (n != NULL) {
-		n->type = (uint8_t) type;
-		n->refs = 1;
-		n->y = -1;
-	}
-	return n;
-}
-
-static int text_add(dnode *n, const uint8_t *s, size_t len)
-{
-	if (n->len + len + 1 > n->cap) {
-		uint32_t cap = n->cap ? n->cap : 32;
-		char *t;
-		while (cap < n->len + len + 1)
-			cap *= 2;
-		t = realloc(n->text, cap);
-		if (t == NULL)
-			return 0;
-		n->text = t;
-		n->cap = cap;
-	}
-	memcpy(n->text + n->len, s, len);
-	n->len += (uint32_t) len;
-	n->text[n->len] = 0;
-	return 1;
-}
-
-static void free_node(dnode *n)
-{
-	dnode *c, *next;
-	uint16_t i;
-
-	for (c = n->first; c != NULL; c = next) {
-		next = c->next;
-		free_node(c);
-	}
-	for (i = 0; i < n->nattr; i++)
-		free((char *) n->attrs[i].val);
-	free(n->attrs);
-	free((char *) n->e.hint);
-	free(n->cls);
-	free(n->text);
-	free(n);
-}
-
-static const ec_atom *intern(const uint8_t *s, size_t n)
-{
-	return ec_intern(bd->d->css, (const char *) s, n);
-}
-
-/* the class attribute, split at white space */
-static void set_classes(dnode *n, const char *s, size_t len)
-{
-	const char *e = s + len;
-	free(n->cls);
-	n->cls = NULL;
-	n->ncls = 0;
-	while (s < e) {
-		const char *w;
-		while (s < e && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f'))
-			s++;
-		w = s;
-		while (s < e && !(*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f'))
-			s++;
-		if (s > w) {
-			const ec_atom **c = realloc((void *) n->cls, (n->ncls + 1) * sizeof *n->cls);
-			if (c == NULL)
-				return;
-			n->cls = c;
-			c[n->ncls++] = ec_intern(bd->d->css, w, s - w);
-		}
-	}
-}
-
-static void add_attr(dnode *n, const uint8_t *name, size_t nlen, const uint8_t *val, size_t vlen)
-{
-	ec_attr *at;
-	char *v;
-	size_t i;
-
-	at = realloc(n->attrs, (n->nattr + 1) * sizeof *n->attrs);
-	if (at == NULL)
-		return;
-	n->attrs = at;
-	v = malloc(vlen + 1);
-	if (v == NULL)
-		return;
-	memcpy(v, val, vlen);
-	v[vlen] = 0;
-	/* attribute names are case-insensitive in HTML; Hubbub gives HTML's
-	   in lower case, but not foreign content's */
-	{
-		char lower[64];
-		const ec_atom *a;
-		if (nlen < sizeof lower) {
-			for (i = 0; i < nlen; i++)
-				lower[i] = (char) (name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i]);
-			a = ec_intern(bd->d->css, lower, nlen);
+	struct dblk *b = d->mem;
+	n = (n + DALIGN - 1) & ~(size_t) (DALIGN - 1);
+	if (b == NULL || b->used + n > b->size) {
+		/* 16 KB first (a small page), then 64 KB; something larger
+		   than that gets a block of its own, kept behind the one in
+		   use so that keeps its room */
+		size_t size = b == NULL ? 16384 : 65536;
+		int alone = n > size;
+		if (alone)
+			size = n;
+		b = malloc(DHEAD + size);
+		if (b == NULL)
+			return NULL;
+		b->size = size;
+		b->used = 0;
+		if (alone && d->mem != NULL) {
+			b->next = d->mem->next;
+			d->mem->next = b;
 		} else {
-			a = intern(name, nlen);
+			b->next = d->mem;
+			d->mem = b;
 		}
-		at[n->nattr].name = a;
-		at[n->nattr].val = v;
-		at[n->nattr].len = (uint32_t) vlen;
-		n->nattr++;
-		if (a == bd->a_class)
-			set_classes(n, v, vlen);
-		else if (a == bd->a_id && n->e.id == NULL && vlen > 0)
-			n->e.id = intern(val, vlen);
 	}
+	b->used += n;
+	return (char *) b + DHEAD + b->used - n;
+}
+
+void *doc_grow(doc *d, void *p, size_t old, size_t n)
+{
+	struct dblk *b = d->mem;
+	size_t o = (old + DALIGN - 1) & ~(size_t) (DALIGN - 1);
+	void *q;
+	if (b != NULL && (char *) p + o == (char *) b + DHEAD + b->used &&
+	    b->used - o + ((n + DALIGN - 1) & ~(size_t) (DALIGN - 1)) <= b->size) {
+		b->used = b->used - o + ((n + DALIGN - 1) & ~(size_t) (DALIGN - 1));
+		return p;
+	}
+	q = doc_alloc(d, n);
+	if (q != NULL && old > 0)
+		memcpy(q, p, old < n ? old : n);
+	return q;
 }
 
 const char *dn_attr(const dnode *n, const char *name)
@@ -164,303 +83,9 @@ const char *dn_attr(const dnode *n, const char *name)
 	return NULL;
 }
 
-/* ---------------------------------------------------------------- the tree handler */
-
-static hubbub_error t_create_comment(void *ctx, const hubbub_string *data, void **result)
-{
-	dnode *n = new_node(DN_OTHER);
-	(void) ctx;
-	(void) data;
-	if (n == NULL)
-		return HUBBUB_NOMEM;
-	*result = n;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_create_doctype(void *ctx, const hubbub_doctype *dt, void **result)
-{
-	dnode *n = new_node(DN_OTHER);
-	(void) ctx;
-	(void) dt;
-	if (n == NULL)
-		return HUBBUB_NOMEM;
-	*result = n;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_create_element(void *ctx, const hubbub_tag *tag, void **result)
-{
-	dnode *n = new_node(DN_ELEMENT);
-	uint32_t i;
-	int t;
-
-	(void) ctx;
-	if (n == NULL)
-		return HUBBUB_NOMEM;
-	n->ns = (uint8_t) tag->ns;
-	n->e.name = intern(tag->name.ptr, tag->name.len);
-	for (t = 1; t < T_NTAGS; t++)
-		if (bd->tags[t] == n->e.name)
-			break;
-	n->tag = (uint16_t) (t < T_NTAGS ? t : T_OTHER);
-	if (tag->ns == HUBBUB_NS_SVG && n->tag != T_SVG)
-		n->tag = T_OTHER;
-	for (i = 0; i < tag->n_attributes; i++)
-		add_attr(n, tag->attributes[i].name.ptr, tag->attributes[i].name.len,
-			 tag->attributes[i].value.ptr, tag->attributes[i].value.len);
-	bd->d->elements++;
-	*result = n;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_create_text(void *ctx, const hubbub_string *data, void **result)
-{
-	dnode *n = new_node(DN_TEXT);
-	(void) ctx;
-	if (n == NULL || !text_add(n, data->ptr, data->len)) {
-		free(n);
-		return HUBBUB_NOMEM;
-	}
-	*result = n;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_ref_node(void *ctx, void *v)
-{
-	(void) ctx;
-	((dnode *) v)->refs++;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_unref_node(void *ctx, void *v)
-{
-	dnode *n = v;
-	(void) ctx;
-	if (n->refs > 0)
-		n->refs--;
-	if (n->refs == 0 && n->parent == NULL && n->type != DN_DOCUMENT)
-		free_node(n);
-	return HUBBUB_OK;
-}
-
-static void link_last(dnode *parent, dnode *child)
-{
-	child->parent = parent;
-	child->prev = parent->last;
-	child->next = NULL;
-	if (parent->last != NULL)
-		parent->last->next = child;
-	else
-		parent->first = child;
-	parent->last = child;
-}
-
-static hubbub_error t_append_child(void *ctx, void *p, void *c, void **result)
-{
-	dnode *parent = p, *child = c;
-
-	(void) ctx;
-	if (child->type == DN_TEXT && parent->last != NULL && parent->last->type == DN_TEXT) {
-		text_add(parent->last, (const uint8_t *) child->text, child->len);
-		*result = parent->last;
-	} else {
-		link_last(parent, child);
-		*result = child;
-	}
-	((dnode *) *result)->refs++;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_insert_before(void *ctx, void *p, void *c, void *r, void **result)
-{
-	dnode *parent = p, *child = c, *ref = r;
-
-	(void) ctx;
-	if (child->type == DN_TEXT && ref->prev != NULL && ref->prev->type == DN_TEXT) {
-		text_add(ref->prev, (const uint8_t *) child->text, child->len);
-		*result = ref->prev;
-	} else {
-		child->parent = parent;
-		child->prev = ref->prev;
-		child->next = ref;
-		if (ref->prev != NULL)
-			ref->prev->next = child;
-		else
-			parent->first = child;
-		ref->prev = child;
-		*result = child;
-	}
-	((dnode *) *result)->refs++;
-	return HUBBUB_OK;
-}
-
-static void unlink_node(dnode *child)
-{
-	dnode *parent = child->parent;
-
-	if (parent == NULL)
-		return;
-	if (child->prev != NULL)
-		child->prev->next = child->next;
-	else
-		parent->first = child->next;
-	if (child->next != NULL)
-		child->next->prev = child->prev;
-	else
-		parent->last = child->prev;
-	child->parent = child->prev = child->next = NULL;
-}
-
-static hubbub_error t_remove_child(void *ctx, void *p, void *c, void **result)
-{
-	dnode *child = c;
-	(void) ctx;
-	(void) p;
-	unlink_node(child);
-	child->refs++;
-	*result = child;
-	return HUBBUB_OK;
-}
-
-static dnode *clone(const dnode *old, int deep)
-{
-	dnode *n = new_node(old->type);
-	const dnode *c;
-	uint16_t i;
-
-	if (n == NULL)
-		return NULL;
-	n->ns = old->ns;
-	n->tag = old->tag;
-	n->e.name = old->e.name;
-	for (i = 0; i < old->nattr; i++) {
-		size_t nl;
-		const char *an = ec_atom_text(old->attrs[i].name, &nl);
-		add_attr(n, (const uint8_t *) an, nl, (const uint8_t *) old->attrs[i].val, old->attrs[i].len);
-	}
-	if (old->len > 0)
-		text_add(n, (const uint8_t *) old->text, old->len);
-	if (old->type == DN_ELEMENT)
-		bd->d->elements++;
-	if (deep) {
-		for (c = old->first; c != NULL; c = c->next) {
-			dnode *k = clone(c, 1);
-			if (k != NULL) {
-				k->refs = 0;
-				link_last(n, k);
-			}
-		}
-	}
-	return n;
-}
-
-static hubbub_error t_clone_node(void *ctx, void *v, bool deep, void **result)
-{
-	dnode *n = clone(v, deep);
-	(void) ctx;
-	if (n == NULL)
-		return HUBBUB_NOMEM;
-	*result = n;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_reparent_children(void *ctx, void *v, void *np)
-{
-	dnode *old = v, *parent = np, *c, *next;
-	(void) ctx;
-	for (c = old->first; c != NULL; c = next) {
-		next = c->next;
-		unlink_node(c);
-		link_last(parent, c);
-	}
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_get_parent(void *ctx, void *v, bool element_only, void **result)
-{
-	dnode *p = ((dnode *) v)->parent;
-	(void) ctx;
-	if (p != NULL && element_only && p->type != DN_ELEMENT)
-		p = NULL;
-	if (p != NULL)
-		p->refs++;
-	*result = p;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_has_children(void *ctx, void *v, bool *result)
-{
-	(void) ctx;
-	*result = ((dnode *) v)->first != NULL;
-	return HUBBUB_OK;
-}
-
-/* a control and the form the parser had open (a form left open across a
-   table's cells is not its ancestor) */
-static hubbub_error t_form_associate(void *ctx, void *form, void *v)
-{
-	(void) ctx;
-	((dnode *) v)->owner = form;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_add_attributes(void *ctx, void *v, const hubbub_attribute *a, uint32_t n)
-{
-	dnode *e = v;
-	uint32_t i;
-	(void) ctx;
-	for (i = 0; i < n; i++) {
-		char name[64];
-		if (a[i].name.len >= sizeof name)
-			continue;
-		memcpy(name, a[i].name.ptr, a[i].name.len);
-		name[a[i].name.len] = 0;
-		if (dn_attr(e, name) == NULL)
-			add_attr(e, a[i].name.ptr, a[i].name.len, a[i].value.ptr, a[i].value.len);
-	}
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_set_quirks_mode(void *ctx, hubbub_quirks_mode mode)
-{
-	(void) ctx;
-	(void) mode;
-	return HUBBUB_OK;
-}
-
-static hubbub_error t_complete_script(void *ctx, void *script)
-{
-	(void) ctx;
-	(void) script;
-	return HUBBUB_OK;
-}
-
-/* a <meta charset> found while parsing: start again in that charset unless
-   the one in use is certain or the same */
-static hubbub_error t_encoding_change(void *ctx, const char *name)
-{
-	hubbub_charset_source source;
-	const char *cur = hubbub_parser_read_charset(bd->parser, &source);
-
-	(void) ctx;
-	if (cur == NULL || source == HUBBUB_CHARSET_CONFIDENT)
-		return HUBBUB_OK;
-	if (parserutils_charset_mibenum_from_name(name, strlen(name)) ==
-			parserutils_charset_mibenum_from_name(cur, strlen(cur)))
-		return HUBBUB_OK;
-	bd->new_charset = name;
-	return HUBBUB_ENCODINGCHANGE;
-}
-
-static hubbub_tree_handler handler = {
-	t_create_comment, t_create_doctype, t_create_element, t_create_text,
-	t_ref_node, t_unref_node, t_append_child, t_insert_before,
-	t_remove_child, t_clone_node, t_reparent_children, t_get_parent,
-	t_has_children, t_form_associate, t_add_attributes, t_set_quirks_mode,
-	t_encoding_change, t_complete_script, NULL
-};
-
 /* ---------------------------------------------------------------- after parsing */
+
+static doc *bd_doc;	/* the document being finished (one at a time) */
 
 static void collapse_into(char *out, size_t size, const char *s, size_t n)
 {
@@ -591,25 +216,66 @@ static const char *list_type(const char *v, int ol)
 	return NULL;
 }
 
+/* the attributes the hints and links look at, as atoms of the document
+   being finished: compared as pointers, not as text */
+static struct {
+	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
+	const ec_atom *col, *font;
+} ha;
+
+static const char *attr_atom(const dnode *n, const ec_atom *a)
+{
+	uint16_t i;
+	for (i = 0; i < n->nattr; i++)
+		if (n->attrs[i].name == a)
+			return n->attrs[i].val;
+	return NULL;
+}
+
+#define HA(n, name) attr_atom((n), ha.name)
+
+static void hint_atoms(doc *d)
+{
+#define A(x) ha.x = ec_intern(d->css, #x, sizeof #x - 1)
+	A(align);
+	A(bgcolor);
+	A(border);
+	A(cellpadding);
+	A(cellspacing);
+	A(color);
+	A(face);
+	A(height);
+	A(href);
+	A(hspace);
+	A(leftmargin);
+	A(marginheight);
+	A(marginwidth);
+	A(nowrap);
+	A(size);
+	A(text);
+	A(topmargin);
+	A(type);
+	A(valign);
+	A(vspace);
+	A(width);
+	A(col);
+	A(font);
+#undef A
+}
+
 static void hints(dnode *n)
 {
 	HINT h;
-	char buf[32], name[12];
-	const char *v, *t;
-	size_t nl;
+	char buf[32];
+	const char *v;
 	int cell = n->tag == T_TD || n->tag == T_TH;
 
 	if (n->nattr == 0 && !cell)
 		return;
-	t = ec_atom_text(n->e.name, &nl);
-	if (nl >= sizeof name)
-		return;
-	memcpy(name, t, nl);
-	name[nl] = 0;
 	h.n = 0;
 	h.s[0] = 0;
 
-	if ((v = dn_attr(n, "align")) != NULL) {
+	if ((v = HA(n, align)) != NULL) {
 		if ((n->tag == T_TABLE || n->tag == T_IMG) && (is(v, "left") || is(v, "right"))) {
 			/* the HTML Standard's rendering section: a float */
 			put(&h, "float", is(v, "left") ? "left" : "right");
@@ -626,54 +292,54 @@ static void hints(dnode *n)
 				put(&h, "text-align", "center");
 		}
 	}
-	if ((v = dn_attr(n, "valign")) != NULL &&
+	if ((v = HA(n, valign)) != NULL &&
 	    (is(v, "top") || is(v, "middle") || is(v, "bottom") || is(v, "baseline")))
 		put(&h, "vertical-align", is(v, "top") ? "top" : is(v, "middle") ? "middle" :
 		    is(v, "bottom") ? "bottom" : "baseline");
-	if ((v = colour(dn_attr(n, "bgcolor"), buf)) != NULL)
+	if ((v = colour(HA(n, bgcolor), buf)) != NULL)
 		put(&h, "background-color", v);
 	if (n->tag == T_BODY) {
-		if ((v = colour(dn_attr(n, "text"), buf)) != NULL)
+		if ((v = colour(HA(n, text), buf)) != NULL)
 			put(&h, "color", v);
-		if ((v = dimension(dn_attr(n, "marginwidth"), buf)) != NULL ||
-		    (v = dimension(dn_attr(n, "leftmargin"), buf)) != NULL)
+		if ((v = dimension(HA(n, marginwidth), buf)) != NULL ||
+		    (v = dimension(HA(n, leftmargin), buf)) != NULL)
 			put(&h, "margin-left", v), put(&h, "margin-right", v);
-		if ((v = dimension(dn_attr(n, "marginheight"), buf)) != NULL ||
-		    (v = dimension(dn_attr(n, "topmargin"), buf)) != NULL)
+		if ((v = dimension(HA(n, marginheight), buf)) != NULL ||
+		    (v = dimension(HA(n, topmargin), buf)) != NULL)
 			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
 	}
 	if (n->tag == T_IMG) {
-		if ((v = dimension(dn_attr(n, "hspace"), buf)) != NULL)
+		if ((v = dimension(HA(n, hspace), buf)) != NULL)
 			put(&h, "margin-left", v), put(&h, "margin-right", v);
-		if ((v = dimension(dn_attr(n, "vspace"), buf)) != NULL)
+		if ((v = dimension(HA(n, vspace), buf)) != NULL)
 			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
 	}
-	if (n->tag == T_TABLE || cell || n->tag == T_HR || n->tag == T_IMG || !strcmp(name, "col")) {
-		if ((v = dimension(dn_attr(n, "width"), buf)) != NULL)
+	if (n->tag == T_TABLE || cell || n->tag == T_HR || n->tag == T_IMG || n->e.name == ha.col) {
+		if ((v = dimension(HA(n, width), buf)) != NULL)
 			put(&h, "width", v);
 	}
 	if (n->tag == T_TABLE || cell || n->tag == T_TR || n->tag == T_IMG) {
-		if ((v = dimension(dn_attr(n, "height"), buf)) != NULL)
+		if ((v = dimension(HA(n, height), buf)) != NULL)
 			put(&h, "height", v);
 	}
 	if (cell) {
 		const dnode *tb;
-		if (dn_attr(n, "nowrap") != NULL)
+		if (HA(n, nowrap) != NULL)
 			put(&h, "white-space", "nowrap");
 		for (tb = n->parent; tb != NULL && tb->tag != T_TABLE; tb = tb->parent)
 			;
 		if (tb != NULL) {
-			const char *b = dn_attr(tb, "border");
+			const char *b = HA(tb, border);
 			if (b != NULL && (*b == 0 || dimension(b, buf) != NULL))
 				put(&h, "border", "1px inset gray");
-			if ((v = dimension(dn_attr(tb, "cellpadding"), buf)) != NULL)
+			if ((v = dimension(HA(tb, cellpadding), buf)) != NULL)
 				put(&h, "padding", v);
-			else if ((v = dn_attr(tb, "cellpadding")) != NULL && *v == '0')
+			else if ((v = HA(tb, cellpadding)) != NULL && *v == '0')
 				put(&h, "padding", "0");
 		}
 	}
 	if (n->tag == T_TABLE) {
-		const char *b = dn_attr(n, "border");
+		const char *b = HA(n, border);
 		if (b != NULL) {
 			char bw[48];
 			v = dimension(b, buf);
@@ -684,19 +350,19 @@ static void hints(dnode *n)
 				put(&h, "border", bw);
 			}
 		}
-		if ((v = dimension(dn_attr(n, "cellspacing"), buf)) != NULL)
+		if ((v = dimension(HA(n, cellspacing), buf)) != NULL)
 			put(&h, "border-spacing", v);
-		else if ((v = dn_attr(n, "cellspacing")) != NULL && *v == '0')
+		else if ((v = HA(n, cellspacing)) != NULL && *v == '0')
 			put(&h, "border-spacing", "0");
 	}
-	if (n->tag == T_HR && (v = colour(dn_attr(n, "color"), buf)) != NULL) {
+	if (n->tag == T_HR && (v = colour(HA(n, color), buf)) != NULL) {
 		put(&h, "border-color", v);
 		put(&h, "background-color", v);
 	}
-	if (!strcmp(name, "font")) {
-		if ((v = colour(dn_attr(n, "color"), buf)) != NULL)
+	if (n->e.name == ha.font) {
+		if ((v = colour(HA(n, color), buf)) != NULL)
 			put(&h, "color", v);
-		if ((v = dn_attr(n, "size")) != NULL) {
+		if ((v = HA(n, size)) != NULL) {
 			static const char *const sizes[] = { "x-small", "small", "medium", "large", "x-large",
 							     "xx-large", "48px" };
 			int k, rel = 0;
@@ -714,7 +380,7 @@ static void hints(dnode *n)
 				put(&h, "font-size", sizes[k - 1]);
 			}
 		}
-		if ((v = dn_attr(n, "face")) != NULL) {
+		if ((v = HA(n, face)) != NULL) {
 			char f[96];
 			size_t i, k = 0;
 			for (i = 0; v[i] && k < sizeof f - 1; i++) {
@@ -729,12 +395,12 @@ static void hints(dnode *n)
 		}
 	}
 	if (n->tag == T_OL || n->tag == T_UL || n->tag == T_LI) {
-		if ((v = list_type(dn_attr(n, "type"), n->tag == T_OL ||
+		if ((v = list_type(HA(n, type), n->tag == T_OL ||
 				   (n->tag == T_LI && n->parent && n->parent->tag == T_OL))) != NULL)
 			put(&h, "list-style-type", v);
 	}
 	if (h.n > 0) {
-		char *s = malloc(h.n + 1);
+		char *s = doc_alloc(bd_doc, h.n + 1);
 		if (s != NULL) {
 			memcpy(s, h.s, h.n + 1);
 			n->e.hint = s;
@@ -754,7 +420,7 @@ static void finish(doc *d, dnode *n, dnode *parent)
 	n->e.ncls = n->ncls;
 	n->e.attr = n->attrs;
 	n->e.nattr = n->nattr;
-	if (n->tag == T_A && dn_attr(n, "href") != NULL)
+	if (n->tag == T_A && HA(n, href) != NULL)
 		n->e.flags |= EC_NODE_LINK;
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
@@ -780,7 +446,7 @@ static void finish(doc *d, dnode *n, dnode *parent)
 			free(buf);
 		}
 	} else if (n->tag == T_BASE && d->base[0] == 0) {
-		const char *h = dn_attr(n, "href");
+		const char *h = HA(n, href);
 		if (h != NULL && strlen(h) < sizeof d->base)
 			strcpy(d->base, h);
 	}
@@ -807,99 +473,49 @@ static void finish(doc *d, dnode *n, dnode *parent)
 		n->e.flags |= EC_NODE_EMPTY;
 }
 
-static dnode *parse_with(doc *d, const char *data, size_t len, const char *charset, int confident,
-			 char *changed, size_t changed_size)
+doc *doc_parse_opts(const char *data, size_t len, const html_opts *o, const ec_media *media)
 {
-	hubbub_parser_optparams params;
-	hubbub_error err = HUBBUB_OK;
-	dnode *root = new_node(DN_DOCUMENT);
-	size_t off;
-	const char *used;
-	hubbub_charset_source src;
-
-	if (root == NULL)
-		return NULL;
-	if (hubbub_parser_create(charset, confident, &bd->parser) != HUBBUB_OK) {
-		free(root);
-		return NULL;
-	}
-	params.tree_handler = &handler;
-	hubbub_parser_setopt(bd->parser, HUBBUB_PARSER_TREE_HANDLER, &params);
-	params.document_node = root;
-	hubbub_parser_setopt(bd->parser, HUBBUB_PARSER_DOCUMENT_NODE, &params);
-	d->elements = 0;
-	for (off = 0; off < len && err == HUBBUB_OK; off += 4096) {
-		size_t n = len - off < 4096 ? len - off : 4096;
-		err = hubbub_parser_parse_chunk(bd->parser, (const uint8_t *) data + off, n);
-	}
-	if (err == HUBBUB_ENCODINGCHANGE && changed != NULL) {
-		strncpy(changed, bd->new_charset, changed_size - 1);
-		changed[changed_size - 1] = 0;
-		hubbub_parser_destroy(bd->parser);
-		free_node(root);
-		return NULL;
-	}
-	if (err == HUBBUB_OK)
-		hubbub_parser_completed(bd->parser);
-	used = hubbub_parser_read_charset(bd->parser, &src);
-	if (used != NULL) {
-		strncpy(d->charset, used, sizeof d->charset - 1);
-		d->charset[sizeof d->charset - 1] = 0;
-	}
-	hubbub_parser_destroy(bd->parser);
-	return root;
-}
-
-doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media *media)
-{
-	BUILD b;
-	char changed[40] = "";
 	doc *d = calloc(1, sizeof *d);
 	dnode *c;
-	int t;
 
 	if (d == NULL)
 		return NULL;
 	d->css = ec_create(media, 0);
-	if (d->css == NULL) {
-		free(d);
+	if (d->css == NULL || !html_parse(d, data, len, o)) {
+		doc_free(d);
 		return NULL;
 	}
-	memset(&b, 0, sizeof b);
-	b.d = d;
-	bd = &b;
-	for (t = 1; t < T_NTAGS; t++)
-		b.tags[t] = ec_intern(d->css, tag_names[t], strlen(tag_names[t]));
-	b.a_class = ec_intern(d->css, "class", 5);
-	b.a_id = ec_intern(d->css, "id", 2);
-	if (charset != NULL && charset[0] == 0)
-		charset = NULL;
-	d->root = parse_with(d, data, len, charset, charset != NULL, changed, sizeof changed);
-	if (d->root == NULL && changed[0] != 0)	/* <meta charset> said otherwise: start again */
-		d->root = parse_with(d, data, len, changed, 1, NULL, 0);
-	bd = NULL;
-	if (d->root == NULL) {
-		ec_destroy(d->css);
-		free(d);
-		return NULL;
-	}
+	bd_doc = d;
+	hint_atoms(d);
 	for (c = d->root->first; c != NULL; c = c->next)
 		if (c->type == DN_ELEMENT) {
 			finish(d, c, NULL);
 			c->e.index = c->e.nsib = 1;
 			break;
 		}
+	bd_doc = NULL;
 	form_init(d);		/* out of memory: the controls it made */
 	return d;
 }
 
+doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media *media)
+{
+	html_opts o;
+	memset(&o, 0, sizeof o);
+	o.charset = charset;
+	return doc_parse_opts(data, len, &o, media);
+}
+
 void doc_free(doc *d)
 {
+	struct dblk *b, *next;
 	if (d == NULL)
 		return;
 	form_free(d);
-	if (d->root != NULL)
-		free_node(d->root);
+	for (b = d->mem; b != NULL; b = next) {
+		next = b->next;
+		free(b);
+	}
 	if (d->css != NULL)
 		ec_destroy(d->css);
 	free(d);
@@ -949,7 +565,7 @@ static void sheets_in(dnode *n, void (*cb)(void *, int, const char *, size_t), v
 {
 	dnode *c;
 	if (n->type == DN_ELEMENT) {
-		if (n->tag == T_STYLE && n->ns == HUBBUB_NS_HTML && media_ok(dn_attr(n, "media"))) {
+		if (n->tag == T_STYLE && n->ns == DN_NS_HTML && media_ok(dn_attr(n, "media"))) {
 			size_t len = 0;
 			char *buf;
 			for (c = n->first; c != NULL; c = c->next)

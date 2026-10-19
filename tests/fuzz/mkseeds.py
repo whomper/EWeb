@@ -5,7 +5,9 @@
 fuzz_http the first byte picks the request (see fuzz_http.c), the rest is
 what the server says; for fuzz_url, an href, a newline and a base; for
 fuzz_cookie, Set-Cookie values a line each, the first byte picking the
-address it came from (see fuzz_cookie.c).
+address it came from (see fuzz_cookie.c); for fuzz_html, a page, the first
+byte picking its charset, scripting and a fragment's context (see
+fuzz_html.c).
 
 tests/fuzz/found/ holds the inputs that once broke a parser, as the fuzzer
 saved them; make test runs them all again (common/tests/fuzz/replay.c)."""
@@ -83,3 +85,32 @@ for name, lines in [
     ("odd", ["a=", "a", "=b", " a = 1 ; ; = ; Path ; Domain=", "bq=1; Domain=.EXAMPLE.co.il; Max-Age=-1"]),
 ]:
     put("cookie", name, "\n".join(lines) + "\n")
+
+# pages: each part of the parser at least once (the first byte: charset,
+# scripting, fragment context)
+for name, first, page in [
+    ("doc", 0, "<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>T &amp; t</title>"
+     "<style>p{color:red}</style><script>if (a < b && c) x('</scr' + 'ipt>');<!-- <script>"
+     "</script> --></script></head><body class='a b' id=x><p>One<p>Two &notin; &#x41;&#128;&#0;"
+     "&nbsp&lt=<b><i>bold</b>italic</i><a href=\"/x?a=1&b=2\">link<div>block</a></div>"),
+    ("tables", 3, "<table><caption>c<tr><td>1<td>2<tr><th>h</table>x<table><tbody><tr>"
+     "<td><table><td>in</table></td>loose<form><input type=hidden></table><b>after"),
+    ("forms", 4, "<form action=/f><select name=s><optgroup label=g><option selected>A"
+     "<option>B</select><textarea>\nline</textarea><button><selectedcontent></button>"
+     "<input name=q value='&quot;'><fieldset><legend>L</legend><label>x<input type=checkbox>"
+     "</label></form><form><form>"),
+    ("foreign", 0x08, "<svg viewbox='0 0 1 1'><foreignObject><p>html</p></foreignObject>"
+     "<path xlink:href=#a /><![CDATA[x]]></svg><math><mi>x</mi><annotation-xml encoding="
+     "text/html><div>d</div></annotation-xml></math><svg><desc><b>x</b></desc><font color=1>"),
+    ("template", 0x50, "<template><tr><td>t</td></tr></template><td>cell<col><frameset>"),
+    ("rawtext", 0x70, "<xmp><b></xmp><plaintext><x></plaintext>&amp;"),
+    ("misc", 1, "<?xml version=1?><?pi data?><!--c--!><!DOCTYPE html PUBLIC \"-//W3C//DTD "
+     "HTML 4.01 Transitional//EN\"><noscript><b>n</b></noscript><frameset><frame>"
+     "<noframes>x</noframes></frameset><!-- end"),
+    ("hebrew", 6, "<html dir=rtl><body>\xf9\xec\xe5\xed <b>\xf2\xe5\xec\xed</b> 123\r\n"
+     "\r<pre>\r\nx</pre>"),
+    ("utf16", 5, "<\0p\0>\0h\0\x01\xd8\x37\xdc"),
+    ("broken", 0, "<p>\xff\xc3(\xe2\x82\xf0\x9f\x98<a <b\0c=\"\0\" d='' e=f\0g> "
+     "</b x=1/> &# &#x; &#99999999999; &unknown; &amp"),
+]:
+    put("html", name, bytes([first]) + page.encode("latin-1"))
