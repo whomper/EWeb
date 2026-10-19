@@ -112,6 +112,18 @@ A form goes in the page's own character set, as browsers send it; Back
 after sending shows it as you filled it in. EWeb can't send files yet
 (a file field sends none), and buttons that need JavaScript do nothing.
 
+## Cookies
+
+Sites remember you (a login, a basket, a setting) with cookies. EWeb
+keeps them as browsers do: those meant to last are kept in `COOKIES.TXT`
+next to `EWEB.PRG`, written when you quit EWeb, so that you stay logged
+in from one day to the next; the others last until you quit. A picture
+or stylesheet from another site (an advert's, a tracker's) gets no
+cookies and can't set any.
+
+Options > Forget cookies forgets them all at once, the file too: you are
+logged out of every site.
+
 ## The window
 
 At the top, from the left:

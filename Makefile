@@ -272,6 +272,10 @@ build/asan/nettest: tests/net/nettest.c common/tests/fuzz/fuzz_net.c $(HOSTNET_S
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -DFUZZ_NET $(NET_INC) \
 		-Icommon/tests/fuzz -I$(GEN)/net -o $@ $(filter %.c,$^) build/host/libbearssl.a
+build/asan/cookietest: tests/net/cookietest.c $(HOSTNET_SRC) $(NET_HDRS) build/host/libbearssl.a
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) $(NET_INC) \
+		-o $@ $(filter %.c,$^) build/host/libbearssl.a
 build/asan/urltest: tests/url/urltest.c src/net/url.c src/net/url.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) -Isrc/net -o $@ $(filter %.c,$^)
@@ -430,7 +434,7 @@ build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(N
 # without libFuzzer (common/tests/fuzz/replay.c)
 FUZZCC    ?= clang
 FUZZTIME  ?= 60
-FUZZERS   := http url
+FUZZERS   := http url cookie
 FUZZ_SRC  = $(HOSTNET_SRC) common/tests/fuzz/fuzz_net.c
 build/fuzz/fuzz_%: tests/fuzz/fuzz_%.c $(HOSTNET_SRC) $(NET_HDRS) build/host/libbearssl.a
 	@mkdir -p $(@D)
@@ -574,9 +578,10 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest binary/EWEB.FNT
+		build/asan/ewrender build/asan/formtest build/asan/cookietest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
+	build/asan/cookietest tests/net/cookies.txt
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

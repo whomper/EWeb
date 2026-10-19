@@ -108,6 +108,10 @@ hub stay complete, with the evidence.
   to left), sent by `br_submit` (`src/browse`), edited in `ui/win.c`. After changing them: `make test`
   (`tests/forms/cases.txt`, worked out from the standard), `make itest` (`/site/form.html`), `make
   hatarigui`.
+- **Cookies** are `src/net/cookie.c` (RFC 6265bis; hooked into `http.c` by `src/browse`), kept in
+  `COOKIES.TXT` next to `EWEB.PRG`: read once when needed, written once at quit (6.5). After changing
+  them: `make test` (`tests/net/cookies.txt`), `make fuzz` for a while (`fuzz_cookie`), `make itest`
+  (`/site/cookie/`), `make hatarifiles`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there

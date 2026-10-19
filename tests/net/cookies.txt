@@ -1,0 +1,261 @@
+# EWeb's cookies (tests/net/cookietest.c), worked out from RFC 6265bis:
+# the Set-Cookie parsing algorithm (5.6), the cookie-date algorithm
+# (5.1.1), the storage model (5.7) and the Cookie header (5.8).
+
+case a cookie goes back to its host, every path under its default one
+set http://example.com/ a=1
+get http://example.com/ a=1
+get http://example.com/x/y?q=1 a=1
+get http://other.com/ -
+get http://sub.example.com/ -
+
+case the default path is the request's, up to its last slash
+set http://example.com/dir/page.html p=1
+get http://example.com/dir p=1
+get http://example.com/dir/ p=1
+get http://example.com/dir/x/y p=1
+get http://example.com/dirx -
+get http://example.com/ -
+
+case Path matches at a slash, and its case counts
+set http://example.com/ a=1; Path=/docs
+get http://example.com/docs a=1
+get http://example.com/docs/web a=1
+get http://example.com/docsets -
+get http://example.com/Docs -
+
+case a Path that isn't one is the default path
+set http://example.com/a/b c=1; Path=nope
+get http://example.com/a/x c=1
+get http://example.com/ -
+
+case Domain: the domain and its subdomains; without it, the host only
+set http://www.example.com/ a=1; Domain=example.com
+set http://www.example.com/ b=2
+get http://example.com/ a=1
+get http://sub.example.com/ a=1
+get http://www.example.com/ a=1; b=2
+get http://x.www.example.com/ a=1
+
+case Domain with a leading dot, in capitals
+set http://www.example.com/ a=1; Domain=.EXAMPLE.com
+get http://sub.example.com/ a=1
+
+case a Domain the host isn't in is refused
+set http://example.com/ a=1; Domain=other.com
+set http://example.com/ b=1; Domain=www.example.com
+count 0
+
+case a public suffix as Domain is refused, except by the suffix's own host
+set http://example.co.il/ a=1; Domain=co.il
+set http://example.com/ b=1; Domain=com
+count 0
+set http://co.il/ c=1; Domain=co.il
+get http://co.il/ c=1
+get http://x.co.il/ -
+
+case Secure: only from https, only to https
+set http://example.com/ s=1; Secure
+count 0
+set https://example.com/ s=1; Secure
+get https://example.com/ s=1
+get http://example.com/ -
+
+case a plain page can't put a cookie over a secure one
+set https://a.com/ s=1; Secure
+set http://a.com/ s=2
+get https://a.com/ s=1
+
+case Max-Age: seconds from now; 0 or less ends it
+now 1000
+set http://example.com/ a=1; Max-Age=10
+set http://example.com/ b=1
+set http://example.com/ b=2; Max-Age=0
+set http://example.com/ c=1; Max-Age=-5
+get http://example.com/ a=1
+now 1012
+get http://example.com/ -
+
+case Max-Age wins over Expires, whichever comes first
+set http://example.com/ a=1; Max-Age=100; Expires=Thu, 01 Jan 1970 00:00:00 GMT
+set http://example.com/ b=1; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=100
+get http://example.com/ a=1; b=1
+
+case Expires in the past ends a cookie
+set http://example.com/ a=1
+set http://example.com/ a=1; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+count 0
+
+case Expires dates as servers write them
+set http://example.com/ a=1; Expires=Wed, 21 Oct 2037 07:28:00 GMT
+set http://example.com/ b=1; expires=Sunday, 06-Nov-94 08:49:37 GMT
+set http://example.com/ c=1; Expires=Thu, 31 Dec 9999 23:59:59 GMT
+set http://example.com/ d=1; Expires=Tue Nov 15 08:12:31 2044
+set http://example.com/ e=1; Expires=31-Feb-2030 00:00:00
+set http://example.com/ f=1; Expires=tomorrow
+get http://example.com/ a=1; c=1; d=1; e=1; f=1
+reload
+get http://example.com/ a=1; c=1; d=1
+
+case longer paths first, then the older
+set http://example.com/ y=root
+set http://example.com/a/b/c x=deep; Path=/a/b
+set http://example.com/ z=later
+get http://example.com/a/b/c x=deep; y=root; z=later
+
+case the same name, domain and path is replaced
+set http://example.com/ a=1
+set http://example.com/ a=2
+get http://example.com/ a=2
+count 1
+set http://example.com/ a=3; Path=/x
+get http://example.com/x/y a=3; a=2
+
+case a cookie with no '=' is a value with no name
+set http://example.com/ token
+get http://example.com/ token
+set http://example.com/ =v
+get http://example.com/ v
+
+case white space round names, values and attributes goes
+set http://example.com/  a = 1 ; Path = / ; Max-Age = 60 
+get http://example.com/ a=1
+
+case a control character refuses the cookie; a long one too
+set http://example.com/ a=1
+set http://example.com/ =
+count 0
+
+case __Secure- needs Secure from https
+set http://example.com/ __Secure-a=1; Secure
+set https://example.com/ __Secure-b=1
+set https://example.com/ __Secure-c=1; Secure
+get https://example.com/ __Secure-c=1
+
+case __Host- needs Secure, no Domain and the path /
+set https://example.com/ __Host-a=1; Secure; Path=/
+set https://example.com/ __Host-b=1; Secure; Path=/; Domain=example.com
+set https://example.com/x __Host-c=1; Secure
+set https://example.com/ __host-d=1; Path=/
+get https://example.com/ __Host-a=1
+
+case SameSite=Strict: only from the same site
+set https://a.com/ s=1; SameSite=Strict
+get https://a.com/ s=1
+getx https://a.com/ https://www.a.com/x 1 1 s=1
+getx https://a.com/ https://b.com/ 1 1 -
+
+case SameSite=Lax: from another site only to a page opened with GET
+set https://a.com/ l=1; SameSite=Lax
+getx https://a.com/ https://b.com/ 1 1 l=1
+getx https://a.com/ https://b.com/ 1 0 -
+getx https://a.com/ https://a.com/form 1 0 l=1
+
+case no SameSite is as Lax
+set https://a.com/ d=1
+getx https://a.com/ https://b.com/ 1 1 d=1
+getx https://a.com/ https://b.com/ 1 0 -
+
+case SameSite=None needs Secure, and goes everywhere a page goes
+set https://a.com/ n=1; SameSite=None
+count 0
+set https://a.com/ n=1; SameSite=None; Secure
+getx https://a.com/ https://b.com/ 1 0 n=1
+
+case another site's picture sets none and gets none
+set3 http://tracker.com/px.gif http://news.com/ t=1
+get http://tracker.com/ -
+set http://cdn.com/ c=1
+getx http://cdn.com/x.png http://news.com/ 0 1 -
+set http://www.news.com/ n=1; Domain=news.com
+getx http://img.news.com/a.png http://www.news.com/ 0 1 n=1
+set3 http://img.news.com/a.png http://www.news.com/ m=1
+get http://img.news.com/ n=1; m=1
+
+case addresses: no Domain but the address itself
+set http://127.0.0.1/ a=1
+set http://127.0.0.1/ b=1; Domain=0.0.1
+set http://127.0.0.1/ c=1; Domain=127.0.0.1
+get http://127.0.0.1/ a=1; c=1
+get http://127.0.0.2/ -
+
+case only the lasting ones are written out
+set http://example.com/ s=1
+set http://example.com/ l=1; Max-Age=3600
+reload
+get http://example.com/ l=1
+
+case sites without the Public Suffix List
+same www.example.co.il mail.example.co.il 1
+same example.co.il www.example.co.il 1
+same a.example.com b.example.com 1
+same a.github.io b.github.io 0
+same example.com example.org 0
+same 127.0.0.1 127.0.0.2 0
+same localhost localhost 1
+
+case 60 cookies a domain: the least used goes
+set http://example.com/ c0=0
+set http://example.com/ c1=1
+set http://example.com/ c2=2
+set http://example.com/ c3=3
+set http://example.com/ c4=4
+set http://example.com/ c5=5
+set http://example.com/ c6=6
+set http://example.com/ c7=7
+set http://example.com/ c8=8
+set http://example.com/ c9=9
+set http://example.com/ c10=10
+set http://example.com/ c11=11
+set http://example.com/ c12=12
+set http://example.com/ c13=13
+set http://example.com/ c14=14
+set http://example.com/ c15=15
+set http://example.com/ c16=16
+set http://example.com/ c17=17
+set http://example.com/ c18=18
+set http://example.com/ c19=19
+set http://example.com/ c20=20
+set http://example.com/ c21=21
+set http://example.com/ c22=22
+set http://example.com/ c23=23
+set http://example.com/ c24=24
+set http://example.com/ c25=25
+set http://example.com/ c26=26
+set http://example.com/ c27=27
+set http://example.com/ c28=28
+set http://example.com/ c29=29
+set http://example.com/ c30=30
+set http://example.com/ c31=31
+set http://example.com/ c32=32
+set http://example.com/ c33=33
+set http://example.com/ c34=34
+set http://example.com/ c35=35
+set http://example.com/ c36=36
+set http://example.com/ c37=37
+set http://example.com/ c38=38
+set http://example.com/ c39=39
+set http://example.com/ c40=40
+set http://example.com/ c41=41
+set http://example.com/ c42=42
+set http://example.com/ c43=43
+set http://example.com/ c44=44
+set http://example.com/ c45=45
+set http://example.com/ c46=46
+set http://example.com/ c47=47
+set http://example.com/ c48=48
+set http://example.com/ c49=49
+set http://example.com/ c50=50
+set http://example.com/ c51=51
+set http://example.com/ c52=52
+set http://example.com/ c53=53
+set http://example.com/ c54=54
+set http://example.com/ c55=55
+set http://example.com/ c56=56
+set http://example.com/ c57=57
+set http://example.com/ c58=58
+set http://example.com/ c59=59
+count 60
+set http://example.com/ c60=60
+count 60
+get http://example.com/c0 c1=1; c2=2; c3=3; c4=4; c5=5; c6=6; c7=7; c8=8; c9=9; c10=10; c11=11; c12=12; c13=13; c14=14; c15=15; c16=16; c17=17; c18=18; c19=19; c20=20; c21=21; c22=22; c23=23; c24=24; c25=25; c26=26; c27=27; c28=28; c29=29; c30=30; c31=31; c32=32; c33=33; c34=34; c35=35; c36=36; c37=37; c38=38; c39=39; c40=40; c41=41; c42=42; c43=43; c44=44; c45=45; c46=46; c47=47; c48=48; c49=49; c50=50; c51=51; c52=52; c53=53; c54=54; c55=55; c56=56; c57=57; c58=58; c59=59; c60=60

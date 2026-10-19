@@ -60,11 +60,18 @@ typedef struct page {
 	int nlinks, linkcap;
 	struct fctl **ctls;		/* the form controls shown (their state is the document's) */
 	int nctls, ctlcap;
+	/* the items by where they are: the page in strips of PAGE_STRIP rows,
+	   each strip's items (indexes into items, in order) from sidx[strip[k]]
+	   to sidx[strip[k + 1]]; NULL when out of memory (then all are looked at) */
+	long *strip, *sidx;
+	long nstrips;
 	int32_t width, height;		/* device px */
 	uint32_t bg;			/* what the page is drawn on (0xRRGGBB) */
 	struct arena *mem;
 	LAYOUT_OPT opt;
 } page;
+
+#define PAGE_STRIP 256
 
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);

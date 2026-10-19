@@ -3,7 +3,9 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """Writes tests/fuzz/seeds/: the starting inputs for make fuzz. For
 fuzz_http the first byte picks the request (see fuzz_http.c), the rest is
-what the server says; for fuzz_url, an href, a newline and a base.
+what the server says; for fuzz_url, an href, a newline and a base; for
+fuzz_cookie, Set-Cookie values a line each, the first byte picking the
+address it came from (see fuzz_cookie.c).
 
 tests/fuzz/found/ holds the inputs that once broke a parser, as the fuzzer
 saved them; make test runs them all again (common/tests/fuzz/replay.c)."""
@@ -69,3 +71,15 @@ for name, href, base in [
     ("query", "?a=é&b='c'", "http://example.org/p"),
 ]:
     put("url", name, href + ("\n" + base if base else ""))
+
+for name, lines in [
+    ("plain", ["aa=1", "bb=2; Max-Age=60; Path=/"]),
+    ("attributes", ["xsid=abc; Domain=example.co.il; Secure; HttpOnly; SameSite=Lax; "
+                    "Expires=Wed, 21 Oct 2037 07:28:00 GMT"]),
+    ("prefixes", ["c__Host-x=1; Secure; Path=/", "\x03y=2; Domain=example.com; Path=/deep",
+                  "b__Secure-z=3; Secure; Max-Age=99999999999"]),
+    ("dates", ["ad=1; expires=Sunday, 06-Nov-94 08:49:37 GMT", "ae=2; Expires=Tue Nov 15 08:12:31 2044",
+               "af=3; Expires=31-Feb-2030 00:00:00", "ag=4; Expires=Thu, 31 Dec 9999 23:59:59 GMT"]),
+    ("odd", ["a=", "a", "=b", " a = 1 ; ; = ; Path ; Domain=", "bq=1; Domain=.EXAMPLE.co.il; Max-Age=-1"]),
+]:
+    put("cookie", name, "\n".join(lines) + "\n")

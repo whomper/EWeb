@@ -10,17 +10,6 @@
 /* a control's text is drawn within its box: canvas px, x0 <= x < x1 */
 static int32_t clip_x0 = -0x7fffffff, clip_x1 = 0x7fffffff;
 
-static void put(canvas *c, int32_t x, int32_t y, uint32_t pv)
-{
-	if (c->bpp == 8) {
-		c->pix[y * c->stride + x] = (uint8_t) pv;
-	} else {
-		uint8_t *p = c->pix + y * c->stride + 2 * x;
-		p[0] = (uint8_t) (pv >> 8);
-		p[1] = (uint8_t) pv;
-	}
-}
-
 static uint32_t pixel(canvas *c, uint32_t rgb)
 {
 	return c->bpp == 8 ? c->pen(c->ud, rgb) : RGB565(rgb);
@@ -48,11 +37,14 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 		if (c->bpp == 8) {
 			memset(c->pix + (y + j) * c->stride + x, (int) pv, (size_t) w);
 		} else {
+			/* a word a pixel (the rows start on even addresses), as the
+			   machine stores it: the Falcon's high byte first */
 			uint8_t *p = c->pix + (y + j) * c->stride + 2 * x;
-			for (i = 0; i < w; i++) {
-				*p++ = (uint8_t) (pv >> 8);
-				*p++ = (uint8_t) pv;
-			}
+			uint8_t b[2] = { (uint8_t) (pv >> 8), (uint8_t) pv };
+			uint16_t v, *q = (uint16_t *) (void *) p;
+			memcpy(&v, b, 2);
+			for (i = 0; i < w; i++)
+				q[i] = v;
 		}
 	}
 }
@@ -102,11 +94,23 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 		r0 = -gy;
 	if (gy + r1 > c->h)
 		r1 = c->h - gy;
+	/* a row's address once; the depth's own loop */
 	for (row = r0; row < r1; row++) {
 		const uint8_t *b = g->bits + row * stride;
-		for (col = c0; col < c1; col++)
-			if (b[col >> 3] & (0x80 >> (col & 7)))
-				put(c, gx + col, gy + row, pv);
+		uint8_t *o = c->pix + (gy + row) * c->stride;
+		if (c->bpp == 8) {
+			o += gx;
+			for (col = c0; col < c1; col++)
+				if (b[col >> 3] & (0x80 >> (col & 7)))
+					o[col] = (uint8_t) pv;
+		} else {
+			o += 2 * gx;
+			for (col = c0; col < c1; col++)
+				if (b[col >> 3] & (0x80 >> (col & 7))) {
+					o[2 * col] = (uint8_t) (pv >> 8);
+					o[2 * col + 1] = (uint8_t) pv;
+				}
+		}
 	}
 }
 
@@ -791,32 +795,70 @@ long cv_ctl_line(const dl_item *d, fctl *c, int how)
 	return r;
 }
 
+/* one item, if it falls on the canvas */
+static void item(canvas *c, const page *p, const dl_item *d)
+{
+	int32_t top = c->oy, bottom = c->oy + c->h, left = c->ox, right = c->ox + c->w;
+	if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
+		return;
+	if (d->type == DL_FILL) {
+		cv_fill(c, d->x, d->y, d->w, d->h, d->rgb);
+	} else if (d->type == DL_IMAGE) {
+		const PIC *pic = NULL;
+		const uint8_t *pens = NULL;
+		if (d->flags & DLF_ALT)
+			return;		/* its alt text is drawn instead */
+		if (c->picture != NULL && c->picture(c->ud, d->img, d->w, d->h, &pic, &pens) && pic != NULL &&
+		    (c->bpp != 8 || pens != NULL))
+			cv_picture(c, pic, pens, d->x, d->y);
+		else
+			placeholder(c, d);
+	} else if (d->type == DL_CTL) {
+		if (d->ctl > 0 && d->ctl <= p->nctls)
+			control(c, d, p->ctls[d->ctl - 1]);
+	} else {
+		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, d->rgb, d->flags);
+	}
+}
+
 void cv_page(canvas *c, const page *p)
 {
-	long i;
-	int32_t top = c->oy, bottom = c->oy + c->h, left = c->ox, right = c->ox + c->w;
+	long i, s0, s1;
 
 	cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
-	for (i = 0; i < p->nitems; i++) {
-		const dl_item *d = &p->items[i];
-		if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
-			continue;
-		if (d->type == DL_FILL) {
-			cv_fill(c, d->x, d->y, d->w, d->h, d->rgb);
-		} else if (d->type == DL_IMAGE) {
-			const PIC *pic = NULL;
-			const uint8_t *pens = NULL;
-			if (d->flags & DLF_ALT)
-				continue;	/* its alt text is drawn instead */
-			if (c->picture != NULL && c->picture(c->ud, d->img, d->w, d->h, &pic, &pens) && pic != NULL &&
-			    (c->bpp != 8 || pens != NULL))
-				cv_picture(c, pic, pens, d->x, d->y);
-			else
-				placeholder(c, d);
-		} else if (d->type == DL_CTL) {
-			if (d->ctl > 0 && d->ctl <= p->nctls)
-				control(c, d, p->ctls[d->ctl - 1]);
-		} else
-			cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, d->rgb, d->flags);
+	if (p->strip == NULL || c->h > 60 * PAGE_STRIP) {	/* (a whole long page: all of them) */
+		for (i = 0; i < p->nitems; i++)
+			item(c, p, &p->items[i]);
+		return;
+	}
+	/* only the strips the canvas falls on: their lists merged in the
+	   items' order, each item once */
+	s0 = c->oy < 0 ? 0 : c->oy / PAGE_STRIP;
+	s1 = (c->oy + c->h - 1) / PAGE_STRIP;
+	if (s1 >= p->nstrips)
+		s1 = p->nstrips - 1;
+	if (s0 > s1)
+		return;
+	{
+		long at[64], last = -1;
+		int k, ns;
+		ns = (int) (s1 - s0 + 1);
+		for (k = 0; k < ns; k++)
+			at[k] = p->strip[s0 + k];
+		for (;;) {
+			long best = -1;
+			int bk = -1;
+			for (k = 0; k < ns; k++)
+				if (at[k] < p->strip[s0 + k + 1] && (best < 0 || p->sidx[at[k]] < best)) {
+					best = p->sidx[at[k]];
+					bk = k;
+				}
+			if (bk < 0)
+				break;
+			at[bk]++;
+			if (best != last)
+				item(c, p, &p->items[best]);
+			last = best;
+		}
 	}
 }

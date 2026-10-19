@@ -1,0 +1,3 @@
+c__Host-x=1; Secure; Path=/
+y=2; Domain=example.com; Path=/deep
+b__Secure-z=3; Secure; Max-Age=99999999999

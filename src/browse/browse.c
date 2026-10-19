@@ -14,6 +14,7 @@
 #include "img.h"
 #include "http.h"
 #include "conn.h"
+#include "cookie.h"
 #include "plat.h"
 #include "util.h"
 
@@ -446,11 +447,39 @@ static void host_of(const char *url, char *out, int size)
 	out[n] = 0;
 }
 
+/* cookie.c's for the HTTP client's requests */
+static void cookie_in(const HTTPREQ *rq, const URL *u, const char *method, const char *value)
+{
+	CKCTX x;
+	x.top = rq->top;
+	x.safe = !strcmp(method, "GET") || !strcmp(method, "HEAD");
+	x.site = rq->site;
+	ck_set(u, value, &x);
+}
+
+static void cookie_out(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req)
+{
+	CKCTX x;
+	SBUF v;
+	x.top = rq->top;
+	x.safe = !strcmp(method, "GET") || !strcmp(method, "HEAD");
+	x.site = rq->site;
+	sb_init(&v);
+	if (ck_get(u, &x, &v) && v.s != NULL) {
+		sb_adds(req, "Cookie: ");
+		sb_adds(req, v.s);	/* not sb_printf: it cuts long lines */
+		sb_adds(req, "\r\n");
+	}
+	sb_free(&v);
+}
+
 /* 1: f->data has what came (a page, or a server's error page); 0: none,
-   f->err says why (conn_stop: stopped). post: a form sent with POST
-   (its answer isn't kept in the cache), else NULL */
-static int fetch(browser *b, const char *url, int fresh, const char *accept, long maxbody, int keep,
-		 const FSUBMIT *post, FETCH *f)
+   f->err says why (conn_stop: stopped). accept NULL: a page, else a
+   stylesheet or a picture of the page site (its address; a page's: the
+   page it was found on, NULL when typed, for cookies and Referer). post:
+   a form sent with POST (its answer isn't kept in the cache), else NULL */
+static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
+		 int keep, const FSUBMIT *post, FETCH *f)
 {
 	memset(f, 0, sizeof *f);
 	str_copy(f->url, url, sizeof f->url);
@@ -507,7 +536,9 @@ static int fetch(browser *b, const char *url, int fresh, const char *accept, lon
 			rq.ctype = post->ctype;
 		}
 		rq.maxbody = maxbody;
-		rq.referrer = b->url[0] && !has_scheme(b->url, "file") && !has_scheme(b->url, "about") ? b->url : NULL;
+		rq.top = accept == NULL;
+		rq.site = site != NULL && (has_scheme(site, "http") || has_scheme(site, "https")) ? site : NULL;
+		rq.referrer = rq.site;
 		sb_init(&body);
 		ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
 		if (ok) {
@@ -574,7 +605,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
 		say(sh->b, "%s", msg);
 	}
-	if (fetch(sh->b, url, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
+	if (fetch(sh->b, url, sh->base, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
 	    (f->status == 0 || (f->status >= 200 && f->status < 300)))
 		ec_sheet(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR);
 	free(f->data);
@@ -959,7 +990,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
-	r = fetch(b, url, mode == NAV_RELOAD, NULL, 0, 1, post, f);
+	r = fetch(b, url, b->typed ? NULL : b->url, mode == NAV_RELOAD, NULL, 0, 1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {
@@ -1050,6 +1081,8 @@ static int picture_poll(void)
 void br_init(browser *b, int32_t width, int32_t zoom)
 {
 	pic_poll = picture_poll;
+	http_cookie_in = cookie_in;
+	http_cookie_out = cookie_out;
 	memset(b, 0, sizeof *b);
 	b->width = width;
 	b->zoom = zoom > 0 ? zoom : 1024;
@@ -1081,10 +1114,14 @@ void br_free(browser *b)
 int br_go(browser *b, const char *typed)
 {
 	char url[4096];
+	int r;
 	typed_url(b, typed, url, sizeof url);
 	if (url[0] == 0)
 		return BR_STOPPED;
-	return load(b, url, NAV_NEW);
+	b->typed = 1;		/* from no page: no Referer, a site's own cookies */
+	r = load(b, url, NAV_NEW);
+	b->typed = 0;
+	return r;
 }
 
 void br_link_url(const browser *b, int link, char *out, int size)
@@ -1411,7 +1448,7 @@ static int fetch_picture(browser *b, ew_img *im)
 		snprintf(msg, sizeof msg, "Pictures: %d of %d from %s...", b->pic_done + 1,
 			 b->pic_n > b->pic_done ? b->pic_n : b->pic_done + 1, has_scheme(url, "file") ? "the disk" : host);
 		say(b, "%s", msg);
-		if (!fetch(b, url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f) ||
+		if (!fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f) ||
 		    (f->status != 0 && (f->status < 200 || f->status >= 300))) {
 			free(f->data);
 			free(f);

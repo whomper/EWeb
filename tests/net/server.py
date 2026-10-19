@@ -31,6 +31,13 @@ Pages:
                  answered with 303; /site/echo answers each with a page
                  whose title is what came: "METHOD|Content-Type|body"
                  (CR LF as ~; multipart as its parts, name=value;...)
+  /site/cookie/  cookies: set (one lasting, one for the session, a Secure
+                 one that plain HTTP may not set), show (the title is
+                 "COOKIE|" and the Cookie header that came), form.html (a
+                 login whose POST is answered with 303 and a cookie),
+                 third.html, opened as localhost (a picture from 127.0.0.1
+                 that sets a cookie there: another site's, which EWeb
+                 refuses)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -222,6 +229,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS_PAGE)
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
+        elif p.startswith("/site/cookie/") and cookie_get(self, p):
+            pass
         elif p.startswith("/site/echo"):
             self.send(200, echo_page("GET", "", p.partition("?")[2].encode()))
         elif p.startswith("/site/") and p[6:] in PICS:
@@ -254,11 +263,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(404, b"not here\n", "text/plain")
 
 
+def cookie_get(self, p):
+    if p == "/site/cookie/set":
+        self.send(200, b"<!DOCTYPE html><title>Set</title><p>Cookies set.", extra=[
+            ("Set-Cookie", "lasting=1; Max-Age=3600; Path=/site/"),
+            ("Set-Cookie", "session=2; Path=/"),
+            ("Set-Cookie", "sec=3; Secure; Path=/")])
+    elif p == "/site/cookie/show":
+        c = self.headers.get("Cookie", "")
+        self.send(200, ("<!DOCTYPE html><title>COOKIE|%s</title><p>What came." % c).encode())
+    elif p == "/site/cookie/form.html":
+        self.send(200, b"<!DOCTYPE html><title>Log in</title><form method=post action=/site/cookie/login>"
+                       b"<input name=user value=erez><input type=submit name=go value=Go></form>")
+    elif p == "/site/cookie/third.html":
+        port = self.server.server_address[1]
+        self.send(200, ("<!DOCTYPE html><title>Third</title><p><img src='http://127.0.0.1:%d/site/cookie/px.gif'"
+                        " alt=px>" % port).encode())
+    elif p == "/site/cookie/px.gif":
+        self.send(200, PICS["anim.gif"][0], "image/gif", extra=[("Set-Cookie", "tp=1; Path=/")])
+    else:
+        return False
+    return True
+
+
 def _post(self):
     n = int(self.headers.get("Content-Length", "0"))
     body = self.rfile.read(n) if n else b""
     if self.path == "/site/echo":
         self.send(200, echo_page("POST", self.headers.get("Content-Type", ""), body))
+    elif self.path == "/site/cookie/login":
+        self.send(303, b"", extra=[("Location", "/site/cookie/show"),
+                                   ("Set-Cookie", "sid=xyz; Path=/; HttpOnly; SameSite=Lax")])
     elif self.path == "/site/after":
         # Post/Redirect/Get: the answer is somewhere else, fetched with GET
         self.send(303, b"", extra=[("Location", "/site/echo?after=1")])

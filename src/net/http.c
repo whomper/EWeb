@@ -19,6 +19,8 @@
 
 char http_user_agent[128] = "EWeb (Atari Falcon030)";
 char http_accept_language[64] = "en-GB,en;q=0.9,he;q=0.8";
+void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
+void (*http_cookie_out)(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req);
 
 #define LINE_MAX_  16384		/* one header line */
 #define HEAD_MAX   65536		/* all the headers of an answer */
@@ -347,6 +349,8 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		  http_accept_language, rq->sink ? "identity" : "gzip, deflate");
 	if (rq->referrer && *rq->referrer)
 		sb_printf(&req, "Referer: %s\r\n", rq->referrer);
+	if (http_cookie_out != NULL)
+		http_cookie_out(rq, u, method, &req);
 	if (rq->headers)
 		sb_adds(&req, rq->headers);
 	if (rq->body && strcmp(method, "GET") && strcmp(method, "HEAD"))
@@ -412,6 +416,8 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 			sb_add(&rs->headers, line.s, line.len);
 			sb_adds(&rs->headers, "\n");
 			header(line.s, rs, h);
+			if (http_cookie_in != NULL && line.len > 11 && !strncasecmp(line.s, "set-cookie:", 11))
+				http_cookie_in(rq, u, method, str_trim(line.s + 11));
 		}
 		if (rs->status >= 200 || rs->status == 101)
 			break;

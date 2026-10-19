@@ -14,8 +14,9 @@ through FAKESTNG, against tests/net/server.py and a site served here:
 Each case's Fopen, Fcreate and Fsfirst are counted between the events
 EWEB.PRG gives through NatFeats, those the program makes itself (at a PC
 in its TPA, not the desktop's), and must stay within the case's budget:
-about one open per file the job touches, plus a safe save's. A quit with
-nothing changed writes nothing; pages, history and idle touch nothing.
+about one open per file the job touches, plus a safe save's. A quit
+writes only COOKIES.TXT, once, as the last of the five pages set a
+cookie that lasts; pages, history and idle touch nothing.
 
     tests/hatari/disk_files.py OUT      (IDLE=seconds, 300 by default)"""
 import collections
@@ -45,7 +46,9 @@ CALLS = ("Fopen", "Fcreate", "Fsfirst")
 # the most each case may do: Fopen, Fcreate, Fsfirst
 BUDGET = {
     "start": (2, 0, 0),             # EWEB.INF, EWEB.FNT
-    "pictures": (0, 0, 0),          # v0.11 shows a picture's description
+    # the first page over the network: COOKIES.TXT read (not there: its
+    # safe save's new file looked for too)
+    "pictures": (1, 0, 1),
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
@@ -54,10 +57,11 @@ BUDGET = {
     "first secure page": (4, 2, 3),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
-    "quit": (0, 0, 0),              # nothing changed since the page size
+    "quit": (0, 1, 0),              # COOKIES.TXT, once (p5.html's cookie); EWEB.INF unchanged
     "start again": (2, 0, 0),
-    "secure page again": (3, 0, 1),  # CACERT.PEM's date; ROOTS.DAT; SEED.DAT read, then written over
-    "quit again": (0, 0, 0),
+    # COOKIES.TXT; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read, then written over
+    "secure page again": (4, 0, 1),
+    "quit again": (0, 0, 0),        # the cookies as they were
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
 
@@ -100,6 +104,13 @@ def serve(d):
 
         def log_message(self, *a):
             pass
+
+        def end_headers(self):
+            # the last of the five pages sets a cookie that lasts: EWeb
+            # writes COOKIES.TXT once, at quit
+            if self.path.endswith("/p5.html"):
+                self.send_header("Set-Cookie", "kept=1; Max-Age=86400; Path=/")
+            super().end_headers()
 
     class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
         daemon_threads = True

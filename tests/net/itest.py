@@ -272,6 +272,35 @@ try:
         rc, title, url, out = send("-F", "user=erez", "-S", "login", "-b")
         check("forms: Back shows the form as it was filled", rc == 0 and re.search(r'^back: 0 "Forms"', out, re.M)
               and re.search(r'^control \S+ \S+ #000000 text "erez"$', out, re.M), out)
+        # cookies: set and sent back, a 303's cookie on the next request,
+        # the lasting one kept in a file for the next run, another site's
+        # picture's refused
+        jar = os.path.join(work, "COOKIES.TXT")
+        if os.path.exists(jar):
+            os.remove(jar)
+        site = "http://localhost:%d/site/cookie/" % HTTP
+
+        def titles(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d"] + list(args), cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            out = p.stdout + p.stderr
+            return p.returncode, re.findall(r'^\w+: \d+ "(.*)" ', out, re.M), out
+
+        rc, t, out = titles("-k", jar, "-N", site + "show", site + "set")
+        check("cookies: set, and sent back", rc == 0 and t[:1] == ["COOKIE|lasting=1; session=2"], out)
+        rc2, t2, out2 = titles("-k", jar, "-N", site + "show", "http://localhost:%d/site/" % HTTP)
+        check("cookies: the lasting one kept for the next run", rc2 == 0 and t2[:1] == ["COOKIE|lasting=1"]
+              and "lasting\t1" in open(jar).read() and "session" not in open(jar).read(), out2)
+        os.remove(jar)
+        p = subprocess.run([ewrender, "-f", font, "-d", "-S", "go", site + "form.html"], cwd=work,
+                           capture_output=True, text=True, timeout=120)
+        m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)
+        check("cookies: a login's 303 sets one, sent with the GET after it",
+              p.returncode == 0 and m is not None and m.group(1) == "COOKIE|sid=xyz", p.stdout + p.stderr)
+        rc, t, out = titles("-v", "-N", "http://127.0.0.1:%d/site/cookie/show" % HTTP, site + "third.html")
+        check("cookies: another site's picture sets none", rc == 0 and t[:1] == ["COOKIE|"]
+              and re.search(r"^picture http://127\.0\.0\.1:\d+/site/cookie/px\.gif decoded", out, re.M) is not None,
+              out)
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)

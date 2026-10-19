@@ -16,6 +16,7 @@
 #include "av.h"
 #include "clip.h"
 #include "conn.h"
+#include "cookie.h"
 #include "crash.h"
 #include "dd.h"
 #include "font.h"
@@ -86,6 +87,8 @@ static const MBAR_ITEM m_view[] = {
 };
 static const MBAR_ITEM m_opts[] = {
 	{ "Use this page as home", 0, C_SETHOME },
+	{ "-", 0, 0 },
+	{ "Forget cookies...", 0, C_COOKIES },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_help[] = {
@@ -605,6 +608,13 @@ void command(int cmd)
 				alert(1, "[3][EWeb can't write EWEB.INF:|is the disk locked or full?][ OK ]");
 		}
 		break;
+	case C_COOKIES:
+		/* what sites know of you: gone from memory and the disk at once */
+		if (alert(2, "[2][Forget every site's cookies?|You will be logged out of|the sites you were logged in to.][Forget|Cancel]") == 1) {
+			ck_clear();
+			status("EWeb has forgotten every site's cookies.");
+		}
+		break;
 	case C_HELP:
 		if (help_key(opt.workdir, "EWEB.HYP", 0, "Keys"))
 			dlg_keys();
@@ -877,6 +887,12 @@ int main(void)
 	   kept next to the program, as EWGET.TTP keeps them */
 	net_init();
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
+	{
+		/* the cookies that last: read when the first page needs them */
+		char ck[256];
+		path_join(ck, sizeof ck, opt.workdir, "COOKIES.TXT");
+		ck_file(ck);
+	}
 	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
 	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
@@ -955,6 +971,7 @@ int main(void)
 	http_close_all();
 	win_close();
 	settings_save();
+	ck_save();		/* the cookies that last, once, if they changed */
 	menu_bar(mb.tree, 0);
 	av_exit();
 	font_free();

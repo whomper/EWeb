@@ -564,6 +564,17 @@ releases.
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
   byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the
   screen through ST-RAM (the screen can't be fed from TT-RAM).
+  Since 19 Oct 2026 (your report: text appeared on the screen line by line) the part to draw is
+  drawn whole in memory and copied to the screen in one go, nothing seen half drawn (buffers for
+  the screen's height when 256 KB of ST RAM stay free after them, else 32 rows at a time as
+  before); the display list is indexed in strips of 256 rows, so drawing the window, or the rows a
+  scroll brings in, looks only at the items there; the planes are made 8 pixels at a time from
+  tables, 16 pixels alike (most of a page is its background) as all-set or all-clear words, written
+  in the screen's own interleaved planes (`vr_trnfm` only for screens of another format); glyphs and
+  true colour's fills a row at a time. A page drawn, on the emulated 32 MHz Falcon (the window,
+  `make hatarigui`'s pages): 16 colours 410-455 ms to 310-365 ms (a long page, 850 to 760), 256
+  colours 585-625 to 560-570, true colour 120-140 to 105-130; the TT in 16 colours 440 to 350, its
+  1280 x 960 monochrome 2.6-3.6 s to 1.9-2.0 s.
 - **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
@@ -740,10 +751,36 @@ the HTML Standard:
   into and sent with Return on the emulated Falcon, Back, Tab, Space and a label's words on a box,
   a login sent with POST); `tests/layout/forms.html`; the page set (1,580 controls in its 258
   pages) laid out and drawn with AddressSanitizer and UBSan, no fault.
-- **Cookies,** next, are kept on the disk (your decision, 19 Oct 2026): in memory while EWeb runs,
-  and in one file next to `EWEB.PRG`, read once at the start and written once (safely, a new file
-  then renamed) when a lasting cookie changed, never once for each answer (the guidelines' 6.5);
-  cookies that last only while the browser runs never go to the disk.
+
+## Cookies (19 Oct 2026)
+
+Kept on the disk (your decision, 19 Oct 2026). `src/net/cookie.c`, fresh code after RFC 6265bis
+(NetSurf's cookies are in its GPL-2.0-only core):
+
+- **Set-Cookie** (the parsing algorithm, the cookie-date algorithm): Expires (two-digit years, the
+  dates servers really write, a day the month doesn't have refused) and Max-Age (which wins);
+  Domain (a host and its subdomains; refused when the host isn't in it, or when it is a public
+  suffix: `com`, `co.il`, `co.uk`... from a short list, as EWeb has no Public Suffix List); Path
+  (else the request's directory); Secure only from https, and a plain page can't replace a secure
+  cookie; HttpOnly; SameSite (None needs Secure); the `__Secure-` and `__Host-` prefixes. Every
+  answer's cookies are taken, a redirect's too (a login answered with 303).
+- **Cookie:** the host's own and its domains', on matching paths, Secure ones only over https,
+  longer paths first, then the older. SameSite: Strict only from the same site; Lax (and no
+  SameSite) also on a page opened from another site with GET; None everywhere a page goes.
+- **Other sites' cookies:** a picture or stylesheet from another site (a tracker's, an ad's)
+  neither sets nor gets cookies; a site is its host's last two labels, three under a listed
+  suffix.
+- **On the disk** (the guidelines' 6.5): `COOKIES.TXT` next to `EWEB.PRG`, one line a cookie (domain,
+  path, expiry, name, value and the flags, tab-separated), read once, when the first page needs
+  cookies; written once, at quit, in one safe save, and only when a lasting cookie changed (none
+  that last: the file goes). Cookies for the session never go to the disk. A reset loses what
+  changed since the start (a site asks you to log in again). Options > Forget cookies empties the
+  store and removes the file at once. 3,000 cookies at most, 60 a domain (the least used go).
+- **Checked:** `tests/net/cookies.txt` (30 cases worked out from the RFC, `make test`, with
+  AddressSanitizer and UBSan); `tests/fuzz/fuzz_cookie.c` (Set-Cookie lines from the fuzz input,
+  and the file written, read and written again the same; what it found, in `tests/fuzz/found`);
+  `make itest` (set and sent back; the lasting one kept for the next run, the session one not; a
+  303's cookie on the GET after it; another site's picture setting none).
 
 ## The design
 
@@ -792,7 +829,7 @@ AERA guidelines.
 ### 1. Direct: EWeb's own engine on the Falcon
 
 - **Networking:** HTTP/1.1 and TLS 1.2 through `common/` (BearSSL, the connection code, DNS), with
-  gzip, cookies, redirects and a disk cache.
+  gzip, cookies (above), redirects and a disk cache.
 - **HTML and CSS:** an HTML5 parser and a CSS engine, NetSurf's or fresh by the rule below, with
   selectors, media queries, CSS variables and flexbox.
 - **A narrow screen:** EWeb tells sites its screen is about 640 px wide, so responsive sites send their
@@ -1020,8 +1057,7 @@ out of both (their paths lead nowhere on the Atari).
    window (above): `EWEB.PRG`, the first text browser.
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
    *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
-   alignment in cells (your order, above); forms (above). Next: cookies, kept on the disk (your
-   decision).
+   alignment in cells (your order, above); forms and cookies (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 

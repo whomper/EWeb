@@ -65,6 +65,10 @@ typedef struct {
 	void *ud;
 	long maxbody;			/* in memory, unpacked; 0: HTTP_MAXBODY */
 	int no_redirect;		/* return a 3xx as it is */
+	/* for cookies: a page (a navigation), not a picture or a stylesheet;
+	   and the page it came from (NULL: typed) */
+	int top;
+	const char *site;
 } HTTPREQ;
 
 /* 1: an answer came (rs->status says which), with its body appended to
@@ -75,6 +79,12 @@ void http_resp_free(HTTPRESP *rs);
 /* the first header of that name in the answer, or NULL */
 const char *http_header(const HTTPRESP *rs, const char *name, char *out, int size);
 void http_close_all(void);	/* close the kept connections */
+
+/* cookies (the browser sets these to cookie.c's; NULL: none): each
+   Set-Cookie of an answer to u (redirects too), and the Cookie header
+   line ("Cookie: ...\r\n") for a request to u, added to req */
+extern void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
+extern void (*http_cookie_out)(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req);
 
 /* how EWeb names itself to servers, and the languages it asks for */
 extern char http_user_agent[128];

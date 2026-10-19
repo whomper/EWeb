@@ -2,8 +2,10 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * screen.c - the page on the screen. The display list is drawn into
- * memory (src/gfx/canvas.c) a band of rows at a time and copied to the
- * screen with vro_cpyfm, from ST RAM (the VDI can't read TT RAM):
+ * memory (src/gfx/canvas.c), the whole of the part to draw at once where
+ * there is the memory for the screen's height (else a band of rows at a
+ * time), and copied to the screen in one go with vro_cpyfm, from ST RAM
+ * (the VDI can't read TT RAM): nothing is seen half drawn.
  *
  * - 1 to 8 planes: the canvas holds a pixel value a byte, the screen's
  *   nearest colour to each of the page's; the bytes are made planes
@@ -22,15 +24,18 @@
 #include "canvas.h"
 #include "img.h"
 
-#define BAND 32			/* rows drawn and copied at a time */
+#define BAND 32			/* rows drawn and copied at a time, short of memory */
 
 static int truecolour, swapped;
+static short format;			/* the screen's: 0 interleaved planes (the Atari's own), 1 the
+					   VDI's standard, 2 packed pixels; -1 not known (vr_trnfm) */
 static short ncol;			/* 2, 4, 16, 256 */
 static unsigned char pal[256][3];	/* each pixel value's colour */
 static unsigned char nearest_of[4096];	/* 12-bit colour -> pixel value + 1, 0 not worked out */
 static PIC_PAL pic_pal;			/* the same colours, for the pictures' pens */
 static long band_w;			/* pixels, a multiple of 16 */
-static unsigned char *chunky;		/* BAND rows, a byte a pixel (planar modes) */
+static short rows;			/* rows the buffers hold: the screen's, or BAND */
+static unsigned char *chunky;		/* rows, a byte a pixel (planar modes) */
 static unsigned short *std_buf, *dev_buf;	/* ST RAM */
 
 static unsigned char from1000(short v)
@@ -59,6 +64,47 @@ static void *st_alloc(long n)
 	return (long) p > 0 ? p : NULL;
 }
 
+static void c2p_init(void);
+
+static void free_bufs(void)
+{
+	free(chunky);
+	if (std_buf != NULL)
+		Mfree(std_buf);
+	if (dev_buf != NULL)
+		Mfree(dev_buf);
+	chunky = NULL;
+	std_buf = dev_buf = NULL;
+}
+
+/* the buffers for n rows: 1, or 0 (none taken) */
+static int bufs(short n)
+{
+	/* the standard planes for vr_trnfm only where the screen has its own format */
+	int std = !truecolour && format != 0 && !(format == 2 && planes == 8);
+	long st = n > BAND ? (truecolour ? band_w * 2 * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
+	if (st > 0) {
+		/* ST RAM left for the rest of the system: 256 KB at least */
+		long free_st = (long) Mxalloc(-1, 0);
+		if (free_st == -32)
+			free_st = (long) Malloc(-1);
+		if (free_st < st + 262144L)
+			return 0;
+	}
+	rows = n;
+	if (truecolour) {
+		dev_buf = st_alloc(band_w * 2 * n);
+	} else {
+		chunky = malloc(band_w * n);
+		std_buf = std ? st_alloc(band_w / 8 * planes * n) : NULL;
+		dev_buf = st_alloc(band_w / 8 * planes * n);
+	}
+	if (dev_buf != NULL && (truecolour || (chunky != NULL && (std_buf != NULL || !std))))
+		return 1;
+	free_bufs();
+	return 0;
+}
+
 int scr_init(void)
 {
 	static short info[272];
@@ -66,12 +112,13 @@ int scr_init(void)
 
 	band_w = (scr_w + 15) & ~15L;
 	have = vq_scrninfo(vdi_h, info);
+	format = have ? info[0] : -1;
 	if (planes == 16) {
 		truecolour = 1;
 		/* NVDI on a card with the bytes the other way round (Intel) */
 		swapped = have && (info[14] & 2);
-		dev_buf = st_alloc(band_w * 2 * BAND);
-		return dev_buf != NULL;
+		/* the screen's height when there is the ST RAM, keeping some for others */
+		return bufs((short) scr_h) || bufs(BAND);
 	}
 	if (planes != 1 && planes != 2 && planes != 4 && planes != 8)
 		return 0;
@@ -90,12 +137,10 @@ int scr_init(void)
 	}
 	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
 	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
+	c2p_init();
 	img_pal = &pic_pal;
 	img_pal_changed();
-	chunky = malloc(band_w * BAND);
-	std_buf = st_alloc(band_w / 8 * planes * BAND);
-	dev_buf = st_alloc(band_w / 8 * planes * BAND);
-	return chunky != NULL && std_buf != NULL && dev_buf != NULL;
+	return bufs((short) scr_h) || bufs(BAND);
 }
 
 const char *scr_mode(void)
@@ -166,25 +211,73 @@ static int picture(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, c
 	return img_picture(img, w, h, pic, pens);
 }
 
-/* the chunky band (h rows) as planes, standard format: plane after plane */
-static void to_planes(short h)
+/* chunky to planes, 8 pixels at a time: for pixel i of 8 with value v,
+   its bit in each plane's byte, planes 0-3 in lo (plane 0 the top byte)
+   and 4-7 in hi; the 8 looked up and ORed */
+static unsigned long c2p_lo[8][256], c2p_hi[8][256];
+
+static void c2p_init(void)
+{
+	int i, v, k;
+	for (i = 0; i < 8; i++)
+		for (v = 0; v < 256; v++) {
+			unsigned long lo = 0, hi = 0;
+			for (k = 0; k < 4; k++) {
+				if (v >> k & 1)
+					lo |= (unsigned long) (0x80 >> i) << (8 * (3 - k));
+				if (v >> (k + 4) & 1)
+					hi |= (unsigned long) (0x80 >> i) << (8 * (3 - k));
+			}
+			c2p_lo[i][v] = lo;
+			c2p_hi[i][v] = hi;
+		}
+}
+
+static unsigned long eight(const unsigned long t[8][256], const unsigned char *s)
+{
+	return t[0][s[0]] | t[1][s[1]] | t[2][s[2]] | t[3][s[3]] | t[4][s[4]] | t[5][s[5]] | t[6][s[6]] | t[7][s[7]];
+}
+
+/* the chunky rows (h of them) as planes: interleaved (the screen's own
+   format, into dev_buf: each 16 pixels' words plane after plane), or
+   standard (into std_buf: plane after plane, for vr_trnfm) */
+static void to_planes(short h, int interleaved)
 {
 	long words = band_w / 16, plane = words * h, r, g;
-	short k, bit;
+	short k;
 	for (r = 0; r < h; r++) {
 		const unsigned char *src = chunky + r * band_w;
-		unsigned short *row = std_buf + r * words;
+		unsigned short *row = interleaved ? dev_buf + r * words * planes : std_buf + r * words;
 		for (g = 0; g < words; g++, src += 16) {
-			unsigned short w[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-			for (bit = 0; bit < 16; bit++) {
-				unsigned char v = src[bit];
-				unsigned short m = (unsigned short) (0x8000 >> bit);
-				for (k = 0; v; k++, v >>= 1)
-					if (v & 1)
-						w[k] |= m;
+			const unsigned long *q = (const unsigned long *) (const void *) src;
+			unsigned long a, b, c = 0, d = 0;
+			unsigned short w[8];
+			if (q[0] == q[1] && q[0] == q[2] && q[0] == q[3] && (q[0] >> 8) == (q[0] & 0xffffffUL)) {
+				/* 16 pixels alike (most of a page is its background):
+				   each plane all set or all clear */
+				unsigned v = (unsigned) (q[0] & 0xff);
+				for (k = 0; k < planes; k++)
+					w[k] = (unsigned short) (v >> k & 1 ? 0xffff : 0);
+				goto put;
 			}
-			for (k = 0; k < planes; k++)
-				row[k * plane + g] = w[k];
+			a = eight(c2p_lo, src);
+			b = eight(c2p_lo, src + 8);
+			if (planes > 4) {
+				c = eight(c2p_hi, src);
+				d = eight(c2p_hi, src + 8);
+			}
+			for (k = 0; k < 4 && k < planes; k++)
+				w[k] = (unsigned short) ((a >> (8 * (3 - k)) & 0xff) << 8 | (b >> (8 * (3 - k)) & 0xff));
+			for (; k < planes; k++)
+				w[k] = (unsigned short) ((c >> (8 * (7 - k)) & 0xff) << 8 | (d >> (8 * (7 - k)) & 0xff));
+put:
+			if (interleaved) {
+				for (k = 0; k < planes; k++)
+					row[g * planes + k] = w[k];
+			} else {
+				for (k = 0; k < planes; k++)
+					row[k * plane + g] = w[k];
+			}
 		}
 	}
 }
@@ -204,8 +297,8 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 	c.pen = pen;
 	c.shade = shade;
 	c.picture = picture;
-	for (y0 = 0; y0 < area->h; y0 += BAND) {
-		short h = area->h - y0 > BAND ? BAND : area->h - y0, pxy[8];
+	for (y0 = 0; y0 < area->h; y0 += rows) {
+		short h = area->h - y0 > rows ? rows : area->h - y0, pxy[8];
 		c.h = h;
 		c.oy = py + y0;
 		if (truecolour) {
@@ -239,8 +332,14 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 					w++;
 				}
 			}
+		} else if (format == 0) {
+			to_planes(h, 1);	/* the screen's own planes: no transform */
+		} else if (format == 2 && planes == 8) {
+			long r;			/* a byte a pixel already */
+			for (r = 0; r < h; r++)
+				memcpy((unsigned char *) dev_buf + r * band_w, chunky + r * band_w, (size_t) band_w);
 		} else {
-			to_planes(h);
+			to_planes(h, 0);
 			src = dst;
 			src.fd_addr = std_buf;
 			src.fd_stand = 1;

@@ -30,7 +30,9 @@
  * its value), chooses a list's option (by its value or text); -S
  * BUTTON then sends the form by that button ("-": Return in the first
  * field filled), and what comes is drawn or dumped. Back with -S
- * shows the form again, as it was filled.
+ * shows the form again, as it was filled. -k FILE keeps the cookies
+ * that last in FILE (read when needed, written at the end), as EWEB.PRG
+ * keeps COOKIES.TXT.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -40,6 +42,7 @@
 #include "browse.h"
 #include "canvas.h"
 #include "conn.h"
+#include "cookie.h"
 #include "font.h"
 #include "form.h"
 #include "http.h"
@@ -284,6 +287,7 @@ int main(int argc, char **argv)
 	page *p;
 	SBUF extra;
 	const char *fill[32], *send = NULL;
+	int rc = 0;
 	int nfill = 0, back_after = 0;
 
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
@@ -319,6 +323,8 @@ int main(int argc, char **argv)
 			send = argv[++i];
 		else if (!strcmp(argv[i], "-b"))
 			back_after = 1;
+		else if (!strcmp(argv[i], "-k") && i + 1 < argc)
+			ck_file(argv[++i]);
 		else
 			break;
 	}
@@ -453,9 +459,8 @@ int main(int argc, char **argv)
 	if (band) {
 		long n = bands(p, width);
 		printf("bands: %ld drawn, page %d x %d\n", n, (int) p->width, (int) p->height);
-		return n < 0;
-	}
-	if (dump) {
+		rc = n < 0;
+	} else if (dump) {
 		long k;
 		printf("page %d x %d, background %06lx, %ld items, %d links, title \"%s\"\n", (int) p->width,
 		       (int) p->height, (unsigned long) p->bg, p->nitems, p->nlinks, b.d->title);
@@ -521,5 +526,8 @@ int main(int argc, char **argv)
 	http_close_all();
 	sb_free(&extra);
 	font_free();
-	return 0;
+	ck_save();
+	ck_file(NULL);
+	ck_clear();
+	return rc;
 }

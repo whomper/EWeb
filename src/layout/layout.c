@@ -2621,6 +2621,53 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 
 /* ---------------------------------------------------------------- the page */
 
+/* the items by strips of the page, so that drawing a part of it looks
+   only at the items there */
+static void index_items(page *p)
+{
+	long i, k, n = 0, bottom = p->height;
+	for (i = 0; i < p->nitems; i++)
+		if (p->items[i].y + p->items[i].h > bottom)
+			bottom = p->items[i].y + p->items[i].h;
+	p->nstrips = bottom / PAGE_STRIP + 1;
+	p->strip = calloc((size_t) p->nstrips + 1, sizeof *p->strip);
+	if (p->strip == NULL)
+		return;
+	/* how many in each strip, then where each strip's start */
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP, s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
+		for (k = s0; k <= s1; k++)
+			p->strip[k + 1]++;
+		n += s1 - s0 + 1;
+	}
+	for (k = 0; k < p->nstrips; k++)
+		p->strip[k + 1] += p->strip[k];
+	p->sidx = malloc((size_t) (n ? n : 1) * sizeof *p->sidx);
+	if (p->sidx == NULL) {
+		free(p->strip);
+		p->strip = NULL;
+		return;
+	}
+	{
+		long *at = malloc((size_t) p->nstrips * sizeof *at);
+		if (at == NULL) {
+			free(p->strip);
+			free(p->sidx);
+			p->strip = p->sidx = NULL;
+			return;
+		}
+		memcpy(at, p->strip, (size_t) p->nstrips * sizeof *at);
+		for (i = 0; i < p->nitems; i++) {
+			const dl_item *d = &p->items[i];
+			long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP, s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
+			for (k = s0; k <= s1; k++)
+				p->sidx[at[k]++] = i;
+		}
+		free(at);
+	}
+}
+
 page *layout_page(doc *d, const LAYOUT_OPT *o)
 {
 	L l;
@@ -2678,6 +2725,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		page_free(p);
 		return NULL;
 	}
+	index_items(p);
 	return p;
 }
 
@@ -2688,6 +2736,8 @@ void page_free(page *p)
 	free(p->items);
 	free(p->links);
 	free(p->ctls);
+	free(p->strip);
+	free(p->sidx);
 	if (p->mem != NULL) {
 		afree(p->mem);
 		free(p->mem);

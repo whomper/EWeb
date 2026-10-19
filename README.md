@@ -3,8 +3,8 @@
 A web browser for the Atari Falcon, written in C for GEM, made for a Falcon
 with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and fine on
 any Falcon or TT. It shows the document web: pages laid out with their
-stylesheets, links, lists, tables, pictures and forms, in EWeb's own fonts.
-Cookies come next.
+stylesheets, links, lists, tables, pictures and forms, with cookies, in
+EWeb's own fonts.
 
 ![EWeb on a Falcon](docs/screenshot.png)
 
@@ -28,6 +28,9 @@ Cookies come next.
   right to left), Tab from one to the next and Return to send; sent with
   GET or POST, urlencoded, multipart or plain text, in the page's own
   character set, as the HTML Standard has browsers send them.
+- **Cookies**, as RFC 6265bis has them, those meant to last kept in
+  `COOKIES.TXT` (written once, at quit); none for other sites' pictures and
+  stylesheets; Options > Forget cookies.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
@@ -124,7 +127,7 @@ src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hin
 src/layout/           the layout: boxes, lines, tables, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
-src/net/              EWeb's URL parser and HTTP client, and gzip
+src/net/              EWeb's URL parser and HTTP client, cookies (cookie.c), and gzip
 src/plat.h            what EWeb needs from the machine (atari/plat_tos.c, tests/host/plat_posix.c)
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
                       EWeb's engine on the same tree, the page set, the
@@ -134,7 +137,7 @@ tests/css/            the CSS engine's cases (from the specifications), and
                       csscmp, which compares it with LibCSS value by value
 tests/html5lib/       Hubbub against the Web Platform Tests' tree-construction tests
 tests/hebrew/         a Hebrew page in every Hebrew encoding
-tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py)
+tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py), cookies.txt
 tests/url/            the URL parser against the URL Standard's tests
 tests/fuzz/           fuzz targets for the HTTP client and the URL parser, their seeds
 tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fakesting)
@@ -165,7 +168,8 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
 - `make test` also runs the HTTP client against servers played by
   `common/tests/fuzz/fuzz_net.c` (`tests/net/nettest.c`: lengths, chunks,
   gzip and deflate, redirects, kept connections, and what a hostile server
-  might send), and the fuzz targets' seeds and past finds (`tests/fuzz`).
+  might send), the cookies (`tests/net/cookies.txt`, from RFC 6265bis), and
+  the fuzz targets' seeds and past finds (`tests/fuzz`).
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
@@ -203,7 +207,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   again for the one whose size it didn't give, the missing one failed; and
   a picture on its own; and forms (`/site/form.html`) sent with GET and
   POST, urlencoded and multipart, a POST answered with 303, and Back to the
-  form as it was filled. The decoders' own tests (PngSuite, libjpeg-turbo's
+  form as it was filled; and cookies (`/site/cookie/`: set and sent back, the
+  lasting one kept in a file for the next run, a 303's, another site's
+  picture's refused). The decoders' own tests (PngSuite, libjpeg-turbo's
   and libnsgif's pictures against Pillow, the 68030 build under QEMU) are
   AERA-Atari's `common/tests/pic`.
 - `make hatarifiles`: what `EWEB.PRG` and `EWGET.TTP` do on the disk, from
@@ -214,7 +220,7 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   touch nothing, and a quit with nothing changed writes nothing.
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
-- `make fuzz`: the HTTP client and the URL parser under libFuzzer.
+- `make fuzz`: the HTTP client, the URL parser and the cookies under libFuzzer.
 - `tests/bench/measure.py [-E ewcss]`: 68030 instructions per phase for the
   whole page set; `tests/bench/hatari.py [--stock]`: `NSBENCH.TTP` timed on an
   emulated Falcon.
