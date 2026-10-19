@@ -25,6 +25,7 @@
 #include "img.h"
 #include "mbar.h"
 #include "plat.h"
+#include "secret.h"
 #include "tls.h"
 #include "util.h"
 
@@ -293,6 +294,24 @@ static void log_event(const char *fmt, ...)
 	nf_debug(buf);
 }
 
+/* the key for the cookies' values couldn't be made: they go into
+   COOKIES.TXT as they are, and the user is told (the guidelines, 7.2) */
+static void key_warn(const char *keyfile)
+{
+	char name[64];
+	const char *b = strrchr(keyfile, '\\');
+	str_copy(name, b ? b + 1 : keyfile, sizeof name);
+	alert(1, "[1][EWeb can't write its key file|%s, so the cookies kept|in COOKIES.TXT aren't|encrypted.][ OK ]", name);
+}
+
+/* the page's address for the log: without its query, which may hold
+   what was typed into a form or a search (7.3) */
+static void log_url(char *out, int size)
+{
+	str_copy(out, br.url, size);
+	out[strcspn(out, "?")] = 0;
+}
+
 /* the browser's own lines (a picture each) */
 static void log_line(void *ud, const char *line)
 {
@@ -441,13 +460,15 @@ static void loaded(int r)
 	switch (r) {
 	case BR_SHOWN: {
 		unsigned long ms_drawn = pf_ms();
+		char shown[440];
 		win_page_changed();
 		ms_drawn = pf_ms() - ms_drawn;
+		log_url(shown, sizeof shown);
 		{
 			short x, y, w, h;
 			win_page_area(&x, &y, &w, &h);
 			log_event("shown %.400s height %ld links %d area %d %d %d %d top %ld ms %lu "
-				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) title %.200s", br.url,
+				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) title %.200s", shown,
 				  br.p ? (long) br.p->height : 0L, br.p ? br.p->nlinks : 0, x, y, w, h, (long) win_top(),
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
 				  br.title);
@@ -455,7 +476,7 @@ static void loaded(int r)
 		break;
 	}
 	case BR_SAME:
-		log_event("same %.400s top %ld", br.url, (long) br.scroll_to);
+		log_event("same %.*s top %ld", (int) strcspn(br.url, "?"), br.url, (long) br.scroll_to);
 		win_address(br.url);
 		win_scroll_to(br.scroll_to >= 0 ? br.scroll_to : 0);
 		win_status("");
@@ -753,7 +774,7 @@ static void pictures(void)
 			win_page_drawn(y0, y1);
 		break;
 	case BRP_LAYOUT:
-		log_event("relaid %.400s height %ld ms %lu", br.url, br.p ? (long) br.p->height : 0L, pf_ms() - t);
+		log_event("relaid %.*s height %ld ms %lu", (int) strcspn(br.url, "?"), br.url, br.p ? (long) br.p->height : 0L, pf_ms() - t);
 		win_page_relaid();
 		break;
 	case BRP_STOPPED:
@@ -763,7 +784,7 @@ static void pictures(void)
 	said[0] = 0;
 	if (!br_pictures_pending(&br)) {
 		win_status(br.pic_stopped ? "Pictures stopped." : "");
-		log_event("pictures %.400s %d", br.url, br.pic_done);
+		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
 		menu_update();
 	}
 }
@@ -889,9 +910,11 @@ int main(void)
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
 	{
 		/* the cookies that last: read when the first page needs them */
-		char ck[256];
+		char ck[256], key[256];
 		path_join(ck, sizeof ck, opt.workdir, "COOKIES.TXT");
-		ck_file(ck);
+		path_join(key, sizeof key, opt.workdir, "EWEB.KEY");
+		ck_file(ck, key);
+		secret_warn = key_warn;
 	}
 	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");

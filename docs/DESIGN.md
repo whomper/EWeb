@@ -771,16 +771,20 @@ Kept on the disk (your decision, 19 Oct 2026). `src/net/cookie.c`, fresh code af
   neither sets nor gets cookies; a site is its host's last two labels, three under a listed
   suffix.
 - **On the disk** (the guidelines' 6.5): `COOKIES.TXT` next to `EWEB.PRG`, one line a cookie (domain,
-  path, expiry, name, value and the flags, tab-separated), read once, when the first page needs
-  cookies; written once, at quit, in one safe save, and only when a lasting cookie changed (none
+  path, expiry, name, value and the flags, tab-separated), the values encrypted as the apps keep
+  passwords (7.2: common's `secret.c`, XTEA with the key in `EWEB.KEY`, made the first time; a
+  cookie is often a login; `secret.c` now takes 4,096 characters), read once, when the first page
+  needs cookies; written once, at quit, in one safe save, and only when a lasting cookie changed (none
   that last: the file goes). Cookies for the session never go to the disk. A reset loses what
   changed since the start (a site asks you to log in again). Options > Forget cookies empties the
   store and removes the file at once. 3,000 cookies at most, 60 a domain (the least used go).
 - **Checked:** `tests/net/cookies.txt` (30 cases worked out from the RFC, `make test`, with
   AddressSanitizer and UBSan); `tests/fuzz/fuzz_cookie.c` (Set-Cookie lines from the fuzz input,
   and the file written, read and written again the same; what it found, in `tests/fuzz/found`);
-  `make itest` (set and sent back; the lasting one kept for the next run, the session one not; a
-  303's cookie on the GET after it; another site's picture setting none).
+  `make itest` (set and sent back; the lasting one kept for the next run, encrypted, the session
+  one not; a 303's cookie on the GET after it; another site's picture setting none).
+- **The log** (7.3) has no page's query (what was typed into a form or a search), and no cookie,
+  field or body.
 
 ## The design
 

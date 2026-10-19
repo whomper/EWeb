@@ -386,8 +386,10 @@ def browse():
             r.shot(8)
             r.key(RETURN)
             ev = r.wait(r"shown ", 120)
+            # (the log has no query: what was typed stays out of it, 7.3;
+            # the echo page's title says what came)
             check("forms: typed into a field, sent with Return", ev is not None and
-                  ev.startswith("shown %secho?q=atarist&go=Find " % site) and
+                  ev.startswith("shown %secho " % site) and "atarist" not in ev.split(" title ")[0] and
                   ev.endswith("title GET||q=atarist&go=Find"), str(r.events()))
             r.key(UNDO)
             ev = r.wait(r"shown ", 120)

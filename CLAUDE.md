@@ -109,7 +109,8 @@ hub stay complete, with the evidence.
   (`tests/forms/cases.txt`, worked out from the standard), `make itest` (`/site/form.html`), `make
   hatarigui`.
 - **Cookies** are `src/net/cookie.c` (RFC 6265bis; hooked into `http.c` by `src/browse`), kept in
-  `COOKIES.TXT` next to `EWEB.PRG`: read once when needed, written once at quit (6.5). After changing
+  `COOKIES.TXT` next to `EWEB.PRG`, values encrypted with `EWEB.KEY` (common's `secret.c`): read
+  once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). After changing
   them: `make test` (`tests/net/cookies.txt`), `make fuzz` for a while (`fuzz_cookie`), `make itest`
   (`/site/cookie/`), `make hatarifiles`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a

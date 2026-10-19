@@ -32,9 +32,11 @@ void ck_set(const URL *u, const char *line, const CKCTX *x);
    1 if there is one */
 int ck_get(const URL *u, const CKCTX *x, SBUF *out);
 
-/* the file they are kept in, read the first time cookies are needed;
-   NULL or "": none (kept in memory only) */
-void ck_file(const char *path);
+/* the file they are kept in, read the first time cookies are needed,
+   and the key their values are encrypted with there (common's secret.c:
+   a cookie is often a login); NULL or "": no file (in memory only), no
+   key (the values as they are) */
+void ck_file(const char *path, const char *key);
 /* lasting cookies changed since the file was read: written now (one
    safe save); 1 when nothing needed writing or it was written */
 int ck_save(void);
@@ -48,7 +50,8 @@ extern long long (*ck_now)(void);
 /* two hosts of the same site (example.co.il and www.example.co.il) */
 int ck_same_site(const char *a, const char *b);
 
-/* the store as text (the file's lines) and back, for the tests */
+/* the store as text (the file's lines, values encrypted when there is a
+   key) and back */
 char *ck_text(long *len);
 void ck_load(const char *s, long len);
 

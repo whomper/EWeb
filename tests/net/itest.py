@@ -276,8 +276,9 @@ try:
         # the lasting one kept in a file for the next run, another site's
         # picture's refused
         jar = os.path.join(work, "COOKIES.TXT")
-        if os.path.exists(jar):
-            os.remove(jar)
+        for f in (jar, os.path.join(work, "EWEB.KEY")):
+            if os.path.exists(f):
+                os.remove(f)
         site = "http://localhost:%d/site/cookie/" % HTTP
 
         def titles(*args):
@@ -289,8 +290,10 @@ try:
         rc, t, out = titles("-k", jar, "-N", site + "show", site + "set")
         check("cookies: set, and sent back", rc == 0 and t[:1] == ["COOKIE|lasting=1; session=2"], out)
         rc2, t2, out2 = titles("-k", jar, "-N", site + "show", "http://localhost:%d/site/" % HTTP)
-        check("cookies: the lasting one kept for the next run", rc2 == 0 and t2[:1] == ["COOKIE|lasting=1"]
-              and "lasting\t1" in open(jar).read() and "session" not in open(jar).read(), out2)
+        kept = open(jar).read()
+        check("cookies: the lasting one kept for the next run, its value encrypted", rc2 == 0
+              and t2[:1] == ["COOKIE|lasting=1"] and "\tlasting\t{E}" in kept and "session" not in kept
+              and os.path.getsize(os.path.join(work, "EWEB.KEY")) == 16, out2)
         os.remove(jar)
         p = subprocess.run([ewrender, "-f", font, "-d", "-S", "go", site + "form.html"], cwd=work,
                            capture_output=True, text=True, timeout=120)

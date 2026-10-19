@@ -17,6 +17,9 @@
  *   reload                    the lasting ones written out as text, the
  *                             store emptied and read back from it
  *   same A B 0|1              ck_same_site
+ *   key FILE                  the values in the text encrypted with the
+ *                             key in FILE (made when it isn't there)
+ *   hidden TEXT               TEXT isn't in the text written out
  *
  * Prints each failure, then how many cases passed.
  */
@@ -44,7 +47,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	ck_now = fake_now;
-	ck_file(NULL);
+	ck_file(NULL, NULL);
 	while (fgets(line, sizeof line, f) != NULL) {
 		char *a = line, *b, *c;
 		URL u;
@@ -63,6 +66,7 @@ int main(int argc, char **argv)
 			ok = 1;
 			snprintf(name, sizeof name, "%s", b);
 			ck_clear();
+			ck_file(NULL, NULL);
 			t_now = 1760000000LL;
 		} else if (!strcmp(a, "now")) {
 			t_now = atoll(b);
@@ -123,6 +127,17 @@ int main(int argc, char **argv)
 			char *t = ck_text(&len);
 			ck_clear();
 			ck_load(t, len);
+			free(t);
+		} else if (!strcmp(a, "key")) {
+			ck_file(NULL, b);
+		} else if (!strcmp(a, "hidden")) {
+			long len;
+			char *t = ck_text(&len);
+			if (strstr(t, b) != NULL) {
+				fprintf(stderr, "FAIL %s: \"%s\" in the text written out\n", name, b);
+				failed++;
+				ok = 0;
+			}
 			free(t);
 		} else if (!strcmp(a, "same")) {
 			char *h2;

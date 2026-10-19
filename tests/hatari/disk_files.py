@@ -57,10 +57,13 @@ BUDGET = {
     "first secure page": (4, 2, 3),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
-    "quit": (0, 1, 0),              # COOKIES.TXT, once (p5.html's cookie); EWEB.INF unchanged
+    # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
+    # looked for, then made; EWEB.INF unchanged
+    "quit": (1, 2, 0),
     "start again": (2, 0, 0),
-    # COOKIES.TXT; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read, then written over
-    "secure page again": (4, 0, 1),
+    # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
+    # then written over
+    "secure page again": (5, 0, 1),
     "quit again": (0, 0, 0),        # the cookies as they were
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }

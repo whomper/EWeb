@@ -14,6 +14,7 @@
 
 #include "cookie.h"
 #include "plat.h"
+#include "secret.h"
 #include "tls.h"
 
 enum { SS_DEFAULT, SS_LAX, SS_STRICT, SS_NONE };
@@ -32,6 +33,18 @@ static long count;
 static int changed;			/* lasting cookies changed since the file was read */
 static int loaded;			/* the file was read */
 static char file[256];
+static char keyfile[256];		/* EWEB.KEY: "" none */
+static int key_state;			/* 0 not read yet, 1 there, -1 none to be had */
+
+/* the key, read (or made) the first time it is needed: 1 if there is one */
+static int have_key(void)
+{
+	if (keyfile[0] == 0)
+		return 0;
+	if (key_state == 0)
+		key_state = secret_init(keyfile) ? 1 : -1;
+	return key_state > 0;
+}
 
 /* ---------------------------------------------------------------- time */
 
@@ -660,9 +673,11 @@ static long long ll_parse(const char *s)
 	return neg ? -v : v;
 }
 
-void ck_file(const char *path)
+void ck_file(const char *path, const char *key)
 {
 	str_copy(file, path ? path : "", sizeof file);
+	str_copy(keyfile, key ? key : "", sizeof keyfile);
+	key_state = 0;
 	loaded = 0;
 }
 
@@ -686,7 +701,15 @@ char *ck_text(long *len)
 			sb_printf(&s, "\t%d\t%s\t", c->secure, e);
 			sb_adds(&s, c->name);
 			sb_addc(&s, '\t');
-			sb_adds(&s, c->value);
+			if (keyfile[0] && c->value[0] && have_key()) {
+				/* encrypted, as the apps keep passwords (without a key
+				   secret.c leaves it as it is and says so) */
+				static char enc[sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1];
+				secret_encode(c->value, enc, sizeof enc);
+				sb_adds(&s, enc);
+			} else {
+				sb_adds(&s, c->value);
+			}
 			sb_printf(&s, "\t%d\t%d\t%s\n", c->http_only, c->same, k);
 		}
 	*len = s.len;
@@ -727,6 +750,13 @@ void ck_load(const char *s, long len)
 			c->expiry = ll_parse(f[4]);
 			c->name = dup(f[5], n[5]);
 			c->value = dup(f[6], n[6]);
+			if (c->value != NULL && strncmp(c->value, SECRET_TAG, strlen(SECRET_TAG)) == 0) {
+				/* encrypted: read with the key, else the cookie goes */
+				static char dec[SECRET_MAX + 1];
+				char *v = c->value;
+				c->value = have_key() && secret_decode(v, dec, sizeof dec) ? dup(dec, strlen(dec)) : NULL;
+				free(v);
+			}
 			c->http_only = (unsigned char) (f[7][0] == '1');
 			c->same = (unsigned char) (f[8][0] - '0');
 			c->created = c->used = ll_parse(f[9]);

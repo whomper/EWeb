@@ -239,7 +239,8 @@ BSSL_SRC  := $(sort $(wildcard $(BSSL)/src/*/*.c))
 BSSL_DEF  := -DBR_USE_URANDOM=0 -DBR_USE_GETENTROPY=0 -DBR_USE_UNIX_TIME=0 -DBR_USE_WIN32_TIME=0 \
              -DBR_USE_WIN32_RAND=0 -DBR_RDRAND=0
 NET_SRC   := $(sort $(wildcard src/net/*.c))
-NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c common/src/inflate.c
+NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c common/src/inflate.c \
+             common/src/secret.c
 NET_HDRS  := $(wildcard src/*.h src/net/*.h ui/*.h tests/net/*.h common/src/*.h common/atari/*.h \
              common/atari/include/*.h common/ui/*.h atari/include/*.h)
 NET_INC   := -Isrc -Isrc/net -Icommon/src -Iatari -Icommon/atari -Iui -Icommon/ui -Itests/net -I$(BSSL)/inc
@@ -289,7 +290,7 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
 # common/'s files as the other AERA apps build them
 COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
-              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o inflate.o net_tos.o sting.o sting_s.o dsprsa.o \
+              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o inflate.o secret.o net_tos.o sting.o sting_s.o dsprsa.o \
               dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o bigbuf.o)
 build/tos/net/dspec.o: common/dsp/ec_prog.h
 build/tos/net/%.o: src/net/%.c $(NET_HDRS)

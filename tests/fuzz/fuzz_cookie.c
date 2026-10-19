@@ -34,7 +34,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 	if (strlen(s) != n)
 		return 0;
 	ck_now = fixed;
-	ck_file(NULL);
+	ck_file(NULL, NULL);
 	ck_clear();
 	for (i = 0; i < 4; i++)
 		url_parse(&u[i], where[i], 0);

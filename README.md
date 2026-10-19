@@ -29,7 +29,8 @@ EWeb's own fonts.
   GET or POST, urlencoded, multipart or plain text, in the page's own
   character set, as the HTML Standard has browsers send them.
 - **Cookies**, as RFC 6265bis has them, those meant to last kept in
-  `COOKIES.TXT` (written once, at quit); none for other sites' pictures and
+  `COOKIES.TXT` (written once, at quit; their values encrypted, as the
+  family keeps passwords); none for other sites' pictures and
   stylesheets; Options > Forget cookies.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.

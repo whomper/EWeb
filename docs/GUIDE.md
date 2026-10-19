@@ -116,7 +116,8 @@ after sending shows it as you filled it in. EWeb can't send files yet
 
 Sites remember you (a login, a basket, a setting) with cookies. EWeb
 keeps them as browsers do: those meant to last are kept in `COOKIES.TXT`
-next to `EWEB.PRG`, written when you quit EWeb, so that you stay logged
+next to `EWEB.PRG` (their values encrypted with the key in `EWEB.KEY`),
+written when you quit EWeb, so that you stay logged
 in from one day to the next; the others last until you quit. A picture
 or stylesheet from another site (an advert's, a tracker's) gets no
 cookies and can't set any.

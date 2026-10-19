@@ -185,6 +185,13 @@ set http://example.com/ l=1; Max-Age=3600
 reload
 get http://example.com/ l=1
 
+case the values written out are encrypted with the key, and read back with it
+key build/asan/COOKIETEST.KEY
+set https://example.com/ sid=s3cr3t-login-token; Max-Age=3600; Secure
+hidden s3cr3t-login-token
+reload
+get https://example.com/ sid=s3cr3t-login-token
+
 case sites without the Public Suffix List
 same www.example.co.il mail.example.co.il 1
 same example.co.il www.example.co.il 1

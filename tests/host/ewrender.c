@@ -323,8 +323,13 @@ int main(int argc, char **argv)
 			send = argv[++i];
 		else if (!strcmp(argv[i], "-b"))
 			back_after = 1;
-		else if (!strcmp(argv[i], "-k") && i + 1 < argc)
-			ck_file(argv[++i]);
+		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
+			/* the key beside it, as EWEB.KEY beside COOKIES.TXT */
+			static char key[1024];
+			const char *f = argv[++i], *sl = strrchr(f, '/');
+			snprintf(key, sizeof key, "%.*sEWEB.KEY", sl ? (int) (sl - f + 1) : 0, f);
+			ck_file(f, key);
+		}
 		else
 			break;
 	}
@@ -527,7 +532,7 @@ int main(int argc, char **argv)
 	sb_free(&extra);
 	font_free();
 	ck_save();
-	ck_file(NULL);
+	ck_file(NULL, NULL);
 	ck_clear();
 	return rc;
 }
