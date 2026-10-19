@@ -272,6 +272,23 @@ try:
         rc, title, url, out = send("-F", "user=erez", "-S", "login", "-b")
         check("forms: Back shows the form as it was filled", rc == 0 and re.search(r'^back: 0 "Forms"', out, re.M)
               and re.search(r'^control \S+ \S+ #000000 text "erez"$', out, re.M), out)
+        # what is typed and kept never reaches the log (7.3): a login sent
+        # with GET and with POST, its cookie, all with the log on
+        log = os.path.join(work, "FORM.LOG")
+        if os.path.exists(log):
+            os.remove(log)
+        for how in ("get", "post"):
+            p = subprocess.run([ewrender, "-f", font, "-d", "-l", log, "-F", "user=erez", "-F", "pw=s3cr3tpw",
+                                "-S", "login" if how == "post" else "go"] +
+                               (["-F", "q=s3cr3tq"] if how == "get" else []) + [form],
+                               cwd=work, capture_output=True, text=True, timeout=120)
+        p2 = subprocess.run([ewrender, "-f", font, "-d", "-l", log, "-S", "go",
+                             "http://localhost:%d/site/cookie/form.html" % HTTP],
+                            cwd=work, capture_output=True, text=True, timeout=120)
+        text = open(log, errors="replace").read() if os.path.exists(log) else ""
+        check("the log keeps no field, query, body or cookie", text != "" and "/site/echo" in text and
+              not any(w in text for w in ("s3cr3t", "user=erez", "sid=xyz", "Cookie", "erez")),
+              text[-2000:])
         # cookies: set and sent back, a 303's cookie on the next request,
         # the lasting one kept in a file for the next run, another site's
         # picture's refused

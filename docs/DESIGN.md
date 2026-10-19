@@ -783,8 +783,10 @@ Kept on the disk (your decision, 19 Oct 2026). `src/net/cookie.c`, fresh code af
   and the file written, read and written again the same; what it found, in `tests/fuzz/found`);
   `make itest` (set and sent back; the lasting one kept for the next run, encrypted, the session
   one not; a 303's cookie on the GET after it; another site's picture setting none).
-- **The log** (7.3) has no page's query (what was typed into a form or a search), and no cookie,
-  field or body.
+- **The logs** (7.3): EWEB.PRG's has no page's query (what was typed into a form or a search);
+  the HTTP client's (EWGET's `-l`, CRASH.LOG) has each request's path with its query cut to
+  `?...`, and never a cookie, a field or a body (`make itest` sends a login with GET and POST, its
+  cookie set, and looks for them in the log).
 
 ## The design
 

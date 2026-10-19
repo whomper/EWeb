@@ -143,6 +143,11 @@ int scr_init(void)
 	return bufs((short) scr_h) || bufs(BAND);
 }
 
+int scr_rows(void)
+{
+	return rows;
+}
+
 const char *scr_mode(void)
 {
 	if (truecolour)

@@ -342,7 +342,14 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	sb_init(&req);
 	sb_init(&line);
 	sb_printf(&req, "%s %s HTTP/1.1\r\n", method, target);
-	conn_log("HTTP", " >> ", req.s, req.len - 2);
+	{
+		/* the log has the path, not the query: a form sent with GET
+		   puts its fields there, and sites their tokens (7.3) */
+		char shown[URL_MAX + 40];
+		size_t q = strcspn(target, "?");
+		snprintf(shown, sizeof(shown), "%s %.*s%s HTTP/1.1", method, (int)q, target, target[q] ? "?..." : "");
+		conn_log("HTTP", " >> ", shown, (long)strlen(shown));
+	}
 	sb_printf(&req, "Host: %s\r\nUser-Agent: %s\r\nAccept: %s\r\nAccept-Language: %s\r\n"
 		  "Accept-Encoding: %s\r\n", hostport, http_user_agent,
 		  rq->accept ? rq->accept : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

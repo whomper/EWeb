@@ -432,6 +432,10 @@ def screens():
             ev = r.wait(r"shown ", 120)
             check("screens: %s (%s)" % (name, ready.split(" ", 1)[1] if ready else "?"),
                   ev is not None and ev.startswith("shown file:///C:/TABLES.HTM "), str(r.events()))
+            # drawn whole off screen: buffers for the screen's height
+            m = re.search(r"(\d+)x(\d+) buf (\d+)", ready or "")
+            check("screens: %s draws the window in one go" % name, m is not None and m.group(2) == m.group(3),
+                  ready or "no ready line")
             if tc:
                 # a mode TOS didn't take must not pass as true colour
                 check("screens: %s is true colour" % name, ready is not None and "true colour" in ready,

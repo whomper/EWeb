@@ -32,7 +32,7 @@
  * field filled), and what comes is drawn or dumped. Back with -S
  * shows the form again, as it was filled. -k FILE keeps the cookies
  * that last in FILE (read when needed, written at the end), as EWEB.PRG
- * keeps COOKIES.TXT.
+ * keeps COOKIES.TXT. -l FILE: the connections' log, as EWGET -l writes it.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -323,6 +323,8 @@ int main(int argc, char **argv)
 			send = argv[++i];
 		else if (!strcmp(argv[i], "-b"))
 			back_after = 1;
+		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
+			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
 			/* the key beside it, as EWEB.KEY beside COOKIES.TXT */
 			static char key[1024];

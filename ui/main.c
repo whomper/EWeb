@@ -966,7 +966,7 @@ int main(void)
 	if (strcmp(net_stack(), "none") == 0)
 		status("No network: load STinG to reach web sites (files can be opened).");
 
-	log_event("ready %s %dx%d", scr_mode(), scr_w, scr_h);
+	log_event("ready %s %dx%d buf %d", scr_mode(), scr_w, scr_h, scr_rows());
 	command_line(first, sizeof first);
 	if (first[0])
 		go(first);
