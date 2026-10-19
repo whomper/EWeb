@@ -138,6 +138,31 @@ def emutos():
     return img
 
 
+def xvfb(display, size="1024x768x24", timeout=20):
+    """An X display for a rig: None when one answers on display already,
+    else the Xvfb started on it, once it answers (Hatari started on a
+    display that isn't up yet hangs and prints nothing; a fixed sleep was
+    too short on a slow CI runner: EHypView found it)"""
+    env = dict(os.environ, DISPLAY=display)
+
+    def up():
+        try:
+            return subprocess.run(["xdpyinfo"], env=env, capture_output=True).returncode == 0
+        except FileNotFoundError:   # no xdpyinfo: the server's socket is there
+            return os.path.exists("/tmp/.X11-unix/X" + display.lstrip(":").split(".")[0])
+    if up():
+        return None
+    p = subprocess.Popen(["Xvfb", display, "-screen", "0", size],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    end = time.time() + timeout
+    while not up():
+        if p.poll() is not None or time.time() > end:
+            p.kill()
+            sys.exit("machines.py: Xvfb on %s didn't start" % display)
+        time.sleep(0.1)
+    return p
+
+
 def tos_version(path):
     v = struct.unpack(">H", open(path, "rb").read(4)[2:4])[0]
     return "%x.%02x" % (v >> 8, v & 0xFF)
