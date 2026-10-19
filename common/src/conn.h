@@ -65,6 +65,9 @@ int   conn_pending(CONN *c);
 extern char conn_logfile[200];
 void conn_log(const char *who, const char *dir, const char *text, long n);
 void conn_log_flush(void);	/* write out what is still buffered */
+/* 1: a job begins, its milestones are written with the buffer (when it
+   is full, at an error, or at conn_log_hold(0), which writes it out) */
+void conn_log_hold(int on);
 /* add text (a crash report) at the end of the log, after what is still
    buffered: crash_report = conn_log_append (crash.h) */
 void conn_log_append(const char *text, long n);

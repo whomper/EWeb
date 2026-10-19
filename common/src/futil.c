@@ -56,9 +56,10 @@ char *pf_load(const char *path, long *len)
 	if (pf_size_open && (h = pf_open(path, PF_READ)) >= 0 && (size = pf_size_open(h)) < 0) {
 		pf_close(h);
 		h = -1;
-	}
-	if (h < 0)
 		size = pf_size(path);
+	} else if (!pf_size_open) {
+		size = pf_size(path);	/* with the hook, a failed open says it */
+	}
 	if (h < 0 && size < 0) {
 		/* a save cut short after the old file went: the new one is whole */
 		char tmp[260];

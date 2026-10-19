@@ -121,7 +121,9 @@ int main(void)
 	check(holds("ECAL.INF", "five") && looks == 0 && opens == 1, "with pf_size_open: the open alone");
 	put("WIN.IN$", "won");
 	check(holds("WIN.INF", "won") && pf_size(at("WIN.IN$")) < 0, "  and a save cut short is still finished");
-	check(pf_load(at("NONE.INF"), 0) == 0, "  and no file is still nothing");
+	looks = opens = 0;
+	check(pf_load(at("NONE.INF"), 0) == 0 && opens == 1 && looks == 1,
+	      "  and no file is still nothing: the open, then only the look for NONE.IN$");
 	pf_size_open = 0;
 	unlink(at("WIN.INF"));
 	unlink(at("ECAL.INF"));
