@@ -14,6 +14,10 @@ white. Pictures and forms come in later versions.
   there is some
 - **STinG** for the network (plain TOS), on a network card such as the
   NetUSBee. Without a network EWeb still opens pages on your disks
+- Under TOS, Atari's `FOLDR100.PRG` first in `AUTO`, renamed for more
+  room (`FOLDR400.PRG`): TOS keeps an entry in a small internal pool for
+  every folder a program or accessory has looked into, and halts with
+  "OUT OF INTERNAL MEMORY" when it runs out
 
 ## Installing
 

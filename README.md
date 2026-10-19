@@ -55,6 +55,10 @@ and unpack it into a folder of its own. It contains:
 **Needs:** a Falcon or TT, plain TOS, EmuTOS or MagiC, a screen 640 pixels
 wide, about 2 MB free; STinG for the network.
 
+**Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
+TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
+into, and halts with "OUT OF INTERNAL MEMORY" when it runs out; FOLDRxxx makes the pool bigger.
+
 ## How it reaches the servers
 
 Straight from the Atari, through STinG or MiNTnet: EWeb resolves the name
