@@ -215,6 +215,13 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def handle_error(self, request, client_address):
+        # the Atari closed the connection early (Esc, another page):
+        # nothing to report
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
 
 def serve(port, ctx=None, addr="127.0.0.1"):
     s = Server((addr, port), Handler)
