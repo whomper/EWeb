@@ -500,7 +500,11 @@ corrupted ST-RAM (where TOS, the desktop and the accessories live). So from 0.10
 read or write of a sector or more from TT-RAM through 8 KB of its own in ST-RAM (`atari/plat_tos.c`),
 says so on its "files" line with the `_FRB` cookie, and has the family's crash recorder
 (`common/atari/crash.c`): a crash in EWGET is written to `CRASH.LOG`; one in the system after it
-ended is found in TOS's record at the next start.
+ended is found in TOS's record at the next start. Erez's runs of 0.11 (19 Oct 2026): HDDRIVER sets
+`_FRB` (it bounces TT-RAM itself), four runs without junk, and the bombs still came, after EWGET had
+ended (a white screen, no `CRASH.LOG`): not the files' DMA. The family's rule since (the guidelines'
+6.5): with `_FRB`, TT-RAM goes to and from the disk as it is, in 32 KB pieces; without, through
+32 KB of ST-RAM.
 
 **Faster arithmetic on the DSP** is the next step for the handshake: after the above a repeat visit
 leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 s both ways), and a
@@ -597,9 +601,10 @@ releases.
   changed by the user (the page size, the home page) is saved then, the window's place at quit if it
   moved, and nothing is written when nothing changed. The secure connections' files (`CACERT.PEM`,
   `ROOTS.DAT`, `SEED.DAT`) are `common/`'s (`tls_file_info`: `CACERT.PEM` looked up once; the seed
-  read, then written over in place, with no look at the folder). Reads and writes go
-  through 8 KB in ST-RAM (`atari/plat_tos.c`) until it is known whether the Falcon's crashes come
-  from DMA to and from TT-RAM; then 32 KB pieces.
+  read, then written over in place, with no look at the folder). Reads and writes from TT-RAM go
+  in 32 KB pieces (`atari/plat_tos.c`): as they are where the disk driver sets `_FRB`, else
+  through 32 KB in ST-RAM; a 1 MB download is 32 writes (it was 128 of 8 KB). `EWGET.TTP`'s log
+  (`-l`) is written once a run, not at each milestone.
 
 ## The design
 

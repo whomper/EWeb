@@ -58,7 +58,7 @@ BUDGET = {
     "start again": (2, 0, 0),
     "secure page again": (3, 0, 1),  # CACERT.PEM's date; ROOTS.DAT; SEED.DAT read, then written over
     "quit again": (0, 0, 0),
-    "EWGET 1 MB": (2, 2, 1),        # EWGET.CMD, EWGET.LOG, the file; CRASH.LOG looked for (is there a report to show?)
+    "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
 
 fails = 0
@@ -276,7 +276,7 @@ def eweb(hd):
 
 def ewget(hd):
     with open(os.path.join(hd, "EWGET.CMD"), "w") as f:
-        f.write("-o BIG.BIN http://127.0.0.1:%d/big.bin" % SITE)
+        f.write("-l NET.LOG -o BIG.BIN http://127.0.0.1:%d/big.bin" % SITE)
     r = Run("ewget", hd, "EWGET.TTP")
     try:
         deadline = time.time() + 1200
@@ -295,6 +295,17 @@ def ewget(hd):
         # gathered in memory: the file is made once, after the body came
         made = [i for i, l in enumerate(lines) if 'Fcreate("BIG.BIN"' in l]
         check("  BIG.BIN made once", len(made) == 1)
+        # in 32 KB pieces (as they are under EmuTOS, which sets _FRB; through
+        # 32 KB of ST-RAM under a TOS without it): its writes up to its Fclose
+        h = re.search(r"-> FD (\d+)", "\n".join(lines[made[0]:made[0] + 4])) if made else None
+        pieces = []
+        for l in lines[made[0]:] if h else []:
+            if l.startswith("GEMDOS 0x3E Fclose(%s)" % h.group(1)):
+                break
+            if l.startswith("GEMDOS 0x40 Fwrite(%s, " % h.group(1)):
+                pieces.append(l)
+        check("  BIG.BIN in 32 KB pieces", len(pieces) == 32 and all(", 32768, " in l for l in pieces),
+              "%d writes" % len(pieces))
     finally:
         r.end()
 

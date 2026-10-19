@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include "tos.h"
 #include "../src/plat.h"
+#include "bigbuf.h"
 
 void (*pf_idle)(void);
 
@@ -29,23 +30,42 @@ int pf_open(const char *path, int mode)
 
 /* Files and DMA. A Falcon's SCSI and ACSI disks work by DMA, and the DMA
    chip reaches ST-RAM only, while GEMDOS moves whole sectors straight
-   between the disk and the caller's buffer. With the buffer in TT-RAM it
-   is up to the hard disk driver to go through ST-RAM (HDDRIVER does); a
-   driver that doesn't reads into the wrong memory, or writes whatever is
-   there. So reads and writes of a sector or more from TT-RAM go through a
-   buffer of our own in ST-RAM: a few copies, and nothing left to the
-   driver */
-#define BOUNCE 8192
+   between the disk and the caller's buffer. The family's rule (the
+   guidelines' 6.5): where the hard disk driver says it bounces TT-RAM
+   through ST-RAM itself (the _FRB cookie: HDDRIVER on Erez's Falcon,
+   common's big_direct), TT-RAM goes to and from the disk as it is, in
+   32 KB pieces; where it doesn't, each piece is copied through 32 KB of
+   our own in ST-RAM (8 KB when there isn't that much), so nothing is
+   left to a driver that might DMA where the DMA can't reach. */
+#define PIECE (32L * 1024)
 static char *bounce;			/* in ST-RAM; (char *)-1: none to be had */
+static long bounce_len;
+static int direct = -1;			/* big_direct(), asked once */
 
-/* the buffer's size, 0 when there is none (it is made the first time) */
+/* the ST-RAM buffer's size, 0 when there is none or none is needed (it
+   is made the first time) */
 long pf_bounce_size(void)
 {
+	if (direct < 0)
+		direct = big_direct();
+	if (direct)
+		return 0;
 	if (!bounce) {
-		long b = (long)Mxalloc(BOUNCE, 0);	/* ST-RAM only */
+		long b = (long)Mxalloc(PIECE, 0);	/* ST-RAM only */
+		bounce_len = PIECE;
+		if (b <= 0) {
+			b = (long)Mxalloc(8192, 0);
+			bounce_len = 8192;
+		}
 		bounce = b > 0 ? (char *)b : (char *)-1;
 	}
-	return bounce != (char *)-1 ? BOUNCE : 0;
+	return bounce != (char *)-1 ? bounce_len : 0;
+}
+
+int pf_direct(void)
+{
+	pf_bounce_size();
+	return direct;
 }
 
 static char *bounce_for(const void *buf, long n)
@@ -58,14 +78,14 @@ static char *bounce_for(const void *buf, long n)
 long pf_read(int h, void *buf, long n)
 {
 	char *b = bounce_for(buf, n);
-	long done = 0;
-	if (!b)
-		return Fread((short)h, n, buf);
+	long done = 0, piece = b ? bounce_len : (unsigned long)buf >= 0x01000000UL ? PIECE : n;
 	while (done < n) {
-		long k = n - done < BOUNCE ? n - done : BOUNCE, r = Fread((short)h, k, b);
+		long k = n - done < piece ? n - done : piece;
+		long r = Fread((short)h, k, b ? b : (char *)buf + done);
 		if (r < 0)
 			return done ? done : r;
-		memcpy((char *)buf + done, b, r);
+		if (b)
+			memcpy((char *)buf + done, b, r);
 		done += r;
 		if (r < k)
 			break;
@@ -76,13 +96,12 @@ long pf_read(int h, void *buf, long n)
 long pf_write(int h, const void *buf, long n)
 {
 	char *b = bounce_for(buf, n);
-	long done = 0;
-	if (!b)
-		return Fwrite((short)h, n, buf);
+	long done = 0, piece = b ? bounce_len : (unsigned long)buf >= 0x01000000UL ? PIECE : n;
 	while (done < n) {
-		long k = n - done < BOUNCE ? n - done : BOUNCE, w;
-		memcpy(b, (const char *)buf + done, k);
-		w = Fwrite((short)h, k, b);
+		long k = n - done < piece ? n - done : piece, w;
+		if (b)
+			memcpy(b, (const char *)buf + done, k);
+		w = Fwrite((short)h, k, b ? b : (const char *)buf + done);
 		if (w < 0)
 			return done ? done : w;
 		done += w;

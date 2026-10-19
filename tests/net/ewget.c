@@ -87,6 +87,9 @@ int ewget(int argc, char **argv)
 	falcon_dsp_ec_init();
 	out("network: %s; RSA on the %s, elliptic curves on the %s\n", net_stack(), falcon_dsp_state(),
 	    falcon_dsp_ec_state());
+	/* the log (-l) written in one go at the end, not at each milestone:
+	   one open a run (the guidelines' 6.5); errors still go out at once */
+	conn_log_hold(1);
 	for (i = 0; i < times; i++) {
 		HTTPREQ rq;
 		HTTPRESP rs;
@@ -140,6 +143,6 @@ int ewget(int argc, char **argv)
 		sb_free(&body);
 	}
 	http_close_all();
-	conn_log_flush();
+	conn_log_hold(0);
 	return rc;
 }

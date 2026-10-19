@@ -112,8 +112,11 @@ def main():
             print("---- %s: EWGET.TTP %s" % (name, cmdline))
             print("\n".join(l for l in text.splitlines() if l.strip()))
             ok = "done (0)" in text and "200 OK" in text
-            # files to and from TT-RAM through EWGET's own buffer in ST-RAM (DMA reaches ST-RAM only)
-            files_ok = "files: to and from TT-RAM through EWGET's 8 KB in ST-RAM" in text
+            # files to and from TT-RAM in 32 KB pieces: as they are where the
+            # disk driver sets _FRB (EmuTOS does), else through EWGET's own
+            # 32 KB in ST-RAM (DMA reaches ST-RAM only)
+            files_ok = ("files: to and from TT-RAM as they are, 32 KB at a time (_FRB cookie set" in text or
+                        "files: to and from TT-RAM through EWGET's 32 KB in ST-RAM (no _FRB cookie)" in text)
             if name.startswith("Mozilla's list"):
                 net = open(os.path.join(hd, "NET.LOG" if name == "Mozilla's list" else "NET2.LOG"),
                            errors="replace").read()

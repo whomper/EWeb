@@ -20,6 +20,7 @@
 #include "crash.h"
 
 long pf_bounce_size(void);	/* plat_tos.c */
+int pf_direct(void);
 
 #define MAXARG 20
 
@@ -187,9 +188,12 @@ int main(void)
 		    cacr & 0x0001 ? "on" : "off", cacr & 0x0100 ? "on" : "off",
 		    (unsigned long)&main >= 0x01000000UL ? "TT-RAM" : "ST-RAM");
 	}
-	out("files: %s; _FRB cookie %s\n",
-	    pf_bounce_size() ? "to and from TT-RAM through EWGET's 8 KB in ST-RAM" : "straight (no ST-RAM for a buffer)",
-	    get_cookie(0x5F465242L) ? "set" : "not set");
+	if (pf_direct())
+		out("files: to and from TT-RAM as they are, 32 KB at a time (_FRB cookie set: the disk driver bounces them)\n");
+	else if (pf_bounce_size())
+		out("files: to and from TT-RAM through EWGET's %ld KB in ST-RAM (no _FRB cookie)\n", pf_bounce_size() / 1024);
+	else
+		out("files: straight (no ST-RAM for a buffer, no _FRB cookie)\n");
 	if (crash_previous())
 		out("the last run ended with %s in EWGET: see CRASH.LOG\n", crash_previous());
 	else if (crash_log()[0] && pf_size(crash_log()) > 0)
