@@ -65,13 +65,23 @@ typedef struct browser {
 	int at;			/* the entry the page shown belongs to, -1 none */
 	long src_len;		/* the page shown's source, bytes (what keeping it costs) */
 
+	/* the page shown's pictures, fetched after it is shown */
+	int pic_stopped;	/* Esc stopped them: no more for this page */
+	int pic_relayout;	/* one came whose size the layout didn't know */
+	unsigned long pic_laid;	/* when the page was last laid out again for them (ms) */
+	int pic_n, pic_done;	/* how many to fetch, and fetched, for the status line */
+
 	/* settings */
+	int pictures;		/* pictures are shown (1, the default) */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening
 	   example.com..."); NULL for none */
 	void (*say)(void *ud, const char *what);
+	/* a line for the log (each picture: what it was, how long it took);
+	   NULL for none */
+	void (*log)(void *ud, const char *line);
 	void *ud;
 } browser;
 
@@ -94,6 +104,23 @@ void br_scrolled(browser *b, int32_t y);
 int br_relayout(browser *b, int32_t width);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
+
+/* the page's pictures still to come (or to decode at the size shown) */
+int br_pictures_pending(browser *b);
+/* what br_pictures_step did */
+enum {
+	BRP_NONE,		/* nothing: none were left */
+	BRP_DRAWN,		/* one came: draw the page from *y0 to *y1 again */
+	BRP_LAYOUT,		/* the page was laid out again: draw it all */
+	BRP_STOPPED		/* stopped (conn_stop) */
+};
+/* the next picture, those in the window (top to top + height, device
+   px) first, then those below, then above: fetched and decoded. The
+   layout is done again when pictures came whose sizes it didn't know,
+   at most once in two seconds and when the last has come. */
+int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1);
+/* stop fetching this page's pictures (Esc) */
+void br_pictures_stop(browser *b);
 
 /* the memory cache's size (pages and stylesheets kept for Back and for
    the next page of a site), bytes */

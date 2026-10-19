@@ -3,8 +3,8 @@
 /*
  * layout.h - EWeb's layout (fresh code, Erez's decision of 18 Oct 2026):
  * a styled document (src/doc) becomes boxes, lines and a display list of
- * fills and text runs in device pixels, ready to draw (src/gfx). Block
- * and inline layout, line breaking with EWeb's fonts, lists, rows (table
+ * fills, text runs and pictures in device pixels, ready to draw
+ * (src/gfx). Block and inline layout, line breaking with EWeb's fonts, lists, rows (table
  * rows and flex rows, cells side by side), margins, padding, borders,
  * backgrounds, links, and Hebrew words reordered right to left.
  */
@@ -21,14 +21,21 @@ typedef struct {
 	int32_t zoom;			/* device px per CSS px, x1024 (819: 0.8) */
 	/* has this link (href, resolved by the caller) been visited? NULL: no */
 	int (*visited)(void *ud, const char *href);
+	/* a picture: its handle for an <img>'s src (as the page has it; NULL:
+	   pictures aren't shown, its alt text is), and its size in CSS px
+	   once it is known (0 x 0 until its file has come) */
+	void *(*image)(void *ud, const char *src, int32_t *w, int32_t *h);
 	void *ud;
 } LAYOUT_OPT;
 
-enum { DL_FILL, DL_TEXT };
+enum { DL_FILL, DL_TEXT, DL_IMAGE };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
 #define DLF_STRIKE 8
+#define DLF_NOSIZE 16			/* a picture laid out before its file's size was known */
+#define DLF_ALT 32			/* and with no size at all: its alt text's room (the text
+					   is an item of its own), nothing drawn */
 
 typedef struct dl_item {
 	int32_t x, y, w, h;		/* device px on the page; text: its line box part */
@@ -39,6 +46,7 @@ typedef struct dl_item {
 	ew_font *font;
 	const char *text;		/* UTF-8, kept by the page */
 	uint32_t len;
+	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h */
 } dl_item;
 
 typedef struct page {

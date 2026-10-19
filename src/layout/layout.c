@@ -76,7 +76,7 @@ static char *astrdup(struct arena *a, const char *s, size_t n)
 /* ---------------------------------------------------------------- boxes */
 
 enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM };
-enum { AT_LABEL, AT_FIELD, AT_BUTTON };	/* an atom: alt text; a text field; a button */
+enum { AT_LABEL, AT_FIELD, AT_BUTTON, AT_IMAGE };	/* an atom: alt text; a text field; a button; a picture */
 
 typedef struct box box;
 struct box {
@@ -97,6 +97,8 @@ struct box {
 	uint32_t len;
 	int32_t aw, ah;			/* an atom's size, device px (AUTO: from its label) */
 	int32_t num;			/* a list item's number */
+	void *img;			/* AT_IMAGE: the picture's handle */
+	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
 };
 
 /* ---------------------------------------------------------------- the context */
@@ -130,6 +132,7 @@ typedef struct {
 	long nit, itcap;
 	int body_bg_taken;
 	int fail;
+	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int32_t *cols;			/* the table being laid out: its column widths */
 	int ncols;
 	int32_t sp_h, sp_v;		/* and its border-spacing */
@@ -557,6 +560,27 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 
 static void build(L *l, box *parent, dnode *n);
 
+/* the picture an <img> shows: its src, or where a page that loads its
+   pictures as they are scrolled to keeps the real one (data-src and the
+   like) when src is missing or only a placeholder */
+static const char *img_src(dnode *n)
+{
+	static const char *const lazy[] = { "data-src", "data-lazy-src", "data-original", "data-srcset" };
+	const char *s = dn_attr(n, "src");
+	size_t i;
+	if (s != NULL && *s != 0 && strncmp(s, "data:", 5) != 0)
+		return s;
+	for (i = 0; i < sizeof lazy / sizeof lazy[0]; i++) {
+		const char *v = dn_attr(n, lazy[i]);
+		if (v != NULL && *v != 0 && strncmp(v, "data:", 5) != 0) {
+			if (i == 3)
+				return NULL;	/* a list: not taken apart yet */
+			return v;
+		}
+	}
+	return s != NULL && *s != 0 ? s : NULL;
+}
+
 static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps)
 {
 	const ec_content *ct;
@@ -621,9 +645,21 @@ static void build_element(L *l, box *parent, dnode *c)
 		new_box(l, BX_BR, c, st, parent);
 		return;
 	case T_IMG: {
-		const char *alt = dn_attr(c, "alt");
-		if (alt != NULL && *alt != 0)
+		const char *alt = dn_attr(c, "alt"), *src = img_src(c);
+		void *h = NULL;
+		int32_t iw = 0, ih = 0;
+		if (src != NULL && l->p->opt.image != NULL)
+			h = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
+		if (h != NULL) {
+			atom(l, parent, c, st, AT_IMAGE, alt, AUTO, AUTO);
+			if (parent->last != NULL && parent->last->n == c) {
+				parent->last->img = h;
+				parent->last->iw = iw;
+				parent->last->ih = ih;
+			}
+		} else if (alt != NULL && *alt != 0) {
 			atom(l, parent, c, st, AT_LABEL, alt, AUTO, AUTO);
+		}
 		return;
 	}
 	case T_INPUT: case T_TEXTAREA: case T_SELECT: case T_BUTTON:
@@ -977,12 +1013,84 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 	t[o] = 0;
 }
 
+/* a whole number from an attribute ("120", "120px"), 0 if none */
+static int32_t attr_px(dnode *n, const char *name)
+{
+	const char *v = dn_attr(n, name);
+	int32_t r = 0;
+	if (v == NULL)
+		return 0;
+	while (*v == ' ')
+		v++;
+	while (*v >= '0' && *v <= '9' && r < 100000)
+		r = r * 10 + (*v++ - '0');
+	return *v == 0 || *v == 'p' || *v == ' ' ? r : 0;
+}
+
+/* a picture's size on the page, device px: CSS width and height (the
+   width and height attributes are hints for them), else its own size,
+   one from the other by its proportions (its file's, or the attributes'
+   before it has come), within max-width and max-height. 0: not known
+   until its file comes */
+static int image_size(L *l, box *b, int32_t *w, int32_t *h)
+{
+	int32_t iw = b->iw, ih = b->ih, mw, mh;
+	int guess;
+	*w = len(l, b->st, EP_WIDTH, l->cw);
+	*h = len(l, b->st, EP_HEIGHT, AUTO);
+	/* a guess when its file's size is needed and not known yet */
+	guess = (iw <= 0 || ih <= 0) && (*w == AUTO || *h == AUTO);
+	if (iw <= 0 || ih <= 0) {
+		/* the proportions the page gives, until the file says */
+		iw = attr_px(b->n, "width");
+		ih = attr_px(b->n, "height");
+		if (iw <= 0 || ih <= 0)
+			iw = ih = 0;
+		else if (*w == AUTO && *h == AUTO)
+			*w = dev(l, iw << 10), *h = dev(l, ih << 10);
+	} else if (*w == AUTO && *h == AUTO) {
+		*w = dev(l, iw << 10);
+		*h = dev(l, ih << 10);
+	}
+	if (*w == AUTO && *h != AUTO)
+		*w = iw > 0 ? (int32_t) ((int64_t) *h * iw / ih) : 0;
+	else if (*h == AUTO && *w != AUTO)
+		*h = iw > 0 ? (int32_t) ((int64_t) *w * ih / iw) : 0;
+	if (*w == AUTO || *h == AUTO) {
+		*w = *h = 0;
+		return 1;
+	}
+	mw = len(l, b->st, EP_MAX_WIDTH, l->cw);
+	if (mw != AUTO && *w > mw && mw >= 0) {
+		if (iw > 0 && len(l, b->st, EP_HEIGHT, AUTO) == AUTO)
+			*h = (int32_t) ((int64_t) *h * mw / *w);
+		*w = mw;
+	}
+	mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
+	if (mh != AUTO && *h > mh && mh >= 0) {
+		if (iw > 0 && len(l, b->st, EP_WIDTH, l->cw) == AUTO)
+			*w = (int32_t) ((int64_t) *w * mh / *h);
+		*h = mh;
+	}
+	if (*w < 0)
+		*w = 0;
+	if (*h < 0)
+		*h = 0;
+	return guess;
+}
+
 static int32_t atom_w(L *l, box *b, ew_font *f)
 {
 	int32_t w = b->aw;
-	(void) l;
+	if (b->atom == AT_IMAGE) {
+		int32_t h;
+		image_size(l, b, &w, &h);
+		if (w > 0 && h > 0)
+			return w;
+		w = AUTO;		/* its alt text, until it comes */
+	}
 	if (w == AUTO)
-		w = (int32_t) font_width(f, b->text, b->len) + (b->atom == AT_LABEL ? 0 : 8);
+		w = (int32_t) font_width(f, b->text, b->len) + (b->atom == AT_LABEL || b->atom == AT_IMAGE ? 0 : 8);
 	return w;
 }
 
@@ -1006,7 +1114,28 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			it = &l->it[l->nit - 1];
 			it->atom = c;
 			it->dir = (uint8_t) word_dir(c->text, c->len);
-			if (c->ah != AUTO || c->atom != AT_LABEL) {
+			if (c->atom == AT_IMAGE) {
+				int32_t iw, ih;
+				image_size(l, c, &iw, &ih);
+				if (iw > 0 && ih > 0) {
+					/* on the baseline, or its middle on the text's */
+					int va = kw(c->st, EP_VERTICAL_ALIGN);
+					it->asc = ih;
+					it->desc = 0;
+					if (va == KW_MIDDLE) {
+						it->asc = ih / 2 + (r.font->ascent - r.font->descent) / 2;
+						it->desc = ih - it->asc;
+					} else if (va == KW_TEXT_BOTTOM || va == KW_BOTTOM) {
+						it->asc = ih - r.font->descent;
+						it->desc = r.font->descent;
+					}
+					if (it->desc < 0) {
+						it->asc += it->desc;
+						it->desc = 0;
+					}
+					it->dir = 0;
+				}
+			} else if (c->ah != AUTO || c->atom != AT_LABEL) {
 				int32_t h = c->ah != AUTO ? c->ah : r.font->ascent + r.font->descent + 4;
 				it->asc = h - 2 - r.font->descent;
 				it->desc = r.font->descent + 2;
@@ -1098,7 +1227,30 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 {
 	box *b = it->atom;
 	int32_t h = it->asc + it->desc, y = base - it->asc + it->shift;
-	if (b->atom != AT_LABEL) {
+	if (b->atom == AT_IMAGE) {
+		int32_t iw, ih;
+		int guess = image_size(l, b, &iw, &ih), sized = iw > 0 && ih > 0;
+		dl_item *d = dl_add(l);
+		if (d == NULL)
+			return;
+		/* with no size yet: its alt text, drawn below, and its place for
+		   the picture to be fetched (DLF_ALT: nothing drawn) */
+		d->type = DL_IMAGE;
+		d->x = x;
+		d->y = y;
+		d->w = sized ? iw : it->w;
+		d->h = sized ? ih : h;
+		d->link = it->link;
+		d->img = b->img;
+		d->flags = (uint8_t) ((guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT));
+		d->text = b->text;	/* its alt text, while it comes */
+		d->len = b->len;
+		d->font = it->font;
+		d->rgb = 0x606060;
+		if (sized)
+			return;
+	}
+	if (b->atom != AT_LABEL && b->atom != AT_IMAGE) {
 		uint32_t edge = 0xff808080;
 		fill(l, x, y, it->w, h, b->atom == AT_BUTTON ? 0xffe0e0e0 : 0xffffffff);
 		fill(l, x, y, it->w, 1, edge);
@@ -1327,6 +1479,7 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	int line_start = 1;
 	int32_t h;
 	l->nit = 0;
+	l->cw = w;
 	runstate(l, &r, b->st, NULL, b->link);
 	collect(l, b, &r, &line_start);
 	if (l->fail)
@@ -1348,6 +1501,7 @@ static int32_t inline_measure(L *l, box *b)
 	long i;
 	int32_t lw = 0, best = 0;
 	l->nit = 0;
+	l->cw = AUTO;
 	runstate(l, &r, b->st, NULL, b->link);
 	collect(l, b, &r, &line_start);
 	for (i = 0; i < l->nit; i++) {

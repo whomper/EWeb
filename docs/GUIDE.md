@@ -2,8 +2,8 @@
 
 EWeb is a web browser for the Atari Falcon (and the TT). It fetches pages
 itself over the internet, secure ones too, and shows them with its own
-fonts: text, links, headings, lists and tables, in colour or black and
-white. Pictures and forms come in later versions.
+fonts: text, links, headings, lists, tables and pictures, in colour or
+black and white. Forms come in a later version.
 
 ## What you need
 
@@ -58,6 +58,30 @@ address and press Return:
 While a page loads, the info line says what is happening and how much
 has come; **Esc**, **Undo** or the Stop button stop it, and the page
 you were on stays.
+
+## Pictures
+
+A page is shown as soon as its text is laid out; its pictures come
+after, those in the window first, then those below, and each is drawn
+as it comes ("Pictures: 3 of 12" on the info line). You can read and
+scroll meanwhile; clicking a link or typing an address goes there at
+once. **Esc** (or File > Stop) stops the pictures of the page shown.
+
+Until a picture has come its place is framed, with what it shows written
+in it where the page says. A picture whose size the page doesn't give
+shows its description first, and the page is laid out again when its
+size is known (at most every two seconds, so that it doesn't jump about
+while you read).
+
+EWeb shows JPEG, PNG (with transparency) and GIF (the first picture of
+an animated one), decoded at the size the page shows them: a big photo
+shown small takes much less time and memory than at its own size. In 16
+or 256 colours and in monochrome they are dithered to the screen's own
+colours; in true colour they are as they are. An address of a picture
+on its own (a `.jpg` link) shows the picture.
+
+On a slow line, View > Show pictures turns them off: pages then show
+what their pictures are instead, and come quicker.
 
 ## The window
 
@@ -122,7 +146,7 @@ choose all of it.
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |
-| Esc | stop a page loading |
+| Esc | stop a page loading, or its pictures |
 | Up, Down | scroll; with Shift, a page |
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |
@@ -134,13 +158,15 @@ choose all of it.
 
 ## What EWeb shows
 
-This first version shows the text of pages as their stylesheets lay it
-out: headings, paragraphs, lists, tables, links, bold and italic,
-colours and backgrounds, borders, Hebrew right to left. It doesn't yet
+EWeb shows pages as their stylesheets lay them out: headings,
+paragraphs, lists, tables, links, bold and italic, colours and
+backgrounds, borders, pictures, Hebrew right to left. It doesn't yet
 show:
 
-- pictures (their description shows where the page gives one)
 - forms (their fields are drawn, but can't be typed into)
+- pictures in the background of a page or a box (CSS
+  `background-image`), WebP and AVIF pictures (EWeb asks servers for
+  JPEG, PNG and GIF, which most send then), and SVG drawings
 - things placed beside others with `float` or `position`, which come
   one under the other instead
 - anything made by JavaScript
@@ -167,6 +193,8 @@ was, when you quit:
   (FrogFind: `http://frogfind.com/?q=%s`)
 - `ZOOM=` the size of pages, per cent
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
+- `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
+  Show pictures)
 - `WINDOW=` where the window was
 
 ## When something goes wrong
@@ -184,6 +212,8 @@ was, when you quit:
 
 EWeb is made by AERA | Erez Yaary, free software under the GNU GPL,
 version 2 or later: github.com/whomper/EWeb. Its fonts are drawn from
-DejaVu; its HTML parser is NetSurf's Hubbub (MIT). It belongs to the
+DejaVu; its HTML parser is NetSurf's Hubbub (MIT), its GIF decoder
+NetSurf's libnsgif (MIT), and its JPEG decoder libjpeg-turbo (the IJG's
+and BSD licences). It belongs to the
 AERA family of Atari programs (ECal, EContact, EMail, EFTP, EHypView,
 ClaudeST) and looks and works as they do.

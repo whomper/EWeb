@@ -20,6 +20,7 @@
 
 #include "ui.h"
 #include "canvas.h"
+#include "img.h"
 
 #define BAND 32			/* rows drawn and copied at a time */
 
@@ -27,6 +28,7 @@ static int truecolour, swapped;
 static short ncol;			/* 2, 4, 16, 256 */
 static unsigned char pal[256][3];	/* each pixel value's colour */
 static unsigned char nearest_of[4096];	/* 12-bit colour -> pixel value + 1, 0 not worked out */
+static PIC_PAL pic_pal;			/* the same colours, for the pictures' pens */
 static long band_w;			/* pixels, a multiple of 16 */
 static unsigned char *chunky;		/* BAND rows, a byte a pixel (planar modes) */
 static unsigned short *std_buf, *dev_buf;	/* ST RAM */
@@ -86,6 +88,10 @@ int scr_init(void)
 		pal[px][1] = from1000(rgb[1]);
 		pal[px][2] = from1000(rgb[2]);
 	}
+	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
+	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
+	img_pal = &pic_pal;
+	img_pal_changed();
 	chunky = malloc(band_w * BAND);
 	std_buf = st_alloc(band_w / 8 * planes * BAND);
 	dev_buf = st_alloc(band_w / 8 * planes * BAND);
@@ -152,6 +158,14 @@ static int shade(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light)
 	return (int) ((y * 16 + 127500L) / 255000L);
 }
 
+/* a picture as decoded at its size (img.c), and its pens in the modes
+   with a palette */
+static int picture(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
+{
+	(void) ud;
+	return img_picture(img, w, h, pic, pens);
+}
+
 /* the chunky band (h rows) as planes, standard format: plane after plane */
 static void to_planes(short h)
 {
@@ -189,6 +203,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 	c.ox = px;
 	c.pen = pen;
 	c.shade = shade;
+	c.picture = picture;
 	for (y0 = 0; y0 < area->h; y0 += BAND) {
 		short h = area->h - y0 > BAND ? BAND : area->h - y0, pxy[8];
 		c.h = h;

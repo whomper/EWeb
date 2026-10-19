@@ -141,6 +141,65 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 	}
 }
 
+void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y)
+{
+	int32_t px = x - c->ox, py = y - c->oy, x0 = 0, y0 = 0, x1 = pic->w, y1 = pic->h, i, j;
+	if (px < 0)
+		x0 = -px;
+	if (py < 0)
+		y0 = -py;
+	if (px + x1 > c->w)
+		x1 = c->w - px;
+	if (py + y1 > c->h)
+		y1 = c->h - py;
+	for (j = y0; j < y1; j++) {
+		long k = (long) j * pic->w;
+		const uint8_t *a = pic->alpha != NULL ? pic->alpha + k : NULL;
+		if (c->bpp == 8) {
+			uint8_t *o = c->pix + (py + j) * c->stride + px;
+			const uint8_t *s = pens + k;
+			if (a == NULL) {
+				memcpy(o + x0, s + x0, (size_t) (x1 - x0));
+			} else {
+				for (i = x0; i < x1; i++)
+					if (a[i] >= 128)
+						o[i] = s[i];
+			}
+		} else {
+			uint8_t *o = c->pix + (py + j) * c->stride + 2 * px;
+			const uint16_t *s = pic->px + k;
+			for (i = x0; i < x1; i++) {
+				unsigned v = s[i];
+				if (a != NULL && a[i] != 255) {
+					unsigned u, al = a[i], r, g, b;
+					if (al == 0)
+						continue;
+					u = (unsigned) o[2 * i] << 8 | o[2 * i + 1];
+					/* each component mixed: (new * a + old * (255 - a)) / 256 */
+					r = (((v >> 11) * al + (u >> 11) * (255 - al)) >> 8) & 31;
+					g = ((((v >> 5) & 63) * al + ((u >> 5) & 63) * (255 - al)) >> 8) & 63;
+					b = (((v & 31) * al + (u & 31) * (255 - al)) >> 8) & 31;
+					v = r << 11 | g << 5 | b;
+				}
+				o[2 * i] = (uint8_t) (v >> 8);
+				o[2 * i + 1] = (uint8_t) v;
+			}
+		}
+	}
+}
+
+/* a picture not there yet: a frame, with its alt text when it fits */
+static void placeholder(canvas *c, const dl_item *d)
+{
+	cv_fill(c, d->x, d->y, d->w, 1, 0xc0c0c0);
+	cv_fill(c, d->x, d->y + d->h - 1, d->w, 1, 0xc0c0c0);
+	cv_fill(c, d->x, d->y, 1, d->h, 0xc0c0c0);
+	cv_fill(c, d->x + d->w - 1, d->y, 1, d->h, 0xc0c0c0);
+	if (d->len > 0 && d->font != NULL && d->h >= d->font->ascent + d->font->descent + 4 &&
+	    (int32_t) font_width(d->font, d->text, d->len) <= d->w - 6)
+		cv_text(c, d->font, d->x + 3, d->y + 2 + d->font->ascent, d->text, d->len, d->rgb, 0);
+}
+
 void cv_page(canvas *c, const page *p)
 {
 	long i;
@@ -151,9 +210,19 @@ void cv_page(canvas *c, const page *p)
 		const dl_item *d = &p->items[i];
 		if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
 			continue;
-		if (d->type == DL_FILL)
+		if (d->type == DL_FILL) {
 			cv_fill(c, d->x, d->y, d->w, d->h, d->rgb);
-		else
+		} else if (d->type == DL_IMAGE) {
+			const PIC *pic = NULL;
+			const uint8_t *pens = NULL;
+			if (d->flags & DLF_ALT)
+				continue;	/* its alt text is drawn instead */
+			if (c->picture != NULL && c->picture(c->ud, d->img, d->w, d->h, &pic, &pens) && pic != NULL &&
+			    (c->bpp != 8 || pens != NULL))
+				cv_picture(c, pic, pens, d->x, d->y);
+			else
+				placeholder(c, d);
+		} else
 			cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, d->rgb, d->flags);
 	}
 }

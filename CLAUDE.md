@@ -1,7 +1,7 @@
 # Notes for working on EWeb
 
 EWeb is the AERA family's web browser for the Atari Falcon, tuned for a DFB1 (68030 at 50 MHz, FPU,
-128 MB of TT-RAM): `EWEB.PRG`, a text browser so far (pictures and forms come next), with the design
+128 MB of TT-RAM): `EWEB.PRG`, a browser of the document web (text and pictures; forms come next), with the design
 (`docs/DESIGN.md`) and the first milestone's measuring tools. The other AERA apps (ECal, EContact,
 EMail, EFTP, EHypView, ClaudeST) are meant to look and behave as one family, and EWeb is one of them.
 
@@ -103,6 +103,11 @@ hub stay complete, with the evidence.
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
   `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
+- **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
+  page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
+  (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there
+  and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). `make itest` loads
+  `/site/pics.html`; `make hatarigui` shows it over the network and from the disk in every mode.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page

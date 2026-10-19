@@ -22,6 +22,10 @@ Pages:
   /site/         a page for the browser (make itest's ewrender checks): a
                  stylesheet linked (/site/style.css), links to /site/two.html
                  and an anchor on it
+  /site/pics.html  pictures: a JPEG with its size given, a PNG with alpha
+                 and no size (the page is laid out again when it comes), a
+                 GIF, a progressive JPEG with only its width, a big PNG held
+                 to the width, and one that isn't there (made with Pillow)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -48,6 +52,59 @@ SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back 
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
 BIG = bytes(rnd.randrange(256) for _ in range(2 << 20))
+PICS_PAGE = (b"<!DOCTYPE html><html><head><title>Pictures</title><style>body{background:#fff;font-family:sans-serif}"
+             b".wide{max-width:100%}</style></head><body><h1>Pictures</h1>"
+             b"<p>A photo: <img src=photo.jpg width=240 height=160 alt='a photo'> with text after it.</p>"
+             b"<p><a href=two.html><img src=logo.png alt='the logo'></a> a link round a picture with alpha.</p>"
+             b"<p>A GIF: <img src=anim.gif alt=gif> and a progressive JPEG: <img src=prog.jpg width=160 alt=prog></p>"
+             b"<p><img class=wide src=big.png alt='a big one'></p>"
+             b"<p>Not there: <img src=gone.png width=100 height=30 alt='gone'>.</p><p id=end>The end</p>"
+             b"</body></html>\n")
+
+
+def make_pics():
+    """the pictures of /site/pics.html, the same bytes every time"""
+    import io
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        return {}
+
+    def photo(w, h):
+        im = Image.new("RGB", (w, h))
+        px = im.load()
+        for y in range(h):
+            for x in range(w):
+                px[x, y] = (40 + 180 * x // w, 60 + 150 * y // h, 200 - 120 * x // w)
+        d = ImageDraw.Draw(im)
+        d.ellipse((w // 4, h // 5, 3 * w // 4, 4 * h // 5), fill=(200, 30, 40))
+        d.rectangle((w // 10, h // 2, w // 3, h - 10), fill=(250, 240, 200))
+        return im
+
+    def save(im, fmt, **kw):
+        b = io.BytesIO()
+        im.save(b, fmt, **kw)
+        return b.getvalue()
+    logo = Image.new("RGBA", (150, 60), (0, 0, 0, 0))
+    d = ImageDraw.Draw(logo)
+    d.ellipse((2, 2, 56, 56), fill=(0, 90, 200, 255))
+    d.rectangle((64, 18, 146, 42), fill=(230, 120, 0, 160))
+    frames = [Image.new("P", (48, 48), i * 60) for i in range(3)]
+    for i, f in enumerate(frames):
+        f.putpalette([v for c in range(256) for v in (c, 255 - c, (c * 3) & 255)])
+        ImageDraw.Draw(f).rectangle((8 + i * 8, 8, 24 + i * 8, 40), fill=200)
+    gif = io.BytesIO()
+    frames[0].save(gif, "GIF", save_all=True, append_images=frames[1:], duration=200, loop=0)
+    return {
+        "photo.jpg": (save(photo(480, 320), "JPEG", quality=85), "image/jpeg"),
+        "prog.jpg": (save(photo(320, 240), "JPEG", quality=85, progressive=True), "image/jpeg"),
+        "logo.png": (save(logo, "PNG"), "image/png"),
+        "anim.gif": (gif.getvalue(), "image/gif"),
+        "big.png": (save(photo(800, 600), "PNG"), "image/png"),
+    }
+
+
+PICS = make_pics()
 
 
 def make_certs(work):
@@ -122,6 +179,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, SITE_CSS, "text/css")
         elif p == "/site/two.html":
             self.send(200, SITE_TWO)
+        elif p == "/site/pics.html":
+            self.send(200, PICS_PAGE)
+        elif p.startswith("/site/") and p[6:] in PICS:
+            self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
         elif p == "/redirect":
             self.send(302, b"", extra=[("Location", "/page")])
         elif p == "/secure":

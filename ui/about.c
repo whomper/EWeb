@@ -23,8 +23,9 @@ void dlg_about(void)
 {
 	static char net[80], where[80];
 	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, where, 0 },
-		    { "Fonts drawn from DejaVu (free licence). HTML parser:",
-		      "NetSurf's Hubbub and libparserutils (MIT).", 0 },
+		    { "Fonts drawn from DejaVu. From NetSurf (MIT):",
+		      "Hubbub, libparserutils, libnsgif. JPEG:",
+		      "libjpeg-turbo (the IJG's and BSD licences)." },
 		    icon_bits, icon16_px, icon16_rgb };
 	snprintf(net, sizeof net, "%s  \xF9  secure sites: %s",
 		 strcmp(net_stack(), "none") ? net_stack() : "no network",

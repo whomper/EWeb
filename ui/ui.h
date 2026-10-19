@@ -19,6 +19,7 @@ typedef struct {
 	short zoom;			/* ZOOM=: the page's size, per cent of 80 (the Falcon's pixels to CSS's) */
 	short win_x, win_y, win_w, win_h;	/* WINDOW=: where the window was */
 	char workdir[200];		/* where EWEB.PRG is: EWEB.FNT, EWEB.INF, the certificates */
+	short pictures;			/* PICTURES=: shown (1), or only their alt text (0) */
 } EWOPT;
 extern EWOPT opt;
 
@@ -86,6 +87,8 @@ void win_message(const short *msg);	/* WM_* */
 void win_redraw(const GRECT *area);	/* NULL: all of it */
 void win_redraw_page(void);
 void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything drawn */
+void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
+void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
 void win_title(void);
 void win_status(const char *s);		/* the info line; "" for what the page says */
 void win_toolbar(void);			/* the buttons again (loading started or ended) */
@@ -109,7 +112,7 @@ enum {
 	C_NONE, C_ABOUT,
 	C_OPENURL, C_OPENFILE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
-	C_BACK, C_FORWARD, C_HOME, C_LARGER, C_SMALLER, C_ACTUAL,
+	C_BACK, C_FORWARD, C_HOME, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
 	C_SETHOME,
 	C_HELP, C_KEYS
 };

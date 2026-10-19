@@ -23,7 +23,9 @@
  * every scroll position and in pieces across, at 8 and 16 bits, each into
  * a buffer of just its size: under AddressSanitizer a pixel drawn past a
  * band's edge stops it (on the Falcon it would land in ST RAM next to the
- * band, TOS's).
+ * band, TOS's). The page's pictures are fetched and decoded before it is
+ * drawn or dumped, as EWEB.PRG does after showing it (-n: none, their
+ * alt text, as before pictures came).
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -35,6 +37,7 @@
 #include "conn.h"
 #include "font.h"
 #include "http.h"
+#include "img.h"
 #include "plat.h"
 #include "ui.h"
 #include "util.h"
@@ -196,6 +199,19 @@ static int shade8(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light)
 	return (int) (rgb & 15);
 }
 
+static int picture(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
+{
+	(void) ud;
+	return img_picture(img, w, h, pic, pens);
+}
+
+/* the Falcon's 16 standard colours, for the pictures' pens at 8 bits */
+static const unsigned char falcon16[16][3] = {
+	{ 255, 255, 255 }, { 255, 0, 0 }, { 0, 255, 0 }, { 255, 255, 0 }, { 0, 0, 255 }, { 255, 0, 255 },
+	{ 0, 255, 255 }, { 170, 170, 170 }, { 85, 85, 85 }, { 170, 0, 0 }, { 0, 170, 0 }, { 170, 170, 0 },
+	{ 0, 0, 170 }, { 170, 0, 170 }, { 0, 170, 170 }, { 0, 0, 0 }
+};
+
 /* -B: the page as ui/screen.c draws it, a band of 32 rows at a time, at
    every scroll position (each row the top of a band) and in pieces across
    (an area of the window uncovered), each into a buffer of just its size */
@@ -220,6 +236,7 @@ static long bands(const page *p, int32_t width)
 				c.oy = y;
 				c.pen = pen8;
 				c.shade = k & 1 ? shade8 : NULL;
+				c.picture = picture;
 				c.pix = malloc(c.stride * c.h);
 				if (c.pix == NULL)
 					return -1;
@@ -238,11 +255,23 @@ static void said(void *ud, const char *what)
 		fprintf(stderr, "%s\n", what);
 }
 
+/* every picture of the page shown, fetched and decoded */
+static void pictures(browser *b)
+{
+	int32_t y0, y1;
+	while (br_pictures_pending(b)) {
+		int r = br_pictures_step(b, 0, 400, &y0, &y1);
+		if (r == BRP_NONE || r == BRP_STOPPED)
+			break;
+	}
+}
+
 int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1;
-	int dump = 0, show_tree = 0, verbose = 0, band = 0, i, r;
+	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, i, r;
+	PIC_PAL pal;
 	const char *next = NULL;
 	char where[4096];
 	browser b;
@@ -272,6 +301,8 @@ int main(int argc, char **argv)
 			show_tree = 1;
 		else if (!strcmp(argv[i], "-v"))
 			verbose = 1;
+		else if (!strcmp(argv[i], "-n"))
+			nopics = 1;
 		else if (!strcmp(argv[i], "-c") && i + 1 < argc)
 			cacert = argv[++i];
 		else
@@ -311,13 +342,20 @@ int main(int argc, char **argv)
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
 	b.say = said;
+	b.log = said;
 	b.ud = &verbose;
 	b.extra_css = extra.s;
+	b.pictures = !nopics;
+	if (band) {
+		pic_pal_init(&pal, 16, falcon16);
+		img_pal = &pal;
+	}
 	r = br_go(&b, where);
 	if (r != BR_SHOWN || b.p == NULL) {
 		fprintf(stderr, "ewrender: nothing shown (%d)\n", r);
 		return 1;
 	}
+	pictures(&b);
 	if (next != NULL) {
 		static const char *const step[] = { "to", "back", "forward", "back", "narrower", "forward", "back" };
 		int k;
@@ -330,6 +368,7 @@ int main(int argc, char **argv)
 				r = br_relayout(&b, width - 100) ? BR_SHOWN : BR_STOPPED;
 			else
 				r = br_forward(&b);
+			pictures(&b);
 			printf("%s: %d \"%s\" %s width %d fetch %lu parse %lu layout %lu\n", step[k], r, b.title, b.url,
 			       b.p ? (int) b.p->opt.width : 0, b.ms_fetch, b.ms_parse, b.ms_layout);
 		}
@@ -353,6 +392,10 @@ int main(int argc, char **argv)
 			if (it->type == DL_FILL)
 				printf("fill %d,%d %dx%d #%06lx\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
 				       (unsigned long) it->rgb);
+			else if (it->type == DL_IMAGE)
+				printf("image %d,%d %dx%d%s%s link %d \"%.*s\" %s\n", (int) it->x, (int) it->y, (int) it->w,
+				       (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "", it->flags & DLF_ALT ? " alt" : "",
+				       it->link, (int) it->len, it->text, img_url(it->img));
 			else
 				printf("text %d,%d %dx%d #%06lx %s%d%s%s%s link %d \"%.*s\"\n", (int) it->x,
 				       (int) (it->y + it->base), (int) it->w, (int) it->h, (unsigned long) it->rgb,
@@ -376,6 +419,7 @@ int main(int argc, char **argv)
 		c.bpp = 16;
 		c.stride = 2L * c.w;
 		c.oy = top;
+		c.picture = picture;
 		c.pix = malloc(c.stride * c.h);
 		if (c.pix == NULL)
 			return 1;

@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "layout.h"
+#include "pic.h"
 
 typedef struct canvas {
 	uint8_t *pix;
@@ -24,6 +25,11 @@ typedef struct canvas {
 	   monochrome screen's greys), how many of 16 pixels are light; NULL
 	   or -1: solid in pen() */
 	int (*shade)(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light);
+	/* a picture (a DL_IMAGE's handle) at w x h: 1 and its pixels, and
+	   at 8 bits its pens (pic_dither's, to the screen's colours); 0 when
+	   it isn't there (yet): its place is framed, its alt text in it.
+	   NULL: never */
+	int (*picture)(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens);
 	void *ud;
 } canvas;
 
@@ -31,6 +37,10 @@ typedef struct canvas {
 #define RGB565(rgb) ((uint16_t) ((((rgb) >> 8) & 0xF800) | (((rgb) >> 5) & 0x07E0) | (((rgb) >> 3) & 0x001F)))
 
 void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb);
+/* a picture at (x, y), page coordinates, clipped to the canvas: solid
+   where its alpha is, mixed with what is under it at 16 bits (at 8, a
+   pixel at least half solid is drawn) */
+void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y);
 /* the page's background, then every item that falls on the canvas */
 void cv_page(canvas *c, const page *p);
 /* one text run at x with its baseline at base, in page coordinates */

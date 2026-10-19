@@ -21,6 +21,7 @@
 #include "font.h"
 #include "help.h"
 #include "http.h"
+#include "img.h"
 #include "mbar.h"
 #include "plat.h"
 #include "tls.h"
@@ -33,10 +34,17 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "" };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1 };
 browser br;
 int loading;
 static short quit;
+static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
+/* what came while a picture did and isn't the window's own (a menu, a
+   click, a key that isn't scrolling): done when the picture has stopped */
+static struct {
+	short which, msg[8];
+	AEVENT ev;
+} later;
 
 #define FROGFIND "http://frogfind.com/?q=%s"
 
@@ -72,6 +80,8 @@ static const MBAR_ITEM m_view[] = {
 	{ "Larger text", "^+", C_LARGER },
 	{ "Smaller text", "^-", C_SMALLER },
 	{ "Actual size", "^0", C_ACTUAL },
+	{ "-", 0, 0 },
+	{ "Show pictures", 0, C_PICTURES },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_opts[] = {
@@ -105,7 +115,7 @@ void menu_update(void)
 {
 	int addr = win_address_has_focus();
 	enable(C_RELOAD, !loading && br.cur >= 0);
-	enable(C_STOP, loading);
+	enable(C_STOP, loading || br_pictures_pending(&br));
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
@@ -119,6 +129,12 @@ void menu_update(void)
 	enable(C_SMALLER, !loading && opt.zoom > 50);
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
+	enable(C_PICTURES, !loading);
+	{
+		short i = mbar_object(&mb, C_PICTURES);
+		if (i >= 0)
+			menu_icheck(mb.tree, i, opt.pictures ? 1 : 0);
+	}
 }
 
 /* ---------------------------------------------------------------- the settings */
@@ -168,6 +184,8 @@ static void settings_load(void)
 			opt.zoom = (short) atoi(eq);
 		else if (!strcmp(line, "DSP"))
 			opt.dsp = atoi(eq) != 0;
+		else if (!strcmp(line, "PICTURES"))
+			opt.pictures = atoi(eq) != 0;
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -235,6 +253,8 @@ int settings_save(void)
 	put(&s, "ZOOM", v, "the size of pages, per cent (100: a CSS pixel is 0.8 of the screen's)");
 	snprintf(v, sizeof v, "%d", opt.dsp);
 	put(&s, "DSP", v, "1: the DSP does the secure connections' arithmetic, 0: the 68030 does");
+	snprintf(v, sizeof v, "%d", opt.pictures);
+	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -270,6 +290,13 @@ static void log_event(const char *fmt, ...)
 	nf_debug(buf);
 }
 
+/* the browser's own lines (a picture each) */
+static void log_line(void *ud, const char *line)
+{
+	(void) ud;
+	log_event("%s", line);
+}
+
 static char said[160];		/* what the browser said last, for the KB counter */
 static long said_bytes;
 
@@ -300,13 +327,59 @@ static void keys_flush(void)
 	esc_quiet_until = pf_ms() + 1000;
 }
 
+/* a picture is stopped for what came: it is done after */
+static void put_off(short which, const short *msg, const AEVENT *ev)
+{
+	if (later.which == 0) {
+		later.which = which;
+		memcpy(later.msg, msg, sizeof later.msg);
+		later.ev = *ev;
+	}
+	conn_stop = 1;
+}
+
 /* while a page loads: the window redrawn, moved and topped; Esc, Undo
-   and Stop stop the load; the menu bar waits */
+   and Stop stop the load; the menu bar waits. While its pictures come
+   the window scrolls too, and what else comes stops the picture and is
+   done after it (Esc and Stop: no more pictures for this page) */
 static void idle(void)
 {
 	short msg[8], which;
 	AEVENT ev;
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 5, msg, &ev);
+	if (pics) {
+		if (which & MU_MESAG) {
+			if (msg[0] == MN_SELECTED) {
+				if (mbar_command(&mb, msg[4]) == C_STOP) {
+					conn_stop = 1;
+					br_pictures_stop(&br);
+					menu_tnormal(mb.tree, msg[3], 1);
+				} else {
+					put_off(MU_MESAG, msg, &ev);
+				}
+			} else if (msg[0] == AP_TERM) {
+				put_off(MU_MESAG, msg, &ev);
+			} else {
+				win_message(msg);
+			}
+		}
+		if (which & MU_KEYBD) {
+			short scan = KEY_SCAN(ev.kreturn);
+			if (scan == 0x01) {
+				conn_stop = 1;
+				br_pictures_stop(&br);
+			} else if (scan == 0x48 || scan == 0x50 ||
+				   (!win_address_has_focus() && (scan == 0x39 || scan == 0x47) &&
+				    !key_ctrl(ev.kstate, ev.kreturn))) {
+				win_key(ev.kstate, ev.kreturn);	/* scrolling: the page stays */
+			} else {
+				put_off(MU_KEYBD, msg, &ev);
+			}
+		}
+		if (which & MU_BUTTON)
+			put_off(MU_BUTTON, msg, &ev);
+		return;
+	}
 	if (which & MU_MESAG) {
 		switch (msg[0]) {
 		case MN_SELECTED:
@@ -475,7 +548,11 @@ void command(int cmd)
 		loading_on();
 		loaded(br_reload(&br));
 		break;
-	case C_STOP: conn_stop = 1; break;
+	case C_STOP:
+		conn_stop = 1;
+		br_pictures_stop(&br);
+		win_status("");
+		break;
 	case C_QUIT: quit = 1; break;
 	case C_CUT: win_clip(CLIP_CUT); break;
 	case C_COPY: win_clip(CLIP_COPY); break;
@@ -497,6 +574,19 @@ void command(int cmd)
 	case C_LARGER: set_zoom(opt.zoom + 10); break;
 	case C_SMALLER: set_zoom(opt.zoom - 10); break;
 	case C_ACTUAL: set_zoom(100); break;
+	case C_PICTURES:
+		/* a setting: on the disk at once (6.5); the page laid out again
+		   with its pictures or without */
+		opt.pictures = (short) !opt.pictures;
+		settings_save();
+		br.pictures = opt.pictures;
+		if (br.d != NULL) {
+			graf_mouse(BUSYBEE, 0);
+			br_relayout(&br, win_page_w());
+			graf_mouse(ARROW, 0);
+			win_page_relaid();
+		}
+		break;
 	case C_SETHOME:
 		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0) {
 			str_copy(opt.home, br.url, sizeof opt.home);
@@ -566,6 +656,97 @@ static int shortcut(short kstate, short key)
 		}
 	}
 	return 0;
+}
+
+static void av_start(const char *s);
+
+/* an event of the main loop (or one put off while a picture came) */
+static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *hover_y)
+{
+	AEVENT ev = *pev;
+	if (which & MU_M1) {
+		short k;
+		graf_mkstate(hover_x, hover_y, &k, &k);
+		win_hover(*hover_x, *hover_y);
+	}
+	if (which & MU_MESAG) {
+		const char *va;
+		switch (msg[0]) {
+		case MN_SELECTED:
+			command(mbar_command(&mb, msg[4]));
+			menu_tnormal(mb.tree, msg[3], 1);
+			break;
+		case AP_TERM:
+			quit = 1;
+			break;
+		default: {
+			DROP dr;
+			/* a file dropped is opened, as VA_START's */
+			switch (dd_message(msg, DD_WANT_FILES, &dr)) {
+			case DD_FILES: av_start(dr.data); break;
+			case DD_NONE:
+				if (av_message(msg, &va) == AV_START)
+					av_start(va);
+				else
+					win_message(msg);
+			}
+			dd_done(&dr);
+		}
+		}
+	}
+	if (win_iconified)	/* an icon takes no keys or clicks */
+		which &= ~(MU_KEYBD | MU_BUTTON);
+	if (which & MU_KEYBD) {
+		if (!shortcut(ev.kstate, ev.kreturn))
+			win_key(ev.kstate, ev.kreturn);
+		menu_update();
+	}
+	if (which & MU_BUTTON) {
+		short h = wind_find(ev.mx, ev.my), t, dd, mx, my, mbt, ks;
+		wind_get(0, WF_TOP, &t, &dd, &dd, &dd);
+		if (h > 0 && h != t)	/* a click in a window behind: bring it up too */
+			wind_set(h, WF_TOP, 0, 0, 0, 0);
+		if (win_mouse(ev.mx, ev.my, ev.mbutton, ev.breturn >= 2 ? 2 : 1, ev.kstate))
+			menu_update();
+		do {			/* the button let go */
+			graf_mkstate(&mx, &my, &mbt, &ks);
+			if (mbt & 3)
+				evnt_timer_(10);
+		} while (mbt & 3);
+	}
+}
+
+/* the next of the page's pictures: fetched and decoded, then drawn */
+static void pictures(void)
+{
+	int32_t y0, y1;
+	int r;
+	unsigned long t = pf_ms();
+	pics = 1;
+	conn_stop = 0;
+	conn_bytes = 0;
+	said[0] = 0;
+	r = br_pictures_step(&br, win_top(), win_page_h(), &y0, &y1);
+	pics = 0;
+	switch (r) {
+	case BRP_DRAWN:
+		if (y1 > y0)
+			win_page_drawn(y0, y1);
+		break;
+	case BRP_LAYOUT:
+		log_event("relaid %.400s height %ld ms %lu", br.url, br.p ? (long) br.p->height : 0L, pf_ms() - t);
+		win_page_relaid();
+		break;
+	case BRP_STOPPED:
+		break;
+	}
+	conn_stop = 0;
+	said[0] = 0;
+	if (!br_pictures_pending(&br)) {
+		win_status(br.pic_stopped ? "Pictures stopped." : "");
+		log_event("pictures %.400s %d", br.url, br.pic_done);
+		menu_update();
+	}
 }
 
 /* ---------------------------------------------------------------- start and end */
@@ -716,9 +897,21 @@ int main(void)
 			br_keep_max = tt / 4 < (24L << 20) ? tt / 4 : (24L << 20);
 		else if (st > 0)
 			br_keep_max = st / 8 < (2L << 20) ? st / 8 : (2L << 20);
+		/* and pictures (their files and decoded pixels): an eighth of
+		   the TT RAM up to 16 MB, else a sixteenth of the ST RAM up to
+		   1 MB, a file of a million pixels at most (GIF and interlaced
+		   PNG decode whole, four bytes a pixel) */
+		if (tt > 0) {
+			img_max = tt / 8 < (16L << 20) ? tt / 8 : (16L << 20);
+		} else if (st > 0) {
+			img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
+			img_max_px = 1L << 20;
+		}
 	}
 	br.search = opt.search;
+	br.pictures = opt.pictures;
 	br.say = say;
+	br.log = log_line;
 	win_open();
 	menu_update();
 	crash_offer("EWeb", "in EWeb's folder");
@@ -735,56 +928,16 @@ int main(void)
 
 	while (!quit) {
 		short which;
-		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1, 0x102, 3, 0, 0, msg, &ev);
-		if (which & MU_M1) {
-			short k;
-			graf_mkstate(&hover_x, &hover_y, &k, &k);
-			win_hover(hover_x, hover_y);
-		}
-		if (which & MU_MESAG) {
-			const char *va;
-			switch (msg[0]) {
-			case MN_SELECTED:
-				command(mbar_command(&mb, msg[4]));
-				menu_tnormal(mb.tree, msg[3], 1);
-				break;
-			case AP_TERM:
-				quit = 1;
-				break;
-			default: {
-				DROP dr;
-				/* a file dropped is opened, as VA_START's */
-				switch (dd_message(msg, DD_WANT_FILES, &dr)) {
-				case DD_FILES: av_start(dr.data); break;
-				case DD_NONE:
-					if (av_message(msg, &va) == AV_START)
-						av_start(va);
-					else
-						win_message(msg);
-				}
-				dd_done(&dr);
+		int more = !loading && !win_iconified && br_pictures_pending(&br);
+		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more ? MU_TIMER : 0), 0x102, 3, 0, 0, msg, &ev);
+		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+		if ((which & MU_TIMER) && !quit) {
+			pictures();
+			if (later.which) {
+				short w = later.which;
+				later.which = 0;
+				handle(w, later.msg, &later.ev, &hover_x, &hover_y);
 			}
-			}
-		}
-		if (win_iconified)	/* an icon takes no keys or clicks */
-			which &= ~(MU_KEYBD | MU_BUTTON);
-		if (which & MU_KEYBD) {
-			if (!shortcut(ev.kstate, ev.kreturn))
-				win_key(ev.kstate, ev.kreturn);
-			menu_update();
-		}
-		if (which & MU_BUTTON) {
-			short h = wind_find(ev.mx, ev.my), t, dd, mx, my, mbt, ks;
-			wind_get(0, WF_TOP, &t, &dd, &dd, &dd);
-			if (h > 0 && h != t)	/* a click in a window behind: bring it up too */
-				wind_set(h, WF_TOP, 0, 0, 0, 0);
-			if (win_mouse(ev.mx, ev.my, ev.mbutton, ev.breturn >= 2 ? 2 : 1, ev.kstate))
-				menu_update();
-			do {			/* the button let go */
-				graf_mkstate(&mx, &my, &mbt, &ks);
-				if (mbt & 3)
-					evnt_timer_(10);
-			} while (mbt & 3);
 		}
 	}
 

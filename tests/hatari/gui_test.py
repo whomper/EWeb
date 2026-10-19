@@ -7,10 +7,13 @@
   xdotool can move the mouse): pages from tests/net/server.py through
   FAKESTNG, a link clicked, Undo back, an address typed after ^L with an
   anchor on the page, a secure page (TLS on the emulated 68030 and DSP),
-  a slow download stopped with Esc, ^Q;
+  a slow download stopped with Esc, a page of pictures (fetched after the
+  page is shown, the window scrolled meanwhile), ^Q;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
-  and on its monochrome monitor; each must say it showed the page.
+  and on its monochrome monitor; each must say it showed the page; then
+  the page of pictures from the disk, each picture in the screen's own
+  colours.
 
 EWEB.PRG says what it does as "EWEB ..." lines through NatFeats; each step
 waits for the line it expects, then a screenshot goes to OUT.
@@ -51,6 +54,12 @@ def hd_for(name, home):
         shutil.copy(os.path.join(ROOT, f), hd)
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
+    import server
+    with open(os.path.join(hd, "PICS.HTM"), "wb") as f:
+        f.write(server.PICS_PAGE)
+    for k, (data, _) in server.PICS.items():
+        with open(os.path.join(hd, k.upper()), "wb") as f:
+            f.write(data)
     with open(os.path.join(hd, "EWEB.INF"), "w") as f:
         f.write("HOME=%s\r\n" % home)
     return hd
@@ -312,6 +321,26 @@ def browse():
         ev = r.wait(r"(stopped|shown )", 120)
         check("browse: Esc stops a load", ev == "stopped", str(r.events()))
         r.shot(5)
+        # a page of pictures: shown first, its pictures after, the window
+        # scrolled while they come (Down doesn't stop them)
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/pics.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("browse: a page of pictures shown", ev is not None and ev.startswith("shown %spics.html " % site),
+              str(r.events()))
+        r.key(DOWN)
+        r.key(DOWN, (SHIFT,))
+        ev = r.wait(r"pictures ", 600)
+        evs = r.events()
+        dec = [e for e in evs if e.startswith("picture %s" % site) and " decoded at " in e]
+        check("browse: its pictures, with the window scrolled meanwhile",
+              ev is not None and ev.endswith(" 6") and len(dec) == 5 and
+              any(e.startswith("picture %sgone.png failed" % site) for e in evs) and
+              any(e.startswith("relaid ") for e in evs), "\n".join(evs[-14:]))
+        r.key(0x47)		# ClrHome: the top
+        time.sleep(2)
+        r.shot(7)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:
@@ -336,6 +365,16 @@ def screens():
                       ready or "no ready line")
             time.sleep(2)
             r.shot(0)
+            # the page of pictures, from the disk: dithered to the screen's
+            # colours (true colour: as they are)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/PICS.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"pictures ", 300)
+            dec = [e for e in r.events() if " decoded at " in e]
+            check("screens: %s pictures" % name, ev is not None and len(dec) == 5, "\n".join(r.events()[-10:]))
+            time.sleep(2)
+            r.shot(1)
             r.key(Q, (CTRL,))
             check("screens: %s quits" % name, r.wait(r"quit$", 60) is not None, str(r.events()))
         finally:

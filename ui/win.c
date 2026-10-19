@@ -316,6 +316,34 @@ void win_scroll_by(int32_t dy)
 	win_scroll_to(top + dy);
 }
 
+/* a picture came: the part of the page from y0 to y1 drawn again, where
+   it is in the window */
+void win_page_drawn(int32_t y0, int32_t y1)
+{
+	GRECT r = r_page;
+	int32_t a = y0 - top, b = y1 - top;
+	if (win_h <= 0 || win_iconified || b <= 0 || a >= r_page.h)
+		return;
+	if (a < 0)
+		a = 0;
+	if (b > r_page.h)
+		b = r_page.h;
+	r.y = (short) (r_page.y + a);
+	r.h = (short) (b - a);
+	redraw(&r, 2);
+}
+
+/* the page laid out again (its pictures' sizes came): the same place on
+   it, all drawn */
+void win_page_relaid(void)
+{
+	if (top > max_top())
+		top = max_top();
+	br_scrolled(&br, top);
+	sliders();
+	win_redraw_page();
+}
+
 static int32_t line_step(void)
 {
 	return gl_hchar * 3;

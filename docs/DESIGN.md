@@ -540,8 +540,8 @@ releases.
   marker and `start`, `reversed` and `value`; `::before` and `::after` text; tables with shared column
   widths, `colspan`, `border-spacing`, shrinking to fit, and flex rows side by side; Hebrew words
   reordered right to left within each line (a word-level form of the bidirectional algorithm), with
-  right-to-left paragraphs aligned right. Pictures show their `alt` text; form controls are drawn as
-  boxes. Not yet: floats, positioning, `rowspan`, vertical alignment in cells, pictures, forms.
+  right-to-left paragraphs aligned right. Pictures (below, 19 Oct 2026); form controls are drawn as
+  boxes. Not yet: floats, positioning, `rowspan`, vertical alignment in cells, forms.
 - **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
   byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the
@@ -611,6 +611,73 @@ releases.
   through 32 KB in ST-RAM; a 1 MB download is 32 writes (it was 128 of 8 KB). `EWGET.TTP`'s log
   (`-l`) is written once a run, not at each milestone.
 
+## Pictures (19 Oct 2026)
+
+Your decisions (19 Oct 2026): **pictures first, then the layout's gaps** (floats, positioning,
+`rowspan`), and **the picture code shared** in AERA-Atari's `common/` rather than copied from
+EContact: `common/src/pic.c` and its decoders, which EContact's photos can move to.
+
+- **How a page gets them** (`src/browse/img.c`, `br_pictures_step`): the page is shown as soon as
+  its text is laid out; its pictures come after, those in the window first, then below, then above,
+  one a step of the main loop, each drawn as it comes. The window scrolls meanwhile (its arrows,
+  slider, Up, Down, Space, ClrHome); anything else (a link clicked, a menu, typing) stops the
+  picture coming, is done, and the pictures go on after it; Esc and Stop end them for the page.
+  Each address is kept once, with its file (so that another width or page size decodes it again
+  without fetching) and each size it is decoded at; their memory is counted (an eighth of the free
+  TT RAM up to 16 MB, else a sixteenth of the free ST RAM up to 1 MB), and
+  past it the pictures no page shows go first, then the decoded pixels of those only kept pages
+  show. A page kept for Back keeps its pictures.
+- **Their size on the page** (`src/layout`): CSS `width` and `height` (HTML's `width` and `height`
+  attributes are hints for them), else the file's own size, one from the other by the
+  proportions, within `max-width` and `max-height`; `vertical-align: middle` and `bottom` too.
+  Before a picture's file has come, the attributes' proportions stand in, or with neither its alt
+  text: the page is laid out again when such a picture comes with other proportions, at most once
+  in two seconds and when the last has come (in the GUI rig: 0.4 to 0.7 s on the emulated Falcon
+  for the test page). A picture not there yet is framed, its alt text in it. `data-src` and the
+  like stand in for a `src` that is missing or a `data:` placeholder; `data:` pictures are decoded
+  from the address itself.
+- **Decoding** (`common/src/pic.c`): straight to the size shown, never whole at the file's size
+  (but an interlaced PNG and a GIF, four bytes a pixel while they decode): a shrinking picture is
+  averaged, each pixel weighted by its alpha, an enlarged one repeats its pixels. Kept as the
+  Falcon's 16-bit colour with an alpha only when it has one; in true colour drawn as it is, alpha
+  mixed; in the modes with a palette dithered once (Floyd-Steinberg, serpentine) to the screen's
+  own pens, a colour wanted past the cube's edges finding the pen that lies that way (light blue
+  on 16 colours would otherwise come out grey); monochrome the same with black and white.
+- **JPEG: NetSurf's choice, libjpeg-turbo, over EContact's TJpgDec.** Both measured (68030
+  instructions under QEMU, `common/tests/pic`; the times at your DFB1's 5.2 million a second):
+
+  | A JPEG | shown at | TJpgDec | libjpeg-turbo 3.1.4 |
+  |---|---|---|---|
+  | 480 x 320 photo | its size | 26 M (5.0 s) | 19 M (3.7 s) |
+  | the same | 192 x 128 | 26 M (5.0 s) | 8.5 M (1.6 s) |
+  | 1589 x 1043 photo | 596 x 391 | 297 M (57 s) | 61 M (12 s) |
+  | 320 x 240, progressive | 128 x 96 | 0.85 M, 8x8 blocks only | 7.1 M, the real picture |
+
+  libjpeg-turbo's IDCT unpacks straight at n/8 of the size (TJpgDec's 1/2 and 1/4 do the whole
+  IDCT, then average), and it reads every JPEG a page has: progressive, arithmetic, CMYK. It costs 89 KB of program. Taken as its decoder only, 8-bit, without
+  the floating-point IDCT (AERA-Atari's `third_party/libjpeg-turbo/AERA.md`). TJpgDec stays in
+  `common/` for the 68000 programs.
+- **PNG** is fresh (`common/src/png.c`, on the family's inflate: NetSurf uses libpng, a library
+  too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
+  PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is
+  NetSurf's libnsgif, its first frame (a 48 x 48 GIF, 0.2 M).
+- **Dithering** costs 150 to 210 instructions a pixel (a 192 x 128 picture, 1 s; 16 and 256
+  colours alike, the nearest pens found among a few), the next thing to make quicker (the DSP, or
+  the 68030's own code); true colour has none.
+- **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
+  those. Not yet: CSS `background-image`, `srcset` and `<picture>`'s sources (the `<img>`'s own
+  `src` is taken), SVG, animation, `<input type=image>`.
+- **Off on a slow line:** View > Show pictures (`PICTURES=` in `EWEB.INF`): pages show their
+  pictures' alt text instead.
+- **Checked:** `common/tests/pic` (PngSuite, libjpeg-turbo's and libnsgif's test pictures and more
+  made from them, against Pillow with both JPEG decoders, cut short and damaged under
+  AddressSanitizer and UBSan, and the same bytes from the 68030 builds); `make itest` (a page of
+  pictures over HTTP: sizes, the page laid out again, a missing one, a picture on its own); `make
+  hatarigui` (the page of pictures over the network, scrolled while they come, and from the disk in
+  256 colours, true colour, TT medium and TT monochrome). The rig found a fault in the family's
+  FAKESTNG: a connection's number used again at once (a page stopped with Esc, then the next) got
+  the last of the old connection's data; fixed in AERA-Atari.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -663,8 +730,9 @@ AERA guidelines.
   selectors, media queries, CSS variables and flexbox.
 - **A narrow screen:** EWeb tells sites its screen is about 640 px wide, so responsive sites send their
   simpler mobile layout, which also fits the Falcon's screen.
-- **Images:** GIF, PNG and JPEG. JPEGs decode at 1/2, 1/4 or 1/8 size, which is much faster. EWeb asks
-  servers for JPEG and PNG only, so image servers don't send AVIF or WebP.
+- **Images:** GIF, PNG and JPEG. JPEGs decode at n/8 of their size when shown smaller, which is much
+  faster. EWeb asks servers for JPEG, PNG and GIF only, so image servers don't send AVIF or WebP
+  (done: above, 19 Oct 2026).
 - **First-party content only by default:** no third-party scripts, ads, trackers or web fonts. This also
   saves a slow TLS handshake for each extra domain.
 - **The rest:** forms, bookmarks, history, Hebrew (below), and a GEM interface that follows the AERA
@@ -883,6 +951,8 @@ out of both (their paths lead nowhere on the Atari).
    on your DFB1 (v0.7 to v0.9); then EWeb's fonts, the document, the layout, browsing and the GEM
    window (above): `EWEB.PRG`, the first text browser.
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
+   *Done so far (19 Oct 2026):* pictures (above). Next: floats, positioning, `rowspan` and
+   vertical alignment in cells (your order); then forms and cookies.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 

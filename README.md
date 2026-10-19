@@ -2,9 +2,9 @@
 
 A web browser for the Atari Falcon, written in C for GEM, made for a Falcon
 with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and fine on
-any Falcon or TT. This first browser shows the text of the web: pages laid
-out with their stylesheets, links, lists and tables, in EWeb's own fonts.
-Pictures and forms come next.
+any Falcon or TT. It shows the document web: pages laid out with their
+stylesheets, links, lists, tables and pictures, in EWeb's own fonts.
+Forms come next.
 
 ![EWeb on a Falcon](docs/screenshot.png)
 
@@ -19,6 +19,11 @@ Pictures and forms come next.
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
   and fresh layout code: blocks, lines, lists, tables, colours, borders, and
   Hebrew right to left.
+- **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
+  GIF, fetched after the page is shown (you read and scroll meanwhile),
+  decoded straight at the size shown, dithered to the screen's colours in
+  16 and 256 colours and monochrome; off with one menu item on a slow line.
+  The decoders are the family's (AERA-Atari's `common/src/pic.c`).
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
@@ -110,7 +115,7 @@ docs/GUIDE.md         the guide, made into EWEB.HYP (tools/mkhelp.py, docs/front
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
 ui/                   EWEB.PRG's GEM side: the window, the toolbar, the page on the
                       screen in every mode, the menus, the About box
-src/browse/           browsing: addresses, loading, history, EWeb's own pages
+src/browse/           browsing: addresses, loading, history, EWeb's own pages, the pages' pictures (img.c)
 src/doc/              the document: Hubbub's tree, the UA stylesheet, HTML's hints
 src/layout/           the layout: boxes, lines, tables, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
@@ -179,9 +184,16 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   there and a file that isn't a page).
 - `make hatarigui`: `EWEB.PRG` on an emulated Falcon through FAKESTNG, the
   mouse moved by xdotool: a page and its stylesheet, a link clicked, Undo,
-  an address typed with an anchor, a secure page, Esc stopping a download;
-  and a page drawn on the Falcon in 256 colours and true colour and on the
+  an address typed with an anchor, a secure page, Esc stopping a download,
+  a page of pictures (scrolled while they come); and a page and a page of
+  pictures drawn on the Falcon in 256 colours and true colour and on the
   TT in 16 colours and monochrome.
+- `make itest` also loads a page of pictures (`tests/net/server.py`'s
+  `/site/pics.html`): each decoded at the size shown, the page laid out
+  again for the one whose size it didn't give, the missing one failed; and
+  a picture on its own. The decoders' own tests (PngSuite, libjpeg-turbo's
+  and libnsgif's pictures against Pillow, the 68030 build under QEMU) are
+  AERA-Atari's `common/tests/pic`.
 - `make hatarifiles`: what `EWEB.PRG` and `EWGET.TTP` do on the disk, from
   Hatari's GEMDOS trace (the guidelines' 6.5): the opens and lookups of
   each case (start, a page with pictures, five pages, back and forward, the
@@ -201,9 +213,10 @@ EWeb is free software under the GNU General Public License, version 2 or (at
 your option) any later version; see [`COPYING`](COPYING). `EWEB.FNT` is drawn
 from the DejaVu fonts (Bitstream Vera's licence, free to use and to change,
 not to sell alone). NetSurf's libraries
-in `third_party/netsurf/`, `tests/html5lib/h5test.c` and BearSSL
-(`common/third_party/bearssl`) are under the MIT licence; `CACERT.PEM` is
-Mozilla's list of authorities (MPL 2.0).
+in `third_party/netsurf/` and `common/third_party/nsgif`, `tests/html5lib/h5test.c` and BearSSL
+(`common/third_party/bearssl`) are under the MIT licence; libjpeg-turbo
+(`common/third_party/libjpeg-turbo`) under the IJG's and the modified BSD
+licences; `CACERT.PEM` is Mozilla's list of authorities (MPL 2.0).
 
 ---
 

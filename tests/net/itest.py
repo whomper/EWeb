@@ -224,6 +224,24 @@ try:
         rc, out = browse("http://localhost:%d/chunked" % HTTP)
         check("the browser: not a page", rc == 0 and "EWeb can't show this" in out
               and "application/octet-stream" in out, out)
+        # pictures: fetched after the page, decoded at the size shown (a
+        # CSS pixel is 0.8 of the Falcon's), the page laid out again for
+        # the one whose size it didn't know; the missing one failed
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/pics.html" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        site = "http://localhost:%d/site/" % HTTP
+        want = {"photo.jpg": "192x128", "logo.png": "120x48", "anim.gif": "38x38", "prog.jpg": "128x96",
+                "big.png": "596x447"}
+        got = {m.group(2): m.group(1) for m in re.finditer(r"^image \S+ (\d+x\d+) link \d+ \"[^\"]*\" %s(\S+)$"
+                                                         % re.escape(site), out, re.M)}
+        decoded = re.findall(r"^picture %s(\S+) decoded at (\d+x\d+)" % re.escape(site), out, re.M)
+        check("the browser: pictures", p.returncode == 0 and all(got.get(k) == v for k, v in want.items())
+              and sorted(decoded) == sorted(want.items())
+              and re.search(r"^picture %sgone\.png failed" % re.escape(site), out, re.M) is not None, out)
+        rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
+        check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
+              and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)

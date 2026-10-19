@@ -239,7 +239,7 @@ BSSL_SRC  := $(sort $(wildcard $(BSSL)/src/*/*.c))
 BSSL_DEF  := -DBR_USE_URANDOM=0 -DBR_USE_GETENTROPY=0 -DBR_USE_UNIX_TIME=0 -DBR_USE_WIN32_TIME=0 \
              -DBR_USE_WIN32_RAND=0 -DBR_RDRAND=0
 NET_SRC   := $(sort $(wildcard src/net/*.c))
-NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c
+NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c common/src/inflate.c
 NET_HDRS  := $(wildcard src/*.h src/net/*.h ui/*.h tests/net/*.h common/src/*.h common/atari/*.h \
              common/atari/include/*.h common/ui/*.h atari/include/*.h)
 NET_INC   := -Isrc -Isrc/net -Icommon/src -Iatari -Icommon/atari -Iui -Icommon/ui -Itests/net -I$(BSSL)/inc
@@ -285,7 +285,7 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
 # common/'s files as the other AERA apps build them
 COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
-              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o net_tos.o sting.o sting_s.o dsprsa.o \
+              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o inflate.o net_tos.o sting.o sting_s.o dsprsa.o \
               dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o bigbuf.o)
 build/tos/net/dspec.o: common/dsp/ec_prog.h
 build/tos/net/%.o: src/net/%.c $(NET_HDRS)
@@ -327,6 +327,43 @@ binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
+# pictures (common/src/pic.c): JPEG with libjpeg-turbo (NetSurf's choice,
+# 8-bit only: pic_lj8.c), PNG (png.c), GIF (NetSurf's libnsgif)
+PIC_C    := pic png pic_lj8
+LJ       := common/third_party/libjpeg-turbo
+LJ_C     := jaricom jcomapi jdapimin jdapistd jdarith jdcoefct jdcolor jddctmgr jdhuff jdinput jdmainct \
+            jdmarker jdmaster jdmerge jdphuff jdpostct jdsample jidctfst jidctint jidctred jmemmgr \
+            jmemnobs jquant1 jquant2 jutils
+PIC_INC  := -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -I$(LJ)/src -I$(LJ)/config -Icommon/third_party/nsgif/include
+TOSPIC_OBJ := $(addprefix build/tos/pic/,$(addsuffix .o,$(PIC_C) $(LJ_C) gif lzw))
+build/tos/pic/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) $(COMMON_WARN) -c $< -o $@
+build/tos/pic/%.o: $(LJ)/src/%.c $(wildcard $(LJ)/src/*.h $(LJ)/config/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -w -c $< -o $@
+build/tos/pic/%.o: common/third_party/nsgif/src/%.c common/third_party/nsgif/include/nsgif.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
+HOSTPIC_SRC := $(addprefix common/src/,$(addsuffix .c,$(PIC_C)))
+HOSTPIC_3P  := $(addprefix $(LJ)/src/,$(addsuffix .c,$(LJ_C))) common/third_party/nsgif/src/gif.c \
+               common/third_party/nsgif/src/lzw.c
+HOSTPIC_INC  = -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT $(addprefix -I$(CURDIR)/,common/src $(LJ)/src $(LJ)/config \
+               common/third_party/nsgif/include)
+build/host/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
+	@rm -rf build/host/pic && mkdir -p build/host/pic
+	cd build/host/pic && $(HOSTCC) -O2 -g -std=gnu99 -Wall -Wno-sign-compare $(HOSTPIC_INC) \
+		-c $(addprefix $(CURDIR)/,$(HOSTPIC_SRC))
+	cd build/host/pic && $(HOSTCC) -O2 -g -std=gnu99 -DNDEBUG -w $(HOSTPIC_INC) -c $(addprefix $(CURDIR)/,$(HOSTPIC_3P))
+	rm -f $@ && ar rcs $@ build/host/pic/*.o
+build/asan/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
+	@rm -rf build/asan/pic && mkdir -p build/asan/pic
+	cd build/asan/pic && $(HOSTCC) -O1 -g -std=gnu99 $(SAN) -Wall -Wno-sign-compare $(HOSTPIC_INC) \
+		-c $(addprefix $(CURDIR)/,$(HOSTPIC_SRC))
+	cd build/asan/pic && $(HOSTCC) -O1 -g -std=gnu99 $(SAN) -DNDEBUG -w $(HOSTPIC_INC) \
+		-c $(addprefix $(CURDIR)/,$(HOSTPIC_3P))
+	rm -f $@ && ar rcs $@ build/asan/pic/*.o
+
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
@@ -347,7 +384,7 @@ build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(tos_HUB) $(TOSNET_OBJ) \
+build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(tos_HUB) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
@@ -370,12 +407,14 @@ binary/EWEB.FNT: tools/mkfont.py
 # a page drawn on this computer as EWeb draws it on the Falcon (PNG),
 # loaded as EWeb loads it: a file, or a URL
 EWR_SRC := tests/host/ewrender.c tests/host/dsp_none.c $(HOSTNET_SRC)
-build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(host_HUB) $(NET_HDRS) build/host/libbearssl.a
+build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(host_HUB) $(NET_HDRS) build/host/libbearssl.a \
+		build/host/pic.a
 	$(HOSTCC) -O2 -g -std=gnu99 $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) \
-		$(host_HUB) build/host/libbearssl.a
-build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a
+		$(host_HUB) build/host/pic.a build/host/libbearssl.a
+build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_HUB) $(NET_HDRS) build/host/libbearssl.a \
+		build/asan/pic.a
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
-		$(asan_PU) $(asan_HUB) build/host/libbearssl.a
+		$(asan_PU) $(asan_HUB) build/asan/pic.a build/host/libbearssl.a
 
 # fuzzing (the AERA guidelines, 7.1): what servers send, and the
 # addresses in pages. Needs clang with libFuzzer; make fuzz runs each
