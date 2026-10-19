@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Floats, positions, rows</title><style>
+body { font-family: sans-serif; background: #fff; margin: 8px }
+.box { float: right; width: 160px; border: 1px solid #888; background: #eee; margin: 0 0 6px 10px; padding: 4px }
+.side { float: left; width: 90px; height: 60px; background: #fdd; margin-right: 8px }
+.clear { clear: both; border-top: 2px solid navy }
+.own { overflow: hidden; background: #eef }
+.l { float: left; width: 30%; background: #fed } .r { float: right; width: 30%; background: #dfe }
+.head { position: relative; height: 30px; background: #036; color: #fff }
+.head .a { position: absolute; left: 6px; top: 6px } .head .b { position: absolute; right: 6px; top: 6px }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden }
+.moved { position: relative; left: 12px; top: 3px }
+td, th { border: 1px solid #888 }
+</style></head><body>
+<div class=head><span class=a>Left</span><span class=b>Right</span></div>
+<p><span class=sr>Read only by screen readers</span>After the header.</p>
+<div class=box>A box floated right, with words enough for three lines of it.</div>
+<p>A paragraph beside the box on the right: its lines are shortened until the box ends, then they take the whole width again, as browsers do.</p>
+<div class=side>Left</div>
+<p>This one starts beside a float on the left and the box on the right, lines shortened on both sides, words going on long enough to pass the floats.</p>
+<p class=clear>Below every float.</p>
+<div class=own><div class=l>Floated left</div><div class=r>Floated right</div><p>Between two floats in a box that holds them.</p></div>
+<p class=moved>Moved by position: relative.</p>
+<table align=right border=1><tr><td>A table</td></tr><tr><td>floated right</td></tr></table>
+<p>Text beside a table that align=right floats.</p>
+<table cellpadding=3>
+<tr><th rowspan=3>Three rows</th><td>One</td><td style="background:#fed">Short</td></tr>
+<tr><td>Two, with more words in it than the others have</td><td valign=bottom>Down</td></tr>
+<tr><td colspan=2>Three, across two</td></tr>
+<tr><td>Four</td><td>Five</td><td valign=top>Up</td></tr>
+</table>
+</body></html>

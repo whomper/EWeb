@@ -50,7 +50,7 @@ text 568,136 29x17 #000000 sans13 link 0 "right"
 fill 261,144 51x18 #ccddee
 text 262,158 49x17 #000000 sans13 link 0 "centred"
 text 313,158 32x17 #000000 sans13 link 0 "table"
-text 9,178 34x17 #000000 sans13 link 0 "outer"
+text 9,183 34x17 #000000 sans13 link 0 "outer"
 text 52,183 32x17 #000000 sans13 link 0 "inner"
 fill 50,168 36x1 #808080
 fill 50,187 36x1 #808080

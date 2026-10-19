@@ -13,8 +13,11 @@
  *            side; a block of text breaks into lines with EWeb's fonts.
  *            Fills (backgrounds, borders) and text runs go to the page's
  *            display list as they are placed.
- * Floats and positioning are laid out as ordinary blocks; tables as rows
- * of cells side by side, each row on its own (columns don't line up yet).
+ * Floats (left and right) go beside what follows them in their block
+ * formatting context: lines are shortened next to them, clear moves below
+ * them, and a block that starts a context of its own (a cell, a float,
+ * overflow other than visible) holds its floats. Positioning is laid out
+ * as ordinary blocks; tables as rows of cells side by side.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -89,6 +92,7 @@ struct box {
 	uint8_t atom;			/* AT_* */
 	uint8_t tablerow;
 	uint8_t table;			/* a table: shrinks to fit, its rows share column widths */
+	uint8_t repl;			/* a picture as a block (floated, display: block): its one child the atom */
 	uint16_t link;			/* 1 + link index, or 0 */
 	dnode *n;			/* the element, or NULL */
 	const ec_style *st;		/* its style (an anonymous box or text: the parent's) */
@@ -124,6 +128,12 @@ typedef struct {
 	int32_t x;			/* where it went on its line */
 } ITEM;
 
+/* a float placed, in device px on the page */
+typedef struct {
+	int32_t x0, x1, y0, y1;
+	uint8_t right;
+} FLT;
+
 typedef struct {
 	page *p;
 	struct arena *a;
@@ -133,6 +143,25 @@ typedef struct {
 	int body_bg_taken;
 	int fail;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
+	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
+	/* the last block laid out: its background and border items (-1:
+	   none), for a row to stretch its cells to the row's height */
+	long last_bg, last_bd[4];
+	/* the table being laid out: per column, the rows a cell from above
+	   still takes, and for the cell's first column where it began */
+	struct span {
+		int rows;
+		int head;		/* the cell's first column */
+		int32_t top, h;		/* its row's top and its height */
+		long bg, bd[4], k0, k1;	/* its background, borders and items */
+		int va;			/* its vertical-align */
+	} *spans;
+	/* positioned boxes' containing block: the nearest positioned
+	   ancestor's padding box (the page at first) */
+	int32_t cbx, cby, cbw;
+	FLT *fl;			/* the floats placed; those of the context being laid out */
+	int nfl, flcap, fl0;		/* from fl0 on */
+	int32_t fl_top;			/* no float of this context goes higher than the last */
 	int32_t *cols;			/* the table being laid out: its column widths */
 	int ncols;
 	int32_t sp_h, sp_v;		/* and its border-spacing */
@@ -651,11 +680,21 @@ static void build_element(L *l, box *parent, dnode *c)
 		if (src != NULL && l->p->opt.image != NULL)
 			h = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
 		if (h != NULL) {
-			atom(l, parent, c, st, AT_IMAGE, alt, AUTO, AUTO);
-			if (parent->last != NULL && parent->last->n == c) {
-				parent->last->img = h;
-				parent->last->iw = iw;
-				parent->last->ih = ih;
+			box *in = parent;
+			if (block_level(d)) {
+				/* floated or display: block: a block of its own round it */
+				in = new_box(l, BX_BLOCK, c, st, parent);
+				if (in == NULL)
+					return;
+				in->repl = 1;
+				if (parent->link)
+					in->link = parent->link;
+			}
+			atom(l, in, c, st, AT_IMAGE, alt, AUTO, AUTO);
+			if (in->last != NULL && in->last->n == c) {
+				in->last->img = h;
+				in->last->iw = iw;
+				in->last->ih = ih;
 			}
 		} else if (alt != NULL && *alt != 0) {
 			atom(l, parent, c, st, AT_LABEL, alt, AUTO, AUTO);
@@ -1167,6 +1206,82 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 	}
 }
 
+/* ---------------------------------------------------------------- floats */
+
+/* what floats of the context leave of x0..x1 between y0 and y1; 1 if
+   any float is there */
+static int band(L *l, int32_t y0, int32_t y1, int32_t x0, int32_t x1, int32_t *lx, int32_t *rx)
+{
+	int i, any = 0;
+	*lx = x0;
+	*rx = x1;
+	for (i = l->fl0; i < l->nfl; i++) {
+		const FLT *f = &l->fl[i];
+		if (f->y1 <= y0 || f->y0 >= y1 || f->x1 <= x0 || f->x0 >= x1)
+			continue;
+		any = 1;
+		if (f->right) {
+			if (f->x0 < *rx)
+				*rx = f->x0;
+		} else if (f->x1 > *lx) {
+			*lx = f->x1;
+		}
+	}
+	return any;
+}
+
+/* the first float bottom below y that is beside x0..x1 (AUTO: none) */
+static int32_t next_bottom(L *l, int32_t y, int32_t x0, int32_t x1)
+{
+	int i;
+	int32_t b = AUTO;
+	for (i = l->fl0; i < l->nfl; i++) {
+		const FLT *f = &l->fl[i];
+		if (f->y1 > y && f->y0 <= y && f->x1 > x0 && f->x0 < x1 && (b == AUTO || f->y1 < b))
+			b = f->y1;
+	}
+	return b;
+}
+
+/* the lowest bottom of the context's floats on a side (KW_LEFT, KW_RIGHT,
+   KW_BOTH), or AUTO */
+static int32_t floats_bottom(L *l, int side)
+{
+	int i;
+	int32_t b = AUTO;
+	for (i = l->fl0; i < l->nfl; i++) {
+		const FLT *f = &l->fl[i];
+		if ((side == KW_BOTH || (side == KW_RIGHT) == (f->right != 0)) && (b == AUTO || f->y1 > b))
+			b = f->y1;
+	}
+	return b;
+}
+
+/* the display list from item k on moved by (dx, dy) */
+static void shift_items(L *l, long k, int32_t dx, int32_t dy)
+{
+	for (; k < l->p->nitems; k++) {
+		l->p->items[k].x += dx;
+		l->p->items[k].y += dy;
+	}
+}
+
+/* a box that starts a block formatting context of its own: its floats
+   are its own, and it holds them */
+static int own_context(const box *b)
+{
+	int d;
+	if (b->parent == NULL || b->anon)
+		return b->parent == NULL;
+	if (b->parent->row || b->table || kw(b->st, EP_FLOAT) != KW_NONE || kw(b->st, EP_POSITION) == KW_ABSOLUTE ||
+	    kw(b->st, EP_POSITION) == KW_FIXED)
+		return 1;
+	d = kw(b->st, EP_DISPLAY);
+	if (d == KW_INLINE_BLOCK || d == KW_FLOW_ROOT || d == KW_TABLE_CELL || d == KW_FLEX || d == KW_GRID)
+		return 1;
+	return kw(b->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(b->st, EP_OVERFLOW_Y) != KW_VISIBLE;
+}
+
 /* ---------------------------------------------------------------- lines */
 
 static void reverse(long *o, uint8_t *d, long a, long b)
@@ -1223,6 +1338,27 @@ static void visual_order(L *l, long i, long j, int rtl, long *ord)
 	free(d);
 }
 
+/* a picture's item in the display list */
+static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
+		       int flags)
+{
+	dl_item *d = dl_add(l);
+	if (d == NULL)
+		return;
+	d->type = DL_IMAGE;
+	d->x = x;
+	d->y = y;
+	d->w = w;
+	d->h = h;
+	d->link = link;
+	d->img = b->img;
+	d->flags = (uint8_t) flags;
+	d->text = b->text;	/* its alt text, while it comes */
+	d->len = b->len;
+	d->font = f;
+	d->rgb = 0x606060;
+}
+
 static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 {
 	box *b = it->atom;
@@ -1230,23 +1366,10 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 	if (b->atom == AT_IMAGE) {
 		int32_t iw, ih;
 		int guess = image_size(l, b, &iw, &ih), sized = iw > 0 && ih > 0;
-		dl_item *d = dl_add(l);
-		if (d == NULL)
-			return;
 		/* with no size yet: its alt text, drawn below, and its place for
 		   the picture to be fetched (DLF_ALT: nothing drawn) */
-		d->type = DL_IMAGE;
-		d->x = x;
-		d->y = y;
-		d->w = sized ? iw : it->w;
-		d->h = sized ? ih : h;
-		d->link = it->link;
-		d->img = b->img;
-		d->flags = (uint8_t) ((guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT));
-		d->text = b->text;	/* its alt text, while it comes */
-		d->len = b->len;
-		d->font = it->font;
-		d->rgb = 0x606060;
+		image_item(l, b, x, y, sized ? iw : it->w, sized ? ih : h, it->link, it->font,
+			   (guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT));
 		if (sized)
 			return;
 	}
@@ -1326,7 +1449,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	}
 	while (i < l->nit) {
 		long j, k, last_break = -1, end;
-		int32_t lw = 0, avail = w - (firstline ? indent : 0), asc = strut_a, desc = strut_d, off, base;
+		int32_t lw = 0, avail, asc = strut_a, desc = strut_d, off, base, lx = x, lwid = w;
 		int any = 0, broke = 0, justify;
 
 		/* the line's start: collapsible spaces go */
@@ -1334,6 +1457,23 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			i++;
 		if (i >= l->nit)
 			break;
+		if (l->nfl > l->fl0) {
+			/* beside the floats there: below them when not even the
+			   first word fits */
+			int32_t rx, need = l->it[i].w < w ? l->it[i].w : w, hgt, nb;
+			int tries;
+			for (tries = 0; tries < 64; tries++) {
+				hgt = l->it[i].asc + l->it[i].desc > lh ? l->it[i].asc + l->it[i].desc : lh;
+				if (!band(l, cy, cy + hgt, x, x + w, &lx, &rx) || rx - lx >= need)
+					break;
+				nb = next_bottom(l, cy, x, x + w);
+				if (nb == AUTO || nb <= cy)
+					break;
+				cy = nb;
+			}
+			lwid = rx - lx;
+		}
+		avail = lwid - (firstline ? indent : 0);
 		for (j = i; j < l->nit; j++) {
 			ITEM *it = &l->it[j];
 			if (it->kind == IT_BREAK) {
@@ -1385,7 +1525,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			if (it->desc > desc)
 				desc = it->desc;
 		}
-		avail = w - (firstline ? indent : 0);
+		avail = lwid - (firstline ? indent : 0);
 		off = firstline ? indent : 0;
 		if (ta == KW_RIGHT || (ta == KW_END && !rtl) || ((ta == KW_START || ta == KW_JUSTIFY || ta == 0) && rtl))
 			off += avail - lw;
@@ -1417,7 +1557,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 		visual_order(l, i, end, rtl, ord);
 		/* positions, backgrounds, then the text */
 		{
-			int32_t px = x + off;
+			int32_t px = lx + off;
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
 				it->x = px;
@@ -1488,6 +1628,21 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	return h;
 }
 
+/* a picture as a block of its own (floated, display: block): no line
+   round it; with no size yet, its alt text on a line */
+static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
+{
+	box *a = b->first;
+	int32_t iw, ih, fb = AUTO;
+	int guess;
+	l->cw = w;
+	guess = image_size(l, a, &iw, &ih);
+	if (iw <= 0 || ih <= 0)
+		return inline_layout(l, b, x, y, w, &fb);
+	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st), guess ? DLF_NOSIZE : 0);
+	return ih;
+}
+
 /* ---------------------------------------------------------------- measuring */
 
 static int32_t measure(L *l, box *b);
@@ -1504,6 +1659,13 @@ static int32_t inline_measure(L *l, box *b)
 	l->cw = AUTO;
 	runstate(l, &r, b->st, NULL, b->link);
 	collect(l, b, &r, &line_start);
+	if (l->minw && !keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
+		/* the narrowest: its widest word or picture */
+		for (i = 0; i < l->nit; i++)
+			if (l->it[i].kind != IT_SPACE && l->it[i].kind != IT_BREAK && l->it[i].w > best)
+				best = l->it[i].w;
+		return best;
+	}
 	for (i = 0; i < l->nit; i++) {
 		if (l->it[i].kind == IT_BREAK) {
 			if (lw > best)
@@ -1539,7 +1701,13 @@ static int32_t measure(L *l, box *b)
 			return w + len0(l, b->st, EP_MARGIN_LEFT, AUTO) + len0(l, b->st, EP_MARGIN_RIGHT, AUTO);
 		return w + extras(l, b);
 	}
-	if (b->inl) {
+	if (b->repl) {
+		int32_t ih;
+		l->cw = AUTO;
+		image_size(l, b->first, &inner, &ih);
+		if (inner <= 0)
+			inner = inline_measure(l, b);
+	} else if (b->inl) {
 		inner = inline_measure(l, b);
 	} else if (b->table) {
 		/* its columns at their widest, and the spacing between them */
@@ -1681,19 +1849,35 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 	return cw + extras(l, c);
 }
 
-static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n)
+static int rowspan(const box *c);
+
+/* a row's cells' widths into their columns; occ: per column, the rows a
+   cell from a row above still takes (as row_layout skips them) */
+static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n, int *occ)
 {
 	box *c;
-	int i = 0;
+	int i = 0, k, taken[MAXCOLS];
+	for (k = 0; k < MAXCOLS; k++)
+		taken[k] = occ[k] > 0;
 	for (c = r->first; c != NULL && i < MAXCOLS; c = c->next) {
-		int span = colspan(c);
+		int span = colspan(c), rs = rowspan(c);
+		while (i < MAXCOLS && taken[i])
+			i++;
+		if (i >= MAXCOLS)
+			break;
 		if (span == 1) {
 			int32_t p = cell_pref(l, c, w);
 			if (p > cols[i])
 				cols[i] = p;
 		}
+		for (k = i; k < i + span && k < MAXCOLS; k++)
+			if (rs > 1)
+				occ[k] = rs;
 		i += span;
 	}
+	for (k = 0; k < MAXCOLS; k++)
+		if (occ[k] > 0)
+			occ[k]--;
 	if (i > MAXCOLS)
 		i = MAXCOLS;
 	if (i > *n)
@@ -1704,31 +1888,47 @@ static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n)
 static int columns(L *l, box *t, int32_t w, int32_t *cols)
 {
 	box *c, *r;
-	int n = 0;
+	int n = 0, occ[MAXCOLS];
 	memset(cols, 0, MAXCOLS * sizeof *cols);
+	memset(occ, 0, sizeof occ);
 	for (c = t->first; c != NULL; c = c->next) {
 		if (c->tablerow)
-			col_row(l, c, w, cols, &n);
+			col_row(l, c, w, cols, &n, occ);
 		else if (!c->row)
 			for (r = c->first; r != NULL; r = r->next)
 				if (r->tablerow)
-					col_row(l, r, w, cols, &n);
+					col_row(l, r, w, cols, &n, occ);
 	}
 	return n;
 }
 
-/* fits the columns into w: shares out what is over or under */
-static void fit_columns(int32_t *cols, int n, int32_t w, int grow)
+/* fits the columns into w: shares out what is over or under. Too wide,
+   each keeps the narrowest it goes (mins: its longest word) and the rest
+   is shared by how much more each would take */
+static void fit_columns(int32_t *cols, const int32_t *mins, int n, int32_t w, int grow)
 {
-	int32_t total = 0, given = 0;
+	int32_t total = 0, given = 0, tmin = 0;
 	int i;
 	for (i = 0; i < n; i++) {
 		if (cols[i] < 1)
 			cols[i] = 1;
 		total += cols[i];
+		tmin += mins[i] < cols[i] ? mins[i] : cols[i];
 	}
 	if (total == w || n == 0 || (total < w && !grow))
 		return;
+	if (total > w && tmin < w) {
+		int32_t room = w - tmin, extra = total - tmin;
+		for (i = 0; i < n; i++) {
+			int32_t m = mins[i] < cols[i] ? mins[i] : cols[i];
+			int32_t k = m + (extra > 0 ? (int32_t) ((int64_t) (cols[i] - m) * room / extra) : 0);
+			cols[i] = k < 1 ? 1 : k;
+			given += cols[i];
+		}
+		if (w - given > 0)
+			cols[n - 1] += w - given;
+		return;
+	}
 	for (i = 0; i < n; i++) {
 		int32_t k = (int32_t) ((int64_t) cols[i] * w / total);
 		if (k < 1)
@@ -1740,13 +1940,59 @@ static void fit_columns(int32_t *cols, int n, int32_t w, int grow)
 		cols[n - 1] += w - given;
 }
 
+/* a block's background and borders (as layout_block left them in
+   last_bg, last_bd) made dh taller */
+static void stretch(L *l, long bg, const long *bd, int32_t dh)
+{
+	dl_item *it = l->p->items;
+	if (dh <= 0)
+		return;
+	if (bg >= 0)
+		it[bg].h += dh;
+	if (bd[1] >= 0)
+		it[bd[1]].y += dh;
+	if (bd[2] >= 0)
+		it[bd[2]].h += dh;
+	if (bd[3] >= 0)
+		it[bd[3]].h += dh;
+}
+
+/* a cell's content (its items from k0 to k1, but its background and
+   borders) moved down dy: vertical-align middle or bottom */
+static void cell_shift(L *l, long k0, long k1, long bg, const long *bd, int32_t dy)
+{
+	long k;
+	int j;
+	if (dy <= 0)
+		return;
+	for (k = k0; k < k1; k++) {
+		if (k == bg)
+			continue;
+		for (j = 0; j < 4 && bd[j] != k; j++)
+			;
+		if (j == 4)
+			l->p->items[k].y += dy;
+	}
+}
+
+static int rowspan(const box *c)
+{
+	const char *v = c->n != NULL ? dn_attr(c->n, "rowspan") : NULL;
+	int n = v != NULL ? atoi(v) : 1;
+	return n < 1 ? 1 : n > 1000 ? 1000 : n;
+}
+
 /* children side by side: a table row's cells, a flex row's items */
 static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t *first)
 {
 	box *c;
 	int n = 0, i, col = 0;
 	int32_t *pref, total = 0, h = 0, cx, lineh = 0, cy = y, *cols = b->tablerow ? l->cols : NULL;
+	int32_t colx[MAXCOLS + 1];
 	box **kids;
+	int *start = NULL, above[MAXCOLS];
+	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[4] = NULL;
+	int32_t *hh = NULL;
 
 	for (c = b->first; c != NULL; c = c->next)
 		n++;
@@ -1754,17 +2000,43 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 		return 0;
 	pref = malloc(n * sizeof *pref);
 	kids = malloc(n * sizeof *kids);
-	if (pref == NULL || kids == NULL) {
+	start = malloc(n * sizeof *start);
+	k0 = malloc(n * sizeof *k0);
+	k1 = malloc(n * sizeof *k1);
+	kbg = malloc(n * sizeof *kbg);
+	kbd = malloc(n * sizeof *kbd);
+	hh = malloc(n * sizeof *hh);
+	if (pref == NULL || kids == NULL || start == NULL || k0 == NULL || k1 == NULL || kbg == NULL || kbd == NULL ||
+	    hh == NULL) {
 		free(pref);
 		free(kids);
+		free(start);
+		free(k0);
+		free(k1);
+		free(kbg);
+		free(kbd);
+		free(hh);
 		l->fail = 1;
 		return 0;
 	}
+	if (cols != NULL) {
+		/* where each column starts; which are taken by a cell from a row above */
+		colx[0] = x + l->sp_h;
+		for (i = 0; i < l->ncols; i++)
+			colx[i + 1] = colx[i] + cols[i] + l->sp_h;
+		for (i = 0; i < MAXCOLS; i++)
+			above[i] = l->spans != NULL && l->spans[i].rows > 0;
+	}
 	for (c = b->first, i = 0; c != NULL; c = c->next, i++) {
 		kids[i] = c;
+		start[i] = 0;
 		if (cols != NULL) {
-			/* a table's row: its cells take the table's columns */
+			/* a table's row: its cells take the table's columns, past
+			   those a cell from above still takes */
 			int span = colspan(c), k;
+			while (col < l->ncols && above[col])
+				col++;
+			start[i] = col;
 			pref[i] = 0;
 			for (k = 0; k < span && col < l->ncols; k++)
 				pref[i] += cols[col++] + (k > 0 ? l->sp_h : 0);
@@ -1816,22 +2088,186 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	}
 	for (i = 0; i < n; i++) {
 		int32_t mb, ch, f = AUTO, pw = pref[i] > w ? w : pref[i];
+		if (cols != NULL && start[i] < l->ncols)
+			cx = colx[start[i]];
 		if (b->wrap && cx > x && cx + pw > x + w) {
 			cy += lineh;
 			lineh = 0;
 			cx = x;
 		}
+		k0[i] = l->p->nitems;
 		ch = layout_block(l, kids[i], cx, cy, pw, 1, &mb, &f);
+		k1[i] = l->p->nitems;
+		kbg[i] = l->last_bg;
+		memcpy(kbd[i], l->last_bd, sizeof kbd[i]);
+		hh[i] = ch;
 		if (*first == AUTO && f != AUTO)
 			*first = f;
-		if (ch > lineh)
+		/* a cell taking rows below doesn't set this row's height */
+		if (ch > lineh && !(cols != NULL && rowspan(kids[i]) > 1 && l->spans != NULL))
 			lineh = ch;
 		cx += pw + (cols != NULL ? l->sp_h : 0);
+	}
+	if (cols != NULL && l->spans != NULL) {
+		int k;
+		/* the cells from above that end in this row: the row as tall as
+		   they need, and they as tall as their rows */
+		for (k = 0; k < l->ncols; k++) {
+			struct span *sp = &l->spans[k];
+			if (!above[k] || --sp->rows > 0 || sp->head != k)
+				continue;
+			if (sp->top + sp->h > cy + lineh)
+				lineh = sp->top + sp->h - cy;
+		}
+		for (k = 0; k < l->ncols; k++) {
+			struct span *sp = &l->spans[k];
+			int32_t dh = cy + lineh - sp->top - sp->h;
+			if (!above[k] || sp->rows != 0 || sp->head != k)
+				continue;
+			stretch(l, sp->bg, sp->bd, dh);
+			if (sp->va == KW_MIDDLE || sp->va == KW_BOTTOM)
+				cell_shift(l, sp->k0, sp->k1, sp->bg, sp->bd, sp->va == KW_MIDDLE ? dh / 2 : dh);
+		}
+		/* this row's cells that take rows below */
+		for (i = 0; i < n; i++) {
+			int rs = rowspan(kids[i]), span = colspan(kids[i]), j;
+			if (rs < 2)
+				continue;
+			for (j = start[i]; j < start[i] + span && j < l->ncols; j++) {
+				struct span *sp = &l->spans[j];
+				sp->rows = rs - 1;
+				sp->head = start[i];
+				sp->top = cy;
+				sp->h = hh[i];
+				sp->bg = kbg[i];
+				memcpy(sp->bd, kbd[i], sizeof sp->bd);
+				sp->k0 = k0[i];
+				sp->k1 = k1[i];
+				sp->va = kids[i]->anon ? 0 : kw(kids[i]->st, EP_VERTICAL_ALIGN);
+			}
+		}
+	}
+	/* each cell as tall as its row (a flex row's items too: they
+	   stretch), its content where vertical-align puts it */
+	if (!b->wrap) {
+		for (i = 0; i < n; i++) {
+			int32_t dh = lineh - hh[i];
+			int va;
+			if (cols != NULL && rowspan(kids[i]) > 1 && l->spans != NULL)
+				continue;
+			stretch(l, kbg[i], kbd[i], dh);
+			va = kids[i]->anon ? 0 : kw(kids[i]->st, EP_VERTICAL_ALIGN);
+			if (b->tablerow && dh > 0 && (va == KW_MIDDLE || va == KW_BOTTOM))
+				cell_shift(l, k0[i], k1[i], kbg[i], kbd[i], va == KW_MIDDLE ? dh / 2 : dh);
+		}
 	}
 	h = cy + lineh - y;
 	free(pref);
 	free(kids);
+	free(start);
+	free(k0);
+	free(k1);
+	free(kbg);
+	free(kbd);
+	free(hh);
 	return h;
+}
+
+/* a float of the block being laid out (its content x..x+w), its top no
+   higher than y: laid out at its width (asked for, or its widest within
+   w), then put as far left or right as it goes where it fits beside the
+   floats already there, else below them */
+static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y)
+{
+	int right = kw(c->st, EP_FLOAT) == KW_RIGHT, clr = kw(c->st, EP_CLEAR), tries;
+	int32_t wf = cell_pref(l, c, w), hf, mb, f = AUTO, fy, lx = x, rx = x + w, nb;
+	long k0 = l->p->nitems;
+	FLT *fl;
+	if (wf > w)
+		wf = w;
+	if (wf < 1)
+		wf = 1;
+	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+	if (l->fail)
+		return;
+	fy = y > l->fl_top ? y : l->fl_top;
+	if (clr == KW_LEFT || clr == KW_RIGHT || clr == KW_BOTH) {
+		int32_t cb = floats_bottom(l, clr);
+		if (cb != AUTO && cb > fy)
+			fy = cb;
+	}
+	for (tries = 0; tries < 64; tries++) {
+		if (!band(l, fy, fy + (hf > 0 ? hf : 1), x, x + w, &lx, &rx) || rx - lx >= wf)
+			break;
+		nb = next_bottom(l, fy, x, x + w);
+		if (nb == AUTO || nb <= fy)
+			break;
+		fy = nb;
+	}
+	if (rx - lx < wf) {
+		lx = x;
+		rx = x + w;
+	}
+	shift_items(l, k0, right ? rx - wf : lx, fy);
+	if (c->n != NULL)
+		c->n->y += fy;
+	if (l->nfl == l->flcap) {
+		int cap = l->flcap ? l->flcap * 2 : 32;
+		FLT *n2 = realloc(l->fl, cap * sizeof *n2);
+		if (n2 == NULL) {
+			l->fail = 1;
+			return;
+		}
+		l->fl = n2;
+		l->flcap = cap;
+	}
+	fl = &l->fl[l->nfl++];
+	fl->x0 = right ? rx - wf : lx;
+	fl->x1 = fl->x0 + wf;
+	fl->y0 = fy;
+	fl->y1 = fy + hf;
+	fl->right = (uint8_t) right;
+	l->fl_top = fy;
+}
+
+/* an absolutely positioned box (or fixed: the page is its containing
+   block, as EWeb has no viewport of its own): out of the flow, where
+   left, right and top put it in its containing block, else where it
+   would have been (sx, sy) */
+static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
+{
+	int fixed = kw(c->st, EP_POSITION) == KW_FIXED;
+	int32_t cbx = fixed ? 0 : l->cbx, cby = fixed ? 0 : l->cby, cbw = fixed ? l->p->width : l->cbw;
+	int32_t left = len(l, c->st, EP_LEFT, cbw), right = len(l, c->st, EP_RIGHT, cbw);
+	int32_t top = len(l, c->st, EP_TOP, AUTO), wf, mb, f = AUTO, ax, ay;
+	long k0 = l->p->nitems;
+	if (len(l, c->st, EP_WIDTH, cbw) == AUTO && left != AUTO && right != AUTO)
+		wf = cbw - left - right;	/* stretched between its sides */
+	else
+		wf = cell_pref(l, c, cbw);
+	if (wf > cbw)
+		wf = cbw;
+	if (wf < 1)
+		wf = 1;
+	layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+	if (l->fail)
+		return;
+	ax = left != AUTO ? cbx + left : right != AUTO ? cbx + cbw - right - wf : sx;
+	ay = top != AUTO ? cby + top : sy;
+	{
+		/* text for screen readers only: a box of a pixel that hides
+		   what overflows it, or put far off the page. EWeb doesn't clip,
+		   so it would be drawn over the page: it goes */
+		int32_t cw = len(l, c->st, EP_WIDTH, cbw), chh = len(l, c->st, EP_HEIGHT, AUTO);
+		int hides = kw(c->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(c->st, EP_OVERFLOW_Y) != KW_VISIBLE;
+		if ((hides && ((cw != AUTO && cw <= 2) || (chh != AUTO && chh <= 2))) || ax + wf <= 0 || ay < -1000) {
+			l->p->nitems = k0;
+			return;
+		}
+	}
+	shift_items(l, k0, ax, ay);
+	if (c->n != NULL)
+		c->n->y += ay;
 }
 
 /* lays a block out with its margin box's top left at (x, y) in a
@@ -1848,10 +2284,19 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	uint32_t bg = 0;
 	int auto_l = 0, auto_r = 0, wauto = 1, saved_n = l->ncols, table_n = 0;
 	int32_t *saved_cols = l->cols, *table_cols = NULL, saved_sh = l->sp_h, saved_sv = l->sp_v;
-	int32_t table_sh = 0, table_sv = 0;
+	int32_t table_sh = 0, table_sv = 0, saved_top = l->fl_top;
+	int32_t saved_cbx = l->cbx, saved_cby = l->cby, saved_cbw = l->cbw;
+	int saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
+	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems;
+	struct span *saved_spans = l->spans;
 
 	if (l->fail)
 		return 0;
+	if (own) {
+		/* a context of its own: the floats from here on are its */
+		l->fl0 = l->nfl;
+		l->fl_top = AUTO;
+	}
 	if (!b->anon) {
 		ml = len(l, s, EP_MARGIN_LEFT, cbw);
 		mr = len(l, s, EP_MARGIN_RIGHT, cbw);
@@ -1917,16 +2362,37 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			}
 		}
 	}
+	if (b->repl && wauto && !fixed_w) {
+		/* a picture: its own width, not its container's */
+		int32_t iw, ih;
+		l->cw = cbw;
+		image_size(l, b->first, &iw, &ih);
+		if (iw > 0 && iw < w) {
+			w = iw;
+			if (auto_l || auto_r) {
+				int32_t room = cbw - w - bl - br - pl - pr;
+				if (auto_l && auto_r) {
+					ml = room / 2;
+					mr = room - ml;
+				} else if (auto_l) {
+					ml = room - mr;
+				}
+			}
+		}
+	}
 	if (b->table) {
 		/* its columns at their widest; a table without a width shrinks to them */
-		int32_t *cols = amalloc(l->a, MAXCOLS * sizeof *cols), total, sp;
-		int n, i;
+		int32_t *cols = amalloc(l->a, MAXCOLS * sizeof *cols), mins[MAXCOLS], total, sp;
+		int n, i, was = l->minw;
 		if (cols == NULL) {
 			l->fail = 1;
 			return 0;
 		}
 		table_sh = s->k[EP_BORDER_SPACING_H] == EK_PX ? dev(l, s->v[EP_BORDER_SPACING_H].i) : 0;
 		table_sv = s->k[EP_BORDER_SPACING_V] == EK_PX ? dev(l, s->v[EP_BORDER_SPACING_V].i) : 0;
+		l->minw = 1;
+		columns(l, b, w, mins);
+		l->minw = was;
 		n = columns(l, b, w, cols);
 		sp = table_sh * (n + 1);
 		total = sp;
@@ -1937,7 +2403,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				ml += (w - total) / 2;
 			w = total;
 		}
-		fit_columns(cols, n, w - sp > n ? w - sp : n, !wauto || fixed_w);
+		fit_columns(cols, mins, n, w - sp > n ? w - sp : n, !wauto || fixed_w);
 		table_cols = cols;
 		table_n = n;
 	}
@@ -1945,6 +2411,20 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		w = 1;
 	if (b->n != NULL)
 		b->n->y = y + mt;
+	if (pos != KW_STATIC && pos != KW_STICKY) {
+		/* positioned: the containing block of what is absolute in it */
+		l->cbx = x + ml + bl;
+		l->cby = y + mt + bt;
+		l->cbw = pl + w + pr;
+	}
+	if (b->table) {
+		l->spans = calloc(MAXCOLS, sizeof *l->spans);
+		if (l->spans == NULL) {
+			l->spans = saved_spans;
+			l->fail = 1;
+			return 0;
+		}
+	}
 	if (!b->anon) {
 		bg = color(s, EP_BACKGROUND_COLOR);
 		if ((bg >> 24) != 0 && !(b->n != NULL && b->n->tag == T_BODY && l->body_bg_taken))
@@ -1963,7 +2443,9 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->cols = NULL;
 		l->ncols = 0;
 	}
-	if (b->inl) {
+	if (b->repl) {
+		ch = repl_layout(l, b, cx, cy, w);
+	} else if (b->inl) {
 		ch = inline_layout(l, b, cx, cy, w, &fb);
 	} else if (b->row) {
 		ch = row_layout(l, b, cx, cy, w, &fb);
@@ -1991,7 +2473,40 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				num = v ? atoi(v) : (reversed ? num - 1 : num + 1);
 				c->num = num;
 			}
+			if (!c->anon && kw(c->st, EP_FLOAT) != KW_NONE) {
+				/* out of the flow: beside what follows */
+				place_float(l, c, cx, w, edge + (prev_mb > 0 ? prev_mb : 0));
+				continue;
+			}
+			if (!c->anon && (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED)) {
+				/* out of the flow altogether */
+				place_abs(l, c, cx, edge + (prev_mb > 0 ? prev_mb : 0));
+				continue;
+			}
 			top = edge + collapse(prev_mb, cmt) - cmt;
+			if (!c->anon && l->nfl > l->fl0) {
+				int clr = kw(c->st, EP_CLEAR);
+				if (clr == KW_LEFT || clr == KW_RIGHT || clr == KW_BOTH) {
+					/* below the floats on that side */
+					int32_t cb = floats_bottom(l, clr);
+					if (cb != AUTO && cb > top + cmt) {
+						top = cb - cmt;
+						prev_mb = 0;
+					}
+				}
+			}
+			if (l->nfl > l->fl0 && own_context(c)) {
+				/* a table or a box of its own beside the floats, not under them */
+				int32_t lx, rx;
+				if (band(l, top + cmt, top + cmt + 1, cx, cx + w, &lx, &rx) && rx - lx > 0) {
+					h = layout_block(l, c, lx, top, rx - lx, 0, &cmb, &cf);
+					if (fb == AUTO && cf != AUTO)
+						fb = cf;
+					edge = top + h - cmb;
+					prev_mb = cmb;
+					continue;
+				}
+			}
 			h = layout_block(l, c, cx, top, w, 0, &cmb, &cf);
 			if (fb == AUTO && cf != AUTO)
 				fb = cf;
@@ -2004,6 +2519,15 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	if (b->table && ch > 0)
 		ch += table_sv;		/* the spacing under the last row */
+	if (own) {
+		/* it holds its floats */
+		int32_t fbot = floats_bottom(l, KW_BOTH);
+		if (fbot != AUTO && fbot - cy > ch)
+			ch = fbot - cy;
+		l->nfl = l->fl0;
+		l->fl0 = saved_fl0;
+		l->fl_top = saved_top;
+	}
 	if (b->list)
 		marker(l, b, cx, w, fb != AUTO ? fb : cy + font_of(l, s)->ascent);
 	if (!b->anon) {
@@ -2024,16 +2548,41 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			l->p->items[bgi].h = bt + pt + ch + pb + bb;
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
-			fill(l, bx, by, bw, bt, color(s, EP_BORDER_TOP_COLOR));
-			fill(l, bx, by + bh - bb, bw, bb, color(s, EP_BORDER_BOTTOM_COLOR));
-			fill(l, bx, by + bt, bl, bh - bt - bb, color(s, EP_BORDER_LEFT_COLOR));
-			fill(l, bx + bw - br, by + bt, br, bh - bt - bb, color(s, EP_BORDER_RIGHT_COLOR));
+			bd[0] = fill(l, bx, by, bw, bt, color(s, EP_BORDER_TOP_COLOR));
+			bd[1] = fill(l, bx, by + bh - bb, bw, bb, color(s, EP_BORDER_BOTTOM_COLOR));
+			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, color(s, EP_BORDER_LEFT_COLOR));
+			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, color(s, EP_BORDER_RIGHT_COLOR));
 		}
 	}
 	l->cols = saved_cols;
 	l->ncols = saved_n;
 	l->sp_h = saved_sh;
 	l->sp_v = saved_sv;
+	if (b->table) {
+		free(l->spans);
+		l->spans = saved_spans;
+	}
+	if (pos == KW_RELATIVE) {
+		/* moved where top, left, bottom and right say, its place kept */
+		int32_t dx = len(l, s, EP_LEFT, cbw), dy = len(l, s, EP_TOP, AUTO);
+		if (dx == AUTO) {
+			dx = len(l, s, EP_RIGHT, cbw);
+			dx = dx == AUTO ? 0 : -dx;
+		}
+		if (dy == AUTO) {
+			dy = len(l, s, EP_BOTTOM, AUTO);
+			dy = dy == AUTO ? 0 : -dy;
+		}
+		if (dx != 0 || dy != 0)
+			shift_items(l, kstart, dx, dy);
+	}
+	if (pos != KW_STATIC && pos != KW_STICKY) {
+		l->cbx = saved_cbx;
+		l->cby = saved_cby;
+		l->cbw = saved_cbw;
+	}
+	l->last_bg = bgi;
+	memcpy(l->last_bd, bd, sizeof bd);
 	*mb_out = mb;
 	*first = fb;
 	return mt + bt + pt + ch + pb + bb + mb;
@@ -2064,6 +2613,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->width = o->width;
 	p->bg = 0xffffff;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
+	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
+	l.last_bg = -1;
 	if (html == NULL || html->e.style == NULL) {
 		p->height = 0;
 		return p;
@@ -2091,6 +2642,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->height = layout_block(&l, root, 0, 0, o->width, 0, &mb, &fb);
 	}
 	free(l.it);
+	free(l.fl);
 	if (l.fail) {
 		page_free(p);
 		return NULL;

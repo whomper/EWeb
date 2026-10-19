@@ -607,7 +607,12 @@ static void hints(dnode *n)
 	h.s[0] = 0;
 
 	if ((v = dn_attr(n, "align")) != NULL) {
-		if (n->tag == T_TABLE) {
+		if ((n->tag == T_TABLE || n->tag == T_IMG) && (is(v, "left") || is(v, "right"))) {
+			/* the HTML Standard's rendering section: a float */
+			put(&h, "float", is(v, "left") ? "left" : "right");
+		} else if (n->tag == T_IMG && (is(v, "middle") || is(v, "top") || is(v, "bottom"))) {
+			put(&h, "vertical-align", is(v, "middle") ? "middle" : is(v, "top") ? "top" : "baseline");
+		} else if (n->tag == T_TABLE) {
 			if (is(v, "center"))
 				put(&h, "margin-left", "auto"), put(&h, "margin-right", "auto");
 		} else if (n->tag != T_IMG && n->tag != T_HR && n->tag != T_INPUT) {
@@ -632,6 +637,12 @@ static void hints(dnode *n)
 			put(&h, "margin-left", v), put(&h, "margin-right", v);
 		if ((v = dimension(dn_attr(n, "marginheight"), buf)) != NULL ||
 		    (v = dimension(dn_attr(n, "topmargin"), buf)) != NULL)
+			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
+	}
+	if (n->tag == T_IMG) {
+		if ((v = dimension(dn_attr(n, "hspace"), buf)) != NULL)
+			put(&h, "margin-left", v), put(&h, "margin-right", v);
+		if ((v = dimension(dn_attr(n, "vspace"), buf)) != NULL)
 			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
 	}
 	if (n->tag == T_TABLE || cell || n->tag == T_HR || n->tag == T_IMG || !strcmp(name, "col")) {

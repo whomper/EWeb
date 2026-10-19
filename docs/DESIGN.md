@@ -541,7 +541,26 @@ releases.
   widths, `colspan`, `border-spacing`, shrinking to fit, and flex rows side by side; Hebrew words
   reordered right to left within each line (a word-level form of the bidirectional algorithm), with
   right-to-left paragraphs aligned right. Pictures (below, 19 Oct 2026); form controls are drawn as
-  boxes. Not yet: floats, positioning, `rowspan`, vertical alignment in cells, forms.
+  boxes. Since 19 Oct 2026 (your order: after pictures, the layout's gaps):
+  - **floats**, left and right, in each block formatting context (the page, a cell, a float, a box
+    with `overflow` other than visible, absolute boxes): each at its width (asked for, or its widest
+    within the room), as far over as it fits beside those already there, else below them; lines
+    beside them are shortened (moved below when not even their first word fits), `clear` goes
+    below them, a table or a box of its own goes beside them rather than under, and a context holds
+    its floats. HTML's `align=left|right` on `<img>` and `<table>` floats them (and `hspace`,
+    `vspace`); a floated or `display: block` picture is a block of its own size (`margin: auto`
+    centres it);
+  - **positioning**: `relative` moves a box and keeps its place; `absolute` takes it out of the
+    flow, at `left`, `right` and `top` in its nearest positioned ancestor (the page for `fixed`:
+    EWeb has no viewport of its own), else where it would have been; text meant for screen readers
+    only (a box of a pixel hiding its overflow, or put far off the page) isn't drawn, as EWeb doesn't
+    clip;
+  - **tables**: `rowspan` (a cell takes its columns in the rows below; the last of them grows to
+    it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
+    default, top, bottom) in cells, and columns too wide for the room keep their longest word,
+    sharing what is left by how much more each would take.
+  Not yet: forms, `background-image`, grid. `tests/layout/floats.html` keeps them all; the page set
+  laid out with AddressSanitizer and UBSan, no fault.
 - **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
   byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the
@@ -951,8 +970,8 @@ out of both (their paths lead nowhere on the Atari).
    on your DFB1 (v0.7 to v0.9); then EWeb's fonts, the document, the layout, browsing and the GEM
    window (above): `EWEB.PRG`, the first text browser.
 3. **The document web:** images, forms, floats and positioning, bookmarks, a faster HTML parse.
-   *Done so far (19 Oct 2026):* pictures (above). Next: floats, positioning, `rowspan` and
-   vertical alignment in cells (your order); then forms and cookies.
+   *Done so far (19 Oct 2026):* pictures (above); floats, positioning, `rowspan` and vertical
+   alignment in cells (your order, above). Next: forms and cookies.
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol.
 5. **JavaScript:** QuickJS with the lean DOM.
 

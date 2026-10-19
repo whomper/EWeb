@@ -1,0 +1,91 @@
+page 608 x 442, background ffffff, 90 items, 0 links, title "Floats, positions, rows"
+fill 6,6 596x24 #003366
+text 11,24 24x17 #ffffff sans13 link 0 "Left"
+text 565,24 32x17 #ffffff sans13 link 0 "Right"
+text 6,56 109x17 #000000 sans13 link 0 "After the header."
+fill 466,72 136x56 #eeeeee
+text 470,89 121x17 #000000 sans13 link 0 "A box floated right,"
+text 470,105 118x17 #000000 sans13 link 0 "with words enough"
+text 470,121 120x17 #000000 sans13 link 0 "for three lines of it."
+fill 466,72 136x1 #888888
+fill 466,127 136x1 #888888
+fill 466,73 1x54 #888888
+fill 601,73 1x54 #888888
+text 6,85 436x17 #000000 sans13 link 0 "A paragraph beside the box on the right: its lines are shortened until"
+text 6,101 433x17 #000000 sans13 link 0 "the box ends, then they take the whole width again, as browsers do."
+fill 6,117 72x48 #ffdddd
+text 6,130 24x17 #000000 sans13 link 0 "Left"
+text 84,130 353x17 #000000 sans13 link 0 "This one starts beside a float on the left and the box on"
+text 84,146 513x17 #000000 sans13 link 0 "the right, lines shortened on both sides, words going on long enough to pass the"
+text 84,162 39x17 #000000 sans13 link 0 "floats."
+text 6,193 112x17 #000000 sans13 link 0 "Below every float."
+fill 6,178 596x2 #000080
+fill 6,209 596x58 #eeeeff
+fill 6,209 178x16 #ffeedd
+text 6,222 71x17 #000000 sans13 link 0 "Floated left"
+fill 424,209 178x16 #ddffee
+text 424,222 80x17 #000000 sans13 link 0 "Floated right"
+text 184,235 204x17 #000000 sans13 link 0 "Between two floats in a box that"
+text 6,251 76x17 #000000 sans13 link 0 "holds them."
+text 16,295 174x17 #000000 sans13 link 0 "Moved by position: relative."
+text 520,327 45x17 #000000 sans13 link 0 "A table"
+fill 518,312 81x1 #888888
+fill 518,331 81x1 #888888
+fill 518,313 1x18 #888888
+fill 598,313 1x18 #888888
+text 520,349 77x17 #000000 sans13 link 0 "floated right"
+fill 518,334 81x1 #888888
+fill 518,353 81x1 #888888
+fill 518,335 1x18 #888888
+fill 598,335 1x18 #888888
+fill 515,309 87x1 #808080
+fill 515,356 87x1 #808080
+fill 515,310 1x46 #808080
+fill 601,310 1x46 #808080
+text 6,322 268x17 #000000 sans13 link 0 "Text beside a table that align=right floats."
+text 11,380 81x17 #000000 sans13 bold link 0 "Three rows"
+fill 8,340 87x1 #888888
+fill 8,409 87x1 #888888
+fill 8,341 1x68 #888888
+fill 94,341 1x68 #888888
+text 100,356 26x17 #000000 sans13 link 0 "One"
+fill 97,340 307x1 #888888
+fill 97,361 307x1 #888888
+fill 97,341 1x20 #888888
+fill 403,341 1x20 #888888
+fill 406,340 41x22 #ffeedd
+text 409,356 35x17 #000000 sans13 link 0 "Short"
+fill 406,340 41x1 #888888
+fill 406,361 41x1 #888888
+fill 406,341 1x20 #888888
+fill 446,341 1x20 #888888
+text 100,380 301x17 #000000 sans13 link 0 "Two, with more words in it than the others have"
+fill 97,364 307x1 #888888
+fill 97,385 307x1 #888888
+fill 97,365 1x20 #888888
+fill 403,365 1x20 #888888
+text 409,380 35x17 #000000 sans13 link 0 "Down"
+fill 406,364 41x1 #888888
+fill 406,385 41x1 #888888
+fill 406,365 1x20 #888888
+fill 446,365 1x20 #888888
+text 100,404 112x17 #000000 sans13 link 0 "Three, across two"
+fill 97,388 350x1 #888888
+fill 97,409 350x1 #888888
+fill 97,389 1x20 #888888
+fill 446,389 1x20 #888888
+text 11,428 28x17 #000000 sans13 link 0 "Four"
+fill 8,412 87x1 #888888
+fill 8,433 87x1 #888888
+fill 8,413 1x20 #888888
+fill 94,413 1x20 #888888
+text 100,428 25x17 #000000 sans13 link 0 "Five"
+fill 97,412 307x1 #888888
+fill 97,433 307x1 #888888
+fill 97,413 1x20 #888888
+fill 403,413 1x20 #888888
+text 409,428 18x17 #000000 sans13 link 0 "Up"
+fill 406,412 41x1 #888888
+fill 406,433 41x1 #888888
+fill 406,413 1x20 #888888
+fill 446,413 1x20 #888888

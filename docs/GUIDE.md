@@ -160,15 +160,15 @@ choose all of it.
 
 EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
-backgrounds, borders, pictures, Hebrew right to left. It doesn't yet
+backgrounds, borders, pictures, boxes and pictures floated beside the
+text, positioned boxes, tables with cells over several rows, Hebrew right
+to left. It doesn't yet
 show:
 
 - forms (their fields are drawn, but can't be typed into)
 - pictures in the background of a page or a box (CSS
   `background-image`), WebP and AVIF pictures (EWeb asks servers for
   JPEG, PNG and GIF, which most send then), and SVG drawings
-- things placed beside others with `float` or `position`, which come
-  one under the other instead
 - anything made by JavaScript
 
 Sites made for small screens and for text, such as FrogFind, 68k.news,
