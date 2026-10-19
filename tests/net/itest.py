@@ -248,6 +248,35 @@ try:
         rc, data, out = save("https://localhost:%d/site/" % HTTPS)
         check("the browser: the page shown saved", rc == 0 and data == server.SITE and
               "saved page: 1 %d INDEX.HTM\n" % len(server.SITE) in out, out)
+        # the disk cache: a page fresh for an hour shown again with no
+        # request (the next run reads the pack and the index), one asked
+        # again each time answered with a 304, Reload asking again
+        cache = os.path.join(work, "cache")
+        shutil.rmtree(cache, ignore_errors=True)
+
+        def cached(*args):
+            p = subprocess.run([ewrender, "-f", font, "-C", cache, "-d"] + list(args), cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            m = re.search(r'title "([^"]*)"', p.stdout)
+            return p.returncode, m.group(1) if m else None, p.stdout + p.stderr
+
+        def counts():
+            import urllib.request
+            with urllib.request.urlopen("http://localhost:%d/site/cache/count" % HTTP, timeout=10) as r:
+                return r.read().decode()
+
+        site = "http://localhost:%d/site/cache/" % HTTP
+        r1 = cached(site + "fresh.html")
+        r2 = cached(site + "fresh.html")
+        check("the cache: a fresh page from the disk, no request", r1[1] == "fresh 1" and r2[1] == "fresh 1" and
+              counts().startswith("fresh=1 "), r1[2] + r2[2] + counts())
+        r1 = cached(site + "etag.html")
+        r2 = cached(site + "etag.html")
+        check("the cache: asked again, a 304", r1[1] == "etag 1" and r2[1] == "etag 1" and
+              counts().endswith(" etag=2 304=1"), r1[2] + r2[2] + counts())
+        check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB.PAK")) and
+              os.path.exists(os.path.join(cache, "EWEB.IDX")) and
+              "/site/cache/fresh.html" in open(os.path.join(cache, "EWEB.IDX")).read(), " ".join(os.listdir(cache)))
         # pictures: fetched after the page, decoded at the size shown (a
         # CSS pixel is 0.8 of the Falcon's), the page laid out again for
         # the one whose size it didn't know; the missing one failed

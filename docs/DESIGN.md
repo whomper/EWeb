@@ -943,6 +943,33 @@ remove the wrong one, and the list shown again takes the place of the one clicke
 remove it twice). `tests/browse/bmtest.c` (in `make test`) reads a Firefox export and checks
 what EWeb writes reads back the same; `make hatarigui` adds, lists and removes one.
 
+## The disk cache (19 Oct 2026)
+
+What servers send (pages, stylesheets, pictures) is kept on the disk from one run to the next, as
+HTTP caching (RFC 9111) has a browser keep it: used as it is for as long as the answer said it
+stays fresh (`max-age`, else `Expires` less `Date`, else a tenth of the time since
+`Last-Modified`, a day at most, less its `Age`; a year at most), then asked for again with its
+`ETag` or date, a 304 keeping what is there. Not kept: `no-store`, `Vary: *`, an answer that sets
+a cookie (it may be one person's), one with nothing to go by, and one bigger than an eighth of the
+cache. Back and Forward take a page from it however old it is, as browsers do; Reload asks the
+server again (a 304 when it is unchanged).
+
+On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
+`CACHE\EWEB.IDX` the index, read in one open the first time the cache is needed and written at quit.
+What comes is gathered in memory and added to the pack in one write when a sixteenth of the cache
+has gathered, or at quit: browsing page after page opens nothing (a reset loses only what is
+fetched again). The pack is opened when a job (a page and its stylesheets, a page's pictures)
+first reads from it, and closed when the job ends; its head is checked against the index the first
+time a run opens it. At quit a pack grown past its size, or half of it left over from answers replaced,
+is written again with the answers used last (three quarters of its size), in big pieces. The
+pack's first bytes and the index carry the same number, so an index from before a reset doesn't
+read another pack; what a job added after the last quit is lost then, and fetched again.
+Options > Empty the cache forgets it all, the files too.
+
+`tests/browse/dctest.c` (in `make test`) checks the rules on a clock of its own, a reset between a
+job and quit, and the pack written again; `make itest` shows a page from it with no request, and a
+304; `make hatarifiles` counts its opens.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1221,7 +1248,7 @@ out of both (their paths lead nowhere on the Atari).
    alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
    the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
    tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above);
-   saving pages and files, and bookmarks (above).
+   saving pages and files, bookmarks and the disk cache (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.

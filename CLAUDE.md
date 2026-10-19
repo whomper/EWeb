@@ -127,6 +127,11 @@ hub stay complete, with the evidence.
   `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
+- **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation; `CACHE\EWEB.PAK`
+  and `EWEB.IDX` next to `EWEB.PRG`, the index read when first needed and written at quit, a job's
+  answers added in one write, the pack written again at quit under another name, then renamed),
+  used by `fetch()` in `src/browse`. After changing it: `make test` (`tests/browse/dctest.c`),
+  `make itest` (`/site/cache/`), `make hatarifiles`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there

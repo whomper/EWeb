@@ -71,7 +71,7 @@ static long long clock_now(void)
 long long (*ck_now)(void) = clock_now;
 
 /* the cookie-date algorithm: 1 and *t, or 0 */
-static int cookie_date(const char *s, long long *t)
+int ck_date(const char *s, long long *t)
 {
 	static const char months[] = "janfebmaraprmayjunjulaugsepoctnovdec";
 	int hh = -1, mi = 0, ss = 0, day = -1, mon = -1, year = -1;
@@ -444,7 +444,7 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 			long long e;
 			memcpy(t, avb, (size_t) (ave - avb));
 			t[ave - avb] = 0;
-			if (cookie_date(t, &e)) {
+			if (ck_date(t, &e)) {
 				expires = e;
 				has_expires = 1;
 			}

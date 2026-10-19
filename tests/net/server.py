@@ -41,6 +41,9 @@ Pages:
   /site/files.html  files to save: links to /chunked (2 MB), a file that
                  isn't there, /site/ and /site/small.bin (20 KB; the same
                  bytes as /site/small.zip, application/zip)
+  /site/cache/   the disk cache: fresh.html (fresh for an hour), etag.html
+                 (asked again each time: a 304 to its ETag), count (how
+                 many requests each had, and the 304s; never kept)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -66,6 +69,7 @@ FILES_PAGE = (b"<!DOCTYPE html><html><head><title>Files</title></head><body><p><
               b"file</a> <a href=/site/none.zip>A file that isn't there</a> <a href=/site/>A page</a> "
               b"<a href=/site/small.bin>A small file</a></p></body></html>")
 SMALL = bytes(range(256)) * 80
+CACHE_COUNT = {"fresh": 0, "etag": 0, "304": 0}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
@@ -238,6 +242,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, FORM_PAGE)
         elif p == "/site/files.html":
             self.send(200, FILES_PAGE)
+        elif p == "/site/cache/fresh.html":
+            CACHE_COUNT["fresh"] += 1
+            self.send(200, b"<!DOCTYPE html><title>fresh %d</title><p>Kept an hour." % CACHE_COUNT["fresh"],
+                      extra=[("Cache-Control", "max-age=3600")])
+        elif p == "/site/cache/etag.html":
+            CACHE_COUNT["etag"] += 1
+            if self.headers.get("If-None-Match") == '"v1"':
+                CACHE_COUNT["304"] += 1
+                self.send(304, b"", extra=[("ETag", '"v1"'), ("Cache-Control", "no-cache")])
+            else:
+                self.send(200, b"<!DOCTYPE html><title>etag %d</title><p>Asked each time." % CACHE_COUNT["etag"],
+                          extra=[("ETag", '"v1"'), ("Cache-Control", "no-cache")])
+        elif p == "/site/cache/count":
+            self.send(200, ("fresh=%d etag=%d 304=%d" % (CACHE_COUNT["fresh"], CACHE_COUNT["etag"],
+                                                        CACHE_COUNT["304"])).encode(), "text/plain",
+                      extra=[("Cache-Control", "no-store")])
         elif p in ("/site/small.bin", "/site/small.zip"):
             self.send(200, SMALL, "application/octet-stream" if p.endswith(".bin") else "application/zip")
         elif p.startswith("/site/cookie/") and cookie_get(self, p):

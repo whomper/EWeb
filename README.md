@@ -36,6 +36,10 @@ EWeb's own fonts.
 - **Bookmarks**: a Bookmarks menu (^D adds the page shown, ^B shows them all
   as a page), kept in `BOOKMARK.HTM` in the bookmark file other browsers
   import and export.
+- **A disk cache**, as HTTP has browsers keep one: pages, stylesheets and
+  pictures kept in one pack (`CACHE\EWEB.PAK`) from one run to the next,
+  asked again with their ETag or date when they say so; Options > Empty the
+  cache.
 - **Saving**: the page shown as it came (^S), a link's file (Alternate-click,
   as Safari's Option-click) straight to the disk as it comes, and a file EWeb
   doesn't show, opened as a page.

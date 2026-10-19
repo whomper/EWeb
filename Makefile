@@ -288,6 +288,12 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
 		-Icommon/src -o $@ $(filter %.c,$^)
+# the disk cache (src/browse/dcache.c)
+build/asan/dctest: tests/browse/dctest.c src/browse/dcache.c src/browse/dcache.h $(HOSTNET_SRC) $(NET_HDRS) \
+		build/host/libbearssl.a
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) $(NET_INC) -Isrc/browse \
+		-o $@ $(filter %.c,$^) build/host/libbearssl.a
 build/asan/urltest: tests/url/urltest.c src/net/url.c src/net/url.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) -Isrc/net -o $@ $(filter %.c,$^)
@@ -645,11 +651,12 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest binary/EWEB.FNT
+		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
 	build/asan/bmtest build/asan
+	build/asan/dctest build/asan
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

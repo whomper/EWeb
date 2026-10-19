@@ -19,6 +19,7 @@
 #include "conn.h"
 #include "cookie.h"
 #include "crash.h"
+#include "dcache.h"
 #include "dd.h"
 #include "font.h"
 #include "help.h"
@@ -98,6 +99,7 @@ static const MBAR_ITEM m_opts[] = {
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
 	{ "Forget cookies...", 0, C_COOKIES },
+	{ "Empty the cache...", 0, C_CACHE },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_help[] = {
@@ -807,6 +809,17 @@ void command(int cmd)
 			status("EWeb has forgotten every site's cookies.");
 		}
 		break;
+	case C_CACHE: {
+		/* the pages and pictures kept on the disk: gone at once */
+		long bytes, n = dc_count(&bytes);
+		if (alert(2, "[2][Empty the cache?|%ld pages and pictures,|%ld KB, kept on the disk|are forgotten.][Empty|Cancel]",
+			  n, (bytes + 1023) >> 10) == 1) {
+			dc_clear();
+			br_cache_clear();
+			status("EWeb's cache is empty.");
+		}
+		break;
+	}
 	case C_HELP:
 		if (help_key(opt.workdir, "EWEB.HYP", 0, "Keys"))
 			dlg_keys();
@@ -1110,6 +1123,13 @@ int main(void)
 		ck_file(ck, key);
 		secret_warn = key_warn;
 	}
+	{
+		/* the disk cache: CACHE next to the program, read the first time
+		   a page is fetched; 8 MB, or 2 MB on a machine without TT RAM */
+		char dir[256];
+		path_join(dir, sizeof dir, opt.workdir, "CACHE");
+		dc_dir(dir, (long) Mxalloc(-1L, 1) > 0 ? 8L << 20 : 2L << 20);
+	}
 	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
 	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
@@ -1196,6 +1216,7 @@ int main(void)
 	win_close();
 	settings_save();
 	ck_save();		/* the cookies that last, once, if they changed */
+	dc_close();		/* the cache's index, once (and its pack written again if it must be) */
 	menu_bar(mb.tree, 0);
 	av_exit();
 	font_free();

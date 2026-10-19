@@ -152,6 +152,20 @@ EWeb lists its links, or open EWeb's in another browser.
 The file selector offers the name; if there is a file of that name
 already, EWeb asks before replacing it.
 
+## The cache
+
+Pages, stylesheets and pictures are kept on the disk, in the `CACHE`
+folder next to `EWEB.PRG`, for as long as their sites say they stay
+the same: a page you open again comes from the disk, often with no
+waiting for the network at all, and a site's pictures and stylesheets
+come once. When a site says to ask, EWeb asks whether the page changed
+and keeps its copy if it didn't. Back and Forward show pages as they
+were; Reload (^R) asks the site again.
+
+The cache takes up to 8 MB (2 MB on a Falcon without TT RAM); at quit
+EWeb keeps the pages used last within that. Options > Empty the cache
+forgets it all.
+
 ## The window
 
 At the top, from the left:

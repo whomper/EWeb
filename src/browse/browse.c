@@ -16,6 +16,7 @@
 #include "http.h"
 #include "conn.h"
 #include "cookie.h"
+#include "dcache.h"
 #include "plat.h"
 #include "util.h"
 
@@ -546,7 +547,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		fresh = 1;
 		keep = 0;
 	}
-	if (!fresh) {
+	if (fresh != 1) {
 		centry *e = cache_get(url);
 		if (e != NULL) {
 			f->data = malloc(e->len + 1);
@@ -564,15 +565,44 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 	}
 	{
 		HTTPREQ rq;
-		HTTPRESP *rs = malloc(sizeof *rs);
+		HTTPRESP *rs;
 		SBUF body;
-		int ok;
+		DC_GOT got;
+		char key[4096];
+		int ok, have = 0;
+		/* the disk cache (dcache.h), by the address without its fragment:
+		   fresh, or any age for Back and Forward, it is used as it is;
+		   else the server is asked whether it changed */
+		str_copy(key, url, sizeof key);
+		key[strcspn(key, "#")] = 0;
+		if (post == NULL && dc_get(key, &got)) {
+			if (fresh != 1 && (got.fresh || fresh == 2)) {
+				f->data = got.data;
+				f->len = got.len;
+				str_copy(f->url, got.url, sizeof f->url);
+				str_copy(f->mime, got.mime, sizeof f->mime);
+				str_copy(f->charset, got.charset, sizeof f->charset);
+				str_copy(f->security, got.security, sizeof f->security);
+				f->status = 200;
+				if (keep)
+					cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
+				return 1;
+			}
+			if (got.validate[0])
+				have = 1;
+			else
+				free(got.data);
+		}
+		rs = malloc(sizeof *rs);
 		if (rs == NULL) {
+			if (have)
+				free(got.data);
 			snprintf(f->err, sizeof f->err, "Out of memory.");
 			return 0;
 		}
 		memset(&rq, 0, sizeof rq);
 		rq.url = url;
+		rq.headers = have ? got.validate : NULL;
 		rq.accept = accept;
 		if (post != NULL) {
 			rq.method = "POST";
@@ -586,6 +616,25 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		rq.referrer = rq.site;
 		sb_init(&body);
 		ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+		if (ok && have && rs->status == 304) {
+			/* unchanged: what is kept, fresh again */
+			dc_fresh(key, rs->headers.s ? rs->headers.s : "");
+			sb_free(&body);
+			f->data = got.data;
+			f->len = got.len;
+			str_copy(f->url, got.url, sizeof f->url);
+			str_copy(f->mime, got.mime, sizeof f->mime);
+			str_copy(f->charset, got.charset, sizeof f->charset);
+			str_copy(f->security, got.security, sizeof f->security);
+			f->status = 200;
+			if (keep)
+				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
+			http_resp_free(rs);
+			free(rs);
+			return 1;
+		}
+		if (have)
+			free(got.data);
 		if (ok) {
 			f->status = rs->status;
 			str_copy(f->url, rs->url.href, sizeof f->url);
@@ -600,6 +649,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 					f->data[0] = 0;
 				f->len = 0;
 			}
+			if (f->status == 200 && post == NULL)
+				dc_put(key, f->url, rs->headers.s ? rs->headers.s : "", f->mime, f->charset, f->security,
+				       f->data, f->len);
 			if (f->status == 200 && keep) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				/* after a redirect, under where it came from too: the
@@ -1060,7 +1112,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
-	r = fetch(b, url, b->typed ? NULL : b->url, mode == NAV_RELOAD, NULL, 0, 1, post, f);
+	r = fetch(b, url, b->typed ? NULL : b->url, mode == NAV_RELOAD ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0,
+		  1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {
@@ -1148,7 +1201,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 
 static int load(browser *b, const char *url, int mode)
 {
-	return load_post(b, url, mode, NULL);
+	int r = load_post(b, url, mode, NULL);
+	dc_job_end();		/* the page and its stylesheets: into the pack */
+	return r;
 }
 
 /* ---------------------------------------------------------------- what the front end asks */
@@ -1267,6 +1322,7 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 		r = load(b, url, NAV_NEW);
 	} else {
 		r = load_post(b, url, NAV_NEW, &s);
+		dc_job_end();
 	}
 	form_submit_free(&s);
 	return r;
@@ -1493,12 +1549,14 @@ int br_pictures_pending(browser *b)
 	for (i = 0; i < b->p->nitems; i++)
 		if (to_do(b, &b->p->items[i]))
 			return 1;
+	dc_job_end();		/* the page's pictures have come: into the pack */
 	return 0;
 }
 
 void br_pictures_stop(browser *b)
 {
 	b->pic_stopped = 1;
+	dc_job_end();
 }
 
 /* pictures still to fetch, each once */

@@ -49,8 +49,9 @@ BUDGET = {
     # there, pf_load also looks for an unfinished safe save's file once)
     "start": (3, 0, 0),
     # the first page over the network: COOKIES.TXT read (not there: its
-    # safe save's new file looked for too)
-    "pictures": (1, 0, 1),
+    # safe save's new file looked for too), the cache's index read (none
+    # yet); what the pages bring is kept in memory until quit
+    "pictures": (2, 0, 1),
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
@@ -60,12 +61,13 @@ BUDGET = {
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
-    # looked for, then made; EWEB.INF unchanged
-    "quit": (1, 2, 0),
+    # looked for, then made; EWEB.INF unchanged; the cache's pack made with
+    # what the session brought, in one write, and its index saved
+    "quit": (1, 4, 0),
     "start again": (3, 0, 0),
     # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
-    # then written over
-    "secure page again": (5, 0, 1),
+    # then written over; the cache's index
+    "secure page again": (6, 0, 1),
     "quit again": (0, 0, 0),        # the cookies as they were
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }

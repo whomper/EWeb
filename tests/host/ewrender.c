@@ -40,6 +40,8 @@
  * link's file to FILE instead (Alternate-click). Each prints what it
  * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
+ * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
+ * index written at the end, as at quit).
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -51,6 +53,7 @@
 #include "canvas.h"
 #include "conn.h"
 #include "cookie.h"
+#include "dcache.h"
 #include "font.h"
 #include "form.h"
 #include "http.h"
@@ -336,6 +339,8 @@ int main(int argc, char **argv)
 			back_after = 1;
 		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
 			bm_file(argv[++i]);
+		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
+			dc_dir(argv[++i], 8L << 20);
 		else if (!strcmp(argv[i], "-A"))
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
@@ -593,5 +598,6 @@ int main(int argc, char **argv)
 	ck_save();
 	ck_file(NULL, NULL);
 	ck_clear();
+	dc_close();
 	return rc;
 }

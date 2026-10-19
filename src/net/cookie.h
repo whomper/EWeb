@@ -47,6 +47,10 @@ long ck_count(void);
 /* the time, UTC seconds since 1970 (from the clock and tls_tz_minutes);
    tests set their own */
 extern long long (*ck_now)(void);
+/* a date as cookies and HTTP give them (RFC 6265bis's cookie-date
+   algorithm, which reads HTTP's three forms too): 1 and *t, UTC seconds
+   since 1970, or 0 */
+int ck_date(const char *s, long long *t);
 /* two hosts of the same site (example.co.il and www.example.co.il) */
 int ck_same_site(const char *a, const char *b);
 
