@@ -15,14 +15,18 @@ punctuation and signs pages use most.
 FONTDIR (default /usr/share/fonts/truetype/dejavu) needs the Debian
 packages fonts-dejavu-core and fonts-dejavu-extra. The same fonts and
 the same Pillow (tools/requirements.txt: its wheel carries the FreeType
-that draws the glyphs) give the same file, byte for byte; tests/layout's
-lists were made with them. Glyphs a face lacks (DejaVu Serif has no
+that draws the glyphs) give the same glyphs, and with the same zlib (which
+packs them) the same file, byte for byte; tests/layout's lists were made
+with them. Glyphs a face lacks (DejaVu Serif has no
 Hebrew) are DejaVu Sans's in the same style.
 
 The file (big-endian, as the 68030 reads it):
-    "EWFNT1\\0\\0", u16 faces, u16 codes, u16 code[codes] (sorted)
-    per face: u8 family, u8 style, u8 px, u8 0, u32 offset, u32 size
-    at offset: u8 ascent, u8 descent, u16 0,
+    "EWFNT2\\0\\0", u16 faces, u16 codes, u16 code[codes] (sorted)
+    per face: u8 family, u8 style, u8 px, u8 0, u32 offset, u32 stored,
+              u32 size
+    at offset: the face, DEFLATE'd (raw, RFC 1951: stored bytes that
+    unpack to size; 1.8 MB of faces take 0.7 MB). Unpacked:
+               u8 ascent, u8 descent, u16 0,
                per code: u8 advance, s8 x, s8 y (top, from the baseline),
                          u8 w, u8 h, u8 0, u32 bitmap (from the face's start)
                bitmaps: h rows of (w + 7) / 8 bytes, the left pixel in bit 7
@@ -30,6 +34,7 @@ The file (big-endian, as the 68030 reads it):
 import os
 import struct
 import sys
+import zlib
 
 import PIL
 from PIL import Image, ImageDraw, ImageFont
@@ -146,14 +151,16 @@ def main():
                     metrics += struct.pack(">BbbBBBI", adv, x, y, w, h, 0, base + len(bitmaps) if bits else 0)
                     bitmaps += bits
                 faces.append((fam, style, px, head + metrics + bitmaps))
-    data = b"EWFNT1\0\0" + struct.pack(">HH", len(faces), len(cps))
+    data = b"EWFNT2\0\0" + struct.pack(">HH", len(faces), len(cps))
     data += b"".join(struct.pack(">H", c) for c in cps)
-    off = len(data) + 12 * len(faces)
+    off = len(data) + 16 * len(faces)
     dirs = b""
     blocks = b""
     for fam, style, px, block in faces:
-        dirs += struct.pack(">BBBBII", fam, style, px, 0, off + len(blocks), len(block))
-        blocks += block
+        z = zlib.compressobj(9, zlib.DEFLATED, -15, 9)
+        packed = z.compress(block) + z.flush()
+        dirs += struct.pack(">BBBBIII", fam, style, px, 0, off + len(blocks), len(packed), len(block))
+        blocks += packed
     with open(out, "wb") as f:
         f.write(data + dirs + blocks)
     print("%s: %d faces, %d characters, %d KB" % (out, len(faces), len(cps), (len(data + dirs + blocks) + 1023) // 1024))

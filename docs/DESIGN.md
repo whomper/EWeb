@@ -516,10 +516,13 @@ releases.
 
 - **Fonts** (`tools/mkfont.py`, `src/gfx/font.c`): `EWEB.FNT` holds DejaVu Sans, Serif and Sans
   Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 395
-  characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB. FreeType draws them
+  characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB unpacked; each face
+  is DEFLATE'd in the file, 705 KB in all (Erez's decision, 19 Oct 2026: packed, every size kept). FreeType draws them
   without smoothing, with its hinted advances, so the spacing matches the pixels; letters a face
   lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb opens the file once at start and keeps it
-  open: its directory is read then, and each face the first time a page uses it. Hebrew vowel points take no room and are not
+  open: its directory is read then, and each face the first time a page uses it, unpacked by the
+  HTTP client's inflate (the start page's five faces: its layout 40 ms -> 365 ms on the emulated
+  32 MHz Falcon, the first time only). Hebrew vowel points take no room and are not
   drawn yet.
 - **The document** (`src/doc`): Hubbub's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for

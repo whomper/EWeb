@@ -2,22 +2,24 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * font.c - EWEB.FNT: the table of faces is read at start, a face's
- * glyphs when it is first used (all of them take 1.8 MB; a page uses a
+ * glyphs when it is first used (1.8 MB unpacked, all of them; a page uses a
  * handful of faces). The file stays open from font_init to font_free, so
  * a face is a seek and a read, not a search of the folder (the
- * guidelines' 6.5).
+ * guidelines' 6.5). Each face is DEFLATE'd in the file (0.7 MB for all
+ * of them): read whole, then unpacked by the HTTP client's inflate.
  */
 #include <stdlib.h>
 #include <string.h>
 
 #include "font.h"
 #include "plat.h"
+#include "inflate.h"
 
 static int fh = -1;			/* EWEB.FNT, open while the fonts are */
 static uint16_t ncodes, nfaces;
 static uint16_t *codes;
 static ew_font *faces;
-static uint32_t *foff, *fsize;
+static uint32_t *foff, *fstored, *fsize;	/* where a face is, its packed and unpacked sizes */
 static int16_t ascii[96];		/* code index of 0x20..0x7f, -1 if none */
 static int qmark;			/* the index of '?' */
 
@@ -35,10 +37,11 @@ void font_free(void)
 	free(faces);
 	free(codes);
 	free(foff);
+	free(fstored);
 	free(fsize);
 	faces = NULL;
 	codes = NULL;
-	foff = fsize = NULL;
+	foff = fstored = fsize = NULL;
 	nfaces = ncodes = 0;
 	if (fh >= 0)
 		pf_close(fh);
@@ -59,28 +62,30 @@ int font_init(const char *path)
 	h = pf_open(path, PF_READ);
 	if (h < 0)
 		return 0;
-	if (!read_at(h, 0, head, 12) || memcmp(head, "EWFNT1", 6) != 0)
+	if (!read_at(h, 0, head, 12) || memcmp(head, "EWFNT2", 6) != 0)
 		goto done;
 	nfaces = be16(head + 8);
 	ncodes = be16(head + 10);
 	codes = malloc(ncodes * sizeof *codes);
-	dir = malloc((long) ncodes * 2 + (long) nfaces * 12);
+	dir = malloc((long) ncodes * 2 + (long) nfaces * 16);
 	faces = calloc(nfaces, sizeof *faces);
 	foff = malloc(nfaces * sizeof *foff);
+	fstored = malloc(nfaces * sizeof *fstored);
 	fsize = malloc(nfaces * sizeof *fsize);
-	if (!codes || !dir || !faces || !foff || !fsize || nfaces == 0 || ncodes == 0)
+	if (!codes || !dir || !faces || !foff || !fstored || !fsize || nfaces == 0 || ncodes == 0)
 		goto done;
-	if (!read_at(h, 12, dir, (long) ncodes * 2 + (long) nfaces * 12))
+	if (!read_at(h, 12, dir, (long) ncodes * 2 + (long) nfaces * 16))
 		goto done;
 	for (i = 0; i < ncodes; i++)
 		codes[i] = be16(dir + 2 * i);
 	for (i = 0; i < nfaces; i++) {
-		const uint8_t *d = dir + 2 * ncodes + 12 * i;
+		const uint8_t *d = dir + 2 * ncodes + 16 * i;
 		faces[i].family = d[0];
 		faces[i].style = d[1];
 		faces[i].px = d[2];
 		foff[i] = be32(d + 4);
-		fsize[i] = be32(d + 8);
+		fstored[i] = be32(d + 8);
+		fsize[i] = be32(d + 12);
 	}
 	for (i = 0; i < 96; i++)
 		ascii[i] = -1;
@@ -103,14 +108,22 @@ done:
 static int load(ew_font *f)
 {
 	int i = (int) (f - faces);
+	uint8_t *packed;
+	SBUF out;
 	if (f->data || f->failed)
 		return f->data != NULL;
-	f->data = malloc(fsize[i]);
-	if (!f->data || fh < 0 || !read_at(fh, foff[i], f->data, fsize[i]) || (long) fsize[i] < 4 + 10L * ncodes) {
-		free(f->data);
-		f->data = NULL;
-		f->failed = 1;
+	sb_init(&out);
+	packed = malloc(fstored[i] ? fstored[i] : 1);
+	if (packed && fh >= 0 && read_at(fh, foff[i], packed, fstored[i]) &&
+	    inflate_raw(packed, (long) fstored[i], &out, (long) fsize[i]) == 1 && out.len == (long) fsize[i] &&
+	    out.len >= 4 + 10L * ncodes) {
+		f->data = (uint8_t *) out.s;
 	} else {
+		sb_free(&out);
+		f->failed = 1;
+	}
+	free(packed);
+	if (f->data) {
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
 	}
