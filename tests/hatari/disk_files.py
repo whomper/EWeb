@@ -45,7 +45,9 @@ CALLS = ("Fopen", "Fcreate", "Fsfirst")
 
 # the most each case may do: Fopen, Fcreate, Fsfirst
 BUDGET = {
-    "start": (2, 0, 0),             # EWEB.INF, EWEB.FNT
+    # EWEB.INF, EWEB.FNT, BOOKMARK.HTM for the menu (not there: its safe
+    # save's new file looked for too)
+    "start": (3, 0, 1),
     # the first page over the network: COOKIES.TXT read (not there: its
     # safe save's new file looked for too)
     "pictures": (1, 0, 1),
@@ -60,7 +62,7 @@ BUDGET = {
     # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
     # looked for, then made; EWEB.INF unchanged
     "quit": (1, 2, 0),
-    "start again": (2, 0, 0),
+    "start again": (3, 0, 1),
     # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
     # then written over
     "secure page again": (5, 0, 1),

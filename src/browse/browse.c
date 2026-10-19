@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "browse.h"
+#include "bookmark.h"
 #include "form.h"
 #include "img.h"
 #include "http.h"
@@ -385,6 +386,50 @@ static void start_page(SBUF *s)
 		   "and forms (Tab goes from field to field, Return sends). Esc stops a page that is loading, "
 		   "and its pictures; Undo goes back.</p>"
 		   "</body></html>");
+}
+
+static void host_of(const char *url, char *out, int size);
+
+/* a bookmark's mark in its Remove link, so that a list shown before
+   another was removed can't remove the wrong one */
+static unsigned long bm_mark(int i)
+{
+	const char *u = bm_list[i].url;
+	unsigned long h = 2166136261UL;
+	for (; *u; u++)
+		h = ((h ^ (unsigned char) *u) * 16777619UL) & 0xFFFFFFFFUL;
+	return h;
+}
+
+/* about:bookmarks: each with its address's host and a Remove link */
+static void bookmarks_page(SBUF *s)
+{
+	int i;
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>Bookmarks</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "<style>.rm{font-size:13px;color:#a00}</style></head><body><h1>Bookmarks</h1>");
+	if (bm_n == 0)
+		sb_adds(s, "<p>None yet: Bookmarks &gt; Add bookmark (^D) keeps the page shown here, and in "
+			   "the Bookmarks menu.</p>");
+	else
+		sb_adds(s, "<ul>");
+	for (i = 0; i < bm_n; i++) {
+		char host[128], mark[96];
+		host_of(bm_list[i].url, host, sizeof host);
+		sb_adds(s, "<li><a href=\"");
+		esc(s, bm_list[i].url);
+		sb_adds(s, "\">");
+		esc(s, bm_list[i].title[0] ? bm_list[i].title : bm_list[i].url);
+		sb_adds(s, "</a> <span class=small>");
+		esc(s, host);
+		snprintf(mark, sizeof mark, "</span> <a class=rm href=\"about:bookmarks?remove=%d-%08lx\">", i, bm_mark(i));
+		sb_adds(s, mark);
+		sb_adds(s, "Remove</a></li>");
+	}
+	if (bm_n > 0)
+		sb_adds(s, "</ul>");
+	sb_adds(s, "<p class=small>They are kept in BOOKMARK.HTM, next to EWEB.PRG: a file other browsers "
+		   "import and export.</p></body></html>");
 }
 
 static void error_page(SBUF *s, const char *url, const char *what, const char *why, const char *todo)
@@ -983,10 +1028,25 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	sb_init(&src);
 	if (has_scheme(url, "about")) {
-		if (strcmp(url + 6, "blank") == 0)
+		if (strcmp(url + 6, "blank") == 0) {
 			sb_adds(&src, "<html><head><title></title></head><body></body></html>");
-		else
+		} else if (strncmp(url + 6, "bookmarks", 9) == 0) {
+			/* ?remove=I-MARK: that one gone, the list shown again in
+			   its place (Back doesn't remove it twice) */
+			const char *q = strstr(url, "?remove=");
+			if (q != NULL) {
+				char *e;
+				long i = strtol(q + 8, &e, 10);
+				if (*e == '-' && i >= 0 && i < bm_n && strtoul(e + 1, NULL, 16) == bm_mark((int) i))
+					bm_remove((int) i);
+				if (b->cur >= 0 && strncmp(b->hist[b->cur].url, "about:bookmarks", 15) == 0)
+					mode = NAV_RELOAD;
+			}
+			url = "about:bookmarks";
+			bookmarks_page(&src);
+		} else {
 			start_page(&src);
+		}
 		r = own_page(b, url, &src, mode);
 		sb_free(&src);
 		return r;
@@ -1582,6 +1642,13 @@ relayout:
 	if (!br_relayout(b, b->width))
 		return BRP_STOPPED;
 	return BRP_LAYOUT;
+}
+
+int br_bookmark(browser *b)
+{
+	if (b->cur < 0 || b->url[0] == 0 || has_scheme(b->url, "about"))
+		return 0;
+	return bm_add(b->url, b->title);
 }
 
 /* ---------------------------------------------------------------- saving */

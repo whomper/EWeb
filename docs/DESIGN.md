@@ -931,6 +931,18 @@ already in memory (up to 8 MB): EWeb asks where to save it and writes it in one 
 page shown stays. The name offered is 8.3 from the address (`INDEX.HTM` for `/`, the type's
 ending when the address has none). `make itest` and `make hatarigui` save each kind.
 
+## Bookmarks (19 Oct 2026)
+
+`BOOKMARK.HTM`, next to `EWEB.PRG`, is the bookmark file browsers have shared since Netscape (a
+`<DT><A HREF>` for each, UTF-8), so one exported from another browser is read (folders left out,
+bookmarklets and `place:` queries too) and EWeb's opens elsewhere. It is read once a start, for
+the Bookmarks menu (the first twenty, the menu bar made again when they change), and written in
+one safe save at each change (6.5). `about:bookmarks` lists them all, each with a Remove link that
+names it by its place and a hash of its address, so a list shown before another change can't
+remove the wrong one, and the list shown again takes the place of the one clicked (Back doesn't
+remove it twice). `tests/browse/bmtest.c` (in `make test`) reads a Firefox export and checks
+what EWeb writes reads back the same; `make hatarigui` adds, lists and removes one.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1209,7 +1221,7 @@ out of both (their paths lead nowhere on the Atari).
    alignment in cells (your order, above); forms and cookies (above); the HTML parse 40% faster on
    the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
    tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above);
-   saving pages and files (above).
+   saving pages and files, and bookmarks (above).
 4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.

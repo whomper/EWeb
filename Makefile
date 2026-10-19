@@ -282,6 +282,12 @@ build/asan/cookietest: tests/net/cookietest.c $(HOSTNET_SRC) $(NET_HDRS) build/h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) $(NET_INC) \
 		-o $@ $(filter %.c,$^) build/host/libbearssl.a
+# the bookmarks (src/browse/bookmark.c)
+build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookmark.h common/src/util.c \
+		common/src/futil.c tests/host/plat_posix.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
+		-Icommon/src -o $@ $(filter %.c,$^)
 build/asan/urltest: tests/url/urltest.c src/net/url.c src/net/url.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) -Isrc/net -o $@ $(filter %.c,$^)
@@ -464,6 +470,18 @@ build/asan/replay_html: tests/fuzz/fuzz_html.c common/tests/fuzz/replay.c $(FUZZ
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -w $(FUZZ_HTML_INC) \
 		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_HTML_SRC)
 FUZZERS += html
+# bookmark files (src/browse/bookmark.c)
+FUZZ_BM_SRC = src/browse/bookmark.c common/src/util.c common/src/futil.c tests/host/plat_posix.c
+build/fuzz/fuzz_bookmark: tests/fuzz/fuzz_bookmark.c $(FUZZ_BM_SRC) src/browse/bookmark.h
+	@mkdir -p $(@D)
+	$(FUZZCC) -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -Isrc -Isrc/browse \
+		-Icommon/src -o $@ $< $(FUZZ_BM_SRC)
+build/asan/replay_bookmark: tests/fuzz/fuzz_bookmark.c common/tests/fuzz/replay.c $(FUZZ_BM_SRC) \
+		src/browse/bookmark.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Isrc -Isrc/browse -Icommon/src \
+		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_BM_SRC)
+FUZZERS += bookmark
 
 fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 	@for f in $(FUZZERS); do \
@@ -628,10 +646,11 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest build/asan/cookietest binary/EWEB.FNT
+		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
+	build/asan/bmtest build/asan
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

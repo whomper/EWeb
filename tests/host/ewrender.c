@@ -38,13 +38,15 @@
  * -s FILE saves the page shown at the end as it came (File > Save page
  * as), or a file EWeb doesn't show (a download); -g LINK saves that
  * link's file to FILE instead (Alternate-click). Each prints what it
- * did and the name EWEB.PRG would offer.
+ * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
+ * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "bookmark.h"
 #include "browse.h"
 #include "canvas.h"
 #include "conn.h"
@@ -294,7 +296,7 @@ int main(int argc, char **argv)
 	SBUF extra;
 	const char *fill[32], *send = NULL;
 	int rc = 0;
-	int nfill = 0, back_after = 0, save_link = -1;
+	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0;
 	const char *save_to = NULL;
 
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
@@ -332,6 +334,10 @@ int main(int argc, char **argv)
 			send = argv[++i];
 		else if (!strcmp(argv[i], "-b"))
 			back_after = 1;
+		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
+			bm_file(argv[++i]);
+		else if (!strcmp(argv[i], "-A"))
+			bookmark = 1;
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
 			save_to = argv[++i];
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
@@ -492,6 +498,10 @@ int main(int argc, char **argv)
 		}
 		if (b.p == NULL)
 			return 1;
+	}
+	if (bookmark) {
+		int k = br_bookmark(&b);
+		printf("bookmarked: %d %d\n", k, bm_n);
 	}
 	if (save_to != NULL) {
 		char name[16];

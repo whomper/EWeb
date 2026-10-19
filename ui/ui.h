@@ -115,7 +115,9 @@ enum {
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
 	C_SETHOME, C_COOKIES,
-	C_HELP, C_KEYS
+	C_HELP, C_KEYS,
+	C_BMADD, C_BMSHOW,
+	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
 };
 void command(int cmd);
 void go(const char *typed);		/* an address typed, a file dropped */

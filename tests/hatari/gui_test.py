@@ -13,7 +13,9 @@
   Tab from field to field, a box ticked with Space and its label clicked,
   sent with POST by its button clicked), saving (^S and the file
   selector's OK: the page as it came; Alternate-click: a link's file; a
-  file EWeb doesn't show, opened: saved), ^Q;
+  file EWeb doesn't show, opened: saved), bookmarks (^D adds the page,
+  BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
+  clicked), ^Q;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -43,7 +45,7 @@ WHICH = sys.argv[2:] or ["browse", "screens"]
 HTTP, HTTPS = 18280, 18643
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
-L, Q, C, S, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x38
+L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
@@ -225,12 +227,12 @@ def check(name, ok, detail=""):
     return ok
 
 
-def link_point(url, area, top, text):
+def link_point(url, area, top, text, extra=()):
     """where on the screen the link with this text is: ewrender's display
     list of the same page, at the window's width"""
     x0, y0, w, _ = area
     p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
-                        "-w", str(w), "-d", url], capture_output=True, text=True, timeout=60)
+                        "-w", str(w), "-d"] + list(extra) + [url], capture_output=True, text=True, timeout=60)
     for line in p.stdout.splitlines():
         m = re.match(r'text (\d+),(\d+) (\d+)x(\d+) \S+ .* link (\d+) "(.*)"$', line)
         if m and m.group(5) != "0" and text in m.group(6):
@@ -452,6 +454,37 @@ def browse():
             ev = r.wait(r"saved ", 60)
             check("saving: a file EWeb doesn't show", dl == "download application/zip %d" % len(server.SMALL) and
                   ev == "saved %d" % len(server.SMALL) and saved("SMALL.ZIP") == server.SMALL, str(r.events()))
+            # bookmarks: ^D adds the page shown (on the disk at once), ^B
+            # shows them; the Bookmarks menu has it; Remove takes it away
+            r.key(D, (CTRL,))
+            ev = r.wait(r"bookmarked ", 30)
+            bm = (saved("BOOKMARK.HTM") or b"").decode("utf-8", "replace")
+            check("bookmarks: ^D adds the page", ev == "bookmarked 1 1" and
+                  'HREF="%sfiles.html">Files</A>' % site in bm, str(r.events()) + "\n" + bm)
+            r.key(D, (CTRL,))
+            check("bookmarks: once", r.wait(r"bookmarked ", 30) == "bookmarked -1 1", str(r.events()))
+            r.key(B, (CTRL,))
+            ev = r.wait(r"shown ", 60)
+            check("bookmarks: ^B shows them", ev is not None and ev.startswith("shown about:bookmarks ") and
+                  ev.endswith("title Bookmarks"), str(r.events()))
+            m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+            if m:
+                area = tuple(int(m.group(i)) for i in range(1, 5))
+                r.mouse.move(8 * len(" EWeb  File  Edit  View  Book"), 5)	# the Bookmarks menu, dropped
+                r.shot(12)
+                r.mouse.move(area[0] + area[2] // 2, area[1] + area[3] - 20)
+                time.sleep(0.5)
+                pt = link_point("about:bookmarks", area, int(m.group(5)), "Remove",
+                                ("-m", os.path.join(hd, "BOOKMARK.HTM")))
+                r.shot(13)
+                if check("bookmarks: Remove found on the page", pt is not None):
+                    r.mouse.click(*pt)
+                    ev = r.wait(r"shown ", 60)
+                    check("bookmarks: Remove takes it away", ev is not None and
+                          ev.startswith("shown about:bookmarks ") and
+                          "HREF" not in (saved("BOOKMARK.HTM") or b"HREF").decode("utf-8", "replace"),
+                          str(r.events()))
+                    r.shot(14)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

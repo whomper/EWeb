@@ -143,6 +143,11 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 /* stop fetching this page's pictures (Esc) */
 void br_pictures_stop(browser *b);
 
+/* the page shown to the bookmarks (bookmark.h; about:bookmarks lists
+   them): 1 added and saved, -1 already there, 0 not (EWeb's own page,
+   or the disk wouldn't take it) */
+int br_bookmark(browser *b);
+
 /* ---- saving (File > Save page, a link's file, a file EWeb doesn't show) */
 
 /* a name for a file from url on a TOS disk: 8.3, capitals, what a page

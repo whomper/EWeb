@@ -7,7 +7,7 @@ what the server says; for fuzz_url, an href, a newline and a base; for
 fuzz_cookie, Set-Cookie values a line each, the first byte picking the
 address it came from (see fuzz_cookie.c); for fuzz_html, a page, the first
 byte picking its charset, scripting and a fragment's context (see
-fuzz_html.c).
+fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them.
 
 tests/fuzz/found/ holds the inputs that once broke a parser, as the fuzzer
 saved them; make test runs them all again (common/tests/fuzz/replay.c)."""
@@ -114,3 +114,17 @@ for name, first, page in [
      "</b x=1/> &# &#x; &#99999999999; &unknown; &amp"),
 ]:
     put("html", name, bytes([first]) + page.encode("latin-1"))
+
+# bookmark files: Netscape's, as Firefox and Chrome export it, and odd ones
+for name, data in [
+    ("firefox", "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; "
+     "charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks Menu</H1>\n<DL><p>\n    <DT><H3 ADD_DATE=\"1\">"
+     "Atari</H3>\n    <DL><p>\n        <DT><A HREF=\"https://en.wikipedia.org/wiki/Atari\" ADD_DATE=\"2\" "
+     "ICON=\"data:image/png;base64,iVBOR\">Atari &amp; more</A>\n    </DL><p>\n    <DT><A HREF=\"place:x\">"
+     "q</A>\n</DL><p>\n"),
+    ("chrome", "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<DL><p>\n<DT><A HREF='http://68k.news/?a=1&amp;b=2' "
+     "add_date=1>68k &#x5e9;&#1500; <b>x</b>\n news</a>\n<DT><A HREF=javascript:x()>js</A>\n</DL>"),
+    ("odd", "<a href=\"\">e</a><a  href = 'x' >y</a><A NAME=n>no</A><a href=\"u\"><a href=v>w</a>"
+     "<a\thref=\"t\">&#0;&#xffffff;&#55296;&quot</a><a href=\"z"),
+]:
+    put("bookmark", name, data)

@@ -14,6 +14,7 @@
 #include "ui.h"
 #include "aboutbox.h"
 #include "av.h"
+#include "bookmark.h"
 #include "clip.h"
 #include "conn.h"
 #include "cookie.h"
@@ -87,6 +88,12 @@ static const MBAR_ITEM m_view[] = {
 	{ "Show pictures", 0, C_PICTURES },
 	{ 0, 0, 0 }
 };
+/* Bookmarks: the commands, then the first BM_MENU bookmarks, made again
+   when they change (bm_menu) */
+#define BM_MENU 20
+static MBAR_ITEM m_bm[3 + BM_MENU + 1];
+static char bm_text[BM_MENU][40];
+static unsigned bm_seen;
 static const MBAR_ITEM m_opts[] = {
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
@@ -103,11 +110,59 @@ static const MBAR_TITLE bar[] = {
 	{ " File ", m_file },
 	{ " Edit ", m_edit },
 	{ " View ", m_view },
+	{ " Bookmarks ", m_bm },
 	{ " Options ", m_opts },
 	{ " Help ", m_help },
 	{ 0, 0 }
 };
 static MBAR mb;
+
+/* the Bookmarks menu's items from the bookmarks: their titles (else
+   their addresses) in the system font's characters, cut to fit */
+static void bm_items(void)
+{
+	int i, n = 0;
+	m_bm[n].text = "Add bookmark";
+	m_bm[n].key = "^D";
+	m_bm[n++].cmd = C_BMADD;
+	m_bm[n].text = "Show bookmarks";
+	m_bm[n].key = "^B";
+	m_bm[n++].cmd = C_BMSHOW;
+	for (i = 0; i < bm_n && i < BM_MENU; i++) {
+		char t[160];
+		const char *u = bm_list[i].url, *s = strstr(u, "://");
+		if (i == 0) {
+			m_bm[n].text = "-";
+			m_bm[n].key = 0;
+			m_bm[n++].cmd = 0;
+		}
+		atari_text(bm_list[i].title[0] ? bm_list[i].title : s ? s + 3 : u, t, sizeof t);
+		if (strlen(t) > 30)
+			strcpy(t + 27, "...");
+		str_copy(bm_text[i], t, sizeof bm_text[i]);
+		m_bm[n].text = bm_text[i];
+		m_bm[n].key = 0;
+		m_bm[n++].cmd = C_BM + i;
+	}
+	memset(&m_bm[n], 0, sizeof m_bm[n]);
+	bm_seen = bm_changes;
+}
+
+/* the menu bar made again when the bookmarks changed */
+static void bm_menu(void)
+{
+	MBAR old = mb;
+	if (bm_seen == bm_changes)
+		return;
+	bm_items();
+	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
+		mb = old;		/* no memory: the menu as it was */
+		return;
+	}
+	menu_bar(old.tree, 0);
+	menu_bar(mb.tree, 1);
+	mbar_free(&old);
+}
 
 static void enable(int cmd, int on)
 {
@@ -136,6 +191,13 @@ void menu_update(void)
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
 	enable(C_PICTURES, !loading);
+	enable(C_BMADD, !loading && br.cur >= 0 && strncmp(br.url, "about:", 6) != 0);
+	enable(C_BMSHOW, !loading);
+	{
+		int i;
+		for (i = 0; i < bm_n && i < BM_MENU; i++)
+			enable(C_BM + i, !loading);
+	}
 	{
 		short i = mbar_object(&mb, C_PICTURES);
 		if (i >= 0)
@@ -552,6 +614,7 @@ static void loaded(int r)
 		break;
 	}
 	conn_stop = 0;
+	bm_menu();		/* a bookmark removed on about:bookmarks */
 	menu_update();
 }
 
@@ -749,6 +812,26 @@ void command(int cmd)
 			dlg_keys();
 		break;
 	case C_KEYS: dlg_keys(); break;
+	case C_BMADD: {
+		int r = br_bookmark(&br);
+		log_event("bookmarked %d %d", r, bm_n);
+		switch (r) {
+		case 1:
+			status("Bookmarked: it is in the Bookmarks menu.");
+			bm_menu();
+			break;
+		case -1:
+			status("This page is in your bookmarks already.");
+			break;
+		default:
+			alert(1, "[3][EWeb can't write BOOKMARK.HTM:|is the disk locked or full?][ OK ]");
+		}
+		break;
+	}
+	case C_BMSHOW: go("about:bookmarks"); break;
+	default:
+		if (cmd >= C_BM && cmd < C_BM + BM_MENU && cmd - C_BM < bm_n)
+			go(bm_list[cmd - C_BM].url);
 	}
 	menu_update();
 }
@@ -776,6 +859,8 @@ static int shortcut(short kstate, short key)
 		case 0x26: cmd = C_OPENURL; break;		/* L */
 		case 0x18: cmd = C_OPENFILE; break;		/* O */
 		case 0x1f: cmd = C_SAVE; break;			/* S */
+		case 0x20: cmd = C_BMADD; break;		/* D */
+		case 0x30: cmd = C_BMSHOW; break;		/* B */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */
 		case 0x11: cmd = C_QUIT; break;			/* W: the one window */
@@ -1035,6 +1120,13 @@ int main(void)
 	pf_idle = idle;
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari Falcon030)", EWEB_VERSION);
 
+	{
+		/* the bookmarks: read once a start (6.5), for their menu */
+		char bm[256];
+		path_join(bm, sizeof bm, opt.workdir, "BOOKMARK.HTM");
+		bm_file(bm);
+		bm_items();
+	}
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EWeb: not enough memory.][ Quit ]");
 		v_clsvwk(vdi_h);

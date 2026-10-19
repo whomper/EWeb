@@ -120,6 +120,12 @@ hub stay complete, with the evidence.
   once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). After changing
   them: `make test` (`tests/net/cookies.txt`), `make fuzz` for a while (`fuzz_cookie`), `make itest`
   (`/site/cookie/`), `make hatarifiles`.
+- **Bookmarks** are `src/browse/bookmark.c` (`BOOKMARK.HTM` next to `EWEB.PRG`, Netscape's bookmark
+  file; read once a start for the Bookmarks menu, one safe save at each change), listed on
+  `about:bookmarks` (`src/browse`). After changing them: `make test` (`tests/browse/bmtest.c`),
+  `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
+  the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
+  `make hatarigui` after changing it.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there

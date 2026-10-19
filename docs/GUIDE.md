@@ -125,6 +125,17 @@ cookies and can't set any.
 Options > Forget cookies forgets them all at once, the file too: you are
 logged out of every site.
 
+## Bookmarks
+
+**Bookmarks > Add bookmark** (**^D**) keeps the page shown; the
+Bookmarks menu lists the first twenty, and **Show bookmarks** (**^B**)
+shows them all as a page, each with its site and a Remove link.
+
+They are kept in `BOOKMARK.HTM` next to `EWEB.PRG`, at once, in the
+bookmark file other browsers import and export: put one exported from
+Firefox, Chrome or another browser there (its folders are left out) and
+EWeb lists its links, or open EWeb's in another browser.
+
 ## Saving pages and files
 
 - **File > Save page as** (**^S**) saves the page shown as it came, in
@@ -202,6 +213,8 @@ choose all of it.
 | ^L | type an address (Return goes there) |
 | ^O | open a page on your disks |
 | ^S | save the page shown |
+| ^D | add the page shown to the bookmarks |
+| ^B | show the bookmarks |
 | Alternate-click | save a link's file |
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
