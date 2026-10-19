@@ -198,6 +198,19 @@ try:
                   and "background ffeedd" in out and re.search(r'#aa0000 \S+ bold link 0 "Welcome"', out)
                   and "link 1 %s://localhost:%d/site/two.html\n" % (scheme, port) in out
                   and "link 2 %s://localhost:%d/site/two.html#end\n" % (scheme, port) in out, out)
+        # Back and Forward: the pages kept as laid out, shown again with no
+        # fetch or parse; laid out again at another width
+        p = subprocess.run([ewrender, "-f", font, "-c", os.path.join(work, "CACERT.PEM"), "-d", "-N",
+                            "http://localhost:%d/site/two.html" % HTTP, "http://localhost:%d/site/" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        steps = re.findall(r'^(to|back|forward|narrower): 0 "([^"]*)" \S+ width (\d+) fetch (\d+) parse (\d+)',
+                           p.stdout, re.M)
+        want = [("to", "Two"), ("back", "EWeb site"), ("forward", "Two"), ("back", "EWeb site"),
+                ("narrower", "EWeb site"), ("forward", "Two"), ("back", "EWeb site")]
+        check("the browser: Back and Forward from pages kept", p.returncode == 0 and
+              [(s[0], s[1]) for s in steps] == want and
+              all(s[3] == "0" and s[4] == "0" for s in steps if s[0] in ("back", "forward")) and
+              steps[5][2] == "508", p.stdout + p.stderr)
         rc, out = browse("http://localhost:%d/site/two.html#end" % HTTP)
         check("the browser: a page's anchor", rc == 0 and '"The end"' in out
               and "link 1 http://localhost:%d/site/\n" % HTTP in out, out)

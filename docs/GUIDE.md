@@ -87,9 +87,10 @@ lays the page out again for the new width.
 ## Back, Forward and Home
 
 **Undo** (or **^Z**) goes back, **Shift-Undo** (or **Shift-^Z**)
-forward, to where you were on each page. EWeb keeps the last 50 pages,
-and the last few pages and their stylesheets in memory, so going back
-is quick and doesn't fetch them again; **^R** fetches the page again.
+forward, to where you were on each page. EWeb keeps the last 50 pages.
+The last few stay in memory as they were laid out (in TT RAM when there
+is some), so Back and Forward show them at once, without fetching or
+reading them again; **^R** fetches the page again.
 
 **Home** opens your home page: EWeb's own start page, or the page you
 chose with Options > Use this page as home.

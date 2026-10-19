@@ -29,11 +29,15 @@
 struct achunk { struct achunk *next; size_t used, size; char mem[]; };
 struct arena { struct achunk *head; };
 
+/* what a box or a run needs: 4 on the 68030 (2 would do), 8 where
+   pointers are 8 bytes (the build machine's checks) */
+#define AALIGN (sizeof(void *) > 4 ? 8 : 4)
+
 static void *amalloc(struct arena *a, size_t n)
 {
 	struct achunk *c = a->head;
 	void *p;
-	n = (n + 3) & ~(size_t) 3;
+	n = (n + AALIGN - 1) & ~(size_t) (AALIGN - 1);
 	if (c == NULL || c->used + n > c->size) {
 		size_t size = n > 16384 ? n : 16384;
 		c = malloc(sizeof *c + size);

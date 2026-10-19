@@ -21,7 +21,18 @@
 typedef struct {
 	char *url;		/* as loaded, fragment included */
 	int32_t y;		/* how far down it was scrolled */
+	/* the page as it was laid out, kept so that Back and Forward show it
+	   at once (NULL: loaded again, from the cache or the server) */
+	doc *d;
+	page *p;
+	long src_len;		/* its source's bytes (its memory is about 8 times that) */
+	int status;
+	char *security;
 } BR_ENTRY;
+
+/* the memory pages kept for Back and Forward may take, roughly (the
+   front end sets it from the machine's free memory; 16 MB by default) */
+extern long br_keep_max;
 
 /* what a load came to */
 enum {
@@ -51,6 +62,8 @@ typedef struct browser {
 
 	BR_ENTRY hist[BR_HISTORY];
 	int nhist, cur;		/* cur: the entry shown, -1 none */
+	int at;			/* the entry the page shown belongs to, -1 none */
+	long src_len;		/* the page shown's source, bytes (what keeping it costs) */
 
 	/* settings */
 	const char *search;	/* words typed: this with %s for them ("" for none) */

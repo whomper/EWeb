@@ -36,7 +36,7 @@ HTTP, HTTPS = 18280, 18643
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C = 0x26, 0x10, 0x2E
-RETURN, UNDO = 0x1C, 0x61
+RETURN, UNDO, DOWN, SPACE = 0x1C, 0x61, 0x50, 0x39
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
 # takes letters and digits as they are
@@ -268,6 +268,31 @@ def browse():
         check("browse: an address typed, scrolled to its anchor",
               ev is not None and ev.startswith("shown %stwo.html#end " % site) and top > 1000, str(r.events()))
         r.shot(3)
+        # a long page scrolled the way people do: Down a line at a time,
+        # Shift-Down and Space a page (what stays on the screen is moved,
+        # the new rows drawn), then Back from memory; EWEB.PRG still answers
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/page" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("browse: a long page", ev is not None and ev.startswith("shown http://127.0.0.1:%d/page " % HTTP),
+              str(r.events()))
+        for _ in range(25):
+            r.key(DOWN)
+        for _ in range(6):
+            r.key(DOWN, (SHIFT,))
+        for _ in range(6):
+            r.key(SPACE)
+        for _ in range(4):
+            r.key(SPACE, (SHIFT,))
+        time.sleep(3)
+        r.shot(6)
+        r.key(UNDO)
+        ev = r.wait(r"shown ", 120)
+        ms = re.search(r"fetch (\d+)", ev or "")
+        check("browse: scrolled, then Back from memory",
+              ev is not None and ev.startswith("shown %stwo.html#end " % site) and ms is not None and
+              int(ms.group(1)) < 200, str(r.events()))
         # a secure page: the TLS handshake on the emulated 68030 and DSP,
         # the window alive meanwhile
         r.key(L, (CTRL,))

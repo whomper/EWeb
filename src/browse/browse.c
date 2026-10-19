@@ -509,8 +509,13 @@ static int fetch(browser *b, const char *url, int fresh, const char *accept, lon
 					f->data[0] = 0;
 				f->len = 0;
 			}
-			if (f->status == 200)
+			if (f->status == 200) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
+				/* after a redirect, under where it came from too: the
+				   history keeps that address, and Back asks for it */
+				if (strcmp(url, f->url) != 0)
+					cache_put(f->url, f->url, f->data, f->len, f->mime, f->charset, f->security);
+			}
 		}
 		sb_free(&body);
 		http_resp_free(rs);
@@ -621,12 +626,87 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	return 1;
 }
 
-static void show(browser *b, doc *d, page *p, const char *url, const char *security, int status)
+/* ---------------------------------------------------------------- pages kept for Back */
+
+long br_keep_max = 16L << 20;
+
+static void unkeep(BR_ENTRY *e)
 {
-	if (b->p != NULL)
-		page_free(b->p);
-	if (b->d != NULL)
-		doc_free(b->d);
+	if (e->p != NULL)
+		page_free(e->p);
+	if (e->d != NULL)
+		doc_free(e->d);
+	free(e->security);
+	e->p = NULL;
+	e->d = NULL;
+	e->security = NULL;
+	e->src_len = 0;
+}
+
+/* what a page laid out keeps, roughly: its tree, styles and display list
+   (about eight times its source, on the page set) */
+static long cost(long src_len)
+{
+	return 8 * src_len + 65536L;
+}
+
+/* the kept pages within br_keep_max: those farthest from the one shown go
+   first */
+static void keep_trim(browser *b)
+{
+	for (;;) {
+		long total = 0;
+		int i, far = -1, fd = -1;
+		for (i = 0; i < b->nhist; i++) {
+			if (b->hist[i].p == NULL)
+				continue;
+			total += cost(b->hist[i].src_len);
+			if ((i > b->cur ? i - b->cur : b->cur - i) > fd) {
+				fd = i > b->cur ? i - b->cur : b->cur - i;
+				far = i;
+			}
+		}
+		if (total <= br_keep_max || far < 0)
+			return;
+		unkeep(&b->hist[far]);
+	}
+}
+
+/* the page shown goes to its history entry, to come back at once */
+static void keep_shown(browser *b)
+{
+	BR_ENTRY *e;
+	if (b->p == NULL || b->at < 0 || b->at >= b->nhist || cost(b->src_len) > br_keep_max) {
+		if (b->p != NULL)
+			page_free(b->p);
+		if (b->d != NULL)
+			doc_free(b->d);
+	} else {
+		e = &b->hist[b->at];
+		unkeep(e);
+		e->d = b->d;
+		e->p = b->p;
+		e->src_len = b->src_len;
+		e->status = b->status;
+		e->security = str_ndup(b->security, (long) strlen(b->security));
+	}
+	b->d = NULL;
+	b->p = NULL;
+	b->at = -1;
+}
+
+/* keep: the page shown stays in its history entry (a new page, or one
+   from the history); else it goes (a reload) */
+static void show(browser *b, doc *d, page *p, const char *url, const char *security, int status, int keep)
+{
+	if (keep) {
+		keep_shown(b);
+	} else {
+		if (b->p != NULL)
+			page_free(b->p);
+		if (b->d != NULL)
+			doc_free(b->d);
+	}
 	b->d = d;
 	b->p = p;
 	str_copy(b->url, url, sizeof b->url);
@@ -642,16 +722,20 @@ static void hist_push(browser *b, const char *url)
 	if (u == NULL)
 		return;
 	/* what was ahead goes */
-	for (i = b->cur + 1; i < b->nhist; i++)
+	for (i = b->cur + 1; i < b->nhist; i++) {
 		free(b->hist[i].url);
+		unkeep(&b->hist[i]);
+	}
 	b->nhist = b->cur + 1;
 	if (b->nhist == BR_HISTORY) {
 		free(b->hist[0].url);
+		unkeep(&b->hist[0]);
 		memmove(b->hist, b->hist + 1, (BR_HISTORY - 1) * sizeof b->hist[0]);
 		b->nhist--;
+		b->cur--;
 	}
+	memset(&b->hist[b->nhist], 0, sizeof b->hist[0]);
 	b->hist[b->nhist].url = u;
-	b->hist[b->nhist].y = 0;
 	b->cur = b->nhist++;
 }
 
@@ -684,9 +768,12 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 	page *p;
 	if (!build(b, src->s, src->len, "utf-8", url, 0, &d, &p))
 		return BR_STOPPED;
-	show(b, d, p, url, "", 0);
+	show(b, d, p, url, "", 0, mode != NAV_RELOAD);
+	b->src_len = src->len;
 	if (mode == NAV_NEW)
 		hist_push(b, url);
+	b->at = b->cur;
+	keep_trim(b);
 	b->scroll_to = mode == NAV_NEW ? -1 : b->hist[b->cur].y;
 	return BR_SHOWN;
 }
@@ -783,11 +870,14 @@ static int load(browser *b, const char *url, int mode)
 			strcat(shown, "#");
 			strcat(shown, fr);
 		}
-		show(b, d, p, shown, f->security, f->status);
+		show(b, d, p, shown, f->security, f->status, mode != NAV_RELOAD);
+		b->src_len = f->len;
 		if (mode == NAV_NEW)
 			hist_push(b, shown);
 		else
 			hist_set_url(b, shown);
+		b->at = b->cur;
+		keep_trim(b);
 	}
 	if (mode == NAV_NEW)
 		b->scroll_to = anchor_y(b, b->url);
@@ -806,6 +896,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	b->width = width;
 	b->zoom = zoom > 0 ? zoom : 1024;
 	b->cur = -1;
+	b->at = -1;
 	b->scroll_to = -1;
 	b->search = "";
 }
@@ -819,10 +910,13 @@ void br_free(browser *b)
 		doc_free(b->d);
 	b->p = NULL;
 	b->d = NULL;
-	for (i = 0; i < b->nhist; i++)
+	for (i = 0; i < b->nhist; i++) {
 		free(b->hist[i].url);
+		unkeep(&b->hist[i]);
+	}
 	b->nhist = 0;
 	b->cur = -1;
+	b->at = -1;
 }
 
 int br_go(browser *b, const char *typed)
@@ -865,6 +959,32 @@ static int go_to(browser *b, int i)
 		str_copy(b->url, b->hist[i].url, sizeof b->url);
 		b->scroll_to = b->hist[i].y;
 		return BR_SAME;
+	}
+	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom) {
+		/* kept: shown at once, laid out again only for another width */
+		BR_ENTRY *e = &b->hist[i];
+		doc *d = e->d;
+		page *p = e->p;
+		int status = e->status;
+		long src_len = e->src_len;
+		char security[96];
+		str_copy(security, e->security ? e->security : "", sizeof security);
+		e->d = NULL;
+		e->p = NULL;
+		unkeep(e);
+		show(b, d, p, e->url, security, status, 1);
+		b->src_len = src_len;
+		b->cur = i;
+		b->at = i;
+		b->ms_fetch = b->ms_parse = b->ms_style = b->ms_layout = 0;
+		if (p->opt.width != b->width) {
+			unsigned long t = pf_ms();
+			br_relayout(b, b->width);
+			b->ms_layout = pf_ms() - t;
+		}
+		keep_trim(b);
+		b->scroll_to = e->y;
+		return BR_SHOWN;
 	}
 	b->cur = i;
 	r = load(b, b->hist[i].url, NAV_HISTORY);

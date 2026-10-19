@@ -548,8 +548,13 @@ releases.
   screen through ST-RAM (the screen can't be fed from TT-RAM).
 - **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
-  and for a site's stylesheets, 50 pages of history with where each was scrolled, a page's anchors,
-  and EWeb's own pages (the start page; "can't open", with the reason).
+  and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
+  of history with where each was scrolled, a page's anchors, and EWeb's own pages (the start page;
+  "can't open", with the reason). The pages nearest in the history stay laid out (Erez's request,
+  19 Oct 2026): Back and Forward show them at once, laid out again only for another window width,
+  within a quarter of the free TT RAM up to 24 MB (else an eighth of the free ST RAM up to 2 MB),
+  a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
+  about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
 - **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar (Back, Forward, Reload or Stop, Home,
   the address, typed into in place), the page under it with the window's slider, the status on the
   info line (a link's address under the mouse, what a load is doing, how a secure page came), the

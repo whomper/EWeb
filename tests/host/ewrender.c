@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL]
  *            PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
@@ -15,7 +15,15 @@
  * -t the document tree with each element's display first, -v what
  * the browser says while it loads (its status line), -c the root
  * certificates for https (binary/CACERT.PEM),
- * -y and -H the part of the page drawn (all of it).
+ * -y and -H the part of the page drawn (all of it). -N URL: then to URL,
+ * Back, Forward, Back, the width 100 px less, Forward, Back, each step's
+ * title and times printed (kept pages come back with no fetch or parse);
+ * what is drawn or dumped is the page at the end. -B draws the page as
+ * EWEB.PRG does on the screen (ui/screen.c), in bands of 32 rows at
+ * every scroll position and in pieces across, at 8 and 16 bits, each into
+ * a buffer of just its size: under AddressSanitizer a pixel drawn past a
+ * band's edge stops it (on the Falcon it would land in ST RAM next to the
+ * band, TOS's).
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -174,6 +182,56 @@ static void tree(const dnode *n, int depth)
 
 /* ---------------------------------------------------------------- the page */
 
+static uint8_t pen8(void *ud, uint32_t rgb)
+{
+	(void) ud;
+	return (uint8_t) ((rgb >> 16 ^ rgb >> 8 ^ rgb) & 0xff);
+}
+
+static int shade8(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light)
+{
+	(void) ud;
+	*dark = 1;
+	*light = 0;
+	return (int) (rgb & 15);
+}
+
+/* -B: the page as ui/screen.c draws it, a band of 32 rows at a time, at
+   every scroll position (each row the top of a band) and in pieces across
+   (an area of the window uncovered), each into a buffer of just its size */
+static long bands(const page *p, int32_t width)
+{
+	static const int32_t across[][2] = { { 0, 0 }, { 0, 100 }, { 37, 211 }, { 300, 0 }, { 599, 0 } };
+	int32_t y, k, bpp;
+	long n = 0;
+	for (bpp = 8; bpp <= 16; bpp += 8) {
+		for (k = 0; k < (int32_t) (sizeof across / sizeof across[0]); k++) {
+			int32_t x = across[k][0], w = across[k][1] ? across[k][1] : width - across[k][0];
+			if (w <= 0 || x >= width)
+				continue;
+			for (y = -40; y < p->height + 40; y += k ? 13 : 1) {
+				canvas c;
+				memset(&c, 0, sizeof c);
+				c.w = w;
+				c.h = 32;
+				c.bpp = (int) bpp;
+				c.stride = bpp == 16 ? 2L * w : w;
+				c.ox = x;
+				c.oy = y;
+				c.pen = pen8;
+				c.shade = k & 1 ? shade8 : NULL;
+				c.pix = malloc(c.stride * c.h);
+				if (c.pix == NULL)
+					return -1;
+				cv_page(&c, p);
+				free(c.pix);
+				n++;
+			}
+		}
+	}
+	return n;
+}
+
 static void said(void *ud, const char *what)
 {
 	if (*(int *) ud)
@@ -184,7 +242,8 @@ int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1;
-	int dump = 0, show_tree = 0, verbose = 0, i, r;
+	int dump = 0, show_tree = 0, verbose = 0, band = 0, i, r;
+	const char *next = NULL;
 	char where[4096];
 	browser b;
 	page *p;
@@ -205,6 +264,10 @@ int main(int argc, char **argv)
 			height = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-d"))
 			dump = 1;
+		else if (!strcmp(argv[i], "-B"))
+			band = 1;
+		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
+			next = argv[++i];
 		else if (!strcmp(argv[i], "-t"))
 			show_tree = 1;
 		else if (!strcmp(argv[i], "-v"))
@@ -215,7 +278,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-N URL] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -255,9 +318,32 @@ int main(int argc, char **argv)
 		fprintf(stderr, "ewrender: nothing shown (%d)\n", r);
 		return 1;
 	}
+	if (next != NULL) {
+		static const char *const step[] = { "to", "back", "forward", "back", "narrower", "forward", "back" };
+		int k;
+		for (k = 0; k < 7; k++) {
+			if (k == 0)
+				r = br_go(&b, next);
+			else if (k == 1 || k == 3 || k == 6)
+				r = br_back(&b);
+			else if (k == 4)
+				r = br_relayout(&b, width - 100) ? BR_SHOWN : BR_STOPPED;
+			else
+				r = br_forward(&b);
+			printf("%s: %d \"%s\" %s width %d fetch %lu parse %lu layout %lu\n", step[k], r, b.title, b.url,
+			       b.p ? (int) b.p->opt.width : 0, b.ms_fetch, b.ms_parse, b.ms_layout);
+		}
+		if (b.p == NULL)
+			return 1;
+	}
 	p = b.p;
 	if (show_tree)
 		tree(b.d->root, 0);
+	if (band) {
+		long n = bands(p, width);
+		printf("bands: %ld drawn, page %d x %d\n", n, (int) p->width, (int) p->height);
+		return n < 0;
+	}
 	if (dump) {
 		long k;
 		printf("page %d x %d, background %06lx, %ld items, %d links, title \"%s\"\n", (int) p->width,

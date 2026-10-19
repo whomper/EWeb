@@ -707,6 +707,16 @@ int main(void)
 	graf_mouse(ARROW, 0);
 
 	br_init(&br, 600, (int32_t) (819L * opt.zoom / 100));
+	{
+		/* pages kept for Back and Forward (the heap takes TT RAM first):
+		   a quarter of the free TT RAM up to 24 MB, else an eighth of
+		   the free ST RAM up to 2 MB */
+		long tt = (long) Mxalloc(-1L, 1), st = (long) Mxalloc(-1L, 0);
+		if (tt > 0)
+			br_keep_max = tt / 4 < (24L << 20) ? tt / 4 : (24L << 20);
+		else if (st > 0)
+			br_keep_max = st / 8 < (2L << 20) ? st / 8 : (2L << 20);
+	}
 	br.search = opt.search;
 	br.say = say;
 	win_open();
