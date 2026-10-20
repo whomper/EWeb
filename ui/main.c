@@ -593,7 +593,7 @@ static void idle(void)
 {
 	short msg[8], which;
 	AEVENT ev;
-	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 5, msg, &ev);
+	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
 	win_throb(1);
 	if (pics) {
 		if (which & MU_MESAG) {
@@ -1470,6 +1470,13 @@ int main(void)
 	cw = gl_wchar;
 	ch = gl_hchar;
 	vdi_h = v_opnvwk_(vdi_h, work_out);
+	if (vdi_h <= 0) {
+		/* no workstation (the VDI out of memory, 2.1): said by the AES,
+		   never drawn with */
+		form_alert(1, "[3][EWeb couldn't open a VDI|workstation: too little|memory is free for it.|Quit a program or accessory|and start EWeb again.][ OK ]");
+		appl_exit();
+		return 1;
+	}
 	scr_w = work_out[0] + 1;
 	scr_h = work_out[1] + 1;
 	vq_extnd(vdi_h, 1, work_out);

@@ -12,6 +12,7 @@
 #include "bigbuf.h"
 
 void (*pf_idle)(void);
+int pf_idle_quick;
 
 int pf_open(const char *path, int mode)
 {

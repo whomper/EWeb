@@ -83,7 +83,9 @@ hub stay complete, with the evidence.
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions, `tools/prof68k.py` shows where they go function by function, and
   `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
-  `NSBENCH.TTP` on an emulated 32 MHz Falcon.
+  `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times `PICBENCH.TTP`
+  (`make binary/PICBENCH.TTP`: a picture decoded and dithered as `EWEBST.PRG` does it) on the
+  cycle-exact 8 MHz ST.
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and

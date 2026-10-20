@@ -71,5 +71,6 @@ void net_close_wait(int h, int seconds);
 
 /* the UI can show progress and keep the screen alive while we wait */
 extern void (*pf_idle)(void);
+extern int pf_idle_quick;		/* set: pf_idle mustn't wait (a decoder's poll) */
 
 #endif

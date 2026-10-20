@@ -276,6 +276,9 @@ static void draw_addr(void)
 /* ---------------------------------------------------------------- the throbber */
 
 static const THR_ED *thr_ed;		/* the edition for this screen, NULL: none */
+static char *thr_dev;			/* its frames in the screen's own form (ST RAM), each made when first shown */
+static unsigned thr_made;		/* which of them are made, a bit each */
+static int thr_nodev;			/* no memory for them: each drawn as it comes */
 static int thr_frame;			/* the frame shown: 0 at rest */
 static int thr_drawn;			/* frames drawn, for the log */
 static unsigned long thr_at;		/* when the frame was last moved on (ms) */
@@ -294,21 +297,36 @@ static const THR_ED *edition(void)
 	return tall ? &thr_mono_tall : &thr_mono_short;
 }
 
-/* the frame shown, within clip: unpacked from its few hundred bytes each
-   time (1.6 KB while it is drawn, nothing kept) */
+/* the frame shown, within clip. Unpacking a frame and making it the
+   screen's took 150 ms on an 8 MHz ST, longer than a frame lasts: each is
+   made once, into the screen's own form (16 frames: 3.8 KB in
+   monochrome, 30 KB in 256 colours), and copied from there after */
 static void draw_throbber(const GRECT *clip)
 {
 	GRECT r = r_thr;
 	SBUF b;
 	const THR_ED *e = thr_ed != NULL ? thr_ed : (thr_ed = edition());
-	long n = (long) THR_W * e->h;
+	long n = (long) THR_W * e->h, size = scr_dev_size(THR_W, e->h);
+	char *f;
 	if (r.w <= 0 || !rect_and(&r, clip))
 		return;
+	r_thr.h = e->h;
+	if (thr_dev == NULL && !thr_nodev && (thr_dev = scr_dev_alloc(size * THR_FRAMES)) == NULL)
+		thr_nodev = 1;
+	f = thr_dev != NULL ? thr_dev + size * thr_frame : NULL;
+	if (f != NULL && (thr_made & (1u << thr_frame))) {
+		scr_blit_dev(f, THR_W, e->h, &r_thr, &r);
+		return;
+	}
 	sb_init(&b);
 	if (inflate_raw(e->data + e->off[thr_frame], e->off[thr_frame + 1] - e->off[thr_frame], &b, n) == 1 &&
 	    b.len == n) {
-		r_thr.h = e->h;
-		scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &r_thr, &r);
+		if (f != NULL && scr_rgb_dev((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, f)) {
+			thr_made |= 1u << thr_frame;
+			scr_blit_dev(f, THR_W, e->h, &r_thr, &r);
+		} else {
+			scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &r_thr, &r);
+		}
 	}
 	sb_free(&b);
 }
@@ -1579,6 +1597,9 @@ void win_close(void)
 	wind_close(win_h);
 	wind_delete(win_h);
 	win_h = -1;
+	scr_dev_free(thr_dev);		/* the throbber's frames */
+	thr_dev = NULL;
+	thr_made = 0;
 }
 
 void win_message(const short *msg)

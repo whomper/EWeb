@@ -1364,11 +1364,20 @@ static int load(browser *b, const char *url, int mode)
 
 /* ---------------------------------------------------------------- what the front end asks */
 
-/* a long decode keeps the window alive, and Esc stops it */
+/* a long decode keeps the window alive, and Esc stops it: GEM's turn
+   ten times a second, and then without waiting for its timer (each
+   turn waited a clock tick, 20 ms; a progressive JPEG on the ST polled
+   hundreds of times, most of its 13.7 s) */
 static int picture_poll(void)
 {
-	if (pf_idle)
+	static unsigned long last;
+	unsigned long now = pf_ms();
+	if (pf_idle && now - last >= 100) {
+		last = now;
+		pf_idle_quick = 1;
 		pf_idle();
+		pf_idle_quick = 0;
+	}
 	return !conn_stop;
 }
 

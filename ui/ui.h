@@ -89,6 +89,13 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
    at at; the part of it on part (within at and the clip set) */
 void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
 	     const GRECT *part);
+/* the same made once into the screen's own form (dev: scr_dev_size bytes
+   of ST RAM from scr_dev_alloc), then put on the screen from there */
+long scr_dev_size(short w, short h);
+void *scr_dev_alloc(long n);
+void scr_dev_free(void *p);
+int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, void *dev);
+void scr_blit_dev(void *dev, short w, short h, const GRECT *at, const GRECT *part);
 
 /* the window (win.c) */
 extern short win_h;			/* AES handle, -1 when closed */

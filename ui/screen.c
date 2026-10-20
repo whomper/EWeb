@@ -294,13 +294,11 @@ put:
 	}
 }
 
-/* dev_buf's h rows of words * 16 pixels (made from chunky in the modes
-   with planes) to the screen at x, y: w pixels of them, from column sx */
-static void put(short h, long words, short sx, short w, short x, short y)
+/* dev_buf's h rows of words * 16 pixels, from chunky in the modes with
+   planes, made the screen's own */
+static void make(short h, long words)
 {
-	MFDB src, dst, scr;
-	short pxy[8];
-	memset(&scr, 0, sizeof scr);
+	MFDB src, dst;
 	memset(&dst, 0, sizeof dst);
 	dst.fd_addr = dev_buf;
 	dst.fd_w = (short) (words * 16);
@@ -327,6 +325,21 @@ static void put(short h, long words, short sx, short w, short x, short y)
 		src.fd_stand = 1;
 		vr_trnfm(vdi_h, &src, &dst);
 	}
+}
+
+/* h rows of words * 16 pixels in the screen's own form, at at, to the
+   screen at x, y: w pixels of them, from column sx */
+static void blit(void *at, short h, long words, short sx, short w, short x, short y)
+{
+	MFDB src, scr;
+	short pxy[8];
+	memset(&scr, 0, sizeof scr);
+	memset(&src, 0, sizeof src);
+	src.fd_addr = at;
+	src.fd_w = (short) (words * 16);
+	src.fd_h = h;
+	src.fd_wdwidth = (short) words;
+	src.fd_nplanes = planes;
 	pxy[0] = sx;
 	pxy[1] = 0;
 	pxy[2] = sx + w - 1;
@@ -335,7 +348,43 @@ static void put(short h, long words, short sx, short w, short x, short y)
 	pxy[5] = y;
 	pxy[6] = x + w - 1;
 	pxy[7] = y + h - 1;
-	vro_cpyfm(vdi_h, 3, pxy, &dst, &scr);
+	vro_cpyfm(vdi_h, 3, pxy, &src, &scr);
+}
+
+/* dev_buf's h rows, made from chunky, to the screen */
+static void put(short h, long words, short sx, short w, short x, short y)
+{
+	make(h, words);
+	blit(dev_buf, h, words, sx, w, x, y);
+}
+
+/* each colour's pixel value (or 5-6-5 pixel) */
+static void rgb_map(unsigned short *map, const unsigned long *col, short ncol)
+{
+	short i;
+	for (i = 0; i < ncol; i++) {
+		unsigned long c = col[i];
+		map[i] = truecolour ? (unsigned short) ((c >> 8 & 0xf800) | (c >> 5 & 0x07e0) | (c >> 3 & 0x001f)) :
+			 pen(NULL, (uint32_t) c);
+	}
+}
+
+/* n rows of pix (w wide), from row y, into chunky (or dev_buf) */
+static void rgb_rows(const unsigned char *pix, const unsigned short *map, short w, long words, short y, short n)
+{
+	short r, x;
+	for (r = 0; r < n; r++) {
+		const unsigned char *s = pix + (long) (y + r) * w;
+		if (truecolour) {
+			unsigned short *d = dev_buf + r * words * 16;
+			for (x = 0; x < w; x++)
+				d[x] = map[s[x]];
+		} else {
+			unsigned char *d = chunky + r * words * 16;
+			for (x = 0; x < w; x++)
+				d[x] = (unsigned char) map[s[x]];
+		}
+	}
 }
 
 void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
@@ -343,30 +392,56 @@ void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, sho
 {
 	unsigned short map[256];
 	long words = (w + 15) / 16;
-	short i, y0, sx = part->x - at->x, sy = part->y - at->y;
+	short y0, sx = part->x - at->x, sy = part->y - at->y;
 	if (part->w <= 0 || part->h <= 0 || words * 16 > band_w)
 		return;
-	for (i = 0; i < ncol; i++) {
-		unsigned long c = col[i];
-		map[i] = truecolour ? (unsigned short) ((c >> 8 & 0xf800) | (c >> 5 & 0x07e0) | (c >> 3 & 0x001f)) :
-			 pen(NULL, (uint32_t) c);
-	}
+	rgb_map(map, col, ncol);
 	for (y0 = 0; y0 < part->h; y0 += rows) {
-		short n = part->h - y0 > rows ? rows : part->h - y0, r, x;
-		for (r = 0; r < n; r++) {
-			const unsigned char *s = pix + (long) (sy + y0 + r) * w;
-			if (truecolour) {
-				unsigned short *d = dev_buf + r * words * 16;
-				for (x = 0; x < w; x++)
-					d[x] = map[s[x]];
-			} else {
-				unsigned char *d = chunky + r * words * 16;
-				for (x = 0; x < w; x++)
-					d[x] = (unsigned char) map[s[x]];
-			}
-		}
+		short n = part->h - y0 > rows ? rows : part->h - y0;
+		rgb_rows(pix, map, w, words, sy + y0, n);
 		put(n, words, sx, part->w, part->x, part->y + y0);
 	}
+}
+
+long scr_dev_size(short w, short h)
+{
+	return (w + 15) / 16 * 2L * planes * h;
+}
+
+void *scr_dev_alloc(long n)
+{
+	return st_alloc(n);
+}
+
+void scr_dev_free(void *p)
+{
+	if (p != NULL)
+		Mfree(p);
+}
+
+int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, void *dev)
+{
+	unsigned short map[256];
+	long words = (w + 15) / 16, row = words * 2 * planes;
+	short y0;
+	if (words * 16 > band_w)
+		return 0;
+	rgb_map(map, col, ncol);
+	for (y0 = 0; y0 < h; y0 += rows) {
+		short n = h - y0 > rows ? rows : h - y0;
+		rgb_rows(pix, map, w, words, y0, n);
+		make(n, words);
+		memcpy((char *) dev + y0 * row, dev_buf, (size_t) (n * row));
+	}
+	return 1;
+}
+
+void scr_blit_dev(void *dev, short w, short h, const GRECT *at, const GRECT *part)
+{
+	long words = (w + 15) / 16, row = words * 2 * planes;
+	short sy = part->y - at->y;
+	if (part->w > 0 && part->h > 0)
+		blit((char *) dev + sy * row, part->h, words, part->x - at->x, part->w, part->x, part->y);
 }
 
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)

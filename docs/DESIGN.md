@@ -817,13 +817,43 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   IDCT, then average), and it reads every JPEG a page has: progressive, arithmetic, CMYK. It costs 89 KB of program. Taken as its decoder only, 8-bit, without
   the floating-point IDCT (AERA-Atari's `third_party/libjpeg-turbo/AERA.md`). TJpgDec stays in
   `common/` for the 68000 programs.
+- **JPEG made faster on the 68030 (20 Oct 2026):** libjpeg's fast integer IDCT (`JDCT_IFAST`)
+  and no copies: a picture shown at the size it unpacks to gets its 5-6-5 pixels straight from
+  libjpeg (patched to give the machine's own byte order), any other has its RGB rows go to the
+  scaler as they are. The decoder's own functions on the 480 x 320 photo (`tools/prof68k.py`):
+  22.6 M instructions at its size before, 16.7 M after (3.2 s on the DFB1); shown at 192 x 128,
+  10.2 M to 8.9 M. Against a decode in floating point the photo is 38.2 dB (39.2 with the exact
+  IDCT; libjpeg's merged upsampling would save more but makes colour fringes, 31.7 dB, so it isn't
+  used). The DSP is next.
+- **JPEG made faster on the ST's 68000 (20 Oct 2026):** TJpgDec's transform is now the same AAN
+  transform in 16-bit arithmetic (each product one `muls.w`; the 68000 has no 32-bit multiply,
+  and GCC called a routine for each), at 1/2 and 1/4 scale the coefficients are folded into a
+  4 x 4 or 2 x 2 block and only that is transformed (the exact average of each square, which the
+  scaler took before), and the colours come from tables, each chroma sample's terms once for the
+  pixels sharing it (AERA-Atari's `third_party/tjpgd/README.txt`). The scaler takes RGB rows,
+  divides through a table of reciprocals (`mulu.w`) and copies a row shown at its size; black
+  and white has a dither of its own. Its error against libjpeg-turbo's exact decode went down
+  (4:2:0, mean 2.83 to 2.64). `PICBENCH.TTP` (`tests/bench/picbench.c`, run in Hatari's
+  cycle-exact 8 MHz ST by `tests/bench/picbench.py`) times each step:
+
+  | The 480 x 320 photo on an 8 MHz ST | before | after |
+  |---|---|---|
+  | decoded, shown at 192 x 128 | 18.1 s | 12.8 s |
+  | dithered to black and white, 192 x 128 | 5.7 s | 2.1 s |
+  | decoded at its size | | 24.8 s |
+  | dithered at its size | | 12.8 s |
+
+  In `EWEBST.PRG` the progressive 320 x 240 JPEG (jpegdc's 8 x 8 averages) went from 13.7 s to
+  5.0 s on the page: while a picture decodes, GEM gets its turn ten times a second and without
+  waiting for its timer (each turn had waited a clock tick, hundreds of them), and the throbber
+  is copied, not made again (its section, below).
 - **PNG** is fresh (`common/src/png.c`, on the family's inflate: NetSurf uses libpng, a library
   too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
   PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is
   NetSurf's libnsgif, its first frame (a 48 x 48 GIF, 0.2 M).
 - **Dithering** costs 150 to 210 instructions a pixel (a 192 x 128 picture, 1 s; 16 and 256
   colours alike, the nearest pens found among a few), the next thing to make quicker (the DSP, or
-  the 68030's own code); true colour has none.
+  the 68030's own code); true colour has none. Black and white (two pens) has a loop of its own.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
   those. Not yet: CSS `background-image`, `srcset` and `<picture>`'s sources (the `<img>`'s own
   `src` is taken), SVG, animation. `<input type=image>` shows its picture (forms, below).
@@ -1086,8 +1116,8 @@ Measured in Hatari (8 MHz, TOS 1.04), the tables page from the disk:
 
 On the 1 MB ST the pictures page then shows too (9.3 s), after the tables page is given back. The
 `-Os` build is about 15% slower than the `-O2` one was on the 4 MB ST (9.5 s for the tables page);
-the 1 MB ST comes first. Drawing in monochrome is the most of it; making the ST edition faster
-(drawing, JPEG on 16-bit arithmetic) is for later.
+the 1 MB ST comes first. Drawing in monochrome is the most of it; JPEG on 16-bit arithmetic came
+on 20 Oct 2026 (Pictures, above), drawing is for later.
 
 ## The throbber (20 Oct 2026)
 
@@ -1103,8 +1133,11 @@ as `ui/throbber.h`: 16 frames of 40 x 40 (40 x 20 on the 200-line screens) in th
 TOS 4.04's 256-colour palette for 256 colours and true colour (gold, bronze and copper from its hue
 wheel, an ordered dither so the still A doesn't shimmer as the star moves), its 16 system colours,
 and black and white (monochrome and 4 colours). Each frame is deflated on its own (80 to 380
-bytes) and unpacked when it is drawn, so only the frame shown is in memory (1.6 KB);
-`scr_rgb` (`ui/screen.c`) puts it on the screen as the page is, through the same buffers. The
+bytes). A frame is unpacked the first time it is shown and made into the screen's own form in ST
+RAM (`scr_rgb_dev`, `ui/screen.c`), then copied from there (`vro_cpyfm`): making one took 150 ms
+on an 8 MHz ST, longer than a frame lasts, and slowed a picture's decoding by as much. The 16
+frames take 3.8 KB in monochrome, 30 KB in 256 colours; without the memory, each frame is drawn
+as it comes, as the page is (`scr_rgb`). The
 editions are 17 KB of `EWEB.PRG` and 5.5 KB of `EWEBST.PRG` (no 256-colour or 480-line 16-colour
 one there; with its code, the ST edition grew by 7 KB).
 

@@ -547,6 +547,23 @@ binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
+# PICBENCH.TTP: a picture decoded as EWEBST.PRG decodes it (TJpgDec,
+# jpegdc, PNG, GIF; 68000 code), each step timed on the 200 Hz clock;
+# tests/bench/picbench.py runs it on the family's ST in Hatari
+build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+build/st/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \
+		-DBENCH_MAIN=picbench -Itests/bench -c $< -o $@
+build/st/picbench.elf: $(st_RT) build/st/bench/picbench.o build/st/bench/plat_pic.o $(STPIC_OBJ) \
+		build/st/net/util.o build/st/net/inflate.o
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+binary/PICBENCH.TTP: build/st/picbench.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
 # the root certificates: Mozilla's list (common/certs), and the same read
 # once into ROOTS.DAT, which the Atari loads in a moment
 binary/CACERT.PEM: common/certs/CACERT.PEM
