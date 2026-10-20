@@ -15,12 +15,22 @@
  *                             lengths and with bytes changed, decoded at
  *                             three sizes (AddressSanitizer and UBSan
  *                             watch); prints how many decoded
+ *
+ * Built with WITH_DSP_SIM (test_pic_dsp), libjpeg-turbo's JPEGs go to
+ * dsp/jpeg.a56 on Hatari's DSP core (dsp_sim.c); PIC_DSP_CYCLES=1 prints
+ * its cycles and the words each way to stderr.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "pic.h"
+
+#ifdef WITH_DSP_SIM
+const PIC_DSP *sim_dsp(void);
+extern unsigned long long sim_cycles;
+extern unsigned long sim_in, sim_out;
+#endif
 
 static unsigned char *load(const char *path, long *n)
 {
@@ -158,7 +168,7 @@ static int robust(int argc, char **argv)
 	return 0;
 }
 
-int main(int argc, char **argv)
+static int run(int argc, char **argv)
 {
 	if (argc >= 2 && strcmp(argv[1], "-r") == 0)
 		return robust(argc - 2, argv + 2);
@@ -168,4 +178,19 @@ int main(int argc, char **argv)
 		return one(argv[1], atoi(argv[2]), atoi(argv[3]), argv[4], 0);
 	fprintf(stderr, "test_pic FILE W H OUT | -d|-D|-m FILE W H OUT | -r FILE...\n");
 	return 2;
+}
+
+int main(int argc, char **argv)
+{
+	int r;
+#ifdef WITH_DSP_SIM
+	pic_dsp = sim_dsp();
+#endif
+	r = run(argc, argv);
+#ifdef WITH_DSP_SIM
+	if (getenv("PIC_DSP_CYCLES"))
+		fprintf(stderr, "dsp: %s, %llu cycles, %lu words in, %lu out\n", pic_dsp_state(), sim_cycles, sim_in,
+			sim_out);
+#endif
+	return r;
 }
