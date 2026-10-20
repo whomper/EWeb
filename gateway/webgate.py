@@ -1,0 +1,603 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
+"""webgate - the Raspberry Pi gateway for EWeb on the Atari.
+
+EWeb on a Falcon makes its own secure connections (TLS 1.2, the curves on
+the DSP); the ST edition, EWEBST.PRG, can't, and some sites take TLS 1.3
+only. So EWeb, when its gateway is set, sends every request to the Pi in
+plain HTTP on your home network, in proxy form:
+
+    GET https://en.wikipedia.org/wiki/Atari_ST HTTP/1.1
+
+and webgate makes the request, checks the server's certificate (TLS 1.2
+or 1.3) and hands the answer back as it comes:
+
+  - the server's own compression (gzip, deflate) is passed through as it
+    is, and only those are asked for: less to carry over a serial line,
+    and EWeb unpacks them;
+  - a long answer is passed on a piece at a time (chunked when its length
+    isn't known), so a download needn't fit in the Pi's memory either;
+  - redirects, cookies and error pages go back as they came: EWeb follows
+    them and keeps the cookies itself;
+  - X-Gateway-TLS says how the Pi reached the server ("TLS 1.3,
+    TLS_AES_128_GCM_SHA256"), for EWeb's info line;
+  - one connection per server is kept open and reused.
+
+Snapshots (--browser): a GET with "X-Gateway-Snapshot: 1" is opened in an
+ordinary Chromium on the Pi (its own profile: your logins stay there), and
+once the page has settled after its scripts ran, its extension
+(webgate-ext/) sends the page back as plain HTML: no scripts, each canvas
+as a picture, the fields as filled, a <base> so EWeb fetches the
+stylesheets and pictures through webgate as usual. X-Gateway-Snapshot-URL
+says where the browser ended up. The extension talks to webgate on
+127.0.0.1:8281 only. One page at a time: the browser has one tab. The
+proxy's rules hold for the browser too: webgate gives it only http and
+https addresses outside the home network (unless --allow-local), and the
+extension blocks every request into the home network that its address
+shows (addresses, single names, .local and the like), so that a link
+followed in live view can't lead there either.
+
+Live view (--browser), for what a snapshot can't do (a CAPTCHA, a login
+made by scripts): EWeb opens http://webgate/live (webgate keeps the name
+for itself), a page with a picture of the browser's screen as a picture
+button, a field to type into and buttons for keys. A click on the picture
+is a real click on the Pi's screen (xdotool, in the browser's X display:
+the browser runs full screen there), typing real typing; then the page
+comes again with a new picture. http://webgate/live?url=ADDRESS opens
+ADDRESS first; "As a page" ends with a snapshot of what is shown.
+
+A request that can't be made is answered 502 (403 for the home network,
+504 for a server that is too slow) with a line starting "webgate:", which
+EWeb shows on its "can't open" page.
+
+Only standard Python 3 is needed, and aeragate.py next to it.
+`aera-gateway install web` sets it up as a service.
+
+    webgate.py [--port 8280] [--allow 192.168.1.50] [--allow-local] [--cafile F] [-v]
+"""
+
+import argparse
+import gzip
+import html
+import http.client
+import json
+import os
+import socket
+import ssl
+import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
+
+import aeragate
+
+VERSION = "1.0"
+
+HOP_BY_HOP = {
+    "connection", "keep-alive", "proxy-connection", "proxy-authorization",
+    "proxy-authenticate", "te", "trailer", "transfer-encoding", "upgrade",
+    "host", "content-length", "accept-encoding",
+}
+
+PIECE = 65536
+
+
+class Config:
+    allow = []              # client addresses allowed; empty = any on the private networks
+    allow_local = False     # may requests go to servers on the local network?
+    verbose = False
+    timeout = 60
+    cafile = None           # the root certificates to check servers against (None: the Pi's)
+    browser = False         # snapshots: the Pi's Chromium and webgate-ext are there
+    browser_port = 8281     # where webgate-ext asks (127.0.0.1 only)
+    snapshot_wait = 60      # seconds a page may take to settle
+    live_width = 608        # live view's picture, pixels wide (EWeb's page on a 640-pixel screen)
+    live_quality = 0.7      # its JPEG quality: small for STinG, enough to read
+    live_settle = 1.0       # seconds the browser has after a click before the next picture
+    insecure = False        # tests only: don't check certificates
+
+
+def _dial(address, timeout=None, source_address=None):
+    """a connection to the address that was checked: without --allow-local
+    never one on the home network, even if the name's answer changes"""
+    return aeragate.connect(address[0], address[1], timeout, Config.allow_local)
+
+
+def _proxy(scheme):
+    """(host, port) of an upstream proxy from HTTPS_PROXY, for a Pi on a
+    network that only goes out through one; None normally."""
+    v = os.environ.get(scheme.upper() + "_PROXY") or os.environ.get(scheme + "_proxy")
+    if not v:
+        return None
+    u = urlsplit(v if "://" in v else "http://" + v)
+    return (u.hostname, u.port or 8080) if u.hostname else None
+
+
+class Upstream(threading.local):
+    """One kept-open connection per server, per thread (an Atari's
+    connection is served by one thread)."""
+
+    def __init__(self):
+        self.conns = {}
+
+    def get(self, scheme, host, port):
+        key = (scheme, host, port)
+        c = self.conns.get(key)
+        if c is None:
+            if scheme == "https":
+                ctx = aeragate.tls_context(Config.cafile)
+                if Config.insecure:
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                proxy = _proxy("https")
+                if proxy:
+                    c = http.client.HTTPSConnection(proxy[0], proxy[1], timeout=Config.timeout, context=ctx)
+                    c.set_tunnel(host, port)
+                else:
+                    c = http.client.HTTPSConnection(host, port, timeout=Config.timeout, context=ctx)
+                    c._create_connection = _dial
+            else:
+                c = http.client.HTTPConnection(host, port, timeout=Config.timeout)
+                c._create_connection = _dial
+            self.conns[key] = c
+        return c
+
+    def drop(self, scheme, host, port):
+        c = self.conns.pop((scheme, host, port), None)
+        if c:
+            c.close()
+
+
+UP = Upstream()
+
+
+class Bridge:
+    """webgate-ext's side: the address the browser is to open next, and
+    the snapshot it sends back. One page at a time."""
+
+    def __init__(self):
+        self.turn = threading.Lock()        # one Atari's page at a time
+        self.cv = threading.Condition()
+        self.wanted = None                  # {"id", "url"} not yet taken by the extension
+        self.done = {}                      # id -> snapshot
+        self.asked = None                   # the id being waited for
+        self.n = 0
+
+    def ask(self, url, wait, **more):
+        """url opened in the browser: its snapshot ({"url", "title",
+        "html"}), or None. more: shot=WIDTH for a picture of the screen
+        ({"pic", "w"}), snap=1 for a snapshot of the page shown now."""
+        with self.turn, self.cv:
+            self.n += 1
+            me = self.n
+            self.wanted = dict({"id": str(me), "url": url}, **more)
+            self.asked = str(me)
+            self.cv.notify_all()
+            ok = self.cv.wait_for(lambda: str(me) in self.done, wait)
+            if self.wanted and self.wanted["id"] == str(me):
+                self.wanted = None
+            self.asked = None
+            return self.done.pop(str(me), None) if ok else None
+
+    def next(self, wait=25):
+        """for the extension: the next address, or None after wait seconds"""
+        with self.cv:
+            self.cv.wait_for(lambda: self.wanted is not None, wait)
+            w, self.wanted = self.wanted, None
+            return w
+
+    def give(self, id, snap):
+        """what the extension sent; one that came too late is dropped"""
+        with self.cv:
+            if id == self.asked:
+                self.done[id] = snap
+                self.cv.notify_all()
+
+
+BRIDGE = Bridge()
+
+
+class ExtHandler(BaseHTTPRequestHandler):
+    """webgate-ext talks here, on 127.0.0.1 only"""
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def answer(self, status, body=b"", ctype="application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path.startswith("/config"):
+            # what the extension blocks: the home network, unless --allow-local
+            self.answer(200, json.dumps({"allow_local": Config.allow_local}).encode())
+            return
+        if self.path.startswith("/next"):
+            w = BRIDGE.next()
+            if w is None:
+                self.answer(204)
+            else:
+                self.answer(200, json.dumps(w).encode())
+        else:
+            self.answer(404)
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        data = self.rfile.read(n) if n else b""
+        q = urlsplit(self.path)
+        if q.path == "/shot":
+            a = parse_qs(q.query)
+            BRIDGE.give(a.get("id", [""])[0], {"pic": data, "w": int(a.get("w", ["0"])[0] or 0),
+                                               "why": a.get("why", [""])[0]})
+            self.answer(200, b"{}")
+            return
+        if q.path != "/snapshot" or not q.query.startswith("id="):
+            self.answer(404)
+            return
+        try:
+            snap = json.loads(data.decode("utf-8"))
+        except ValueError:
+            self.answer(400)
+            return
+        BRIDGE.give(q.query[3:], snap)
+        self.answer(200, b"{}")
+
+
+def tls_of(conn):
+    """how conn reached its server: "TLS 1.3, TLS_AES_128_GCM_SHA256", or
+    "" for plain HTTP"""
+    s = getattr(conn, "sock", None)
+    if not isinstance(s, ssl.SSLSocket):
+        return ""
+    v = (s.version() or "TLS").replace("TLSv", "TLS ")
+    c = s.cipher()
+    return "%s, %s" % (v, c[0]) if c else v
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "webgate/" + VERSION
+
+    where = "-"             # the server a request goes to, for the log
+
+    def log_message(self, fmt, *args):
+        if Config.verbose:
+            aeragate.say("%s %s" % (self.address_string(), fmt % args))
+
+    def log_request(self, code="-", size="-"):
+        # the request line has the whole address, with what a form sent
+        # in it: note() logs the server only (7.3)
+        pass
+
+    def note(self, status, size, more=""):
+        if Config.verbose:
+            aeragate.say("%s %s %s -> %d, %d bytes%s" % (
+                self.address_string(), self.command, self.where, status, size, more))
+
+    def handle(self):
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError, socket.timeout):
+            pass        # the Atari went away (reset, switched off, Esc): nothing to say
+
+    def do_GET(self):
+        self.proxy()
+
+    do_HEAD = do_POST = do_GET
+
+    def reply(self, status, text, ctype="text/plain; charset=utf-8"):
+        body = text.encode("utf-8")
+        self.note(status, len(body), ": " + text.strip() if status >= 400 else "")
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def proxy(self):
+        self.where = "-"
+        if not aeragate.client_ok(self.client_address[0], Config.allow):
+            self.reply(403, "webgate: this address may not use the gateway\n")
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else None
+        if self.path.startswith("/"):
+            self.reply(200, "webgate %s is running. Put this address in EWeb's gateway setting.\n" % VERSION)
+            return
+        u = urlsplit(self.path)
+        if u.hostname == "webgate" and u.path.startswith("/live"):
+            self.live(u)
+            return
+        if u.scheme not in ("http", "https") or not u.hostname:
+            self.reply(400, "webgate: expected a request like GET https://host/path\n")
+            return
+        port = u.port or (443 if u.scheme == "https" else 80)
+        self.where = "%s://%s:%d" % (u.scheme, u.hostname, port)
+        path = (u.path or "/") + ("?" + u.query if u.query else "")
+        if self.headers.get("X-Gateway-Snapshot") == "1" and self.command == "GET":
+            self.snapshot(u)
+            return
+        headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
+        headers["Host"] = u.netloc.rsplit("@", 1)[-1]
+        # what the Atari unpacks itself, and nothing it can't
+        asked = (self.headers.get("Accept-Encoding") or "").lower()
+        headers["Accept-Encoding"] = ", ".join(e for e in ("gzip", "deflate") if e in asked) or "identity"
+        for attempt in (1, 2):
+            conn = UP.get(u.scheme, u.hostname, port)
+            try:
+                conn.request(self.command, path, body=body, headers=headers)
+                resp = conn.getresponse()
+                break
+            except ssl.SSLCertVerificationError as e:
+                UP.drop(u.scheme, u.hostname, port)
+                self.reply(502, "webgate: %s has an untrusted certificate (%s)\n" % (u.hostname, e.verify_message))
+                return
+            except aeragate.HomeNetwork:
+                UP.drop(u.scheme, u.hostname, port)
+                self.reply(403, "webgate: won't connect to the local network (%s)\n" % u.hostname)
+                return
+            except socket.gaierror:
+                UP.drop(u.scheme, u.hostname, port)
+                self.reply(502, "webgate: can't find %s\n" % u.hostname)
+                return
+            except (http.client.RemoteDisconnected, BrokenPipeError, ConnectionResetError,
+                    http.client.CannotSendRequest, http.client.ResponseNotReady):
+                UP.drop(u.scheme, u.hostname, port)    # a kept connection went stale
+                if attempt == 2:
+                    self.reply(502, "webgate: %s closed the connection\n" % u.hostname)
+                    return
+            except (OSError, http.client.HTTPException) as e:
+                UP.drop(u.scheme, u.hostname, port)
+                self.reply(504 if isinstance(e, socket.timeout) else 502,
+                           "webgate: can't reach %s (%s)\n" % (u.hostname, e))
+                return
+        self.pass_on(resp, conn, u, port)
+
+    # ------------------------------------------------------------ live view
+
+    def send_body(self, status, body, ctype, extra=()):
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        for k, v in extra:
+            self.send_header(k, v)
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def again(self):
+        """after a click or keys: the live page again, with a new picture"""
+        time.sleep(Config.live_settle)
+        self.send_body(303, b"", "text/plain", [("Location", "http://webgate/live?n=%d" % int(time.time() * 10))])
+
+    def xdo(self, *args):
+        """real input on the browser's screen"""
+        try:
+            subprocess.run(["xdotool"] + list(args), timeout=10, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def live(self, u):
+        if not Config.browser:
+            self.reply(501, "webgate: live view needs the Pi's browser (webgate --browser)\n")
+            return
+        a = parse_qs(u.query, keep_blank_values=True)
+        part = u.path[len("/live"):]
+        if part == "/shot.jpg":
+            r = BRIDGE.ask("", 20, shot=Config.live_width, quality=Config.live_quality)
+            if not r or not r.get("pic"):
+                why = (r or {}).get("why") or "it didn't answer"
+                self.reply(504, "webgate: the browser's screen didn't come: %s\n" % why[:200])
+                return
+            LIVE["full"] = r.get("w") or Config.live_width
+            self.send_body(200, r["pic"], "image/jpeg")
+            return
+        if part == "/click":
+            try:
+                x, y = int(a.get("at.x", ["0"])[0]), int(a.get("at.y", ["0"])[0])
+            except ValueError:
+                x = y = 0
+            k = LIVE.get("full", Config.live_width) / float(Config.live_width)
+            self.xdo("mousemove", str(int(x * k)), str(int(y * k)), "click", "1")
+            self.again()
+            return
+        if part == "/type":
+            t = a.get("t", [""])[0]
+            if t:
+                self.xdo("type", "--delay", "40", "--", t)
+            if "enter" in a:
+                self.xdo("key", "Return")
+            self.again()
+            return
+        if part == "/key":
+            k = a.get("k", [""])[0]
+            if k in LIVE_KEYS:
+                self.xdo("key", LIVE_KEYS[k])
+            self.again()
+            return
+        if part == "/page":
+            snap = BRIDGE.ask("", Config.snapshot_wait, snap=1)
+            if snap is None:
+                self.reply(504, "webgate: the browser's page didn't come\n")
+                return
+            self.send_snap(snap, snap.get("url") or self.path)
+            return
+        url = a.get("url", [""])[0]
+        title = "the Pi's browser"
+        if url and not self.browser_may_open(url):
+            return
+        if url:
+            snap = BRIDGE.ask(url, Config.snapshot_wait)
+            if snap:
+                title = snap.get("title") or url
+        n = int(time.time() * 10)
+        page = LIVE_PAGE % {"title": html.escape(title), "n": n, "w": Config.live_width}
+        self.send_body(200, page.encode("utf-8"), "text/html; charset=utf-8")
+
+    def browser_may_open(self, url):
+        """may the Pi's browser open url? The proxy's rules (7.3): http and
+        https only, nowhere in the home network without --allow-local. When
+        not, the Atari has been answered."""
+        u = urlsplit(url)
+        if u.scheme not in ("http", "https") or not u.hostname:
+            self.reply(400, "webgate: expected a request like GET https://host/path\n")
+            return False
+        if Config.allow_local:
+            return True
+        try:
+            aeragate.lookup(u.hostname, u.port or (443 if u.scheme == "https" else 80), False)
+        except aeragate.HomeNetwork:
+            self.reply(403, "webgate: won't connect to the local network (%s)\n" % u.hostname)
+            return False
+        except (socket.gaierror, UnicodeError, ValueError):
+            self.reply(502, "webgate: can't find %s\n" % u.hostname)
+            return False
+        return True
+
+    def snapshot(self, u):
+        """the page as the Pi's browser shows it, after its scripts ran"""
+        if not Config.browser:
+            self.reply(501, "webgate: snapshots need the Pi's browser (webgate --browser)\n")
+            return
+        if not self.browser_may_open(self.path):
+            return
+        snap = BRIDGE.ask(self.path, Config.snapshot_wait)
+        if snap is None:
+            self.reply(504, "webgate: the browser didn't finish %s in %d s\n" % (u.hostname, Config.snapshot_wait))
+            return
+        self.send_snap(snap, self.path)
+
+    def send_snap(self, snap, url):
+        """a snapshot to the Atari, with the address it came from (its
+        <base href> says the same for the page's own links)"""
+        body = (snap.get("html") or "").encode("utf-8")
+        packed = "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+        if packed:
+            body = gzip.compress(body, 6)
+        self.note(200, len(body), " (a snapshot)")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        if packed:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Gateway-Snapshot-URL", snap.get("url") or url)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def pass_on(self, resp, conn, u, port):
+        """the answer to the Atari as it comes, a piece at a time"""
+        clen = resp.getheader("Content-Length")
+        known = clen is not None and clen.strip().isdigit() and resp.chunked is False
+        empty = self.command == "HEAD" or resp.status in (204, 304) or 100 <= resp.status < 200
+        self.send_response(resp.status, resp.reason)
+        for k, v in resp.getheaders():
+            if k.lower() not in HOP_BY_HOP:
+                self.send_header(k, v)
+        tls = tls_of(conn)
+        if tls:
+            self.send_header("X-Gateway-TLS", tls)
+        if empty:
+            self.send_header("Content-Length", "0")
+        elif known:
+            self.send_header("Content-Length", clen.strip())
+        else:
+            self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        sent = 0
+        try:
+            while not empty:
+                piece = resp.read(PIECE)
+                if not piece:
+                    break
+                sent += len(piece)
+                self.wfile.write(piece if known else b"%x\r\n%s\r\n" % (len(piece), piece))
+            if not empty and not known:
+                self.wfile.write(b"0\r\n\r\n")
+            resp.read()
+        except (OSError, http.client.HTTPException):
+            # the server or the Atari went away halfway: neither connection
+            # can carry another answer
+            UP.drop(u.scheme, u.hostname, port)
+            self.close_connection = True
+        if resp.will_close:
+            UP.drop(u.scheme, u.hostname, port)
+        self.note(resp.status, sent)
+
+
+LIVE = {}           # the browser's screen width, as the last picture said
+
+# live view's keys: what EWeb's buttons send, what xdotool presses
+LIVE_KEYS = {"enter": "Return", "tab": "Tab", "backspace": "BackSpace", "esc": "Escape",
+             "up": "Page_Up", "down": "Page_Down", "back": "alt+Left", "reload": "F5"}
+
+LIVE_PAGE = """<!DOCTYPE html><html><head><meta charset=utf-8><title>Live: %(title)s</title>
+<style>body{margin:4px;font-family:sans-serif;background:#fff}form{display:inline;margin:0}
+p{margin:4px 0}input[type=image]{border:1px solid #888}</style></head><body>
+<form action="http://webgate/live/click"><input type=image name=at width=%(w)d
+ src="http://webgate/live/shot.jpg?n=%(n)d" alt="the Pi's browser"></form>
+<p><form action="http://webgate/live/type"><input name=t size=40> <input type=submit value=Type>
+ <input type=submit name=enter value="Type and Enter"></form></p>
+<p><form action="http://webgate/live/key"><button name=k value=enter>Enter</button>
+ <button name=k value=tab>Tab</button> <button name=k value=backspace>Backspace</button>
+ <button name=k value=esc>Esc</button> <button name=k value=up>Page up</button>
+ <button name=k value=down>Page down</button> <button name=k value=back>Back</button>
+ <button name=k value=reload>Reload</button></form>
+ <a href="http://webgate/live?n=%(n)d">Picture again</a> &middot; <a href="http://webgate/live/page">As a page</a></p>
+</body></html>
+"""
+
+
+def parser():
+    """the command line (aera-gateway reads a service's settings with it)"""
+    ap = argparse.ArgumentParser(description="HTTP and HTTPS gateway for EWeb on the Atari")
+    ap.add_argument("--port", type=int, default=8280)
+    ap.add_argument("--bind", default="0.0.0.0")
+    ap.add_argument("--allow", action="append", default=[],
+                    help="only this Atari's address may use the gateway (may repeat)")
+    ap.add_argument("--allow-local", action="store_true",
+                    help="also forward to servers on the local network")
+    ap.add_argument("--cafile", help="check servers against these root certificates, not the Pi's")
+    ap.add_argument("--browser", action="store_true",
+                    help="snapshots: the Pi's Chromium with webgate-ext is running")
+    ap.add_argument("--browser-port", type=int, default=8281, help="where webgate-ext asks (127.0.0.1 only)")
+    ap.add_argument("--insecure", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("-v", "--verbose", action="store_true")
+    return ap
+
+
+def main(argv=None):
+    a = parser().parse_args(argv)
+    Config.allow = a.allow
+    Config.allow_local = a.allow_local
+    Config.verbose = a.verbose
+    Config.cafile = a.cafile
+    Config.insecure = a.insecure
+    Config.browser = a.browser
+    Config.browser_port = a.browser_port
+    srv = ThreadingHTTPServer((a.bind, a.port), Handler)
+    srv.daemon_threads = True
+    if a.browser:
+        ext = ThreadingHTTPServer(("127.0.0.1", a.browser_port), ExtHandler)
+        ext.daemon_threads = True
+        threading.Thread(target=ext.serve_forever, daemon=True).start()
+    aeragate.say("webgate %s listening on %s:%d" % (VERSION, a.bind, a.port))
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
