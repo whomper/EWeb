@@ -1482,6 +1482,33 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 	}
 }
 
+#ifndef EW_ST	/* scripts' selectors: the ST edition runs no scripts */
+const ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len)
+{
+	char *copy = ec_alloc(&c->mem, len + 1);
+	uint32_t spec;
+	int never, stop, n;
+	ec_lex lx;
+
+	if (copy == NULL)
+		return NULL;
+	memcpy(copy, s, len);
+	copy[len] = 0;
+	ec_lex_init(&lx, copy, len);
+	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
+	if (n <= 0 || stop != T_EOF)
+		return NULL;
+	return sellist(c, prelude, 0, n, 0, &spec, &never);
+}
+
+int ec_matches(ec_ctx *c, const ec_sellist *l, const ec_node *e)
+{
+	int mf = 0;
+	return ec_match_list(c, l, e, &mf);
+}
+
+#endif
+
 int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin)
 {
 	char *copy = ec_alloc(&c->mem, len + 1);

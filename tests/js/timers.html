@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- args: -T 400 -->
+<!-- expect: console: interval 3 stopped -->
+<!-- expect: console: timeout args 1 2 -->
+<!-- expect: console: promise then -->
+<!-- expect: "count 3" -->
+<!-- absent: never -->
+<html><head><title>timers</title></head><body>
+<p id="c">count 0</p>
+<script>
+var n = 0;
+var iv = setInterval(function () {
+	n++;
+	document.getElementById("c").textContent = "count " + n;
+	if (n === 3) { clearInterval(iv); console.log("interval 3 stopped"); }
+}, 20);
+setTimeout(function (a, b) { console.log("timeout args " + a + " " + b); }, 10, 1, 2);
+var t = setTimeout(function () { console.log("never"); }, 30);
+clearTimeout(t);
+Promise.resolve(1).then(function () { console.log("promise then"); });
+</script>
+</body></html>

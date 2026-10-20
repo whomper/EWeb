@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<!-- args: -K go -->
+<!-- expect: load: 0 "the next page" -->
+<html><head><title>navigate</title></head><body>
+<p><span id="go">go on</span></p>
+<script>
+document.getElementById("go").addEventListener("click", function () {
+	location.href = "navigate2.htm";
+});
+</script>
+</body></html>

@@ -45,11 +45,17 @@
  * Through the Pi's browser: webgate's snapshots).
  * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
+ * -J runs the pages' scripts (src/js, every site's), printing what they
+ * log, console.log and alert ("js ...", "console: ", "alert: ") and
+ * answering OK; then -K ID clicks the element with that id (again for
+ * more; "a script loaded" and the load's result when one sent the
+ * browser on), and -T MS lets the page's timers run for MS ms.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "bookmark.h"
 #include "browse.h"
@@ -58,6 +64,7 @@
 #include "cookie.h"
 #include "dcache.h"
 #include "font.h"
+#include "js.h"
 #include "form.h"
 #include "http.h"
 #include "img.h"
@@ -278,6 +285,77 @@ static void said(void *ud, const char *what)
 		fprintf(stderr, "%s\n", what);
 }
 
+static int scripts_on;
+
+static void logged(void *ud, const char *line)
+{
+	if (scripts_on && strncmp(line, "js ", 3) == 0)
+		printf("%s\n", line);
+	else
+		said(ud, line);
+}
+
+static void console_line(void *ud, const char *line)
+{
+	(void) ud;
+	printf("console: %s\n", line);
+}
+
+static int asked(void *ud, int kind, const char *text, char *out, int size)
+{
+	(void) ud;
+	printf("%s: %s\n", kind == JS_ALERT ? "alert" : kind == JS_CONFIRM ? "confirm" : "prompt", text);
+	(void) out, (void) size;
+	return 1;
+}
+
+static dnode *by_id(dnode *n, const char *id)
+{
+	dnode *c, *f;
+	const char *v;
+	if (n->type == DN_ELEMENT && (v = dn_attr(n, "id")) != NULL && strcmp(v, id) == 0)
+		return n;
+	for (c = n->first; c != NULL; c = c->next)
+		if ((f = by_id(c, id)) != NULL)
+			return f;
+	return NULL;
+}
+
+/* a click on the element with that id, as EWEB.PRG does one: its click
+   event, then (unless a script said no) its link or control */
+static int click(browser *b, const char *id)
+{
+	dnode *n = b->d ? by_id(b->d->root, id) : NULL;
+	int32_t x, y, w, h;
+	int cancelled = 0, load = 0, r;
+	if (n == NULL || !page_node_rect(b->p, n, &x, &y, &w, &h)) {
+		printf("click %s: not shown\n", id);
+		return 0;
+	}
+	x += w / 2;
+	y += h / 2;
+	r = br_js_click(b, x, y, &cancelled, &load);
+	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
+	       cancelled ? ", cancelled" : "");
+	if (r == BRJ_LOAD)
+		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+	else if (!cancelled) {
+		int link = page_link_at(b->p, x, y);
+		fctl *c = page_ctl_at(b->p, x, y, NULL);
+		if (c != NULL && (c->kind == FC_SUBMIT || c->kind == FC_IMAGE)) {
+			r = br_submit(b, NULL, c, 0, 0);
+			printf("sent: %d \"%s\" %s\n", r, b->title, b->url);
+		} else if (c != NULL && (c->kind == FC_CHECKBOX || c->kind == FC_RADIO)) {
+			form_check(b->d, c);
+			br_js_event(b, c, "change", &cancelled, &load);
+		} else if (link >= 0) {
+			r = br_follow(b, link);
+			printf("followed: %d \"%s\" %s\n", r, b->title, b->url);
+		}
+	}
+	return 1;
+}
+
 /* every picture of the page shown, fetched and decoded */
 static void pictures(browser *b)
 {
@@ -302,7 +380,8 @@ int main(int argc, char **argv)
 	SBUF extra;
 	const char *fill[32], *send = NULL;
 	int rc = 0;
-	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0;
+	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0;
+	const char *clicks[16];
 	const char *save_to = NULL;
 
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
@@ -350,6 +429,12 @@ int main(int argc, char **argv)
 			snapshot = 1;
 		else if (!strcmp(argv[i], "-A"))
 			bookmark = 1;
+		else if (!strcmp(argv[i], "-J"))
+			scripts_on = 1;
+		else if (!strcmp(argv[i], "-K") && i + 1 < argc && nclick < 16)
+			clicks[nclick++] = argv[++i];
+		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
+			timers = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
 			save_to = argv[++i];
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
@@ -400,8 +485,12 @@ int main(int argc, char **argv)
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
 	b.say = said;
-	b.log = said;
+	b.log = logged;
 	b.ud = &verbose;
+	b.scripts = scripts_on;
+	b.script_sites = "*";
+	b.console = console_line;
+	b.ask = asked;
 	b.extra_css = extra.s;
 	b.pictures = !nopics;
 	b.snapshot = snapshot;
@@ -512,6 +601,24 @@ int main(int argc, char **argv)
 		if (b.p == NULL)
 			return 1;
 	}
+	if (timers > 0) {
+		unsigned long t0 = pf_ms();
+		long due;
+		while ((due = br_js_due(&b)) >= 0 && (long) (pf_ms() - t0) + due <= timers) {
+			int load = 0, k;
+			if (due > 0)
+				usleep((useconds_t) due * 1000);
+			k = br_js_step(&b, &load);
+			if (k == BRJ_LOAD)
+				printf("load: %d \"%s\" %s\n", load, b.title, b.url);
+		}
+	}
+	for (i = 0; i < nclick; i++) {
+		click(&b, clicks[i]);
+		pictures(&b);
+	}
+	if (scripts_on && b.script_note[0])
+		printf("note: %s\n", b.script_note);
 	if (bookmark) {
 		int k = br_bookmark(&b);
 		printf("bookmarked: %d %d\n", k, bm_n);

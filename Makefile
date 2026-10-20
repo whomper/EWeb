@@ -76,8 +76,8 @@ EC_FLAGS := -Wall -Wextra -Wno-unused-parameter -Werror -Isrc/css
 # EWeb's browser: the document, the layout, the drawing, the browsing
 # (src/doc, src/layout, src/gfx, src/browse: this on the network's code)
 EWB_SRC  := $(sort $(wildcard src/doc/*.c src/layout/*.c src/gfx/*.c src/browse/*.c))
-EWB_HDRS = $(wildcard src/doc/*.h src/layout/*.h src/gfx/*.h src/browse/*.h src/css/*.h) $(NET_HDRS)
-EWB_INC  = -Isrc -Isrc/doc -Isrc/layout -Isrc/gfx -Isrc/browse -Isrc/css $(NET_INC)
+EWB_HDRS = $(wildcard src/doc/*.h src/layout/*.h src/gfx/*.h src/browse/*.h src/css/*.h src/js/*.h) $(NET_HDRS)
+EWB_INC  = -Isrc -Isrc/doc -Isrc/layout -Isrc/gfx -Isrc/browse -Isrc/css -Isrc/js $(NET_INC)
 EWB_FLAGS = -Wall -Wextra -Wno-unused-parameter -Werror $(EWB_INC) -I$(GEN) $(NET_VER)
 
 # what NetSurf's build system defines for its libraries; and no iconv: the
@@ -386,6 +386,64 @@ build/asan/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
 		-c $(addprefix $(CURDIR)/,$(HOSTPIC_3P))
 	rm -f $@ && ar rcs $@ build/asan/pic/*.o
 
+# JavaScript (src/js): QuickJS (third_party/quickjs, CONFIG_EWEB) on EWeb's
+# document. On the Atari it is built for the FPU (-m68881: libgcc's
+# soft-float doubles are PIC code, and JavaScript's numbers are all
+# doubles) with musl's maths (third_party/libm) and the shims in
+# atari/include/js; EWEB.PRG runs it only when there is an FPU. The ST
+# edition and formtest have js_none.c.
+QJS      := third_party/quickjs
+QJS_C    := quickjs libregexp libunicode cutils dtoa
+QJS_DEF  := -DCONFIG_EWEB -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\"
+QJS_HDRS := $(wildcard $(QJS)/*.h)
+LIBM     := third_party/libm
+LIBM_C   := $(basename $(notdir $(wildcard $(LIBM)/src/*.c)))
+JS_FLAGS  = $(EWB_FLAGS) $(NSINC) -I$(QJS) $(QJS_DEF)
+host_JS  := build/host/js/js.o $(addprefix build/host/qjs/,$(addsuffix .o,$(QJS_C)))
+asan_JS  := build/asan/js/js.o $(addprefix build/asan/qjs/,$(addsuffix .o,$(QJS_C)))
+build/host/qjs/%.o: $(QJS)/%.c $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -g -std=gnu99 -DNDEBUG $(QJS_DEF) -w -c $< -o $@
+# (AddressSanitizer only: QuickJS's own shifts and casts aren't UBSan's
+# business here; its assertions stay on, and find what EWeb leaks)
+build/asan/qjs/%.o: $(QJS)/%.c $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 -fsanitize=address -fno-omit-frame-pointer $(QJS_DEF) -w -c $< -o $@
+build/host/js/js.o: src/js/js.c $(EWB_HDRS) $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O2 -g -std=gnu99 $(JS_FLAGS) -c $< -o $@
+build/asan/js/js.o: src/js/js.c $(EWB_HDRS) $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(JS_FLAGS) -c $< -o $@
+build/%/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(if $(filter asan,$*),$(SAN)) $(EWB_FLAGS) $(NSINC) -c $< -o $@
+
+TOSJS_CFLAGS := -m68030 -m68881 -O2 -std=gnu99 -DNDEBUG -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
+                -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc -isystem $(GCCINC) \
+                -U__linux__ -U__gnu_linux__ -U__GLIBC__ -Iatari/include/js -I$(LIBM)/eweb -Iatari/include \
+                -Icommon/atari/include
+tos_JS := build/tos/js/js.o build/tos/js/js_libc.o $(addprefix build/tos/qjs/,$(addsuffix .o,$(QJS_C))) \
+          $(addprefix build/tos/libm/,$(addsuffix .o,$(LIBM_C) eweb_fpu))
+build/tos/qjs/%.o: $(QJS)/%.c $(QJS_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h $(LIBM)/eweb/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) $(QJS_DEF) -w -c $< -o $@
+build/tos/libm/%.o: $(LIBM)/src/%.c $(wildcard $(LIBM)/src/*.h $(LIBM)/eweb/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) -include features.h -I$(LIBM)/src -w -c $< -o $@
+build/tos/libm/eweb_fpu.o: $(LIBM)/eweb/eweb_fpu.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) $(NET_WARN) -c $< -o $@
+build/tos/js/js.o: src/js/js.c $(EWB_HDRS) $(QJS_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) $(JS_FLAGS) -c $< -o $@
+build/tos/js/js_libc.o: atari/js_libc.c $(NET_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) $(NET_INC) $(NET_WARN) -c $< -o $@
+build/st/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(ST_CFLAGS) $(EWB_FLAGS) $(NSINC) -c $< -o $@
+
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
@@ -406,7 +464,7 @@ build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
+build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) $(tos_JS) \
 		build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
@@ -483,7 +541,7 @@ build/st/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ)
+build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -505,21 +563,21 @@ binary/EWEB.FNT: tools/mkfont.py
 # a page drawn on this computer as EWeb draws it on the Falcon (PNG),
 # loaded as EWeb loads it: a file, or a URL
 EWR_SRC := tests/host/ewrender.c tests/host/dsp_none.c $(HOSTNET_SRC)
-build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(NET_HDRS) build/host/libbearssl.a \
+build/host/ewrender: $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) $(host_JS) $(NET_HDRS) build/host/libbearssl.a \
 		build/host/pic.a
 	$(HOSTCC) -O2 -g -std=gnu99 $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(host_EWB) $(host_EC) $(host_PU) \
-		build/host/pic.a build/host/libbearssl.a
-build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
+		$(host_JS) build/host/pic.a build/host/libbearssl.a -lm
+build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_JS) $(NET_HDRS) build/host/libbearssl.a \
 		build/asan/pic.a
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
-		$(asan_PU) build/asan/pic.a build/host/libbearssl.a
+		$(asan_PU) $(asan_JS) build/asan/pic.a build/host/libbearssl.a -lm
 
 # the forms: what a form sends (tests/forms/cases.txt)
 FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
 build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
-		build/asan/pic.a
+		build/asan/pic.a build/asan/js/js_none.o
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(FT_SRC) $(asan_EWB) $(asan_EC) \
-		$(asan_PU) build/asan/pic.a build/host/libbearssl.a
+		$(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
 
 # fuzzing (the AERA guidelines, 7.1): what servers send, and the
 # addresses in pages. Needs clang with libFuzzer; make fuzz runs each
@@ -742,6 +800,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
 	build/asan/formtest tests/forms/cases.txt > /dev/null
+	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 
 # the Hebrew pages and the input stream as 68030 code too (qemu-user)
 hebtest68k: build/m68k/hebtest build/m68k/streamtest

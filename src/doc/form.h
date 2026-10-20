@@ -41,6 +41,7 @@ struct fctl {
 	uint8_t disabled, readonly;
 	uint8_t multiple;		/* a <select multiple> */
 	uint8_t focus;			/* the keyboard is here */
+	uint8_t gone;			/* form_init again: no longer in the tree */
 	char *v;			/* the value, UTF-8 (text, password, textarea, hidden...) */
 	long len, cap;
 	long maxlen;			/* maxlength, -1: none */
@@ -52,7 +53,8 @@ struct fctl {
 };
 
 /* the document's controls, made once it is parsed (each element's ctl
-   set); 0 only when out of memory */
+   set), and again after a script changed the tree (those still in it
+   keep their state); 0 only when out of memory */
 int form_init(doc *d);
 void form_free(doc *d);
 /* every control of f (the one form) back as the page had it */

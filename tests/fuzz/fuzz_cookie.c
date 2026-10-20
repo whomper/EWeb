@@ -23,7 +23,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 					       "http://127.0.0.1:8080/x", "https://sub.example.com/deep/er/page" };
 	static char s[16384];
 	URL u[4];
-	CKCTX x = { 1, 1, NULL };
+	CKCTX x = { 1, 1, NULL, 0 };
 	char *line, *next, *t1, *t2;
 	long l1, l2;
 	int i;

@@ -34,4 +34,13 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o);
    namespace's ("xlink", "xml", "xmlns") or NULL. For the test runner. */
 const char *html_foreign_attr(int ns, const char *name, const char **prefix);
 
+/* For scripts (src/js): a fragment parsed into d's memory and atoms, as
+   innerHTML parses it (UTF-8, in the context of an element named context
+   in the namespace context_ns): a document node holding its nodes, not
+   in d's tree; NULL if out of memory. d->root and the rest stay. */
+dnode *html_fragment(doc *d, const char *context, int context_ns, const char *data, size_t len, int scripting);
+/* a new HTML element named name (no attributes) in d's memory, as
+   document.createElement makes it; NULL if out of memory */
+dnode *html_element(doc *d, const char *name, size_t len);
+
 #endif

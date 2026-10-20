@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!-- expect: "written by the script" -->
+<!-- expect: "written twice" -->
+<!-- expect: console: the written script ran -->
+<!-- expect: "after" -->
+<html><head><title>document.write</title></head><body>
+<p>before</p>
+<script>
+document.write("<p id=w>written by the script</p>");
+document.write("<p>written twice</p><script>console.log('the written script ran')<\/script>");
+</script>
+<p>after</p>
+<script>
+var p = document.getElementById("w");
+if (!p || p.previousElementSibling.tagName !== "SCRIPT" ||
+    p.previousElementSibling.previousElementSibling.textContent !== "before") console.log("FAIL order");
+</script>
+</body></html>

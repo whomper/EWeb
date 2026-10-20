@@ -135,6 +135,9 @@ typedef struct {
 	int32_t shift;			/* vertical-align: + down */
 	box *atom;
 	int32_t x;			/* where it went on its line */
+#ifndef EW_ST
+	dnode *node;			/* the element it is in (for scripts' events) */
+#endif
 } ITEM;
 
 /* a float placed, in device px on the page */
@@ -342,6 +345,29 @@ static dl_item *dl_add(L *l)
 	return &p->items[p->nitems++];
 }
 
+#ifndef EW_ST
+/* a block's border box, for scripts (a click's element, the element's
+   place) */
+static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	page *p = l->p;
+	if (p->nblocks == p->blockcap) {
+		long cap = p->blockcap ? p->blockcap * 2 : 256;
+		struct pg_block *nb = realloc(p->blocks, cap * sizeof *nb);
+		if (nb == NULL)
+			return;
+		p->blocks = nb;
+		p->blockcap = cap;
+	}
+	p->blocks[p->nblocks].n = n;
+	p->blocks[p->nblocks].x = x;
+	p->blocks[p->nblocks].y = y;
+	p->blocks[p->nblocks].w = w;
+	p->blocks[p->nblocks].h = h;
+	p->nblocks++;
+}
+#endif
+
 static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb)
 {
 	dl_item *d;
@@ -377,6 +403,9 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 	d->font = it->font;
 	d->text = s;
 	d->len = n;
+#ifndef EW_ST
+	d->node = it->node;
+#endif
 }
 
 static uint16_t add_link(L *l, const char *href)
@@ -895,6 +924,9 @@ typedef struct {
 	uint16_t link;
 	uint16_t ctl;			/* in a <label>: its control (1 + index into page.ctls) */
 	int32_t asc, desc, shift;
+#ifndef EW_ST
+	dnode *node;			/* the element whose run it is */
+#endif
 } RUNSTATE;
 
 static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *parent, uint16_t link)
@@ -908,6 +940,9 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *pare
 	r->font = font_of(l, st);
 	r->color = color(st, EP_COLOR);
 	r->link = link;
+#ifndef EW_ST
+	r->node = parent ? parent->node : NULL;
+#endif
 	r->ctl = parent ? parent->ctl : 0;
 	r->deco = parent ? parent->deco : 0;
 	r->bg = parent ? parent->bg : 0;
@@ -951,6 +986,9 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->link = r->link;
 	it->ctl = r->ctl;
 	it->hidden = r->hidden;
+#ifndef EW_ST
+	it->node = r->node;
+#endif
 	it->asc = r->asc - r->shift;
 	it->desc = r->desc + r->shift;
 	it->shift = r->shift;
@@ -1163,6 +1201,10 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		case BX_ATOM: {
 			ITEM *it;
 			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+#ifndef EW_ST
+			if (c->n != NULL)
+				r.node = c->n;
+#endif
 			put_item(l, &r, IT_ATOM, c->text, c->len, atom_w(l, c, r.font));
 			it = &l->it[l->nit - 1];
 			it->atom = c;
@@ -1201,6 +1243,10 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		case BX_INLINE: {
 			int32_t gl, gr;
 			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+#ifndef EW_ST
+			if (c->n != NULL)
+				r.node = c->n;
+#endif
 			if (c->n != NULL && c->n->tag == T_LABEL && c->n->ns == DN_NS_HTML)
 				r.ctl = label_for(l, c->n);
 			gl = len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_PADDING_LEFT, AUTO) +
@@ -1374,6 +1420,9 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 	d->len = b->len;
 	d->font = f;
 	d->rgb = 0x606060;
+#ifndef EW_ST
+	d->node = b->n;
+#endif
 }
 
 /* a form control: its frame, then its content as an item drawn from
@@ -1397,6 +1446,9 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 	if (d == NULL)
 		return;
 	d->type = DL_CTL;
+#ifndef EW_ST
+	d->node = c->n;
+#endif
 	d->x = x + in;
 	d->y = y + in;
 	d->w = it->w - 2 * in;
@@ -1657,6 +1709,14 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	l->nit = 0;
 	l->cw = w;
 	runstate(l, &r, b->st, NULL, b->link);
+#ifndef EW_ST
+	{
+		box *e;
+		for (e = b; e != NULL && e->n == NULL; e = e->parent)
+			;
+		r.node = e != NULL ? e->n : NULL;
+	}
+#endif
 	collect(l, b, &r, &line_start);
 	if (l->fail)
 		return 0;
@@ -2588,6 +2648,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			bd[1] = fill(l, bx, by + bh - bb, bw, bb, color(s, EP_BORDER_BOTTOM_COLOR));
 			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, color(s, EP_BORDER_LEFT_COLOR));
 			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, color(s, EP_BORDER_RIGHT_COLOR));
+#ifndef EW_ST
+			if (b->n != NULL && !b->anon)
+				block_rect(l, b->n, bx, by, bw, bh);
+#endif
 		}
 	}
 	l->cols = saved_cols;
@@ -2741,6 +2805,9 @@ void page_free(page *p)
 	free(p->items);
 	free(p->links);
 	free(p->ctls);
+#ifndef EW_ST
+	free(p->blocks);
+#endif
 	free(p->strip);
 	free(p->sidx);
 	if (p->mem != NULL) {
@@ -2749,6 +2816,64 @@ void page_free(page *p)
 	}
 	free(p);
 }
+
+#ifndef EW_ST
+dnode *page_node_at(const page *p, int32_t x, int32_t y)
+{
+	long i, best = -1;
+	for (i = p->nitems - 1; i >= 0; i--) {
+		const dl_item *d = &p->items[i];
+		if (d->node != NULL && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h)
+			return d->node;
+	}
+	/* the innermost block there: the last laid out of those holding it
+	   (a block's rectangle is put when its children are done) */
+	for (i = 0; i < p->nblocks; i++) {
+		const struct pg_block *b = &p->blocks[i];
+		if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h &&
+		    (best < 0 || (int64_t) b->w * b->h <= (int64_t) p->blocks[best].w * p->blocks[best].h))
+			best = i;
+	}
+	return best >= 0 ? p->blocks[best].n : NULL;
+}
+
+int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
+{
+	long i;
+	int32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	int found = 0;
+	for (i = 0; i < p->nblocks; i++)
+		if (p->blocks[i].n == n) {
+			*x = p->blocks[i].x;
+			*y = p->blocks[i].y;
+			*w = p->blocks[i].w;
+			*h = p->blocks[i].h;
+			return 1;
+		}
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		const dnode *k;
+		for (k = d->node; k != NULL && k != n; k = k->parent)
+			;
+		if (k == NULL || d->node == NULL)
+			continue;
+		if (!found || d->x < x0)
+			x0 = d->x;
+		if (!found || d->y < y0)
+			y0 = d->y;
+		if (!found || d->x + d->w > x1)
+			x1 = d->x + d->w;
+		if (!found || d->y + d->h > y1)
+			y1 = d->y + d->h;
+		found = 1;
+	}
+	*x = x0;
+	*y = y0;
+	*w = x1 - x0;
+	*h = y1 - y0;
+	return found;
+}
+#endif
 
 int page_link_at(const page *p, int32_t x, int32_t y)
 {

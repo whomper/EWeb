@@ -16,6 +16,9 @@
   file EWeb doesn't show, opened: saved), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
   clicked), ^Q;
+- scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
+  a page whose script makes tabs, one clicked (the page laid out again),
+  a button whose onclick says hello in an alert, answered with Return;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -41,7 +44,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "screens", "st"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st"]
 HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
@@ -499,6 +502,48 @@ def browse():
         srv.wait(10)
 
 
+def scripts():
+    work = os.path.join(OUT, "server")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("scripts: the test server", False)
+    xvfb = machines.xvfb(DISPLAY)
+    site = "http://127.0.0.1:%d/site/" % HTTP
+    r = Run("scripts", "Falcon:16", hd_for("scripts", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n"), windowed=True,
+            network=True)
+    try:
+        ran = r.wait(r"scripts ran ", 300)
+        ev = r.wait(r"shown ", 120)
+        check("scripts: the page's ran (%s)" % (ran or "")[12:], ran is not None and ev is not None and
+              ev.endswith("title Tabs ready"), str(r.events()))
+        r.shot(0)
+        if ev is None:
+            return
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev)
+        area = tuple(int(m.group(i)) for i in range(1, 5))
+        r.mouse.click(*text_point(site + "tabs.html", area, int(m.group(5)), "Second"))
+        ev = r.wait(r"scripted ", 120)
+        check("scripts: a tab clicked shows its words", ev is not None and ev.endswith("title Tab t2"),
+              str(r.events()))
+        r.shot(1)
+        r.mouse.click(*ctl_point(site + "tabs.html", area, int(m.group(5)), 0))
+        ev = r.wait(r"script alert", 120)
+        time.sleep(2)
+        r.shot(2)
+        r.key(RETURN)
+        check("scripts: onclick's alert, answered", ev is not None, str(r.events()))
+        r.key(Q, (CTRL,))
+        check("scripts: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
+    finally:
+        r.end()
+        if xvfb is not None:
+            xvfb.terminate()
+        srv.stdin.close()
+        srv.wait(10)
+
+
 def screens():
     for name, spec, tc in (("falcon256", "Falcon:256", False), ("truecolour", "Falcon:16", True),
                            ("ttmed", "TT:ttmed", False), ("ttmono", "TT:mono", False)):
@@ -643,6 +688,11 @@ if "browse" in WHICH:
         browse()
     else:
         print("skip  browse: needs Xvfb and xdotool")
+if "scripts" in WHICH:
+    if shutil.which("Xvfb") and shutil.which("xdotool"):
+        scripts()
+    else:
+        print("skip  scripts: needs Xvfb and xdotool")
 if "screens" in WHICH:
     screens()
 if "st" in WHICH:

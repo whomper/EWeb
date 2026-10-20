@@ -702,6 +702,34 @@ static void ctl_show(const fctl *c)
 		win_scroll_to(it->y + it->h - r_page.h + 8);
 }
 
+static int typed;		/* the field with the keyboard was typed in: change when it goes */
+
+/* is c still one of the page's controls (a script may have taken it away) */
+static int ctl_alive(const fctl *c)
+{
+	const fctl *k;
+	for (k = br.d ? br.d->ctls : NULL; k != NULL; k = k->next)
+		if (k == c)
+			return 1;
+	return 0;
+}
+
+void win_ctl_check(void)
+{
+	if (f_focus != NULL && !ctl_alive(f_focus)) {
+		f_focus = NULL;
+		typed = 0;
+	}
+}
+
+/* a box ticked or an option chosen: input, then change */
+static void ctl_events(fctl *c)
+{
+	ctl_event(c, "input");
+	if (ctl_alive(c))
+		ctl_event(c, "change");
+}
+
 static void ctl_blur(void)
 {
 	fctl *c = f_focus;
@@ -710,6 +738,10 @@ static void ctl_blur(void)
 	c->focus = 0;
 	f_focus = NULL;
 	ctl_redraw(c);
+	if (typed) {
+		typed = 0;
+		ctl_event(c, "change");
+	}
 }
 
 static void addr_blur(void);
@@ -721,6 +753,7 @@ static void ctl_focus(fctl *c)
 	ctl_blur();
 	addr_blur();
 	f_focus = c;
+	typed = 0;
 	c->focus = 1;
 	ctl_show(c);
 	ctl_redraw(c);
@@ -812,13 +845,16 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 	case FC_CHECKBOX:
 		form_check(br.d, c);
 		ctl_redraw(c);
+		ctl_events(c);
 		break;
 	case FC_RADIO:
 		form_check(br.d, c);
 		win_redraw_page();	/* the rest of its group */
+		ctl_events(c);
 		break;
 	case FC_SELECT:
 		choose(c, mx, my);
+		ctl_events(c);
 		break;
 	case FC_SUBMIT:
 	case FC_IMAGE: {
@@ -987,8 +1023,11 @@ static int ctl_key(short kstate, short key)
 		}
 		return 0;
 	}
-	if (changed)
+	if (changed) {
 		ctl_redraw(c);
+		typed = 1;
+		ctl_event(c, "input");
+	}
 	return 1;
 }
 
@@ -1263,12 +1302,17 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	}
 	if (rect_hit(&r_page, mx, my)) {
 		const dl_item *it = NULL;
-		fctl *c = br.p ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, &it) : NULL;
+		fctl *c;
 		addr_blur();
 		if (button & 2) {
 			context_menu(mx, my);
 			return 1;
 		}
+		/* the page's scripts first: a click event, which may say no to
+		   what the click does, or change the page */
+		if (!(kstate & 0x08) && page_click(mx - r_page.x, my - r_page.y + top))
+			return 1;
+		c = br.p ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, &it) : NULL;
 		if (c != NULL && !loading) {
 			/* a label's text stands for its control */
 			int label = it->type == DL_TEXT;

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<!-- args: -K go -->
+<!-- expect: console: submit checked: name=Erez -->
+<!-- expect: console: change on agree true -->
+<!-- expect: control -->
+<!-- expect: "Please give your name" -->
+<html><head><title>forms</title></head><body>
+<form id="f" action="http://example.invalid/send">
+<input id="name" name="name" value="">
+<input id="agree" type="checkbox" name="agree">
+<select id="s" name="s"><option value="a">A</option><option value="b" selected>B</option></select>
+<textarea id="t" name="t">text</textarea>
+<input id="go" type="submit" value="Send">
+</form>
+<p id="msg"></p>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+var f = document.getElementById("f");
+check(f.elements.length === 5, "elements " + f.elements.length);
+check(document.getElementById("s").value === "b", "select value");
+check(document.getElementById("s").selectedIndex === 1, "selectedIndex");
+document.getElementById("s").value = "a";
+check(document.getElementById("s").selectedIndex === 0, "select value set");
+check(document.getElementById("t").value === "text", "textarea value");
+check(document.getElementById("go").type === "submit", "type");
+check(document.getElementById("name").form === f, "form");
+f.addEventListener("submit", function (e) {
+	var n = document.getElementById("name");
+	if (n.value === "") {
+		e.preventDefault();
+		document.getElementById("msg").textContent = "Please give your name";
+		n.value = "Erez";
+		console.log("submit checked: name=" + n.value);
+	}
+});
+document.getElementById("agree").addEventListener("change", function () { console.log("change on agree " + this.checked); });
+document.getElementById("agree").click();
+</script>
+</body></html>

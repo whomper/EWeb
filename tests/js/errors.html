@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<!-- expect: js error: ReferenceError: 'nothing' is not defined -->
+<!-- expect: console: the next script still runs -->
+<!-- errors -->
+<html><head><title>errors</title></head><body>
+<script>nothing();</script>
+<script>console.log("the next script still runs");</script>
+</body></html>

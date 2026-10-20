@@ -1,0 +1,49 @@
+From f882896768af0b3d656a96ab4a551b786d200cf9 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Tue, 20 Oct 2026 08:01:35 +0000
+Subject: [PATCH] EWeb: build freestanding on the Atari (CONFIG_EWEB)
+
+EWeb builds QuickJS without an operating system's C library: no
+malloc.h (alloca is the compiler's), no malloc_usable_size (0, as for
+Emscripten) and no Atomics (no threads), when CONFIG_EWEB is defined.
+---
+ quickjs.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/quickjs.c b/quickjs.c
+index 1de2da7..f863e1c 100644
+--- a/quickjs.c
++++ b/quickjs.c
+@@ -32,7 +32,10 @@
+ #include <time.h>
+ #include <fenv.h>
+ #include <math.h>
+-#if defined(__APPLE__)
++#if defined(CONFIG_EWEB)
++/* EWeb on the Atari: freestanding, no malloc.h */
++#define alloca __builtin_alloca
++#elif defined(__APPLE__)
+ #include <malloc/malloc.h>
+ #elif defined(__linux__) || defined(__GLIBC__)
+ #include <malloc.h>
+@@ -68,7 +71,7 @@
+ 
+ /* define to include Atomics.* operations which depend on the OS
+    threads */
+-#if !defined(__EMSCRIPTEN__)
++#if !defined(__EMSCRIPTEN__) && !defined(CONFIG_EWEB)
+ #define CONFIG_ATOMICS
+ #endif
+ 
+@@ -2150,7 +2153,7 @@ static size_t js_def_malloc_usable_size(const void *ptr)
+     return malloc_size(ptr);
+ #elif defined(_WIN32)
+     return _msize((void *)ptr);
+-#elif defined(__EMSCRIPTEN__)
++#elif defined(__EMSCRIPTEN__) || defined(CONFIG_EWEB)
+     return 0;
+ #elif defined(__linux__) || defined(__GLIBC__)
+     return malloc_usable_size((void *)ptr);
+-- 
+2.43.0
+

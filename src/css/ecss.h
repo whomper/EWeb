@@ -182,6 +182,13 @@ const ec_stats *ec_get_stats(const ec_ctx *c);
 const char *ec_prop_name(int prop);
 const char *ec_kw_name(int kw);
 
+/* For scripts (querySelector, matches, closest): a selector list read
+ * with c's atoms, in c's memory until ec_destroy(); NULL if it is not a
+ * valid one (or out of memory). ec_matches: does e match it. */
+struct ec_sellist;
+const struct ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len);
+int ec_matches(ec_ctx *c, const struct ec_sellist *l, const ec_node *e);
+
 /* a custom property's computed value, or NULL */
 const char *ec_custom_value(const ec_style *s, const ec_atom *name, size_t *len);
 

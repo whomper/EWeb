@@ -23,6 +23,7 @@ typedef struct {
 	char gate[64];			/* GATE=: the Pi gateway (AERA-Gateway's webgate), "" none */
 	unsigned short gateport;	/* GATEPORT=: its port, 8280 */
 	short snapshot;			/* SNAPSHOT=: pages through the Pi's browser (webgate's snapshots) */
+	char scripts[512];		/* SCRIPTS=: the sites whose scripts run, host names ("" none) */
 } EWOPT;
 extern EWOPT opt;
 
@@ -117,7 +118,7 @@ enum {
 	C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
-	C_SETTINGS, C_FALCON, C_SETHOME, C_COOKIES, C_CACHE,
+	C_SETTINGS, C_FALCON, C_SCRIPTS, C_SETHOME, C_COOKIES, C_CACHE,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
@@ -127,6 +128,9 @@ int  falcon_mode_set(int on);		/* 0 (and an alert why) when it can't */
 
 /* dialogs.c */
 int  dlg_settings(void);		/* 1: changed (in opt) */
+/* a page's prompt(): its question (UTF-8), the answer in answer (UTF-8,
+   the page's suggestion first); 1 OK, 0 Cancel */
+int  dlg_prompt(const char *text, char *answer, int size);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
 void save_link(int link);		/* its file saved (Alternate-click, the link's menu) */
@@ -136,6 +140,12 @@ struct fctl;
 void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y);
 void menu_update(void);
 void status(const char *s);
+/* the page's scripts (src/js): a click at (x, y) on the page, before
+   its default (1: done, a script said no or loaded a page); an event at
+   a form control ("input", "change") */
+int  page_click(int32_t x, int32_t y);
+void win_ctl_check(void);		/* after a script: the control with the keyboard may be gone */
+void ctl_event(struct fctl *c, const char *type);
 int  settings_save(void);
 
 /* about.c */

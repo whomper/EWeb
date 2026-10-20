@@ -1056,13 +1056,82 @@ On the 1 MB ST the pictures page then shows too (9.3 s), after the tables page i
 the 1 MB ST comes first. Drawing in monochrome is the most of it; making the ST edition faster
 (drawing, JPEG on 16-bit arithmetic) is for later.
 
+## A little JavaScript: QuickJS on EWeb's own document (20 Oct 2026)
+
+The design's part 2 (below): QuickJS (`third_party/quickjs`, 2026-06-04, one small patch for a
+freestanding build) runs a page's scripts on a lean DOM in `src/js/js.c`, fresh code: the objects
+scripts see are EWeb's own document nodes, made into objects only when a script first asks for one
+(one object a node), so there is one tree, styled and laid out as before. Selectors (`querySelector`,
+`matches`, `closest`) are EWeb's CSS engine's, `innerHTML` and `document.write` EWeb's HTML parser's
+(a fragment parsed into the document's own memory and atoms). NetSurf's DOM (libdom) was not ported
+first, against the rule: its whole point would be to sit under Duktape, which can't parse today's
+scripts (ES5 only), and EWeb's document, built for speed, is not libdom's tree; to be weighed if
+the DOM grows past "lean".
+
+- **What scripts get:** nodes, elements and text; `getElementById`, `querySelector(All)`, the
+  `getElementsBy...` (arrays, not live lists); creating, inserting, moving and removing nodes;
+  attributes, `id`, `className`, `classList`, `style` (the `style` attribute's declarations) and
+  `getComputedStyle` (the CSS engine's computed values); `textContent`, `innerHTML`, `outerHTML`,
+  `insertAdjacentHTML`; form controls' `value`, `checked`, `selectedIndex`, `options`, a form's
+  `elements`, `submit()` and `reset()`; events with capture and bubbling, `addEventListener`
+  (`once`), `on...` properties and attributes (`return false` too), `preventDefault`,
+  `CustomEvent`, `dispatchEvent`; `setTimeout`, `setInterval`, `requestAnimationFrame`, promises;
+  `location` (and setting it), `history.pushState`, `navigator`, `document.cookie` (no HttpOnly
+  cookie seen, set or replaced: RFC 6265bis), `alert`, `confirm`, `prompt`; `fetch` and
+  `XMLHttpRequest` (made when a page first uses them, from a few lines of JavaScript, as are
+  `localStorage` and `sessionStorage`, kept for the page only); `getBoundingClientRect` and the
+  `offset...` sizes from the layout (each element's block, kept with the page for this, and the
+  element of each text, picture and control: also how a click finds its element).
+- **When they run:** after the page is parsed and its stylesheets have come, in document order, as
+  if each were deferred; what `document.write` writes goes in after its script, and a script that
+  writes is run in its turn. Then `DOMContentLoaded` and `load`, and the timers due. A script that
+  changed the document has it styled and laid out again (after its event or timer, not at each
+  change). Clicks, typing, ticks and choices in forms, and a form sent are events; a click's default
+  (a link followed, a form sent) waits for its listeners, which may cancel it. Modules aren't run
+  (no loader); their `nomodule` fallbacks are.
+- **The budget** (the design: 100-200 KB, a few seconds): 200 KB of script a page and 5 seconds for
+  its scripts, `DOMContentLoaded` and `load` (the time a script waits for the network or for an
+  answer to an alert not counted), 2 seconds for each event or timer after, 8 MB of heap and 96 KB
+  of the 128 KB stack. A page over its budget is parsed again and shown without scripts, with its
+  `<noscript>` parts. An event or timer over its 2 seconds is stopped; the page stays.
+- **Off by default, on per site** (the design): Options > Run this site's scripts, kept in
+  `EWEB.INF` as `SCRIPTS=`, the host names. A page whose site isn't chosen is parsed as before; one
+  with no script and no `on...` attribute gets no runtime either (QuickJS's start costs 1.14
+  million 68030 instructions).
+- **`<noscript>`** is shown when scripts don't run: the HTML Standard hides it only with scripting.
+  EWeb's UA sheet hid it always, so pages lost their no-script versions; now a page whose scripts
+  run parses it as text and hides it, and every other page shows it.
+- **Only with an FPU** (a change to the design's "a build without the FPU runs JavaScript's maths in
+  software"): QuickJS is built with `-m68881`, as every JavaScript number is a double and libgcc's
+  soft-float routines for the 68000 family are position-independent code that EWeb's freestanding
+  link can't take. `EWEB.PRG` runs scripts when the `_FPU` cookie says there is one (the DFB1's
+  68882, a TT's, a Falcon with an FPU card), and has no FPU instruction outside `src/js`, QuickJS and
+  its maths, so it runs as before on a Falcon without one. A soft-float build (EWeb's own double
+  routines) is possible later if Falcons without an FPU should have scripts. The maths are musl's
+  (`third_party/libm`), the C library calls QuickJS needs beyond common's `atari/js_libc.c`.
+  The ST edition has none of it (`js_none.c`; 1.8 KB more than before, for the layout's and forms'
+  shared changes).
+- **Size:** 874 KB of `EWEB.PRG`'s 1.62 MB of code: QuickJS 764 KB (the engine 667, Unicode's
+  tables 55, regular expressions 26, number formatting 11, the rest 4), musl's maths 41 KB, the DOM
+  and the rest of `src/js` 69 KB (the design's estimate for QuickJS was about 800 KB).
+
+Tested by `make test` (`tests/js/run.py`: pages whose scripts check themselves and whose results
+are looked for in the display list, through ewrender `-J` with clicks `-K` and timers `-T`, under
+AddressSanitizer with QuickJS's own assertions on, which find any object EWeb leaks), `make itest`
+(a script from a file, `fetch`, `XMLHttpRequest` and `document.cookie` against the test server, an
+HttpOnly cookie kept from them) and `make hatarigui`'s `scripts` group (EWEB.PRG on the emulated
+Falcon with its 68882: tabs a script makes, one clicked, an `onclick` alert answered). There the
+tabs page's scripts (329 bytes) took 740 ms on the emulated 32 MHz Falcon: most of it the runtime
+QuickJS makes for each page with scripts and the prelude it compiles, the cost every such page
+pays; compiling the prelude once into bytecode is the next saving to measure.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
 
-- **Two builds from one source,** as the family has ST editions: one uses the FPU, for Falcons that
-  have one; the other doesn't, and runs JavaScript's maths in software, several times slower. Nothing
-  else in EWeb needs floating point.
+- **Two builds from one source,** as the family has ST editions: `EWEB.PRG` for the 68030 and
+  `EWEBST.PRG` for the 68000. JavaScript uses the FPU, and runs only where there is one (above);
+  nothing else in EWeb needs floating point.
 - **At start,** EWeb reads the system cookies (`_CPU`, `_FPU`, `_MCH`), asks TOS for TT-RAM, and times
   a short loop to see how fast the CPU is. It checks that the 68030's caches are on and says so if they
   aren't: your DFB1 ran with them off at first, which made it a quarter slower.
@@ -1151,7 +1220,7 @@ lives in the other parts:
 ### 2. A little JavaScript on the Falcon
 
 - QuickJS (MIT licence), carried in the repo the way `common/` carries BearSSL. Its code is about
-  800 KB for the 68030 at `-O2`.
+  800 KB for the 68030 at `-O2`. *Done (20 Oct 2026, above).*
 - Off by default; switched on per site.
 - A lean DOM: selectors, events, classes, `innerHTML`, timers and `fetch`.
 - A hard budget of roughly 100–200 KB of script and a few seconds per page. Beyond that the page falls
@@ -1339,7 +1408,7 @@ out of both (their paths lead nowhere on the Atari).
    2026):* webgate's fetches, the gateway as a proxy, and the ST edition (above). With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.
-5. **JavaScript:** QuickJS with the lean DOM.
+5. **JavaScript:** QuickJS with the lean DOM. *Done (20 Oct 2026):* above, with an FPU.
 
 ## Open questions
 

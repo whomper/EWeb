@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><title>style</title>
+<style>#a { display: none; color: rgb(0, 128, 0); width: 120px } .big { font-size: 20px }</style>
+</head><body>
+<div id="a">hidden</div>
+<p id="b" class="big">big</p>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+var a = document.getElementById("a");
+check(getComputedStyle(a).display === "none", "computed display " + getComputedStyle(a).display);
+check(getComputedStyle(a).color === "rgb(0, 128, 0)", "computed color " + getComputedStyle(a).color);
+check(getComputedStyle(a).width === "120px", "computed width " + getComputedStyle(a).width);
+a.style.display = "block";
+check(getComputedStyle(a).display === "block", "computed after inline");
+a.style.removeProperty("display");
+check(a.style.display === "", "removeProperty");
+a.style.cssText = "margin-left: 4px";
+check(a.style.marginLeft === "4px", "cssText");
+a.style.width = 50;
+check(a.style.width === "50px", "number px");
+check(getComputedStyle(document.getElementById("b")).fontSize === "20px", "font-size");
+var m = document.querySelector("p.big");
+check(m.matches("body > p") && m.closest("body") === document.body, "matches closest");
+var r = m.getBoundingClientRect();
+check(typeof r.top === "number", "rect");
+check(document.body.children.length >= 2, "children");
+check(btoa("Hi!") === "SGkh" && atob("SGkh") === "Hi!", "base64");
+console.log("done");
+</script>
+</body></html>

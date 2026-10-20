@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- expect: console: done --><!-- expect: console: DOMContentLoaded --><!-- expect: console: load --><!-- expect: "Hello from a script" --><!-- expect: "three" --><!-- expect: title "scripts ran" --><!-- absent: shown only without scripts -->
+<html><head><title>before</title>
+<script>
+var log = [];
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+document.title = "scripts ran";
+</script>
+</head><body>
+<p id="greet">Hello</p>
+<ul id="list"><li class="a">one</li><li class="b">two</li></ul>
+<noscript><p>shown only without scripts</p></noscript>
+<script>
+var g = document.getElementById("greet");
+check(g && g.tagName === "P", "getElementById");
+g.textContent = "Hello from a script";
+var li = document.createElement("li");
+li.className = "c";
+li.appendChild(document.createTextNode("three"));
+document.getElementById("list").appendChild(li);
+check(document.querySelectorAll("#list li").length === 3, "querySelectorAll");
+check(document.querySelector("li.b").textContent === "two", "querySelector");
+li.classList.add("d");
+check(li.className === "c d", "classList.add " + li.className);
+li.classList.toggle("c");
+check(!li.classList.contains("c"), "classList.toggle");
+g.style.color = "red";
+check(g.getAttribute("style") === "color: red;", "style " + g.getAttribute("style"));
+var d = document.createElement("div");
+d.innerHTML = "<b>bold</b> and <i>it</i>";
+check(d.childNodes.length === 3 && d.firstChild.tagName === "B", "innerHTML");
+check(d.innerHTML === "<b>bold</b> and <i>it</i>", "innerHTML back " + d.innerHTML);
+document.body.appendChild(d);
+check(JSON.stringify({a: [1, 2]}) === '{"a":[1,2]}', "JSON");
+check(Math.sqrt(2).toFixed(5) === "1.41421", "maths");
+document.addEventListener("DOMContentLoaded", function () { console.log("DOMContentLoaded"); });
+window.addEventListener("load", function () { console.log("load"); });
+setTimeout(function () { console.log("timer"); }, 0);
+console.log("done");
+</script>
+</body></html>

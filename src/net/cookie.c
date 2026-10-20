@@ -25,10 +25,12 @@ struct ck {
 	char *name, *value, *domain, *path;
 	long long expiry;		/* 0: only while EWeb runs */
 	long long created, used;
+	unsigned long seq;		/* the order they were made in: created is in seconds */
 	unsigned char host_only, secure, http_only, same;
 };
 
 static ck *all;
+static unsigned long seq;
 static long count;
 static int changed;			/* lasting cookies changed since the file was read */
 static int loaded;			/* the file was read */
@@ -542,8 +544,13 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 	c->host_only = (unsigned char) !has_domain;
 	c->secure = (unsigned char) secure;
 	c->http_only = (unsigned char) http_only;
+	if (x != NULL && x->script && http_only) {
+		ck_free(c);		/* a script can't set an HttpOnly cookie */
+		return;
+	}
 	c->same = (unsigned char) same;
 	c->created = c->used = now;
+	c->seq = ++seq;
 	if (has_maxage)
 		c->expiry = maxage <= 0 ? 1 : now + maxage;
 	else if (has_expires)
@@ -553,7 +560,12 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 		ck *o = *pp;
 		if (strcmp(o->name, c->name) == 0 && strcmp(o->domain, c->domain) == 0 && o->host_only == c->host_only &&
 		    strcmp(o->path, c->path) == 0) {
+			if (x != NULL && x->script && o->http_only) {
+				ck_free(c);	/* nor replace one */
+				return;
+			}
 			c->created = o->created;
+			c->seq = o->seq;
 			if (!o->expiry && !c->expiry)
 				drop(pp);
 			else if (o->expiry && c->expiry > now && o->expiry == c->expiry && strcmp(o->value, c->value) == 0 &&
@@ -611,7 +623,7 @@ int ck_get(const URL *u, const CKCTX *x, SBUF *out)
 		return 0;
 	for (c = all; c != NULL; c = c->next) {
 		if (!(c->host_only ? strcmp(host, c->domain) == 0 : domain_match(host, c->domain)) ||
-		    !path_match(path, c->path) || (c->secure && !u->tls))
+		    !path_match(path, c->path) || (c->secure && !u->tls) || (x != NULL && x->script && c->http_only))
 			continue;
 		if (c->same == SS_STRICT && !same)
 			continue;
@@ -624,7 +636,8 @@ int ck_get(const URL *u, const CKCTX *x, SBUF *out)
 		for (j = i; j > 0; j--) {
 			ck *a = list[j - 1], *b = list[j];
 			size_t la = strlen(a->path), lb = strlen(b->path);
-			if (la > lb || (la == lb && a->created <= b->created))
+			if (la > lb || (la == lb && (a->created < b->created ||
+						     (a->created == b->created && a->seq <= b->seq))))
 				break;
 			list[j - 1] = b;
 			list[j] = a;
@@ -692,6 +705,11 @@ char *ck_text(long *len)
 	for (c = all; c != NULL; c = c->next)
 		if (c->expiry > now) {
 			char e[24], k[24];
+			/* without a key, a value that starts as an encrypted one
+			   does would be read back as one (and lost): not kept */
+			if (!(keyfile[0] && c->value[0] && have_key()) &&
+			    strncmp(c->value, SECRET_TAG, strlen(SECRET_TAG)) == 0)
+				continue;
 			ll_str(c->expiry, e);
 			ll_str(c->created, k);
 			/* piece by piece: sb_printf cuts long lines */
@@ -760,6 +778,7 @@ void ck_load(const char *s, long len)
 			c->http_only = (unsigned char) (f[7][0] == '1');
 			c->same = (unsigned char) (f[8][0] - '0');
 			c->created = c->used = ll_parse(f[9]);
+			c->seq = ++seq;
 			if (c->domain == NULL || c->path == NULL || c->name == NULL || c->value == NULL || c->expiry <= now ||
 			    c->same > SS_NONE || c->path[0] != '/') {
 				ck_free(c);

@@ -334,11 +334,24 @@ static int in_disabled_fieldset(const dnode *n)
 int form_init(doc *d)
 {
 	dnode *n, **forms = NULL;
-	fctl **tail = &d->ctls;
-	int nforms = 0, cap = 0, ok = 1;
+	fctl **tail = &d->ctls, **old = NULL, *c;
+	int nforms = 0, cap = 0, ok = 1, nold = 0, i;
 
 	if (d->root == NULL)
 		return 1;
+	/* again, after a script changed the tree: the controls still in it
+	   keep their state, those gone are let go */
+	for (c = d->ctls; c != NULL; c = c->next)
+		nold++;
+	if (nold > 0) {
+		if ((old = malloc((size_t) nold * sizeof *old)) == NULL)
+			return 0;
+		for (nold = 0, c = d->ctls; c != NULL; c = c->next) {
+			c->gone = 1;
+			old[nold++] = c;
+		}
+	}
+	d->ctls = NULL;
 	/* the forms first: a control may name one further down */
 	for (n = d->root; n != NULL; n = next_node(n, d->root, !is_html(n, T_TEMPLATE)))
 		if (is_html(n, T_FORM)) {
@@ -353,12 +366,16 @@ int form_init(doc *d)
 			forms[nforms++] = n;
 		}
 	for (n = d->root; n != NULL; n = next_node(n, d->root, !is_html(n, T_TEMPLATE))) {
-		fctl *c;
 		const char *fa;
-		int i;
 		if (n->type != DN_ELEMENT || n->ns != DN_NS_HTML ||
 		    (n->tag != T_INPUT && n->tag != T_BUTTON && n->tag != T_SELECT && n->tag != T_TEXTAREA))
 			continue;
+		if ((c = n->ctl) != NULL) {
+			c->gone = 0;
+			*tail = c;
+			tail = &c->next;
+			continue;
+		}
 		c = calloc(1, sizeof *c);
 		if (c == NULL) {
 			ok = 0;
@@ -396,8 +413,23 @@ int form_init(doc *d)
 		*tail = c;
 		tail = &c->next;
 	}
+	*tail = NULL;
 	free(forms);
-	radio_groups(d);
+	if (old == NULL) {
+		radio_groups(d);
+		return ok;
+	}
+	for (i = 0; i < nold; i++)
+		if (old[i]->gone) {
+			c = old[i];
+			if (c->n->ctl == c)
+				c->n->ctl = NULL;
+			free(c->v);
+			free(c->opt);
+			free(c->sel);
+			free(c);
+		}
+	free(old);
 	return ok;
 }
 

@@ -421,6 +421,8 @@ static void finish(doc *d, dnode *n, dnode *parent)
 	int empty = 1;
 
 	n->e.parent = parent ? &parent->e : NULL;
+	n->e.first = NULL;
+	n->e.flags = 0;
 	n->e.cls = n->cls;
 	n->e.ncls = n->ncls;
 	n->e.attr = n->attrs;
@@ -534,11 +536,128 @@ doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media
 	return doc_parse_opts(data, len, &o, media);
 }
 
+#ifndef EW_ST	/* the ST edition runs no scripts */
+/* the element links, flags and hints again, and the form controls, after
+   a script changed the tree */
+void doc_refresh(doc *d)
+{
+	dnode *c;
+	if (d->root == NULL)
+		return;
+	bd_doc = d;
+	hint_atoms(d);
+	d->html = d->body = NULL;
+	for (c = d->root->first; c != NULL; c = c->next)
+		if (c->type == DN_ELEMENT) {
+			finish(d, c, NULL);
+			c->e.index = c->e.nsib = 1;
+			break;
+		}
+	bd_doc = NULL;
+	form_init(d);
+}
+
+/* the class attribute, split at white space, into n->cls */
+static int split_classes(doc *d, dnode *n, const char *s, size_t len)
+{
+	const char *e = s + len, *w;
+	size_t k = 0;
+	const ec_atom **cls;
+	for (w = s; w < e;) {
+		while (w < e && (*w == ' ' || *w == '\t' || *w == '\n' || *w == '\r' || *w == '\f'))
+			w++;
+		if (w < e)
+			k++;
+		while (w < e && !(*w == ' ' || *w == '\t' || *w == '\n' || *w == '\r' || *w == '\f'))
+			w++;
+	}
+	n->ncls = 0;
+	n->cls = NULL;
+	if (k == 0)
+		return 1;
+	if ((cls = doc_alloc(d, k * sizeof *cls)) == NULL)
+		return 0;
+	while (s < e) {
+		while (s < e && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f'))
+			s++;
+		w = s;
+		while (s < e && !(*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f'))
+			s++;
+		if (s > w && (cls[n->ncls++] = ec_intern(d->css, w, (size_t) (s - w))) == NULL)
+			return 0;
+	}
+	n->cls = cls;
+	return 1;
+}
+
+int dn_set_attr(doc *d, dnode *n, const char *name, const char *val, size_t len)
+{
+	size_t nl = strlen(name);
+	const ec_atom *a = ec_intern(d->css, name, nl);
+	char *v = doc_alloc(d, len + 1);
+	uint16_t i;
+	if (a == NULL || v == NULL)
+		return 0;
+	memcpy(v, val, len);
+	v[len] = 0;
+	for (i = 0; i < n->nattr; i++)
+		if (n->attrs[i].name == a)
+			break;
+	if (i == n->nattr) {
+		ec_attr *at = doc_alloc(d, (n->nattr + 1u) * sizeof *at);
+		if (at == NULL)
+			return 0;
+		if (n->nattr)
+			memcpy(at, n->attrs, n->nattr * sizeof *at);
+		n->attrs = at;
+		n->nattr++;
+		n->attrs[i].name = a;
+	}
+	n->attrs[i].val = v;
+	n->attrs[i].len = (uint32_t) len;
+	if (nl == 5 && memcmp(name, "class", 5) == 0 && !split_classes(d, n, v, len))
+		return 0;
+	if (nl == 2 && memcmp(name, "id", 2) == 0)
+		n->e.id = len ? ec_intern(d->css, v, len) : NULL;
+	n->e.hint = NULL;	/* made again from the attributes */
+	n->e.nhint = 0;
+	return 1;
+}
+
+void dn_remove_attr(doc *d, dnode *n, const char *name)
+{
+	size_t nl = strlen(name);
+	uint16_t i;
+	for (i = 0; i < n->nattr; i++) {
+		size_t al;
+		const char *an = ec_atom_text(n->attrs[i].name, &al);
+		if (al == nl && memcmp(an, name, nl) == 0)
+			break;
+	}
+	if (i == n->nattr)
+		return;
+	memmove(&n->attrs[i], &n->attrs[i + 1], (size_t) (n->nattr - i - 1) * sizeof *n->attrs);
+	n->nattr--;
+	if (nl == 5 && memcmp(name, "class", 5) == 0) {
+		n->cls = NULL;
+		n->ncls = 0;
+	}
+	if (nl == 2 && memcmp(name, "id", 2) == 0)
+		n->e.id = NULL;
+	n->e.hint = NULL;
+	n->e.nhint = 0;
+	(void) d;
+}
+
+#endif
+
 void doc_free(doc *d)
 {
 	struct dblk *b, *next;
 	if (d == NULL)
 		return;
+	if (d->js_free != NULL)
+		d->js_free(d->js);
 	form_free(d);
 	for (b = d->mem; b != NULL; b = next) {
 		next = b->next;

@@ -169,6 +169,14 @@ hub stay complete, with the evidence.
   (`tools/count68k.sh build/m68k/docparse`, `tools/prof68k.py`) when the change is meant for speed.
   `ewh5test -f PAGE` prints a page's tree in the tests' format.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
+- **Scripts** are `src/js/js.c` (QuickJS from `third_party/quickjs`, kept as `third_party/netsurf`
+  is: patches in its `patches/` with the README; a runtime per document, `doc.js`; the lean DOM on
+  EWeb's own nodes; the budget), run by `src/browse` for the sites in `SCRIPTS=` (Options > Run this
+  site's scripts). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
+  `-m68881` and run only with an FPU (the `_FPU` cookie); no FPU instruction may appear outside them
+  (`m68k-linux-gnu-objdump -d`); the ST edition has `js_none.c`. After changing them: `make test`
+  (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers), `make itest`
+  (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882).
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). After changing it, `make test` (its cases, `tests/css/cases.txt`, worked out from the
   specifications) and `make csscmp` (against LibCSS on the page set: no difference may be left

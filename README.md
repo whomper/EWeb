@@ -29,6 +29,11 @@ EWeb's own fonts.
   right to left), Tab from one to the next and Return to send; sent with
   GET or POST, urlencoded, multipart or plain text, in the page's own
   character set, as the HTML Standard has browsers send them.
+- **A little JavaScript** on a Falcon or TT with an FPU (QuickJS, on a lean
+  DOM of EWeb's own document): menus, tabs, form checks, alerts, timers and
+  `fetch`, for the sites you choose (Options > Run this site's scripts),
+  within a budget of 200 KB and a few seconds a page; past it, or with
+  scripts off, the page's `<noscript>` version.
 - **Cookies**, as RFC 6265bis has them, those meant to last kept in
   `COOKIES.TXT` (written once, at quit; their values encrypted, as the
   family keeps passwords); none for other sites' pictures and
@@ -147,6 +152,8 @@ src/doc/              the document: EWeb's HTML parser (html.c), the UA styleshe
 src/layout/           the layout: boxes, lines, tables, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
+src/js/               the pages' scripts: QuickJS's runtime with the budget, and the lean DOM (js.c);
+                      js_none.c for the ST edition
 src/net/              EWeb's URL parser and HTTP client, cookies (cookie.c), and gzip
 src/plat.h            what EWeb needs from the machine (atari/plat_tos.c, tests/host/plat_posix.c)
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
@@ -164,10 +171,14 @@ tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fak
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
+tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
-atari/                the C library pieces NetSurf needs beyond common/, and plat_tos.c
+atari/                the C library pieces NetSurf and QuickJS need beyond common/ (include/js,
+                      js_libc.c), and plat_tos.c
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT; Hubbub and LibCSS
                       only as nsbench's yardsticks)
+third_party/quickjs/  QuickJS, the JavaScript engine (MIT)
+third_party/libm/     musl's maths functions, for QuickJS on the Atari (MIT)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py, icon/ (the icon), QEMU with
                       plugins and counting 68030 instructions
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here
@@ -191,7 +202,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   `common/tests/fuzz/fuzz_net.c` (`tests/net/nettest.c`: lengths, chunks,
   gzip and deflate, redirects, kept connections, and what a hostile server
   might send), the cookies (`tests/net/cookies.txt`, from RFC 6265bis), and
-  the fuzz targets' seeds and past finds (`tests/fuzz`).
+  the fuzz targets' seeds and past finds (`tests/fuzz`), and the scripts'
+  test pages (`tests/js`: the DOM, events, forms, `document.write`,
+  timers, computed styles, errors and the budget).
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server
@@ -256,7 +269,8 @@ EWeb is free software under the GNU General Public License, version 2 or (at
 your option) any later version; see [`COPYING`](COPYING). `EWEB.FNT` is drawn
 from the DejaVu fonts (Bitstream Vera's licence, free to use and to change,
 not to sell alone). NetSurf's libraries
-in `third_party/netsurf/` and `common/third_party/nsgif`, `tests/html5lib/h5test.c` and BearSSL
+in `third_party/netsurf/` and `common/third_party/nsgif`, QuickJS (`third_party/quickjs`), musl's
+maths (`third_party/libm`), `tests/html5lib/h5test.c` and BearSSL
 (`common/third_party/bearssl`) are under the MIT licence; libjpeg-turbo
 (`common/third_party/libjpeg-turbo`) under the IJG's and the modified BSD
 licences; `CACERT.PEM` is Mozilla's list of authorities (MPL 2.0).

@@ -24,6 +24,7 @@ typedef struct {
 	int top;		/* a page (a navigation), not a picture or a stylesheet */
 	int safe;		/* GET or HEAD */
 	const char *site;	/* the page it came from (its address), NULL: typed */
+	int script;		/* document.cookie: no HttpOnly cookie is seen, set or replaced */
 } CKCTX;
 
 /* a Set-Cookie header's value from the answer to u */

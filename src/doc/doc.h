@@ -62,6 +62,9 @@ typedef struct doc {
 	struct dblk *mem;		/* the blocks of memory (doc_alloc) */
 	uint32_t elements;
 	struct fctl *ctls;		/* the form controls, in document order (form.h) */
+	/* its scripts' state (src/js), let go first by doc_free */
+	void *js;
+	void (*js_free)(void *js);
 } doc;
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or
@@ -81,6 +84,14 @@ void *doc_grow(doc *d, void *p, size_t old, size_t n);
 
 /* the value of an element's attribute (NUL-terminated), or NULL */
 const char *dn_attr(const dnode *n, const char *name);
+/* for scripts: an attribute set (its id and classes kept with it, the
+   element's hints made again by doc_refresh) or removed; name in lower
+   case. dn_set_attr returns 0 if out of memory */
+int dn_set_attr(doc *d, dnode *n, const char *name, const char *val, size_t len);
+void dn_remove_attr(doc *d, dnode *n, const char *name);
+/* after a script changed the tree: the element links, flags and hints
+   the CSS engine reads, and the form controls, made again */
+void doc_refresh(doc *d);
 
 /* The page's stylesheets in document order: cb is called for each
    <style> with its text (is_link 0) and each <link rel=stylesheet> for a

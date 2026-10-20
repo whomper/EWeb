@@ -270,13 +270,34 @@ show:
 - pictures in the background of a page or a box (CSS
   `background-image`), WebP and AVIF pictures (EWeb asks servers for
   JPEG, PNG and GIF, which most send then), and SVG drawings
-- anything made by JavaScript (but see [Pages made by
-  scripts](#pages-made-by-scripts))
+- what a page's JavaScript makes, unless you let that site's scripts
+  run (see [Pages made by scripts](#pages-made-by-scripts)); without
+  them EWeb shows the page's `<noscript>` parts, as browsers do with
+  scripts off
 
 Sites made for small screens and for text, such as FrogFind, 68k.news,
 Wikipedia and many blogs, read well.
 
 ## Pages made by scripts
+
+**On the Falcon itself:** `EWEB.PRG` runs a little JavaScript, on a
+Falcon or TT with an FPU (a 68881 or 68882, as on the DFB1). It is off
+until you choose a site: open one of its pages and pick Options > Run
+this site's scripts (ticked while they run); the page comes again with
+its scripts. EWeb remembers the sites in `EWEB.INF`. Pick it again to
+turn them off.
+
+It is made for the small scripts pages use for menus, tabs, form checks,
+a message or a question (`alert` and `confirm` are EWeb's alerts,
+`prompt` a small dialog): clicks, typing in a form, timers, the page
+changed and laid out again, `fetch`, and the site's cookies (except
+those it marks as not for scripts, HttpOnly). Each page may bring 200 KB of script
+and run for 5 seconds as it opens (2 seconds for each click or timer
+after); a page whose scripts take more is shown as if they were off,
+with its `<noscript>` parts, and the status line says so. Big sites
+built of scripts (web apps, frameworks) are too much for a 68030: for
+those, use the Pi's browser (below). The ST edition and a Falcon without
+an FPU run no scripts.
 
 With the Pi gateway set up for it (`aera-gateway` with its browser, on
 the Pi), two things in the View menu use the Pi's own web browser:
@@ -316,7 +337,8 @@ The info line says how a secure page came.
 Options > Settings (^,) has two pages:
 
 - **General:** whether pages' pictures are shown, the size of pages
-  (per cent), and where words typed in the address go.
+  (per cent), and where words typed in the address go. (Which sites'
+  scripts run is Options > Run this site's scripts.)
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
@@ -336,6 +358,8 @@ was, when you quit:
 - `GATE=` the Pi gateway's address: without Falcon mode every page comes
   through the Pi, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)
+- `SCRIPTS=` the sites whose scripts run, their names with spaces
+  between (`file` for pages on your disks)
 - `WINDOW=` where the window was
 
 ## When something goes wrong

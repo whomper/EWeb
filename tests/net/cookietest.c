@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 		} else if (!strcmp(a, "now")) {
 			t_now = atoll(b);
 		} else if (!strcmp(a, "set") || !strcmp(a, "set3")) {
-			CKCTX x = { 1, 1, NULL };
+			CKCTX x = { 1, 1, NULL, 0 };
 			char *site = NULL;
 			c = strchr(b, ' ');
 			*c++ = 0;
@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 			t_now++;		/* each cookie made a second after the one before */
 			ck_set(&u, c, &x);
 		} else if (!strcmp(a, "get") || !strcmp(a, "getx")) {
-			CKCTX x = { 1, 1, NULL };
+			CKCTX x = { 1, 1, NULL, 0 };
 			char *want;
 			SBUF got;
 			c = strchr(b, ' ');

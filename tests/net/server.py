@@ -44,6 +44,12 @@ Pages:
   /site/cache/   the disk cache: fresh.html (fresh for an hour), etag.html
                  (asked again each time: a 304 to its ETag), count (how
                  many requests each had, and the 304s; never kept)
+  /site/script.html  scripts (EWeb's src/js): one from a file
+                 (/site/script.js), fetch and XMLHttpRequest of
+                 /site/data.json, document.cookie beside an HttpOnly cookie
+                 the page set, and the cookies a script's request sends;
+                 /site/tabs.html: tabs a click shows, an alert (EWEB.PRG
+                 in Hatari)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -197,6 +203,29 @@ def make_certs(work):
     open(mark, "w").close()
 
 
+TABS_PAGE = (b"<!DOCTYPE html><title>Tabs</title><style>.hide { display: none } .tab { background: #ddd }</style>"
+             b"<p><span id=t1 class=tab>First</span> <span id=t2 class=tab>Second</span></p>"
+             b"<div id=p1>The first tab's words</div><div id=p2 class=hide>The second tab's words</div>"
+             b"<p><button id=hi type=button onclick=\"alert('Hello from the page')\">Say hello</button></p>"
+             b"<noscript><p>Without scripts</p></noscript><script>document.title = 'Tabs ready';"
+             b"var tabs = document.querySelectorAll('.tab'); for (var i = 0; i < tabs.length; i++)"
+             b" tabs[i].onclick = function () { document.getElementById('p1').className = this.id == 't1' ? '' : 'hide';"
+             b" document.getElementById('p2').className = this.id == 't2' ? '' : 'hide';"
+             b" document.title = 'Tab ' + this.id; };</script>")
+SCRIPT_PAGE = (b"<!DOCTYPE html><title>Scripts</title><p id=a>waiting</p><p id=b>waiting</p><p id=c>waiting</p>"
+               b"<p id=d></p><p id=e>waiting</p><script src=/site/script.js></script><script>"
+               b"fetch('/site/data.json').then(function (r) { return r.json(); }).then(function (j) {"
+               b" document.getElementById('a').textContent = 'fetch ' + j.word; });"
+               b"var x = new XMLHttpRequest(); x.open('GET', '/site/data.json');"
+               b"x.onload = function () { document.getElementById('b').textContent = 'xhr ' +"
+               b" JSON.parse(x.responseText).word; }; x.send();"
+               b"document.cookie = 'js=1; Path=/'; document.cookie = 'hidden=0; Path=/';"
+               b"document.getElementById('d').textContent = 'cookies ' + document.cookie;"
+               b"var y = new XMLHttpRequest(); y.open('GET', '/site/cookie/show', false); y.send();"
+               b"document.getElementById('e').textContent = 'sent ' + /<title>COOKIE\\|(.*)<\\/title>/.exec(y.responseText)[1];"
+               b"</script>")
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     secure_port = 0
@@ -244,6 +273,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, FORM_PAGE)
         elif p == "/site/files.html":
             self.send(200, FILES_PAGE)
+        elif p == "/site/tabs.html":
+            self.send(200, TABS_PAGE)
+        elif p == "/site/script.html":
+            self.send(200, SCRIPT_PAGE, extra=[("Set-Cookie", "hidden=1; HttpOnly; Path=/"),
+                                               ("Set-Cookie", "seen=2; Path=/")])
+        elif p == "/site/script.js":
+            self.send(200, b"document.getElementById('c').textContent = 'external ' + (1 + 1);",
+                      "text/javascript")
+        elif p == "/site/data.json":
+            self.send(200, b'{"word": "atari"}', "application/json")
         elif p == "/site/cache/fresh.html":
             CACHE_COUNT["fresh"] += 1
             self.send(200, b"<!DOCTYPE html><title>fresh %d</title><p>Kept an hour." % CACHE_COUNT["fresh"],

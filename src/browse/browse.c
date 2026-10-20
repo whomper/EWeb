@@ -12,7 +12,9 @@
 #include "browse.h"
 #include "bookmark.h"
 #include "form.h"
+#include "html.h"
 #include "img.h"
+#include "js.h"
 #include "font.h"
 #include "http.h"
 #include "conn.h"
@@ -482,6 +484,20 @@ typedef struct {
 	char err[200];		/* when nothing came */
 } FETCH;
 
+#ifndef EW_ST
+static void js_host_of(browser *b, js_host *h);
+#endif
+static int js_after(browser *b, int *load_r);
+static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post);
+static int load(browser *b, const char *url, int mode);
+
+#ifndef EW_ST
+static int hexval(int c)
+{
+	return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+#endif
+
 static void host_of(const char *url, char *out, int size)
 {
 	const char *h = strstr(url, "://");
@@ -501,6 +517,7 @@ static void cookie_in(const HTTPREQ *rq, const URL *u, const char *method, const
 	x.top = rq->top;
 	x.safe = !strcmp(method, "GET") || !strcmp(method, "HEAD");
 	x.site = rq->site;
+	x.script = 0;
 	ck_set(u, value, &x);
 }
 
@@ -511,6 +528,7 @@ static void cookie_out(const HTTPREQ *rq, const URL *u, const char *method, SBUF
 	x.top = rq->top;
 	x.safe = !strcmp(method, "GET") || !strcmp(method, "HEAD");
 	x.site = rq->site;
+	x.script = 0;
 	sb_init(&v);
 	if (ck_get(u, &x, &v) && v.s != NULL) {
 		sb_adds(req, "Cookie: ");
@@ -866,19 +884,32 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	SHEETS sh;
 
 	unsigned long t = pf_ms(), t_sheets;
+	int scripts = br_scripts_for(b, url), again = 0;
+	html_opts o;
 
+	b->script_note[0] = 0;
+#ifndef EW_ST
+parse:
+#endif
 	say(b, "%s", "Reading the page...");
-	d = doc_parse(data, (size_t) len, charset && *charset ? charset : NULL, &m);
+	memset(&o, 0, sizeof o);
+	o.charset = charset && *charset ? charset : NULL;
+	o.scripting = scripts;
+	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d == NULL)
 		return 0;
 	doc_add_ua(d);
+	/* <noscript> is shown when scripts aren't run (the HTML Standard's
+	   rendering: hidden only with scripting) */
+	if (scripts)
+		ec_sheet(d->css, "noscript { display: none !important }", 37, EC_ORIGIN_UA);
 	b->ms_parse = pf_ms() - t;
 	if (d->base[0] == 0 || !resolve(url, d->base, base, sizeof base))
 		str_copy(base, url, sizeof base);
 	sh.b = b;
 	sh.d = d;
 	sh.base = base;
-	sh.fresh = fresh;
+	sh.fresh = again ? 0 : fresh;
 	sh.n = 0;
 	t_sheets = pf_ms();
 	doc_sheets(d, sheet_cb, &sh);
@@ -886,6 +917,44 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
+#ifndef EW_ST
+	if (scripts && !conn_stop) {
+		js_host h;
+		int r;
+		unsigned long ms;
+		long bytes;
+		say(b, "%s", "Running the page's scripts...");
+		js_host_of(b, &h);
+		r = js_page(d, url, base, &h);
+		js_stats(d, &ms, &bytes);
+		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
+			/* over the budget: the page as it is without them */
+			snprintf(b->script_note, sizeof b->script_note, "%s",
+				 r == JS_TOO_MUCH ? "Its scripts were too much for EWeb: shown without them." :
+				 "No memory for its scripts: shown without them.");
+			if (b->log != NULL) {
+				char line[120];
+				snprintf(line, sizeof line, "scripts too much ms %lu bytes %ld", ms, bytes);
+				b->log(b->ud, line);
+			}
+			doc_free(d);
+			scripts = 0;
+			again = 1;
+			t = pf_ms();
+			goto parse;
+		}
+		if (r == JS_DONE) {
+			if (b->log != NULL) {
+				char line[120];
+				snprintf(line, sizeof line, "scripts ran ms %lu bytes %ld", ms, bytes);
+				b->log(b->ud, line);
+			}
+			doc_refresh(d);
+			js_changed(d);
+		}
+		t = pf_ms();
+	}
+#endif
 	say(b, "%s", "Laying the page out...");
 	doc_select(d);
 	b->ms_style = pf_ms() - t;
@@ -896,6 +965,7 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 		doc_free(d);
 		return 0;
 	}
+	js_set_page(d, p);
 	*dout = d;
 	*pout = p;
 	return 1;
@@ -992,6 +1062,7 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 	}
 	b->d = d;
 	b->p = p;
+	js_set_page(d, p);
 	b->pic_stopped = 0;
 	b->pic_relayout = 0;
 	b->pic_n = b->pic_done = 0;
@@ -1252,6 +1323,12 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		b->scroll_to = b->hist[b->cur].y;
 	free(f->data);
 	free(f);
+	if (b->d != NULL && b->d->js != NULL && js_navigation(b->d, NULL, NULL, NULL) != NULL) {
+		/* its scripts sent the browser on (location = ...) */
+		int lr;
+		if (js_after(b, &lr) == BRJ_LOAD)
+			return lr;
+	}
 	return BR_SHOWN;
 }
 
@@ -1338,6 +1415,16 @@ int br_follow(browser *b, int link)
 	br_link_url(b, link, url, sizeof url);
 	if (url[0] == 0)
 		return BR_STOPPED;
+	if (has_scheme(url, "javascript")) {
+		int lr, r = br_js_url(b, url, &lr);
+		if (r == BRJ_LOAD)
+			return lr;
+		if (r == BRJ_DRAWN) {
+			b->scroll_to = b->cur >= 0 ? b->hist[b->cur].y : -1;
+			return BR_SHOWN;
+		}
+		return BR_STOPPED;
+	}
 	return load(b, url, NAV_NEW);
 }
 
@@ -1346,7 +1433,19 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 	FSUBMIT s;
 	char base[4096], url[4096];
 	int r;
-	if (b->d == NULL || !form_submit(b->d, from, submitter, x, y, &s))
+	if (b->d == NULL)
+		return BR_STOPPED;
+	{
+		/* the form's submit event: a script may send it itself, or not */
+		fctl *c = submitter ? submitter : from;
+		if (c != NULL && c->form != NULL && b->d->js != NULL && js_event(b->d, c->form, "submit")) {
+			int load;
+			if (js_after(b, &load) == BRJ_LOAD)
+				return load;
+			return BR_STOPPED;
+		}
+	}
+	if (!form_submit(b->d, from, submitter, x, y, &s))
 		return BR_STOPPED;
 	base_of(b, b->d, b->url, base, sizeof base);
 	/* no action: the page's own address, without its fragment */
@@ -1383,6 +1482,331 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 	form_submit_free(&s);
 	return r;
 }
+
+#ifndef EW_ST
+/* ---------------------------------------------------------------- scripts */
+
+int br_scripts_for(const browser *b, const char *url)
+{
+	char host[128];
+	const char *s;
+	size_t hl;
+	if (!b->scripts || !js_built || b->script_sites == NULL)
+		return 0;
+	if (has_scheme(url, "file"))
+		str_copy(host, "file", sizeof host);
+	else if (has_scheme(url, "http") || has_scheme(url, "https"))
+		host_of(url, host, sizeof host);
+	else
+		return 0;
+	host[strcspn(host, ":")] = 0;
+	hl = strlen(host);
+	for (s = b->script_sites; *s;) {
+		const char *w;
+		size_t i;
+		while (*s == ' ' || *s == ',')
+			s++;
+		w = s;
+		while (*s && *s != ' ' && *s != ',')
+			s++;
+		if (s - w == 1 && *w == '*')
+			return 1;
+		if ((size_t) (s - w) != hl)
+			continue;
+		for (i = 0; i < hl; i++)
+			if (((w[i] >= 'A' && w[i] <= 'Z') ? w[i] + 32 : w[i]) !=
+			    ((host[i] >= 'A' && host[i] <= 'Z') ? host[i] + 32 : host[i]))
+				break;
+		if (i == hl)
+			return 1;
+	}
+	return 0;
+}
+
+static int jh_fetch(void *ud, const char *site, const char *url, const char *method, const char *body, long blen,
+		    const char *ctype, char **data, long *len, int *status, char *mime, int msize)
+{
+	browser *b = ud;
+	FETCH *f = malloc(sizeof *f);
+	FSUBMIT post;
+	int r;
+	if (f == NULL)
+		return 0;
+	memset(&post, 0, sizeof post);
+	if (strcmp(method, "POST") == 0) {
+		post.post = 1;
+		post.body = (char *) body;
+		post.len = blen;
+		str_copy(post.ctype, ctype ? ctype : "text/plain", sizeof post.ctype);
+	}
+	r = fetch(b, url, site, 0, "*/*", 2L << 20, !post.post, post.post ? &post : NULL, f);
+	if (r) {
+		*data = f->data;
+		*len = f->len;
+		*status = f->status;
+		str_copy(mime, f->mime, msize);
+	} else {
+		free(f->data);
+	}
+	free(f);
+	return r;
+}
+
+static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size)
+{
+	(void) ud;
+	if (!resolve(base, href, out, size))
+		out[0] = 0;
+}
+
+static void jh_cookie_get(void *ud, const char *url, char *out, int size)
+{
+	URL *u = malloc(sizeof *u);
+	CKCTX x;
+	SBUF v;
+	(void) ud;
+	out[0] = 0;
+	if (u == NULL)
+		return;
+	x.top = 1;
+	x.safe = 1;
+	x.site = url;
+	x.script = 1;
+	sb_init(&v);
+	if (url_parse(u, url, NULL) && ck_get(u, &x, &v) && v.s != NULL)
+		str_copy(out, v.s, size);
+	sb_free(&v);
+	free(u);
+}
+
+static void jh_cookie_set(void *ud, const char *url, const char *line)
+{
+	URL *u = malloc(sizeof *u);
+	CKCTX x;
+	(void) ud;
+	if (u == NULL)
+		return;
+	x.top = 1;
+	x.safe = 1;
+	x.site = url;
+	x.script = 1;
+	if (url_parse(u, url, NULL))
+		ck_set(u, line, &x);
+	free(u);
+}
+
+static int jh_ask(void *ud, int kind, const char *text, char *out, int size)
+{
+	browser *b = ud;
+	return b->ask != NULL ? b->ask(b->ud, kind, text, out, size) : 1;
+}
+
+static void jh_log(void *ud, const char *line)
+{
+	browser *b = ud;
+	if (b->log != NULL)
+		b->log(b->ud, line);
+}
+
+static void jh_console(void *ud, const char *line)
+{
+	browser *b = ud;
+	if (b->console != NULL)
+		b->console(b->ud, line);
+}
+
+static void js_host_of(browser *b, js_host *h)
+{
+	h->fetch = jh_fetch;
+	h->resolve = jh_resolve;
+	h->cookie_get = jh_cookie_get;
+	h->cookie_set = jh_cookie_set;
+	h->ask = jh_ask;
+	h->log = jh_log;
+	h->console = jh_console;
+	h->ud = b;
+}
+
+/* the page shown styled and laid out again after a script changed it */
+static int restyle(browser *b)
+{
+	char base[4096];
+	doc *d = b->d;
+	page *p;
+	doc_refresh(d);
+	ec_unstyle(d->css);
+	doc_select(d);
+	base_of(b, d, b->url, base, sizeof base);
+	p = lay(b, d, base);
+	if (p == NULL)
+		return 0;
+	pg_free(b->p);
+	b->p = p;
+	js_set_page(d, p);
+	shown_imgs(b);
+	str_copy(b->title, d->title, sizeof b->title);
+	return 1;
+}
+
+/* what the page's scripts did: a new address, or a changed page */
+static int js_after(browser *b, int *load_r)
+{
+	static int depth;
+	const char *to, *post, *ctype;
+	long len;
+	if (b->d == NULL || b->d->js == NULL)
+		return BRJ_NONE;
+	if ((to = js_navigation(b->d, &post, &len, &ctype)) != NULL && depth < 4) {
+		char *u = str_ndup(to, (long) strlen(to));
+		FSUBMIT s;
+		memset(&s, 0, sizeof s);
+		if (post != NULL) {
+			s.post = 1;
+			s.body = str_ndup(post, len);
+			s.len = len;
+			str_copy(s.ctype, ctype, sizeof s.ctype);
+		}
+		js_navigation_done(b->d);
+		if (u == NULL) {
+			free(s.body);
+			return BRJ_NONE;
+		}
+		depth++;
+		if (!strcmp(u, "about:back"))
+			*load_r = br_back(b);
+		else if (!strcmp(u, "about:forward"))
+			*load_r = br_forward(b);
+		else if (s.post) {
+			*load_r = load_post(b, u, NAV_NEW, &s);
+			dc_job_end();
+		} else {
+			*load_r = load(b, u, NAV_NEW);
+		}
+		depth--;
+		free(s.body);
+		free(u);
+		return BRJ_LOAD;
+	}
+	if (js_navigation(b->d, NULL, NULL, NULL) != NULL)
+		js_navigation_done(b->d);	/* sent on and on: no further */
+	if (js_changed(b->d) && restyle(b))
+		return BRJ_DRAWN;
+	return BRJ_NONE;
+}
+
+long br_js_due(const browser *b)
+{
+	return b->d != NULL ? js_due(b->d) : -1;
+}
+
+int br_js_step(browser *b, int *load_r)
+{
+	if (b->d == NULL || b->d->js == NULL)
+		return BRJ_NONE;
+	js_run_timers(b->d);
+	return js_after(b, load_r);
+}
+
+int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
+{
+	*cancelled = 0;
+#ifndef EW_ST
+	if (b->d != NULL && b->d->js != NULL && b->p != NULL) {
+		dnode *n = page_node_at(b->p, x, y);
+		if (n != NULL)
+			*cancelled = js_event(b->d, n, "click");
+		return js_after(b, load_r);
+	}
+#else
+	(void) x, (void) y;
+#endif
+	(void) load_r;
+	return BRJ_NONE;
+}
+
+int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load_r)
+{
+	*cancelled = 0;
+	if (b->d == NULL || b->d->js == NULL || c == NULL)
+		return BRJ_NONE;
+	*cancelled = js_event(b->d, c->n, type);
+	return js_after(b, load_r);
+}
+
+int br_js_url(browser *b, const char *url, int *load_r)
+{
+	char *code;
+	long n;
+	if (b->d == NULL || b->d->js == NULL || !has_scheme(url, "javascript"))
+		return BRJ_NONE;
+	/* its code, %-escapes undone */
+	url += 11;
+	n = (long) strlen(url);
+	if ((code = malloc((size_t) n + 1)) == NULL)
+		return BRJ_NONE;
+	{
+		long i, k = 0;
+		for (i = 0; i < n; i++) {
+			int a, c;
+			if (url[i] == '%' && i + 2 < n && (a = hexval(url[i + 1])) >= 0 && (c = hexval(url[i + 2])) >= 0) {
+				code[k++] = (char) (a * 16 + c);
+				i += 2;
+			} else
+				code[k++] = url[i];
+		}
+		code[k] = 0;
+	}
+	js_run(b->d, code);
+	free(code);
+	return js_after(b, load_r);
+}
+
+#else	/* the ST edition: no scripts */
+
+int br_scripts_for(const browser *b, const char *url)
+{
+	(void) b, (void) url;
+	return 0;
+}
+
+long br_js_due(const browser *b)
+{
+	(void) b;
+	return -1;
+}
+
+int br_js_step(browser *b, int *load_r)
+{
+	(void) b, (void) load_r;
+	return BRJ_NONE;
+}
+
+int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
+{
+	(void) b, (void) x, (void) y, (void) load_r;
+	*cancelled = 0;
+	return BRJ_NONE;
+}
+
+int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load_r)
+{
+	(void) b, (void) c, (void) type, (void) load_r;
+	*cancelled = 0;
+	return BRJ_NONE;
+}
+
+int br_js_url(browser *b, const char *url, int *load_r)
+{
+	(void) b, (void) url, (void) load_r;
+	return BRJ_NONE;
+}
+
+static int js_after(browser *b, int *load_r)
+{
+	(void) b, (void) load_r;
+	return BRJ_NONE;
+}
+#endif
 
 static int go_to(browser *b, int i)
 {
@@ -1478,6 +1902,7 @@ int br_relayout(browser *b, int32_t width)
 		return 0;
 	pg_free(b->p);
 	b->p = p;
+	js_set_page(b->d, p);
 	shown_imgs(b);
 	return 1;
 }

@@ -92,6 +92,12 @@ typedef struct browser {
 				   after their scripts ran (with the gateway only) */
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
+	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), and
+	   the sites whose scripts run: host names with spaces between ("*"
+	   all, "file" pages on the disk); off by default (the design) */
+	int scripts;
+	const char *script_sites;
+	char script_note[96];	/* what the last page's scripts came to, for the status line ("" none) */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening
@@ -103,6 +109,11 @@ typedef struct browser {
 	/* may this address be opened? 0: no (the front end has said why: a
 	   secure page with neither TLS nor the Pi gateway); NULL: all may */
 	int (*can_open)(void *ud, const char *url);
+	/* a script's alert, confirm or prompt (js.h's JS_ALERT...): 1 OK, 0
+	   Cancel (prompt's answer in out); NULL: OK at once */
+	int (*ask)(void *ud, int kind, const char *text, char *out, int size);
+	/* what a script's console.log writes; NULL: nowhere */
+	void (*console)(void *ud, const char *line);
 	void *ud;
 } browser;
 
@@ -147,6 +158,30 @@ enum {
 int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1);
 /* stop fetching this page's pictures (Esc) */
 void br_pictures_stop(browser *b);
+
+/* ---- the page shown's scripts (js.h) */
+
+/* are url's scripts run (its site is one of script_sites) */
+int br_scripts_for(const browser *b, const char *url);
+/* ms until its next timer, -1 for none */
+long br_js_due(const browser *b);
+/* what a script did (after br_js_step, br_js_event, br_js_click) */
+enum {
+	BRJ_NONE,		/* nothing to show */
+	BRJ_DRAWN,		/* the page was laid out again: draw it all */
+	BRJ_LOAD		/* a script sent the browser elsewhere: *load is the load's BR_* */
+};
+/* its timers that are due run */
+int br_js_step(browser *b, int *load);
+/* a click at (x, y) on the page: its element's click event; *cancelled
+   if a script said no to the default (following the link, pressing the
+   button) */
+int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load);
+/* an event at a form control ("input", "change", "focus", "blur",
+   "submit" at its form): *cancelled likewise */
+int br_js_event(browser *b, struct fctl *c, const char *type, int *cancelled, int *load);
+/* a link to javascript:...: its code run */
+int br_js_url(browser *b, const char *url, int *load);
 
 /* the page shown to the bookmarks (bookmark.h; about:bookmarks lists
    them): 1 added and saved, -1 already there, 0 not (EWeb's own page,

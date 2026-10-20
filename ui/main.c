@@ -25,6 +25,7 @@
 #include "help.h"
 #include "http.h"
 #include "img.h"
+#include "js.h"
 #include "mbar.h"
 #include "plat.h"
 #include "secret.h"
@@ -38,7 +39,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "" };
 browser br;
 int loading;
 static short quit;
@@ -101,6 +102,9 @@ static unsigned bm_seen;
 static const MBAR_ITEM m_opts[] = {
 	{ "Settings...", "^,", C_SETTINGS },
 	{ "Falcon mode (TLS)", 0, C_FALCON },
+#ifndef EW_ST
+	{ "Run this site's scripts", 0, C_SCRIPTS },
+#endif
 	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
@@ -179,6 +183,73 @@ static void enable(int cmd, int on)
 		menu_ienable(mb.tree, i, on ? 1 : 0);
 }
 
+static void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+#ifndef EW_ST
+/* the site a page is of, as SCRIPTS= names it: its host, or "file" for
+   pages on the disk; 0 for none (EWeb's own pages) */
+static int site_of(const char *url, char *out, int size)
+{
+	const char *h;
+	char t[128];
+	size_t n;
+	if (strncmp(url, "file:", 5) == 0) {
+		if (out != NULL)
+			str_copy(out, "file", size);
+		return 1;
+	}
+	if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0)
+		return 0;
+	h = strstr(url, "://") + 3;
+	n = strcspn(h, "/?#:");
+	if (n == 0 || n >= sizeof t)
+		return 0;
+	memcpy(t, h, n);
+	t[n] = 0;
+	if (out != NULL)
+		str_copy(out, t, size);
+	return 1;
+}
+
+/* a site's scripts on (its name added to SCRIPTS=) or off (taken out) */
+static void scripts_toggle(void)
+{
+	char site[128], list[sizeof opt.scripts];
+	const char *s = opt.scripts;
+	int on = !br_scripts_for(&br, br.url);
+	size_t n = 0;
+	if (!site_of(br.url, site, sizeof site))
+		return;
+	list[0] = 0;
+	while (*s) {
+		const char *w;
+		while (*s == ' ' || *s == ',')
+			s++;
+		w = s;
+		while (*s && *s != ' ' && *s != ',')
+			s++;
+		if (s == w || ((size_t) (s - w) == strlen(site) && strncmp(w, site, (size_t) (s - w)) == 0))
+			continue;
+		if (n + (size_t) (s - w) + 2 >= sizeof list)
+			break;
+		if (n)
+			list[n++] = ' ';
+		memcpy(list + n, w, (size_t) (s - w));
+		n += (size_t) (s - w);
+		list[n] = 0;
+	}
+	if (on && n + strlen(site) + 2 < sizeof list) {
+		if (n)
+			list[n++] = ' ';
+		strcpy(list + n, site);
+	}
+	str_copy(opt.scripts, list, sizeof opt.scripts);
+	settings_save();
+	log_event("scripts %s %s", on ? "on" : "off", site);
+}
+
+#endif
+
 void menu_update(void)
 {
 	int addr = win_address_has_focus();
@@ -210,6 +281,9 @@ void menu_update(void)
 	}
 	enable(C_SETTINGS, !loading);
 	enable(C_FALCON, !loading);
+#ifndef EW_ST
+	enable(C_SCRIPTS, !loading && br.scripts && site_of(br.url, NULL, 0));
+#endif
 	{
 		short i = mbar_object(&mb, C_PICTURES);
 		if (i >= 0)
@@ -220,6 +294,11 @@ void menu_update(void)
 		i = mbar_object(&mb, C_SNAPSHOT);
 		if (i >= 0)
 			menu_icheck(mb.tree, i, opt.snapshot && http_gateway[0] ? 1 : 0);
+#ifndef EW_ST
+		i = mbar_object(&mb, C_SCRIPTS);
+		if (i >= 0)
+			menu_icheck(mb.tree, i, br.scripts && br_scripts_for(&br, br.url) ? 1 : 0);
+#endif
 	}
 }
 
@@ -280,6 +359,8 @@ static void settings_load(void)
 			opt.gateport = (unsigned short) atoi(eq);
 		else if (!strcmp(line, "SNAPSHOT"))
 			opt.snapshot = atoi(eq) != 0;
+		else if (!strcmp(line, "SCRIPTS"))
+			str_copy(opt.scripts, eq, sizeof opt.scripts);
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -363,6 +444,8 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.snapshot);
 	put(&s, "SNAPSHOT", v, "1: pages through the Pi's browser, after their scripts ran (the gateway's "
 	    "snapshots; View menu), 0: as the servers send them");
+	put(&s, "SCRIPTS", opt.scripts, "the sites whose scripts run, their names with spaces between "
+	    "(Options > Run this site's scripts; \"file\": pages on the disk); EWEB.PRG with an FPU");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -621,6 +704,10 @@ static void loaded(int r)
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
 				  br.title);
 		}
+		if (br.script_note[0]) {
+			win_status(br.script_note);
+			log_event("scripts note %s", br.script_note);
+		}
 		break;
 	}
 	case BR_SAME:
@@ -667,6 +754,87 @@ static void loaded(int r)
 	bm_menu();		/* a bookmark removed on about:bookmarks */
 	menu_update();
 }
+
+#ifndef EW_ST
+/* ---------------------------------------------------------------- the page's scripts */
+
+/* a script's alert, confirm or prompt: the family's alert (its text
+   wrapped, in the system font's characters), or the prompt's dialog */
+static int js_ask(void *ud, int kind, const char *text, char *out, int size)
+{
+	char a[200], *p;
+	(void) ud;
+	graf_mouse(ARROW, 0);
+	if (kind == JS_PROMPT)
+		return dlg_prompt(text, out, size);
+	atari_text(text, a, sizeof a);
+	for (p = a; *p; p++)
+		if (*p == '\n')
+			*p = '|';
+		else if (*p == '[')
+			*p = '(';
+		else if (*p == ']')
+			*p = ')';
+	log_event("script %s", kind == JS_ALERT ? "alert" : "confirm");
+	if (kind == JS_ALERT) {
+		alert(1, "[1][%s][ OK ]", a);
+		return 1;
+	}
+	return alert(1, "[2][%s][ OK |Cancel]", a) == 1;
+}
+
+/* what a script did, on the screen */
+static void scripted(int r, int load)
+{
+	if (r == BRJ_LOAD) {
+		loaded(load);
+	} else if (r == BRJ_DRAWN) {
+		log_event("scripted %.*s height %ld title %.100s", (int) strcspn(br.url, "?"), br.url,
+			  br.p ? (long) br.p->height : 0L, br.title);
+		win_ctl_check();
+		win_title();
+		win_page_relaid();
+		menu_update();
+	}
+}
+
+int page_click(int32_t x, int32_t y)
+{
+	int cancelled = 0, load = 0, r;
+	if (loading || br.d == NULL || br.d->js == NULL)
+		return 0;
+	r = br_js_click(&br, x, y, &cancelled, &load);
+	scripted(r, load);
+	return cancelled || r == BRJ_LOAD;
+}
+
+void ctl_event(struct fctl *c, const char *type)
+{
+	int cancelled = 0, load = 0;
+	if (loading || br.d == NULL || br.d->js == NULL)
+		return;
+	scripted(br_js_event(&br, c, type, &cancelled, &load), load);
+}
+
+/* the page's timers that are due */
+static void js_timers(void)
+{
+	int load = 0, r = br_js_step(&br, &load);
+	scripted(r, load);
+}
+
+#else	/* the ST edition: no scripts */
+int page_click(int32_t x, int32_t y)
+{
+	(void) x, (void) y;
+	return 0;
+}
+
+void ctl_event(struct fctl *c, const char *type)
+{
+	(void) c, (void) type;
+}
+#endif
 
 void go(const char *typed)
 {
@@ -946,6 +1114,15 @@ void command(int cmd)
 	case C_LIVE:
 		live_view();
 		break;
+#ifndef EW_ST
+	case C_SCRIPTS:
+		/* a setting: on the disk at once (6.5); the page comes again
+		   with its scripts or without */
+		scripts_toggle();
+		if (br.cur >= 0)
+			command(C_RELOAD);
+		break;
+#endif
 	case C_SETTINGS: {
 		int pics = opt.pictures, zoom = opt.zoom, changed;
 		log_event("settings shown");
@@ -1371,6 +1548,12 @@ int main(void)
 	br.log = log_line;
 	br.can_open = can_open;
 	br.snapshot = opt.snapshot;
+	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen */
+#ifndef EW_ST
+	br.scripts = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
+	br.script_sites = opt.scripts;
+	br.ask = js_ask;
+#endif
 	win_open();
 	menu_update();
 	crash_offer("EWeb", "in EWeb's folder");
@@ -1389,9 +1572,16 @@ int main(void)
 	while (!quit) {
 		short which;
 		int more = !loading && !win_iconified && br_pictures_pending(&br);
-		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more ? MU_TIMER : 0), 0x102, 3, 0, 0, msg, &ev);
+		long due = loading || win_iconified ? -1 : br_js_due(&br);
+		short wait = more ? 0 : due >= 0 ? (short) (due > 1000 ? 1000 : due) : 0;
+		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 ? MU_TIMER : 0), 0x102, 3, 0,
+				    wait, msg, &ev);
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
-		if ((which & MU_TIMER) && !quit) {
+#ifndef EW_ST
+		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)
+			js_timers();
+#endif
+		if ((which & MU_TIMER) && !quit && more) {
 			pictures();
 			if (later.which) {
 				short w = later.which;

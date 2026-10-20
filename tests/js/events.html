@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- args: -K tab2 -K stop -K inner -K plain -->
+<!-- expect: console: tab2 clicked -->
+<!-- expect: "Second tab's text" -->
+<!-- expect: click stop: laid out again, cancelled -->
+<!-- expect: console: capture body, target inner, bubble outer -->
+<!-- expect: console: onclick attribute this=plain -->
+<!-- absent: "First tab's text" -->
+<html><head><title>events</title>
+<style>.hidden { display: none }</style>
+</head><body>
+<p><span id="tab1" class="tab">One</span> <span id="tab2" class="tab">Two</span></p>
+<div id="p1">First tab's text</div>
+<div id="p2" class="hidden">Second tab's text</div>
+<p><a id="stop" href="http://example.invalid/never">a link a script stops</a></p>
+<div id="outer"><p><b id="inner">inner</b></p></div>
+<p><span id="plain" onclick="console.log('onclick attribute this=' + this.id)">plain</span></p>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+var tabs = document.querySelectorAll(".tab");
+for (var i = 0; i < tabs.length; i++)
+	tabs[i].addEventListener("click", function (e) {
+		console.log(this.id + " clicked");
+		check(e.target === this && e.currentTarget === this, "target");
+		document.getElementById("p1").classList.toggle("hidden", this.id !== "tab1");
+		document.getElementById("p2").classList.toggle("hidden", this.id !== "tab2");
+	});
+document.getElementById("stop").onclick = function (e) {
+	e.preventDefault();
+	this.textContent = "stopped";
+};
+var seen = [];
+document.body.addEventListener("click", function (e) { if (e.target.id === "inner") seen.push("capture body"); }, true);
+document.getElementById("inner").addEventListener("click", function (e) { seen.push("target inner"); });
+document.getElementById("outer").addEventListener("click", function (e) {
+	seen.push("bubble outer");
+	console.log(seen.join(", "));
+});
+var once = 0;
+document.addEventListener("x-once", function () { once++; }, { once: true });
+document.dispatchEvent(new Event("x-once"));
+document.dispatchEvent(new Event("x-once"));
+check(once === 1, "once");
+var ce = new CustomEvent("x-c", { detail: { n: 5 } });
+var got = 0;
+document.addEventListener("x-c", function (e) { got = e.detail.n; });
+document.dispatchEvent(ce);
+check(got === 5, "CustomEvent detail");
+function h() { got = 99; }
+document.addEventListener("x-r", h);
+document.removeEventListener("x-r", h);
+document.dispatchEvent(new Event("x-r"));
+check(got === 5, "removeEventListener");
+</script>
+</body></html>

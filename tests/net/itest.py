@@ -450,6 +450,17 @@ try:
         check("cookies: another site's picture sets none", rc == 0 and t[:1] == ["COOKIE|"]
               and re.search(r"^picture http://127\.0\.0\.1:\d+/site/cookie/px\.gif decoded", out, re.M) is not None,
               out)
+        # scripts (src/js): a script from a file, fetch and XMLHttpRequest,
+        # document.cookie without the HttpOnly cookie (which it can neither
+        # see nor replace), and the cookie a script set sent with its request
+        p = subprocess.run([ewrender, "-f", font, "-J", "-T", "500", "-d",
+                            "http://localhost:%d/site/script.html" % HTTP], cwd=work, capture_output=True, text=True,
+                           timeout=120)
+        out = p.stdout + p.stderr
+        check("scripts: a file's, fetch and XMLHttpRequest", p.returncode == 0 and '"external 2"' in out
+              and '"fetch atari"' in out and '"xhr atari"' in out and "js error" not in out, out)
+        check("scripts: document.cookie, HttpOnly kept from them", p.returncode == 0
+              and '"cookies seen=2; js=1"' in out and '"sent hidden=1; seen=2; js=1"' in out, out)
     # through AERA-Gateway's webgate (EWEB.INF's GATEWAY=, EWGET -g): the
     # Pi makes the secure connection (TLS 1.3 here), passes the server's
     # gzip, redirects, cookies and big answers through, and refuses a

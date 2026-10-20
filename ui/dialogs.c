@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "ui.h"
+#include "charset.h"
 #include "dialog.h"
 #include "http.h"
 #include "tls.h"
@@ -420,3 +421,63 @@ int dlg_settings(void)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */
 	return 1;
 }
+
+#ifndef EW_ST	/* the ST edition runs no scripts */
+/* ---------------------------------------------------------------- a page's prompt */
+
+static char p_lines[3][44], p_answer[44];
+
+int dlg_prompt(const char *text, char *answer, int size)
+{
+	char a[200];
+	const char *s;
+	short field, ok, r, x, y, w, h, k;
+	long n;
+	char *u;
+	/* the question in at most three lines of 40 */
+	atari_text(text, a, sizeof a);
+	memset(p_lines, 0, sizeof p_lines);
+	for (s = a, k = 0; *s && k < 3; k++) {
+		size_t len = strlen(s), cut = len > 40 ? 40 : len;
+		if (len > 40)
+			while (cut > 20 && s[cut] != ' ')
+				cut--;
+		memcpy(p_lines[k], s, cut);
+		p_lines[k][cut] = 0;
+		s += cut;
+		while (*s == ' ' || *s == '\n')
+			s++;
+	}
+	atari_text(answer, p_answer, sizeof p_answer);
+	d_begin(44, 9);
+	nticks = 0;
+	memset(page_of, 0, sizeof page_of);
+	d_band(44, " The page asks");
+	for (k = 0; k < 3; k++)
+		if (p_lines[k][0])
+			d_text(2, (short) (2 + k), p_lines[k]);
+	field = d_field(2, 5, p_answer, 40, 'X');
+	d_button(18, 7, 10, "Cancel", EXIT);
+	ok = d_button(31, 7, 10, "OK", EXIT | DEFAULT);
+	d_end();
+	form_center(tree, &x, &y, &w, &h);
+	wind_update(BEG_UPDATE);
+	wind_update(3);		/* BEG_MCTRL */
+	form_dial(FMD_START, x, y, w, h);
+	objc_draw(tree, 0, 8, x, y, w, h);
+	r = dlg_do(tree, field, (short) (ok - 1));
+	form_dial(FMD_FINISH, x, y, w, h);
+	wind_update(2);		/* END_MCTRL */
+	wind_update(END_UPDATE);
+	if (r >= 0)
+		tree[r & 0x7fff].ob_state &= ~SELECTED;
+	if (r < 0 || (r & 0x7fff) != ok)
+		return 0;
+	u = atari_to_utf8(p_answer, (long) strlen(p_answer), &n);
+	if (u != NULL) {
+		str_copy(answer, u, size);
+		free(u);
+	}
+	return 1;
+}
+#endif

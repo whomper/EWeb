@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<!-- expect: note: Its scripts were too much for EWeb: shown without them. -->
+<!-- expect: "the page without its scripts" -->
+<!-- errors -->
+<html><head><title>budget</title></head><body>
+<noscript><p>the page without its scripts</p></noscript>
+<script>for (;;) {}</script>
+</body></html>

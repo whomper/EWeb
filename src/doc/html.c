@@ -4990,3 +4990,54 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 	}
 	return 1;
 }
+
+#ifndef EW_ST	/* the ST edition runs no scripts */
+dnode *html_fragment(doc *d, const char *context, int context_ns, const char *data, size_t len, int scripting)
+{
+	html_opts o;
+	dnode *root = d->root;
+	uint32_t elements = d->elements;
+	uint8_t quirks = d->quirks;
+	char charset[sizeof d->charset];
+	dnode *f = NULL;
+	memset(&o, 0, sizeof o);
+	o.charset = "utf-8";
+	o.scripting = scripting;
+	o.context = context;
+	o.context_ns = context_ns;
+	memcpy(charset, d->charset, sizeof charset);
+	if (html_parse(d, data, len, &o))
+		f = d->root;
+	d->root = root;
+	d->quirks = quirks;
+	d->elements = elements + (f != NULL ? d->elements : 0);
+	memcpy(d->charset, charset, sizeof charset);
+	return f;
+}
+
+dnode *html_element(doc *d, const char *name, size_t len)
+{
+	P p;
+	dnode *n;
+	uint8_t lower[16];
+	size_t i;
+	int hid = H_NONE;
+	if (!ready) {
+		names_init();
+		runs_init();
+		mibs_init();
+	}
+	if (len < sizeof lower) {
+		for (i = 0; i < len; i++)
+			lower[i] = (uint8_t) (name[i] >= 'A' && name[i] <= 'Z' ? name[i] + 32 : name[i]);
+		hid = hlookup(lower, len);
+	}
+	memset(&p, 0, sizeof p);
+	p.d = d;
+	if (__builtin_setjmp(p.jmp))
+		return NULL;
+	n = element(&p, DN_NS_HTML, hid, hid ? lower : (const uint8_t *) name, len, NULL, 0);
+	p_free(&p);
+	return n;
+}
+#endif

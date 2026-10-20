@@ -50,6 +50,9 @@ typedef struct dl_item {
 	const char *text;		/* UTF-8, kept by the page */
 	uint32_t len;			/* DL_CTL: a textarea's line step */
 	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h */
+#ifndef EW_ST
+	dnode *node;			/* the element it is of: a click's target for scripts */
+#endif
 } dl_item;
 
 typedef struct page {
@@ -67,6 +70,14 @@ typedef struct page {
 	long nstrips;
 	int32_t width, height;		/* device px */
 	uint32_t bg;			/* what the page is drawn on (0xRRGGBB) */
+#ifndef EW_ST
+	/* each element's block (border box, device px), for scripts */
+	struct pg_block {
+		dnode *n;
+		int32_t x, y, w, h;
+	} *blocks;
+	long nblocks, blockcap;
+#endif
 	struct arena *mem;
 	LAYOUT_OPT opt;
 } page;
@@ -84,6 +95,13 @@ struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it
 /* a control's item on the page (its content's place), or NULL when it
    isn't shown */
 const dl_item *page_ctl_item(const page *p, const struct fctl *c);
+#ifndef EW_ST
+/* for scripts: the element under (x, y) (the innermost), or NULL; an
+   element's place on the page (its block, or what its items cover): 0
+   when it isn't shown */
+dnode *page_node_at(const page *p, int32_t x, int32_t y);
+int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h);
+#endif
 /* where the element with that id (or an <a name>) is, or -1 */
 int32_t page_anchor(const page *p, const char *id);
 
