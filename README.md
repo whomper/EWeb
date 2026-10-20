@@ -137,6 +137,8 @@ docs/DESIGN.md        the design
 docs/CSS.md           EWeb's CSS engine
 docs/GUIDE.md         the guide, made into EWEB.HYP (tools/mkhelp.py, docs/front.json)
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
+gateway/              AERA-Gateway's Raspberry Pi gateways, webgate.py (EWeb's) among them:
+                      a read-only copy (tools/sync-gateway.sh)
 ui/                   EWEB.PRG's GEM side: the window, the toolbar, the page on the
                       screen in every mode, the menus, the About box
 src/browse/           browsing: addresses, loading, history, EWeb's own pages, the pages' pictures (img.c)

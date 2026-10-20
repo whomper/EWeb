@@ -987,9 +987,9 @@ through the gateway"). What it can't do is answered 502, 403 or 504 with a line 
 the sites that take TLS 1.3 only; direct stays the Falcon's default. Tested: webgate's own unit
 tests (in AERA-Gateway), `make itest`'s gateway cases (TLS 1.3, a redirect, a big chunked answer, a
 refused certificate, a gateway that isn't there, a page with its pictures, a login's POST and
-cookie) and EWGET through it in Hatari (`make hatarinet`), with `WEBGATE=` naming webgate until
-EWeb carries AERA-Gateway's `gateway/`. Next: snapshots (Chromium on the Pi), live view, and the
-ST edition.
+cookie) and EWGET through it in Hatari (`make hatarinet`), from EWeb's copy of AERA-Gateway's
+`gateway/` (`tools/sync-gateway.sh`). It is in AERA-Gateway 1.2 (`aera-gateway install web`, port
+8280 assigned to EWeb). Next: snapshots (Chromium on the Pi), live view, and the ST edition.
 
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 
