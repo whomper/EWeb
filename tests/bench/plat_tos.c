@@ -117,8 +117,11 @@ static void machine_report(void)
 			cacr & 0x0100 ? "on" : "off", cacr & 0x1000 ? " with burst" : "");
 	}
 	out("loop: %lu rounds a second (6.2 to 8.3 million at 50 MHz)\n", loops);
-	out("program in %s; free ST-RAM %ld KB, TT-RAM %ld KB\n",
+	/* where its text starts (the basepage's p_tbase), for a profiler's
+	   addresses */
+	out("program in %s at $%08lx; free ST-RAM %ld KB, TT-RAM %ld KB\n",
 		(unsigned long) &machine_report >= 0x01000000UL ? "TT-RAM" : "ST-RAM",
+		*(unsigned long *) ((unsigned char *) _BasePage + 8),
 		st_free > 0 ? st_free / 1024 : 0, tt_free > 0 ? tt_free / 1024 : 0);
 	st = read_rate(0);
 	tt = read_rate(1);

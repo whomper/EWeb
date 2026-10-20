@@ -143,10 +143,11 @@ hub stay complete, with the evidence.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there
-  and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). On a Falcon a JPEG's
-  transform and colours are the DSP's (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`; `PICDSP=`):
-  after changing them, `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the
-  emulated Falcon. `make itest` loads
+  and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). On a Falcon a baseline
+  JPEG is the DSP's, Huffman codes to pixels (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;
+  `PICDSP=`), made fast for the stock Falcon (the owner's rule, 20 Oct 2026): after changing them,
+  `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the emulated stock Falcon
+  (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make itest` loads
   `/site/pics.html`; `make hatarigui` shows it over the network and from the disk in every mode.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).

@@ -4,8 +4,8 @@ PICBENCH.TTP - EWeb's picture timer
 What it does
 ------------
 PICBENCH decodes a JPEG as EWEB.PRG does (libjpeg-turbo) and times it on
-your Atari, twice: on the 68030 alone, and with the Falcon's DSP doing the
-picture's transform and colours while the 68030 unpacks it. So we can see
+your Atari, twice: on the 68030 alone, and with the Falcon's DSP decoding
+it while the 68030 hands it the bytes and takes the pixels. So we can see
 how much the DSP gives on a real Falcon, against the emulator EWeb was
 measured on. It doesn't show the picture.
 
@@ -30,11 +30,12 @@ How to use it
 What it prints
 --------------
   the DSP: checked
-  on the 68030: decode 2690 ms (480x320, JPEG, 8/8), dither 0 ms
-  with the DSP: decode 725 ms (480x320, JPEG, 8/8), dither 0 ms
+  on the 68030: decode 4635 ms (480x320, JPEG, 8/8), dither 0 ms
+  with the DSP: decode 575 ms (480x320, JPEG, 8/8), dither 0 ms
 
 "checked" means the DSP decoded a small known picture as the 68030 does
 (EWeb checks it the same way the first time, and leaves a DSP that gets it
 wrong alone). "8/8" is the size libjpeg unpacks the picture at before the
 picture is made the size it is shown at. The figures above are Hatari's
-Falcon (32 MHz); send yours with PICBENCH.LOG.
+stock Falcon (16 MHz), which runs about 1.8 times as fast as a real one;
+send yours with PICBENCH.LOG.

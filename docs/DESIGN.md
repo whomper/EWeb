@@ -847,32 +847,42 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   5.0 s on the page: while a picture decodes, GEM gets its turn ten times a second and without
   waiting for its timer (each turn had waited a clock tick, hundreds of them), and the throbber
   is copied, not made again (its section, below).
-- **JPEG on the DSP (20 Oct 2026; the owner's rule: the DSP takes what it does faster):** the
-  68030 unpacks each MCU's Huffman codes (libjpeg's entropy decoder, called by `pic.c`) and sends
-  the coefficients that are not 0; the DSP (`common/dsp/jpeg.a56`, 483 of the bootstrap's 512
-  words) dequantises them, transforms each block straight to n/8 of its size (each pixel the mean
-  of the ones it covers; only the rows and columns a block uses, and a block of its DC alone
-  filled at once: in the photo 30% of the blocks are, and the rest use two rows and two columns
-  on the whole), makes the colours (the chroma repeated over the luma it covers; the clamp is the
-  multiplier's limiter) and sends the pixels back as 5-6-5, straight into the picture, or as R G
-  B for the scaler. It works an MCU behind, so it transforms one while the 68030 unpacks the
-  next. The first such JPEG checks it against libjpeg's own decode of a known picture; a DSP that
-  gets it wrong, or stops answering, is left alone. Progressive and CMYK JPEGs stay with libjpeg.
-  Against Pillow: closer than libjpeg's fast transform for 4:4:4 and grey (2.17 and 1.90 against
-  2.44 and 2.06: its transform is exact), a little further for 4:2:0 (2.67 against 2.44: it
-  repeats the chroma where libjpeg blends it). `PICBENCH.TTP` on Hatari's Falcon (32 MHz, its
-  DSP core), on the release's `PHOTO.JPG` (`tests/bench/mkphoto.py`: 480 x 320, 24 KB, a grain
-  as a camera's) and, in brackets, the smoother 8 KB photo of the measures above:
+- **JPEG on the DSP (20 Oct 2026; the owner's rules: the DSP takes what it does faster, and it is
+  made fast for the stock Falcon, "as I want others to enjoy this", not for his DFB1X):** the
+  first version (0.16) had the 68030 unpack the Huffman codes and the DSP transform and make the
+  colours. Erez's `PICBENCH.LOG`s showed it was the 68030's half that a stock Falcon waited on
+  (8.49 s on the 68030 alone, 2.57 s with the DSP; at 192 x 128, 5.88 s and 3.11 s), and the
+  DSP's that a DFB1X did (2.11 s and 1.10 s). So now the DSP (`common/dsp/jpeg.a56`) decodes a
+  baseline JPEG itself: `pic.c` lets libjpeg read the headers and sends the scan's bytes as the DSP
+  asks for them, two to a 16-bit port write. The DSP unpacks the Huffman codes (for an AC
+  coefficient a 9-bit table, made on the DSP, gives its run, value and length at once when the
+  code and value fit, as libjpeg-turbo's fast path does), dequantises, transforms each block
+  straight to n/8 of its size (each pixel the mean of the ones it covers; only the rows and
+  columns a block uses, a block of its DC alone filled at once), makes the colours (the chroma
+  repeated over the luma it covers; each channel's bits from a table at Y + its term, libjpeg's
+  way, the tables made on the DSP for 5-6-5 or R G B) and sends each MCU's pixels from its host
+  interrupt while it decodes the next, so the 68030 reads one while the DSP works on the other.
+  The 68030 is left copying bytes in and pixels out. The first such JPEG checks it against
+  libjpeg's own decode of a known picture; a DSP that gets it wrong, or stops answering, is left
+  alone. Progressive, arithmetic-coded and CMYK JPEGs stay with libjpeg. Against Pillow: closer
+  than libjpeg's fast transform for 4:4:4 and grey (its transform is exact), a little further for
+  4:2:0 (it repeats the chroma where libjpeg blends it). The scaler sums a JPEG's rows in 16 bits
+  (a third of the memory the five longs of a picture with alpha take), the same pixels a third
+  sooner. `PICBENCH.TTP` on Hatari, the release's `PHOTO.JPG` (`tests/bench/mkphoto.py`: 480 x
+  320, 24 KB, a grain as a camera's):
 
-  | The photo | on the 68030 | with the DSP |
-  |---|---|---|
-  | at its size | 2.69 s (2.15) | 0.73 s (0.50) |
-  | shown at 192 x 128 (4/8, then the scaler) | 1.71 s (1.26) | 0.89 s (0.66) |
+  | The photo | stock Falcon (16 MHz): 68030 | with the DSP | 32 MHz: 68030 | with the DSP |
+  |---|---|---|---|---|
+  | at its size, 0.16 | 4.56 s | 1.40 s | 2.69 s | 0.73 s |
+  | at its size, now | 4.64 s | 0.58 s | 2.72 s | 0.28 s |
+  | shown at 192 x 128 (4/8, then the scaler), 0.16 | - | - | 1.71 s | 0.89 s |
+  | shown at 192 x 128, now | 3.07 s | 0.69 s | 1.65 s | 0.35 s |
 
-  At its size the 68030's Huffman decoding is about all that is left; shown smaller, the scaler
-  is the rest (the DSP could average the pixels too). Hatari runs the DSP faster than a real one
-  next to a 32 MHz 68030 (the elliptic curves, above), so the DFB1's figures are the ones that
-  count: a release measures them. `PICDSP=0` (Settings > General) leaves it all to the 68030.
+  Hatari runs a stock Falcon about 1.8 times as fast as Erez's (4.56 s against 8.49 s on the
+  68030, 1.40 s against 2.57 s with the DSP), so his should take about 1.1 s for the photo with
+  the DSP. What is left: the 68030 reading each pixel through the host port (a status read and
+  two byte reads a word), the DSP's transform, and, shown smaller, the scaler (the DSP could
+  average the pixels too). `PICDSP=0` (Settings > General) leaves it all to the 68030.
 - **PNG** is fresh (`common/src/png.c`, on the family's inflate: NetSurf uses libpng, a library
   too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
   PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is

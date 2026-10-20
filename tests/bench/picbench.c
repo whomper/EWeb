@@ -7,13 +7,14 @@
  * (plat_tos.c, the 200 Hz clock); tests/bench/picbench.py runs them in
  * Hatari.
  *
- *     PICBENCH.TTP [FILE WIDTH HEIGHT [COLOURS [TIMES]]]
+ *     PICBENCH.TTP [FILE WIDTH HEIGHT [COLOURS [TIMES [WHICH]]]]
  *
  * decodes FILE at WIDTH x HEIGHT (0 0: its own size), then dithers it to
  * COLOURS pens (2: black and white, 16: the ST's system colours, 0: none),
  * TIMES times, and prints each step's time. PICBENCH decodes a JPEG on
  * the 68030 and then, on a Falcon, with the DSP (after its check, which
- * isn't timed). In PICBST, a JPEG that TJpgDec can't read (progressive)
+ * isn't timed; WHICH 1: the 68030's alone, 2: the DSP's alone, for a
+ * profiler). In PICBST, a JPEG that TJpgDec can't read (progressive)
  * is read by jpegdc: its open and read are timed too. Without arguments
  * it takes PHOTO.JPG (tests/bench/mkphoto.py) at its size and at 192 x
  * 128, as a release has it.
@@ -34,6 +35,8 @@ static unsigned long ms(unsigned long t)
 {
 	return t * 1000UL / TICKS_PER_SEC;
 }
+
+static int which;		/* 0 both ways, 1 the 68030's, 2 the DSP's */
 
 static int bench(const char *file, int w, int h, int colours, int times)
 {
@@ -79,6 +82,8 @@ static int bench(const char *file, int w, int h, int colours, int times)
 		PIC *p;
 #ifdef PIC_LIBJPEG
 		const PIC_DSP *dsp = pic_dsp;
+		if (dsp != NULL && which == (k & 1 ? 1 : 2))
+			continue;
 		if (k & 1)
 			out("with the DSP: ");
 		else if (dsp != NULL)
@@ -142,6 +147,7 @@ static int bench(const char *file, int w, int h, int colours, int times)
 int picbench(int argc, char **argv)
 {
 	int r;
+	which = argc > 6 ? atoi(argv[6]) : 0;
 	if (argc >= 4)
 		return bench(argv[1], atoi(argv[2]), atoi(argv[3]), argc > 4 ? atoi(argv[4]) : 0,
 			     argc > 5 ? atoi(argv[5]) : 1);
