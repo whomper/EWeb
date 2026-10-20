@@ -83,9 +83,9 @@ hub stay complete, with the evidence.
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions, `tools/prof68k.py` shows where they go function by function, and
   `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
-  `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times `PICBENCH.TTP`
-  (`make binary/PICBENCH.TTP`: a picture decoded and dithered as `EWEBST.PRG` does it) on the
-  cycle-exact 8 MHz ST.
+  `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times a picture decoded
+  and dithered as EWeb does it: `PICBENCH.TTP` (as `EWEB.PRG`, on the 68030 and with the DSP) on
+  the Falcon, `PICBST.TTP` (as `EWEBST.PRG`) on the cycle-exact 8 MHz ST.
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and
@@ -143,7 +143,10 @@ hub stay complete, with the evidence.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there
-  and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). `make itest` loads
+  and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). On a Falcon a JPEG's
+  transform and colours are the DSP's (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`; `PICDSP=`):
+  after changing them, `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the
+  emulated Falcon. `make itest` loads
   `/site/pics.html`; `make hatarigui` shows it over the network and from the disk in every mode.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
@@ -161,8 +164,9 @@ hub stay complete, with the evidence.
 - **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`, `tools/icon/make_rsc.py`),
   `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
-  `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.
-  `tests/bench/mkpage.py` makes the news page, the same bytes every time; when it changes, measure the
+  `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, and `PICBENCH.TTP` with `PICBENCH.TXT`
+  and `PHOTO.JPG`, from `make dist`. `tests/bench/mkpage.py` makes the news page and
+  `tests/bench/mkphoto.py` the photo, the same bytes every time; when they change, measure the
   shipped files again and change their figures in DESIGN.md.
 - **EWeb's HTML parser** is `src/doc/html.c` (fresh, after the HTML Standard's 13.2; DESIGN.md): it
   replaced Hubbub on speed and standards, and Hubbub stays only in nsbench and `make h5test` as the

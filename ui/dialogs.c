@@ -180,7 +180,7 @@ static void make_ticks(void)
 #define NTICK 4
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -282,6 +282,9 @@ static void part_general(short x, short y)
 	d_text(x, ROW(6), "Disk cache");
 	d_field(x + 12, ROW(6), s_cache, 2, '9');
 	d_text(x + 15, ROW(6), "MB  (0: none)");
+#ifndef EW_ST
+	d_tick(x, ROW(7), "JPEGs on the DSP (a Falcon's)", T_PICDSP);
+#endif
 }
 
 /* the family's Secure page: TLS on this Atari, or the Pi gateway */
@@ -399,6 +402,7 @@ int dlg_settings(void)
 	s_on[T_PICTURES] = opt.pictures;
 	s_on[T_FALCON] = (short) opt.falcon;
 	s_on[T_DSP] = (short) opt.dsp;
+	s_on[T_PICDSP] = opt.picdsp;
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
 	str_copy(s_search, opt.search, sizeof s_search);
 	str_copy(s_gate, opt.gate, sizeof s_gate);
@@ -425,6 +429,7 @@ int dlg_settings(void)
 	if (s_cache[0] && atol(s_cache) != cache_mb() && atol(s_cache) <= CACHE_MAX_MB)
 		opt.cache = (short) atoi(s_cache);
 	opt.dsp = s_on[T_DSP];
+	opt.picdsp = s_on[T_PICDSP];
 	if (s_on[T_FALCON] != opt.falcon)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */
 	return 1;

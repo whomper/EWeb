@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""PICBENCH.TTP (tests/bench/picbench.c, `make binary/PICBENCH.TTP`) on one of
-the family's machines in Hatari (common/tools/machines.py: Erez's TOS when
-~/.aera/tos has it, else EmuTOS), cycle-exact: a picture decoded as
-EWEBST.PRG decodes it, and dithered, each step timed.
-    tests/bench/picbench.py [--machine ST:mono] PICTURE WIDTH HEIGHT [COLOURS [TIMES]]
-It prints what picbench printed (its times are the emulated machine's).
+"""tests/bench/picbench.c on one of the family's machines in Hatari
+(common/tools/machines.py: Erez's TOS when ~/.aera/tos has it, else
+EmuTOS), cycle-exact: a picture decoded as EWeb decodes it, and dithered,
+each step timed. On an ST, PICBST.TTP (`make binary/PICBST.TTP`: as
+EWEBST.PRG); on a Falcon, PICBENCH.TTP (`make binary/PICBENCH.TTP`: as
+EWEB.PRG, on the 68030 and then with the DSP).
+    tests/bench/picbench.py [--machine ST:mono] [PICTURE WIDTH HEIGHT [COLOURS [TIMES]]]
+Without a picture, the release's run: PHOTO.JPG (tests/bench/mkphoto.py) at
+its size and at 192 x 128. It prints what picbench printed (its times are
+the emulated machine's).
 """
 import os
 import shutil
@@ -25,20 +29,25 @@ def main():
     if args[:1] == ["--machine"]:
         spec = args[1]
         args = args[2:]
-    if len(args) < 3:
+    if len(args) not in (0, 3, 4, 5):
         sys.exit(__doc__)
-    pic = args[0]
-    name = "PIC" + os.path.splitext(pic)[1].upper()[:4]
     work = os.path.join(ROOT, "build", "picbench")
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
-    shutil.copy(os.path.join(ROOT, "binary", "PICBENCH.TTP"), work)
-    shutil.copy(pic, os.path.join(work, name))
-    with open(os.path.join(work, "PICBENCH.CMD"), "w") as f:
-        f.write(" ".join([name] + args[1:]))
+    if args:
+        pic = args[0]
+        name = "PIC" + os.path.splitext(pic)[1].upper()[:4]
+    else:
+        subprocess.run([sys.executable, os.path.join(ROOT, "tests", "bench", "mkphoto.py"), work], check=True)
+    prog = "PICBST" if spec.upper().startswith("ST") else "PICBENCH"
+    shutil.copy(os.path.join(ROOT, "binary", prog + ".TTP"), work)
+    if args:
+        shutil.copy(pic, os.path.join(work, name))
+        with open(os.path.join(work, prog + ".CMD"), "w") as f:
+            f.write(" ".join([name] + args[1:]))
     log = os.path.join(work, "hatari.log")
     m = machines.Machine(spec, work)
-    cmd = ["hatari"] + m.args() + ["--auto", "C:\\PICBENCH.TTP", "--fast-boot", "yes", "--natfeats", "yes",
+    cmd = ["hatari"] + m.args() + ["--auto", "C:\\%s.TTP" % prog, "--fast-boot", "yes", "--natfeats", "yes",
                                    "--cpu-exact", "yes", "--fast-forward", "yes", "--statusbar", "no",
                                    "--log-level", "fatal"]
     print(m.describe())

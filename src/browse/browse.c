@@ -16,6 +16,7 @@
 #include "img.h"
 #include "js.h"
 #include "font.h"
+#include "pic.h"
 #include "http.h"
 #include "conn.h"
 #include "cookie.h"
@@ -2002,6 +2003,7 @@ static char *data_url(const char *url, long *len)
 
 static void log_img(browser *b, ew_img *im, const char *what, unsigned long ms_fetch, unsigned long ms_decode)
 {
+	static const char *dsp;		/* where JPEGs are transformed, as last logged */
 	char line[600];
 	int32_t w, h;
 	if (b->log == NULL)
@@ -2011,6 +2013,12 @@ static void log_img(browser *b, ew_img *im, const char *what, unsigned long ms_f
 		 strncmp(img_url(im), "data:", 5) == 0 ? "data:" : img_url(im), what, (long) w, (long) h,
 		 ms_fetch, ms_decode);
 	b->log(b->ud, line);
+	if (dsp != pic_dsp_state() && strcmp(pic_dsp_state(), "-") != 0) {
+		/* the first JPEG, or the DSP's check failed */
+		dsp = pic_dsp_state();
+		snprintf(line, sizeof line, "JPEGs transformed on the %s", dsp);
+		b->log(b->ud, line);
+	}
 }
 
 /* a picture still to do at item d: to fetch, or to decode at its size */

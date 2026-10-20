@@ -30,7 +30,8 @@
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
 #   make dist        a release's files in dist/: EWEB.PRG, EWEB.FNT, EWEB.HYP,
-#                    NSBENCH.TTP, NSBENCH.TXT, EWGET.TTP, EWGET.TXT,
+#                    NSBENCH.TTP, NSBENCH.TXT, PICBENCH.TTP, PICBENCH.TXT,
+#                    PHOTO.JPG, EWGET.TTP, EWGET.TXT,
 #                    CACERT.PEM, ROOTS.DAT, SAMPLE.HTM, NEWS.HTM, NEWS.CSS and
 #                    EWEB-x.y.zip (with the desktop icon, icons/)
 #
@@ -464,8 +465,9 @@ build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/src/pic.h
 build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) $(tos_JS) \
-		build/tos/libbearssl.a
+		build/tos/gem/common/dspjpeg.o build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -547,20 +549,35 @@ binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
-# PICBENCH.TTP: a picture decoded as EWEBST.PRG decodes it (TJpgDec,
+# PICBST.TTP: a picture decoded as EWEBST.PRG decodes it (TJpgDec,
 # jpegdc, PNG, GIF; 68000 code), each step timed on the 200 Hz clock;
-# tests/bench/picbench.py runs it on the family's ST in Hatari
+# PICBENCH.TTP as EWEB.PRG does (libjpeg-turbo; on the 68030, then with
+# the DSP). tests/bench/picbench.py runs them on the family's machines in
+# Hatari
 build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
 build/st/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \
+	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBST"' -DBENCH_TITLE='"picbench"' \
 		-DBENCH_MAIN=picbench -Itests/bench -c $< -o $@
 build/st/picbench.elf: $(st_RT) build/st/bench/picbench.o build/st/bench/plat_pic.o $(STPIC_OBJ) \
 		build/st/net/util.o build/st/net/inflate.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
-binary/PICBENCH.TTP: build/st/picbench.elf common/tools/elf2tos.py
+binary/PICBST.TTP: build/st/picbench.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+build/tos/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \
+		-DBENCH_MAIN=picbench -Itests/bench -c $< -o $@
+build/tos/picbench.elf: $(tos_RT) build/tos/bench/picbench.o build/tos/bench/plat_pic.o $(TOSPIC_OBJ) \
+		build/tos/gem/common/dspjpeg.o build/tos/net/util.o build/tos/net/inflate.o
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+binary/PICBENCH.TTP: build/tos/picbench.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
@@ -862,20 +879,25 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 
 # a release's files: EWeb (the program, its fonts, its guide, the
 # certificates, the desktop icon) and the measuring tools
+build/photo/PHOTO.JPG: tests/bench/mkphoto.py
+	python3 tests/bench/mkphoto.py build/photo
 dist: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
-		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM
+		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM \
+		binary/PICBENCH.TTP docs/PICBENCH.TXT build/photo/PHOTO.JPG
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP \
-		binary/CACERT.PEM binary/ROOTS.DAT dist/
+		binary/CACERT.PEM binary/ROOTS.DAT binary/PICBENCH.TTP build/photo/PHOTO.JPG dist/
 	cp icons/EWEB.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
+	sed 's/$$/\r/' docs/PICBENCH.TXT > dist/PICBENCH.TXT
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
 	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
 	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
 	cp dist/EWEB.PRG dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
-		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
+		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS \
+		dist/PICBENCH.TTP dist/PICBENCH.TXT dist/PHOTO.JPG dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

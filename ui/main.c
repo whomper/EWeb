@@ -27,10 +27,14 @@
 #include "img.h"
 #include "js.h"
 #include "mbar.h"
+#include "pic.h"
 #include "plat.h"
 #include "secret.h"
 #include "tls.h"
 #include "util.h"
+#ifndef EW_ST
+#include "dspjpeg.h"
+#endif
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -39,7 +43,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1 };
 browser br;
 int loading;
 static short quit;
@@ -351,6 +355,8 @@ static void settings_load(void)
 			opt.dsp = atoi(eq) != 0;
 		else if (!strcmp(line, "PICTURES"))
 			opt.pictures = atoi(eq) != 0;
+		else if (!strcmp(line, "PICDSP"))
+			opt.picdsp = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -460,6 +466,9 @@ int settings_save(void)
 	put(&s, "DSP", v, "Falcon mode: 1 = the DSP does the secure connections' arithmetic, 0 = the 68030 does");
 	snprintf(v, sizeof v, "%d", opt.pictures);
 	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
+	snprintf(v, sizeof v, "%d", opt.picdsp);
+	put(&s, "PICDSP", v, "1 = the DSP does JPEGs' transform and colours while the 68030 unpacks them "
+	    "(a Falcon's EWEB.PRG), 0 = the 68030 does it all");
 	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without Falcon mode "
 	    "(aera-gateway install web on the Pi)");
 	snprintf(v, sizeof v, "%u", opt.gateport);
@@ -947,6 +956,16 @@ static void gate_apply(void)
 		http_gateway[0] = 0;
 }
 
+/* JPEGs' transform and colours on a Falcon's DSP (common/atari/dspjpeg.c)
+   unless PICDSP=0; the 68030 does them if the DSP can't be had, or gets
+   pic.c's check wrong */
+void pictures_dsp_init(void)
+{
+#ifndef EW_ST
+	pic_dsp = opt.picdsp && dspjpeg_present() ? &dspjpeg_port : NULL;
+#endif
+}
+
 int falcon_mode_set(int on)
 {
 	if (on) {
@@ -1165,6 +1184,7 @@ void command(int cmd)
 			gate_apply();
 			falcon_dsp_init();
 			falcon_dsp_ec_init();
+			pictures_dsp_init();
 			settings_save();
 			if (cache != opt.cache) {
 				dc_close();	/* what it holds kept; made smaller at the next quit */
@@ -1532,6 +1552,7 @@ int main(void)
 	tls_file_info = pf_info;	/* CACERT.PEM looked up once (6.5) */
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
+	pictures_dsp_init();
 	pf_idle = idle;
 #ifdef EW_ST
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);

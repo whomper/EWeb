@@ -61,7 +61,8 @@ EWeb's own fonts.
 - **The family's ways**: the About box, menus, shortcuts, right-click menus,
   VA_START and drag and drop, the help file, iconify, the crash report.
 - And the first milestone's tools: `NSBENCH.TTP` times the HTML parser and
-  both CSS engines on the Atari, `EWGET.TTP` fetches a page and times it.
+  both CSS engines on the Atari, `PICBENCH.TTP` a JPEG on the 68030 and with
+  the DSP, `EWGET.TTP` fetches a page and times it.
   [`docs/DESIGN.md`](docs/DESIGN.md) has what was measured, the decisions
   and the plan.
 
@@ -79,6 +80,7 @@ and unpack it into a folder of its own. It contains:
 | `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list) |
 | `icons/` | EWeb's desktop icon, for DESKICON.RSC |
 | `NSBENCH.TTP`, `NSBENCH.TXT`, `SAMPLE.HTM`, `NEWS.HTM`, `NEWS.CSS` | the measuring tool, its guide and two pages to try it on |
+| `PICBENCH.TTP`, `PICBENCH.TXT`, `PHOTO.JPG` | times a JPEG on the 68030 and with the DSP, its guide and a photo to try it on |
 | `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
 
 1. With STinG running, double-click `EWEB.PRG`. Its start page has a few
@@ -151,6 +153,7 @@ docs/DESIGN.md        the design
 docs/CSS.md           EWeb's CSS engine
 docs/GUIDE.md         the guide, made into EWEB.HYP (tools/mkhelp.py, docs/front.json)
 docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
+docs/PICBENCH.TXT     PICBENCH's guide, as it goes into a release
 gateway/              AERA-Gateway's Raspberry Pi gateways, webgate.py (EWeb's) among them:
                       a read-only copy (tools/sync-gateway.sh)
 ui/                   EWEB.PRG's GEM side: the window, the toolbar (its pictures in
@@ -268,7 +271,8 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   the bookmark file under libFuzzer.
 - `tests/bench/measure.py [-E ewcss]`: 68030 instructions per phase for the
   whole page set; `tests/bench/hatari.py [--stock]`: `NSBENCH.TTP` timed on an
-  emulated Falcon. The Hatari rigs boot the family's machines
+  emulated Falcon; `tests/bench/picbench.py`: a picture timed as `EWEB.PRG` and
+  `EWEBST.PRG` decode it, on the emulated Falcon and ST. The Hatari rigs boot the family's machines
   (`common/tools/machines.py`): the owner's own TOS 4.04 when it is in
   `~/.aera/tos`, else EmuTOS 1.4.
 

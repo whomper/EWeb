@@ -86,7 +86,9 @@ while you read).
 
 EWeb shows JPEG, PNG (with transparency) and GIF (the first picture of
 an animated one), decoded at the size the page shows them: a big photo
-shown small takes much less time and memory than at its own size. In 16
+shown small takes much less time and memory than at its own size. On a
+Falcon the DSP does a JPEG's transform and colours while the 68030
+unpacks it (Settings > General). In 16
 or 256 colours and in monochrome they are dithered to the screen's own
 colours; in true colour they are as they are. An address of a picture
 on its own (a `.jpg` link) shows the picture.
@@ -356,8 +358,9 @@ The info line says how a secure page came.
 Options > Settings (^,) has two pages:
 
 - **General:** whether pages' pictures are shown, the size of pages
-  (per cent), and where words typed in the address go. (Which sites'
-  scripts run is Options > Run this site's scripts.)
+  (per cent), where words typed in the address go, and (on a Falcon)
+  whether the DSP helps with JPEGs. (Which sites' scripts run is
+  Options > Run this site's scripts.)
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
@@ -374,6 +377,9 @@ was, when you quit:
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
   Show pictures)
+- `PICDSP=` 1 to let a Falcon's DSP do JPEGs' transform and colours
+  while the 68030 unpacks them (a photo four times as quick), 0 for the
+  68030 alone
 - `GATE=` the Pi gateway's address: without Falcon mode every page comes
   through the Pi, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)

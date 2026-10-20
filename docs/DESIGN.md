@@ -824,7 +824,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   22.6 M instructions at its size before, 16.7 M after (3.2 s on the DFB1); shown at 192 x 128,
   10.2 M to 8.9 M. Against a decode in floating point the photo is 38.2 dB (39.2 with the exact
   IDCT; libjpeg's merged upsampling would save more but makes colour fringes, 31.7 dB, so it isn't
-  used). The DSP is next.
+  used). The DSP's part is below.
 - **JPEG made faster on the ST's 68000 (20 Oct 2026):** TJpgDec's transform is now the same AAN
   transform in 16-bit arithmetic (each product one `muls.w`; the 68000 has no 32-bit multiply,
   and GCC called a routine for each), at 1/2 and 1/4 scale the coefficients are folded into a
@@ -833,7 +833,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   pixels sharing it (AERA-Atari's `third_party/tjpgd/README.txt`). The scaler takes RGB rows,
   divides through a table of reciprocals (`mulu.w`) and copies a row shown at its size; black
   and white has a dither of its own. Its error against libjpeg-turbo's exact decode went down
-  (4:2:0, mean 2.83 to 2.64). `PICBENCH.TTP` (`tests/bench/picbench.c`, run in Hatari's
+  (4:2:0, mean 2.83 to 2.64). `PICBST.TTP` (`tests/bench/picbench.c`, run in Hatari's
   cycle-exact 8 MHz ST by `tests/bench/picbench.py`) times each step:
 
   | The 480 x 320 photo on an 8 MHz ST | before | after |
@@ -847,6 +847,32 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   5.0 s on the page: while a picture decodes, GEM gets its turn ten times a second and without
   waiting for its timer (each turn had waited a clock tick, hundreds of them), and the throbber
   is copied, not made again (its section, below).
+- **JPEG on the DSP (20 Oct 2026; the owner's rule: the DSP takes what it does faster):** the
+  68030 unpacks each MCU's Huffman codes (libjpeg's entropy decoder, called by `pic.c`) and sends
+  the coefficients that are not 0; the DSP (`common/dsp/jpeg.a56`, 483 of the bootstrap's 512
+  words) dequantises them, transforms each block straight to n/8 of its size (each pixel the mean
+  of the ones it covers; only the rows and columns a block uses, and a block of its DC alone
+  filled at once: in the photo 30% of the blocks are, and the rest use two rows and two columns
+  on the whole), makes the colours (the chroma repeated over the luma it covers; the clamp is the
+  multiplier's limiter) and sends the pixels back as 5-6-5, straight into the picture, or as R G
+  B for the scaler. It works an MCU behind, so it transforms one while the 68030 unpacks the
+  next. The first such JPEG checks it against libjpeg's own decode of a known picture; a DSP that
+  gets it wrong, or stops answering, is left alone. Progressive and CMYK JPEGs stay with libjpeg.
+  Against Pillow: closer than libjpeg's fast transform for 4:4:4 and grey (2.17 and 1.90 against
+  2.44 and 2.06: its transform is exact), a little further for 4:2:0 (2.67 against 2.44: it
+  repeats the chroma where libjpeg blends it). `PICBENCH.TTP` on Hatari's Falcon (32 MHz, its
+  DSP core), on the release's `PHOTO.JPG` (`tests/bench/mkphoto.py`: 480 x 320, 24 KB, a grain
+  as a camera's) and, in brackets, the smoother 8 KB photo of the measures above:
+
+  | The photo | on the 68030 | with the DSP |
+  |---|---|---|
+  | at its size | 2.69 s (2.15) | 0.73 s (0.50) |
+  | shown at 192 x 128 (4/8, then the scaler) | 1.71 s (1.26) | 0.89 s (0.66) |
+
+  At its size the 68030's Huffman decoding is about all that is left; shown smaller, the scaler
+  is the rest (the DSP could average the pixels too). Hatari runs the DSP faster than a real one
+  next to a 32 MHz 68030 (the elliptic curves, above), so the DFB1's figures are the ones that
+  count: a release measures them. `PICDSP=0` (Settings > General) leaves it all to the 68030.
 - **PNG** is fresh (`common/src/png.c`, on the family's inflate: NetSurf uses libpng, a library
   too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
   PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is
