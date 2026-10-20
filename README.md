@@ -221,10 +221,29 @@ checks servers against your own CA; `-v` logs every request (the
 server, never the address's path). Like ecalgate, it follows
 `HTTPS_PROXY` (`sudo systemctl edit webgate`).
 
-webgate can also hand a page to a browser on the Pi and send EWeb the
-page as it stands after its scripts ran (`--browser`, with
-`webgate-ext/`). `install web` doesn't set that up yet: it needs Chromium
-on the Pi.
+### The Pi's browser: snapshots and live view
+
+Some sites are made by their scripts, and EWeb can't run those. With
+
+```
+sudo gateway/aera-gateway install web --browser
+```
+
+the Pi runs Chromium for EWeb, full screen in a screen of its own (Xvfb,
+no monitor needed), with webgate's extension. EWeb then gets a page as
+it stands after its scripts ran (a snapshot), and `http://webgate/live`
+in EWeb shows the browser's screen: a click on the picture clicks on
+the Pi, typing types there, for the logins and CAPTCHAs a snapshot can't
+do. The browser's profile, with any logins, stays in
+`/var/lib/webgate/browser`.
+
+It needs a Pi with 2 GB of memory or more (Chromium takes about 400 MB
+with one page) and installs Chromium, Xvfb, xdotool and Pillow (about
+600 MB). It runs as webgate's own user, as two more services,
+`webgate-screen` and `webgate-browser`, and the browser goes out only
+through webgate, so the home-network rule holds for it too: nothing at
+home without `--allow-local`, whatever a name's answer says, and no
+files from the Pi. `install web --no-browser` turns it off again.
 
 ## claude: ClaudeST's bridge
 

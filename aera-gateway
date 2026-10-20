@@ -53,6 +53,7 @@ OPT = "/opt/aera-gateway"                   # the gateways' code on the Pi
 UNITS = "/etc/systemd/system"
 OLD_BIN = "/usr/local/bin"                  # where the apps' own install.sh put them
 FILES = ("aeragate.py", "emailgate.py", "ecalgate.py", "eftpgate.py", "webgate.py")
+EXT = "webgate-ext"                         # webgate's browser extension, a folder next to them
 HOME_NETS = ("192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8")
 CLAUDEST = "whomper/ClaudeST"
 
@@ -95,6 +96,14 @@ class Pi:
 
     def have(self, prog):
         return shutil.which(prog) is not None
+
+    def which(self, *progs):
+        """the path of the first of progs that is installed, or None"""
+        for prog in progs:
+            path = shutil.which(prog)
+            if path:
+                return path
+        return None
 
     def is_root(self):
         return os.geteuid() == 0
@@ -366,6 +375,9 @@ class Gateway:
 
     def describe(self, ns):
         return ""
+
+    def prepare(self, pi, ns):
+        """what this set-up needs on the Pi beyond packages, before anything changes"""
 
     def before_start(self, pi):
         pass
@@ -645,6 +657,12 @@ class Web(Gateway):
     key, name, script = "web", "webgate", "webgate.py"
     title = "EWeb gateway for the Atari (HTTP and HTTPS)"
     removed = "webgate removed."
+    # the Pi's browser (--browser): Chromium full screen in a screen of
+    # its own, going out through webgate (127.0.0.1), as user webgate
+    SCREEN, BROWSER = "webgate-screen", "webgate-browser"
+    DISPLAY = ":99"
+    PROFILE = "/var/lib/webgate/browser"
+    MIN_MEMORY = 1536                       # MB: a Pi with 2 GB or more
 
     def options(self, ap):
         super().options(ap)
@@ -658,6 +676,9 @@ class Web(Gateway):
         ap.add_argument("-v", "--verbose", action="store_true", default=None,
                         help="log every request (the server, never the address's path)")
         ap.add_argument("--no-verbose", dest="verbose", action="store_false")
+        ap.add_argument("--browser", action="store_true", default=None,
+                        help="EWeb's snapshots and live view: Chromium on the Pi (a Pi with 2 GB or more)")
+        ap.add_argument("--no-browser", dest="browser", action="store_false")
 
     def apply(self, ns, o):
         super().apply(ns, o)
@@ -671,12 +692,107 @@ class Web(Gateway):
             ns.cafile = os.path.abspath(o.cafile) if o.cafile else None
         if o.verbose is not None:
             ns.verbose = o.verbose
+        if o.browser is not None:
+            ns.browser = o.browser
+
+    def prepare(self, pi, ns):
+        """the Pi's browser: enough memory, and its programs"""
+        if not ns.browser:
+            return
+        m = re.search(r"^MemTotal:\s+(\d+) kB", pi.read("/proc/meminfo") or "", re.M)
+        if m and int(m.group(1)) // 1024 < self.MIN_MEMORY:
+            raise Failed("The Pi's browser needs a Pi with 2 GB of memory or more; this one has %d MB.\n"
+                         "webgate works without it: sudo %s install web --no-browser"
+                         % (int(m.group(1)) // 1024, PROG))
+        need = []
+        if not pi.which("chromium", "chromium-browser"):
+            need.append("chromium" if pi.ok("apt-cache", "show", "chromium") else "chromium-browser")
+        if not pi.which("Xvfb"):
+            need.append("xvfb")
+        if not pi.which("xdotool"):
+            need.append("xdotool")
+        if not pi.ok("python3", "-c", "import PIL"):
+            need.append("python3-pil")
+        if need:
+            heading("Installing the Pi's browser (%s): this takes a while" % ", ".join(need))
+            pi.run("apt-get", "update", "-qq")
+            pi.run("apt-get", "install", "-y", "-qq", *need)
+
+    def unit(self, ns, keep):
+        keep = [k for k in keep if not k.startswith("Environment=DISPLAY=")]
+        return super().unit(ns, keep + (["Environment=DISPLAY=" + self.DISPLAY] if ns.browser else []))
+
+    def browser_units(self, pi, ns):
+        """(the screen's unit, the browser's unit)"""
+        port = ns.browser_port
+        chromium = pi.which("chromium", "chromium-browser") or "/usr/bin/chromium"
+        ext = "%s/%s" % (OPT, EXT)
+        args = [chromium, "--kiosk", "--no-first-run", "--no-default-browser-check", "--noerrdialogs",
+                "--disable-infobars", "--disable-session-crashed-bubble", "--password-store=basic",
+                "--user-data-dir=" + self.PROFILE, "--load-extension=" + ext, "--disable-extensions-except=" + ext,
+                # everything through webgate, which connects only where 7.3 lets it
+                "--proxy-server=http://127.0.0.1:%d" % port, "--proxy-bypass-list=<-loopback>;127.0.0.1:%d" % port,
+                # and it resolves nothing itself: names go to webgate as they are
+                "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1", "--disable-quic",
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                "--window-position=0,0", "--window-size=1024,768", "about:blank"]
+        common = ["User=" + self.name, "Restart=always", "RestartSec=5",
+                  "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes"]
+        screen = "\n".join([
+            "[Unit]", "Description=webgate's screen for the Pi's browser (EWeb's snapshots and live view)",
+            "After=%s.service" % self.name, "JoinsNamespaceOf=%s.service" % self.name, "",
+            "[Service]",
+            "ExecStart=%s %s -screen 0 1024x768x24 -nolisten tcp" % (pi.which("Xvfb") or "/usr/bin/Xvfb",
+                                                                    self.DISPLAY),
+            "NoNewPrivileges=yes"] + common + ["", "[Install]", "WantedBy=multi-user.target", ""])
+        browser = "\n".join([
+            "[Unit]", "Description=The Pi's browser for EWeb (Chromium, out through webgate only)",
+            "Requires=%s.service" % self.SCREEN, "After=%s.service %s.service" % (self.SCREEN, self.name),
+            "JoinsNamespaceOf=%s.service" % self.name, "",
+            "[Service]",
+            "Environment=DISPLAY=" + self.DISPLAY, "Environment=HOME=/var/lib/webgate", "StateDirectory=webgate",
+            # the screen may take a moment
+            "ExecStartPre=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do xdotool getdisplaygeometry >/dev/null "
+            "2>&1 && exit 0; sleep 1; done; exit 1'",
+            "ExecStart=" + " ".join(unit_word(w) for w in args),
+            "# Chromium's own sandbox needs its setuid helper or user namespaces: no NoNewPrivileges here"]
+            + common + ["", "[Install]", "WantedBy=multi-user.target", ""])
+        return screen, browser
+
+    def started(self, pi, ns):
+        if not ns.browser:
+            self.browser_off(pi, quiet=False)
+            return
+        screen, browser = self.browser_units(pi, ns)
+        pi.write(unit_path(self.SCREEN), screen)
+        pi.write(unit_path(self.BROWSER), browser)
+        # Chromium keeps an extension's old background script in its
+        # profile: a new webgate-ext starts afresh (the logins stay)
+        for d in ("Service Worker", "Extension State", "Extension Rules"):
+            pi.rmtree("%s/Default/%s" % (self.PROFILE, d))
+        pi.run("systemctl", "daemon-reload")
+        pi.run("systemctl", "enable", self.SCREEN + ".service", self.BROWSER + ".service", out="hide")
+        pi.run("systemctl", "restart", self.SCREEN + ".service", check=False)
+        pi.run("systemctl", "restart", self.BROWSER + ".service", check=False)
+        say("The Pi's browser (Chromium, in webgate's own screen) is running for EWeb's snapshots and live view.")
+
+    def browser_off(self, pi, quiet=True):
+        if not pi.exists(unit_path(self.BROWSER)) and not pi.exists(unit_path(self.SCREEN)):
+            return
+        for u in (self.BROWSER, self.SCREEN):
+            pi.run("systemctl", "disable", "--now", u + ".service", check=False, out="hide", errors=False)
+            pi.remove(unit_path(u))
+        pi.run("systemctl", "daemon-reload")
+        if not quiet:
+            say("The Pi's browser is off (its profile, with any logins, stays in %s)." % self.PROFILE)
+
+    def after_remove(self, pi):
+        self.browser_off(pi)
 
     def args(self, ns):
         out = ["--port", str(ns.port)] + super().args(ns)
         out += ["--allow-local"] if ns.allow_local else []
         out += ["--cafile", ns.cafile] if ns.cafile else []
-        # the Pi's browser: not offered yet, but kept if it was set by hand
         out += ["--browser"] if ns.browser else []
         out += ["--browser-port", str(ns.browser_port)] if ns.browser_port != ns.default["browser_port"] else []
         out += ["--insecure"] if ns.insecure else []
@@ -687,8 +803,9 @@ class Web(Gateway):
         return [str(ns.port)]
 
     def describe(self, ns):
-        return "servers at home %s%s" % ("allowed" if ns.allow_local else "refused",
-                                         ", CA " + ns.cafile if ns.cafile else "")
+        return "servers at home %s%s%s" % ("allowed" if ns.allow_local else "refused",
+                                           ", CA " + ns.cafile if ns.cafile else "",
+                                           "; the Pi's browser" if ns.browser else "")
 
     def tell(self, ns, ip):
         return "\n".join([
@@ -712,6 +829,8 @@ def put_files(pi, src):
     pi.makedirs(new)
     for f in FILES:
         pi.copy(os.path.join(src, f), "%s/%s" % (new, f), 0o644 if f == "aeragate.py" else 0o755)
+    for f in sorted(glob.glob(os.path.join(src, EXT, "*"))):
+        pi.copy(f, "%s/%s/%s" % (new, EXT, os.path.basename(f)), 0o644)
     had = pi.exists(OPT)
     if had:
         pi.rename(OPT, old)
@@ -749,6 +868,7 @@ def install_gateway(pi, gw, o, src=HERE):
         gw.take_over(pi, ns)
     gw.apply(ns, o)
     gw.check(ns)
+    gw.prepare(pi, ns)
     need_packages(pi, gw)
     if not pi.ok("id", gw.name):
         pi.run("useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", gw.name)
