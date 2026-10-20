@@ -372,7 +372,7 @@ int main(int argc, char **argv)
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, i, r;
-	PIC_PAL pal;
+	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
 	char where[4096];
 	browser b;
