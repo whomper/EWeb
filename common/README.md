@@ -369,6 +369,9 @@ Falcon about 1.8 times as fast as Erez's.
 
 The scaler sums a JPEG's rows (solid, each pixel shown from 257 or fewer) in 16 bits, a third of the
 memory the five longs of a picture with alpha take: a third less time shrinking on the 68030.
+A `PIC_PAL`'s nearest-pen table (32 KB) is made only for more than 4 pens, by `pic_pal_init`
+(`pic_pal_free` gives it back; a `PIC_PAL` starts zeroed): monochrome and 4-colour screens work each
+pen out, and EWeb's 1 MB ST got its 32 KB back.
 
 ## Coming next
 
