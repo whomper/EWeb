@@ -84,14 +84,17 @@ const char *pic_dsp_state(void);
 typedef struct {
 	int n;				/* pens, 2 .. 256 */
 	unsigned char rgb[256][3];	/* each pen's colour */
-	/* a colour to its nearest pen + 1 (0: not worked out yet), each
-	   component from -128 to 383 in steps of 16: past the cube's edges
-	   too, for the dither's errors */
-	unsigned char near[32 * 32 * 32];
+	/* 32 x 32 x 32: a colour to its nearest pen + 1 (0: not worked out
+	   yet), each component from -128 to 383 in steps of 16 (past the
+	   cube's edges too, for the dither's errors); only for more than 4
+	   pens (a monochrome ST's 32 KB back), NULL: each worked out */
+	unsigned char *near;
 	unsigned char order[256];	/* the pens sorted by their red */
 } PIC_PAL;
-/* n pens of these colours */
+/* n pens of these colours. A PIC_PAL starts zeroed (static, or memset)
+   and may be made again; pic_pal_free gives its table back */
 void pic_pal_init(PIC_PAL *pal, int n, const unsigned char rgb[][3]);
+void pic_pal_free(PIC_PAL *pal);
 /* the pen nearest a colour (to 4 bits a component; -128..383 each) */
 int pic_pal_nearest(PIC_PAL *pal, int r, int g, int b);
 /* the picture as pens, Floyd-Steinberg (serpentine; a colour wanted past

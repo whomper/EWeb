@@ -1684,7 +1684,12 @@ void pic_pal_init(PIC_PAL *pal, int n, const unsigned char rgb[][3])
 	int i, j;
 	pal->n = n < 2 ? 2 : n > 256 ? 256 : n;
 	memcpy(pal->rgb, rgb, (size_t) pal->n * 3);
-	memset(pal->near, 0, sizeof pal->near);
+	if (pal->n <= 4)
+		pic_pal_free(pal);
+	else if (pal->near == NULL)
+		pal->near = calloc(32 * 32 * 32, 1);
+	else
+		memset(pal->near, 0, 32 * 32 * 32);
 	/* the pens by their red, for nearest_far */
 	for (i = 0; i < pal->n; i++) {
 		for (j = i; j > 0 && pal->rgb[pal->order[j - 1]][0] > pal->rgb[i][0]; j--)
@@ -1693,6 +1698,12 @@ void pic_pal_init(PIC_PAL *pal, int n, const unsigned char rgb[][3])
 	}
 }
 
+
+void pic_pal_free(PIC_PAL *pal)
+{
+	free(pal->near);
+	pal->near = NULL;
+}
 
 /* a colour (each component -128..383) to its index in near[] */
 #define NEAR_AT(r, g, b) ((((r) + 128) >> 4) * 1024 + (((g) + 128) >> 4) * 32 + (((b) + 128) >> 4))
@@ -1705,7 +1716,7 @@ static int nearest_far(PIC_PAL *pal, int r, int g, int b)
 {
 	int k = NEAR_AT(r, g, b), lo, hi, best = 0;
 	long bd = 0x7fffffffL;
-	if (pal->near[k])
+	if (pal->near != NULL && pal->near[k])
 		return pal->near[k] - 1;
 	/* the step's middle */
 	r = (r & ~15) + 8;
@@ -1748,7 +1759,8 @@ static int nearest_far(PIC_PAL *pal, int r, int g, int b)
 			best = i;
 		}
 	}
-	pal->near[k] = (unsigned char) (best + 1);
+	if (pal->near != NULL)
+		pal->near[k] = (unsigned char) (best + 1);
 	return best;
 }
 
@@ -1895,7 +1907,7 @@ static void dither_many(const PIC *p, PIC_PAL *pal, unsigned char *out)
 			r = r < -128 ? -128 : r > 383 ? 383 : r;
 			g = g < -128 ? -128 : g > 383 ? 383 : g;
 			b = b < -128 ? -128 : b > 383 ? 383 : b;
-			k = pal->near[NEAR_AT(r, g, b)];
+			k = pal->near != NULL ? pal->near[NEAR_AT(r, g, b)] : 0;
 			k = k ? k - 1 : nearest_far(pal, r, g, b);
 			o[x] = (unsigned char) k;
 			qr = r - pal->rgb[k][0];
