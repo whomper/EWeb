@@ -17,6 +17,7 @@
  * sums are 32-bit additions: the only divisions are one a component of
  * each pixel shown.
  */
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,6 +26,7 @@
 #include "nsgif.h"
 #ifdef PIC_LIBJPEG
 #include <stdio.h>		/* jpeglib.h names FILE */
+#define JPEG_INTERNALS		/* the entropy decoder, for the DSP's way */
 #include "jpeglib.h"
 #include "jerror.h"
 #else
@@ -544,13 +546,392 @@ typedef struct {
 	struct jpeg_source_mgr src;
 	unsigned char *row;
 	int stopped;
+	/* the DSP's way */
+	int dsp_on;			/* the DSP is held (let go if libjpeg gives up) */
+	union {
+		JBLOCK b;
+		uint32_t l[32];		/* two coefficients at a time */
+	} blk[C_MAX_BLOCKS_IN_MCU];	/* an MCU's coefficients, 0 where not written */
+	JBLOCKROW rows[C_MAX_BLOCKS_IN_MCU];
+	unsigned long w[7 * 3 + 13 + 4 * 8 + 64 + 8 * 8 * 3 + 8 * 8 + 3 * 64 + 7];	/* words for the DSP */
 } LJ;
 
-static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
+/* ---------------------------------------------------------------- JPEG on the DSP */
+
+/* libjpeg unpacks each MCU's coefficients (the Huffman codes), and
+   dsp/jpeg.a56 does the rest: dequantising, the transform straight to
+   n/8 of the size (each pixel the mean of those it covers), the colours,
+   the chroma over the luma it covers; it sends the pixels back an MCU
+   behind, so it works out one MCU while the 68030 unpacks the next */
+
+const PIC_DSP *pic_dsp;
+int pic_dsp_failed;
+static int dsp_state;			/* 0: not checked yet, 1: checked, -1: the 68030 does it */
+static int dsp_testing;			/* the check: 1 its DSP decodes, 2 its 68030 ones */
+
+/* jpeg.a56's commands and memory */
+#define D_LOADX 1
+#define D_MCU   2
+#define D_END   3
+#define D_LOADY 4
+#define D_BT    0x20			/* x: the block table */
+#define D_BLK   0x40			/* x: the block */
+#define D_TRM   0x600			/* x: the colour terms */
+#define D_QT    0x40			/* y: the quantisers, 64 a component */
+#define D_YPL   0x200			/* y: the MCU's luma */
+#define D_CBP   0x300			/* y: its Cb, Cr */
+#define D_CRP   0x340
+#define D_CONST 0x500			/* y: the format's constants */
+
+/* the 8-point inverse DCT: B[x][u] = C(u) / 2 * cos((2x + 1) u pi / 16),
+   times 2^23 */
+static const long dsp_basis[8][8] = {
+	{  2965821,  4113712,  3875032,  3487436,  2965821,  2330230,  1605091,   818268 },
+	{  2965821,  3487436,  1605091,  -818268, -2965821, -4113712, -3875032, -2330230 },
+	{  2965821,  2330230, -1605091, -4113712, -2965821,   818268,  3875032,  3487436 },
+	{  2965821,   818268, -3875032, -2330230,  2965821,  3487436, -1605091, -4113712 },
+	{  2965821,  -818268, -3875032,  2330230,  2965821, -3487436, -1605091,  4113712 },
+	{  2965821, -2330230, -1605091,  4113712, -2965821,  -818268,  3875032, -3487436 },
+	{  2965821, -3487436,  1605091,   818268, -2965821,  4113712, -3875032,  2330230 },
+	{  2965821, -4113712,  3875032, -3487436,  2965821, -2330230,  1605091,  -818268 }
+};
+
+/* each format's 7 constants (jpeg.a56): for R, G and B its mask and how
+   far it moves down (R G B's R stays: $7FFFFF, rounded), then what puts
+   the top bits right */
+static const unsigned long dsp_565[7] = { 0xF80000, 0x008000, 0xFC0000, 0x000400, 0xF80000, 0x000010, 0x008410 };
+static const unsigned long dsp_rgb[7] = { 0xFF0000, 0x7FFFFF, 0xFF0000, 0x008000, 0xFF0000, 0x000080, 0x808080 };
+
+/* the JPEGs it takes: 8-bit, one scan of grey or of Y Cb Cr with the
+   chroma at most halved each way, shown at 2/8 of the size or more (at
+   1/8 there is no transform to speak of) */
+static int dsp_takes(j_decompress_ptr c, int k)
 {
-	LJ *j = calloc(1, sizeof *j);
+	jpeg_component_info *ci = c->comp_info;
+	if (k < 2 || c->data_precision != 8 || c->progressive_mode || c->master->lossless ||
+	    c->inputctl->has_multiple_scans || c->blocks_in_MCU > 8)
+		return 0;
+	if (c->num_components == 1)
+		return c->jpeg_color_space == JCS_GRAYSCALE;
+	return c->num_components == 3 && c->jpeg_color_space == JCS_YCbCr && c->comps_in_scan == 3 &&
+	       ci[0].h_samp_factor <= 2 && ci[0].v_samp_factor <= 2 && ci[1].h_samp_factor == 1 &&
+	       ci[1].v_samp_factor == 1 && ci[2].h_samp_factor == 1 && ci[2].v_samp_factor == 1;
+}
+
+/* the M x 8 transform to M pixels a block: pixel i the mean of the
+   8/M pixels it covers (parts of them at the ends), twice the true
+   one (so each entry is below 1, as the DSP's fractions are) */
+static void dsp_matrix(unsigned long *w, int m)
+{
+	int i, u, x;
+	for (i = 0; i < m; i++)
+		for (u = 0; u < 8; u++) {
+			long sum = 0;
+			for (x = 0; x < 8; x++) {
+				/* how much of source pixel x is in pixel i, in M-ths:
+				   [mx, mx + m) against [8i, 8i + 8) */
+				int lo = m * x > 8 * i ? m * x : 8 * i, hi = m * x + m < 8 * i + 8 ? m * x + m : 8 * i + 8;
+				if (hi > lo)
+					sum += (hi - lo) * dsp_basis[x][u];
+			}
+			/* weights (hi - lo) / 8, times 2 */
+			sum = sum >= 0 ? (sum + 2) >> 2 : -((-sum + 2) >> 2);
+			*w++ = (unsigned long) sum & 0xFFFFFFUL;
+		}
+}
+
+/* an MCU's pixels from the DSP: into the picture (5-6-5), or into the
+   band of R G B rows */
+static void dsp_read(LJ *j, PIC *p, unsigned char *band, long x, long y, int cols, int rows)
+{
+	if (band == NULL)
+		pic_dsp->get16(p->px + y * p->w + x, cols, rows, p->w);
+	else
+		pic_dsp->get24(band + x * 3, cols, rows, (long) j->ci.output_width * 3);
+}
+
+/* 1 decoded, 0 not (why), -1 the DSP stopped answering */
+static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
+{
+	j_decompress_ptr c = &j->ci;
+	int nb = c->blocks_in_MCU, grey = c->num_components == 1, direct = c->out_color_space == JCS_RGB565;
+	int hy = grey ? 1 : c->comp_info[0].h_samp_factor, vy = grey ? 1 : c->comp_info[0].v_samp_factor;
+	int mw = hy * k, mh = vy * k, b, i, ci, seen[3] = { 0, 0, 0 }, pcols = 0, prows = 0, ok = 0;
+	long ow = (long) c->output_width, oh = (long) c->output_height, mx, my, px = 0, py = -1, n;
+	unsigned long *w = j->w;
+	unsigned char *band = NULL;
+
+	if (!direct) {
+		band = malloc((size_t) ow * mh * 3);
+		if (band == NULL || !sc_init(sc, p, ow, oh)) {
+			free(band);
+			*why = PIC_MEMORY;
+			return 0;
+		}
+	}
+	for (b = 0; b < nb; b++)
+		j->rows[b] = &j->blk[b].b;
+
+	/* the setup, written into the DSP's memory: the variables */
+	n = 0;
+	w[n++] = D_LOADX;
+	w[n++] = 0;
+	w[n++] = 13;
+	w[n++] = (unsigned long) k;
+	w[n++] = (unsigned long) nb;
+	w[n++] = (unsigned long) mw;
+	w[n++] = (unsigned long) hy;
+	w[n++] = (unsigned long) vy;
+	w[n++] = grey ? 1 : 3;
+	w[n++] = direct ? 0 : 1;
+	for (i = 0; i < 5; i++)
+		w[n++] = 0;		/* this and the last MCU's pixels: none */
+	w[n++] = (unsigned long) mw * 3;
+	/* each block's quantisers, where its pixels go, the pitch */
+	w[n++] = D_LOADX;
+	w[n++] = D_BT;
+	w[n++] = (unsigned long) nb * 4;
+	for (b = 0; b < nb; b++) {
+		ci = c->cur_comp_info[c->MCU_membership[b]]->component_index;
+		if (ci == 0) {
+			int bx = seen[0] % hy, by = seen[0] / hy;
+			seen[0]++;
+			w[n++] = D_QT;
+			w[n++] = (unsigned long) (D_YPL + by * k * mw + bx * k);
+			w[n++] = (unsigned long) (mw - k);
+			w[n++] = 0x4000;	/* the DC + 4: each pixel + 1/2, rounded */
+		} else {
+			w[n++] = (unsigned long) (D_QT + 64 * ci);
+			w[n++] = ci == 1 ? D_CBP : D_CRP;
+			w[n++] = 0;
+			w[n++] = 0;
+		}
+	}
+	/* the block 0, and grey's colour terms */
+	w[n++] = D_LOADX;
+	w[n++] = D_BLK;
+	w[n++] = 64;
+	for (i = 0; i < 64; i++)
+		w[n++] = 0;
+	if (grey) {
+		w[n++] = D_LOADX;
+		w[n++] = D_TRM;
+		w[n++] = (unsigned long) k * k * 3;
+		for (i = 0; i < k * k * 3; i++)
+			w[n++] = 0;
+	}
+	/* the transform, the quantisers, the format's constants */
+	w[n++] = D_LOADY;
+	w[n++] = 0;
+	w[n++] = (unsigned long) k * 8;
+	dsp_matrix(w + n, k);
+	n += 8 * k;
+	w[n++] = D_LOADY;
+	w[n++] = D_QT;
+	w[n++] = grey ? 64 : 3 * 64;
+	for (ci = 0; ci < (grey ? 1 : 3); ci++) {
+		const JQUANT_TBL *q = c->comp_info[ci].quant_table;
+		for (i = 0; i < 64; i++) {
+			unsigned long v = q != NULL ? (unsigned long) q->quantval[i] * 32 : 32;
+			w[n++] = v > 0x7FFFFFUL ? 0x7FFFFFUL : v;
+		}
+	}
+	w[n++] = D_LOADY;
+	w[n++] = D_CONST;
+	w[n++] = 7;
+	for (i = 0; i < 7; i++)
+		w[n++] = direct ? dsp_565[i] : dsp_rgb[i];
+	if (!pic_dsp->begin()) {
+		free(band);
+		return -2;
+	}
+	j->dsp_on = 1;
+	pic_dsp_failed = 0;
+	pic_dsp->put(w, n);
+
+	for (my = 0; my < (long) c->MCU_rows_in_scan && !pic_dsp_failed; my++) {
+		for (mx = 0; mx < (long) c->MCUs_per_row && !pic_dsp_failed; mx++) {
+			(*c->entropy->decode_mcu)(c, j->rows);
+			/* the coefficients that are not 0, and 0 again for the next */
+			n = 0;
+			w[n++] = D_MCU;
+			w[n++] = (unsigned long) (ow - mx * mw < mw ? ow - mx * mw : mw);
+			w[n++] = (unsigned long) (oh - my * mh < mh ? oh - my * mh : mh);
+			for (b = 0; b < nb; b++) {
+				uint32_t *l = j->blk[b].l;
+				const JCOEF *q = j->blk[b].b;
+				long at = n++;
+				for (i = 0; i < 32; i++)
+					if (l[i] != 0) {
+						if (q[2 * i] != 0)
+							w[n++] = (((unsigned long) (long) q[2 * i] << 6) | (unsigned) (2 * i)) & 0xFFFFFFUL;
+						if (q[2 * i + 1] != 0)
+							w[n++] = (((unsigned long) (long) q[2 * i + 1] << 6) | (unsigned) (2 * i + 1)) &
+								 0xFFFFFFUL;
+						l[i] = 0;
+					}
+				w[at] = (unsigned long) (n - at - 1);
+			}
+			pic_dsp->put(w, n);
+			/* the last one's pixels */
+			if (py >= 0)
+				dsp_read(j, p, band, px, py, pcols, prows);
+			if (band != NULL && py >= 0 && px + pcols >= ow) {
+				/* its band of rows is whole */
+				for (i = 0; i < prows; i++)
+					if (!sc_row_rgb(sc, band + (long) i * ow * 3)) {
+						*why = PIC_STOPPED;
+						goto out;
+					}
+			}
+			px = mx * mw;
+			py = my * mh;
+			pcols = (int) w[1];
+			prows = (int) w[2];
+		}
+		if (direct && pic_poll != NULL && !pic_poll()) {
+			*why = PIC_STOPPED;
+			goto out;
+		}
+	}
+	/* the last MCU's pixels */
+	w[0] = D_END;
+	pic_dsp->put(w, 1);
+	dsp_read(j, p, band, px, py, pcols, prows);
+	if (band != NULL && !pic_dsp_failed) {
+		for (i = 0; i < prows; i++)
+			if (!sc_row_rgb(sc, band + (long) i * ow * 3)) {
+				*why = PIC_STOPPED;
+				break;
+			}
+		ok = i == prows;
+	} else {
+		ok = 1;
+	}
+out:
+	pic_dsp->end(ok && !pic_dsp_failed);
+	j->dsp_on = 0;
+	free(band);
+	return pic_dsp_failed ? -1 : ok;
+}
+
+/* the check, the first time: a known picture (32 x 24, smooth colours,
+   4:2:0) decoded on the DSP and on the 68030, at its size (5-6-5 from the
+   DSP) and at 10 x 7 (from 3/8 by the scaler): the same within a step or
+   two of 5-6-5 (the DSP repeats the chroma where libjpeg's 68030 way
+   blends it, and its transform is exact) */
+static const unsigned char dsp_test_jpg[] = {
+	0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+	0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x03, 0x02, 0x02, 0x03, 0x02, 0x02, 0x03,
+	0x03, 0x03, 0x03, 0x04, 0x03, 0x03, 0x04, 0x05, 0x08, 0x05, 0x05, 0x04, 0x04, 0x05, 0x0a, 0x07,
+	0x07, 0x06, 0x08, 0x0c, 0x0a, 0x0c, 0x0c, 0x0b, 0x0a, 0x0b, 0x0b, 0x0d, 0x0e, 0x12, 0x10, 0x0d,
+	0x0e, 0x11, 0x0e, 0x0b, 0x0b, 0x10, 0x16, 0x10, 0x11, 0x13, 0x14, 0x15, 0x15, 0x15, 0x0c, 0x0f,
+	0x17, 0x18, 0x16, 0x14, 0x18, 0x12, 0x14, 0x15, 0x14, 0xff, 0xdb, 0x00, 0x43, 0x01, 0x03, 0x04,
+	0x04, 0x05, 0x04, 0x05, 0x09, 0x05, 0x05, 0x09, 0x14, 0x0d, 0x0b, 0x0d, 0x14, 0x14, 0x14, 0x14,
+	0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+	0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14,
+	0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0xff, 0xc0,
+	0x00, 0x11, 0x08, 0x00, 0x18, 0x00, 0x20, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11,
+	0x01, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+	0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 0x05,
+	0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d, 0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
+	0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08, 0x23,
+	0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16, 0x17,
+	0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a,
+	0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
+	0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
+	0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99,
+	0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7,
+	0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5,
+	0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1,
+	0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xc4, 0x00, 0x1f, 0x01, 0x00, 0x03,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+	0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x11, 0x00,
+	0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04, 0x07, 0x05, 0x04, 0x04, 0x00, 0x01, 0x02, 0x77, 0x00,
+	0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 0x13,
+	0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0, 0x15,
+	0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34, 0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26, 0x27,
+	0x28, 0x29, 0x2a, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+	0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
+	0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88,
+	0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6,
+	0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4,
+	0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe2,
+	0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9,
+	0xfa, 0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0xfa,
+	0x97, 0x47, 0xb5, 0x8e, 0xe6, 0x35, 0xe0, 0x1c, 0xd6, 0xac, 0xde, 0x19, 0x8e, 0x78, 0xf8, 0x41,
+	0xd3, 0xd2, 0xb8, 0x7f, 0x08, 0x78, 0x95, 0x24, 0x54, 0xcb, 0x57, 0xa8, 0xe9, 0x5a, 0x94, 0x73,
+	0xc6, 0x39, 0x07, 0x22, 0xbf, 0x9b, 0xe1, 0x83, 0xad, 0x87, 0x9e, 0x88, 0xf4, 0x70, 0xf9, 0x4d,
+	0x4c, 0xb3, 0x5b, 0x6c, 0x79, 0xd6, 0xbf, 0xe0, 0x85, 0x65, 0x6c, 0x47, 0xfa, 0x57, 0x92, 0xf8,
+	0xb3, 0xc1, 0x7e, 0x5e, 0xfc, 0x27, 0xe9, 0x5f, 0x54, 0x5e, 0xdb, 0xc5, 0x71, 0x19, 0xe0, 0x1a,
+	0xf3, 0xff, 0x00, 0x14, 0xf8, 0x7d, 0x25, 0x57, 0xc2, 0xd7, 0xeb, 0x5c, 0x3b, 0x8c, 0xa9, 0x4e,
+	0x51, 0x52, 0x3e, 0x9e, 0x8f, 0x15, 0xcb, 0x00, 0xb9, 0x5c, 0x8f, 0x9e, 0x7c, 0x27, 0xe3, 0x13,
+	0x0e, 0xc0, 0x5f, 0x1f, 0x8d, 0x7a, 0xff, 0x00, 0x87, 0x3c, 0x74, 0xbb, 0x53, 0x32, 0x7e, 0xb4,
+	0x51, 0x5e, 0xbd, 0x6c, 0xbf, 0x0e, 0xf5, 0x71, 0x3f, 0x58, 0xe2, 0x2c, 0x0d, 0x08, 0x53, 0x6d,
+	0x44, 0xee, 0xac, 0x7c, 0x5d, 0x1c, 0xe8, 0x32, 0xe0, 0xfe, 0x34, 0xb7, 0xba, 0x8c, 0x77, 0x48,
+	0x79, 0x06, 0x8a, 0x2b, 0x7c, 0x1e, 0x0e, 0x95, 0x39, 0xae, 0x54, 0x7f, 0x1b, 0xf1, 0x65, 0x49,
+	0x51, 0x94, 0xb9, 0x1d, 0x8f, 0xff, 0xd9
+};
+
+static int dsp_close(const PIC *a, const PIC *b)
+{
+	long i, n = (long) a->w * a->h, sum = 0;
+	if (a->w != b->w || a->h != b->h)
+		return 0;
+	for (i = 0; i < n; i++) {
+		int d1 = ((a->px[i] >> 11) & 31) - ((b->px[i] >> 11) & 31);
+		int d2 = ((a->px[i] >> 5) & 63) - ((b->px[i] >> 5) & 63);
+		int d3 = (a->px[i] & 31) - (b->px[i] & 31);
+		d1 = d1 < 0 ? -d1 : d1;
+		d2 = d2 < 0 ? -d2 : d2;
+		d3 = d3 < 0 ? -d3 : d3;
+		if (d1 > 3 || d2 > 6 || d3 > 3)
+			return 0;
+		sum += d1 + d2 / 2 + d3;
+	}
+	return sum <= n * 3;		/* a step in each component at most, on the whole */
+}
+
+static int dsp_check(void)
+{
+	static const short size[2][2] = { { 32, 24 }, { 10, 7 } };
+	int s, ok = 1, why;
+	for (s = 0; s < 2 && ok; s++) {
+		PIC *a, *b;
+		dsp_testing = 1;
+		a = pic_decode(dsp_test_jpg, (long) sizeof dsp_test_jpg, size[s][0], size[s][1], 1024, &why);
+		dsp_testing = 2;
+		b = pic_decode(dsp_test_jpg, (long) sizeof dsp_test_jpg, size[s][0], size[s][1], 1024, &why);
+		ok = a != NULL && b != NULL && dsp_close(a, b);
+		pic_free(a);
+		pic_free(b);
+	}
+	dsp_testing = 0;
+	return ok;
+}
+
+static int dsp_usable(void)
+{
+	if (pic_dsp == NULL || dsp_state < 0 || dsp_testing == 2)
+		return 0;
+	if (dsp_testing == 1 || dsp_state > 0)
+		return 1;
+	dsp_state = dsp_check() ? 1 : -1;
+	return dsp_state > 0;
+}
+
+const char *pic_dsp_state(void)
+{
+	return pic_dsp == NULL || dsp_state < 0 ? "68030" : dsp_state > 0 ? "DSP" : "-";
+}
+
+static int decode_lj(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
+{
+	LJ *j;
 	long y, x;
-	int k, ok = 0;
+	int k, ok = 0, dsp = dsp_usable();
+	j = calloc(1, sizeof *j);
 	if (j == NULL) {
 		*why = PIC_MEMORY;
 		return 0;
@@ -558,6 +939,8 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 	j->ci.err = lj_errors(&j->err.pub);
 	if (__builtin_setjmp(j->err.jmp)) {
 		/* libjpeg gave up: damaged, or out of memory */
+		if (j->dsp_on)
+			pic_dsp->end(0);
 		*why = j->stopped ? PIC_STOPPED : j->err.pub.msg_code == JERR_OUT_OF_MEMORY ? PIC_MEMORY :
 		       (j->err.pub.msg_code == JERR_BAD_PRECISION || j->err.pub.msg_code == JERR_NOT_COMPILED) ?
 		       PIC_UNSUPPORTED : PIC_DAMAGED;
@@ -598,6 +981,18 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 	jpeg_start_decompress(&j->ci);
 	p->how = PIC_JPEG;
 	p->scale = k;
+	if (dsp && dsp_takes(&j->ci, k)) {
+		ok = decode_dsp(j, p, sc, k, why);
+		if (ok != -2) {
+			/* -1: the DSP stopped answering; from now on the 68030
+			   does them, this one again (decode_jpeg) */
+			if (ok < 0 && dsp_testing == 0)
+				dsp_state = -1;
+			jpeg_abort_decompress(&j->ci);
+			goto done;
+		}
+		ok = 0;			/* the DSP couldn't be had: the 68030 this time */
+	}
 	if (j->ci.out_color_space == JCS_RGB565) {
 		for (y = 0; y < (long) j->ci.output_height; y++) {
 			JSAMPROW r = (JSAMPROW) (p->px + y * p->w);
@@ -648,7 +1043,28 @@ done:
 	return ok;
 }
 
+static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
+{
+	int ok = decode_lj(d, n, p, sc, why);
+	if (ok < 0) {
+		/* the DSP stopped answering: again on the 68030 */
+		sc_free(sc);
+		memset(sc, 0, sizeof *sc);
+		*why = PIC_OK;
+		ok = decode_lj(d, n, p, sc, why);
+	}
+	return ok;
+}
+
 #else
+
+const PIC_DSP *pic_dsp;			/* (no DSP for TJpgDec's builds) */
+int pic_dsp_failed;
+
+const char *pic_dsp_state(void)
+{
+	return "68000";
+}
 
 /* TJpgDec (third_party/tjpgd), for the family's programs on a 68000:
    small, and quick at 1/8 (no IDCT); the kinds it won't take from their

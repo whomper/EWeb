@@ -44,3 +44,9 @@ was 39.2 dB with the exact IDCT and is 38.2 dB with the fast one, both
 with the 5-6-5 pixels' own loss: no one sees it. libjpeg's merged
 upsampling would save 40% in all, but makes colour fringes on sharp
 coloured edges (31.7 dB), so it isn't used.
+
+Since 20 Oct 2026 pic.c can hand a JPEG's transform and colours to the
+Falcon's DSP (common/README.md, JPEGs on the DSP): it builds with
+`JPEG_INTERNALS` and calls the entropy decoder (`cinfo->entropy->
+decode_mcu`) itself after `jpeg_start_decompress`, an MCU at a time, in
+place of `jpeg_read_scanlines`. Nothing in libjpeg changed for it.

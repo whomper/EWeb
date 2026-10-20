@@ -49,6 +49,31 @@ void pic_free(PIC *p);
    never */
 extern int (*pic_poll)(void);
 
+/* ---- a JPEG's transform and colours on the Falcon's DSP (PIC_LIBJPEG
+   builds; dsp/jpeg.a56) ---- */
+typedef struct {
+	int (*begin)(void);	/* get the DSP and start jpeg.a56 on it: 1; 0 if it couldn't be had */
+	/* let it go; clean: jpeg.a56 is back at its commands (the next
+	   picture needn't load it again) */
+	void (*end)(int clean);
+	void (*put)(const unsigned long *w, long n);	/* n words to the DSP */
+	/* rows of cols words from it, pitch apart: their low 16 bits (pitch
+	   in pixels), or their 3 bytes (pitch in bytes) */
+	void (*get16)(unsigned short *d, int cols, int rows, long pitch);
+	void (*get24)(unsigned char *d, int cols, int rows, long pitch);
+} PIC_DSP;
+/* set by the program where it may use the DSP (atari/dspjpeg.c's
+   dspjpeg_port), NULL: the 68030 does it all. The first JPEG decoded
+   with it checks it on a known picture; if the DSP gets it wrong, or
+   ever stops answering, the 68030 does them from then on */
+extern const PIC_DSP *pic_dsp;
+/* put and the gets set it when the DSP stops answering, and then do
+   nothing */
+extern int pic_dsp_failed;
+/* where JPEGs are transformed: "DSP", "68030" (not to be had, or it
+   failed), "-" (not tried yet); "68000" in TJpgDec's builds */
+const char *pic_dsp_state(void);
+
 /* ---- the screen's colours ---- */
 typedef struct {
 	int n;				/* pens, 2 .. 256 */

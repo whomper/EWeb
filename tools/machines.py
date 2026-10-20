@@ -54,6 +54,7 @@ on Erez's machines. Name only the other programs, not the one under test.
 import hashlib
 import os
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -170,8 +171,17 @@ def xvfb(display, size="1024x768x24", timeout=20):
     def up():
         try:
             return subprocess.run(["xdpyinfo"], env=env, capture_output=True).returncode == 0
-        except FileNotFoundError:   # no xdpyinfo: the server's socket is there
-            return os.path.exists("/tmp/.X11-unix/X" + display.lstrip(":").split(".")[0])
+        except FileNotFoundError:   # no xdpyinfo: the server's socket answers
+            # (a socket left by an Xvfb that was killed is only a file:
+            # taken for a display, the rig's xdotool found no window)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                sock.connect("/tmp/.X11-unix/X" + display.lstrip(":").split(".")[0])
+                return True
+            except OSError:
+                return False
+            finally:
+                sock.close()
     if up():
         return None
     p = subprocess.Popen(["Xvfb", display, "-screen", "0", size],

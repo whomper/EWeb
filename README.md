@@ -34,7 +34,7 @@ These files were the same code in ECal, EContact, EMail and EFTP when they moved
 | `atari/include/` | `ctype.h` `limits.h` `stdio.h` `string.h` `strings.h` | the parts of the freestanding C library headers every app shares |
 | `src/` | `bidi.c/.h`, `ctime.c/.h`, `futil.c`, `secret.c/.h` | Hebrew right-to-left layout; dates and times; safe file writes (`pf_save` writes `NAME.IN$` and renames it over `NAME.INF`; `tests/futil`); password encryption |
 | `ui/` | `dsp.c` | checks the DSP and turns Falcon mode on |
-| `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026 (below) |
+| `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026, `jpeg.a56` since 20 Oct 2026 (below) |
 | `tools/` | `elf2tos.py`, `mkroots.c`, `build-hcp.sh` | ELF to TOS program header; root certificates to `ROOTS.DAT`; `build-hcp.sh DIR` builds the `hcp` help compiler (th-otto/hypview at a fixed commit) for `make help` and the Release workflow |
 | `third_party/bearssl/` | BearSSL 0.6 | TLS for Falcon mode (MIT licence) |
 | `certs/` | `CACERT.PEM` | Mozilla's root certificates (MPL 2.0) |
@@ -338,6 +338,27 @@ Build: `-Icommon/third_party/nsgif/include`, and either `-Icommon/third_party/tj
 `jpegdc.c` and `tjpgd.c` (built with `-fwrapv`: its IDCT wraps on damaged data, as it does on the
 68000) or libjpeg-turbo's flags (its `AERA.md`) with `pic_lj8.c`. `atari/include/stdio.h` names
 `FILE` (no functions) for libjpeg's prototypes.
+
+### JPEGs on the DSP (20 Oct 2026, from EWeb)
+
+With libjpeg-turbo (`-DPIC_LIBJPEG`) the Falcon's DSP56001 can take a JPEG's transform and colours:
+libjpeg unpacks each MCU's Huffman codes on the 68030 (its entropy decoder, called by `pic.c`
+itself), `pic.c` sends the coefficients that are not 0, and the DSP sends the MCU's pixels back an
+MCU behind, so it works out one while the 68030 unpacks the next.
+
+| File | What it does |
+|---|---|
+| `dsp/jpeg.a56`, `dsp/jpeg_prog.h` | dequantising, the transform straight to n/8 of the size (each pixel the mean of the ones it covers, any n from 2 to 8; only the rows and columns a block uses; a block of its DC alone filled at once), the colours from Y Cb Cr with the chroma repeated over the luma it covers, clamped by the multiplier's limiter, packed as 5-6-5 or R G B. `cd dsp && a56 jpeg.a56 && python3 mkh.py a56.out jpeg_prog.h dsp_jpeg_prog jpeg.a56` |
+| `src/pic.c/.h` | `pic_dsp` (a `PIC_DSP` port, NULL: the 68030 does it all): JPEGs of one scan, grey or Y Cb Cr with the chroma halved at most, 8-bit, shown at 2/8 or more go to the DSP; the rest (progressive, CMYK) stay with libjpeg. The first such JPEG checks the DSP on a known picture, against libjpeg's own decode; a DSP that gets it wrong or stops answering is left alone for the session. `pic_dsp_state()` says "DSP", "68030" or "-" (not tried yet) |
+| `atari/dspjpeg.c/.h` | the port: Dsp_Lock for the whole picture, the bootstrap, the host port (each MCU's words in one `Supexec`, its pixels in another, so the program's polls run in user mode); a picture that ended cleanly leaves the program at its commands, and the next asks it (PING) instead of loading it again |
+
+It is opt-in: an app builds `dspjpeg.c` and sets `pic_dsp = &dspjpeg_port` when `dspjpeg_present()`.
+`tests/pic`: `make testdsp` runs every check of `make test` with `jpeg.a56` on Hatari's DSP core
+(`dsp_sim.c`; `../ec/fetch-hatari.sh` first): 361 checks, the damaged files under AddressSanitizer
+and UBSan included. Against Pillow it is closer than libjpeg's fast transform for 4:4:4 and grey
+(its transform is exact) and a little further for 4:2:0 (it repeats the chroma, as TJpgDec does,
+where libjpeg blends it). On Hatari's Falcon (`PICBENCH.TTP` in EWeb, its `PHOTO.JPG`) a 480 x 320
+photo took 2.69 s on the 68030 and 0.73 s with the DSP; shown at 192 x 128, 1.71 s and 0.89 s.
 
 ## Coming next
 

@@ -1,0 +1,449 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+; jpeg.a56 - a JPEG's transform, colour and upsampling on the Falcon's
+; DSP56001, for pic.c (src/pic.c's decode_dsp; atari/dspjpeg.c loads it).
+; The 68030 unpacks the Huffman codes and sends each MCU's coefficients
+; that are not 0; this program dequantises them, transforms each 8 x 8
+; block to M x M pixels (M = 1..8: the picture at M/8 of its size, each
+; pixel the average of the ones it covers), makes the colours from Y, Cb
+; and Cr (the chroma repeated over the luma it covers) and sends the MCU's
+; pixels back, as 5-6-5 (the picture's own) or as R G B bytes (for the
+; scaler).
+;
+; One MCU behind: an MCU's pixels go back after the next MCU has come, so
+; the DSP works out MCU n while the 68030 unpacks MCU n+1.
+;
+; Commands (a word each, then their words):
+;   1 LOADX  ADDR, N, then N words into X memory from ADDR
+;   4 LOADY  the same into Y memory
+;            (the setup: the 68030 writes the variables, the block table,
+;            the transform, the quantisers, the format's constants and
+;            the zeros where they are needed)
+;   2 MCU    COLS, ROWS (its pixels to send back), then for each block
+;            n and n words (c << 6 | k: coefficient c at k, natural order)
+;   3 END    the last MCU's pixels
+;   5 PING   "JPG" ($4A5047) back: the program is here, at its commands
+;
+; The setup, in X: M, NB (blocks in an MCU), PW (the MCU's width in
+; pixels), RH, RV (luma pixels a chroma sample covers, across and down),
+; NC (components: 1 or 3), FMT (0: 5-6-5, 1: R G B), 0 x 5, PW * 3 from
+; V_M; NB x (quantisers, plane, the plane's pitch - M, DC bias) at BT;
+; BLK 0; for grey, TRM 0 (M rows of PW * 3). In Y: the M x 8 transform
+; at AM, NC x 64 quantisers (Q * 32, natural order) at QT, the format's
+; 7 constants at CONSTS.
+;
+; Numbers: a dequantised coefficient F is F/2048 (the multiplier gives
+; c * Q * 2^12 in the low word of the product: no shift needed); the
+; transform's matrix is twice the true one (each entry below 1), so the
+; rows are t/1024 and the pixels p/512, shifted to p/256 as they are
+; stored (p: -128..127 about 0); a colour is shifted once more to
+; c/128, and moved to a register, which limits it to -1..1: the clamp.
+; Its top bits are the 8-bit value with the top bit inverted, which
+; the format's constant puts right.
+
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+
+; internal X: variables (short addresses, for DO), the block table, the
+; block and the transform's rows
+V_M	equ	$00
+V_NB	equ	$01
+V_PW	equ	$02
+V_RH	equ	$03
+V_RV	equ	$04
+V_NC	equ	$05
+V_FMT	equ	$06
+V_COLS	equ	$07
+V_ROWS	equ	$08
+V_PCOLS	equ	$09
+V_PROWS	equ	$0a
+V_PSKIP	equ	$0b
+V_PW3	equ	$0c
+V_BIAS	equ	$0d
+V_N	equ	$0e
+V_C	equ	$10
+V_R	equ	$11
+V_K	equ	$12
+BT	equ	$20		; 4 words a block, at most 8 blocks
+BLK	equ	$40		; 64, aligned for modulo 64
+TT	equ	$80		; 64: T[i][v] at TT + 8i + v, rows aligned for modulo 8
+
+; internal Y: the transform (M rows of 8) and the quantisers
+AM	equ	$00
+QT	equ	$40		; up to 3 x 64
+
+; external Y: the MCU's planes, its pixels, the format's constants
+YPL	equ	$0200		; luma, PW x PH (at most 16 x 16)
+CBP	equ	$0300		; Cb, M x M
+CRP	equ	$0340		; Cr
+OUT	equ	$0400		; the pixels, PW x PH
+CONSTS	equ	$0500		; 7 words, read in turn for each pixel
+; external X: the coefficients as they came, the colour terms
+INB	equ	$0200		; at most 8 x 65
+TRM	equ	$0600		; Rc Gc Bc for each luma column, M rows of PW
+
+; the colour constants, halved where they are above 1 (shifted back)
+K_RCR	equ	$59BA5E		; 1.402 / 2
+K_GCB	equ	$D3F35A		; -0.344136
+K_GCR	equ	$A49731		; -0.714136
+K_BCB	equ	$716873		; 1.772 / 2
+
+	org	p:$0
+	jmp	start
+
+	org	p:$40
+start
+	movep	#1,x:$ffe0		; port B is the host port
+	movep	#0,x:$fffe		; no wait states
+
+cmd
+	jsr	rd
+	move	x0,a
+	move	#>2,x1
+	cmp	x1,a
+	jeq	mcu
+	move	#>1,x1
+	cmp	x1,a
+	jeq	ldx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	ldy
+	move	#>3,x1
+	cmp	x1,a
+	jeq	fin
+	move	#>5,x1
+	cmp	x1,a
+	jeq	ping
+	jmp	cmd
+
+; ---- PING: "JPG" back, so the 68030 knows this program is still here
+ping
+	move	#>$4A5047,x1
+pw	jclr	#1,x:HSR,pw
+	movep	x1,x:HRX
+	jmp	cmd
+
+; ---- LOADX, LOADY: words into memory (the setup, written by the 68030)
+ldx
+	jsr	rdan
+	do	x0,lx1
+	jsr	rd
+	move	x0,x:(r0)+
+lx1
+	jmp	cmd
+ldy
+	jsr	rdan
+	do	x0,ly1
+	jsr	rd
+	move	x0,y:(r0)+
+ly1
+	jmp	cmd
+rdan
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	rts
+
+; ---- END: the last MCU's pixels
+fin
+	jsr	send
+	jmp	cmd
+
+; ---- MCU
+mcu
+	jsr	rd
+	move	x0,x:V_COLS
+	jsr	rd
+	move	x0,x:V_ROWS
+	; its blocks' coefficients, as they come
+	move	#INB,r0
+	do	x:V_NB,mc1
+	jsr	rd
+	move	x0,x:(r0)+
+	move	x0,a
+	tst	a
+	jeq	mc2
+	do	x0,mc3
+mc4	jclr	#0,x:HSR,mc4
+	movep	x:HRX,x:(r0)+
+mc3
+	nop
+mc2
+	nop
+mc1
+	; the last one's pixels, now that this one is here
+	jsr	send
+	move	x:V_COLS,x0
+	move	x0,x:V_PCOLS
+	move	x:V_ROWS,x0
+	move	x0,x:V_PROWS
+	move	x:V_PW,a
+	move	x:V_COLS,x0
+	sub	x0,a
+	move	a1,x:V_PSKIP
+
+	; each block: dequantised into BLK, transformed into its plane. Only
+	; the columns up to the last one used (K) and the rows up to the
+	; last one used (R) are worked on: most blocks have one or two
+	move	#INB,r0
+	move	r0,x:V_N
+	move	#BT,r3
+	do	x:V_NB,blk
+	move	x:V_N,r0
+	move	x:(r3)+,r6		; its quantisers
+	move	x:(r3)+,r5		; where its pixels go
+	move	x:(r3)+,n5		; the plane's pitch - M
+	move	x:(r3)+,x0
+	move	x0,x:V_BIAS		; DC + 4: the pixels rounded
+	clr	b
+	move	b,x:V_C			; the last column used
+	move	b,x:V_R			; the last row used
+	move	x:(r0)+,x0		; its coefficients
+	move	x0,a
+	tst	a	#BLK,r1
+	jeq	dq0
+	move	#>$ffffc0,x1
+	move	#>$00003f,y1
+	do	x0,dq1
+	move	x:(r0)+,a		; c << 6 | k
+	tfr	a,b
+	and	x1,a			; c << 6
+	and	y1,b			; k
+	move	b1,n6
+	move	b1,n1
+	move	a1,x0
+	move	y:(r6+n6),y0		; Q * 32
+	mpy	x0,y0,a			; c * Q * 2^12 in a0: F / 2048
+	move	a0,x:(r1+n1)
+	move	#>7,x0
+	and	x0,b	x:V_C,a		; k's column
+	move	b1,x0
+	cmp	x0,a
+	tlt	x0,a
+	move	a1,x:V_C
+dq1
+	; k's in natural order: the last is in the last row used
+	move	n1,x0
+	move	#>$100000,y0
+	mpy	x0,y0,a			; k >> 3
+	move	a1,x:V_R
+dq0
+	move	r0,x:V_N
+	move	x:BLK,a
+	move	x:V_BIAS,x0
+	add	x0,a
+	move	a1,x:BLK
+	move	x:V_R,a
+	move	x:V_C,b
+	add	a,b
+	tst	b	#8,n0
+	jeq	dconly			; the DC alone: every pixel the same
+
+	; the columns: T[i][v] = sum over u < R of A[i][u] F[u][v], v < K
+	move	#>1,x0			; R - 1, at least 1 (REP 0 would be 65536)
+	cmp	x0,a
+	tlt	x0,a
+	move	a1,x:V_R
+	move	#>7,b
+	sub	a,b
+	move	b1,n4			; past A's other columns
+	move	x:V_C,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_K		; K columns
+	movec	#63,m0
+	move	#8,n1
+	move	#BLK,r2
+	move	#TT,r7			; (r3 is the block table's)
+	do	x:V_K,p1c
+	move	r2,r0
+	move	r7,r1
+	move	#AM,r4
+	do	x:V_M,p1r
+	clr	a	x:(r0)+n0,x0	y:(r4)+,y0
+	rep	x:V_R
+	mac	x0,y0,a	x:(r0)+n0,x0	y:(r4)+,y0
+	macr	x0,y0,a	(r4)+n4
+	move	r2,r0
+	move	a,x:(r1)+n1
+p1r
+	move	(r2)+
+	move	(r7)+
+p1c
+	movec	#$ffff,m0
+	; the rows: p[i][j] = sum over v < K of A[j][v] T[i][v]
+	move	#8,n2
+	move	x:V_C,a
+	tst	a	#TT,r2
+	jeq	k1			; one column: each row the same
+	move	a1,x:V_K		; K - 1
+	move	#>7,b
+	sub	a,b
+	move	b1,n4
+	move	b1,n0
+	movec	#7,m0
+	do	x:V_M,p2r
+	move	r2,r0
+	move	#AM,r4
+	nop
+	do	x:V_M,p2c
+	clr	a	x:(r0)+,x0	y:(r4)+,y0
+	rep	x:V_K
+	mac	x0,y0,a	x:(r0)+,x0	y:(r4)+,y0
+	macr	x0,y0,a	(r4)+n4
+	asl	a	(r0)+n0
+	move	a,y:(r5)+
+p2c
+	move	(r5)+n5
+	move	(r2)+n2
+p2r
+	movec	#$ffff,m0
+	jmp	zero
+
+	; one column: p[i][j] = A[j][0] T[i][0], the same for every j
+k1
+	move	y:AM,y0
+	do	x:V_M,k2
+	move	x:(r2)+n2,x0
+	mpyr	x0,y0,a
+	asl	a
+	rep	x:V_M
+	move	a,y:(r5)+
+	move	(r5)+n5
+k2
+	jmp	zero
+
+	; the DC alone: A[0][0]^2 F[0][0] everywhere
+dconly
+	move	x:BLK,x0
+	move	y:AM,y0
+	mpyr	x0,y0,a
+	move	a,x0
+	mpyr	x0,y0,a
+	asl	a
+	do	x:V_M,dc2
+	rep	x:V_M
+	move	a,y:(r5)+
+	move	(r5)+n5
+dc2
+
+	; the rows used, 0 again
+zero
+	clr	a	#BLK,r1
+	move	x:V_R,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x0
+	do	x0,c0
+	rep	#8
+	move	a,x:(r1)+
+c0
+	nop
+blk
+	nop
+
+	; the colour terms, for each luma column (chroma repeated RH times)
+	move	x:V_NC,a
+	move	#>1,x0
+	cmp	x0,a
+	jeq	col
+	move	#CBP,r4
+	move	#CRP,r5
+	move	#TRM,r1
+	do	x:V_M,t1
+	do	x:V_M,t2
+	move	y:(r4)+,x0		; Cb
+	move	y:(r5)+,x1		; Cr
+	move	#>K_GCB,y0
+	mpy	x0,y0,a
+	move	#>K_GCR,y0
+	mac	x1,y0,a			; Gc
+	move	#>K_RCR,y0
+	mpy	x1,y0,b
+	asl	b			; Rc
+	move	a,y1
+	move	b,x1
+	move	#>K_BCB,y0
+	mpy	x0,y0,a
+	asl	a			; Bc
+	move	a,x0
+	do	x:V_RH,t3
+	move	x1,x:(r1)+
+	move	y1,x:(r1)+
+	move	x0,x:(r1)+
+t3
+	nop
+t2
+	nop
+t1
+
+	; the pixels
+col
+	move	#YPL,r4
+	move	#OUT,r5
+	move	#TRM,r2
+	move	x:V_PW3,n2
+	move	#CONSTS,r6
+	movec	#6,m6			; the format's 7 constants, in turn
+	do	x:V_M,d1
+	do	x:V_RV,d2
+	move	r2,r1
+	nop
+	do	x:V_PW,d3
+	move	x:(r1)+,x0	y:(r4)+,y0	; Rc, Y
+	tfr	y0,a	x:(r1)+,x1		; Gc
+	add	x0,a	x:(r1)+,x0		; Y + Rc; Bc
+	asl	a
+	tfr	y0,b	a,y1			; y1 = R, limited
+	add	x1,b
+	asl	b
+	tfr	y0,a	b,x1			; x1 = G
+	add	x0,a	y:(r6)+,x0		; Y + Bc; R's mask
+	asl	a
+	tfr	y1,b	a,y0			; y0 = B
+	and	x0,b	y:(r6)+,y1		; R's top bits; its shift
+	move	b1,x0
+	mpyr	x0,y1,b	y:(r6)+,x0		; R moved down (rounded: by $7FFFFF it stays); G's mask
+	tfr	x1,a	y:(r6)+,y1		; G; its shift
+	and	x0,a	y:(r6)+,x0		; G's top bits; B's mask
+	move	a1,x1
+	mac	x1,y1,b	y:(r6)+,y1		; + G moved down; B's shift
+	tfr	y0,a
+	and	x0,a	y:(r6)+,x0		; B's top bits; the top bits' fix
+	move	a1,x1
+	mac	x1,y1,b
+	add	x0,b
+	move	b1,y:(r5)+
+d3
+	nop
+d2
+	move	(r2)+n2
+d1
+
+cdone
+	movec	#$ffff,m6
+	jmp	cmd
+
+; ---- the last MCU's pixels: PROWS rows of PCOLS (from OUT, PW a row)
+send
+	move	x:V_PROWS,a
+	tst	a
+	jeq	sn0
+	move	#OUT,r5
+	move	x:V_PSKIP,n5
+	do	x:V_PROWS,sn1
+	do	x:V_PCOLS,sn2
+sn3	jclr	#1,x:HSR,sn3
+	movep	y:(r5)+,x:HRX
+sn2
+	move	(r5)+n5
+sn1
+	clr	a
+	move	a,x:V_PROWS
+sn0
+	rts
+
+; ---- host port
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
