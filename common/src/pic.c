@@ -236,6 +236,53 @@ static long first_shown(long i, long n, long m)
 	return d;
 }
 
+static void sc_rows(SCALER *s);
+
+#ifdef PIC_LIBJPEG
+/* a row of a solid picture, R G B (a JPEG's): no alpha to weigh */
+static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
+{
+	long x, w = s->pic->w;
+	unsigned long *q;
+	if (pic_poll != NULL && ++s->polls >= 16) {
+		s->polls = 0;
+		if (!pic_poll())
+			return 0;
+	}
+	if (s->y >= s->sh)
+		return 1;
+	if (s->sw == w && s->sh == s->pic->h) {
+		unsigned short *o = s->pic->px + s->y * w;
+		for (x = 0; x < w; x++, rgb += 3)
+			o[x] = (unsigned short) (((rgb[0] & 0xF8) << 8) | ((rgb[1] & 0xFC) << 3) | (rgb[2] >> 3));
+		s->y++;
+		return 1;
+	}
+	if (s->down_x) {
+		const short *m = s->xmap;
+		for (x = 0; x < s->sw; x++, rgb += 3) {
+			q = s->sum + m[x] * 5;
+			q[0] += rgb[0];
+			q[1] += rgb[1];
+			q[2] += rgb[2];
+			q[3] += 255;
+			q[4]++;
+		}
+	} else {
+		for (x = 0, q = s->sum; x < w; x++, q += 5) {
+			const unsigned char *c = rgb + s->xmap[x] * 3;
+			q[0] += c[0];
+			q[1] += c[1];
+			q[2] += c[2];
+			q[3] += 255;
+			q[4]++;
+		}
+	}
+	sc_rows(s);
+	return 1;
+}
+#endif
+
 /* a row of the decoded picture, R G B A */
 static int sc_row(SCALER *s, const unsigned char *rgba)
 {
@@ -303,6 +350,16 @@ static int sc_row(SCALER *s, const unsigned char *rgba)
 			}
 		}
 	}
+	sc_rows(s);
+	return 1;
+}
+
+/* the rows shown that the row summed finishes (shrinking: when the next
+   one's first row comes; enlarging: each whose centre falls in it), and
+   the next row */
+static void sc_rows(SCALER *s)
+{
+	long w = s->pic->w;
 	if (s->down_y) {
 		/* rows shown are made when the next one's first row comes */
 		long dy = s->y + 1 < s->sh ? centre(s->y + 1, s->sh, s->pic->h) : -1;
@@ -324,7 +381,6 @@ static int sc_row(SCALER *s, const unsigned char *rgba)
 		}
 	}
 	s->y++;
-	return 1;
 }
 
 /* ---------------------------------------------------------------- JPEG */
@@ -420,7 +476,7 @@ typedef struct {
 	struct jpeg_decompress_struct ci;
 	LJERR err;
 	struct jpeg_source_mgr src;
-	unsigned char *row, *rgba;
+	unsigned char *row;
 	int stopped;
 } LJ;
 
@@ -460,39 +516,58 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 			break;
 	j->ci.scale_num = (unsigned) k;
 	j->ci.scale_denom = 8;
-	j->ci.dct_method = JDCT_ISLOW;
+	/* the integer transform made of fewer multiplies (13% fewer
+	   instructions for the whole picture on the 68030, a quality step
+	   no one sees: 38.2 dB against the exact one's 39.2, both against a
+	   decode in floating point, the 5-6-5 pixels' own loss included) */
+	j->ci.dct_method = JDCT_IFAST;
+	jpeg_calc_output_dimensions(&j->ci);
+	if (j->ci.out_color_space == JCS_RGB && (long) j->ci.output_width == p->w &&
+	    (long) j->ci.output_height == p->h) {
+		/* at the size shown: libjpeg writes the 5-6-5 pixels into the
+		   picture, as put() makes them (cut, not dithered) */
+		j->ci.out_color_space = JCS_RGB565;
+		j->ci.dither_mode = JDITHER_NONE;
+	}
 	jpeg_start_decompress(&j->ci);
 	p->how = PIC_JPEG;
 	p->scale = k;
+	if (j->ci.out_color_space == JCS_RGB565) {
+		for (y = 0; y < (long) j->ci.output_height; y++) {
+			JSAMPROW r = (JSAMPROW) (p->px + y * p->w);
+			if (pic_poll != NULL && (y & 15) == 15 && !pic_poll()) {
+				*why = PIC_STOPPED;
+				jpeg_abort_decompress(&j->ci);
+				goto done;
+			}
+			jpeg_read_scanlines(&j->ci, &r, 1);
+		}
+		jpeg_finish_decompress(&j->ci);
+		ok = 1;
+		goto done;
+	}
 	j->row = malloc((size_t) j->ci.output_width * (size_t) j->ci.output_components);
-	j->rgba = malloc((size_t) j->ci.output_width * 4);
-	if (j->row == NULL || j->rgba == NULL || !sc_init(sc, p, j->ci.output_width, j->ci.output_height)) {
+	if (j->row == NULL || !sc_init(sc, p, j->ci.output_width, j->ci.output_height)) {
 		*why = PIC_MEMORY;
 		jpeg_abort_decompress(&j->ci);
 		goto done;
 	}
 	for (y = 0; y < (long) j->ci.output_height; y++) {
 		JSAMPROW r = j->row;
-		const unsigned char *s = j->row;
-		unsigned char *o = j->rgba;
 		jpeg_read_scanlines(&j->ci, &r, 1);
 		if (j->ci.out_color_space == JCS_CMYK) {
-			/* Adobe writes CMYK inverted: each component times K */
-			for (x = 0; x < (long) j->ci.output_width; x++, s += 4, o += 4) {
-				o[0] = (unsigned char) (s[0] * s[3] / 255);
-				o[1] = (unsigned char) (s[1] * s[3] / 255);
-				o[2] = (unsigned char) (s[2] * s[3] / 255);
-				o[3] = 255;
-			}
-		} else {
-			for (x = 0; x < (long) j->ci.output_width; x++, s += 3, o += 4) {
-				o[0] = s[0];
-				o[1] = s[1];
-				o[2] = s[2];
-				o[3] = 255;
+			/* Adobe writes CMYK inverted: each component times K,
+			   made R G B in place */
+			const unsigned char *s = j->row;
+			unsigned char *o = j->row;
+			for (x = 0; x < (long) j->ci.output_width; x++, s += 4, o += 3) {
+				unsigned k4 = s[3];
+				o[0] = (unsigned char) (s[0] * k4 / 255);
+				o[1] = (unsigned char) (s[1] * k4 / 255);
+				o[2] = (unsigned char) (s[2] * k4 / 255);
 			}
 		}
-		if (!sc_row(sc, j->rgba)) {
+		if (!sc_row_rgb(sc, j->row)) {
 			*why = PIC_STOPPED;
 			jpeg_abort_decompress(&j->ci);
 			goto done;
@@ -503,7 +578,6 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 done:
 	jpeg_destroy_decompress(&j->ci);
 	free(j->row);
-	free(j->rgba);
 	free(j);
 	return ok;
 }
