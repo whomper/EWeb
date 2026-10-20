@@ -88,6 +88,8 @@ typedef struct browser {
 
 	/* settings */
 	int pictures;		/* pictures are shown (1, the default) */
+	int snapshot;		/* pages through the Pi's browser: webgate's snapshots,
+				   after their scripts ran (with the gateway only) */
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */

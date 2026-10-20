@@ -38,7 +38,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0 };
 browser br;
 int loading;
 static short quit;
@@ -87,6 +87,9 @@ static const MBAR_ITEM m_view[] = {
 	{ "Actual size", "^0", C_ACTUAL },
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
+	{ "-", 0, 0 },
+	{ "Through the Pi's browser", 0, C_SNAPSHOT },
+	{ "Live view", 0, C_LIVE },
 	{ 0, 0, 0 }
 };
 /* Bookmarks: the commands, then the first BM_MENU bookmarks, made again
@@ -196,6 +199,8 @@ void menu_update(void)
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
 	enable(C_PICTURES, !loading);
+	enable(C_SNAPSHOT, !loading && http_gateway[0]);
+	enable(C_LIVE, !loading && http_gateway[0]);
 	enable(C_BMADD, !loading && br.cur >= 0 && strncmp(br.url, "about:", 6) != 0);
 	enable(C_BMSHOW, !loading);
 	{
@@ -212,6 +217,9 @@ void menu_update(void)
 		i = mbar_object(&mb, C_FALCON);
 		if (i >= 0)
 			menu_icheck(mb.tree, i, opt.falcon ? 1 : 0);
+		i = mbar_object(&mb, C_SNAPSHOT);
+		if (i >= 0)
+			menu_icheck(mb.tree, i, opt.snapshot && http_gateway[0] ? 1 : 0);
 	}
 }
 
@@ -270,6 +278,8 @@ static void settings_load(void)
 			str_copy(opt.gate, eq, sizeof opt.gate);
 		else if (!strcmp(line, "GATEPORT"))
 			opt.gateport = (unsigned short) atoi(eq);
+		else if (!strcmp(line, "SNAPSHOT"))
+			opt.snapshot = atoi(eq) != 0;
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -350,6 +360,9 @@ int settings_save(void)
 	    "(aera-gateway install web on the Pi)");
 	snprintf(v, sizeof v, "%u", opt.gateport);
 	put(&s, "GATEPORT", v, "the gateway's port");
+	snprintf(v, sizeof v, "%d", opt.snapshot);
+	put(&s, "SNAPSHOT", v, "1: pages through the Pi's browser, after their scripts ran (the gateway's "
+	    "snapshots; View menu), 0: as the servers send them");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -684,6 +697,33 @@ static void home(void)
 	go(opt.home[0] ? opt.home : "about:start");
 }
 
+/* live view: the Pi's browser on the screen, showing the page shown here
+   (webgate's own page, http://webgate/live) */
+static void live_view(void)
+{
+	char u[4200];
+	const char *s = br.url;
+	long n = 0;
+	n = snprintf(u, sizeof u, "http://webgate/live");
+	if (br.cur >= 0 && (strncmp(s, "http:", 5) == 0 || strncmp(s, "https:", 6) == 0)) {
+		static const char hex[] = "0123456789ABCDEF";
+		n += snprintf(u + n, sizeof u - n, "?url=");
+		for (; *s && *s != '#' && n < (long) sizeof u - 4; s++) {
+			unsigned char c = (unsigned char) *s;
+			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			    c == '-' || c == '.' || c == '_' || c == '~') {
+				u[n++] = (char) c;
+			} else {
+				u[n++] = '%';
+				u[n++] = hex[c >> 4];
+				u[n++] = hex[c & 15];
+			}
+		}
+		u[n] = 0;
+	}
+	go(u);
+}
+
 /* the search engine's own page: the search address up to its question
    (FrogFind's http://frogfind.com/?q=%s: http://frogfind.com/) */
 static void search_home(void)
@@ -892,6 +932,19 @@ void command(int cmd)
 			graf_mouse(ARROW, 0);
 			win_page_relaid();
 		}
+		break;
+	case C_SNAPSHOT:
+		/* a setting: on the disk at once (6.5); the page shown comes again
+		   the other way */
+		opt.snapshot = (short) !opt.snapshot;
+		br.snapshot = opt.snapshot;
+		settings_save();
+		log_event("snapshots %s", opt.snapshot ? "on" : "off");
+		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0 && strncmp(br.url, "file:", 5) != 0)
+			command(C_RELOAD);
+		break;
+	case C_LIVE:
+		live_view();
 		break;
 	case C_SETTINGS: {
 		int pics = opt.pictures, zoom = opt.zoom, changed;
@@ -1317,6 +1370,7 @@ int main(void)
 	br.say = say;
 	br.log = log_line;
 	br.can_open = can_open;
+	br.snapshot = opt.snapshot;
 	win_open();
 	menu_update();
 	crash_offer("EWeb", "in EWeb's folder");

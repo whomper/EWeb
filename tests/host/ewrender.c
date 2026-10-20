@@ -40,7 +40,9 @@
  * link's file to FILE instead (Alternate-click). Each prints what it
  * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
- * -W GATEWAY goes through AERA-Gateway's webgate (as EWEB.INF's GATEWAY=).
+ * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
+ * Pi gateway); -R then asks for pages through the Pi's browser (View >
+ * Through the Pi's browser: webgate's snapshots).
  * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
  */
@@ -291,7 +293,7 @@ int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1;
-	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, i, r;
+	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, i, r;
 	PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
 	char where[4096];
@@ -344,6 +346,8 @@ int main(int argc, char **argv)
 			str_copy(http_gateway, argv[++i], sizeof http_gateway);
 		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
 			dc_dir(argv[++i], 8L << 20);
+		else if (!strcmp(argv[i], "-R"))
+			snapshot = 1;
 		else if (!strcmp(argv[i], "-A"))
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
@@ -400,6 +404,7 @@ int main(int argc, char **argv)
 	b.ud = &verbose;
 	b.extra_css = extra.s;
 	b.pictures = !nopics;
+	b.snapshot = snapshot;
 	if (band) {
 		pic_pal_init(&pal, 16, falcon16);
 		img_pal = &pal;
@@ -536,6 +541,8 @@ int main(int argc, char **argv)
 		long k;
 		printf("page %d x %d, background %06lx, %ld items, %d links, title \"%s\"\n", (int) p->width,
 		       (int) p->height, (unsigned long) p->bg, p->nitems, p->nlinks, b.d->title);
+		if (verbose)
+			printf("address %s, security \"%s\"\n", b.url, b.security);
 		for (k = 0; k < p->nitems; k++) {
 			const dl_item *it = &p->items[k];
 			if (it->type == DL_FILL)

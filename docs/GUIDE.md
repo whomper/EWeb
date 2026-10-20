@@ -270,10 +270,28 @@ show:
 - pictures in the background of a page or a box (CSS
   `background-image`), WebP and AVIF pictures (EWeb asks servers for
   JPEG, PNG and GIF, which most send then), and SVG drawings
-- anything made by JavaScript
+- anything made by JavaScript (but see [Pages made by
+  scripts](#pages-made-by-scripts))
 
 Sites made for small screens and for text, such as FrogFind, 68k.news,
 Wikipedia and many blogs, read well.
+
+## Pages made by scripts
+
+With the Pi gateway set up for it (`aera-gateway` with its browser, on
+the Pi), two things in the View menu use the Pi's own web browser:
+
+- **Through the Pi's browser:** each page is opened by the browser on
+  the Pi, its scripts run there, and EWeb shows the page as it then
+  stands: a snapshot. Links and forms work as on any page; the info line
+  says "a snapshot from the Pi's browser". Turn it off for pages that
+  don't need it: they come quicker straight from their servers.
+- **Live view:** the Pi's browser's screen as a picture, with the page
+  shown in EWeb opened there. A click on the picture is a click there;
+  type into the field under it and press Type (or Type and Enter), or use
+  the buttons for keys, scrolling and Back. For what a snapshot can't
+  do: a login made by scripts, a cookie question, a puzzle. "As a page"
+  brings what the Pi's browser shows back as a page in EWeb.
 
 ## Secure sites
 

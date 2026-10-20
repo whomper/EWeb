@@ -22,6 +22,7 @@ typedef struct {
 	short pictures;			/* PICTURES=: shown (1), or only their alt text (0) */
 	char gate[64];			/* GATE=: the Pi gateway (AERA-Gateway's webgate), "" none */
 	unsigned short gateport;	/* GATEPORT=: its port, 8280 */
+	short snapshot;			/* SNAPSHOT=: pages through the Pi's browser (webgate's snapshots) */
 } EWOPT;
 extern EWOPT opt;
 
@@ -115,7 +116,7 @@ enum {
 	C_NONE, C_ABOUT,
 	C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
-	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
+	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
 	C_SETTINGS, C_FALCON, C_SETHOME, C_COOKIES, C_CACHE,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW,

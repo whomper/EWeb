@@ -991,6 +991,27 @@ cookie) and EWGET through it in Hatari (`make hatarinet`), from EWeb's copy of A
 `gateway/` (`tools/sync-gateway.sh`). It is in AERA-Gateway 1.2 (`aera-gateway install web`, port
 8280 assigned to EWeb). Next: snapshots (Chromium on the Pi), live view, and the ST edition.
 
+## Gateway mode: the Pi's browser, snapshots and live view (20 Oct 2026)
+
+webgate's `--browser` (AERA-Gateway 1.2 has it; the recipe leaves it out until Erez decides on
+Chromium and Xvfb for the Pi) hands an address to an ordinary Chromium on the Pi with webgate-ext
+loaded, no automation protocol: the extension long-polls webgate on 127.0.0.1:8281, opens the page,
+and once it has been quiet for 800 ms (8 s at most) sends it back as plain HTML: no scripts or
+handlers, each canvas as a picture, the fields as filled, a `<base>` so that EWeb fetches the
+stylesheets and pictures through webgate as usual. EWeb asks for that with `X-Gateway-Snapshot: 1`
+on a page's GET (View > Through the Pi's browser, `SNAPSHOT=`), not looked for in or kept in the
+disk cache; the answer's `X-Gateway-Snapshot-URL` becomes the page's address, and the info line says
+"a snapshot from the Pi's browser". Live view (View > Live view) is webgate's own page,
+`http://webgate/live?url=...`: the browser's screen as a 608-pixel JPEG in a picture button (EWeb's
+forms send its x and y), a field to type into and buttons for keys; webgate turns them into real
+input with xdotool and answers 303 back to the page. The home network rule (7.3) holds for the
+browser: webgate gives it only http and https addresses outside it, and the extension blocks
+requests into it as far as an address shows it (the owner session's review). Tested: webgate's
+unit tests with a stand-in extension and xdotool, a real Chromium in Xvfb (click, type, a script
+run, "As a page"; the home network refused and blocked), and `make itest`'s two cases through
+`ewrender -R` and the live page with a stand-in extension. Measured here: Chromium 597 MB on the
+disk, 385 MB of memory with one simple page; Erez's Pi is probably a Pi 4.
+
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 
 `EWEBST.PRG` is the same sources as `EWEB.PRG` built as 68000 code (`-fno-store-merging

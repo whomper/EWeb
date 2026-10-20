@@ -630,10 +630,19 @@ int http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int err
 		if (http_gateway[0]) {
 			/* how the Pi reached the server (webgate's X-Gateway-TLS) */
 			char v[80];
+			char at[2048];
+			URL su;
 			if (http_header(rs, "X-Gateway-TLS", v, sizeof(v)))
 				snprintf(rs->security, sizeof(rs->security), "%.70s, through the gateway", v);
 			else
 				rs->security[0] = 0;
+			/* a snapshot from the Pi's browser: where the browser ended up
+			   is the page's address (its links are relative to it) */
+			if (http_header(rs, "X-Gateway-Snapshot-URL", at, sizeof(at)) && url_parse(&su, at, NULL) &&
+			    su.special) {
+				rs->url = su;
+				snprintf(rs->security, sizeof(rs->security), "a snapshot from the Pi's browser");
+			}
 		}
 		if (rq->no_redirect || !h.location[0] ||
 		    (rs->status != 301 && rs->status != 302 && rs->status != 303 &&

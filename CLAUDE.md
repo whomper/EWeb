@@ -100,6 +100,8 @@ hub stay complete, with the evidence.
   The Pi gateway (Settings > Secure: `FALCON=0`, `GATE=`, `GATEPORT=`; EWGET `-g`, ewrender `-W`) is AERA-Gateway's `webgate.py`, whose
   protocol EWeb's session owns (AERA-Gateway's owner session commits it): `make itest` and `make
   hatarinet` run it from EWeb's read-only `gateway/` copy (`tools/sync-gateway.sh`; `WEBGATE=` for another).
+  Its `--browser` (snapshots: View > Through the Pi's browser, `SNAPSHOT=`, ewrender `-R`; live view:
+  `http://webgate/live`) is tested by `make itest` with a stand-in for webgate-ext.
   Every Hatari rig boots the family's machines (`common/tools/machines.py`): Erez's TOS 4.04 from
   `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
   Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).

@@ -27,6 +27,7 @@ ewrender = os.path.abspath(sys.argv[3]) if len(sys.argv) > 4 else None
 font = os.path.abspath(sys.argv[4]) if len(sys.argv) > 4 else None
 os.makedirs(work, exist_ok=True)
 HTTP, HTTPS, BAD, EC, GATE = 18080, 18443, 18444, 18445, 18288
+GATE2, EXT = 18298, 18299	# webgate with --browser, and its extension's port
 # AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
 # gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
@@ -42,6 +43,78 @@ checks = 0
 def run(*args, cwd=None):
     p = subprocess.run([ewget] + list(args), cwd=cwd or work, capture_output=True, text=True, timeout=120)
     return p.returncode, p.stdout + p.stderr
+
+
+def snapshots():
+    """the Pi's browser, through webgate --browser (View > Through the Pi's
+    browser, View > Live view): a stand-in for webgate-ext answers as it
+    does, a page "made by script" for an address, a JPEG for the screen"""
+    import http.client
+    import json
+    import threading
+    import urllib.request
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE2), "--bind", "127.0.0.1", "--allow-local",
+                             "--cafile", os.path.join(work, "CACERT.PEM"), "--browser", "--browser-port", str(EXT)],
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    stop = []
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    jpeg = opener.open("http://localhost:%d/site/photo.jpg" % HTTP).read()
+
+    def extension():
+        while not stop:
+            try:
+                c = http.client.HTTPConnection("127.0.0.1", EXT, timeout=30)
+                c.request("GET", "/next")
+                r = c.getresponse()
+                body = r.read()
+                if r.status != 200:
+                    c.close()
+                    continue
+                w = json.loads(body)
+                if w.get("shot"):
+                    c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg)
+                else:
+                    url = w["url"] or "https://localhost:%d/site/now.html" % HTTPS
+                    page = ("<!DOCTYPE html><html><head><base href='%s'><title>Made by script</title></head>"
+                            "<body><p>The page as the browser shows it: %s</p><a href='next.html'>next</a>"
+                            % (url, url))
+                    c.request("POST", "/snapshot?id=" + w["id"], body=json.dumps(
+                        {"url": url + "#shown", "title": "Made by script", "html": page}).encode())
+                c.getresponse().read()
+                c.close()
+            except OSError:
+                import time
+                time.sleep(0.2)
+
+    t = threading.Thread(target=extension, daemon=True)
+    g = "127.0.0.1:%d" % GATE2
+    try:
+        import time
+        for _ in range(50):
+            try:
+                if b"webgate" in opener.open("http://%s/" % g).read():
+                    break
+            except OSError:
+                time.sleep(0.1)
+        t.start()
+        page = "https://localhost:%d/site/page.html" % HTTPS
+        p = subprocess.run([ewrender, "-f", font, "-W", g, "-R", "-v", "-d", page], cwd=work,
+                           capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        check("the Pi's browser: a page as it shows it", p.returncode == 0 and 'title "Made by script"' in out
+              and "a snapshot from the Pi's browser" in out and page + "#shown" in out, out)
+        live = "http://webgate/live?url=" + urllib.request.quote(page, safe="")
+        p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", live], cwd=work,
+                           capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        check("the Pi's browser: live view, its screen a picture button", p.returncode == 0
+              and 'title "Live: Made by script"' in out
+              and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None, out)
+    finally:
+        stop.append(1)
+        gate.terminate()
+        gate.wait(timeout=10)
 
 
 def check(name, ok, out):
@@ -425,6 +498,8 @@ try:
         finally:
             gate.terminate()
             gate.wait(timeout=10)
+        if ewrender:
+            snapshots()
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)

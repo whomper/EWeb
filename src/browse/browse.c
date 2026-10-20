@@ -576,7 +576,10 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		   else the server is asked whether it changed */
 		str_copy(key, url, sizeof key);
 		key[strcspn(key, "#")] = 0;
-		if (post == NULL && dc_get(key, &got)) {
+		/* a page through the Pi's browser: a snapshot of it as it is now,
+		   never kept (webgate says no-store), so not looked for either */
+		int snap = b->snapshot && accept == NULL && post == NULL && http_gateway[0];
+		if (post == NULL && !snap && dc_get(key, &got)) {
 			if (fresh != 1 && (got.fresh || fresh == 2)) {
 				f->data = got.data;
 				f->len = got.len;
@@ -603,7 +606,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		}
 		memset(&rq, 0, sizeof rq);
 		rq.url = url;
-		rq.headers = have ? got.validate : NULL;
+		rq.headers = have ? got.validate : snap ? "X-Gateway-Snapshot: 1\r\n" : NULL;
 		rq.accept = accept;
 		if (post != NULL) {
 			rq.method = "POST";
