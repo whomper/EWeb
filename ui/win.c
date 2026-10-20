@@ -2,7 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * win.c - EWeb's window, as a browser's: a toolbar along the top (Back,
- * Forward, Reload or Stop while a page loads, Home, and the address,
+ * Forward, Reload, Home, Search and Stop as pictures with their names
+ * under them, flat until the mouse is over one; the address under them,
  * which can be typed into), the page under it with the window's own
  * slider, and the status on the info line (a link's address under the
  * mouse, what a load is doing). The page is drawn by screen.c; scrolling
@@ -19,6 +20,7 @@
 #include "form.h"
 #include "iconify.h"
 #include "util.h"
+#include "tbicons.h"
 
 short win_h = -1;
 short win_iconified;
@@ -34,27 +36,24 @@ static char title[160];
 
 /* ---------------------------------------------------------------- the toolbar */
 
-enum { B_BACK, B_FORWARD, B_RELOAD, B_HOME, NBUT };
+/* the buttons, in the order of tbicons.h's pictures */
+enum { B_BACK, B_FORWARD, B_RELOAD, B_HOME, B_SEARCH, B_STOP, NBUT };
+static const char *const names[NBUT] = { "Back", "Forward", "Reload", "Home", "Search", "Stop" };
 static GRECT but[NBUT];
-
-static const char *label(int i)
-{
-	switch (i) {
-	case B_BACK: return "\x04";		/* the system font's arrows */
-	case B_FORWARD: return "\x03";
-	case B_RELOAD: return loading ? "Stop" : "Reload";
-	case B_HOME: return "Home";
-	}
-	return "";
-}
+static int hot = -1;			/* the button under the mouse: framed */
+static int sunk = -1;			/* the one held down: framed, sunk */
+static short tall;			/* the 20-row pictures (else the 10-row ones) */
+static short small_h = -1;		/* the system font's height, to come back to */
 
 static int enabled(int i)
 {
 	switch (i) {
 	case B_BACK: return !loading && br_can_back(&br);
 	case B_FORWARD: return !loading && br_can_forward(&br);
-	case B_RELOAD: return loading || br.cur >= 0;
+	case B_RELOAD: return !loading && br.cur >= 0;
 	case B_HOME: return !loading;
+	case B_SEARCH: return !loading && opt.search[0];
+	case B_STOP: return loading;
 	}
 	return 0;
 }
@@ -64,24 +63,35 @@ static int enabled(int i)
 static char addr[1024];
 static int a_focus, a_cur, a_first, a_all;
 
+/* the buttons' names: the 8x8 font where the system's is 8x16, else the
+   6x6 one (in an 8-pixel cell) */
+static short small_w = 6;
+#define SMALL_H 8
+#define LOC_W (10 * small_w + 4)	/* "Location:" before the address */
+
 static void layout(void)
 {
-	short x, i, bh = gl_hchar + 4, th = gl_hchar + 10;
+	short x, i, ih, bh, row, th;
+	tall = gl_hchar >= 16;
+	small_w = tall ? 8 : 6;
+	ih = tall ? TB_TALL : TB_SHORT;
+	bh = 3 + ih + 2 + SMALL_H + 2;	/* a button: its picture, its name under it */
+	row = bh + 4;
+	th = row + gl_hchar + 8;
 	r_tool = work;
 	r_tool.h = th;
 	x = work.x + 4;
 	for (i = 0; i < NBUT; i++) {
-		short w = i <= B_FORWARD ? 3 * gl_wchar : i == B_RELOAD ? 8 * gl_wchar : 6 * gl_wchar;
 		but[i].x = x;
-		but[i].y = work.y + 3;
-		but[i].w = w;
+		but[i].y = work.y + 2;
+		but[i].w = 7 * small_w + 6;	/* "Forward" */
 		but[i].h = bh;
-		x += w + (i == B_FORWARD || i == B_HOME ? gl_wchar : 2);
+		x += but[i].w + 2;
 	}
-	r_addr.x = x;
-	r_addr.y = work.y + 3;
-	r_addr.w = work.x + work.w - 4 - x;
-	r_addr.h = bh;
+	r_addr.x = work.x + 4 + LOC_W;
+	r_addr.y = work.y + row + 2;
+	r_addr.w = work.x + work.w - 4 - r_addr.x;
+	r_addr.h = gl_hchar + 4;
 	r_page = work;
 	r_page.y += th;
 	r_page.h -= th;
@@ -94,15 +104,129 @@ static short paper(void)
 	return planes >= 4 ? grey_pen() : 0;
 }
 
-static void draw_button(int i)
+/* a name in the buttons' font, its top at y; dim: what can't be used
+   (grey, or GEM's light letters with fewer than 16 colours) */
+static void small_text(short x, short y, const char *s, int dim)
+{
+	short d;
+	if (small_h < 0)
+		small_h = gl_hchar >= 16 ? 13 : 6;	/* the 8x16 or 8x8 font */
+	vst_height(vdi_h, tall ? 6 : 4, &d, &d);
+	vswr_mode(vdi_h, MD_TRANS);
+	vst_color(vdi_h, dim && planes >= 4 ? 9 : 1);
+	if (dim && planes < 4)
+		vst_effects(vdi_h, 2);
+	v_gtext_n(vdi_h, x, y, s, (short) strlen(s));
+	if (dim && planes < 4)
+		vst_effects(vdi_h, 0);
+	vst_height(vdi_h, small_h, &d, &d);
+}
+
+/* the pen a picture's layer takes on this screen; -1: not drawn */
+static short layer_pen(const TB_LAYER *l)
+{
+	if (planes == 1)
+		return l->mono;
+	if (planes == 2 && l->pen > 3)		/* 4 colours: white, black, red, green */
+		return l->pen == 6 ? 0 : 1;
+	return l->pen;
+}
+
+/* a button's picture at x, y, within clip: each layer a mask copied in its
+   pen (from ST RAM, where the blitter reaches); one that can't be used,
+   only its outline, grey (on a monochrome screen every other dot) */
+static void draw_icon(short x, short y, int i, int on, const GRECT *clip)
+{
+	const TB_ICON *ic = tall ? &tb_tall[i] : &tb_short[i];
+	short rows = tall ? TB_TALL : TB_SHORT, k;
+	GRECT r;
+	r.x = x;
+	r.y = y;
+	r.w = TB_W;
+	r.h = rows;
+	if (!rect_and(&r, clip))
+		return;
+	for (k = 0; k < ic->n; k++) {
+		const TB_LAYER *l = &ic->layer[k];
+		unsigned short *buf = st_ram(2L * 2 * rows);
+		short pen = layer_pen(l), colours[2], pxy[8], j;
+		MFDB src, dst;
+		if (!on) {
+			if (l->pen != 1)
+				continue;	/* the outline alone */
+			pen = planes >= 4 ? 9 : 1;
+		}
+		if (pen < 0 || buf == NULL)
+			continue;
+		for (j = 0; j < 2 * rows; j++) {
+			unsigned short v = l->bits[j];
+			if (!on && planes < 4)
+				v &= (j >> 1) & 1 ? 0xAAAA : 0x5555;
+			buf[j] = v;
+		}
+		src.fd_addr = buf;
+		src.fd_w = 32;
+		src.fd_h = rows;
+		src.fd_wdwidth = 2;
+		src.fd_stand = 0;
+		src.fd_nplanes = 1;
+		src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
+		dst.fd_addr = NULL;
+		pxy[0] = r.x - x;
+		pxy[1] = r.y - y;
+		pxy[2] = pxy[0] + r.w - 1;
+		pxy[3] = pxy[1] + r.h - 1;
+		pxy[4] = r.x;
+		pxy[5] = r.y;
+		pxy[6] = r.x + r.w - 1;
+		pxy[7] = r.y + r.h - 1;
+		colours[0] = pen;
+		colours[1] = 0;
+		vrt_cpyfm(vdi_h, MD_TRANS, pxy, &src, &dst, colours);
+	}
+}
+
+/* a button's frame: raised under the mouse, sunk while held down */
+static void button_frame(const GRECT *r, int down)
+{
+	short x1 = r->x, y1 = r->y, x2 = r->x + r->w - 1, y2 = r->y + r->h - 1;
+	if (planes >= 4) {
+		short lt = down ? 9 : 0, rb = down ? 0 : 9;
+		line_col(x1, y1, x2, y1, lt);
+		line_col(x1, y1, x1, y2, lt);
+		line_col(x1, y2, x2, y2, rb);
+		line_col(x2, y1, x2, y2, rb);
+		if (down) {
+			line_col(x1 + 1, y1 + 1, x2 - 1, y1 + 1, 1);
+			line_col(x1 + 1, y1 + 1, x1 + 1, y2 - 1, 1);
+		}
+		return;
+	}
+	{
+		GRECT f = *r;
+		f.w--;
+		f.h--;
+		frame(&f, 1);
+		if (down) {
+			line_col(x1 + 1, y1 + 1, x2 - 2, y1 + 1, 1);
+			line_col(x1 + 1, y1 + 1, x1 + 1, y2 - 2, 1);
+		} else {
+			line_col(x1 + 1, y2, x2, y2, 1);
+			line_col(x2, y1 + 1, x2, y2, 1);
+		}
+	}
+}
+
+static void draw_button(int i, const GRECT *clip)
 {
 	GRECT r = but[i];
-	const char *l = label(i);
-	short n = (short) strlen(l), on = enabled(i);
-	fill(&r, 0);
-	frame(&r, 1);
-	text_at(r.x + (r.w - n * gl_wchar) / 2, r.y + 2, l, n, n,
-		TX_LTR | (on ? 0 : TX_DIM) | (i == B_RELOAD && loading ? TX_BOLD : 0));
+	short on = enabled(i), down = i == sunk, d = down ? 1 : 0, n = (short) strlen(names[i]);
+	short ih = tall ? TB_TALL : TB_SHORT;
+	fill(&r, paper());
+	if (down || (i == hot && on))
+		button_frame(&r, down);
+	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, on, clip);
+	small_text(r.x + (r.w - n * small_w) / 2 + d, r.y + 3 + ih + 2 + d, names[i], !on);
 }
 
 static short addr_cols(void)
@@ -142,7 +266,8 @@ static void draw_toolbar(GRECT *clip)
 		return;
 	fill(&r_tool, paper());
 	for (i = 0; i < NBUT; i++)
-		draw_button(i);
+		draw_button(i, &r);
+	small_text(r_tool.x + 4, r_addr.y + (r_addr.h - SMALL_H) / 2 + 1, "Location:", 0);
 	draw_addr();
 	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
 }
@@ -967,16 +1092,34 @@ static int link_at(short mx, short my)
 
 int win_stop_hit(short mx, short my)
 {
-	return loading && !win_iconified && rect_hit(&but[B_RELOAD], mx, my);
+	return loading && !win_iconified && rect_hit(&but[B_STOP], mx, my);
 }
 
 static short pointer = ARROW;
 
+/* the button under the mouse, framed (the others flat) */
+static void hot_button(int b)
+{
+	int old = hot;
+	if (b == hot)
+		return;
+	hot = b;
+	if (old >= 0)
+		redraw(&but[old], 1);
+	if (b >= 0)
+		redraw(&but[b], 1);
+}
+
 void win_hover(short mx, short my)
 {
 	short h = wind_find(mx, my), t, d, want = ARROW;
-	int l = -1;
+	int l = -1, b = -1, i;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	if (h == win_h && t == win_h && !win_iconified)
+		for (i = 0; i < NBUT; i++)
+			if (rect_hit(&but[i], mx, my) && enabled(i))
+				b = i;
+	hot_button(b);
 	if (h == win_h && t == win_h && !win_iconified && !loading) {
 		fctl *c = br.p && rect_hit(&r_page, mx, my) ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, NULL)
 							     : NULL;
@@ -1007,27 +1150,31 @@ void win_hover(short mx, short my)
 	evnt_set_m1(1, mx, my, 1, 1);
 }
 
-static void press(int i)
+/* a button held down: sunk while the mouse is on it, raised when it
+   leaves; 1 when let go on it (a click), 0 when let go elsewhere */
+static int press(int i)
 {
-	GRECT r = but[i];
-	short p[4];
-	wind_update(BEG_UPDATE);
-	graf_mouse(M_OFF, 0);
-	clip_on(&r);
-	p[0] = r.x + 1;
-	p[1] = r.y + 1;
-	p[2] = r.x + r.w - 2;
-	p[3] = r.y + r.h - 2;
-	vswr_mode(vdi_h, MD_XOR);
-	vsf_interior(vdi_h, FIS_SOLID);
-	vsf_color(vdi_h, 1);
-	vr_recfl(vdi_h, p);
-	vswr_mode(vdi_h, MD_REPLACE);
-	clip_off();
-	graf_mouse(M_ON, 0);
-	wind_update(END_UPDATE);
-	evnt_timer_(80);
-	win_toolbar();
+	short mx, my, mb, ks, in = 1;
+	sunk = i;
+	redraw(&but[i], 1);
+	for (;;) {
+		graf_mkstate(&mx, &my, &mb, &ks);
+		if (!(mb & 1))
+			break;
+		if (rect_hit(&but[i], mx, my) != in) {
+			in = !in;
+			sunk = in ? i : -1;
+			hot = in ? -1 : i;
+			redraw(&but[i], 1);
+		}
+		evnt_timer_(20);
+	}
+	sunk = -1;
+	hot = rect_hit(&but[i], mx, my) ? i : -1;
+	redraw(&but[i], 1);
+	if (!in)
+		hot_button(-1);
+	return in;
 }
 
 /* right-click: the link's commands, or the page's (Back first, as
@@ -1078,14 +1225,15 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	for (i = 0; i < NBUT; i++) {
 		if (!rect_hit(&but[i], mx, my))
 			continue;
-		if (!enabled(i))
+		if (!enabled(i) || !press(i))
 			return 1;
-		press(i);
 		switch (i) {
 		case B_BACK: command(C_BACK); break;
 		case B_FORWARD: command(C_FORWARD); break;
-		case B_RELOAD: command(loading ? C_STOP : C_RELOAD); break;
+		case B_RELOAD: command(C_RELOAD); break;
 		case B_HOME: command(C_HOME); break;
+		case B_SEARCH: command(C_SEARCH); break;
+		case B_STOP: command(C_STOP); break;
 		}
 		return 1;
 	}

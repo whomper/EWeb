@@ -684,6 +684,22 @@ static void home(void)
 	go(opt.home[0] ? opt.home : "about:start");
 }
 
+/* the search engine's own page: the search address up to its question
+   (FrogFind's http://frogfind.com/?q=%s: http://frogfind.com/) */
+static void search_home(void)
+{
+	char u[256];
+	char *q;
+	str_copy(u, opt.search, sizeof u);
+	q = strchr(u, '?');
+	if (q == NULL)
+		q = strstr(u, "%s");
+	if (q != NULL)
+		*q = 0;
+	if (u[0])
+		go(u);
+}
+
 /* every page through the Pi gateway (webgate) when one is set and Falcon
    mode is off: always so in the ST edition */
 static void gate_apply(void)
@@ -860,6 +876,7 @@ void command(int cmd)
 		}
 		break;
 	case C_HOME: home(); break;
+	case C_SEARCH: search_home(); break;
 	case C_LARGER: set_zoom(opt.zoom + 10); break;
 	case C_SMALLER: set_zoom(opt.zoom - 10); break;
 	case C_ACTUAL: set_zoom(100); break;

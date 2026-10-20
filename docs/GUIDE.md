@@ -174,14 +174,20 @@ forgets it all.
 
 ## The window
 
-At the top, from the left:
+At the top, a row of buttons, each a picture with its name under it:
 
-- **Back** and **Forward** (the arrows)
-- **Reload**, which turns into **Stop** while a page loads
+- **Back** and **Forward**
+- **Reload** the page shown
 - **Home**, the start page
-- the address of the page shown, which you can type into
+- **Search**, the search engine's own page (Settings > General)
+- **Stop** a page while it loads
 
-Under them is the page, with the window's slider on the right. The info
+They lie flat until the mouse is over one, which then stands out in a
+frame; held down, it sinks, and works when you let go over it. Under
+them, after **Location:**, is the address of the page shown, which you
+can type into.
+
+Under that is the page, with the window's slider on the right. The info
 line shows the address of the link under the mouse, what a load is
 doing, or, for a secure page, how it is secured. The window's title is
 the page's.
