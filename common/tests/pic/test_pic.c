@@ -28,7 +28,7 @@
 
 #ifdef WITH_DSP_SIM
 const PIC_DSP *sim_dsp(void);
-extern unsigned long long sim_cycles;
+extern unsigned long long sim_cycles, sim_pc[512];
 extern unsigned long sim_in, sim_out;
 #endif
 
@@ -191,6 +191,16 @@ int main(int argc, char **argv)
 	if (getenv("PIC_DSP_CYCLES"))
 		fprintf(stderr, "dsp: %s, %llu cycles, %lu words in, %lu out\n", pic_dsp_state(), sim_cycles, sim_in,
 			sim_out);
+	if (getenv("PIC_DSP_PROFILE")) {
+		/* each internal address's cycles, for tools to name from a56's labels */
+		FILE *f = fopen(getenv("PIC_DSP_PROFILE"), "w");
+		int a;
+		for (a = 0; f != NULL && a < 512; a++)
+			if (sim_pc[a])
+				fprintf(f, "%04x %llu\n", a, sim_pc[a]);
+		if (f != NULL)
+			fclose(f);
+	}
 #endif
 	return r;
 }

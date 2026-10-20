@@ -45,8 +45,10 @@ with the 5-6-5 pixels' own loss: no one sees it. libjpeg's merged
 upsampling would save 40% in all, but makes colour fringes on sharp
 coloured edges (31.7 dB), so it isn't used.
 
-Since 20 Oct 2026 pic.c can hand a JPEG's transform and colours to the
-Falcon's DSP (common/README.md, JPEGs on the DSP): it builds with
-`JPEG_INTERNALS` and calls the entropy decoder (`cinfo->entropy->
-decode_mcu`) itself after `jpeg_start_decompress`, an MCU at a time, in
-place of `jpeg_read_scanlines`. Nothing in libjpeg changed for it.
+Since 20 Oct 2026 pic.c can hand a baseline JPEG to the Falcon's DSP
+(common/README.md, JPEGs on the DSP): libjpeg reads the headers and
+starts the decompression; pic.c builds with `JPEG_INTERNALS` for the
+natural order, and sends the scan from where libjpeg's source stopped
+(`next_input_byte`) to the DSP, with the Huffman and quantisation tables
+libjpeg read, in place of `jpeg_read_scanlines`. Nothing in libjpeg
+changed for it.

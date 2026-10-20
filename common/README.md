@@ -341,24 +341,34 @@ Build: `-Icommon/third_party/nsgif/include`, and either `-Icommon/third_party/tj
 
 ### JPEGs on the DSP (20 Oct 2026, from EWeb)
 
-With libjpeg-turbo (`-DPIC_LIBJPEG`) the Falcon's DSP56001 can take a JPEG's transform and colours:
-libjpeg unpacks each MCU's Huffman codes on the 68030 (its entropy decoder, called by `pic.c`
-itself), `pic.c` sends the coefficients that are not 0, and the DSP sends the MCU's pixels back an
-MCU behind, so it works out one while the 68030 unpacks the next.
+With libjpeg-turbo (`-DPIC_LIBJPEG`) the Falcon's DSP56001 can decode a baseline JPEG: libjpeg reads
+its headers, `pic.c` sends the scan's bytes as the DSP asks for them (the 0 after each `$FF` taken
+out), and the DSP unpacks the Huffman codes, transforms, makes the colours and sends each MCU's
+pixels back from its host interrupt while it decodes the next. So a stock Falcon's 68030 only copies
+bytes in and pixels out: it was the slower half when it unpacked the codes itself (the first version,
+a DSP that took the transform and colours: 8.5 s on the 68030 against 2.6 s with the DSP on a stock
+Falcon, 2.1 s and 1.1 s on a DFB1X; the stock Falcon is the one to make fast, as most have one).
 
 | File | What it does |
 |---|---|
-| `dsp/jpeg.a56`, `dsp/jpeg_prog.h` | dequantising, the transform straight to n/8 of the size (each pixel the mean of the ones it covers, any n from 2 to 8; only the rows and columns a block uses; a block of its DC alone filled at once), the colours from Y Cb Cr with the chroma repeated over the luma it covers, clamped by the multiplier's limiter, packed as 5-6-5 or R G B. `cd dsp && a56 jpeg.a56 && python3 mkh.py a56.out jpeg_prog.h dsp_jpeg_prog jpeg.a56` |
-| `src/pic.c/.h` | `pic_dsp` (a `PIC_DSP` port, NULL: the 68030 does it all): JPEGs of one scan, grey or Y Cb Cr with the chroma halved at most, 8-bit, shown at 2/8 or more go to the DSP; the rest (progressive, CMYK) stay with libjpeg. The first such JPEG checks the DSP on a known picture, against libjpeg's own decode; a DSP that gets it wrong or stops answering is left alone for the session. `pic_dsp_state()` says "DSP", "68030" or "-" (not tried yet) |
-| `atari/dspjpeg.c/.h` | the port: Dsp_Lock for the whole picture, the bootstrap, the host port (each MCU's words in one `Supexec`, its pixels in another, so the program's polls run in user mode); a picture that ended cleanly leaves the program at its commands, and the next asks it (PING) instead of loading it again |
+| `dsp/jpeg.a56`, `dsp/jpeg_prog.h` | the Huffman codes (an 8-bit lookahead table for the code, and for AC coefficients a 9-bit one, made on the DSP, giving the run and value at once when the code and value fit, as libjpeg-turbo's fast path does; longer codes by maxcode), dequantising, the transform straight to n/8 of the size (each pixel the mean of the ones it covers, any n from 2 to 8; only the rows and columns a block uses; a block of its DC alone filled at once), the colours from Y Cb Cr with the chroma repeated over the luma it covers, each channel's bits from a table at Y + its term (libjpeg's way; the tables made on the DSP for 5-6-5 or R G B), the pixels sent by the host interrupt from one buffer while the next MCU goes into the other. Two parts: the bootstrap loads the first 512 words, which load the rest into external memory (`mkh.py` writes both). `cd dsp && a56 jpeg.a56 && python3 mkh.py a56.out jpeg_prog.h dsp_jpeg_prog jpeg.a56` |
+| `src/pic.c/.h` | `pic_dsp` (a `PIC_DSP` port, NULL: the 68030 does it all): JPEGs of one scan, grey or Y Cb Cr with the chroma halved at most, 8-bit, Huffman-coded, shown at 2/8 or more go to the DSP; the rest (progressive, arithmetic, CMYK) stay with libjpeg. The first such JPEG checks the DSP on a known picture, against libjpeg's own decode; a DSP that gets it wrong or stops answering is left alone for the session. `pic_dsp_state()` says "DSP", "68030" or "-" (not tried yet) |
+| `atari/dspjpeg.c/.h` | the port: Dsp_Lock for the whole picture, the bootstrap, the host port (the scan's words in one `Supexec`, two bytes a word; each MCU's pixels in another, each word waited for; so the program's polls run in user mode); a picture that ended cleanly leaves the program at its commands, and the next asks it (PING) instead of loading it again |
 
 It is opt-in: an app builds `dspjpeg.c` and sets `pic_dsp = &dspjpeg_port` when `dspjpeg_present()`.
 `tests/pic`: `make testdsp` runs every check of `make test` with `jpeg.a56` on Hatari's DSP core
 (`dsp_sim.c`; `../ec/fetch-hatari.sh` first): 361 checks, the damaged files under AddressSanitizer
 and UBSan included. Against Pillow it is closer than libjpeg's fast transform for 4:4:4 and grey
 (its transform is exact) and a little further for 4:2:0 (it repeats the chroma, as TJpgDec does,
-where libjpeg blends it). On Hatari's Falcon (`PICBENCH.TTP` in EWeb, its `PHOTO.JPG`) a 480 x 320
-photo took 2.69 s on the 68030 and 0.73 s with the DSP; shown at 192 x 128, 1.71 s and 0.89 s.
+where libjpeg blends it). `PIC_DSP_CYCLES=1` prints the DSP's cycles, `PIC_DSP_PROFILE=FILE` writes
+them for each address of the first part, `PIC_DSP_TRACE=ADDR` (and `PIC_DSP_FOLLOW=N`) and
+`PIC_DSP_DUMP=[x]ADDR,N` show its registers and memory. On Hatari's stock Falcon (16 MHz, its DSP;
+`PICBENCH.TTP` in EWeb, its `PHOTO.JPG`) a 480 x 320 photo takes 4.64 s on the 68030 and 0.58 s with
+the DSP (the first version: 1.40 s); shown at 192 x 128, 3.07 s and 0.69 s. Hatari runs a stock
+Falcon about 1.8 times as fast as Erez's.
+
+The scaler sums a JPEG's rows (solid, each pixel shown from 257 or fewer) in 16 bits, a third of the
+memory the five longs of a picture with alpha take: a third less time shrinking on the 68030.
 
 ## Coming next
 

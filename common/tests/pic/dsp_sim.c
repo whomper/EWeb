@@ -23,15 +23,50 @@ const char *dsp56k_getInstructionText(void) { return ""; }
 static void hint(int s) { (void)s; }
 
 unsigned long long sim_cycles;		/* DSP clock cycles (32 MHz on the Falcon) */
+unsigned long long sim_pc[512];		/* PIC_DSP_PROFILE: the cycles at each internal address */
 unsigned long sim_in, sim_out;		/* words to the DSP, and from it */
 int sim_busy;				/* begin() says the DSP is taken */
 
+/* PIC_DSP_TRACE=ADDR (hex): the registers each time the DSP is there,
+   and with PIC_DSP_FOLLOW=N at the N instructions after, for debugging
+   jpeg.a56 */
+static void trace(uint16_t pc)
+{
+	static long at = -2;
+	static int follow;
+	const uint32_t *r = dsp_core.registers;
+	if (at == -2) {
+		const char *e = getenv("PIC_DSP_TRACE");
+		at = e != NULL ? strtol(e, NULL, 16) : -1;
+	}
+	if (at < 0)
+		return;
+	if (pc == at && follow == 0 && getenv("PIC_DSP_FOLLOW") != NULL)
+		follow = atoi(getenv("PIC_DSP_FOLLOW"));
+	else if (pc != at) {
+		if (follow == 0)
+			return;
+		follow--;
+	}
+	fprintf(stderr, "@%04x a=%02x:%06x:%06x b=%02x:%06x:%06x x=%06x,%06x y=%06x,%06x "
+		"r0-7=%04x,%04x,%04x,%04x,%04x,%04x,%04x,%04x sr=%04x\n", pc,
+		r[DSP_REG_A2], r[DSP_REG_A1], r[DSP_REG_A0], r[DSP_REG_B2], r[DSP_REG_B1], r[DSP_REG_B0],
+		r[DSP_REG_X0], r[DSP_REG_X1], r[DSP_REG_Y0], r[DSP_REG_Y1], r[DSP_REG_R0], r[DSP_REG_R0 + 1],
+		r[DSP_REG_R0 + 2], r[DSP_REG_R0 + 3], r[DSP_REG_R0 + 4], r[DSP_REG_R0 + 5], r[DSP_REG_R0 + 6],
+		r[DSP_REG_R0 + 7], r[DSP_REG_SR]);
+}
+
 static int step(void)
 {
+	uint16_t pc;
 	if (!dsp_core.running)
 		return 0;
+	pc = dsp_core.pc;
+	trace(pc);
 	dsp56k_execute_instruction();
 	sim_cycles += dsp_core.instr_cycle;
+	if (pc < 512)
+		sim_pc[pc] += dsp_core.instr_cycle;
 	return 1;
 }
 
@@ -71,17 +106,30 @@ static void put(const unsigned long *w, long n)
 		put1(*w++);
 }
 
-static void get16(unsigned short *d, int cols, int rows, long pitch)
+static void put16(const unsigned short *w, long n)
+{
+	while (n-- > 0 && !pic_dsp_failed)
+		put1(*w++);
+}
+
+static unsigned long get16(unsigned short *d, int cols, int rows, long pitch)
 {
 	int r, c;
+	unsigned long h = get1();
+	if (h != 0 || pic_dsp_failed)
+		return h;
 	for (r = 0; r < rows; r++, d += pitch)
 		for (c = 0; c < cols && !pic_dsp_failed; c++)
 			d[c] = (unsigned short)get1();
+	return 0;
 }
 
-static void get24(unsigned char *d, int cols, int rows, long pitch)
+static unsigned long get24(unsigned char *d, int cols, int rows, long pitch)
 {
 	int r, c;
+	unsigned long h = get1();
+	if (h != 0 || pic_dsp_failed)
+		return h;
 	for (r = 0; r < rows; r++, d += pitch)
 		for (c = 0; c < cols && !pic_dsp_failed; c++) {
 			unsigned long v = get1();
@@ -89,10 +137,12 @@ static void get24(unsigned char *d, int cols, int rows, long pitch)
 			d[3 * c + 1] = (unsigned char)(v >> 8);
 			d[3 * c + 2] = (unsigned char)v;
 		}
+	return 0;
 }
 
 static int begin(void)
 {
+	static const unsigned long ext[3] = { 6, DSP_JPEG_PROG_EXT_AT, DSP_JPEG_PROG_EXT_N };
 	static int inited;
 	if (sim_busy)
 		return 0;
@@ -104,22 +154,30 @@ static int begin(void)
 	dsp_core_reset();
 	pic_dsp_failed = 0;
 	put(dsp_jpeg_prog, 512);
+	put(ext, 3);				/* LOADP: the rest */
+	put(dsp_jpeg_prog_ext, DSP_JPEG_PROG_EXT_N);
 	return 1;
 }
 
-/* PIC_DSP_DUMP=ADDR,N: the DSP's Y memory from ADDR at the end, for
-   debugging jpeg.a56 */
+/* PIC_DSP_DUMP=[x]ADDR,N: the DSP's external Y (or X) memory from ADDR
+   at the end, for debugging jpeg.a56 */
 static void end(int clean)
 {
-	(void)clean;
 	const char *e = getenv("PIC_DSP_DUMP");
-	unsigned a, n, i;
+	unsigned a, n, i, x = 0;
+	(void)clean;
+	if (e != NULL && *e == 'x') {
+		x = 0x4000;
+		e++;
+	}
 	if (e == NULL || sscanf(e, "%x,%u", &a, &n) != 2)
 		return;
 	for (i = 0; i < n; i++)
-		fprintf(stderr, "%06lx%c", (unsigned long)dsp_core.ramext[(a + i) & 0x3fff], i % 8 == 7 ? '\n' : ' ');
+		fprintf(stderr, "%06lx%c", (unsigned long)dsp_core.ramext[((a + i) & 0x3fff) | x],
+			i % 8 == 7 ? '\n' : ' ');
+	fprintf(stderr, "\n");
 }
-static const PIC_DSP port = { begin, end, put, get16, get24 };
+static const PIC_DSP port = { begin, end, put, put16, get16, get24 };
 
 const PIC_DSP *sim_dsp(void)
 {

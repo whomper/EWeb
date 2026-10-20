@@ -1,72 +1,115 @@
 ; SPDX-License-Identifier: GPL-2.0-or-later
 ; Copyright (C) 2026 AERA | Erez Yaary
-; jpeg.a56 - a JPEG's transform, colour and upsampling on the Falcon's
-; DSP56001, for pic.c (src/pic.c's decode_dsp; atari/dspjpeg.c loads it).
-; The 68030 unpacks the Huffman codes and sends each MCU's coefficients
-; that are not 0; this program dequantises them, transforms each 8 x 8
-; block to M x M pixels (M = 1..8: the picture at M/8 of its size, each
-; pixel the average of the ones it covers), makes the colours from Y, Cb
-; and Cr (the chroma repeated over the luma it covers) and sends the MCU's
-; pixels back, as 5-6-5 (the picture's own) or as R G B bytes (for the
-; scaler).
-;
-; One MCU behind: an MCU's pixels go back after the next MCU has come, so
-; the DSP works out MCU n while the 68030 unpacks MCU n+1.
+; jpeg.a56 - a baseline JPEG decoded on the Falcon's DSP56001, for pic.c
+; (src/pic.c's decode_dsp; atari/dspjpeg.c loads it). The 68030 sends
+; the scan's bytes as they are in the file (the 0 after each $FF taken
+; out), when the DSP asks for them; this program unpacks the Huffman
+; codes, dequantises, transforms each 8 x 8 block to M x M pixels (M =
+; 1..8: the picture at M/8 of its size, each pixel the average of the
+; ones it covers), makes the colours from Y, Cb and Cr (the chroma
+; repeated over the luma it covers) and sends each MCU's pixels back, as
+; 5-6-5 (the picture's own) or as R G B bytes (for the scaler). So the
+; 68030 only copies bytes in and pixels out (a stock Falcon's 68030 was
+; the slower half, with the Huffman codes its own).
 ;
 ; Commands (a word each, then their words):
 ;   1 LOADX  ADDR, N, then N words into X memory from ADDR
 ;   4 LOADY  the same into Y memory
-;            (the setup: the 68030 writes the variables, the block table,
-;            the transform, the quantisers, the format's constants and
-;            the zeros where they are needed)
-;   2 MCU    COLS, ROWS (its pixels to send back), then for each block
-;            n and n words (c << 6 | k: coefficient c at k, natural order)
-;   3 END    the last MCU's pixels
+;   6 LOADP  the same into P memory (the code below P:$0200, that the
+;            bootstrap doesn't load)
 ;   5 PING   "JPG" ($4A5047) back: the program is here, at its commands
+;   7 DECODE the picture, every MCU in turn: for each, a word to the
+;            68030: 0, then its pixels (ROWS rows of COLS); or 1, asking
+;            for 256 words of the scan's bytes, two to a word (b0 << 8 |
+;            b1), sent at once; or 2, the same from after the next RST
+;            marker (a restart). Past the scan's end, words of 0. The
+;            pixels go from the host's interrupt, while the next MCU is
+;            decoded
 ;
-; The setup, in X: M, NB (blocks in an MCU), PW (the MCU's width in
-; pixels), RH, RV (luma pixels a chroma sample covers, across and down),
-; NC (components: 1 or 3), FMT (0: 5-6-5, 1: R G B), 0 x 5, PW * 3 from
-; V_M; NB x (quantisers, plane, the plane's pitch - M, DC bias) at BT;
-; BLK 0; for grey, TRM 0 (M rows of PW * 3). In Y: the M x 8 transform
-; at AM, NC x 64 quantisers (Q * 32, natural order) at QT, the format's
-; 7 constants at CONSTS.
+; The setup, written by the 68030 with LOADX and LOADY: the variables from
+; V_M to V_NFT; NB x 8 words of the block table at BT (quantisers, plane,
+; its pitch - M, DC bias, DC table, AC table, DC predictor, fast AC
+; table); BLK 0;
+; the natural order at ZZ; for grey, TRM the tables' middles (TR + 384,
+; TG + 384, TB + 384, M rows of PW of them); each
+; component's Huffman tables (HLA: 256 entries of the code's length (0:
+; longer than 8 bits) in X and the symbol in Y, for each byte the bits
+; may start with; at HLA + $800, maxcode[l] at X + l and valoff[l] at X +
+; 32 + l, the symbols in Y); SPLIT (an AC symbol's run in X, size in Y);
+; the small tables at TAB. In Y: the M x 8 transform at AM, NC x 64
+; quantisers (Q * 2048, natural order) at QT, the format's 9 constants
+; (for R, G and B: a mask, a shift and a fix; DECODE makes the colour
+; tables from them).
 ;
 ; Numbers: a dequantised coefficient F is F/2048 (the multiplier gives
-; c * Q * 2^12 in the low word of the product: no shift needed); the
+; v * Q * 2^12 in the low word of the product: no shift needed); the
 ; transform's matrix is twice the true one (each entry below 1), so the
 ; rows are t/1024 and the pixels p/512, shifted to p/256 as they are
-; stored (p: -128..127 about 0); a colour is shifted once more to
-; c/128, and moved to a register, which limits it to -1..1: the clamp.
-; Its top bits are the 8-bit value with the top bit inverted, which
-; the format's constant puts right.
+; stored (p: -128..127 about 0, + 1/2 in the luma, from the DC's bias,
+; so that it rounds). A pixel's luma is made an integer, the chroma's
+; terms too (rounded), and each channel's bits in the pixel are a table's
+; at their sum (libjpeg's way): TR, TG and TB, made at DECODE's start,
+; for each value from -256 to 511 the bits of it clamped to 0..255 (by
+; the limiter: v as (v - 128)/128 moved to a register is limited to
+; -1..1; its top bits are the 8-bit value with the top bit inverted,
+; which the format's fix puts right).
+;
+; The bits: A1:A0 holds them from the top (r4 counts them, less 18),
+; refilled 16
+; at a time by a multiply-accumulate (word * 2^(24 - n): it lands just
+; under the n bits there) and used up by shifting left.
 
+HCR	equ	$ffe8
 HSR	equ	$ffe9
 HRX	equ	$ffeb
 
-; internal X: variables (short addresses, for DO), the block table, the
-; block and the transform's rows
-V_M	equ	$00
+; internal X: variables (short addresses, for DO), the block and the
+; transform's rows, the natural order
+V_M	equ	$00		; the setup, from the 68030:
 V_NB	equ	$01
 V_PW	equ	$02
 V_RH	equ	$03
 V_RV	equ	$04
 V_NC	equ	$05
 V_FMT	equ	$06
-V_COLS	equ	$07
+V_COLS	equ	$07		; this MCU's pixels to send
 V_ROWS	equ	$08
-V_PCOLS	equ	$09
-V_PROWS	equ	$0a
-V_PSKIP	equ	$0b
+V_MX	equ	$09		; MCUs across, down
+V_MY	equ	$0a
+V_LASTC	equ	$0b		; the last column's and row's pixels
 V_PW3	equ	$0c
 V_BIAS	equ	$0d
-V_N	equ	$0e
-V_C	equ	$10
+V_LASTR	equ	$0e
+V_PH	equ	$0f		; an MCU's height in pixels
+V_C	equ	$10		; a block's last column used, last row, K
 V_R	equ	$11
 V_K	equ	$12
-BT	equ	$20		; 4 words a block, at most 8 blocks
+V_RI	equ	$13		; the restart interval (0: none)
+V_RTG	equ	$14		; MCUs to the next restart
+V_SEG	equ	$15		; 1: the next data from after the next RST
+V_AVAIL	equ	$16		; words in the ring
+V_NBITS	equ	$17		; the bits, kept over the transform
+V_BA1	equ	$18
+V_BA0	equ	$19
+V_PLANE	equ	$1a		; this block's:
+V_PITCH	equ	$1b
+V_DCT	equ	$1c
+V_ACT	equ	$1d
+V_PREDP	equ	$1e
+V_KMAX	equ	$1f
+V_PRED	equ	$20		; 3 DC predictors
+V_BTP	equ	$23
+V_CX	equ	$24		; MCUs to go in the row, rows to go
+V_RY	equ	$25
+V_NPIX	equ	$26		; ROWS x COLS
+V_TB	equ	$27		; the Huffman table being read
+V_OBUF	equ	$28		; the end of this MCU's pixels' buffer (OBUFA or OBUFB)
+V_RP	equ	$29		; the ring's next word
+V_FT	equ	$2a		; this block's fast AC table (its middle)
+V_NFT	equ	$2b		; fast AC tables to make (Cb and Cr may share one)
 BLK	equ	$40		; 64, aligned for modulo 64
 TT	equ	$80		; 64: T[i][v] at TT + 8i + v, rows aligned for modulo 8
+ZZ	equ	$c0		; the natural order: ZZ + k is coefficient k's place
 
 ; internal Y: the transform (M rows of 8) and the quantisers
 AM	equ	$00
@@ -76,11 +119,34 @@ QT	equ	$40		; up to 3 x 64
 YPL	equ	$0200		; luma, PW x PH (at most 16 x 16)
 CBP	equ	$0300		; Cb, M x M
 CRP	equ	$0340		; Cr
-OUT	equ	$0400		; the pixels, PW x PH
-CONSTS	equ	$0500		; 7 words, read in turn for each pixel
-; external X: the coefficients as they came, the colour terms
-INB	equ	$0200		; at most 8 x 65
-TRM	equ	$0600		; Rc Gc Bc for each luma column, M rows of PW
+OBUFA	equ	$0800		; the pixels: an MCU's end just below one of these
+OBUFB	equ	$2800		; (bit 11 set only there), the next MCU's below the other
+CONSTS	equ	$0500		; 9 words: each channel's mask, shift, fix
+; external X: the scan's words, the colour terms
+INB	equ	$0200		; a ring of 512 (modulo 512, read through V_RP)
+TRM	equ	$0600		; Rt Gt Bt for each luma column, M rows of PW
+; external X and Y: the Huffman tables, a component's DC and AC at
+; HLA + $200 c and HLA + $100 + $200 c; the rest
+HLA	equ	$1000
+SPLIT	equ	$1e00		; an AC symbol: X its run, Y its size
+TAB	equ	$1f00
+VMASK	equ	TAB		; X: 2^s - 1
+VPOW	equ	TAB		; Y: 2^(s - 24)
+VHALF	equ	TAB+$20		; Y: 2^(s - 1)
+BT	equ	TAB+$20		; X: the block table, 8 words a block
+P2	equ	TAB+$40		; Y: 2^(24 - n), for n bits there
+RUPTO	equ	TAB+$80		; X: the last row of the coefficients to k
+CUPTO	equ	TAB+$80		; Y: and the last column
+; the fast AC tables, a component's at FT0 + $200 c: for each 9 bits
+; (-256..255) the bits a coefficient's code and value take there (0: more
+; than 9, the slow way) in X, its value in Y, its run in X at FRUN on
+; (the end: 64)
+FT0	equ	$2a00
+FRUN	equ	$0900-FT0
+; X and Y: the colour tables, each channel's bits for v = -256..511
+TR	equ	$2000		; X
+TG	equ	$2000		; Y
+TB	equ	$2400		; Y
 
 ; the colour constants, halved where they are above 1 (shifted back)
 K_RCR	equ	$59BA5E		; 1.402 / 2
@@ -90,53 +156,24 @@ K_BCB	equ	$716873		; 1.772 / 2
 
 	org	p:$0
 	jmp	start
-
-	org	p:$40
 start
 	movep	#1,x:$ffe0		; port B is the host port
 	movep	#0,x:$fffe		; no wait states
+	movep	#$0400,x:$ffff		; the host's interrupts at level 0
+	andi	#$fc,mr			; (only the transmitter's, when on)
 
+; the commands: LOADP here (it brings the rest), the others in the rest
 cmd
 	jsr	rd
 	move	x0,a
-	move	#>2,x1
+	move	#>6,x1
 	cmp	x1,a
-	jeq	mcu
-	move	#>1,x1
-	cmp	x1,a
-	jeq	ldx
-	move	#>4,x1
-	cmp	x1,a
-	jeq	ldy
-	move	#>3,x1
-	cmp	x1,a
-	jeq	fin
-	move	#>5,x1
-	cmp	x1,a
-	jeq	ping
-	jmp	cmd
-
-; ---- PING: "JPG" back, so the 68030 knows this program is still here
-ping
-	move	#>$4A5047,x1
-pw	jclr	#1,x:HSR,pw
-	movep	x1,x:HRX
-	jmp	cmd
-
-; ---- LOADX, LOADY: words into memory (the setup, written by the 68030)
-ldx
-	jsr	rdan
-	do	x0,lx1
+	jne	xcmd
+	jsr	rdan			; LOADP
+	do	x0,lp1
 	jsr	rd
-	move	x0,x:(r0)+
-lx1
-	jmp	cmd
-ldy
-	jsr	rdan
-	do	x0,ly1
-	jsr	rd
-	move	x0,y:(r0)+
-ly1
+	movem	x0,p:(r0)+
+lp1
 	jmp	cmd
 rdan
 	jsr	rd
@@ -144,95 +181,52 @@ rdan
 	jsr	rd
 	rts
 
-; ---- END: the last MCU's pixels
-fin
-	jsr	send
-	jmp	cmd
+	org	p:$22			; the host can take a word
+	jsr	hint
 
-; ---- MCU
-mcu
-	jsr	rd
-	move	x0,x:V_COLS
-	jsr	rd
-	move	x0,x:V_ROWS
-	; its blocks' coefficients, as they come
-	move	#INB,r0
-	do	x:V_NB,mc1
-	jsr	rd
-	move	x0,x:(r0)+
-	move	x0,a
-	tst	a
-	jeq	mc2
-	do	x0,mc3
-mc4	jclr	#0,x:HSR,mc4
-	movep	x:HRX,x:(r0)+
-mc3
-	nop
-mc2
-	nop
-mc1
-	; the last one's pixels, now that this one is here
-	jsr	send
-	move	x:V_COLS,x0
-	move	x0,x:V_PCOLS
-	move	x:V_ROWS,x0
-	move	x0,x:V_PROWS
-	move	x:V_PW,a
-	move	x:V_COLS,x0
-	sub	x0,a
-	move	a1,x:V_PSKIP
+; ---- DECODE
+decode
+	jsr	dstart			; the bits, the ring, the counters
+	do	x:V_MY,dy
+	move	x:V_MX,x0
+	move	x0,x:V_CX
+	do	x:V_MX,dx
+	jsr	mstart			; a restart; this MCU's pixels to send
 
-	; each block: dequantised into BLK, transformed into its plane. Only
-	; the columns up to the last one used (K) and the rows up to the
-	; last one used (R) are worked on: most blocks have one or two
-	move	#INB,r0
-	move	r0,x:V_N
-	move	#BT,r3
+	; each block: its coefficients from the bits into BLK, transformed
+	; into its plane. Only the columns up to the last one used (K) and
+	; the rows up to the last one used (R) are worked on: most blocks
+	; have one or two
+	move	#BT,x0
+	move	x0,x:V_BTP
 	do	x:V_NB,blk
-	move	x:V_N,r0
-	move	x:(r3)+,r6		; its quantisers
-	move	x:(r3)+,r5		; where its pixels go
-	move	x:(r3)+,n5		; the plane's pitch - M
-	move	x:(r3)+,x0
+	move	x:V_BTP,r0
+	nop
+	move	x:(r0)+,r6		; its quantisers
+	move	x:(r0)+,x0
+	move	x0,x:V_PLANE		; where its pixels go
+	move	x:(r0)+,x0
+	move	x0,x:V_PITCH		; the plane's pitch - M
+	move	x:(r0)+,x0
 	move	x0,x:V_BIAS		; DC + 4: the pixels rounded
-	clr	b
-	move	b,x:V_C			; the last column used
-	move	b,x:V_R			; the last row used
-	move	x:(r0)+,x0		; its coefficients
-	move	x0,a
-	tst	a	#BLK,r1
-	jeq	dq0
-	move	#>$ffffc0,x1
-	move	#>$00003f,y1
-	do	x0,dq1
-	move	x:(r0)+,a		; c << 6 | k
-	tfr	a,b
-	and	x1,a			; c << 6
-	and	y1,b			; k
-	move	b1,n6
-	move	b1,n1
-	move	a1,x0
-	move	y:(r6+n6),y0		; Q * 32
-	mpy	x0,y0,a			; c * Q * 2^12 in a0: F / 2048
-	move	a0,x:(r1+n1)
-	move	#>7,x0
-	and	x0,b	x:V_C,a		; k's column
-	move	b1,x0
-	cmp	x0,a
-	tlt	x0,a
-	move	a1,x:V_C
-dq1
-	; k's in natural order: the last is in the last row used
-	move	n1,x0
-	move	#>$100000,y0
-	mpy	x0,y0,a			; k >> 3
-	move	a1,x:V_R
-dq0
-	move	r0,x:V_N
-	move	x:BLK,a
-	move	x:V_BIAS,x0
-	add	x0,a
-	move	a1,x:BLK
+	move	x:(r0)+,x0
+	move	x0,x:V_DCT
+	move	x:(r0)+,x0
+	move	x0,x:V_ACT
+	move	x:(r0)+,x0
+	move	x0,x:V_PREDP
+	move	x:(r0)+,x0
+	move	x0,x:V_FT		; its fast AC table
+	move	r0,x:V_BTP
+	move	x:V_BA1,a		; the bits
+	move	x:V_BA0,a0
+	move	x:V_NBITS,r4
+	jsr	hblk
+	move	a1,x:V_BA1
+	move	a0,x:V_BA0
+	move	r4,x:V_NBITS
+	move	x:V_PLANE,r5
+	move	x:V_PITCH,n5
 	move	x:V_R,a
 	move	x:V_C,b
 	add	a,b
@@ -254,7 +248,7 @@ dq0
 	movec	#63,m0
 	move	#8,n1
 	move	#BLK,r2
-	move	#TT,r7			; (r3 is the block table's)
+	move	#TT,r7
 	do	x:V_K,p1c
 	move	r2,r0
 	move	r7,r1
@@ -347,6 +341,606 @@ blk
 	move	#>1,x0
 	cmp	x0,a
 	jeq	col
+	jsr	terms
+
+	; the pixels: each channel's bits from its table at Y + the term
+	; (libjpeg's way), the pixel the sum; each stored a pixel later. ROWS
+	; x COLS end at V_OBUF (rows past them go past it, unsent)
+col
+	move	x:V_OBUF,b
+	move	x:V_NPIX,x0
+	sub	x0,b	x:V_PW,a
+	move	b1,r5
+	move	x:V_COLS,x0
+	sub	x0,a	#>1,x0
+	sub	x0,a			; PW - COLS - 1: to the next row's luma
+	move	a1,n4
+	move	(r5)-			; (the first store there: the header's place)
+	move	#YPL,r4
+	move	#TRM,r2
+	move	x:V_PW3,n2
+	move	#>$000100,y1		; 2^-15 (doubled by the multiplier): p/256 to p
+	move	y:(r4)+,y0
+	do	x:V_M,d1
+	do	x:V_RV,d2
+	move	r2,r1
+	do	x:V_COLS,d3
+	mpy	y0,y1,b		x:(r1)+,x0	a,y:(r5)+	; Y (+ 1/2: the bias); Rt; the last pixel
+	tfr	b,a		x:(r1)+,x1		; Gt
+	add	x0,a		x:(r1)+,x0		; R's place; Bt
+	tfr	b,a		a1,r0
+	add	x1,a
+	add	x0,b		a1,r6			; B's place; G's
+	move	b1,r7
+	move	x:(r0),a	y:(r6),y0		; R's bits; G's
+	add	y0,a		y:(r7),y0		; B's
+	add	y0,a		y:(r4)+,y0		; the next Y
+d3
+	move	(r4)+n4
+	move	y:(r4)+,y0
+d2
+	move	(r2)+n2
+d1
+	move	a,y:(r5)+
+
+	jsr	osend
+dx
+	move	x:V_RY,b
+	move	#>1,x0
+	sub	x0,b
+	move	b1,x:V_RY
+dy
+dw	jset	#1,x:HCR,dw		; the last MCU's pixels gone
+	jmp	cmd
+
+; ---- a block's coefficients from the bits: DC, then AC to the end of
+; block, dequantised into BLK (in natural order; the rest stays 0); V_R
+; and V_C the last row and column that may be other than 0
+hblk
+	move	x:V_DCT,x0
+	move	x0,x:V_TB
+	jsr	need
+	jsr	hsym			; y1 = the DC's size
+	clr	b
+	move	y1,b
+	tst	b
+	jeq	hb1
+	jsr	need		; (it uses n7)
+	move	y1,n7
+	jsr	hval			; b1 = the difference
+hb1	move	x:V_PREDP,r7
+	nop
+	move	x:(r7),x0
+	add	x0,b
+	move	b1,x:(r7)		; the predictor
+	move	b1,x0
+	move	y:(r6),y0		; Q * 2048
+	mpy	x0,y0,b			; v * Q * 2^12 in b0: F / 2048
+	move	b0,b
+	move	x:V_BIAS,x0
+	add	x0,b
+	move	b1,x:BLK
+	move	x:V_ACT,x0
+	move	x0,x:V_TB
+	move	#ZZ+1,r1		; k
+	move	#BLK,r0
+	move	#ZZ,x0
+	move	x0,x:V_KMAX
+	move	x:V_FT,x1		; its fast table's middle
+	move	#>$000100,y1		; 2^-15 (doubled): a1's top 9 bits
+	move	#FRUN,n2
+hac	jsset	#15,r4,need		; at least 18 bits
+	move	a1,x0
+	mpy	x0,y1,b			; the next 9 bits (-256..255)
+	add	x1,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),y0	; the bits a coefficient takes (0: the slow way); its value
+	move	x0,b
+	tst	b	x:(r2+n2),n1		; its run (the end: 64)
+	jeq	hacs
+	rep	x0
+	asl	a	x0,n4
+	move	(r1)+n1			; k + run
+	move	(r4)-n4
+	move	r1,b
+	move	#>ZZ+63,x0
+	cmp	x0,b
+	jgt	hend			; the end (or past the block: damaged)
+	move	x:(r1),n0		; its place
+	move	x:(r1),n6
+	move	r1,x:V_KMAX
+	move	y:(r6+n6),x0		; Q * 2048
+	mpy	x0,y0,b			; v * Q * 2^12 in b0
+	move	b0,x:(r0+n0)
+	move	(r1)+
+hchk	move	r1,b
+	move	#>ZZ+64,x0
+	cmp	x0,b
+	jlt	hac
+	jmp	hend
+hend	move	x:V_KMAX,b		; R and C for the transform
+	move	#>RUPTO-ZZ,x0
+	add	x0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),y0
+	move	x0,x:V_R
+	move	y0,x:V_C
+	rts
+
+; ---- the bits: at least 18 there (r4 counts them, less 18: negative,
+; fewer)
+need	jclr	#15,r4,nd1
+	jsr	getw			; x0 = 16 bits (shifted left 7)
+	move	r4,n7
+	move	#P2+18,r7
+	nop
+	move	y:(r7+n7),y0		; 2^(24 - n)
+	mac	x0,y0,a			; under the n bits there
+	move	#16,n4
+	nop
+	move	(r4)+n4
+	jmp	need
+nd1	rts
+
+; x0 = the next word of the scan (shifted left 7), asking the 68030 when
+; the ring is empty
+getw	move	x:V_AVAIL,b
+	tst	b
+	jne	gw1
+	jsr	ask
+	move	#>256,b
+gw1	move	#>1,x0
+	sub	x0,b	x:V_RP,r7
+	movec	#511,m7
+	move	b1,x:V_AVAIL
+	move	x:(r7)+,b		; b0 << 8 | b1 (under whatever the top byte was)
+	move	r7,x:V_RP
+	movec	#$ffff,m7
+	move	#>$ffff,x0
+	and	x0,b	#>$40,y0
+	move	b1,x0			; to b0 << 15 | b1 << 7 (2^6, doubled)
+	mpy	x0,y0,b
+	move	b0,x0
+	rts
+
+; ---- a Huffman code at the bits' head (at least 16 there), with the
+; table at r2: y1 = its symbol, the code used up
+hsym	move	a1,x0
+	move	#>$000080,y0		; 2^-16
+	mpy	x0,y0,b
+	move	#>$0000ff,x0
+	and	x0,b			; the top 8 bits
+	move	x:V_TB,x0
+	add	x0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),y1	; the code's length, its symbol
+	move	x0,b
+	tst	b
+	jeq	hslow			; longer than 8 bits
+	move	x0,n4
+	rep	x0
+	asl	a
+	move	(r4)-n4
+	rts
+
+; ---- n7 = s (1..15): b1 = the next s bits as JPEG's signed value (the
+; low half negative), used up
+hval	move	#VPOW,r7
+	move	a1,x0
+	move	y:(r7+n7),y0		; 2^(s - 24)
+	mpy	x0,y0,b			; a1 >> (24 - s)
+	move	#VMASK,r7
+	nop
+	move	x:(r7+n7),x0		; 2^s - 1
+	and	x0,b
+	move	b1,b
+	move	#VHALF,r7
+	nop
+	move	y:(r7+n7),y0		; 2^(s - 1)
+	cmp	y0,b
+	jge	hv1
+	sub	x0,b			; v - (2^s - 1)
+hv1	move	n7,n4
+	rep	n7
+	asl	a
+	move	(r4)-n4
+	rts
+
+; ---- host port
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+
+; ---------------------------------------------------------------- the rest
+; (run once a picture or seldom: loaded by LOADP after the bootstrap)
+
+; the host's interrupt: an MCU's next word (r3) to the 68030; at the
+; buffer's end (r3 at OBUFA or OBUFB), no more. (Not just after its
+; vector: Hatari takes a JSR to there for a fast interrupt's end)
+hint	movep	y:(r3)+,x:HRX
+	jclr	#11,r3,hi1
+	movep	#0,x:HCR		; (BSET and BCLR there: Hatari misses them)
+hi1	rti
+
+	org	p:$7000
+
+; a picture's start: the ring empty, the predictors 0, the counters, the
+; first bits
+dstart
+	clr	a
+	move	a,x:V_AVAIL
+	move	a,x:V_SEG
+	move	a,x:V_PRED
+	move	a,x:V_PRED+1
+	move	a,x:V_PRED+2
+	move	x:V_RI,x0
+	move	x0,x:V_RTG
+	move	x:V_MY,x0
+	move	x0,x:V_RY
+	move	#INB,x0
+	move	x0,x:V_RP
+	move	#OBUFA,x0
+	move	x0,x:V_OBUF
+	jsr	mktab
+	move	#HLA+$100,x0		; each component's fast AC table
+	move	x0,x:V_TB
+	move	#FT0-256,r0
+	move	#FRUN,n0
+	do	x:V_NFT,mf0
+	jsr	mkfast
+	move	x:V_TB,a
+	move	#>$200,x0
+	add	x0,a
+	move	a1,x:V_TB
+mf0
+	jsr	bstart
+	rts
+
+; a fast AC table (at r0, on to the next) from the lookahead table at
+; V_TB: for each 9 bits, the code they start with when it is 8 bits or
+; fewer and its value's bits are there too
+mkfast
+	move	#>$800000,x1		; the 9 bits at a1's top, from -256
+	do	#512,mf9
+	move	x1,a
+	move	#9,r4			; (bits there, for hval)
+	move	a1,x0
+	move	#>$000080,y0
+	mpy	x0,y0,b
+	move	#>$0000ff,x0
+	and	x0,b
+	move	x:V_TB,x0
+	add	x0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),y1	; the code's length (0: over 8), its symbol
+	move	x0,b
+	tst	b
+	jeq	mf8
+	move	x0,n4
+	rep	x0
+	asl	a
+	move	(r4)-n4
+	move	#>SPLIT,b
+	move	y1,x0
+	add	x0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),y0	; the run, the value's size
+	move	x0,n1
+	move	y0,b
+	tst	b
+	jne	mf2
+	move	n1,b			; size 0: 16 zeros (a 0 after 15), or the end
+	move	#>15,x0
+	cmp	x0,b
+	jeq	mf6
+	move	#64,n1
+mf6	clr	b
+	jmp	mf7
+mf2	move	r4,b			; the value's bits all there?
+	cmp	y0,b
+	jlt	mf8
+	move	y0,n7
+	jsr	hval			; b1 = the value
+mf7	move	b1,y:(r0)
+	move	r4,x0
+	move	#>9,b
+	sub	x0,b
+	move	b1,x:(r0)		; the bits taken
+	move	n1,x:(r0+n0)		; the run
+	jmp	mf5
+mf8	clr	b			; the slow way
+	move	b1,x:(r0)
+	move	b1,y:(r0)
+mf5	move	(r0)+
+	move	x1,b
+	move	#>$008000,x0
+	add	x0,b
+	move	b1,x1
+mf9
+	rts
+
+; the colour tables: for v = -256..511 each channel's bits in the pixel,
+; v clamped to 0..255 (by the limiter: v as (v - 128)/128), masked,
+; moved to its place and its top bit put right by the format's constants
+mktab
+	move	#TR,r0
+	move	#TG,r4
+	move	#TB,r5
+	move	#CONSTS,r6
+	movec	#8,m6
+	move	#>$a00000,a		; -384/128 (v = -256), over two shifts
+	asl	a
+	asl	a
+	move	#>$010000,x1		; v + 1
+	do	#768,mt1
+	move	a,x0			; limited: the clamp
+	tfr	x0,b	y:(r6)+,y0	; R's mask
+	and	y0,b	y:(r6)+,y1	; its shift
+	move	b1,y0
+	mpyr	y1,y0,b	y:(r6)+,y0	; its fix
+	add	y0,b
+	move	b1,x:(r0)+
+	tfr	x0,b	y:(r6)+,y0	; G's
+	and	y0,b	y:(r6)+,y1
+	move	b1,y0
+	mpyr	y1,y0,b	y:(r6)+,y0
+	add	y0,b
+	move	b1,y:(r4)+
+	tfr	x0,b	y:(r6)+,y0	; B's
+	and	y0,b	y:(r6)+,y1
+	move	b1,y0
+	mpyr	y1,y0,b	y:(r6)+,y0
+	add	y0,b
+	move	b1,y:(r5)+
+	add	x1,a
+mt1
+	movec	#$ffff,m6
+	rts
+
+; the bits from a segment's start: two 0 bits (so the first refill lands
+; where the multiplier can put it), then the data, the two dropped
+bstart
+	clr	a
+	move	#>2-18,r4
+	jsr	need
+	asl	a
+	asl	a
+	move	#2,n4
+	nop
+	move	(r4)-n4
+	move	a1,x:V_BA1
+	move	a0,x:V_BA0
+	move	r4,x:V_NBITS
+	rts
+
+; an MCU's start: a restart when one is due; its pixels to send (the
+; last column and row may have fewer)
+mstart
+	move	x:V_RI,b
+	tst	b
+	jeq	ms2
+	move	x:V_RTG,b
+	tst	b
+	jne	ms1
+	clr	a			; the ring and the bits dropped, the predictors 0,
+	move	a,x:V_AVAIL		; the next data from after the RST marker
+	move	a,x:V_PRED
+	move	a,x:V_PRED+1
+	move	a,x:V_PRED+2
+	move	#>1,x0
+	move	x0,x:V_SEG
+	jsr	bstart
+	move	x:V_RI,b
+ms1	move	#>1,x0
+	sub	x0,b
+	move	b1,x:V_RTG
+ms2	move	#>1,x0
+	move	x:V_PW,b
+	move	x:V_CX,a
+	cmp	x0,a
+	jne	ms3
+	move	x:V_LASTC,b
+ms3	move	b1,x:V_COLS
+	sub	x0,a
+	move	a1,x:V_CX
+	move	x:V_PH,b
+	move	x:V_RY,a
+	cmp	x0,a
+	jne	ms4
+	move	x:V_LASTR,b
+ms4	move	b1,x:V_ROWS
+	move	b1,y0
+	move	x:V_COLS,x0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,x:V_NPIX
+	rts
+
+; 256 words of the scan into the ring (empty): 1 asks for the next, 2 for
+; those from after the next RST marker
+ask
+	move	x:V_SEG,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x0
+ak0	jset	#1,x:HCR,ak0		; the pixels before gone
+ak1	jclr	#1,x:HSR,ak1
+	movep	x0,x:HRX
+	clr	b
+	move	b,x:V_SEG
+	move	x:V_RP,r7
+	movec	#511,m7
+	do	#256,ak2
+ak3	jclr	#0,x:HSR,ak3
+	movep	x:HRX,x:(r7)+
+ak2
+	movec	#$ffff,m7
+	rts
+
+; a code longer than 8 bits: for l = 9..16 the top l bits against the
+; table's maxcode[l]; the symbol is valoff[l] on from the code
+hslow
+	move	#9,n7
+hs1	move	#VPOW,r7
+	move	a1,x0
+	move	y:(r7+n7),y0		; 2^(l - 24)
+	mpy	x0,y0,b
+	move	#VMASK,r7
+	nop
+	move	x:(r7+n7),x0		; 2^l - 1
+	and	x0,b
+	move	b1,y1			; the code
+	move	x:V_TB,b		; maxcode[l] at the table + $800 + l
+	move	#>$800,x0
+	add	x0,b
+	move	n7,x0
+	add	x0,b
+	move	b1,r2
+	nop
+	move	x:(r2),x0
+	move	y1,b
+	cmp	x0,b
+	jle	hs2
+	move	n7,b			; l + 1, up to 16
+	move	#>1,x0
+	add	x0,b
+	move	b1,n7
+	move	#>17,x0
+	cmp	x0,b
+	jlt	hs1
+	move	#0,y1			; no such code (damaged): symbol 0, 16 bits
+	move	#16,n7
+	jmp	hs3
+hs2	move	#32,n2			; valoff[l]
+	nop
+	move	x:(r2+n2),x0
+	add	x0,b
+	move	x:V_TB,x0
+	add	x0,b
+	move	#>$800,x0
+	add	x0,b
+	move	b1,r5
+	nop
+	move	y:(r5),y1		; the symbol
+hs3	move	n7,n4
+	rep	n7
+	asl	a
+	move	(r4)-n4
+	rts
+
+; the commands but LOADP
+xcmd
+	move	#>1,x1
+	cmp	x1,a
+	jeq	ldx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	ldy
+	move	#>5,x1
+	cmp	x1,a
+	jeq	ping
+	move	#>7,x1
+	cmp	x1,a
+	jeq	decode
+	jmp	cmd
+ldx
+	jsr	rdan
+	do	x0,lx1
+	jsr	rd
+	move	x0,x:(r0)+
+lx1
+	jmp	cmd
+ldy
+	jsr	rdan
+	do	x0,ly1
+	jsr	rd
+	move	x0,y:(r0)+
+ly1
+	jmp	cmd
+; PING: "JPG" back, so the 68030 knows this program is still here
+ping
+	move	#>$4A5047,x1
+pw	jclr	#1,x:HSR,pw
+	movep	x1,x:HRX
+	jmp	cmd
+
+; an AC coefficient the slow way (hac): the code and the value read in
+; turn
+hacs	jsr	hsym			; y1 = run << 4 | size
+	move	#>SPLIT,b
+	move	y1,x0
+	add	x0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x1	y:(r5),y0	; the run, the size
+	move	y0,b
+	tst	b
+	jne	hac2
+	move	x1,b			; size 0: 16 zeros (run 15), or the end
+	move	#>15,x0
+	cmp	x0,b
+	jne	hend
+	move	#16,n1
+	nop
+	move	(r1)+n1
+	jmp	hacr
+hac2	move	x1,n1
+	nop
+	move	(r1)+n1			; k + run
+	move	r1,b
+	move	#>ZZ+63,x0
+	cmp	x0,b	y0,x1		; (need uses y0)
+	jgt	hend			; past the block: damaged
+	jsr	need
+	move	x1,n7
+	jsr	hval			; b1 = the coefficient
+	move	x:(r1),n0		; its place
+	move	x:(r1),n6
+	move	r1,x:V_KMAX
+	move	b1,x0
+	move	y:(r6+n6),y0		; Q * 2048
+	mpy	x0,y0,b
+	move	b0,x:(r0+n0)
+	move	(r1)+
+hacr	move	x:V_FT,x1
+	move	#>$000100,y1
+	move	#FRUN,n2
+	jmp	hchk
+
+; an MCU's pixels made: 0 before them, and they go from there, by the
+; host's interrupt, once the last MCU's have all gone; the next MCU's in
+; the other buffer
+osend
+	move	x:V_OBUF,b
+	move	x:V_NPIX,x0
+	sub	x0,b	#>1,x0
+	sub	x0,b
+	move	b1,r6
+	clr	a
+	move	a,y:(r6)
+sw	jset	#1,x:HCR,sw
+	move	r6,r3
+	movep	#2,x:HCR		; HTIE
+	move	x:V_OBUF,a
+	move	#>OBUFA^OBUFB,x0
+	eor	x0,a
+	move	a1,x:V_OBUF
+	rts
+
+; the colour terms of an MCU: Rt Gt Bt for each luma column (Rc, Gc and
+; Bc as integers, on from the tables' middles)
+terms
 	move	#CBP,r4
 	move	#CRP,r5
 	move	#TRM,r1
@@ -367,6 +961,19 @@ blk
 	mpy	x0,y0,a
 	asl	a			; Bc
 	move	a,x0
+	move	#>$000100,y0		; as integers, on from the tables' middles
+	mpyr	x1,y0,b
+	move	#>TR+384,x1
+	add	x1,b
+	move	b1,x1
+	mpyr	y1,y0,b
+	move	#>TG+384,y1
+	add	y1,b
+	move	b1,y1
+	mpyr	x0,y0,b
+	move	#>TB+384,x0
+	add	x0,b
+	move	b1,x0
 	do	x:V_RH,t3
 	move	x1,x:(r1)+
 	move	y1,x:(r1)+
@@ -376,74 +983,5 @@ t3
 t2
 	nop
 t1
-
-	; the pixels
-col
-	move	#YPL,r4
-	move	#OUT,r5
-	move	#TRM,r2
-	move	x:V_PW3,n2
-	move	#CONSTS,r6
-	movec	#6,m6			; the format's 7 constants, in turn
-	do	x:V_M,d1
-	do	x:V_RV,d2
-	move	r2,r1
-	nop
-	do	x:V_PW,d3
-	move	x:(r1)+,x0	y:(r4)+,y0	; Rc, Y
-	tfr	y0,a	x:(r1)+,x1		; Gc
-	add	x0,a	x:(r1)+,x0		; Y + Rc; Bc
-	asl	a
-	tfr	y0,b	a,y1			; y1 = R, limited
-	add	x1,b
-	asl	b
-	tfr	y0,a	b,x1			; x1 = G
-	add	x0,a	y:(r6)+,x0		; Y + Bc; R's mask
-	asl	a
-	tfr	y1,b	a,y0			; y0 = B
-	and	x0,b	y:(r6)+,y1		; R's top bits; its shift
-	move	b1,x0
-	mpyr	x0,y1,b	y:(r6)+,x0		; R moved down (rounded: by $7FFFFF it stays); G's mask
-	tfr	x1,a	y:(r6)+,y1		; G; its shift
-	and	x0,a	y:(r6)+,x0		; G's top bits; B's mask
-	move	a1,x1
-	mac	x1,y1,b	y:(r6)+,y1		; + G moved down; B's shift
-	tfr	y0,a
-	and	x0,a	y:(r6)+,x0		; B's top bits; the top bits' fix
-	move	a1,x1
-	mac	x1,y1,b
-	add	x0,b
-	move	b1,y:(r5)+
-d3
-	nop
-d2
-	move	(r2)+n2
-d1
-
-cdone
-	movec	#$ffff,m6
-	jmp	cmd
-
-; ---- the last MCU's pixels: PROWS rows of PCOLS (from OUT, PW a row)
-send
-	move	x:V_PROWS,a
-	tst	a
-	jeq	sn0
-	move	#OUT,r5
-	move	x:V_PSKIP,n5
-	do	x:V_PROWS,sn1
-	do	x:V_PCOLS,sn2
-sn3	jclr	#1,x:HSR,sn3
-	movep	y:(r5)+,x:HRX
-sn2
-	move	(r5)+n5
-sn1
-	clr	a
-	move	a,x:V_PROWS
-sn0
 	rts
 
-; ---- host port
-rd	jclr	#0,x:HSR,rd
-	movep	x:HRX,x0
-	rts

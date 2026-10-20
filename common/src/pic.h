@@ -49,18 +49,24 @@ void pic_free(PIC *p);
    never */
 extern int (*pic_poll)(void);
 
-/* ---- a JPEG's transform and colours on the Falcon's DSP (PIC_LIBJPEG
-   builds; dsp/jpeg.a56) ---- */
+/* ---- a baseline JPEG decoded on the Falcon's DSP (PIC_LIBJPEG builds;
+   dsp/jpeg.a56) ---- */
 typedef struct {
-	int (*begin)(void);	/* get the DSP and start jpeg.a56 on it: 1; 0 if it couldn't be had */
+	/* get the DSP and start jpeg.a56 on it (its bootstrap part and the
+	   rest): 1; 0 if it couldn't be had */
+	int (*begin)(void);
 	/* let it go; clean: jpeg.a56 is back at its commands (the next
 	   picture needn't load it again) */
 	void (*end)(int clean);
 	void (*put)(const unsigned long *w, long n);	/* n words to the DSP */
-	/* rows of cols words from it, pitch apart: their low 16 bits (pitch
-	   in pixels), or their 3 bytes (pitch in bytes) */
-	void (*get16)(unsigned short *d, int cols, int rows, long pitch);
-	void (*get24)(unsigned char *d, int cols, int rows, long pitch);
+	/* n words of 16 bits to the DSP (the scan's bytes, two to a word: as
+	   $00xxxx there; a port write of 2 bytes, not 3) */
+	void (*put16)(const unsigned short *w, long n);
+	/* an MCU's word from the DSP: 0, and then rows of cols words, pitch
+	   apart, their low 16 bits (pitch in pixels) or their 3 bytes (pitch
+	   in bytes), read into d; else the word (the DSP asks for data) */
+	unsigned long (*get16)(unsigned short *d, int cols, int rows, long pitch);
+	unsigned long (*get24)(unsigned char *d, int cols, int rows, long pitch);
 } PIC_DSP;
 /* set by the program where it may use the DSP (atari/dspjpeg.c's
    dspjpeg_port), NULL: the 68030 does it all. The first JPEG decoded
