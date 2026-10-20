@@ -82,10 +82,17 @@ async function guard() {
     id: i + 1, priority: 1, action: {type: "block"},
     condition: {regexFilter: re, resourceTypes: TYPES},
   }));
-  // webgate itself, on this Pi, is the one address of home it may reach
+  // webgate itself, on this Pi, is the one address of home this extension
+  // may reach; a page never may (it could take the Atari's next page from
+  // /next, or hand in a snapshot of its own), with --allow-local too.
+  // webgate refuses them as well (Sec-Fetch-Site, Origin)
   if (!local)
     rules.push({id: 100, priority: 2, action: {type: "allow"},
-                condition: {urlFilter: "|" + WEBGATE + "/", resourceTypes: TYPES}});
+                condition: {urlFilter: "|" + WEBGATE + "/", initiatorDomains: [chrome.runtime.id],
+                            resourceTypes: TYPES}});
+  rules.push({id: 101, priority: 3, action: {type: "block"},
+              condition: {urlFilter: "|" + WEBGATE + "/", excludedInitiatorDomains: [chrome.runtime.id],
+                          resourceTypes: TYPES}});
   await chrome.declarativeNetRequest.updateDynamicRules({removeRuleIds: old, addRules: rules});
 }
 
