@@ -38,7 +38,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "" };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT };
 browser br;
 int loading;
 static short quit;
@@ -96,6 +96,9 @@ static MBAR_ITEM m_bm[3 + BM_MENU + 1];
 static char bm_text[BM_MENU][40];
 static unsigned bm_seen;
 static const MBAR_ITEM m_opts[] = {
+	{ "Settings...", "^,", C_SETTINGS },
+	{ "Falcon mode (TLS)", 0, C_FALCON },
+	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
 	{ "Forget cookies...", 0, C_COOKIES },
@@ -200,10 +203,15 @@ void menu_update(void)
 		for (i = 0; i < bm_n && i < BM_MENU; i++)
 			enable(C_BM + i, !loading);
 	}
+	enable(C_SETTINGS, !loading);
+	enable(C_FALCON, !loading);
 	{
 		short i = mbar_object(&mb, C_PICTURES);
 		if (i >= 0)
 			menu_icheck(mb.tree, i, opt.pictures ? 1 : 0);
+		i = mbar_object(&mb, C_FALCON);
+		if (i >= 0)
+			menu_icheck(mb.tree, i, opt.falcon ? 1 : 0);
 	}
 }
 
@@ -256,8 +264,12 @@ static void settings_load(void)
 			opt.dsp = atoi(eq) != 0;
 		else if (!strcmp(line, "PICTURES"))
 			opt.pictures = atoi(eq) != 0;
-		else if (!strcmp(line, "GATEWAY"))
-			str_copy(opt.gateway, eq, sizeof opt.gateway);
+		else if (!strcmp(line, "FALCON"))
+			opt.falcon = atoi(eq) != 0;
+		else if (!strcmp(line, "GATE"))
+			str_copy(opt.gate, eq, sizeof opt.gate);
+		else if (!strcmp(line, "GATEPORT"))
+			opt.gateport = (unsigned short) atoi(eq);
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -276,6 +288,10 @@ static void settings_load(void)
 	free(data);
 	if (opt.zoom < 50 || opt.zoom > 200)
 		opt.zoom = 100;
+	if (opt.gateport == 0)
+		opt.gateport = HTTP_GATEWAY_PORT;
+	if (!tls_available)
+		opt.falcon = 0;		/* the ST edition: through the Pi gateway */
 }
 
 /* one setting into the text: its line replaced, or its note and line
@@ -323,12 +339,17 @@ int settings_save(void)
 	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (FrogFind: " FROGFIND ")");
 	snprintf(v, sizeof v, "%d", opt.zoom);
 	put(&s, "ZOOM", v, "the size of pages, per cent (100: a CSS pixel is 0.8 of the screen's)");
+	snprintf(v, sizeof v, "%d", opt.falcon);
+	put(&s, "FALCON", v, "1 = Falcon mode: secure pages with TLS on this Atari (Falcon, TT; EWEB.PRG); "
+	    "0 = through the Pi gateway");
 	snprintf(v, sizeof v, "%d", opt.dsp);
-	put(&s, "DSP", v, "1: the DSP does the secure connections' arithmetic, 0: the 68030 does");
+	put(&s, "DSP", v, "Falcon mode: 1 = the DSP does the secure connections' arithmetic, 0 = the 68030 does");
 	snprintf(v, sizeof v, "%d", opt.pictures);
 	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
-	put(&s, "GATEWAY", opt.gateway, "AERA-Gateway's web service on the Pi (PI_IP, or PI_IP:8280) to fetch "
-	    "every page through, or nothing to fetch them directly");
+	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without Falcon mode "
+	    "(aera-gateway install web on the Pi)");
+	snprintf(v, sizeof v, "%u", opt.gateport);
+	put(&s, "GATEPORT", v, "the gateway's port");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -362,6 +383,16 @@ static void log_event(const char *fmt, ...)
 	va_end(ap);
 	strcat(buf, "\n");
 	nf_debug(buf);
+}
+
+/* the memory, for the rigs' log: the heap's blocks in use, the most
+   they were, and the RAM TOS has left (the largest block) */
+static long ram_free(void)
+{
+	long st = (long) Mxalloc(-1L, 0), tt = (long) Mxalloc(-1L, 1);
+	if (st < 0)
+		return (long) Malloc(-1L);
+	return st > tt ? st : tt;
 }
 
 /* the key for the cookies' values couldn't be made: they go into
@@ -612,7 +643,7 @@ static void loaded(int r)
 		win_toolbar();
 		break;
 	default:
-		log_event("stopped");
+		log_event("stopped heap %ld peak %ld free %ld", heap_use, heap_peak, ram_free());
 		keys_flush();
 		win_address(br.url);
 		win_status(conn_stop || r == BR_STOPPED ? "Stopped." : "");
@@ -651,6 +682,54 @@ void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y)
 static void home(void)
 {
 	go(opt.home[0] ? opt.home : "about:start");
+}
+
+/* every page through the Pi gateway (webgate) when one is set and Falcon
+   mode is off: always so in the ST edition */
+static void gate_apply(void)
+{
+	if (opt.gate[0] && !opt.falcon)
+		snprintf(http_gateway, sizeof http_gateway, "%.100s:%u", opt.gate, opt.gateport);
+	else
+		http_gateway[0] = 0;
+}
+
+int falcon_mode_set(int on)
+{
+	if (on) {
+		if (!tls_available) {
+			alert(1, "[3][This is the ST edition: Falcon|mode is in EWEB.PRG.][ OK ]");
+			return 0;
+		}
+		if (get_cookie(0x5F435055L) < 20) {	/* _CPU */
+			alert(1, "[3][Falcon mode needs a 68020 or|better (Falcon, TT): this Atari|is too slow for TLS.][ OK ]");
+			return 0;
+		}
+		if (!pf_exists(conn_cacert)) {
+			alert(1, "[3][Falcon mode needs the root|certificates: put CACERT.PEM and|ROOTS.DAT next to EWEB.PRG.][ OK ]");
+			return 0;
+		}
+	}
+	opt.falcon = on;
+	falcon_dsp_init();
+	falcon_dsp_ec_init();
+	gate_apply();
+	return 1;
+}
+
+/* a secure address with neither Falcon mode nor the Pi gateway: said
+   plainly, and the page stays (EFTP's words) */
+static int can_open(void *ud, const char *url)
+{
+	(void) ud;
+	if (strncmp(url, "https:", 6) != 0 || http_gateway[0] || opt.falcon)
+		return 1;
+	log_event("secure page: needs the gateway");
+	if (!tls_available)
+		alert(1, "[1][Secure pages need the|Raspberry Pi gateway: on the|Pi, aera-gateway install web,|then its address in|Settings > Secure.][ OK ]");
+	else
+		alert(1, "[1][Secure pages need Falcon|mode (Options menu) or the|Raspberry Pi gateway|(Settings > Secure).][ OK ]");
+	return 0;
 }
 
 /* the size of pages: a CSS pixel is 0.8 of the screen's at 100% */
@@ -728,7 +807,7 @@ void save_link(int link)
 		saved(full, br_saved);
 	} else if (r == BRS_STOPPED) {
 		keys_flush();
-		log_event("stopped");
+		log_event("stopped heap %ld peak %ld free %ld", heap_use, heap_peak, ram_free());
 		win_status("Stopped.");
 	} else {
 		char t[220];
@@ -796,6 +875,31 @@ void command(int cmd)
 			graf_mouse(ARROW, 0);
 			win_page_relaid();
 		}
+		break;
+	case C_SETTINGS: {
+		int pics = opt.pictures, zoom = opt.zoom, changed;
+		log_event("settings shown");
+		changed = dlg_settings();
+		log_event("settings %s", changed ? "changed" : "kept");
+		if (changed) {
+			gate_apply();
+			falcon_dsp_init();
+			falcon_dsp_ec_init();
+			settings_save();
+			br.pictures = opt.pictures;
+			br.zoom = (int32_t) (819L * opt.zoom / 100);
+			if (br.d != NULL && (pics != opt.pictures || zoom != opt.zoom)) {
+				graf_mouse(BUSYBEE, 0);
+				br_relayout(&br, win_page_w());
+				graf_mouse(ARROW, 0);
+				win_page_relaid();
+			}
+		}
+		break;
+	}
+	case C_FALCON:
+		if (falcon_mode_set(!opt.falcon))
+			settings_save();
 		break;
 	case C_SETHOME:
 		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0) {
@@ -874,6 +978,7 @@ static int shortcut(short kstate, short key)
 		int cmd = C_NONE;
 		switch (scan) {
 		case 0x26: cmd = C_OPENURL; break;		/* L */
+		case 0x33: cmd = C_SETTINGS; break;		/* , */
 		case 0x18: cmd = C_OPENFILE; break;		/* O */
 		case 0x1f: cmd = C_SAVE; break;			/* S */
 		case 0x20: cmd = C_BMADD; break;		/* D */
@@ -1147,7 +1252,8 @@ int main(void)
 #else
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari Falcon030)", EWEB_VERSION);
 #endif
-	str_copy(http_gateway, opt.gateway, sizeof http_gateway);	/* GATEWAY= (webgate on the Pi) */
+	gate_apply();
+	br.can_open = can_open;
 
 	{
 		/* the bookmarks: read once a start (6.5), for their menu */
@@ -1200,7 +1306,8 @@ int main(void)
 	if (strcmp(net_stack(), "none") == 0)
 		status("No network: load STinG to reach web sites (files can be opened).");
 
-	log_event("ready %s %dx%d buf %d", scr_mode(), scr_w, scr_h, scr_rows());
+	log_event("ready %s %dx%d buf %d heap %ld free %ld", scr_mode(), scr_w, scr_h, scr_rows(), heap_use,
+		  ram_free());
 	command_line(first, sizeof first);
 	if (first[0])
 		go(first);

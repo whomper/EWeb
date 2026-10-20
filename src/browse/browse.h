@@ -98,6 +98,9 @@ typedef struct browser {
 	/* a line for the log (each picture: what it was, how long it took);
 	   NULL for none */
 	void (*log)(void *ud, const char *line);
+	/* may this address be opened? 0: no (the front end has said why: a
+	   secure page with neither TLS nor the Pi gateway); NULL: all may */
+	int (*can_open)(void *ud, const char *url);
 	void *ud;
 } browser;
 

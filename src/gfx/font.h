@@ -33,6 +33,7 @@ typedef struct ew_font {
 /* reads the file's table of faces: 0 if it can't */
 int font_init(const char *path);
 void font_free(void);
+void font_drop(void);		/* the glyphs given back, read again when used */
 
 /* the face nearest to px of that family and style; never NULL once
    font_init succeeded (a face that can't be read draws nothing) */

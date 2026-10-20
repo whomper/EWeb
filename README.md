@@ -47,9 +47,9 @@ EWeb's own fonts.
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
   colour, through ST-RAM so that it runs from TT-RAM.
-- **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP; or,
-  with `GATEWAY=` set, through AERA-Gateway's web service on a Raspberry Pi
-  (TLS 1.3 sites too).
+- **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP
+  (Falcon mode); or through the Pi gateway, AERA-Gateway's web service on a
+  Raspberry Pi (TLS 1.3 sites too).
 - **The family's ways**: the About box, menus, shortcuts, right-click menus,
   VA_START and drag and drop, the help file, iconify, the crash report.
 - And the first milestone's tools: `NSBENCH.TTP` times the HTML parser and
@@ -80,8 +80,9 @@ and unpack it into a folder of its own. It contains:
 3. Pages on your disks open too: ^O, or drop one on `EWEB.PRG`.
 
 **Needs:** a Falcon or TT, plain TOS, EmuTOS or MagiC, a screen 640 pixels
-wide, about 2 MB free; STinG for the network. On an ST or STE (4 MB best), the
-ST edition `EWEBST.PRG` with `GATEWAY=` in `EWEB.INF` naming the Pi.
+wide, about 2 MB free; STinG for the network. On an ST or STE (from 1 MB; 4 MB
+best), the ST edition `EWEBST.PRG`, with the Pi gateway's address in Settings >
+Secure.
 
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
 TOS keeps an entry in a small internal pool for every folder a program or accessory has looked

@@ -30,10 +30,15 @@ void *doc_alloc(doc *d, size_t n)
 	struct dblk *b = d->mem;
 	n = (n + DALIGN - 1) & ~(size_t) (DALIGN - 1);
 	if (b == NULL || b->used + n > b->size) {
-		/* 16 KB first (a small page), then 64 KB; something larger
-		   than that gets a block of its own, kept behind the one in
-		   use so that keeps its room */
+		/* 16 KB first (a small page), then 64 KB (8 KB at a time in
+		   the ST edition, for a 1 MB ST); something larger than that
+		   gets a block of its own, kept behind the one in use so that
+		   keeps its room */
+#ifdef EW_ST
+		size_t size = 8192;
+#else
 		size_t size = b == NULL ? 16384 : 65536;
+#endif
 		int alone = n > size;
 		if (alone)
 			size = n;

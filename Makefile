@@ -389,7 +389,7 @@ build/asan/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
-GEM_UI     := main draw screen win about
+GEM_UI     := main draw screen win about dialogs
 GEM_COMMON := aboutbox alert popup dialog help av iconify clip mbar dd
 GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
@@ -417,21 +417,24 @@ binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
 # (-fdisable-tree-bswap, as every 68000 build), no TLS (common's
 # tls_none.c: BearSSL's 150 KB left out) and no DSP; secure sites through
 # AERA-Gateway's webgate (GATEWAY=). The same sources as EWEB.PRG.
-ST_CFLAGS     := $(subst -m68030,-m68000,$(TOS_CFLAGS)) -fdisable-tree-bswap
+ST_CFLAGS     := $(subst -O2,-Os,$(subst -m68030,-m68000,$(TOS_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST
 ST_LDFLAGS    := $(subst -m68030,-m68000,$(TOS_LDFLAGS))
-STNET_CFLAGS  := $(subst -m68030,-m68000,$(TOSNET_CFLAGS)) -fdisable-tree-bswap -DEW_ST \
+STNET_CFLAGS  := $(subst -O2,-Os,$(subst -m68030,-m68000,$(TOSNET_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST \
                  -DTLS_FULL_EDITION=\"EWEB.PRG\"
 $(eval $(call target_rules,st,$(M68KCC),$(ST_CFLAGS)))
 st_RT      := $(subst build/tos/,build/st/,$(tos_RT)) build/st/rt/ll68000.o
 STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
               $(addprefix build/st/net/,conn.o tls_none.o util.o futil.o inflate.o secret.o net_tos.o sting.o \
               sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o dsp_none.o)
-STPIC_OBJ  := $(subst build/tos/,build/st/,$(TOSPIC_OBJ))
+# pictures: TJpgDec (and jpegdc for the JPEGs it won't take) in place of
+# libjpeg-turbo, 100 KB less for the 1 MB ST
+STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
+STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
 STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
 build/st/rt/%.o: common/atari/%.S
 	@mkdir -p $(@D)
-	$(M68KCC) -m68000 -DSTACK_SIZE=65536 -c $< -o $@
+	$(M68KCC) -m68000 -DSTACK_SIZE=49152 -c $< -o $@
 build/st/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
@@ -461,13 +464,13 @@ build/st/net/crash_s.o: common/atari/crash.S
 	$(M68KCC) -m68000 -c $< -o $@
 build/st/pic/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) $(COMMON_WARN) -c $< -o $@
-build/st/pic/%.o: $(LJ)/src/%.c $(wildcard $(LJ)/src/*.h $(LJ)/config/*.h)
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) $(COMMON_WARN) -c $< -o $@
+build/st/pic/%.o: common/third_party/tjpgd/%.c common/third_party/tjpgd/*.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) -w -c $< -o $@
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -w -c $< -o $@
 build/st/pic/%.o: common/third_party/nsgif/src/%.c common/third_party/nsgif/include/nsgif.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNDEBUG -w -c $< -o $@
 build/st/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@

@@ -29,6 +29,7 @@ void dlg_about(void)
 		    icon_bits, icon16_px, icon16_rgb };
 	snprintf(net, sizeof net, "%s  \xF9  secure sites: %s",
 		 strcmp(net_stack(), "none") ? net_stack() : "no network",
+		 !opt.falcon ? (opt.gate[0] ? "the Pi gateway" : "none") :
 		 strcmp(falcon_dsp_ec_state(), "DSP") ? "68030" : "DSP");
 	snprintf(where, sizeof where, "%s%s%s", scr_mode(), about_ram()[0] ? "  \xF9  " : "", about_ram());
 	about_show(&a);
@@ -48,6 +49,7 @@ void dlg_keys(void)
 		 "^C       copy the page's text (or the address)\n"
 		 "Tab      between the page and the address\n"
 		 "Right click: a link's or the page's commands\n"
+		 "^,       the Settings\n"
 		 "^Q       quit");
 }
 

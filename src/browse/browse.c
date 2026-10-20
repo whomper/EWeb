@@ -13,6 +13,7 @@
 #include "bookmark.h"
 #include "form.h"
 #include "img.h"
+#include "font.h"
 #include "http.h"
 #include "conn.h"
 #include "cookie.h"
@@ -811,10 +812,49 @@ static void base_of(const browser *b, const doc *d, const char *url, char *out, 
 		str_copy(out, url, size);
 }
 
+/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
+   Back and the one shown go, and the pictures not in use; 1 when
+   something was given back */
+static void unkeep(BR_ENTRY *e);
+
+static int make_room(browser *b)
+{
+	int i, freed = 0;
+	for (i = 0; i < b->nhist; i++)
+		if (b->hist[i].p != NULL) {
+			unkeep(&b->hist[i]);
+			freed = 1;
+		}
+	if (b->p != NULL) {
+		pg_free(b->p);
+		doc_free(b->d);
+		b->p = NULL;
+		b->d = NULL;
+		freed = 1;
+	}
+	img_clear();
+	font_drop();
+	return freed;
+}
+
+static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
+		  doc **dout, page **pout);
+
 /* the source made into a page (doc styled and laid out): 1, or 0 when
-   out of memory or stopped while fetching its sheets */
+   out of memory or stopped while fetching its sheets. Out of memory, the
+   pages kept go and it is tried once more */
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
+{
+	if (build1(b, data, len, charset, url, fresh, dout, pout))
+		return 1;
+	if (conn_stop || !make_room(b))
+		return 0;
+	return build1(b, data, len, charset, url, fresh, dout, pout);
+}
+
+static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
+		  doc **dout, page **pout)
 {
 	ec_media m = media_of(b);
 	doc *d;
@@ -1071,6 +1111,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		str_copy(b->elsewhere, url, sizeof b->elsewhere);
 		return BR_ELSEWHERE;
 	}
+	if (b->can_open != NULL && !b->can_open(b->ud, url))
+		return BR_STOPPED;	/* the page shown stays */
 	/* a place on the page shown */
 	if (mode == NAV_NEW && post == NULL && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
 		hist_push(b, url);
@@ -1159,6 +1201,17 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	}
 	sb_free(&src);
+	if (!r && !conn_stop) {
+		/* no memory for it, even with the kept pages gone: said on a
+		   page of EWeb's own, which is small */
+		free(f->data);
+		free(f);
+		error_page(&src, url, "EWeb can't show this page",
+			   "There isn't enough memory for it on this Atari.", NULL);
+		r = own_page(b, url, &src, mode);
+		sb_free(&src);
+		return r;
+	}
 	if (!r || conn_stop) {
 		if (r) {
 			pg_free(p);

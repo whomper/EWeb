@@ -46,6 +46,7 @@ HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
+COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
@@ -351,7 +352,7 @@ def browse():
         time.sleep(8)
         r.key(0x01)
         ev = r.wait(r"(stopped|shown )", 120)
-        check("browse: Esc stops a load", ev == "stopped", str(r.events()))
+        check("browse: Esc stops a load", ev is not None and ev.startswith("stopped"), str(r.events()))
         r.shot(5)
         # a page of pictures: shown first, its pictures after, the window
         # scrolled while they come (Down doesn't stop them)
@@ -527,6 +528,16 @@ def screens():
             check("screens: %s pictures" % name, ev is not None and len(dec) == 5, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
+            if name == "falcon256":
+                # ^, the Settings dialog (looked at in its screenshot); Esc
+                # leaves it as it was
+                r.key(COMMA, (CTRL,))
+                ev = r.wait(r"settings shown", 60)
+                time.sleep(2)
+                r.shot(2)
+                r.key(ESC)
+                check("screens: ^, shows the Settings, Esc keeps them", ev is not None and
+                      r.wait(r"settings ", 60) == "settings kept", str(r.events()[-5:]))
             r.key(Q, (CTRL,))
             check("screens: %s quits" % name, r.wait(r"quit$", 60) is not None, str(r.events()))
         finally:
@@ -534,13 +545,13 @@ def screens():
 
 
 def st():
-    """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, TOS
-    1.04): a page and its pictures from the disk in monochrome and in
-    medium resolution; then, over the network, a secure page through
-    AERA-Gateway's webgate (the ST has no TLS of its own)"""
+    """EWEBST.PRG, the ST edition, on the 1 MB ST and Erez's 1040 ST (68000
+    at 8 MHz, TOS 1.04): a page and its pictures from the disk in
+    monochrome and in medium resolution; then, over the network, a secure
+    page through AERA-Gateway's webgate (the ST has no TLS of its own)"""
     if not os.path.exists(os.path.join(ROOT, "binary/EWEBST.PRG")):
         return check("st: EWEBST.PRG made", False, "make binary/EWEBST.PRG first")
-    for name, spec in (("stmono", "ST:mono"), ("stmed", "ST:med")):
+    for name, spec in (("stone", "ST-1:mono"), ("stmono", "ST:mono"), ("stmed", "ST:med")):
         r = Run(name, spec, hd_for(name, r"C:\TABLES.HTM"), prg="EWEBST.PRG")
         try:
             ready = r.wait(r"ready ", 300)
@@ -554,13 +565,39 @@ def st():
             r.key(RETURN)
             ev = r.wait(r"pictures ", 1200)
             dec = [e for e in r.events() if " decoded at " in e]
-            # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
-            # gives pictures (a sixteenth of its RAM), so it says so
-            big = [e for e in r.events() if "big.png not enough memory" in e]
-            check("st: %s pictures (the big one too big for the memory)" % name,
-                  ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
+            shown = [e for e in r.events() if e.startswith("shown file:///C:/PICS.HTM ")]
+            if spec.startswith("ST-1"):
+                # a 1 MB ST: the page shows (the one before given back to
+                # make room), the pictures as far as their memory goes
+                check("st: %s shows the pictures' page" % name, ev is not None and len(shown) == 1,
+                      "\n".join(r.events()[-10:]))
+            else:
+                # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
+                # gives pictures (a sixteenth of its RAM), so it says so
+                big = [e for e in r.events() if "big.png not enough memory" in e]
+                check("st: %s pictures (the big one too big for the memory)" % name,
+                      ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
+            if name == "stmono":
+                # a secure page with no gateway set: said plainly, the page
+                # stays (the hub, 20 Oct 2026)
+                r.key(L, (CTRL,))
+                r.type("https://example.com/")
+                r.key(RETURN)
+                ev = r.wait(r"secure page", 120)
+                time.sleep(2)
+                r.shot(2)
+                r.key(RETURN)
+                check("st: a secure page without the gateway says it needs it",
+                      ev == "secure page: needs the gateway", str(r.events()[-5:]))
+                r.key(COMMA, (CTRL,))
+                ev = r.wait(r"settings shown", 120)
+                time.sleep(3)
+                r.shot(3)
+                r.key(ESC)
+                check("st: ^, shows the Settings, Esc keeps them", ev is not None and
+                      r.wait(r"settings ", 120) == "settings kept", str(r.events()[-5:]))
             r.key(Q, (CTRL,))
             check("st: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()))
         finally:
@@ -580,7 +617,7 @@ def st():
                              "--cafile", os.path.join(work, "CACERT.PEM")], env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     site = "https://127.0.0.1:%d/site/" % HTTPS
-    r = Run("stnet", "ST:mono", hd_for("stnet", site, "GATEWAY=127.0.0.1:%d\r\n" % GATE), network=True,
+    r = Run("stnet", "ST:mono", hd_for("stnet", site, "GATE=127.0.0.1\r\nGATEPORT=%d\r\n" % GATE), network=True,
             prg="EWEBST.PRG")
     try:
         ev = r.wait(r"shown ", 600)

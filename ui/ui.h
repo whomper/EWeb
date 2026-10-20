@@ -11,7 +11,7 @@
 #define UI_H
 
 typedef struct {
-	int falcon;			/* TLS on the Atari itself (always, in EWeb) */
+	int falcon;			/* FALCON=: Falcon mode, TLS on this Atari (never in the ST edition) */
 	int dsp;			/* RSA and elliptic curves on the DSP when there is one */
 	/* EWEB.INF (the program's): */
 	char home[512];			/* HOME=: the start page; "" EWeb's own */
@@ -20,7 +20,8 @@ typedef struct {
 	short win_x, win_y, win_w, win_h;	/* WINDOW=: where the window was */
 	char workdir[200];		/* where EWEB.PRG is: EWEB.FNT, EWEB.INF, the certificates */
 	short pictures;			/* PICTURES=: shown (1), or only their alt text (0) */
-	char gateway[128];		/* GATEWAY=: AERA-Gateway's webgate (PI_IP or PI_IP:8280), "" none */
+	char gate[64];			/* GATE=: the Pi gateway (AERA-Gateway's webgate), "" none */
+	unsigned short gateport;	/* GATEPORT=: its port, 8280 */
 } EWOPT;
 extern EWOPT opt;
 
@@ -115,12 +116,16 @@ enum {
 	C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_LARGER, C_SMALLER, C_ACTUAL, C_PICTURES,
-	C_SETHOME, C_COOKIES, C_CACHE,
+	C_SETTINGS, C_FALCON, C_SETHOME, C_COOKIES, C_CACHE,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
 };
 void command(int cmd);
+int  falcon_mode_set(int on);		/* 0 (and an alert why) when it can't */
+
+/* dialogs.c */
+int  dlg_settings(void);		/* 1: changed (in opt) */
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
 void save_link(int link);		/* its file saved (Alternate-click, the link's menu) */

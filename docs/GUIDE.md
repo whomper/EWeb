@@ -12,8 +12,9 @@ colour or black and white.
   mode: monochrome, 4, 16 or 256 colours, or the Falcon's true colour.
   On an ST or STE (TOS 1.04 or newer, 4 MB best), use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
-  sites through AERA-Gateway's web service on a Raspberry Pi
-  (`GATEWAY=`, in [Settings](#settings))
+  sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
+  gateway, in [Settings](#settings)); it runs on a 1 MB ST, which has
+  room for one page at a time and few pictures
 - About 2 MB of free memory, more for big pages; TT RAM is used when
   there is some
 - **STinG** for the network (plain TOS), on a network card such as the
@@ -246,6 +247,7 @@ choose all of it.
 | ^C | copy the page's text, the address, or a field's text |
 | Tab, Shift-Tab | the page's next field (or the one before), then the address |
 | Return | in a field: send its form |
+| ^, | the Settings |
 | Help | this guide |
 | ^Q, ^W | quit |
 
@@ -269,13 +271,30 @@ Wikipedia and many blogs, read well.
 
 ## Secure sites
 
-EWeb opens `https://` pages itself: the Falcon's 68030 and DSP do the
-TLS handshake, checked against the root certificates in `CACERT.PEM`
-(and `ROOTS.DAT`, the same read ahead of time). The first visit to a
-site takes a few seconds; later ones are quicker, as EWeb remembers
-what it checked (`SIGS.DAT`). The info line says how a secure page came.
+In Falcon mode (Options > Falcon mode, on unless you turn it off) EWeb
+opens `https://` pages itself: the Falcon's 68030 and DSP do the TLS
+handshake, checked against the root certificates in `CACERT.PEM` (and
+`ROOTS.DAT`, the same read ahead of time). The first visit to a site
+takes a few seconds; later ones are quicker, as EWeb remembers what it
+checked (`SIGS.DAT`).
+
+Without Falcon mode, and always in the ST edition, pages come through
+the Pi gateway: AERA-Gateway's web service on a Raspberry Pi in your
+home (`aera-gateway install web` on the Pi), whose address you type in
+Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
+hands the page over your home network. With neither, EWeb says so when
+you open a secure page, and the page shown stays.
+
+The info line says how a secure page came.
 
 ## Settings
+
+Options > Settings (^,) has two pages:
+
+- **General:** whether pages' pictures are shown, the size of pages
+  (per cent), and where words typed in the address go.
+- **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
+  checks certificates, and the Pi gateway's address and port (8280).
 
 EWeb keeps its settings in `EWEB.INF`, next to the program, with a note
 above each. A setting you change is saved there at once; where the window
@@ -285,13 +304,14 @@ was, when you quit:
 - `SEARCH=` where words typed in the address go, `%s` for the words
   (FrogFind: `http://frogfind.com/?q=%s`)
 - `ZOOM=` the size of pages, per cent
+- `FALCON=` 1 for Falcon mode (secure pages on this Atari), 0 for the
+  Pi gateway
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
   Show pictures)
-- `GATEWAY=` AERA-Gateway's web service on your Raspberry Pi (its
-  address, or `address:port`; 8280 when none is given): every page then
-  comes through the Pi, which makes the secure connection itself (TLS
-  1.3 too). Empty (the default): EWeb fetches pages directly.
+- `GATE=` the Pi gateway's address: without Falcon mode every page comes
+  through the Pi, which makes the secure connection itself (TLS 1.3 too)
+- `GATEPORT=` its port (8280)
 - `WINDOW=` where the window was
 
 ## When something goes wrong

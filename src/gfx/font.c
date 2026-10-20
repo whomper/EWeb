@@ -48,6 +48,17 @@ void font_free(void)
 	fh = -1;
 }
 
+/* the faces' glyphs given back (a 1 MB ST short of memory for a page);
+   each is read again when next used */
+void font_drop(void)
+{
+	int i;
+	for (i = 0; i < nfaces; i++) {
+		free(faces[i].data);
+		faces[i].data = NULL;
+	}
+}
+
 static int read_at(int h, long off, void *buf, long n)
 {
 	return pf_seek(h, off) == off && pf_read(h, buf, n) == n;
@@ -114,6 +125,11 @@ static int load(ew_font *f)
 		return f->data != NULL;
 	sb_init(&out);
 	packed = malloc(fstored[i] ? fstored[i] : 1);
+	/* the face's room at its exact size: no doubling while it unpacks */
+	if (packed && !sb_reserve(&out, (long) fsize[i])) {
+		free(packed);
+		packed = NULL;
+	}
 	if (packed && fh >= 0 && read_at(fh, foff[i], packed, fstored[i]) &&
 	    inflate_raw(packed, (long) fstored[i], &out, (long) fsize[i]) == 1 && out.len == (long) fsize[i] &&
 	    out.len >= 4 + 10L * ncodes) {
@@ -180,6 +196,8 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 	uint32_t off;
 
 	memset(g, 0, sizeof *g);
+	if (f != NULL && f->data == NULL && !f->failed)
+		load(f);		/* given back by font_drop */
 	if (f == NULL || f->data == NULL)
 		return;
 	i = index_of(cp);

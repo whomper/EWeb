@@ -277,7 +277,11 @@ typedef struct {
 	int failed;			/* 1 the sink refused, 2 too big */
 } BODY;
 
+#ifdef EW_ST
+static char rbuf[8192];		/* the ST edition: 8 KB less for a 1 MB ST */
+#else
 static char rbuf[16384];
+#endif
 
 /* n bytes of the body (or, n < 0, up to the close); 1 ok, 0 failed */
 static int read_body(CONN *c, BODY *b, long n, HTTPRESP *rs)

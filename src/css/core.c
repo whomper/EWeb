@@ -5,6 +5,14 @@
 
 /* ------------------------------------------------------------ memory */
 
+/* a context's memory comes in pieces of this: in the ST edition small
+   ones, as a 1 MB ST has 200 KB for everything */
+#ifdef EW_ST
+#define EC_CHUNK 4096
+#else
+#define EC_CHUNK 65536
+#endif
+
 void *ec_alloc_slow(ec_arena *a, size_t n)
 {
 	size_t size = a->chunk_size ? a->chunk_size : 32768;
@@ -126,7 +134,11 @@ typedef struct name {
 	int32_t val;
 } name;
 
+#ifdef EW_ST
+#define NAMES_SIZE 1024		/* 295 names: room enough, 10 KB less for a 1 MB ST */
+#else
 #define NAMES_SIZE 2048
+#endif
 static name names[NAMES_SIZE];
 static int names_ready;
 
@@ -347,8 +359,8 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 	}
 	c->media = *media;
 	c->opts = opts;
-	c->mem.chunk_size = 65536;
-	c->smem.chunk_size = 65536;
+	c->mem.chunk_size = EC_CHUNK;
+	c->smem.chunk_size = EC_CHUNK;
 	if (atoms_grow(c) != 0) {
 		free(c);
 		return NULL;
