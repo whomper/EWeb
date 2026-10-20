@@ -170,7 +170,8 @@ def make_certs(work):
     holds both authorities."""
     def run(*a):
         subprocess.run(["openssl"] + list(a), cwd=work, check=True, capture_output=True)
-    if os.path.exists(os.path.join(work, "ec.pem")):
+    mark = os.path.join(work, "certs.2")    # the certificates' version (2: an IP entry for 127.0.0.1)
+    if os.path.exists(mark):
         return
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "CACERT.PEM",
         "-days", "3650", "-subj", "/CN=EWeb test authority",
@@ -178,7 +179,7 @@ def make_certs(work):
     run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "host.key", "-out", "host.csr",
         "-subj", "/CN=localhost")
     with open(os.path.join(work, "ext.cnf"), "w") as f:
-        f.write("subjectAltName=DNS:localhost,DNS:127.0.0.1\nbasicConstraints=CA:FALSE\n"
+        f.write("subjectAltName=DNS:localhost,DNS:127.0.0.1,IP:127.0.0.1\nbasicConstraints=CA:FALSE\n"
                 "keyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n")
     run("x509", "-req", "-in", "host.csr", "-CA", "CACERT.PEM", "-CAkey", "ca.key", "-CAcreateserial",
         "-out", "host.pem", "-days", "825", "-extfile", "ext.cnf")
@@ -193,6 +194,7 @@ def make_certs(work):
         "-out", "ec.pem", "-days", "825", "-sha384", "-extfile", "ext.cnf")
     with open(os.path.join(work, "CACERT.PEM"), "a") as f:
         f.write(open(os.path.join(work, "ecca.pem")).read())
+    open(mark, "w").close()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

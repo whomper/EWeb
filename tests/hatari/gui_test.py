@@ -41,8 +41,8 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "screens"]
-HTTP, HTTPS = 18280, 18643
+WHICH = sys.argv[2:] or ["browse", "screens", "st"]
+HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
@@ -53,12 +53,13 @@ RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 KEYS = {":": (SHIFT, 0x27), "/": (None, 0x35), ".": (None, 0x34), "#": (SHIFT, 0x04), "-": (None, 0x0C)}
 
 
-def hd_for(name, home):
+def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("binary/EWEB.PRG", "binary/EWEB.FNT"):
-        shutil.copy(os.path.join(ROOT, f), hd)
+    for f in ("binary/EWEB.PRG", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
+        if os.path.exists(os.path.join(ROOT, f)):
+            shutil.copy(os.path.join(ROOT, f), hd)
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
     import server
@@ -68,7 +69,7 @@ def hd_for(name, home):
         with open(os.path.join(hd, k.upper()), "wb") as f:
             f.write(data)
     with open(os.path.join(hd, "EWEB.INF"), "w") as f:
-        f.write("HOME=%s\r\n" % home)
+        f.write("HOME=%s\r\n%s" % (home, inf))
     return hd
 
 
@@ -113,7 +114,7 @@ class Mouse:
 class Run:
     """Hatari with EWEB.PRG, its events and its command FIFO"""
 
-    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False):
+    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG"):
         self.name = name
         self.fifo = os.path.join(OUT, name + ".fifo")
         self.log = os.path.join(OUT, name + ".log")
@@ -122,7 +123,7 @@ class Run:
                 os.remove(p)
         self.m = machines.Machine(spec, hd)
         args = ["hatari"] + self.m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
-                                             "--cmd-fifo", self.fifo, "--auto", r"C:\EWEB.PRG"]
+                                             "--cmd-fifo", self.fifo, "--auto", "C:\\" + prg]
         if truecolour:
             # the Falcon on an RGB monitor, 640x200 in 16-bit colour: the
             # NVRAM's mode (16 bits, 80 columns, PAL; EmuTOS stopped at
@@ -532,6 +533,71 @@ def screens():
             r.end()
 
 
+def st():
+    """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, TOS
+    1.04): a page and its pictures from the disk in monochrome and in
+    medium resolution; then, over the network, a secure page through
+    AERA-Gateway's webgate (the ST has no TLS of its own)"""
+    if not os.path.exists(os.path.join(ROOT, "binary/EWEBST.PRG")):
+        return check("st: EWEBST.PRG made", False, "make binary/EWEBST.PRG first")
+    for name, spec in (("stmono", "ST:mono"), ("stmed", "ST:med")):
+        r = Run(name, spec, hd_for(name, r"C:\TABLES.HTM"), prg="EWEBST.PRG")
+        try:
+            ready = r.wait(r"ready ", 300)
+            ev = r.wait(r"shown ", 300)
+            check("st: %s (%s)" % (name, ready.split(" ", 1)[1] if ready else "?"),
+                  ev is not None and ev.startswith("shown file:///C:/TABLES.HTM "), str(r.events()))
+            time.sleep(2)
+            r.shot(0)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/PICS.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"pictures ", 1200)
+            dec = [e for e in r.events() if " decoded at " in e]
+            # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
+            # gives pictures (a sixteenth of its RAM), so it says so
+            big = [e for e in r.events() if "big.png not enough memory" in e]
+            check("st: %s pictures (the big one too big for the memory)" % name,
+                  ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
+            time.sleep(2)
+            r.shot(1)
+            r.key(Q, (CTRL,))
+            check("st: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()))
+        finally:
+            r.end()
+    webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
+    if not os.path.exists(webgate):
+        print("skip  st: through the gateway (no webgate at %s)" % webgate)
+        return
+    work = os.path.join(OUT, "server")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("st: the test server", False)
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    gate = subprocess.Popen([sys.executable, webgate, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
+                             "--cafile", os.path.join(work, "CACERT.PEM")], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    site = "https://127.0.0.1:%d/site/" % HTTPS
+    r = Run("stnet", "ST:mono", hd_for("stnet", site, "GATEWAY=127.0.0.1:%d\r\n" % GATE), network=True,
+            prg="EWEBST.PRG")
+    try:
+        ev = r.wait(r"shown ", 600)
+        check("st: a secure page through the gateway", ev is not None and ev.startswith("shown " + site + " ")
+              and ev.endswith("title EWeb site"), str(r.events()))
+        time.sleep(2)
+        r.shot(0)
+        r.key(Q, (CTRL,))
+        check("st: quits after the network", r.wait(r"quit$", 120) is not None, str(r.events()))
+    finally:
+        r.end()
+        gate.terminate()
+        gate.wait(10)
+        srv.stdin.close()
+        srv.wait(10)
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -542,5 +608,7 @@ if "browse" in WHICH:
         print("skip  browse: needs Xvfb and xdotool")
 if "screens" in WHICH:
     screens()
+if "st" in WHICH:
+    st()
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

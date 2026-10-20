@@ -9,7 +9,11 @@ colour or black and white.
 
 - A Falcon030 (best with an accelerator such as the DFB1 and TT RAM) or
   a TT, with TOS 4, EmuTOS or MagiC; a screen 640 pixels wide in any
-  mode: monochrome, 4, 16 or 256 colours, or the Falcon's true colour
+  mode: monochrome, 4, 16 or 256 colours, or the Falcon's true colour.
+  On an ST or STE (TOS 1.04 or newer, 4 MB best), use `EWEBST.PRG`, the
+  ST edition: it has no secure connections of its own and reaches secure
+  sites through AERA-Gateway's web service on a Raspberry Pi
+  (`GATEWAY=`, in [Settings](#settings))
 - About 2 MB of free memory, more for big pages; TT RAM is used when
   there is some
 - **STinG** for the network (plain TOS), on a network card such as the
@@ -26,7 +30,8 @@ The files are in the latest release on EWeb's GitHub page
 `EWEB-x.y.zip`. Put them in a folder of their own, on any drive:
 
 ```
-EWEB.PRG      the program
+EWEB.PRG      the program (Falcon, TT)
+EWEBST.PRG    the ST edition (ST, STE: secure sites through the gateway)
 EWEB.FNT      its fonts (needed: EWeb draws pages with them)
 EWEB.HYP      this guide, for EHypView or ST-Guide (the Help key opens it)
 CACERT.PEM    secure sites: the root certificates
@@ -283,6 +288,10 @@ was, when you quit:
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
   Show pictures)
+- `GATEWAY=` AERA-Gateway's web service on your Raspberry Pi (its
+  address, or `address:port`; 8280 when none is given): every page then
+  comes through the Pi, which makes the secure connection itself (TLS
+  1.3 too). Empty (the default): EWeb fetches pages directly.
 - `WINDOW=` where the window was
 
 ## When something goes wrong

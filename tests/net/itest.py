@@ -26,7 +26,10 @@ work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
 ewrender = os.path.abspath(sys.argv[3]) if len(sys.argv) > 4 else None
 font = os.path.abspath(sys.argv[4]) if len(sys.argv) > 4 else None
 os.makedirs(work, exist_ok=True)
-HTTP, HTTPS, BAD, EC = 18080, 18443, 18444, 18445
+HTTP, HTTPS, BAD, EC, GATE = 18080, 18443, 18444, 18445, 18288
+# AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
+# gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
+WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
                         "--https", str(HTTPS), "--untrusted", str(BAD), "--ecdsa", str(EC)],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -374,6 +377,54 @@ try:
         check("cookies: another site's picture sets none", rc == 0 and t[:1] == ["COOKIE|"]
               and re.search(r"^picture http://127\.0\.0\.1:\d+/site/cookie/px\.gif decoded", out, re.M) is not None,
               out)
+    # through AERA-Gateway's webgate (EWEB.INF's GATEWAY=, EWGET -g): the
+    # Pi makes the secure connection (TLS 1.3 here), passes the server's
+    # gzip, redirects, cookies and big answers through, and refuses a
+    # certificate it can't check
+    if not os.path.exists(WEBGATE):
+        print("itest: no webgate (%s): the gateway's cases left out" % WEBGATE)
+    else:
+        env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+        gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
+                                 "--cafile", os.path.join(work, "CACERT.PEM")], env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        g = "127.0.0.1:%d" % GATE
+        try:
+            import time
+            for _ in range(50):
+                rc, out = run("-g", g, "http://localhost:%d/page" % HTTP)
+                if "200 OK" in out:
+                    break
+                time.sleep(0.1)
+            rc, out = run("-g", g, "-n", "2", "-o", "gw.htm", "https://localhost:%d/page" % HTTPS)
+            check("the gateway: https", rc == 0 and "TLS 1.3" in out and "through the gateway" in out
+                  and "the connection was kept open" in out and "unpack" in out and saved("gw.htm") == server.PAGE,
+                  out)
+            rc, out = run("-g", g, "-o", "gwmoved.htm", "http://localhost:%d/secure" % HTTP)
+            check("the gateway: http to https", rc == 0 and "after 1 redirect" in out
+                  and saved("gwmoved.htm") == server.PAGE, out)
+            rc, out = run("-g", g, "-o", "gwbig.bin", "https://localhost:%d/chunked" % HTTPS)
+            check("the gateway: a big answer, chunked", rc == 0 and saved("gwbig.bin") == server.BIG, out)
+            rc, out = run("-g", g, "-o", "gwbad.txt", "https://localhost:%d/page" % BAD)
+            check("the gateway: a certificate nobody signed", "502 Bad Gateway" in out
+                  and saved("gwbad.txt").startswith(b"webgate: localhost has an untrusted certificate"), out)
+            rc, out = run("-g", "127.0.0.1:1", "https://localhost:%d/page" % HTTPS)
+            check("the gateway: not there", rc != 0 and "the gateway (127.0.0.1)" in out, out)
+            if ewrender:
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", "https://localhost:%d/site/pics.html"
+                                    % HTTPS], cwd=work, capture_output=True, text=True, timeout=120)
+                out = p.stdout + p.stderr
+                check("the gateway: a page and its pictures", p.returncode == 0 and 'title "Pictures"' in out
+                      and len(re.findall(r"^picture \S+ decoded", out, re.M)) == 5, out)
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-S", "go",
+                                    "https://localhost:%d/site/cookie/form.html" % HTTPS], cwd=work,
+                                   capture_output=True, text=True, timeout=120)
+                m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)
+                check("the gateway: a login's POST, its 303 and cookie", p.returncode == 0 and m is not None
+                      and m.group(1) == "COOKIE|sid=xyz", p.stdout + p.stderr)
+        finally:
+            gate.terminate()
+            gate.wait(timeout=10)
 finally:
     srv.stdin.close()
     srv.wait(timeout=10)

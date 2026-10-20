@@ -97,6 +97,9 @@ hub stay complete, with the evidence.
   `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
   The handshake's RSA and elliptic curves run on the DSP through `common/` (`ui/dsp.c`, `ui/dsp_ec.c`,
   `src/ecdsp.c`, `dsp/ec.a56`): change those in AERA-Atari and test them there (`common/tests/ec`).
+  The gateway (`GATEWAY=`, EWGET `-g`, ewrender `-W`) is AERA-Gateway's `webgate.py`, whose
+  protocol EWeb's session owns (AERA-Gateway's owner session commits it): `make itest` and `make
+  hatarinet` run it from `WEBGATE=` (or EWeb's `gateway/` copy, once AERA-Gateway has it).
   Every Hatari rig boots the family's machines (`common/tools/machines.py`): Erez's TOS 4.04 from
   `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
   Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).
@@ -143,7 +146,11 @@ hub stay complete, with the evidence.
   (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
   `docs/help/WINDOW.IMG` (and `docs/screenshot.png`) is a Hatari capture of the start page in 16
   colours (`helpfront.py thumb`): take it again when the window changes.
-- **A release** carries `EWEB.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`, `tools/icon/make_rsc.py`),
+- **The ST edition** is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
+  (`-fdisable-tree-bswap`), `tls_none.c`, no DSP, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is
+  68020 code); check a build with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code.
+  `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and through the gateway.
+- **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`, `tools/icon/make_rsc.py`),
   `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, from `make dist`.

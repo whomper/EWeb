@@ -970,6 +970,42 @@ Options > Empty the cache forgets it all, the files too.
 job and quit, and the pack written again; `make itest` shows a page from it with no request, and a
 304; `make hatarifiles` counts its opens.
 
+## Gateway mode, first step: webgate fetches (20 Oct 2026)
+
+AERA-Gateway's `web` service, `webgate.py` (EWeb's protocol, in AERA-Gateway as the family's other
+gateways are), is an HTTP proxy for EWeb on the Pi: EWeb, with `GATEWAY=` set in `EWEB.INF` (EWGET
+`-g`), sends every request to it in plain HTTP in proxy form (`GET https://host/path HTTP/1.1`),
+and the Pi makes the connection onwards with aeragate's rules (TLS 1.2 or 1.3, the certificate and
+name checked, never back into the home network). It passes the answer back as it comes: the
+server's gzip or deflate as they are (only those are asked for: less to carry over a serial line,
+and EWeb unpacks them), a long answer a piece at a time (chunked when its length isn't known),
+redirects, cookies and error pages as they came (EWeb follows and keeps them itself), and
+`X-Gateway-TLS` saying how the Pi reached the server, which EWeb's info line shows ("TLS 1.3, ...,
+through the gateway"). What it can't do is answered 502, 403 or 504 with a line starting
+"webgate:", shown on EWeb's page. Port 8280. It gives the ST edition the secure web, and the Falcon
+the sites that take TLS 1.3 only; direct stays the Falcon's default. Tested: webgate's own unit
+tests (in AERA-Gateway), `make itest`'s gateway cases (TLS 1.3, a redirect, a big chunked answer, a
+refused certificate, a gateway that isn't there, a page with its pictures, a login's POST and
+cookie) and EWGET through it in Hatari (`make hatarinet`), with `WEBGATE=` naming webgate until
+EWeb carries AERA-Gateway's `gateway/`. Next: snapshots (Chromium on the Pi), live view, and the
+ST edition.
+
+## The ST edition, EWEBST.PRG (20 Oct 2026)
+
+`EWEBST.PRG` is the same sources as `EWEB.PRG` built as 68000 code (`-fdisable-tree-bswap`, as
+every 68000 build of the family), with common's `tls_none.c` in place of TLS (BearSSL's 150 KB
+left out) and no DSP; secure sites come through AERA-Gateway's webgate (`GATEWAY=`). It is 590 KB
+of code, 23 KB of data and 401 KB of BSS. The cross compiler's libgcc has its 64-bit multiply and
+divide only as 68020 code (an illegal instruction on an ST), so `atari/ll68000.c` has 68000 ones
+(16-bit multiplies, common's 32-bit routines, shift and subtract), matched against native
+arithmetic on a million random pairs; they belong in common next to its 32-bit ones. TOS 1.x has
+no `Mxalloc`: the memory is sized from `Malloc(-1)` there. On Erez's 1040 ST in Hatari (8 MHz,
+4 MB, TOS 1.04), in monochrome and medium resolution: the tables page from the disk in 9.5 s
+(parse 1.2 s, layout 2.6 s, drawing 5.3 s), the page of pictures with its JPEGs decoded in 20-30 s
+each and the 800x600 PNG refused for its 1.9 MB (pictures may take a sixteenth of the RAM), and a
+secure page through the gateway. Making the ST edition faster (JPEG on 16-bit arithmetic,
+drawing) is for later.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1249,7 +1285,8 @@ out of both (their paths lead nowhere on the Atari).
    the page set (above), and EWeb's own HTML parser, 44% more and the HTML Standard's
    tree-construction tests nearly all passed (above); the UA stylesheet parsed once a program run (above);
    saving pages and files, bookmarks and the disk cache (above).
-4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. With it the ST
+4. **Gateway mode in EWeb:** snapshots and live view, over EWeb's own protocol. *Done so far (20 Oct
+   2026):* webgate's fetches, the gateway as a proxy, and the ST edition (above). With it the ST
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.
 5. **JavaScript:** QuickJS with the lean DOM.

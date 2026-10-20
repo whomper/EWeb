@@ -86,6 +86,13 @@ void http_close_all(void);	/* close the kept connections */
 extern void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
 extern void (*http_cookie_out)(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req);
 
+/* AERA-Gateway's webgate on the Pi: "PI_IP" or "PI_IP:8280", "" for
+   none. When set, every request goes there in proxy form ("GET
+   https://host/path") and the Pi makes the connection onwards, TLS 1.2
+   or 1.3; rs->security then says how the Pi reached the server. */
+extern char http_gateway[128];
+#define HTTP_GATEWAY_PORT 8280
+
 /* how EWeb names itself to servers, and the languages it asks for */
 extern char http_user_agent[128];
 extern char http_accept_language[64];

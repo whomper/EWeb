@@ -27,7 +27,9 @@ sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
 import machines  # noqa: E402
 import server  # noqa: E402
 
-HTTP, HTTPS, EC = 18180, 18543, 18545
+HTTP, HTTPS, EC, GATE = 18180, 18543, 18545, 18288
+# AERA-Gateway's webgate (EWeb's copy, gateway/, or WEBGATE=path/webgate.py)
+WEBGATE = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
 RUNS = [
     ("https", "-n 2 -o PAGE.HTM https://127.0.0.1:%d/page" % HTTPS),
     ("http to https", "-o MOVED.HTM http://127.0.0.1:%d/secure" % HTTP),
@@ -44,6 +46,9 @@ RUNS = [
     # again: ROOTS.DAT now has CACERT.PEM's date, so the 186 KB file
     # isn't read for its checksum
     ("Mozilla's list again", "-l NET2.LOG https://127.0.0.1:%d/page" % HTTPS),
+    # through AERA-Gateway's webgate on "the Pi" (this computer): no TLS on
+    # the Atari, TLS 1.3 from the Pi to the server
+    ("through the gateway", "-n 2 -g 127.0.0.1:%d -o GW.HTM https://127.0.0.1:%d/page" % (GATE, HTTPS)),
 ]
 
 
@@ -90,9 +95,18 @@ def main():
     shutil.copy(os.path.join(ROOT, "binary", "EWGET.TTP"), hd)
     shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)	# the test authority
     print("---- " + machines.Machine("Falcon:16", hd).describe())
+    gate = None
+    if os.path.exists(WEBGATE):
+        env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+        gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE), "--bind", "127.0.0.1",
+                                 "--allow-local", "--cafile", os.path.join(srv_dir, "CACERT.PEM")], env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     fails = 0
     try:
         for name, cmdline in RUNS:
+            if name == "through the gateway" and gate is None:
+                print("---- %s: left out (no webgate at %s)" % (name, WEBGATE))
+                continue
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
@@ -134,6 +148,10 @@ def main():
                 for l in net.splitlines():
                     if "TLS --" in l:
                         print("---- " + l.strip())
+            elif name == "through the gateway":
+                ok = ok and "TLS 1.3" in text and "through the gateway" in text \
+                     and "the connection was kept open" in text \
+                     and open(os.path.join(hd, "GW.HTM"), "rb").read() == server.PAGE
             elif name == "https":
                 ok = ok and "TLS 1.2" in text and "the connection was kept open" in text \
                      and "RSA on the DSP" in text and open(os.path.join(hd, "PAGE.HTM"), "rb").read() == server.PAGE
@@ -145,6 +163,9 @@ def main():
             print("---- %s: %s" % (name, "ok" if ok else "FAILED"))
             fails += not ok
     finally:
+        if gate is not None:
+            gate.terminate()
+            gate.wait(timeout=10)
         srv.stdin.close()
         srv.wait(timeout=10)
     sys.exit(1 if fails else 0)

@@ -20,6 +20,7 @@ typedef struct {
 	short win_x, win_y, win_w, win_h;	/* WINDOW=: where the window was */
 	char workdir[200];		/* where EWEB.PRG is: EWEB.FNT, EWEB.INF, the certificates */
 	short pictures;			/* PICTURES=: shown (1), or only their alt text (0) */
+	char gateway[128];		/* GATEWAY=: AERA-Gateway's webgate (PI_IP or PI_IP:8280), "" none */
 } EWOPT;
 extern EWOPT opt;
 

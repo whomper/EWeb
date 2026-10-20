@@ -5,12 +5,14 @@
  * handshake, waiting for the answer, the body, unpacking it. EWGET.TTP on
  * the Atari (main_tos.c), ewget on this computer (main_posix.c).
  *
- *   ewget [-o FILE] [-n N] [-l LOG] [-z MINUTES] [-r] [-A] URL
+ *   ewget [-o FILE] [-n N] [-l LOG] [-z MINUTES] [-r] [-A] [-g GATEWAY] URL
  *
  * -o saves the body, -n fetches N times (the second over the kept
  * connection, or with the TLS session resumed), -l writes the protocol log,
  * -z is the time zone in minutes east of UTC (for certificate dates), -r
- * leaves out the DSP (RSA on the 68030), -A shows the answer's headers. */
+ * leaves out the DSP (RSA on the 68030), -A shows the answer's headers,
+ * -g goes through AERA-Gateway's webgate (PI_IP or PI_IP:8280), which
+ * makes the secure connection onwards. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +28,7 @@ EWOPT opt = { .falcon = 1, .dsp = 1 };
 
 static void usage(void)
 {
-	out("usage: ewget [-o FILE] [-n N] [-l LOG] [-z MINUTES] [-r] [-A] URL\n");
+	out("usage: ewget [-o FILE] [-n N] [-l LOG] [-z MINUTES] [-r] [-A] [-g GATEWAY] URL\n");
 }
 
 static int save(const char *path, const SBUF *b)
@@ -65,6 +67,8 @@ int ewget(int argc, char **argv)
 			opt.dsp = 0;
 		else if (!strcmp(argv[i], "-A"))
 			show_headers = 1;
+		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
+			str_copy(http_gateway, argv[++i], sizeof(http_gateway));
 		else if (argv[i][0] == '-' || url)
 			return usage(), 2;
 		else

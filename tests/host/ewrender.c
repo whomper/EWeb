@@ -40,6 +40,7 @@
  * link's file to FILE instead (Alternate-click). Each prints what it
  * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
+ * -W GATEWAY goes through AERA-Gateway's webgate (as EWEB.INF's GATEWAY=).
  * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
  */
@@ -339,6 +340,8 @@ int main(int argc, char **argv)
 			back_after = 1;
 		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
 			bm_file(argv[++i]);
+		else if (!strcmp(argv[i], "-W") && i + 1 < argc)
+			str_copy(http_gateway, argv[++i], sizeof http_gateway);
 		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
 			dc_dir(argv[++i], 8L << 20);
 		else if (!strcmp(argv[i], "-A"))

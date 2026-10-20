@@ -53,16 +53,37 @@ void http_close_all(void)
 		drop(&kept[i]);
 }
 
-/* a connection to u's host: a kept one, or a new one in the slot used
-   longest ago */
+char http_gateway[128];
+
+/* the gateway's host and port (http_gateway) */
+static unsigned short gateway_of(char *host, int size)
+{
+	const char *c = strrchr(http_gateway, ':');
+	long port = c && c[1] ? strtol(c + 1, NULL, 10) : 0;
+	if (c && port > 0 && port < 65536 && !strchr(c + 1, ']')) {
+		snprintf(host, size, "%.*s", (int)(c - http_gateway), http_gateway);
+		return (unsigned short)port;
+	}
+	str_copy(host, http_gateway, size);
+	return HTTP_GATEWAY_PORT;
+}
+
+/* a connection to u's host, or to the gateway when there is one: a kept
+   one, or a new one in the slot used longest ago */
 static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int errlen)
 {
 	char key[300], host[256];
-	int i, sec = u->tls ? SEC_TLS : SEC_PLAIN;
+	int i, sec = u->tls ? SEC_TLS : SEC_PLAIN, gw = http_gateway[0] != 0;
+	unsigned short port = u->port;
 	KEPT *k = 0;
 	unsigned long t0;
-	url_host(u, host, sizeof(host));
-	snprintf(key, sizeof(key), "%s %u %d", host, u->port, sec);
+	if (gw) {
+		port = gateway_of(host, sizeof(host));
+		sec = SEC_PLAIN;
+	} else {
+		url_host(u, host, sizeof(host));
+	}
+	snprintf(key, sizeof(key), "%s %u %d", host, port, sec);
 	for (i = 0; i < HTTP_KEEP; i++)
 		if (kept[i].c && !kept[i].c->dead && !strcmp(kept[i].key, key)) {
 			kept[i].used = ++kept_clock;
@@ -70,7 +91,7 @@ static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int err
 			return &kept[i];
 		}
 	*reused = 0;
-	if (u->tls && !tls_available) {
+	if (u->tls && !tls_available && !gw) {
 		snprintf(err, errlen, "%s needs a secure connection, and this edition of EWeb has no TLS", host);
 		return 0;
 	}
@@ -79,13 +100,16 @@ static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int err
 			k = &kept[i];
 	drop(k);
 	t0 = pf_ms();
-	k->c = conn_open("HTTP", host, u->port, 0, sec, err, errlen);
+	k->c = conn_open("HTTP", host, port, 0, sec, err, errlen);
 	if (!k->c) {
-		/* name the host, where the message doesn't */
-		if (!strstr(err, host) && strcmp(err, "stopped")) {
+		/* name the host (the gateway), where the message doesn't */
+		if (strcmp(err, "stopped") && (gw || !strstr(err, host))) {
 			char e[200];
 			str_copy(e, err, sizeof(e));
-			snprintf(err, errlen, "%s: %s", host, e);
+			if (gw)
+				snprintf(err, errlen, "the gateway (%s): %s", host, e);
+			else
+				snprintf(err, errlen, "%s: %s", host, e);
 		}
 		return 0;
 	}
@@ -341,7 +365,10 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	url_hostport(u, hostport, sizeof(hostport));
 	sb_init(&req);
 	sb_init(&line);
-	sb_printf(&req, "%s %s HTTP/1.1\r\n", method, target);
+	if (http_gateway[0])	/* to the gateway: the whole address (proxy form) */
+		sb_printf(&req, "%s %s://%s%s HTTP/1.1\r\n", method, u->tls ? "https" : "http", hostport, target);
+	else
+		sb_printf(&req, "%s %s HTTP/1.1\r\n", method, target);
 	{
 		/* the log has the path, not the query: a form sent with GET
 		   puts its fields there, and sites their tokens (7.3) */
@@ -595,6 +622,14 @@ int http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int err
 		if (x <= 0) {
 			rs->t.total_ms = pf_ms() - t0;
 			return 0;
+		}
+		if (http_gateway[0]) {
+			/* how the Pi reached the server (webgate's X-Gateway-TLS) */
+			char v[80];
+			if (http_header(rs, "X-Gateway-TLS", v, sizeof(v)))
+				snprintf(rs->security, sizeof(rs->security), "%.70s, through the gateway", v);
+			else
+				rs->security[0] = 0;
 		}
 		if (rq->no_redirect || !h.location[0] ||
 		    (rs->status != 301 && rs->status != 302 && rs->status != 303 &&

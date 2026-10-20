@@ -38,7 +38,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "" };
 browser br;
 int loading;
 static short quit;
@@ -256,6 +256,8 @@ static void settings_load(void)
 			opt.dsp = atoi(eq) != 0;
 		else if (!strcmp(line, "PICTURES"))
 			opt.pictures = atoi(eq) != 0;
+		else if (!strcmp(line, "GATEWAY"))
+			str_copy(opt.gateway, eq, sizeof opt.gateway);
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -325,6 +327,8 @@ int settings_save(void)
 	put(&s, "DSP", v, "1: the DSP does the secure connections' arithmetic, 0: the 68030 does");
 	snprintf(v, sizeof v, "%d", opt.pictures);
 	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
+	put(&s, "GATEWAY", opt.gateway, "AERA-Gateway's web service on the Pi (PI_IP, or PI_IP:8280) to fetch "
+	    "every page through, or nothing to fetch them directly");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -1138,7 +1142,12 @@ int main(void)
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
 	pf_idle = idle;
+#ifdef EW_ST
+	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);
+#else
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari Falcon030)", EWEB_VERSION);
+#endif
+	str_copy(http_gateway, opt.gateway, sizeof http_gateway);	/* GATEWAY= (webgate on the Pi) */
 
 	{
 		/* the bookmarks: read once a start (6.5), for their menu */
@@ -1162,6 +1171,10 @@ int main(void)
 		   a quarter of the free TT RAM up to 24 MB, else an eighth of
 		   the free ST RAM up to 2 MB */
 		long tt = (long) Mxalloc(-1L, 1), st = (long) Mxalloc(-1L, 0);
+		if (st < 0) {		/* TOS 1.x has no Mxalloc: all is ST RAM */
+			tt = 0;
+			st = (long) Malloc(-1L);
+		}
 		if (tt > 0)
 			br_keep_max = tt / 4 < (24L << 20) ? tt / 4 : (24L << 20);
 		else if (st > 0)

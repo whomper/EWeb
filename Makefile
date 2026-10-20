@@ -103,7 +103,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
+all: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
@@ -178,7 +178,7 @@ build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 build/$(1)/ewb/doc/html.o: $(GEN)/entities.h
 build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
 	@mkdir -p $$(@D)
-	$(2) $$(filter-out -w,$(3)) $(if $(filter tos,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
+	$(2) $$(filter-out -w,$(3)) $(if $(filter tos st,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
 endef
 
 HOST_CFLAGS := -O2 -g -std=gnu99 -DNDEBUG -w
@@ -413,6 +413,79 @@ binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
+# EWEBST.PRG, the ST edition (the guidelines' NAMEST.PRG): 68000 code
+# (-fdisable-tree-bswap, as every 68000 build), no TLS (common's
+# tls_none.c: BearSSL's 150 KB left out) and no DSP; secure sites through
+# AERA-Gateway's webgate (GATEWAY=). The same sources as EWEB.PRG.
+ST_CFLAGS     := $(subst -m68030,-m68000,$(TOS_CFLAGS)) -fdisable-tree-bswap
+ST_LDFLAGS    := $(subst -m68030,-m68000,$(TOS_LDFLAGS))
+STNET_CFLAGS  := $(subst -m68030,-m68000,$(TOSNET_CFLAGS)) -fdisable-tree-bswap -DEW_ST \
+                 -DTLS_FULL_EDITION=\"EWEB.PRG\"
+$(eval $(call target_rules,st,$(M68KCC),$(ST_CFLAGS)))
+st_RT      := $(subst build/tos/,build/st/,$(tos_RT)) build/st/rt/ll68000.o
+STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
+              $(addprefix build/st/net/,conn.o tls_none.o util.o futil.o inflate.o secret.o net_tos.o sting.o \
+              sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o dsp_none.o)
+STPIC_OBJ  := $(subst build/tos/,build/st/,$(TOSPIC_OBJ))
+STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
+STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
+build/st/rt/%.o: common/atari/%.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -DSTACK_SIZE=65536 -c $< -o $@
+build/st/rt/%.o: common/atari/%.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
+build/st/rt/%.o: atari/%.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
+build/st/net/%.o: src/net/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(NET_WARN) -c $< -o $@
+build/st/net/%.o: atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(NET_WARN) -c $< -o $@
+build/st/net/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/st/net/%.o: common/atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/st/net/dsp_none.o: tests/host/dsp_none.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(NET_WARN) -c $< -o $@
+build/st/net/sting_s.o: common/atari/sting.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -c $< -o $@
+build/st/net/crash_s.o: common/atari/crash.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -c $< -o $@
+build/st/pic/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) $(COMMON_WARN) -c $< -o $@
+build/st/pic/%.o: $(LJ)/src/%.c $(wildcard $(LJ)/src/*.h $(LJ)/config/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) -w -c $< -o $@
+build/st/pic/%.o: common/third_party/nsgif/src/%.c common/third_party/nsgif/include/nsgif.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
+build/st/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
+build/st/gem/common/%.o: common/ui/%.c ui/*.h $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/st/gem/common/%.o: common/atari/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
+build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ)
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
 # the root certificates: Mozilla's list (common/certs), and the same read
 # once into ROOTS.DAT, which the Atari loads in a moment
 binary/CACERT.PEM: common/certs/CACERT.PEM
@@ -504,7 +577,7 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
-hatarigui: binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender
+hatarigui: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
@@ -691,19 +764,19 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 
 # a release's files: EWeb (the program, its fonts, its guide, the
 # certificates, the desktop icon) and the measuring tools
-dist: binary/EWEB.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
+dist: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
 		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp binary/EWEB.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
-		binary/ROOTS.DAT dist/
+	cp binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP \
+		binary/CACERT.PEM binary/ROOTS.DAT dist/
 	cp icons/EWEB.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
 	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
 	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
-	cp dist/EWEB.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
+	cp dist/EWEB.PRG dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
 		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
