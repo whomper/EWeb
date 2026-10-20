@@ -76,10 +76,10 @@ MACHINES = {
                ["--machine", "falcon", "--cpuclock", "32", "--fpu", "68882", "--memsize", "14",
                 "--ttram", "128", "--addr24", "off", "--dsp", "emu", "--monitor", "vga"],
                ["16", "256"], "tos404.img"),
-    "Falcon-4": ("a Falcon030 as sold: 68030 at 16 MHz, no FPU, 4 MB ST RAM and no TT RAM, VGA "
+    "Falcon-4": ("a Falcon030 as sold: 68030 at 16 MHz, no FPU, 4 MB ST RAM and no TT RAM, the DSP, VGA "
                  "(Erez, 19 Oct 2026: the machine for all three accessories loaded at once)",
                  ["--machine", "falcon", "--cpuclock", "16", "--memsize", "4", "--ttram", "0",
-                  "--addr24", "on", "--monitor", "vga"],
+                  "--addr24", "on", "--dsp", "emu", "--monitor", "vga"],
                  ["16", "256"], "tos404.img"),
 }
 

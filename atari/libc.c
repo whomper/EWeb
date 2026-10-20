@@ -746,9 +746,20 @@ void *realloc(void *ptr, size_t n)
 		return 0;
 	b = (BLK *)((char *)ptr - WORD);
 	s = SIZE(b);
-	if (s - WORD >= n)
-		return ptr;		/* it fits (a block never shrinks) */
 	need = block_for(n);
+	if (s >= need) {
+		/* it fits; a block asked for much less gives its end back, in
+		   place (a converter's result, cut to what it used: ECal kept
+		   three times each title's length) */
+		if (s - need >= MINBLK) {
+			BLK *t = AT(b, need);
+			b->head = need | (b->head & FLAGS);
+			t->head = (s - need) | PINUSE;	/* freed, as free() would */
+			heap_use -= (long)(s - need);
+			free_more(t);
+		}
+		return ptr;
+	}
 	nx = AT(b, s);
 	if (!(nx->head & INUSE) && (t = s + SIZE(nx)) >= need) {
 		/* grow into the free block after it */
