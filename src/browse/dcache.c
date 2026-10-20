@@ -4,9 +4,9 @@
  * dcache.c - EWeb's disk cache (dcache.h): the index in memory, the
  * answers in one pack on the disk.
  *
- * EWEB.IDX, text: "EWDC 1 GEN PAKLEN\n", then a line for each answer,
- * "OFF LEN STORED FRESH USED\tMIME\tCHARSET\tSECURITY\tETAG\tLASTMOD\tKEY\tURL\n"
- * (times in UTC seconds since 1970). EWEB.PAK: "EWDC" and GEN in eight
+ * EWEB.IDX, text: "EWDC 2 GEN PAKLEN\n", then a line for each answer,
+ * "OFF LEN STORED FRESH USED FLAGS\tMIME\tCHARSET\tSECURITY\tETAG\tLASTMOD\tKEY\tURL\n"
+ * (times in UTC seconds since 1970; FLAGS DCF_*; version 1 had none). EWEB.PAK: "EWDC" and GEN in eight
  * hex digits, CR LF twice (16 bytes), then the answers' bytes.
  */
 #include <stdio.h>
@@ -20,6 +20,10 @@
 
 #define HEAD 16			/* the pack's first bytes */
 
+#define DCF_REVALIDATE	1	/* must-revalidate or no-cache: never shown stale */
+#define DCF_IMMUTABLE	2	/* immutable (RFC 8246): Reload doesn't ask */
+#define DCF_OWN		4	/* EWeb's own data (dc_put_own), not an answer */
+
 typedef struct {
 	char *key, *url, *etag, *lastmod;
 	char mime[64], charset[40], security[96];
@@ -27,6 +31,7 @@ typedef struct {
 	long off, len;			/* off -1: in mem, not yet in the pack */
 	char *mem;
 	unsigned long hash;
+	unsigned char flags;		/* DCF_* */
 } DCE;
 
 static long long now_utc(void)
@@ -281,7 +286,7 @@ static void load(void)
 			pf_close(h);
 		}
 	}
-	s = d != NULL && strncmp(d, "EWDC 1 ", 7) == 0 ? d + 7 : NULL;
+	s = d != NULL && (strncmp(d, "EWDC 1 ", 7) == 0 || strncmp(d, "EWDC 2 ", 7) == 0) ? d + 7 : NULL;
 	if (s != NULL) {
 		g = strtoul(s, &s, 16);
 		while (*s == ' ')
@@ -295,7 +300,7 @@ static void load(void)
 	gen = g;
 	plen = idx_len = (long) v;
 	for (s = nl + 1; *s; s = nl + 1) {
-		long long o, n, st, fr, us;
+		long long o, n, st, fr, us, fl = 0;
 		long off;
 		char *rest = s, *mime, *cs, *sec, *etag, *lm, *key, *url;
 		DCE *e;
@@ -304,7 +309,7 @@ static void load(void)
 			break;
 		*nl = 0;
 		if (!read_num(&rest, &o) || !read_num(&rest, &n) || !read_num(&rest, &st) || !read_num(&rest, &fr) ||
-		    !read_num(&rest, &us) || *rest != '\t')
+		    !read_num(&rest, &us) || (*rest != '\t' && !read_num(&rest, &fl)) || *rest != '\t')
 			continue;
 		rest++;
 		off = (long) o;
@@ -328,6 +333,7 @@ static void load(void)
 		e->used = us;
 		e->off = off;
 		e->len = (long) n;
+		e->flags = (unsigned char) fl;
 	}
 	free(d);
 }
@@ -397,20 +403,61 @@ static int directive(const char *cc, const char *name, long *v)
 	return 0;
 }
 
+/* Vary names only what EWeb asks with the same way each time (RFC 9111,
+   4.1): a page that varies by anything else (Cookie, Referer...) isn't
+   kept, rather than shown for a request it wasn't the answer to */
+static int vary_ok(const char *v)
+{
+	static const char *const same[] = { "accept-encoding", "accept", "accept-language", "user-agent", NULL };
+	const char *p = v;
+	while (*p) {
+		const char *w;
+		size_t n;
+		int i;
+		while (*p == ' ' || *p == ',')
+			p++;
+		w = p;
+		while (*p && *p != ',' && *p != ' ')
+			p++;
+		n = (size_t) (p - w);
+		if (n == 0)
+			continue;
+		for (i = 0; same[i]; i++)
+			if (strlen(same[i]) == n) {
+				size_t k;
+				for (k = 0; k < n; k++)
+					if ((w[k] | 0x20) != same[i][k])
+						break;
+				if (k == n)
+					break;
+			}
+		if (same[i] == NULL)
+			return 0;
+	}
+	return 1;
+}
+
 /* how long an answer stays fresh, seconds, from its headers (RFC 9111,
    4.2): max-age, else Expires less Date, else a tenth of the time since
-   Last-Modified, a day at most; less its Age. -1: not to be kept. */
-static long long lifetime(const char *h)
+   Last-Modified, a day at most; less its Age. -1: not to be kept. *flags:
+   DCF_REVALIDATE and DCF_IMMUTABLE as it says. */
+static long long lifetime(const char *h, unsigned char *flags)
 {
 	char cc[256], v[128];
 	long n;
 	long long date, t, life = 0;
 	header(h, "Cache-Control", cc, sizeof cc);
+	*flags = 0;
 	if (directive(cc, "no-store", NULL))
 		return -1;
 	header(h, "Vary", v, sizeof v);
-	if (strchr(v, '*') != NULL)
+	if (!vary_ok(v))
 		return -1;
+	if (directive(cc, "must-revalidate", NULL) || directive(cc, "no-cache", NULL) ||
+	    directive(cc, "proxy-revalidate", NULL))
+		*flags |= DCF_REVALIDATE;
+	if (directive(cc, "immutable", NULL))
+		*flags |= DCF_IMMUTABLE;
 	header(h, "Date", v, sizeof v);
 	if (!ck_date(v, &date))
 		date = dc_now();
@@ -438,6 +485,7 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 {
 	char etag[96], lm[48], sc[8];
 	long long life;
+	unsigned char flags;
 	DCE *e;
 	if (dir[0] == 0)
 		return;
@@ -445,7 +493,7 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	e = find(key);
 	if (e != NULL)
 		drop(e);
-	life = lifetime(headers);
+	life = lifetime(headers, &flags);
 	header(headers, "ETag", etag, sizeof etag);
 	header(headers, "Last-Modified", lm, sizeof lm);
 	header(headers, "Set-Cookie", sc, sizeof sc);
@@ -471,6 +519,7 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	str_copy(e->security, security, sizeof e->security);
 	e->stored = e->used = dc_now();
 	e->fresh = e->stored + life;
+	e->flags = flags;
 	e->off = -1;
 	e->len = len;
 	pending += len;
@@ -483,6 +532,7 @@ void dc_fresh(const char *key, const char *headers)
 {
 	char v[96];
 	long long life;
+	unsigned char flags;
 	DCE *e;
 	if (dir[0] == 0)
 		return;
@@ -490,13 +540,16 @@ void dc_fresh(const char *key, const char *headers)
 	e = find(key);
 	if (e == NULL)
 		return;
-	life = lifetime(headers);
+	life = lifetime(headers, &flags);
 	if (life < 0) {
 		drop(e);
 		return;
 	}
 	e->stored = e->used = dc_now();
 	e->fresh = e->stored + life;
+	header(headers, "Cache-Control", v, sizeof v);
+	if (v[0])		/* a 304 with its own Cache-Control: what it says now */
+		e->flags = flags;
 	header(headers, "ETag", v, sizeof v);
 	if (v[0] && !strchr(v, '\t')) {
 		char *t = str_ndup(v, (long) strlen(v));
@@ -506,6 +559,51 @@ void dc_fresh(const char *key, const char *headers)
 		}
 	}
 	changed = 1;
+}
+
+void dc_drop(const char *key)
+{
+	DCE *e;
+	if (dir[0] == 0)
+		return;
+	load();
+	if ((e = find(key)) != NULL)
+		drop(e);
+}
+
+long dc_own_max(void)
+{
+	return dir[0] ? max_size / 8 : 0;
+}
+
+void dc_put_own(const char *key, const char *what, const char *data, long len)
+{
+	DCE *e;
+	if (dir[0] == 0)
+		return;
+	load();
+	if ((e = find(key)) != NULL)
+		drop(e);
+	if (len > max_size / 8 || strchr(key, '\t') || strchr(key, '\n') || strchr(what, '\t') || strchr(what, '\n'))
+		return;
+	if ((e = add(key, what, "", "")) == NULL)
+		return;
+	if ((e->mem = malloc((size_t) len + 1)) == NULL) {
+		ent_free(e);
+		nent--;
+		return;
+	}
+	memcpy(e->mem, data, (size_t) len);
+	str_copy(e->mime, "application/x-eweb", sizeof e->mime);
+	e->stored = e->used = dc_now();
+	e->fresh = e->stored + 31536000;	/* its key is its contents: never stale */
+	e->flags = DCF_OWN;
+	e->off = -1;
+	e->len = len;
+	pending += len;
+	changed = 1;
+	if (pending >= max_size / 16)
+		flush();
 }
 
 int dc_get(const char *key, DC_GOT *g)
@@ -541,6 +639,8 @@ int dc_get(const char *key, DC_GOT *g)
 	str_copy(g->security, e->security, sizeof g->security);
 	e->used = dc_now();
 	g->fresh = e->used < e->fresh;
+	g->stale_ok = !(e->flags & DCF_REVALIDATE);
+	g->immutable = (e->flags & DCF_IMMUTABLE) != 0;
 	if (e->etag[0])
 		snprintf(g->validate, sizeof g->validate, "If-None-Match: %.150s\r\n", e->etag);
 	else if (e->lastmod[0])
@@ -616,8 +716,27 @@ static void compact(void)
 	int i, n = 0, out, in, ok = 1;
 	char *buf;
 	qsort(ent, (size_t) nent, sizeof *ent, by_use);
-	while (n < nent && keep + ent[n].len <= max_size / 4 * 3)
-		keep += ent[n++].len;
+	/* the answers used last, three quarters of the size; EWeb's own data
+	   (decoded pictures) at most half of that, so that it doesn't push
+	   out the pages */
+	{
+		long own = 0;
+		int k;
+		for (k = 0; k < nent; k++) {
+			DCE t;
+			if (keep + ent[k].len > max_size / 4 * 3)
+				break;
+			if ((ent[k].flags & DCF_OWN) && own + ent[k].len > max_size / 8 * 3)
+				continue;
+			if (ent[k].flags & DCF_OWN)
+				own += ent[k].len;
+			keep += ent[k].len;
+			t = ent[n];
+			ent[n] = ent[k];
+			ent[k] = t;
+			n++;
+		}
+	}
 	for (i = n; i < nent; i++)
 		ent_free(&ent[i]);
 	nent = n;
@@ -685,13 +804,13 @@ void dc_close(void)
 		compact();
 	if (changed && nent > 0) {
 		sb_init(&s);
-		sb_printf(&s, "EWDC 1 %08lx %ld\n", gen, pak_len);
+		sb_printf(&s, "EWDC 2 %08lx %ld\n", gen, pak_len);
 		for (i = 0; i < nent; i++) {
 			DCE *e = &ent[i];
 			/* times as long: the Atari's printf has no %lld (2038 is
 			   far enough for a cache) */
-			sb_printf(&s, "%ld %ld %ld %ld %ld\t", e->off, e->len, (long) e->stored, (long) e->fresh,
-				  (long) e->used);
+			sb_printf(&s, "%ld %ld %ld %ld %ld %d\t", e->off, e->len, (long) e->stored, (long) e->fresh,
+				  (long) e->used, (int) e->flags);
 			sb_adds(&s, e->mime);
 			sb_addc(&s, '\t');
 			sb_adds(&s, e->charset);

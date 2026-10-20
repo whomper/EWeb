@@ -353,6 +353,46 @@ try:
         check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB.PAK")) and
               os.path.exists(os.path.join(cache, "EWEB.IDX")) and
               "/site/cache/fresh.html" in open(os.path.join(cache, "EWEB.IDX")).read(), " ".join(os.listdir(cache)))
+        # a form sent there with POST: what was kept for it is forgotten
+        # (RFC 9111, 4.4), and the next look asks the server
+        r1 = cached("-S", "go", site + "post.html")
+        r2 = cached(site + "fresh.html")
+        check("the cache: a POST forgets the page it went to", "sent: 0 \"posted\"" in r1[2] and r2[1] == "fresh 2",
+              r1[2] + r2[2] + counts())
+        # cut off: a page kept is shown from the cache, marked out of date,
+        # unless its server said it must always be asked (must-revalidate)
+        import http.server
+        import threading
+
+        class Away(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                must = self.path == "/must.html"
+                body = b"<!DOCTYPE html><title>%s</title><p>Kept." % (b"must" if must else b"kept")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=0, must-revalidate" if must else "max-age=0")
+                self.send_header("ETag", '"a"')
+                self.end_headers()
+                self.wfile.write(body)
+
+        away = http.server.ThreadingHTTPServer(("127.0.0.1", 18197), Away)
+        threading.Thread(target=away.serve_forever, daemon=True).start()
+        r1 = cached("http://127.0.0.1:18197/kept.html")
+        r2 = cached("http://127.0.0.1:18197/must.html")
+        away.shutdown()
+        away.server_close()
+        r3 = cached("http://127.0.0.1:18197/kept.html")
+        r4 = cached("http://127.0.0.1:18197/must.html")
+        check("the cache: cut off, a page kept shown, said to be out of date", r1[1] == "kept" and r3[1] == "kept"
+              and "note: From the cache: the server couldn't be reached" in r3[2], r1[2] + r3[2])
+        check("the cache: cut off, a must-revalidate page not shown", r2[1] == "must" and r4[1] != "must",
+              r2[2] + r4[2])
         # pictures: fetched after the page, decoded at the size shown (a
         # CSS pixel is 0.8 of the Falcon's), the page laid out again for
         # the one whose size it didn't know; the missing one failed
@@ -368,6 +408,20 @@ try:
         check("the browser: pictures", p.returncode == 0 and all(got.get(k) == v for k, v in want.items())
               and sorted(decoded) == sorted(want.items())
               and re.search(r"^picture %sgone\.png failed" % re.escape(site), out, re.M) is not None, out)
+        # decoded pictures kept in the disk cache as the screen draws them:
+        # the next run reads them, but for the small one (decoded each time)
+        pix = os.path.join(work, "PIXCACHE")
+        shutil.rmtree(pix, ignore_errors=True)
+        outs = []
+        for _ in range(2):
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-C", pix, "http://localhost:%d/site/pics.html" % HTTP],
+                               cwd=work, capture_output=True, text=True, timeout=120)
+            outs.append(p.stdout + p.stderr)
+        again = re.findall(r"^picture %s(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), outs[1], re.M)
+        check("the cache: decoded pictures read back", sorted(again) == sorted(
+              [(k, "decoded" if k == "anim.gif" else "from the cache", v) for k, v in want.items()]) and
+              outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
+              outs[1])
         rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
         check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
               and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)

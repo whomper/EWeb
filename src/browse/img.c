@@ -9,10 +9,20 @@
  * another). The memory they take is counted: past img_max the oldest
  * that no page shows go, then the decoded pixels of pictures only kept
  * pages show (their files stay: decoding again is quicker than fetching).
+ *
+ * A picture decoded is kept in the disk cache too (dcache.h, as EWeb's
+ * own data), as the screen draws it: its pens for the screen's palette
+ * (and which pixels are solid), or in true colour its pixels. Its key is
+ * made from the file's contents, the size and the palette, so it is never
+ * out of date: the next time a page shows that file at that size, on
+ * that screen, it is read, not decoded and dithered again (seconds on a
+ * 68030 for a photo).
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "dcache.h"
 #include "img.h"
 #include "util.h"
 
@@ -39,6 +49,8 @@ struct ew_img {
 	int refs;			/* pages showing it */
 	int cur;			/* the page shown shows it */
 	unsigned long used;		/* when last drawn or decoded */
+	unsigned long sum[2];		/* the file's contents, for the disk cache's key */
+	int cached;			/* its last decode came from the disk cache */
 };
 
 static ew_img *all;
@@ -57,10 +69,140 @@ static long var_bytes(const var *v)
 {
 	long n = (long) sizeof *v;
 	if (v->pic != NULL)
-		n += (long) v->pic->w * v->pic->h * (v->pic->alpha != NULL ? 3 : 2);
+		n += (long) v->pic->w * v->pic->h * ((v->pic->px != NULL ? 2 : 0) + (v->pic->alpha != NULL ? 1 : 0));
 	if (v->pens != NULL)
 		n += (long) v->pic->w * v->pic->h;
 	return n;
+}
+
+/* ---------------------------------------------------------------- the disk cache */
+
+/* pictures smaller than this are decoded each time (quicker than a look
+   in the cache, and many small entries would crowd its index) */
+#define PIX_MIN (64L * 64)
+
+/* "EWPX", 1, flags (PX_*), the width and height as two bytes each, then
+   the pixels (2 bytes each, the machine's order), the alpha (a byte
+   each), the pens (a byte each) */
+enum { PX_PIXELS = 1, PX_ALPHA = 2, PX_PENS = 4 };
+#define PIX_HEAD 10
+
+static void sums(const char *d, long n, unsigned long *s)
+{
+	unsigned long a = 2166136261UL, b = 5381;
+	long i;
+	for (i = 0; i < n; i++) {
+		unsigned char c = (unsigned char) d[i];
+		a = ((a ^ c) * 16777619UL) & 0xFFFFFFFFUL;
+		b = (b * 33 + c) & 0xFFFFFFFFUL;
+	}
+	s[0] = a;
+	s[1] = b;
+}
+
+/* the key: the file (its two sums and length), the size, and the screen:
+   true colour, or its palette (each pen's colour summed) */
+static void pix_key(const ew_img *im, int32_t w, int32_t h, char *out, int size)
+{
+	unsigned long p[2] = { 0, 0 };
+	if (img_pal != NULL)
+		sums((const char *) img_pal->rgb, (long) img_pal->n * 3, p);
+	snprintf(out, (size_t) size, "pix:%08lx%08lx:%ld:%ldx%ld:%s%08lx", im->sum[0], im->sum[1], im->len, (long) w,
+		 (long) h, img_pal != NULL ? "p" : "tc", p[0] ^ p[1]);
+}
+
+/* v (w x h) from the disk cache: 1 when it was there and whole */
+static int pix_load(ew_img *im, var *v)
+{
+	char key[120];
+	DC_GOT g;
+	const unsigned char *d;
+	long n = (long) v->w * v->h, want;
+	int fl, ok = 0;
+	PIC *pic;
+	pix_key(im, v->w, v->h, key, sizeof key);
+	if (!dc_get(key, &g))
+		return 0;
+	d = (const unsigned char *) g.data;
+	fl = g.len >= PIX_HEAD ? d[5] : 0;
+	want = PIX_HEAD + (fl & PX_PIXELS ? 2 * n : 0) + (fl & PX_ALPHA ? n : 0) + (fl & PX_PENS ? n : 0);
+	if (g.len == want && memcmp(d, "EWPX\1", 5) == 0 && (d[6] << 8 | d[7]) == v->w && (d[8] << 8 | d[9]) == v->h &&
+	    ((fl & PX_PIXELS) || ((fl & PX_PENS) && img_pal != NULL)) && (pic = calloc(1, sizeof *pic)) != NULL) {
+		const unsigned char *s = d + PIX_HEAD;
+		pic->w = (int) v->w;
+		pic->h = (int) v->h;
+		pic->how = im->kind;
+		ok = 1;
+		if (fl & PX_PIXELS) {
+			if ((pic->px = malloc((size_t) n * 2)) == NULL)
+				ok = 0;
+			else
+				memcpy(pic->px, s, (size_t) n * 2);
+			s += 2 * n;
+		}
+		if (ok && (fl & PX_ALPHA)) {
+			if ((pic->alpha = malloc((size_t) n)) == NULL)
+				ok = 0;
+			else
+				memcpy(pic->alpha, s, (size_t) n);
+			s += n;
+		}
+		if (ok && (fl & PX_PENS) && img_pal != NULL) {
+			if ((v->pens = malloc((size_t) n)) == NULL)
+				ok = 0;
+			else {
+				memcpy(v->pens, s, (size_t) n);
+				v->serial = pal_serial;
+			}
+		}
+		if (ok)
+			v->pic = pic;
+		else {
+			pic_free(pic);
+			free(v->pens);
+			v->pens = NULL;
+		}
+	}
+	free(g.data);
+	return ok;
+}
+
+/* v into the disk cache, as the screen draws it */
+static void pix_save(ew_img *im, const var *v)
+{
+	char key[120];
+	long n = (long) v->w * v->h, len;
+	int fl;
+	unsigned char *b, *s;
+	if (img_pal != NULL && v->pens != NULL)
+		fl = PX_PENS | (v->pic->alpha != NULL ? PX_ALPHA : 0);
+	else if (v->pic->px != NULL)
+		fl = PX_PIXELS | (v->pic->alpha != NULL ? PX_ALPHA : 0);
+	else
+		return;
+	len = PIX_HEAD + (fl & PX_PIXELS ? 2 * n : 0) + (fl & PX_ALPHA ? n : 0) + (fl & PX_PENS ? n : 0);
+	if (len > dc_own_max() || (b = malloc((size_t) len)) == NULL)	/* too big to keep: none made */
+		return;
+	memcpy(b, "EWPX\1", 5);
+	b[5] = (unsigned char) fl;
+	b[6] = (unsigned char) (v->w >> 8);
+	b[7] = (unsigned char) v->w;
+	b[8] = (unsigned char) (v->h >> 8);
+	b[9] = (unsigned char) v->h;
+	s = b + PIX_HEAD;
+	if (fl & PX_PIXELS) {
+		memcpy(s, v->pic->px, (size_t) n * 2);
+		s += 2 * n;
+	}
+	if (fl & PX_ALPHA) {
+		memcpy(s, v->pic->alpha, (size_t) n);
+		s += n;
+	}
+	if (fl & PX_PENS)
+		memcpy(s, v->pens, (size_t) n);
+	pix_key(im, v->w, v->h, key, sizeof key);
+	dc_put_own(key, im->url, (const char *) b, len);
+	free(b);
 }
 
 static void var_free(ew_img *im, var *v)
@@ -137,6 +279,7 @@ int img_set_file(ew_img *im, char *data, long len)
 	}
 	im->data = data;
 	im->len = len;
+	sums(data, len, im->sum);
 	im->iw = (int32_t) w;
 	im->ih = (int32_t) h;
 	im->state = IMG_HERE;
@@ -182,6 +325,15 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		return 0;
 	v->w = w;
 	v->h = h;
+	im->cached = 0;
+	if ((long) w * h >= PIX_MIN && pix_load(im, v)) {
+		im->cached = 1;
+		v->used = im->used = ++tick;
+		v->next = im->vars;
+		im->vars = v;
+		img_used += var_bytes(v);
+		return 1;
+	}
 	max = im->kind == PIC_JPEG ? img_max_px * 12 : img_max_px;
 	v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
 	if (v->pic == NULL && im->why == PIC_STOPPED) {
@@ -200,7 +352,14 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 	v->next = im->vars;
 	im->vars = v;
 	img_used += var_bytes(v);
+	if (v->pic != NULL && (long) w * h >= PIX_MIN)
+		pix_save(im, v);
 	return v->pic != NULL;
+}
+
+int img_from_cache(const ew_img *im)
+{
+	return im->cached;
 }
 
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
@@ -211,6 +370,10 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 	if (v == NULL || v->pic == NULL)
 		return 0;
 	v->used = im->used = ++tick;
+	if (img_pal != NULL && (v->pens == NULL || v->serial != pal_serial) && v->pic->px == NULL) {
+		var_free(im, v);	/* from the disk cache for another palette: decoded again */
+		return 0;
+	}
 	if (img_pal != NULL && (v->pens == NULL || v->serial != pal_serial)) {
 		if (v->pens == NULL) {
 			v->pens = malloc((size_t) w * h);

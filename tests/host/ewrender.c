@@ -617,8 +617,8 @@ int main(int argc, char **argv)
 		click(&b, clicks[i]);
 		pictures(&b);
 	}
-	if (scripts_on && b.script_note[0])
-		printf("note: %s\n", b.script_note);
+	if (b.note[0])
+		printf("note: %s\n", b.note);
 	if (bookmark) {
 		int k = br_bookmark(&b);
 		printf("bookmarked: %d %d\n", k, bm_n);

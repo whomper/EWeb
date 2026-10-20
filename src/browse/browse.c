@@ -482,6 +482,7 @@ typedef struct {
 	char mime[64], charset[40], security[96];
 	int status;		/* 0: a file or the cache */
 	char err[200];		/* when nothing came */
+	int stale;		/* from the cache, out of date: the server couldn't be reached */
 } FETCH;
 
 #ifndef EW_ST
@@ -588,7 +589,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		SBUF body;
 		DC_GOT got;
 		char key[4096];
-		int ok, have = 0;
+		int ok, have = 0, cached = 0;
 		/* the disk cache (dcache.h), by the address without its fragment:
 		   fresh, or any age for Back and Forward, it is used as it is;
 		   else the server is asked whether it changed */
@@ -598,7 +599,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		   never kept (webgate says no-store), so not looked for either */
 		int snap = b->snapshot && accept == NULL && post == NULL && http_gateway[0];
 		if (post == NULL && !snap && dc_get(key, &got)) {
-			if (fresh != 1 && (got.fresh || fresh == 2)) {
+			/* fresh (immutable: even for Reload, RFC 8246), or any age
+			   for Back and Forward */
+			if ((fresh != 1 && (got.fresh || fresh == 2)) || (fresh == 1 && got.fresh && got.immutable)) {
 				f->data = got.data;
 				f->len = got.len;
 				str_copy(f->url, got.url, sizeof f->url);
@@ -610,14 +613,13 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 					cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				return 1;
 			}
+			cached = 1;	/* kept for when the server can't be reached */
 			if (got.validate[0])
 				have = 1;
-			else
-				free(got.data);
 		}
 		rs = malloc(sizeof *rs);
 		if (rs == NULL) {
-			if (have)
+			if (cached)
 				free(got.data);
 			snprintf(f->err, sizeof f->err, "Out of memory.");
 			return 0;
@@ -655,8 +657,26 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			free(rs);
 			return 1;
 		}
-		if (have)
+		if (!ok && cached && got.stale_ok && !conn_stop && post == NULL) {
+			/* no answer: what is kept, said to be out of date (RFC 9111,
+			   4.2.4: a cache may when it is cut off) */
+			sb_free(&body);
+			f->data = got.data;
+			f->len = got.len;
+			str_copy(f->url, got.url, sizeof f->url);
+			str_copy(f->mime, got.mime, sizeof f->mime);
+			str_copy(f->charset, got.charset, sizeof f->charset);
+			str_copy(f->security, got.security, sizeof f->security);
+			f->status = 200;
+			f->stale = 1;
+			http_resp_free(rs);
+			free(rs);
+			return 1;
+		}
+		if (cached)
 			free(got.data);
+		if (ok && post != NULL && rs->status < 400)
+			dc_drop(key);	/* what was kept for it has changed (RFC 9111, 4.4) */
 		if (ok) {
 			f->status = rs->status;
 			str_copy(f->url, rs->url.href, sizeof f->url);
@@ -887,7 +907,7 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	int scripts = br_scripts_for(b, url), again = 0;
 	html_opts o;
 
-	b->script_note[0] = 0;
+	b->note[0] = 0;
 #ifndef EW_ST
 parse:
 #endif
@@ -929,7 +949,7 @@ parse:
 		js_stats(d, &ms, &bytes);
 		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
 			/* over the budget: the page as it is without them */
-			snprintf(b->script_note, sizeof b->script_note, "%s",
+			snprintf(b->note, sizeof b->note, "%s",
 				 r == JS_TOO_MUCH ? "Its scripts were too much for EWeb: shown without them." :
 				 "No memory for its scripts: shown without them.");
 			if (b->log != NULL) {
@@ -1306,6 +1326,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			strcat(shown, fr);
 		}
 		show(b, d, p, shown, f->security, f->status, mode != NAV_RELOAD);
+		if (f->stale && b->note[0] == 0)
+			snprintf(b->note, sizeof b->note, "%s",
+				 "From the cache: the server couldn't be reached, so it may be out of date.");
 		b->src_len = f->len;
 		b->src = f->data;
 		f->data = NULL;
@@ -2161,7 +2184,8 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 			if (b->p != p0)
 				return BRP_LAYOUT;	/* laid out again meanwhile (the window sized) */
 			ms_decode += pf_ms() - t;
-			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? "decoded" : img_why(im), (long) w, (long) h);
+			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_from_cache(im) ? "from the cache" : "decoded") :
+				 img_why(im), (long) w, (long) h);
 			log_img(b, im, what, ms_fetch, pf_ms() - t);
 		}
 		if (d->y < lo)

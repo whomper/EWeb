@@ -24,8 +24,11 @@ typedef struct {
 	unsigned short gateport;	/* GATEPORT=: its port, 8280 */
 	short snapshot;			/* SNAPSHOT=: pages through the Pi's browser (webgate's snapshots) */
 	char scripts[512];		/* SCRIPTS=: the sites whose scripts run, host names ("" none) */
+	short cache;			/* CACHE=: the disk cache's size, MB (0 none; -1: 8 with TT RAM, else 2) */
 } EWOPT;
 extern EWOPT opt;
+#define CACHE_MAX_MB	64	/* the most CACHE= may ask for */
+long cache_mb(void);		/* the disk cache's size now, MB */
 
 /* common/ui/dsp.c, common/ui/dsp_ec.c */
 void falcon_dsp_init(void);
@@ -82,6 +85,10 @@ int scr_rows(void);			/* rows drawn at a time: the screen's, else 32 */
 /* the page's part that falls on area (on the screen), the page's point
    (px, py) at area's top left; area must be within the clip set */
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
+/* a picture of w x h, each pixel a byte into col (0xRRGGBB, ncol of them),
+   at at; the part of it on part (within at and the clip set) */
+void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
+	     const GRECT *part);
 
 /* the window (win.c) */
 extern short win_h;			/* AES handle, -1 when closed */
@@ -97,6 +104,8 @@ void win_page_relaid(void);		/* laid out again for its pictures: the same place,
 void win_title(void);
 void win_status(const char *s);		/* the info line; "" for what the page says */
 void win_toolbar(void);			/* the buttons again (loading started or ended) */
+void win_throb(int busy);		/* the throbber's next frame while busy (each 110 ms), else at rest */
+int  win_throb_frames(void);		/* frames drawn since the last call, for the log */
 int  win_mouse(short mx, short my, short button, short clicks, short kstate);	/* 1: ours */
 void win_hover(short mx, short my);	/* a link's address on the info line, the pointing hand */
 int  win_key(short kstate, short key);	/* 1: taken (the address field, scrolling) */

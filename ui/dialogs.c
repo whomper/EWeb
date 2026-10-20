@@ -266,19 +266,22 @@ static short first_edit(void)
 
 /* ---------------------------------------------------------------- the settings */
 
-static char s_zoom[4], s_search[44], s_gate[20], s_gport[6];
+static char s_zoom[4], s_search[44], s_gate[20], s_gport[6], s_cache[4];
 
 static void part_general(short x, short y)
 {
 	rows_at(y);
 	d_tick(x, ROW(0), "Show pages' pictures", T_PICTURES);
-	d_text(x + 3, ROW(1), "(off: what they say instead, for a slow line)");
+	d_text(x + 3, ROW(1), "(off: only their words, for a slow line)");
 	d_text(x, ROW(2), "Page size");
 	d_field(x + 12, ROW(2), s_zoom, 3, '9');
 	d_text(x + 16, ROW(2), "%  (50 to 200)");
 	d_text(x, ROW(3), "Words typed in the address go to:");
 	d_field(x, ROW(4), s_search, 40, 'X');
 	d_text(x, ROW(5), "(%s for the words; nothing: none)");
+	d_text(x, ROW(6), "Disk cache");
+	d_field(x + 12, ROW(6), s_cache, 2, '9');
+	d_text(x + 15, ROW(6), "MB  (0: none)");
 }
 
 /* the family's Secure page: TLS on this Atari, or the Pi gateway */
@@ -400,6 +403,7 @@ int dlg_settings(void)
 	str_copy(s_search, opt.search, sizeof s_search);
 	str_copy(s_gate, opt.gate, sizeof s_gate);
 	snprintf(s_gport, sizeof s_gport, "%u", opt.gateport);
+	snprintf(s_cache, sizeof s_cache, "%ld", cache_mb());
 	box = settings_tree(&ok);
 	r = settings_run(box, ok);
 	if (r != ok)
@@ -416,6 +420,10 @@ int dlg_settings(void)
 	str_trim(opt.gate);
 	port = atoi(s_gport);
 	opt.gateport = (unsigned short) (port > 0 && port < 65536 ? port : HTTP_GATEWAY_PORT);
+	/* the size as it was unless it was changed (an INF without CACHE=
+	   keeps following the machine's memory) */
+	if (s_cache[0] && atol(s_cache) != cache_mb() && atol(s_cache) <= CACHE_MAX_MB)
+		opt.cache = (short) atoi(s_cache);
 	opt.dsp = s_on[T_DSP];
 	if (s_on[T_FALCON] != opt.falcon)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */

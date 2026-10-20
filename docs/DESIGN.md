@@ -716,7 +716,7 @@ releases.
   a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
   about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
 - **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar (Back, Forward, Reload or Stop, Home,
-  the address, typed into in place), the page under it with the window's slider, the status on the
+  the address, typed into in place; the throbber, below), the page under it with the window's slider, the status on the
   info line (a link's address under the mouse, what a load is doing, how a secure page came), the
   family's menu bar, About box, shortcuts, right-click menus, VA_START and drag and drop, help,
   iconify and crash report. The page is drawn into memory a band of 32 rows at a time and copied
@@ -966,9 +966,42 @@ pack's first bytes and the index carry the same number, so an index from before 
 read another pack; what a job added after the last quit is lost then, and fetched again.
 Options > Empty the cache forgets it all, the files too.
 
+**Smarter (20 Oct 2026)**, the owner's ask: a cache that knows how current what it holds is, and
+holds pictures ready to show.
+
+- **What may be shown stale is the server's to say.** `must-revalidate`, `proxy-revalidate` and
+  `no-cache` mark an answer that is never shown out of date; `immutable` (RFC 8246) one that Reload
+  doesn't ask about while it is fresh (a site's versioned scripts and pictures). The marks are kept
+  in the index (its second form, `EWDC 2`, a number more a line; the first is still read), and a 304
+  with a `Cache-Control` of its own changes them.
+- **`Vary`** keeps an answer only when it varies on what EWeb always sends the same
+  (`Accept-Encoding`, `Accept`, `Accept-Language`, `User-Agent`); on anything else (a cookie) it isn't kept.
+- **Cut off** (the server can't be reached, RFC 9111 4.2.4), a page kept is shown from the cache
+  however old, and the info line says so: *From the cache: the server couldn't be reached, so it
+  may be out of date.* Not one marked never to be shown stale, and never for a POST.
+- **A POST forgets** what was kept for its address (RFC 9111 4.4), so the next look asks the
+  server.
+- **Pictures as the screen shows them.** Decoding is what takes the time on the Atari (a 480×320
+  JPEG 3.1 s on the emulated Falcon, 800×600 PNG 15.4 s), so the pixels made for the screen are
+  kept too: at each size a page shows a picture at, for each palette (the 256-colour pens, 16, mono,
+  true colour), under a key made of two sums of the file, its length, the size and the palette, so
+  the same picture from another address, or from the disk, finds them. Only for 64×64 and over (a
+  smaller one decodes in about the time it takes to read). They are EWeb's own data in the pack,
+  fresh for a year, never more than three eighths of it at quit. The picture is fetched as before
+  (fresh or asked again), so a changed picture gets new sums, and is decoded again.
+- **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (64 at most; 0:
+  none); without it 8 MB, 2 MB on a machine without TT RAM.
+
+**Measured** on the emulated Falcon in 256 colours (`make hatarigui`, `PICS.HTM` from the disk,
+then the next run on the same disk): the five pictures took 20.7 s to decode and dither, and 0.25 s
+from the cache (the small animated GIF, decoded each time, 0.16 s of it): the 800×600 PNG 15.4 s
+against 0.07 s.
+
 `tests/browse/dctest.c` (in `make test`) checks the rules on a clock of its own, a reset between a
-job and quit, and the pack written again; `make itest` shows a page from it with no request, and a
-304; `make hatarifiles` counts its opens.
+job and quit, the pack written again, `Vary`, the marks and the own data's share; `make itest`
+shows a page from it with no request, and a 304, a POST forgetting, a page shown cut off and a
+`must-revalidate` one not, and the pictures read back; `make hatarigui` the pictures read back on
+the next run; `make hatarifiles` counts its opens.
 
 ## Gateway mode, first step: webgate fetches (20 Oct 2026)
 
@@ -1055,6 +1088,31 @@ On the 1 MB ST the pictures page then shows too (9.3 s), after the tables page i
 `-Os` build is about 15% slower than the `-O2` one was on the 4 MB ST (9.5 s for the tables page);
 the 1 MB ST comes first. Drawing in monochrome is the most of it; making the ST edition faster
 (drawing, JPEG on 16-bit arithmetic) is for later.
+
+## The throbber (20 Oct 2026)
+
+Erez's choice of six animations of the AERA mark's pyramid A: **Orbit**, made more of at his
+asking. A star goes round the A on a tilted ellipse with a short trail, behind it at the back of its
+round, lighting the A's edge as it passes in front, over a field of 22 faint stars that pulse
+slowly (never brighter than the A's shadow side, so they don't take the eye). It goes round while a
+page or its pictures come, a frame each 110 ms from the network's waits and the decoders' polls;
+at rest it is the A alone.
+
+`tools/mkthrobber.py` draws it at 8 times the size and puts it on the Falcon's own colours, written
+as `ui/throbber.h`: 16 frames of 40 x 40 (40 x 20 on the 200-line screens) in three editions,
+TOS 4.04's 256-colour palette for 256 colours and true colour (gold, bronze and copper from its hue
+wheel, an ordered dither so the still A doesn't shimmer as the star moves), its 16 system colours,
+and black and white (monochrome and 4 colours). Each frame is deflated on its own (80 to 380
+bytes) and unpacked when it is drawn, so only the frame shown is in memory (1.6 KB);
+`scr_rgb` (`ui/screen.c`) puts it on the screen as the page is, through the same buffers. The
+editions are 17 KB of `EWEB.PRG` and 5.5 KB of `EWEBST.PRG` (no 256-colour or 480-line 16-colour
+one there; with its code, the ST edition grew by 7 KB).
+
+**The 1 MB ST** had 188 KB free at the start with the picture cache, and showed the pictures page
+blank (190.9 KB was enough before it): it is at the edge, and each addition counts. The cookie
+file's buffers for encrypting and decrypting values (12 KB) are now taken only while they are read
+or written, and the planes table for 256 colours (8 KB) only on such a screen: 203.6 KB free
+without the throbber, about 197 KB with it, and the pictures page shows again.
 
 ## A little JavaScript: QuickJS on EWeb's own document (20 Oct 2026)
 

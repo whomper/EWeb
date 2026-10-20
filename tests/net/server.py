@@ -41,9 +41,10 @@ Pages:
   /site/files.html  files to save: links to /chunked (2 MB), a file that
                  isn't there, /site/ and /site/small.bin (20 KB; the same
                  bytes as /site/small.zip, application/zip)
-  /site/cache/   the disk cache: fresh.html (fresh for an hour), etag.html
-                 (asked again each time: a 304 to its ETag), count (how
-                 many requests each had, and the 304s; never kept)
+  /site/cache/   the disk cache: fresh.html (fresh for an hour; a POST to
+                 it changes it), etag.html (asked again each time: a 304 to
+                 its ETag), post.html (a form that POSTs to fresh.html),
+                 count (how many requests each had, and the 304s; never kept)
   /site/script.html  scripts (EWeb's src/js): one from a file
                  (/site/script.js), fetch and XMLHttpRequest of
                  /site/data.json, document.cookie beside an HttpOnly cookie
@@ -295,6 +296,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send(200, b"<!DOCTYPE html><title>etag %d</title><p>Asked each time." % CACHE_COUNT["etag"],
                           extra=[("ETag", '"v1"'), ("Cache-Control", "no-cache")])
+        elif p == "/site/cache/post.html":
+            self.send(200, b"<!DOCTYPE html><title>Post</title><form method=post action=/site/cache/fresh.html>"
+                           b"<input name=n value=1><input type=submit name=go value=Go></form>")
         elif p == "/site/cache/count":
             self.send(200, ("fresh=%d etag=%d 304=%d" % (CACHE_COUNT["fresh"], CACHE_COUNT["etag"],
                                                         CACHE_COUNT["304"])).encode(), "text/plain",
@@ -366,6 +370,8 @@ def _post(self):
     elif self.path == "/site/cookie/login":
         self.send(303, b"", extra=[("Location", "/site/cookie/show"),
                                    ("Set-Cookie", "sid=xyz; Path=/; HttpOnly; SameSite=Lax")])
+    elif self.path == "/site/cache/fresh.html":
+        self.send(200, b"<!DOCTYPE html><title>posted</title><p>It changed.")
     elif self.path == "/site/after":
         # Post/Redirect/Get: the answer is somewhere else, fetched with GET
         self.send(303, b"", extra=[("Location", "/site/echo?after=1")])

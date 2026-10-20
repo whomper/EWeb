@@ -4,7 +4,8 @@
  * win.c - EWeb's window, as a browser's: a toolbar along the top (Back,
  * Forward, Reload, Home, Search and Stop as pictures with their names
  * under them, flat until the mouse is over one; the address under them,
- * which can be typed into), the page under it with the window's own
+ * which can be typed into; at the right the throbber, the AERA A with a
+ * star going round it while a page or its pictures come), the page under it with the window's own
  * slider, and the status on the info line (a link's address under the
  * mouse, what a load is doing). The page is drawn by screen.c; scrolling
  * moves what is on the screen and draws only the new rows when it can.
@@ -20,7 +21,10 @@
 #include "form.h"
 #include "iconify.h"
 #include "util.h"
+#include "inflate.h"
+#include "plat.h"
 #include "tbicons.h"
+#include "throbber.h"
 
 short win_h = -1;
 short win_iconified;
@@ -29,7 +33,7 @@ short win_iconified;
 #define POINT_HAND 3
 #define TEXT_CRSR  1
 
-static GRECT work, r_tool, r_page, r_addr;
+static GRECT work, r_tool, r_page, r_addr, r_thr;
 static int32_t top;			/* the page's row at r_page's top */
 static char info[160];			/* the info line as set (Atari text) */
 static char title[160];
@@ -92,6 +96,17 @@ static void layout(void)
 	r_addr.y = work.y + row + 2;
 	r_addr.w = work.x + work.w - 4 - r_addr.x;
 	r_addr.h = gl_hchar + 4;
+	/* the throbber at the right, in the middle of the toolbar's height,
+	   where the window is wide enough for it after the buttons; the
+	   address then ends before it */
+	r_thr.w = THR_W;
+	r_thr.h = tall ? THR_TALL : THR_SHORT;
+	r_thr.x = work.x + work.w - 6 - THR_W;
+	r_thr.y = work.y + (th - 1 - r_thr.h) / 2;
+	if (r_thr.x < x + 8 || r_thr.x - 8 < r_addr.x + 8 * gl_wchar)
+		r_thr.w = 0;
+	else
+		r_addr.w = r_thr.x - 8 - r_addr.x;
 	r_page = work;
 	r_page.y += th;
 	r_page.h -= th;
@@ -258,6 +273,87 @@ static void draw_addr(void)
 	}
 }
 
+/* ---------------------------------------------------------------- the throbber */
+
+static const THR_ED *thr_ed;		/* the edition for this screen, NULL: none */
+static int thr_frame;			/* the frame shown: 0 at rest */
+static int thr_drawn;			/* frames drawn, for the log */
+static unsigned long thr_at;		/* when the frame was last moved on (ms) */
+
+static const THR_ED *edition(void)
+{
+#ifndef EW_ST
+	if (planes >= 8)
+		return tall ? &thr_256_tall : &thr_256_short;
+	if (planes == 4)
+		return tall ? &thr_16_tall : &thr_16_short;
+#else
+	if (planes == 4 && !tall)
+		return &thr_16_short;
+#endif
+	return tall ? &thr_mono_tall : &thr_mono_short;
+}
+
+/* the frame shown, within clip: unpacked from its few hundred bytes each
+   time (1.6 KB while it is drawn, nothing kept) */
+static void draw_throbber(const GRECT *clip)
+{
+	GRECT r = r_thr;
+	SBUF b;
+	const THR_ED *e = thr_ed != NULL ? thr_ed : (thr_ed = edition());
+	long n = (long) THR_W * e->h;
+	if (r.w <= 0 || !rect_and(&r, clip))
+		return;
+	sb_init(&b);
+	if (inflate_raw(e->data + e->off[thr_frame], e->off[thr_frame + 1] - e->off[thr_frame], &b, n) == 1 &&
+	    b.len == n) {
+		r_thr.h = e->h;
+		scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &r_thr, &r);
+	}
+	sb_free(&b);
+}
+
+void win_throb(int busy)
+{
+	GRECT r, a;
+	short mx, my, d, hide;
+	unsigned long now = pf_ms();
+	if (win_h <= 0 || win_iconified || r_thr.w <= 0)
+		return;
+	if (busy ? now - thr_at < 110 : thr_frame == 0)
+		return;
+	thr_frame = busy ? (thr_frame + 1) % THR_FRAMES : 0;
+	thr_at = now;
+	thr_drawn++;
+	/* the mouse off only when it is near: the pointer doesn't flicker
+	   eight times a second */
+	graf_mkstate(&mx, &my, &d, &d);
+	hide = mx > r_thr.x - 20 && mx < r_thr.x + r_thr.w + 4 && my > r_thr.y - 20 && my < r_thr.y + r_thr.h + 4;
+	wind_update(BEG_UPDATE);
+	if (hide)
+		graf_mouse(M_OFF, 0);
+	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w > 0 && r.h > 0) {
+		a = r_thr;
+		if (rect_and(&a, &r)) {
+			clip_on(&a);
+			draw_throbber(&a);
+		}
+		wind_get(win_h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	clip_off();
+	if (hide)
+		graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+}
+
+int win_throb_frames(void)
+{
+	int n = thr_drawn;
+	thr_drawn = 0;
+	return n;
+}
+
 static void draw_toolbar(GRECT *clip)
 {
 	GRECT r = r_tool;
@@ -269,6 +365,7 @@ static void draw_toolbar(GRECT *clip)
 		draw_button(i, &r);
 	small_text(r_tool.x + 4, r_addr.y + (r_addr.h - SMALL_H) / 2 + 1, "Location:", 0);
 	draw_addr();
+	draw_throbber(&r);
 	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
 }
 

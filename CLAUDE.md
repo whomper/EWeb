@@ -106,7 +106,7 @@ hub stay complete, with the evidence.
   `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
   Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
-  `win.c`, the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
+  `win.c` with the throbber (`ui/throbber.h` from `tools/mkthrobber.py`), the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
   (addresses, loading, history, EWeb's own pages), `src/doc` (EWeb's HTML parser `html.c`, the
   document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, tables, a display list) and `src/gfx` (`EWEB.FNT`,
@@ -132,7 +132,8 @@ hub stay complete, with the evidence.
   `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
-- **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation; `CACHE\EWEB.PAK`
+- **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
+  when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; `CACHE\EWEB.PAK`
   and `EWEB.IDX` next to `EWEB.PRG`, the index read when first needed and written at quit, a job's
   answers added in one write, the pack written again at quit under another name, then renamed),
   used by `fetch()` in `src/browse`. After changing it: `make test` (`tests/browse/dctest.c`),

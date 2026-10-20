@@ -97,7 +97,8 @@ typedef struct browser {
 	   all, "file" pages on the disk); off by default (the design) */
 	int scripts;
 	const char *script_sites;
-	char script_note[96];	/* what the last page's scripts came to, for the status line ("" none) */
+	char note[96];		/* about the page shown, for the status line ("" none): its
+				   scripts were too much, it came from the cache out of date */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening

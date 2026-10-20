@@ -39,7 +39,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "" };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1 };
 browser br;
 int loading;
 static short quit;
@@ -361,6 +361,8 @@ static void settings_load(void)
 			opt.snapshot = atoi(eq) != 0;
 		else if (!strcmp(line, "SCRIPTS"))
 			str_copy(opt.scripts, eq, sizeof opt.scripts);
+		else if (!strcmp(line, "CACHE"))
+			opt.cache = (short) atoi(eq);
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -379,10 +381,31 @@ static void settings_load(void)
 	free(data);
 	if (opt.zoom < 50 || opt.zoom > 200)
 		opt.zoom = 100;
+	if (opt.cache < -1 || opt.cache > CACHE_MAX_MB)
+		opt.cache = -1;
 	if (opt.gateport == 0)
 		opt.gateport = HTTP_GATEWAY_PORT;
 	if (!tls_available)
 		opt.falcon = 0;		/* the ST edition: through the Pi gateway */
+}
+
+/* the disk cache: CACHE next to the program, read the first time a page
+   is fetched; CACHE= MB, or 8 MB (2 MB on a machine without TT RAM) */
+long cache_mb(void)
+{
+	return opt.cache >= 0 ? opt.cache : (long) Mxalloc(-1L, 1) > 0 ? 8 : 2;
+}
+
+static void cache_open(void)
+{
+	char dir[256];
+	long mb = cache_mb();
+	if (mb == 0) {
+		dc_dir("", 0);		/* none: nothing read or kept */
+		return;
+	}
+	path_join(dir, sizeof dir, opt.workdir, "CACHE");
+	dc_dir(dir, mb << 20);
 }
 
 /* one setting into the text: its line replaced, or its note and line
@@ -446,6 +469,11 @@ int settings_save(void)
 	    "snapshots; View menu), 0: as the servers send them");
 	put(&s, "SCRIPTS", opt.scripts, "the sites whose scripts run, their names with spaces between "
 	    "(Options > Run this site's scripts; \"file\": pages on the disk); EWEB.PRG with an FPU");
+	if (opt.cache >= 0) {
+		snprintf(v, sizeof v, "%d", opt.cache);
+		put(&s, "CACHE", v, "the disk cache (CACHE next to EWEB.PRG), MB: pages, pictures as the screen "
+		    "shows them; 0: none");
+	}
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -566,6 +594,7 @@ static void idle(void)
 	short msg[8], which;
 	AEVENT ev;
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 5, msg, &ev);
+	win_throb(1);
 	if (pics) {
 		if (which & MU_MESAG) {
 			if (msg[0] == MN_SELECTED) {
@@ -704,9 +733,9 @@ static void loaded(int r)
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
 				  br.title);
 		}
-		if (br.script_note[0]) {
-			win_status(br.script_note);
-			log_event("scripts note %s", br.script_note);
+		if (br.note[0]) {
+			win_status(br.note);
+			log_event("note %s", br.note);
 		}
 		break;
 	}
@@ -1128,7 +1157,7 @@ void command(int cmd)
 		break;
 #endif
 	case C_SETTINGS: {
-		int pics = opt.pictures, zoom = opt.zoom, changed;
+		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, changed;
 		log_event("settings shown");
 		changed = dlg_settings();
 		log_event("settings %s", changed ? "changed" : "kept");
@@ -1137,6 +1166,10 @@ void command(int cmd)
 			falcon_dsp_init();
 			falcon_dsp_ec_init();
 			settings_save();
+			if (cache != opt.cache) {
+				dc_close();	/* what it holds kept; made smaller at the next quit */
+				cache_open();
+			}
 			br.pictures = opt.pictures;
 			br.zoom = (int32_t) (819L * opt.zoom / 100);
 			if (br.d != NULL && (pics != opt.pictures || zoom != opt.zoom)) {
@@ -1352,6 +1385,7 @@ static void pictures(void)
 	if (!br_pictures_pending(&br)) {
 		win_status(br.pic_stopped ? "Pictures stopped." : "");
 		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
+		log_event("throbber %d", win_throb_frames());
 		menu_update();
 	}
 }
@@ -1483,13 +1517,7 @@ int main(void)
 		ck_file(ck, key);
 		secret_warn = key_warn;
 	}
-	{
-		/* the disk cache: CACHE next to the program, read the first time
-		   a page is fetched; 8 MB, or 2 MB on a machine without TT RAM */
-		char dir[256];
-		path_join(dir, sizeof dir, opt.workdir, "CACHE");
-		dc_dir(dir, (long) Mxalloc(-1L, 1) > 0 ? 8L << 20 : 2L << 20);
-	}
+	cache_open();
 	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
 	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
@@ -1593,6 +1621,8 @@ int main(void)
 				handle(w, later.msg, &later.ev, &hover_x, &hover_y);
 			}
 		}
+		/* moving on while the pictures come; at rest once they have */
+		win_throb(!quit && (loading || br_pictures_pending(&br)));
 	}
 
 	log_event("quit");

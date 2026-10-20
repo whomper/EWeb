@@ -18,7 +18,12 @@ colour or black and white.
 - About 2 MB of free memory, more for big pages; TT RAM is used when
   there is some
 - **STinG** for the network (plain TOS), on a network card such as the
-  NetUSBee. Without a network EWeb still opens pages on your disks
+  NetUSBee. Without a network EWeb still opens pages on your disks.
+  Set the Delay in `STING.CPX` to 10 on a Falcon or TT, 25 to 50 on an
+  ST: STinG looks at the card that often, so it sets how fast pages
+  come (on a Falcon with a NetUSBee, Delay 10 took downloads from 40 to
+  75 KB/s). On a NetUSBee, keep STinG's TCP receive window at 5840
+  (MSS 1460): the card holds about four full packets
 - Under TOS, Atari's `FOLDR100.PRG` first in `AUTO`, renamed for more
   room (`FOLDR400.PRG`): TOS keeps an entry in a small internal pool for
   every folder a program or accessory has looked into, and halts with
@@ -168,9 +173,18 @@ come once. When a site says to ask, EWeb asks whether the page changed
 and keeps its copy if it didn't. Back and Forward show pages as they
 were; Reload (^R) asks the site again.
 
-The cache takes up to 8 MB (2 MB on a Falcon without TT RAM); at quit
-EWeb keeps the pages used last within that. Options > Empty the cache
-forgets it all.
+Pictures are kept as they were shown, ready for the screen: a page of
+pictures that took seconds to decode the first time shows them at once
+the next time, even after a restart.
+
+When a site can't be reached, a page EWeb kept is shown, and the line
+under the page says it may be out of date; a site that says its pages
+must always be checked gets an error instead. Sending a form forgets
+what was kept for the page it went to.
+
+The cache takes 8 MB (2 MB on a Falcon without TT RAM); Settings >
+General > Disk cache changes it, 0 for none. At quit EWeb keeps the
+pages used last within that. Options > Empty the cache forgets it all.
 
 ## The window
 
@@ -186,6 +200,10 @@ They lie flat until the mouse is over one, which then stands out in a
 frame; held down, it sinks, and works when you let go over it. Under
 them, after **Location:**, is the address of the page shown, which you
 can type into.
+
+At the right is the AERA A. While a page or its pictures come, a star
+goes round it over a field of faint stars; when it stands still, EWeb
+is waiting for you.
 
 Under that is the page, with the window's slider on the right. The info
 line shows the address of the link under the mouse, what a load is

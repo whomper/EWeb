@@ -374,6 +374,10 @@ def browse():
               ev is not None and ev.endswith(" 6") and len(dec) == 5 and
               any(e.startswith("picture %sgone.png failed" % site) for e in evs) and
               any(e.startswith("relaid ") for e in evs), "\n".join(evs[-14:]))
+        # the throbber went round while they came (each 110 ms)
+        thr = r.wait(r"throbber ", 30)
+        check("browse: the throbber moved while the pictures came", thr is not None and int(thr.split()[1]) >= 8,
+              thr or "no throbber line")
         r.key(0x47)		# ClrHome: the top
         time.sleep(2)
         r.shot(7)
@@ -587,6 +591,32 @@ def screens():
             check("screens: %s quits" % name, r.wait(r"quit$", 60) is not None, str(r.events()))
         finally:
             r.end()
+        if name == "falcon256":
+            cached_pictures(name, spec, dec)
+
+
+def cached_pictures(name, spec, dec):
+    """the next run on the same disk: the page of pictures again, each read
+    as the screen showed it from the cache (but the small one, decoded each
+    time); the times of both, for DESIGN.md"""
+    hd = os.path.join(OUT, name)
+    r = Run(name + "-again", spec, hd)
+    try:
+        r.wait(r"shown ", 120)
+        r.key(L, (CTRL,))
+        r.type("file:///C:/PICS.HTM")
+        r.key(RETURN)
+        ev = r.wait(r"pictures ", 300)
+        again = [e for e in r.events() if e.startswith("picture ") and " at " in e]
+        ms = lambda evs: sum(int(e.rsplit(" ", 1)[1]) for e in evs if " decode " in e)
+        print("  pictures in %s: decoded %d ms, from the cache %d ms" % (name, ms(dec), ms(again)))
+        check("screens: %s pictures read back from the cache" % name, ev is not None and
+              sum(" from the cache at " in e for e in again) == 4 and sum(" decoded at " in e for e in again) == 1,
+              "\n".join(again or r.events()[-10:]))
+        r.key(Q, (CTRL,))
+        r.wait(r"quit$", 60)
+    finally:
+        r.end()
 
 
 def st():

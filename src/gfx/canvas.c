@@ -157,6 +157,11 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y)
 {
 	int32_t px = x - c->ox, py = y - c->oy, x0 = 0, y0 = 0, x1 = pic->w, y1 = pic->h, i, j;
+	/* what there is to draw with: its pens in the modes with a palette,
+	   its pixels in true colour (one read from the disk cache for a
+	   palette has no pixels) */
+	if (c->bpp == 8 ? pens == NULL : pic->px == NULL)
+		return;
 	if (px < 0)
 		x0 = -px;
 	if (py < 0)

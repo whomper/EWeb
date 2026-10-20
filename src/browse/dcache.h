@@ -31,6 +31,10 @@ typedef struct {
 	/* to ask again: "If-None-Match: ...\r\nIf-Modified-Since: ...\r\n",
 	   "" when it has neither */
 	char validate[200];
+	int stale_ok;		/* may be shown stale when the server can't be reached (it
+				   didn't say must-revalidate or no-cache) */
+	int immutable;		/* Cache-Control: immutable: fresh, it isn't asked about even
+				   on Reload (RFC 8246) */
 } DC_GOT;
 
 /* where the files are (a folder, made when first written; "" none: the
@@ -49,6 +53,18 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 
 /* a 304 for key: what is kept is fresh again, for as long as headers say */
 void dc_fresh(const char *key, const char *headers);
+
+/* what is kept for key forgotten (a form sent there with POST changed
+   it: RFC 9111, 4.4) */
+void dc_drop(const char *key);
+
+/* EWeb's own data kept under key (a picture decoded and dithered for the
+   screen, under a key made from its file's contents): never stale, kept
+   while there is room, its kind taking at most half the cache. data is
+   copied. */
+void dc_put_own(const char *key, const char *what, const char *data, long len);
+/* the most dc_put_own keeps (0: there is no cache) */
+long dc_own_max(void);
 
 /* the end of a job (a page and its stylesheets, a page's pictures): the
    pack closed */

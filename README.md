@@ -44,8 +44,10 @@ EWeb's own fonts.
   import and export.
 - **A disk cache**, as HTTP has browsers keep one: pages, stylesheets and
   pictures kept in one pack (`CACHE\EWEB.PAK`) from one run to the next,
-  asked again with their ETag or date when they say so; Options > Empty the
-  cache.
+  asked again with their ETag or date when they say so, and pictures kept
+  decoded for the screen (a page of pictures in a quarter of a second
+  instead of twenty); a kept page shown when its site can't be reached;
+  Settings > General for its size, Options > Empty the cache.
 - **Saving**: the page shown as it came (^S), a link's file (Alternate-click,
   as Safari's Option-click) straight to the disk as it comes, and a file EWeb
   doesn't show, opened as a page.
@@ -93,6 +95,12 @@ Secure.
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
 TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
 into, and halts with "OUT OF INTERNAL MEMORY" when it runs out; FOLDRxxx makes the pool bigger.
+
+**With STinG, set the Delay in `STING.CPX` to suit the machine:** 10 on a Falcon or TT, 25 to 50
+on an ST, as STinG's manual says. STinG looks at the network card that often, so it sets the speed
+of every STinG program: on Erez's Falcon with a NetUSBee, Delay 10 took EFTP's downloads from 40 to
+75 KB/s, and pages come the faster for it too. On a NetUSBee, keep STinG's TCP receive window at
+5840 (MSS 1460): the card holds about four full packets.
 
 ## How it reaches the servers
 

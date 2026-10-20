@@ -5,8 +5,9 @@
  * own: how long HTTP lets an answer stay fresh (max-age, Expires and
  * Date, a tenth of the time since Last-Modified, Age, no-cache), what it
  * doesn't let be kept (no-store, Vary: *, a cookie set, too big), asking
- * again (ETag, Last-Modified) and a 304, the pack and the index read at
- * the next start, a reset between a job and quit, the pack written again
+ * again (ETag, Last-Modified) and a 304, Vary, must-revalidate and
+ * immutable, an answer forgotten, EWeb's own data (decoded pictures) and
+ * its share, the pack and the index read at the next start, a reset between a job and quit, the pack written again
  * when it grew too big, and a pack that isn't the index's.
  *
  *   dctest DIR      (a folder it may make CACHE in)
@@ -183,6 +184,89 @@ int main(int argc, char **argv)
 		want("another pack: nothing read", got("http://e/29", NULL, NULL) == -1 && dc_count(NULL) == 0);
 		dc_close();
 	}
+	/* what the server says about keeping it current (RFC 9111, RFC 8246) */
+	dc_dir(dir, 1L << 20);
+	{
+		DC_GOT g;
+		put("http://v/1", "Cache-Control: max-age=60\nVary: Accept-Encoding, User-Agent\n", "v1");
+		want("Vary: what EWeb sends the same: kept", got("http://v/1", "v1", NULL) == 1);
+		put("http://v/2", "Cache-Control: max-age=60\nVary: Cookie\n", "v2");
+		want("Vary: Cookie: not kept", got("http://v/2", NULL, NULL) == -1);
+		put("http://v/3", "Cache-Control: max-age=60\nVary: accept-language,referer\n", "v3");
+		want("Vary: Referer among others: not kept", got("http://v/3", NULL, NULL) == -1);
+		put("http://v/4", "Cache-Control: max-age=60, must-revalidate\nETag: \"m\"\n", "v4");
+		put("http://v/5", "Cache-Control: no-cache\nETag: \"n\"\n", "v5");
+		put("http://v/6", "Cache-Control: max-age=60\nETag: \"s\"\n", "v6");
+		put("http://v/7", "Cache-Control: max-age=31536000, immutable\n", "v7");
+		want("must-revalidate: not shown stale", dc_get("http://v/4", &g) && !g.stale_ok && !g.immutable);
+		free(g.data);
+		want("no-cache: not shown stale", dc_get("http://v/5", &g) && !g.stale_ok);
+		free(g.data);
+		want("plain: may be shown stale when cut off", dc_get("http://v/6", &g) && g.stale_ok && !g.immutable);
+		free(g.data);
+		want("immutable", dc_get("http://v/7", &g) && g.immutable && g.fresh);
+		free(g.data);
+		dc_drop("http://v/6");
+		want("dropped (a POST there)", got("http://v/6", NULL, NULL) == -1);
+		dc_put_own("pix:abc", "http://v/pic.jpg", "PIXELS", 6);
+		want("own data kept", got("pix:abc", "PIXELS", NULL) == 1);
+		clock_s += 40000000;	/* over a year */
+		want("own data: never stale by itself", got("pix:abc", "PIXELS", NULL) >= 0);
+		dc_job_end();
+		dc_close();
+		/* the flags kept across a run */
+		dc_dir(dir, 1L << 20);
+		want("must-revalidate kept in the index", dc_get("http://v/4", &g) && !g.stale_ok);
+		free(g.data);
+		want("immutable kept in the index", dc_get("http://v/7", &g) && g.immutable);
+		free(g.data);
+		dc_clear();
+		dc_close();
+	}
+
+	/* decoded pictures take at most half of what a compacted pack keeps */
+	dc_dir(dir, 64L << 10);
+	{
+		char data[4097];
+		memset(data, 'p', 4096);
+		data[4096] = 0;
+		for (i = 0; i < 12; i++) {
+			char key[64];
+			snprintf(key, sizeof key, "pix:%d", i);
+			clock_s++;
+			dc_put_own(key, "http://p/", data, 4096);
+			dc_job_end();
+		}
+		for (i = 0; i < 6; i++) {
+			char key[64];
+			snprintf(key, sizeof key, "http://q/%d", i);
+			clock_s++;
+			put(key, "Cache-Control: max-age=100000\n", data);
+			dc_job_end();
+		}
+		dc_close();
+		dc_dir(dir, 64L << 10);
+		{
+			long own = 0;
+			int pages = 0;
+			for (i = 0; i < 12; i++) {
+				char key[64];
+				snprintf(key, sizeof key, "pix:%d", i);
+				if (got(key, NULL, NULL) >= 0)
+					own += 4096;
+			}
+			for (i = 0; i < 6; i++) {
+				char key[64];
+				snprintf(key, sizeof key, "http://q/%d", i);
+				pages += got(key, NULL, NULL) >= 0;
+			}
+			want("compacted: pictures within their half", own <= (64L << 10) / 8 * 3 && own > 0);
+			want("compacted: the pages kept", pages == 6);
+		}
+		dc_clear();
+		dc_close();
+	}
+
 	dc_dir(dir, 1L << 20);
 	dc_clear();
 	printf("disk cache: %d checks, %d failed\n", checks, fails);

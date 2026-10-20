@@ -46,6 +46,8 @@ int img_tried(const ew_img *im, int32_t w, int32_t h);
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens);
 /* what went wrong last, for the log */
 const char *img_why(const ew_img *im);
+/* its last decode was read from the disk cache, not decoded */
+int img_from_cache(const ew_img *im);
 
 /* the screen's pens (the front end's, before drawing); NULL: true colour */
 extern PIC_PAL *img_pal;

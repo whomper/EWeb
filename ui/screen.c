@@ -64,7 +64,7 @@ static void *st_alloc(long n)
 	return (long) p > 0 ? p : NULL;
 }
 
-static void c2p_init(void);
+static int c2p_init(void);
 
 static void free_bufs(void)
 {
@@ -137,7 +137,8 @@ int scr_init(void)
 	}
 	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
 	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
-	c2p_init();
+	if (!c2p_init())
+		return 0;
 	img_pal = &pic_pal;
 	img_pal_changed();
 	return bufs((short) scr_h) || bufs(BAND);
@@ -219,11 +220,13 @@ static int picture(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, c
 /* chunky to planes, 8 pixels at a time: for pixel i of 8 with value v,
    its bit in each plane's byte, planes 0-3 in lo (plane 0 the top byte)
    and 4-7 in hi; the 8 looked up and ORed */
-static unsigned long c2p_lo[8][256], c2p_hi[8][256];
+static unsigned long c2p_lo[8][256], (*c2p_hi)[256];	/* hi: planes 4-7, made for 256 colours only */
 
-static void c2p_init(void)
+static int c2p_init(void)
 {
 	int i, v, k;
+	if (planes > 4 && c2p_hi == NULL && (c2p_hi = malloc(8 * sizeof *c2p_hi)) == NULL)
+		return 0;
 	for (i = 0; i < 8; i++)
 		for (v = 0; v < 256; v++) {
 			unsigned long lo = 0, hi = 0;
@@ -234,8 +237,10 @@ static void c2p_init(void)
 					hi |= (unsigned long) (0x80 >> i) << (8 * (3 - k));
 			}
 			c2p_lo[i][v] = lo;
-			c2p_hi[i][v] = hi;
+			if (c2p_hi != NULL)
+				c2p_hi[i][v] = hi;
 		}
+	return 1;
 }
 
 static unsigned long eight(const unsigned long t[8][256], const unsigned char *s)
@@ -246,12 +251,14 @@ static unsigned long eight(const unsigned long t[8][256], const unsigned char *s
 /* the chunky rows (h of them) as planes: interleaved (the screen's own
    format, into dev_buf: each 16 pixels' words plane after plane), or
    standard (into std_buf: plane after plane, for vr_trnfm) */
-static void to_planes(short h, int interleaved)
+/* chunky's h rows (words * 16 pixels each) as planes: the screen's own
+   (interleaved) in dev_buf, or the standard ones in std_buf */
+static void to_planes(short h, long words, int interleaved)
 {
-	long words = band_w / 16, plane = words * h, r, g;
+	long plane = words * h, r, g;
 	short k;
 	for (r = 0; r < h; r++) {
-		const unsigned char *src = chunky + r * band_w;
+		const unsigned char *src = chunky + r * words * 16;
 		unsigned short *row = interleaved ? dev_buf + r * words * planes : std_buf + r * words;
 		for (g = 0; g < words; g++, src += 16) {
 			const unsigned long *q = (const unsigned long *) (const void *) src;
@@ -287,15 +294,88 @@ put:
 	}
 }
 
-void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
+/* dev_buf's h rows of words * 16 pixels (made from chunky in the modes
+   with planes) to the screen at x, y: w pixels of them, from column sx */
+static void put(short h, long words, short sx, short w, short x, short y)
 {
 	MFDB src, dst, scr;
+	short pxy[8];
+	memset(&scr, 0, sizeof scr);
+	memset(&dst, 0, sizeof dst);
+	dst.fd_addr = dev_buf;
+	dst.fd_w = (short) (words * 16);
+	dst.fd_h = h;
+	dst.fd_wdwidth = (short) words;
+	dst.fd_nplanes = planes;
+	if (truecolour) {
+		if (swapped) {
+			unsigned short *p = dev_buf;
+			long n = words * 16 * h;
+			while (n-- > 0) {
+				*p = (unsigned short) (*p << 8 | *p >> 8);
+				p++;
+			}
+		}
+	} else if (format == 0) {
+		to_planes(h, words, 1);	/* the screen's own planes: no transform */
+	} else if (format == 2 && planes == 8) {
+		memcpy(dev_buf, chunky, (size_t) (words * 16 * h));	/* a byte a pixel already */
+	} else {
+		to_planes(h, words, 0);
+		src = dst;
+		src.fd_addr = std_buf;
+		src.fd_stand = 1;
+		vr_trnfm(vdi_h, &src, &dst);
+	}
+	pxy[0] = sx;
+	pxy[1] = 0;
+	pxy[2] = sx + w - 1;
+	pxy[3] = h - 1;
+	pxy[4] = x;
+	pxy[5] = y;
+	pxy[6] = x + w - 1;
+	pxy[7] = y + h - 1;
+	vro_cpyfm(vdi_h, 3, pxy, &dst, &scr);
+}
+
+void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
+	     const GRECT *part)
+{
+	unsigned short map[256];
+	long words = (w + 15) / 16;
+	short i, y0, sx = part->x - at->x, sy = part->y - at->y;
+	if (part->w <= 0 || part->h <= 0 || words * 16 > band_w)
+		return;
+	for (i = 0; i < ncol; i++) {
+		unsigned long c = col[i];
+		map[i] = truecolour ? (unsigned short) ((c >> 8 & 0xf800) | (c >> 5 & 0x07e0) | (c >> 3 & 0x001f)) :
+			 pen(NULL, (uint32_t) c);
+	}
+	for (y0 = 0; y0 < part->h; y0 += rows) {
+		short n = part->h - y0 > rows ? rows : part->h - y0, r, x;
+		for (r = 0; r < n; r++) {
+			const unsigned char *s = pix + (long) (sy + y0 + r) * w;
+			if (truecolour) {
+				unsigned short *d = dev_buf + r * words * 16;
+				for (x = 0; x < w; x++)
+					d[x] = map[s[x]];
+			} else {
+				unsigned char *d = chunky + r * words * 16;
+				for (x = 0; x < w; x++)
+					d[x] = (unsigned char) map[s[x]];
+			}
+		}
+		put(n, words, sx, part->w, part->x, part->y + y0);
+	}
+}
+
+void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
+{
 	short y0;
 	canvas c;
 
 	if (area->w <= 0 || area->h <= 0)
 		return;
-	memset(&scr, 0, sizeof scr);
 	memset(&c, 0, sizeof c);
 	c.w = area->w > band_w ? (int32_t) band_w : area->w;
 	c.ox = px;
@@ -303,7 +383,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 	c.shade = shade;
 	c.picture = picture;
 	for (y0 = 0; y0 < area->h; y0 += rows) {
-		short h = area->h - y0 > rows ? rows : area->h - y0, pxy[8];
+		short h = area->h - y0 > rows ? rows : area->h - y0;
 		c.h = h;
 		c.oy = py + y0;
 		if (truecolour) {
@@ -322,42 +402,6 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		} else {
 			memset(chunky, pen(NULL, 0xffffff), band_w * h);
 		}
-		memset(&dst, 0, sizeof dst);
-		dst.fd_addr = dev_buf;
-		dst.fd_w = (short) band_w;
-		dst.fd_h = h;
-		dst.fd_wdwidth = (short) (band_w / 16);
-		dst.fd_nplanes = planes;
-		if (truecolour) {
-			if (swapped) {
-				unsigned short *w = dev_buf;
-				long n = band_w * h;
-				while (n-- > 0) {
-					*w = (unsigned short) (*w << 8 | *w >> 8);
-					w++;
-				}
-			}
-		} else if (format == 0) {
-			to_planes(h, 1);	/* the screen's own planes: no transform */
-		} else if (format == 2 && planes == 8) {
-			long r;			/* a byte a pixel already */
-			for (r = 0; r < h; r++)
-				memcpy((unsigned char *) dev_buf + r * band_w, chunky + r * band_w, (size_t) band_w);
-		} else {
-			to_planes(h, 0);
-			src = dst;
-			src.fd_addr = std_buf;
-			src.fd_stand = 1;
-			vr_trnfm(vdi_h, &src, &dst);
-		}
-		pxy[0] = 0;
-		pxy[1] = 0;
-		pxy[2] = c.w - 1;
-		pxy[3] = h - 1;
-		pxy[4] = area->x;
-		pxy[5] = area->y + y0;
-		pxy[6] = area->x + c.w - 1;
-		pxy[7] = area->y + y0 + h - 1;
-		vro_cpyfm(vdi_h, 3, pxy, &dst, &scr);
+		put(h, band_w / 16, 0, (short) c.w, area->x, area->y + y0);
 	}
 }

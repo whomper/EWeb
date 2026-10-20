@@ -694,11 +694,16 @@ void ck_file(const char *path, const char *key)
 	loaded = 0;
 }
 
+/* an encrypted value's room (taken when needed: 8 KB a 1 MB ST keeps
+   for the rest otherwise) */
+#define ENC_SIZE (sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1)
+
 char *ck_text(long *len)
 {
 	SBUF s;
 	long long now = ck_now();
 	ck *c;
+	char *enc = NULL;
 	sb_init(&s);
 	sb_adds(&s, "# EWeb's cookies, kept by EWeb: domain, host only, path, secure, expires (UTC seconds\n"
 		    "# since 1970), name, value, HttpOnly, SameSite, created\n");
@@ -722,14 +727,18 @@ char *ck_text(long *len)
 			if (keyfile[0] && c->value[0] && have_key()) {
 				/* encrypted, as the apps keep passwords (without a key
 				   secret.c leaves it as it is and says so) */
-				static char enc[sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1];
-				secret_encode(c->value, enc, sizeof enc);
+				if (enc == NULL && (enc = malloc(ENC_SIZE)) == NULL) {
+					sb_free(&s);	/* never written as it is */
+					return NULL;
+				}
+				secret_encode(c->value, enc, ENC_SIZE);
 				sb_adds(&s, enc);
 			} else {
 				sb_adds(&s, c->value);
 			}
 			sb_printf(&s, "\t%d\t%d\t%s\n", c->http_only, c->same, k);
 		}
+	free(enc);
 	*len = s.len;
 	return sb_steal(&s);
 }
@@ -739,6 +748,7 @@ void ck_load(const char *s, long len)
 	const char *p = s, *e = s + len;
 	long long now = ck_now();
 	ck **tail = &all;
+	char *dec = NULL;	/* a value decrypted: taken when one is */
 	while (*tail != NULL)
 		tail = &(*tail)->next;
 	/* in the file's order, after those already here */
@@ -759,8 +769,10 @@ void ck_load(const char *s, long len)
 			for (i = 0; i < 10; i++)
 				n[i] = (size_t) ((i < 9 ? f[i + 1] - 1 : end) - f[i]);
 			c = calloc(1, sizeof *c);
-			if (c == NULL)
+			if (c == NULL) {
+				free(dec);
 				return;
+			}
 			c->domain = dup(f[0], n[0]);
 			c->host_only = (unsigned char) (f[1][0] == '1');
 			c->path = dup(f[2], n[2]);
@@ -770,9 +782,11 @@ void ck_load(const char *s, long len)
 			c->value = dup(f[6], n[6]);
 			if (c->value != NULL && strncmp(c->value, SECRET_TAG, strlen(SECRET_TAG)) == 0) {
 				/* encrypted: read with the key, else the cookie goes */
-				static char dec[SECRET_MAX + 1];
 				char *v = c->value;
-				c->value = have_key() && secret_decode(v, dec, sizeof dec) ? dup(dec, strlen(dec)) : NULL;
+				if (dec == NULL)
+					dec = malloc(SECRET_MAX + 1);
+				c->value = dec != NULL && have_key() && secret_decode(v, dec, SECRET_MAX + 1) ?
+					   dup(dec, strlen(dec)) : NULL;
 				free(v);
 			}
 			c->http_only = (unsigned char) (f[7][0] == '1');
@@ -790,6 +804,7 @@ void ck_load(const char *s, long len)
 		}
 		p = nl ? nl + 1 : e;
 	}
+	free(dec);
 	trim(NULL);
 	loaded = 1;
 }
