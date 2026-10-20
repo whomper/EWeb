@@ -151,7 +151,22 @@ typedef struct {
 	long y;				/* rows taken */
 	int any_alpha;
 	int polls;
+	int solid;			/* every row came by sc_row_rgb: no alpha in the sums */
 } SCALER;
+
+/* a 16 x 16 product: a 68000's mulu.w (GCC calls its 32-bit routine for
+   one followed by a shift, though both are 16 bits) */
+#if defined(__mc68000__) && !defined(__mc68020__) && !defined(__mc68030__) && !defined(__mc68040__) && \
+    !defined(__mc68060__)
+static unsigned long mul16(unsigned short a, unsigned short b)
+{
+	unsigned long r = a;
+	__asm__("mulu.w %1,%0" : "+d" (r) : "dmi" (b));
+	return r;
+}
+#else
+#define mul16(a, b) ((unsigned long) (unsigned short) (a) * (unsigned short) (b))
+#endif
 
 /* n source pixels to m shown, by their centres: down, each source
    pixel's pixel shown; else each shown pixel's source */
@@ -199,15 +214,63 @@ static void put(SCALER *s, long i, int r, int g, int b, int a)
 		s->any_alpha = 1;
 }
 
+
+/* 65536 / n, rounded, for averaging n pixels with a 16 x 16 multiply
+   (a 68000 divides 32 bits in software: three to a pixel were most of
+   the scaler's time); made the first time it is needed */
+static unsigned short recip[258];
+
 /* the sums made into row dy, and cleared */
 static void flush(SCALER *s, long dy)
 {
 	long x, i = dy * s->pic->w;
 	unsigned long *q = s->sum;
+	if (s->solid) {
+		/* solid rows (a JPEG's): sums of at most 257 pixels fit 16 bits,
+		   the mean rounded */
+		unsigned short *o = s->pic->px + i;
+		if (recip[2] == 0)
+			for (x = 2; x < 258; x++)
+				recip[x] = (unsigned short) ((65536L + x / 2) / x);
+		for (x = 0; x < s->pic->w; x++, q += 5) {
+			unsigned n = (unsigned) q[4], r, g, b;
+			if (n == 0) {
+				r = g = b = 0;
+			} else if (n == 1) {
+				r = (unsigned) q[0];
+				g = (unsigned) q[1];
+				b = (unsigned) q[2];
+			} else if (n < 258) {
+				unsigned short k = recip[n];
+				r = (unsigned) ((mul16((unsigned short) q[0], k) + 32768UL) >> 16);
+				g = (unsigned) ((mul16((unsigned short) q[1], k) + 32768UL) >> 16);
+				b = (unsigned) ((mul16((unsigned short) q[2], k) + 32768UL) >> 16);
+			} else {
+				r = (unsigned) (q[0] / n);
+				g = (unsigned) (q[1] / n);
+				b = (unsigned) (q[2] / n);
+			}
+			o[x] = (unsigned short) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+			q[0] = q[1] = q[2] = q[3] = q[4] = 0;
+		}
+		memset(s->pic->alpha + i, 255, (size_t) s->pic->w);
+		return;
+	}
 	for (x = 0; x < s->pic->w; x++, q += 5, i++) {
 		unsigned long n = q[4], a = q[3];
 		if (n == 0) {
 			put(s, i, 0, 0, 0, 0);
+		} else if (n == 1) {
+			/* one pixel (enlarging): as it is, no divide (a 68000's are
+			   in software) */
+			if (a == 255)
+				put(s, i, (int) q[0], (int) q[1], (int) q[2], 255);
+			else if (a == 0)
+				put(s, i, 0, 0, 0, 0);
+			else {
+				unsigned long r = q[0] * 255 / a, g = q[1] * 255 / a, b = q[2] * 255 / a;
+				put(s, i, r > 255 ? 255 : (int) r, g > 255 ? 255 : (int) g, b > 255 ? 255 : (int) b, (int) a);
+			}
 		} else if (a == 255 * n) {
 			put(s, i, (int) (q[0] / n), (int) (q[1] / n), (int) (q[2] / n), 255);
 		} else if (a == 0) {
@@ -238,7 +301,6 @@ static long first_shown(long i, long n, long m)
 
 static void sc_rows(SCALER *s);
 
-#ifdef PIC_LIBJPEG
 /* a row of a solid picture, R G B (a JPEG's): no alpha to weigh */
 static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
 {
@@ -251,10 +313,14 @@ static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
 	}
 	if (s->y >= s->sh)
 		return 1;
+	if (s->y == 0)
+		s->solid = 1;
 	if (s->sw == w && s->sh == s->pic->h) {
-		unsigned short *o = s->pic->px + s->y * w;
+		unsigned short *o = s->pic->px + mul16((unsigned short) s->y, (unsigned short) w);
 		for (x = 0; x < w; x++, rgb += 3)
 			o[x] = (unsigned short) (((rgb[0] & 0xF8) << 8) | ((rgb[1] & 0xFC) << 3) | (rgb[2] >> 3));
+		/* solid, for when clear rows follow (a JPEG cut short) */
+		memset(s->pic->alpha + mul16((unsigned short) s->y, (unsigned short) w), 255, (size_t) w);
 		s->y++;
 		return 1;
 	}
@@ -281,12 +347,12 @@ static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
 	sc_rows(s);
 	return 1;
 }
-#endif
 
 /* a row of the decoded picture, R G B A */
 static int sc_row(SCALER *s, const unsigned char *rgba)
 {
 	long x, w = s->pic->w;
+	s->solid = 0;		/* the sums weigh alpha from now on */
 	if (pic_poll != NULL && ++s->polls >= 16) {
 		s->polls = 0;
 		if (!pic_poll())
@@ -592,7 +658,7 @@ typedef struct {
 	const unsigned char *p;
 	long left;
 	SCALER *sc;
-	unsigned char *strip;		/* an MCU row of the unpacked picture, R G B A */
+	unsigned char *strip;		/* an MCU row of the unpacked picture, R G B */
 	long sw;
 	int rows;			/* in the strip */
 	int stopped;
@@ -614,21 +680,14 @@ static int jout(JDEC *jd, void *bitmap, JRECT *r)
 {
 	JPG *j = jd->device;
 	const unsigned char *px = bitmap;
-	long x, y, w = r->right - r->left + 1;
-	for (y = 0; y <= r->bottom - r->top; y++) {
-		unsigned char *o = j->strip + (y * j->sw + r->left) * 4;
-		for (x = 0; x < w; x++, px += 3, o += 4) {
-			o[0] = px[0];
-			o[1] = px[1];
-			o[2] = px[2];
-			o[3] = 255;
-		}
-	}
+	long y, w = r->right - r->left + 1;
+	for (y = 0; y <= r->bottom - r->top; y++, px += w * 3)
+		memcpy(j->strip + (mul16((unsigned short) y, (unsigned short) j->sw) + r->left) * 3, px, (size_t) w * 3);
 	j->rows = r->bottom - r->top + 1;
 	if (r->right + 1 >= j->sw) {
 		/* the row of blocks is whole */
 		for (y = 0; y < j->rows; y++)
-			if (!sc_row(j->sc, j->strip + y * j->sw * 4)) {
+			if (!sc_row_rgb(j->sc, j->strip + mul16((unsigned short) y, (unsigned short) j->sw) * 3)) {
 				j->stopped = 1;
 				return 0;
 			}
@@ -655,7 +714,8 @@ static int jdc_pic_poll(void)
 	return 1;
 }
 
-#define POOL 11000L			/* TJpgDec's workspace with its Huffman tables */
+#define POOL 11512L			/* TJpgDec's workspace with its Huffman tables, and the
+					   folding multipliers of 1/2 and 1/4 (4 x 128 bytes at most) */
 
 static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
 {
@@ -679,7 +739,7 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 		sw = scaled(jd.width, jd.msx * 8, scale);
 		sh = scaled(jd.height, jd.msy * 8, scale);
 		j.sw = sw;
-		j.strip = malloc((size_t) sw * 16 * 4);
+		j.strip = malloc((size_t) sw * 16 * 3);
 		if (j.strip == NULL || !sc_init(sc, p, sw, sh)) {
 			free(j.strip);
 			free(pool);
@@ -738,7 +798,7 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 		jdc_poll = was;
 		bw = (jw + 7) / 8;
 		bh = (jh + 7) / 8;
-		row = malloc((size_t) bw * 4);
+		row = malloc((size_t) bw * 3);
 		if (row == NULL || !sc_init(sc, p, bw, bh)) {
 			free(row);
 			jdc_free(c);
@@ -751,12 +811,11 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 			for (bx = 0; bx < bw; bx++) {
 				int r, g, b;
 				jdc_rgb(c, (int) bx, (int) by, &r, &g, &b);
-				row[bx * 4] = (unsigned char) r;
-				row[bx * 4 + 1] = (unsigned char) g;
-				row[bx * 4 + 2] = (unsigned char) b;
-				row[bx * 4 + 3] = 255;
+				row[bx * 3] = (unsigned char) r;
+				row[bx * 3 + 1] = (unsigned char) g;
+				row[bx * 3 + 2] = (unsigned char) b;
 			}
-			if (!sc_row(sc, row)) {
+			if (!sc_row_rgb(sc, row)) {
 				free(row);
 				jdc_free(c);
 				*why = PIC_STOPPED;
@@ -971,6 +1030,10 @@ void pic_pal_init(PIC_PAL *pal, int n, const unsigned char rgb[][3])
 /* a colour (each component -128..383) to its index in near[] */
 #define NEAR_AT(r, g, b) ((((r) + 128) >> 4) * 1024 + (((g) + 128) >> 4) * 32 + (((b) + 128) >> 4))
 
+/* a square: each side at most 640 apart, so a 16 x 16 multiply (a
+   68000's muls.w; a long one was a call to GCC's 32-bit routine) */
+#define SQ(v) ((long) (short) (v) * (short) (v))
+
 static int nearest_far(PIC_PAL *pal, int r, int g, int b)
 {
 	int k = NEAR_AT(r, g, b), lo, hi, best = 0;
@@ -997,14 +1060,14 @@ static int nearest_far(PIC_PAL *pal, int r, int g, int b)
 	hi = lo;
 	lo = lo - 1;
 	while (lo >= 0 || hi < pal->n) {
-		int i, side;
-		long dr, dd;
+		int i, side, dr;
+		long dd;
 		if (hi < pal->n && (lo < 0 || pal->rgb[pal->order[hi]][0] - r <= r - pal->rgb[pal->order[lo]][0]))
 			i = pal->order[hi++], side = 1;
 		else
 			i = pal->order[lo--], side = 0;
 		dr = r - pal->rgb[i][0];
-		if (3 * dr * dr >= bd) {
+		if (3 * SQ(dr) >= bd) {
 			/* every pen past this one on its side is farther still */
 			if (side)
 				hi = pal->n;
@@ -1012,8 +1075,7 @@ static int nearest_far(PIC_PAL *pal, int r, int g, int b)
 				lo = -1;
 			continue;
 		}
-		dd = 3 * dr * dr + 4L * (g - pal->rgb[i][1]) * (g - pal->rgb[i][1]) +
-		     2L * (b - pal->rgb[i][2]) * (b - pal->rgb[i][2]);
+		dd = 3 * SQ(dr) + 4 * SQ(g - pal->rgb[i][1]) + 2 * SQ(b - pal->rgb[i][2]);
 		if (dd < bd) {
 			bd = dd;
 			best = i;
@@ -1028,7 +1090,103 @@ int pic_pal_nearest(PIC_PAL *pal, int r, int g, int b)
 	return nearest_far(pal, r, g, b);
 }
 
-void pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out)
+/* two pens (a monochrome screen): Floyd-Steinberg on the brightness alone,
+   from tables, in 16-bit arithmetic. The three colours' dither took 250 us
+   a pixel on an 8 MHz ST (5.7 s for a 192 x 128 photo); brightness is all
+   two pens can show */
+static void dither_two(const PIC *p, PIC_PAL *pal, unsigned char *out)
+{
+	long w = p->w, y;
+	short lr[32], lg[64], lb[32], y0, y1, mid, i;
+	short *rows = calloc((size_t) (w + 2) * 2, sizeof *rows), *cur, *nxt;
+	int light;
+	/* each pen's brightness (0.299, 0.587, 0.114 in 256ths), and each
+	   5-6-5 component's share of a pixel's */
+	y0 = (short) ((77 * pal->rgb[0][0] + 150 * pal->rgb[0][1] + 29 * pal->rgb[0][2]) >> 8);
+	y1 = (short) ((77 * pal->rgb[1][0] + 150 * pal->rgb[1][1] + 29 * pal->rgb[1][2]) >> 8);
+	light = y0 >= y1 ? 0 : 1;
+	if (light) {
+		short t = y0;
+		y0 = y1;
+		y1 = t;
+	}
+	mid = (short) ((y0 + y1) >> 1);		/* y0 the light pen's, y1 the dark one's */
+	for (i = 0; i < 32; i++) {
+		int c = (i << 3) | (i >> 2);
+		lr[i] = (short) ((77 * c) >> 8);
+		lb[i] = (short) ((29 * c) >> 8);
+	}
+	for (i = 0; i < 64; i++)
+		lg[i] = (short) ((150 * ((i << 2) | (i >> 4))) >> 8);
+	if (rows == NULL) {
+		long k;
+		for (k = 0; k < (long) p->h * w; k++) {
+			unsigned v = p->px[k];
+			out[k] = (unsigned char) (lr[v >> 11] + lg[(v >> 5) & 63] + lb[v & 31] >= mid ? light : !light);
+		}
+		return;
+	}
+	cur = rows + 1;
+	nxt = rows + w + 3;
+	for (y = 0; y < p->h; y++) {
+		const unsigned short *px = p->px + y * w;
+		const unsigned char *al = p->alpha != NULL ? p->alpha + y * w : NULL;
+		unsigned char *o = out + y * w;
+		short e = 0, *c, *d;	/* e: 7/16 of the last pixel's error, in 16ths */
+		long n;
+		/* a pixel at s (its alpha a, or none), its pen to o; c its row's
+		   errors, d the next row's, STEP the way along (serpentine): a
+		   loop each way, so that the pointers step by addressing (a
+		   68000's (a0)+ and -(a0)); GCC makes the weights shifts and adds */
+#define TWO(STEP) do { \
+			unsigned v = *s; \
+			short want, q; \
+			if (a != NULL && *a < 128) { \
+				*o = 0; \
+				e = 0; \
+				break; \
+			} \
+			want = (short) (lr[v >> 11] + lg[(v >> 5) & 63] + lb[v & 31] + ((e + *c) >> 4)); \
+			if (want >= mid) { \
+				*o = (unsigned char) light; \
+				q = want - y0; \
+			} else { \
+				*o = (unsigned char) !light; \
+				q = want - y1; \
+			} \
+			e = (short) (q * 7); \
+			d[-(STEP)] += (short) (q * 3); \
+			d[0] += (short) (q * 5); \
+			d[STEP] = q; \
+		} while (0)
+		if (!(y & 1)) {
+			const unsigned short *s = px;
+			const unsigned char *a = al;
+			c = cur;
+			d = nxt;
+			for (n = w; n > 0; n--, s++, o++, c++, d++, a = a != NULL ? a + 1 : NULL)
+				TWO(1);
+		} else {
+			const unsigned short *s = px + w - 1;
+			const unsigned char *a = al != NULL ? al + w - 1 : NULL;
+			o += w - 1;
+			c = cur + w - 1;
+			d = nxt + w - 1;
+			for (n = w; n > 0; n--, s--, o--, c--, d--, a = a != NULL ? a - 1 : NULL)
+				TWO(-1);
+		}
+#undef TWO
+		{
+			short *t = cur;
+			cur = nxt;
+			nxt = t;
+			memset(nxt - 1, 0, (size_t) (w + 2) * sizeof *nxt);
+		}
+	}
+	free(rows);
+}
+
+static void dither_many(const PIC *p, PIC_PAL *pal, unsigned char *out)
 {
 	/* Floyd-Steinberg: each pixel's error (what it wanted less its pen)
 	   carried 7/16 on, and 3/16, 5/16 and 1/16 to the row below,
@@ -1097,4 +1255,12 @@ void pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out)
 		}
 	}
 	free(rows);
+}
+
+void pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out)
+{
+	if (pal->n == 2)
+		dither_two(p, pal, out);
+	else
+		dither_many(p, pal, out);
 }
