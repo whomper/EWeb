@@ -758,6 +758,25 @@ build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build
 		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
 		build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU)
 	$(M68KCC) -m68030 -static -o $@ $^
+# a page's scripts as EWEB.PRG runs them (src/js), as 68030 code with the
+# FPU, for counting (tools/count68k.sh build/m68k/jsbench PAGE.HTM)
+m68k_JS := build/m68k/js/js.o $(addprefix build/m68k/qjs/,$(addsuffix .o,$(QJS_C)))
+build/m68k/qjs/%.o: $(QJS)/%.c $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(M68K_CFLAGS) $(QJS_DEF) -c $< -o $@
+build/m68k/js/js.o: src/js/js.c $(EWB_HDRS) $(QJS_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -m68881 -O2 -std=gnu99 -DNDEBUG $(JS_FLAGS) -c $< -o $@
+build/m68k/jsbench: tests/bench/jsbench.c $(m68k_JS) build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
+		build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o build/m68k/ewb/layout/layout.o \
+		build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) src/net/url.c tests/host/plat_posix.c common/src/util.c
+	$(M68KCC) -m68030 -m68881 -O2 -std=gnu99 -DNDEBUG $(JS_FLAGS) -static -o $@ tests/bench/jsbench.c \
+		src/net/url.c tests/host/plat_posix.c common/src/util.c common/src/inflate.c $(filter %.o,$^) -lm
+# (glibc's static libm for m68k has no fmod: musl's)
+build/m68k/jsbench: build/m68k/libm/fmod.o
+build/m68k/libm/fmod.o: $(LIBM)/src/fmod.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(M68K_CFLAGS) -include $(LIBM)/eweb/features.h -I$(LIBM)/src -c $< -o $@
 build/m68k/atheap/libc.o: common/atari/libc.c common/tests/heap/stub/tos.h
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -O2 -DHEAP_TEST -Icommon/tests/heap/stub -c $< -o $@

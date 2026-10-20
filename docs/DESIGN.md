@@ -1123,7 +1123,11 @@ HttpOnly cookie kept from them) and `make hatarigui`'s `scripts` group (EWEB.PRG
 Falcon with its 68882: tabs a script makes, one clicked, an `onclick` alert answered). There the
 tabs page's scripts (329 bytes) took 740 ms on the emulated 32 MHz Falcon: most of it the runtime
 QuickJS makes for each page with scripts and the prelude it compiles, the cost every such page
-pays; compiling the prelude once into bytecode is the next saving to measure.
+pays. Counted (`build/m68k/jsbench`, `tools/count68k.sh`, `tools/prof68k.py`): a page with an empty
+handler costs 4.3 million 68030 instructions (about 0.6-0.9 s on the DFB1), the test page `basics.html`
+5.1 million; the runtime's start and end are most of it, spread over QuickJS's atoms and properties
+(each 3-6%) as it builds JavaScript's standard objects, not the prelude. The saving to try next is
+one runtime and context kept for the pages of a site, or made once and copied.
 
 ## The design
 
