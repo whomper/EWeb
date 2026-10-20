@@ -7,10 +7,12 @@ import http.client
 import json
 import os
 import shutil
+import socket
 import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -387,6 +389,184 @@ class SnapshotTest(unittest.TestCase):
             webgate.Config.browser = True
         self.assertEqual(r.status, 501)
         self.assertTrue(data.startswith(b"webgate: snapshots need the Pi's browser"))
+
+
+class BrowserProxyTest(unittest.TestCase):
+    """the Pi's browser goes out through webgate (127.0.0.1:8281): every
+    connection to the address webgate checked, so a name whose answer is
+    at home is refused there too (7.3)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.up = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        threading.Thread(target=cls.up.serve_forever, daemon=True).start()
+        cls.ext = ThreadingHTTPServer(("127.0.0.1", 0), webgate.ExtHandler)
+        cls.ext.daemon_threads = True
+        threading.Thread(target=cls.ext.serve_forever, daemon=True).start()
+        cls.port = cls.up.server_address[1]
+
+    @classmethod
+    def tearDownClass(cls):
+        for s in (cls.up, cls.ext):
+            s.shutdown()
+            s.server_close()
+        webgate.Config.allow_local = False
+        webgate.Config.allow = []
+
+    def conn(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.ext.server_address[1], timeout=10)
+        self.addCleanup(c.close)
+        return c
+
+    def connect(self, host):
+        c = self.conn()
+        c.request("CONNECT", "%s:%d" % (host, self.port))
+        return c, c.getresponse()
+
+    def test_home_refused(self):
+        webgate.Config.allow_local = False
+        c, r = self.connect("127.0.0.1")
+        self.assertEqual(r.status, 403)
+        self.assertIn(b"webgate: won't connect to the local network (127.0.0.1)", r.read())
+        c, r = self.connect("localhost")       # a name, its answer checked
+        self.assertEqual(r.status, 403)
+        c = self.conn()
+        c.request("GET", "http://127.0.0.1:%d/page" % self.port)
+        r = c.getresponse()
+        self.assertEqual(r.status, 403)
+        r.read()
+
+    def test_tunnel_and_page_with_allow_local(self):
+        webgate.Config.allow_local = True
+        webgate.Config.allow = ["192.168.1.50"]       # the Atari's: not the browser's concern
+        try:
+            s = socket.create_connection(("127.0.0.1", self.ext.server_address[1]), timeout=10)
+            self.addCleanup(s.close)
+            s.sendall(b"CONNECT 127.0.0.1:%d HTTP/1.1\r\nHost: x\r\n\r\n" % self.port)
+            got = b""
+            while b"\r\n\r\n" not in got:
+                got += s.recv(65536)
+            self.assertTrue(got.startswith(b"HTTP/1.1 200"), got)
+            s.sendall(b"GET /echo HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+            got = b""
+            while True:
+                d = s.recv(65536)
+                if not d:
+                    break
+                got += d
+            self.assertTrue(got.endswith(b"GET /echo "), got)
+            c = self.conn()
+            c.request("GET", "http://127.0.0.1:%d/page" % self.port)
+            r = c.getresponse()
+            self.assertEqual((r.status, r.read()), (200, PAGE))
+        finally:
+            webgate.Config.allow_local = False
+            webgate.Config.allow = []
+
+    def resolver(self, *answers):
+        """a stand-in for the name server: each call the next answer"""
+        calls = []
+
+        def getaddrinfo(host, port, *a, **k):
+            calls.append(host)
+            ips = answers[min(len(calls), len(answers)) - 1]
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port)) for ip in ips]
+        return calls, getaddrinfo
+
+    def test_private_addresses_never_dialled(self):
+        webgate.Config.allow_local = False
+        dialled = []
+        with unittest.mock.patch.object(webgate.aeragate, "dial", lambda addrs, *a: dialled.append(addrs)):
+            for host in ("192.168.1.1", "10.0.0.1", "172.16.0.1", "169.254.169.254", "127.0.0.1",
+                         "[::1]", "[::ffff:192.168.1.1]", "0.0.0.0"):
+                c, r = self.connect(host)
+                self.assertEqual(r.status, 403, host)
+                r.read()
+        self.assertEqual(dialled, [])
+
+    def test_names_that_answer_home(self):
+        webgate.Config.allow_local = False
+        for answer in (["192.168.1.10"], ["93.184.216.34", "192.168.1.10"]):     # home, and mixed
+            calls, fake = self.resolver(answer)
+            c1, c2 = self.conn(), self.conn()
+            c1.connect()                # to webgate, before the stand-in answers every name
+            c2.connect()
+            with unittest.mock.patch.object(webgate.aeragate.socket, "getaddrinfo", fake):
+                c1.request("CONNECT", "rebind.example:443")
+                r = c1.getresponse()
+                self.assertEqual(r.status, 403, answer)
+                r.read()
+                c2.request("GET", "http://rebind.example/")
+                r = c2.getresponse()
+                self.assertEqual(r.status, 403, answer)
+                r.read()
+
+    def test_rebinding_one_look_up(self):
+        """public at the check, private a moment later: webgate connects to
+        what it checked, and asks once"""
+        webgate.Config.allow_local = False
+        calls, fake = self.resolver(["93.184.216.34"], ["192.168.1.10"])
+        dialled = []
+        a, b = socket.socketpair()
+        self.addCleanup(a.close)
+
+        def dial(addrs, *rest):
+            dialled.append(addrs)
+            return b
+        s = socket.create_connection(("127.0.0.1", self.ext.server_address[1]), timeout=10)
+        self.addCleanup(s.close)
+        with unittest.mock.patch.object(webgate.aeragate.socket, "getaddrinfo", fake), \
+                unittest.mock.patch.object(webgate.aeragate, "dial", dial):
+            s.sendall(b"CONNECT rebind.example:443 HTTP/1.1\r\nHost: x\r\n\r\n")
+            got = b""
+            while b"\r\n\r\n" not in got:
+                got += s.recv(4096)
+            self.assertTrue(got.startswith(b"HTTP/1.1 200"), got)
+            s.sendall(b"hello")
+            self.assertEqual(a.recv(5), b"hello")
+            a.sendall(b"back")
+            self.assertEqual(s.recv(4), b"back")
+        self.assertEqual(calls, ["rebind.example"])
+        self.assertEqual([sa[0] for _, sa in dialled[0]], ["93.184.216.34"])
+
+    def test_only_the_pi_itself(self):
+        self.assertTrue(webgate._local("127.0.0.1"))
+        self.assertTrue(webgate._local("::1"))
+        self.assertFalse(webgate._local("192.168.1.50"))
+
+    def test_pages_kept_off_the_bridge(self):
+        """a page in the Pi's browser can't take the Atari's next page
+        (/next) or hand in a snapshot of its own; the extension can"""
+        for headers in ({"Sec-Fetch-Site": "cross-site"}, {"Sec-Fetch-Site": "same-site"},
+                        {"Origin": "http://evil.example"}, {"Origin": "null"}):
+            c = self.conn()
+            c.request("GET", "/next", headers=headers)
+            self.assertEqual(c.getresponse().status, 403, headers)
+            c = self.conn()
+            c.request("POST", "/snapshot?id=1", body=b"{}", headers=headers)
+            self.assertEqual(c.getresponse().status, 403, headers)
+        webgate.BRIDGE.asked = "7"
+        try:
+            c = self.conn()
+            c.request("POST", "/snapshot?id=7", body=b'{"html": "mine"}',
+                      headers={"Sec-Fetch-Site": "cross-site", "Origin": "http://evil.example"})
+            self.assertEqual(c.getresponse().status, 403)
+            self.assertNotIn("7", webgate.BRIDGE.done)
+            c = self.conn()
+            c.request("POST", "/snapshot?id=7", body=b'{"html": "made"}',
+                      headers={"Sec-Fetch-Site": "none", "Origin": "chrome-extension://abcdef"})
+            self.assertEqual(c.getresponse().status, 200)
+            self.assertEqual(webgate.BRIDGE.done.pop("7"), {"html": "made"})
+        finally:
+            webgate.BRIDGE.asked = None
+        c = self.conn()
+        c.request("GET", "/config", headers={"Sec-Fetch-Site": "none"})
+        self.assertEqual(c.getresponse().status, 200)
+
+    def test_extension_still_answered(self):
+        c = self.conn()
+        c.request("GET", "/config")
+        self.assertEqual(json.loads(c.getresponse().read()), {"allow_local": False})
 
 
 class TlsTest(unittest.TestCase):

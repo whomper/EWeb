@@ -38,9 +38,13 @@ class FakePi(ag.Pi):
         self.rules = []
         self.answers = []
         self.busy = set()           # ports another program has
+        self.programs = set()       # installed beyond python3 (chromium, Xvfb...)
 
     def have(self, prog):
         return prog == "python3" or (prog == "ufw" and self.ufw is not None)
+
+    def which(self, *progs):
+        return next(("/usr/bin/" + p for p in progs if p in self.programs), None)
 
     def is_root(self):
         return True
@@ -469,15 +473,50 @@ class DavFtpTest(Base):
         self.assertEqual(self.execstart("webgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/webgate.py "
                                                     "--port 8280 --allow 192.168.1.50 --allow-local -v")
 
-    def test_web_keeps_the_browser(self):
-        # --browser isn't offered yet; one set by hand stays through an update
-        self.assertEqual(self.run_ag("install", "web"), 0, self.err)
-        unit = self.unit("webgate").replace("webgate.py --port 8280", "webgate.py --port 8280 --browser")
-        self.pi.write(ag.unit_path("webgate"), unit + "Environment=DISPLAY=:1\n")
-        self.assertEqual(self.run_ag("update"), 0, self.err)
+    def test_web_browser(self):
+        self.pi.write("/proc/meminfo", "MemTotal:        3884136 kB\nMemFree: 1 kB\n")
+        self.assertEqual(self.run_ag("install", "web", "--browser"), 0, self.err)
         self.assertEqual(self.execstart("webgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/webgate.py "
                                                     "--port 8280 --browser")
-        self.assertIn("Environment=DISPLAY=:1", self.unit("webgate"))
+        self.assertIn("Environment=DISPLAY=:99", self.unit("webgate"))
+        installed = [c for c in self.pi.cmds if c[:2] == ("apt-get", "install")][-1]
+        for pkg in ("xvfb", "xdotool"):
+            self.assertIn(pkg, installed)
+        screen, browser = self.unit("webgate-screen"), self.unit("webgate-browser")
+        self.assertIn(":99 -screen 0 1024x768x24 -nolisten tcp", screen)
+        for want in ("--proxy-server=http://127.0.0.1:8281", "--load-extension=/opt/aera-gateway/webgate-ext",
+                     "--user-data-dir=/var/lib/webgate/browser", "JoinsNamespaceOf=webgate.service",
+                     "User=webgate", "--kiosk", '"--proxy-bypass-list=<-loopback>;127.0.0.1:8281"',
+                     '"--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1"', "--disable-quic",
+                     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"):
+            self.assertIn(want, browser)
+        self.assertTrue(self.pi.exists("/opt/aera-gateway/webgate-ext/manifest.json"))
+        self.assertIn(("systemctl", "restart", "webgate-browser.service"), self.pi.cmds)
+        self.assertIn("the Pi's browser", self.out)
+        # an update keeps it, and a new extension starts afresh
+        self.pi.write("/var/lib/webgate/browser/Default/Service Worker/x", "old")
+        self.pi.write("/var/lib/webgate/browser/Default/Cookies", "logins")
+        self.assertEqual(self.run_ag("update"), 0, self.err)
+        self.assertIn("--browser", self.execstart("webgate"))
+        self.assertFalse(self.pi.exists("/var/lib/webgate/browser/Default/Service Worker"))
+        self.assertTrue(self.pi.exists("/var/lib/webgate/browser/Default/Cookies"))
+        # off again, and gone with the service
+        self.assertEqual(self.run_ag("install", "web", "--no-browser"), 0, self.err)
+        self.assertNotIn("--browser", self.execstart("webgate"))
+        self.assertNotIn("DISPLAY", self.unit("webgate"))
+        self.assertIsNone(self.unit("webgate-browser"))
+        self.assertIsNone(self.unit("webgate-screen"))
+        self.run_ag("install", "web", "--browser")
+        self.assertEqual(self.run_ag("remove", "web"), 0, self.err)
+        self.assertIsNone(self.unit("webgate-browser"))
+
+    def test_web_browser_needs_memory(self):
+        self.pi.write("/proc/meminfo", "MemTotal:         948304 kB\n")
+        self.assertEqual(self.run_ag("install", "web", "--browser"), 1)
+        self.assertIn("needs a Pi with 2 GB of memory or more; this one has 926 MB", self.err)
+        self.assertIsNone(self.unit("webgate"))
+        self.assertFalse(any(c[:2] == ("apt-get", "install") for c in self.pi.cmds))
+        self.assertEqual(self.run_ag("install", "web"), 0, self.err)        # without it, as before
 
     def test_cafile_must_exist(self):
         self.assertEqual(self.run_ag("install", "ftp", "--cafile", "/no/such/ca.pem"), 2)

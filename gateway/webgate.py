@@ -199,57 +199,6 @@ class Bridge:
 BRIDGE = Bridge()
 
 
-class ExtHandler(BaseHTTPRequestHandler):
-    """webgate-ext talks here, on 127.0.0.1 only"""
-    protocol_version = "HTTP/1.1"
-
-    def log_message(self, fmt, *args):
-        pass
-
-    def answer(self, status, body=b"", ctype="application/json"):
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self):
-        if self.path.startswith("/config"):
-            # what the extension blocks: the home network, unless --allow-local
-            self.answer(200, json.dumps({"allow_local": Config.allow_local}).encode())
-            return
-        if self.path.startswith("/next"):
-            w = BRIDGE.next()
-            if w is None:
-                self.answer(204)
-            else:
-                self.answer(200, json.dumps(w).encode())
-        else:
-            self.answer(404)
-
-    def do_POST(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        data = self.rfile.read(n) if n else b""
-        q = urlsplit(self.path)
-        if q.path == "/shot":
-            a = parse_qs(q.query)
-            BRIDGE.give(a.get("id", [""])[0], {"pic": data, "w": int(a.get("w", ["0"])[0] or 0),
-                                               "why": a.get("why", [""])[0]})
-            self.answer(200, b"{}")
-            return
-        if q.path != "/snapshot" or not q.query.startswith("id="):
-            self.answer(404)
-            return
-        try:
-            snap = json.loads(data.decode("utf-8"))
-        except ValueError:
-            self.answer(400)
-            return
-        BRIDGE.give(q.query[3:], snap)
-        self.answer(200, b"{}")
-
-
 def tls_of(conn):
     """how conn reached its server: "TLS 1.3, TLS_AES_128_GCM_SHA256", or
     "" for plain HTTP"""
@@ -266,6 +215,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "webgate/" + VERSION
 
     where = "-"             # the server a request goes to, for the log
+    for_browser = False     # ExtHandler: the Pi's own browser, not an Atari
 
     def log_message(self, fmt, *args):
         if Config.verbose:
@@ -304,7 +254,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def proxy(self):
         self.where = "-"
-        if not aeragate.client_ok(self.client_address[0], Config.allow):
+        if not (_local(self.client_address[0]) if self.for_browser else
+                aeragate.client_ok(self.client_address[0], Config.allow)):
             self.reply(403, "webgate: this address may not use the gateway\n")
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -313,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, "webgate %s is running. Put this address in EWeb's gateway setting.\n" % VERSION)
             return
         u = urlsplit(self.path)
-        if u.hostname == "webgate" and u.path.startswith("/live"):
+        if not self.for_browser and u.hostname == "webgate" and u.path.startswith("/live"):
             self.live(u)
             return
         if u.scheme not in ("http", "https") or not u.hostname:
@@ -322,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
         port = u.port or (443 if u.scheme == "https" else 80)
         self.where = "%s://%s:%d" % (u.scheme, u.hostname, port)
         path = (u.path or "/") + ("?" + u.query if u.query else "")
-        if self.headers.get("X-Gateway-Snapshot") == "1" and self.command == "GET":
+        if not self.for_browser and self.headers.get("X-Gateway-Snapshot") == "1" and self.command == "GET":
             self.snapshot(u)
             return
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
@@ -557,6 +508,126 @@ p{margin:4px 0}input[type=image]{border:1px solid #888}</style></head><body>
  <a href="http://webgate/live?n=%(n)d">Picture again</a> &middot; <a href="http://webgate/live/page">As a page</a></p>
 </body></html>
 """
+
+
+def _local(addr):
+    """the Pi itself (127.0.0.1, ::1): the only one its browser's proxy serves"""
+    ip = aeragate._ip(addr)
+    return ip is not None and ip.is_loopback
+
+
+class ExtHandler(Handler):
+    """127.0.0.1 only. webgate-ext talks here (/next, /config, /shot,
+    /snapshot), and the Pi's browser goes out through here, as through
+    a proxy (--proxy-server): its pages and what they load in proxy form,
+    https and websockets as CONNECT tunnels. Every connection is made by
+    webgate to the address it checked, so the browser reaches the home
+    network only with --allow-local, whatever a name's answer says (7.3)."""
+    for_browser = True
+
+    def answer(self, status, body=b"", ctype="application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def from_a_page(self):
+        """Is this bridge request from a page the browser opened (an <img>,
+        a fetch, a form), not from webgate-ext? Pages can't set these
+        headers, and Chromium always sends Sec-Fetch-Site to 127.0.0.1;
+        the extension's own say "none" and chrome-extension://."""
+        site, origin = self.headers.get("Sec-Fetch-Site"), self.headers.get("Origin")
+        if (site is not None and site != "none") or (origin is not None and not origin.startswith("chrome-extension://")):
+            self.answer(403)
+            return True
+        return False
+
+    def do_GET(self):
+        if not self.path.startswith("/"):
+            self.proxy()            # the browser, going out
+            return
+        if self.from_a_page():
+            return
+        if self.path.startswith("/config"):
+            # what the extension blocks: the home network, unless --allow-local
+            self.answer(200, json.dumps({"allow_local": Config.allow_local}).encode())
+            return
+        if self.path.startswith("/next"):
+            w = BRIDGE.next()
+            if w is None:
+                self.answer(204)
+            else:
+                self.answer(200, json.dumps(w).encode())
+        else:
+            self.answer(404)
+
+    def do_POST(self):
+        if not self.path.startswith("/"):
+            self.proxy()
+            return
+        if self.from_a_page():
+            return
+        n = int(self.headers.get("Content-Length") or 0)
+        data = self.rfile.read(n) if n else b""
+        q = urlsplit(self.path)
+        if q.path == "/shot":
+            a = parse_qs(q.query)
+            BRIDGE.give(a.get("id", [""])[0], {"pic": data, "w": int(a.get("w", ["0"])[0] or 0),
+                                               "why": a.get("why", [""])[0]})
+            self.answer(200, b"{}")
+            return
+        if q.path != "/snapshot" or not q.query.startswith("id="):
+            self.answer(404)
+            return
+        try:
+            snap = json.loads(data.decode("utf-8"))
+        except ValueError:
+            self.answer(400)
+            return
+        BRIDGE.give(q.query[3:], snap)
+        self.answer(200, b"{}")
+
+    def do_HEAD(self):
+        self.proxy()
+
+    do_PUT = do_DELETE = do_OPTIONS = do_PATCH = do_HEAD
+
+    def do_CONNECT(self):
+        """a tunnel for the browser (https, websockets), to the address
+        webgate checked: one look-up, and the connection to what it said"""
+        if not _local(self.client_address[0]):
+            self.reply(403, "webgate: this address may not use the gateway\n")
+            return
+        host, _, port = self.path.rpartition(":")
+        host = host.strip("[]")
+        if not host or not port.isdigit():
+            self.reply(400, "webgate: expected CONNECT host:port\n")
+            return
+        port = int(port)
+        self.where = "%s:%d" % (host, port)
+        try:
+            up = aeragate.connect(host, port, Config.timeout, Config.allow_local)
+        except aeragate.HomeNetwork:
+            self.reply(403, "webgate: won't connect to the local network (%s)\n" % host)
+            return
+        except (socket.gaierror, UnicodeError, ValueError):
+            self.reply(502, "webgate: can't find %s\n" % host)
+            return
+        except OSError as e:
+            self.reply(504 if isinstance(e, socket.timeout) else 502, "webgate: can't reach %s (%s)\n" % (host, e))
+            return
+        self.close_connection = True
+        try:
+            self.send_response(200, "Connection established")
+            self.end_headers()
+            self.note(200, 0, " (a tunnel)")
+            aeragate.relay(self.connection, up, 300, 60)
+        except OSError:
+            pass
+        finally:
+            up.close()
 
 
 def parser():
