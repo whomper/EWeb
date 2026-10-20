@@ -297,7 +297,8 @@ after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
 those, use the Pi's browser (below). The ST edition and a Falcon without
-an FPU run no scripts.
+an FPU run no scripts: there the menu item says "JavaScript needs an
+FPU (a 68881 or 68882)", and pages are shown as with scripts off.
 
 With the Pi gateway set up for it (`aera-gateway` with its browser, on
 the Pi), two things in the View menu use the Pi's own web browser:

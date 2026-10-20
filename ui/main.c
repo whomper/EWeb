@@ -282,7 +282,7 @@ void menu_update(void)
 	enable(C_SETTINGS, !loading);
 	enable(C_FALCON, !loading);
 #ifndef EW_ST
-	enable(C_SCRIPTS, !loading && br.scripts && site_of(br.url, NULL, 0));
+	enable(C_SCRIPTS, !loading && site_of(br.url, NULL, 0));	/* without an FPU: it says why */
 #endif
 	{
 		short i = mbar_object(&mb, C_PICTURES);
@@ -1118,6 +1118,10 @@ void command(int cmd)
 	case C_SCRIPTS:
 		/* a setting: on the disk at once (6.5); the page comes again
 		   with its scripts or without */
+		if (!br.scripts) {
+			alert(1, "[1][JavaScript needs an FPU|(a 68881 or 68882): on|this Atari pages are|shown without their|scripts.][ OK ]");
+			break;
+		}
 		scripts_toggle();
 		if (br.cur >= 0)
 			command(C_RELOAD);

@@ -29,11 +29,12 @@ EWeb's own fonts.
   right to left), Tab from one to the next and Return to send; sent with
   GET or POST, urlencoded, multipart or plain text, in the page's own
   character set, as the HTML Standard has browsers send them.
-- **A little JavaScript** on a Falcon or TT with an FPU (QuickJS, on a lean
-  DOM of EWeb's own document): menus, tabs, form checks, alerts, timers and
-  `fetch`, for the sites you choose (Options > Run this site's scripts),
-  within a budget of 200 KB and a few seconds a page; past it, or with
-  scripts off, the page's `<noscript>` version.
+- **A little JavaScript** (QuickJS, on a lean DOM of EWeb's own document):
+  menus, tabs, form checks, alerts, timers and `fetch`, for the sites you
+  choose (Options > Run this site's scripts), within a budget of 200 KB and
+  a few seconds a page; past it, or with scripts off, the page's
+  `<noscript>` version. It needs an FPU (a 68881 or 68882, as on the DFB1):
+  without one, and in the ST edition, pages are shown without scripts.
 - **Cookies**, as RFC 6265bis has them, those meant to last kept in
   `COOKIES.TXT` (written once, at quit; their values encrypted, as the
   family keeps passwords); none for other sites' pictures and
