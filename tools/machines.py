@@ -33,6 +33,23 @@ on the other end of the serial port and gives Hatari's serial arguments;
 the Atari's TCP connections become this computer's. m.stop() ends the
 bridge. It works on Erez's TOS too: FAKESTNG makes the cookie jar TOS
 1.04 lacks and turns off its XON/XOFF.
+
+NVDI: m.nvdi() installs Erez's own NVDI 5.03 (C:\\AUTO\\NVDI.PRG, NVDI.INF,
+ASSIGN.SYS, his GEMSYS drivers and his Bitstream fonts in C:\\BTFONTS) from
+the folder $AERA_NVDI (~/.aera/nvdi/x), as the TOS images: commercial,
+never in git nor sent anywhere. False when it isn't there (a rig that
+needs it says so and stops). AERA_WITH_NVDI=1 installs it on every Falcon
+a rig starts, so the hub runs an app's own rigs under NVDI unchanged. His GEMSYS\\STING (his network's settings)
+and his accessories are left out. NVDI 5.03 boots on the Falcon's TOS 4.04
+in about 30 s here, reading every font.
+
+The family's accessories alongside: m.accs(["ECal", "EContact"]) puts those
+programs' accessories from their latest releases (getrelease.py; the ST
+editions on an ST) in C:\\, each with C:\\NAME.INF naming its folder
+C:\\NAME so that no first-time question waits; a file the rig put there
+itself is kept. AERA_WITH_ACCS=ECal,EContact does it on every machine a
+rig starts, so the hub runs an app's own rigs with the others loaded, as
+on Erez's machines. Name only the other programs, not the one under test.
 """
 import hashlib
 import os
@@ -58,6 +75,11 @@ MACHINES = {
                ["--machine", "falcon", "--cpuclock", "32", "--fpu", "68882", "--memsize", "14",
                 "--ttram", "128", "--addr24", "off", "--dsp", "emu", "--monitor", "vga"],
                ["16", "256"], "tos404.img"),
+    "Falcon-4": ("a Falcon030 as sold: 68030 at 16 MHz, no FPU, 4 MB ST RAM and no TT RAM, VGA "
+                 "(Erez, 19 Oct 2026: the machine for all three accessories loaded at once)",
+                 ["--machine", "falcon", "--cpuclock", "16", "--memsize", "4", "--ttram", "0",
+                  "--addr24", "on", "--monitor", "vga"],
+                 ["16", "256"], "tos404.img"),
 }
 
 SCREENS = {
@@ -186,15 +208,20 @@ class Machine:
 
     def describe(self):
         return "%s:%s, %s" % (self.name, self.screen,
-                              "TOS " + tos_version(self.tos) if self.real else "EmuTOS 1.4")
+                              "TOS " + tos_version(self.tos) if self.real else "EmuTOS 1.4") + \
+            ("; with " + ", ".join(self.with_accs) if getattr(self, "with_accs", None) else "")
 
     def args(self):
         """Hatari's arguments; also writes the machine's own settings"""
         os.makedirs(self.hd, exist_ok=True)
+        if os.environ.get("AERA_WITH_NVDI") and self.name.startswith("Falcon") and not self.nvdi():
+            sys.exit("machines.py: AERA_WITH_NVDI, but no NVDI here")
+        if os.environ.get("AERA_WITH_ACCS"):
+            self.accs([a for a in os.environ["AERA_WITH_ACCS"].split(",") if a.strip()])
         cfg = os.path.join(self.home, ".config", "hatari")
         os.makedirs(cfg, exist_ok=True)
         nv = bytearray(50)                  # the TT's and Falcon's NVRAM, past the clock
-        if self.name == "Falcon":
+        if self.name.startswith("Falcon"):
             mode = FALCON_MODE[self.screen]
             nv[14:16] = struct.pack(">H", mode)
             inf = os.path.join(self.hd, "NEWDESK.INF")
@@ -209,9 +236,69 @@ class Machine:
         nv[48], nv[49] = ~s & 0xFF, s
         with open(os.path.join(cfg, "hatari.nvram"), "wb") as f:
             f.write(nv)
+        # under NVDI, TOS's memory count as well (TOS 4.04 on Falcon-4 was
+        # still counting after 45 s): fast-boot skips it
+        fast = ["--fast-boot", "yes"] if os.path.exists(os.path.join(self.hd, "AUTO", "NVDI.PRG")) else []
         return (["--tos", self.tos] + self.base + SCREENS[self.screen] +
                 ["--harddrive", self.hd, "--gemdos-drive", "C", "--sound", "off",
-                 "--confirm-quit", "no"])
+                 "--confirm-quit", "no"] + fast)
+
+    def nvdi(self):
+        """Erez's NVDI on C: (see above): True, or False when it isn't here"""
+        src = os.environ.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
+        need = [os.path.join("auto", "nvdi.prg"), "nvdi.inf", "ASSIGN.SYS", "gemsys", "btfonts"]
+        missing = [n for n in need if not os.path.exists(os.path.join(src, n))]
+        if missing:
+            if len(missing) < len(need):        # NVDI stops at its banner without GEMSYS
+                print("machines.py: NVDI in %s lacks %s" % (src, ", ".join(missing)), file=sys.stderr)
+            return False
+        os.makedirs(os.path.join(self.hd, "AUTO"), exist_ok=True)
+        shutil.copy(os.path.join(src, "auto", "nvdi.prg"), os.path.join(self.hd, "AUTO", "NVDI.PRG"))
+        shutil.copy(os.path.join(src, "nvdi.inf"), os.path.join(self.hd, "NVDI.INF"))
+        shutil.copy(os.path.join(src, "ASSIGN.SYS"), os.path.join(self.hd, "ASSIGN.SYS"))
+        gemsys = os.path.join(self.hd, "GEMSYS")
+        os.makedirs(gemsys, exist_ok=True)
+        for f in os.listdir(os.path.join(src, "gemsys")):
+            if os.path.isfile(os.path.join(src, "gemsys", f)):
+                shutil.copy(os.path.join(src, "gemsys", f), os.path.join(gemsys, f.upper()))
+        fonts = os.path.join(self.hd, "BTFONTS")
+        if not os.path.exists(fonts):
+            shutil.copytree(os.path.join(src, "btfonts"), fonts)
+        return True
+
+    # the accessories, by program: (the edition for the Falcon and TT, the ST's)
+    ACCS = {"ECal": ("ECAL.ACC", "ECALST.ACC"), "EContact": ("ECONTACT.ACC", "ECONTST.ACC"),
+            "EHypView": ("EHYPVIEW.ACC", "EHYPVIEW.ACC")}
+
+    def accs(self, apps):
+        """the family's accessories alongside (see above); returns what was put
+        on C:, e.g. ["ECal v2.16"]"""
+        os.makedirs(self.hd, exist_ok=True)
+        done = []
+        for app in apps:
+            app = app.strip()
+            if app not in self.ACCS:
+                sys.exit("machines.py: no accessory for %r (%s)" % (app, ", ".join(self.ACCS)))
+            names = self.ACCS[app]
+            f = names[1] if self.name.startswith("ST") else names[0]
+            if any(os.path.exists(os.path.join(self.hd, n)) for n in names):
+                continue                    # the rig's own
+            cache = os.path.join(os.path.expanduser("~"), ".cache", "aera", "accs", app)
+            os.makedirs(cache, exist_ok=True)
+            subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                         "getrelease.py"), app, cache, f],
+                           check=True, stdout=subprocess.DEVNULL)
+            shutil.copy(os.path.join(cache, f), os.path.join(self.hd, f))
+            stem = names[0][:-4]
+            os.makedirs(os.path.join(self.hd, stem), exist_ok=True)
+            inf = os.path.join(self.hd, stem + ".INF")
+            if not os.path.exists(inf):
+                with open(inf, "w", newline="") as fh:
+                    fh.write("[OPTIONS]\r\nFOLDER=C:\\%s\r\n" % stem)
+            tag = open(os.path.join(cache, app.upper() + ".VERSION")).read().strip()
+            done.append("%s %s" % (app, tag))
+        self.with_accs = done
+        return done
 
     def network(self, rate=None):
         """FAKESTNG and its bridge; Hatari's serial arguments"""
