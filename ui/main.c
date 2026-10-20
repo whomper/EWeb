@@ -1253,7 +1253,6 @@ int main(void)
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari Falcon030)", EWEB_VERSION);
 #endif
 	gate_apply();
-	br.can_open = can_open;
 
 	{
 		/* the bookmarks: read once a start (6.5), for their menu */
@@ -1300,6 +1299,7 @@ int main(void)
 	br.pictures = opt.pictures;
 	br.say = say;
 	br.log = log_line;
+	br.can_open = can_open;
 	win_open();
 	menu_update();
 	crash_offer("EWeb", "in EWeb's folder");

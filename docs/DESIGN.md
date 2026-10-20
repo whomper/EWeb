@@ -973,7 +973,8 @@ job and quit, and the pack written again; `make itest` shows a page from it with
 ## Gateway mode, first step: webgate fetches (20 Oct 2026)
 
 AERA-Gateway's `web` service, `webgate.py` (EWeb's protocol, in AERA-Gateway as the family's other
-gateways are), is an HTTP proxy for EWeb on the Pi: EWeb, with `GATEWAY=` set in `EWEB.INF` (EWGET
+gateways are), is an HTTP proxy for EWeb on the Pi: EWeb, with the Pi gateway set (Settings > Secure:
+`GATE=`, `GATEPORT=`, and Falcon mode off, `FALCON=0`; EWGET
 `-g`), sends every request to it in plain HTTP in proxy form (`GET https://host/path HTTP/1.1`),
 and the Pi makes the connection onwards with aeragate's rules (TLS 1.2 or 1.3, the certificate and
 name checked, never back into the home network). It passes the answer back as it comes: the
@@ -992,19 +993,47 @@ ST edition.
 
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 
-`EWEBST.PRG` is the same sources as `EWEB.PRG` built as 68000 code (`-fdisable-tree-bswap`, as
-every 68000 build of the family), with common's `tls_none.c` in place of TLS (BearSSL's 150 KB
-left out) and no DSP; secure sites come through AERA-Gateway's webgate (`GATEWAY=`). It is 590 KB
-of code, 23 KB of data and 401 KB of BSS. The cross compiler's libgcc has its 64-bit multiply and
-divide only as 68020 code (an illegal instruction on an ST), so `atari/ll68000.c` has 68000 ones
-(16-bit multiplies, common's 32-bit routines, shift and subtract), matched against native
-arithmetic on a million random pairs; they belong in common next to its 32-bit ones. TOS 1.x has
-no `Mxalloc`: the memory is sized from `Malloc(-1)` there. On Erez's 1040 ST in Hatari (8 MHz,
-4 MB, TOS 1.04), in monochrome and medium resolution: the tables page from the disk in 9.5 s
-(parse 1.2 s, layout 2.6 s, drawing 5.3 s), the page of pictures with its JPEGs decoded in 20-30 s
-each and the 800x600 PNG refused for its 1.9 MB (pictures may take a sixteenth of the RAM), and a
-secure page through the gateway. Making the ST edition faster (JPEG on 16-bit arithmetic,
-drawing) is for later.
+`EWEBST.PRG` is the same sources as `EWEB.PRG` built as 68000 code (`-fno-store-merging
+-fdisable-tree-bswap`, as every 68000 build of the family), with common's `tls_none.c` in place of
+TLS (BearSSL's 150 KB left out) and no DSP; secure sites come through AERA-Gateway's webgate, the
+Pi gateway of Settings > Secure. The cross compiler's libgcc has its 64-bit multiply and divide
+only as 68020 code (an illegal instruction on an ST), so `atari/ll68000.c` has 68000 ones (16-bit
+multiplies, common's 32-bit routines, shift and subtract), matched against native arithmetic on a
+million random pairs; they belong in common next to its 32-bit ones. TOS 1.x has no `Mxalloc`: the
+memory is sized from `Malloc(-1)` there.
+
+**It runs on a 1 MB ST** (the hub's rule for ST editions, 20 Oct 2026). TOS 1.04 there leaves a
+program 940,906 bytes (919 KB, measured with a probe in Hatari); the first build needed 1015 KB to
+load (590 KB of code, 23 KB of data, 401 KB of BSS). Now 655 KB (384 KB of code, 23 of data, 249 of
+BSS):
+
+| Change | Saved |
+|---|---|
+| TJpgDec (and jpegdc for what it won't take) in place of libjpeg-turbo | 92 KB of code |
+| `-Os` | 115 KB of code |
+| `EW_ST`: the CSS engine's prelude 1024 tokens, 512 hits, a 256-entry style cache, 256 values and declarations, 4 levels of `:not()`, 1024 names | 128 KB of BSS |
+| `EW_ST`: the HTTP client's read buffer 8 KB, the stack 48 KB | 24 KB of BSS |
+
+At run time the arenas take small pieces on the ST (the CSS engine 4 KB, the document and the
+layout 8 KB, not 64 and 16), as a context's empty pieces were most of a small page's memory; a
+font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
+grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
+in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
+fit, EWeb says so on a page of its own, which is small. Pictures may take a sixteenth of the free
+RAM (12 KB on the 1 MB ST, so few come; the photo is refused for memory).
+
+Measured in Hatari (8 MHz, TOS 1.04), the tables page from the disk:
+
+| Machine | Free at start | Page | Parse | Layout | Drawing |
+|---|---|---|---|---|---|
+| 1 MB ST, monochrome | 196 KB | 10.9 s | 1.4 s | 2.8 s | 6.2 s |
+| 4 MB ST, monochrome | 2.8 MB | 11.1 s | 1.5 s | 2.9 s | 6.3 s |
+| 4 MB ST, medium resolution | 2.8 MB | 6.8 s | 1.5 s | 2.9 s | 1.9 s |
+
+On the 1 MB ST the pictures page then shows too (9.3 s), after the tables page is given back. The
+`-Os` build is about 15% slower than the `-O2` one was on the 4 MB ST (9.5 s for the tables page);
+the 1 MB ST comes first. Drawing in monochrome is the most of it; making the ST edition faster
+(drawing, JPEG on 16-bit arithmetic) is for later.
 
 ## The design
 
