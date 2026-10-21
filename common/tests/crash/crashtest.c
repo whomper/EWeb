@@ -5,9 +5,17 @@
  * emulator. C:\CRASHT.INF says what to do:
  *   b  a bus error in the program        a  an address error (68000)
  *   i  an illegal instruction            z  a division by zero
- *   s  a bus error in supervisor mode (in the program's own code): the
- *      bombs, which TOS records; the run after the next reset finds the
- *      record and, since it was in the program, says so (crash_previous)
+ *   k  a bus error in supervisor mode in the program's own code (a
+ *      Supexec of its): caught as in user mode
+ *   f  line F (an opcode for a coprocessor that isn't there)
+ *   w  a wild jump: user mode, an illegal instruction outside the
+ *      program, with another program's handler on vector 4 before the
+ *      catcher's (as a driver's on a DFB1): caught, as the program is the
+ *      process running
+ *   s  a bus error in supervisor mode outside the program: the bombs,
+ *      which TOS records; the run after the next reset finds the record
+ *      and, since it wasn't in the program, doesn't count it as its own
+ *      (crash_previous)
  *   p  no crash: STinG's way into supervisor mode. Code outside the
  *      program, with a handler of its own on vector 8 put there before
  *      the catcher, runs "or.w #0,sr" in user mode and catches the
@@ -53,6 +61,33 @@ static void sup_bus(void)
 }
 
 static volatile long sink;
+
+/* code copied into a Malloc'ed block, outside the program */
+static void *outside(const unsigned short *code, long n)
+{
+	void *m = Malloc(n);
+	if ((long)m <= 0) {
+		nf_debug("CRASHT no memory\n");
+		return 0;
+	}
+	memcpy(m, code, n);
+	return m;
+}
+/* s: tst.l $FFFFFA40 (nothing there); rts */
+static const unsigned short sup_out[] = { 0x4AB9, 0xFFFF, 0xFA40, 0x4E75 };
+/* w: illegal */
+static const unsigned short wild[] = { 0x4AFC };
+/* w: another program's handler on vector 4, before the catcher: on to
+   the one before it (move.l old(pc),-(sp); rts; old) */
+static const unsigned short pass4[] = { 0x2F3A, 0x0004, 0x4E75, 0x0000, 0x0000 };
+static unsigned short *pass4_block;
+static volatile long *volatile v4 = (volatile long *)0x10L;
+
+static void pass4_hook(void)		/* supervisor mode */
+{
+	*(long *)(pass4_block + 3) = *v4;
+	*v4 = (long)pass4_block;
+}
 
 /* ---- p: a resident program's privilege violation, as STinG's ----
    Copied into a Malloc'ed block, outside the program: handler, the old
@@ -113,6 +148,11 @@ int main(void)
 		memcpy(sting_block, sting_code, sizeof(sting_code));
 		Supexec(sting_hook);
 	}
+	if (kind == 'w') {		/* a driver's handler is there first */
+		if (!(pass4_block = outside(pass4, sizeof pass4)))
+			return 1;
+		Supexec(pass4_hook);
+	}
 	crash_install("C:\\", "CrashTest", "1.0");
 	crash_cleanup = cleanup;
 	crash_report = report;
@@ -150,10 +190,25 @@ int main(void)
 		sink = q;
 		break;
 	}
-	case 's':
-		put("C:\\STAGE1.TXT", "s\r\n", 3);
+	case 'k':
 		Supexec(sup_bus);
 		break;
+	case 'f':
+		__asm__ volatile(".short 0xFE00");	/* coprocessor 7: none */
+		break;
+	case 'w': {
+		void (*f)(void) = (void (*)(void))outside(wild, sizeof wild);
+		if (f)
+			f();
+		break;
+	}
+	case 's': {
+		void *f = outside(sup_out, sizeof sup_out);
+		put("C:\\STAGE1.TXT", "s\r\n", 3);
+		if (f)
+			Supexec(f);
+		break;
+	}
 	case 'p': {
 		long r = ((long (*)(void))(sting_block + 17))();
 		crash_remove();

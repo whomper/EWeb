@@ -27,10 +27,10 @@
 
 /* shared with crash.S */
 short crash_busy, crash_cpu, crash_fvec, crash_newsr;
-long crash_regs[15], crash_usp, crash_jump, crash_old[9], crash_old_term;
+long crash_regs[15], crash_usp, crash_jump, crash_old[12], crash_old_term;
 long crash_stack_top;
 void crash_e2(void), crash_e3(void), crash_e4(void), crash_e5(void),
-     crash_e6(void), crash_e7(void), crash_e8(void), crash_term(void);
+     crash_e6(void), crash_e7(void), crash_e8(void), crash_e11(void), crash_term(void);
 long crash_take(unsigned short *f, long vec);
 void crash_landing(void);
 void crash_restore(void);
@@ -39,13 +39,17 @@ void (*crash_cleanup)(const char *what);
 void (*crash_report)(const char *text, long n);
 extern short _is_acc;			/* crt0.S */
 
-static void (*const entry[9])(void) = {
-	0, 0, crash_e2, crash_e3, crash_e4, crash_e5, crash_e6, crash_e7, crash_e8
+/* the vectors caught: 2 to 8, and 11 (line F: on a machine with an FPU,
+   only code that isn't code runs into it) */
+static void (*const entry[12])(void) = {
+	0, 0, crash_e2, crash_e3, crash_e4, crash_e5, crash_e6, crash_e7, crash_e8, 0, 0, crash_e11
 };
-static const char *const names[9] = {
+static const char *const names[12] = {
 	0, 0, "bus error, 2 bombs", "address error, 3 bombs", "illegal instruction, 4 bombs",
-	"division by zero, 5 bombs", "CHK, 6 bombs", "TRAPV, 7 bombs", "privilege violation, 8 bombs"
+	"division by zero, 5 bombs", "CHK, 6 bombs", "TRAPV, 7 bombs", "privilege violation, 8 bombs", 0, 0,
+	"line F (an FPU instruction or none), 11 bombs"
 };
+#define CAUGHT(i) ((i) >= 2 && (i) <= 11 && entry[i] != 0)
 
 static int installed;
 static const char *app = "the program", *app_version = "";
@@ -97,6 +101,20 @@ static long frame(const unsigned short *f, long vec, long *addr, short *has)
 	return size;
 }
 
+static volatile long *low(long a);
+
+/* the program is the process running now (GEMDOS's p_run, TOS 1.02 and
+   later); supervisor mode */
+static int ours_running(void)
+{
+	const unsigned char *h = (const unsigned char *)*low(0x4F2L);	/* _sysbase */
+	long *run;
+	if (h == 0 || *(const unsigned short *)(h + 2) < 0x0102)
+		return 0;
+	run = *(long *const *)(h + 0x28);
+	return run != 0 && *run == (long)_BasePage;
+}
+
 /* the frame's size if the fault is the program's to handle, else 0 (on to
    TOS); notes what happened. Runs in the exception. */
 long crash_take(unsigned short *f, long vec)
@@ -104,16 +122,29 @@ long crash_take(unsigned short *f, long vec)
 	const unsigned short *s = !crash_cpu && vec <= 3 ? f + 4 : f;
 	long size;
 	u32 pc = (u32)s[1] << 16 | s[2], old = (u32)crash_old[vec];
+	int rom = old >= 0xE00000UL && old < 0x1000000UL;
 	crash_jump = crash_old[vec];
-	if (s[0] & 0x2000)
-		return 0;			/* supervisor mode: not ours */
-	/* in someone else's code, with a handler of theirs before ours: theirs.
-	   STinG gets into supervisor mode by running "or.w #0,sr" in user mode
-	   and catching the privilege violation (protect_exec, in TCP_open and
-	   others); taking it for a crash bombed every connection. TOS's own
-	   handler (in ROM) still leaves a wild jump outside the program to us. */
-	if ((pc < text_lo || pc >= prog_hi) && !(old >= 0xE00000UL && old < 0x1000000UL))
-		return 0;
+	if (s[0] & 0x2000) {
+		/* supervisor mode: the program's own code there (a Supexec of its:
+		   a DSP's host port, a hardware register) is ours; the system's,
+		   a driver's or an interrupt's goes on to TOS, which leaves its
+		   record of the bombs for the next start */
+		if (pc < text_lo || pc >= text_hi)
+			return 0;
+	} else if (pc < text_lo || pc >= prog_hi) {
+		/* in someone else's code, with a handler of theirs before ours:
+		   theirs. STinG gets into supervisor mode by running "or.w #0,sr"
+		   in user mode and catching the privilege violation (protect_exec,
+		   in TCP_open and others); taking it for a crash bombed every
+		   connection. Line F outside the program is never ours: TOS
+		   1.0x's ROM calls its own routines with it, an FPU emulator
+		   runs the code it is. With TOS's own handler (in ROM), or while
+		   the program is the process running (a wild jump of its own
+		   through a pointer gone bad: on a machine whose drivers hook the
+		   vectors, its bombs went to TOS and nothing said where), ours */
+		if (vec == 11 || (!rom && (vec == 8 || !ours_running())))
+			return 0;
+	}
 	if (!(size = frame(f, vec, &c_addr, &c_has_addr)))
 		return 0;
 	c_vec = vec;
@@ -139,8 +170,8 @@ void crash_restore(void)
 	int i;
 	if (!installed)
 		return;
-	for (i = 2; i <= 8; i++)
-		if (*low(i * 4L) == (long)entry[i])
+	for (i = 2; i <= 11; i++)
+		if (CAUGHT(i) && *low(i * 4L) == (long)entry[i])
 			*low(i * 4L) = crash_old[i];
 	if (*low(0x408L) == (long)crash_term)
 		*low(0x408L) = crash_old_term;
@@ -156,10 +187,11 @@ static void sup_install(void)
 			prev[i] = rec[i];
 		rec[0] = 0;			/* told once */
 	}
-	for (i = 2; i <= 8; i++) {
-		crash_old[i] = *low(i * 4L);
-		*low(i * 4L) = (long)entry[i];
-	}
+	for (i = 2; i <= 11; i++)
+		if (CAUGHT(i)) {
+			crash_old[i] = *low(i * 4L);
+			*low(i * 4L) = (long)entry[i];
+		}
 	crash_old_term = *low(0x408L);	/* etv_term */
 	*low(0x408L) = (long)crash_term;
 	installed = 1;
@@ -318,9 +350,9 @@ void crash_install(const char *workdir, const char *name, const char *version)
 		short has;
 		u32 pc;
 		const char *name;
-		if (vec < 2 || vec > 8)
+		if (!CAUGHT(vec))
 			vec = prev[17];		/* the number as a long */
-		name = vec >= 2 && vec <= 8 ? names[vec] : "an exception";
+		name = CAUGHT(vec) ? names[vec] : "an exception";
 		st = !crash_cpu && vec <= 3 ? f + 4 : f;
 		pc = (u32)st[1] << 16 | st[2];
 		header("found TOS's record of a crash before this run");
@@ -373,8 +405,16 @@ int crash_test(short scan)
 	if (scan == 0x3b) {		/* F1: bus error in the program */
 		bad = (long *)0x10L;
 		*bad = 0;
-	} else if (scan == 0x3c) {	/* F2: bus error in supervisor mode */
+	} else if (scan == 0x3c) {	/* F2: bus error in its code, supervisor mode */
 		Supexec(crash_test_sup);
+	} else if (scan == 0x3f) {	/* F5: the same outside the program: the bombs */
+		/* tst.l $FFFFFA40; rts, in memory of its own */
+		static const unsigned short sup_out[] = { 0x4AB9, 0xFFFF, 0xFA40, 0x4E75 };
+		unsigned short *m = Malloc(sizeof sup_out);
+		if ((long)m <= 0)
+			return 1;
+		memcpy(m, sup_out, sizeof sup_out);
+		Supexec(m);
 	} else if (scan == 0x3d) {	/* F3: illegal instruction */
 		ill = (void (*)(void))illegal;
 		ill();

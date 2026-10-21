@@ -1,17 +1,19 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
-| The crash catcher's exception entries (see crash.c). Vectors 2-8 (the
-| 2 to 8 bombs) come here with the vector number pushed. A fault in
-| program's own code (user mode) is turned into a jump to crash_landing,
+| The crash catcher's exception entries (see crash.c). Vectors 2-8 and 11
+| (the 2 to 8 and 11 bombs) come here with the vector number pushed. A
+| fault that is the program's (crash_take) is turned into a jump to crash_landing,
 | in user mode on a stack of its own, which writes CRASH.LOG and quits
-| cleanly. A fault in supervisor mode (the system, a driver, an
-| interrupt) goes on to TOS's handler as before: the bombs, and TOS's
+| cleanly. A fault in supervisor mode outside the program (the system, a
+| driver, an interrupt) goes on to TOS's handler as before: the bombs, and TOS's
 | record of them at $380, which the program reads at its next start.
 | Its stack (crash_stack_top) is taken by crash_install, so a desk
 | accessory, which never installs the catcher, doesn't pay for it.
 
 	.text
-	.globl	crash_e2, crash_e3, crash_e4, crash_e5, crash_e6, crash_e7, crash_e8
+	.globl	crash_e2, crash_e3, crash_e4, crash_e5, crash_e6, crash_e7, crash_e8, crash_e11
+crash_e11:	pea	11.w
+	bra.s	common
 crash_e2:	pea	2.w
 	bra.s	common
 crash_e3:	pea	3.w
