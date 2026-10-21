@@ -49,6 +49,9 @@ def make_pics():
         "alpha.png": (save(Image.new("RGBA", (1000, 500), (200, 0, 0, 120)), "PNG"), "image/png"),
         "turned.jpg": (save(turned, "JPEG", exif=exif.tobytes()), "image/jpeg"),
         "junk.jpg": (b"not a picture at all", "image/jpeg"),
+        # for the stand-in aerapens (PensTest): too slow, cut short
+        "slow.png": (b"slow" + save(photo(30, 20), "PNG"), "image/png"),
+        "short.png": (b"short" + save(photo(30, 20), "PNG"), "image/png"),
         # a few kilobytes that claim 80 million pixels
         "bomb.png": (save(Image.new("1", (10000, 8000)), "PNG"), "image/png"),
     }
@@ -277,6 +280,185 @@ class ProxyTest(unittest.TestCase):
             webgate.Config.allow_local = True
         self.assertEqual(r.status, 403)
         self.assertIn(b"webgate: won't connect to the local network", data)
+
+
+class FakePens(threading.Thread):
+    """a stand-in for aerapens behind its socket (AERA-Atari's
+    common/tools/pens; systemd starts one a connection): the pens of
+    W x H (W wide when H is 0, as tall as wide) all pen 1, for a JPEG,
+    PNG or GIF only; "slow" pictures answered too late, "short" ones cut
+    short. The last request is kept."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path = path
+        self.last = None
+        self.srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.srv.bind(path)
+        self.srv.listen(4)
+
+    def run(self):
+        while True:
+            try:
+                c, _ = self.srv.accept()
+            except OSError:
+                return
+            with c:
+                req = b""
+                while True:
+                    b = c.recv(65536)
+                    if not b:
+                        break
+                    req += b
+                self.last = req
+                try:
+                    c.sendall(self.answer(req))
+                except OSError:
+                    pass        # webgate gave up waiting (the slow one)
+
+    def answer(self, req):
+        import time
+        import zlib
+        if req[:5] != b"AEPQ\1" or len(req) < 16:
+            return b""
+        if req[5:6] == b"v":
+            return b"aerapens 0123456789ab test\n"
+        n, w, h = req[6] + 1, int.from_bytes(req[8:10], "big"), int.from_bytes(req[10:12], "big")
+        pic = req[16 + 3 * n:]
+        if pic.startswith(b"slow"):
+            time.sleep(2)
+        if not pic.startswith((b"\xff\xd8", b"\x89PNG", b"GIF8")):
+            return b""          # as aerapens: not a JPEG, PNG or GIF (exit 2, nothing written)
+        h = h or w
+        depth = 1 if n <= 2 else 2 if n <= 4 else 4 if n <= 16 else 8
+        row = (w * depth + 7) // 8
+        out = (b"aerapens 0123456789ab test\n" + b"EWPN" + bytes([1, depth, 0, n - 1]) + w.to_bytes(2, "big") +
+               h.to_bytes(2, "big") + (999).to_bytes(2, "big") + (777).to_bytes(2, "big") +
+               zlib.crc32(req[16:16 + 3 * n]).to_bytes(4, "big") + bytes([0x11]) * (row * h))
+        return out[:-5] if pic.startswith(b"short") else out
+
+    def stop(self):
+        self.srv.close()
+
+
+ST16 = bytes([255, 255, 255, 255, 0, 0, 0, 255, 0, 255, 255, 0, 0, 0, 255, 255, 0, 255, 0, 255, 255, 170, 170, 170,
+              85, 85, 85, 170, 0, 0, 0, 170, 0, 170, 170, 0, 0, 0, 170, 170, 0, 170, 0, 170, 170, 0, 0, 0])
+
+
+class PensTest(ProxyTest):
+    """pictures as the Atari's pens (EWeb's protocol): the colours sent
+    once, then each picture asked for with them, made by aerapens on its
+    socket"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.dir = tempfile.mkdtemp()
+        cls.fake = FakePens(os.path.join(cls.dir, "pens.sock"))
+        cls.fake.start()
+        webgate.Config.pens_socket = cls.fake.path
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fake.stop()
+        webgate.Config.pens_socket = "/run/webgate-pens.sock"
+        shutil.rmtree(cls.dir)
+        super().tearDownClass()
+
+    def colours(self, rgb=ST16):
+        c = http.client.HTTPConnection("127.0.0.1", self.gw.server_address[1], timeout=10)
+        self.addCleanup(c.close)
+        c.request("POST", "http://webgate/palette", body=rgb, headers={"Content-Type": "application/octet-stream"})
+        r = c.getresponse()
+        r.read()
+        return r
+
+    def pens(self, name, ask):
+        r, data, _ = self.ask("GET", "/pic/" + name, {"X-Gateway-Picture": ask})
+        return r, data
+
+    def test_which(self):
+        self.assertEqual(webgate.pens_which(), "aerapens 0123456789ab test")
+        webgate.Config.pens_socket = "/nowhere/pens.sock"
+        try:
+            self.assertIsNone(webgate.pens_which())
+        finally:
+            webgate.Config.pens_socket = self.fake.path
+
+    def test_colours_first(self):
+        crc = "%08x" % (__import__("zlib").crc32(bytes(range(48))) & 0xFFFFFFFF)
+        seen = len(Upstream.seen)
+        r, data = self.pens("big.jpg", "fit=600; size=300x200; pens=16; pal=%s; ed=lj" % crc)
+        self.assertEqual((r.status, r.getheader("X-Gateway-Palette")), (409, "need"))
+        self.assertEqual(len(Upstream.seen), seen)             # nothing fetched for it
+        r = self.colours(bytes(range(48)))
+        self.assertEqual((r.status, r.getheader("X-Gateway-Palette")), (204, crc))
+
+    def test_colours_refused(self):
+        for rgb in (b"", b"\0\0\0", bytes(769), bytes(10)):
+            self.assertEqual(self.colours(rgb).status, 400)
+
+    def test_colours_kept_sixteen(self):
+        crcs = [self.colours(bytes([k]) * 6).getheader("X-Gateway-Palette") for k in range(17)]
+        self.assertIsNone(webgate.PALETTES.get(int(crcs[0], 16)))           # the oldest went
+        self.assertEqual(webgate.PALETTES.get(int(crcs[16], 16)), bytes([16]) * 6)
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_pens(self):
+        crc = self.colours().getheader("X-Gateway-Palette")
+        r, data = self.pens("big.jpg", "fit=600; size=300x200; pens=16; pal=%s; ed=lj" % crc)
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "application/x-aera-pens"))
+        self.assertEqual(r.getheader("X-Gateway-Pens"), "aerapens 0123456789ab test")
+        self.assertEqual(r.getheader("ETag"), '"p1"')           # kept: EWeb asks with it again
+        self.assertEqual(r.getheader("Cache-Control"), "max-age=600")
+        self.assertIn("pens 300x200, 4 bits", r.getheader("X-Gateway-Picture"))
+        self.assertEqual(len(data), 20 + 150 * 200)             # the line taken off
+        self.assertEqual((data[:4], data[16:20]), (b"EWPN", bytes.fromhex(crc)))
+        q = self.fake.last          # the request: the colours, then the file as it came
+        self.assertEqual(q[:16], b"AEPQ\1l\x0f\0" + (300).to_bytes(2, "big") + (200).to_bytes(2, "big") +
+                         len(PICS["big.jpg"][0]).to_bytes(4, "big"))
+        self.assertEqual(q[16:], ST16 + PICS["big.jpg"][0])
+        # without size=: fit wide at most; EWEBST.PRG's decoders
+        r, data = self.pens("big.jpg", "fit=96; pens=16; pal=%s; ed=tj" % crc)
+        self.assertEqual((data[8:12], self.fake.last[5:6], self.fake.last[8:12]),
+                         (bytes([0, 96, 0, 96]), b"t", bytes([0, 96, 0, 0])))
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_pens_of_a_kind_the_atari_cant_read(self):
+        crc = self.colours().getheader("X-Gateway-Palette")
+        for name in ("pic.webp", "turned.jpg"):
+            r, data = self.pens(name, "fit=600; pens=16; pal=%s; ed=lj" % crc)
+            self.assertEqual(r.getheader("Content-Type"), "application/x-aera-pens")
+            given = self.fake.last[16 + 48:]
+            self.assertEqual(given[:8], b"\x89PNG\r\n\x1a\n")   # made a PNG first
+            im = self.opened(given)
+            self.assertEqual(im.size, (400, 300) if name == "pic.webp" else (60, 80))   # upright
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_pens_not_had(self):
+        crc = self.colours().getheader("X-Gateway-Palette")
+        # aerapens can't (junk), too slow, cut short; the count doesn't match
+        # the colours; no socket: each as without pens
+        r, data = self.pens("junk.jpg", "fit=600; pens=16; pal=%s; ed=lj" % crc)
+        self.assertEqual(data, PICS["junk.jpg"][0])
+        was = webgate.PENS_TIME
+        webgate.PENS_TIME = 1
+        try:
+            for name in ("slow.png", "short.png"):
+                r, data = self.pens(name, "fit=600; pens=16; pal=%s; ed=lj" % crc)
+                self.assertEqual((r.status, r.getheader("Content-Type"), r.getheader("X-Gateway-Pens")),
+                                 (200, "image/png", None), name)
+        finally:
+            webgate.PENS_TIME = was
+        r, data = self.pens("big.jpg", "fit=600; pens=256; pal=%s; ed=lj" % crc)
+        self.assertEqual(r.getheader("Content-Type"), "image/jpeg")
+        webgate.Config.pens_socket = "/nowhere/pens.sock"
+        try:
+            r, data = self.pens("big.jpg", "fit=600; pens=16; pal=%s; ed=lj" % crc)
+        finally:
+            webgate.Config.pens_socket = self.fake.path
+        self.assertEqual(r.getheader("Content-Type"), "image/jpeg")
+        self.assertIn(b"webgate natural 1200x800", data[:64])
 
 
 class LiveTest(unittest.TestCase):

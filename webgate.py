@@ -32,6 +32,22 @@ or 1.3) and hands the answer back as it comes:
     page is laid out as with the original. A megabyte of photo becomes a
     few dozen kilobytes, and the Atari decodes it at its size. Needs
     Pillow (python3-pil); without it pictures pass as they came.
+  - a picture asked for with pens ("X-Gateway-Picture: fit=608;
+    size=400x300; pens=16; pal=CRC; ed=lj") comes as the Atari's screen
+    shows it: the screen's own pens, made here by aerapens (AERA-Atari's
+    common/tools/pens: the Atari's own decoder, scaler and dither, so the
+    same pens to the bit; ed=lj as EWEB.PRG decodes, tj as EWEBST.PRG),
+    as application/x-aera-pens. The colours are EWeb's, sent once to
+    http://webgate/palette (2 to 256 of them, R G B bytes; webgate keeps
+    the last 16 by their CRC-32); a request naming colours webgate hasn't
+    got is answered 409 with "X-Gateway-Palette: need" before anything is
+    fetched. A kind the Atari can't read, or a photo its EXIF says is
+    turned, is made a PNG first (upright, nothing lost) and then pens.
+    aerapens answers on a socket (--pens-socket, /run/webgate-pens.sock:
+    systemd starts one a connection, as its own user, with little memory
+    and time); X-Gateway-Pens names it ("aerapens COMMON BUILD"), and the
+    log says which once. Without it, or when it fails or is too slow, the
+    picture comes as above.
 
 Snapshots (--browser): a GET with "X-Gateway-Snapshot: 1" is opened in an
 ordinary Chromium on the Pi (its own profile: your logins stay there), and
@@ -63,7 +79,7 @@ EWeb shows on its "can't open" page.
 Only standard Python 3 is needed, and aeragate.py next to it.
 `aera-gateway install web` sets it up as a service.
 
-    webgate.py [--port 8280] [--allow 192.168.1.50] [--allow-local] [--cafile F] [-v]
+    webgate.py [--port 8280] [--allow 192.168.1.50] [--allow-local] [--cafile F] [--pens-socket P] [-v]
 """
 
 import argparse
@@ -78,6 +94,7 @@ import ssl
 import subprocess
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -94,6 +111,143 @@ HOP_BY_HOP = {
 PIECE = 65536
 PICTURE_MAX = 40 << 20  # the most of a picture's file webgate takes in to make smaller
 PICTURE_PIXELS = 40_000_000     # and the most pixels it unpacks: a few kilobytes can claim gigabytes
+PALETTES_KEPT = 16              # the Ataris' colours kept for pens, the oldest dropped
+PENS_TIME = 6                   # seconds aerapens may take (its unit stops it after 5)
+PENS_ANSWER_MAX = 6 << 20       # the most of its answer read: 4 megapixels of pens and a mask
+PENS_SEEN = [None]              # the aerapens last logged ("aerapens COMMON BUILD")
+
+
+class Palettes:
+    """the colours EWeb sent (http://webgate/palette), by their CRC-32"""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.kept = {}          # crc -> R G B bytes, oldest first
+
+    def put(self, rgb):
+        crc = zlib.crc32(rgb) & 0xFFFFFFFF
+        with self.lock:
+            self.kept.pop(crc, None)
+            self.kept[crc] = rgb
+            while len(self.kept) > PALETTES_KEPT:
+                del self.kept[next(iter(self.kept))]
+        return crc
+
+    def get(self, crc):
+        with self.lock:
+            return self.kept.get(crc)
+
+
+PALETTES = Palettes()
+
+
+def pens_input(data):
+    """data as aerapens takes it: a JPEG, PNG or GIF as it came; another
+    kind Pillow reads, or a photo its EXIF says is turned, as a PNG
+    (upright, nothing lost); None when it can't be had"""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return data
+    try:
+        im = Image.open(io.BytesIO(data))
+        fmt, (w, h) = im.format, im.size
+        if w * h > PICTURE_PIXELS:
+            return None
+        turned = fmt in ("JPEG", "WEBP", "TIFF", "MPO") and \
+            (im.getexif() or {}).get(0x0112, 1) in (2, 3, 4, 5, 6, 7, 8)
+        if fmt in ("JPEG", "PNG", "GIF") and not turned:
+            return data
+        im = ImageOps.exif_transpose(im)
+        alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
+        out = io.BytesIO()
+        im.convert("RGBA" if alpha else "RGB").save(out, "PNG", compress_level=1)
+        return out.getvalue()
+    except Exception:       # Pillow's errors for what isn't a picture it reads are many kinds
+        return data
+
+
+def pens_ask(request):
+    """aerapens' answer to request, over its socket (Config.pens_socket:
+    systemd starts one aerapens a connection, with little memory and
+    time), or None (no socket, an error, too slow, too long)"""
+    path = Config.pens_socket
+    if not path or not os.path.exists(path):
+        return None
+    deadline = time.monotonic() + PENS_TIME
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(PENS_TIME)
+            s.connect(path)
+            s.sendall(request)
+            s.shutdown(socket.SHUT_WR)
+            parts, size = [], 0
+            while True:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return None
+                s.settimeout(left)
+                b = s.recv(65536)
+                if not b:
+                    break
+                parts.append(b)
+                size += len(b)
+                if size > PENS_ANSWER_MAX:
+                    return None
+            return b"".join(parts)
+    except OSError:
+        return None
+
+
+def pens_request(ed, n, w, h, rgb=b"", data=b""):
+    """aerapens' request (AERA-Atari, common/tools/pens/aerapens.c): ed
+    "l" (EWEB.PRG's decoders), "t" (EWEBST.PRG's) or "v" (which it is)"""
+    return (b"AEPQ\1" + ed.encode() + bytes([n - 1 if n else 0, 0]) + w.to_bytes(2, "big") + h.to_bytes(2, "big") +
+            len(data).to_bytes(4, "big") + rgb + data)
+
+
+def pens_line(answer):
+    """the answer's first line, "aerapens COMMON BUILD", and the rest; or None"""
+    line, nl, rest = answer.partition(b"\n")
+    if not nl or not line.startswith(b"aerapens ") or len(line) > 200:
+        return None
+    return line.decode("ascii", "replace"), rest
+
+
+def pens_which():
+    """which aerapens answers on the socket ("aerapens COMMON BUILD"), or None"""
+    a = pens_ask(pens_request("v", 0, 1, 0))
+    got = pens_line(a) if a else None
+    return got[0] if got else None
+
+
+def make_pens(data, want):
+    """data (a picture's file) as the Atari's pens (aerapens), for want
+    (picture_ask's): (bytes, what was done, "aerapens COMMON BUILD") or None"""
+    rgb = PALETTES.get(want["pal"])
+    if rgb is None or len(rgb) // 3 != want["pens"]:
+        return None
+    data = pens_input(data)
+    if data is None:
+        return None
+    w, h = want["size"] or (want["fit"], 0)
+    a = pens_ask(pens_request("l" if want["ed"] == "lj" else "t", want["pens"], w, h, rgb, data))
+    got = pens_line(a) if a else None
+    if got is None:
+        return None
+    which, out = got
+    if len(out) < 20 or out[:4] != b"EWPN":
+        return None
+    pw, ph = int.from_bytes(out[8:10], "big"), int.from_bytes(out[10:12], "big")
+    depth, mask = out[5], out[6] & 1
+    if depth not in (1, 2, 4, 8) or len(out) != 20 + ph * ((pw * depth + 7) // 8 + (mask and (pw + 7) // 8)):
+        return None
+    if which != PENS_SEEN[0]:
+        PENS_SEEN[0] = which
+        aeragate.say("webgate: pictures as pens by %s" % which)
+    return out, "pens %dx%d, %d bits%s, natural %dx%d" % (
+        pw, ph, depth, ", a mask" if mask else "", int.from_bytes(out[12:14], "big"),
+        int.from_bytes(out[14:16], "big")), which
 
 
 def make_picture(data, fit):
@@ -154,6 +308,7 @@ class Config:
     live_quality = 0.7      # its JPEG quality: small for STinG, enough to read
     live_settle = 1.0       # seconds the browser has after a click before the next picture
     insecure = False        # tests only: don't check certificates
+    pens_socket = "/run/webgate-pens.sock"  # aerapens' socket (systemd's); not there: no pens
 
 
 def _dial(address, timeout=None, source_address=None):
@@ -324,6 +479,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.for_browser and u.hostname == "webgate" and u.path.startswith("/live"):
             self.live(u)
             return
+        if not self.for_browser and u.hostname == "webgate" and u.path == "/palette":
+            self.palette(body)
+            return
         if u.scheme not in ("http", "https") or not u.hostname:
             self.reply(400, "webgate: expected a request like GET https://host/path\n")
             return
@@ -332,6 +490,12 @@ class Handler(BaseHTTPRequestHandler):
         path = (u.path or "/") + ("?" + u.query if u.query else "")
         if not self.for_browser and self.headers.get("X-Gateway-Snapshot") == "1" and self.command == "GET":
             self.snapshot(u)
+            return
+        want = self.picture_ask()
+        if want["pens"] and PALETTES.get(want["pal"]) is None:
+            # colours webgate hasn't got: EWeb sends them, then asks again
+            self.send_body(409, b"webgate: send the colours first\n", "text/plain", [("X-Gateway-Palette", "need")])
+            self.note(409, 0, " (no colours %08x)" % want["pal"])
             return
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
         headers["Host"] = u.netloc.rsplit("@", 1)[-1]
@@ -367,25 +531,48 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(504 if isinstance(e, socket.timeout) else 502,
                            "webgate: can't reach %s (%s)\n" % (u.hostname, e))
                 return
-        fit = self.picture_fit()
-        if fit and self.command == "GET" and resp.status == 200 and \
+        if want["fit"] and self.command == "GET" and resp.status == 200 and \
                 (resp.getheader("Content-Type") or "").lower().startswith("image/") and \
                 (resp.getheader("Content-Encoding") or "identity").lower() == "identity":
-            self.picture(resp, conn, u, port, fit)
+            self.picture(resp, conn, u, port, want)
         else:
             self.pass_on(resp, conn, u, port)
 
-    def picture_fit(self):
-        """X-Gateway-Picture: fit=WIDTH, or 0"""
-        v = self.headers.get("X-Gateway-Picture") or ""
-        for part in v.split(";"):
-            k, _, n = part.strip().partition("=")
-            if k == "fit" and n.isdigit() and 16 <= int(n) <= 4096:
-                return int(n)
-        return 0
+    def picture_ask(self):
+        """X-Gateway-Picture: fit=WIDTH (0: none), and for pens size=WxH
+        (None: fit wide at most), pens=N, pal=CRC (8 hex digits), ed=lj
+        or tj: a dict; pens 0 when they weren't asked for, or not right"""
+        want = {"fit": 0, "size": None, "pens": 0, "pal": None, "ed": "lj"}
+        for part in (self.headers.get("X-Gateway-Picture") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "fit" and v.isdigit() and 16 <= int(v) <= 4096:
+                want["fit"] = int(v)
+            elif k == "size":
+                w, _, h = v.partition("x")
+                if w.isdigit() and h.isdigit() and 1 <= int(w) <= 4096 and 1 <= int(h) <= 4096:
+                    want["size"] = (int(w), int(h))
+            elif k == "pens" and v.isdigit() and 2 <= int(v) <= 256:
+                want["pens"] = int(v)
+            elif k == "pal" and len(v) == 8 and all(c in "0123456789abcdefABCDEF" for c in v):
+                want["pal"] = int(v, 16)
+            elif k == "ed" and v in ("lj", "tj"):
+                want["ed"] = v
+        if not want["fit"] or want["pal"] is None:
+            want["pens"] = 0
+        return want
 
-    def picture(self, resp, conn, u, port, fit):
-        """a picture as the page can show it (make_picture), or as it came"""
+    def palette(self, body):
+        """EWeb's colours for pens: 2 to 256, R G B bytes each"""
+        if self.command != "POST" or body is None or not 6 <= len(body) <= 768 or len(body) % 3:
+            self.reply(400, "webgate: the colours are 2 to 256 of R G B bytes\n")
+            return
+        crc = PALETTES.put(bytes(body))
+        self.send_body(204, b"", "text/plain", [("X-Gateway-Palette", "%08x" % crc)])
+        self.note(204, 0, " (colours %08x, %d)" % (crc, len(body) // 3))
+
+    def picture(self, resp, conn, u, port, want):
+        """a picture as the Atari's pens (make_pens), else as the page can
+        show it (make_picture), or as it came"""
         try:
             data = resp.read(PICTURE_MAX + 1)
         except (OSError, http.client.HTTPException):
@@ -398,7 +585,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if resp.will_close:
             UP.drop(u.scheme, u.hostname, port)
-        made = make_picture(data, fit)
+        pens = make_pens(data, want) if want["pens"] else None
+        made = (pens[0], "application/x-aera-pens", pens[1]) if pens else make_picture(data, want["fit"])
         self.send_response(resp.status, resp.reason)
         skip = HOP_BY_HOP | ({"content-type", "content-length"} if made else set())
         for k, v in resp.getheaders():
@@ -408,6 +596,8 @@ class Handler(BaseHTTPRequestHandler):
             data = made[0]
             self.send_header("Content-Type", made[1])
             self.send_header("X-Gateway-Picture", made[2])
+        if pens:
+            self.send_header("X-Gateway-Pens", pens[2])    # which aerapens made them, for tracing
         tls = tls_of(conn)
         if tls:
             self.send_header("X-Gateway-TLS", tls)
@@ -750,6 +940,8 @@ def parser():
     ap.add_argument("--browser", action="store_true",
                     help="snapshots: the Pi's Chromium with webgate-ext is running")
     ap.add_argument("--browser-port", type=int, default=8281, help="where webgate-ext asks (127.0.0.1 only)")
+    ap.add_argument("--pens-socket", default="/run/webgate-pens.sock",
+                    help="aerapens' socket, for pictures as the Atari's pens (not there: none)")
     ap.add_argument("--insecure", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap
@@ -764,6 +956,7 @@ def main(argv=None):
     Config.insecure = a.insecure
     Config.browser = a.browser
     Config.browser_port = a.browser_port
+    Config.pens_socket = a.pens_socket
     srv = ThreadingHTTPServer((a.bind, a.port), Handler)
     srv.daemon_threads = True
     if a.browser:
@@ -771,6 +964,10 @@ def main(argv=None):
         ext.daemon_threads = True
         threading.Thread(target=ext.serve_forever, daemon=True).start()
     aeragate.say("webgate %s listening on %s:%d" % (VERSION, a.bind, a.port))
+    # once, at the start: which aerapens makes pens, if any
+    PENS_SEEN[0] = pens_which()
+    aeragate.say("webgate: pictures as pens by %s" % PENS_SEEN[0] if PENS_SEEN[0] else
+                 "webgate: no pictures as pens (nothing answers on %s)" % Config.pens_socket)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

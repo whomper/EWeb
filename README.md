@@ -222,6 +222,17 @@ transparency) no wider, with its real size inside so that the page looks
 the same. A 2560-pixel photo of 865 KB comes as about 70 KB. `install
 web` installs Pillow (python3-pil) for that.
 
+EWeb can also ask for a picture as its screen will show it: in the
+Atari's own colours, already scaled and dithered, made by aerapens, the
+same code EWeb runs on the Atari (AERA-Atari's), so the result is the
+same to the bit and the Atari only copies it to the screen. `install web`
+builds aerapens from AERA-Gateway's `pens/` folder (it installs gcc and
+make if they aren't there; `remove web` leaves them) and runs one
+aerapens a picture, through `webgate-pens.socket`, as a user of its own
+with 64 MB and 2 seconds at most, no network and nothing to open. If
+it's missing, fails or takes too long, the picture comes as a JPEG or
+PNG, as above.
+
 `--allow-local` lets it reach servers on your home network too (a
 router's or a NAS's pages); `--port N` gives it another port; `--cafile`
 checks servers against your own CA; `-v` logs every request (the
