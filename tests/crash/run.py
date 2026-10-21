@@ -3,7 +3,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """The crash catcher's check in Hatari (EmuTOS), on a 68000 ST and a
 68030 Falcon: each kind of crash in CRASHT.PRG, then a crash in
-supervisor mode, a warm reset and the report of it at the next start.
+supervisor mode outside the program, a warm reset and the report of it at
+the next start.
 
     make && python3 run.py etos512us.img [work-dir]
 
@@ -82,18 +83,25 @@ def run(machine, kind, reset=False):
 
 
 NAMES = {"b": "bus error, 2 bombs", "a": "address error, 3 bombs",
-         "i": "illegal instruction, 4 bombs", "z": "division by zero, 5 bombs"}
+         "i": "illegal instruction, 4 bombs", "z": "division by zero, 5 bombs",
+         "k": "bus error, 2 bombs", "f": "line F (an FPU instruction or none), 11 bombs",
+         "w": "illegal instruction, 4 bombs"}
 
 for machine in ("st", "falcon"):
-    for kind in "biza":
+    for kind in "bizakfw":
         if kind == "a" and machine != "st":
             continue			# a 68030 reads odd addresses
         d, con, rep = run(machine, kind)
         tag = "%s %s:" % (machine, NAMES[kind])
         check("CRASHT crashing" in con and "CRASHT no crash" not in con, tag + " it crashed")
         check("CrashTest 1.0: " + NAMES[kind] in rep, tag + " CRASH.LOG names it")
-        check("(CrashTest+$" in rep.split("\r\n")[2] if rep.count("\r\n") > 2 else False,
-              tag + " where, as an offset into the program")
+        if kind == "w":     # outside the program: no offset, but the caller
+            check("callers? +$" in rep, tag + " the caller, as an offset into the program")
+        else:
+            check("(CrashTest+$" in rep.split("\r\n")[2] if rep.count("\r\n") > 2 else False,
+                  tag + " where, as an offset into the program")
+        if kind == "k":
+            check(", SR 2" in rep, tag + " in supervisor mode")
         check("D0-D7" in rep and "A0-A6" in rep and "USP" in rep, tag + " the registers")
         check("last status: about to crash" in rep, tag + " the last status")
         cl = os.path.join(d, "CLEANUP.TXT")
@@ -112,6 +120,6 @@ for machine in ("st", "falcon"):
     check("CRASHT previous" in con, tag + " the program ran again after a reset")
     check("found TOS's record of a crash before this run" in rep and "bus error, 2 bombs at" in rep,
           tag + " CRASH.LOG has TOS's record")
-    check("CRASHT previous bus error, 2 bombs" in con, tag + " counted as the program's (it was in its code)")
+    check("CRASHT previous none" in con, tag + " not counted as the program's (it wasn't in its code)")
 print("%d failed" % failed)
 sys.exit(1 if failed else 0)
