@@ -2,10 +2,11 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * win.c - EWeb's window, as a browser's: a toolbar along the top (Back,
- * Forward, Reload, Home, Search and Stop as pictures with their names
- * under them, flat until the mouse is over one; the address under them,
- * which can be typed into; at the right the throbber, the AERA A with a
- * star going round it while a page or its pictures come), the page under it with the window's own
+ * Forward, Reload, Home, Search and Stop as pictures at the left, flat
+ * until the mouse is over one, its name then on the info line; the
+ * address beside them, which can be typed into; at the right the
+ * throbber, the AERA A with a star going round it while a page or its
+ * pictures come), the page under it with the window's own
  * slider, and the status on the info line (a link's address under the
  * mouse, what a load is doing). The page is drawn by screen.c; scrolling
  * moves what is on the screen and draws only the new rows when it can.
@@ -47,7 +48,6 @@ static GRECT but[NBUT];
 static int hot = -1;			/* the button under the mouse: framed */
 static int sunk = -1;			/* the one held down: framed, sunk */
 static short tall;			/* the 20-row pictures (else the 10-row ones) */
-static short small_h = -1;		/* the system font's height, to come back to */
 
 static int enabled(int i)
 {
@@ -67,46 +67,40 @@ static int enabled(int i)
 static char addr[1024];
 static int a_focus, a_cur, a_first, a_all;
 
-/* the buttons' names: the 8x8 font where the system's is 8x16, else the
-   6x6 one (in an 8-pixel cell) */
-static short small_w = 6;
-#define SMALL_H 8
-#define LOC_W (10 * small_w + 4)	/* "Location:" before the address */
-
+/* one row: the buttons at the left, the address beside them, the
+   throbber at the right (where the window is wide enough for it and
+   eight letters of the address), each in the middle of the row */
 static void layout(void)
 {
-	short x, i, ih, bh, row, th;
+	short x, i, ih, bh, th;
 	tall = gl_hchar >= 16;
-	small_w = tall ? 8 : 6;
 	ih = tall ? TB_TALL : TB_SHORT;
-	bh = 3 + ih + 2 + SMALL_H + 2;	/* a button: its picture, its name under it */
-	row = bh + 4;
-	th = row + gl_hchar + 8;
+	bh = 3 + ih + 3;		/* a button: its picture in its frame */
+	th = 2 + bh + 3;		/* and the line under the toolbar */
 	r_tool = work;
 	r_tool.h = th;
 	x = work.x + 4;
 	for (i = 0; i < NBUT; i++) {
 		but[i].x = x;
 		but[i].y = work.y + 2;
-		but[i].w = 7 * small_w + 6;	/* "Forward" */
+		but[i].w = TB_W + 6;
 		but[i].h = bh;
 		x += but[i].w + 2;
 	}
-	r_addr.x = work.x + 4 + LOC_W;
-	r_addr.y = work.y + row + 2;
-	r_addr.w = work.x + work.w - 4 - r_addr.x;
+	r_addr.x = x + 6;
 	r_addr.h = gl_hchar + 4;
-	/* the throbber at the right, in the middle of the toolbar's height,
-	   where the window is wide enough for it after the buttons; the
-	   address then ends before it */
+	r_addr.y = work.y + (th - 1 - r_addr.h) / 2;
+	r_addr.w = work.x + work.w - 4 - r_addr.x;
 	r_thr.w = THR_W;
 	r_thr.h = tall ? THR_TALL : THR_SHORT;
-	r_thr.x = work.x + work.w - 6 - THR_W;
+	r_thr.x = work.x + work.w - 4 - THR_W;
 	r_thr.y = work.y + (th - 1 - r_thr.h) / 2;
-	if (r_thr.x < x + 8 || r_thr.x - 8 < r_addr.x + 8 * gl_wchar)
+	if (r_thr.x - 8 < r_addr.x + 8 * gl_wchar)
 		r_thr.w = 0;
 	else
 		r_addr.w = r_thr.x - 8 - r_addr.x;
+	if (r_addr.w < 4 * gl_wchar)
+		r_addr.w = 0;		/* no room for it */
 	r_page = work;
 	r_page.y += th;
 	r_page.h -= th;
@@ -117,24 +111,6 @@ static void layout(void)
 static short paper(void)
 {
 	return planes >= 4 ? grey_pen() : 0;
-}
-
-/* a name in the buttons' font, its top at y; dim: what can't be used
-   (grey, or GEM's light letters with fewer than 16 colours) */
-static void small_text(short x, short y, const char *s, int dim)
-{
-	short d;
-	if (small_h < 0)
-		small_h = gl_hchar >= 16 ? 13 : 6;	/* the 8x16 or 8x8 font */
-	vst_height(vdi_h, tall ? 6 : 4, &d, &d);
-	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, dim && planes >= 4 ? 9 : 1);
-	if (dim && planes < 4)
-		vst_effects(vdi_h, 2);
-	v_gtext_n(vdi_h, x, y, s, (short) strlen(s));
-	if (dim && planes < 4)
-		vst_effects(vdi_h, 0);
-	vst_height(vdi_h, small_h, &d, &d);
 }
 
 /* the pen a picture's layer takes on this screen; -1: not drawn */
@@ -235,13 +211,11 @@ static void button_frame(const GRECT *r, int down)
 static void draw_button(int i, const GRECT *clip)
 {
 	GRECT r = but[i];
-	short on = enabled(i), down = i == sunk, d = down ? 1 : 0, n = (short) strlen(names[i]);
-	short ih = tall ? TB_TALL : TB_SHORT;
+	short on = enabled(i), down = i == sunk, d = down ? 1 : 0;
 	fill(&r, paper());
 	if (down || (i == hot && on))
 		button_frame(&r, down);
 	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, on, clip);
-	small_text(r.x + (r.w - n * small_w) / 2 + d, r.y + 3 + ih + 2 + d, names[i], !on);
 }
 
 static short addr_cols(void)
@@ -253,6 +227,8 @@ static void draw_addr(void)
 {
 	GRECT r = r_addr, in;
 	short cols = addr_cols(), n = (short) strlen(addr) - a_first;
+	if (r.w <= 0)
+		return;
 	fill(&r, 0);
 	frame(&r, a_focus ? 1 : (planes >= 4 ? 9 : 1));
 	if (n > cols)
@@ -381,7 +357,6 @@ static void draw_toolbar(GRECT *clip)
 	fill(&r_tool, paper());
 	for (i = 0; i < NBUT; i++)
 		draw_button(i, &r);
-	small_text(r_tool.x + 4, r_addr.y + (r_addr.h - SMALL_H) / 2 + 1, "Location:", 0);
 	draw_addr();
 	draw_throbber(&r);
 	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
@@ -1251,13 +1226,16 @@ int win_stop_hit(short mx, short my)
 
 static short pointer = ARROW;
 
-/* the button under the mouse, framed (the others flat) */
+/* the button under the mouse, framed (the others flat), its name on the
+   info line (while nothing loads: then the line is the load's) */
 static void hot_button(int b)
 {
 	int old = hot;
 	if (b == hot)
 		return;
 	hot = b;
+	if (!loading)
+		win_status(b >= 0 ? names[b] : "");
 	if (old >= 0)
 		redraw(&but[old], 1);
 	if (b >= 0)

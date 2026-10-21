@@ -192,7 +192,8 @@ pages used last within that. Options > Empty the cache forgets it all.
 
 ## The window
 
-At the top, a row of buttons, each a picture with its name under it:
+Along the top, the toolbar: at the left a row of buttons, each a
+picture:
 
 - **Back** and **Forward**
 - **Reload** the page shown
@@ -201,11 +202,11 @@ At the top, a row of buttons, each a picture with its name under it:
 - **Stop** a page while it loads
 
 They lie flat until the mouse is over one, which then stands out in a
-frame; held down, it sinks, and works when you let go over it. Under
-them, after **Location:**, is the address of the page shown, which you
-can type into.
+frame and says its name on the info line; held down, it sinks, and works
+when you let go over it. Beside them is the address of the page shown,
+which you can type into.
 
-At the right is the AERA A. While a page or its pictures come, a star
+At the right end is the AERA A. While a page or its pictures come, a star
 goes round it over a field of faint stars; when it stands still, EWeb
 is waiting for you.
 

@@ -738,8 +738,10 @@ releases.
   within a quarter of the free TT RAM up to 24 MB (else an eighth of the free ST RAM up to 2 MB),
   a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
   about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
-- **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar (Back, Forward, Reload or Stop, Home,
-  the address, typed into in place; the throbber, below), the page under it with the window's slider, the status on the
+- **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar of one row (your layout, 21 Oct 2026:
+  the buttons as pictures alone at the left, Back, Forward, Reload, Home, Search and Stop, each
+  saying its name on the info line under the mouse; the address beside them, typed into in place;
+  the throbber, below, at the right end), the page under it with the window's slider, the status on the
   info line (a link's address under the mouse, what a load is doing, how a secure page came), the
   family's menu bar, About box, shortcuts, right-click menus, VA_START and drag and drop, help,
   iconify and crash report. The page is drawn into memory a band of 32 rows at a time and copied
@@ -1248,7 +1250,9 @@ page or its pictures come, a frame each 110 ms from the network's waits and the 
 at rest it is the A alone.
 
 `tools/mkthrobber.py` draws it at 8 times the size and puts it on the Falcon's own colours, written
-as `ui/throbber.h`: 16 frames of 40 x 40 (40 x 20 on the 200-line screens) in three editions,
+as `ui/throbber.h`: 16 frames of 26 x 26, the toolbar's height (26 x 13 on the 200-line screens;
+40 x 40 until the toolbar became one row, 21 Oct 2026, when black and white lost its dither and
+its star field, which left no A at that size) in three editions,
 TOS 4.04's 256-colour palette for 256 colours and true colour (gold, bronze and copper from its hue
 wheel, an ordered dither so the still A doesn't shimmer as the star moves), its 16 system colours,
 and black and white (monochrome and 4 colours). Each frame is deflated on its own (80 to 380

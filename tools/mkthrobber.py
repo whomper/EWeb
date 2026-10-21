@@ -8,10 +8,11 @@ put on the Falcon's own colours: TOS 4.04's 256-colour palette
 (tools/falcon256.txt, read in Hatari) for 256 colours and true colour, its
 16 system colours, and black and white for monochrome and 4 colours.
 
-Each edition is 16 frames of 40 x 40 pixels, and 40 x 20 for the screens
-of 200 lines (their pixels are twice as tall), as a byte a pixel into its
-own list of colours, each frame deflated on its own (EWeb inflates the
-one it shows, so a frame's 1.6 KB is all it keeps). Written as
+Each edition is 16 frames of 26 x 26 pixels, the height of EWeb's toolbar
+(its buttons' frames, 21 Oct 2026; drawn in a 40-unit square, as at
+first), and 26 x 13 for the screens of 200 lines (their pixels are twice
+as tall), as a byte a pixel into its own list of colours, each frame
+deflated on its own (EWeb inflates the one it shows). Written as
 ui/throbber.h; the ST edition has no 256-colour or 16-colour 480-line
 one (its screens are monochrome, or have 200 lines).
 
@@ -28,7 +29,8 @@ from PIL import Image, ImageChops, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S = 8                           # drawn 8 times bigger
-N = 40                          # the throbber, square
+N = 40                          # the square it is drawn in, in units
+OUT = 26                        # the throbber, square, in pixels
 FRAMES = 16
 
 PAL256 = [tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) for h in open(os.path.join(HERE, "falcon256.txt")).read().split()]
@@ -142,7 +144,7 @@ def scene(f):
         im = ImageChops.add(im, glow(x, y, 6.5, (255, 190, 120), 0.75))
         d = ImageDraw.Draw(im)
         star(d, x, y, 4.6, C["HI"], t * math.pi)
-    return im.resize((N, N), Image.LANCZOS)
+    return im.resize((OUT, OUT), Image.LANCZOS)
 
 
 # the field: 22 stars, a fixed seed (the same every time); each pulses once
@@ -155,6 +157,7 @@ while len(FIELD) < 22:
     x, y = random.randrange(1, 39), random.randrange(1, 38)
     if all(abs(x - a) + abs(y - b) >= 5 for a, b, _, _ in FIELD):
         FIELD.append((x, y, random.choice((1, 1, 2)), random.random()))
+FIELD = [(x * OUT // N, y * OUT // N, sp, ph) for x, y, sp, ph in FIELD]
 BIG = {0, 5, 11, 17}
 
 
@@ -165,7 +168,7 @@ def stars(base, f, greys, edge):
     px, src = out.load(), base.load()
 
     def night(x, y):
-        return all(0 <= x + dx < N and 0 <= y + dy < N and src[x + dx, y + dy] == BG
+        return all(0 <= x + dx < OUT and 0 <= y + dy < OUT and src[x + dx, y + dy] == BG
                    for dx in (-1, 0, 1) for dy in (-1, 0, 1))
     for i, (x, y, speed, ph) in enumerate(FIELD):
         u = 0.5 - 0.5 * math.cos(2 * math.pi * (speed * f / FRAMES + ph))
@@ -221,7 +224,8 @@ GREYS16 = [None, None, None, None, None, (136, 136, 136)]
 
 
 def mono(im):
-    """black and white: the A by its brightness, ordered"""
+    """black and white: the A by its brightness, a dot white where it is
+    lit at all (at 26 pixels a dither would leave no shape)"""
     src = im.load()
     out = Image.new("RGB", im.size)
     px = out.load()
@@ -231,13 +235,13 @@ def mono(im):
             # brightened (gamma 0.5): the bronze's shadow faces would be
             # a few dots, and the A must read as a shape
             lum = 255 * ((299 * r + 587 * g + 114 * b) / 255000) ** 0.5
-            px[x, y] = (255, 255, 255) if lum > (BAYER[y % 4][x % 4] + 0.5) * 16 else (0, 0, 0)
+            px[x, y] = (255, 255, 255) if lum > 110 else (0, 0, 0)
     return out
 
 
 def half(im):
     """for the screens of 200 lines: every two rows as one"""
-    return im.resize((N, N // 2), Image.BOX)
+    return im.resize((OUT, OUT // 2), Image.BOX)
 
 
 def editions():
@@ -259,7 +263,6 @@ def editions():
                     im = stars(im, f, GREYS16, None) if tall else im
                 else:
                     im = mono(im)
-                    im = stars(im, f, [None, None, None, None, None, (255, 255, 255)], None) if tall else im
                 fr.append(im)
             out[(name, tall)] = fr
     C.update(BRONZE)
@@ -272,12 +275,12 @@ def main(argv):
     lines = ["/* SPDX-License-Identifier: GPL-2.0-or-later",
              " * Copyright (C) 2026 AERA | Erez Yaary */",
              "/* throbber.h - EWeb's throbber, made by tools/mkthrobber.py: the AERA",
-             "   A with a star going round it, %d frames of %d x %d (THR_TALL) or" % (FRAMES, N, N),
-             "   %d x %d (THR_SHORT, for the 200-line screens), each pixel a byte into" % (N, N // 2),
+             "   A with a star going round it, %d frames of %d x %d (THR_TALL) or" % (FRAMES, OUT, OUT),
+             "   %d x %d (THR_SHORT, for the 200-line screens), each pixel a byte into" % (OUT, OUT // 2),
              "   its edition's colours (0xRRGGBB), each frame deflated on its own (at",
              "   off[f], off[f + 1] - off[f] bytes): 256 colours (true colour too),",
              "   16 colours, and black and white (monochrome, 4 colours). */",
-             "#define THR_W %d" % N, "#define THR_TALL %d" % N, "#define THR_SHORT %d" % (N // 2),
+             "#define THR_W %d" % OUT, "#define THR_TALL %d" % OUT, "#define THR_SHORT %d" % (OUT // 2),
              "#define THR_FRAMES %d" % FRAMES,
              "typedef struct { short ncol, h; const unsigned long *col; const unsigned short *off; const unsigned char *data; } THR_ED;",
              ""]
@@ -308,7 +311,7 @@ def main(argv):
         lines.append("};")
         lines.append("static const unsigned short thr_off_%s[%d] = { %s };" % (tag, len(off), ", ".join(map(str, off))))
         lines.append("static const THR_ED thr_%s = { %d, %d, thr_col_%s, thr_off_%s, thr_data_%s };" % (
-            tag, len(cols), N if tall else N // 2, tag, tag, tag))
+            tag, len(cols), OUT if tall else OUT // 2, tag, tag, tag))
         if not st:
             lines.append("#endif")
         lines.append("")
