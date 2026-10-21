@@ -22,7 +22,7 @@ B      := build
 SAN    := -fsanitize=address,undefined -fno-sanitize-recover=undefined
 LJ     := $(T)/libjpeg-turbo
 LJ_C   := jaricom jcomapi jdapimin jdapistd jdarith jdcoefct jdcolor jddctmgr jdhuff jdinput jdmainct jdmarker \
-          jdmaster jdmerge jdphuff jdpostct jdsample jidctfst jidctint jidctred jmemmgr jmemnobs \
+          jdmaster jdmerge jdphuff jdpostct jdsample jdtrans jidctfst jidctint jidctred jmemmgr jmemnobs \
           jquant1 jquant2 jutils
 LJ_SRC := $(addprefix $(LJ)/src/,$(addsuffix .c,$(LJ_C)))
 LJ_INC := -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -I$(LJ)/src -I$(LJ)/config
