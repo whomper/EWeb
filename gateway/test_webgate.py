@@ -22,6 +22,42 @@ PAGE = b"<!DOCTYPE html><title>Page</title><p>\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d"
 BIG = bytes(range(256)) * 1024          # 256 KB, more than one piece
 
 
+def make_pics():
+    """pictures for the picture cases (X-Gateway-Picture), or {} without Pillow"""
+    try:
+        import io
+        from PIL import Image
+    except ImportError:
+        return {}
+
+    def save(im, fmt, **kw):
+        b = io.BytesIO()
+        im.save(b, fmt, **kw)
+        return b.getvalue()
+
+    def photo(w, h):
+        im = Image.new("RGB", (w, h))
+        im.putdata([(x * 255 // w, y * 255 // h, 128) for y in range(h) for x in range(w)])
+        return im
+    turned = photo(80, 60)
+    exif = turned.getexif()
+    exif[0x0112] = 6            # to be turned a quarter clockwise: 60 x 80 as shown
+    pics = {
+        "big.jpg": (save(photo(1200, 800), "JPEG", quality=90), "image/jpeg"),
+        "small.jpg": (save(photo(300, 200), "JPEG", quality=90), "image/jpeg"),
+        "pic.webp": (save(photo(400, 300), "WEBP"), "image/webp"),
+        "alpha.png": (save(Image.new("RGBA", (1000, 500), (200, 0, 0, 120)), "PNG"), "image/png"),
+        "turned.jpg": (save(turned, "JPEG", exif=exif.tobytes()), "image/jpeg"),
+        "junk.jpg": (b"not a picture at all", "image/jpeg"),
+        # a few kilobytes that claim 80 million pixels
+        "bomb.png": (save(Image.new("1", (10000, 8000)), "PNG"), "image/png"),
+    }
+    return pics
+
+
+PICS = make_pics()
+
+
 class Upstream(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     seen = []
@@ -63,6 +99,15 @@ class Upstream(BaseHTTPRequestHandler):
             self.send_response(304)
             self.send_header("ETag", '"v1"')
             self.end_headers()
+        elif self.path.startswith("/pic/") and self.path[5:] in PICS:
+            data, ctype = PICS[self.path[5:]]
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("ETag", '"p1"')
+            self.send_header("Cache-Control", "max-age=600")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         elif self.path.startswith("/echo"):
             data = b"%s %s %s" % (self.command.encode(), self.path.encode(), body)
             self.send_response(200)
@@ -106,6 +151,65 @@ class ProxyTest(unittest.TestCase):
         c.request(method, self.base + path, body=body, headers=headers or {})
         r = c.getresponse()
         return r, r.read(), c
+
+    def picture(self, name, fit=600):
+        r, data, _ = self.ask("GET", "/pic/" + name, {"X-Gateway-Picture": "fit=%d" % fit} if fit else {})
+        return r, data
+
+    def opened(self, data):
+        import io
+        from PIL import Image
+        return Image.open(io.BytesIO(data))
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_made_smaller(self):
+        r, data = self.picture("big.jpg")
+        self.assertEqual(r.getheader("Content-Type"), "image/jpeg")
+        self.assertEqual(r.getheader("ETag"), '"p1"')           # kept: EWeb asks with it again
+        self.assertEqual(r.getheader("Cache-Control"), "max-age=600")
+        self.assertIn("JPEG 1200x800 to JPEG 600x400", r.getheader("X-Gateway-Picture"))
+        im = self.opened(data)
+        self.assertEqual((im.format, im.size), ("JPEG", (600, 400)))
+        self.assertFalse(im.info.get("progressive"))           # baseline: the DSP's
+        self.assertEqual(data[2:6], b"\xff\xfe\x00\x1a")      # its comment first
+        self.assertEqual(data[6:6 + 24], b"webgate natural 1200x800")
+        self.assertLess(len(data), len(PICS["big.jpg"][0]))
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_small_or_not_asked_as_it_came(self):
+        r, data = self.picture("small.jpg")
+        self.assertEqual(data, PICS["small.jpg"][0])
+        self.assertIsNone(r.getheader("X-Gateway-Picture"))
+        r, data = self.picture("big.jpg", fit=0)
+        self.assertEqual(data, PICS["big.jpg"][0])
+        r, data = self.picture("junk.jpg")                      # not a picture Pillow reads
+        self.assertEqual(data, PICS["junk.jpg"][0])
+        r, data = self.picture("bomb.png")                      # too many pixels to unpack
+        self.assertEqual(data, PICS["bomb.png"][0])
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_webp_made_jpeg(self):
+        r, data = self.picture("pic.webp")
+        im = self.opened(data)
+        self.assertEqual((r.getheader("Content-Type"), im.format, im.size), ("image/jpeg", "JPEG", (400, 300)))
+        self.assertIn(b"webgate natural 400x300", data[:64])
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_alpha_made_png(self):
+        r, data = self.picture("alpha.png")
+        im = self.opened(data)
+        self.assertEqual((r.getheader("Content-Type"), im.format, im.size), ("image/png", "PNG", (600, 300)))
+        self.assertEqual(im.info.get("webgate"), "natural 1000x500")
+        # the tEXt before the pixels, where EWeb looks
+        self.assertLess(data.index(b"tEXtwebgate"), data.index(b"IDAT"))
+        self.assertEqual(im.convert("RGBA").getpixel((10, 10))[3], 120)
+
+    @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_turned_upright(self):
+        r, data = self.picture("turned.jpg", fit=64)
+        im = self.opened(data)
+        self.assertEqual(im.size, (60, 80))
+        self.assertIn(b"webgate natural 60x80", data[:64])
 
     def test_page_gzip_passed_through(self):
         r, data, _ = self.ask("GET", "/page", {"Accept-Encoding": "gzip, deflate, br"})
