@@ -7,8 +7,11 @@
  * address beside them, which can be typed into; at the right the
  * throbber, the AERA A with a star going round it while a page or its
  * pictures come), the page under it with the window's own
- * slider, and the status on the info line (a link's address under the
- * mouse, what a load is doing). The page is drawn by screen.c; scrolling
+ * slider, and the status bar at the foot (a link's address under the
+ * mouse, what a load is doing, a button's name; under it a thin line
+ * that fills from left to right as a load comes, in each phase's colour:
+ * Erez's choice of 21 Oct 2026, design C). GEM's info line takes only
+ * text, so the window has none and draws its own. The page is drawn by screen.c; scrolling
  * moves what is on the screen and draws only the new rows when it can.
  */
 #include <stdio.h>
@@ -30,13 +33,14 @@
 short win_h = -1;
 short win_iconified;
 
-#define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | INFO | UPARROW | DNARROW | VSLIDE)
+#define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | UPARROW | DNARROW | VSLIDE)
 #define POINT_HAND 3
 #define TEXT_CRSR  1
 
-static GRECT work, r_tool, r_page, r_addr, r_thr;
+static GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
 static int32_t top;			/* the page's row at r_page's top */
-static char info[160];			/* the info line as set (Atari text) */
+static void redraw(const GRECT *area, int parts);
+static char info[160];			/* the status bar's text as set (Atari text) */
 static char title[160];
 
 /* ---------------------------------------------------------------- the toolbar */
@@ -101,9 +105,13 @@ static void layout(void)
 		r_addr.w = r_thr.x - 8 - r_addr.x;
 	if (r_addr.w < 4 * gl_wchar)
 		r_addr.w = 0;		/* no room for it */
+	/* the status bar: its text, the ribbon along its foot */
+	r_stat = work;
+	r_stat.h = gl_hchar + (tall ? 7 : 5);
+	r_stat.y = work.y + work.h - r_stat.h;
 	r_page = work;
 	r_page.y += th;
-	r_page.h -= th;
+	r_page.h -= th + r_stat.h;
 	if (r_page.h < 0)
 		r_page.h = 0;
 }
@@ -348,6 +356,111 @@ int win_throb_frames(void)
 	return n;
 }
 
+/* ---------------------------------------------------------------- the status bar */
+
+/* the ribbon: how far a load has come, 0..1024 of the bar's width, in
+   parts each the colour of the phase it came in */
+#define RIB_PARTS 16
+static struct {
+	short end, pen;
+} rib[RIB_PARTS];
+static int nrib;
+static short rib_at;			/* how far it has come */
+static unsigned long rib_full;		/* when it filled (ms), 0: not full */
+
+/* each phase's pen (connecting, the page, its stylesheets, building it,
+   its pictures): the darker colours of the system 16, which read on the
+   grey; black where there are only 4 colours or 2 */
+static short rib_pen(int phase)
+{
+	static const short pens[] = { 4, 13, 15, 14, 11 };
+	if (planes < 4 || phase < 0 || phase > 4)
+		return 1;
+	return pens[phase];
+}
+
+static short rib_rows(void)
+{
+	return tall ? 3 : 2;
+}
+
+static void draw_ribbon(void)
+{
+	GRECT r;
+	short x0 = r_stat.x + 1, w = r_stat.w - 2, from = 0;
+	int i;
+	r.y = r_stat.y + r_stat.h - rib_rows();
+	r.h = rib_rows();
+	for (i = 0; i < nrib; i++) {
+		r.x = x0 + (short) ((long) w * from / 1024);
+		r.w = (short) ((long) w * rib[i].end / 1024) - (r.x - x0);
+		if (r.w > 0)
+			fill(&r, rib[i].pen);
+		from = rib[i].end;
+	}
+	r.x = x0 + (short) ((long) w * from / 1024);
+	r.w = x0 + w - r.x;
+	if (r.w > 0)
+		fill(&r, paper());
+}
+
+static void draw_status(GRECT *clip)
+{
+	GRECT r = r_stat;
+	short cols = (r_stat.w - gl_wchar) / gl_wchar;
+	if (!rect_and(&r, clip))
+		return;
+	fill(&r_stat, paper());
+	hline(r_stat.x, r_stat.x + r_stat.w - 1, r_stat.y);
+	if (info[0] && cols > 0)
+		text_at(r_stat.x + gl_wchar / 2, r_stat.y + 2, info, (long) strlen(info), cols, 0);
+	draw_ribbon();
+}
+
+static void redraw_ribbon(void)
+{
+	GRECT r = r_stat;
+	r.y = r_stat.y + r_stat.h - rib_rows();
+	r.h = rib_rows();
+	redraw(&r, 1);
+}
+
+void win_progress(int phase, int at)
+{
+	if (phase < 0) {
+		if (nrib == 0)
+			return;
+		nrib = 0;
+		rib_at = 0;
+		rib_full = 0;
+	} else {
+		if (at > 1024)
+			at = 1024;
+		if (at <= rib_at && nrib > 0)
+			return;		/* it only goes on */
+		if (nrib > 0 && rib[nrib - 1].pen == rib_pen(phase))
+			rib[nrib - 1].end = (short) at;
+		else if (nrib < RIB_PARTS) {
+			rib[nrib].pen = rib_pen(phase);
+			rib[nrib++].end = (short) at;
+		} else {
+			rib[nrib - 1].end = (short) at;
+		}
+		rib_at = (short) at;
+		rib_full = at == 1024 ? pf_ms() | 1 : 0;
+	}
+	if (win_h > 0 && !win_iconified)
+		redraw_ribbon();
+}
+
+int win_progress_shown(void)
+{
+	/* full for a moment, then gone */
+	if (rib_full && pf_ms() - rib_full >= 800)
+		win_progress(-1, 0);
+	return nrib > 0;
+}
+
 static void draw_toolbar(GRECT *clip)
 {
 	GRECT r = r_tool;
@@ -360,6 +473,12 @@ static void draw_toolbar(GRECT *clip)
 	draw_addr();
 	draw_throbber(&r);
 	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
+}
+
+static void draw_bars(GRECT *clip)
+{
+	draw_toolbar(clip);
+	draw_status(clip);
 }
 
 /* ---------------------------------------------------------------- drawing */
@@ -393,7 +512,7 @@ static void redraw(const GRECT *area, int parts)
 		if (rect_and(&c, &a)) {
 			clip_on(&c);
 			if (parts & 1)
-				draw_toolbar(&c);
+				draw_bars(&c);
 			if (parts & 2)
 				draw_page(&c);
 		}
@@ -595,8 +714,11 @@ void win_status(const char *s)
 	if (strcmp(t, info) == 0)
 		return;
 	str_copy(info, t, sizeof info);
-	if (win_h > 0 && !win_iconified)
-		wind_set_str(win_h, WF_INFO, info);
+	if (win_h > 0 && !win_iconified) {
+		GRECT r = r_stat;
+		r.h -= rib_rows();
+		redraw(&r, 1);
+	}
 }
 
 /* ---------------------------------------------------------------- the address field */
@@ -1558,7 +1680,6 @@ void win_open(void)
 	if (!title[0])
 		str_copy(title, " EWeb ", sizeof title);
 	wind_set_str(win_h, WF_NAME, title);
-	wind_set_str(win_h, WF_INFO, info);
 	wind_open(win_h, x, y, w, h);
 	get_work();
 	save_place();
@@ -1617,7 +1738,6 @@ void win_message(const short *msg)
 			break;
 		wind_set(win_h, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
 		win_iconified = 0;
-		wind_set_str(win_h, WF_INFO, info);
 		resized();
 		win_redraw(NULL);
 		break;

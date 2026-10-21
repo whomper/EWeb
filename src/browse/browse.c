@@ -32,6 +32,13 @@ long br_cache_max = 4L << 20;
 
 enum { NAV_NEW, NAV_HISTORY, NAV_RELOAD };
 
+/* the load's phase, for the front end's ribbon */
+static void phase(browser *b, int ph)
+{
+	if (b->phase != NULL)
+		b->phase(b->ud, ph);
+}
+
 static void say(browser *b, const char *fmt, const char *arg)
 {
 	char buf[200];
@@ -545,6 +552,10 @@ static void cookie_out(const HTTPREQ *rq, const URL *u, const char *method, SBUF
    stylesheet or a picture of the page site (its address; a page's: the
    page it was found on, NULL when typed, for cookies and Referer). post:
    a form sent with POST (its answer isn't kept in the cache), else NULL */
+/* for the next fetch only: more header lines (each with CRLF), and the
+   types whose answer isn't wanted (HTTPREQ.refuse); NULL: none */
+static const char *fetch_more, *fetch_refuse;
+
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
 {
@@ -589,7 +600,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		HTTPRESP *rs;
 		SBUF body;
 		DC_GOT got;
-		char key[4096];
+		char key[4096], *both = NULL;
 		int ok, have = 0, cached = 0;
 		/* the disk cache (dcache.h), by the address without its fragment:
 		   fresh, or any age for Back and Forward, it is used as it is;
@@ -628,6 +639,15 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		memset(&rq, 0, sizeof rq);
 		rq.url = url;
 		rq.headers = have ? got.validate : snap ? "X-Gateway-Snapshot: 1\r\n" : NULL;
+		if (fetch_more != NULL) {
+			both = malloc(strlen(rq.headers ? rq.headers : "") + strlen(fetch_more) + 1);
+			if (both != NULL) {
+				strcpy(both, rq.headers ? rq.headers : "");
+				strcat(both, fetch_more);
+				rq.headers = both;
+			}
+		}
+		rq.refuse = fetch_refuse;
 		rq.accept = accept;
 		if (post != NULL) {
 			rq.method = "POST";
@@ -641,6 +661,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		rq.referrer = rq.site;
 		sb_init(&body);
 		ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+		free(both);
 		if (ok && have && rs->status == 304) {
 			/* unchanged: what is kept, fresh again */
 			dc_fresh(key, rs->headers.s ? rs->headers.s : "");
@@ -743,6 +764,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		char host[128], msg[200];
 		host_of(url, host, sizeof host);
 		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		phase(sh->b, BRPH_STYLES);
 		say(sh->b, "%s", msg);
 	}
 	if (fetch(sh->b, url, sh->base, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
@@ -840,6 +862,7 @@ static page *lay(browser *b, doc *d, const char *base)
 	memset(&o, 0, sizeof o);
 	o.width = b->width;
 	o.zoom = b->zoom;
+	o.text = b->text;
 	o.image = image_cb;
 	o.ud = b;
 	lay_base = base;
@@ -914,6 +937,7 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 #ifndef EW_ST
 parse:
 #endif
+	phase(b, BRPH_BUILD);
 	say(b, "%s", "Reading the page...");
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
@@ -979,6 +1003,7 @@ parse:
 		t = pf_ms();
 	}
 #endif
+	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	doc_select(d);
 	b->ms_style = pf_ms() - t;
@@ -1247,6 +1272,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	if (f == NULL)
 		return BR_STOPPED;
 	host_of(url, host, sizeof host);
+	phase(b, BRPH_CONNECT);
 	if (has_scheme(url, "file"))
 		say(b, "%s", "Reading the file...");
 	else
@@ -1393,6 +1419,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	memset(b, 0, sizeof *b);
 	b->width = width;
 	b->zoom = zoom > 0 ? zoom : 1024;
+	b->text = 1024;
 	b->cur = -1;
 	b->at = -1;
 	b->scroll_to = -1;
@@ -1855,7 +1882,7 @@ static int go_to(browser *b, int i)
 		b->scroll_to = b->hist[i].y;
 		return BR_SAME;
 	}
-	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom) {
+	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom && b->hist[i].p->opt.text == b->text) {
 		/* kept: shown at once, laid out again only for another width */
 		BR_ENTRY *e = &b->hist[i];
 		doc *d = e->d;
@@ -2100,18 +2127,48 @@ static int waiting(const browser *b)
 	return n;
 }
 
-/* the file of a picture: from the network, a file or a data: address */
+/* a picture of a kind EWeb can't show, by its address's ending (WebP,
+   AVIF, SVG...): not fetched on its own (the Pi's gateway makes them
+   JPEG or PNG) */
+static int unshowable(const char *url)
+{
+	static const char *const ends[] = { ".webp", ".avif", ".svg", ".svgz", ".jxl", ".heic", ".heif", ".tif",
+					    ".tiff" };
+	size_t n = strcspn(url, "?#"), i;
+	for (i = 0; i < sizeof ends / sizeof ends[0]; i++) {
+		size_t k = strlen(ends[i]);
+		if (n > k && !strncasecmp(url + n - k, ends[i], k))
+			return 1;
+	}
+	return 0;
+}
+
+/* the kinds of answer a picture's request leaves unread: those EWeb
+   can't show (a page of HTML too, a site's "not found") */
+static const char picture_refuse[] = "image/webp image/avif image/svg+xml image/jxl image/heic image/heif "
+				     "image/tiff text/";
+
+/* the file of a picture: from the network, a file or a data: address.
+   Through the Pi's gateway, the picture is asked for as the page can
+   show it: no wider than the page (webgate makes a bigger one smaller,
+   and WebP and the like JPEG or PNG, saying the picture's own size in
+   it: img.c) */
 static int fetch_picture(browser *b, ew_img *im)
 {
 	const char *url = img_url(im);
 	char *data;
 	long len = 0;
+	if (!http_gateway[0] && !has_scheme(url, "file") && unshowable(url)) {
+		b->pic_done++;
+		return 0;
+	}
 	if (has_scheme(url, "data")) {
 		data = data_url(url, &len);
 	} else {
 		FETCH *f = malloc(sizeof *f);
-		char host[128], msg[200];
+		char host[128], msg[200], fit[48];
 		long max = img_max / 2 < (4L << 20) ? img_max / 2 : (4L << 20);
+		int ok;
 		if (f == NULL)
 			return 0;
 		host_of(url, host, sizeof host);
@@ -2120,8 +2177,12 @@ static int fetch_picture(browser *b, ew_img *im)
 		snprintf(msg, sizeof msg, "Pictures: %d of %d from %s...", b->pic_done + 1,
 			 b->pic_n > b->pic_done ? b->pic_n : b->pic_done + 1, has_scheme(url, "file") ? "the disk" : host);
 		say(b, "%s", msg);
-		if (!fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f) ||
-		    (f->status != 0 && (f->status < 200 || f->status >= 300))) {
+		snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
+		fetch_more = http_gateway[0] ? fit : NULL;
+		fetch_refuse = picture_refuse;
+		ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f);
+		fetch_more = fetch_refuse = NULL;
+		if (!ok || (f->status != 0 && (f->status < 200 || f->status >= 300))) {
 			free(f->data);
 			free(f);
 			if (conn_stop)

@@ -30,6 +30,9 @@ Pages:
                  /site/css/ whose url(tile.png) is its folder's, and a
                  <picture> whose WebP source is passed over and whose img's
                  srcset gives logo.png for its 150px
+  /site/webp.html  a WebP picture (pic.webp) and a GIF: EWeb on its own
+                 doesn't fetch the WebP; through webgate it comes as JPEG;
+                 /site/hits/NAME: how many times a picture was asked for
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -135,6 +138,8 @@ BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=styl
            b"<p><picture><source type=image/webp srcset=no.webp><img src=gone.png "
            b"srcset='logo.png 150w, big.png 800w' sizes='(max-width: 10px) 800px, 150px' alt=chosen>"
            b"</picture></p></body></html>\n")
+WEBP_PAGE = (b"<!DOCTYPE html><html><head><title>WebP</title></head><body>"
+             b"<p><img src=pic.webp alt=webp> and <img src=anim.gif alt=gif></p></body></html>\n")
 BG_CSS = b".box { background: #eee url(tile.png) repeat-x 0 100%; height: 40px }\n"
 
 
@@ -178,10 +183,12 @@ def make_pics():
         "anim.gif": (gif.getvalue(), "image/gif"),
         "big.png": (save(photo(800, 600), "PNG"), "image/png"),
         "css/tile.png": (save(Image.new("RGB", (8, 8), (90, 90, 200)), "PNG"), "image/png"),
+        "pic.webp": (save(photo(320, 200), "WEBP"), "image/webp"),
     }
 
 
 PICS = make_pics()
+HITS = {}           # how many times each picture was asked for (/site/hits/NAME)
 
 
 def make_certs(work):
@@ -285,6 +292,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS_PAGE)
         elif p == "/site/bg.html":
             self.send(200, BG_PAGE)
+        elif p == "/site/webp.html":
+            self.send(200, WEBP_PAGE)
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":
@@ -327,7 +336,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p.startswith("/site/echo"):
             self.send(200, echo_page("GET", "", p.partition("?")[2].encode()))
         elif p.startswith("/site/") and p[6:] in PICS:
+            HITS[p[6:]] = HITS.get(p[6:], 0) + 1
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
+        elif p.startswith("/site/hits/"):
+            self.send(200, b"%d" % HITS.get(p[11:], 0), "text/plain")
         elif p == "/redirect":
             self.send(302, b"", extra=[("Location", "/page")])
         elif p == "/secure":

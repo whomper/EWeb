@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -430,6 +431,15 @@ try:
               and re.search(r"^background \S+ \S+ tile \S+ 6x6 across %scss/tile\.png$" % re.escape(site), out, re.M)
               and re.search(r"^image \S+ 120x48 link \d+ \"chosen\" %slogo\.png$" % re.escape(site), out, re.M)
               and "no.webp" not in out and "big.png" not in out and "gone.png" not in out, out)
+        # a picture EWeb can't read, by its name: not fetched at all
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/webp.html" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        hits = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/hits/pic.webp" % HTTP, timeout=10).read()
+        check("the browser: a WebP not fetched, the GIF beside it shown", p.returncode == 0
+              and "pic.webp decoded" not in out and re.search(r"^picture \S+anim\.gif decoded", out, re.M)
+              and hits == b"0", out + "\nhits: %r" % hits)
         rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
         check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
               and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)
@@ -562,6 +572,21 @@ try:
                 out = p.stdout + p.stderr
                 check("the gateway: a page and its pictures", p.returncode == 0 and 'title "Pictures"' in out
                       and len(re.findall(r"^picture \S+ decoded", out, re.M)) == 5, out)
+                if "X-Gateway-Picture" in open(WEBGATE).read():
+                    # the Pi makes pictures as the page shows them: big.png
+                    # (800 x 600) comes 608 wide, laid out at its own size
+                    # as without the gateway; the WebP comes as JPEG
+                    big = re.search(r"^image \S+ (\d+x\d+) link \d+ \"a big one\" \S+big\.png$", out, re.M)
+                    check("the gateway: a big picture made smaller, at its own size on the page",
+                          big is not None and big.group(1) == "596x447", out)
+                    p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d",
+                                        "https://localhost:%d/site/webp.html" % HTTPS], cwd=work,
+                                       capture_output=True, text=True, timeout=120)
+                    out = p.stdout + p.stderr
+                    check("the gateway: a WebP made JPEG and shown", p.returncode == 0 and
+                          re.search(r"^image \S+ 256x160 link \d+ \"webp\" \S+pic\.webp$", out, re.M), out)
+                else:
+                    print("itest: webgate makes no pictures (%s): those cases left out" % WEBGATE)
                 p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-S", "go",
                                     "https://localhost:%d/site/cookie/form.html" % HTTPS], cwd=work,
                                    capture_output=True, text=True, timeout=120)

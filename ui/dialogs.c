@@ -273,7 +273,7 @@ static void part_general(short x, short y)
 	rows_at(y);
 	d_tick(x, ROW(0), "Show pages' pictures", T_PICTURES);
 	d_text(x + 3, ROW(1), "(off: only their words, for a slow line)");
-	d_text(x, ROW(2), "Page size");
+	d_text(x, ROW(2), "Text size");
 	d_field(x + 12, ROW(2), s_zoom, 3, '9');
 	d_text(x + 16, ROW(2), "%  (50 to 200)");
 	d_text(x, ROW(3), "Words typed in the address go to:");

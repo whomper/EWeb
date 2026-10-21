@@ -396,10 +396,11 @@ static void settings_load(void)
 }
 
 /* the disk cache: CACHE next to the program, read the first time a page
-   is fetched; CACHE= MB, or 8 MB (2 MB on a machine without TT RAM) */
+   is fetched; CACHE= MB, or 32 MB (a page of 45 photos and their decoded
+   pixels takes 20 or so; 2 MB on a machine without TT RAM) */
 long cache_mb(void)
 {
-	return opt.cache >= 0 ? opt.cache : (long) Mxalloc(-1L, 1) > 0 ? 8 : 2;
+	return opt.cache >= 0 ? opt.cache : (long) Mxalloc(-1L, 1) > 0 ? 32 : 2;
 }
 
 static void cache_open(void)
@@ -458,7 +459,7 @@ int settings_save(void)
 	put(&s, "HOME", opt.home, "the start page: an address, or nothing for EWeb's own");
 	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (FrogFind: " FROGFIND ")");
 	snprintf(v, sizeof v, "%d", opt.zoom);
-	put(&s, "ZOOM", v, "the size of pages, per cent (100: a CSS pixel is 0.8 of the screen's)");
+	put(&s, "ZOOM", v, "the size of the text, per cent (Larger text, Smaller text)");
 	snprintf(v, sizeof v, "%d", opt.falcon);
 	put(&s, "FALCON", v, "1 = Falcon mode: secure pages with TLS on this Atari (Falcon, TT; EWEB.PRG); "
 	    "0 = through the Pi gateway");
@@ -555,6 +556,51 @@ static void log_line(void *ud, const char *line)
 
 static char said[160];		/* what the browser said last, for the KB counter */
 static long said_bytes;
+
+/* the status bar's ribbon: each phase its stretch of the line (0..1024);
+   within one, the line goes on as its bytes come (never quite to the
+   end: how much will come isn't known), the pictures one by one */
+static const short ph_from[] = { 0, 80, 420, 560, 660 }, ph_to[] = { 80, 420, 560, 660, 1024 };
+static int ph = -1;		/* the phase now, -1 none */
+static long ph_bytes;		/* conn_bytes when it began */
+
+static void on_phase(void *ud, int p)
+{
+	(void) ud;
+	if (p < 0 || p > BRPH_PICTURES || p < ph)
+		return;
+	ph = p;
+	ph_bytes = conn_bytes;
+	win_progress(p, ph_from[p]);
+}
+
+/* how far the bytes of this phase have taken it */
+static void ph_bytes_came(void)
+{
+	long kb;
+	if (ph == BRPH_CONNECT && conn_bytes > 0)
+		on_phase(NULL, BRPH_PAGE);
+	if (ph != BRPH_PAGE && ph != BRPH_STYLES)
+		return;
+	kb = (conn_bytes - ph_bytes) >> 10;
+	win_progress(ph, ph_from[ph] + (int) ((long) (ph_to[ph] - ph_from[ph]) * kb / (kb + 48)));
+}
+
+/* the pictures: done of all */
+static void ph_pictures(void)
+{
+	int n = br.pic_n > br.pic_done ? br.pic_n : br.pic_done;
+	if (!br_pictures_pending(&br)) {
+		win_progress(ph >= 0 ? ph : BRPH_PICTURES, 1024);
+		ph = -1;
+		return;
+	}
+	if (ph < BRPH_PICTURES)
+		on_phase(NULL, BRPH_PICTURES);
+	if (n > 0)
+		win_progress(BRPH_PICTURES, ph_from[BRPH_PICTURES] +
+			     (int) ((long) (ph_to[BRPH_PICTURES] - ph_from[BRPH_PICTURES]) * br.pic_done / (n + 1)));
+}
 
 void status(const char *s)
 {
@@ -663,6 +709,8 @@ static void idle(void)
 	}
 	if ((which & MU_BUTTON) && win_stop_hit(ev.mx, ev.my))
 		conn_stop = 1;
+	if (loading)
+		ph_bytes_came();
 	/* how much has come, as it comes */
 	if (loading && said[0] && conn_bytes - said_bytes >= 1024) {
 		char a[200];
@@ -681,6 +729,8 @@ static void loading_on(void)
 	conn_stop = 0;
 	conn_bytes = 0;
 	said[0] = 0;
+	win_progress(-1, 0);
+	ph = -1;
 	graf_mouse(BUSYBEE, 0);
 	win_toolbar();
 	menu_update();
@@ -726,6 +776,12 @@ static void loaded(int r)
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
+	if (r == BR_SHOWN || r == BR_SAME)
+		ph_pictures();		/* full, or on to the pictures */
+	else {
+		win_progress(-1, 0);
+		ph = -1;
+	}
 	switch (r) {
 	case BR_SHOWN: {
 		unsigned long ms_drawn = pf_ms();
@@ -1004,14 +1060,16 @@ static int can_open(void *ud, const char *url)
 	return 0;
 }
 
-/* the size of pages: a CSS pixel is 0.8 of the screen's at 100% */
+/* the text's size, per cent: only text grows or shrinks, the page's
+   pictures keep their size (decoded once) and the page its width in CSS
+   px (the same pictures chosen, the same media queries) */
 static void set_zoom(int z)
 {
 	if (z < 50 || z > 200 || z == opt.zoom)
 		return;
 	opt.zoom = (short) z;
 	settings_save();	/* a setting: on the disk at once (6.5) */
-	br.zoom = (int32_t) (819L * opt.zoom / 100);
+	br.text = (int32_t) (1024L * opt.zoom / 100);
 	if (br.d != NULL) {
 		graf_mouse(BUSYBEE, 0);
 		br_relayout(&br, win_page_w());
@@ -1191,7 +1249,7 @@ void command(int cmd)
 				cache_open();
 			}
 			br.pictures = opt.pictures;
-			br.zoom = (int32_t) (819L * opt.zoom / 100);
+			br.text = (int32_t) (1024L * opt.zoom / 100);
 			if (br.d != NULL && (pics != opt.pictures || zoom != opt.zoom)) {
 				graf_mouse(BUSYBEE, 0);
 				br_relayout(&br, win_page_w());
@@ -1402,6 +1460,7 @@ static void pictures(void)
 	}
 	conn_stop = 0;
 	said[0] = 0;
+	ph_pictures();
 	if (!br_pictures_pending(&br)) {
 		win_status(br.pic_stopped ? "Pictures stopped." : "");
 		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
@@ -1577,7 +1636,8 @@ int main(void)
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 
-	br_init(&br, 600, (int32_t) (819L * opt.zoom / 100));
+	br_init(&br, 600, 819);		/* a CSS pixel is 0.8 of the screen's */
+	br.text = (int32_t) (1024L * opt.zoom / 100);
 	{
 		/* pages kept for Back and Forward (the heap takes TT RAM first):
 		   a quarter of the free TT RAM up to 24 MB, else an eighth of
@@ -1605,6 +1665,7 @@ int main(void)
 	br.search = opt.search;
 	br.pictures = opt.pictures;
 	br.say = say;
+	br.phase = on_phase;
 	br.log = log_line;
 	br.can_open = can_open;
 	br.snapshot = opt.snapshot;
@@ -1633,9 +1694,11 @@ int main(void)
 		short which;
 		int more = !loading && !win_iconified && br_pictures_pending(&br);
 		long due = loading || win_iconified ? -1 : br_js_due(&br);
-		short wait = more ? 0 : due >= 0 ? (short) (due > 1000 ? 1000 : due) : 0;
-		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 ? MU_TIMER : 0), 0x102, 3, 0,
-				    wait, msg, &ev);
+		/* the ribbon, full: gone a moment later */
+		int rib = !more && due < 0 && win_progress_shown();
+		short wait = more ? 0 : due >= 0 ? (short) (due > 1000 ? 1000 : due) : rib ? 200 : 0;
+		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 || rib ? MU_TIMER : 0),
+				    0x102, 3, 0, wait, msg, &ev);
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
 #ifndef EW_ST
 		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)

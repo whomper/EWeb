@@ -69,6 +69,10 @@ typedef struct {
 	   and the page it came from (NULL: typed) */
 	int top;
 	const char *site;
+	/* types whose 2xx body isn't wanted, space-separated, lower case ("text/"
+	   for all of them): such an answer is left unread (its connection
+	   goes) and the request fails, err naming the type. NULL: any */
+	const char *refuse;
 } HTTPREQ;
 
 /* 1: an answer came (rs->status says which), with its body appended to

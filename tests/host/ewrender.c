@@ -7,11 +7,12 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL]
  *            PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
- * in 1024ths (819), -d the display list as text instead of a picture,
+ * in 1024ths (819), -X the text's size in per cent (100: Larger text and
+ * Smaller text, fonts only), -d the display list as text instead of a picture,
  * -t the document tree with each element's display first, -v what
  * the browser says while it loads (its status line), -c the root
  * certificates for https (binary/CACERT.PEM),
@@ -370,7 +371,7 @@ static void pictures(browser *b)
 int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
-	int32_t width = 608, zoom = 819, top = 0, height = -1;
+	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, i, r;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
@@ -389,6 +390,8 @@ int main(int argc, char **argv)
 			width = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-z") && i + 1 < argc)
 			zoom = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-X") && i + 1 < argc)
+			text = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-f") && i + 1 < argc)
 			fnt = argv[++i];
 		else if (!strcmp(argv[i], "-o") && i + 1 < argc)
@@ -452,7 +455,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-N URL] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-N URL] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -484,6 +487,7 @@ int main(int argc, char **argv)
 	net_init();
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
+	b.text = (int32_t) (1024L * text / 100);
 	b.say = said;
 	b.log = logged;
 	b.ud = &verbose;

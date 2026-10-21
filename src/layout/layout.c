@@ -152,6 +152,7 @@ typedef struct {
 	page *p;
 	struct arena *a;
 	int32_t zoom;
+	int32_t text;			/* LAYOUT_OPT.text */
 	ITEM *it;
 	long nit, itcap;
 	int body_bg_taken;
@@ -262,9 +263,16 @@ static int contains_ci(const char *s, size_t n, const char *w)
 	return 0;
 }
 
+/* text's size in device px: the page's, times the text size the reader
+   chose (only text grows or shrinks with it) */
+static int32_t text_px(L *l, int32_t px)
+{
+	return l->text == 1024 ? px : (int32_t) (((int64_t) px * l->text + 512) >> 10);
+}
+
 static int32_t font_px(L *l, const ec_style *s)
 {
-	int32_t px = s->k[EP_FONT_SIZE] == EK_PX ? dev(l, s->v[EP_FONT_SIZE].i) : dev(l, 16 << 10);
+	int32_t px = text_px(l, s->k[EP_FONT_SIZE] == EK_PX ? dev(l, s->v[EP_FONT_SIZE].i) : dev(l, 16 << 10));
 	return px < 6 ? 6 : px;
 }
 
@@ -318,7 +326,7 @@ static int32_t line_height(L *l, const ec_style *s, ew_font *f)
 	case EK_NUM:
 		return (int32_t) (((int64_t) px * s->v[EP_LINE_HEIGHT].i + 512) >> 10);
 	case EK_PX:
-		return dev(l, s->v[EP_LINE_HEIGHT].i);
+		return text_px(l, dev(l, s->v[EP_LINE_HEIGHT].i));
 	case EK_PCT:
 		return (int32_t) ((int64_t) px * s->v[EP_LINE_HEIGHT].i / (100 * 1024));
 	default: {
@@ -4239,6 +4247,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->width = o->width;
 	p->bg = 0xffffff;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
+	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
 	l.last_bg = -1;
 	if (html == NULL || html->e.style == NULL) {

@@ -4,10 +4,21 @@
  * dcache.c - EWeb's disk cache (dcache.h): the index in memory, the
  * answers in one pack on the disk.
  *
- * EWEB.IDX, text: "EWDC 2 GEN PAKLEN\n", then a line for each answer,
+ * EWEB.IDX, text: "EWDC 3 GEN PAKLEN AT\n", then a line for each answer,
  * "OFF LEN STORED FRESH USED FLAGS\tMIME\tCHARSET\tSECURITY\tETAG\tLASTMOD\tKEY\tURL\n"
- * (times in UTC seconds since 1970; FLAGS DCF_*; version 1 had none). EWEB.PAK: "EWDC" and GEN in eight
- * hex digits, CR LF twice (16 bytes), then the answers' bytes.
+ * (times in UTC seconds since 1970; FLAGS DCF_*). EWEB.PAK: "EWDC" and GEN in eight
+ * hex digits, CR LF twice (16 bytes), then the answers, each its tag (its
+ * key's hash and its length, 4 bytes each, big-endian) and its bytes; OFF
+ * is the tag's place.
+ *
+ * The pack is a ring (21 Oct 2026; before, it was written again at quit
+ * once it had grown past its size, which took the Falcon's disk half a
+ * minute after a page of pictures): what a job brings goes in one write
+ * at AT, and AT goes back to the start when the next write wouldn't fit
+ * in the cache's size; what that write lands on is forgotten. So quit
+ * writes only what has gathered and the index. An index older than the
+ * pack (a reset) may name what was written over since: its tag then
+ * doesn't match, and it is forgotten when it is read.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +30,7 @@
 #include "util.h"
 
 #define HEAD 16			/* the pack's first bytes */
+#define TAG 8			/* before each answer in the pack */
 
 #define DCF_REVALIDATE	1	/* must-revalidate or no-cache: never shown stale */
 #define DCF_IMMUTABLE	2	/* immutable (RFC 8246): Reload doesn't ask */
@@ -47,13 +59,16 @@ static DCE *ent;
 static int nent, cap;
 static int loaded;
 static unsigned long gen;
-static long pak_len, dead, pending;
+static long pak_len, pending;
+static long at;			/* where the next write goes in the ring */
 static long idx_len;		/* the pack's length the index read was of; -1 none */
 static int checked;		/* the pack's head checked against the index this run */
 static int pak = -1;
+static int pak_wo;		/* the pack was made this job, open for writing only */
 static int changed;
 
 static void flush(void);
+static void put32(char *p, unsigned long v);
 
 static void path_of(char *out, int size, const char *name)
 {
@@ -85,7 +100,8 @@ static void forget_all(void)
 	free(ent);
 	ent = NULL;
 	nent = cap = 0;
-	pak_len = dead = pending = 0;
+	pak_len = pending = 0;
+	at = HEAD;
 }
 
 static void close_pak(void)
@@ -93,6 +109,7 @@ static void close_pak(void)
 	if (pak >= 0)
 		pf_close(pak);
 	pak = -1;
+	pak_wo = 0;
 }
 
 static void new_gen(void)
@@ -140,9 +157,7 @@ static DCE *find(const char *key)
 
 static void drop(DCE *e)
 {
-	if (e->off >= 0)
-		dead += e->len;
-	else
+	if (e->off < 0)
 		pending -= e->len;
 	ent_free(e);
 	*e = ent[--nent];
@@ -230,10 +245,9 @@ static int open_pak(int make)
 			for (i = nent - 1; i >= 0; i--)
 				if (ent[i].off >= 0)
 					drop(&ent[i]);
-			dead = 0;
+			at = HEAD;
 		} else {
 			pak_len = size;
-			dead += size - idx_len;	/* added after the index was written (a reset) */
 		}
 	}
 	if (pak < 0 && make) {
@@ -245,9 +259,10 @@ static int open_pak(int make)
 			close_pak();
 			pf_remove(p);
 		}
+		pak_wo = pak >= 0;	/* written only: opened again when read */
 		checked = 1;
 		pak_len = HEAD;
-		dead = 0;
+		at = HEAD;
 	}
 	return pak >= 0;
 }
@@ -259,7 +274,7 @@ static void load(void)
 	long len;
 	unsigned long g = 0;
 	long plen = 0;
-	long long v;
+	long long v, w;
 	if (loaded)
 		return;
 	loaded = 1;
@@ -286,19 +301,23 @@ static void load(void)
 			pf_close(h);
 		}
 	}
-	s = d != NULL && (strncmp(d, "EWDC 1 ", 7) == 0 || strncmp(d, "EWDC 2 ", 7) == 0) ? d + 7 : NULL;
+	/* (an index of before the ring, 1 or 2: its pack has no tags, and is
+	   written over) */
+	s = d != NULL && strncmp(d, "EWDC 3 ", 7) == 0 ? d + 7 : NULL;
 	if (s != NULL) {
 		g = strtoul(s, &s, 16);
 		while (*s == ' ')
 			s++;
 	}
-	if (s == NULL || !read_num(&s, &v) || (nl = strchr(d, '\n')) == NULL) {
+	if (s == NULL || !read_num(&s, &v) || !read_num(&s, &w) || (nl = strchr(d, '\n')) == NULL ||
+	    w < HEAD || w > v) {
 		free(d);	/* none: a pack there can't be read, and is written over */
 		checked = 1;
 		return;
 	}
 	gen = g;
 	plen = idx_len = (long) v;
+	at = (long) w;
 	for (s = nl + 1; *s; s = nl + 1) {
 		long long o, n, st, fr, us, fl = 0;
 		long off;
@@ -320,7 +339,7 @@ static void load(void)
 		lm = field(&rest);
 		key = field(&rest);
 		url = field(&rest);
-		if (off < HEAD || n < 0 || off + n > plen || !key[0] || find(key) != NULL)
+		if (off < HEAD || n < 0 || off + TAG + n > plen || !key[0] || find(key) != NULL)
 			continue;
 		e = add(key, url[0] ? url : key, etag, lm);
 		if (e == NULL)
@@ -498,9 +517,11 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	header(headers, "Last-Modified", lm, sizeof lm);
 	header(headers, "Set-Cookie", sc, sizeof sc);
 	/* not kept: what HTTP says not to keep, what would never be fresh
-	   and can't be asked about, one person's answer (it sets a cookie),
-	   and what would take an eighth of the cache */
-	if (life < 0 || (life == 0 && !etag[0] && !lm[0]) || sc[0] || len > max_size / 8 ||
+	   and can't be asked about, a page that sets a cookie (one person's;
+	   a picture or a stylesheet that does is kept, as browsers' own
+	   caches keep them), and what would take a quarter of the cache */
+	if (life < 0 || (life == 0 && !etag[0] && !lm[0]) || (sc[0] && !strcmp(mime, "text/html")) ||
+	    len > max_size / 4 ||
 	    strchr(etag, '\t') || strchr(lm, '\t') || strchr(key, '\t') || strchr(url, '\t') || strchr(security, '\t') ||
 	    strchr(key, '\n') || strchr(url, '\n'))
 		return;
@@ -616,18 +637,27 @@ int dc_get(const char *key, DC_GOT *g)
 	e = find(key);
 	if (e == NULL)
 		return 0;
-	d = malloc((size_t) e->len + 1);
+	d = malloc((size_t) e->len + TAG + 1);
 	if (d == NULL)
 		return 0;
+	if (e->off >= 0 && pak_wo)
+		close_pak();	/* made this job, open for writing only: opened again */
 	if (e->off < 0) {
 		memcpy(d, e->mem, (size_t) e->len);
 	} else if (!open_pak(0) || (e = find(key)) == NULL) {	/* a pack that wasn't the index's */
 		free(d);
 		return 0;
-	} else if (pf_seek(pak, e->off) != e->off || pf_read(pak, d, e->len) != e->len) {
-		free(d);
-		drop(e);	/* the pack lost it */
-		return 0;
+	} else {
+		char tag[TAG];
+		put32(tag, e->hash);
+		put32(tag + 4, (unsigned long) e->len);
+		if (pf_seek(pak, e->off) != e->off || pf_read(pak, d, e->len + TAG) != e->len + TAG ||
+		    memcmp(d, tag, TAG) != 0) {
+			free(d);
+			drop(e);	/* the pack lost it, or it was written over (a reset) */
+			return 0;
+		}
+		memmove(d, d + TAG, (size_t) e->len);
 	}
 	d[e->len] = 0;
 	memset(g, 0, sizeof *g);
@@ -651,142 +681,66 @@ int dc_get(const char *key, DC_GOT *g)
 
 /* ---------------------------------------------------------------- the pack */
 
-/* what has gathered, into the pack in one write at its end */
+static void put32(char *p, unsigned long v)
+{
+	p[0] = (char) (v >> 24);
+	p[1] = (char) (v >> 16);
+	p[2] = (char) (v >> 8);
+	p[3] = (char) v;
+}
+
+/* what has gathered, into the pack in one write at the ring's place:
+   back to its start when it wouldn't fit in the cache's size, and what
+   it lands on forgotten */
 static void flush(void)
 {
-	if (pending > 0 && !open_pak(1)) {
-		int i;
-		for (i = nent - 1; i >= 0; i--)	/* no pack to be had: let them go */
+	long need = 0, o;
+	int i;
+	char *buf;
+	if (pending <= 0)
+		return;
+	for (i = 0; i < nent; i++)
+		if (ent[i].off < 0)
+			need += TAG + ent[i].len;
+	buf = open_pak(1) ? malloc((size_t) need) : NULL;
+	if (buf != NULL) {
+		if (at + need > max_size && at > HEAD)
+			at = HEAD;
+		/* what this write lands on */
+		for (i = nent - 1; i >= 0; i--)
+			if (ent[i].off >= 0 && ent[i].off < at + need && ent[i].off + TAG + ent[i].len > at)
+				drop(&ent[i]);
+		for (o = 0, i = 0; i < nent; i++)
+			if (ent[i].off < 0) {
+				put32(buf + o, ent[i].hash);
+				put32(buf + o + 4, (unsigned long) ent[i].len);
+				memcpy(buf + o + TAG, ent[i].mem, (size_t) ent[i].len);
+				o += TAG + ent[i].len;
+			}
+	}
+	if (buf != NULL && pf_seek(pak, at) == at && pf_write(pak, buf, need) == need) {
+		for (i = 0; i < nent; i++)
+			if (ent[i].off < 0) {
+				ent[i].off = at;
+				at += TAG + ent[i].len;
+				free(ent[i].mem);
+				ent[i].mem = NULL;
+			}
+		if (at > pak_len)
+			pak_len = at;
+	} else {
+		for (i = nent - 1; i >= 0; i--)	/* no pack, or the disk wouldn't take it: let them go */
 			if (ent[i].off < 0)
 				drop(&ent[i]);
-		pending = 0;
-	} else if (pending > 0) {
-		/* what the job brought, in one write at the pack's end */
-		char *buf = malloc((size_t) pending);
-		long at = 0;
-		int i;
-		if (buf != NULL) {
-			for (i = 0; i < nent; i++)
-				if (ent[i].off < 0) {
-					memcpy(buf + at, ent[i].mem, (size_t) ent[i].len);
-					at += ent[i].len;
-				}
-		}
-		if (buf != NULL && pf_seek(pak, pak_len) == pak_len && pf_write(pak, buf, at) == at) {
-			for (i = 0; i < nent; i++)
-				if (ent[i].off < 0) {
-					ent[i].off = pak_len;
-					pak_len += ent[i].len;
-					free(ent[i].mem);
-					ent[i].mem = NULL;
-				}
-		} else {
-			for (i = nent - 1; i >= 0; i--)	/* the disk wouldn't take it */
-				if (ent[i].off < 0)
-					drop(&ent[i]);
-		}
-		free(buf);
-		pending = 0;
 	}
+	free(buf);
+	pending = 0;
+	changed = 1;
 }
 
 void dc_job_end(void)
 {
 	close_pak();
-}
-
-static int by_use(const void *a, const void *b)
-{
-	const DCE *x = a, *y = b;
-	return x->used > y->used ? -1 : x->used < y->used;
-}
-
-static int by_place(const void *a, const void *b)
-{
-	const DCE *x = a, *y = b;
-	return x->off < y->off ? -1 : x->off > y->off;
-}
-
-/* the pack written again with the answers used last, three quarters of
-   its size at most: read and written in big pieces (6.5) */
-static void compact(void)
-{
-	char from[300], to[300], head[HEAD + 1];
-	long keep = 0, at, piece = 256L << 10, used = 0;
-	int i, n = 0, out, in, ok = 1;
-	char *buf;
-	qsort(ent, (size_t) nent, sizeof *ent, by_use);
-	/* the answers used last, three quarters of the size; EWeb's own data
-	   (decoded pictures) at most half of that, so that it doesn't push
-	   out the pages */
-	{
-		long own = 0;
-		int k;
-		for (k = 0; k < nent; k++) {
-			DCE t;
-			if (keep + ent[k].len > max_size / 4 * 3)
-				break;
-			if ((ent[k].flags & DCF_OWN) && own + ent[k].len > max_size / 8 * 3)
-				continue;
-			if (ent[k].flags & DCF_OWN)
-				own += ent[k].len;
-			keep += ent[k].len;
-			t = ent[n];
-			ent[n] = ent[k];
-			ent[k] = t;
-			n++;
-		}
-	}
-	for (i = n; i < nent; i++)
-		ent_free(&ent[i]);
-	nent = n;
-	qsort(ent, (size_t) nent, sizeof *ent, by_place);
-	while ((buf = malloc((size_t) piece)) == NULL && piece > 8192)
-		piece /= 2;
-	path_of(from, sizeof from, "EWEB.PAK");
-	path_of(to, sizeof to, "EWEB.NEW");
-	in = pf_open(from, PF_READ);
-	out = buf != NULL && in >= 0 ? pf_open(to, PF_WRITE) : -1;
-	if (out < 0) {
-		free(buf);
-		if (in >= 0)
-			pf_close(in);
-		dc_clear();
-		return;
-	}
-	new_gen();
-	snprintf(head, sizeof head, "EWDC%08lx\r\n\r\n", gen);
-	memcpy(buf, head, HEAD);
-	used = HEAD;
-	at = HEAD;
-	for (i = 0; i < nent && ok; i++) {
-		long left = ent[i].len, src = ent[i].off;
-		ent[i].off = at;
-		at += left;
-		while (left > 0 && ok) {
-			long k = piece - used < left ? piece - used : left;
-			ok = pf_seek(in, src) == src && pf_read(in, buf + used, k) == k;
-			used += k;
-			src += k;
-			left -= k;
-			if (used == piece) {
-				ok = ok && pf_write(out, buf, used) == used;
-				used = 0;
-			}
-		}
-	}
-	ok = ok && (used == 0 || pf_write(out, buf, used) == used);
-	pf_close(in);
-	pf_close(out);
-	free(buf);
-	if (!ok || pf_remove(from) != 0 || pf_rename(to, from) != 0) {
-		pf_remove(to);
-		dc_clear();
-		return;
-	}
-	pak_len = at;
-	dead = 0;
-	changed = 1;
 }
 
 void dc_close(void)
@@ -800,11 +754,9 @@ void dc_close(void)
 		forget_all();
 		return;
 	}
-	if (nent > 0 && (pak_len > max_size || dead > pak_len / 2))
-		compact();
 	if (changed && nent > 0) {
 		sb_init(&s);
-		sb_printf(&s, "EWDC 2 %08lx %ld\n", gen, pak_len);
+		sb_printf(&s, "EWDC 3 %08lx %ld %ld\n", gen, pak_len, at);
 		for (i = 0; i < nent; i++) {
 			DCE *e = &ent[i];
 			/* times as long: the Atari's printf has no %lld (2038 is

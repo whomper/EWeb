@@ -111,7 +111,11 @@ void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything 
 void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
 void win_title(void);
-void win_status(const char *s);		/* the info line; "" for what the page says */
+void win_status(const char *s);		/* the status bar's text; "" for what the page says */
+/* the status bar's ribbon: a load has come so far (0..1024) in a phase
+   (BRPH_*: its colour); phase -1 clears it */
+void win_progress(int phase, int at);
+int win_progress_shown(void);		/* it is shown (and gone a moment after it filled) */
 void win_toolbar(void);			/* the buttons again (loading started or ended) */
 void win_throb(int busy);		/* the throbber's next frame while busy (each 110 ms), else at rest */
 int  win_throb_frames(void);		/* frames drawn since the last call, for the log */

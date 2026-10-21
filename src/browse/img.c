@@ -262,6 +262,51 @@ void img_ref(ew_img *im, int d)
 		im->refs = 0;
 }
 
+/* the size a picture made smaller by the Pi's gateway had: webgate puts
+   "webgate natural WxH" in a JPEG's comment, or "natural WxH" under the
+   keyword "webgate" in a PNG's tEXt chunk, before its pixels. 1 and *w,
+   *h, or 0 */
+static int natural(const unsigned char *d, long n, int kind, long *w, long *h)
+{
+	const unsigned char *t = NULL;
+	long i, tl = 0;
+	char s[32], *x;
+	if (kind == PIC_JPEG) {
+		for (i = 2; i + 4 <= n && d[i] == 0xFF;) {
+			long sl = (long) d[i + 2] << 8 | d[i + 3];
+			if (d[i + 1] == 0xDA || sl < 2)
+				break;
+			if (d[i + 1] == 0xFE && sl - 2 > 16 && !memcmp(d + i + 4, "webgate natural ", 16)) {
+				t = d + i + 4 + 16;
+				tl = sl - 2 - 16;
+				break;
+			}
+			i += 2 + sl;
+		}
+	} else if (kind == PIC_PNG) {
+		for (i = 8; i + 12 <= n;) {
+			long cl = (long) d[i] << 24 | (long) d[i + 1] << 16 | (long) d[i + 2] << 8 | d[i + 3];
+			if (cl < 0 || cl > n || !memcmp(d + i + 4, "IDAT", 4))
+				break;
+			if (!memcmp(d + i + 4, "tEXt", 4) && cl > 16 && !memcmp(d + i + 8, "webgate\0natural ", 16)) {
+				t = d + i + 8 + 16;
+				tl = cl - 16;
+				break;
+			}
+			i += 12 + cl;
+		}
+	}
+	if (t == NULL || tl <= 0 || tl >= (long) sizeof s || t + tl > d + n)
+		return 0;
+	memcpy(s, t, (size_t) tl);
+	s[tl] = 0;
+	*w = strtol(s, &x, 10);
+	if (*x != 'x')
+		return 0;
+	*h = strtol(x + 1, NULL, 10);
+	return *w > 0 && *h > 0 && *w <= 0x7fff && *h <= 0x7fff;
+}
+
 int img_set_file(ew_img *im, char *data, long len)
 {
 	long w, h;
@@ -280,6 +325,13 @@ int img_set_file(ew_img *im, char *data, long len)
 	im->data = data;
 	im->len = len;
 	sums(data, len, im->sum);
+	{
+		long nw, nh;
+		if (natural((const unsigned char *) data, len, im->kind, &nw, &nh)) {
+			w = nw;		/* made smaller on the Pi: the page sees its own size */
+			h = nh;
+		}
+	}
 	im->iw = (int32_t) w;
 	im->ih = (int32_t) h;
 	im->state = IMG_HERE;

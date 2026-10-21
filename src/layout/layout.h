@@ -19,6 +19,8 @@
 typedef struct {
 	int32_t width;			/* the page's width: the window's work area, device px */
 	int32_t zoom;			/* device px per CSS px, x1024 (819: 0.8) */
+	int32_t text;			/* the text's size, x1024: fonts and line heights only
+					   (Larger text: the pictures stay as they are); 0: 1024 */
 	/* has this link (href, resolved by the caller) been visited? NULL: no */
 	int (*visited)(void *ud, const char *href);
 	/* a picture: its handle for an <img>'s src or a background's url()

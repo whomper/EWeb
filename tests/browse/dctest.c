@@ -4,11 +4,13 @@
  * dctest - EWeb's disk cache (src/browse/dcache.c) on a clock of its
  * own: how long HTTP lets an answer stay fresh (max-age, Expires and
  * Date, a tenth of the time since Last-Modified, Age, no-cache), what it
- * doesn't let be kept (no-store, Vary: *, a cookie set, too big), asking
- * again (ETag, Last-Modified) and a 304, Vary, must-revalidate and
- * immutable, an answer forgotten, EWeb's own data (decoded pictures) and
- * its share, the pack and the index read at the next start, a reset between a job and quit, the pack written again
- * when it grew too big, and a pack that isn't the index's.
+ * doesn't let be kept (no-store, Vary: *, a page that sets a cookie, too
+ * big), asking again (ETag, Last-Modified) and a 304, Vary,
+ * must-revalidate and immutable, an answer forgotten, EWeb's own data
+ * (decoded pictures), the pack and the index read at the next start, a
+ * reset between a job and quit, the pack a ring of the cache's size (and
+ * after a reset, what the ring wrote over not read), and a pack that
+ * isn't the index's.
  *
  *   dctest DIR      (a folder it may make CACHE in)
  */
@@ -105,16 +107,23 @@ int main(int argc, char **argv)
 	put("http://b/2", "Cache-Control: max-age=60\nVary: *\n", "x");
 	put("http://b/3", "Cache-Control: max-age=60\nSet-Cookie: id=1\n", "x");
 	put("http://b/4", "Content-Type: text/html\n", "x");
-	want("no-store, Vary *, a cookie, nothing to go by: not kept",
+	want("no-store, Vary *, a page that sets a cookie, nothing to go by: not kept",
 	     got("http://b/1", NULL, NULL) == -1 && got("http://b/2", NULL, NULL) == -1 &&
 	     got("http://b/3", NULL, NULL) == -1 && got("http://b/4", NULL, NULL) == -1);
+	dc_put("http://b/6", "http://b/6", "Cache-Control: max-age=60\nSet-Cookie: id=1\n", "image/png", "", "",
+	       "png", 3);
+	want("a picture that sets a cookie: kept", got("http://b/6", "png", NULL) == 1);
 	{
-		char *big = malloc((1L << 17) + 2);
-		memset(big, 'b', (1L << 17) + 1);
-		big[(1L << 17) + 1] = 0;
+		char *big = malloc((1L << 18) + 2);
+		memset(big, 'b', (1L << 18) + 1);
+		big[(1L << 18) + 1] = 0;
 		put("http://b/5", "Cache-Control: max-age=60\n", big);
-		want("an eighth of the cache: not kept", got("http://b/5", NULL, NULL) == -1);
+		want("a quarter of the cache: not kept", got("http://b/5", NULL, NULL) == -1);
+		big[1L << 18] = 0;
+		put("http://b/5", "Cache-Control: max-age=60\n", big);
+		want("just under a quarter: kept", got("http://b/5", big, NULL) == 1);
 		free(big);
+		dc_drop("http://b/5");
 	}
 	put("http://a/1", "Cache-Control: no-store\n", "x");
 	want("no-store forgets what was kept", got("http://a/1", NULL, NULL) == -1);
@@ -126,7 +135,7 @@ int main(int argc, char **argv)
 	dc_close();
 	dc_dir(dir, 1L << 20);
 	want("the next start", got("http://a/3", "three", NULL) == 0 && got("http://a/5", "five", NULL) == 1 &&
-	     got("http://c/1", "kept in memory, then the pack at quit", NULL) == 1 && dc_count(&bytes) == 6);
+	     got("http://c/1", "kept in memory, then the pack at quit", NULL) == 1 && dc_count(&bytes) == 7);
 	{
 		DC_GOT g;
 		want("how it came, kept", dc_get("https://c/2", &g) && strcmp(g.security, "TLS 1.2, test") == 0 &&
@@ -146,8 +155,9 @@ int main(int argc, char **argv)
 	     got("http://a/3", "three", NULL) == 0);
 	dc_close();
 
-	/* too big: written again with those used last */
+	/* a ring of the cache's size: never bigger, the oldest written over */
 	dc_dir(dir, 64L << 10);
+	dc_clear();
 	{
 		char data[4097];
 		memset(data, 'z', 4096);
@@ -158,17 +168,45 @@ int main(int argc, char **argv)
 			data[0] = (char) ('A' + i);
 			clock_s++;
 			put(key, "Cache-Control: max-age=100000\n", data);
-			dc_job_end();
+			if (i % 3 == 2)
+				dc_close();	/* a run: what it brought into the pack in one write */
 		}
 		dc_close();
 		dc_dir(dir, 64L << 10);
 		dc_count(&bytes);
 		data[0] = (char) ('A' + 29);
-		want("compacted: within three quarters", bytes <= 48L << 10 && bytes >= 40L << 10);
-		want("compacted: the last used kept", got("http://e/29", data, NULL) == 1);
-		want("compacted: the first gone", got("http://e/0", NULL, NULL) == -1);
+		want("the ring: the newest kept", got("http://e/29", data, NULL) == 1);
+		want("the ring: the oldest written over", got("http://e/0", NULL, NULL) == -1);
+		want("the ring: most of its size in use", bytes <= 64L << 10 && bytes >= 36L << 10);
 		snprintf(path, sizeof path, "%s/EWEB.PAK", dir);
-		want("compacted: the pack's size", pf_size(path) <= (48L << 10) + 16);
+		want("the ring: the pack no bigger than the cache", pf_size(path) <= 64L << 10);
+		dc_close();
+		/* a reset after the ring went round: the index from before names
+		   answers written over since, and none of them is read */
+		dc_dir(dir, 64L << 10);
+		for (i = 30; i < 38; i++) {
+			char key[64];
+			snprintf(key, sizeof key, "http://e/%d", i);
+			data[0] = (char) ('a' + i - 30);
+			clock_s++;
+			put(key, "Cache-Control: max-age=100000\n", data);
+			dc_job_end();	/* (each a sixteenth of the cache: in the pack at once) */
+		}
+		dc_dir(dir, 64L << 10);	/* no dc_close */
+		{
+			int bad = 0, kept = 0;
+			for (i = 0; i < 30; i++) {
+				char key[64];
+				int r;
+				snprintf(key, sizeof key, "http://e/%d", i);
+				data[0] = (char) ('A' + i);
+				r = got(key, data, NULL);
+				bad += r == -2;
+				kept += r == 1;
+			}
+			want("a reset after the ring went round: nothing written over is read", bad == 0);
+			want("a reset: what wasn't written over still read", kept > 0);
+		}
 		dc_close();
 	}
 
@@ -181,7 +219,15 @@ int main(int argc, char **argv)
 			pf_close(h);
 		}
 		dc_dir(dir, 1L << 20);
-		want("another pack: nothing read", got("http://e/29", NULL, NULL) == -1 && dc_count(NULL) == 0);
+		{
+			int any = 0;
+			for (i = 0; i < 38; i++) {
+				char key[64];
+				snprintf(key, sizeof key, "http://e/%d", i);
+				any += got(key, NULL, NULL) != -1;
+			}
+			want("another pack: nothing read", any == 0 && dc_count(NULL) == 0);
+		}
 		dc_close();
 	}
 	/* what the server says about keeping it current (RFC 9111, RFC 8246) */
@@ -220,49 +266,6 @@ int main(int argc, char **argv)
 		free(g.data);
 		want("immutable kept in the index", dc_get("http://v/7", &g) && g.immutable);
 		free(g.data);
-		dc_clear();
-		dc_close();
-	}
-
-	/* decoded pictures take at most half of what a compacted pack keeps */
-	dc_dir(dir, 64L << 10);
-	{
-		char data[4097];
-		memset(data, 'p', 4096);
-		data[4096] = 0;
-		for (i = 0; i < 12; i++) {
-			char key[64];
-			snprintf(key, sizeof key, "pix:%d", i);
-			clock_s++;
-			dc_put_own(key, "http://p/", data, 4096);
-			dc_job_end();
-		}
-		for (i = 0; i < 6; i++) {
-			char key[64];
-			snprintf(key, sizeof key, "http://q/%d", i);
-			clock_s++;
-			put(key, "Cache-Control: max-age=100000\n", data);
-			dc_job_end();
-		}
-		dc_close();
-		dc_dir(dir, 64L << 10);
-		{
-			long own = 0;
-			int pages = 0;
-			for (i = 0; i < 12; i++) {
-				char key[64];
-				snprintf(key, sizeof key, "pix:%d", i);
-				if (got(key, NULL, NULL) >= 0)
-					own += 4096;
-			}
-			for (i = 0; i < 6; i++) {
-				char key[64];
-				snprintf(key, sizeof key, "http://q/%d", i);
-				pages += got(key, NULL, NULL) >= 0;
-			}
-			want("compacted: pictures within their half", own <= (64L << 10) / 8 * 3 && own > 0);
-			want("compacted: the pages kept", pages == 6);
-		}
 		dc_clear();
 		dc_close();
 	}

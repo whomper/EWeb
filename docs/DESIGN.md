@@ -738,11 +738,19 @@ releases.
   within a quarter of the free TT RAM up to 24 MB (else an eighth of the free ST RAM up to 2 MB),
   a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
   about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
-- **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar of one row (your layout, 21 Oct 2026:
-  the buttons as pictures alone at the left, Back, Forward, Reload, Home, Search and Stop, each
-  saying its name on the info line under the mouse; the address beside them, typed into in place;
-  the throbber, below, at the right end), the page under it with the window's slider, the status on the
-  info line (a link's address under the mouse, what a load is doing, how a secure page came), the
+- **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar of one row (your layout, 21 Oct 2026,
+  a size larger the same day: the buttons as pictures alone at the left, 30 x 25 (`tools/mktbicons.py`
+  draws them in a 24 x 20 square), Back, Forward, Reload, Home, Search and Stop, each saying its
+  name on the status bar under the mouse; the address beside them, typed into in place; the
+  throbber, below, at the right end), the page under it with the window's slider, a status bar at the
+  foot (your choice of 21 Oct 2026, design C of four drawn: a link's address under the mouse, what a
+  load is doing, how a secure page came; and along its foot a line two or three pixels high that
+  fills from left to right as a load comes, each part in its phase's colour, the darker system
+  colours that read on the grey: connecting blue, the page cyan, its stylesheets magenta, building
+  it yellow, its pictures green; black with 4 colours or 2. Each phase has its stretch of the line
+  (0-8%, 8-41%, 41-55%, 55-64%, 64-100%); within one it goes on with the bytes that come (never to
+  the end, as how much will come isn't known) or with the pictures done; once full it goes a moment
+  later. GEM's info line takes only text, so the window has none and draws its own), the
   family's menu bar, About box, shortcuts, right-click menus, VA_START and drag and drop, help,
   iconify and crash report. The page is drawn into memory a band of 32 rows at a time and copied
   to the screen from ST-RAM: in the planar modes each colour is the screen's nearest (EWeb sets no
@@ -779,7 +787,7 @@ releases.
   | Start | 5 opens, 1 lookup (`EWEB.INF`; `EWEB.FNT` 4 times) | 2, 0 (`EWEB.INF`, `EWEB.FNT`) |
   | A page with a face not used before | 1 open (`EWEB.FNT`) | 0 |
   | 10 pages, a page with 10 pictures, back 4 and forward 4, 5 minutes idle | 0 | 0 |
-  | The page size changed (^+ ^- ^0) | 0 (saved at quit) | a safe save each time |
+  | The text size changed (^+ ^- ^0) | 0 (saved at quit) | a safe save each time |
   | Quit, nothing changed | 2 opens, 1 lookup, a safe save | 0 |
   | First secure page of a session | 3 opens, 5 lookups | 3, 1 (`ROOTS.DAT`; `SEED.DAT` read, then written over) |
   | The same, the first session after installing | 5 opens, 7 lookups, 61 reads | 5, 1, 31 |
@@ -788,7 +796,7 @@ releases.
   Pages, stylesheets, history and Back go through memory (the cache), never the disk. `EWEB.FNT`
   stays open while EWeb runs, a face read with one seek. A file read whole is opened and its size
   taken with a seek (`pf_size_open`), not looked up first. `EWEB.INF` is read once and kept: a setting
-  changed by the user (the page size, the home page) is saved then, the window's place at quit if it
+  changed by the user (the text size, the home page) is saved then, the window's place at quit if it
   moved, and nothing is written when nothing changed. The secure connections' files (`CACERT.PEM`,
   `ROOTS.DAT`, `SEED.DAT`) are `common/`'s (`tls_file_info`: `CACERT.PEM` looked up once; the seed
   read, then written over in place, with no look at the folder). Reads and writes from TT-RAM go
@@ -967,6 +975,28 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   `ec_sizes`), else the window's width. A picture chosen for 2x is shown at half its file's size.
   `data-srcset` and `data-sizes` stand in as `data-src` does, and a `data:` candidate (a
   placeholder) only when there is nothing else.
+- **What isn't fetched, and the Pi's pictures** (21 Oct 2026; your yaary.music in Falcon mode took
+  minutes for its pictures: 13 MB of them, 2560-pixel JPEGs, PNGs of up to 1.9 MB, and 1.4 MB of
+  WebP that EWeb fetched only to find it couldn't read). In Falcon mode a picture whose address
+  ends in `.webp`, `.avif`, `.svg`, `.jxl`, `.heic` or `.tif` isn't fetched at all, and any
+  picture's answer whose type is one of those (or text: a site's "not found") is left unread
+  after its headers (`HTTPREQ.refuse`, its connection closed). Through the Pi gateway each picture
+  is asked for with `X-Gateway-Picture: fit=WIDTH` (the page's width, device pixels): webgate
+  decodes one wider than that, or of a kind the Atari can't read, with Pillow, upright as its EXIF
+  says, and sends a baseline JPEG no wider (quality 80; a PNG of 256 colours when it has
+  transparency or was a GIF or palette PNG), its own size written in it, "webgate natural WxH" in
+  the JPEG's first comment or under the keyword `webgate` in a PNG's tEXt before its pixels; EWeb
+  (`img.c`) lays it out at that size, so the page is the same either way, and the disk cache keeps
+  it with the size in it. A JPEG, PNG or GIF the page can show as it is comes as it is.
+  Of yaary.music's pictures, an 865 KB photo (2560 x 1920) comes as 72 KB, 608 x 456, and a
+  1.8 MB PNG with transparency as 30 KB (measured with webgate's `make_picture`). Without Pillow
+  on the Pi, pictures pass as they came. The site itself can do more: its pictures have no
+  `srcset`, which WordPress makes for its uploads, and EWeb would take the smallest sharp one.
+- **The text size** (Larger text, Smaller text, ^+ ^- ^0; `ZOOM=`, per cent) changes the text
+  alone since 21 Oct 2026 (before, the whole page): fonts and line heights (`LAYOUT_OPT.text`), not
+  lengths or pictures, so the pictures keep their size and the pixels decoded for it, the page its
+  width in CSS pixels (the same `srcset` choices and media queries), and nothing is fetched or
+  decoded again.
 - **Background pictures** (21 Oct 2026, CSS Backgrounds 3): the first layer's `url()`, over the
   border box, at `background-position` in the padding box, `background-size` (`cover`,
   `contain`, lengths, percentages, `auto`) and `background-repeat`; the root's or the body's over
@@ -1100,9 +1130,10 @@ What servers send (pages, stylesheets, pictures) is kept on the disk from one ru
 HTTP caching (RFC 9111) has a browser keep it: used as it is for as long as the answer said it
 stays fresh (`max-age`, else `Expires` less `Date`, else a tenth of the time since
 `Last-Modified`, a day at most, less its `Age`; a year at most), then asked for again with its
-`ETag` or date, a 304 keeping what is there. Not kept: `no-store`, `Vary: *`, an answer that sets
-a cookie (it may be one person's), one with nothing to go by, and one bigger than an eighth of the
-cache. Back and Forward take a page from it however old it is, as browsers do; Reload asks the
+`ETag` or date, a 304 keeping what is there. Not kept: `no-store`, `Vary: *`, a page that sets
+a cookie (it may be one person's; a picture or stylesheet that does is kept, as browsers' own
+caches keep them, since 21 Oct 2026), one with nothing to go by, and one bigger than a quarter of
+the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it however old it is, as browsers do; Reload asks the
 server again (a 304 when it is unchanged).
 
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
@@ -1111,11 +1142,23 @@ What comes is gathered in memory and added to the pack in one write when a sixte
 has gathered, or at quit: browsing page after page opens nothing (a reset loses only what is
 fetched again). The pack is opened when a job (a page and its stylesheets, a page's pictures)
 first reads from it, and closed when the job ends; its head is checked against the index the first
-time a run opens it. At quit a pack grown past its size, or half of it left over from answers replaced,
-is written again with the answers used last (three quarters of its size), in big pieces. The
-pack's first bytes and the index carry the same number, so an index from before a reset doesn't
-read another pack; what a job added after the last quit is lost then, and fetched again.
-Options > Empty the cache forgets it all, the files too.
+time a run opens it. The pack's first bytes and the index carry the same number, so an index from
+before a reset doesn't read another pack; what a job added after the last quit is lost then, and
+fetched again. Options > Empty the cache forgets it all, the files too.
+
+**The pack a ring (21 Oct 2026).** Until then, at quit a pack grown past its size, or half of it
+left over from answers replaced, was written again with the answers used last (three quarters of
+its size): after a page of 45 pictures, whose decoded pixels are kept too, that was reading and
+writing some 6 MB, and quitting took you 20 to 30 s. Now the pack is a ring of the cache's size:
+what a job brings goes in one write at the ring's place (`AT`, in the index's third form, `EWDC
+3`), back to its start when the write wouldn't fit, and what it lands on is forgotten (the newest
+kept, not the used last). Quit writes only what has gathered and the index. Each answer in the
+pack carries a tag, its key's hash and its length, checked when it is read: an index from before
+a reset may name what the ring has written over since, and that is forgotten rather than shown.
+An index of the older forms is read as none (its pack is written over). The same day: a pack made
+new was opened for writing only, so what a job put in it and asked for again before the job ended
+(a page's pictures, decoded at another size) failed to read and was forgotten; it is opened again
+for reading and writing once made.
 
 **Smarter (20 Oct 2026)**, the owner's ask: a cache that knows how current what it holds is, and
 holds pictures ready to show.
@@ -1138,10 +1181,12 @@ holds pictures ready to show.
   true colour), under a key made of two sums of the file, its length, the size and the palette, so
   the same picture from another address, or from the disk, finds them. Only for 64×64 and over (a
   smaller one decodes in about the time it takes to read). They are EWeb's own data in the pack,
-  fresh for a year, never more than three eighths of it at quit. The picture is fetched as before
+  fresh for a year, until the ring comes round to them. The picture is fetched as before
   (fresh or asked again), so a changed picture gets new sums, and is decoded again.
 - **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (64 at most; 0:
-  none); without it 8 MB, 2 MB on a machine without TT RAM.
+  none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
+  more than that, so its first pictures were gone by its last, and gone again on the next visit),
+  2 MB on a machine without TT RAM.
 
 **Measured** on the emulated Falcon in 256 colours (`make hatarigui`, `PICS.HTM` from the disk,
 then the next run on the same disk): the five pictures took 20.7 s to decode and dither, and 0.25 s
@@ -1149,7 +1194,8 @@ from the cache (the small animated GIF, decoded each time, 0.16 s of it): the 80
 against 0.07 s.
 
 `tests/browse/dctest.c` (in `make test`) checks the rules on a clock of its own, a reset between a
-job and quit, the pack written again, `Vary`, the marks and the own data's share; `make itest`
+job and quit, the ring (never bigger than the cache, the oldest written over, and after a reset
+nothing written over read), a new pack read back in the same job, `Vary` and the marks; `make itest`
 shows a page from it with no request, and a 304, a POST forgetting, a page shown cut off and a
 `must-revalidate` one not, and the pictures read back; `make hatarigui` the pictures read back on
 the next run; `make hatarifiles` counts its opens.
@@ -1250,7 +1296,7 @@ page or its pictures come, a frame each 110 ms from the network's waits and the 
 at rest it is the A alone.
 
 `tools/mkthrobber.py` draws it at 8 times the size and puts it on the Falcon's own colours, written
-as `ui/throbber.h`: 16 frames of 26 x 26, the toolbar's height (26 x 13 on the 200-line screens;
+as `ui/throbber.h`: 16 frames of 30 x 30, the toolbar's height (30 x 15 on the 200-line screens;
 40 x 40 until the toolbar became one row, 21 Oct 2026, when black and white lost its dither and
 its star field, which left no A at that size) in three editions,
 TOS 4.04's 256-colour palette for 256 colours and true colour (gold, bronze and copper from its hue

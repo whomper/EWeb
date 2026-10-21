@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """mktbicons.py - the toolbar's icons (Back, Forward, Reload, Home, Search,
-Stop) as layers of one colour each, 24 pixels wide: 20 high for screens
-with the 16-pixel font, 10 for the 200-line ones (their pixels are twice as
+Stop) as layers of one colour each, drawn in a 24 x 20 square and made 30
+pixels wide (21 Oct 2026, a size larger than at first): 25 high for screens
+with the 16-pixel font, 12 for the 200-line ones (their pixels are twice as
 tall). Drawn here as shapes, and written as ui/tbicons.h: each layer a
 VDI pen and a 1-bit mask, drawn in that order (the outline last), so that
 any palette, monochrome too, shows them.
@@ -15,7 +16,8 @@ import sys
 
 from PIL import Image, ImageDraw
 
-W, H = 24, 20
+W, H = 24, 20                   # the square they are drawn in
+OW, OT, OS = 30, 25, 12         # the icons: wide, tall (TB_TALL), on 200 lines (TB_SHORT)
 SS = 8                          # drawn 8 times bigger, then each pixel at half cover or more
 
 # VDI pens: 0 white, 1 black, 2 red, 3 green, 4 blue, 6 yellow, 9 dark grey (VDI has no brown;
@@ -76,17 +78,17 @@ ICONS = ["back", "forward", "reload", "home", "search", "stop"]
 def mask(draw, h):
     big = Image.new("L", (W * SS, H * SS), 0)
     draw(ImageDraw.Draw(big), SS)
-    small = big.resize((W, h), Image.BOX)
-    return [[1 if small.getpixel((x, y)) >= 100 else 0 for x in range(W)] for y in range(h)]
+    small = big.resize((OW, h), Image.BOX)
+    return [[1 if small.getpixel((x, y)) >= 100 else 0 for x in range(OW)] for y in range(h)]
 
 
 def words(m):
-    """each row as two 16-bit words (24 pixels and 8 of nothing)"""
+    """each row as two 16-bit words (OW pixels, the rest nothing)"""
     out = []
     for row in m:
         v = 0
         for x in range(32):
-            v = (v << 1) | (row[x] if x < W else 0)
+            v = (v << 1) | (row[x] if x < OW else 0)
         out += [v >> 16, v & 0xFFFF]
     return out
 
@@ -97,13 +99,13 @@ def main(argv):
              " * Copyright (C) 2026 AERA | Erez Yaary */",
              "/* tbicons.h - the toolbar's icons, made by tools/mktbicons.py: each a",
              "   list of layers (a VDI pen, the pen on a monochrome screen, and a",
-             "   mask, 2 words a row), drawn in order, 24 pixels wide,",
-             "   20 rows (TB_TALL) or 10 (TB_SHORT, for the 200-line screens). */",
-             "#define TB_W 24", "#define TB_TALL 20", "#define TB_SHORT 10",
+             "   mask, 2 words a row), drawn in order, %d pixels wide," % OW,
+             "   %d rows (TB_TALL) or %d (TB_SHORT, for the 200-line screens). */" % (OT, OS),
+             "#define TB_W %d" % OW, "#define TB_TALL %d" % OT, "#define TB_SHORT %d" % OS,
              "typedef struct { short pen, mono; const unsigned short *bits; } TB_LAYER;	/* mono: the pen on a monochrome screen, -1 none */",
              "typedef struct { short n; const TB_LAYER *layer; } TB_ICON;", ""]
     previews = []
-    for h, tag in ((20, "tall"), (10, "short")):
+    for h, tag in ((OT, "tall"), (OS, "short")):
         for kind in ICONS:
             layers = shapes(kind)
             names = []
@@ -128,18 +130,18 @@ def main(argv):
     if len(argv) > 2:
         pens = {0: (255, 255, 255), 1: (0, 0, 0), 2: (228, 0, 43), 3: (0, 160, 0), 4: (0, 64, 200),
                 6: (255, 214, 0), 9: (100, 100, 100)}
-        im = Image.new("RGB", (len(ICONS) * 32 * 4, 46 * 4), (192, 192, 192))
+        im = Image.new("RGB", (len(ICONS) * 36 * 4, (OT * 2 + 6) * 4), (192, 192, 192))
         for i, kind in enumerate(ICONS):
-            for row, h in ((0, 20), (1, 10)):
+            for row, h in ((0, OT), (1, OS)):
                 for pen, draw in shapes(kind):
                     m = mask(draw, h)
                     for y in range(h):
-                        for x in range(W):
+                        for x in range(OW):
                             if m[y][x]:
-                                y0 = (2 + row * 22 + y * (2 if h == 10 else 1)) * 4
-                                for yy in range(2 if h == 10 else 1):
-                                    im.paste(pens[pen], ((i * 32 + 4 + x) * 4, y0 + yy * 4,
-                                                         (i * 32 + 5 + x) * 4, y0 + yy * 4 + 4))
+                                y0 = (2 + row * (OT + 2) + y * (2 if h == OS else 1)) * 4
+                                for yy in range(2 if h == OS else 1):
+                                    im.paste(pens[pen], ((i * 36 + 4 + x) * 4, y0 + yy * 4,
+                                                         (i * 36 + 5 + x) * 4, y0 + yy * 4 + 4))
         im.save(argv[2])
 
 

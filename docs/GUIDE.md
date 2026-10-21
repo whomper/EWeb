@@ -66,20 +66,27 @@ address and press Return:
   a search engine made for vintage computers (another can be set in
   [Settings](#settings))
 
-While a page loads, the info line says what is happening and how much
-has come; **Esc**, **Undo** or the Stop button stop it, and the page
-you were on stays.
+While a page loads, the status bar at the foot of the window says what
+is happening and how much has come, and the thin line along its foot
+fills from left to right, in a colour for each step: blue while EWeb
+connects, cyan as the page comes, magenta for its stylesheets, yellow
+while the page is laid out, green as its pictures come. **Esc**,
+**Undo** or the Stop button stop it, and the page you were on stays.
 
 ## Pictures
 
 A page is shown as soon as its text is laid out; its pictures come
 after, those in the window first, then those below, and each is drawn
-as it comes ("Pictures: 3 of 12" on the info line). You can read and
+as it comes ("Pictures: 3 of 12" on the status bar). You can read and
 scroll meanwhile; clicking a link or typing an address goes there at
 once. **Esc** (or File > Stop) stops the pictures of the page shown.
 
 Until a picture has come its place is framed, with what it shows written
-in it where the page says. A picture whose size the page doesn't give
+in it where the page says. Pictures EWeb can't show (WebP, AVIF, SVG)
+aren't fetched at all; through the Raspberry Pi gateway they come as
+JPEG or PNG, and big ones come made smaller on the Pi, a few dozen
+kilobytes instead of a megabyte (see
+[Secure sites](#secure-sites)). A picture whose size the page doesn't give
 shows its description first, and the page is laid out again when its
 size is known (at most every two seconds, so that it doesn't jump about
 while you read).
@@ -159,7 +166,7 @@ EWeb lists its links, or open EWeb's in another browser.
   stay on the server; open the file again with ^O.
 - **A link's file**: Alternate-click the link, or right-click it and
   choose Save the link's file. It goes straight to the disk as it comes,
-  so it can be bigger than your memory; the info line counts it, and
+  so it can be bigger than your memory; the status bar counts it, and
   Esc stops it (nothing is left behind).
 - **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
   page: EWeb asks where to save it, and the page you were on stays.
@@ -186,9 +193,11 @@ under the page says it may be out of date; a site that says its pages
 must always be checked gets an error instead. Sending a form forgets
 what was kept for the page it went to.
 
-The cache takes 8 MB (2 MB on a Falcon without TT RAM); Settings >
-General > Disk cache changes it, 0 for none. At quit EWeb keeps the
-pages used last within that. Options > Empty the cache forgets it all.
+The cache takes 32 MB (2 MB on a Falcon without TT RAM); Settings >
+General > Disk cache changes it, 0 for none. When it is full, what came
+first makes room for what comes, so quitting takes no time: EWeb writes
+only what came since it last wrote and its list. Options > Empty the
+cache forgets it all.
 
 ## The window
 
@@ -202,7 +211,7 @@ picture:
 - **Stop** a page while it loads
 
 They lie flat until the mouse is over one, which then stands out in a
-frame and says its name on the info line; held down, it sinks, and works
+frame and says its name on the status bar; held down, it sinks, and works
 when you let go over it. Beside them is the address of the page shown,
 which you can type into.
 
@@ -243,10 +252,11 @@ chose with Options > Use this page as home.
 
 ## Text size
 
-**^+** makes pages larger, **^-** smaller, by a tenth each time, and
-**^0** puts them back as they were. At the usual size a page's pixel is
-0.8 of the screen's, so that pages made for wider screens fit the
-Falcon's 640.
+**^+** makes the text larger, **^-** smaller, by a tenth each time, and
+**^0** puts it back as it was. Only the text changes: the pictures keep
+their size and stay as they were decoded, so nothing is fetched or
+decoded again (a page's pixel is 0.8 of the screen's, so that pages
+made for wider screens fit the Falcon's 640).
 
 ## Copying
 
@@ -330,7 +340,7 @@ the Pi), two things in the View menu use the Pi's own web browser:
 
 - **Through the Pi's browser:** each page is opened by the browser on
   the Pi, its scripts run there, and EWeb shows the page as it then
-  stands: a snapshot. Links and forms work as on any page; the info line
+  stands: a snapshot. Links and forms work as on any page; the status bar
   says "a snapshot from the Pi's browser". Turn it off for pages that
   don't need it: they come quicker straight from their servers.
 - **Live view:** the Pi's browser's screen as a picture, with the page
@@ -353,10 +363,14 @@ Without Falcon mode, and always in the ST edition, pages come through
 the Pi gateway: AERA-Gateway's web service on a Raspberry Pi in your
 home (`aera-gateway install web` on the Pi), whose address you type in
 Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
-hands the page over your home network. With neither, EWeb says so when
-you open a secure page, and the page shown stays.
+hands the page over your home network. It also makes each picture as the
+page can show it: one wider than the page comes made smaller, and WebP,
+AVIF and the like come as JPEG or PNG (the Pi needs `python3-pil`, which
+`aera-gateway install web` adds). A photo of a megabyte comes as a few
+dozen kilobytes, and the Falcon decodes far less. With neither, EWeb
+says so when you open a secure page, and the page shown stays.
 
-The info line says how a secure page came.
+The status bar says how a secure page came.
 
 ## Settings
 

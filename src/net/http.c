@@ -124,6 +124,21 @@ static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int err
 
 /* ---------------- reading the answer ---------------- */
 
+/* is mime one of the types in list (an entry ending in / all of its kind) */
+static int refused(const char *mime, const char *list)
+{
+	size_t m = strlen(mime);
+	while (*list && m) {
+		size_t n = strcspn(list, " ");
+		if (n && (n == m || (list[n - 1] == '/' && n < m)) && !strncmp(mime, list, n))
+			return 1;
+		list += n;
+		while (*list == ' ')
+			list++;
+	}
+	return 0;
+}
+
 /* one line (to LF, a CR before it dropped) of at most max bytes into b:
    its length, -1 when the connection failed (c->err) or -2 when the line
    is too long */
@@ -462,6 +477,10 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	}
 	if (h->bad) {
 		snprintf(err, errlen, "%s sent a length that can't be right", hostport);
+		goto fail;
+	}
+	if (rq->refuse && rs->status >= 200 && rs->status < 300 && refused(rs->mime, rq->refuse)) {
+		snprintf(err, errlen, "%s sent %s, which EWeb doesn't show", hostport, rs->mime);
 		goto fail;
 	}
 	if (h->http10 && !h->keep_alive)

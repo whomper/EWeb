@@ -18,6 +18,9 @@
 
 #define BR_HISTORY 50		/* pages Back can go to */
 
+/* a load's phases, in order */
+enum { BRPH_CONNECT, BRPH_PAGE, BRPH_STYLES, BRPH_BUILD, BRPH_PICTURES };
+
 typedef struct {
 	char *url;		/* as loaded, fragment included */
 	int32_t y;		/* how far down it was scrolled */
@@ -63,6 +66,7 @@ typedef struct browser {
 	/* the window */
 	int32_t width;		/* device px */
 	int32_t zoom;		/* device px per CSS px, x1024 */
+	int32_t text;		/* the text's size, x1024 (LAYOUT_OPT.text) */
 
 	BR_ENTRY hist[BR_HISTORY];
 	int nhist, cur;		/* cur: the entry shown, -1 none */
@@ -104,6 +108,8 @@ typedef struct browser {
 	/* the front end: what is happening, for the status line ("Opening
 	   example.com..."); NULL for none */
 	void (*say)(void *ud, const char *what);
+	/* the load's phase now (BRPH_*), for the status bar's ribbon; NULL: none */
+	void (*phase)(void *ud, int ph);
 	/* a line for the log (each picture: what it was, how long it took);
 	   NULL for none */
 	void (*log)(void *ud, const char *line);

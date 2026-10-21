@@ -12,11 +12,12 @@
  * is gathered in memory and added to the pack in one write when a
  * sixteenth of the cache has gathered, or at quit (a reset loses only
  * what is fetched again); the pack is opened when a job first reads from
- * it, and closed when the job ends. At quit a pack grown past its size, or half
- * of it left over from answers replaced, is written again with the
- * answers used last, in big pieces. The pack and the index carry the
- * same number, so an index from before a reset doesn't read another
- * pack.
+ * it, and closed when the job ends. The pack is a ring of the cache's
+ * size: a write that wouldn't fit goes back to its start, and what it
+ * lands on is forgotten, so quit writes only what has gathered and the
+ * index. The pack and the index carry the same number, so an index from
+ * before a reset doesn't read another pack, and each answer in the pack
+ * its tag, so that one written over since isn't read.
  */
 #ifndef DCACHE_H
 #define DCACHE_H
@@ -60,8 +61,7 @@ void dc_drop(const char *key);
 
 /* EWeb's own data kept under key (a picture decoded and dithered for the
    screen, under a key made from its file's contents): never stale, kept
-   while there is room, its kind taking at most half the cache. data is
-   copied. */
+   until the ring comes round to it. data is copied. */
 void dc_put_own(const char *key, const char *what, const char *data, long len);
 /* the most dc_put_own keeps (0: there is no cache) */
 long dc_own_max(void);

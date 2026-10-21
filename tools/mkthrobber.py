@@ -8,9 +8,9 @@ put on the Falcon's own colours: TOS 4.04's 256-colour palette
 (tools/falcon256.txt, read in Hatari) for 256 colours and true colour, its
 16 system colours, and black and white for monochrome and 4 colours.
 
-Each edition is 16 frames of 26 x 26 pixels, the height of EWeb's toolbar
+Each edition is 16 frames of 30 x 30 pixels, the height of EWeb's toolbar
 (its buttons' frames, 21 Oct 2026; drawn in a 40-unit square, as at
-first), and 26 x 13 for the screens of 200 lines (their pixels are twice
+first), and 30 x 15 for the screens of 200 lines (their pixels are twice
 as tall), as a byte a pixel into its own list of colours, each frame
 deflated on its own (EWeb inflates the one it shows). Written as
 ui/throbber.h; the ST edition has no 256-colour or 16-colour 480-line
@@ -30,7 +30,7 @@ from PIL import Image, ImageChops, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
 S = 8                           # drawn 8 times bigger
 N = 40                          # the square it is drawn in, in units
-OUT = 26                        # the throbber, square, in pixels
+OUT = 30                        # the throbber, square, in pixels
 FRAMES = 16
 
 PAL256 = [tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) for h in open(os.path.join(HERE, "falcon256.txt")).read().split()]
