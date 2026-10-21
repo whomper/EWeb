@@ -862,7 +862,14 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   repeated over the luma it covers; each channel's bits from a table at Y + its term, libjpeg's
   way, the tables made on the DSP for 5-6-5 or R G B) and sends each MCU's pixels from its host
   interrupt while it decodes the next, so the 68030 reads one while the DSP works on the other.
-  The 68030 is left copying bytes in and pixels out. The first such JPEG checks it against
+  The 68030 is left copying bytes in and pixels out. A picture shown smaller the DSP shrinks too
+  (21 Oct 2026; the scaler's centre mapping): each source pixel's R, G and B summed into the box of
+  the pixel shown it falls in (one long word a box: X R << 12 + G, Y B), the boxes that go on into
+  the next MCU or row of MCUs carried, the rest sent as their means, rounded as the scaler does: the
+  same bytes as the DSP's R G B rows through the scaler (the tests compare them), with only the
+  pixels shown coming back. Boxes of more than 16 pixels, or tables over 4096 words, leave it to the
+  scaler. Making that oracle showed the R G B tables' red one below for many reds (×$7FFFFF,
+  rounded), taking one from green and blue; the tables are exact now. The first such JPEG checks it against
   libjpeg's own decode of a known picture; a DSP that gets it wrong, or stops answering, is left
   alone. Progressive, arithmetic-coded and CMYK JPEGs stay with libjpeg. Against Pillow: closer
   than libjpeg's fast transform for 4:4:4 and grey (its transform is exact), a little further for
@@ -876,13 +883,15 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   | at its size, 0.16 | 4.56 s | 1.40 s | 2.69 s | 0.73 s |
   | at its size, now | 4.64 s | 0.58 s | 2.72 s | 0.28 s |
   | shown at 192 x 128 (4/8, then the scaler), 0.16 | - | - | 1.71 s | 0.89 s |
-  | shown at 192 x 128, now | 3.07 s | 0.69 s | 1.65 s | 0.35 s |
+  | shown at 192 x 128, 0.17 | 3.07 s | 0.69 s | 1.65 s | 0.35 s |
+  | shown at 192 x 128, the DSP shrinking it | 3.07 s | 0.45 s | | |
+  | a 1024 x 683 photo shown at 600 x 400 (5/8, then shrunk) | 18.5 s | 2.0 s | | |
 
   Hatari runs a stock Falcon about 1.8 times as fast as Erez's (4.56 s against 8.49 s on the
   68030, 1.40 s against 2.57 s with the DSP), so his should take about 1.1 s for the photo with
   the DSP. What is left: the 68030 reading each pixel through the host port (a status read and
-  two byte reads a word), the DSP's transform, and, shown smaller, the scaler (the DSP could
-  average the pixels too). `PICDSP=0` (Settings > General) leaves it all to the 68030.
+  two byte reads a word) and the DSP's own work: the Huffman codes, the transform, and shrinking
+  (about 135 cycles a pixel shown and 95 a source pixel, in external memory). `PICDSP=0` (Settings > General) leaves it all to the 68030.
 - **PNG** is fresh (`common/src/png.c`, on the family's inflate: NetSurf uses libpng, a library
   too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
   PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is
