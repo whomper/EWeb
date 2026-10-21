@@ -6,7 +6,8 @@
 # decoders: TJpgDec (test_pic, the 68000 programs') and libjpeg-turbo
 # (test_pic_lj, -DPIC_LIBJPEG: EWeb's); make testdsp, EWeb's with the
 # transform and colours on the Falcon's DSP (dsp/jpeg.a56 on Hatari's core),
-# and the dither on it (dsp/dither.a56) against the 68030's
+# and the dither on it (dsp/dither.a56) against the 68030's; make pens,
+# aerapens (tools/pens) against the Atari's own code
 S      := ../../src
 T      := ../../third_party
 SRC    := test_pic.c $(S)/pic.c $(S)/png.c $(S)/jpegdc.c $(S)/inflate.c $(S)/util.c \
@@ -54,6 +55,10 @@ $(B)/test_pic_dsp: $(SRC_LJ) dsp_sim.c ../../dsp/jpeg_prog.h ../../dsp/dither_pr
 		$(B)/libjpeg.a $(B)/hatari.a
 $(B):
 	mkdir -p $@
+# aerapens (../../tools/pens), the Pi gateway's pens, against the Atari's
+# code under qemu-m68k: here, arm64 and armhf, every picture and screen
+pens:
+	python3 pens.py -q
 testdsp: $(B)/test_pic_dsp
 	python3 run.py $(B)/test_pic_dsp
 test: $(B)/test_pic $(B)/test_pic_lj
@@ -64,4 +69,4 @@ test68k: $(B)/test_pic $(B)/test_pic68k $(B)/test_pic_lj $(B)/test_pic_lj68k
 	python3 run.py --same $(B)/test_pic_lj "qemu-m68k -cpu m68030 $(B)/test_pic_lj68k"
 clean:
 	rm -rf $(B)
-.PHONY: test test68k testdsp clean
+.PHONY: test test68k testdsp pens clean

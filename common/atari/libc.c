@@ -908,12 +908,29 @@ long labs(long v) { return v < 0 ? -v : v; }
    list of thousands of contacts sorted again after every change (the
    shell sort it replaces went quadratic there). Pointers (the usual
    case) are swapped as longs */
+/* two elements swapped: by longs or shorts where both are on even
+   addresses and the size allows, else a byte at a time (ECal's reminder
+   index of 43 elements took 60 ms on an ST, byte by byte) */
 static void swap_el(char *x, char *y, size_t size)
 {
 	if (size == sizeof(long) && !(((unsigned long)x | (unsigned long)y) & 1)) {
 		long t = *(long *)x;
 		*(long *)x = *(long *)y;
 		*(long *)y = t;
+	} else if (!((size | (unsigned long)x | (unsigned long)y) & 1)) {
+		long *lx = (long *)x, *ly = (long *)y, t;
+		for (; size >= sizeof(long); size -= sizeof(long)) {
+			t = *lx;
+			*lx++ = *ly;
+			*ly++ = t;
+		}
+		for (x = (char *)lx, y = (char *)ly; size; size -= sizeof(short)) {
+			short u = *(short *)x;	/* the shorts left */
+			*(short *)x = *(short *)y;
+			*(short *)y = u;
+			x += sizeof(short);
+			y += sizeof(short);
+		}
 	} else {
 		while (size--) {
 			char t = *x;

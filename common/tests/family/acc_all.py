@@ -171,9 +171,10 @@ try:
     desk = shot("0-desktop")
     check(hatari.poll() is None and os.path.getsize(desk) > 0,
           "%s's window came" % prg if prg else "the desktop came")
-    if prg:
+    if prg and prg.upper() == "EMAIL":
         # a first start's welcome (EMail's "Let's set up your mail account")
-        # waits for OK, then the account dialog: Esc declines
+        # waits for OK, then the account dialog: Esc declines (only EMail's:
+        # in EFTP, Return opens the drive row A:, and TOS asks for a disk)
         xdo("key", "Return")
         time.sleep(3)
         xdo("key", "Escape")
