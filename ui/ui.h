@@ -25,7 +25,7 @@ typedef struct {
 	short snapshot;			/* SNAPSHOT=: pages through the Pi's browser (webgate's snapshots) */
 	char scripts[512];		/* SCRIPTS=: the sites whose scripts run, host names ("" none) */
 	short cache;			/* CACHE=: the disk cache's size, MB (0 none; -1: 8 with TT RAM, else 2) */
-	short picdsp;			/* PICDSP=: JPEGs' transform and colours on the DSP (EWEB.PRG) */
+	short picdsp;			/* PICDSP=: JPEGs and the dither on the DSP (EWEB.PRG) */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	64	/* the most CACHE= may ask for */

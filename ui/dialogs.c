@@ -283,7 +283,7 @@ static void part_general(short x, short y)
 	d_field(x + 12, ROW(6), s_cache, 2, '9');
 	d_text(x + 15, ROW(6), "MB  (0: none)");
 #ifndef EW_ST
-	d_tick(x, ROW(7), "JPEGs on the DSP (a Falcon's)", T_PICDSP);
+	d_tick(x, ROW(7), "Pictures on the DSP (a Falcon's)", T_PICDSP);
 #endif
 }
 

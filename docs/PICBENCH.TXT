@@ -3,11 +3,12 @@ PICBENCH.TTP - EWeb's picture timer
 
 What it does
 ------------
-PICBENCH decodes a JPEG as EWEB.PRG does (libjpeg-turbo) and times it on
-your Atari, twice: on the 68030 alone, and with the Falcon's DSP decoding
-it while the 68030 hands it the bytes and takes the pixels. So we can see
-how much the DSP gives on a real Falcon, against the emulator EWeb was
-measured on. It doesn't show the picture.
+PICBENCH decodes a JPEG as EWEB.PRG does (libjpeg-turbo) and dithers it
+to a screen's colours, and times both on your Atari, twice: on the 68030
+alone, and with the Falcon's DSP decoding and dithering while the 68030
+hands it the bytes and takes the pixels. So we can see how much the DSP
+gives on a real Falcon, against the emulator EWeb was measured on. It
+doesn't show the picture.
 
 What it needs
 -------------
@@ -20,22 +21,25 @@ How to use it
 1. Copy PICBENCH.TTP and PHOTO.JPG (a made-up landscape, 480 x 320, the
    size of a page's photo) to a folder on your hard disk.
 2. Double-click PICBENCH.TTP and press Return in the box that asks for
-   arguments: it times PHOTO.JPG at its size, and shown at 192 x 128.
-   Or type a JPEG of your own and the size to show it at, such as
+   arguments: it times PHOTO.JPG at its size dithered to 16 colours, and
+   shown at 192 x 128 dithered to 256. Or type a JPEG of your own, the
+   size to show it at and the colours to dither it to (2, 4, 16 or 256;
+   0 or none: not dithered), such as
      MYPIC.JPG 0 0        at its own size
-     MYPIC.JPG 320 200    shown at 320 x 200
+     MYPIC.JPG 320 200 16 shown at 320 x 200, dithered to 16 colours
 3. It writes what it finds on the screen and in PICBENCH.LOG next to it.
    Press a key at the end.
 
 What it prints
 --------------
   the DSP: checked
-  on the 68030: decode 4635 ms (480x320, JPEG, 8/8), dither 0 ms
-  with the DSP: decode 575 ms (480x320, JPEG, 8/8), dither 0 ms
+  its dither: checked
+  on the 68030: decode 4645 ms (480x320, JPEG, 8/8), dither 9600 ms
+  with the DSP: decode 585 ms (480x320, JPEG, 8/8), dither 1135 ms
 
-"checked" means the DSP decoded a small known picture as the 68030 does
-(EWeb checks it the same way the first time, and leaves a DSP that gets it
-wrong alone). "8/8" is the size libjpeg unpacks the picture at before the
+"checked" means the DSP decoded a small known picture as the 68030 does,
+and dithered one to the very same pens (EWeb checks it the same way the
+first time, and leaves a DSP that gets it wrong alone). "8/8" is the size libjpeg unpacks the picture at before the
 picture is made the size it is shown at. The figures above are Hatari's
 stock Falcon (16 MHz), which runs about 1.8 times as fast as a real one;
 send yours with PICBENCH.LOG.

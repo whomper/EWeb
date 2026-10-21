@@ -896,9 +896,32 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   too big for what it adds here): every colour type and depth, interlaced, `tRNS`; an 800 x 600
   PNG decoded at its size, 44 M instructions (8.5 s), shown at 604 x 453, 59 M. **GIF** is
   NetSurf's libnsgif, its first frame (a 48 x 48 GIF, 0.2 M).
-- **Dithering** costs 150 to 210 instructions a pixel (a 192 x 128 picture, 1 s; 16 and 256
-  colours alike, the nearest pens found among a few), the next thing to make quicker (the DSP, or
-  the 68030's own code); true colour has none. Black and white (two pens) has a loop of its own.
+- **Dithering** costs 150 to 210 instructions a pixel on the 68030 (a 192 x 128 picture, 1 s; 16
+  and 256 colours alike, the nearest pens found among a few); true colour has none. Black and white
+  (two pens) has a loop of its own, on the 68030.
+- **Dithering on the DSP (21 Oct 2026; the owner's rule: the DSP takes what it does faster):** for
+  3 pens or more (a Falcon's 4, 16 and 256 colours) `common/dsp/dither.a56` gives the very pens the
+  68030's dither gives, to the bit (`make testdsp` dithers every test picture both ways, 4, 16 and
+  256 colours, 432 times; the first picture checks it on a known one, some of it clear, and a DSP
+  that differs or stops answering is left alone). The colour each pixel wants is made in the
+  accumulator, as (c - 128) x 2^15 and the error's sixteenths below, so that its limiter clamps it to
+  -128..383 as the 68030 does; its pen comes from a near table (32 x 32 x 32 cells, three to a word,
+  each worked out the first time it is wanted by the 68030's own search, kept while the program and
+  the palette stay); the next row's errors are written over the row's own as each is done. The
+  68030 sends the palette's tables once, then each row's pixels as they are, and reads the row
+  before's pens back three to a word while the DSP dithers the next (its host receive interrupt
+  takes the row into a ring of two). Hatari 2.4.1 raises no receive interrupt for a word sent to a
+  DSP that had none waiting (its "direct transfer"; later Hatari does), so the program takes such a
+  word itself while it waits: on Hatari the rows don't overlap the dither, on a Falcon they do. The
+  DSP takes 174 cycles a pixel (5.4 us); `PICBENCH.TTP` on Hatari's stock Falcon:
+
+  | The photo dithered | 68030 | with the DSP |
+  |---|---|---|
+  | at its size (480 x 320), 16 colours | 9.6 s | 1.14 s |
+  | shown at 192 x 128, 256 colours | 1.74 s | 0.23 s |
+
+  Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
+  tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
   those. Not yet: CSS `background-image`, `srcset` and `<picture>`'s sources (the `<img>`'s own
   `src` is taken), SVG, animation. `<input type=image>` shows its picture (forms, below).

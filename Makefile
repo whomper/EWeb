@@ -465,7 +465,7 @@ build/tos/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/src/pic.h
+build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h common/src/pic.h
 build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) $(tos_JS) \
 		build/tos/gem/common/dspjpeg.o build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc

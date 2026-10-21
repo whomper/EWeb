@@ -90,7 +90,8 @@ shown small takes much less time and memory than at its own size. On a
 Falcon the DSP decodes a JPEG while the 68030 only hands it the bytes
 and takes the pixels (Settings > General). In 16
 or 256 colours and in monochrome they are dithered to the screen's own
-colours; in true colour they are as they are. An address of a picture
+colours (on a Falcon in 4, 16 and 256 colours by the DSP, eight times as
+quick); in true colour they are as they are. An address of a picture
 on its own (a `.jpg` link) shows the picture.
 
 On a slow line, View > Show pictures turns them off: pages then show
@@ -359,7 +360,7 @@ Options > Settings (^,) has two pages:
 
 - **General:** whether pages' pictures are shown, the size of pages
   (per cent), where words typed in the address go, and (on a Falcon)
-  whether the DSP helps with JPEGs. (Which sites' scripts run is
+  whether the DSP helps with pictures. (Which sites' scripts run is
   Options > Run this site's scripts.)
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
@@ -377,8 +378,9 @@ was, when you quit:
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
   Show pictures)
-- `PICDSP=` 1 to let a Falcon's DSP decode JPEGs (a photo eight times
-  as quick on a stock Falcon), 0 for the 68030 alone
+- `PICDSP=` 1 to let a Falcon's DSP decode JPEGs and dither pictures
+  to the screen's colours (each about eight times as quick on a stock
+  Falcon), 0 for the 68030 alone
 - `GATE=` the Pi gateway's address: without Falcon mode every page comes
   through the Pi, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)

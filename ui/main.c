@@ -467,7 +467,7 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.pictures);
 	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
 	snprintf(v, sizeof v, "%d", opt.picdsp);
-	put(&s, "PICDSP", v, "1 = the DSP does JPEGs' transform and colours while the 68030 unpacks them "
+	put(&s, "PICDSP", v, "1 = the DSP decodes JPEGs and dithers pictures while the 68030 hands it the bytes "
 	    "(a Falcon's EWEB.PRG), 0 = the 68030 does it all");
 	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without Falcon mode "
 	    "(aera-gateway install web on the Pi)");
@@ -956,9 +956,9 @@ static void gate_apply(void)
 		http_gateway[0] = 0;
 }
 
-/* JPEGs' transform and colours on a Falcon's DSP (common/atari/dspjpeg.c)
-   unless PICDSP=0; the 68030 does them if the DSP can't be had, or gets
-   pic.c's check wrong */
+/* JPEGs decoded and pictures dithered on a Falcon's DSP
+   (common/atari/dspjpeg.c) unless PICDSP=0; the 68030 does them if the DSP
+   can't be had, or gets pic.c's checks wrong */
 void pictures_dsp_init(void)
 {
 #ifndef EW_ST
