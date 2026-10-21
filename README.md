@@ -34,7 +34,7 @@ These files were the same code in ECal, EContact, EMail and EFTP when they moved
 | `atari/include/` | `ctype.h` `limits.h` `stdio.h` `string.h` `strings.h` | the parts of the freestanding C library headers every app shares |
 | `src/` | `bidi.c/.h`, `ctime.c/.h`, `futil.c`, `secret.c/.h` | Hebrew right-to-left layout; dates and times; safe file writes (`pf_save` writes `NAME.IN$` and renames it over `NAME.INF`; `tests/futil`); password encryption |
 | `ui/` | `dsp.c` | checks the DSP and turns Falcon mode on |
-| `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026, `jpeg.a56` since 20 Oct 2026 (below) |
+| `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026, `jpeg.a56` since 20 Oct 2026, `dither.a56` since 21 Oct 2026 (below) |
 | `tools/` | `elf2tos.py`, `mkroots.c`, `build-hcp.sh` | ELF to TOS program header; root certificates to `ROOTS.DAT`; `build-hcp.sh DIR` builds the `hcp` help compiler (th-otto/hypview at a fixed commit) for `make help` and the Release workflow |
 | `third_party/bearssl/` | BearSSL 0.6 | TLS for Falcon mode (MIT licence) |
 | `certs/` | `CACERT.PEM` | Mozilla's root certificates (MPL 2.0) |
@@ -346,7 +346,7 @@ Build: `-Icommon/third_party/nsgif/include`, and either `-Icommon/third_party/tj
 68000) or libjpeg-turbo's flags (its `AERA.md`) with `pic_lj8.c`. `atari/include/stdio.h` names
 `FILE` (no functions) for libjpeg's prototypes.
 
-### JPEGs on the DSP (20 Oct 2026, from EWeb)
+### JPEGs and the dither on the DSP (20 and 21 Oct 2026, from EWeb)
 
 With libjpeg-turbo (`-DPIC_LIBJPEG`) the Falcon's DSP56001 can decode a baseline JPEG: libjpeg reads
 its headers, `pic.c` sends the scan's bytes as the DSP asks for them (the 0 after each `$FF` taken
@@ -360,9 +360,16 @@ Falcon, 2.1 s and 1.1 s on a DFB1X; the stock Falcon is the one to make fast, as
 |---|---|
 | `dsp/jpeg.a56`, `dsp/jpeg_prog.h` | the Huffman codes (an 8-bit lookahead table for the code, and for AC coefficients a 9-bit one, made on the DSP, giving the run and value at once when the code and value fit, as libjpeg-turbo's fast path does; longer codes by maxcode), dequantising, the transform straight to n/8 of the size (each pixel the mean of the ones it covers, any n from 2 to 8; only the rows and columns a block uses; a block of its DC alone filled at once), the colours from Y Cb Cr with the chroma repeated over the luma it covers, each channel's bits from a table at Y + its term (libjpeg's way; the tables made on the DSP for 5-6-5 or R G B), the pixels sent by the host interrupt from one buffer while the next MCU goes into the other. A picture shown smaller it shrinks too (the scaler's centre mapping): each pixel's R, G and B as sums into the box of the pixel shown it falls in, the boxes going on into the next MCU or row of MCUs carried, the rest sent as their means, rounded as the scaler does; so only the pixels shown come back, the same as the scaler's. Two parts: the bootstrap loads the first 512 words, which load the rest into external memory (`mkh.py` writes both). `cd dsp && a56 jpeg.a56 && python3 mkh.py a56.out jpeg_prog.h dsp_jpeg_prog jpeg.a56` |
 | `src/pic.c/.h` | `pic_dsp` (a `PIC_DSP` port, NULL: the 68030 does it all): JPEGs of one scan, grey or Y Cb Cr with the chroma halved at most, 8-bit, Huffman-coded, shown at 2/8 or more go to the DSP; the rest (progressive, arithmetic, CMYK) stay with libjpeg. The first such JPEG checks the DSP on a known picture, against libjpeg's own decode; a DSP that gets it wrong or stops answering is left alone for the session. `pic_dsp_state()` says "DSP", "68030" or "-" (not tried yet) |
-| `atari/dspjpeg.c/.h` | the port: Dsp_Lock for the whole picture, the bootstrap, the host port (the scan's words in one `Supexec`, two bytes a word; each MCU's pixels in another, each word waited for; so the program's polls run in user mode); a picture that ended cleanly leaves the program at its commands, and the next asks it (PING) instead of loading it again |
+| `atari/dspjpeg.c/.h` | the port, for both programs (`begin(PIC_DSP_JPEG)` or `begin(PIC_DSP_DITHER)`): Dsp_Lock for the whole picture, the bootstrap, the host port (the scan's words in one `Supexec`, two bytes a word; each MCU's pixels in another, each word waited for; so the program's polls run in user mode); a picture that ended cleanly leaves the program at its commands, and the next for the same program asks it (PING: "JPG" or "DTH") instead of loading it again |
+
+| `dsp/dither.a56`, `dsp/dither_prog.h` | (21 Oct 2026) `pic_dither`'s Floyd-Steinberg for 3 pens or more, the very pens the 68030's `dither_many` gives: serpentine, each component wanted limited to -128..383 by the accumulator's limiter, its pen from a near table of 32 x 32 x 32 cells (three to a word, worked out the first time a cell is wanted by `nearest_far`'s own search, kept while the program and the palette stay), the next row's errors written over the row's own as each is done. The rows come in by the host's receive interrupt into a ring of two while the last is dithered (the wait takes a word itself as well: Hatari 2.4.1 raises no interrupt for a word sent while the DSP had none waiting), the pens go back three to a word from the transmit interrupt. `cd dsp && a56 dither.a56 && python3 mkh.py a56.out dither_prog.h dsp_dither_prog dither.a56` |
 
 It is opt-in: an app builds `dspjpeg.c` and sets `pic_dsp = &dspjpeg_port` when `dspjpeg_present()`.
+`pic_dither` then has the DSP dither pictures of 1024 pixels or more and up to 1280 wide to 3 pens
+or more (two keep their own dither on the 68030): the 68030 sends the palette's tables once, each
+row's pixels and reads the pens of the row before; the first time, a known picture (some of it
+clear) is dithered both ways and must give the same pens, or the 68030 dithers from then on
+(`pic_dither_state()`: "DSP", "68030" or "-"); `pic_dsp_dither` (1) 0 leaves it to the 68030.
 `pic_dsp_shrink` (1) has the DSP shrink a picture shown smaller when its boxes are 16 pixels or
 fewer and its tables fit (else the R G B rows come back for the scaler); the tests set it to 0 to
 compare the two, which give the same bytes.
@@ -372,7 +379,7 @@ and UBSan included. Against Pillow it is closer than libjpeg's fast transform fo
 (its transform is exact) and a little further for 4:2:0 (it repeats the chroma, as TJpgDec does,
 where libjpeg blends it). `PIC_DSP_CYCLES=1` prints the DSP's cycles, `PIC_DSP_PROFILE=FILE` writes
 them for each address (the first part and the rest), `PIC_DSP_TRACE=ADDR` (and `PIC_DSP_FOLLOW=N`) and
-`PIC_DSP_DUMP=[x]ADDR,N` (at the end) or `PIC_DSP_DUMPAT=PC,N,[x]ADDR,LEN` (the Nth time it is at PC) show its registers and memory; `PIC_DSP_SHRINK=0` leaves shrinking to the scaler. On Hatari's stock Falcon (16 MHz, its DSP;
+`PIC_DSP_DUMP=[x]ADDR,N` (at the end) or `PIC_DSP_DUMPAT=PC,N,[x]ADDR,LEN` (the Nth time it is at PC) show its registers and memory; `PIC_DSP_SHRINK=0` leaves shrinking to the scaler; `PIC_DSP_RELOAD=1` loads the program for every picture. `make testdsp` also dithers every picture both ways, to 4, 16 and 256 colours at its size and at 61 x 37 (`test_pic -X`): 432 dithers, the same pens to the bit. On Hatari's stock Falcon the 480 x 320 photo is dithered to 16 colours in 9.6 s on the 68030 and 1.14 s on the DSP; at 192 x 128 to 256 colours, 1.74 s and 0.23 s (the DSP takes 174 cycles a pixel). On Hatari's stock Falcon (16 MHz, its DSP;
 `PICBENCH.TTP` in EWeb, its `PHOTO.JPG`) a 480 x 320 photo takes 4.64 s on the 68030 and 0.58 s with
 the DSP (the first version: 1.40 s); shown at 192 x 128, 3.07 s and 0.45 s (0.69 s before the DSP
 shrank it); a 1024 x 683 photo shown at 600 x 400, 18.5 s and 2.0 s. Hatari runs a stock Falcon

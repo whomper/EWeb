@@ -11,13 +11,19 @@
 #include "people_ask.h"
 #include "people_file.h"
 
-#define PIECE	2048		/* read at a time for the names */
+#define PIECE	4096		/* read a step for the names: a step stays short
+				   on an ST (2.2), the file opened and closed in it */
 #define LINE	(PEOPLE_ADDR + PEOPLE_NAME + 4)
 
 static char path[160];
 static void (*on_message)(short *m);
 static unsigned long seen_date;	/* the file as last read whole */
 static long seen_size = -2;
+static unsigned long scan_date;	/* a reading in steps: the file's date, size */
+static long scan_size, pos = -1;	/* where the next step reads; -1 none */
+static char carry[LINE + 1];	/* a line cut by the last step */
+static long have;
+static int skip;
 
 static int file_dialog(const char *partial, void (*picked)(const PERSON *list, int n));
 
@@ -48,50 +54,73 @@ static void no_cr(char *s)
 		s[l - 1] = 0;
 }
 
+/* EContact writes the file anew and renames it into place: for a moment
+   there is none. Once read, a missing file counts as unchanged. */
+static int gone(void)
+{
+	pos = -1;
+	return seen_size >= 0 ? 0 : -1;
+}
+
+/* a step of reading the names: PIECE bytes, the file opened and closed;
+   2 more to come, 1 read whole, 0 unchanged since, -1 no file */
 static int scan(void (*line)(const char *addr, const char *name, void *ud), void *ud, int force)
 {
-	char buf[PIECE + LINE + 1], *name, *email;
-	long size, got, have = 0;
-	unsigned long date = pf_info(path, &size);
-	int h, skip = 0;
-	if (!date && size < 0)
-		return -1;
-	if (!force && date == seen_date && size == seen_size)
+	char buf[PIECE + LINE + 1], *name, *email, *p, *end;
+	long got;
+	int h;
+	if (force < 0) {		/* every name asked for has come: stop */
+		pos = -1;
 		return 0;
-	if ((h = pf_open(path, PF_READ)) < 0)
-		return -1;
-	for (;;) {
-		char *p = buf, *end;
-		got = pf_read(h, buf + have, PIECE);
-		if (got < 0)
-			got = 0;
-		have += got;
-		buf[have] = 0;
-		/* whole lines; the last one, cut, waits for the next piece */
-		while ((end = strchr(p, '\n')) != 0 || (got == 0 && *p)) {
-			if (end)
-				*end = 0;
-			no_cr(p);
-			if (!skip && p_line(p, &name, &email))
-				line(email, name, ud);
-			skip = 0;
-			if (!end)
-				break;
-			p = end + 1;
-		}
-		if (got == 0)
-			break;
-		have = (long)strlen(p);
-		if (have > LINE) {	/* a long line (a group's): passed over */
-			skip = 1;
-			have = 0;
-		}
-		memmove(buf, p, (size_t)have);
 	}
+	if (pos < 0) {
+		scan_date = pf_info(path, &scan_size);
+		if (!scan_date && scan_size < 0)
+			return gone();
+		if (!force && scan_date == seen_date && scan_size == seen_size)
+			return 0;
+		pos = have = 0;
+		skip = 0;
+	}
+	if ((h = pf_open(path, PF_READ)) < 0)
+		return gone();
+	got = pf_seek(h, pos) == pos ? pf_read(h, buf + have, PIECE) : -1;
 	pf_close(h);
-	seen_date = date;
-	seen_size = size;
-	return 1;
+	if (got < 0)
+		return gone();
+	memcpy(buf, carry, (size_t)have);
+	have += got;
+	pos += got;
+	buf[have] = 0;
+	/* whole lines; the last one, cut, waits for the next step */
+	for (p = buf; (end = strchr(p, '\n')) != 0 || (got == 0 && *p); p = end + 1) {
+		if (end)
+			*end = 0;
+		no_cr(p);
+		if (!skip && p_line(p, &name, &email))
+			line(email, name, ud);
+		skip = 0;
+		if (!end)
+			break;
+	}
+	if (got == 0) {			/* the end */
+		pos = -1;
+		seen_date = scan_date;
+		seen_size = scan_size;
+		return 1;
+	}
+	have = (long)strlen(p);
+	if (have > LINE) {		/* a long line (a group's): passed over */
+		skip = 1;
+		have = 0;
+	}
+	memcpy(carry, p, (size_t)have);
+	return 2;
+}
+
+int people_file_busy(void)
+{
+	return pos >= 0;
 }
 
 int people_file_scan(void (*line)(const char *addr, const char *name, void *ud), void *ud, int force)
@@ -104,8 +133,10 @@ void people_file(const char *folder, void (*message)(short *m))
 	long l;
 	path[0] = 0;
 	seen_size = -2;
+	pos = -1;
 	people_scan_hook = 0;
 	people_pick_hook = 0;
+	people_busy_hook = 0;
 	if (!folder || !*folder || (l = (long)strlen(folder)) > (long)sizeof(path) - 14)
 		return;
 	strcpy(path, folder);
@@ -115,6 +146,7 @@ void people_file(const char *folder, void (*message)(short *m))
 	on_message = message;
 	people_scan_hook = scan;
 	people_pick_hook = file_dialog;
+	people_busy_hook = people_file_busy;
 }
 
 #ifdef PEOPLE_FILE_HOST
@@ -479,15 +511,16 @@ static short members(const char *s, PERSON *out)
 	return n;
 }
 
-/* the file, its P and G lines cut in place; 0 when there is none */
+/* the file, its P and G lines cut in place; 0 when there is none, -1
+   when it is there and doesn't fit in memory */
 static int load(void)
 {
-	long len;
+	long len, size;
 	char *p, *name, *email;
 	short n = 0, i = 0;
 	text = pf_load(path, &len);
 	if (!text)
-		return 0;
+		return pf_info(path, &size) || size >= 0 ? -1 : 0;
 	for (p = text; *p; p++)
 		if (*p == '\n')
 			n++;
@@ -550,7 +583,8 @@ static int file_dialog(const char *partial, void (*picked)(const PERSON *list, i
 	graf_mouse(ARROW, 0);
 	if (r <= 0) {
 		unload();
-		return 0;		/* no file: as if EContact weren't there */
+		return r;		/* 0 no file: as if EContact weren't there;
+					   -1 no memory for it */
 	}
 	font_sys_push();
 	find[0] = 0;

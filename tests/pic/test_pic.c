@@ -11,6 +11,10 @@
  *                             of the Falcon's standard palette: OUT gets
  *                             each pixel's pen colour (-D: to 256, a 6x6x6
  *                             cube, greys and the 16)
+ *   test_pic -X FILE...       (test_pic_dsp) each picture dithered on the
+ *                             DSP and on the 68030, to 4, 16 and 256
+ *                             colours, at its size and at 61 x 37: the
+ *                             same pens to the bit; prints how many
  *   test_pic -r FILE...       robustness: each file cut short at many
  *                             lengths and with bytes changed, decoded at
  *                             three sizes (AddressSanitizer and UBSan
@@ -62,6 +66,19 @@ static const unsigned char bw[2][3] = { { 255, 255, 255 }, { 0, 0, 0 } };
 /* -D's 256 colours */
 static unsigned char pal256[256][3];
 
+static void make256(void)
+{
+	int k;
+	memcpy(pal256, vga16, sizeof vga16);
+	for (k = 0; k < 216; k++) {
+		pal256[16 + k][0] = (unsigned char) (k / 36 * 51);
+		pal256[16 + k][1] = (unsigned char) (k / 6 % 6 * 51);
+		pal256[16 + k][2] = (unsigned char) (k % 6 * 51);
+	}
+	for (k = 232; k < 256; k++)
+		pal256[k][0] = pal256[k][1] = pal256[k][2] = (unsigned char) ((k - 232) * 11);
+}
+
 static int one(const char *file, int w, int h, const char *out, int dither)
 {
 	long n, i;
@@ -81,18 +98,10 @@ static int one(const char *file, int w, int h, const char *out, int dither)
 	}
 	if (dither) {
 		static PIC_PAL pal;
-		int k;
 		if (dither == 3) {
 			pic_pal_init(&pal, 2, bw);
 		} else if (dither == 2) {
-			memcpy(pal256, vga16, sizeof vga16);
-			for (k = 0; k < 216; k++) {
-				pal256[16 + k][0] = (unsigned char) (k / 36 * 51);
-				pal256[16 + k][1] = (unsigned char) (k / 6 % 6 * 51);
-				pal256[16 + k][2] = (unsigned char) (k % 6 * 51);
-			}
-			for (k = 232; k < 256; k++)
-				pal256[k][0] = pal256[k][1] = pal256[k][2] = (unsigned char) ((k - 232) * 11);
+			make256();
 			pic_pal_init(&pal, 256, (const unsigned char (*)[3]) pal256);
 		} else {
 			pic_pal_init(&pal, 16, vga16);
@@ -168,10 +177,65 @@ static int robust(int argc, char **argv)
 	return 0;
 }
 
+#ifdef WITH_DSP_SIM
+static int dsame(int argc, char **argv)
+{
+	static const unsigned char four[4][3] = { { 255, 255, 255 }, { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 0 } };
+	static const int sizes[2][2] = { { 0, 0 }, { 61, 37 } };
+	static PIC_PAL pals[3];
+	long tried = 0, differ = 0;
+	int a, s, k;
+	make256();
+	pic_pal_init(&pals[0], 4, four);
+	pic_pal_init(&pals[1], 16, vga16);
+	pic_pal_init(&pals[2], 256, (const unsigned char (*)[3]) pal256);
+	for (a = 0; a < argc; a++) {
+		long n;
+		unsigned char *d = load(argv[a], &n);
+		if (d == NULL)
+			continue;
+		for (s = 0; s < 2; s++) {
+			int why;
+			PIC *p = pic_decode(d, n, sizes[s][0], sizes[s][1], 4L << 20, &why);
+			if (p == NULL)
+				continue;
+			for (k = 0; k < 3; k++) {
+				size_t np = (size_t) p->w * p->h;
+				unsigned char *x = malloc(np), *y = malloc(np);
+				pic_dsp_dither = 1;
+				pic_dither(p, &pals[k], x);
+				pic_dsp_dither = 0;
+				pic_dither(p, &pals[k], y);
+				pic_dsp_dither = 1;
+				tried++;
+				if (memcmp(x, y, np) != 0) {
+					size_t i;
+					for (i = 0; i < np && x[i] == y[i]; i++)
+						;
+					differ++;
+					printf("FAIL %s %dx%d %d colours: pixel %ld,%ld: %d, the 68030's %d\n", argv[a], p->w,
+					       p->h, pals[k].n, (long) (i % p->w), (long) (i / p->w), x[i], y[i]);
+				}
+				free(x);
+				free(y);
+			}
+			pic_free(p);
+		}
+		free(d);
+	}
+	printf("dithered on the DSP: %ld, %ld differ (%s)\n", tried, differ, pic_dsp_state());
+	return differ != 0;
+}
+#endif
+
 static int run(int argc, char **argv)
 {
 	if (argc >= 2 && strcmp(argv[1], "-r") == 0)
 		return robust(argc - 2, argv + 2);
+#ifdef WITH_DSP_SIM
+	if (argc >= 2 && strcmp(argv[1], "-X") == 0)
+		return dsame(argc - 2, argv + 2);
+#endif
 	if (argc == 6 && (strcmp(argv[1], "-d") == 0 || strcmp(argv[1], "-D") == 0 || strcmp(argv[1], "-m") == 0))
 		return one(argv[2], atoi(argv[3]), atoi(argv[4]), argv[5], argv[1][1] == 'D' ? 2 : argv[1][1] == 'm' ? 3 : 1);
 	if (argc == 5)

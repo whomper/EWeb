@@ -43,6 +43,21 @@ long pf_read(int h, void *buf, long n)
 {
 	return (long)fread(buf, 1, (size_t)n, files[h]);
 }
+long pf_seek(int h, long off)
+{
+	return fseek(files[h], off, SEEK_SET) ? -1 : off;
+}
+
+/* rounds of questions until the file is read to its end */
+static int polls(void)
+{
+	int n = 0;
+	do {
+		people_poll();
+		n++;
+	} while (people_file_busy() && n < 100);
+	return n;
+}
 void pf_close(int h) { if (files[h]) fclose(files[h]); files[h] = 0; }
 unsigned long pf_info(const char *path, long *size)
 {
@@ -86,6 +101,7 @@ int main(void)
 {
 	char dir[] = "/tmp/peoplefileXXXXXX", path[128];
 	const char *s;
+	int n, o;
 	if (!mkdtemp(dir))
 		return 1;
 	snprintf(path, sizeof(path), "%s/CONTACTS.TXT", dir);
@@ -98,46 +114,59 @@ int main(void)
 	CHECK(people_name("grace@x.org") && !*people_name("grace@x.org"), "off: no EContact, no name");
 	CHECK(opens == 0, "off: the file isn't read");
 
-	/* on: the names come from the file */
+	/* on: the names come from the file, a step at a time */
 	people_file(dir, 0);
 	now += 31000;			/* the absent one is asked again */
 	people_name("grace@x.org");
 	people_poll();
+	CHECK(opens == 1 && people_file_busy(), "on: the first step, one open, more to come");
+	n = polls();
 	s = people_name("grace@x.org");
 	CHECK(s && !strcmp(s, "Grace Baker"), "on: Grace's name from the file");
-	CHECK(opens == 1, "on: one open");
+	CHECK(opens > 3 && opens == n + 1 && !people_file_busy(), "on: read in steps, an open each, stopped once found");
 	CHECK(people_name("GRACE@X.ORG") && !strcmp(people_name("GRACE@X.ORG"), "Grace Baker"), "any case");
 	people_name("person0@example.org");
 	people_name("person299@example.org");
 	people_name("last@x.org");
 	people_name("nobody@x.org");
-	people_poll();
+	o = opens;
+	polls();
 	CHECK(!strcmp(people_name("person0@example.org"), "Person 0"), "the line after a long group line");
 	CHECK(!strcmp(people_name("person299@example.org"), "Person 299"), "a line past the first piece");
 	CHECK(!strcmp(people_name("last@x.org"), "The Last"), "the last line, without its end");
 	CHECK(people_name("nobody@x.org") && !*people_name("nobody@x.org"), "not in the file: no name");
-	CHECK(opens == 2, "a new address: the file read again (2 opens)");
+	CHECK(opens > o, "a new address: the file read again");
 	CHECK(names_calls >= 2, "names_came told");
 
 	/* unchanged: the one not there isn't looked for again */
 	now += 31000;
 	people_name("nobody@x.org");
-	people_poll();
-	CHECK(opens == 2, "unchanged file: not read again for the one not there");
+	o = opens;
+	polls();
+	CHECK(opens == o, "unchanged file: not read again for the one not there");
+
+	/* for a moment there is none (EContact renaming it into place) */
+	rename(path, "/tmp/people_aside.txt");
+	now += 31000;
+	people_name("nobody@x.org");
+	polls();
+	CHECK(people_name("grace@x.org") && !strcmp(people_name("grace@x.org"), "Grace Baker"), "missing for a moment: names kept");
+	rename("/tmp/people_aside.txt", path);
 
 	/* EContact wrote it again: read again */
 	sleep(1);
 	write_file(path, 1);
 	now += 31000;
 	people_name("new@x.org");
-	people_poll();
+	polls();
 	CHECK(!strcmp(people_name("new@x.org"), "New One"), "a new line after EContact wrote the file");
 
 	/* no file: as without the option */
 	remove(path);
+	people_file(dir, 0);		/* never read: a missing file is no file */
 	now += 31000;
 	people_name("other@x.org");
-	people_poll();
+	polls();
 	CHECK(people_name("other@x.org") && !*people_name("other@x.org"), "no file: no name, no error");
 	people_file(0, 0);
 	rmdir(dir);
