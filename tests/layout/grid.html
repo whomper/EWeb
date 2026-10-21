@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html>
+<head>
+<title>Grid</title>
+<style>
+body { font-size: 13px; margin: 8px; }
+.g { display: grid; background: #ddd; margin: 6px 0; gap: 4px; }
+.g > * { background: #8cf; border: 1px solid #036; }
+.g > :nth-child(2n) { background: #fc8; }
+.g > :nth-child(3n) { background: #8f8; }
+h2 { font-size: 14px; margin: 10px 0 2px; }
+.page { grid-template-columns: 120px 1fr; grid-template-areas: "head head" "nav main" "foot foot"; }
+.page header { grid-area: head; }
+.page nav { grid-area: nav; }
+.page main { grid-area: main; }
+.page footer { grid-area: foot; }
+.cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+</style>
+</head>
+<body>
+<h2>Fixed, fr and auto columns</h2>
+<div class="g" style="grid-template-columns: 100px 1fr 2fr"><div>100px</div><div>1fr</div><div>2fr</div><div>next row</div><div>b</div><div>c</div></div>
+<div class="g" style="grid-template-columns: auto auto 1fr"><div>auto</div><div>a longer auto</div><div>the rest, 1fr</div></div>
+<div class="g" style="grid-template-columns: repeat(3, 1fr); row-gap: 10px"><div>one</div><div>two</div><div>three</div><div>four</div><div>five</div></div>
+<div class="g" style="grid-template-columns: minmax(100px, 200px) 1fr fit-content(80px)"><div>minmax 100..200</div><div>1fr</div><div>fit-content(80px) with more words</div></div>
+
+<h2>Placing by lines and spans</h2>
+<div class="g" style="grid-template-columns: repeat(4, 1fr)">
+<div style="grid-column: 1 / 3">columns 1 to 3</div><div style="grid-column: span 2">span 2</div>
+<div style="grid-column: 2 / -1; grid-row: 2">2 to the end, row 2</div><div style="grid-row: 2 / 4; grid-column: 1">rows 2 to 4</div>
+<div>auto</div><div>auto</div><div>auto</div>
+</div>
+
+<h2>Areas</h2>
+<div class="g page">
+<header>Header</header><nav>Navigation<br>links</nav><main>The main part, as wide as the rest of the grid, its text going on to show how the column grows.</main><footer>Footer</footer>
+</div>
+
+<h2>Cards: repeat(auto-fill, minmax(140px, 1fr))</h2>
+<div class="g cards"><div>card 1</div><div>card 2</div><div>card 3</div><div>card 4</div><div>card 5</div></div>
+
+<h2>Alignment</h2>
+<div class="g" style="grid-template-columns: 1fr 1fr 1fr; grid-auto-rows: 50px; justify-items: center">
+<div>centred</div><div style="justify-self: start; align-self: end">start, end</div><div style="justify-self: stretch; align-self: center">stretch, centre</div>
+</div>
+<div class="g" style="grid-template-columns: 80px 80px; justify-content: center"><div>a</div><div>b</div></div>
+
+<h2>Rows and columns by flow</h2>
+<div class="g" style="grid-template-rows: 30px auto 30px; grid-template-columns: 1fr"><div>30px</div><div>auto, its text</div><div>30px</div></div>
+<div class="g" style="grid-auto-flow: column; grid-template-rows: auto auto"><div>1</div><div>2</div><div>3</div><div>4</div><div>5</div></div>
+<div class="g" style="grid-template-columns: 1fr 1fr; height: 120px; grid-template-rows: 1fr 2fr"><div>1fr row</div><div>b</div><div>2fr row</div><div>d</div></div>
+</body>
+</html>

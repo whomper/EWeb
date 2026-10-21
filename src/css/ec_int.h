@@ -302,7 +302,8 @@ int ec_prop_lookup(const char *s, size_t len);	/* EP_*, EC_SH_BASE + ES_*, or -1
 
 enum {
 	VP_KW, VP_LEN, VP_COLOR, VP_FAMILY, VP_FSIZE, VP_WEIGHT, VP_LHEIGHT, VP_LISTTYPE,
-	VP_IMAGE, VP_BWIDTH, VP_BGPOS, VP_INT, VP_NUM, VP_ALPHA, VP_VALIGN, VP_DECO, VP_CONTENT
+	VP_IMAGE, VP_BWIDTH, VP_BGPOS, VP_INT, VP_NUM, VP_ALPHA, VP_VALIGN, VP_DECO, VP_CONTENT,
+	VP_TRACKS, VP_AREAS, VP_AUTOFLOW, VP_GRIDLINE
 };
 
 /* Parses a property's (or shorthand's) value from its tokens (no

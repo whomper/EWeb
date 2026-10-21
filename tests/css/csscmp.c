@@ -672,6 +672,8 @@ static void compare(const node *n, const css_computed_style *ls, const ec_style 
 		nv a, b;
 		if (p == EP_OVERFLOW_WRAP || p == EP_ROW_GAP)
 			continue;		/* LibCSS has neither */
+		if (p >= EP_GRID_TEMPLATE_COLUMNS && p <= EP_JUSTIFY_SELF)
+			continue;		/* nor grid's */
 		lc_get(p, ls, root, &a);
 		ec_get(p, es, &b);
 

@@ -84,6 +84,37 @@ typedef struct ec_content {
 	struct { uint16_t type, kw; const ec_str *s; } item[];
 } ec_content;
 
+/* a grid's track sizes (CSS Grid 7.2): grid-template-columns and -rows,
+ * grid-auto-columns and -rows. A size is a length (EC_TR_LEN: px once
+ * computed; until then rel is the unit, EK_EM...), a percentage, fr, auto,
+ * min-content or max-content; a track is minmax(mn, mx) (a plain size: the
+ * same twice; fit-content(L): EC_TR_FIT with L in both). An auto repeat
+ * (repeat(auto-fill or auto-fit, ...)) is the tracks from rep_at, rep_n
+ * of them, rep its keyword */
+enum { EC_TR_LEN, EC_TR_PCT, EC_TR_FR, EC_TR_AUTO, EC_TR_MIN, EC_TR_MAX, EC_TR_FIT };
+typedef struct ec_tsize {
+	uint8_t k, rel;
+	ec_fx v;
+} ec_tsize;
+typedef struct ec_tracks {
+	uint16_t n, rep_at, rep_n;
+	uint8_t rep, rel;		/* rel: some length not yet in px */
+	struct { ec_tsize mn, mx; } t[];
+} ec_tracks;
+
+/* grid-template-areas: rows x cols names (NULL for a cell of "."), by rows */
+typedef struct ec_areas {
+	uint16_t rows, cols;
+	const ec_str *name[];
+} ec_areas;
+
+/* grid-row-start and the like: auto (EK_KW); EK_INT a line (negative:
+   from the end), or EC_GRID_SPAN + n a span of n; EK_PTR an area's name
+   (ec_str). grid-auto-flow: EK_INT, these bits */
+#define EC_GRID_SPAN	0x10000
+#define EC_FLOW_COLUMN	1
+#define EC_FLOW_DENSE	2
+
 typedef struct ec_style {
 	ec_v v[EC_NPROP];
 	uint8_t k[EC_NPROP];

@@ -71,11 +71,17 @@ Falcons, and a divide that costs 40 to 80 cycles.
   logic), `@supports` (declarations, `not`, `and`, `or`, `selector()`),
   `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
   `@container` are skipped.
-- **Properties:** the 83 EWeb draws: box model, positioning, floats,
+- **Properties:** the 96 EWeb draws: box model, positioning, floats,
   borders, backgrounds (first layer), fonts, text (including `direction`,
   `unicode-bidi`, `text-align: start | end`), lists, tables, flexbox,
-  `gap`, `overflow`, `opacity`, `content`, and their shorthands. Unknown
-  properties are skipped. Not yet: grid's own properties, logical
+  grid (since 21 Oct 2026: `grid-template-columns` and `-rows` as track
+  lists with `fr`, `minmax()`, `fit-content()` and `repeat()`, `auto-fill`
+  and `auto-fit` too; `grid-template-areas`; `grid-auto-columns`, `-rows`
+  and `-flow`; the line longhands with numbers, `span` and areas' names;
+  `justify-items` and `justify-self`; the shorthands `grid-row`,
+  `grid-column`, `grid-area` and `grid-template` (rows / columns); line
+  names are read past), `gap`, `overflow`, `opacity`, `content`, and their
+  shorthands. Unknown properties are skipped. Not yet: logical
   properties (`margin-inline-start` and so on, which matter for Hebrew),
   transforms, animations, `border-radius`, shadows.
 - **Computed values** as CSS defines them: relative lengths become px

@@ -284,8 +284,8 @@ choose all of it.
 EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
-text, positioned boxes, tables with cells over several rows, forms,
-Hebrew right to left. It doesn't yet
+text, positioned boxes, tables with cells over several rows, flexible
+boxes and grids (CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
 show:
 
 - file fields (EWeb can't send files yet)

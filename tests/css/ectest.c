@@ -46,6 +46,23 @@ static void fx_str(char *buf, size_t cap, ec_fx v, const char *unit)
 	strncat(buf, unit, cap - strlen(buf) - 1);
 }
 
+/* a grid track's size as CSS writes it */
+static void tsize_str(char *buf, size_t cap, const ec_tsize *z)
+{
+	char v[64];
+	switch (z->k) {
+	case EC_TR_LEN: fx_str(buf, cap, z->v, "px"); return;
+	case EC_TR_PCT: fx_str(buf, cap, z->v, "%"); return;
+	case EC_TR_FR: fx_str(buf, cap, z->v, "fr"); return;
+	case EC_TR_AUTO: snprintf(buf, cap, "auto"); return;
+	case EC_TR_MIN: snprintf(buf, cap, "min-content"); return;
+	case EC_TR_MAX: snprintf(buf, cap, "max-content"); return;
+	default:
+		fx_str(v, sizeof v, z->v, "px");
+		snprintf(buf, cap, "fit-content(%s)", v);
+	}
+}
+
 static void value(const ec_style *s, int p, char *buf, size_t cap)
 {
 	ec_v v = s->v[p];
@@ -57,7 +74,12 @@ static void value(const ec_style *s, int p, char *buf, size_t cap)
 	case EK_PX: fx_str(buf, cap, v.i, "px"); return;
 	case EK_PCT: fx_str(buf, cap, v.i, "%"); return;
 	case EK_NUM: fx_str(buf, cap, v.i, ""); return;
-	case EK_INT: snprintf(buf, cap, "%ld", (long) v.i); return;
+	case EK_INT:
+		if (p >= EP_GRID_ROW_START && p <= EP_GRID_COLUMN_END && v.i >= EC_GRID_SPAN)
+			snprintf(buf, cap, "span %ld", (long) (v.i - EC_GRID_SPAN));
+		else
+			snprintf(buf, cap, "%ld", (long) v.i);
+		return;
 	case EK_CURCOLOR: snprintf(buf, cap, "currentcolor"); return;
 	case EK_IMAGE: snprintf(buf, cap, "gradient"); return;
 	case EK_COLOR: {
@@ -93,6 +115,31 @@ static void value(const ec_style *s, int p, char *buf, size_t cap)
 				snprintf(buf + n, cap - n, "|%s", f->generic ? ec_kw_name(f->generic) : "");
 		} else if (p == EP_CONTENT) {
 			snprintf(buf, cap, "set");
+		} else if (p == EP_GRID_TEMPLATE_COLUMNS || p == EP_GRID_TEMPLATE_ROWS ||
+			   p == EP_GRID_AUTO_COLUMNS || p == EP_GRID_AUTO_ROWS) {
+			const ec_tracks *t = v.p;
+			size_t n = 0;
+			buf[0] = 0;
+			for (i = 0; i < t->n && n < cap; i++) {
+				if (t->rep && i == t->rep_at)
+					n += snprintf(buf + n, cap - n, "%s[%s:", i ? " " : "", t->rep == 1 ? "auto-fill" : "auto-fit");
+				tsize_str(a, sizeof a, &t->t[i].mn);
+				tsize_str(b, sizeof b, &t->t[i].mx);
+				if (strcmp(a, b))
+					n += snprintf(buf + n, cap - n, "%sminmax(%s,%s)", i && !(t->rep && i == t->rep_at) ? " " : "", a, b);
+				else
+					n += snprintf(buf + n, cap - n, "%s%s", i && !(t->rep && i == t->rep_at) ? " " : "", a);
+				if (t->rep && i == t->rep_at + t->rep_n - 1 && n < cap)
+					n += snprintf(buf + n, cap - n, "]");
+			}
+		} else if (p == EP_GRID_TEMPLATE_AREAS) {
+			const ec_areas *ar = v.p;
+			size_t n = snprintf(buf, cap, "%dx%d", ar->rows, ar->cols);
+			for (i = 0; i < ar->rows * ar->cols && n < cap; i++)
+				n += snprintf(buf + n, cap - n, "%s%s", i % ar->cols ? " " : "/",
+					      ar->name[i] ? ar->name[i]->s : ".");
+		} else if (p >= EP_GRID_ROW_START && p <= EP_GRID_COLUMN_END) {
+			snprintf(buf, cap, "name(%s)", ((const ec_str *) v.p)->s);
 		} else {
 			snprintf(buf, cap, "url(%s)", ((const ec_str *) v.p)->s);
 		}

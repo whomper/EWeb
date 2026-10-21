@@ -669,7 +669,7 @@ releases.
   spaces (a word too long for its line is split), `text-align` (justify too), `line-height`,
   `white-space`, `text-transform`, `text-decoration`, sub and superscripts; lists with every common
   marker and `start`, `reversed` and `value`; `::before` and `::after` text; tables with shared column
-  widths, `colspan`, `border-spacing`, shrinking to fit, and flex rows side by side; Hebrew words
+  widths, `colspan`, `border-spacing`, and shrinking to fit (flex rows, side by side, until flexbox had its own, below); Hebrew words
   reordered right to left within each line (a word-level form of the bidirectional algorithm), with
   right-to-left paragraphs aligned right. Pictures and forms (below, 19 Oct 2026). Since 19 Oct 2026 (your order: after pictures, the layout's gaps):
   - **floats**, left and right, in each block formatting context (the page, a cell, a float, a box
@@ -688,9 +688,31 @@ releases.
   - **tables**: `rowspan` (a cell takes its columns in the rows below; the last of them grows to
     it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
     default, top, bottom) in cells, and columns too wide for the room keep their longest word,
-    sharing what is left by how much more each would take.
-  Not yet: `background-image`, grid. `tests/layout/floats.html` keeps them all; the page set
-  laid out with AddressSanitizer and UBSan, no fault.
+    sharing what is left by how much more each would take;
+  - **flexbox** (21 Oct 2026, its own algorithm now, CSS Flexbox 1's 9.2 to 9.9; it had shared table
+    rows' code): each item's base size (`flex-basis`, its width, else its widest), shared out by
+    `flex-grow` or taken back by `flex-shrink` (weighted by the base), each within its `min-` and
+    `max-width` (an automatic minimum is its longest word), frozen and shared again as the
+    specification does; `flex-wrap` (and `wrap-reverse`) into lines, `justify-content` (start, end,
+    centre, the three spaces) and auto margins along a line, `align-items` and `align-self`
+    (stretch, start, end, centre, baseline) across, `align-content` across the lines of a container
+    of a set height, `row-gap` and `column-gap`, `order`, `row-reverse`; `flex-direction: column` (and
+    `column-reverse`) lays its items down, `flex-grow` sharing a set height's room. An element in a
+    flex container is an item of its own; its text goes in an anonymous one;
+  - **grid** (21 Oct 2026, a first form of CSS Grid 1): `grid-template-columns` and `-rows` (lengths,
+    percentages, `fr`, `auto`, `min-content`, `max-content`, `minmax()`, `fit-content()`, `repeat()`
+    with a count, `auto-fill` and `auto-fit`), `grid-template-areas` and `grid-area`, `grid-row`,
+    `grid-column` and their longhands (numbers, negative ones from the end, `span`), auto-placement
+    row by row or column by column (`grid-auto-flow`, sparse), `grid-auto-rows` and `-columns`,
+    gaps, `justify-items`, `justify-self`, `align-items`, `align-self` and `justify-content`.
+    Columns are sized from the width: lengths first, content sizes from the items of one column (an
+    item over several makes room for its longest word), then each grown to its limit, `fr` sharing
+    what is left, else the `auto` columns; rows are as tall as their items need, and `fr` rows share
+    a set height's room. Not taken: named lines (other than areas'), `dense`, `subgrid`, `masonry`,
+    `grid` and `grid-template`'s areas form. The CSS engine's 13 new properties cost 0.2 to 0.6% more
+    68030 instructions on the page set's sheets.
+  Not yet: `background-image`. `tests/layout/floats.html`, `flex.html` and `grid.html` keep them
+  all; the page set laid out with AddressSanitizer and UBSan, no fault.
 - **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
   byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the

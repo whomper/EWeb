@@ -1481,6 +1481,375 @@ static int text_decoration(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	return 1;
 }
 
+/* ------------------------------------------------------------ grid (CSS Grid 1) */
+
+/* a track size at t[*i]: a length, a percentage, fr, auto, min-content
+   or max-content (calc() is not taken) */
+static int tsize(ec_ctx *c, const ec_tok *t, int n, int *i, ec_tsize *z)
+{
+	const ec_tok *k;
+	ec_decl d;
+
+	if (*i >= n)
+		return 0;
+	k = &t[*i];
+	z->rel = 0;
+	z->v = 0;
+	if (k->type == T_DIM && k->ulen == 2 && (k->u[0] | 32) == 'f' && (k->u[1] | 32) == 'r') {
+		if (k->num < 0)
+			return 0;
+		z->k = EC_TR_FR;
+		z->v = k->num;
+		(*i)++;
+		return 1;
+	}
+	if (k->type == T_IDENT) {
+		int kw = ec_kw(k);
+		if (kw == KW_AUTO)
+			z->k = EC_TR_AUTO;
+		else if (kw == KW_MIN_CONTENT)
+			z->k = EC_TR_MIN;
+		else if (kw == KW_MAX_CONTENT)
+			z->k = EC_TR_MAX;
+		else
+			return 0;
+		(*i)++;
+		return 1;
+	}
+	if (!length(c, t, n, i, LF_NN, &d))
+		return 0;
+	if (d.kind == EK_PCT || d.kind == EK_PX)
+		z->k = d.kind == EK_PCT ? EC_TR_PCT : EC_TR_LEN;
+	else if (d.kind >= EK_EM && d.kind <= EK_VMAX)
+		z->k = EC_TR_LEN, z->rel = d.kind;
+	else
+		return 0;
+	z->v = d.v.i;
+	return 1;
+}
+
+/* a track: a size, minmax(min, max) or fit-content(length) */
+static int track(ec_ctx *c, const ec_tok *t, int n, int *i, ec_tsize *mn, ec_tsize *mx)
+{
+	if (*i < n && t[*i].type == T_FUNC) {
+		int end = block_end(t, n, *i), j = *i + 1;
+		if (end < 0)
+			return 0;
+		if (ec_tok_is(&t[*i], "minmax")) {
+			if (!tsize(c, t, end - 1, &j, mn) || mn->k == EC_TR_FR || j >= end - 1 || t[j].type != T_COMMA)
+				return 0;
+			j++;
+			if (!tsize(c, t, end - 1, &j, mx) || j != end - 1)
+				return 0;
+		} else if (ec_tok_is(&t[*i], "fit-content")) {
+			if (!tsize(c, t, end - 1, &j, mn) || j != end - 1 || mn->k != EC_TR_LEN)
+				return 0;
+			mn->k = EC_TR_FIT;
+			*mx = *mn;
+		} else {
+			return 0;
+		}
+		*i = end;
+		return 1;
+	}
+	if (!tsize(c, t, n, i, mn))
+		return 0;
+	*mx = *mn;
+	return 1;
+}
+
+/* line names ([a b]) are read past: EWeb places by numbers and areas */
+static int line_names(const ec_tok *t, int n, int i)
+{
+	while (i < n && t[i].type != T_RBRACK)
+		i++;
+	return i < n ? i + 1 : -1;
+}
+
+#define EC_MAXTRACKS 256
+
+/* grid-template-columns and -rows (none, or a track list with repeat()),
+   grid-auto-columns and -rows (sizes only: the flag) */
+static int tracks(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *d)
+{
+	struct { ec_tsize mn, mx; } tmp[EC_MAXTRACKS];
+	int i = 0, nt = 0, rep = 0, rep_at = 0, rep_n = 0, sizes_only = ptab[prop].flags, k;
+	ec_tracks *r;
+
+	d->prop = prop;
+	if (!sizes_only && n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_NONE) {
+		d->kind = EK_KW;
+		d->v.i = KW_NONE;
+		return 1;
+	}
+	while (i < n) {
+		if (t[i].type == T_LBRACK && !sizes_only) {
+			if ((i = line_names(t, n, i)) < 0)
+				return -1;
+			continue;
+		}
+		if (t[i].type == T_FUNC && ec_tok_is(&t[i], "repeat") && !sizes_only) {
+			int end = block_end(t, n, i), j = i + 1, count = 1, k0 = nt, m, q;
+			if (end < 0 || j >= end - 1)
+				return -1;
+			if (t[j].type == T_IDENT && (ec_kw(&t[j]) == KW_AUTO_FILL || ec_kw(&t[j]) == KW_AUTO_FIT)) {
+				if (rep)
+					return -1;
+				rep = ec_kw(&t[j]);
+			} else if (t[j].type == T_NUM && (t[j].flags & TF_INT) && t[j].num >= 1024) {
+				count = t[j].num >> 10;
+			} else {
+				return -1;
+			}
+			if (++j >= end - 1 || t[j].type != T_COMMA)
+				return -1;
+			j++;
+			while (j < end - 1) {
+				if (t[j].type == T_LBRACK) {
+					if ((j = line_names(t, end - 1, j)) < 0)
+						return -1;
+					continue;
+				}
+				if (nt >= EC_MAXTRACKS || !track(c, t, end - 1, &j, &tmp[nt].mn, &tmp[nt].mx))
+					return -1;
+				nt++;
+			}
+			if (nt == k0)
+				return -1;
+			m = nt - k0;
+			if (rep && t[i + 1].type == T_IDENT) {
+				rep_at = k0;
+				rep_n = m;
+			} else {
+				for (k = 1; k < count && nt + m <= EC_MAXTRACKS; k++)
+					for (q = 0; q < m; q++)
+						tmp[nt++] = tmp[k0 + q];
+			}
+			i = end;
+			continue;
+		}
+		if (nt >= EC_MAXTRACKS || !track(c, t, n, &i, &tmp[nt].mn, &tmp[nt].mx))
+			return -1;
+		nt++;
+	}
+	if (nt == 0)
+		return -1;
+	r = ec_alloc(&c->mem, sizeof *r + (size_t) nt * sizeof r->t[0]);
+	if (r == NULL)
+		return -1;
+	r->n = (uint16_t) nt;
+	r->rep = (uint8_t) (rep ? rep - KW_AUTO_FILL + 1 : 0);
+	r->rep_at = (uint16_t) rep_at;
+	r->rep_n = (uint16_t) rep_n;
+	r->rel = 0;
+	for (k = 0; k < nt; k++) {
+		r->t[k].mn = tmp[k].mn;
+		r->t[k].mx = tmp[k].mx;
+		r->rel |= tmp[k].mn.rel | tmp[k].mx.rel;
+	}
+	d->kind = EK_PTR;
+	d->v.p = r;
+	return 1;
+}
+
+/* grid-template-areas: none, or a string a row, each cell a name or "."
+   (one or more), every row as many */
+static int areas(ec_ctx *c, const ec_tok *t, int n, ec_decl *d)
+{
+	char buf[1024];
+	const ec_str *name[1024];
+	int k, cols = 0, nn = 0;
+	ec_areas *a;
+
+	d->prop = EP_GRID_TEMPLATE_AREAS;
+	if (n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_NONE) {
+		d->kind = EK_KW;
+		d->v.i = KW_NONE;
+		return 1;
+	}
+	for (k = 0; k < n; k++) {
+		size_t len, p = 0;
+		const char *s;
+		int row = 0;
+		if (t[k].type != T_STR)
+			return -1;
+		s = ec_tok_text(&t[k], buf, sizeof buf, &len);
+		while (p < len) {
+			size_t q;
+			if (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r' || s[p] == '\f') {
+				p++;
+				continue;
+			}
+			q = p;
+			if (s[p] == '.') {
+				while (q < len && s[q] == '.')
+					q++;
+			} else {
+				while (q < len && s[q] != ' ' && s[q] != '\t' && s[q] != '\n' && s[q] != '\r' &&
+				       s[q] != '\f' && s[q] != '.')
+					q++;
+			}
+			if (nn >= 1024)
+				return -1;
+			name[nn] = s[p] == '.' ? NULL : ec_str_new(&c->mem, s + p, q - p);
+			if (s[p] != '.' && name[nn] == NULL)
+				return -1;
+			nn++;
+			row++;
+			p = q;
+		}
+		if (row == 0 || (k > 0 && row != cols))
+			return -1;
+		cols = row;
+	}
+	if (n == 0 || n > 1000)
+		return -1;
+	a = ec_alloc(&c->mem, sizeof *a + (size_t) nn * sizeof a->name[0]);
+	if (a == NULL)
+		return -1;
+	a->rows = (uint16_t) n;
+	a->cols = (uint16_t) cols;
+	memcpy(a->name, name, (size_t) nn * sizeof a->name[0]);
+	d->kind = EK_PTR;
+	d->v.p = a;
+	return 1;
+}
+
+/* grid-auto-flow: row or column, and dense */
+static int autoflow(const ec_tok *t, int n, ec_decl *d)
+{
+	int k, bits = 0, dir = 0, dense = 0;
+
+	for (k = 0; k < n; k++) {
+		int kw = t[k].type == T_IDENT ? ec_kw(&t[k]) : 0;
+		if ((kw == KW_ROW || kw == KW_COLUMN) && !dir) {
+			dir = 1;
+			if (kw == KW_COLUMN)
+				bits |= EC_FLOW_COLUMN;
+		} else if (kw == KW_DENSE && !dense) {
+			dense = 1;
+			bits |= EC_FLOW_DENSE;
+		} else {
+			return -1;
+		}
+	}
+	if (n == 0)
+		return -1;
+	put(d, EP_GRID_AUTO_FLOW, EK_INT, bits);
+	return 1;
+}
+
+/* a grid line, t[0..n): auto, an integer, span and an integer, or a name */
+static int gridline(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *d)
+{
+	const ec_tok *name = NULL;
+	int k, span = 0, num = 0;
+
+	d->prop = prop;
+	if (n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_AUTO) {
+		d->kind = EK_KW;
+		d->v.i = KW_AUTO;
+		return 1;
+	}
+	for (k = 0; k < n; k++) {
+		int kw = t[k].type == T_IDENT ? ec_kw(&t[k]) : -1;
+		if (kw == KW_SPAN && !span)
+			span = 1;
+		else if (t[k].type == T_NUM && (t[k].flags & TF_INT) && t[k].num != 0 && !num)
+			num = t[k].num / 1024;
+		else if (t[k].type == T_IDENT && kw != KW_AUTO && kw != KW_SPAN && kw != KW_INHERIT &&
+			 kw != KW_INITIAL && kw != KW_UNSET && !name)
+			name = &t[k];
+		else
+			return 0;
+	}
+	if (span) {
+		/* span and a name: not taken (EWeb doesn't name lines) */
+		if (num <= 0 || name)
+			return 0;
+		d->kind = EK_INT;
+		d->v.i = EC_GRID_SPAN + (num > 1000 ? 1000 : num);
+		return 1;
+	}
+	if (name) {
+		if (num)
+			return 0;
+		d->kind = EK_PTR;
+		d->v.p = tok_str(c, name);
+		return d->v.p != NULL;
+	}
+	if (num == 0)
+		return 0;
+	d->kind = EK_INT;
+	d->v.i = num > 1000 ? 1000 : num < -1000 ? -1000 : num;
+	return 1;
+}
+
+/* the parts of a value between /s: their starts in at[], n of them */
+static int slashes(const ec_tok *t, int n, int *at, int max)
+{
+	int k, np = 1;
+
+	at[0] = 0;
+	for (k = 0; k < n; k++)
+		if (is_delim(&t[k], '/')) {
+			if (np == max)
+				return -1;
+			at[np++] = k + 1;
+		}
+	at[np] = n + 1;
+	return np;
+}
+
+/* grid-row, grid-column: start [/ end]; grid-area: row-start [/
+   column-start [/ row-end [/ column-end]]], a missing one the name
+   before it (when it is one) or auto */
+static int grid_lines(ec_ctx *c, const uint8_t *p, int max, const ec_tok *t, int n, ec_decl *out)
+{
+	int at[5], np = slashes(t, n, at, max), k;
+
+	if (np < 0)
+		return -1;
+	for (k = 0; k < np; k++)
+		if (at[k + 1] - 1 - at[k] < 1 ||
+		    gridline(c, p[k], t + at[k], at[k + 1] - 1 - at[k], &out[k]) != 1)
+			return -1;
+	for (; k < max; k++) {
+		/* the start's name for the end; for grid-area's second its first's */
+		int from = max == 4 ? (k == 1 ? 0 : k - 2) : 0;
+		if (out[from].kind == EK_PTR)
+			out[k] = out[from];
+		else
+			put(&out[k], p[k], EK_KW, KW_AUTO);
+		out[k].prop = p[k];
+	}
+	return max;
+}
+
+/* grid-template: none, or rows / columns */
+static int grid_template(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
+{
+	int at[3], np;
+
+	if (n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_NONE) {
+		put(&out[0], EP_GRID_TEMPLATE_ROWS, EK_KW, KW_NONE);
+		put(&out[1], EP_GRID_TEMPLATE_COLUMNS, EK_KW, KW_NONE);
+		put(&out[2], EP_GRID_TEMPLATE_AREAS, EK_KW, KW_NONE);
+		return 3;
+	}
+	np = slashes(t, n, at, 2);
+	if (np != 2 || tracks(c, EP_GRID_TEMPLATE_ROWS, t, at[1] - 1, &out[0]) != 1 ||
+	    tracks(c, EP_GRID_TEMPLATE_COLUMNS, t + at[1], n - at[1], &out[1]) != 1)
+		return -1;
+	put(&out[2], EP_GRID_TEMPLATE_AREAS, EK_KW, KW_NONE);
+	return 3;
+}
+
+static const uint8_t sh_grid_row[2] = { EP_GRID_ROW_START, EP_GRID_ROW_END };
+static const uint8_t sh_grid_col[2] = { EP_GRID_COLUMN_START, EP_GRID_COLUMN_END };
+static const uint8_t sh_grid_area[4] = { EP_GRID_ROW_START, EP_GRID_COLUMN_START, EP_GRID_ROW_END,
+					 EP_GRID_COLUMN_END };
+
 int ec_shorthand_props(int sh, uint8_t *p)
 {
 	int k;
@@ -1540,6 +1909,12 @@ int ec_shorthand_props(int sh, uint8_t *p)
 	case ES_WORD_WRAP:
 		p[0] = EP_OVERFLOW_WRAP;
 		return 1;
+	case ES_GRID_ROW: memcpy(p, sh_grid_row, 2); return 2;
+	case ES_GRID_COLUMN: memcpy(p, sh_grid_col, 2); return 2;
+	case ES_GRID_AREA: memcpy(p, sh_grid_area, 4); return 4;
+	case ES_GRID_TEMPLATE:
+		p[0] = EP_GRID_TEMPLATE_ROWS; p[1] = EP_GRID_TEMPLATE_COLUMNS; p[2] = EP_GRID_TEMPLATE_AREAS;
+		return 3;
 	}
 	return 0;
 }
@@ -1577,6 +1952,10 @@ static int shorthand(ec_ctx *c, int sh, const ec_tok *t, int n, ec_decl *out)
 	case ES_TEXT_DECORATION: return text_decoration(c, t, n, out);
 	case ES_BORDER_SPACING:
 		return pair(c, EP_BORDER_SPACING_H, EP_BORDER_SPACING_V, 0, t, n, out);
+	case ES_GRID_ROW: return grid_lines(c, sh_grid_row, 2, t, n, out);
+	case ES_GRID_COLUMN: return grid_lines(c, sh_grid_col, 2, t, n, out);
+	case ES_GRID_AREA: return grid_lines(c, sh_grid_area, 4, t, n, out);
+	case ES_GRID_TEMPLATE: return grid_template(c, t, n, out);
 	case ES_WORD_WRAP: {
 		int i = 0;
 		if (!one(c, EP_OVERFLOW_WRAP, t, n, &i, &out[0]) || i != n)
@@ -1631,6 +2010,14 @@ int ec_parse_value(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *out, in
 		return family(c, t, n, out);
 	case VP_CONTENT:
 		return content(c, t, n, out);
+	case VP_TRACKS:
+		return tracks(c, prop, t, n, out);
+	case VP_AREAS:
+		return areas(c, t, n, out);
+	case VP_AUTOFLOW:
+		return autoflow(t, n, out);
+	case VP_GRIDLINE:
+		return gridline(c, prop, t, n, out) == 1 ? 1 : -1;
 	case VP_DECO: {
 		int bits = 0;
 		if (n == 1 && ec_kw(&t[0]) == KW_NONE) {

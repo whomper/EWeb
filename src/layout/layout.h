@@ -4,9 +4,9 @@
  * layout.h - EWeb's layout (fresh code, Erez's decision of 18 Oct 2026):
  * a styled document (src/doc) becomes boxes, lines and a display list of
  * fills, text runs and pictures in device pixels, ready to draw
- * (src/gfx). Block and inline layout, line breaking with EWeb's fonts, lists, rows (table
- * rows and flex rows, cells side by side), margins, padding, borders,
- * backgrounds, links, and Hebrew words reordered right to left.
+ * (src/gfx). Block and inline layout, line breaking with EWeb's fonts, lists, floats,
+ * tables, flexbox, grid, margins, padding, borders, backgrounds, links, and
+ * Hebrew words reordered right to left.
  */
 #ifndef EW_LAYOUT_H
 #define EW_LAYOUT_H

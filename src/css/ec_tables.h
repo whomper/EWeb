@@ -96,6 +96,18 @@
 	P(ALIGN_CONTENT,       "align-content",       VP_KW,     KL_ALIGN_CONTENT,    EK_KW,    KW_NORMAL) \
 	P(ROW_GAP,             "row-gap",             VP_LEN,    LF_NORMAL | LF_NN,   EK_KW,    KW_NORMAL) \
 	P(COLUMN_GAP,          "column-gap",          VP_LEN,    LF_NORMAL | LF_NN,   EK_KW,    KW_NORMAL) \
+	P(GRID_TEMPLATE_COLUMNS, "grid-template-columns", VP_TRACKS, 0,               EK_KW,    KW_NONE) \
+	P(GRID_TEMPLATE_ROWS,  "grid-template-rows",  VP_TRACKS, 0,                   EK_KW,    KW_NONE) \
+	P(GRID_TEMPLATE_AREAS, "grid-template-areas", VP_AREAS,  0,                   EK_KW,    KW_NONE) \
+	P(GRID_AUTO_COLUMNS,   "grid-auto-columns",   VP_TRACKS, 1,                   EK_KW,    KW_AUTO) \
+	P(GRID_AUTO_ROWS,      "grid-auto-rows",      VP_TRACKS, 1,                   EK_KW,    KW_AUTO) \
+	P(GRID_AUTO_FLOW,      "grid-auto-flow",      VP_AUTOFLOW, 0,                 EK_INT,   0) \
+	P(GRID_ROW_START,      "grid-row-start",      VP_GRIDLINE, 0,                 EK_KW,    KW_AUTO) \
+	P(GRID_ROW_END,        "grid-row-end",        VP_GRIDLINE, 0,                 EK_KW,    KW_AUTO) \
+	P(GRID_COLUMN_START,   "grid-column-start",   VP_GRIDLINE, 0,                 EK_KW,    KW_AUTO) \
+	P(GRID_COLUMN_END,     "grid-column-end",     VP_GRIDLINE, 0,                 EK_KW,    KW_AUTO) \
+	P(JUSTIFY_ITEMS,       "justify-items",       VP_KW,     KL_JUSTIFY_ITEMS,    EK_KW,    KW_NORMAL) \
+	P(JUSTIFY_SELF,        "justify-self",        VP_KW,     KL_JUSTIFY_SELF,     EK_KW,    KW_AUTO) \
 	P(TABLE_LAYOUT,        "table-layout",        VP_KW,     KL_TABLE_LAYOUT,     EK_KW,    KW_AUTO)
 
 /* The shorthands: S(id, name). Each expands into longhands when parsed. */
@@ -109,7 +121,9 @@
 	S(LIST_STYLE, "list-style") S(FLEX, "flex") S(FLEX_FLOW, "flex-flow") \
 	S(GAP, "gap") S(GRID_GAP, "grid-gap") S(OVERFLOW, "overflow") \
 	S(TEXT_DECORATION, "text-decoration") S(INSET, "inset") \
-	S(BORDER_SPACING, "border-spacing") S(WORD_WRAP, "word-wrap")
+	S(BORDER_SPACING, "border-spacing") S(WORD_WRAP, "word-wrap") \
+	S(GRID_ROW, "grid-row") S(GRID_COLUMN, "grid-column") S(GRID_AREA, "grid-area") \
+	S(GRID_TEMPLATE, "grid-template")
 
 /* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". */
 #define EC_KEYWORDS(K) \
@@ -179,7 +193,8 @@
 	K(EXTRA_CONDENSED, "extra-condensed") K(EXTRA_EXPANDED, "extra-expanded") \
 	K(ULTRA_EXPANDED, "ultra-expanded") K(WAVY, "wavy") K(FROM_FONT, "from-font") \
 	K(SAFE, "safe") K(UNSAFE, "unsafe") K(FIRST, "first") K(LAST, "last") \
-	K(MIN_CONTENT, "min-content") K(MAX_CONTENT, "max-content") K(FIT_CONTENT, "fit-content")
+	K(MIN_CONTENT, "min-content") K(MAX_CONTENT, "max-content") K(FIT_CONTENT, "fit-content") \
+	K(AUTO_FILL, "auto-fill") K(AUTO_FIT, "auto-fit") K(SPAN, "span") K(DENSE, "dense")
 
 /* The keyword lists of VP_KW properties: L(id, keywords...) */
 #define EC_KWLISTS(L) \
@@ -219,6 +234,10 @@
 	L(ALIGN_CONTENT, KW_NORMAL, KW_STRETCH, KW_FLEX_START, KW_FLEX_END, KW_CENTER, \
 		KW_SPACE_BETWEEN, KW_SPACE_AROUND, KW_SPACE_EVENLY, KW_START, KW_END, KW_BASELINE) \
 	L(TABLE_LAYOUT, KW_AUTO, KW_FIXED) \
+	L(JUSTIFY_ITEMS, KW_NORMAL, KW_STRETCH, KW_START, KW_END, KW_CENTER, KW_FLEX_START, \
+		KW_FLEX_END, KW_SELF_START, KW_SELF_END, KW_LEFT, KW_RIGHT, KW_BASELINE) \
+	L(JUSTIFY_SELF, KW_AUTO, KW_NORMAL, KW_STRETCH, KW_START, KW_END, KW_CENTER, KW_FLEX_START, \
+		KW_FLEX_END, KW_SELF_START, KW_SELF_END, KW_LEFT, KW_RIGHT, KW_BASELINE) \
 	L(LIST_TYPE, KW_DISC, KW_CIRCLE, KW_SQUARE, KW_DECIMAL, KW_DECIMAL_LEADING_ZERO, \
 		KW_LOWER_ROMAN, KW_UPPER_ROMAN, KW_LOWER_GREEK, KW_LOWER_LATIN, KW_UPPER_LATIN, \
 		KW_LOWER_ALPHA, KW_UPPER_ALPHA, KW_ARMENIAN, KW_GEORGIAN, KW_HEBREW, KW_NONE)

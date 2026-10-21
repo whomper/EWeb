@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html>
+<head>
+<title>Flexbox</title>
+<style>
+body { font-size: 13px; margin: 8px; }
+.f { display: flex; background: #ddd; margin: 6px 0; }
+.f > * { background: #8cf; border: 1px solid #036; }
+.f > :nth-child(2) { background: #fc8; }
+.f > :nth-child(3) { background: #8f8; }
+h2 { font-size: 14px; margin: 10px 0 2px; }
+</style>
+</head>
+<body>
+<h2>Grow, shrink, basis</h2>
+<div class="f"><div style="flex: 1">one</div><div style="flex: 2">two</div><div style="flex: 1">three</div></div>
+<div class="f"><div style="flex: 0 0 100px">100px</div><div style="flex: 1">the rest</div><div style="width: 60px">60px</div></div>
+<div class="f" style="width: 300px"><div style="flex: 0 1 200px">shrinks a</div><div style="flex: 0 2 200px">shrinks twice b</div></div>
+<div class="f"><div style="flex-grow: 1; max-width: 120px">grow, max 120px</div><div style="flex-grow: 1">grow</div></div>
+
+<h2>justify-content</h2>
+<div class="f" style="justify-content: flex-end"><span>end</span><span>end</span></div>
+<div class="f" style="justify-content: center"><span>centre</span><span>centre</span></div>
+<div class="f" style="justify-content: space-between"><span>a</span><span>b</span><span>c</span></div>
+<div class="f" style="justify-content: space-around"><span>a</span><span>b</span><span>c</span></div>
+<div class="f" style="justify-content: space-evenly"><span>a</span><span>b</span><span>c</span></div>
+<div class="f"><span>left</span><span style="margin-left: auto">pushed right by margin-left: auto</span></div>
+
+<h2>align-items and align-self</h2>
+<div class="f" style="height: 50px"><div>stretch</div><div style="align-self: flex-start">start</div><div style="align-self: center">centre</div><div style="align-self: flex-end">end</div></div>
+<div class="f" style="align-items: baseline"><div style="font-size: 24px">Big</div><div>small</div><div style="padding-top: 10px">padded</div></div>
+
+<h2>Direction, gap, order, wrap</h2>
+<div class="f" style="flex-direction: row-reverse; gap: 10px"><div>1</div><div>2</div><div>3</div></div>
+<div class="f" style="column-gap: 20px"><div style="order: 2">order 2</div><div style="order: 1">order 1</div><div>order 0</div></div>
+<div class="f" style="flex-wrap: wrap; width: 260px; gap: 4px 8px"><div style="width: 100px">a 100</div><div style="width: 100px">b 100</div><div style="width: 100px">c 100</div><div style="width: 100px">d 100</div><div style="width: 100px">e 100</div></div>
+<div class="f" style="flex-wrap: wrap-reverse; width: 220px"><div style="width: 100px">1</div><div style="width: 100px">2</div><div style="width: 100px">3</div></div>
+<div class="f" style="flex-wrap: wrap; width: 220px; height: 90px; align-content: space-between"><div style="width: 100px">1</div><div style="width: 100px">2</div><div style="width: 100px">3</div></div>
+
+<h2>Columns</h2>
+<div class="f" style="flex-direction: column"><div>stretched</div><div style="align-self: center">centred</div><div style="align-self: flex-end">at the end</div></div>
+<div class="f" style="flex-direction: column; height: 120px"><div>top</div><div style="flex-grow: 1">grows to fill</div><div>bottom</div></div>
+<div class="f" style="flex-direction: column; height: 80px; justify-content: center"><div>centred</div><div>down the column</div></div>
+<div class="f" style="flex-direction: column-reverse; row-gap: 4px"><div>first</div><div>second</div></div>
+
+<h2>Text and pictures as items</h2>
+<div class="f" style="align-items: center">Some text <b>bold item</b> <a href="#x">a link</a> more text</div>
+<nav class="f" style="justify-content: space-between; background: #335; color: white"><a href="#a" style="color: white">Home</a><a href="#b" style="color: white">News</a><a href="#c" style="color: white">About</a></nav>
+</body>
+</html>

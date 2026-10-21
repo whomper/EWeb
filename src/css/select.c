@@ -717,7 +717,9 @@ static void apply(cascade *k, const ec_decl *d)
 	if ((d->kind >= EK_EM && d->kind <= EK_CALCX) || p == EP_FONT_SIZE ||
 			(d->kind == EK_KW && (p == EP_FONT_WEIGHT || p == EP_TEXT_ALIGN)) ||
 			(p == EP_LINE_HEIGHT && d->kind == EK_PCT) ||
-			(p == EP_COLOR && d->kind == EK_CURCOLOR))
+			(p == EP_COLOR && d->kind == EK_CURCOLOR) ||
+			(d->kind == EK_PTR && (p == EP_GRID_TEMPLATE_COLUMNS || p == EP_GRID_TEMPLATE_ROWS ||
+			 p == EP_GRID_AUTO_COLUMNS || p == EP_GRID_AUTO_ROWS) && ((const ec_tracks *) d->v.p)->rel))
 		k->todo[k->ntodo++] = p;
 }
 
@@ -825,6 +827,39 @@ static void compute_length(cascade *k, int p, ec_fx fs)
 	st->v[p].i = v;
 }
 
+/* a track list's lengths in em, rem, vw... made px: a copy, for this style */
+static void compute_tracks(cascade *k, int p, ec_fx fs)
+{
+	ec_ctx *c = k->c;
+	const ec_tracks *t = k->st->v[p].p;
+	ec_tracks *r = ec_alloc(&c->smem, sizeof *r + t->n * sizeof r->t[0]);
+	ec_fx rfs = root_font(c);
+	int32_t w = c->media.width, h = c->media.height;
+	int i, j;
+
+	if (r == NULL)
+		return;
+	memcpy(r, t, sizeof *r + t->n * sizeof r->t[0]);
+	for (i = 0; i < r->n; i++)
+		for (j = 0; j < 2; j++) {
+			ec_tsize *z = j ? &r->t[i].mx : &r->t[i].mn;
+			switch (z->rel) {
+			case EK_EM: z->v = fx_mul(z->v, fs); break;
+			case EK_EX: z->v = fx_mul(fx_mul(z->v, fs), 614); break;
+			case EK_CH: z->v = fx_mul(fx_mul(z->v, fs), 410); break;
+			case EK_REM: z->v = fx_mul(z->v, rfs); break;
+			case EK_VW: z->v = z->v * w / 100; break;
+			case EK_VH: z->v = z->v * h / 100; break;
+			case EK_VMIN: z->v = z->v * (w < h ? w : h) / 100; break;
+			case EK_VMAX: z->v = z->v * (w > h ? w : h) / 100; break;
+			default: break;
+			}
+			z->rel = 0;
+		}
+	r->rel = 0;
+	k->st->v[p].p = r;
+}
+
 static int bolder(int w)
 {
 	return w < 350 ? 400 : w < 550 ? 700 : 900;
@@ -917,6 +952,11 @@ static void compute(cascade *k)
 		case EP_COLOR:
 			if (st->k[p] == EK_CURCOLOR)
 				parent_value(k, p);
+			continue;
+		case EP_GRID_TEMPLATE_COLUMNS: case EP_GRID_TEMPLATE_ROWS:
+		case EP_GRID_AUTO_COLUMNS: case EP_GRID_AUTO_ROWS:
+			if (st->k[p] == EK_PTR)
+				compute_tracks(k, p, fs);
 			continue;
 		case EP_LINE_HEIGHT:
 			if (st->k[p] == EK_PCT) {

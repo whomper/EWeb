@@ -93,7 +93,9 @@ struct box {
 	uint8_t kind;
 	uint8_t inl;			/* a block whose children are inline: lines */
 	uint8_t row;			/* a block whose children go side by side */
-	uint8_t wrap;			/* a row that wraps (flex-wrap) */
+	uint8_t wrap;			/* a flex row that wraps (flex-wrap) */
+	uint8_t flex;			/* a flex container: its children are flex items */
+	uint8_t grid;			/* a grid container: its children are grid items */
 	uint8_t list;			/* a list item */
 	uint8_t anon;			/* an anonymous block: no box of its own */
 	uint8_t atom;			/* AT_* */
@@ -727,9 +729,11 @@ static void build_element(L *l, box *parent, dnode *c)
 	b->table = d == KW_TABLE || d == KW_INLINE_TABLE;
 	if (d == KW_TABLE_ROW)
 		b->row = 1;
-	else if ((d == KW_FLEX || d == KW_INLINE_FLEX) &&
-		 (kw(st, EP_FLEX_DIRECTION) == KW_ROW || kw(st, EP_FLEX_DIRECTION) == KW_ROW_REVERSE)) {
-		b->row = 1;
+	b->grid = d == KW_GRID || d == KW_INLINE_GRID;
+	if (d == KW_FLEX || d == KW_INLINE_FLEX) {
+		b->flex = 1;
+		/* a row's items measure side by side */
+		b->row = kw(st, EP_FLEX_DIRECTION) == KW_ROW || kw(st, EP_FLEX_DIRECTION) == KW_ROW_REVERSE;
 		b->wrap = kw(st, EP_FLEX_WRAP) == KW_WRAP || kw(st, EP_FLEX_WRAP) == KW_WRAP_REVERSE;
 	}
 	pseudo(l, b, c, st->before);
@@ -785,13 +789,22 @@ static void fixup(L *l, box *b)
 	}
 	if (b->kind != BX_BLOCK)
 		return;
+	if (b->flex || b->grid) {
+		/* a flex or grid container's element children are its items, blocks
+		   (its text and pictures go in anonymous items) */
+		for (c = b->first; c != NULL; c = c->next)
+			if (c->kind == BX_INLINE && c->n != NULL) {
+				c->kind = BX_BLOCK;
+				fixup(l, c);
+			}
+	}
 	for (c = b->first; c != NULL; c = c->next) {
 		if (c->kind == BX_BLOCK)
 			has_block = 1;
 		else if (c->kind != BX_TEXT || !blank(c->text, c->len) || keeps_space(c->st))
 			has_inline = 1;
 	}
-	if (!has_block && !b->row) {
+	if (!has_block && !b->row && !b->flex && !b->grid) {
 		b->inl = 1;
 		return;
 	}
@@ -1335,7 +1348,7 @@ static int own_context(const box *b)
 	int d;
 	if (b->parent == NULL || b->anon)
 		return b->parent == NULL;
-	if (b->parent->row || b->table || kw(b->st, EP_FLOAT) != KW_NONE || kw(b->st, EP_POSITION) == KW_ABSOLUTE ||
+	if (b->parent->row || b->parent->flex || b->parent->grid || b->table || kw(b->st, EP_FLOAT) != KW_NONE || kw(b->st, EP_POSITION) == KW_ABSOLUTE ||
 	    kw(b->st, EP_POSITION) == KW_FIXED)
 		return 1;
 	d = kw(b->st, EP_DISPLAY);
@@ -1742,6 +1755,7 @@ static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
 /* ---------------------------------------------------------------- measuring */
 
 static int32_t measure(L *l, box *b);
+static int32_t gap(L *l, const ec_style *s, int p, int32_t base);
 static int columns(L *l, box *t, int32_t w, int32_t *cols);
 
 /* the widest line of a block of text, unbroken */
@@ -1805,6 +1819,19 @@ static int32_t measure(L *l, box *b)
 			inner = inline_measure(l, b);
 	} else if (b->inl) {
 		inner = inline_measure(l, b);
+	} else if (b->grid && b->st->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR) {
+		/* its columns' lengths, the others as wide as its widest item */
+		const ec_tracks *t = b->st->v[EP_GRID_TEMPLATE_COLUMNS].p;
+		int32_t widest = 0, g = gap(l, b->st, EP_COLUMN_GAP, AUTO);
+		int k;
+		for (c = b->first; c != NULL; c = c->next) {
+			int32_t m = measure(l, c);
+			if (m > widest)
+				widest = m;
+		}
+		for (k = 0; k < t->n; k++)
+			inner += (t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
+				  t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest) + (k ? g : 0);
 	} else if (b->table) {
 		/* its columns at their widest, and the spacing between them */
 		int32_t cols[MAXCOLS];
@@ -1815,13 +1842,16 @@ static int32_t measure(L *l, box *b)
 		for (i = 0; i < n; i++)
 			inner += cols[i];
 	} else {
-		for (c = b->first; c != NULL; c = c->next) {
+		int k = 0;
+		for (c = b->first; c != NULL; c = c->next, k++) {
 			int32_t m = measure(l, c);
-			if (b->row)
+			if (b->row && !(b->flex && b->wrap && l->minw))
 				inner += m;
 			else if (m > inner)
 				inner = m;
 		}
+		if (b->flex && b->row && k > 1 && !(b->wrap && l->minw))
+			inner += gap(l, b->st, EP_COLUMN_GAP, AUTO) * (k - 1);
 	}
 	if (!b->anon) {
 		mx = len(l, b->st, EP_MAX_WIDTH, AUTO);
@@ -2078,7 +2108,7 @@ static int rowspan(const box *c)
 	return n < 1 ? 1 : n > 1000 ? 1000 : n;
 }
 
-/* children side by side: a table row's cells, a flex row's items */
+/* children side by side: a table row's cells */
 static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t *first)
 {
 	box *c;
@@ -2163,18 +2193,6 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 				given += add;
 			}
 			pref[n - 1] += room - given;
-		} else if (!b->tablerow) {
-			/* flex-grow shares the room */
-			int64_t grow = 0;
-			for (i = 0; i < n; i++)
-				if (!kids[i]->anon && kids[i]->st->k[EP_FLEX_GROW] == EK_NUM)
-					grow += kids[i]->st->v[EP_FLEX_GROW].i;
-			if (grow > 0) {
-				int32_t room = w - total;
-				for (i = 0; i < n; i++)
-					if (!kids[i]->anon && kids[i]->st->k[EP_FLEX_GROW] == EK_NUM)
-						pref[i] += (int32_t) (room * kids[i]->st->v[EP_FLEX_GROW].i / grow);
-			}
 		}
 	}
 	cx = x;
@@ -2370,6 +2388,1111 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
    containing block cbw wide; fixed_w: cbw is its own width (a row's
    share). Returns the margin box's height, with the bottom margin in
    *mb_out (for collapsing) and the first baseline in *first. */
+/* ---------------------------------------------------------------- flex */
+
+/* a flex container's items, laid out after CSS Flexbox's algorithm (9.2
+   to 9.9): each item's base size (flex-basis, else its width, else its
+   widest), shared out by flex-grow or taken back by flex-shrink (each
+   kept within its min and max: an automatic min is its narrowest), lines
+   when it wraps, justify-content along a line, align-items, align-self
+   and align-content across. Sizes are outer (margins, borders and
+   padding in) along the main axis; items are laid out at their place
+   along it, then moved across (their display items) where alignment puts
+   them, or stretched */
+typedef struct {
+	box *b;
+	int32_t base, hyp, mn, mx, size;	/* along the main axis, outer */
+	int32_t inner;				/* the base less margins, borders, padding (shrinking's weight) */
+	int32_t grow, shrink;			/* ec_fx */
+	int32_t pos, cross, f;			/* its place on its line; laid out: across, its first baseline */
+	int32_t top;				/* where it was laid out across */
+	long k0, k1, bg, bd[4];
+	int line, frozen, align, autos, order;
+} FITEM;
+
+/* gap: row-gap or column-gap, normal 0 */
+static int32_t gap(L *l, const ec_style *s, int p, int32_t base)
+{
+	int32_t g = len(l, s, p, base);
+	return g == AUTO || g < 0 ? 0 : g;
+}
+
+/* an item's align-self, auto being its container's align-items; normal
+   is stretch, start-ish are flex-start */
+static int fl_align(const FITEM *it, int ai)
+{
+	int a = it->b->anon ? KW_AUTO : kw(it->b->st, EP_ALIGN_SELF);
+	if (a == KW_AUTO || a == 0)
+		a = ai;
+	if (a == KW_NORMAL || a == 0)
+		a = KW_STRETCH;
+	if (a == KW_START || a == KW_SELF_START)
+		a = KW_FLEX_START;
+	if (a == KW_END || a == KW_SELF_END)
+		a = KW_FLEX_END;
+	return a;
+}
+
+/* the display items from k0 to k1 moved */
+static void shift_range(L *l, long k0, long k1, int32_t dx, int32_t dy)
+{
+	long k;
+	if (dx == 0 && dy == 0)
+		return;
+	for (k = k0; k < k1; k++) {
+		l->p->items[k].x += dx;
+		l->p->items[k].y += dy;
+	}
+}
+
+/* where free room puts a line's first item and what goes between them
+   (justify-content or align-content's distribution) */
+static void distribute(int how, int32_t free, int n, int32_t *start, int32_t *between)
+{
+	*start = 0;
+	*between = 0;
+	if (free < 0 && (how == KW_SPACE_BETWEEN))
+		how = KW_FLEX_START;
+	if (free < 0 && (how == KW_SPACE_AROUND || how == KW_SPACE_EVENLY))
+		how = KW_CENTER;
+	switch (how) {
+	case KW_FLEX_END: case KW_END: case KW_RIGHT:
+		*start = free;
+		break;
+	case KW_CENTER:
+		*start = free / 2;
+		break;
+	case KW_SPACE_BETWEEN:
+		if (n > 1)
+			*between = free / (n - 1);
+		break;
+	case KW_SPACE_AROUND:
+		*between = free / n;
+		*start = *between / 2;
+		break;
+	case KW_SPACE_EVENLY:
+		*between = free / (n + 1);
+		*start = *between;
+		break;
+	default:
+		break;
+	}
+}
+
+/* a line's items' sizes along the main axis: room shared out by
+   flex-grow, or what is over taken back by flex-shrink (by flex-shrink
+   times its base), each within its min and max (9.7) */
+static void flex_resolve(FITEM *it, int n, int32_t room)
+{
+	int32_t used = 0, init_free;
+	int i, growing, round;
+	for (i = 0; i < n; i++)
+		used += it[i].hyp;
+	growing = used < room;
+	for (i = 0; i < n; i++) {
+		it[i].size = it[i].hyp;
+		it[i].frozen = (growing ? it[i].grow == 0 : it[i].shrink == 0) ||
+			       (growing && it[i].base > it[i].hyp) || (!growing && it[i].base < it[i].hyp);
+	}
+	init_free = room;
+	for (i = 0; i < n; i++)
+		init_free -= it[i].frozen ? it[i].size : it[i].base;
+	for (round = 0; round <= n; round++) {
+		int64_t sum = 0, sumw = 0;
+		int32_t free = room, viol = 0;
+		for (i = 0; i < n; i++) {
+			if (it[i].frozen) {
+				free -= it[i].size;
+			} else {
+				free -= it[i].base;
+				sum += growing ? it[i].grow : it[i].shrink;
+				sumw += (int64_t) it[i].shrink * it[i].inner;
+			}
+		}
+		if (sum == 0)
+			break;
+		/* factors adding to less than 1 take only that share of the room */
+		if (sum < 1024) {
+			int32_t part = (int32_t) ((int64_t) init_free * sum / 1024);
+			if (growing ? part < free : part > free)
+				free = part;
+		}
+		for (i = 0; i < n; i++) {
+			int32_t want, got;
+			if (it[i].frozen)
+				continue;
+			if (growing)
+				want = it[i].base + (int32_t) ((int64_t) free * it[i].grow / sum);
+			else
+				want = it[i].base + (sumw > 0 ? (int32_t) ((int64_t) free * it[i].shrink * it[i].inner / sumw) : 0);
+			got = want;
+			if (got > it[i].mx)
+				got = it[i].mx;
+			if (got < it[i].mn)
+				got = it[i].mn;
+			it[i].size = got;
+			viol += got - want;
+		}
+		for (i = 0; i < n; i++) {
+			if (it[i].frozen)
+				continue;
+			if (viol == 0 || (viol > 0 && it[i].size == it[i].mn) || (viol < 0 && it[i].size == it[i].mx))
+				it[i].frozen = 1;
+		}
+		if (viol == 0)
+			break;
+	}
+}
+
+static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef, int32_t *first)
+{
+	const ec_style *s = b->st;
+	int dir = kw(s, EP_FLEX_DIRECTION), column = dir == KW_COLUMN || dir == KW_COLUMN_REVERSE;
+	int rev = dir == KW_ROW_REVERSE || dir == KW_COLUMN_REVERSE;
+	int wrap = !column && b->wrap, wrev = kw(s, EP_FLEX_WRAP) == KW_WRAP_REVERSE;
+	int jc = kw(s, EP_JUSTIFY_CONTENT), ai = kw(s, EP_ALIGN_ITEMS), ac = kw(s, EP_ALIGN_CONTENT);
+	int32_t cgap = gap(l, s, EP_COLUMN_GAP, w), rgap = gap(l, s, EP_ROW_GAP, hdef);
+	int n = 0, i, j, nl = 0;
+	int32_t total = 0, *ltop = NULL, *lh = NULL, *lstart = NULL;
+	FITEM *it;
+	box *c;
+
+	for (c = b->first; c != NULL; c = c->next)
+		n++;
+	if (n == 0)
+		return 0;
+	it = calloc((size_t) n, sizeof *it);
+	lh = malloc((size_t) (n + 1) * sizeof *lh);
+	ltop = malloc((size_t) (n + 1) * sizeof *ltop);
+	lstart = malloc((size_t) (n + 1) * sizeof *lstart);
+	if (it == NULL || lh == NULL || ltop == NULL || lstart == NULL) {
+		free(it);
+		free(lh);
+		free(ltop);
+		free(lstart);
+		l->fail = 1;
+		return 0;
+	}
+	/* the items, by order (as they come when it is the same); those
+	   positioned absolutely are out of the flow */
+	n = 0;
+	for (c = b->first; c != NULL; c = c->next) {
+		FITEM t;
+		if (!c->anon && (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED)) {
+			place_abs(l, c, x, y);
+			continue;
+		}
+		memset(&t, 0, sizeof t);
+		t.b = c;
+		t.order = c->anon || c->st->k[EP_ORDER] != EK_INT ? 0 : c->st->v[EP_ORDER].i;
+		for (j = n; j > 0 && it[j - 1].order > t.order; j--)
+			it[j] = it[j - 1];
+		it[j] = t;
+		n++;
+	}
+	if (n == 0)
+		goto done;
+
+	if (!column) {
+		/* each item's base size, its min and max, along the row */
+		for (i = 0; i < n; i++) {
+			const ec_style *cs = it[i].b->st;
+			int anon = it[i].b->anon;
+			int32_t ex = extras(l, it[i].b), bw = AUTO, v;
+			int bbox = !anon && kw(cs, EP_BOX_SIZING) == KW_BORDER_BOX;
+			int32_t mex = anon ? 0 : len0(l, cs, EP_MARGIN_LEFT, w) + len0(l, cs, EP_MARGIN_RIGHT, w);
+			if (!anon && cs->k[EP_FLEX_BASIS] != EK_KW)
+				bw = len(l, cs, EP_FLEX_BASIS, w);
+			if (bw != AUTO)
+				it[i].base = bw + (bbox ? mex : ex);
+			else
+				it[i].base = cell_pref(l, it[i].b, w);
+			it[i].inner = it[i].base - ex > 0 ? it[i].base - ex : 0;
+			it[i].mx = INT32_MAX;
+			v = anon ? AUTO : len(l, cs, EP_MAX_WIDTH, w);
+			if (v != AUTO)
+				it[i].mx = v + (bbox ? mex : ex);
+			v = anon ? AUTO : len(l, cs, EP_MIN_WIDTH, w);
+			if (v != AUTO) {
+				it[i].mn = v + (bbox ? mex : ex);
+			} else if (anon || kw(cs, EP_OVERFLOW_X) == KW_VISIBLE) {
+				/* automatic: its narrowest (a word), no wider than its width */
+				int was = l->minw;
+				int32_t sw = anon ? AUTO : len(l, cs, EP_WIDTH, w);
+				l->minw = 1;
+				it[i].mn = measure(l, it[i].b);
+				l->minw = was;
+				if (sw != AUTO && sw + (bbox ? mex : ex) < it[i].mn)
+					it[i].mn = sw + (bbox ? mex : ex);
+				if (it[i].mn > it[i].mx)
+					it[i].mn = it[i].mx;
+			}
+			it[i].hyp = it[i].base < it[i].mn ? it[i].mn : it[i].base > it[i].mx ? it[i].mx : it[i].base;
+			it[i].grow = anon || cs->k[EP_FLEX_GROW] != EK_NUM ? 0 : cs->v[EP_FLEX_GROW].i;
+			it[i].shrink = anon ? 1024 : cs->k[EP_FLEX_SHRINK] != EK_NUM ? 1024 : cs->v[EP_FLEX_SHRINK].i;
+			it[i].align = fl_align(&it[i], ai);
+			it[i].autos = !anon && ((cs->k[EP_MARGIN_LEFT] == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO) +
+						(cs->k[EP_MARGIN_RIGHT] == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO));
+		}
+		/* lines: as many items as go in the width (one, when it doesn't wrap) */
+		for (i = 0; i < n; ) {
+			int32_t sum = 0;
+			lstart[nl] = i;
+			for (j = i; j < n; j++) {
+				int32_t add = it[j].hyp + (j > i ? cgap : 0);
+				if (wrap && j > i && sum + add > w)
+					break;
+				sum += add;
+				it[j].line = nl;
+			}
+			i = j;
+			nl++;
+		}
+		lstart[nl] = n;
+		/* each line: sizes, places along it, laid out */
+		for (j = 0; j < nl; j++) {
+			int a = lstart[j], e = lstart[j + 1], k, nauto = 0;
+			int32_t free, start, between, pos, maxasc = AUTO, h = 0;
+			flex_resolve(it + a, e - a, w - cgap * (e - a - 1));
+			free = w - cgap * (e - a - 1);
+			for (k = a; k < e; k++) {
+				free -= it[k].size;
+				nauto += it[k].autos;
+			}
+			if (nauto > 0 && free > 0) {
+				/* auto margins take the room, justify-content none */
+				int32_t each = free / nauto;
+				start = 0;
+				between = 0;
+				pos = 0;
+				for (k = a; k < e; k++) {
+					const ec_style *cs = it[k].b->st;
+					if (!it[k].b->anon && cs->k[EP_MARGIN_LEFT] == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO)
+						pos += each;
+					it[k].pos = pos;
+					pos += it[k].size + cgap;
+					if (!it[k].b->anon && cs->k[EP_MARGIN_RIGHT] == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO)
+						pos += each;
+				}
+			} else {
+				distribute(jc, free, e - a, &start, &between);
+				pos = start;
+				for (k = a; k < e; k++) {
+					it[k].pos = pos;
+					pos += it[k].size + cgap + between;
+				}
+			}
+			ltop[j] = y + total;
+			for (k = a; k < e; k++) {
+				int32_t mb, f = AUTO, ix = rev ? x + w - it[k].pos - it[k].size : x + it[k].pos;
+				it[k].k0 = l->p->nitems;
+				it[k].cross = layout_block(l, it[k].b, ix, ltop[j], it[k].size, 1, &mb, &f);
+				it[k].k1 = l->p->nitems;
+				it[k].bg = l->last_bg;
+				memcpy(it[k].bd, l->last_bd, sizeof it[k].bd);
+				it[k].f = f;
+				it[k].top = ltop[j];
+				if (it[k].align == KW_BASELINE && f != AUTO && f - ltop[j] > maxasc)
+					maxasc = f - ltop[j];
+			}
+			/* baseline items: their first lines' baselines lined up */
+			for (k = a; k < e; k++) {
+				int32_t d = 0;
+				if (it[k].align == KW_BASELINE && it[k].f != AUTO && maxasc != AUTO)
+					d = maxasc - (it[k].f - ltop[j]);
+				if (d > 0) {
+					shift_range(l, it[k].k0, it[k].k1, 0, d);
+					it[k].top += d;
+					if (it[k].f != AUTO)
+						it[k].f += d;
+				}
+				if (it[k].top - ltop[j] + it[k].cross > h)
+					h = it[k].top - ltop[j] + it[k].cross;
+			}
+			/* a line that doesn't wrap fills a container of a set height */
+			if (!wrap && hdef != AUTO && hdef > h)
+				h = hdef;
+			lh[j] = h;
+			total += h + (j < nl - 1 ? rgap : 0);
+		}
+		/* the lines across: align-content in a container of a set
+		   height (stretch: each line taller), wrap-reverse from the
+		   bottom up */
+		{
+			int32_t room = hdef != AUTO && wrap ? hdef - total : 0, start = 0, between = 0, extra = 0, at;
+			int how = ac == KW_NORMAL || ac == 0 ? KW_STRETCH : ac;
+			if (room > 0) {
+				if (how == KW_STRETCH)
+					extra = room / nl;
+				else
+					distribute(how, room, nl, &start, &between);
+			}
+			at = start;
+			for (j = 0; j < nl; j++) {
+				int32_t top;
+				lh[j] += extra;
+				top = wrev ? y + (hdef != AUTO && wrap ? hdef : total + nl * extra) - at - lh[j] : y + at;
+				for (i = lstart[j]; i < lstart[j + 1]; i++) {
+					int32_t d = top - ltop[j], room2 = lh[j] - (it[i].top - ltop[j]) - it[i].cross;
+					/* within its line: align-self */
+					if (it[i].align == KW_CENTER)
+						d += room2 / 2;
+					else if (it[i].align == KW_FLEX_END)
+						d += room2;
+					shift_range(l, it[i].k0, it[i].k1, 0, d);
+					if (it[i].f != AUTO)
+						it[i].f += d;
+					if (it[i].align == KW_STRETCH && (it[i].b->anon || it[i].b->st->k[EP_HEIGHT] == EK_KW))
+						stretch(l, it[i].bg, it[i].bd, room2);
+				}
+				at += lh[j] + rgap + between;
+			}
+			total += nl * extra;
+			if (hdef != AUTO && wrap && hdef > total)
+				total = hdef;
+		}
+		for (i = 0; i < n && *first == AUTO; i++)
+			if (it[i].line == 0 && it[i].f != AUTO)
+				*first = it[i].f;
+	} else {
+		/* a column: each item as wide as align-self makes it, laid out
+		   down in turn; in a container of a set height, flex-grow
+		   shares the room left and justify-content places them */
+		int32_t cy = 0, free, start, between, sumgrow = 0, given = 0;
+		for (i = 0; i < n; i++) {
+			const ec_style *cs = it[i].b->st;
+			int anon = it[i].b->anon;
+			int32_t iw = w, mb, f = AUTO, ox = 0, bh;
+			it[i].align = fl_align(&it[i], ai);
+			it[i].grow = anon || cs->k[EP_FLEX_GROW] != EK_NUM ? 0 : cs->v[EP_FLEX_GROW].i;
+			if (!(it[i].align == KW_STRETCH && (anon || cs->k[EP_WIDTH] == EK_KW))) {
+				iw = cell_pref(l, it[i].b, w);
+				if (iw > w)
+					iw = w;
+				if (it[i].align == KW_CENTER)
+					ox = (w - iw) / 2;
+				else if (it[i].align == KW_FLEX_END)
+					ox = w - iw;
+			}
+			it[i].k0 = l->p->nitems;
+			bh = layout_block(l, it[i].b, x + ox, y + cy, iw, 1, &mb, &f);
+			it[i].k1 = l->p->nitems;
+			it[i].bg = l->last_bg;
+			memcpy(it[i].bd, l->last_bd, sizeof it[i].bd);
+			/* a flex-basis of a length makes it at least that tall */
+			if (!anon && cs->k[EP_FLEX_BASIS] == EK_PX && cs->k[EP_HEIGHT] == EK_KW) {
+				int32_t want = dev(l, cs->v[EP_FLEX_BASIS].i) + len0(l, cs, EP_MARGIN_TOP, w) +
+					       len0(l, cs, EP_MARGIN_BOTTOM, w) + len0(l, cs, EP_PADDING_TOP, w) +
+					       len0(l, cs, EP_PADDING_BOTTOM, w) +
+					       (kw(cs, EP_BORDER_TOP_STYLE) > KW_HIDDEN ? len0(l, cs, EP_BORDER_TOP_WIDTH, AUTO) : 0) +
+					       (kw(cs, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN ? len0(l, cs, EP_BORDER_BOTTOM_WIDTH, AUTO) : 0);
+				if (want > bh) {
+					stretch(l, it[i].bg, it[i].bd, want - bh);
+					bh = want;
+				}
+			}
+			it[i].pos = cy;
+			it[i].size = bh;
+			it[i].f = f;
+			sumgrow += it[i].grow;
+			cy += bh + (i < n - 1 ? rgap : 0);
+		}
+		total = cy;
+		free = hdef != AUTO ? hdef - total : 0;
+		if (free > 0 && sumgrow > 0) {
+			/* taller by flex-grow, those below moved down */
+			for (i = 0; i < n; i++) {
+				int32_t add = (int32_t) ((int64_t) free * it[i].grow / sumgrow);
+				shift_range(l, it[i].k0, it[i].k1, 0, given);
+				it[i].pos += given;
+				if (add > 0)
+					stretch(l, it[i].bg, it[i].bd, add);
+				it[i].size += add;
+				given += add;
+			}
+			total += given;
+			free -= given;
+		}
+		distribute(jc, free, n, &start, &between);
+		for (i = 0; i < n; i++) {
+			int32_t place = start + it[i].pos + i * between, d;
+			if (rev) {
+				int32_t span = hdef != AUTO ? hdef : total;
+				place = span - place - it[i].size;
+			}
+			d = place - it[i].pos;
+			shift_range(l, it[i].k0, it[i].k1, 0, d);
+			if (it[i].f != AUTO)
+				it[i].f += d;
+		}
+		for (i = 0; i < n && *first == AUTO; i++)
+			if (it[i].f != AUTO)
+				*first = it[i].f;
+	}
+done:
+	free(it);
+	free(lh);
+	free(ltop);
+	free(lstart);
+	return total;
+}
+
+/* ---------------------------------------------------------------- grid */
+
+/* a grid container's items, after CSS Grid 1, in a first form: the
+   explicit grid from grid-template-columns, -rows and -areas (repeat(),
+   auto-fill and auto-fit), each item placed by its lines (numbers, spans,
+   areas' names) or auto-placed (row by row or column by column, sparse),
+   the grid growing by grid-auto-columns and -rows. Columns are sized
+   from the width (lengths, percentages, min-content, max-content, auto,
+   minmax(), fit-content() and fr, the items of one column giving its
+   content sizes, those spanning more made room for), rows by what their
+   items need (lengths, and fr in a grid of a set height); items are
+   stretched or aligned in their areas by justify-self and align-self.
+   Line names other than areas', subgrid and masonry are not taken */
+typedef struct {
+	box *b;
+	int r0, r1, c0, c1;			/* its area: rows r0..r1-1, columns c0..c1-1 */
+	int32_t h, f, top;			/* laid out: outer height, baseline, top */
+	long k0, k1, bg, bd[4];
+	int ja, aa;				/* justify-self, align-self */
+} GITEM;
+
+typedef struct {
+	int32_t base, lim;
+	ec_fx fr;				/* flexible: its fr, else 0 */
+	int stretchy;				/* auto at its max: takes room left */
+} GTRACK;
+
+/* the track list's size at track i of an axis: the explicit list's (an
+   auto repeat expanded nrep times), else the auto tracks' in turn */
+static void gtrack_def(const ec_style *s, int tp, int ap, int i, int nrep, ec_tsize *mn, ec_tsize *mx)
+{
+	const ec_tracks *t = s->k[tp] == EK_PTR ? s->v[tp].p : NULL, *a = s->k[ap] == EK_PTR ? s->v[ap].p : NULL;
+	int n = 0, k;
+	if (t != NULL) {
+		n = t->rep ? t->n - t->rep_n + t->rep_n * nrep : t->n;
+		if (i < n) {
+			if (t->rep && i >= t->rep_at)
+				k = i < t->rep_at + t->rep_n * nrep ? t->rep_at + (i - t->rep_at) % t->rep_n :
+					i - t->rep_n * (nrep - 1);
+			else
+				k = i;
+			*mn = t->t[k].mn;
+			*mx = t->t[k].mx;
+			return;
+		}
+	}
+	if (a != NULL) {
+		k = (i - n) % a->n;
+		*mn = a->t[k].mn;
+		*mx = a->t[k].mx;
+		return;
+	}
+	mn->k = mx->k = EC_TR_AUTO;
+	mn->v = mx->v = 0;
+}
+
+/* a track size in px against base (a percentage's; AUTO: none), or AUTO
+   when it isn't a length */
+static int32_t gsize_px(L *l, const ec_tsize *z, int32_t base)
+{
+	if (z->k == EC_TR_LEN || z->k == EC_TR_FIT)
+		return dev(l, z->v);
+	if (z->k == EC_TR_PCT)
+		return base == AUTO ? AUTO : (int32_t) ((int64_t) base * z->v / (100 * 1024));
+	return AUTO;
+}
+
+/* how many times an auto repeat goes in avail (at least once) */
+static int grid_repeats(L *l, const ec_tracks *t, int32_t avail, int32_t g)
+{
+	int32_t fixed = 0, rep = 0, k, n;
+	if (t == NULL || !t->rep || avail == AUTO)
+		return 1;
+	for (k = 0; k < t->n; k++) {
+		int32_t v = gsize_px(l, &t->t[k].mx, avail);
+		if (v == AUTO)
+			v = gsize_px(l, &t->t[k].mn, avail);
+		if (v == AUTO)
+			v = 0;
+		if (k >= t->rep_at && k < t->rep_at + t->rep_n)
+			rep += v + g;
+		else
+			fixed += v + g;
+	}
+	if (rep <= 0)
+		return 1;
+	n = (avail - fixed + g) / rep;
+	return n < 1 ? 1 : n > 200 ? 200 : n;
+}
+
+/* the explicit tracks of an axis */
+static int grid_explicit(const ec_tracks *t, int nrep)
+{
+	if (t == NULL)
+		return 0;
+	return t->rep ? t->n - t->rep_n + t->rep_n * nrep : t->n;
+}
+
+/* an item's lines on an axis from its start and end: *a..*b (b past),
+   -1 for auto; span set when it only says how many */
+static void grid_lines_of(const ec_style *s, int ps, int pe, const ec_areas *ar, int rows, int nexp,
+			  int *a, int *b, int *span)
+{
+	int k, i;
+	*a = *b = -1;
+	*span = 1;
+	for (k = 0; k < 2; k++) {
+		int p = k ? pe : ps, v, at = -1;
+		if (s->k[p] == EK_INT) {
+			v = s->v[p].i;
+			if (v >= EC_GRID_SPAN) {
+				*span = v - EC_GRID_SPAN;
+				continue;
+			}
+			at = v > 0 ? v - 1 : nexp + 1 + v;
+			if (at < 0)
+				at = 0;
+		} else if (s->k[p] == EK_PTR && ar != NULL) {
+			/* an area's name: its first line, or for the end its last */
+			const ec_str *nm = s->v[p].p;
+			int lo = -1, hi = -1;
+			for (i = 0; i < ar->rows * ar->cols; i++)
+				if (ar->name[i] != NULL && ar->name[i]->len == nm->len &&
+				    memcmp(ar->name[i]->s, nm->s, nm->len) == 0) {
+					int pos = rows ? i / ar->cols : i % ar->cols;
+					if (lo < 0 || pos < lo)
+						lo = pos;
+					if (pos > hi)
+						hi = pos;
+				}
+			if (lo >= 0)
+				at = k ? hi + 1 : lo;
+		}
+		if (k)
+			*b = at;
+		else
+			*a = at;
+	}
+	if (*a >= 0 && *b >= 0) {
+		if (*b < *a) {
+			int t = *a;
+			*a = *b;
+			*b = t;
+		}
+		if (*b == *a)
+			*b = *a + 1;
+		*span = *b - *a;
+	} else if (*a < 0 && *b >= 0) {
+		*a = *b - *span;
+		if (*a < 0)
+			*a = 0;
+		*b = *a + *span;
+	} else if (*a >= 0) {
+		*b = *a + *span;
+	}
+}
+
+/* the cells taken: rows x cols, growing as rows come */
+typedef struct {
+	unsigned char *m;
+	int rows, cols;
+} GOCC;
+
+static int gocc_fits(GOCC *o, int r, int c, int nr, int nc)
+{
+	int i, j;
+	if (c + nc > o->cols)
+		return 0;
+	for (i = r; i < r + nr; i++)
+		for (j = c; j < c + nc; j++)
+			if (i < o->rows && o->m[i * o->cols + j])
+				return 0;
+	return 1;
+}
+
+static int gocc_take(GOCC *o, int r, int c, int nr, int nc)
+{
+	int i, j;
+	if (r + nr > o->rows) {
+		int rows = r + nr + 8;
+		unsigned char *m = realloc(o->m, (size_t) rows * o->cols);
+		if (m == NULL)
+			return 0;
+		memset(m + (size_t) o->rows * o->cols, 0, (size_t) (rows - o->rows) * o->cols);
+		o->m = m;
+		o->rows = rows;
+	}
+	for (i = r; i < r + nr; i++)
+		for (j = c; j < c + nc && j < o->cols; j++)
+			o->m[i * o->cols + j] = 1;
+	return 1;
+}
+
+/* justify-self or align-self, auto being the container's -items, normal
+   stretch, start-ish start */
+static int g_align(int a, int items)
+{
+	if (a == KW_AUTO || a == 0)
+		a = items;
+	if (a == KW_NORMAL || a == 0)
+		a = KW_STRETCH;
+	if (a == KW_START || a == KW_SELF_START || a == KW_FLEX_START || a == KW_LEFT)
+		a = KW_FLEX_START;
+	if (a == KW_END || a == KW_SELF_END || a == KW_FLEX_END || a == KW_RIGHT)
+		a = KW_FLEX_END;
+	return a;
+}
+
+/* the tracks' sizes in room (each base grown to its limit as room
+   allows, the rest to fr tracks, or the auto ones when there are none) */
+static void grid_fit(GTRACK *t, int n, int32_t room, int fill_auto)
+{
+	int32_t used = 0, left;
+	int64_t frsum = 0;
+	int i, k, nflex = 0, ngrow;
+	for (i = 0; i < n; i++) {
+		used += t[i].base;
+		if (t[i].fr > 0) {
+			frsum += t[i].fr;
+			nflex++;
+		}
+	}
+	left = room - used;
+	/* grow the others to their limits, evenly */
+	for (k = 0; k < n && left > 0; k++) {
+		int32_t each;
+		ngrow = 0;
+		for (i = 0; i < n; i++)
+			if (t[i].fr == 0 && t[i].lim > t[i].base)
+				ngrow++;
+		if (ngrow == 0)
+			break;
+		each = left / ngrow > 0 ? left / ngrow : 1;
+		for (i = 0; i < n && left > 0; i++)
+			if (t[i].fr == 0 && t[i].lim > t[i].base) {
+				int32_t add = t[i].lim - t[i].base < each ? t[i].lim - t[i].base : each;
+				if (add > left)
+					add = left;
+				t[i].base += add;
+				left -= add;
+			}
+	}
+	if (nflex > 0 && left + 0 > 0) {
+		/* fr: the room's share each, none below its base (those
+		   bigger keep it, and the share is worked out again) */
+		int32_t pool = left;
+		unsigned char fixed[256];
+		memset(fixed, 0, sizeof fixed);
+		for (i = 0; i < n; i++)
+			if (t[i].fr > 0)
+				pool += t[i].base;
+		for (k = 0; k < 4; k++) {
+			int64_t fs = 0;
+			int32_t p = pool, again = 0;
+			for (i = 0; i < n && i < 256; i++)
+				if (t[i].fr > 0) {
+					if (fixed[i])
+						p -= t[i].base;
+					else
+						fs += t[i].fr;
+				}
+			if (fs == 0)
+				break;
+			if (fs < 1024)
+				fs = 1024;
+			for (i = 0; i < n && i < 256; i++)
+				if (t[i].fr > 0 && !fixed[i] && (int32_t) ((int64_t) p * t[i].fr / fs) < t[i].base) {
+					fixed[i] = 1;
+					again = 1;
+				}
+			if (again)
+				continue;
+			for (i = 0; i < n && i < 256; i++)
+				if (t[i].fr > 0 && !fixed[i])
+					t[i].base = (int32_t) ((int64_t) p * t[i].fr / fs);
+			break;
+		}
+		(void) frsum;
+	} else if (left > 0 && fill_auto) {
+		/* no fr: the auto tracks share what is left (justify-content normal) */
+		int na = 0;
+		for (i = 0; i < n; i++)
+			na += t[i].stretchy;
+		for (i = 0; i < n && na > 0; i++)
+			if (t[i].stretchy) {
+				int32_t add = left / na;
+				t[i].base += add;
+				left -= add;
+				na--;
+			}
+	}
+}
+
+static int32_t grid_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef, int32_t *first)
+{
+	const ec_style *s = b->st;
+	const ec_tracks *tc = s->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_COLUMNS].p : NULL;
+	const ec_tracks *tr = s->k[EP_GRID_TEMPLATE_ROWS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_ROWS].p : NULL;
+	const ec_areas *ar = s->k[EP_GRID_TEMPLATE_AREAS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_AREAS].p : NULL;
+	int flow = s->k[EP_GRID_AUTO_FLOW] == EK_INT ? s->v[EP_GRID_AUTO_FLOW].i : 0;
+	int32_t cg = gap(l, s, EP_COLUMN_GAP, w), rg = gap(l, s, EP_ROW_GAP, hdef), total = 0;
+	int crep = grid_repeats(l, tc, w, cg), rrep = grid_repeats(l, tr, hdef, rg);
+	int ncx = grid_explicit(tc, crep), nrx = grid_explicit(tr, rrep), ncols, nrows, n = 0, i, j, k;
+	int ji = kw(s, EP_JUSTIFY_ITEMS), ai = kw(s, EP_ALIGN_ITEMS), jc = kw(s, EP_JUSTIFY_CONTENT);
+	GITEM *it;
+	GTRACK *col = NULL, *row = NULL;
+	GOCC occ = { NULL, 0, 0 };
+	int32_t *cx = NULL, *ry = NULL;
+	box *c;
+
+	if (ar != NULL) {
+		if (ar->cols > ncx)
+			ncx = ar->cols;
+		if (ar->rows > nrx)
+			nrx = ar->rows;
+	}
+	for (c = b->first; c != NULL; c = c->next)
+		n++;
+	if (n == 0)
+		return hdef != AUTO ? 0 : 0;
+	it = calloc((size_t) n, sizeof *it);
+	if (it == NULL) {
+		l->fail = 1;
+		return 0;
+	}
+	/* each item's lines where it says */
+	n = 0;
+	ncols = ncx > 0 ? ncx : 1;
+	nrows = nrx;
+	for (c = b->first; c != NULL; c = c->next) {
+		GITEM *g = &it[n];
+		int sr, sc;
+		if (!c->anon && (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED)) {
+			place_abs(l, c, x, y);
+			continue;
+		}
+		g->b = c;
+		if (c->anon) {
+			g->r0 = g->c0 = -1;
+			g->r1 = g->c1 = 1;
+		} else {
+			grid_lines_of(c->st, EP_GRID_ROW_START, EP_GRID_ROW_END, ar, 1, nrx, &g->r0, &g->r1, &sr);
+			grid_lines_of(c->st, EP_GRID_COLUMN_START, EP_GRID_COLUMN_END, ar, 0, ncx, &g->c0, &g->c1, &sc);
+			if (g->r0 < 0)
+				g->r1 = sr;
+			if (g->c0 < 0)
+				g->c1 = sc;
+		}
+		if (g->c0 >= 0 && g->c1 > ncols)
+			ncols = g->c1;
+		if (g->c0 < 0 && g->c1 > ncols)
+			ncols = g->c1;
+		if (g->r0 >= 0 && g->r1 > nrows)
+			nrows = g->r1;
+		if (ncols > 1000)
+			ncols = 1000;
+		g->ja = g_align(c->anon ? KW_AUTO : kw(c->st, EP_JUSTIFY_SELF), ji);
+		g->aa = g_align(c->anon ? KW_AUTO : kw(c->st, EP_ALIGN_SELF), ai);
+		n++;
+	}
+	/* placing: those with both lines; then auto-placement in order (row
+	   by row, or column by column), each from where the last went */
+	occ.cols = ncols;
+	{
+		int cr = 0, cc = 0;
+		for (i = 0; i < n; i++)
+			if (it[i].r0 >= 0 && it[i].c0 >= 0)
+				gocc_take(&occ, it[i].r0, it[i].c0, it[i].r1 - it[i].r0, it[i].c1 - it[i].c0);
+		for (i = 0; i < n; i++) {
+			GITEM *g = &it[i];
+			int sr = g->r0 >= 0 ? g->r1 - g->r0 : g->r1, sc = g->c0 >= 0 ? g->c1 - g->c0 : g->c1, r, cc2;
+			if (g->r0 >= 0 && g->c0 >= 0)
+				continue;
+			if (sc > ncols)
+				sc = ncols;
+			if (g->r0 >= 0) {
+				/* its row set: the first columns free there */
+				for (cc2 = 0; cc2 + sc <= ncols && !gocc_fits(&occ, g->r0, cc2, sr, sc); cc2++)
+					;
+				if (cc2 + sc > ncols)
+					cc2 = 0;
+				g->c0 = cc2;
+				g->c1 = cc2 + sc;
+			} else if (g->c0 >= 0) {
+				/* its column set: down from the cursor's row */
+				for (r = (flow & EC_FLOW_COLUMN) ? 0 : cr; !gocc_fits(&occ, r, g->c0, sr, g->c1 - g->c0); r++)
+					;
+				g->r0 = r;
+				g->r1 = r + sr;
+				if (!(flow & EC_FLOW_COLUMN)) {
+					cr = r;
+					cc = g->c1;
+				}
+			} else if (!(flow & EC_FLOW_COLUMN)) {
+				for (;;) {
+					if (cc + sc > ncols) {
+						cc = 0;
+						cr++;
+						continue;
+					}
+					if (gocc_fits(&occ, cr, cc, sr, sc))
+						break;
+					cc++;
+				}
+				g->r0 = cr;
+				g->r1 = cr + sr;
+				g->c0 = cc;
+				g->c1 = cc + sc;
+				cc += sc;
+			} else {
+				/* column by column, down the explicit rows */
+				int rows = nrx > 0 ? nrx : 1;
+				for (;;) {
+					if (cr + sr > rows && cr > 0) {
+						cr = 0;
+						cc++;
+						continue;
+					}
+					if (cc + sc > ncols) {
+						/* past the columns there are: more on the right */
+						int nc = cc + sc;
+						unsigned char *m = calloc((size_t) (occ.rows ? occ.rows : 1) * nc, 1);
+						if (m == NULL)
+							break;
+						for (r = 0; r < occ.rows; r++)
+							memcpy(m + r * nc, occ.m + r * occ.cols, (size_t) occ.cols);
+						free(occ.m);
+						occ.m = m;
+						occ.cols = ncols = nc;
+					}
+					if (gocc_fits(&occ, cr, cc, sr, sc))
+						break;
+					cr++;
+				}
+				g->r0 = cr;
+				g->r1 = cr + sr;
+				g->c0 = cc;
+				g->c1 = cc + sc;
+				cr += sr;
+			}
+			gocc_take(&occ, g->r0, g->c0, g->r1 - g->r0, g->c1 - g->c0);
+			if (g->r1 > nrows)
+				nrows = g->r1;
+		}
+	}
+	free(occ.m);
+	if (nrows < 1)
+		nrows = 1;
+	col = calloc((size_t) ncols, sizeof *col);
+	row = calloc((size_t) nrows, sizeof *row);
+	cx = malloc((size_t) (ncols + 1) * sizeof *cx);
+	ry = malloc((size_t) (nrows + 1) * sizeof *ry);
+	if (col == NULL || row == NULL || cx == NULL || ry == NULL) {
+		l->fail = 1;
+		goto out;
+	}
+
+	/* the columns: each one's base and limit, from its sizes and its
+	   items' content (auto-fit's empty ones none) */
+	for (i = 0; i < ncols; i++) {
+		ec_tsize mn, mx;
+		int32_t v, cmin = 0, cmax = 0;
+		int content = 0;
+		if (tc != NULL && tc->rep == 2 && i >= tc->rep_at && i < tc->rep_at + tc->rep_n * crep) {
+			for (k = 0; k < n && !(it[k].c0 <= i && it[k].c1 > i); k++)
+				;
+			if (k == n)
+				continue;
+		}
+		gtrack_def(s, EP_GRID_TEMPLATE_COLUMNS, EP_GRID_AUTO_COLUMNS, i, crep, &mn, &mx);
+		content = gsize_px(l, &mn, w) == AUTO || (mx.k != EC_TR_FR && gsize_px(l, &mx, w) == AUTO) || mn.k == EC_TR_FIT;
+		if (content)
+			for (k = 0; k < n; k++)
+				if (it[k].c0 == i && it[k].c1 == i + 1) {
+					int was = l->minw;
+					int32_t a, m;
+					l->minw = 1;
+					a = measure(l, it[k].b);
+					l->minw = was;
+					m = cell_pref(l, it[k].b, w);
+					if (a > cmin)
+						cmin = a;
+					if (m > cmax)
+						cmax = m;
+				}
+		if (cmax < cmin)
+			cmax = cmin;
+		v = gsize_px(l, &mn, w);
+		col[i].base = v != AUTO ? v : mn.k == EC_TR_MAX ? cmax : cmin;
+		if (mn.k == EC_TR_FIT)
+			col[i].base = cmin;
+		if (mx.k == EC_TR_FR) {
+			col[i].fr = mx.v;
+			col[i].lim = col[i].base;
+		} else {
+			v = gsize_px(l, &mx, w);
+			col[i].lim = mx.k == EC_TR_FIT ? (cmax < v ? cmax : v) : v != AUTO ? v : mx.k == EC_TR_MIN ? cmin : cmax;
+			col[i].stretchy = mx.k == EC_TR_AUTO;
+		}
+		if (col[i].lim < col[i].base)
+			col[i].lim = col[i].base;
+	}
+	/* an item over several columns: room for its narrowest */
+	for (k = 0; k < n; k++) {
+		int span = it[k].c1 - it[k].c0, was = l->minw;
+		int32_t have = cg * (span - 1), need;
+		if (span < 2 || it[k].c1 > ncols)
+			continue;
+		for (i = it[k].c0; i < it[k].c1; i++)
+			have += col[i].base;
+		l->minw = 1;
+		need = measure(l, it[k].b);
+		l->minw = was;
+		if (need > have) {
+			int32_t add = (need - have + span - 1) / span;
+			for (i = it[k].c0; i < it[k].c1; i++) {
+				col[i].base += add;
+				if (col[i].lim < col[i].base)
+					col[i].lim = col[i].base;
+			}
+		}
+	}
+	grid_fit(col, ncols, w - cg * (ncols - 1), jc == KW_NORMAL || jc == KW_STRETCH || jc == 0);
+	{
+		/* justify-content: the columns where the room left puts them */
+		int32_t used = cg * (ncols - 1), start, between;
+		for (i = 0; i < ncols; i++)
+			used += col[i].base;
+		distribute(jc == KW_NORMAL || jc == KW_STRETCH ? KW_FLEX_START : jc, w - used, ncols, &start, &between);
+		cx[0] = x + start;
+		for (i = 0; i < ncols; i++)
+			cx[i + 1] = cx[i] + col[i].base + cg + between;
+	}
+
+	/* the rows, top down: each item laid out where its area starts,
+	   each row as tall as its items need (those over several rows in
+	   their last), or its length */
+	ry[0] = y;
+	for (j = 0; j < nrows; j++) {
+		ec_tsize mn, mx;
+		int32_t h = 0, v;
+		gtrack_def(s, EP_GRID_TEMPLATE_ROWS, EP_GRID_AUTO_ROWS, j, rrep, &mn, &mx);
+		v = gsize_px(l, &mn, hdef);
+		if (v != AUTO)
+			h = v;
+		row[j].fr = mx.k == EC_TR_FR && hdef != AUTO ? mx.v : 0;
+		for (k = 0; k < n; k++) {
+			GITEM *g = &it[k];
+			int32_t aw, iw, ix, mb, f = AUTO;
+			if (g->r0 != j || g->c0 >= ncols)
+				continue;
+			if (g->c1 > ncols)
+				g->c1 = ncols;
+			aw = cx[g->c1] - cx[g->c0] - cg;
+			if (g->c1 == ncols)
+				aw = cx[g->c1] - cx[g->c0] - cg;
+			iw = aw;
+			ix = cx[g->c0];
+			if (g->ja != KW_STRETCH || (!g->b->anon && g->b->st->k[EP_WIDTH] != EK_KW)) {
+				iw = cell_pref(l, g->b, aw);
+				if (iw > aw)
+					iw = aw;
+				if (g->ja == KW_CENTER)
+					ix += (aw - iw) / 2;
+				else if (g->ja == KW_FLEX_END)
+					ix += aw - iw;
+			}
+			g->k0 = l->p->nitems;
+			g->h = layout_block(l, g->b, ix, ry[j], iw, 1, &mb, &f);
+			g->k1 = l->p->nitems;
+			g->bg = l->last_bg;
+			memcpy(g->bd, l->last_bd, sizeof g->bd);
+			g->f = f;
+			g->top = ry[j];
+		}
+		v = gsize_px(l, &mx, hdef);
+		for (k = 0; k < n; k++) {
+			GITEM *g = &it[k];
+			int32_t need;
+			if (g->r1 - 1 != j || g->c0 >= ncols)
+				continue;
+			need = g->top + g->h - ry[j];
+			if (v != AUTO && mn.k != EC_TR_AUTO && mn.k != EC_TR_MIN && mn.k != EC_TR_MAX)
+				continue;	/* a row of a set size */
+			if (need > h)
+				h = need;
+		}
+		if (v != AUTO && h > v && gsize_px(l, &mn, hdef) != AUTO)
+			h = v;
+		row[j].base = h;
+		ry[j + 1] = ry[j] + h + rg;
+	}
+	/* fr rows in a grid of a set height: the room left, and those below
+	   moved down */
+	{
+		int32_t used = rg * (nrows - 1), left;
+		int64_t frs = 0;
+		for (j = 0; j < nrows; j++) {
+			used += row[j].base;
+			frs += row[j].fr;
+		}
+		left = hdef != AUTO ? hdef - used : 0;
+		if (left > 0 && frs > 0) {
+			int32_t shift = 0;
+			if (frs < 1024)
+				frs = 1024;
+			for (j = 0; j < nrows; j++) {
+				int32_t add = row[j].fr > 0 ? (int32_t) ((int64_t) left * row[j].fr / frs) : 0;
+				for (k = 0; k < n; k++)
+					if (it[k].r0 == j && shift) {
+						shift_range(l, it[k].k0, it[k].k1, 0, shift);
+						it[k].top += shift;
+						if (it[k].f != AUTO)
+							it[k].f += shift;
+					}
+				row[j].base += add;
+				ry[j] += shift;
+				shift += add;
+			}
+			ry[nrows] += shift;
+		}
+	}
+	/* each item in its area's height: stretched, or moved by align-self */
+	for (k = 0; k < n; k++) {
+		GITEM *g = &it[k];
+		int32_t ah, room;
+		if (g->c0 >= ncols)
+			continue;
+		ah = ry[g->r1] - ry[g->r0] - rg;
+		room = ah - (g->top - ry[g->r0]) - g->h;
+		if (room <= 0)
+			continue;
+		if (g->aa == KW_STRETCH && (g->b->anon || g->b->st->k[EP_HEIGHT] == EK_KW))
+			stretch(l, g->bg, g->bd, room);
+		else if (g->aa == KW_CENTER || g->aa == KW_FLEX_END) {
+			int32_t d = g->aa == KW_CENTER ? room / 2 : room;
+			shift_range(l, g->k0, g->k1, 0, d);
+			if (g->f != AUTO)
+				g->f += d;
+		}
+	}
+	total = ry[nrows] - rg - y;
+	if (total < 0)
+		total = 0;
+	for (k = 0; k < n && *first == AUTO; k++)
+		if (it[k].r0 == 0 && it[k].f != AUTO)
+			*first = it[k].f;
+out:
+	free(it);
+	free(col);
+	free(row);
+	free(cx);
+	free(ry);
+	return total;
+}
+
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first)
 {
@@ -2543,6 +3666,16 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		ch = repl_layout(l, b, cx, cy, w);
 	} else if (b->inl) {
 		ch = inline_layout(l, b, cx, cy, w, &fb);
+	} else if (b->flex || b->grid) {
+		int32_t hd = AUTO;
+		if (!b->anon) {
+			hd = len(l, s, EP_HEIGHT, AUTO);
+			if (hd != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
+				hd -= bt + bb + pt + pb;
+			if (hd != AUTO && hd < 0)
+				hd = 0;
+		}
+		ch = b->grid ? grid_layout(l, b, cx, cy, w, hd, &fb) : flex_layout(l, b, cx, cy, w, hd, &fb);
 	} else if (b->row) {
 		ch = row_layout(l, b, cx, cy, w, &fb);
 	} else {

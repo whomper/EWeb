@@ -111,7 +111,7 @@ hub stay complete, with the evidence.
   `win.c` with the throbber (`ui/throbber.h` from `tools/mkthrobber.py`), the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
   (addresses, loading, history, EWeb's own pages), `src/doc` (EWeb's HTML parser `html.c`, the
-  document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, tables, a display list) and `src/gfx` (`EWEB.FNT`,
+  document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, floats, tables, flexbox, grid, a display list) and `src/gfx` (`EWEB.FNT`,
   drawing into memory). It is a program only (no accessory). `tests/host/ewrender.c` draws a page or
   URL as EWeb would (a PNG, or `-d` the display list). After changing the layout or the document:
   `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
