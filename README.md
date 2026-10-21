@@ -138,12 +138,20 @@ cd AERA-Gateway
 sudo gateway/aera-gateway install web --allow ATARI_IP
 ```
 
+Or, from AERA-Gateway 1.8, every gateway for that Atari in one line:
+
+```
+sudo apt install -y git &&
+  git clone https://github.com/whomper/AERA-Gateway ~/AERA-Gateway &&
+  ~/AERA-Gateway/update-pi.sh --allow ATARI_IP
+```
+
 - Add `--browser` to the last line for snapshots and live view: it installs
   Chromium and needs a Pi with 2 GB or more.
 - `install web` also builds `aerapens` (the pictures for the Atari's screen;
   AERA-Gateway 1.6 and later), installing `gcc` and `make` if they're missing.
 - To update: `cd ~/AERA-Gateway && ./update-pi.sh`. To check:
-  `gateway/aera-gateway status`, or `http://PI_IP:8280/`.
+  `sudo aera-gateway status`, or `http://PI_IP:8280/`.
 - In EWeb: Settings > Secure, the Pi gateway `PI_IP`, port `8280`.
 
 ## Building
@@ -264,7 +272,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   page's character set; Return in a field; typing, reset), and lays out five
   pages (`tests/layout`, forms among them) and compares their
   display lists with the ones kept, and the Hebrew test page in each of its
-  encodings, with AddressSanitizer and UBSan; `make itest` loads a site from
+  encodings, and pages nested deeper than the stack holds
+  (`tests/layout/deep.py`: cut, not crashed), with AddressSanitizer and
+  UBSan; `make itest` loads a site from
   `tests/net/server.py` in the browser over HTTP and HTTPS (its stylesheet,
   its links, a redirect, an anchor, EWeb's own pages for a server that isn't
   there and a file that isn't a page).

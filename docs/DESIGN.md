@@ -1453,6 +1453,44 @@ handler costs 4.3 million 68030 instructions (about 0.6-0.9 s on the DFB1), the 
 (each 3-6%) as it builds JavaScript's standard objects, not the prelude. The saving to try next is
 one runtime and context kept for the pages of a site, or made once and copied.
 
+## The stack (21 Oct 2026)
+
+EWeb bombed on Erez's Falcon on Wikipedia's Falcon article, through the gateway and in Falcon mode,
+while pictures came or the page scrolled: 2, 3, 4 or 11 bombs, different each time, and only a cold
+boot brought the machine back. Measured in Hatari on TOS 4.04: the stack (crt0's, in the BSS, right
+after the program's data) held 128 KB, and the layout took about 940 bytes of it for each level a
+page is nested, as the box tree is laid out recursively (tables and flex boxes more, measured again
+at each level). A page 100 blocks deep took 114 KB; 150 never showed. Nothing stopped the stack at
+its end: it went on into the program's data, and what bombed afterwards depended on what it had
+overwritten. A page laid out again when a picture arrives sits a little deeper still.
+
+What EWeb does now:
+- **A floor.** `ec_stack_floor` (`src/css/ecss.h`), set by `main()` 16 KB above the stack's end (8 KB
+  on the ST): room for the deepest call below a recursion, worked out from GCC's call graph
+  (`-fcallgraph-info=su`): 1.5 KB under the layout, and 5 KB under it for a picture's address. Every
+  walk that follows a page's depth checks it (`EC_DEEP()`): the layout (blocks, tables, flex, grid,
+  floats, inline content, measuring, the box fix-up), the parser's clone, the forms' text, the
+  scripts' serialising, cloning and text, the stylesheet's nested `:is()` and `@supports`. What is
+  deeper is left out; the log says `deep`, the status line "Part of this page is nested too deeply to
+  show." The cascade stops 14 KB above the floor, as more goes under each element it styles (12.5 KB:
+  `cascade_style`, a `var()` or `grid-template-areas` value) while its own recursion takes 176 bytes
+  a level; the rest of the subtree takes the deepest element's style. The document's own walks
+  (`finish`, the sheets, anchors) go without recursion.
+- **A larger stack for `EWEB.PRG`:** 256 KB. The ST edition keeps 48 KB: the 1 MB ST has no more to
+  give (64 KB, or the big buffers made static, which take the same memory for good, left it unable
+  to show a page). `grid_layout` is kept out of `layout_block` (it was inlined, and every level paid
+  for its locals): 736 bytes a level instead of 944.
+
+Measured again on the emulated Falcon: 25 blocks deep 37 KB, 100 deep 91 KB, 150 deep 127 KB, 300 deep
+234 KB, all whole; 1000 deep cut at 247 KB, the 16 KB under the floor untouched; 40 nested tables and
+40 nested flex boxes whole. On the 1 MB ST: 25 deep whole (37 KB), 40 deep cut at 42 KB; deeper pages
+need more memory for their styles than the ST has, and EWeb says it can't show them. The ST edition
+before this went to 49,149 bytes of its 49,152 on a page 60 deep, and a page 300 deep never showed.
+`make test` runs `tests/layout/deep.py` (each kind 3000 deep, cut, under AddressSanitizer with
+ewrender `-S`, and 60 deep, whole). The crash catcher (`common/atari/crash.c`) now also takes a fault
+in the program's own supervisor code, a wild jump while it runs and line F, so a crash leaves
+`CRASH.LOG` even when only a cold boot recovers the machine.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

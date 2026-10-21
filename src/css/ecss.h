@@ -216,6 +216,16 @@ int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *
 int ec_media_ok(ec_ctx *c, const char *s, size_t len);
 int32_t ec_sizes(ec_ctx *c, const char *s, size_t len);
 
+/* The stack's floor: the cascade, the layout and the scripts go no deeper
+ * into a document than this; what is deeper isn't laid out (a page nested
+ * deeper than the stack holds overwrote the program's data, and bombed).
+ * The program sets it with room left under it for the deepest call below
+ * a recursion; NULL: no limit. EC_DEEP(): the stack is down to it;
+ * EC_DEEP_BY(n): to n bytes above it (for a recursion with more under it). */
+extern char *ec_stack_floor;
+#define EC_DEEP_BY(n) (ec_stack_floor != NULL && (char *)__builtin_frame_address(0) < ec_stack_floor + (n))
+#define EC_DEEP() EC_DEEP_BY(0)
+
 /* Styles root and every element under it: sets each node's style. The
  * styles last until ec_unstyle() or ec_destroy(). */
 void ec_select(ec_ctx *c, ec_node *root);

@@ -956,6 +956,10 @@ static void build(L *l, box *parent, dnode *n)
 {
 	dnode *c;
 	const ec_style *pst = n->type == DN_ELEMENT && n->e.style ? n->e.style : parent->st;
+	if (EC_DEEP()) {
+		l->p->deep = 1;		/* the stack's floor: no deeper */
+		return;
+	}
 	for (c = n->first; c != NULL && !l->fail; c = c->next) {
 		if (c->type == DN_TEXT) {
 			if (c->len > 0)
@@ -987,6 +991,11 @@ static void fixup(L *l, box *b)
 {
 	box *c, *prev, *next;
 	int has_block = 0, has_inline = 0;
+	if (EC_DEEP()) {
+		l->p->deep = 1;		/* the stack's floor: what is in it left out */
+		b->first = b->last = NULL;
+		return;
+	}
 
 	for (c = b->first; c != NULL; c = c->next) {
 		if (c->first != NULL)
@@ -1412,6 +1421,10 @@ static uint16_t label_for(L *l, dnode *n)
 static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 {
 	box *c;
+	if (EC_DEEP()) {
+		l->p->deep = 1;
+		return;
+	}
 	for (c = b->first; c != NULL && !l->fail; c = c->next) {
 		RUNSTATE r;
 		switch (c->kind) {
@@ -2147,6 +2160,10 @@ static int32_t measure(L *l, box *b)
 {
 	int32_t w = AUTO, inner = 0, mx;
 	box *c;
+	if (EC_DEEP()) {
+		l->p->deep = 1;
+		return 0;
+	}
 	if (!b->anon)
 		w = len(l, b->st, EP_WIDTH, AUTO);
 	if (w != AUTO) {
@@ -3477,7 +3494,10 @@ static void grid_fit(GTRACK *t, int n, int32_t room, int fill_auto)
 	}
 }
 
-static int32_t grid_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef, int32_t *first)
+/* not inlined: layout_block is on the stack once a level of the page, and
+   would carry grid's locals in each */
+static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef,
+						     int32_t *first)
 {
 	const ec_style *s = b->st;
 	const ec_tracks *tc = s->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_COLUMNS].p : NULL;
@@ -3858,6 +3878,12 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 
 	if (l->fail)
 		return 0;
+	if (EC_DEEP()) {
+		l->p->deep = 1;		/* the stack's floor: this box and what is in it left out */
+		*mb_out = 0;
+		*first = AUTO;
+		return 0;
+	}
 	if (own) {
 		/* a context of its own: the floats from here on are its */
 		l->fl0 = l->nfl;
@@ -4411,21 +4437,27 @@ const dl_item *page_ctl_item(const page *p, const fctl *c)
 	return NULL;
 }
 
-static int32_t anchor_in(const dnode *n, const char *id)
+/* in document order, without recursion */
+static int32_t anchor_in(const dnode *top, const char *id)
 {
-	const dnode *c;
-	if (n->type == DN_ELEMENT && n->y >= 0) {
-		const char *v = dn_attr(n, "id");
-		if ((v != NULL && strcmp(v, id) == 0) ||
-		    (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0))
-			return n->y;
+	const dnode *n = top;
+	for (;;) {
+		if (n->type == DN_ELEMENT && n->y >= 0) {
+			const char *v = dn_attr(n, "id");
+			if ((v != NULL && strcmp(v, id) == 0) ||
+			    (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0))
+				return n->y;
+		}
+		if (n->first != NULL) {
+			n = n->first;
+			continue;
+		}
+		while (n != top && n->next == NULL)
+			n = n->parent;
+		if (n == top)
+			return -1;
+		n = n->next;
 	}
-	for (c = n->first; c != NULL; c = c->next) {
-		int32_t y = anchor_in(c, id);
-		if (y >= 0)
-			return y;
-	}
-	return -1;
 }
 
 int32_t page_anchor(const page *p, const char *id)

@@ -195,6 +195,12 @@ $(eval $(call target_rules,asan,$(HOSTCC),$(ASAN_CFLAGS)))
 # the Atari: freestanding, with common/'s runtime (crt0, libc, tos) and
 # EWeb's additions in atari/ (the C headers and calls NetSurf needs beyond it)
 GCCINC     := $(shell $(M68KCC) -print-file-name=include)
+# the programs' stacks (crt0's, in the BSS): a page's depth costs about
+# 700 bytes of stack a level in the layout, and the layout stops short of
+# the end (ui/main.c, EW_STACK_ROOM; DESIGN.md, The stack). The 1 MB ST
+# has no more to give its edition.
+TOS_STACK := 262144
+ST_STACK  := 49152
 TOS_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
@@ -207,7 +213,7 @@ tos_RT     := build/tos/rt/crt0.o build/tos/rt/nf.o build/tos/rt/libc.o build/to
 
 build/tos/rt/%.o: common/atari/%.S
 	@mkdir -p $(@D)
-	$(M68KCC) -m68030 -DSTACK_SIZE=131072 -c $< -o $@
+	$(M68KCC) -m68030 -DSTACK_SIZE=$(TOS_STACK) -c $< -o $@
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
@@ -456,7 +462,7 @@ build/st/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
 # engine, Hubbub, and the network as EWGET.TTP has it
 GEM_UI     := main draw screen win about dialogs
 GEM_COMMON := aboutbox alert popup dialog help av iconify clip mbar dd
-GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
+GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DEW_STACK=$(TOS_STACK) $(EWB_INC) $(NSINC)
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
 build/tos/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
@@ -497,10 +503,10 @@ STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
 STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
-STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM $(EWB_INC) $(NSINC)
+STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) $(EWB_INC) $(NSINC)
 build/st/rt/%.o: common/atari/%.S
 	@mkdir -p $(@D)
-	$(M68KCC) -m68000 -DSTACK_SIZE=49152 -c $< -o $@
+	$(M68KCC) -m68000 -DSTACK_SIZE=$(ST_STACK) -c $< -o $@
 build/st/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
@@ -860,6 +866,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

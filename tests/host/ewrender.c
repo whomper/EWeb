@@ -51,12 +51,16 @@
  * answering OK; then -K ID clicks the element with that id (again for
  * more; "a script loaded" and the load's result when one sent the
  * browser on), and -T MS lets the page's timers run for MS ms.
+ * -S KB: the stack the cascade and the layout may take (ec_stack_floor;
+ * all but a MB of the stack by default); "deep:" on stderr when a page was
+ * cut there.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/resource.h>
 
 #include "bookmark.h"
 #include "browse.h"
@@ -385,6 +389,18 @@ int main(int argc, char **argv)
 	const char *clicks[16];
 	const char *save_to = NULL;
 
+	{
+		/* the stack's floor, as EWEB.PRG has one (ui/main.c): all of the
+		   stack but a MB */
+		struct rlimit rl;
+		long size = 8L << 20;
+		if (getrlimit(RLIMIT_STACK, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY)
+			size = (long) rl.rlim_cur;
+		ec_stack_floor = (char *) __builtin_frame_address(0) - size + (1L << 20);
+		for (i = 1; i + 1 < argc && argv[i][0] == '-'; i++)
+			if (!strcmp(argv[i], "-S"))
+				ec_stack_floor = (char *) __builtin_frame_address(0) - atol(argv[i + 1]) * 1024;
+	}
 	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
 		if (!strcmp(argv[i], "-w") && i + 1 < argc)
 			width = atoi(argv[++i]);
@@ -428,6 +444,8 @@ int main(int argc, char **argv)
 			bm_file(argv[++i]);
 		else if (!strcmp(argv[i], "-Q") && i + 1 < argc)
 			pens = atoi(argv[++i]);	/* pictures as the Pi's pens: 1 always, 0 never */
+		else if (!strcmp(argv[i], "-S") && i + 1 < argc)
+			i++;			/* the stack's floor: above */
 		else if (!strcmp(argv[i], "-W") && i + 1 < argc)
 			str_copy(http_gateway, argv[++i], sizeof http_gateway);
 		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
@@ -532,6 +550,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "ewrender: nothing shown (%d)\n", r);
 		return 1;
 	}
+	if (b.p->deep)
+		fprintf(stderr, "ewrender: deep: nested deeper than the stack holds, the rest left out\n");
 	pictures(&b);
 	if (nfill > 0 || send != NULL) {
 		fctl *first = NULL, *by = NULL;

@@ -28,7 +28,7 @@
 EWEB.PRG says what it does as "EWEB ..." lines through NatFeats; each step
 waits for the line it expects, then a screenshot goes to OUT.
 
-    tests/hatari/gui_test.py OUT [browse] [screens]"""
+    tests/hatari/gui_test.py OUT [browse] [scripts] [screens] [st] [gateway] [falcon] [deep]"""
 import os
 import re
 import shutil
@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep"]
 HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
@@ -860,6 +860,37 @@ def falcon():
         srv.wait(10)
 
 
+def deep():
+    """a page nested 1000 deep, from the disk, on the Falcon (256 KB of
+    stack) and the 1 MB ST (48 KB): shown cut at the stack's floor (the
+    log's "deep"), not crashed, and the next page shown after it (DESIGN.md,
+    The stack: such a page ran off the stack's end and bombed)"""
+    page = "<!DOCTYPE html><title>Deep</title>" + "<div>level" * 1000 + "</div>" * 1000
+    for name, spec, prg in (("deepfalcon", "Falcon:256", "EWEB.PRG"), ("deepst", "ST-1:mono", "EWEBST.PRG")):
+        hd = hd_for(name, r"C:\DEEP.HTM")
+        with open(os.path.join(hd, "DEEP.HTM"), "w") as f:
+            f.write(page)
+        r = Run(name, spec, hd, prg=prg)
+        try:
+            ev = r.wait(r"(shown|stopped) ", 600)
+            cut = r.wait(r"deep ", 30) if ev and ev.startswith("shown ") else None
+            r.shot(0)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/TEXT.HTM")
+            r.key(RETURN)
+            after = r.wait(r"shown file:///C:/TEXT.HTM ", 600)
+            r.key(Q, (CTRL,))
+            quit = r.wait(r"quit$", 300)
+            ok = after is not None and quit is not None and not os.path.exists(os.path.join(hd, "CRASH.LOG"))
+            if spec.startswith("Falcon"):
+                ok = ok and cut is not None
+            check("deep: %s, a page 1000 deep cut%s, then the next page" %
+                  (name, "" if spec.startswith("Falcon") else " or not shown (the ST's memory)"), ok,
+                  "\n".join(r.events()[-10:]))
+        finally:
+            r.end()
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -881,5 +912,7 @@ if "gateway" in WHICH:
     gateway()
 if "falcon" in WHICH:
     falcon()
+if "deep" in WHICH:
+    deep()
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

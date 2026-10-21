@@ -50,6 +50,8 @@ static dnode *next_node(dnode *n, const dnode *top, int into)
 static void text_into(const dnode *n, char **s, long *len, long *cap)
 {
 	const dnode *k;
+	if (EC_DEEP())
+		return;			/* the stack's floor: no deeper */
 	for (k = n->first; k != NULL; k = k->next) {
 		if (k->type == DN_TEXT && k->len > 0) {
 			if (*len + (long) k->len + 1 > *cap) {

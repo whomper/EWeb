@@ -4755,8 +4755,9 @@ static dnode *deep_clone(P *p, const dnode *old)
 		n = new_node(p, old->type);
 		set_text(p, n, (const uint8_t *) old->text, old->len);
 	}
-	for (c = old->first; c != NULL; c = c->next)
-		link_before(n, deep_clone(p, c), NULL);
+	if (!EC_DEEP())			/* the stack's floor: no deeper */
+		for (c = old->first; c != NULL; c = c->next)
+			link_before(n, deep_clone(p, c), NULL);
 	return n;
 }
 

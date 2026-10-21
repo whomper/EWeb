@@ -36,6 +36,17 @@
 #include "dspjpeg.h"
 #endif
 
+/* the stack's size (the Makefile's, crt0's too) and the room kept under
+   the floor (DESIGN.md, The stack) */
+#ifndef EW_STACK
+#error "EW_STACK: the Makefile gives crt0's stack size"
+#endif
+#ifdef EW_ST
+#define EW_STACK_ROOM (8L * 1024)
+#else
+#define EW_STACK_ROOM (16L * 1024)
+#endif
+
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
 #endif
@@ -803,9 +814,13 @@ static void loaded(int r)
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
 				  br.title);
 		}
+		if (br.p && br.p->deep)
+			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
 		if (br.note[0]) {
 			win_status(br.note);
 			log_event("note %s", br.note);
+		} else if (br.p && br.p->deep) {
+			win_status("Part of this page is nested too deeply to show.");
 		}
 		break;
 	}
@@ -1543,6 +1558,13 @@ int main(void)
 	AEVENT ev;
 	short hover_x = -1, hover_y = -1;
 
+	/* the stack (crt0's, EW_STACK bytes) ends that far below main's frame:
+	   the cascade and the layout go no deeper into a page than EW_STACK_ROOM
+	   above its end, room for the deepest call under them (the layout's
+	   1.5 KB, and 5 KB for a picture's address resolved in it; GCC's
+	   -fcallgraph-info=su) with some to spare; the cascade stops sooner
+	   (src/css/select.c) */
+	ec_stack_floor = (char *)__builtin_frame_address(0) - EW_STACK + EW_STACK_ROOM;
 	{
 		extern int mem_unaligned_ok;
 		mem_unaligned_ok = get_cookie(0x5F435055L) >= 20;	/* _CPU */

@@ -87,6 +87,7 @@ static int atoms_grow(ec_ctx *c)
 }
 
 uint32_t ec_stamp;
+char *ec_stack_floor;
 
 const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len)
 {

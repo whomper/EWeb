@@ -1369,6 +1369,29 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	return st;
 }
 
+/* the cascade stops this much above the stack's floor: under an element
+   it styles can go 12.5 KB more (cascade_style's 6.7 KB and a var() or
+   grid-template-areas value's), while its own recursion takes 176 bytes a
+   level, so it still goes deeper than the layout can */
+#define EC_CASCADE_ROOM (14L * 1024)
+
+/* below the stack's floor: every element under top takes its style,
+   without going deeper on the stack */
+static void style_flat(ec_node *top, const ec_style *st)
+{
+	ec_node *e = top->first;
+	while (e != NULL) {
+		e->style = st;
+		if (e->first != NULL) {
+			e = e->first;
+			continue;
+		}
+		while (e != top && e->next == NULL)
+			e = e->parent;
+		e = e == top ? NULL : e->next;
+	}
+}
+
 /* styles e and, unless one, its siblings after it; then their children */
 static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 {
@@ -1396,7 +1419,9 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 		}
 		if (e->parent == NULL)
 			c->root_style = st;
-		if (e->first != NULL) {
+		if (e->first != NULL && EC_DEEP_BY(EC_CASCADE_ROOM)) {
+			style_flat(e, st);
+		} else if (e->first != NULL) {
 			bloom_push(c, e);
 			style_list(c, e->first, st, 0);
 			bloom_pop(c, e);

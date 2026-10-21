@@ -658,6 +658,8 @@ static const ec_sellist *sellist(ec_ctx *c, const ec_tok *t, int i, int n, int f
 	ec_sellist *l;
 
 	*maxspec = 0;
+	if (EC_DEEP())
+		return NULL;		/* :is() in :is() deeper than the stack holds: not valid */
 	for (; i <= n; i++) {
 		if (i < n) {
 			int ty = t[i].type;
@@ -1483,7 +1485,7 @@ static int supports_in_parens(ec_ctx *c, const ec_tok *t, int *i, int n)
 {
 	int end, k;
 
-	if (*i >= n)
+	if (*i >= n || EC_DEEP())
 		return -1;
 	if (t[*i].type == T_FUNC) {
 		end = close_of(t, *i, n);

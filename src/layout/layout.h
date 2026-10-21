@@ -96,6 +96,7 @@ typedef struct page {
 #endif
 	struct arena *mem;
 	LAYOUT_OPT opt;
+	int deep;			/* nested deeper than the stack holds: the rest left out */
 } page;
 
 #define PAGE_STRIP 256

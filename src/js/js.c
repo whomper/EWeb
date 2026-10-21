@@ -545,6 +545,8 @@ static void text_of(const dnode *n, SB *b)
 		jb_add(b, n->text, n->len);
 		return;
 	}
+	if (EC_DEEP())
+		return;			/* the stack's floor: no deeper */
 	for (c = n->first; c != NULL; c = c->next)
 		if (c->type == DN_TEXT || c->type == DN_ELEMENT || c->type == DN_DOCUMENT)
 			text_of(c, b);
@@ -615,6 +617,8 @@ static int raw_text(const dnode *n)
 static void serialise(const dnode *n, SB *b, int self)
 {
 	const dnode *c;
+	if (EC_DEEP())
+		return;			/* the stack's floor: no deeper */
 	if (self) {
 		size_t len;
 		const char *name;
@@ -1025,7 +1029,7 @@ static dnode *clone(ejs *j, const dnode *n, int deep)
 		c->cls = n->cls;
 		c->ncls = n->ncls;
 	}
-	if (deep)
+	if (deep && !EC_DEEP())		/* the stack's floor: no deeper */
 		for (k = n->first; k != NULL; k = k->next) {
 			dnode *ck = clone(j, k, 1);
 			if (ck == NULL)

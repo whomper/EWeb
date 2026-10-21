@@ -414,7 +414,8 @@ static void hints(dnode *n)
 	}
 }
 
-static void finish(doc *d, dnode *n, dnode *parent)
+/* one element: its links, flags and hints, and its children's links */
+static void finish_one(doc *d, dnode *n, dnode *parent)
 {
 	dnode *c, *prev = NULL;
 	uint16_t idx = 0;
@@ -463,7 +464,6 @@ static void finish(doc *d, dnode *n, dnode *parent)
 		if (c->type != DN_ELEMENT)
 			continue;
 		empty = 0;
-		finish(d, c, n);
 		c->e.index = ++idx;
 		c->e.prev = prev ? &prev->e : NULL;
 		c->e.next = NULL;
@@ -478,6 +478,33 @@ static void finish(doc *d, dnode *n, dnode *parent)
 			c->e.nsib = idx;
 	if (empty)
 		n->e.flags |= EC_NODE_EMPTY;
+}
+
+static dnode *element_from(dnode *c)
+{
+	while (c != NULL && c->type != DN_ELEMENT)
+		c = c->next;
+	return c;
+}
+
+/* top and every element under it, in document order, without recursion
+   (a page can be nested deeper than the Atari's stack holds) */
+static void finish(doc *d, dnode *top, dnode *parent)
+{
+	dnode *n = top, *c;
+	finish_one(d, top, parent);
+	for (;;) {
+		if ((c = element_from(n->first)) != NULL) {
+			n = c;
+		} else {
+			while (n != top && element_from(n->next) == NULL)
+				n = n->parent;
+			if (n == top)
+				return;
+			n = element_from(n->next);
+		}
+		finish_one(d, n, n->parent);
+	}
 }
 
 /* The UA sheet, parsed once a program run into a base context that
@@ -708,7 +735,9 @@ static int media_ok(const char *m)
 	return 0;
 }
 
-static void sheets_in(dnode *n, void (*cb)(void *, int, const char *, size_t), void *ud)
+/* n's sheet, if it is a style or link element: 1 when nothing under it
+   is looked at (those, a template, SVG) */
+static int sheet_of(dnode *n, void (*cb)(void *, int, const char *, size_t), void *ud)
 {
 	dnode *c;
 	if (n->type == DN_ELEMENT) {
@@ -730,26 +759,39 @@ static void sheets_in(dnode *n, void (*cb)(void *, int, const char *, size_t), v
 				cb(ud, 0, buf, len);
 				free(buf);
 			}
-			return;
+			return 1;
 		}
 		if (n->tag == T_LINK) {
 			const char *rel = dn_attr(n, "rel"), *href = dn_attr(n, "href");
 			if (rel != NULL && href != NULL && word_in(rel, "stylesheet") && !word_in(rel, "alternate") &&
 			    media_ok(dn_attr(n, "media")))
 				cb(ud, 1, href, strlen(href));
-			return;
+			return 1;
 		}
 		if (n->tag == T_TEMPLATE || n->tag == T_SVG)
-			return;
+			return 1;
 	}
-	for (c = n->first; c != NULL; c = c->next)
-		sheets_in(c, cb, ud);
+	return 0;
 }
 
+/* in document order, without recursion (a page can be nested deeper than
+   the Atari's stack holds) */
 void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t len), void *ud)
 {
-	if (d->root != NULL)
-		sheets_in(d->root, cb, ud);
+	dnode *top = d->root, *n = top;
+	if (top == NULL)
+		return;
+	for (;;) {
+		if (!sheet_of(n, cb, ud) && n->first != NULL) {
+			n = n->first;
+			continue;
+		}
+		while (n != top && n->next == NULL)
+			n = n->parent;
+		if (n == top)
+			return;
+		n = n->next;
+	}
 }
 
 void doc_add_ua(doc *d)
