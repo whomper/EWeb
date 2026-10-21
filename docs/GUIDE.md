@@ -88,7 +88,8 @@ EWeb shows JPEG, PNG (with transparency) and GIF (the first picture of
 an animated one), decoded at the size the page shows them: a big photo
 shown small takes much less time and memory than at its own size. On a
 Falcon the DSP decodes a JPEG while the 68030 only hands it the bytes
-and takes the pixels (Settings > General). In 16
+and takes the pixels (a progressive JPEG's scans the 68030 reads, the
+DSP the rest; Settings > General). In 16
 or 256 colours and in monochrome they are dithered to the screen's own
 colours (on a Falcon in 4, 16 and 256 colours by the DSP, eight times as
 quick); in true colour they are as they are. An address of a picture

@@ -871,7 +871,14 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   scaler. Making that oracle showed the R G B tables' red one below for many reds (×$7FFFFF,
   rounded), taking one from green and blue; the tables are exact now. The first such JPEG checks it against
   libjpeg's own decode of a known picture; a DSP that gets it wrong, or stops answering, is left
-  alone. Progressive, arithmetic-coded and CMYK JPEGs stay with libjpeg. Against Pillow: closer
+  alone. CMYK JPEGs stay with libjpeg. A progressive (or arithmetic-coded) one (21 Oct 2026) has
+  libjpeg read its scans into coefficients on the 68030 (`jpeg_read_coefficients`), and the DSP
+  does the rest from them, each block's coefficients sent in zigzag order to the last other than
+  0: the transform, colours and upsampling were two thirds of libjpeg's work on it. The photo saved
+  progressive on Hatari's stock Falcon: 6.78 s on the 68030, 4.38 s with the DSP; shown at 192 x
+  128, 5.21 s and 4.21 s. What is left is libjpeg reading the scans (its refinement passes most)
+  and the coefficients' trip to the DSP; the scans can't go to the DSP, which hasn't the memory for
+  a picture's coefficients. Against Pillow: closer
   than libjpeg's fast transform for 4:4:4 and grey (its transform is exact), a little further for
   4:2:0 (it repeats the chroma where libjpeg blends it). The scaler sums a JPEG's rows in 16 bits
   (a third of the memory the five longs of a picture with alpha take), the same pixels a third

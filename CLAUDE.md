@@ -144,7 +144,8 @@ hub stay complete, with the evidence.
   page shows it, fetched after the page by `br_pictures_step`) on AERA-Atari's `common/src/pic.c`
   (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there
   and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). On a Falcon a baseline
-  JPEG is the DSP's, Huffman codes to pixels (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;
+  JPEG is the DSP's, Huffman codes to pixels, and a progressive one's from libjpeg's coefficients
+  (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;
   `PICDSP=`), and so is the dither to 3 pens or more (`common/dsp/dither.a56`, the very pens of
   the 68030's: `make testdsp` there compares them), made fast for the stock Falcon (the owner's
   rule, 20 Oct 2026): after changing them,

@@ -355,7 +355,7 @@ binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
 PIC_C    := pic png pic_lj8
 LJ       := common/third_party/libjpeg-turbo
 LJ_C     := jaricom jcomapi jdapimin jdapistd jdarith jdcoefct jdcolor jddctmgr jdhuff jdinput jdmainct \
-            jdmarker jdmaster jdmerge jdphuff jdpostct jdsample jidctfst jidctint jidctred jmemmgr \
+            jdmarker jdmaster jdmerge jdphuff jdpostct jdsample jdtrans jidctfst jidctint jidctred jmemmgr \
             jmemnobs jquant1 jquant2 jutils
 PIC_INC  := -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -I$(LJ)/src -I$(LJ)/config -Icommon/third_party/nsgif/include
 TOSPIC_OBJ := $(addprefix build/tos/pic/,$(addsuffix .o,$(PIC_C) $(LJ_C) gif lzw))
