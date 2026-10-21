@@ -6,8 +6,8 @@ code: each picture fetch.sh gets and run.py makes, to the pens of a
 monochrome ST, ST medium, ST low and a Falcon's 256 colours, W wide and at
 a third of its size, by aerapens built for this machine and for a Pi
 (arm64 and armhf, under QEMU), and by the same sources built as 68030 code
-(aerapens-lj, as EWEB.PRG) and 68000 code (aerapens-tj, as EWEBST.PRG)
-under qemu-m68k: every output must be the 68k one to the byte (or every
+(its EWEB.PRG build, libjpeg-turbo) and 68000 code (its EWEBST.PRG build,
+TJpgDec) under qemu-m68k: every output must be the 68k one to the byte (or every
 build must refuse it alike). make pens; run.py first (it makes build/gen).
 
     pens.py [-q] [FILE...]"""
@@ -37,17 +37,24 @@ def build():
         subprocess.run(["make", "-s", "-C", TOOL] + list(args), check=True)
     make()
     make("pi")
+    # the reference: EWEB.PRG's build as 68030 code, EWEBST.PRG's as 68000
     for ed, arch in (("lj", "-m68030"), ("tj", "-m68000")):
-        make("CC=m68k-linux-gnu-gcc", "ARCH=" + arch, "B=" + os.path.join(B, "m68k-" + ed), "LDFLAGS=-static",
-             os.path.join(B, "m68k-" + ed, "aerapens-" + ed))
+        make("CC=m68k-linux-gnu-gcc", "NM=m68k-linux-gnu-nm", "ARCH=" + arch, "B=" + os.path.join(B, "m68k-" + ed),
+             "LDFLAGS=-static")
 
 
 def runners(ed):
     """the reference (the Atari's code) first"""
-    return [("68k", ["qemu-m68k", "-cpu", "m68030", os.path.join(B, "m68k-" + ed, "aerapens-" + ed)]),
-            ("here", [os.path.join(TOOL, "build", "aerapens-" + ed)]),
-            ("arm64", ["qemu-aarch64", os.path.join(TOOL, "build", "arm64", "aerapens-" + ed)]),
-            ("armhf", ["qemu-arm", os.path.join(TOOL, "build", "armhf", "aerapens-" + ed)])]
+    return [("68k", ["qemu-m68k", "-cpu", "m68030", os.path.join(B, "m68k-" + ed, "aerapens")]),
+            ("here", [os.path.join(TOOL, "build", "aerapens")]),
+            ("arm64", ["qemu-aarch64", os.path.join(TOOL, "build", "arm64", "aerapens")]),
+            ("armhf", ["qemu-arm", os.path.join(TOOL, "build", "armhf", "aerapens")])]
+
+
+def request(ed, w, h, pal, data):
+    """aerapens' request (aerapens.c)"""
+    return (b"AEPQ\1" + (b"l" if ed == "lj" else b"t") + bytes([len(pal) - 1, 0]) + w.to_bytes(2, "big") +
+            h.to_bytes(2, "big") + len(data).to_bytes(4, "big") + bytes(v for c in pal for v in c) + data)
 
 
 def size_of(path):
@@ -71,17 +78,15 @@ def main():
     for path in files:
         data = open(path, "rb").read()
         own = size_of(path)
-        sizes = [("160", 0)]
+        sizes = [(160, 0)]
         if own:
-            sizes.append(("%d" % max(1, own[0] // 3), max(1, own[1] // 3)))
+            sizes.append((max(1, own[0] // 3), max(1, own[1] // 3)))
         for ed in ("lj", "tj"):
             for pname, pal in PALS.items():
-                head = bytes(v for c in pal for v in c)
                 for w, h in sizes:
-                    args = [w, str(h), str(len(pal))]
                     ref = None
                     for name, cmd in runners(ed):
-                        p = subprocess.run(cmd + args, input=head + data, capture_output=True, timeout=600)
+                        p = subprocess.run(cmd, input=request(ed, w, h, pal, data), capture_output=True, timeout=600)
                         got = (p.returncode, p.stdout)
                         runs += 1
                         if ref is None:
