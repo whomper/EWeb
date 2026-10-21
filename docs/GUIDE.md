@@ -361,8 +361,7 @@ checked (`SIGS.DAT`).
 
 Without Falcon mode, and always in the ST edition, pages come through
 the Pi gateway: AERA-Gateway's web service on a Raspberry Pi in your
-home (`aera-gateway install web` on the Pi), whose address you type in
-Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
+home (set up as below), whose address you type in Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
 hands the page over your home network. It also makes each picture as the
 page can show it: one wider than the page comes made smaller, and WebP,
 AVIF and the like come as JPEG or PNG (the Pi needs `python3-pil`, which
@@ -377,6 +376,31 @@ come again from the Pi. With neither, EWeb
 says so when you open a secure page, and the page shown stays.
 
 The status bar says how a secure page came.
+
+### Setting up the Pi gateway
+
+On the Raspberry Pi (Raspberry Pi OS), in a terminal, with your Atari's
+address in place of `ATARI_IP`:
+
+```
+sudo apt install -y git                  (Raspberry Pi OS Lite only)
+git clone https://github.com/whomper/AERA-Gateway
+cd AERA-Gateway
+./update-pi.sh
+sudo gateway/aera-gateway install web --allow ATARI_IP
+```
+
+- Add `--browser` to the last line for **Through the Pi's browser** and
+  **Live view** (see [Pages made by scripts](#pages-made-by-scripts)):
+  it installs Chromium and needs a Pi with 2 GB or more.
+- `install web` also builds the part that makes pictures ready for your
+  screen, and installs `gcc` and `make` for it if they're missing.
+- To update the Pi later: `cd ~/AERA-Gateway && ./update-pi.sh`.
+- To check it: `gateway/aera-gateway status` on the Pi, or open
+  `http://PI_IP:8280/` (the Pi's address) in EWeb.
+
+Then in EWeb: **Settings > Secure**, the Pi gateway `PI_IP` (the Pi's
+address), port `8280`.
 
 ## Settings
 

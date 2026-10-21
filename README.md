@@ -118,8 +118,33 @@ checked against the authorities in `CACERT.PEM` (Mozilla's list; `ROOTS.DAT`
 is the same list read in advance), with its name and dates; there is no way
 to skip the check. A kept connection serves the next requests to the same
 server, and a new one to it resumes the TLS session, which saves most of
-the handshake. Through AERA-Gateway, for CAPTCHAs and heavy sites, comes
-later ([`docs/DESIGN.md`](docs/DESIGN.md)).
+the handshake.
+
+Or through the Pi gateway (Settings > Secure; always for the ST edition):
+AERA-Gateway's web service on a Raspberry Pi makes the secure connection
+(TLS 1.2 or 1.3, its certificates checked) and hands the page over your home
+network. It also makes pictures smaller, turns WebP and the like into JPEG or
+PNG, and can send a picture ready for the Atari's screen, in its own colours,
+made with EWeb's own decoder and dither. With `--browser` it opens pages in
+the Pi's own browser for snapshots and live view (CAPTCHAs, pages made by
+scripts). To set it up, on the Pi (Raspberry Pi OS), with the Atari's address
+for `ATARI_IP`:
+
+```
+sudo apt install -y git                  (Raspberry Pi OS Lite only)
+git clone https://github.com/whomper/AERA-Gateway
+cd AERA-Gateway
+./update-pi.sh
+sudo gateway/aera-gateway install web --allow ATARI_IP
+```
+
+- Add `--browser` to the last line for snapshots and live view: it installs
+  Chromium and needs a Pi with 2 GB or more.
+- `install web` also builds `aerapens` (the pictures for the Atari's screen),
+  installing `gcc` and `make` if they're missing.
+- To update: `cd ~/AERA-Gateway && ./update-pi.sh`. To check:
+  `gateway/aera-gateway status`, or `http://PI_IP:8280/`.
+- In EWeb: Settings > Secure, the Pi gateway `PI_IP`, port `8280`.
 
 ## Building
 
