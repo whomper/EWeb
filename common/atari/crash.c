@@ -39,8 +39,9 @@ void (*crash_cleanup)(const char *what);
 void (*crash_report)(const char *text, long n);
 extern short _is_acc;			/* crt0.S */
 
-/* the vectors caught: 2 to 8, and 11 (line F: on a machine with an FPU,
-   only code that isn't code runs into it) */
+/* the vectors caught: 2 to 8, and 11 (line F) where TOS's own handler
+   is on it (sup_install): with an FPU's, an emulator's or a 68040/68060
+   package's, the program's FPU instructions are theirs */
 static void (*const entry[12])(void) = {
 	0, 0, crash_e2, crash_e3, crash_e4, crash_e5, crash_e6, crash_e7, crash_e8, 0, 0, crash_e11
 };
@@ -107,6 +108,22 @@ static long frame(const unsigned short *f, long vec, long *addr, short *has)
 
 static volatile long *low(long a);
 
+/* TOS's BIOS and XBIOS calls keep the caller's registers in a block below
+   savptr ($4A2), one a call, and give it back on return. A Supexec that a
+   fault taken in it abandons never returns: its block is given back here,
+   or each crash caught in one boot took another (measured: 46 bytes a
+   crash on TOS 1.04, TOS 4.04 and EmuTOS on an ST, 48 on EmuTOS on a
+   Falcon). savptr_user: savptr in user mode, worked out by sup_install;
+   0: not known, left alone. The supervisor stack needs nothing: at Pterm
+   GEMDOS goes back to the parent with the supervisor stack the parent had
+   (Super(0) read it steady over the ten on all four) */
+static long savptr_user, savptr_nested;
+
+static void sup_nested(void)
+{
+	savptr_nested = *low(0x4A2L);
+}
+
 /* the program is the process running now (GEMDOS's p_run, TOS 1.02 and
    later); supervisor mode */
 static int ours_running(void)
@@ -126,7 +143,10 @@ long crash_take(unsigned short *f, long vec)
 	const unsigned short *s = !crash_cpu && vec <= 3 ? f + 4 : f;
 	long size;
 	u32 pc = (u32)s[1] << 16 | s[2], old = (u32)crash_old[vec];
-	int rom = old >= 0xE00000UL && old < 0x1000000UL;
+	/* a 68000 (and 68010) uses 24 bits of an address: TOS 1.x's own
+	   handlers carry the vector's number in the top byte ($08FC0B0A) */
+	u32 at = crash_cpu < 20 ? old & 0xFFFFFFUL : old;
+	int rom = at >= 0xE00000UL && at < 0x1000000UL;
 	if (s[0] & 0x2000) {
 		/* supervisor mode: the program's own code there (a Supexec of its:
 		   a DSP's host port, a hardware register) is ours; the system's,
@@ -150,6 +170,8 @@ long crash_take(unsigned short *f, long vec)
 	}
 	if (!(size = frame(f, vec, &c_addr, &c_has_addr)))
 		return 0;
+	if ((s[0] & 0x2000) && savptr_user)
+		*low(0x4A2L) = savptr_user;	/* the abandoned call's block back */
 	c_vec = vec;
 	c_sr = s[0];
 	c_pc = (long)s[1] << 16 | s[2];
@@ -181,20 +203,65 @@ void crash_restore(void)
 	installed = 0;
 }
 
+/* vector i holds TOS's own handler, the one that shows the bombs: the
+   same as on vector j (TOS 2 to 4), the entry of a table of them 2 bytes
+   apart (EmuTOS), or the vector's number in the top byte (TOS 1.0x) */
+static int tos_default(int i, int j)
+{
+	u32 a = (u32)*low(i * 4L), b = (u32)*low(j * 4L);
+	return a == b || a == b + 2UL * (u32)(i - j) ||
+	       ((b >> 24) == (u32)j && a == ((b & 0xFFFFFFUL) | (u32)i << 24));
+}
+
+/* TOS 1.0x's own line F: at every start its AES copies its dispatcher
+   into RAM (the copy rewrites itself) and puts it on vector 11. It runs
+   line F from ROM only, so a line F in the program's code is a crash; and
+   a stray one there must not reach the dispatcher, which jumps through a
+   table or pops the supervisor stack. Known by its first words (TOS 1.04:
+   move.w (sp)+,d2; movea.l (sp)+,a0; move.w (a0)+,d1; btst #0,d1); an
+   emulator over it isn't */
+static int tos1_aes_line_f(void)
+{
+	static const unsigned short first[4] = { 0x341F, 0x205F, 0x3218, 0x0801 };
+	const unsigned char *h = (const unsigned char *)*low(0x4F2L);	/* _sysbase */
+	const unsigned short *p = (const unsigned short *)(*low(0x2CL) & 0xFFFFFFL);
+	int i;
+	if (h == 0 || *(const unsigned short *)(h + 2) >= 0x0200 || ((long)p & 1))
+		return 0;
+	for (i = 0; i < 4; i++)
+		if (p[i] != first[i])
+			return 0;
+	return 1;
+}
+
 static void sup_install(void)
 {
 	volatile long *rec = low(0x380L);
-	int i;
+	long in = *low(0x4A2L), block;
+	/* line F only while vector 11 has TOS's own handler on it: the one
+	   that bombs, or TOS 1.0x's AES dispatcher. A software FPU emulator or
+	   a 68040's or 68060's FPU package (CT60) keeps it, as the program's
+	   FPU instructions are theirs to run. Looked at before vectors 3 and 7
+	   are ours */
+	int i, line_f = tos_default(11, 7) || tos_default(11, 3) || tos1_aes_line_f();
 	if (rec[0] == 0x12345678L) {		/* proc_lives: TOS saw bombs */
 		for (i = 0; i < 27; i++)
 			prev[i] = rec[i];
 		rec[0] = 0;			/* told once */
 	}
-	for (i = 2; i <= 11; i++)
+	/* savptr in user mode: this Supexec took one block, and the one
+	   nested in it takes another the same size */
+	Supexec(sup_nested);
+	block = in - savptr_nested;
+	savptr_user = block > 0 && block <= 128 ? in + block : 0;
+	for (i = 2; i <= 11; i++) {
+		if (i == 11 && !line_f)
+			continue;
 		if (CAUGHT(i)) {
 			crash_old[i] = *low(i * 4L);
 			*low(i * 4L) = (long)entry[i];
 		}
+	}
 	crash_old_term = *low(0x408L);	/* etv_term */
 	*low(0x408L) = (long)crash_term;
 	installed = 1;
