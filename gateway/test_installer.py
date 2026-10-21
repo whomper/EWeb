@@ -114,6 +114,9 @@ class FakePi(ag.Pi):
             os.chmod(os.path.join(c[3], "bin", "python"), 0o755)
         elif c[0] == "ls":
             rc = 2
+        elif c[0] == "make":            # aerapens' build: a stand-in for what it makes
+            with open(os.path.join(c[c.index("-C") + 1], "aerapens"), "wb") as f:
+                f.write(b"\x7fELF\x02\x01\x01\0" + bytes(range(256)))       # a program's bytes, not text
         elif c[:2] == ["python3", "-c"] and c[2].startswith("import "):
             rc = 1 if c[2][7:] in self.no_modules else 0
         if check and rc:
@@ -517,6 +520,31 @@ class DavFtpTest(Base):
         self.run_ag("install", "web", "--browser")
         self.assertEqual(self.run_ag("remove", "web"), 0, self.err)
         self.assertIsNone(self.unit("webgate-browser"))
+
+    def test_web_pens(self):
+        self.pi.programs = {"make"}          # no cc yet
+        self.assertEqual(self.run_ag("install", "web"), 0, self.err)
+        self.assertIn(("apt-get", "install", "-y", "-qq", "gcc"), self.pi.cmds)
+        self.assertIn("Installing gcc, to build aerapens", self.out)
+        make = [c for c in self.pi.cmds if c[0] == "make"][-1]
+        self.assertEqual(make[-1], "PENS_BUILD=v" + ag.VERSION)
+        self.assertFalse(make[3].startswith(os.path.dirname(ag.HERE)))      # never in the copy itself
+        self.assertTrue(self.pi.exists("/opt/aera-gateway-pens/aerapens"))
+        sock, svc = self.pi.read("/etc/systemd/system/webgate-pens.socket"), self.unit("webgate-pens@")
+        for want in ("ListenStream=/run/webgate-pens.sock", "Accept=yes", "SocketUser=webgate", "SocketMode=0600"):
+            self.assertIn(want, sock)
+        for want in ("ExecStart=/opt/aera-gateway-pens/aerapens", "StandardInput=socket", "DynamicUser=yes",
+                     "LimitAS=64M", "LimitCPU=2", "RuntimeMaxSec=5", "PrivateNetwork=yes",
+                     "RestrictAddressFamilies=none"):
+            self.assertIn(want, svc)
+        # the socket before webgate, so that webgate's first look finds aerapens
+        cmds = [c for c in self.pi.cmds if c[:2] == ("systemctl", "restart")]
+        self.assertLess(cmds.index(("systemctl", "restart", "webgate-pens.socket")),
+                        cmds.index(("systemctl", "restart", "webgate.service")))
+        self.assertEqual(self.run_ag("remove", "web"), 0, self.err)
+        self.assertIsNone(self.pi.read("/etc/systemd/system/webgate-pens.socket"))
+        self.assertFalse(self.pi.exists("/opt/aera-gateway-pens"))
+        self.assertFalse(any(c[:2] == ("apt-get", "remove") for c in self.pi.cmds))   # gcc stays
 
     def test_web_browser_needs_memory(self):
         self.pi.write("/proc/meminfo", "MemTotal:         948304 kB\n")
