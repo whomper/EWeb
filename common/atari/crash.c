@@ -27,7 +27,7 @@
 
 /* shared with crash.S */
 short crash_busy, crash_cpu, crash_fvec, crash_newsr;
-long crash_regs[15], crash_usp, crash_jump, crash_old[12], crash_old_term;
+long crash_regs[15], crash_usp, crash_old[12], crash_old_term;
 long crash_stack_top;
 void crash_e2(void), crash_e3(void), crash_e4(void), crash_e5(void),
      crash_e6(void), crash_e7(void), crash_e8(void), crash_e11(void), crash_term(void);
@@ -55,7 +55,11 @@ static int installed;
 static const char *app = "the program", *app_version = "";
 static char path[220];
 static char note[80];
-static u32 text_lo, text_hi, prog_hi;
+/* the program's code (crash.S looks at it too) and its end */
+u32 crash_text_lo, crash_text_hi;
+static u32 prog_hi;
+#define text_lo crash_text_lo
+#define text_hi crash_text_hi
 
 /* what the exception left */
 static long c_vec, c_pc, c_addr;
@@ -123,7 +127,6 @@ long crash_take(unsigned short *f, long vec)
 	long size;
 	u32 pc = (u32)s[1] << 16 | s[2], old = (u32)crash_old[vec];
 	int rom = old >= 0xE00000UL && old < 0x1000000UL;
-	crash_jump = crash_old[vec];
 	if (s[0] & 0x2000) {
 		/* supervisor mode: the program's own code there (a Supexec of its:
 		   a DSP's host port, a hardware register) is ours; the system's,
