@@ -394,7 +394,8 @@ sudo gateway/aera-gateway install web --allow ATARI_IP
   **Live view** (see [Pages made by scripts](#pages-made-by-scripts)):
   it installs Chromium and needs a Pi with 2 GB or more.
 - `install web` also builds the part that makes pictures ready for your
-  screen, and installs `gcc` and `make` for it if they're missing.
+  screen (AERA-Gateway 1.6 and later), and installs `gcc` and `make` for
+  it if they're missing.
 - To update the Pi later: `cd ~/AERA-Gateway && ./update-pi.sh`.
 - To check it: `gateway/aera-gateway status` on the Pi, or open
   `http://PI_IP:8280/` (the Pi's address) in EWeb.

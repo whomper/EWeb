@@ -140,8 +140,8 @@ sudo gateway/aera-gateway install web --allow ATARI_IP
 
 - Add `--browser` to the last line for snapshots and live view: it installs
   Chromium and needs a Pi with 2 GB or more.
-- `install web` also builds `aerapens` (the pictures for the Atari's screen),
-  installing `gcc` and `make` if they're missing.
+- `install web` also builds `aerapens` (the pictures for the Atari's screen;
+  AERA-Gateway 1.6 and later), installing `gcc` and `make` if they're missing.
 - To update: `cd ~/AERA-Gateway && ./update-pi.sh`. To check:
   `gateway/aera-gateway status`, or `http://PI_IP:8280/`.
 - In EWeb: Settings > Secure, the Pi gateway `PI_IP`, port `8280`.
