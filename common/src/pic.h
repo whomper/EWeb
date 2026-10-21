@@ -76,6 +76,10 @@ extern const PIC_DSP *pic_dsp;
 /* put and the gets set it when the DSP stops answering, and then do
    nothing */
 extern int pic_dsp_failed;
+/* 1 (as it starts): the DSP shrinks a JPEG shown smaller too, sending
+   only the pixels shown; 0: it sends them all, for the scaler (the tests
+   compare the two) */
+extern int pic_dsp_shrink;
 /* where JPEGs are transformed: "DSP", "68030" (not to be had, or it
    failed), "-" (not tried yet); "68000" in TJpgDec's builds */
 const char *pic_dsp_state(void);

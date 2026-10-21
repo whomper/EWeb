@@ -20,6 +20,10 @@
  *   names_came()           names arrived or changed: redraw what shows them
  *   picked(list, n)        the people chosen (n = 0: cancelled)
  *
+ * With EContact's file chosen (people_file.h), names come from the file
+ * and people_pick() opens the shared people dialog when EContact isn't
+ * running.
+ *
  * EContact (answering) reads a question with people_question(), adds the
  * answer's lines with people_answer() and people_poll() sends them, cut
  * into whole commands of at most 1 KB, one at a time as AV_STARTED comes
@@ -44,6 +48,13 @@ int people_picking(void);		/* 1 while a pick waits for its answer */
 int people_message(const char *s, short from);	/* 1 when it was people_ask's */
 void people_poll(void);
 void people_forget(void);		/* AC_CLOSE: questions without answers go */
+
+/* EContact's CONTACTS.TXT (people_file.c sets these when the user chose
+   it, 4.1): names from the file, and the people dialog on it, when
+   neither edition of EContact is running */
+extern int (*people_scan_hook)(void (*line)(const char *addr, const char *name, void *ud),
+			       void *ud, int force);
+extern int (*people_pick_hook)(const char *partial, void (*picked)(const PERSON *list, int n));
 
 /* EContact's side */
 enum { PQ_NONE, PQ_NAMES, PQ_PICK };

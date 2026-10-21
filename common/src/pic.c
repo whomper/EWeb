@@ -671,6 +671,7 @@ typedef struct {
 
 const PIC_DSP *pic_dsp;
 int pic_dsp_failed;
+int pic_dsp_shrink = 1;
 static int dsp_state;			/* 0: not checked yet, 1: checked, -1: the 68030 does it */
 static int dsp_testing;			/* the check: 1 its DSP decodes, 2 its 68030 ones */
 
@@ -696,6 +697,8 @@ static int dsp_testing;			/* the check: 1 its DSP decodes, 2 its 68030 ones */
 #define D_CBP    0x300			/* y: its Cb, Cr */
 #define D_CRP    0x340
 #define D_CONST  0x500			/* y: the format's constants */
+#define D_KT     0x900			/* y: shrinking's divisors */
+#define D_SHRINK 0x3000			/* y: shrinking's tables, 4096 words at most */
 
 /* the 8-point inverse DCT: B[x][u] = C(u) / 2 * cos((2x + 1) u pi / 16),
    times 2^23 */
@@ -711,13 +714,13 @@ static const long dsp_basis[8][8] = {
 };
 
 /* each format's 9 constants (jpeg.a56's colour tables): for R, G and B
-   its mask, how far it moves down (R G B's R stays: $7FFFFF, rounded)
-   and what puts its top bit right */
+   its mask, how far it moves down (halved: jpeg.a56 doubles the product,
+   so R G B's R, which stays, is exact) and what puts its top bit right */
 static const unsigned long dsp_565[9] = {
-	0xF80000, 0x008000, 0x008000, 0xFC0000, 0x000400, 0x000400, 0xF80000, 0x000010, 0x000010
+	0xF80000, 0x004000, 0x008000, 0xFC0000, 0x000200, 0x000400, 0xF80000, 0x000008, 0x000010
 };
 static const unsigned long dsp_rgb[9] = {
-	0xFF0000, 0x7FFFFF, 0x800000, 0xFF0000, 0x008000, 0x008000, 0xFF0000, 0x000080, 0x000080
+	0xFF0000, 0x400000, 0x800000, 0xFF0000, 0x004000, 0x008000, 0xFF0000, 0x000040, 0x000080
 };
 
 /* the JPEGs it takes: 8-bit baseline (Huffman, one scan) of grey or of
@@ -907,6 +910,116 @@ static void dsp_feed(DSPSRC *s, int restart)
 	pic_dsp->put16(w, 256);
 }
 
+/* the DSP shrinking the picture too: each source pixel in the box of the
+   pixel shown it falls in (the scaler's centre mapping), each pixel shown
+   the mean of its box, rounded as the scaler's 16-bit way does: the same
+   pixels, with only those shown coming back. jpeg.a56's tables (at
+   D_SHRINK, in the order of the variables V_SCM to V_SMR), and for the
+   68030 each MCU's rectangle of pixels shown: from (xa, ya), ce x re of
+   them (the last column or row of boxes may go on into the next MCU) */
+typedef struct {
+	short *xa, *ce, *ya, *re;
+	unsigned long *t;
+	long at[7], n;			/* each table's place in t; t's length */
+} DSPSHR;
+
+static void dsp_shrink_free(DSPSHR *s)
+{
+	free(s->xa);
+	free(s->ya);
+	free(s->t);
+	memset(s, 0, sizeof *s);
+}
+
+/* the tables, or 0: the picture isn't shrunk (or its boxes are over 16
+   pixels, or the tables over 4096 words) */
+static int dsp_shrink_plan(DSPSHR *s, long ow, long oh, int mw, int mh, long nmx, long nmy, long w, long h)
+{
+	long x, y, i, maxw = 0, maxh = 0;
+	short *cx = NULL, *cy = NULL;
+	unsigned long *t;
+	memset(s, 0, sizeof *s);
+	s->at[0] = 0;				/* SCM: each source column's box */
+	s->at[1] = s->at[0] + ow;		/* SRM: each source row's, x 16 */
+	s->at[2] = s->at[1] + oh;		/* SWC: each column shown's width - 1, x 16 */
+	s->at[3] = s->at[2] + w;		/* SWR: each row shown's height - 1 */
+	s->at[4] = s->at[3] + h;		/* SCR: carried down (the DSP clears it) */
+	s->at[5] = s->at[4] + 2 * w;		/* SMC: each MCU column's */
+	s->at[6] = s->at[5] + 3 * nmx;		/* SMR: each MCU row's */
+	s->n = s->at[6] + 3 * nmy;
+	if (ow < w || oh < h || (ow == w && oh == h) || s->n > 4096)
+		return 0;
+	s->t = t = calloc((size_t) s->n, sizeof *t);
+	s->xa = malloc((size_t) nmx * 2 * sizeof *s->xa);
+	s->ya = malloc((size_t) nmy * 2 * sizeof *s->ya);
+	cx = malloc((size_t) ow * sizeof *cx);
+	cy = malloc((size_t) oh * sizeof *cy);
+	if (t == NULL || s->xa == NULL || s->ya == NULL || cx == NULL || cy == NULL)
+		goto no;
+	s->ce = s->xa + nmx;
+	s->re = s->ya + nmy;
+	for (x = 0; x < ow; x++) {
+		cx[x] = (short) centre(x, ow, w);
+		t[s->at[2] + cx[x]] += 16;
+	}
+	for (y = 0; y < oh; y++) {
+		cy[y] = (short) centre(y, oh, h);
+		t[s->at[3] + cy[y]]++;
+	}
+	for (i = 0; i < w; i++) {
+		maxw = (long) t[s->at[2] + i] > maxw ? (long) t[s->at[2] + i] : maxw;
+		t[s->at[2] + i] -= 16;
+	}
+	for (i = 0; i < h; i++) {
+		maxh = (long) t[s->at[3] + i] > maxh ? (long) t[s->at[3] + i] : maxh;
+		t[s->at[3] + i]--;
+	}
+	if ((maxw / 16) * maxh > 16)
+		goto no;
+	for (x = 0; x < ow; x++)
+		t[s->at[0] + x] = (unsigned long) (cx[x] - cx[x - x % mw]);
+	for (y = 0; y < oh; y++)
+		t[s->at[1] + y] = (unsigned long) (cy[y] - cy[y - y % mh]) * 16;
+	for (i = 0; i < nmx; i++) {
+		long x0 = i * mw, x1 = (x0 + mw < ow ? x0 + mw : ow) - 1;
+		int out = x1 + 1 < ow && cx[x1 + 1] == cx[x1];
+		unsigned long *e = t + s->at[5] + 3 * i;
+		e[0] = (unsigned long) cx[x0];
+		e[1] = (unsigned long) (cx[x1] - cx[x0] + 1);
+		e[2] = (unsigned long) out;
+		s->xa[i] = cx[x0];
+		s->ce[i] = (short) (e[1] - (unsigned long) out);
+	}
+	for (i = 0; i < nmy; i++) {
+		long y0 = i * mh, y1 = (y0 + mh < oh ? y0 + mh : oh) - 1;
+		int out = y1 + 1 < oh && cy[y1 + 1] == cy[y1];
+		unsigned long *e = t + s->at[6] + 3 * i;
+		e[0] = (unsigned long) cy[y0];
+		e[1] = (unsigned long) (cy[y1] - cy[y0] + 1);
+		e[2] = (unsigned long) out;
+		s->ya[i] = cy[y0];
+		s->re[i] = (short) (e[1] - (unsigned long) out);
+	}
+	free(cx);
+	free(cy);
+	return 1;
+no:
+	free(cx);
+	free(cy);
+	dsp_shrink_free(s);
+	return 0;
+}
+
+/* the sums' tables (R << 12 in X; G, B in Y: a pixel's X R << 12 + G,
+   its Y B) and, 16 on (jpeg.a56 reads
+   each 9 as a ring), the bits shown, 5-6-5, for shrinking: the constants
+   of dsp_565's kind */
+static const unsigned long dsp_sums[25] = {
+	0xFF0000, 0x040000, 0x080000, 0xFF0000, 0x000040, 0x000080, 0xFF0000, 0x000040, 0x000080,
+	0, 0, 0, 0, 0, 0, 0,
+	0xF80000, 0x004000, 0x008000, 0xFC0000, 0x000200, 0x000400, 0xF80000, 0x000008, 0x000010
+};
+
 /* an MCU's pixels from the DSP, into the picture (5-6-5) or the band of
    R G B rows, after the 256-word lots it asks for */
 static void dsp_read(LJ *j, PIC *p, unsigned char *band, DSPSRC *src, long x, long y, int cols, int rows)
@@ -939,8 +1052,11 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	unsigned long w[64 * 3];
 	unsigned char *band = NULL;
 	DSPSRC src;
+	DSPSHR shr;
+	int shrink = !direct && pic_dsp_shrink &&
+		dsp_shrink_plan(&shr, ow, oh, mw, mh, (long) c->MCUs_per_row, (long) c->MCU_rows_in_scan, p->w, p->h);
 
-	if (!direct) {
+	if (!direct && !shrink) {
 		band = malloc((size_t) ow * mh * 3);
 		if (band == NULL || !sc_init(sc, p, ow, oh)) {
 			free(band);
@@ -950,6 +1066,8 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	}
 	if (!pic_dsp->begin()) {
 		free(band);
+		if (shrink)
+			dsp_shrink_free(&shr);
 		return -2;
 	}
 	j->dsp_on = 1;
@@ -977,7 +1095,14 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	ft[1] = 1;
 	ft[2] = grey || c->comp_info[2].ac_tbl_no != c->comp_info[1].ac_tbl_no ? 2 : 1;
 	w[0x2b] = grey ? 1 : (unsigned long) ft[2] + 1;
-	dsp_load(D_LOADX, D_VARS, w, 0x2c);
+	if (shrink) {
+		/* V_SCALE, the tables' places, the width shown */
+		w[0x2c] = 1;
+		for (i = 0; i < 7; i++)
+			w[0x2d + i] = (unsigned long) (D_SHRINK + shr.at[i]);
+		w[0x34] = (unsigned long) p->w;
+	}
+	dsp_load(D_LOADX, D_VARS, w, 0x35);
 	/* each block's quantisers, where its pixels go, the pitch, the bias,
 	   its Huffman tables and DC predictor */
 	for (b = 0; b < nb; b++) {
@@ -1027,7 +1152,21 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 		}
 	}
 	dsp_load(D_LOADY, D_QT, w, grey ? 64 : 3 * 64);
-	dsp_load(D_LOADY, D_CONST, direct ? dsp_565 : dsp_rgb, 9);
+	if (shrink) {
+		static unsigned long kt[256];
+		/* each box's divisor: 65536 / n rounded (the scaler's), x 64; a
+		   box's columns - 1 x 16 + its rows - 1 */
+		for (i = 0; i < 256; i++) {
+			long n = (long) (i / 16 + 1) * (i % 16 + 1);
+			kt[i] = n > 16 ? 0 : n == 1 ? 65536UL * 64 : (unsigned long) ((65536L + n / 2) / n) * 64;
+		}
+		dsp_load(D_LOADY, D_KT, kt, 256);
+		dsp_load(D_LOADY, D_SHRINK, shr.t, shr.at[4]);
+		dsp_load(D_LOADY, (unsigned) (D_SHRINK + shr.at[5]), shr.t + shr.at[5], shr.n - shr.at[5]);
+		dsp_load(D_LOADY, D_CONST, dsp_sums, 25);
+	} else {
+		dsp_load(D_LOADY, D_CONST, direct ? dsp_565 : dsp_rgb, 9);
+	}
 
 	/* the scan, from where libjpeg's headers end */
 	src.p = j->src.next_input_byte;
@@ -1038,7 +1177,11 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	for (my = 0; my < (long) c->MCU_rows_in_scan && !pic_dsp_failed; my++) {
 		int rows = (int) (oh - my * mh < mh ? oh - my * mh : mh);
 		for (mx = 0; mx < (long) c->MCUs_per_row && !pic_dsp_failed; mx++)
-			dsp_read(j, p, band, &src, mx * mw, my * mh, (int) (ow - mx * mw < mw ? ow - mx * mw : mw), rows);
+			if (shrink)
+				dsp_read(j, p, NULL, &src, shr.xa[mx], shr.ya[my], shr.ce[mx], shr.re[my]);
+			else
+				dsp_read(j, p, band, &src, mx * mw, my * mh,
+					 (int) (ow - mx * mw < mw ? ow - mx * mw : mw), rows);
 		if (band != NULL && !pic_dsp_failed) {
 			for (i = 0; i < rows; i++)
 				if (!sc_row_rgb(sc, band + (long) i * ow * 3)) {
@@ -1055,6 +1198,8 @@ out:
 	pic_dsp->end(ok && !pic_dsp_failed);
 	j->dsp_on = 0;
 	free(band);
+	if (shrink)
+		dsp_shrink_free(&shr);
 	return pic_dsp_failed ? -1 : ok;
 }
 
@@ -1303,6 +1448,7 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 
 const PIC_DSP *pic_dsp;			/* (no DSP for TJpgDec's builds) */
 int pic_dsp_failed;
+int pic_dsp_shrink = 1;
 
 const char *pic_dsp_state(void)
 {

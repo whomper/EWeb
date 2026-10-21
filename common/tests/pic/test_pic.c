@@ -28,7 +28,7 @@
 
 #ifdef WITH_DSP_SIM
 const PIC_DSP *sim_dsp(void);
-extern unsigned long long sim_cycles, sim_pc[512];
+extern unsigned long long sim_cycles, sim_pc[1536];
 extern unsigned long sim_in, sim_out;
 #endif
 
@@ -185,6 +185,8 @@ int main(int argc, char **argv)
 	int r;
 #ifdef WITH_DSP_SIM
 	pic_dsp = sim_dsp();
+	if (getenv("PIC_DSP_SHRINK"))		/* 0: the scaler shrinks, as before */
+		pic_dsp_shrink = atoi(getenv("PIC_DSP_SHRINK"));
 #endif
 	r = run(argc, argv);
 #ifdef WITH_DSP_SIM
@@ -192,12 +194,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "dsp: %s, %llu cycles, %lu words in, %lu out\n", pic_dsp_state(), sim_cycles, sim_in,
 			sim_out);
 	if (getenv("PIC_DSP_PROFILE")) {
-		/* each internal address's cycles, for tools to name from a56's labels */
+		/* each address's cycles, for tools to name from a56's labels */
 		FILE *f = fopen(getenv("PIC_DSP_PROFILE"), "w");
 		int a;
-		for (a = 0; f != NULL && a < 512; a++)
+		for (a = 0; f != NULL && a < 1536; a++)
 			if (sim_pc[a])
-				fprintf(f, "%04x %llu\n", a, sim_pc[a]);
+				fprintf(f, "%04x %llu\n", a < 512 ? a : 0x7000 + a - 512, sim_pc[a]);
 		if (f != NULL)
 			fclose(f);
 	}

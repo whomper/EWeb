@@ -107,6 +107,28 @@ V_OBUF	equ	$28		; the end of this MCU's pixels' buffer (OBUFA or OBUFB)
 V_RP	equ	$29		; the ring's next word
 V_FT	equ	$2a		; this block's fast AC table (its middle)
 V_NFT	equ	$2b		; fast AC tables to make (Cb and Cr may share one)
+; shrinking (V_SCALE 1): the tables in Y, from the 68030
+V_SCALE	equ	$2c		; 1: the picture shrunk here (else as it is)
+V_SCM	equ	$2d		; each source column: its box column in its MCU
+V_SRM	equ	$2e		; each source row: its box row in its MCU row, x 16
+V_SWC	equ	$2f		; each column shown: (the columns in it - 1) x 16
+V_SWR	equ	$30		; each row shown: the rows in it - 1
+V_SCR	equ	$31		; the sums carried down, two words a column shown
+V_SMC	equ	$32		; each MCU column: its first column shown, boxes, 1 if the last goes on
+V_SMR	equ	$33		; each MCU row: the same for rows
+V_SW	equ	$34		; the width shown
+V_SCMP	equ	$35		; and as it goes: this MCU's in SCM, the row's in SRM,
+V_SRMP	equ	$36		; the next MCU's record, this row's
+V_SMCP	equ	$37
+V_SMRP	equ	$38
+V_SXA	equ	$39		; this MCU's first column shown, boxes across, 1 if
+V_SNBX	equ	$3a		; the last goes on into the next
+V_SROUT	equ	$3b
+V_SYA	equ	$3c		; the same down
+V_SNBY	equ	$3d
+V_SBOUT	equ	$3e
+V_TMP	equ	$3f		; (a word for a moment)
+V_TRB	equ	V_K		; (during the colours: a pointer)
 BLK	equ	$40		; 64, aligned for modulo 64
 TT	equ	$80		; 64: T[i][v] at TT + 8i + v, rows aligned for modulo 8
 ZZ	equ	$c0		; the natural order: ZZ + k is coefficient k's place
@@ -121,7 +143,7 @@ CBP	equ	$0300		; Cb, M x M
 CRP	equ	$0340		; Cr
 OBUFA	equ	$0800		; the pixels: an MCU's end just below one of these
 OBUFB	equ	$2800		; (bit 11 set only there), the next MCU's below the other
-CONSTS	equ	$0500		; 9 words: each channel's mask, shift, fix
+CONSTS	equ	$0500		; 9 words: each channel's mask, shift, fix (shrinking: 9 more at + 16)
 ; external X: the scan's words, the colour terms
 INB	equ	$0200		; a ring of 512 (modulo 512, read through V_RP)
 TRM	equ	$0600		; Rt Gt Bt for each luma column, M rows of PW
@@ -143,6 +165,19 @@ CUPTO	equ	TAB+$80		; Y: and the last column
 ; (the end: 64)
 FT0	equ	$2a00
 FRUN	equ	$0900-FT0
+; shrinking: each MCU's pixels as sums (X: R << 12 + G, Y: B) at PX, their
+; boxes' sums at SBOX (16 a row of boxes), the sums carried right at SLC (Y,
+; two words a row of boxes), the pixels' bits shown at QR (X), QG, QB (Y),
+; each box's divisor (65536 / n, rounded, x 64) at KT + (columns - 1) x 16
+; + rows - 1 (Y), scratch at SV (X)
+PX	equ	$0f00
+SBOX	equ	$0400
+SLC	equ	$0e00
+QR	equ	$0500
+QG	equ	$0a10
+QB	equ	$0b10
+KT	equ	$0900
+SV	equ	$0e80
 ; X and Y: the colour tables, each channel's bits for v = -256..511
 TR	equ	$2000		; X
 TG	equ	$2000		; Y
@@ -190,6 +225,7 @@ decode
 	do	x:V_MY,dy
 	move	x:V_MX,x0
 	move	x0,x:V_CX
+	jsr	srow			; (shrinking: this row of MCUs' boxes)
 	do	x:V_MX,dx
 	jsr	mstart			; a restart; this MCU's pixels to send
 
@@ -347,6 +383,7 @@ blk
 	; (libjpeg's way), the pixel the sum; each stored a pixel later. ROWS
 	; x COLS end at V_OBUF (rows past them go past it, unsent)
 col
+	jset	#0,x:V_SCALE,scol	; shrinking: the pixels into boxes
 	move	x:V_OBUF,b
 	move	x:V_NPIX,x0
 	sub	x0,b	x:V_PW,a
@@ -383,7 +420,7 @@ d2
 d1
 	move	a,y:(r5)+
 
-	jsr	osend
+col2	jsr	osend
 dx
 	move	x:V_RY,b
 	move	#>1,x0
@@ -599,6 +636,34 @@ dstart
 	add	x0,a
 	move	a1,x:V_TB
 mf0
+	jclr	#0,x:V_SCALE,ds9
+	move	#QR,r0			; shrinking: the pixels' bits shown, for 0..255
+	move	#QG,r4
+	move	#QB,r5
+	move	#CONSTS+16,r6
+	move	#>$800000,a
+	move	#>256,x0
+	jsr	mkt
+	clr	a			; nothing carried
+	move	x:V_SCR,r7
+	move	x:V_SW,b
+	asl	b
+	move	b1,x0
+	do	x0,ds8
+	move	a,y:(r7)+
+ds8
+	move	#SLC,r7
+	rep	#32
+	move	a,y:(r7)+
+	move	x:V_SRM,a		; srow moves these on before each row
+	move	x:V_PH,x0
+	sub	x0,a
+	move	a1,x:V_SRMP
+	move	x:V_SMR,a
+	move	#>3,x0
+	sub	x0,a
+	move	a1,x:V_SMRP
+ds9
 	jsr	bstart
 	rts
 
@@ -677,29 +742,34 @@ mktab
 	move	#TG,r4
 	move	#TB,r5
 	move	#CONSTS,r6
-	movec	#8,m6
 	move	#>$a00000,a		; -384/128 (v = -256), over two shifts
 	asl	a
 	asl	a
+	move	#>768,x0
+; (x0 tables' entries from v (a), into r0, r4 and r5, by the constants at r6)
+mkt	movec	#8,m6
 	move	#>$010000,x1		; v + 1
-	do	#768,mt1
+	do	x0,mt1
 	move	a,x0			; limited: the clamp
 	tfr	x0,b	y:(r6)+,y0	; R's mask
 	and	y0,b	y:(r6)+,y1	; its shift
 	move	b1,y0
-	mpyr	y1,y0,b	y:(r6)+,y0	; its fix
+	mpy	y1,y0,b	y:(r6)+,y0	; its fix
+	asl	b			; (the shift halved, the product whole: x 2, exact)
 	add	y0,b
 	move	b1,x:(r0)+
 	tfr	x0,b	y:(r6)+,y0	; G's
 	and	y0,b	y:(r6)+,y1
 	move	b1,y0
-	mpyr	y1,y0,b	y:(r6)+,y0
+	mpy	y1,y0,b	y:(r6)+,y0
+	asl	b
 	add	y0,b
 	move	b1,y:(r4)+
 	tfr	x0,b	y:(r6)+,y0	; B's
 	and	y0,b	y:(r6)+,y1
 	move	b1,y0
-	mpyr	y1,y0,b	y:(r6)+,y0
+	mpy	y1,y0,b	y:(r6)+,y0
+	asl	b
 	add	y0,b
 	move	b1,y:(r5)+
 	add	x1,a
@@ -764,7 +834,53 @@ ms4	move	b1,x:V_ROWS
 	mpy	x0,y0,a
 	asr	a
 	move	a0,x:V_NPIX
+	jset	#0,x:V_SCALE,smcu
 	rts
+; shrinking: this MCU's boxes (its record), the pixels it sends
+smcu	move	x:V_SMCP,r7
+	move	x:V_SMCP,a
+	move	#>3,x0
+	add	x0,a
+	move	a1,x:V_SMCP
+	move	y:(r7)+,x0
+	move	x0,x:V_SXA
+	move	y:(r7)+,b
+	move	b1,x:V_SNBX
+	move	y:(r7)+,x0
+	move	x0,x:V_SROUT
+	sub	x0,b			; columns sent
+	move	b1,x1
+	move	x:V_SNBY,b
+	move	x:V_SBOUT,x0
+	sub	x0,b			; rows sent
+	move	b1,y0
+	mpy	x1,y0,a
+	asr	a
+	move	a0,x:V_NPIX
+	rts
+
+; shrinking: a row of MCUs' start, its record
+srow	jclr	#0,x:V_SCALE,sr1
+	move	x:V_SRMP,a
+	move	x:V_PH,x0
+	add	x0,a
+	move	a1,x:V_SRMP
+	move	x:V_SMRP,a
+	move	#>3,x0
+	add	x0,a
+	move	a1,x:V_SMRP
+	move	a1,r7
+	move	x:V_SMC,x0
+	move	x0,x:V_SMCP
+	move	x:V_SCM,x0
+	move	x0,x:V_SCMP
+	move	y:(r7)+,x0
+	move	x0,x:V_SYA
+	move	y:(r7)+,x0
+	move	x0,x:V_SNBY
+	move	y:(r7)+,x0
+	move	x0,x:V_SBOUT
+sr1	rts
 
 ; 256 words of the scan into the ring (empty): 1 asks for the next, 2 for
 ; those from after the next RST marker
@@ -917,6 +1033,225 @@ hacr	move	x:V_FT,x1
 	move	#>$000100,y1
 	move	#FRUN,n2
 	jmp	hchk
+
+; ---- shrinking: an MCU's pixels into the boxes of the pixels shown (each
+; source pixel in one), from col; on to col2 with V_NPIX of them to send.
+; A box's sums are one long word: X (R << 12) + G, Y B (each under 4096:
+; 16 pixels a box at most). They are those the 68030's scaler made (its
+; 16-bit way), the means rounded the same: the same pixels
+scol
+	; A: each pixel's sums word into PX, COLS a row
+	move	#PX,r2
+	move	#PX,r5
+	move	x:V_PW,a
+	move	x:V_COLS,x0
+	sub	x0,a	#>1,x0
+	sub	x0,a
+	move	a1,n4			; PW - COLS - 1: to the next row's luma
+	move	#YPL,r4
+	move	#TRM,x0
+	move	x0,x:V_TRB
+	move	#>$000100,y1		; 2^-15 (doubled): p/256 to p
+	move	y:(r4)+,y0
+	do	x:V_M,sa1
+	do	x:V_RV,sa2
+	move	x:V_TRB,r1
+	do	x:V_COLS,sa3
+	mpy	y0,y1,b		x:(r1)+,x0		; Y (+ 1/2); Rt
+	tfr	b,a		x:(r1)+,x1		; Gt
+	add	x0,a		x:(r1)+,x0		; R's place; Bt
+	tfr	b,a		a1,r0
+	add	x1,a		y:(r4)+,y0		; G's place; the next Y
+	add	x0,b		a1,r6			; B's place
+	move	b1,r7
+	move	x:(r0),a	y:(r6),b		; R << 12; G
+	add	b,a		y:(r7),b		; + G; B
+	move	a,x:(r2)+	b,y:(r5)+
+sa3
+	move	(r4)+n4
+	move	y:(r4)+,y0
+sa2
+	move	x:V_TRB,a
+	move	x:V_PW3,x0
+	add	x0,a
+	move	a1,x:V_TRB
+sa1
+
+	; B: each pixel added to its box's sums (SBOX, 16 a row of boxes)
+	clr	a	#SBOX,r0
+	rep	#256
+	move	a10,l:(r0)+
+	move	#PX,r0
+	move	x:V_SRMP,r7
+	do	x:V_ROWS,sb1
+	move	x:V_SCMP,r5
+	move	#>SBOX,a
+	move	y:(r7)+,x0		; this row's box row x 16
+	add	x0,a
+	move	a1,r2
+	do	x:V_COLS,sb2
+	move	y:(r5)+,n2		; this column's box
+	move	l:(r0)+,x		; the pixel
+	move	l:(r2+n2),a
+	add	x,a
+	move	a10,l:(r2+n2)
+sb2
+	nop
+sb1
+	move	x:V_SCMP,a		; the next MCU's columns
+	move	x:V_PW,x0
+	add	x0,a
+	move	a1,x:V_SCMP
+
+	; the sums carried down (into the first row of boxes) and from the left
+	; (the first column) added, and let go of
+	clr	b	#SBOX,r0
+	move	x:V_SCR,a
+	move	x:V_SXA,x0
+	add	x0,a
+	add	x0,a
+	move	a1,r2			; carried down to this MCU's columns
+	do	x:V_SNBX,sc1
+	move	l:(r0),a
+	move	y:(r2),x1
+	move	b,y:(r2)+
+	move	y:(r2),x0
+	move	b,y:(r2)+
+	add	x,a
+	move	a10,l:(r0)+
+sc1
+	move	#SBOX,r0
+	move	#16,n0
+	move	#SLC,r2
+	do	x:V_SNBY,sc2
+	move	l:(r0),a
+	move	y:(r2),x1
+	move	b,y:(r2)+
+	move	y:(r2),x0
+	move	b,y:(r2)+
+	add	x,a
+	move	a10,l:(r0)+n0
+sc2
+	; the last column carried right if it goes on, the last row down
+	jclr	#0,x:V_SROUT,sc4
+	move	#SBOX,b
+	move	x:V_SNBX,x0
+	add	x0,b
+	move	#>1,x0
+	sub	x0,b
+	move	b1,r0
+	move	#SLC,r2
+	do	x:V_SNBY,sc3
+	move	l:(r0)+n0,a
+	move	a1,y:(r2)+
+	move	a0,y:(r2)+
+sc3
+sc4	jclr	#0,x:V_SBOUT,sc6
+	move	x:V_SNBY,x0		; the last row of boxes
+	move	#>16,y0
+	mpy	x0,y0,b
+	asr	b
+	move	#>SBOX-16,x0
+	move	b0,b
+	add	x0,b
+	move	b1,r0
+	move	x:V_SCR,a
+	move	x:V_SXA,x0
+	add	x0,a
+	add	x0,a
+	move	a1,r2
+	move	x:V_SNBX,b
+	move	x:V_SROUT,x0
+	sub	x0,b
+	jeq	sc6			; (all carried right: none)
+	move	b1,x0
+	do	x0,sc5
+	move	l:(r0)+,a
+	move	a1,y:(r2)+
+	move	a0,y:(r2)+
+sc5
+sc6
+	; the rest shown, in rows: each channel's mean, rounded as the
+	; scaler does, (sum x (65536 / n) + 32768) >> 16, and its bits
+	move	x:V_OBUF,b
+	move	x:V_NPIX,x0
+	sub	x0,b
+	move	b1,r5			; the pixels sent, from here
+	move	x:V_NPIX,b		; (none)
+	tst	b
+	jeq	col2
+	move	x:V_SNBY,b
+	move	x:V_SBOUT,x0
+	sub	x0,b
+	move	b1,x:SV			; SV: rows shown
+	move	x:V_SNBX,b
+	move	x:V_SROUT,x0
+	sub	x0,b
+	move	b1,x:SV+1		; SV+1: columns shown
+	move	#SBOX,x0
+	move	x0,x:SV+2		; SV+2: this row's sums
+	move	x:V_SWR,a
+	move	x:V_SYA,x0
+	add	x0,a
+	move	a1,x:SV+3		; SV+3: its rows' entry
+	move	#>1,x1
+	move	#>$200000,y0		; 32768 x 64, doubled
+	move	#QR,r2			; the bits' tables: the mean the index
+	move	#QG,r4
+	move	#QB,r7
+	move	x:SV,n2
+	do	n2,se1
+	move	x:SV+3,r6
+	move	x:V_SWC,a
+	move	x:V_SXA,x0
+	add	x0,a
+	move	a1,r1			; each column's (columns - 1) x 16
+	move	y:(r6)+,a
+	move	r6,x:SV+3
+	move	#>KT,x0
+	add	x0,a	x:SV+2,r0
+	move	a1,r6			; the divisors for this row's boxes
+	move	x:SV+2,a
+	move	#>16,x0
+	add	x0,a
+	move	a1,x:SV+2
+	move	x:SV+1,n3		; (the interrupt uses r3, not n3)
+	do	n3,se2
+	move	y:(r1)+,n6
+	move	l:(r0)+,b		; X (R << 12) + G, Y B
+	move	b0,x0			; B
+	move	y:(r6+n6),y1		; 65536 / n x 64
+	mpy	x0,y1,a
+	mac	x1,y0,a
+	asl	a	b1,x0
+	move	a1,n7
+	move	#>$000fff,a
+	and	x0,a	#>$000800,y1	; G
+	move	y:(r7+n7),x0		; B's bits
+	move	x0,x:V_TMP
+	move	a1,x0
+	move	y:(r6+n6),y1
+	mpy	x0,y1,a
+	mac	x1,y0,a
+	asl	a	b1,x0
+	move	a1,n4
+	move	#>$000800,y1
+	mpy	x0,y1,a			; R (>> 12)
+	move	a1,x0
+	move	y:(r6+n6),y1
+	mpy	x0,y1,a
+	mac	x1,y0,a
+	asl	a	y:(r4+n4),b	; G's bits
+	move	a1,n2
+	move	x:V_TMP,x0
+	add	x0,b
+	move	x:(r2+n2),x0		; R's
+	add	x0,b
+	move	b1,y:(r5)+
+se2
+	nop
+se1
+	jmp	col2
 
 ; an MCU's pixels made: 0 before them, and they go from there, by the
 ; host's interrupt, once the last MCU's have all gone; the next MCU's in

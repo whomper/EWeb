@@ -23,7 +23,7 @@ const char *dsp56k_getInstructionText(void) { return ""; }
 static void hint(int s) { (void)s; }
 
 unsigned long long sim_cycles;		/* DSP clock cycles (32 MHz on the Falcon) */
-unsigned long long sim_pc[512];		/* PIC_DSP_PROFILE: the cycles at each internal address */
+unsigned long long sim_pc[1536];	/* PIC_DSP_PROFILE: each address's cycles, P:$0..$1FF and $7000.. at 512 */
 unsigned long sim_in, sim_out;		/* words to the DSP, and from it */
 int sim_busy;				/* begin() says the DSP is taken */
 
@@ -56,6 +56,32 @@ static void trace(uint16_t pc)
 		r[DSP_REG_R0 + 7], r[DSP_REG_SR]);
 }
 
+/* PIC_DSP_DUMPAT=PC,N,[x]ADDR,LEN (hex but N): the DSP's external Y (or
+   X) memory the Nth time it is at PC (counting from 1) */
+static void dump_at(uint16_t pc)
+{
+	static long at = -2, n, a, len, x;
+	unsigned i;
+	if (at == -2) {
+		const char *e = getenv("PIC_DSP_DUMPAT");
+		char sp[2] = "";
+		at = -1;
+		if (e != NULL && sscanf(e, "%lx,%ld,%1[x]%lx,%lx", &at, &n, sp, &a, &len) < 5) {
+			x = 0;
+			if (sscanf(e, "%lx,%ld,%lx,%lx", &at, &n, &a, &len) < 4)
+				at = -1;
+		} else if (e != NULL) {
+			x = 0x4000;
+		}
+	}
+	if (pc != at || --n != 0)
+		return;
+	for (i = 0; i < (unsigned) len; i++)
+		fprintf(stderr, "%06lx%c", (unsigned long) dsp_core.ramext[((a + i) & 0x3fff) | x],
+			i % 8 == 7 ? '\n' : ' ');
+	fprintf(stderr, "\n");
+}
+
 static int step(void)
 {
 	uint16_t pc;
@@ -63,10 +89,13 @@ static int step(void)
 		return 0;
 	pc = dsp_core.pc;
 	trace(pc);
+	dump_at(pc);
 	dsp56k_execute_instruction();
 	sim_cycles += dsp_core.instr_cycle;
 	if (pc < 512)
 		sim_pc[pc] += dsp_core.instr_cycle;
+	else if (pc >= 0x7000 && pc < 0x7400)
+		sim_pc[512 + pc - 0x7000] += dsp_core.instr_cycle;
 	return 1;
 }
 
