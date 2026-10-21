@@ -52,3 +52,9 @@ natural order, and sends the scan from where libjpeg's source stopped
 (`next_input_byte`) to the DSP, with the Huffman and quantisation tables
 libjpeg read, in place of `jpeg_read_scanlines`. Nothing in libjpeg
 changed for it.
+
+Since 21 Oct 2026 `src/jdtrans.c` is taken too (`jpeg_read_coefficients`,
+unchanged): a progressive or arithmetic-coded JPEG's scans are read into
+coefficients by libjpeg on the 68030, and the DSP does the transform,
+colours and shrinking from them (common/README.md); on the 68030 alone
+the picture goes through libjpeg's own output as before.

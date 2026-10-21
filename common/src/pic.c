@@ -745,6 +745,25 @@ static int dsp_takes(j_decompress_ptr c, int k)
 	       ci[1].v_samp_factor == 1 && ci[2].h_samp_factor == 1 && ci[2].v_samp_factor == 1;
 }
 
+/* a JPEG libjpeg reads into coefficients (progressive or
+   arithmetic-coded), whose transform and colours the DSP may take: the
+   kinds it takes from the scan otherwise */
+static int dsp_takes_coef(j_decompress_ptr c, int k)
+{
+	jpeg_component_info *ci = c->comp_info;
+	int i;
+	if (k < 2 || c->data_precision != 8 || c->master->lossless || !(c->progressive_mode || c->arith_code))
+		return 0;
+	for (i = 0; i < c->num_components; i++)
+		if (ci[i].quant_table == NULL && c->quant_tbl_ptrs[ci[i].quant_tbl_no] == NULL)
+			return 0;
+	if (c->num_components == 1)
+		return c->jpeg_color_space == JCS_GRAYSCALE;
+	return c->num_components == 3 && c->jpeg_color_space == JCS_YCbCr && ci[0].h_samp_factor <= 2 &&
+	       ci[0].v_samp_factor <= 2 && ci[1].h_samp_factor == 1 && ci[1].v_samp_factor == 1 &&
+	       ci[2].h_samp_factor == 1 && ci[2].v_samp_factor == 1;
+}
+
 /* the M x 8 transform to M pixels a block: pixel i the mean of the
    8/M pixels it covers (parts of them at the ends), twice the true
    one (so each entry is below 1, as the DSP's fractions are) */
@@ -853,11 +872,62 @@ static void dsp_fixed(void)
 
 /* the scan's bytes for jpeg.a56, two to a word (b0 << 8 | b1): the 0
    after each $FF taken out, the data ending at a marker (a restart's
-   RST, or the end), and 0s past it */
+   RST, or the end), and 0s past it. Or (coef not NULL) a progressive
+   JPEG's coefficients, as libjpeg read them: for each block of each MCU
+   in turn, K and its first K in zigzag order (to the last other than 0) */
 typedef struct {
 	const unsigned char *p, *end;
 	int stop;
+	j_decompress_ptr c;
+	jvirt_barray_ptr *coef;
+	JBLOCKARRAY rows[3];		/* this row of MCUs' blocks, each component's */
+	long mx, my, mcols, mrows;	/* the next block's MCU, and how many */
+	int b, nb, hy, vy;		/* the block in it, of nb (hy x vy of luma) */
+	int bi, bn;			/* the words of the block being sent */
+	unsigned short bw[65];
 } DSPSRC;
+
+/* the next block's words, into bw */
+static void dsp_block(DSPSRC *s)
+{
+	JCOEFPTR q;
+	int ci, bx, by, k, n;
+	s->bi = 0;
+	s->bn = 1;
+	s->bw[0] = 0;				/* (past the last: 0s) */
+	if (s->my >= s->mrows)
+		return;
+	if (s->b == 0 && s->mx == 0)
+		for (ci = 0; ci < (s->nb == 1 ? 1 : 3); ci++) {
+			int v = ci == 0 ? s->vy : 1;
+			s->rows[ci] = (*s->c->mem->access_virt_barray)((j_common_ptr) s->c, s->coef[ci],
+								      (JDIMENSION) (s->my * v), (JDIMENSION) v, FALSE);
+		}
+	if (s->b < s->hy * s->vy) {
+		ci = 0;
+		bx = (int) (s->mx * s->hy) + s->b % s->hy;
+		by = s->b / s->hy;
+	} else {
+		ci = s->b - s->hy * s->vy + 1;
+		bx = (int) s->mx;
+		by = 0;
+	}
+	q = s->rows[ci][by][bx];
+	for (k = 63; k > 0 && q[jpeg_natural_order[k]] == 0; k--)
+		;
+	n = k + 1;
+	s->bw[0] = (unsigned short) n;
+	for (k = 0; k < n; k++)
+		s->bw[1 + k] = (unsigned short) q[jpeg_natural_order[k]];
+	s->bn = n + 1;
+	if (++s->b == s->nb) {
+		s->b = 0;
+		if (++s->mx == s->mcols) {
+			s->mx = 0;
+			s->my++;
+		}
+	}
+}
 
 static int dsp_byte(DSPSRC *s)
 {
@@ -890,6 +960,15 @@ static void dsp_feed(DSPSRC *s, int restart)
 {
 	static unsigned short w[256];
 	int i;
+	if (s->coef != NULL) {
+		for (i = 0; i < 256; i++) {
+			if (s->bi == s->bn)
+				dsp_block(s);
+			w[i] = s->bw[s->bi++];
+		}
+		pic_dsp->put16(w, 256);
+		return;
+	}
 	if (restart) {
 		/* to the next RSTn, past it (as libjpeg, given a good file) */
 		while (s->p + 1 < s->end && !(s->p[0] == 0xFF && s->p[1] >= 0xD0 && s->p[1] <= 0xD7))
@@ -1043,19 +1122,23 @@ static void dsp_read(LJ *j, PIC *p, unsigned char *band, DSPSRC *src, long x, lo
 
 /* 1 decoded, 0 not (why), -1 the DSP stopped answering, -2 it couldn't
    be had */
-static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
+static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why, jvirt_barray_ptr *coef)
 {
 	j_decompress_ptr c = &j->ci;
-	int nb = c->blocks_in_MCU, grey = c->num_components == 1, direct = c->out_color_space == JCS_RGB565;
+	int grey = c->num_components == 1, direct = c->out_color_space == JCS_RGB565;
 	int hy = grey ? 1 : c->comp_info[0].h_samp_factor, vy = grey ? 1 : c->comp_info[0].v_samp_factor;
+	int nb = coef == NULL ? c->blocks_in_MCU : hy * vy + (grey ? 0 : 2);
 	int mw = hy * k, mh = vy * k, b, i, ci, seen = 0, ok = 0, ft[3];
 	long ow = (long) c->output_width, oh = (long) c->output_height, mx, my;
+	/* MCUs across and down: the scan's, or (coefficients, read from
+	   every scan) the frame's */
+	long mcols = coef == NULL ? (long) c->MCUs_per_row : ((long) c->image_width + 8 * hy - 1) / (8 * hy);
+	long mrows = coef == NULL ? (long) c->MCU_rows_in_scan : ((long) c->image_height + 8 * vy - 1) / (8 * vy);
 	unsigned long w[64 * 3];
 	unsigned char *band = NULL;
 	DSPSRC src;
 	DSPSHR shr;
-	int shrink = !direct && pic_dsp_shrink &&
-		dsp_shrink_plan(&shr, ow, oh, mw, mh, (long) c->MCUs_per_row, (long) c->MCU_rows_in_scan, p->w, p->h);
+	int shrink = !direct && pic_dsp_shrink && dsp_shrink_plan(&shr, ow, oh, mw, mh, mcols, mrows, p->w, p->h);
 
 	if (!direct && !shrink) {
 		band = malloc((size_t) ow * mh * 3);
@@ -1083,22 +1166,23 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	w[0x04] = (unsigned long) vy;
 	w[0x05] = grey ? 1 : 3;
 	w[0x06] = direct ? 0 : 1;
-	w[0x09] = (unsigned long) c->MCUs_per_row;
-	w[0x0a] = (unsigned long) c->MCU_rows_in_scan;
-	w[0x0b] = (unsigned long) (ow - (long) (c->MCUs_per_row - 1) * mw);
+	w[0x09] = (unsigned long) mcols;
+	w[0x0a] = (unsigned long) mrows;
+	w[0x0b] = (unsigned long) (ow - (mcols - 1) * mw);
 	w[0x0c] = (unsigned long) mw * 3;
-	w[0x0e] = (unsigned long) (oh - (long) (c->MCU_rows_in_scan - 1) * mh);
+	w[0x0e] = (unsigned long) (oh - (mrows - 1) * mh);
 	w[0x0f] = (unsigned long) mh;
-	w[0x13] = (unsigned long) c->restart_interval;
+	w[0x13] = coef == NULL ? (unsigned long) c->restart_interval : 0;
 	/* the fast AC tables jpeg.a56 makes: Cr's is Cb's when they share
 	   their Huffman table, as they mostly do */
 	ft[0] = 0;
 	ft[1] = 1;
 	ft[2] = grey || c->comp_info[2].ac_tbl_no != c->comp_info[1].ac_tbl_no ? 2 : 1;
 	w[0x2b] = grey ? 1 : (unsigned long) ft[2] + 1;
+	w[0x2c] = coef != NULL ? 2 : 0;		/* V_SCALE: the coefficients come */
 	if (shrink) {
 		/* V_SCALE, the tables' places, the width shown */
-		w[0x2c] = 1;
+		w[0x2c] |= 1;
 		for (i = 0; i < 7; i++)
 			w[0x2d + i] = (unsigned long) (D_SHRINK + shr.at[i]);
 		w[0x34] = (unsigned long) p->w;
@@ -1108,7 +1192,8 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	   its Huffman tables and DC predictor */
 	for (b = 0; b < nb; b++) {
 		unsigned long *e = w + 8 * b;
-		ci = c->cur_comp_info[c->MCU_membership[b]]->component_index;
+		ci = coef != NULL ? (b < hy * vy ? 0 : b - hy * vy + 1) :
+		     c->cur_comp_info[c->MCU_membership[b]]->component_index;
 		e[0] = (unsigned long) (D_QT + 64 * ci);
 		if (ci == 0) {
 			e[1] = (unsigned long) (D_YPL + (seen / hy) * k * mw + (seen % hy) * k);
@@ -1137,7 +1222,7 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 		dsp_load(D_LOADX, D_TRM, w, (long) k * k * 3);
 	}
 	dsp_fixed();
-	for (ci = 0; ci < (grey ? 1 : 3); ci++) {
+	for (ci = 0; ci < (grey ? 1 : 3) && coef == NULL; ci++) {
 		jpeg_component_info *cp = &c->comp_info[ci];
 		dsp_huff(c->dc_huff_tbl_ptrs[cp->dc_tbl_no], D_HLA + 0x200 * ci);
 		dsp_huff(c->ac_huff_tbl_ptrs[cp->ac_tbl_no], D_HLA + 0x100 + 0x200 * ci);
@@ -1170,14 +1255,21 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 	}
 
 	/* the scan, from where libjpeg's headers end */
+	memset(&src, 0, sizeof src);
 	src.p = j->src.next_input_byte;
 	src.end = src.p + j->src.bytes_in_buffer;
-	src.stop = 0;
+	src.c = c;
+	src.coef = coef;
+	src.mcols = mcols;
+	src.mrows = mrows;
+	src.nb = nb;
+	src.hy = hy;
+	src.vy = vy;
 	w[0] = D_DECODE;
 	pic_dsp->put(w, 1);
-	for (my = 0; my < (long) c->MCU_rows_in_scan && !pic_dsp_failed; my++) {
+	for (my = 0; my < mrows && !pic_dsp_failed; my++) {
 		int rows = (int) (oh - my * mh < mh ? oh - my * mh : mh);
-		for (mx = 0; mx < (long) c->MCUs_per_row && !pic_dsp_failed; mx++)
+		for (mx = 0; mx < mcols && !pic_dsp_failed; mx++)
 			if (shrink)
 				dsp_read(j, p, NULL, &src, shr.xa[mx], shr.ya[my], shr.ce[mx], shr.re[my]);
 			else
@@ -1315,11 +1407,11 @@ const char *pic_dsp_state(void)
 	return pic_dsp == NULL || dsp_state < 0 ? "68030" : dsp_state > 0 ? "DSP" : "-";
 }
 
-static int decode_lj(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
+static int decode_lj(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why, int may)
 {
 	LJ *j;
 	long y, x;
-	int k, ok = 0, dsp = dsp_usable();
+	int k, ok = 0, dsp = may && dsp_usable();
 	j = calloc(1, sizeof *j);
 	if (j == NULL) {
 		*why = PIC_MEMORY;
@@ -1367,11 +1459,24 @@ static int decode_lj(const unsigned char *d, long n, PIC *p, SCALER *sc, int *wh
 		j->ci.out_color_space = JCS_RGB565;
 		j->ci.dither_mode = JDITHER_NONE;
 	}
-	jpeg_start_decompress(&j->ci);
 	p->how = PIC_JPEG;
 	p->scale = k;
+	if (dsp && dsp_takes_coef(&j->ci, k)) {
+		/* progressive: libjpeg reads every scan into coefficients, the
+		   DSP does the rest from them; if it can't be had, the whole
+		   picture again on the 68030 (decode_jpeg) */
+		jvirt_barray_ptr *coef = jpeg_read_coefficients(&j->ci);
+		ok = decode_dsp(j, p, sc, k, why, coef);
+		if (ok < 0 && ok != -2 && dsp_testing == 0)
+			dsp_state = -1;
+		jpeg_abort_decompress(&j->ci);
+		if (ok == -2)
+			ok = -1;
+		goto done;
+	}
+	jpeg_start_decompress(&j->ci);
 	if (dsp && dsp_takes(&j->ci, k)) {
-		ok = decode_dsp(j, p, sc, k, why);
+		ok = decode_dsp(j, p, sc, k, why, NULL);
 		if (ok != -2) {
 			/* -1: the DSP stopped answering; from now on the 68030
 			   does them, this one again (decode_jpeg) */
@@ -1434,13 +1539,14 @@ done:
 
 static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *why)
 {
-	int ok = decode_lj(d, n, p, sc, why);
+	int ok = decode_lj(d, n, p, sc, why, 1);
 	if (ok < 0) {
-		/* the DSP stopped answering: again on the 68030 */
+		/* the DSP stopped answering, or couldn't be had for a
+		   progressive one: again on the 68030 */
 		sc_free(sc);
 		memset(sc, 0, sizeof *sc);
 		*why = PIC_OK;
-		ok = decode_lj(d, n, p, sc, why);
+		ok = decode_lj(d, n, p, sc, why, 0);
 	}
 	return ok;
 }

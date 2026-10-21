@@ -10,7 +10,10 @@
 ; repeated over the luma it covers) and sends each MCU's pixels back, as
 ; 5-6-5 (the picture's own) or as R G B bytes (for the scaler). So the
 ; 68030 only copies bytes in and pixels out (a stock Falcon's 68030 was
-; the slower half, with the Huffman codes its own).
+; the slower half, with the Huffman codes its own). A progressive (or
+; arithmetic-coded) JPEG's scans libjpeg reads on the 68030: then each
+; block's coefficients come instead of the scan (V_SCALE bit 1), and the
+; DSP does the rest from them.
 ;
 ; Commands (a word each, then their words):
 ;   1 LOADX  ADDR, N, then N words into X memory from ADDR
@@ -24,7 +27,9 @@
 ;            b1), sent at once; or 2, the same from after the next RST
 ;            marker (a restart). Past the scan's end, words of 0. The
 ;            pixels go from the host's interrupt, while the next MCU is
-;            decoded
+;            decoded. With V_SCALE bit 1, the words asked for are each
+;            block's coefficients instead: K (1..64), then the first K
+;            in zigzag order (as libjpeg keeps them, not yet dequantised)
 ;
 ; The setup, written by the 68030 with LOADX and LOADY: the variables from
 ; V_M to V_NFT; NB x 8 words of the block table at BT (quantisers, plane,
@@ -108,7 +113,7 @@ V_RP	equ	$29		; the ring's next word
 V_FT	equ	$2a		; this block's fast AC table (its middle)
 V_NFT	equ	$2b		; fast AC tables to make (Cb and Cr may share one)
 ; shrinking (V_SCALE 1): the tables in Y, from the 68030
-V_SCALE	equ	$2c		; 1: the picture shrunk here (else as it is)
+V_SCALE	equ	$2c		; bit 0: the picture shrunk here (else as it is); bit 1: coefficients, not the scan
 V_SCM	equ	$2d		; each source column: its box column in its MCU
 V_SRM	equ	$2e		; each source row: its box row in its MCU row, x 16
 V_SWC	equ	$2f		; each column shown: (the columns in it - 1) x 16
@@ -254,6 +259,7 @@ decode
 	move	x:(r0)+,x0
 	move	x0,x:V_FT		; its fast AC table
 	move	r0,x:V_BTP
+	jset	#1,x:V_SCALE,bc1
 	move	x:V_BA1,a		; the bits
 	move	x:V_BA0,a0
 	move	x:V_NBITS,r4
@@ -261,6 +267,9 @@ decode
 	move	a1,x:V_BA1
 	move	a0,x:V_BA0
 	move	r4,x:V_NBITS
+	jmp	bc2
+bc1	jsr	cblk			; (its coefficients from the 68030)
+bc2
 	move	x:V_PLANE,r5
 	move	x:V_PITCH,n5
 	move	x:V_R,a
@@ -625,6 +634,7 @@ dstart
 	move	#OBUFA,x0
 	move	x0,x:V_OBUF
 	jsr	mktab
+	jset	#1,x:V_SCALE,mf0	; (coefficients: no Huffman codes)
 	move	#HLA+$100,x0		; each component's fast AC table
 	move	x0,x:V_TB
 	move	#FT0-256,r0
@@ -664,7 +674,7 @@ ds8
 	sub	x0,a
 	move	a1,x:V_SMRP
 ds9
-	jsr	bstart
+	jclr	#1,x:V_SCALE,bstart	; the first bits (coefficients: none)
 	rts
 
 ; a fast AC table (at r0, on to the next) from the lookahead table at
@@ -1252,6 +1262,62 @@ se2
 	nop
 se1
 	jmp	col2
+
+; ---- a block's coefficients from the 68030 (a progressive JPEG, its
+; scans read by libjpeg): K, then the first K in zigzag order,
+; dequantised into BLK as hblk does; V_R and V_C as it makes them
+cblk
+	jsr	cget			; K
+	move	x0,x:V_TMP
+	jsr	cget			; the DC
+	move	y:(r6),y0		; Q * 2048
+	mpy	x0,y0,b			; v * Q * 2^12 in b0
+	move	b0,b
+	move	x:V_BIAS,x0
+	add	x0,b
+	move	b1,x:BLK
+	move	#ZZ,r1
+	move	#BLK,r0
+	move	x:V_TMP,b
+	move	#>1,x0
+	sub	x0,b
+	jeq	cb2
+cb1	move	b1,x:V_TMP		; ACs to come
+	jsr	cget
+	move	(r1)+
+	move	x:(r1),n0		; its place
+	move	x:(r1),n6
+	nop
+	move	y:(r6+n6),y0		; Q * 2048
+	mpy	x0,y0,b
+	move	b0,x:(r0+n0)
+	move	x:V_TMP,b
+	move	#>1,x0
+	sub	x0,b
+	jne	cb1
+cb2	move	r1,x:V_KMAX
+	jmp	hend
+
+; x0 = the next coefficient (16 bits, signed), asking the 68030 when the
+; ring is empty
+cget	move	x:V_AVAIL,b
+	tst	b
+	jne	cg1
+	jsr	ask
+	move	#>256,b
+cg1	move	#>1,x0
+	sub	x0,b	x:V_RP,r7
+	movec	#511,m7
+	move	b1,x:V_AVAIL
+	move	x:(r7)+,b
+	move	r7,x:V_RP
+	movec	#$ffff,m7
+	move	#>$ffff,x0
+	and	x0,b	#>$8000,x0
+	eor	x0,b
+	sub	x0,b
+	move	b1,x0
+	rts
 
 ; an MCU's pixels made: 0 before them, and they go from there, by the
 ; host's interrupt, once the last MCU's have all gone; the next MCU's in
