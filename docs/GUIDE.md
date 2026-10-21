@@ -284,14 +284,16 @@ choose all of it.
 EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
-text, positioned boxes, tables with cells over several rows, flexible
-boxes and grids (CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
+text, pictures in the background of a page or a box, positioned
+boxes, tables with cells over several rows, flexible boxes and grids
+(CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
 show:
 
 - file fields (EWeb can't send files yet)
-- pictures in the background of a page or a box (CSS
-  `background-image`), WebP and AVIF pictures (EWeb asks servers for
-  JPEG, PNG and GIF, which most send then), and SVG drawings
+- WebP and AVIF pictures (EWeb asks servers for JPEG, PNG and GIF,
+  which most send then; of a picture offered in several forms and
+  sizes it takes a JPEG, PNG or GIF one at the size the screen needs),
+  SVG drawings, and colour gradients
 - what a page's JavaScript makes, unless you let that site's scripts
   run (see [Pages made by scripts](#pages-made-by-scripts)); without
   them EWeb shows the page's `<noscript>` parts, as browsers do with

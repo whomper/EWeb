@@ -21,9 +21,10 @@ typedef struct {
 	int32_t zoom;			/* device px per CSS px, x1024 (819: 0.8) */
 	/* has this link (href, resolved by the caller) been visited? NULL: no */
 	int (*visited)(void *ud, const char *href);
-	/* a picture: its handle for an <img>'s src (as the page has it; NULL:
-	   pictures aren't shown, its alt text is), and its size in CSS px
-	   once it is known (0 x 0 until its file has come) */
+	/* a picture: its handle for an <img>'s src or a background's url()
+	   (as the page has it; NULL: pictures aren't shown, an <img>'s alt
+	   text is), and its size in CSS px once it is known (0 x 0 until its
+	   file has come) */
 	void *(*image)(void *ud, const char *src, int32_t *w, int32_t *h);
 	void *ud;
 } LAYOUT_OPT;
@@ -36,6 +37,15 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL };
 #define DLF_NOSIZE 16			/* a picture laid out before its file's size was known */
 #define DLF_ALT 32			/* and with no size at all: its alt text's room (the text
 					   is an item of its own), nothing drawn */
+#define DLF_TILE 64			/* DL_IMAGE: a background picture, tiled over the item
+					   (tile); DL_FILL: its picture is the next item */
+
+/* a background picture's tiles: one at (item's x + dx, y + dy), w x h
+   device px, and the others on from it across (rx) and down (ry) */
+typedef struct dl_tile {
+	int32_t dx, dy, w, h;
+	uint8_t rx, ry;
+} dl_tile;
 
 typedef struct dl_item {
 	int32_t x, y, w, h;		/* device px on the page; text: its line box part */
@@ -47,9 +57,13 @@ typedef struct dl_item {
 					   (DL_CTL, drawn from its state), or a picture that is
 					   a submit button (DL_IMAGE); 0: none */
 	ew_font *font;
-	const char *text;		/* UTF-8, kept by the page */
+	union {
+		const char *text;	/* UTF-8, kept by the page */
+		const dl_tile *tile;	/* DL_IMAGE with DLF_TILE (NULL while its size isn't known) */
+	};
 	uint32_t len;			/* DL_CTL: a textarea's line step */
-	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h */
+	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h
+					   (a tile's size with DLF_TILE: DL_PIC_W, DL_PIC_H) */
 #ifndef EW_ST
 	dnode *node;			/* the element it is of: a click's target for scripts */
 #endif
@@ -83,6 +97,10 @@ typedef struct page {
 } page;
 
 #define PAGE_STRIP 256
+
+/* the size a picture item's picture is drawn at */
+#define DL_PIC_W(d) ((d)->flags & DLF_TILE ? ((d)->tile ? (d)->tile->w : 0) : (d)->w)
+#define DL_PIC_H(d) ((d)->flags & DLF_TILE ? ((d)->tile ? (d)->tile->h : 0) : (d)->h)
 
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);

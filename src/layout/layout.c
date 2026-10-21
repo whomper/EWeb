@@ -155,6 +155,7 @@ typedef struct {
 	ITEM *it;
 	long nit, itcap;
 	int body_bg_taken;
+	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
@@ -597,23 +598,216 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 
 static void build(L *l, box *parent, dnode *n);
 
-/* the picture an <img> shows: its src, or where a page that loads its
-   pictures as they are scrolled to keeps the real one (data-src and the
-   like) when src is missing or only a placeholder */
-static const char *img_src(dnode *n)
+/* ---------------------------------------------------------------- which picture */
+
+/* a srcset's candidate: its address, and its density (x 1024) or width */
+typedef struct {
+	const char *u;
+	uint32_t n;
+	int32_t x, w;
+} CAND;
+
+#define MAXCAND 16
+
+static int is_ws(char c)
 {
-	static const char *const lazy[] = { "data-src", "data-lazy-src", "data-original", "data-srcset" };
-	const char *s = dn_attr(n, "src");
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+/* a srcset's candidates, after the HTML Standard's parsing of one */
+static int srcset(const char *s, CAND *c, int max)
+{
+	int n = 0;
+	while (*s && n < max) {
+		const char *u, *ue, *d, *de;
+		int bad = 0, depth = 0, hasx = 0, hasw = 0;
+		int32_t x = 0, w = 0;
+		while (is_ws(*s) || *s == ',')
+			s++;
+		if (*s == 0)
+			break;
+		u = s;
+		while (*s && !is_ws(*s))
+			s++;
+		ue = s;
+		if (ue[-1] == ',') {
+			/* no descriptors */
+			while (ue > u && ue[-1] == ',')
+				ue--;
+			d = de = s;
+		} else {
+			d = s;
+			while (*s && !(*s == ',' && depth == 0)) {
+				if (*s == '(')
+					depth++;
+				else if (*s == ')' && depth > 0)
+					depth--;
+				s++;
+			}
+			de = s;
+		}
+		/* the descriptors: Nx, Nw (Nh: not used) */
+		while (d < de) {
+			const char *t;
+			while (d < de && is_ws(*d))
+				d++;
+			t = d;
+			while (d < de && !is_ws(*d))
+				d++;
+			if (d == t)
+				break;
+			if (d[-1] == 'w' && !hasw && !hasx) {
+				const char *q = t;
+				w = 0;
+				while (q < d - 1 && *q >= '0' && *q <= '9')
+					w = w * 10 + (*q++ - '0');
+				bad |= q != d - 1 || w <= 0 || w > 100000;
+				hasw = 1;
+			} else if (d[-1] == 'x' && !hasw && !hasx) {
+				const char *q = t;
+				int32_t ip = 0, fr = 0, sc = 1;
+				while (q < d - 1 && *q >= '0' && *q <= '9')
+					ip = ip * 10 + (*q++ - '0');
+				if (q < d - 1 && *q == '.')
+					for (q++; q < d - 1 && *q >= '0' && *q <= '9'; q++)
+						if (sc < 10000) {
+							fr = fr * 10 + (*q - '0');
+							sc *= 10;
+						}
+				x = ip * 1024 + fr * 1024 / sc;
+				bad |= q != d - 1 || x <= 0 || ip > 100;
+				hasx = 1;
+			} else if (d[-1] != 'h') {
+				bad = 1;
+			}
+		}
+		if (!bad && ue > u) {
+			c[n].u = u;
+			c[n].n = (uint32_t) (ue - u);
+			c[n].x = hasx ? x : 0;
+			c[n].w = hasw ? w : 0;
+			n++;
+		}
+		if (*s == ',')
+			s++;
+	}
+	return n;
+}
+
+static int is_data(const char *u)
+{
+	return strncmp(u, "data:", 5) == 0;
+}
+
+/* from a srcset (and an img's src as 1x when it may be one), the
+   candidate nearest the screen's density at or above it (the least to
+   fetch that still looks sharp), else the densest; its address and its
+   density (x 1024), 0 when there is none */
+static const char *choose(L *l, const char *set, const char *sizes, const char *src, int32_t *dens)
+{
+	CAND c[MAXCAND + 1];
+	int n = srcset(set, c, MAXCAND), i, best = -1, anyw = 0, one = 0, real = 0;
+	int32_t slot = -1, want = l->zoom, bd = 0;
+	for (i = 0; i < n; i++) {
+		anyw |= c[i].w > 0;
+		one |= c[i].w == 0 && (c[i].x == 0 || c[i].x == 1024);
+		real |= !is_data(c[i].u);
+	}
+	if (src != NULL && *src != 0 && !anyw && !one) {
+		c[n].u = src;
+		c[n].n = (uint32_t) strlen(src);
+		c[n].x = 1024;
+		c[n].w = 0;
+		real |= !is_data(src);
+		n++;
+	}
+	if (anyw) {
+		if (sizes != NULL && *sizes != 0)
+			slot = ec_sizes(l->p->d->css, sizes, strlen(sizes));
+		if (slot <= 0)
+			slot = (int32_t) ((int64_t) l->p->width * 1024 / l->zoom);	/* 100vw */
+		if (slot <= 0)
+			slot = 1;
+	}
+	for (i = 0; i < n; i++) {
+		int32_t d = c[i].w > 0 ? (int32_t) ((int64_t) c[i].w * 1024 / slot) : c[i].x ? c[i].x : 1024;
+		if (real && is_data(c[i].u))
+			continue;		/* a placeholder */
+		if (best < 0 || (bd < want ? d > bd : d >= want && d < bd)) {
+			best = i;
+			bd = d;
+		}
+	}
+	if (best < 0)
+		return NULL;
+	*dens = bd > 0 ? bd : 1024;
+	return astrdup(l->a, c[best].u, c[best].n);
+}
+
+/* a <source>'s type: one EWeb reads (JPEG, PNG, GIF), or none given */
+static int img_type_ok(const char *t)
+{
+	static const char *const ok[] = { "image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/gif" };
+	size_t i, n;
+	if (t == NULL)
+		return 1;
+	while (is_ws(*t))
+		t++;
+	for (n = 0; t[n] && !is_ws(t[n]) && t[n] != ';'; n++)
+		;
+	if (n == 0)
+		return 1;
+	for (i = 0; i < sizeof ok / sizeof ok[0]; i++)
+		if (strlen(ok[i]) == n && contains_ci(t, n, ok[i]))
+			return 1;
+	return 0;
+}
+
+/* the picture an <img> shows: a <picture>'s first <source> whose type
+   EWeb reads and whose media holds, else its own srcset with its src,
+   else where a page that loads its pictures as they are scrolled to
+   keeps the real one (data-srcset, data-src and the like) when src is
+   missing or only a placeholder; and its density (x 1024: a picture
+   chosen for 2x is shown at half its size) */
+static const char *img_src(L *l, dnode *n, int32_t *dens)
+{
+	static const char *const lazy[] = { "data-src", "data-lazy-src", "data-original" };
+	const char *s = dn_attr(n, "src"), *set, *r;
 	size_t i;
-	if (s != NULL && *s != 0 && strncmp(s, "data:", 5) != 0)
+	*dens = 1024;
+	if (n->parent != NULL && n->parent->tag == T_PICTURE && n->parent->ns == DN_NS_HTML) {
+		dnode *k;
+		for (k = n->parent->first; k != NULL && k != n; k = k->next) {
+			const char *m;
+			if (k->type != DN_ELEMENT || k->tag != T_SOURCE)
+				continue;
+			m = dn_attr(k, "media");
+			if (!img_type_ok(dn_attr(k, "type")) || (m != NULL && *m != 0 &&
+								 !ec_media_ok(l->p->d->css, m, strlen(m))))
+				continue;
+			set = dn_attr(k, "srcset");
+			if (set == NULL || *set == 0 || (is_data(set) && dn_attr(k, "data-srcset") != NULL))
+				set = dn_attr(k, "data-srcset");
+			if (set != NULL && (r = choose(l, set, dn_attr(k, "sizes"), NULL, dens)) != NULL)
+				return r;
+		}
+	}
+	set = dn_attr(n, "srcset");
+	if (set != NULL && *set != 0 && (r = choose(l, set, dn_attr(n, "sizes"),
+						 s != NULL && !is_data(s) ? s : NULL, dens)) != NULL && !is_data(r))
+		return r;
+	*dens = 1024;
+	if (s != NULL && *s != 0 && !is_data(s))
 		return s;
+	set = dn_attr(n, "data-srcset");
+	if (set != NULL && *set != 0 && (r = choose(l, set, dn_attr(n, "data-sizes") ? dn_attr(n, "data-sizes") :
+						 dn_attr(n, "sizes"), NULL, dens)) != NULL && !is_data(r))
+		return r;
+	*dens = 1024;
 	for (i = 0; i < sizeof lazy / sizeof lazy[0]; i++) {
 		const char *v = dn_attr(n, lazy[i]);
-		if (v != NULL && *v != 0 && strncmp(v, "data:", 5) != 0) {
-			if (i == 3)
-				return NULL;	/* a list: not taken apart yet */
+		if (v != NULL && *v != 0 && !is_data(v))
 			return v;
-		}
 	}
 	return s != NULL && *s != 0 ? s : NULL;
 }
@@ -682,11 +876,20 @@ static void build_element(L *l, box *parent, dnode *c)
 		new_box(l, BX_BR, c, st, parent);
 		return;
 	case T_IMG: {
-		const char *alt = dn_attr(c, "alt"), *src = img_src(c);
+		int32_t iw = 0, ih = 0, dens;
+		const char *alt = dn_attr(c, "alt"), *src = img_src(l, c, &dens);
 		void *h = NULL;
-		int32_t iw = 0, ih = 0;
 		if (src != NULL && l->p->opt.image != NULL)
 			h = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
+		if (h != NULL && dens != 1024 && iw > 0 && ih > 0) {
+			/* chosen for another density: its size in CSS px */
+			iw = (int32_t) ((int64_t) iw * 1024 / dens);
+			ih = (int32_t) ((int64_t) ih * 1024 / dens);
+			if (iw < 1)
+				iw = 1;
+			if (ih < 1)
+				ih = 1;
+		}
 		if (h != NULL) {
 			box *in = parent;
 			if (block_level(d)) {
@@ -1438,6 +1641,138 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 #endif
 }
 
+/* a background picture (the first layer's url()): its item, here in
+   the painting order, with the picture's size in CSS px in x and y until
+   bg_place puts it where the box is; -1: none */
+static long bg_item(L *l, const ec_style *s, dnode *n)
+{
+	const ec_str *u;
+	void *h;
+	int32_t iw = 0, ih = 0;
+	dl_item *d;
+	if (s == NULL || s->k[EP_BACKGROUND_IMAGE] != EK_PTR || l->p->opt.image == NULL)
+		return -1;
+	u = s->v[EP_BACKGROUND_IMAGE].p;
+	if (u == NULL || u->len == 0)
+		return -1;
+	h = l->p->opt.image(l->p->opt.ud, u->s, &iw, &ih);
+	if (h == NULL)
+		return -1;
+	d = dl_add(l);
+	if (d == NULL)
+		return -1;
+	d->type = DL_IMAGE;
+	d->img = h;
+	d->flags = DLF_TILE | DLF_NOSIZE | DLF_ALT;
+	d->x = iw;
+	d->y = ih;
+#ifndef EW_ST
+	d->node = n;
+#endif
+	return l->p->nitems - 1;
+}
+
+/* the background picture at item i over a box's border box (x, y, w, h),
+   by its background-size, -position and -repeat; its file not come yet:
+   over the box, nothing drawn, and the page laid out again when it has */
+static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int32_t w, int32_t h,
+		     int32_t bl, int32_t bt, int32_t br, int32_t bb)
+{
+	dl_item *d;
+	dl_tile *t;
+	int32_t iw, ih, pw = w - bl - br, ph = h - bt - bb, tw, th, ox, oy, x1, y1;
+	int rep, sw;
+	if (i < 0 || l->fail)
+		return;
+	d = &l->p->items[i];
+	iw = d->x;
+	ih = d->y;
+	d->x = x;
+	d->y = y;
+	d->w = w > 0 ? w : 0;
+	d->h = h > 0 ? h : 0;
+	if (iw <= 0 || ih <= 0)
+		return;
+	d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
+	if (w <= 0 || h <= 0)
+		return;
+	if (pw <= 0)
+		pw = 1;
+	if (ph <= 0)
+		ph = 1;
+	iw = dev(l, iw << 10);
+	ih = dev(l, ih << 10);
+	if (iw <= 0)
+		iw = 1;
+	if (ih <= 0)
+		ih = 1;
+	sw = s->k[EP_BACKGROUND_SIZE_W] == EK_KW ? s->v[EP_BACKGROUND_SIZE_W].i : 0;
+	if (sw == KW_COVER || sw == KW_CONTAIN) {
+		/* as large as covers the area, or as fits in it */
+		int wide = (int64_t) pw * ih > (int64_t) ph * iw;
+		if (wide == (sw == KW_COVER)) {
+			tw = pw;
+			th = (int32_t) ((int64_t) ih * pw / iw);
+		} else {
+			th = ph;
+			tw = (int32_t) ((int64_t) iw * ph / ih);
+		}
+	} else {
+		tw = len(l, s, EP_BACKGROUND_SIZE_W, pw);
+		th = len(l, s, EP_BACKGROUND_SIZE_H, ph);
+		if (tw == AUTO && th == AUTO) {
+			tw = iw;
+			th = ih;
+		} else if (tw == AUTO) {
+			tw = (int32_t) ((int64_t) iw * th / ih);
+		} else if (th == AUTO) {
+			th = (int32_t) ((int64_t) ih * tw / iw);
+		}
+	}
+	if (tw < 1)
+		tw = 1;
+	if (th < 1)
+		th = 1;
+	/* in the padding box: a percentage is of the room the tile leaves */
+	ox = x + bl + len0(l, s, EP_BACKGROUND_POSITION_X, pw - tw);
+	oy = y + bt + len0(l, s, EP_BACKGROUND_POSITION_Y, ph - th);
+	t = amalloc(l->a, sizeof *t);
+	if (t == NULL) {
+		l->fail = 1;
+		return;
+	}
+	rep = kw(s, EP_BACKGROUND_REPEAT);
+	t->rx = (uint8_t) (rep != KW_NO_REPEAT && rep != KW_REPEAT_Y);
+	t->ry = (uint8_t) (rep != KW_NO_REPEAT && rep != KW_REPEAT_X);
+	t->w = tw;
+	t->h = th;
+	/* drawn in the border box, and only where the tiles are */
+	x1 = x + w;
+	y1 = y + h;
+	if (!t->rx) {
+		if (ox > x)
+			x = ox;
+		if (ox + tw < x1)
+			x1 = ox + tw;
+	}
+	if (!t->ry) {
+		if (oy > y)
+			y = oy;
+		if (oy + th < y1)
+			y1 = oy + th;
+	}
+	if (x1 <= x || y1 <= y)
+		return;
+	d->x = x;
+	d->y = y;
+	d->w = x1 - x;
+	d->h = y1 - y;
+	t->dx = ox - x;
+	t->dy = oy - y;
+	d->tile = t;
+	d->flags = DLF_TILE;
+}
+
 /* a form control: its frame, then its content as an item drawn from
    its state */
 static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_t base)
@@ -2073,8 +2408,11 @@ static void stretch(L *l, long bg, const long *bd, int32_t dh)
 	dl_item *it = l->p->items;
 	if (dh <= 0)
 		return;
-	if (bg >= 0)
+	if (bg >= 0) {
 		it[bg].h += dh;
+		if (it[bg].type == DL_FILL && (it[bg].flags & DLF_TILE))
+			it[bg + 1].h += dh;	/* its picture */
+	}
 	if (bd[1] >= 0)
 		it[bd[1]].y += dh;
 	if (bd[2] >= 0)
@@ -2092,7 +2430,8 @@ static void cell_shift(L *l, long k0, long k1, long bg, const long *bd, int32_t 
 	if (dy <= 0)
 		return;
 	for (k = k0; k < k1; k++) {
-		if (k == bg)
+		if (k == bg || (bg >= 0 && k == bg + 1 && l->p->items[bg].type == DL_FILL &&
+				(l->p->items[bg].flags & DLF_TILE)))
 			continue;
 		for (j = 0; j < 4 && bd[j] != k; j++)
 			;
@@ -3499,7 +3838,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	const ec_style *s = b->st;
 	int32_t ml = 0, mr = 0, mt = 0, mb = 0, bl = 0, br = 0, bt = 0, bb = 0, pl = 0, pr = 0, pt = 0, pb = 0;
 	int32_t w, ch = 0, cx, cy, hp, mn, mx, fb = AUTO;
-	long bgi = -1;
+	long bgi = -1, bgp = -1;
 	uint32_t bg = 0;
 	int auto_l = 0, auto_r = 0, wauto = 1, saved_n = l->ncols, table_n = 0;
 	int32_t *saved_cols = l->cols, *table_cols = NULL, saved_sh = l->sp_h, saved_sv = l->sp_v;
@@ -3648,6 +3987,11 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		bg = color(s, EP_BACKGROUND_COLOR);
 		if ((bg >> 24) != 0 && !(b->n != NULL && b->n->tag == T_BODY && l->body_bg_taken))
 			bgi = fill(l, x + ml, y + mt, bl + pl + w + pr + br, 1, bg);
+		if (b->n != l->canvas_bg) {
+			bgp = bg_item(l, s, b->n);
+			if (bgp >= 0 && bgi >= 0)
+				l->p->items[bgi].flags |= DLF_TILE;
+		}
 	}
 	cx = x + ml + bl + pl;
 	cy = y + mt + bt + pt;
@@ -3775,6 +4119,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			ch = mx;
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb;
+		bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb);
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
 			bd[0] = fill(l, bx, by, bw, bt, color(s, EP_BORDER_TOP_COLOR));
@@ -3814,7 +4159,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->cby = saved_cby;
 		l->cbw = saved_cbw;
 	}
-	l->last_bg = bgi;
+	l->last_bg = bgi >= 0 ? bgi : bgp;
 	memcpy(l->last_bd, bd, sizeof bd);
 	*mb_out = mb;
 	*first = fb;
@@ -3878,6 +4223,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	box *root;
 	dnode *html = d->html;
 	int32_t mb, fb = AUTO;
+	long cbg = -1;
 
 	if (p == NULL || a == NULL) {
 		free(p);
@@ -3902,15 +4248,20 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	/* the canvas: the root's background, else the body's */
 	{
 		uint32_t hb = color(html->e.style, EP_BACKGROUND_COLOR);
-		if ((hb >> 24) != 0) {
-			p->bg = hb & 0xffffff;
+		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR) {
+			p->bg = (hb >> 24) != 0 ? hb & 0xffffff : p->bg;
+			l.canvas_bg = html;
 		} else if (d->body != NULL && d->body->e.style != NULL) {
 			uint32_t bb = color(d->body->e.style, EP_BACKGROUND_COLOR);
 			if ((bb >> 24) != 0) {
 				p->bg = bb & 0xffffff;
 				l.body_bg_taken = 1;
 			}
+			l.canvas_bg = d->body;
 		}
+		/* its picture over the whole page, first */
+		if (l.canvas_bg != NULL && kw(l.canvas_bg->e.style, EP_DISPLAY) != KW_NONE)
+			cbg = bg_item(&l, l.canvas_bg->e.style, l.canvas_bg);
 	}
 	root = new_box(&l, BX_BLOCK, html, html->e.style, NULL);
 	if (root != NULL) {
@@ -3920,6 +4271,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		}
 		fixup(&l, root);
 		p->height = layout_block(&l, root, 0, 0, o->width, 0, &mb, &fb);
+		bg_place(&l, cbg, l.canvas_bg != NULL ? l.canvas_bg->e.style : NULL, 0, 0, o->width,
+			 p->height, 0, 0, 0, 0);
 	}
 	free(l.it);
 	free(l.fl);

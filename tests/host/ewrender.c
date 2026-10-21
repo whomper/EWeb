@@ -655,6 +655,14 @@ int main(int argc, char **argv)
 			if (it->type == DL_FILL)
 				printf("fill %d,%d %dx%d #%06lx\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
 				       (unsigned long) it->rgb);
+			else if (it->type == DL_IMAGE && (it->flags & DLF_TILE))
+				printf("background %d,%d %dx%d%s%s tile %d,%d %dx%d%s%s %s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, it->flags & DLF_NOSIZE ? " unsized" : "",
+				       it->tile == NULL && !(it->flags & DLF_NOSIZE) ? " none" : "",
+				       it->tile ? (int) it->tile->dx : 0, it->tile ? (int) it->tile->dy : 0,
+				       it->tile ? (int) it->tile->w : 0, it->tile ? (int) it->tile->h : 0,
+				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
+				       img_url(it->img));
 			else if (it->type == DL_IMAGE)
 				printf("image %d,%d %dx%d%s%s link %d \"%.*s\" %s\n", (int) it->x, (int) it->y, (int) it->w,
 				       (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "", it->flags & DLF_ALT ? " alt" : "",

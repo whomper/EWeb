@@ -711,8 +711,9 @@ releases.
     a set height's room. Not taken: named lines (other than areas'), `dense`, `subgrid`, `masonry`,
     `grid` and `grid-template`'s areas form. The CSS engine's 13 new properties cost 0.2 to 0.6% more
     68030 instructions on the page set's sheets.
-  Not yet: `background-image`. `tests/layout/floats.html`, `flex.html` and `grid.html` keep them
-  all; the page set laid out with AddressSanitizer and UBSan, no fault.
+  Background pictures and `srcset` (Pictures, below). `tests/layout/floats.html`, `flex.html`,
+  `grid.html` and `pictures.html` keep them all; the page set laid out with AddressSanitizer and
+  UBSan, no fault.
 - **The display list and the canvas** (`src/gfx`): the layout gives fills and text runs in device
   pixels (a CSS pixel is 0.8 of the Falcon's at the start); the canvas draws them into memory, a
   byte a pixel for the planar modes or 16-bit for true colour, which the GEM side copies to the
@@ -952,8 +953,29 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
   tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
-  those. Not yet: CSS `background-image`, `srcset` and `<picture>`'s sources (the `<img>`'s own
-  `src` is taken), SVG, animation. `<input type=image>` shows its picture (forms, below).
+  those. Not yet: SVG, animation, CSS gradients. `<input type=image>` shows its picture (forms,
+  below).
+- **Which picture** (21 Oct 2026, the HTML Standard's 4.8.4.3): a `<picture>`'s first `<source>`
+  whose `type` EWeb reads (none, JPEG, PNG or GIF: a WebP or AVIF one is passed over) and whose
+  `media` holds (the CSS engine's media queries, `ec_media_ok`), else the `<img>`'s own `srcset`
+  with its `src` as 1x. Of a `srcset` EWeb takes the candidate nearest the screen's density at or
+  above it (the zoom: 0.8 device pixels to a CSS pixel at 100%), the least to fetch that still
+  looks sharp, else the densest; `w` descriptors are measured against `sizes` (its first entry
+  whose media condition holds; lengths, `vw`, `em`, `calc()`, `min()`, `max()` and `clamp()`;
+  `ec_sizes`), else the window's width. A picture chosen for 2x is shown at half its file's size.
+  `data-srcset` and `data-sizes` stand in as `data-src` does, and a `data:` candidate (a
+  placeholder) only when there is nothing else.
+- **Background pictures** (21 Oct 2026, CSS Backgrounds 3): the first layer's `url()`, over the
+  border box, at `background-position` in the padding box, `background-size` (`cover`,
+  `contain`, lengths, percentages, `auto`) and `background-repeat`; the root's or the body's over
+  the whole page. Each is one item in the display list (`DLF_TILE`: the item is where it is drawn,
+  the tile where the first one goes and its size), its picture decoded once at the tile's size,
+  and the canvas draws the tiles where the item and the window meet: an opaque picture's first
+  rows of tiles, the rest copied from the rows a tile above. Laid out before its file has come,
+  it is drawn when the page is laid out again with its size. A sheet's `url()` is its own address's
+  (`ec_sheet_at`), not the page's. Not taken: more layers, `background-attachment: fixed` (drawn as
+  `scroll`), `background-clip` and `-origin`, `space` and `round` (drawn as `repeat`), pictures in
+  inline boxes' backgrounds, `list-style-image`.
 - **Off on a slow line:** View > Show pictures (`PICTURES=` in `EWEB.INF`): pages show their
   pictures' alt text instead.
 - **Checked:** `common/tests/pic` (PngSuite, libjpeg-turbo's and libnsgif's test pictures and more

@@ -1138,7 +1138,10 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 
 static int mq_condition(ec_ctx *c, const ec_tok *t, int i, int n, int allow_or);
 
-/* ( condition ) or ( feature ) at t[*i] */
+/* ( condition ) or ( feature ) at t[*i]; a condition nested deeper than
+   a few is unknown (a page's could otherwise take the Atari's stack) */
+static int mq_depth;
+
 static int mq_in_parens(ec_ctx *c, const ec_tok *t, int *i, int n)
 {
 	int end, k, r;
@@ -1160,9 +1163,13 @@ static int mq_in_parens(ec_ctx *c, const ec_tok *t, int *i, int n)
 	k = skip_ws(t, *i + 1, end - 1);
 	*i = end;
 	if (k < end - 1 && (t[k].type == T_LPAREN || (t[k].type == T_IDENT &&
-			ec_tok_is(&t[k], "not"))))
+			ec_tok_is(&t[k], "not")))) {
+		if (mq_depth >= 16)
+			return 2;
+		mq_depth++;
 		r = mq_condition(c, t, k, end - 1, 1);
-	else
+		mq_depth--;
+	} else
 		r = mq_feature(c, t, k, end - 1);
 	return r < 0 ? 2 : r;		/* not understood: unknown */
 }
@@ -1283,6 +1290,189 @@ static int media_list(ec_ctx *c, const ec_tok *t, int i, int n)
 		start = i + 1;
 	}
 	return empty || any;
+}
+
+int ec_media_ok(ec_ctx *c, const char *s, size_t len)
+{
+	ec_lex lx;
+	int n, stop;
+
+	ec_lex_init(&lx, s, len);
+	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
+	return n >= 0 && stop == T_EOF && media_list(c, prelude, 0, n);
+}
+
+/* a length in sizes, t[*i] on: a dimension, or calc(), min(), max() or
+   clamp() of them (+ - between lengths, * / by numbers); px x 1024, and
+   in *num 1 if it is a number. depth: brackets inside brackets, a few
+   (a page's could otherwise take the Atari's stack) */
+#define SZ_DEPTH 8
+
+static int sz_sum(ec_ctx *c, const ec_tok *t, int *i, int n, int64_t *v, int *num, int depth);
+
+static int sz_value(ec_ctx *c, const ec_tok *t, int *i, int n, int64_t *v, int *num, int depth)
+{
+	int j = skip_ws(t, *i, n), end;
+	int32_t px;
+
+	if (j >= n || depth > SZ_DEPTH)
+		return 0;
+	*num = 0;
+	if (t[j].type == T_NUM) {
+		*v = t[j].num;
+		*num = 1;
+		*i = j + 1;
+		return 1;
+	}
+	if (t[j].type == T_DIM) {
+		if (!mq_length(c, &t[j], &px))
+			return 0;
+		*v = px;
+		*i = j + 1;
+		return 1;
+	}
+	if (t[j].type != T_FUNC && t[j].type != T_LPAREN)
+		return 0;
+	end = close_of(t, j, n);
+	if (end < 0)
+		return 0;
+	if (t[j].type == T_LPAREN || ec_tok_is(&t[j], "calc")) {
+		int k = j + 1;
+		if (!sz_sum(c, t, &k, end - 1, v, num, depth + 1) || skip_ws(t, k, end - 1) != end - 1)
+			return 0;
+	} else {
+		/* min(a, b ...), max(...), clamp(lo, v, hi) */
+		int fn = ec_tok_is(&t[j], "min") ? 'n' : ec_tok_is(&t[j], "max") ? 'x' :
+			ec_tok_is(&t[j], "clamp") ? 'c' : 0, k = j + 1, cnt = 0, nm;
+		int64_t a[3] = { 0, 0, 0 }, x;
+		if (!fn)
+			return 0;
+		for (;;) {
+			if (!sz_sum(c, t, &k, end - 1, &x, &nm, depth + 1) || nm)
+				return 0;
+			if (fn == 'c') {
+				if (cnt == 3)
+					return 0;
+				a[cnt] = x;
+			} else if (cnt == 0 || (fn == 'n' ? x < a[0] : x > a[0])) {
+				a[0] = x;
+			}
+			cnt++;
+			k = skip_ws(t, k, end - 1);
+			if (k >= end - 1)
+				break;
+			if (t[k].type != T_COMMA)
+				return 0;
+			k++;
+		}
+		if (fn == 'c') {
+			if (cnt != 3)
+				return 0;
+			a[0] = a[1] < a[0] ? a[0] : a[1] > a[2] ? a[2] : a[1];
+		}
+		*v = a[0];
+	}
+	*i = end;
+	return 1;
+}
+
+static int sz_product(ec_ctx *c, const ec_tok *t, int *i, int n, int64_t *v, int *num, int depth)
+{
+	int64_t x;
+	int nm;
+
+	if (!sz_value(c, t, i, n, v, num, depth))
+		return 0;
+	for (;;) {
+		int j = skip_ws(t, *i, n), op;
+		if (j >= n || !(delim(&t[j], '*') || delim(&t[j], '/')))
+			return 1;
+		op = t[j].s[0];
+		*i = j + 1;
+		if (!sz_value(c, t, i, n, &x, &nm, depth))
+			return 0;
+		if (op == '*') {
+			if (!*num && !nm)
+				return 0;
+			*v = *v * x >> 10;
+			*num = *num && nm;
+		} else {
+			if (!nm || x == 0)
+				return 0;
+			*v = (*v << 10) / x;
+		}
+	}
+}
+
+static int sz_sum(ec_ctx *c, const ec_tok *t, int *i, int n, int64_t *v, int *num, int depth)
+{
+	int64_t x;
+	int nm;
+
+	if (!sz_product(c, t, i, n, v, num, depth))
+		return 0;
+	for (;;) {
+		int j = *i, op;
+		/* + and - need white space round them */
+		if (j >= n || t[j].type != T_WS)
+			return 1;
+		j = skip_ws(t, j, n);
+		if (j >= n || !(delim(&t[j], '+') || delim(&t[j], '-')))
+			return 1;
+		op = t[j].s[0];
+		*i = j + 1;
+		if (*i >= n || t[*i].type != T_WS || !sz_product(c, t, i, n, &x, &nm, depth) || nm != *num)
+			return 0;
+		*v = op == '+' ? *v + x : *v - x;
+	}
+}
+
+int32_t ec_sizes(ec_ctx *c, const char *s, size_t len)
+{
+	ec_lex lx;
+	int n, stop, a = 0;
+
+	ec_lex_init(&lx, s, len);
+	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
+	if (n < 0 || stop != T_EOF)
+		return -1;
+	while (a < n) {
+		int b = a, depth = 0, e, l0, k, num;
+		int64_t v;
+		/* this entry: to a comma outside brackets */
+		for (; b < n; b++) {
+			int ty = prelude[b].type;
+			if (ty == T_FUNC || ty == T_LPAREN)
+				depth++;
+			else if (ty == T_RPAREN)
+				depth--;
+			else if (ty == T_COMMA && depth == 0)
+				break;
+		}
+		e = b;
+		while (e > a && prelude[e - 1].type == T_WS)
+			e--;
+		/* its length: the last component, after the media condition */
+		l0 = e - 1;
+		if (l0 >= a && prelude[l0].type == T_RPAREN) {
+			for (depth = 0; l0 >= a; l0--) {
+				int ty = prelude[l0].type;
+				if (ty == T_RPAREN)
+					depth++;
+				else if ((ty == T_FUNC || ty == T_LPAREN) && --depth == 0)
+					break;
+			}
+		}
+		k = l0;
+		if (l0 >= a && prelude[l0].type != T_LPAREN && sz_value(c, prelude, &k, e, &v, &num, 0) &&
+		    k == e && !num && v >= 0) {
+			int cond = skip_ws(prelude, a, l0) >= l0 ? 1 : mq_condition(c, prelude, a, l0, 1);
+			if (cond == 1)
+				return (int32_t) (v >> 10);
+		}
+		a = b + 1;
+	}
+	return -1;
 }
 
 /* ------------------------------------------------------------ @supports */
@@ -1413,6 +1603,7 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 		return bend;
 	memset(b, 0, sizeof *b);
 	b->src = p;
+	b->base = c->sheet_base;
 	b->len = blen;
 	c->st.blocks++;
 	for (k = 0; k < l->n; k++) {
@@ -1520,6 +1711,27 @@ int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin)
 	c->st.sheets++;
 	rules(c, copy, copy + len, origin, 0);
 	return 0;
+}
+
+void ec_set_resolver(ec_ctx *c, int (*resolve)(const char *base, const char *rel, char *out, int size))
+{
+	c->resolve = resolve;
+}
+
+int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *base)
+{
+	int r;
+	if (base != NULL) {
+		size_t n = strlen(base);
+		char *b = ec_alloc(&c->mem, n + 1);
+		if (b == NULL)
+			return -1;
+		memcpy(b, base, n + 1);
+		c->sheet_base = b;
+	}
+	r = ec_sheet(c, css, len, origin);
+	c->sheet_base = NULL;
+	return r;
 }
 
 /* ------------------------------------------------------------ declarations */
@@ -1659,7 +1871,9 @@ void ec_parse_block(ec_ctx *c, ec_block *b)
 	int custom;
 	int k;
 
+	c->parse_base = b->base;
 	b->n = ec_parse_decls(c, b->src, b->len, &b->d, &custom);
+	c->parse_base = NULL;
 	b->custom = custom;
 	for (k = 0; k < b->n; k++)
 		if (b->d[k].imp)

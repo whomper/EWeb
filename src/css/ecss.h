@@ -204,6 +204,18 @@ const char *ec_atom_text(const ec_atom *a, size_t *len);
  * they are added, within their origin. Returns 0, or -1 if out of memory. */
 int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin);
 
+/* A sheet from an address of its own (a <link>'s): its url()s are made
+ * absolute against base by the resolver given (1 if it could; the url
+ * as it is if not, or with no resolver). */
+void ec_set_resolver(ec_ctx *c, int (*resolve)(const char *base, const char *rel, char *out, int size));
+int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *base);
+
+/* For pictures (<source media>, <img sizes>): does a media query list
+ * match c's media; the width in px that sizes gives (its first entry
+ * whose condition holds), or -1 when none does */
+int ec_media_ok(ec_ctx *c, const char *s, size_t len);
+int32_t ec_sizes(ec_ctx *c, const char *s, size_t len);
+
 /* Styles root and every element under it: sets each node's style. The
  * styles last until ec_unstyle() or ec_destroy(). */
 void ec_select(ec_ctx *c, ec_node *root);

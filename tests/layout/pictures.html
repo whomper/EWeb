@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Pictures chosen and backgrounds</title>
+<style>
+body { font-family: sans-serif; margin: 8px; background: #fff url(img/stripe.png) repeat-x }
+.box { width: 200px; height: 50px; border: 2px solid #333; margin: 6px 0; padding: 4px }
+.tiled { background: url(img/tile.png) }
+.across { background: #ffd url(img/tile.png) repeat-x 0 100% }
+.one { background: url(img/one.png) no-repeat right 10px top 5px }
+.cover { background-image: url(img/two.png); background-size: cover; background-repeat: no-repeat }
+.contain { background: url(img/two.png) center / contain no-repeat }
+.half { background: url(img/four.png) 50% 50% / 50% auto no-repeat }
+.grow { display: flex } .grow > div { flex: 1; background: url(img/tile.png) repeat-y; margin: 2px }
+td { background: url(img/tile.png) repeat-x; vertical-align: middle; height: 40px }
+</style></head>
+<body>
+<p>Backgrounds: tiled, across the foot, one in a corner, covering, contained and half the width.</p>
+<div class="box tiled">tiled</div>
+<div class="box across">across</div>
+<div class="box one">a corner</div>
+<div class="box cover">cover</div>
+<div class="box contain">contain</div>
+<div class="box half">half</div>
+<div class="grow"><div>short</div><div>a taller one<br>on two lines<br>and three</div></div>
+<table><tr><td>middle</td><td>a cell<br>of two lines</td></tr></table>
+<p>Chosen: 2x of a srcset (shown at half its size), by width for 120px, a source by its
+media, past a WebP one, and the src when the srcset has nothing better.</p>
+<p><img srcset="img/one.png 1x, img/two.png 2x" alt="1x">
+<img srcset="img/one.png 60w, img/two.png 120w, img/four.png 240w" sizes="(max-width: 100px) 60px, 120px" alt="by width">
+<picture><source type="image/webp" srcset="img/no.webp"><source media="(max-width: 100px)" srcset="img/no.png">
+<source media="(min-width: 200px)" srcset="img/two.png"><img src="img/one.png" alt="picture"></picture>
+<img src="img/four.png" srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x" width="80" alt="src"></p>
+</body></html>

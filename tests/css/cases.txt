@@ -258,6 +258,30 @@ input:read-only { padding-top: 5px }
 #e background-image url(a.png)
 #e background-repeat repeat-y
 #e background-color #008000
+#a -ec-background-size-w cover
+#a -ec-background-size-h auto
+#c -ec-background-size-w auto
+
+=== background-size (CSS Backgrounds 3, 3.9)
+--- css
+#a { background-size: 50% }
+#b { background-size: 2em auto, contain }
+#c { background-size: contain }
+#d { background: url(x.png) 0 0 / 10px 20px; }
+#e { background-size: 10px; background: red }
+#f { background-size: -1px }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+--- expect
+#a -ec-background-size-w 50%
+#a -ec-background-size-h auto
+#b -ec-background-size-w 32px
+#b -ec-background-size-h auto
+#c -ec-background-size-w contain
+#d -ec-background-size-w 10px
+#d -ec-background-size-h 20px
+#e -ec-background-size-w auto
+#f -ec-background-size-w auto
 
 === font (CSS Fonts 4, 2.8)
 --- css

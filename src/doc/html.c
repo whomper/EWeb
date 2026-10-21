@@ -52,7 +52,7 @@
 	X(MTEXT, "mtext") X(NAV, "nav") X(NOBR, "nobr") X(NOEMBED, "noembed") \
 	X(NOFRAMES, "noframes") X(NOSCRIPT, "noscript") X(OBJECT, "object") X(OL, "ol") \
 	X(OPTGROUP, "optgroup") X(OPTION, "option") X(OUTPUT, "output") X(P, "p") \
-	X(PARAM, "param") X(PLAINTEXT, "plaintext") X(PRE, "pre") X(RB, "rb") X(RP, "rp") \
+	X(PARAM, "param") X(PICTURE, "picture") X(PLAINTEXT, "plaintext") X(PRE, "pre") X(RB, "rb") X(RP, "rp") \
 	X(RT, "rt") X(RTC, "rtc") X(RUBY, "ruby") X(S, "s") X(SCRIPT, "script") \
 	X(SEARCH, "search") X(SECTION, "section") X(SELECT, "select") X(SMALL, "small") \
 	X(SOURCE, "source") X(SPAN, "span") X(STRIKE, "strike") X(STRONG, "strong") \
@@ -141,7 +141,8 @@ static void names_init(void)
 		{ H_VIDEO, T_VIDEO }, { H_AUDIO, T_AUDIO }, { H_OBJECT, T_OBJECT },
 		{ H_EMBED, T_EMBED }, { H_TEMPLATE, T_TEMPLATE }, { H_LABEL, T_LABEL },
 		{ H_FORM, T_FORM }, { H_WBR, T_WBR }, { H_FIELDSET, T_FIELDSET },
-		{ H_LEGEND, T_LEGEND }, { H_OPTGROUP, T_OPTGROUP } };
+		{ H_LEGEND, T_LEGEND }, { H_OPTGROUP, T_OPTGROUP }, { H_PICTURE, T_PICTURE },
+		{ H_SOURCE, T_SOURCE } };
 	const uint8_t *l;
 	unsigned i;
 

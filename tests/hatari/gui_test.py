@@ -70,6 +70,7 @@ def hd_for(name, home, inf=""):
     with open(os.path.join(hd, "PICS.HTM"), "wb") as f:
         f.write(server.PICS_PAGE)
     for k, (data, _) in server.PICS.items():
+        os.makedirs(os.path.dirname(os.path.join(hd, k.upper())), exist_ok=True)
         with open(os.path.join(hd, k.upper()), "wb") as f:
             f.write(data)
     with open(os.path.join(hd, "EWEB.INF"), "w") as f:

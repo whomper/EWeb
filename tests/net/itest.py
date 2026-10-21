@@ -422,6 +422,14 @@ try:
               [(k, "decoded" if k == "anim.gif" else "from the cache", v) for k, v in want.items()]) and
               outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
               outs[1])
+        # pictures from a sheet's url() (its folder's) and from srcset
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/bg.html" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        check("the browser: a background from the sheet's folder, a srcset's choice", p.returncode == 0
+              and re.search(r"^background \S+ \S+ tile \S+ 6x6 across %scss/tile\.png$" % re.escape(site), out, re.M)
+              and re.search(r"^image \S+ 120x48 link \d+ \"chosen\" %slogo\.png$" % re.escape(site), out, re.M)
+              and "no.webp" not in out and "big.png" not in out and "gone.png" not in out, out)
         rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
         check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
               and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)

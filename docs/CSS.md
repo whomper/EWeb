@@ -71,8 +71,10 @@ Falcons, and a divide that costs 40 to 80 cycles.
   logic), `@supports` (declarations, `not`, `and`, `or`, `selector()`),
   `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
   `@container` are skipped.
-- **Properties:** the 96 EWeb draws: box model, positioning, floats,
-  borders, backgrounds (first layer), fonts, text (including `direction`,
+- **Properties:** the 98 EWeb draws: box model, positioning, floats,
+  borders, backgrounds (first layer; `background-size` since 21 Oct 2026,
+  kept as two longhands of the engine's own, `-ec-background-size-w` and
+  `-h`), fonts, text (including `direction`,
   `unicode-bidi`, `text-align: start | end`), lists, tables, flexbox,
   grid (since 21 Oct 2026: `grid-template-columns` and `-rows` as track
   lists with `fr`, `minmax()`, `fit-content()` and `repeat()`, `auto-fill`
@@ -123,6 +125,15 @@ names shared, and `ec_create_on(&m, 0, ua)` makes a document's context on
 it. The base is only read from then on (a document's rules on its names go
 into the document's own table), so it may be used by every document of a
 program run and is destroyed last.
+
+A sheet that came from an address of its own (a `<link>`'s) is added with
+`ec_sheet_at(c, css, len, origin, its_address)` once the context has a
+resolver (`ec_set_resolver`): its `url()`s are made absolute against that
+address when its declarations are read, as CSS Values 4 says, not against
+the page's. For pictures, `ec_media_ok(c, s, n)` tells whether a media
+query list holds (a `<source media>`), and `ec_sizes(c, s, n)` gives the
+width an `<img sizes>` names (its first entry whose condition holds, with
+`calc()`, `min()`, `max()` and `clamp()` of lengths), or -1.
 
 `tests/bench/ecstyle.c` builds `ec_node`s from nsbench's document tree;
 in EWeb the document's own nodes will be them.

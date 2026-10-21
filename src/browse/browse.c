@@ -747,7 +747,9 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 	}
 	if (fetch(sh->b, url, sh->base, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
 	    (f->status == 0 || (f->status >= 200 && f->status < 300)))
-		ec_sheet(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR);
+		/* its url()s from where it came */
+		ec_sheet_at(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR,
+			    f->url[0] ? f->url : url);
 	free(f->data);
 	free(f);
 }
@@ -920,6 +922,7 @@ parse:
 	if (d == NULL)
 		return 0;
 	doc_add_ua(d);
+	ec_set_resolver(d->css, resolve);
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
 	   rendering: hidden only with scripting) */
 	if (scripts)
@@ -2031,7 +2034,7 @@ static int to_do(const browser *b, const dl_item *d)
 	st = img_state(im);
 	if (st == IMG_WAITING)
 		return !b->pic_stopped;
-	return st == IMG_HERE && !(d->flags & DLF_ALT) && !img_tried(im, d->w, d->h);
+	return st == IMG_HERE && !(d->flags & DLF_ALT) && !img_tried(im, DL_PIC_W(d), DL_PIC_H(d));
 }
 
 /* the item to work on next: in the window first, then below, then above */
@@ -2189,9 +2192,9 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 		const page *p0 = b->p;
 		if (d->type != DL_IMAGE || d->img != im || (d->flags & DLF_ALT))
 			continue;
-		if (!img_tried(im, d->w, d->h) && img_state(im) == IMG_HERE) {
+		if (!img_tried(im, DL_PIC_W(d), DL_PIC_H(d)) && img_state(im) == IMG_HERE) {
 			unsigned long t = pf_ms();
-			int32_t w = d->w, h = d->h;
+			int32_t w = DL_PIC_W(d), h = DL_PIC_H(d);
 			int ok;
 			if (!fetched)
 				say(b, "%s", "Pictures: decoding...");

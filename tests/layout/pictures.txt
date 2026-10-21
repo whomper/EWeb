@@ -1,0 +1,57 @@
+page 608 x 596, background ffffff, 56 items, 0 links, title "Pictures chosen and backgrounds"
+background 0,0 608x19 tile 0,0 3x19 across file://./tests/layout/img/stripe.png
+text 6,32 580x17 #000000 sans13 link 0 "Backgrounds: tiled, across the foot, one in a corner, covering, contained and half the width."
+background 6,48 170x50 tile 2,2 6x6 across down file://./tests/layout/img/tile.png
+text 11,66 27x17 #000000 sans13 link 0 "tiled"
+fill 6,48 170x2 #333333
+fill 6,96 170x2 #333333
+fill 6,50 2x46 #333333
+fill 174,50 2x46 #333333
+fill 6,103 170x50 #ffffdd
+background 6,145 170x6 tile 2,0 6x6 across file://./tests/layout/img/tile.png
+text 11,121 42x17 #000000 sans13 link 0 "across"
+fill 6,103 170x2 #333333
+fill 6,151 170x2 #333333
+fill 6,105 2x46 #333333
+fill 174,105 2x46 #333333
+background 117,164 48x24 tile 0,0 48x24 file://./tests/layout/img/one.png
+text 11,176 53x17 #000000 sans13 link 0 "a corner"
+fill 6,158 170x2 #333333
+fill 6,206 170x2 #333333
+fill 6,160 2x46 #333333
+fill 174,160 2x46 #333333
+background 8,215 166x48 tile 0,0 166x83 file://./tests/layout/img/two.png
+text 11,231 35x17 #000000 sans13 link 0 "cover"
+fill 6,213 170x2 #333333
+fill 6,261 170x2 #333333
+fill 6,215 2x46 #333333
+fill 174,215 2x46 #333333
+background 45,270 92x46 tile 0,0 92x46 file://./tests/layout/img/two.png
+text 11,286 47x17 #000000 sans13 link 0 "contain"
+fill 6,268 170x2 #333333
+fill 6,316 170x2 #333333
+fill 6,270 2x46 #333333
+fill 174,270 2x46 #333333
+background 49,327 83x41 tile 0,0 83x41 file://./tests/layout/img/four.png
+text 11,341 23x17 #000000 sans13 link 0 "half"
+fill 6,323 170x2 #333333
+fill 6,371 170x2 #333333
+fill 6,325 2x46 #333333
+fill 174,325 2x46 #333333
+background 8,380 6x48 tile 0,0 6x6 down file://./tests/layout/img/tile.png
+text 8,393 33x17 #000000 sans13 link 0 "short"
+background 306,380 6x48 tile 0,0 6x6 down file://./tests/layout/img/tile.png
+text 306,393 72x17 #000000 sans13 link 0 "a taller one"
+text 306,409 75x17 #000000 sans13 link 0 "on two lines"
+text 306,425 62x17 #000000 sans13 link 0 "and three"
+background 8,432 45x6 tile 0,0 6x6 across file://./tests/layout/img/tile.png
+text 9,446 43x17 #000000 sans13 link 0 "middle"
+background 55,432 73x6 tile 0,0 6x6 across file://./tests/layout/img/tile.png
+text 56,446 33x17 #000000 sans13 link 0 "a cell"
+text 56,462 71x17 #000000 sans13 link 0 "of two lines"
+text 6,494 593x17 #000000 sans13 link 0 "Chosen: 2x of a srcset (shown at half its size), by width for 120px, a source by its media, past"
+text 6,510 386x17 #000000 sans13 link 0 "a WebP one, and the src when the srcset has nothing better."
+image 6,550 48x24 link 0 "1x" file://./tests/layout/img/one.png
+image 58,526 96x48 link 0 "by width" file://./tests/layout/img/two.png
+image 158,526 96x48 link 0 "picture" file://./tests/layout/img/two.png
+image 258,542 64x32 link 0 "src" file://./tests/layout/img/four.png

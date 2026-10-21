@@ -18,12 +18,14 @@ EWeb's own fonts.
 - **EWeb's own engine**: EWeb's HTML parser (the HTML Standard's, nearly three
   times as fast as NetSurf's on the 68030), EWeb's CSS engine
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
-  and fresh layout code: blocks, lines, lists, tables, colours, borders, and
-  Hebrew right to left.
+  and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
+  grid, colours, borders, background pictures, and Hebrew right to left.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, fetched after the page is shown (you read and scroll meanwhile),
   decoded straight at the size shown, dithered to the screen's colours in
-  16 and 256 colours and monochrome; off with one menu item on a slow line.
+  16 and 256 colours and monochrome; of a picture offered in several sizes
+  and forms (`srcset`, `<picture>`), the one the screen needs; off with one
+  menu item on a slow line.
   The decoders are the family's (AERA-Atari's `common/src/pic.c`).
 - **Forms**: fields, boxes, lists and buttons, typed into (Hebrew too,
   right to left), Tab from one to the next and Return to send; sent with

@@ -800,6 +800,70 @@ long cv_ctl_line(const dl_item *d, fctl *c, int how)
 	return r;
 }
 
+/* the first of a run of tiles from a (one every step) at or before lo */
+static int32_t first_tile(int32_t a, int32_t step, int32_t lo)
+{
+	int32_t m;
+	if (a <= lo) {
+		m = (lo - a) % step;
+		return lo - m;
+	}
+	m = (a - lo) % step;
+	return m ? lo - (step - m) : lo;
+}
+
+/* a background picture: its tiles where the item and the canvas meet.
+   An opaque one's first rows of tiles are drawn, the rest copied from
+   the rows a tile above */
+static void tiles(canvas *c, const dl_item *d)
+{
+	const dl_tile *t = d->tile;
+	const PIC *pic = NULL;
+	const uint8_t *pens = NULL;
+	canvas sub;
+	int32_t x0 = d->x, y0 = d->y, x1 = d->x + d->w, y1 = d->y + d->h, sx, sy, tx, ty, ylim;
+	int bytes = c->bpp / 8;
+	if (t == NULL || c->picture == NULL || !c->picture(c->ud, d->img, t->w, t->h, &pic, &pens) ||
+	    pic == NULL || (c->bpp == 8 && pens == NULL) || pic->w <= 0 || pic->h <= 0)
+		return;
+	if (x0 < c->ox)
+		x0 = c->ox;
+	if (y0 < c->oy)
+		y0 = c->oy;
+	if (x1 > c->ox + c->w)
+		x1 = c->ox + c->w;
+	if (y1 > c->oy + c->h)
+		y1 = c->oy + c->h;
+	if (x0 >= x1 || y0 >= y1)
+		return;
+	sub = *c;
+	sub.pix = c->pix + (long) (y0 - c->oy) * c->stride + (long) (x0 - c->ox) * bytes;
+	sub.ox = x0;
+	sub.oy = y0;
+	sub.w = x1 - x0;
+	sub.h = y1 - y0;
+	sx = d->x + t->dx;
+	sy = d->y + t->dy;
+	if (t->rx)
+		sx = first_tile(sx, pic->w, x0);
+	if (t->ry)
+		sy = first_tile(sy, pic->h, y0);
+	/* drawn: all of them, or an opaque picture's to a tile below y0 */
+	ylim = t->ry && pic->alpha == NULL && y1 > y0 + pic->h ? y0 + pic->h : y1;
+	for (ty = sy; ty < ylim; ty += pic->h) {
+		for (tx = sx; tx < x1; tx += pic->w) {
+			cv_picture(&sub, pic, pens, tx, ty);
+			if (!t->rx)
+				break;
+		}
+		if (!t->ry)
+			break;
+	}
+	for (ty = ylim; ty < y1; ty++)
+		memcpy(sub.pix + (long) (ty - y0) * c->stride, sub.pix + (long) (ty - y0 - pic->h) * c->stride,
+		       (size_t) (x1 - x0) * bytes);
+}
+
 /* one item, if it falls on the canvas */
 static void item(canvas *c, const page *p, const dl_item *d)
 {
@@ -813,6 +877,10 @@ static void item(canvas *c, const page *p, const dl_item *d)
 		const uint8_t *pens = NULL;
 		if (d->flags & DLF_ALT)
 			return;		/* its alt text is drawn instead */
+		if (d->flags & DLF_TILE) {
+			tiles(c, d);
+			return;
+		}
 		if (c->picture != NULL && c->picture(c->ud, d->img, d->w, d->h, &pic, &pens) && pic != NULL &&
 		    (c->bpp != 8 || pens != NULL))
 			cv_picture(c, pic, pens, d->x, d->y);

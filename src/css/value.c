@@ -560,13 +560,29 @@ static const ec_str *tok_str(ec_ctx *c, const ec_tok *t)
 	return ec_str_new(&c->mem, s, len);
 }
 
+/* a url(): made absolute when its sheet has an address of its own */
+static const ec_str *url_str(ec_ctx *c, const ec_tok *t)
+{
+	char buf[1024], abs[2048];
+	size_t len;
+	const char *s = ec_tok_text(t, buf, sizeof buf, &len);
+	if (c->parse_base != NULL && c->resolve != NULL && len < sizeof buf) {
+		char rel[1024];
+		memcpy(rel, s, len);
+		rel[len] = 0;
+		if (c->resolve(c->parse_base, rel, abs, sizeof abs))
+			return ec_str_new(&c->mem, abs, strlen(abs));
+	}
+	return ec_str_new(&c->mem, s, len);
+}
+
 static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 {
 	const ec_tok *k = &t[*i];
 
 	if (k->type == T_URL) {
 		d->kind = EK_PTR;
-		d->v.p = tok_str(c, k);
+		d->v.p = url_str(c, k);
 		(*i)++;
 		return d->v.p != NULL;
 	}
@@ -584,7 +600,7 @@ static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 			if (end != *i + 3 || t[*i + 1].type != T_STR)
 				return 0;
 			d->kind = EK_PTR;
-			d->v.p = tok_str(c, &t[*i + 1]);
+			d->v.p = url_str(c, &t[*i + 1]);
 			*i = end;
 			return d->v.p != NULL;
 		}
@@ -1143,9 +1159,31 @@ static int position(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *x, ec_de
 	return 1;
 }
 
+/* background-size's first layer from t[*i]: cover | contain | a width
+   and maybe a height (auto when missing) */
+static int bg_size(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *w, ec_decl *h)
+{
+	int j = *i, kw = t[j].type == T_IDENT ? ec_kw(&t[j]) : 0;
+
+	put(h, EP_BACKGROUND_SIZE_H, EK_KW, KW_AUTO);
+	if (kw == KW_COVER || kw == KW_CONTAIN) {
+		put(w, EP_BACKGROUND_SIZE_W, EK_KW, kw);
+		*i = j + 1;
+		return 1;
+	}
+	if (!length(c, t, n, &j, LF_AUTO | LF_NN, w))
+		return 0;
+	if (j < n && t[j].type != T_COMMA && !length(c, t, n, &j, LF_AUTO | LF_NN, h))
+		put(h, EP_BACKGROUND_SIZE_H, EK_KW, KW_AUTO);	/* one value: the height is auto */
+	w->prop = EP_BACKGROUND_SIZE_W;
+	h->prop = EP_BACKGROUND_SIZE_H;
+	*i = j;
+	return 1;
+}
+
 static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 {
-	ec_decl col, img, rep, px, py;
+	ec_decl col, img, rep, px, py, sw, sh;
 	int i = 0, layer = 0;
 
 	put(&col, EP_BACKGROUND_COLOR, EK_COLOR, 0);
@@ -1153,10 +1191,12 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	put(&rep, EP_BACKGROUND_REPEAT, EK_KW, KW_REPEAT);
 	put(&px, EP_BACKGROUND_POSITION_X, EK_PCT, 0);
 	put(&py, EP_BACKGROUND_POSITION_Y, EK_PCT, 0);
+	put(&sw, EP_BACKGROUND_SIZE_W, EK_KW, KW_AUTO);
+	put(&sh, EP_BACKGROUND_SIZE_H, EK_KW, KW_AUTO);
 	while (i <= n) {
-		int hcol = 0, himg = 0, hrep = 0, hpos = 0, hatt = 0, hbox = 0;
+		int hcol = 0, himg = 0, hrep = 0, hpos = 0, hatt = 0, hbox = 0, hsize = 0;
 		int r1 = 0, r2 = 0;
-		ec_decl lcol, limg, lx, ly;
+		ec_decl lcol, limg, lx, ly, lw, lh;
 		while (i < n && t[i].type != T_COMMA) {
 			int j = i, kw = t[i].type == T_IDENT ? ec_kw(&t[i]) : 0;
 			if (!himg && image(c, t, n, &j, &limg)) {
@@ -1185,20 +1225,10 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 			} else if (!hpos && position(c, t, n, &j, &lx, &ly)) {
 				hpos = 1;
 				if (j < n && is_delim(&t[j], '/')) {
-					/* background-size: not kept */
-					int k;
 					j++;
-					for (k = 0; k < 2 && j < n; k++) {
-						int kw2 = t[j].type == T_IDENT ? ec_kw(&t[j]) : 0;
-						ec_decl dummy;
-						if (kw2 == KW_AUTO || ec_tok_is(&t[j], "cover") ||
-								ec_tok_is(&t[j], "contain"))
-							j++;
-						else if (!length(c, t, n, &j, LF_NN, &dummy))
-							break;
-					}
-					if (k == 0)
+					if (j >= n || !bg_size(c, t, n, &j, &lw, &lh))
 						return -1;
+					hsize = 1;
 				}
 			} else if (!hcol && color(t, n, &j, &lcol)) {
 				hcol = 1;
@@ -1233,6 +1263,10 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 				px = lx;
 				py = ly;
 			}
+			if (hsize) {
+				sw = lw;
+				sh = lh;
+			}
 		}
 		if (i >= n)
 			break;
@@ -1246,7 +1280,9 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	out[2] = rep;
 	out[3] = px;
 	out[4] = py;
-	return 5;
+	out[5] = sw;
+	out[6] = sh;
+	return 7;
 }
 
 static int font(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
@@ -1877,9 +1913,13 @@ int ec_shorthand_props(int sh, uint8_t *p)
 	case ES_BACKGROUND:
 		p[0] = EP_BACKGROUND_COLOR; p[1] = EP_BACKGROUND_IMAGE; p[2] = EP_BACKGROUND_REPEAT;
 		p[3] = EP_BACKGROUND_POSITION_X; p[4] = EP_BACKGROUND_POSITION_Y;
-		return 5;
+		p[5] = EP_BACKGROUND_SIZE_W; p[6] = EP_BACKGROUND_SIZE_H;
+		return 7;
 	case ES_BACKGROUND_POSITION:
 		p[0] = EP_BACKGROUND_POSITION_X; p[1] = EP_BACKGROUND_POSITION_Y;
+		return 2;
+	case ES_BACKGROUND_SIZE:
+		p[0] = EP_BACKGROUND_SIZE_W; p[1] = EP_BACKGROUND_SIZE_H;
 		return 2;
 	case ES_FONT:
 		p[0] = EP_FONT_STYLE; p[1] = EP_FONT_VARIANT; p[2] = EP_FONT_WEIGHT;
@@ -1940,6 +1980,13 @@ static int shorthand(ec_ctx *c, int sh, const ec_tok *t, int n, ec_decl *out)
 		int i = 0;
 		/* the first layer only */
 		if (!position(c, t, n, &i, &out[0], &out[1]) || (i < n && t[i].type != T_COMMA))
+			return -1;
+		return 2;
+	}
+	case ES_BACKGROUND_SIZE: {
+		int i = 0;
+		/* the first layer only */
+		if (!bg_size(c, t, n, &i, &out[0], &out[1]) || (i < n && t[i].type != T_COMMA))
 			return -1;
 		return 2;
 	}

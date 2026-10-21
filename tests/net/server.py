@@ -26,6 +26,10 @@ Pages:
                  and no size (the page is laid out again when it comes), a
                  GIF, a progressive JPEG with only its width, a big PNG held
                  to the width, and one that isn't there (made with Pillow)
+  /site/bg.html  pictures from CSS and srcset: a stylesheet in
+                 /site/css/ whose url(tile.png) is its folder's, and a
+                 <picture> whose WebP source is passed over and whose img's
+                 srcset gives logo.png for its 150px
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -126,6 +130,14 @@ PICS_PAGE = (b"<!DOCTYPE html><html><head><title>Pictures</title><style>body{bac
              b"</body></html>\n")
 
 
+BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=stylesheet href=css/bg.css>"
+           b"</head><body><div class=box>A box tiled from its sheet's folder</div>"
+           b"<p><picture><source type=image/webp srcset=no.webp><img src=gone.png "
+           b"srcset='logo.png 150w, big.png 800w' sizes='(max-width: 10px) 800px, 150px' alt=chosen>"
+           b"</picture></p></body></html>\n")
+BG_CSS = b".box { background: #eee url(tile.png) repeat-x 0 100%; height: 40px }\n"
+
+
 def make_pics():
     """the pictures of /site/pics.html, the same bytes every time"""
     import io
@@ -165,6 +177,7 @@ def make_pics():
         "logo.png": (save(logo, "PNG"), "image/png"),
         "anim.gif": (gif.getvalue(), "image/gif"),
         "big.png": (save(photo(800, 600), "PNG"), "image/png"),
+        "css/tile.png": (save(Image.new("RGB", (8, 8), (90, 90, 200)), "PNG"), "image/png"),
     }
 
 
@@ -270,6 +283,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, SITE_TWO)
         elif p == "/site/pics.html":
             self.send(200, PICS_PAGE)
+        elif p == "/site/bg.html":
+            self.send(200, BG_PAGE)
+        elif p == "/site/css/bg.css":
+            self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
         elif p == "/site/files.html":

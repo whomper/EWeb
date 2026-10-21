@@ -75,6 +75,8 @@
 	P(BACKGROUND_REPEAT,   "background-repeat",   VP_KW,     KL_BG_REPEAT,        EK_KW,    KW_REPEAT) \
 	P(BACKGROUND_POSITION_X,"background-position-x",VP_BGPOS,0,                   EK_PCT,   0) \
 	P(BACKGROUND_POSITION_Y,"background-position-y",VP_BGPOS,1,                   EK_PCT,   0) \
+	P(BACKGROUND_SIZE_W,   "-ec-background-size-w",VP_LEN,   LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
+	P(BACKGROUND_SIZE_H,   "-ec-background-size-h",VP_LEN,   LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
 	P(OVERFLOW_X,          "overflow-x",          VP_KW,     KL_OVERFLOW,         EK_KW,    KW_VISIBLE) \
 	P(OVERFLOW_Y,          "overflow-y",          VP_KW,     KL_OVERFLOW,         EK_KW,    KW_VISIBLE) \
 	P(Z_INDEX,             "z-index",             VP_INT,    LF_AUTO,             EK_KW,    KW_AUTO) \
@@ -117,7 +119,8 @@
 	S(BORDER_BOTTOM, "border-bottom") S(BORDER_LEFT, "border-left") \
 	S(BORDER_WIDTH, "border-width") S(BORDER_STYLE, "border-style") \
 	S(BORDER_COLOR, "border-color") S(BACKGROUND, "background") \
-	S(BACKGROUND_POSITION, "background-position") S(FONT, "font") \
+	S(BACKGROUND_POSITION, "background-position") S(BACKGROUND_SIZE, "background-size") \
+	S(FONT, "font") \
 	S(LIST_STYLE, "list-style") S(FLEX, "flex") S(FLEX_FLOW, "flex-flow") \
 	S(GAP, "gap") S(GRID_GAP, "grid-gap") S(OVERFLOW, "overflow") \
 	S(TEXT_DECORATION, "text-decoration") S(INSET, "inset") \
@@ -128,6 +131,7 @@
 /* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". */
 #define EC_KEYWORDS(K) \
 	K(AUTO, "auto") K(NONE, "none") K(NORMAL, "normal") K(INHERIT, "inherit") \
+	K(COVER, "cover") K(CONTAIN, "contain") \
 	K(INITIAL, "initial") K(UNSET, "unset") K(REVERT, "revert") K(REVERT_LAYER, "revert-layer") \
 	K(INLINE, "inline") K(BLOCK, "block") K(LIST_ITEM, "list-item") K(RUN_IN, "run-in") \
 	K(INLINE_BLOCK, "inline-block") K(TABLE, "table") K(INLINE_TABLE, "inline-table") \

@@ -181,6 +181,7 @@ typedef struct ec_calcx {
 
 typedef struct ec_block {
 	const char *src;		/* the declarations' text, parsed when first needed */
+	const char *base;		/* its sheet's address (ec_sheet_at), or NULL */
 	uint32_t len;
 	ec_decl *d;
 	uint16_t n;
@@ -272,6 +273,11 @@ struct ec_ctx {
 	ec_stats st;
 
 	int sibling_rules;		/* any selector looks at siblings */
+
+	/* url()s in a sheet from another address (ec_sheet_at) */
+	int (*resolve)(const char *base, const char *rel, char *out, int size);
+	const char *sheet_base;		/* the sheet being added's */
+	const char *parse_base;		/* the block being parsed's */
 
 	/* names the matcher and the cascade look for */
 	const ec_atom *a_style, *a_href, *a_lang, *a_dir, *a_type, *a_disabled, *a_checked,
