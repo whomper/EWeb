@@ -672,6 +672,7 @@ typedef struct {
 const PIC_DSP *pic_dsp;
 int pic_dsp_failed;
 int pic_dsp_shrink = 1;
+int pic_dsp_dither = 1;
 static int dsp_state;			/* 0: not checked yet, 1: checked, -1: the 68030 does it */
 static int dsp_testing;			/* the check: 1 its DSP decodes, 2 its 68030 ones */
 
@@ -1064,7 +1065,7 @@ static int decode_dsp(LJ *j, PIC *p, SCALER *sc, int k, int *why)
 			return 0;
 		}
 	}
-	if (!pic_dsp->begin()) {
+	if (!pic_dsp->begin(PIC_DSP_JPEG)) {
 		free(band);
 		if (shrink)
 			dsp_shrink_free(&shr);
@@ -1449,8 +1450,14 @@ static int decode_jpeg(const unsigned char *d, long n, PIC *p, SCALER *sc, int *
 const PIC_DSP *pic_dsp;			/* (no DSP for TJpgDec's builds) */
 int pic_dsp_failed;
 int pic_dsp_shrink = 1;
+int pic_dsp_dither = 1;
 
 const char *pic_dsp_state(void)
+{
+	return "68000";
+}
+
+const char *pic_dither_state(void)
 {
 	return "68000";
 }
@@ -2082,10 +2089,205 @@ static void dither_many(const PIC *p, PIC_PAL *pal, unsigned char *out)
 	free(rows);
 }
 
+#ifdef PIC_LIBJPEG
+/* ---------------------------------------------------------------- the dither on the DSP */
+
+/* dsp/dither.a56 does dither_many's work to the bit: the 68030 sends the
+   palette's tables once (while the program stays on the DSP and the
+   palette is the same, its near table is kept), then each row's pixels,
+   and reads the row before's pens while the DSP dithers this one */
+
+#define DD_PAL    8
+#define DD_DITHER 9
+#define DD_WMAX   1280			/* the widest row it takes */
+#define DD_S1     0x800			/* x, y: the pens by red (red, green; blue, pen + 1) */
+#define DD_S2     0xa00
+#define DD_PR     0xc00			/* x, y, x: pen k - 1's red, green, blue */
+#define DD_PB     0xe00
+#define DD_NT     0x1000		/* y: the near table */
+#define DD_MASK   0xFFFFFFUL
+#define DD_FAR    1900L			/* past the pens at either end, by red */
+
+static int dd_state;			/* 0: not checked yet, 1: checked, -1: the 68030 does it */
+static int dd_n;			/* the palette the DSP has (0: none) */
+static unsigned char dd_rgb[256][3];
+
+/* the tables: the program's constants and the palette's */
+static void dd_palette(const PIC_PAL *pal)
+{
+	static const unsigned long consts[20] = {
+		0x001000, 0x000020, 0x000010, 0x40, 0x70, 0x700000, 0x300000, 0x500000, 0x100000,
+		0x50, 0x70, 0xb0, DD_PR, 0x010000, 0x000100, 1, 0x90, 0x400000, 0xff, 0xff8000
+	};
+	unsigned long w[3 * 258], shi;
+	long n = pal->n, i;
+	/* internal X $40..$E0: WR, WG, LO, WB, WI, and the pack's constant */
+	for (i = 0; i < 32; i++) {
+		long m = i - 16, mid = 16 * m + 136, lo = 0, hi = n;
+		while (lo < hi) {		/* nearest_far's first pen at or above the middle */
+			long k = (lo + hi) >> 1;
+			if (pal->rgb[pal->order[k]][0] < mid)
+				lo = k + 1;
+			else
+				hi = k;
+		}
+		w[i] = (unsigned long) (DD_NT + i * 352);
+		w[32 + i] = (unsigned long) (i * 11);
+		w[64 + i] = (unsigned long) (DD_S1 + 1 + lo);
+		w[96 + i] = (unsigned long) (i / 3);
+		w[128 + i] = 1UL << (8 * (i % 3));
+	}
+	w[160] = DD_MASK;
+	dsp_load(D_LOADX, 0x40, w, 161);
+	/* internal Y $00..$E0: TBR, TBG (signed), TBB (signed), MID, WS */
+	memset(w, 0, 0xe1 * sizeof *w);
+	for (i = 0; i < 64; i++) {
+		if (i < 32) {
+			w[i] = ((unsigned long) (8 * i - 128) << 15) & DD_MASK;
+			w[0x70 + (i < 16 ? i : i - 32)] = ((unsigned long) (8 * i - 128) << 15) & DD_MASK;
+			w[0x80 + i] = ((unsigned long) (16 * (i - 16) + 136) << 12) & DD_MASK;
+			w[0xa0 + i] = (0UL - (1UL << (23 - 8 * (i % 3)))) & DD_MASK;
+		}
+		w[0x40 + (i < 32 ? i : i - 64)] = ((unsigned long) (4 * i - 128) << 15) & DD_MASK;
+	}
+	w[0xe0] = 0xFDFDFEUL;			/* -$020202's low word */
+	dsp_load(D_LOADY, 0, w, 0xe1);
+	shi = (unsigned long) (DD_S1 + 1 + n);
+	dsp_load(D_LOADX, 0x19, &shi, 1);
+	dsp_load(D_LOADX, 0x20, consts, 20);
+	/* the pens by red, at the ends far below and above every one */
+	w[0] = (0UL - ((unsigned long) DD_FAR << 12)) & DD_MASK;
+	for (i = 0; i < n; i++)
+		w[1 + i] = (unsigned long) pal->rgb[pal->order[i]][0] << 12;
+	w[1 + n] = (unsigned long) (DD_FAR << 12);
+	dsp_load(D_LOADX, DD_S1, w, n + 2);
+	for (i = 0; i < n; i++) {
+		w[i] = (unsigned long) pal->rgb[pal->order[i]][1] << 12;
+		w[n + i] = (unsigned long) pal->rgb[pal->order[i]][2] << 12;
+		w[2 * n + i] = (unsigned long) pal->order[i] + 1;
+	}
+	dsp_load(D_LOADY, DD_S1 + 1, w, n);
+	dsp_load(D_LOADX, DD_S2 + 1, w + n, n);
+	dsp_load(D_LOADY, DD_S2 + 1, w + 2 * n, n);
+	/* each pen's colour by its pen + 1 */
+	for (i = 0; i < n; i++) {
+		w[i] = ((unsigned long) (pal->rgb[i][0] - 128) << 15) & DD_MASK;
+		w[n + i] = ((unsigned long) (pal->rgb[i][1] - 128) << 15) & DD_MASK;
+		w[2 * n + i] = ((unsigned long) (pal->rgb[i][2] - 128) << 15) & DD_MASK;
+	}
+	dsp_load(D_LOADX, DD_PR + 1, w, n);
+	dsp_load(D_LOADY, DD_PR + 1, w + n, n);
+	dsp_load(D_LOADX, DD_PB + 1, w + 2 * n, n);
+	w[0] = DD_PAL;
+	pic_dsp->put(w, 1);
+	dd_n = pal->n;
+	memcpy(dd_rgb, pal->rgb, (size_t) pal->n * 3);
+}
+
+/* 1: dithered on the DSP; 0: it couldn't be had; -1: it stopped
+   answering */
+static int dither_dsp(const PIC *p, PIC_PAL *pal, unsigned char *out)
+{
+	static unsigned char last[DD_WMAX + 2];
+	long w = p->w, wo = (w + 2) / 3, y;
+	unsigned long h[4];
+	int got = pic_dsp->begin(PIC_DSP_DITHER);
+	if (!got)
+		return 0;
+	pic_dsp_failed = 0;
+	if (got == 1 || dd_n != pal->n || memcmp(dd_rgb, pal->rgb, (size_t) pal->n * 3) != 0)
+		dd_palette(pal);
+	h[0] = DD_DITHER;
+	h[1] = (unsigned long) w;
+	h[2] = (unsigned long) p->h;
+	h[3] = (unsigned long) wo;
+	pic_dsp->put(h, 4);
+	/* a row in, then the row before's pens out (three to a word: the
+	   last word's spare bytes go to the next row's start, written over
+	   when it comes; the last row's through last) */
+	for (y = 0; y <= p->h && !pic_dsp_failed; y++) {
+		if (y < p->h) {
+			static const unsigned long pad[2] = { 1, 1 };
+			pic_dsp->putpx(p->px + y * w, p->alpha != NULL ? p->alpha + y * w : NULL, w);
+			pic_dsp->put(pad, 2);	/* (the last word of pens' spare bytes) */
+		}
+		if (y > 0) {
+			unsigned char *d = y < p->h ? out + (y - 1) * w : last;
+			if (pic_dsp->get24(d, (int) wo, 1, 0) != 0)
+				pic_dsp_failed = 1;
+			else if (y == p->h)
+				memcpy(out + (y - 1) * w, last, (size_t) w);
+		}
+	}
+	pic_dsp->end(!pic_dsp_failed);
+	if (pic_dsp_failed) {
+		dd_n = 0;
+		return -1;
+	}
+	return 1;
+}
+
+/* the check, the first time: a known picture (colours across the cube
+   and past its edges' reach, some of it clear) dithered on both, the same
+   pens to the bit: 1; 0 not; -1 the DSP couldn't be had */
+static int dd_check(PIC_PAL *pal)
+{
+	PIC t;
+	unsigned short px[40 * 12];
+	unsigned char al[40 * 12], a[40 * 12], b[40 * 12];
+	int i, r;
+	memset(&t, 0, sizeof t);
+	t.w = 40;
+	t.h = 12;
+	t.px = px;
+	t.alpha = al;
+	for (i = 0; i < 40 * 12; i++) {
+		int x = i % 40, y = i / 40;
+		px[i] = (unsigned short) ((((x * 31) / 39) << 11) | (((y * 63) / 11) << 5) | ((x + y * 7) & 31));
+		al[i] = (unsigned char) (x == 7 || (x + y) % 13 == 0 ? 0 : 255);
+	}
+	r = dither_dsp(&t, pal, a);
+	if (r == 0)
+		return -1;
+	dither_many(&t, pal, b);
+	return r > 0 && memcmp(a, b, sizeof a) == 0;
+}
+
+const char *pic_dither_state(void)
+{
+	return pic_dsp == NULL || dd_state < 0 ? "68030" : dd_state > 0 ? "DSP" : "-";
+}
+
+/* the DSP's, when it may: 1 done */
+static int dither_on_dsp(const PIC *p, PIC_PAL *pal, unsigned char *out)
+{
+	int r;
+	if (pic_dsp == NULL || !pic_dsp_dither || dd_state < 0 || p->w > DD_WMAX || p->w < 1 ||
+	    (long) p->w * p->h < 1024)
+		return 0;
+	if (dd_state == 0) {
+		r = dd_check(pal);
+		if (r <= 0) {
+			dd_state = r < 0 ? 0 : -1;
+			return 0;
+		}
+		dd_state = 1;
+	}
+	r = dither_dsp(p, pal, out);
+	if (r < 0)
+		dd_state = -1;		/* it stopped answering: the 68030 from now on */
+	return r > 0;
+}
+#endif
+
 void pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out)
 {
 	if (pal->n == 2)
 		dither_two(p, pal, out);
+#ifdef PIC_LIBJPEG
+	else if (dither_on_dsp(p, pal, out))
+		return;
+#endif
 	else
 		dither_many(p, pal, out);
 }

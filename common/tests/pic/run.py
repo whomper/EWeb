@@ -5,6 +5,8 @@
 and more made from them here.
 
     run.py TEST_PIC                 every check (make test)
+    run.py TEST_PIC_DSP             the same, and the DSP's dither against
+                                    the 68030's (make testdsp)
     run.py --same TEST_PIC OTHER    OTHER (the 68030 build under QEMU) must
                                     give the very same bytes (make test68k)
 
@@ -286,6 +288,15 @@ def main():
                 if not ok:
                     print("FAIL %-22s black and white: mean %.0f, Pillow %.0f" % (name, m1, m2))
                     fails += 1
+    if "dsp" in os.path.basename(shlex.split(cmd)[0]):
+        # dithered on the DSP (dsp/dither.a56) and on the 68030: the same
+        # pens, to 4, 16 and 256 colours
+        r = subprocess.run(shlex.split(cmd) + ["-X"] + pictures(), capture_output=True, text=True)
+        checks += 1
+        print(r.stdout.strip()[-3000:], r.stderr.strip()[-2000:])
+        if r.returncode != 0:
+            fails += 1
+            print("FAIL dithered on the DSP")
     r = subprocess.run(shlex.split(cmd) + ["-r"] + pictures(), capture_output=True, text=True)
     checks += 1
     print(r.stdout.strip(), r.stderr.strip()[-2000:])

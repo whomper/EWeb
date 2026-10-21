@@ -13,7 +13,8 @@
  *                          doesn't know the address, 0 while it is being
  *                          asked (the question goes out with people_poll)
  *   people_pick("gra")     EContact's window, to choose people; never while
- *                          we hold the screen (a dialog's BEG_UPDATE)
+ *                          we hold the screen (a dialog's BEG_UPDATE); -1
+ *                          when EContact's file is chosen but doesn't fit
  *   in every event loop, modal ones included:
  *     case AV_PEOPLE: people_message(s, msg[1]);
  *     each turn:      people_poll();
@@ -43,7 +44,9 @@ typedef struct {
 int people_init(int cache, long outbox, void (*names_came)(void),
 		void (*picked)(const PERSON *list, int n));
 const char *people_name(const char *addr);
-int people_pick(const char *partial);	/* 0: one is open already, or no EContact */
+/* 1 picking; 0: one is open already, or no EContact (nor its file);
+   -1: EContact's file is there but doesn't fit in memory now */
+int people_pick(const char *partial);
 int people_picking(void);		/* 1 while a pick waits for its answer */
 int people_message(const char *s, short from);	/* 1 when it was people_ask's */
 void people_poll(void);
@@ -53,8 +56,9 @@ void people_forget(void);		/* AC_CLOSE: questions without answers go */
    it, 4.1): names from the file, and the people dialog on it, when
    neither edition of EContact is running */
 extern int (*people_scan_hook)(void (*line)(const char *addr, const char *name, void *ud),
-			       void *ud, int force);
+			       void *ud, int force);	/* force -1: stop a reading */
 extern int (*people_pick_hook)(const char *partial, void (*picked)(const PERSON *list, int n));
+extern int (*people_busy_hook)(void);	/* 1 while a reading in steps is under way */
 
 /* EContact's side */
 enum { PQ_NONE, PQ_NAMES, PQ_PICK };

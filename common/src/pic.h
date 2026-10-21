@@ -52,22 +52,29 @@ extern int (*pic_poll)(void);
 /* ---- a baseline JPEG decoded on the Falcon's DSP (PIC_LIBJPEG builds;
    dsp/jpeg.a56) ---- */
 typedef struct {
-	/* get the DSP and start jpeg.a56 on it (its bootstrap part and the
-	   rest): 1; 0 if it couldn't be had */
-	int (*begin)(void);
-	/* let it go; clean: jpeg.a56 is back at its commands (the next
+	/* get the DSP and start a program on it (PIC_DSP_JPEG: dsp/jpeg.a56,
+	   PIC_DSP_DITHER: dsp/dither.a56; its bootstrap part and the rest):
+	   1 loaded now, 2 it was there already (left clean); 0 if the DSP
+	   couldn't be had */
+	int (*begin)(int prog);
+	/* let it go; clean: the program is back at its commands (the next
 	   picture needn't load it again) */
 	void (*end)(int clean);
 	void (*put)(const unsigned long *w, long n);	/* n words to the DSP */
 	/* n words of 16 bits to the DSP (the scan's bytes, two to a word: as
 	   $00xxxx there; a port write of 2 bytes, not 3) */
 	void (*put16)(const unsigned short *w, long n);
+	/* n pixels to the DSP: each $00vvvv, or with an alpha (not NULL)
+	   $01vvvv where it is under 128 */
+	void (*putpx)(const unsigned short *px, const unsigned char *alpha, long n);
 	/* an MCU's word from the DSP: 0, and then rows of cols words, pitch
 	   apart, their low 16 bits (pitch in pixels) or their 3 bytes (pitch
 	   in bytes), read into d; else the word (the DSP asks for data) */
 	unsigned long (*get16)(unsigned short *d, int cols, int rows, long pitch);
 	unsigned long (*get24)(unsigned char *d, int cols, int rows, long pitch);
 } PIC_DSP;
+#define PIC_DSP_JPEG   0
+#define PIC_DSP_DITHER 1
 /* set by the program where it may use the DSP (atari/dspjpeg.c's
    dspjpeg_port), NULL: the 68030 does it all. The first JPEG decoded
    with it checks it on a known picture; if the DSP gets it wrong, or
@@ -80,6 +87,14 @@ extern int pic_dsp_failed;
    only the pixels shown; 0: it sends them all, for the scaler (the tests
    compare the two) */
 extern int pic_dsp_shrink;
+/* 1 (as it starts): pic_dither has the DSP dither too (16 colours and
+   more, pictures big enough to be worth it); 0: the 68030 (the tests
+   compare the two) */
+extern int pic_dsp_dither;
+/* where pictures are dithered (16 colours and more): "DSP", "68030"
+   (not to be had, or it failed its check or stopped answering), "-" (not
+   tried yet) */
+const char *pic_dither_state(void);
 /* where JPEGs are transformed: "DSP", "68030" (not to be had, or it
    failed), "-" (not tried yet); "68000" in TJpgDec's builds */
 const char *pic_dsp_state(void);

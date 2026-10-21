@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * dsp_sim.c - dsp/jpeg.a56 itself, loaded through the bootstrap of
- * Hatari's DSP56001 core (../ec/fetch-hatari.sh), behind the Falcon's host
- * port: a PIC_DSP for test_pic_dsp. It counts the DSP's cycles, and the
- * words each way.
+ * dsp_sim.c - dsp/jpeg.a56 and dsp/dither.a56 themselves, loaded through
+ * the bootstrap of Hatari's DSP56001 core (../ec/fetch-hatari.sh), behind
+ * the Falcon's host port: a PIC_DSP for test_pic_dsp. It counts the DSP's
+ * cycles, and the words each way. As on the Falcon, a program left clean
+ * at its commands is kept for the next picture that wants it.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,7 @@
 #include "dsp_cpu.h"
 #include "pic.h"
 #include "../../dsp/jpeg_prog.h"
+#include "../../dsp/dither_prog.h"
 
 /* what the core calls in the rest of Hatari */
 void DSP_SsiTransmit_SC1(uint32_t v) { (void)v; }
@@ -141,6 +143,13 @@ static void put16(const unsigned short *w, long n)
 		put1(*w++);
 }
 
+static void putpx(const unsigned short *px, const unsigned char *alpha, long n)
+{
+	long i;
+	for (i = 0; i < n && !pic_dsp_failed; i++)
+		put1(px[i] | (alpha != NULL && alpha[i] < 128 ? 0x10000UL : 0));
+}
+
 static unsigned long get16(unsigned short *d, int cols, int rows, long pitch)
 {
 	int r, c;
@@ -169,9 +178,14 @@ static unsigned long get24(unsigned char *d, int cols, int rows, long pitch)
 	return 0;
 }
 
-static int begin(void)
+static int alive;			/* the program left clean at its commands, + 1 */
+
+static int begin(int prog)
 {
-	static const unsigned long ext[3] = { 6, DSP_JPEG_PROG_EXT_AT, DSP_JPEG_PROG_EXT_N };
+	static const unsigned long ext[2][3] = {
+		{ 6, DSP_JPEG_PROG_EXT_AT, DSP_JPEG_PROG_EXT_N },
+		{ 6, DSP_DITHER_PROG_EXT_AT, DSP_DITHER_PROG_EXT_N }
+	};
 	static int inited;
 	if (sim_busy)
 		return 0;
@@ -180,11 +194,26 @@ static int begin(void)
 		dsp56k_init_cpu();
 		inited = 1;
 	}
+	pic_dsp_failed = 0;
+	if (alive == prog + 1 && !getenv("PIC_DSP_RELOAD")) {
+		/* its PING */
+		static const unsigned long ping = 5;
+		put(&ping, 1);
+		if (get1() == (prog == PIC_DSP_JPEG ? 0x4A5047UL : 0x445448UL) && !pic_dsp_failed)
+			return 2;
+	}
+	alive = prog + 1;
 	dsp_core_reset();
 	pic_dsp_failed = 0;
-	put(dsp_jpeg_prog, 512);
-	put(ext, 3);				/* LOADP: the rest */
-	put(dsp_jpeg_prog_ext, DSP_JPEG_PROG_EXT_N);
+	if (prog == PIC_DSP_JPEG) {
+		put(dsp_jpeg_prog, 512);
+		put(ext[0], 3);			/* LOADP: the rest */
+		put(dsp_jpeg_prog_ext, DSP_JPEG_PROG_EXT_N);
+	} else {
+		put(dsp_dither_prog, 512);
+		put(ext[1], 3);
+		put(dsp_dither_prog_ext, DSP_DITHER_PROG_EXT_N);
+	}
 	return 1;
 }
 
@@ -194,7 +223,8 @@ static void end(int clean)
 {
 	const char *e = getenv("PIC_DSP_DUMP");
 	unsigned a, n, i, x = 0;
-	(void)clean;
+	if (!clean || pic_dsp_failed)
+		alive = 0;
 	if (e != NULL && *e == 'x') {
 		x = 0x4000;
 		e++;
@@ -206,7 +236,7 @@ static void end(int clean)
 			i % 8 == 7 ? '\n' : ' ');
 	fprintf(stderr, "\n");
 }
-static const PIC_DSP port = { begin, end, put, put16, get16, get24 };
+static const PIC_DSP port = { begin, end, put, put16, putpx, get16, get24 };
 
 const PIC_DSP *sim_dsp(void)
 {

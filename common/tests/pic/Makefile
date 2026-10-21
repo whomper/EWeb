@@ -5,7 +5,8 @@
 # make test68k runs the same as 68030 code under qemu-m68k. Both JPEG
 # decoders: TJpgDec (test_pic, the 68000 programs') and libjpeg-turbo
 # (test_pic_lj, -DPIC_LIBJPEG: EWeb's); make testdsp, EWeb's with the
-# transform and colours on the Falcon's DSP (dsp/jpeg.a56 on Hatari's core)
+# transform and colours on the Falcon's DSP (dsp/jpeg.a56 on Hatari's core),
+# and the dither on it (dsp/dither.a56) against the 68030's
 S      := ../../src
 T      := ../../third_party
 SRC    := test_pic.c $(S)/pic.c $(S)/png.c $(S)/jpegdc.c $(S)/inflate.c $(S)/util.c \
@@ -48,7 +49,7 @@ $(B)/hatari.a: | $(B)
 	mkdir -p $(B)/hat && cd $(B)/hat && cc -O2 -w -I../../$(HAT) -I../../$(HAT)/stub \
 		-c ../../$(HAT)/dsp_core.c ../../$(HAT)/dsp_cpu.c
 	rm -f $@ && ar rcs $@ $(B)/hat/*.o
-$(B)/test_pic_dsp: $(SRC_LJ) dsp_sim.c ../../dsp/jpeg_prog.h $(HDR) $(B)/libjpeg.a $(B)/hatari.a | $(B)
+$(B)/test_pic_dsp: $(SRC_LJ) dsp_sim.c ../../dsp/jpeg_prog.h ../../dsp/dither_prog.h $(HDR) $(B)/libjpeg.a $(B)/hatari.a | $(B)
 	cc $(CFLAGS) $(SAN) $(INC) $(LJ_INC) -DWITH_DSP_SIM -I$(HAT) -I$(HAT)/stub -o $@ $(SRC_LJ) dsp_sim.c \
 		$(B)/libjpeg.a $(B)/hatari.a
 $(B):
