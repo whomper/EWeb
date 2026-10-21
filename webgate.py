@@ -22,7 +22,16 @@ or 1.3) and hands the answer back as it comes:
     them and keeps the cookies itself;
   - X-Gateway-TLS says how the Pi reached the server ("TLS 1.3,
     TLS_AES_128_GCM_SHA256"), for EWeb's info line;
-  - one connection per server is kept open and reused.
+  - one connection per server is kept open and reused;
+  - a picture asked for with "X-Gateway-Picture: fit=WIDTH" (EWeb's
+    width for the page, in pixels) is decoded here when it is wider than
+    that or of a kind the Atari can't read (WebP, AVIF, TIFF, BMP...), and
+    sent as a baseline JPEG no wider (a PNG of 256 colours when it has
+    transparency or was a GIF or a palette PNG), its own size written in
+    it ("webgate natural WxH": a JPEG's comment, a PNG's tEXt) so that the
+    page is laid out as with the original. A megabyte of photo becomes a
+    few dozen kilobytes, and the Atari decodes it at its size. Needs
+    Pillow (python3-pil); without it pictures pass as they came.
 
 Snapshots (--browser): a GET with "X-Gateway-Snapshot: 1" is opened in an
 ordinary Chromium on the Pi (its own profile: your logins stay there), and
@@ -61,6 +70,7 @@ import argparse
 import gzip
 import html
 import http.client
+import io
 import json
 import os
 import socket
@@ -82,6 +92,53 @@ HOP_BY_HOP = {
 }
 
 PIECE = 65536
+PICTURE_MAX = 40 << 20  # the most of a picture's file webgate takes in to make smaller
+PICTURE_PIXELS = 40_000_000     # and the most pixels it unpacks: a few kilobytes can claim gigabytes
+
+
+def make_picture(data, fit):
+    """data (a picture's file) made for a page fit pixels wide: (bytes,
+    content type, what was done) or None to send it as it came (no Pillow,
+    not a picture, too many pixels, or a JPEG, PNG or GIF the page can show
+    as it is)"""
+    try:
+        from PIL import Image, ImageOps, PngImagePlugin
+    except ImportError:
+        return None
+    try:
+        im = Image.open(io.BytesIO(data))
+        fmt, (w, h) = im.format, im.size
+        if fmt in ("JPEG", "PNG", "GIF") and w <= fit or w * h > PICTURE_PIXELS:
+            return None
+        turned = fmt in ("JPEG", "WEBP", "TIFF", "MPO") and \
+            (im.getexif() or {}).get(0x0112, 1) in (5, 6, 7, 8)
+        nw, nh = (h, w) if turned else (w, h)       # as browsers show it, upright
+        if fmt in ("JPEG", "MPO") and nw > fit:
+            im.draft("RGB", (fit, fit) if turned else (fit, max(1, h * fit // w)))
+        im = ImageOps.exif_transpose(im)
+        flat = fmt == "GIF" or im.mode in ("P", "1", "L", "LA", "PA")
+        alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
+        im = im.convert("RGBA" if alpha else "RGB")
+        if nw > fit:
+            im = im.resize((fit, max(1, round(nh * fit / nw))), Image.LANCZOS)
+        out = io.BytesIO()
+        mark = "natural %dx%d" % (nw, nh)
+        if alpha or flat:
+            info = PngImagePlugin.PngInfo()
+            info.add_text("webgate", mark)
+            im.quantize(256, method=Image.FASTOCTREE if alpha else Image.MEDIANCUT).save(
+                out, "PNG", optimize=True, pnginfo=info)
+            body, ctype = out.getvalue(), "image/png"
+        else:
+            im.save(out, "JPEG", quality=80, optimize=True, progressive=False)
+            jpg = out.getvalue()
+            com = b"webgate " + mark.encode()
+            # the comment first, after SOI (Pillow before 9.4 can't write one)
+            body = jpg[:2] + b"\xff\xfe" + (len(com) + 2).to_bytes(2, "big") + com + jpg[2:]
+            ctype = "image/jpeg"
+        return body, ctype, "%s %dx%d to %s %dx%d" % (fmt, nw, nh, ctype[6:].upper(), im.size[0], im.size[1])
+    except Exception:       # Pillow's errors for what isn't a picture it reads are many kinds
+        return None
 
 
 class Config:
@@ -310,7 +367,57 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(504 if isinstance(e, socket.timeout) else 502,
                            "webgate: can't reach %s (%s)\n" % (u.hostname, e))
                 return
-        self.pass_on(resp, conn, u, port)
+        fit = self.picture_fit()
+        if fit and self.command == "GET" and resp.status == 200 and \
+                (resp.getheader("Content-Type") or "").lower().startswith("image/") and \
+                (resp.getheader("Content-Encoding") or "identity").lower() == "identity":
+            self.picture(resp, conn, u, port, fit)
+        else:
+            self.pass_on(resp, conn, u, port)
+
+    def picture_fit(self):
+        """X-Gateway-Picture: fit=WIDTH, or 0"""
+        v = self.headers.get("X-Gateway-Picture") or ""
+        for part in v.split(";"):
+            k, _, n = part.strip().partition("=")
+            if k == "fit" and n.isdigit() and 16 <= int(n) <= 4096:
+                return int(n)
+        return 0
+
+    def picture(self, resp, conn, u, port, fit):
+        """a picture as the page can show it (make_picture), or as it came"""
+        try:
+            data = resp.read(PICTURE_MAX + 1)
+        except (OSError, http.client.HTTPException):
+            UP.drop(u.scheme, u.hostname, port)
+            self.reply(502, "webgate: %s closed the connection\n" % u.hostname)
+            return
+        if len(data) > PICTURE_MAX:
+            UP.drop(u.scheme, u.hostname, port)
+            self.reply(502, "webgate: the picture from %s is too big\n" % u.hostname)
+            return
+        if resp.will_close:
+            UP.drop(u.scheme, u.hostname, port)
+        made = make_picture(data, fit)
+        self.send_response(resp.status, resp.reason)
+        skip = HOP_BY_HOP | ({"content-type", "content-length"} if made else set())
+        for k, v in resp.getheaders():
+            if k.lower() not in skip:
+                self.send_header(k, v)
+        if made:
+            data = made[0]
+            self.send_header("Content-Type", made[1])
+            self.send_header("X-Gateway-Picture", made[2])
+        tls = tls_of(conn)
+        if tls:
+            self.send_header("X-Gateway-TLS", tls)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        try:
+            self.wfile.write(data)
+        except OSError:
+            self.close_connection = True
+        self.note(resp.status, len(data), " (%s)" % made[2] if made else "")
 
     # ------------------------------------------------------------ live view
 

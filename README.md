@@ -215,6 +215,13 @@ In EWeb, Settings > Secure: Pi gateway = the Pi's IP address, port 8280.
 Check it from any browser on your network: `http://PI_IP:8280/` answers "webgate X.Y
 is running".
 
+Pictures come smaller: EWeb says how wide its page is, and webgate
+decodes a picture that is wider, or of a kind the Atari can't read
+(WebP, AVIF, TIFF, BMP), and sends a JPEG (or a 256-colour PNG, for
+transparency) no wider, with its real size inside so that the page looks
+the same. A 2560-pixel photo of 865 KB comes as about 70 KB. `install
+web` installs Pillow (python3-pil) for that.
+
 `--allow-local` lets it reach servers on your home network too (a
 router's or a NAS's pages); `--port N` gives it another port; `--cafile`
 checks servers against your own CA; `-v` logs every request (the
@@ -238,8 +245,7 @@ do. The browser's profile, with any logins, stays in
 `/var/lib/webgate/browser`.
 
 It needs a Pi with 2 GB of memory or more (Chromium takes about 400 MB
-with one page) and installs Chromium, Xvfb, xdotool and Pillow (about
-600 MB). It runs as webgate's own user, as two more services,
+with one page) and installs Chromium, Xvfb and xdotool (about 600 MB). It runs as webgate's own user, as two more services,
 `webgate-screen` and `webgate-browser`, and the browser goes out only
 through webgate, so the home-network rule holds for it too: nothing at
 home without `--allow-local`, whatever a name's answer says, and no
@@ -351,7 +357,7 @@ commands still work and hand on to `aera-gateway`.
 ## Tests
 
 ```
-pip install paramiko pyftpdlib pyopenssl
+pip install paramiko pyftpdlib pyopenssl pillow
 python3 -m unittest discover -s gateway -p 'test_*.py'
 ```
 
@@ -362,8 +368,10 @@ python3 -m unittest discover -s gateway -p 'test_*.py'
 - `test_ecalgate.py`: trimming, compression, chunked answers, redirects,
   the home-network rule, a log without paths.
 - `test_webgate.py`: the proxy against a local server (compression,
-  chunked answers, redirects, cookies, the home-network rule), and
-  snapshots and live view with stand-ins for the browser.
+  chunked answers, redirects, cookies, the home-network rule), pictures
+  made smaller (with Pillow), the Pi's browser's way out with a stand-in
+  name server, and snapshots and live view with stand-ins for the
+  browser.
 - `test_eftpgate.py`: an SFTP and an FTPS server on this computer, and a
   plain FTP client (and EFTP's own FTP core, when built) talking to
   eftpgate as the Atari does.

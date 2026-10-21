@@ -657,6 +657,7 @@ class Web(Gateway):
     key, name, script = "web", "webgate", "webgate.py"
     title = "EWeb gateway for the Atari (HTTP and HTTPS)"
     removed = "webgate removed."
+    packages = ("python3-pil",)             # Pillow: pictures made for the Atari's page
     # the Pi's browser (--browser): Chromium full screen in a screen of
     # its own, going out through webgate (127.0.0.1), as user webgate
     SCREEN, BROWSER = "webgate-screen", "webgate-browser"
@@ -711,8 +712,6 @@ class Web(Gateway):
             need.append("xvfb")
         if not pi.which("xdotool"):
             need.append("xdotool")
-        if not pi.ok("python3", "-c", "import PIL"):
-            need.append("python3-pil")
         if need:
             heading("Installing the Pi's browser (%s): this takes a while" % ", ".join(need))
             pi.run("apt-get", "update", "-qq")
@@ -852,8 +851,9 @@ def need_packages(pi, gw):
         need.append("python3")
     if not pi.exists("/etc/ssl/certs/ca-certificates.crt"):     # the roots, for checking the servers
         need.append("ca-certificates")
-    if "python3-paramiko" in gw.packages and not pi.ok("python3", "-c", "import paramiko"):
-        need.append("python3-paramiko")
+    for package, module in (("python3-paramiko", "paramiko"), ("python3-pil", "PIL")):
+        if package in gw.packages and not pi.ok("python3", "-c", "import " + module):
+            need.append(package)
     if need:
         pi.run("apt-get", "update", "-qq")
         pi.run("apt-get", "install", "-y", "-qq", *need)

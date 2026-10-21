@@ -39,6 +39,7 @@ class FakePi(ag.Pi):
         self.answers = []
         self.busy = set()           # ports another program has
         self.programs = set()       # installed beyond python3 (chromium, Xvfb...)
+        self.no_modules = set()     # Python modules that aren't there
 
     def have(self, prog):
         return prog == "python3" or (prog == "ufw" and self.ufw is not None)
@@ -113,6 +114,8 @@ class FakePi(ag.Pi):
             os.chmod(os.path.join(c[3], "bin", "python"), 0o755)
         elif c[0] == "ls":
             rc = 2
+        elif c[:2] == ["python3", "-c"] and c[2].startswith("import "):
+            rc = 1 if c[2][7:] in self.no_modules else 0
         if check and rc:
             raise ag.Failed("%s failed" % " ".join(cmd))
         return subprocess.CompletedProcess(cmd, rc, text if out == "keep" else None)
@@ -469,6 +472,11 @@ class DavFtpTest(Base):
         self.assertIn("Pi gateway:  192.168.1.10", self.out)
         self.assertIn("Port:        8280", self.out)
         self.assertTrue(self.pi.exists("/opt/aera-gateway/webgate.py"))
+        self.assertNotIn(("apt-get", "install", "-y", "-qq", "python3-pil"), self.pi.cmds)  # Pillow there
+        self.pi.no_modules = {"PIL"}
+        self.run_ag("install", "web")
+        self.assertIn(("apt-get", "install", "-y", "-qq", "python3-pil"), self.pi.cmds)
+        self.pi.no_modules = set()
         self.run_ag("install", "web", "--allow-local", "-v")
         self.assertEqual(self.execstart("webgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/webgate.py "
                                                     "--port 8280 --allow 192.168.1.50 --allow-local -v")
