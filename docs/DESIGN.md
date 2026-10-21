@@ -1015,12 +1015,19 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   measurement: 0.6 s, not 5.7, as EWEB.PRG does it.
 - **Pens from the Pi, built** (21 Oct 2026, your go-ahead): webgate makes a picture into the
   screen's pens with AERA-Atari's `aerapens` (`common/tools/pens`): `common/src/pic.c` itself,
-  built for the Pi (static, arm64 and armhf, `-fsigned-char -fwrapv`), `aerapens-lj` as EWEB.PRG
-  decodes (libjpeg-turbo), `aerapens-tj` as EWEBST.PRG (TJpgDec), so the pens are the ones the
-  Atari would make to the bit: `common/tests/pic/pens.py` runs every build against the same code
-  as 68030 and 68000 code under QEMU (5088 runs, all the same). A pure-Python dither was measured
-  first (AERA-Gateway's rule is standard Python): 0.5 s here for a 400-pixel photo, about 2 s on
-  a Pi 4, slower than the Falcon's DSP; aerapens takes 25 ms here. EWeb's side (`src/browse`):
+  both of EWeb's builds in one program (libjpeg-turbo as EWEB.PRG decodes, TJpgDec as EWEBST.PRG;
+  `-fsigned-char -fwrapv`), so the pens are the ones the Atari would make to the bit:
+  `common/tests/pic/pens.py` runs it (here, and arm64 and armhf under QEMU) against the same code
+  as 68030 and 68000 code under qemu-m68k (5088 runs, all the same). A pure-Python dither was
+  measured first (AERA-Gateway's rule is standard Python): 0.5 s here for a 400-pixel photo, about
+  2 s on a Pi 4, slower than the Falcon's DSP; aerapens takes 25 ms here. AERA-Gateway builds it on
+  the Pi from its `pens/common/` copy and systemd runs one a connection on
+  `/run/webgate-pens.sock`, as its own user with 64 MB, 2 s of CPU and nothing to open; it takes
+  pictures of 16 million pixels at most (from the header, before anything is made) and makes 4
+  million at most; its answer names the AERA-Atari commit and the build (`X-Gateway-Pens`).
+  Fuzzed with libFuzzer, ASan and UBSan (`make fuzzpens` there), which found a GIF whose frames
+  make its canvas far bigger than its header: pic.c now caps it (on the Atari w x h x 4 could
+  wrap). EWeb's side (`src/browse`):
   - **When:** the ST edition always, a 68030 without the DSP always, with the DSP when answers
     come at 30 KB/s or more (16 colours or fewer) or 45 KB/s (256), from the last answer of 8 KB
     or more (`browser.rate`); true colour never (`pens_wanted`; ewrender `-Q`).
@@ -1043,8 +1050,9 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
     changes nothing.
   - **Without aerapens** on the Pi, webgate answers as before (JPEG or PNG), and EWeb takes
     either: nothing breaks while the Pi hasn't it. `make itest` checks the pens through webgate are
-    the pens decoded here, to the pixel, and the cache by the pens asked for; `make hatarigui`'s
-    ST case takes them through the gateway on the emulated ST.
+    the pens decoded here, to the pixel, and the cache by the pens asked for (aerapens behind a
+    socket as on the Pi: `tests/net/penssock.py`); `make hatarigui`'s ST case takes them through
+    the gateway on the emulated ST.
 - **The text size** (Larger text, Smaller text, ^+ ^- ^0; `ZOOM=`, per cent) changes the text
   alone since 21 Oct 2026 (before, the whole page): fonts and line heights (`LAYOUT_OPT.text`), not
   lengths or pictures, so the pictures keep their size and the pixels decoded for it, the page its

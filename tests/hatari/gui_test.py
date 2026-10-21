@@ -689,11 +689,18 @@ def st():
     if srv.stdout.readline().strip() != "ready":
         return check("st: the test server", False)
     env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
-    # the Pi's pens (aerapens, make -C common/tools/pens), when this webgate makes them
-    pens_dir = os.path.join(ROOT, "common", "tools", "pens", "build")
-    pens = "aerapens" in open(webgate).read() and os.access(os.path.join(pens_dir, "aerapens-tj"), os.X_OK)
+    # the Pi's pens (aerapens behind its socket, tests/net/penssock.py), when this webgate makes them
+    tool = os.path.join(ROOT, "common", "tools", "pens", "build", "aerapens")
+    pens = "--pens-socket" in open(webgate).read() and os.access(tool, os.X_OK)
+    sock = os.path.join(work, "pens.sock")
+    penssock = None
+    if pens:
+        penssock = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/penssock.py"), sock, tool],
+                                    stdout=subprocess.PIPE, text=True)
+        pens = penssock.stdout.readline().strip() == "ready"
     gate = subprocess.Popen([sys.executable, webgate, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
-                             "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens", pens_dir] if pens else []),
+                             "--cafile", os.path.join(work, "CACERT.PEM")] +
+                            (["--pens-socket", sock] if pens else []),
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     site = "https://127.0.0.1:%d/site/" % HTTPS
     r = Run("stnet", "ST:mono", hd_for("stnet", site, "GATE=127.0.0.1\r\nGATEPORT=%d\r\n" % GATE), network=True,
@@ -724,6 +731,9 @@ def st():
         r.end()
         gate.terminate()
         gate.wait(10)
+        if penssock is not None:
+            penssock.terminate()
+            penssock.wait(10)
         srv.stdin.close()
         srv.wait(10)
 

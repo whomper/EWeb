@@ -32,8 +32,9 @@ GATE2, EXT = 18298, 18299	# webgate with --browser, and its extension's port
 # AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
 # gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
-# aerapens for it (make -C common/tools/pens)
-PENS = os.path.join(HERE, "..", "..", "common", "tools", "pens", "build")
+# aerapens for it (make -C common/tools/pens), behind a socket as on the Pi
+# (tests/net/penssock.py)
+PENS = os.path.join(HERE, "..", "..", "common", "tools", "pens", "build", "aerapens")
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
                         "--https", str(HTTPS), "--untrusted", str(BAD), "--ecdsa", str(EC)],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -543,10 +544,16 @@ try:
         print("itest: no webgate (%s): the gateway's cases left out" % WEBGATE)
     else:
         env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
-        # the Pi's pens (aerapens, common/tools/pens), when this webgate makes them
-        pens = "aerapens" in open(WEBGATE).read() and os.access(os.path.join(PENS, "aerapens-lj"), os.X_OK)
+        # the Pi's pens (aerapens behind its socket), when this webgate makes them
+        pens = "--pens-socket" in open(WEBGATE).read() and os.access(PENS, os.X_OK)
+        sock = os.path.join(work, "pens.sock")
+        penssock = None
+        if pens:
+            penssock = subprocess.Popen([sys.executable, os.path.join(HERE, "penssock.py"), sock, PENS],
+                                        stdout=subprocess.PIPE, text=True)
+            pens = penssock.stdout.readline().strip() == "ready"
         gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
-                                 "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens", PENS] if pens else []),
+                                 "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens-socket", sock] if pens else []),
                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         g = "127.0.0.1:%d" % GATE
         try:
@@ -640,6 +647,9 @@ try:
         finally:
             gate.terminate()
             gate.wait(timeout=10)
+            if penssock is not None:
+                penssock.terminate()
+                penssock.wait(timeout=10)
         if ewrender:
             snapshots()
 finally:
