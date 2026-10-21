@@ -92,6 +92,12 @@ typedef struct browser {
 
 	/* settings */
 	int pictures;		/* pictures are shown (1, the default) */
+	/* pictures through the Pi's gateway as the screen's pens, made there
+	   (webgate's aerapens): -1 (the default) on the ST edition and
+	   without the DSP always, else when answers come fast enough (rate);
+	   0 never, 1 always */
+	int pens;
+	long rate;		/* bytes a second the last big answer came at (0: not known) */
 	int snapshot;		/* pages through the Pi's browser: webgate's snapshots,
 				   after their scripts ran (with the gateway only) */
 	int typed;		/* the page loading was typed (br_go): no Referer */

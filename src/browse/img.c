@@ -17,6 +17,12 @@
  * out of date: the next time a page shows that file at that size, on
  * that screen, it is read, not decoded and dithered again (seconds on a
  * 68030 for a photo).
+ *
+ * Through the Pi's gateway a picture may come as pens (aerapens, the
+ * very code EWeb runs, on the Pi): "EWPN", the screen's pens packed at
+ * its depth for one size and one palette, and a mask where it has
+ * transparency. They are only unpacked here; another size or palette
+ * is asked for again (img_refetch).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,7 +57,17 @@ struct ew_img {
 	unsigned long used;		/* when last drawn or decoded */
 	unsigned long sum[2];		/* the file's contents, for the disk cache's key */
 	int cached;			/* its last decode came from the disk cache */
+	int refetched;			/* asked for again for pens of another size or screen */
 };
+
+/* a file of pens (aerapens): "EWPN", 1, the bits a pen, flags (1: a
+   mask), pens - 1; width, height, the picture's own width and height (2
+   bytes each, big-endian); the colours' CRC-32; the pens a row at a
+   time, high bits first, each row whole bytes; then the mask the same
+   way, a bit a pixel (1: shown) */
+#define IMG_PENS 0x50
+#define PENS_HEAD 20
+enum { PENS_REFETCH = 0x51 };		/* im->why: to be asked for again */
 
 static ew_img *all;
 static unsigned long tick;
@@ -205,6 +221,8 @@ static void pix_save(ew_img *im, const var *v)
 	free(b);
 }
 
+static var *find(const ew_img *im, int32_t w, int32_t h);
+
 static void var_free(ew_img *im, var *v)
 {
 	var **pp;
@@ -307,13 +325,95 @@ static int natural(const unsigned char *d, long n, int kind, long *w, long *h)
 	return *w > 0 && *h > 0 && *w <= 0x7fff && *h <= 0x7fff;
 }
 
+static long be16(const unsigned char *d)
+{
+	return (long) d[0] << 8 | d[1];
+}
+
+/* the pens' head, checked against their length: 1 and its fields */
+static int pens_head(const unsigned char *d, long n, int *depth, int *mask, long *w, long *h)
+{
+	long row;
+	if (n < PENS_HEAD || memcmp(d, "EWPN\1", 5) != 0)
+		return 0;
+	*depth = d[5];
+	*mask = d[6] & 1;
+	*w = be16(d + 8);
+	*h = be16(d + 10);
+	if ((*depth != 1 && *depth != 2 && *depth != 4 && *depth != 8) || *w < 1 || *h < 1 || *w > 4096 || *h > 4096 ||
+	    be16(d + 12) < 1 || be16(d + 14) < 1)
+		return 0;
+	row = (*w * *depth + 7) / 8 + (*mask ? (*w + 7) / 8 : 0);
+	return n == PENS_HEAD + *h * row;
+}
+
+unsigned long img_pal_crc(void)
+{
+	static long serial;
+	static unsigned long crc;
+	long i;
+	int k;
+	if (img_pal == NULL)
+		return 0;
+	if (serial != pal_serial) {
+		unsigned long c = 0xFFFFFFFFUL;
+		for (i = 0; i < (long) img_pal->n * 3; i++) {
+			c ^= ((const unsigned char *) img_pal->rgb)[i];
+			for (k = 0; k < 8; k++)
+				c = c & 1 ? (c >> 1) ^ 0xEDB88320UL : c >> 1;
+		}
+		crc = c ^ 0xFFFFFFFFUL;
+		serial = pal_serial;
+	}
+	return crc;
+}
+
+int img_refetched(ew_img *im)
+{
+	return im->refetched++;
+}
+
+int img_is_pens(const ew_img *im)
+{
+	return im->state == IMG_HERE && im->kind == IMG_PENS;
+}
+
+int img_refetch(const ew_img *im, int32_t w, int32_t h)
+{
+	const unsigned char *d = (const unsigned char *) im->data;
+	unsigned long crc;
+	if (!img_is_pens(im) || find(im, w, h) != NULL)
+		return 0;
+	crc = (unsigned long) d[16] << 24 | (unsigned long) d[17] << 16 | (unsigned long) d[18] << 8 | d[19];
+	return img_pal == NULL || crc != img_pal_crc() || d[7] + 1 != img_pal->n || be16(d + 8) != w ||
+	       be16(d + 10) != h;
+}
+
 int img_set_file(ew_img *im, char *data, long len)
 {
 	long w, h;
+	int depth, mask;
 	free(im->data);
 	img_used -= im->len;
 	im->data = NULL;
 	im->len = 0;
+	if (len >= 4 && memcmp(data, "EWPN", 4) == 0) {
+		/* pens from the Pi */
+		if (!pens_head((const unsigned char *) data, len, &depth, &mask, &w, &h)) {
+			free(data);
+			im->state = IMG_FAILED;
+			im->why = PIC_DAMAGED;
+			return 0;
+		}
+		im->kind = IMG_PENS;
+		im->data = data;
+		im->len = len;
+		im->iw = (int32_t) be16((const unsigned char *) data + 12);
+		im->ih = (int32_t) be16((const unsigned char *) data + 14);
+		im->state = IMG_HERE;
+		img_used += len;
+		return 1;
+	}
 	im->kind = pic_kind((const unsigned char *) data, len);
 	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF) ||
 	    !pic_size((const unsigned char *) data, len, &w, &h) || w > 0x7fff || h > 0x7fff) {
@@ -364,6 +464,53 @@ int img_tried(const ew_img *im, int32_t w, int32_t h)
 	return im->state == IMG_FAILED || find(im, w, h) != NULL;
 }
 
+/* v from the pens the Pi made: 1 when they are for v's size and this
+   screen (else im->why PENS_REFETCH: to be asked for again) */
+static int pens_var(ew_img *im, var *v)
+{
+	const unsigned char *d = (const unsigned char *) im->data, *s;
+	long w, h, x, y, row;
+	int depth, mask;
+	PIC *pic;
+	if (img_refetch(im, v->w, v->h) || !pens_head(d, im->len, &depth, &mask, &w, &h)) {
+		im->why = PENS_REFETCH;
+		return 0;
+	}
+	pic = calloc(1, sizeof *pic);
+	v->pens = malloc((size_t) (w * h));
+	if (pic == NULL || v->pens == NULL || (mask && (pic->alpha = malloc((size_t) (w * h))) == NULL)) {
+		free(pic);
+		free(v->pens);
+		v->pens = NULL;
+		im->why = PIC_MEMORY;
+		return 0;
+	}
+	pic->w = (int) w;
+	pic->h = (int) h;
+	pic->how = IMG_PENS;
+	row = (w * depth + 7) / 8;
+	s = d + PENS_HEAD;
+	for (y = 0; y < h; y++, s += row) {
+		uint8_t *o = v->pens + y * w;
+		if (depth == 8) {
+			memcpy(o, s, (size_t) w);
+		} else {
+			int m = (1 << depth) - 1;
+			for (x = 0; x < w; x++) {
+				long bit = x * depth;
+				o[x] = (uint8_t) ((s[bit >> 3] >> (8 - depth - (bit & 7))) & m);
+			}
+		}
+	}
+	if (mask)
+		for (y = 0; y < h; y++, s += (w + 7) / 8)
+			for (x = 0; x < w; x++)
+				pic->alpha[y * w + x] = s[x >> 3] & (0x80 >> (x & 7)) ? 255 : 0;
+	v->pic = pic;
+	v->serial = pal_serial;
+	return 1;
+}
+
 int img_decode(ew_img *im, int32_t w, int32_t h)
 {
 	var *v = find(im, w, h);
@@ -378,6 +525,17 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 	v->w = w;
 	v->h = h;
 	im->cached = 0;
+	if (im->kind == IMG_PENS) {
+		if (!pens_var(im, v)) {
+			free(v);
+			return 0;
+		}
+		v->used = im->used = ++tick;
+		v->next = im->vars;
+		im->vars = v;
+		img_used += var_bytes(v);
+		return 1;
+	}
 	if ((long) w * h >= PIX_MIN && pix_load(im, v)) {
 		im->cached = 1;
 		v->used = im->used = ++tick;
@@ -444,6 +602,8 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 
 const char *img_why(const ew_img *im)
 {
+	if (im->why == PENS_REFETCH)
+		return "pens from the Pi for another size or screen";
 	if (im->state == IMG_FAILED && im->kind != PIC_NONE && im->why == PIC_UNSUPPORTED)
 		return pic_kind_name(im->kind);
 	if (im->state == IMG_FAILED && im->why == PIC_OK)

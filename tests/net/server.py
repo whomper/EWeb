@@ -33,6 +33,8 @@ Pages:
   /site/webp.html  a WebP picture (pic.webp) and a GIF: EWeb on its own
                  doesn't fetch the WebP; through webgate it comes as JPEG;
                  /site/hits/NAME: how many times a picture was asked for
+  /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
+                 the Pi's pens from the disk cache, by the pens asked for
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -140,6 +142,8 @@ BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=styl
            b"</picture></p></body></html>\n")
 WEBP_PAGE = (b"<!DOCTYPE html><html><head><title>WebP</title></head><body>"
              b"<p><img src=pic.webp alt=webp> and <img src=anim.gif alt=gif></p></body></html>\n")
+FRESH_PAGE = (b"<!DOCTYPE html><html><head><title>Fresh</title></head><body>"
+              b"<p><img src=fresh/photo.jpg width=240 height=160 alt=photo></p></body></html>\n")
 BG_CSS = b".box { background: #eee url(tile.png) repeat-x 0 100%; height: 40px }\n"
 
 
@@ -294,6 +298,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, BG_PAGE)
         elif p == "/site/webp.html":
             self.send(200, WEBP_PAGE)
+        elif p == "/site/fresh.html":
+            self.send(200, FRESH_PAGE)
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":
@@ -335,6 +341,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
         elif p.startswith("/site/echo"):
             self.send(200, echo_page("GET", "", p.partition("?")[2].encode()))
+        elif p.startswith("/site/fresh/") and p[12:] in PICS:
+            HITS[p[6:]] = HITS.get(p[6:], 0) + 1
+            self.send(200, PICS[p[12:]][0], PICS[p[12:]][1], extra=[("Cache-Control", "max-age=3600")])
         elif p.startswith("/site/") and p[6:] in PICS:
             HITS[p[6:]] = HITS.get(p[6:], 0) + 1
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])

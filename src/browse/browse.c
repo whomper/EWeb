@@ -555,6 +555,9 @@ static void cookie_out(const HTTPREQ *rq, const URL *u, const char *method, SBUF
 /* for the next fetch only: more header lines (each with CRLF), and the
    types whose answer isn't wanted (HTTPREQ.refuse); NULL: none */
 static const char *fetch_more, *fetch_refuse;
+/* for the disk cache: the request's variant (the pens asked for), after
+   the address, or NULL */
+static const char *fetch_variant;
 
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
@@ -607,6 +610,10 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		   else the server is asked whether it changed */
 		str_copy(key, url, sizeof key);
 		key[strcspn(key, "#")] = 0;
+		if (fetch_variant != NULL && strlen(key) + strlen(fetch_variant) + 2 < sizeof key) {
+			strcat(key, "#");	/* no address has one: the fragment is cut off */
+			strcat(key, fetch_variant);
+		}
 		/* a page through the Pi's browser: a snapshot of it as it is now,
 		   never kept (webgate says no-store), so not looked for either */
 		int snap = b->snapshot && accept == NULL && post == NULL && http_gateway[0];
@@ -660,7 +667,14 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		rq.site = site != NULL && (has_scheme(site, "http") || has_scheme(site, "https")) ? site : NULL;
 		rq.referrer = rq.site;
 		sb_init(&body);
-		ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+		{
+			unsigned long t0 = pf_ms(), ms;
+			ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+			ms = pf_ms() - t0;
+			/* how fast answers come, from one big enough to tell */
+			if (ok && body.len >= 8192 && ms > 0)
+				b->rate = (long) ((int64_t) body.len * 1000 / (int64_t) ms);
+		}
 		free(both);
 		if (ok && have && rs->status == 304) {
 			/* unchanged: what is kept, fresh again */
@@ -1425,6 +1439,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	b->scroll_to = -1;
 	b->search = "";
 	b->pictures = 1;
+	b->pens = -1;
 }
 
 void br_free(browser *b)
@@ -2148,12 +2163,75 @@ static int unshowable(const char *url)
 static const char picture_refuse[] = "image/webp image/avif image/svg+xml image/jxl image/heic image/heif "
 				     "image/tiff text/";
 
+/* pictures through the Pi's gateway as the screen's pens (webgate's
+   aerapens: the Atari's own decoder and dither, on the Pi)? The ST
+   edition always (a picture is tens of seconds on a 68000, its pens a
+   moment), and a 68030 without the DSP; with the DSP when the answers
+   come at 30 KB/s or more (16 colours or fewer) or 45 (256): below
+   that, the JPEG is quicker (DESIGN.md, Pens from the Pi) */
+static int pens_wanted(const browser *b)
+{
+	if (!http_gateway[0] || img_pal == NULL || b->pens == 0)
+		return 0;
+	if (b->pens > 0)
+		return 1;
+#ifdef EW_ST
+	return 1;
+#else
+	return pic_dsp == NULL || b->rate >= (img_pal->n <= 16 ? 30L : 45L) * 1024;
+#endif
+}
+
+/* the colours sent to the Pi (webgate keeps them by their CRC), for the
+   pens it makes: 1 if it took them */
+static int send_colours(browser *b)
+{
+	FSUBMIT post;
+	FETCH *f = malloc(sizeof *f);
+	char rgb[768];
+	int ok;
+	if (f == NULL || img_pal == NULL) {
+		free(f);
+		return 0;
+	}
+	memset(&post, 0, sizeof post);
+	memcpy(rgb, img_pal->rgb, (size_t) img_pal->n * 3);
+	post.post = 1;
+	post.body = rgb;
+	post.len = (long) img_pal->n * 3;
+	str_copy(post.ctype, "application/octet-stream", sizeof post.ctype);
+	ok = fetch(b, "http://webgate/palette", NULL, 1, "*/*", 4096, 0, &post, f) && f->status == 204;
+	free(f->data);
+	free(f);
+	return ok;
+}
+
+/* the size a picture is shown at, when the layout knows it without the
+   picture (its width and height said): 1 and w, h; 0 */
+static int shown_size(const browser *b, const ew_img *im, int32_t *w, int32_t *h)
+{
+	long i;
+	for (i = 0; i < b->p->nitems; i++) {
+		const dl_item *d = &b->p->items[i];
+		if (d->type != DL_IMAGE || d->img != im || (d->flags & DLF_ALT))
+			continue;
+		if (d->flags & DLF_NOSIZE)
+			return 0;
+		*w = DL_PIC_W(d);
+		*h = DL_PIC_H(d);
+		return *w > 0 && *h > 0 && *w <= 4096 && *h <= 4096;
+	}
+	return 0;
+}
+
 /* the file of a picture: from the network, a file or a data: address.
    Through the Pi's gateway, the picture is asked for as the page can
    show it: no wider than the page (webgate makes a bigger one smaller,
    and WebP and the like JPEG or PNG, saying the picture's own size in
-   it: img.c) */
-static int fetch_picture(browser *b, ew_img *im)
+   it: img.c), or as the screen's pens (pens_wanted) at the size it is
+   shown (rw x rh when it is to be asked for again at that size, else
+   the layout's when it knows it, else no wider than the page) */
+static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 {
 	const char *url = img_url(im);
 	char *data;
@@ -2166,9 +2244,9 @@ static int fetch_picture(browser *b, ew_img *im)
 		data = data_url(url, &len);
 	} else {
 		FETCH *f = malloc(sizeof *f);
-		char host[128], msg[200], fit[48];
+		char host[128], msg[200], fit[160], variant[64];
 		long max = img_max / 2 < (4L << 20) ? img_max / 2 : (4L << 20);
-		int ok;
+		int ok, pens;
 		if (f == NULL)
 			return 0;
 		host_of(url, host, sizeof host);
@@ -2177,11 +2255,48 @@ static int fetch_picture(browser *b, ew_img *im)
 		snprintf(msg, sizeof msg, "Pictures: %d of %d from %s...", b->pic_done + 1,
 			 b->pic_n > b->pic_done ? b->pic_n : b->pic_done + 1, has_scheme(url, "file") ? "the disk" : host);
 		say(b, "%s", msg);
-		snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
+		pens = !has_scheme(url, "file") && pens_wanted(b);
+		if (pens) {
+			int32_t w = rw, h = rh;
+			char size[32] = "";
+			if ((w > 0 && h > 0) || shown_size(b, im, &w, &h))
+				snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
+			snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
+				 (long) (b->width > 0 ? b->width : 640), size, img_pal->n, img_pal_crc(),
+#ifdef EW_ST
+				 "tj"
+#else
+				 "lj"
+#endif
+				 );
+			if (size[0])
+				snprintf(variant, sizeof variant, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
+			else
+				snprintf(variant, sizeof variant, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(),
+					 (long) (b->width > 0 ? b->width : 640));
+			variant[strcspn(variant, ";")] = 0;
+		} else {
+			snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
+		}
 		fetch_more = http_gateway[0] ? fit : NULL;
+		fetch_variant = pens ? variant : NULL;
 		fetch_refuse = picture_refuse;
 		ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f);
-		fetch_more = fetch_refuse = NULL;
+		if (ok && pens && f->status == 409 && !conn_stop) {
+			/* the Pi hasn't the screen's colours: sent, then asked again */
+			free(f->data);
+			f->data = NULL;
+			fetch_more = fetch_variant = fetch_refuse = NULL;
+			if (send_colours(b)) {
+				fetch_more = fit;
+				fetch_variant = variant;
+				fetch_refuse = picture_refuse;
+				ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f);
+			} else {
+				ok = 0;
+			}
+		}
+		fetch_more = fetch_refuse = fetch_variant = NULL;
 		if (!ok || (f->status != 0 && (f->status < 200 || f->status >= 300))) {
 			free(f->data);
 			free(f);
@@ -2220,7 +2335,7 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 	}
 	im = b->p->items[k].img;
 	if (img_state(im) == IMG_WAITING) {
-		int r = fetch_picture(b, im);
+		int r = fetch_picture(b, im, 0, 0);
 		if (r < 0) {
 			img_waiting(im);
 			return BRP_STOPPED;
@@ -2253,6 +2368,19 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 		const page *p0 = b->p;
 		if (d->type != DL_IMAGE || d->img != im || (d->flags & DLF_ALT))
 			continue;
+		if (img_refetch(im, DL_PIC_W(d), DL_PIC_H(d)) && img_refetched(im) < 4) {
+			/* pens from the Pi for another size or screen: asked for
+			   at this size, for this screen */
+			int r = fetch_picture(b, im, DL_PIC_W(d), DL_PIC_H(d));
+			if (r < 0)
+				return BRP_STOPPED;
+			b->pic_done--;	/* the same picture */
+			if (r == 0) {
+				img_failed(im);
+				snprintf(what, sizeof what, "failed (%s)", img_why(im));
+				log_img(b, im, what, 0, 0);
+			}
+		}
 		if (!img_tried(im, DL_PIC_W(d), DL_PIC_H(d)) && img_state(im) == IMG_HERE) {
 			unsigned long t = pf_ms();
 			int32_t w = DL_PIC_W(d), h = DL_PIC_H(d);
@@ -2265,7 +2393,8 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 			if (b->p != p0)
 				return BRP_LAYOUT;	/* laid out again meanwhile (the window sized) */
 			ms_decode += pf_ms() - t;
-			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_from_cache(im) ? "from the cache" : "decoded") :
+			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_is_pens(im) ? "pens from the Pi" :
+							       img_from_cache(im) ? "from the cache" : "decoded") :
 				 img_why(im), (long) w, (long) h);
 			log_img(b, im, what, ms_fetch, pf_ms() - t);
 		}

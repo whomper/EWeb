@@ -29,8 +29,20 @@ void img_size(const ew_img *im, int32_t *w, int32_t *h);
 void img_ref(ew_img *im, int d);
 
 /* its file came (data is taken, malloc'ed): 1, or 0 when it isn't a
-   picture EWeb shows (it is failed then, why says what it is) */
+   picture EWeb shows (it is failed then, why says what it is). The
+   file may be pens made on the Pi's gateway (webgate, AERA-Atari's
+   aerapens: "EWPN", the screen's pens at one size, for one palette) */
 int img_set_file(ew_img *im, char *data, long len);
+/* its file is pens from the Pi that can't be shown at w x h on this
+   screen (another size, another palette): it is to be asked for again,
+   at that size (img_decode gives 0 meanwhile, and tries nothing) */
+int img_refetch(const ew_img *im, int32_t w, int32_t h);
+/* how many times it was asked for again so (each time one more) */
+int img_refetched(ew_img *im);
+/* its file is pens from the Pi (img_decode only unpacks them) */
+int img_is_pens(const ew_img *im);
+/* the CRC-32 of the screen's colours (img_pal's), as the Pi keeps them */
+unsigned long img_pal_crc(void);
 /* it didn't come: shown by its alt text from now on */
 void img_failed(ew_img *im);
 /* it was stopped while it came: waiting again */

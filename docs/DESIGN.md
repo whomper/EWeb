@@ -1013,6 +1013,38 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   and c slow: about 5 KB of deflate a second on the 8 MHz ST, 20 on the 16 MHz 68030. The DSP's
   dither of a PNG was timed on the 68030 by picbench (its DSP check was a JPEG's) until this
   measurement: 0.6 s, not 5.7, as EWEB.PRG does it.
+- **Pens from the Pi, built** (21 Oct 2026, your go-ahead): webgate makes a picture into the
+  screen's pens with AERA-Atari's `aerapens` (`common/tools/pens`): `common/src/pic.c` itself,
+  built for the Pi (static, arm64 and armhf, `-fsigned-char -fwrapv`), `aerapens-lj` as EWEB.PRG
+  decodes (libjpeg-turbo), `aerapens-tj` as EWEBST.PRG (TJpgDec), so the pens are the ones the
+  Atari would make to the bit: `common/tests/pic/pens.py` runs every build against the same code
+  as 68030 and 68000 code under QEMU (5088 runs, all the same). A pure-Python dither was measured
+  first (AERA-Gateway's rule is standard Python): 0.5 s here for a 400-pixel photo, about 2 s on
+  a Pi 4, slower than the Falcon's DSP; aerapens takes 25 ms here. EWeb's side (`src/browse`):
+  - **When:** the ST edition always, a 68030 without the DSP always, with the DSP when answers
+    come at 30 KB/s or more (16 colours or fewer) or 45 KB/s (256), from the last answer of 8 KB
+    or more (`browser.rate`); true colour never (`pens_wanted`; ewrender `-Q`).
+  - **The request:** `X-Gateway-Picture: fit=W; size=WxH; pens=N; pal=CRC; ed=lj|tj`, `size=` the
+    size it is shown when the layout knows it (its width and height given), else the Pi makes it
+    no wider than the page and a picture shown at another size is asked for again at that size
+    (`img_refetch`). `pal=` is the CRC-32 of the screen's colours: webgate keeps the last 16 sent
+    to `http://webgate/palette` (POST, 2 to 256 of R G B), and answers 409 with
+    `X-Gateway-Palette: need` for others before it fetches anything; EWeb sends them and asks
+    again.
+  - **The answer:** `application/x-aera-pens`, `EWPN`: 1, the bits a pen, flags (1: a mask), N - 1;
+    width, height, the picture's own width and height; the colours' CRC; the pens a row at a time,
+    packed, high bits first; then a bit a pixel where it is shown (alpha 128 or more, where the
+    canvas draws a pen). Its length is checked against its head before anything is made of it.
+    `img.c` only unpacks it (`pentest`). A WebP, AVIF or a photo its EXIF says is turned is made
+    a PNG on the Pi first (upright, nothing lost), then pens.
+  - **The cache:** the answer is kept in the disk cache under its address and the pens asked for
+    (`#pens=N,CRC,WxH`), so another screen's or size's pens are never taken for these; a mode
+    change (other colours) asks the Pi again, as does a window of another width. The text size
+    changes nothing.
+  - **Without aerapens** on the Pi, webgate answers as before (JPEG or PNG), and EWeb takes
+    either: nothing breaks while the Pi hasn't it. `make itest` checks the pens through webgate are
+    the pens decoded here, to the pixel, and the cache by the pens asked for; `make hatarigui`'s
+    ST case takes them through the gateway on the emulated ST.
 - **The text size** (Larger text, Smaller text, ^+ ^- ^0; `ZOOM=`, per cent) changes the text
   alone since 21 Oct 2026 (before, the whole page): fonts and line heights (`LAYOUT_OPT.text`), not
   lengths or pictures, so the pictures keep their size and the pixels decoded for it, the page its

@@ -689,9 +689,12 @@ def st():
     if srv.stdout.readline().strip() != "ready":
         return check("st: the test server", False)
     env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    # the Pi's pens (aerapens, make -C common/tools/pens), when this webgate makes them
+    pens_dir = os.path.join(ROOT, "common", "tools", "pens", "build")
+    pens = "aerapens" in open(webgate).read() and os.access(os.path.join(pens_dir, "aerapens-tj"), os.X_OK)
     gate = subprocess.Popen([sys.executable, webgate, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
-                             "--cafile", os.path.join(work, "CACERT.PEM")], env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                             "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens", pens_dir] if pens else []),
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     site = "https://127.0.0.1:%d/site/" % HTTPS
     r = Run("stnet", "ST:mono", hd_for("stnet", site, "GATE=127.0.0.1\r\nGATEPORT=%d\r\n" % GATE), network=True,
             prg="EWEBST.PRG")
@@ -701,6 +704,20 @@ def st():
               and ev.endswith("title EWeb site"), str(r.events()))
         time.sleep(2)
         r.shot(0)
+        if pens:
+            # its pictures as the screen's pens, made on the Pi: all five,
+            # the big one too (its pens fit where its decoded pixels didn't)
+            r.key(L, (CTRL,))
+            r.type(site + "pics.html")
+            r.key(RETURN)
+            ev = r.wait(r"pictures ", 1200)
+            got = [e for e in r.events() if " pens from the Pi at " in e]
+            check("st: pictures through the gateway as the Pi's pens", ev is not None and len(got) == 5,
+                  "\n".join(r.events()[-12:]))
+            time.sleep(2)
+            r.shot(1)
+        else:
+            print("skip  st: the Pi's pens (no aerapens, or a webgate without them)")
         r.key(Q, (CTRL,))
         check("st: quits after the network", r.wait(r"quit$", 120) is not None, str(r.events()))
     finally:

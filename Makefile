@@ -295,6 +295,12 @@ build/asan/dctest: tests/browse/dctest.c src/browse/dcache.c src/browse/dcache.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) $(NET_INC) -Isrc/browse \
 		-o $@ $(filter %.c,$^) build/host/libbearssl.a
+# pictures that come as pens from the Pi (src/browse/img.c)
+build/asan/pentest: tests/browse/pentest.c src/browse/img.c src/browse/img.h src/browse/dcache.c $(HOSTNET_SRC) \
+		$(NET_HDRS) build/host/libbearssl.a build/asan/pic.a
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) $(NET_INC) -Isrc/browse \
+		-o $@ $(filter %.c,$^) build/asan/pic.a build/host/libbearssl.a
 build/asan/urltest: tests/url/urltest.c src/net/url.c src/net/url.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(NET_WARN) -Isrc/net -o $@ $(filter %.c,$^)
@@ -693,6 +699,7 @@ hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
 
 # against servers on this computer: plain, TLS, redirects, refused certificates
 itest: build/asan/ewget build/asan/ewrender binary/EWEB.FNT
+	$(MAKE) -s -C common/tools/pens
 	python3 tests/net/itest.py build/asan/ewget build/itest build/asan/ewrender binary/EWEB.FNT
 .PHONY: itest
 
@@ -838,12 +845,13 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest binary/EWEB.FNT
+		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest build/asan/pentest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
 	build/asan/bmtest build/asan
 	build/asan/dctest build/asan
+	build/asan/pentest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

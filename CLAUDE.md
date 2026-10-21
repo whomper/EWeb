@@ -154,6 +154,11 @@ hub stay complete, with the evidence.
   `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the emulated stock Falcon
   (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make itest` loads
   `/site/pics.html` and `/site/bg.html`; `make hatarigui` shows it over the network and from the disk in every mode.
+  Through the Pi a picture may come as the screen's pens (DESIGN.md, Pens from the Pi): webgate runs
+  AERA-Atari's `common/tools/pens` (`aerapens`, pic.c itself; its parity test `common/tests/pic/pens.py`,
+  `make pens` there), EWeb asks in `fetch_picture` and unpacks in `img.c` (`tests/browse/pentest.c`);
+  `make itest` checks them against pictures decoded here (ewrender `-E` sums each picture's pens, `-Q`
+  asks for pens or not) when its webgate has them.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page

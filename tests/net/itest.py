@@ -32,6 +32,8 @@ GATE2, EXT = 18298, 18299	# webgate with --browser, and its extension's port
 # AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
 # gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
+# aerapens for it (make -C common/tools/pens)
+PENS = os.path.join(HERE, "..", "..", "common", "tools", "pens", "build")
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
                         "--https", str(HTTPS), "--untrusted", str(BAD), "--ecdsa", str(EC)],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -541,9 +543,11 @@ try:
         print("itest: no webgate (%s): the gateway's cases left out" % WEBGATE)
     else:
         env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+        # the Pi's pens (aerapens, common/tools/pens), when this webgate makes them
+        pens = "aerapens" in open(WEBGATE).read() and os.access(os.path.join(PENS, "aerapens-lj"), os.X_OK)
         gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
-                                 "--cafile", os.path.join(work, "CACERT.PEM")], env=env,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                 "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens", PENS] if pens else []),
+                                env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         g = "127.0.0.1:%d" % GATE
         try:
             import time
@@ -587,6 +591,46 @@ try:
                           re.search(r"^image \S+ 256x160 link \d+ \"webp\" \S+pic\.webp$", out, re.M), out)
                 else:
                     print("itest: webgate makes no pictures (%s): those cases left out" % WEBGATE)
+                def drawn(name, *more, page="pics.html"):
+                    p = subprocess.run([ewrender, "-f", font, "-E", "-v"] + list(more) +
+                                       ["http://localhost:%d/site/%s" % (HTTP, page)], cwd=work,
+                                       capture_output=True, text=True, timeout=120)
+                    return p.returncode, p.stdout + p.stderr, sorted(re.findall(r"^pens .*$", p.stdout, re.M))
+                if not pens:
+                    # a webgate without pens: asked for them, it sends what it did
+                    rc0, out0, png0 = drawn("")
+                    rc1, out1, png1 = drawn("", "-W", g, "-Q", "1")
+                    check("the gateway: pens asked of a webgate without them, the pictures as before", rc0 == 0
+                          and rc1 == 0 and len(png0) == 5 and len(png1) == 5 and "pens from the Pi" not in out1, out1)
+                if pens:
+                    # the Pi's pens: the page drawn in 16 colours through the
+                    # gateway is the page drawn without it, to the pixel (the
+                    # colours sent once on its 409; big.png, whose size the
+                    # layout learns from the first answer, asked for again at
+                    # the size shown); then from the disk cache
+                    shown = {"photo.jpg": "192x128", "logo.png": "120x48", "anim.gif": "38x38",
+                             "prog.jpg": "128x96", "big.png": "596x447"}
+                    rc0, out0, png0 = drawn("pens0.png")
+                    rc1, out1, png1 = drawn("pens1.png", "-W", g, "-Q", "1")
+                    from_pi = re.findall(r"^picture \S+/(\S+) pens from the Pi at (\d+x\d+)", out1, re.M)
+                    check("the gateway: pictures as the Pi's pens, the same to the pixel", rc0 == 0 and rc1 == 0
+                          and len(png0) == len(shown) and png0 == png1 and sorted(from_pi) == sorted(shown.items()),
+                          out0 + out1)
+                    # kept: read back for the same pens; JPEG asked for, it is fetched
+                    cache = os.path.join(work, "PENSCACHE")
+                    shutil.rmtree(cache, ignore_errors=True)
+                    outs = [drawn("", "-W", g, "-Q", q, "-C", cache, page="fresh.html") for q in ("1", "1", "0")]
+
+                    def hits():
+                        return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                            "http://localhost:%d/site/hits/fresh/photo.jpg" % HTTP, timeout=10).read()
+                    check("the gateway: the Pi's pens from the disk cache, not for the JPEG", all(o[0] == 0 for o in outs)
+                          and outs[0][2] == outs[1][2] and len(outs[0][2]) == 1 and hits() == b"2"
+                          and "pens from the Pi at 192x128" in outs[1][1]
+                          and re.search(r"^picture \S+ decoded at 192x128", outs[2][1], re.M) is not None,
+                          "\n".join(o[1] for o in outs) + "\nhits: %r" % hits())
+                else:
+                    print("itest: no pens on this webgate or no aerapens (make -C common/tools/pens): left out")
                 p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-S", "go",
                                     "https://localhost:%d/site/cookie/form.html" % HTTPS], cwd=work,
                                    capture_output=True, text=True, timeout=120)

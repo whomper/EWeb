@@ -372,7 +372,7 @@ int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
-	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, i, r;
+	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
 	char where[4096];
@@ -404,6 +404,8 @@ int main(int argc, char **argv)
 			dump = 1;
 		else if (!strcmp(argv[i], "-B"))
 			band = 1;
+		else if (!strcmp(argv[i], "-E"))
+			penlist = 1;	/* each picture's pens for 16 colours, summed */
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
 			next = argv[++i];
 		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
@@ -424,6 +426,8 @@ int main(int argc, char **argv)
 			back_after = 1;
 		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
 			bm_file(argv[++i]);
+		else if (!strcmp(argv[i], "-Q") && i + 1 < argc)
+			pens = atoi(argv[++i]);	/* pictures as the Pi's pens: 1 always, 0 never */
 		else if (!strcmp(argv[i], "-W") && i + 1 < argc)
 			str_copy(http_gateway, argv[++i], sizeof http_gateway);
 		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
@@ -455,7 +459,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-N URL] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -498,7 +502,8 @@ int main(int argc, char **argv)
 	b.extra_css = extra.s;
 	b.pictures = !nopics;
 	b.snapshot = snapshot;
-	if (band) {
+	b.pens = pens;
+	if (band || penlist) {
 		pic_pal_init(&pal, 16, falcon16);
 		img_pal = &pal;
 	}
@@ -644,6 +649,25 @@ int main(int argc, char **argv)
 	p = b.p;
 	if (show_tree)
 		tree(b.d->root, 0);
+	if (penlist) {
+		/* each picture shown, its pens (and where it is shown) summed:
+		   the same through the Pi's gateway as decoded here */
+		long k, j;
+		for (k = 0; k < p->nitems; k++) {
+			const dl_item *it = &p->items[k];
+			const PIC *pic;
+			const uint8_t *pens;
+			unsigned long h = 2166136261UL;
+			if (it->type != DL_IMAGE || (it->flags & DLF_ALT) ||
+			    !img_picture(it->img, DL_PIC_W(it), DL_PIC_H(it), &pic, &pens) || pens == NULL)
+				continue;
+			for (j = 0; j < (long) pic->w * pic->h; j++) {
+				h = ((h ^ pens[j]) * 16777619UL) & 0xFFFFFFFFUL;
+				h = ((h ^ (pic->alpha == NULL || pic->alpha[j] >= 128)) * 16777619UL) & 0xFFFFFFFFUL;
+			}
+			printf("pens %s %dx%d %08lx\n", img_url(it->img), pic->w, pic->h, h);
+		}
+	}
 	if (band) {
 		long n = bands(p, width);
 		printf("bands: %ld drawn, page %d x %d\n", n, (int) p->width, (int) p->height);

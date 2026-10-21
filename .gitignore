@@ -19,3 +19,4 @@ CRASH.LOG
 # test rigs
 tests/**/work/
 *.log
+common/tools/pens/build/

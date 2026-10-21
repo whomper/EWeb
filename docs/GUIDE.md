@@ -85,7 +85,7 @@ Until a picture has come its place is framed, with what it shows written
 in it where the page says. Pictures EWeb can't show (WebP, AVIF, SVG)
 aren't fetched at all; through the Raspberry Pi gateway they come as
 JPEG or PNG, and big ones come made smaller on the Pi, a few dozen
-kilobytes instead of a megabyte (see
+kilobytes instead of a megabyte, or ready for your screen (see
 [Secure sites](#secure-sites)). A picture whose size the page doesn't give
 shows its description first, and the page is laid out again when its
 size is known (at most every two seconds, so that it doesn't jump about
@@ -367,7 +367,13 @@ hands the page over your home network. It also makes each picture as the
 page can show it: one wider than the page comes made smaller, and WebP,
 AVIF and the like come as JPEG or PNG (the Pi needs `python3-pil`, which
 `aera-gateway install web` adds). A photo of a megabyte comes as a few
-dozen kilobytes, and the Falcon decodes far less. With neither, EWeb
+dozen kilobytes, and the Falcon decodes far less. When the Pi's gateway
+can, it makes each picture ready for your screen too, in its own colours
+and at the size the page shows it, exactly as EWeb would have made it:
+the ST edition always takes them so (a photo in a moment instead of half
+a minute), and the Falcon when the pages come fast enough for that to be
+quicker than its DSP. After you change the screen's colours, pictures
+come again from the Pi. With neither, EWeb
 says so when you open a secure page, and the page shown stays.
 
 The status bar says how a secure page came.
