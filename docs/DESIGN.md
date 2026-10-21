@@ -1028,9 +1028,12 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   Fuzzed with libFuzzer, ASan and UBSan (`make fuzzpens` there), which found a GIF whose frames
   make its canvas far bigger than its header: pic.c now caps it (on the Atari w x h x 4 could
   wrap). EWeb's side (`src/browse`):
-  - **When:** the ST edition always, a 68030 without the DSP always, with the DSP when answers
-    come at 30 KB/s or more (16 colours or fewer) or 45 KB/s (256), from the last answer of 8 KB
-    or more (`browser.rate`); true colour never (`pens_wanted`; ewrender `-Q`).
+  - **When:** always through the gateway, but in true colour (your decision, 21 Oct 2026, after
+    0.24 on the DFB1: the Falcon decoding the Pi's JPEGs took seconds a picture and slowed
+    everything; `PENS=1`, as EWeb starts). `PENS=-1` is the measured choice: the ST edition and a
+    68030 without the DSP always, with the DSP when answers come at 30 KB/s or more (16 colours or
+    fewer) or 45 KB/s (256), from the last answer of 8 KB or more (`browser.rate`); `PENS=0` never
+    (`pens_wanted`; ewrender `-Q`).
   - **The request:** `X-Gateway-Picture: fit=W; size=WxH; pens=N; pal=CRC; ed=lj|tj`, `size=` the
     size it is shown when the layout knows it (its width and height given), else the Pi makes it
     no wider than the page and a picture shown at another size is asked for again at that size

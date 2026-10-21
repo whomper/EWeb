@@ -369,10 +369,11 @@ AVIF and the like come as JPEG or PNG (the Pi needs `python3-pil`, which
 dozen kilobytes, and the Falcon decodes far less. When the Pi's gateway
 can, it makes each picture ready for your screen too, in its own colours
 and at the size the page shows it, exactly as EWeb would have made it:
-the ST edition always takes them so (a photo in a moment instead of half
-a minute), and the Falcon when the pages come fast enough for that to be
-quicker than its DSP. After you change the screen's colours, pictures
-come again from the Pi. With neither, EWeb
+EWeb takes them so whenever the gateway is on (a photo in a moment
+instead of seconds on a Falcon, half a minute on an ST). After you change
+the screen's colours, pictures come again from the Pi. `PENS=0` in
+`EWEB.INF` turns it off (the Atari then decodes the Pi's JPEGs), `PENS=-1`
+takes them only when that is quicker than the Falcon's DSP. With neither, EWeb
 says so when you open a secure page, and the page shown stays.
 
 The status bar says how a secure page came.

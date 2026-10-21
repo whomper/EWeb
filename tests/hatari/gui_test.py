@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway"]
 HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
@@ -738,6 +738,71 @@ def st():
         srv.wait(10)
 
 
+def gateway():
+    """EWEB.PRG on Erez's Falcon in 256 colours, through AERA-Gateway's
+    webgate (Falcon mode off) on a page as superbooth.com's, its big
+    pictures made smaller by the Pi (PENS=0: JPEG and PNG, decoded on the
+    DSP) and as the screen's pens (PENS=1, aerapens behind its socket):
+    every picture shown, and EWeb quits, CACHE written"""
+    webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
+    if not os.path.exists(webgate):
+        print("skip  gateway: no webgate at %s" % webgate)
+        return
+    work = os.path.join(OUT, "server")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("gateway: the test server", False)
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    tool = os.path.join(ROOT, "common", "tools", "pens", "build", "aerapens")
+    sock = os.path.join(work, "gwpens.sock")
+    penssock = None
+    if "--pens-socket" in open(webgate).read() and os.access(tool, os.X_OK):
+        penssock = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/penssock.py"), sock, tool],
+                                    stdout=subprocess.PIPE, text=True)
+        penssock.stdout.readline()
+    gate = subprocess.Popen([sys.executable, webgate, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
+                             "--cafile", os.path.join(work, "CACERT.PEM")] +
+                            (["--pens-socket", sock] if penssock else []),
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    page = "http://127.0.0.1:%d/site/gwpics.html" % HTTP
+    try:
+        for pens in (0, 1) if penssock else (0,):
+            name = "gwpens%d" % pens
+            inf = "FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\nPENS=%d\r\n" % (GATE, pens)
+            hd = hd_for(name, page, inf)
+            r = Run(name, "Falcon:256", hd, network=True)
+            try:
+                ev = r.wait(r"pictures ", 1800)
+                evs = r.events()
+                got = [e for e in evs if re.search(r"^picture \S+ (decoded|pens from the Pi) at ", e)]
+                time.sleep(2)
+                r.shot(0)
+                r.key(Q, (CTRL,))
+                quit = r.wait(r"quit$", 300)
+                if quit is None:
+                    r.shot(1)
+                # (the test server's pictures can't be kept by HTTP's rules:
+                # only pictures decoded here are kept, as EWeb's own)
+                check("gateway: %s, every picture %s, quits" % (
+                      name, "as the Pi's pens" if pens else "the Pi's JPEG and PNG, decoded"),
+                      ev is not None and len(got) == 5 and quit is not None and
+                      all(("pens from the Pi" in e) == bool(pens) for e in got) and
+                      not os.path.exists(os.path.join(hd, "CRASH.LOG")) and
+                      (pens or os.path.isdir(os.path.join(hd, "CACHE"))), "\n".join(r.events()[-20:]))
+            finally:
+                r.end()
+    finally:
+        gate.terminate()
+        gate.wait(10)
+        if penssock is not None:
+            penssock.terminate()
+            penssock.wait(10)
+        srv.stdin.close()
+        srv.wait(10)
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -755,5 +820,7 @@ if "screens" in WHICH:
     screens()
 if "st" in WHICH:
     st()
+if "gateway" in WHICH:
+    gateway()
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

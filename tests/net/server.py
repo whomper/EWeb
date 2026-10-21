@@ -33,6 +33,8 @@ Pages:
   /site/webp.html  a WebP picture (pic.webp) and a GIF: EWeb on its own
                  doesn't fetch the WebP; through webgate it comes as JPEG;
                  /site/hits/NAME: how many times a picture was asked for
+  /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
+                 portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
                  the Pi's pens from the disk cache, by the pens asked for
   /site/form.html  forms: a search sent with GET, a login sent with POST,
@@ -135,6 +137,18 @@ PICS_PAGE = (b"<!DOCTYPE html><html><head><title>Pictures</title><style>body{bac
              b"</body></html>\n")
 
 
+# a page as superbooth.com's: a column of text beside big photos held to
+# their columns, a banner, a WebP; every picture wider than the page, so
+# that the Pi's gateway makes it smaller (or the screen's pens)
+GW_PAGE = (b"<!DOCTYPE html><html><head><title>Gateway pictures</title><style>"
+           b"body{font-family:sans-serif;margin:0}.side{float:left;width:30%}.main{margin-left:32%}"
+           b"img{max-width:100%;height:auto}</style></head><body>"
+           b"<div class=side><h2>NEWS</h2><p>Instrument of the year. The synthesizer has been chosen.</p>"
+           b"<img src=portrait.jpg width=1200 height=1600 alt=portrait></div>"
+           b"<div class=main><h3>ROUNDUP</h3><img src=bigphoto.jpg width=2000 height=1500 alt=big>"
+           b"<p><img src=banner.jpg alt=banner></p><p><img src=big.png alt=png> <img src=pic.webp alt=webp></p>"
+           b"</div></body></html>\n")
+
 BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=stylesheet href=css/bg.css>"
            b"</head><body><div class=box>A box tiled from its sheet's folder</div>"
            b"<p><picture><source type=image/webp srcset=no.webp><img src=gone.png "
@@ -180,7 +194,15 @@ def make_pics():
         ImageDraw.Draw(f).rectangle((8 + i * 8, 8, 24 + i * 8, 40), fill=200)
     gif = io.BytesIO()
     frames[0].save(gif, "GIF", save_all=True, append_images=frames[1:], duration=200, loop=0)
+    def camera(w, h, seed):
+        """a photo as a camera makes one: shapes and fine noise, big"""
+        im = photo(w // 8, h // 8).resize((w, h), Image.BICUBIC)
+        noise = Image.effect_noise((w, h), 40 + seed).convert("RGB")
+        return Image.blend(im, noise, 0.25)
     return {
+        "bigphoto.jpg": (save(camera(2000, 1500, 0), "JPEG", quality=88), "image/jpeg"),
+        "portrait.jpg": (save(camera(1200, 1600, 7), "JPEG", quality=88, subsampling=0), "image/jpeg"),
+        "banner.jpg": (save(camera(1600, 500, 3), "JPEG", quality=85, progressive=True), "image/jpeg"),
         "photo.jpg": (save(photo(480, 320), "JPEG", quality=85), "image/jpeg"),
         "prog.jpg": (save(photo(320, 240), "JPEG", quality=85, progressive=True), "image/jpeg"),
         "logo.png": (save(logo, "PNG"), "image/png"),
@@ -300,6 +322,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, WEBP_PAGE)
         elif p == "/site/fresh.html":
             self.send(200, FRESH_PAGE)
+        elif p == "/site/gwpics.html":
+            self.send(200, GW_PAGE)
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":

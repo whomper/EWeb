@@ -26,6 +26,7 @@ typedef struct {
 	char scripts[512];		/* SCRIPTS=: the sites whose scripts run, host names ("" none) */
 	short cache;			/* CACHE=: the disk cache's size, MB (0 none; -1: 8 with TT RAM, else 2) */
 	short picdsp;			/* PICDSP=: JPEGs and the dither on the DSP (EWEB.PRG) */
+	short pens;			/* PENS=: pictures as the Pi's pens: 1 always (as it starts), -1 when quicker, 0 never */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	64	/* the most CACHE= may ask for */

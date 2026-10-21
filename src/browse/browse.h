@@ -93,9 +93,9 @@ typedef struct browser {
 	/* settings */
 	int pictures;		/* pictures are shown (1, the default) */
 	/* pictures through the Pi's gateway as the screen's pens, made there
-	   (webgate's aerapens): -1 (the default) on the ST edition and
-	   without the DSP always, else when answers come fast enough (rate);
-	   0 never, 1 always */
+	   (webgate's aerapens): 1 always (EWEB.PRG's PENS=, as it starts); -1
+	   (br_init's) on the ST edition and without the DSP always, else when
+	   answers come fast enough (rate); 0 never */
 	int pens;
 	long rate;		/* bytes a second the last big answer came at (0: not known) */
 	int snapshot;		/* pages through the Pi's browser: webgate's snapshots,

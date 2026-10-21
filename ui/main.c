@@ -43,7 +43,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1 };
 browser br;
 int loading;
 static short quit;
@@ -357,6 +357,8 @@ static void settings_load(void)
 			opt.pictures = atoi(eq) != 0;
 		else if (!strcmp(line, "PICDSP"))
 			opt.picdsp = atoi(eq) != 0;
+		else if (!strcmp(line, "PENS"))
+			opt.pens = (short) (atoi(eq) < 0 ? -1 : atoi(eq) > 0);
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -470,6 +472,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.picdsp);
 	put(&s, "PICDSP", v, "1 = the DSP decodes JPEGs and dithers pictures while the 68030 hands it the bytes "
 	    "(a Falcon's EWEB.PRG), 0 = the 68030 does it all");
+	snprintf(v, sizeof v, "%d", opt.pens);
+	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
+	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
 	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without Falcon mode "
 	    "(aera-gateway install web on the Pi)");
 	snprintf(v, sizeof v, "%u", opt.gateport);
@@ -1664,6 +1669,7 @@ int main(void)
 	}
 	br.search = opt.search;
 	br.pictures = opt.pictures;
+	br.pens = opt.pens;
 	br.say = say;
 	br.phase = on_phase;
 	br.log = log_line;
