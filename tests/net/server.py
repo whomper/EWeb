@@ -33,6 +33,10 @@ Pages:
   /site/webp.html  a WebP picture (pic.webp) and a GIF: EWeb on its own
                  doesn't fetch the WebP; through webgate it comes as JPEG;
                  /site/hits/NAME: how many times a picture was asked for
+  /site/wiki.html  a page as a Wikipedia article's: an infobox photo from a
+                 srcset, icons, an SVG, a 1x1 counter, a floated thumbnail
+  /site/wikitls.html  the same, secure, its pictures from another secure
+                 server (the ECDSA one), as Wikipedia's from upload.wikimedia.org
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
@@ -149,6 +153,41 @@ GW_PAGE = (b"<!DOCTYPE html><html><head><title>Gateway pictures</title><style>"
            b"<p><img src=banner.jpg alt=banner></p><p><img src=big.png alt=png> <img src=pic.webp alt=webp></p>"
            b"</div></body></html>\n")
 
+# a page as a Wikipedia article's: an infobox photo from a srcset, small
+# icons, an SVG (the Pi can't make it: refused), a 1x1 counter, a
+# thumbnail floated beside the text, a PNG with alpha, an animated GIF
+WIKI_PAGE = (b"<!DOCTYPE html><html><head><title>Atari Falcon - Wiki</title><style>"
+             b".infobox{float:right;width:22em;border:1px solid #aaa;margin:0 0 1em 1em}"
+             b".thumb{float:left;margin:0 1em 1em 0}img{vertical-align:middle}</style></head><body>"
+             b"<h1>Atari Falcon</h1><table class=infobox><tr><th>Atari Falcon030</th></tr><tr><td>"
+             b"<img src=portrait.jpg srcset='portrait.jpg 1.5x, bigphoto.jpg 2x' width=250 height=333 "
+             b"alt=falcon></td></tr><tr><td><img src=logo.png width=20 height=8 alt=icon> Manufacturer: "
+             b"Atari</td></tr></table><p><img src=anim.gif width=16 height=16 alt=gif> The <b>Atari Falcon030"
+             b"</b> is a personal computer released by Atari in 1992.</p>"
+             b"<div class=thumb><img src=banner.jpg width=220 height=69 alt=thumb><br>A thumbnail</div>"
+             b"<p>Text beside the thumbnail. <img src=wiki.svg width=12 height=12 alt=svg> More text with an "
+             b"SVG icon in it, and a <img src=photo.jpg width=60 height=40 alt=small> small photo.</p>"
+             b"<p><img src=big.png alt=png style='max-width:100%;height:auto'></p>"
+             b"<img src=counter.png width=1 height=1 alt=''></body></html>\n")
+
+# the same as a secure page whose pictures come from another secure host
+# (Wikipedia's from upload.wikimedia.org): https://127.0.0.1/site/wikitls.html,
+# its pictures from the ECDSA server (an ECDSA certificate, as Wikipedia's:
+# the DSP's elliptic curves for each of their connections)
+WIKI_TLS_PAGE = (b"<!DOCTYPE html><html><head><title>Atari Falcon - Wiki TLS</title><style>"
+                 b".infobox{float:right;width:22em}.thumb{float:left;margin:0 1em 1em 0}</style></head><body>"
+                 b"<h1>Atari Falcon</h1><table class=infobox><tr><td><img src=https://localhost:PORT/site/portrait.jpg "
+                 b"srcset='https://localhost:PORT/site/portrait.jpg 1.5x, https://localhost:PORT/site/bigphoto.jpg 2x' "
+                 b"width=250 height=333 alt=falcon></td></tr></table>"
+                 b"<p><img src=https://localhost:PORT/site/anim.gif width=16 height=16 alt=gif> The Falcon030.</p>"
+                 b"<div class=thumb><img src=https://localhost:PORT/site/banner.jpg width=220 height=69 alt=t></div>"
+                 b"<p>Text. <img src=https://localhost:PORT/site/wiki.svg width=12 height=12 alt=svg> "
+                 b"<img src=https://localhost:PORT/site/photo.jpg width=120 height=80 alt=small> "
+                 b"<img src=https://localhost:PORT/site/prog.jpg width=160 alt=prog></p>"
+                 b"<p><img src=https://localhost:PORT/site/big.png style='max-width:100%;height:auto' alt=png> "
+                 b"<img src=https://localhost:PORT/site/logo.png alt=logo></p>" + b"<p>More text.</p>" * 40 +
+                 b"<img src=https://localhost:PORT/site/bigphoto.jpg width=400 height=300 alt=end></body></html>\n")
+
 BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=stylesheet href=css/bg.css>"
            b"</head><body><div class=box>A box tiled from its sheet's folder</div>"
            b"<p><picture><source type=image/webp srcset=no.webp><img src=gone.png "
@@ -210,6 +249,9 @@ def make_pics():
         "big.png": (save(photo(800, 600), "PNG"), "image/png"),
         "css/tile.png": (save(Image.new("RGB", (8, 8), (90, 90, 200)), "PNG"), "image/png"),
         "pic.webp": (save(photo(320, 200), "WEBP"), "image/webp"),
+        "wiki.svg": (b'<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12">'
+                     b'<circle cx="6" cy="6" r="5" fill="#36c"/></svg>', "image/svg+xml"),
+        "counter.png": (save(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "PNG"), "image/png"),
     }
 
 
@@ -276,6 +318,7 @@ SCRIPT_PAGE = (b"<!DOCTYPE html><title>Scripts</title><p id=a>waiting</p><p id=b
 class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     secure_port = 0
+    ecdsa_port = 0
 
     def log_message(self, fmt, *args):
         pass
@@ -324,6 +367,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, FRESH_PAGE)
         elif p == "/site/gwpics.html":
             self.send(200, GW_PAGE)
+        elif p == "/site/wiki.html":
+            self.send(200, WIKI_PAGE)
+        elif p == "/site/wikitls.html":
+            self.send(200, WIKI_TLS_PAGE.replace(b"https://localhost:PORT", b"https://127.0.0.1:%d" % self.ecdsa_port))
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":
@@ -481,6 +528,7 @@ def main():
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
     Handler.secure_port = a.https
+    Handler.ecdsa_port = a.ecdsa
     serve(a.http)
     serve(a.https, tls_context(a.work, "host.pem", "host.key"))
     serve(a.https, tls_context(a.work, "host.pem", "host.key"), "127.0.0.2")

@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon"]
 HTTP, HTTPS, GATE = 18280, 18643, 18289
 DISPLAY = ":98"
 CTRL, SHIFT = 0x1D, 0x2A
@@ -119,7 +119,7 @@ class Mouse:
 class Run:
     """Hatari with EWEB.PRG, its events and its command FIFO"""
 
-    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG"):
+    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG", accs=()):
         self.name = name
         self.fifo = os.path.join(OUT, name + ".fifo")
         self.log = os.path.join(OUT, name + ".log")
@@ -127,6 +127,8 @@ class Run:
             if os.path.exists(p):
                 os.remove(p)
         self.m = machines.Machine(spec, hd)
+        if accs:
+            self.m.accs(accs)       # the family's accessories, from their releases
         args = ["hatari"] + self.m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                              "--cmd-fifo", self.fifo, "--auto", "C:\\" + prg]
         if truecolour:
@@ -767,22 +769,35 @@ def gateway():
                             (["--pens-socket", sock] if penssock else []),
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     page = "http://127.0.0.1:%d/site/gwpics.html" % HTTP
+    wiki = "http://127.0.0.1:%d/site/wiki.html" % HTTP
     try:
         for pens in (0, 1) if penssock else (0,):
             name = "gwpens%d" % pens
             inf = "FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\nPENS=%d\r\n" % (GATE, pens)
             hd = hd_for(name, page, inf)
-            r = Run(name, "Falcon:256", hd, network=True)
+            # with the family's accessories loaded, as on Erez's Falcon
+            r = Run(name, "Falcon:256", hd, network=True, accs=("ECal", "EContact", "EHypView"))
             try:
                 ev = r.wait(r"pictures ", 1800)
                 evs = r.events()
                 got = [e for e in evs if re.search(r"^picture \S+ (decoded|pens from the Pi) at ", e)]
                 time.sleep(2)
                 r.shot(0)
+                # then a page as a Wikipedia article's, and back
+                r.key(L, (CTRL,))
+                r.type(wiki)
+                r.key(RETURN)
+                wev = r.wait(r"pictures ", 1800)
+                time.sleep(2)
+                r.shot(1)
+                check("gateway: %s, a page as Wikipedia's after it" % name, wev is not None and
+                      not os.path.exists(os.path.join(hd, "CRASH.LOG")), "\n".join(r.events()[-25:]))
+                r.key(UNDO)
+                r.wait(r"shown ", 600)
                 r.key(Q, (CTRL,))
                 quit = r.wait(r"quit$", 300)
                 if quit is None:
-                    r.shot(1)
+                    r.shot(2)
                 # (the test server's pictures can't be kept by HTTP's rules:
                 # only pictures decoded here are kept, as EWeb's own)
                 check("gateway: %s, every picture %s, quits" % (
@@ -799,6 +814,48 @@ def gateway():
         if penssock is not None:
             penssock.terminate()
             penssock.wait(10)
+        srv.stdin.close()
+        srv.wait(10)
+
+
+def falcon():
+    """EWEB.PRG on Erez's Falcon in 256 colours in Falcon mode (TLS on the
+    68030 and the DSP, no gateway), a secure page as a Wikipedia
+    article's with its pictures from another secure host: the DSP turns
+    from the handshakes' arithmetic to the JPEGs and the dither and back;
+    scrolled while the pictures come, then the page loaded again"""
+    work = os.path.join(OUT, "server")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("falcon: the test server", False)
+    page = "https://127.0.0.1:%d/site/wikitls.html" % HTTPS
+    hd = hd_for("falconwiki", page)
+    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "CACERT.PEM"))
+    r = Run("falconwiki", "Falcon:256", hd, network=True)
+    try:
+        ev = r.wait(r"shown ", 1200)
+        for _ in range(12):             # scrolled while the pictures come
+            r.key(DOWN)
+            time.sleep(1)
+        pv = r.wait(r"pictures ", 2400)
+        r.shot(0)
+        evs = r.events()
+        dec = [e for e in evs if re.search(r"^picture \S+ decoded at ", e)]
+        r.key(L, (CTRL,))
+        r.type(page)
+        r.key(RETURN)
+        again = r.wait(r"shown ", 1200)
+        r.wait(r"pictures ", 120)       # none when they are all still in memory
+        r.shot(1)
+        r.key(Q, (CTRL,))
+        quit = r.wait(r"quit$", 300)
+        check("falcon: a secure page's pictures from another secure host on the DSP, scrolled, again",
+              ev is not None and pv is not None and len(dec) >= 7 and again is not None and quit is not None and
+              not os.path.exists(os.path.join(hd, "CRASH.LOG")), "\n".join(r.events()[-30:]))
+    finally:
+        r.end()
         srv.stdin.close()
         srv.wait(10)
 
@@ -822,5 +879,7 @@ if "st" in WHICH:
     st()
 if "gateway" in WHICH:
     gateway()
+if "falcon" in WHICH:
+    falcon()
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)
