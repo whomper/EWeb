@@ -13,7 +13,9 @@ its size and at 192 x 128. It prints what picbench printed (its times are
 the emulated machine's). --profile has Hatari's profiler count the CPU's
 cycles from the start to the end (picbench quitting) and save
 them, with the program's own addresses named from its ELF, in OUT; WHICH 2
-times the DSP's way alone, 1 the 68030's.
+times the DSP's way alone, 1 the 68030's. A PICTURE ending in .Z is pens
+as the Pi gateway would send them (raw deflate, a byte a pixel), inflated
+into WIDTH x HEIGHT bytes and timed.
 """
 import os
 import shutil

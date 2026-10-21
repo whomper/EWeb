@@ -992,6 +992,27 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   1.8 MB PNG with transparency as 30 KB (measured with webgate's `make_picture`). Without Pillow
   on the Pi, pictures pass as they came. The site itself can do more: its pictures have no
   `srcset`, which WordPress makes for its uploads, and EWeb would take the smallest sharp one.
+- **Pens from the Pi, measured** (21 Oct 2026, for the hub: could the Pi decode in the Atari's
+  place?). Four pictures (the photo, a banner, a palette PNG, a test card) at the page's width,
+  each as webgate sends it now (a: the Atari decodes and dithers it) and as the screen's pens made
+  on the Pi (b: a byte a pixel, deflated; c: packed at the screen's depth, deflated; d: packed, not
+  compressed), the Atari's time from `PICBENCH.TTP`/`PICBST.TTP` in Hatari (a .Z file is inflated),
+  d's estimated (a copy). The four together, the Atari's seconds and the bytes:
+
+  | machine | a | b | c | d |
+  |---|---|---|---|---|
+  | ST mono (EWEBST) | 113.0 s, 79 KB | 9.6 s, 38 KB | 6.3 s, 33 KB | ~0.2 s, 46 KB |
+  | ST low, 16 colours | 88.0 s, 43 KB | 8.2 s, 39 KB | 7.6 s, 37 KB | ~0.2 s, 91 KB |
+  | ST medium, 4 colours | 211.5 s, 79 KB | 6.3 s, 27 KB | 5.1 s, 25 KB | ~0.2 s, 46 KB |
+  | stock Falcon, 16 colours (DSP) | 6.6 s, 79 KB | 4.1 s, 75 KB | 3.9 s, 73 KB | ~0.2 s, 186 KB |
+  | stock Falcon, 256 colours (DSP) | 6.7 s, 79 KB | 7.7 s, 147 KB | 7.7 s, 147 KB | ~0.2 s, 372 KB |
+
+  With the transfer at 20, 65 and 160 KB/s, d is the fastest on an ST at any speed above 7 KB/s
+  (2.5 s in place of 117 s for the four at 20 KB/s in mono); on the stock Falcon d above 30 KB/s at
+  16 colours (c below) and above 45 KB/s at 256 (a below). Inflating on the Atari is what makes b
+  and c slow: about 5 KB of deflate a second on the 8 MHz ST, 20 on the 16 MHz 68030. The DSP's
+  dither of a PNG was timed on the 68030 by picbench (its DSP check was a JPEG's) until this
+  measurement: 0.6 s, not 5.7, as EWEB.PRG does it.
 - **The text size** (Larger text, Smaller text, ^+ ^- ^0; `ZOOM=`, per cent) changes the text
   alone since 21 Oct 2026 (before, the whole page): fonts and line heights (`LAYOUT_OPT.text`), not
   lengths or pictures, so the pictures keep their size and the pixels decoded for it, the page its

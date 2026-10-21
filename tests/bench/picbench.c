@@ -19,6 +19,11 @@
  * is read by jpegdc: its open and read are timed too. Without arguments
  * it takes PHOTO.JPG (tests/bench/mkphoto.py) at its size dithered to 16
  * colours and at 192 x 128 to 256, as a release has it.
+ *
+ * A FILE ending in .Z is a picture's pens as the Pi gateway would make
+ * them (raw deflate, a byte a pixel): it is inflated TIMES times into
+ * WIDTH x HEIGHT bytes, each timed (what the Atari would do in place of
+ * decoding and dithering).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +31,7 @@
 
 #include "plat.h"
 #include "pic.h"
+#include "inflate.h"
 #ifdef PIC_LIBJPEG
 #include "dspjpeg.h"
 #else
@@ -38,6 +44,36 @@ static unsigned long ms(unsigned long t)
 }
 
 static int which;		/* 0 both ways, 1 the 68030's, 2 the DSP's */
+
+/* pens made on the Pi: inflated, timed */
+static int inflate_bench(const char *file, int w, int h, int times)
+{
+	size_t len;
+	char *data = load(file, &len);
+	int k;
+	if (data == NULL) {
+		out("%s: can't read\n", file);
+		return 1;
+	}
+	for (k = 0; k < times; k++) {
+		SBUF b;
+		unsigned long t0;
+		int r;
+		sb_init(&b);
+		if (!sb_reserve(&b, (long) w * h + 1)) {
+			out("out of memory\n");
+			free(data);
+			return 1;
+		}
+		t0 = ticks();
+		r = inflate_raw((const unsigned char *) data, (long) len, &b, (long) w * h + 1);
+		out("inflate %lu ms (%lu bytes to %ld, %dx%d)%s\n", ms(ticks() - t0), (unsigned long) len, (long) b.len,
+		    w, h, r == 1 && b.len == (long) w * h ? "" : " WRONG");
+		sb_free(&b);
+	}
+	free(data);
+	return 0;
+}
 
 static int bench(const char *file, int w, int h, int colours, int times)
 {
@@ -95,10 +131,12 @@ static int bench(const char *file, int w, int h, int colours, int times)
 			free(pens);
 		}
 		pic_free(p);
-		out("the DSP: %s\n", strcmp(pic_dsp_state(), "DSP") ? "failed its check" : "checked");
+		/* "-": not checked (no JPEG); EWeb keeps the DSP for whichever part passed its check */
+		out("the DSP: %s\n", !strcmp(pic_dsp_state(), "DSP") ? "checked" :
+		    !strcmp(pic_dsp_state(), "-") ? "not checked (not a JPEG)" : "failed its check");
 		if (colours > 2)
 			out("its dither: %s\n", strcmp(pic_dither_state(), "DSP") ? "failed its check" : "checked");
-		if (strcmp(pic_dsp_state(), "DSP"))
+		if (strcmp(pic_dsp_state(), "DSP") && (colours <= 2 || strcmp(pic_dither_state(), "DSP")))
 			pic_dsp = NULL;
 	}
 	times *= pic_dsp != NULL ? 2 : 1;
@@ -181,6 +219,8 @@ int picbench(int argc, char **argv)
 {
 	int r;
 	which = argc > 6 ? atoi(argv[6]) : 0;
+	if (argc >= 4 && strlen(argv[1]) > 2 && !strcmp(argv[1] + strlen(argv[1]) - 2, ".Z"))
+		return inflate_bench(argv[1], atoi(argv[2]), atoi(argv[3]), argc > 5 ? atoi(argv[5]) : 1);
 	if (argc >= 4)
 		return bench(argv[1], atoi(argv[2]), atoi(argv[3]), argc > 4 ? atoi(argv[4]) : 0,
 			     argc > 5 ? atoi(argv[5]) : 1);
