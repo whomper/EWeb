@@ -27,8 +27,10 @@ work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
 ewrender = os.path.abspath(sys.argv[3]) if len(sys.argv) > 4 else None
 font = os.path.abspath(sys.argv[4]) if len(sys.argv) > 4 else None
 os.makedirs(work, exist_ok=True)
-HTTP, HTTPS, BAD, EC, GATE = 18080, 18443, 18444, 18445, 18288
-GATE2, EXT = 18298, 18299	# webgate with --browser, and its extension's port
+# ITEST_PORTS=N moves every port up by N, so two trees can run at once
+OFF = int(os.environ.get("ITEST_PORTS", "0"))
+HTTP, HTTPS, BAD, EC, GATE = (p + OFF for p in (18080, 18443, 18444, 18445, 18288))
+GATE2, EXT = 18298 + OFF, 18299 + OFF	# webgate with --browser, and its extension's port
 # AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
 # gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
