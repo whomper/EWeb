@@ -1,24 +1,27 @@
 # EWeb user guide
 
-EWeb is a web browser for the Atari Falcon (and the TT). It fetches pages
-itself over the internet, secure ones too, and shows them with its own
-fonts: text, links, headings, lists, tables, pictures and forms, in
-colour or black and white.
+EWeb is a web browser for the Atari Falcon and TT, and, in its ST
+edition (`EWEBST.PRG`), for the ST and STE. It fetches pages itself over
+the internet, secure ones too, and shows them with its own fonts: text,
+links, headings, lists, tables, pictures and forms, in colour or black
+and white.
 
 ## What you need
 
 - A Falcon030 (best with an accelerator such as the DFB1 and TT RAM) or
-  a TT, with TOS 4, EmuTOS or MagiC; a screen 640 pixels wide in any
-  mode: monochrome, 4, 16 or 256 colours, or the Falcon's true colour.
+  a TT, with its own TOS (4 on a Falcon, 3 on a TT), EmuTOS or MagiC; a
+  screen 640 pixels wide in any mode: monochrome, 4, 16 or 256 colours, or
+  the Falcon's true colour.
   On an ST or STE (TOS 1.04 or newer, 4 MB best), use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
   gateway, in [Settings](#settings)); it runs on a 1 MB ST, which has
   room for one page at a time and few pictures
-- About 2 MB of free memory, more for big pages; TT RAM is used when
-  there is some
-- **STinG** for the network (plain TOS), on a network card such as the
-  NetUSBee. Without a network EWeb still opens pages on your disks.
+- For `EWEB.PRG` about 3 MB of free memory (the program itself takes
+  2.2 MB), more for big pages; TT RAM is used when there is some
+- **STinG** for the network, on a network card such as the NetUSBee
+  (under FreeMiNT or MagiC-Net, their own MiNTnet works too). Without a
+  network EWeb still opens pages on your disks.
   Set the Delay in `STING.CPX` to 10 on a Falcon or TT, 25 to 50 on an
   ST: STinG looks at the card that often, so it sets how fast pages
   come (on a Falcon with a NetUSBee, Delay 10 took downloads from 40 to
@@ -45,12 +48,18 @@ ROOTS.DAT     the same, read ahead of time
 EWEB.INF      settings (EWeb writes it)
 SEED.DAT      secure sites: randomness kept for the next start
 SIGS.DAT      secure sites: certificate checks remembered
+COOKIES.TXT   cookies kept from one day to the next (EWeb writes it)
+EWEB.KEY      the key their values are encrypted with (EWeb writes it)
+BOOKMARK.HTM  your bookmarks (EWeb writes it)
+CACHE\        the disk cache: EWEB.PAK and EWEB.IDX (EWeb writes them)
 CRASH.LOG     what happened, if EWeb ever crashes
 ```
 
 EWeb keeps everything in the folder it is started from. Start it from
-the desktop with a double click; drop a page (an `.HTM` file) on it to
-open that page.
+the desktop with a double click; drop a page (an `.HTM` file) on it, or
+on its window, to open that page. Other programs can hand it an address
+or a file to show (VA_START), and a mail address (a `mailto:` link) goes
+to EMail, when it is running.
 
 ## Opening pages
 
@@ -68,9 +77,10 @@ address and press Return:
 
 While a page loads, the status bar at the foot of the window says what
 is happening and how much has come, and the thin line along its foot
-fills from left to right, in a colour for each step: blue while EWeb
-connects, cyan as the page comes, magenta for its stylesheets, yellow
-while the page is laid out, green as its pictures come. **Esc**,
+fills from left to right, in a colour for each step (in 16 colours or
+more; black in monochrome and 4 colours): blue while EWeb connects, cyan
+as the page comes, magenta for its stylesheets, yellow while the page is
+laid out, green as its pictures come. **Esc**,
 **Undo** or the Stop button stop it, and the page you were on stays.
 
 ## Pictures
@@ -96,10 +106,10 @@ an animated one), decoded at the size the page shows them: a big photo
 shown small takes much less time and memory than at its own size. On a
 Falcon the DSP decodes a JPEG while the 68030 only hands it the bytes
 and takes the pixels (a progressive JPEG's scans the 68030 reads, the
-DSP the rest; Settings > General). In 16
-or 256 colours and in monochrome they are dithered to the screen's own
-colours (on a Falcon in 4, 16 and 256 colours by the DSP, eight times as
-quick); in true colour they are as they are. An address of a picture
+DSP the rest; Settings > General). In monochrome and in 4, 16 or 256
+colours they are dithered to the screen's own colours (on a Falcon in 4,
+16 and 256 colours by the DSP, eight times as quick); in true colour they
+are as they are. An address of a picture
 on its own (a `.jpg` link) shows the picture.
 
 On a slow line, View > Show pictures turns them off: pages then show
@@ -132,7 +142,9 @@ a click does.
 
 A form goes in the page's own character set, as browsers send it; Back
 after sending shows it as you filled it in. EWeb can't send files yet
-(a file field sends none), and buttons that need JavaScript do nothing.
+(a file field sends none), and buttons that need JavaScript do nothing
+unless you let that site's scripts run (see
+[Pages made by scripts](#pages-made-by-scripts)).
 
 ## Cookies
 
@@ -193,11 +205,11 @@ under the page says it may be out of date; a site that says its pages
 must always be checked gets an error instead. Sending a form forgets
 what was kept for the page it went to.
 
-The cache takes 32 MB (2 MB on a Falcon without TT RAM); Settings >
-General > Disk cache changes it, 0 for none. When it is full, what came
-first makes room for what comes, so quitting takes no time: EWeb writes
-only what came since it last wrote and its list. Options > Empty the
-cache forgets it all.
+The cache takes 32 MB (2 MB without TT RAM, as on a stock Falcon or an
+ST); Settings > General > Disk cache changes it, up to 64 MB, 0 for
+none. When it is full, what came first makes room for what comes, so
+quitting takes no time: EWeb writes only what came since it last wrote
+and its list. Options > Empty the cache forgets it all.
 
 ## The window
 
@@ -219,14 +231,15 @@ At the right end is the AERA A. While a page or its pictures come, a star
 goes round it over a field of faint stars; when it stands still, EWeb
 is waiting for you.
 
-Under that is the page, with the window's slider on the right. The info
-line shows the address of the link under the mouse, what a load is
-doing, or, for a secure page, how it is secured. The window's title is
-the page's.
+Under that is the page, with the window's slider on the right. The
+status bar at the foot of the window shows the address of the link under
+the mouse, a button's name, what a load is doing, or, for a secure page,
+how it is secured. The window's title is the page's.
 
 Click a link to follow it (the pointer turns into a hand over one).
 Right-click a link for its commands (open it, save its file, copy its
-address), or the page for Back, Forward, Reload and copying its text.
+address), the page for Back, Forward, Reload and copying its text, or the
+address for Copy, Cut, Paste and Select all.
 
 The window can be moved, sized, fulled and iconified as any other; EWeb
 lays the page out again for the new width.
@@ -284,11 +297,15 @@ choose all of it.
 | ClrHome, Shift-ClrHome | the top, the end |
 | ^+ ^- ^0 | larger, smaller, as it was |
 | ^C | copy the page's text, the address, or a field's text |
+| ^X, ^V | cut, paste (in the address or a field) |
+| ^A | the whole address, to type over |
 | Tab, Shift-Tab | the page's next field (or the one before), then the address |
 | Return | in a field: send its form |
 | ^, | the Settings |
 | Help | this guide |
 | ^Q, ^W | quit |
+
+Help > Keys shows the main keys in a box of their own.
 
 ## What EWeb shows
 
@@ -300,7 +317,8 @@ boxes, tables with cells over several rows, flexible boxes and grids
 (CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
 show:
 
-- file fields (EWeb can't send files yet)
+- a file to send: a file field shows "No file" (EWeb can't send files
+  yet)
 - WebP and AVIF pictures (EWeb asks servers for JPEG, PNG and GIF,
   which most send then; of a picture offered in several forms and
   sizes it takes a JPEG, PNG or GIF one at the size the screen needs),
@@ -331,12 +349,15 @@ and run for 5 seconds as it opens (2 seconds for each click or timer
 after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
-those, use the Pi's browser (below). The ST edition and a Falcon without
-an FPU run no scripts: there the menu item says "JavaScript needs an
-FPU (a 68881 or 68882)", and pages are shown as with scripts off.
+those, use the Pi's browser (below). The ST edition runs no scripts and
+has no such menu item; on a Falcon without an FPU, picking it says
+"JavaScript needs an FPU (a 68881 or 68882)", and pages are shown as
+with scripts off.
 
 With the Pi gateway set up for it (`aera-gateway` with its browser, on
-the Pi), two things in the View menu use the Pi's own web browser:
+the Pi) and in use (its address in Settings > Secure, and on a Falcon or
+TT Falcon mode off), two things in the View menu use the Pi's own web
+browser:
 
 - **Through the Pi's browser:** each page is opened by the browser on
   the Pi, its scripts run there, and EWeb shows the page as it then
@@ -406,35 +427,40 @@ sudo apt install -y git &&
   screen (AERA-Gateway 1.6 and later), and installs `gcc` and `make` for
   it if they're missing.
 - To update the Pi later: `cd ~/AERA-Gateway && ./update-pi.sh`.
-- To check it: `sudo aera-gateway status` on the Pi, or open
-  `http://PI_IP:8280/` (the Pi's address) in EWeb.
+- To check it: `sudo aera-gateway status` on the Pi; or, before EWeb
+  goes through it (or in Falcon mode), open `http://PI_IP:8280/` (the
+  Pi's address) in EWeb: it says webgate is running.
 
 Then in EWeb: **Settings > Secure**, the Pi gateway `PI_IP` (the Pi's
-address), port `8280`.
+address), port `8280`; on a Falcon or TT, untick Falcon mode there too,
+or pages still come straight from their servers.
 
 ## Settings
 
 Options > Settings (^,) has two pages:
 
-- **General:** whether pages' pictures are shown, the size of pages
-  (per cent), where words typed in the address go, and (on a Falcon)
-  whether the DSP helps with pictures. (Which sites' scripts run is
-  Options > Run this site's scripts.)
+- **General:** whether pages' pictures are shown, the text size (per
+  cent, 50 to 200), where words typed in the address go, the disk
+  cache's size (MB, 0 for none) and, in `EWEB.PRG`, whether a Falcon's
+  DSP does the pictures. (Which sites' scripts run is Options > Run this
+  site's scripts.)
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
-The search address and the gateway's address can be longer than their
-fields: the field moves along with the cursor (Shift+left and right: to
-the start and the end; ^C, ^X and ^V copy, cut and paste the whole text).
+The search address, the gateway's address and the answer to a page's
+question (a script's `prompt`) can be longer than their fields (255, 63
+and 255 characters): the field moves along with the cursor (Shift+left
+and right: to the start and the end; ^C and ^X copy or cut the whole
+text, ^V puts the clipboard's text in at the cursor).
 
 EWeb keeps its settings in `EWEB.INF`, next to the program, with a note
-above each and an empty line after it. A setting you change is saved there at once; where the window
-was, when you quit:
+above each and an empty line after it. A setting you change is saved
+there at once; where the window was, when you quit:
 
 - `HOME=` the start page (empty: EWeb's own)
 - `SEARCH=` where words typed in the address go, `%s` for the words
   (FrogFind: `http://frogfind.com/?q=%s`)
-- `ZOOM=` the size of pages, per cent
+- `ZOOM=` the size of the text, per cent (50 to 200)
 - `FALCON=` 1 for Falcon mode (secure pages on this Atari), 0 for the
   Pi gateway
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
@@ -443,11 +469,19 @@ was, when you quit:
 - `PICDSP=` 1 to let a Falcon's DSP decode JPEGs and dither pictures
   to the screen's colours (each about eight times as quick on a stock
   Falcon), 0 for the 68030 alone
+- `PENS=` through the Pi gateway, pictures made ready for your screen on
+  the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
+  (the Atari decodes them)
 - `GATE=` the Pi gateway's address: without Falcon mode every page comes
   through the Pi, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)
+- `SNAPSHOT=` 1 for pages through the Pi's browser (View > Through the
+  Pi's browser), 0 for pages as their servers send them
 - `SCRIPTS=` the sites whose scripts run, their names with spaces
   between (`file` for pages on your disks)
+- `CACHE=` the disk cache's size, MB, 0 for none (Settings > General);
+  not in the file until you change it, and till then 32 with TT RAM,
+  else 2
 - `WINDOW=` where the window was
 
 ## When something goes wrong
@@ -459,14 +493,16 @@ was, when you quit:
 - **A secure site fails**: check that `CACERT.PEM` and `ROOTS.DAT` are
   next to `EWEB.PRG`, and the Atari's clock is right
 - **EWeb crashed**: next time it starts, it offers to show `CRASH.LOG`;
-  please send it to the address in About
+  please send it with a bug report on EWeb's GitHub page
+  (github.com/whomper/EWeb/issues)
 
 ## About EWeb
 
 EWeb is made by AERA | Erez Yaary, free software under the GNU GPL,
 version 2 or later: github.com/whomper/EWeb. Its fonts are drawn from
-DejaVu; its character set tables are NetSurf's libparserutils (MIT), its GIF decoder
-NetSurf's libnsgif (MIT), and its JPEG decoder libjpeg-turbo (the IJG's
-and BSD licences). It belongs to the
-AERA family of Atari programs (ECal, EContact, EMail, EFTP, EHypView,
-ClaudeST) and looks and works as they do.
+DejaVu; its character set tables are NetSurf's libparserutils (MIT), its
+GIF decoder NetSurf's libnsgif (MIT), its JPEG decoder libjpeg-turbo (the
+IJG's and BSD licences; ChaN's TJpgDec in the ST edition), its secure
+connections BearSSL (MIT), and its scripts QuickJS with musl's maths
+(MIT). It belongs to the AERA family of Atari programs (ECal, EContact,
+EMail, EFTP, EHypView, ClaudeST, EUpdate) and looks and works as they do.
