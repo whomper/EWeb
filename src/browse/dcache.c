@@ -390,6 +390,20 @@ static void header(const char *h, const char *name, char *out, int size)
 	}
 }
 
+/* the header lines have one of that name, of any length */
+static int has_header(const char *h, const char *name)
+{
+	size_t n = strlen(name);
+	while (h != NULL && *h) {
+		if (!strncasecmp(h, name, n) && h[n] == ':')
+			return 1;
+		h = strchr(h, '\n');
+		if (h != NULL)
+			h++;
+	}
+	return 0;
+}
+
 /* a Cache-Control directive: 1 (and its number in *v when there is one) */
 static int directive(const char *cc, const char *name, long *v)
 {
@@ -519,9 +533,11 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	/* not kept: what HTTP says not to keep, what would never be fresh
 	   and can't be asked about, a page that sets a cookie (one person's;
 	   a picture or a stylesheet that does is kept, as browsers' own
-	   caches keep them), and what would take a quarter of the cache */
+	   caches keep them), one with a Refresh header (the index keeps no
+	   headers: from the cache it wouldn't go on), and what would take a
+	   quarter of the cache */
 	if (life < 0 || (life == 0 && !etag[0] && !lm[0]) || (sc[0] && !strcmp(mime, "text/html")) ||
-	    len > max_size / 4 ||
+	    has_header(headers, "Refresh") || len > max_size / 4 ||
 	    strchr(etag, '\t') || strchr(lm, '\t') || strchr(key, '\t') || strchr(url, '\t') || strchr(security, '\t') ||
 	    strchr(key, '\n') || strchr(url, '\n'))
 		return;

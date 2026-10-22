@@ -6,7 +6,7 @@
  * sniffed, or one of a few), scripting on or off and a fragment's context
  * element; the rest is the page. The tree that comes out must hold
  * together: each node's parent, siblings and first and last children
- * agree.
+ * agree; the page's refresh (a <meta http-equiv=refresh>) is one.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -53,8 +53,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 	o.context = contexts[(d[0] >> 4) & 7].name;
 	o.context_ns = contexts[(d[0] >> 4) & 7].ns;
 	doc = doc_parse_opts((const char *) d + 1, n - 1, &o, &m);
-	if (doc != NULL)
+	if (doc != NULL) {
+		const drefresh *r;
+		int k = 0;
 		check(doc->root, 0);
+		/* the page's refresh: the <meta>s whose content is one, as
+		   they were put in (some taken out of the tree since, perhaps) */
+		for (r = doc->refresh; r != NULL; r = r->next) {
+			unsigned long secs;
+			const char *u;
+			size_t ul;
+			if (!doc_refresh_parse(r->content, &secs, &u, &ul) || r->based > 1 || ++k > DOC_REFRESH_METAS)
+				abort();
+		}
+	}
 	doc_free(doc);
 	return 0;
 }

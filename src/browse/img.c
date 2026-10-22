@@ -58,6 +58,7 @@ struct ew_img {
 	unsigned long sum[2];		/* the file's contents, for the disk cache's key */
 	int cached;			/* its last decode came from the disk cache */
 	int refetched;			/* asked for again for pens of another size or screen */
+	int stale;			/* to be asked for again (img_recheck) */
 };
 
 /* a file of pens (aerapens): "EWPN", 1, the bits a pen, flags (1: a
@@ -389,10 +390,37 @@ int img_refetch(const ew_img *im, int32_t w, int32_t h)
 	       be16(d + 10) != h;
 }
 
+void img_recheck(ew_img *im)
+{
+	if (im->state == IMG_HERE && strncmp(im->url, "data:", 5) != 0)
+		im->stale = 1;
+}
+
+int img_stale(const ew_img *im)
+{
+	return im->stale;
+}
+
+void img_kept(ew_img *im)
+{
+	im->stale = 0;
+}
+
 int img_set_file(ew_img *im, char *data, long len)
 {
 	long w, h;
 	int depth, mask;
+	if (im->stale) {
+		/* asked for again: the same, as it was decoded; else each size
+		   it was decoded at goes, to be decoded again from this one */
+		im->stale = 0;
+		if (im->state == IMG_HERE && len == im->len && memcmp(data, im->data, (size_t) len) == 0) {
+			free(data);
+			return 2;
+		}
+		while (im->vars != NULL)
+			var_free(im, im->vars);
+	}
 	free(im->data);
 	img_used -= im->len;
 	im->data = NULL;

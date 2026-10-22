@@ -30,7 +30,12 @@
 
 long br_cache_max = 4L << 20;
 
-enum { NAV_NEW, NAV_HISTORY, NAV_RELOAD };
+/* NAV_REPLACE: a new page in place of the one shown in the history (a
+   refresh: the HTML Standard's historyHandling "replace"); NAV_REFRESH:
+   the page shown again for its refresh, fetched anew as Reload does but
+   its stylesheets as any page's (Chrome's "reload": the page validated,
+   not what it uses) */
+enum { NAV_NEW, NAV_HISTORY, NAV_RELOAD, NAV_REPLACE, NAV_REFRESH };
 
 /* the load's phase, for the front end's ribbon */
 static void phase(browser *b, int ph)
@@ -491,6 +496,7 @@ typedef struct {
 	int status;		/* 0: a file or the cache */
 	char err[200];		/* when nothing came */
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
+	char refresh[2048];	/* a page's Refresh header, "" none */
 } FETCH;
 
 #ifndef EW_ST
@@ -727,10 +733,17 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 					f->data[0] = 0;
 				f->len = 0;
 			}
+			/* a page's Refresh header (one too long for the buffer is
+			   dropped: its address cut short would be another) */
+			if (accept == NULL && http_header(rs, "Refresh", f->refresh, sizeof f->refresh) != NULL &&
+			    strlen(f->refresh) == sizeof f->refresh - 1)
+				f->refresh[0] = 0;
 			if (f->status == 200 && post == NULL)
 				dc_put(key, f->url, rs->headers.s ? rs->headers.s : "", f->mime, f->charset, f->security,
 				       f->data, f->len);
-			if (f->status == 200 && keep) {
+			/* a page with a Refresh header isn't kept, here or on the disk
+			   (dc_put): from the cache it wouldn't go on */
+			if (f->status == 200 && keep && !f->refresh[0]) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				/* after a redirect, under where it came from too: the
 				   history keeps that address, and Back asks for it */
@@ -804,6 +817,10 @@ static ec_media media_of(const browser *b)
 /* the address the page's pictures are resolved against, while it is
    laid out */
 static const char *lay_base;
+/* the page is fetched anew for its refresh (NAV_REFRESH): its pictures
+   are asked for again, as their HTTP freshness says, as browsers do for
+   a document made anew (a camera's, a weather map, sent no-store) */
+static int lay_recheck;
 
 static void *image_cb(void *ud, const char *src, int32_t *w, int32_t *h)
 {
@@ -818,6 +835,8 @@ static void *image_cb(void *ud, const char *src, int32_t *w, int32_t *h)
 	im = img_get(url);
 	if (im == NULL)
 		return NULL;
+	if (lay_recheck)
+		img_recheck(im);
 	img_size(im, w, h);
 	return im;
 }
@@ -1190,21 +1209,25 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 	page *p;
 	if (!build(b, src->s, src->len, "utf-8", url, 0, &d, &p))
 		return BR_STOPPED;
-	show(b, d, p, url, "", 0, mode != NAV_RELOAD);
+	show(b, d, p, url, "", 0, mode == NAV_NEW || mode == NAV_HISTORY);
 	b->src_len = src->len;
 	b->src = sb_steal(src);
 	str_copy(b->mime, "text/html", sizeof b->mime);
 	if (mode == NAV_NEW)
 		hist_push(b, url);
+	else if (mode == NAV_REPLACE)
+		hist_set_url(b, url);
 	b->at = b->cur;
 	keep_trim(b);
-	b->scroll_to = mode == NAV_NEW ? -1 : b->hist[b->cur].y;
+	b->scroll_to = mode == NAV_NEW || mode == NAV_REPLACE ? -1 : b->hist[b->cur].y;
 	return BR_SHOWN;
 }
 
 /* a picture opened on its own: kept as the page's picture, and a page
-   that shows it, its name and size the title */
-static int picture_page(SBUF *s, FETCH *f)
+   that shows it, its name and size the title. anew: the page fetched
+   anew for its refresh (a camera's picture with a Refresh header), so
+   what came is the picture, changed or not */
+static int picture_page(SBUF *s, FETCH *f, int anew)
 {
 	ew_img *im = img_get(f->url);
 	const char *name = strrchr(f->url, '/');
@@ -1212,7 +1235,9 @@ static int picture_page(SBUF *s, FETCH *f)
 	long w, h;
 	if (im == NULL || !pic_size((const unsigned char *) f->data, f->len, &w, &h))
 		return 0;
-	if (img_state(im) != IMG_HERE) {
+	if (anew)
+		img_recheck(im);	/* (unchanged: as it was decoded) */
+	if (img_state(im) != IMG_HERE || img_stale(im)) {
 		char *copy = malloc((size_t) f->len);
 		if (copy == NULL)
 			return 0;
@@ -1230,6 +1255,183 @@ static int picture_page(SBUF *s, FETCH *f)
 	return 1;
 }
 
+/* ---------------------------------------------------------------- refresh */
+/* the HTML Standard's shared declarative refresh steps (4.2.5.3): the
+   Refresh header's value, else the content of the first <meta
+   http-equiv=refresh> the parser put in, parsed by doc_refresh_parse */
+
+static int refreshing;		/* the load is a refresh's (br_refresh_go) */
+
+/* what the status line says at rest once refreshes at once in a row
+   are stopped (refresh_arm), until the next load */
+static const char loop_note[] = "This page sends EWeb on at once again and again: it stays here.";
+
+void br_refresh_cancel(browser *b)
+{
+	if (b->refresh != NULL && b->refresh_s > 0)
+		b->note[0] = 0;		/* its "Going on to ..." */
+	free(b->refresh);
+	b->refresh = NULL;
+	b->refresh_pics = 0;
+	b->refresh_loop = 0;
+}
+
+long br_refresh_due(const browser *b)
+{
+	long ms;
+	if (b->refresh == NULL)
+		return -1;
+	if (b->refresh_pics)	/* not counting yet: its pictures come */
+		return b->refresh_s > 0 ? (long) b->refresh_s * 1000 : 1;
+	ms = (long) (b->refresh_at - pf_ms());
+	return ms > 0 ? ms : 0;
+}
+
+/* the page's pictures are in (br_pictures_pending): a refresh of the
+   page itself counts its seconds from now */
+static void refresh_count(browser *b)
+{
+	if (b->refresh_pics) {
+		b->refresh_pics = 0;
+		b->refresh_at = pf_ms() + b->refresh_s * 1000;
+	}
+}
+
+int br_refresh_note(const browser *b, char *out, int size)
+{
+	long ms = br_refresh_due(b);
+	unsigned long s;
+	char in[24];
+	if (b->refresh_loop) {
+		snprintf(out, size, "%s", loop_note);
+		return 1;
+	}
+	if (ms < 0 || b->refresh_s == 0)
+		return 0;	/* none, or at once: nothing to say */
+	s = b->refresh_pics ? b->refresh_s : ((unsigned long) ms + 999) / 1000;
+	if (s >= 120)
+		snprintf(in, sizeof in, "%lu min", (s + 30) / 60);
+	else
+		snprintf(in, sizeof in, "%lu s", s);
+	if (same_but_fragment(b->refresh, b->url)) {
+		if (*fragment(b->refresh))
+			snprintf(out, size, "This page goes to #%.24s in %s: Esc stops it.", fragment(b->refresh), in);
+		else
+			snprintf(out, size, "This page loads again in %s: Esc stops it.", in);
+	} else {
+		char host[128];
+		const char *name = strrchr(b->refresh, '/');
+		if (has_scheme(b->refresh, "file") && name != NULL)
+			str_copy(host, name + 1, sizeof host);
+		else
+			host_of(b->refresh, host, sizeof host);
+		snprintf(out, size, "Going on to %.48s in %.10s: Esc stays here.", host, in);
+	}
+	return 1;
+}
+
+/* one refresh (the header's value, a meta's content) for the page
+   shown, its address resolved against base: 0 when it isn't one (its
+   address doesn't parse, or is javascript:), so the next may be. (This
+   and refresh_arm are kept out of load_post: inlined, their 8 KB of
+   addresses sat on the stack under the whole load, and the ST edition's
+   48 KB ran out under a stylesheet fetched through the gateway.) */
+static __attribute__((noinline)) int refresh_set(browser *b, const char *value, const char *base)
+{
+	unsigned long secs;
+	const char *u;
+	size_t n;
+	char to[4096];
+	if (value == NULL || !doc_refresh_parse(value, &secs, &u, &n))
+		return 0;
+	if (u == NULL) {
+		str_copy(to, b->url, sizeof to);	/* the page itself */
+	} else {
+		char *href = str_ndup(u, (long) n);
+		int ok = href != NULL && resolve(base, href, to, sizeof to);
+		free(href);
+		if (!ok || has_scheme(to, "javascript"))
+			return 0;
+	}
+	/* one EWeb doesn't follow on its own (mailto:, data:, a file from a
+	   page on the web): the page stays, as the standard lets it ("do
+	   nothing") */
+	if (!has_scheme(to, "http") && !has_scheme(to, "https") &&
+	    !(has_scheme(to, "file") && has_scheme(b->url, "file")))
+		return 1;
+	b->refresh = str_ndup(to, (long) strlen(to));
+	b->refresh_s = secs;
+	b->refresh_at = pf_ms() + secs * 1000;
+	/* another page: its seconds count from now, the pictures of the
+	   page left not waited for (one that goes on at once fetches none);
+	   the page itself, or a place on it: from when its pictures are in,
+	   as the standard says ("completely loaded"), so that a page that
+	   refreshes itself shows them each time */
+	b->refresh_pics = b->refresh != NULL && same_but_fragment(to, b->url);
+	return 1;
+}
+
+/* after a page is shown: its refresh, if it has one; hdr its Refresh
+   header ("" none), which the document is made with, before any meta */
+static __attribute__((noinline)) void refresh_arm(browser *b, const char *hdr)
+{
+	char base[4096];
+	doc *d = b->d;
+	const drefresh *m;
+	int found = hdr[0] && refresh_set(b, hdr, b->url);
+	for (m = d != NULL ? d->refresh : NULL; !found && m != NULL; m = m->next) {
+		/* as the parser put it in, against the base the page had then */
+		if (m->based)
+			base_of(b, d, b->url, base, sizeof base);
+		else
+			str_copy(base, b->url, sizeof base);
+		found = refresh_set(b, m->content, base);
+	}
+	if (b->refresh == NULL)
+		return;
+	if (b->refresh_s == 0 && b->refresh_run >= BR_REFRESH_RUN) {
+		/* at once, again and again (a page that refreshes itself, two
+		   that send each other on): browsers go on for ever. Said at
+		   rest, so it comes back after the pictures' lines */
+		br_refresh_cancel(b);
+		b->refresh_loop = 1;
+		snprintf(b->note, sizeof b->note, "%s", loop_note);
+		return;
+	}
+	br_refresh_note(b, b->note, sizeof b->note);
+}
+
+int br_refresh_go(browser *b)
+{
+	char *to = b->refresh;
+	int r;
+	if (to == NULL)
+		return BR_STOPPED;
+	b->refresh = NULL;
+	b->refresh_pics = 0;
+	if (b->refresh_s > 0)
+		b->note[0] = 0;		/* its "Going on to ..." */
+	b->refresh_run = b->refresh_s == 0 ? b->refresh_run + 1 : 0;
+	if (*fragment(to) && same_but_fragment(to, b->url)) {
+		/* a place on the page: scrolled to, the page staying, its
+		   address in the history changed (the standard's navigation to
+		   a fragment, "replace"; Chrome's too) */
+		hist_set_url(b, to);
+		str_copy(b->url, to, sizeof b->url);
+		b->scroll_to = anchor_y(b, to);
+		free(to);
+		return BR_SAME;
+	}
+	refreshing = 1;
+	/* the page itself is asked for anew (NAV_REFRESH: as Chrome does, a
+	   page that refreshes itself is there for that), its stylesheets
+	   as any page's; another takes its place in the history */
+	r = load(b, to, same_but_fragment(to, b->url) ? NAV_REFRESH : NAV_REPLACE);
+	refreshing = 0;
+	free(to);
+	return r;
+}
+
 /* post: a form sent with POST to url, else NULL */
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
@@ -1242,6 +1444,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 
 	conn_stop = 0;
 	b->elsewhere[0] = 0;
+	br_refresh_cancel(b);		/* any load: the page shown's refresh goes */
+	if (!refreshing)
+		b->refresh_run = 0;
 	if (has_scheme(url, "javascript") || has_scheme(url, "data"))
 		return BR_STOPPED;	/* nothing EWeb can do with it */
 	if (has_scheme(url, "mailto")) {
@@ -1292,8 +1497,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
-	r = fetch(b, url, b->typed ? NULL : b->url, mode == NAV_RELOAD ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0,
-		  1, post, f);
+	r = fetch(b, url, b->typed ? NULL : b->url,
+		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {
@@ -1311,14 +1516,16 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	/* what it is */
 	if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
+		lay_recheck = mode == NAV_REFRESH;
 		r = build(b, f->data, f->len, f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+		lay_recheck = 0;
 	} else if (strncmp(f->mime, "text/", 5) == 0) {
 		text_page(&src, f->data, f->len);
 		r = build(b, src.s, src.len, f->charset[0] ? f->charset : "windows-1252", f->url, 0, &d, &p);
 	} else if (b->pictures && (pic_kind((const unsigned char *) f->data, f->len) == PIC_JPEG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_PNG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF) &&
-		   picture_page(&src, f)) {
+		   picture_page(&src, f, mode == NAV_REFRESH)) {
 		/* a picture on its own: a page that shows it */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	} else if (!has_scheme(f->url, "file") && f->status >= 200 && f->status < 300) {
@@ -1336,6 +1543,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and "
 			 "JPEG, PNG and GIF pictures; other files it saves.", f->mime, f->len);
 		error_page(&src, f->url, "EWeb can't show this", why, NULL);
+		f->refresh[0] = 0;	/* EWeb's own page in its place goes nowhere */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	}
 	sb_free(&src);
@@ -1369,7 +1577,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			strcat(shown, "#");
 			strcat(shown, fr);
 		}
-		show(b, d, p, shown, f->security, f->status, mode != NAV_RELOAD);
+		show(b, d, p, shown, f->security, f->status, mode == NAV_NEW || mode == NAV_HISTORY);
 		if (f->stale && b->note[0] == 0)
 			snprintf(b->note, sizeof b->note, "%s",
 				 "From the cache: the server couldn't be reached, so it may be out of date.");
@@ -1383,8 +1591,13 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			hist_set_url(b, shown);
 		b->at = b->cur;
 		keep_trim(b);
+		/* a page loaded anew: its refresh. Back and Forward leave it be,
+		   as the standard lets them (a page that goes on at once would
+		   otherwise make Back go nowhere) */
+		if (mode != NAV_HISTORY)
+			refresh_arm(b, f->refresh);
 	}
-	if (mode == NAV_NEW)
+	if (mode == NAV_NEW || mode == NAV_REPLACE)
 		b->scroll_to = anchor_y(b, b->url);
 	else
 		b->scroll_to = b->hist[b->cur].y;
@@ -1451,6 +1664,7 @@ void br_free(browser *b)
 		doc_free(b->d);
 	free(b->src);
 	br_dl_free(b);
+	br_refresh_cancel(b);
 	b->p = NULL;
 	b->d = NULL;
 	b->src = NULL;
@@ -1891,6 +2105,8 @@ static int go_to(browser *b, int i)
 	int old = b->cur, r;
 	if (i < 0 || i >= b->nhist)
 		return BR_STOPPED;
+	br_refresh_cancel(b);
+	b->refresh_run = 0;
 	if (b->p != NULL && same_but_fragment(b->hist[i].url, b->url)) {
 		b->cur = i;
 		str_copy(b->url, b->hist[i].url, sizeof b->url);
@@ -1915,6 +2131,7 @@ static int go_to(browser *b, int i)
 		b->src_len = src_len;
 		b->src = src;
 		str_copy(b->mime, e->mime, sizeof b->mime);
+		b->note[0] = 0;		/* (the last page built's) */
 		b->cur = i;
 		b->at = i;
 		b->ms_fetch = b->ms_parse = b->ms_style = b->ms_layout = 0;
@@ -2074,9 +2291,16 @@ static int to_do(const browser *b, const dl_item *d)
 	if (d->type != DL_IMAGE)
 		return 0;
 	st = img_state(im);
-	if (st == IMG_WAITING)
-		return !b->pic_stopped;
+	/* to fetch, or to fetch again (img_recheck), unless Esc stopped them */
+	if ((st == IMG_WAITING || img_stale(im)) && !b->pic_stopped)
+		return 1;
 	return st == IMG_HERE && !(d->flags & DLF_ALT) && !img_tried(im, DL_PIC_W(d), DL_PIC_H(d));
+}
+
+/* the picture is to be fetched now (to_do's first case) */
+static int to_fetch(const browser *b, const ew_img *im)
+{
+	return img_state(im) == IMG_WAITING || (img_stale(im) && !b->pic_stopped);
 }
 
 /* the item to work on next: in the window first, then below, then above */
@@ -2116,6 +2340,7 @@ int br_pictures_pending(browser *b)
 		if (to_do(b, &b->p->items[i]))
 			return 1;
 	dc_job_end();		/* the page's pictures have come: into the pack */
+	refresh_count(b);	/* (the page loaded, as the standard has it) */
 	return 0;
 }
 
@@ -2132,7 +2357,7 @@ static int waiting(const browser *b)
 	int n = 0;
 	for (i = 0; i < b->p->nitems; i++) {
 		const dl_item *d = &b->p->items[i];
-		if (d->type != DL_IMAGE || img_state(d->img) != IMG_WAITING)
+		if (d->type != DL_IMAGE || !to_fetch(b, d->img))
 			continue;
 		for (k = 0; k < i; k++)
 			if (b->p->items[k].type == DL_IMAGE && b->p->items[k].img == d->img)
@@ -2334,17 +2559,25 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 		goto relayout;
 	}
 	im = b->p->items[k].img;
-	if (img_state(im) == IMG_WAITING) {
+	if (to_fetch(b, im)) {
+		int again = img_stale(im);
 		int r = fetch_picture(b, im, 0, 0);
 		if (r < 0) {
 			img_waiting(im);
 			return BRP_STOPPED;
 		}
 		ms_fetch = pf_ms() - t0;
-		if (r == 0) {
+		if (r == 0 && again && img_state(im) == IMG_HERE) {
+			/* asked for again, it didn't come (the server couldn't
+			   be reached): shown as it was */
+			img_kept(im);
+			log_img(b, im, "kept (it didn't come again)", ms_fetch, 0);
+		} else if (r == 0) {
 			img_failed(im);
 			snprintf(what, sizeof what, "failed (%s)", img_why(im));
 			log_img(b, im, what, ms_fetch, 0);
+		} else if (r == 2) {
+			log_img(b, im, "unchanged", ms_fetch, 0);	/* asked for again: as it was decoded */
 		}
 		fetched = 1;
 		/* laid out with a size it hasn't: laid out again */

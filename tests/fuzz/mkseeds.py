@@ -112,6 +112,9 @@ for name, first, page in [
     ("utf16", 5, "<\0p\0>\0h\0\x01\xd8\x37\xdc"),
     ("broken", 0, "<p>\xff\xc3(\xe2\x82\xf0\x9f\x98<a <b\0c=\"\0\" d='' e=f\0g> "
      "</b x=1/> &# &#x; &#99999999999; &unknown; &amp"),
+    ("refresh", 0, "<meta http-equiv=refresh content=x><template><meta http-equiv=Refresh content=1>"
+     "</template><noscript><meta http-equiv=REFRESH content='.5, URL=\"a\"b'></noscript><base href=/b/>"
+     "<p><meta http-equiv=refresh content='0;url=javascript:x'><meta http-equiv=refresh content=3>"),
 ]:
     put("html", name, bytes([first]) + page.encode("latin-1"))
 

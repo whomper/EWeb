@@ -25,10 +25,22 @@
   the page of pictures from the disk, each picture in the screen's own
   colours.
 
+- refresh (the Falcon, pages from the disk): a page whose <meta
+  http-equiv=refresh> goes on to another in 20 s, said on the status line,
+  then shown in its place in the history (Undo goes to the page before
+  it); a page with pictures says it again once they are in (and the
+  ribbon goes); Esc keeps a page whose refresh waits; while the address
+  field has the keyboard it waits, and goes on after Tab; a page that
+  refreshes itself at once waits for its picture (read again, not decoded
+  again), and stops after five, saying so; two that send each other on
+  stop after five too, and the status line says so after the pictures of
+  the one they stop on. The status line is read from the "status" lines
+  win_status() logs at each change.
+
 EWEB.PRG says what it does as "EWEB ..." lines through NatFeats; each step
 waits for the line it expects, then a screenshot goes to OUT.
 
-    tests/hatari/gui_test.py OUT [browse] [scripts] [screens] [st] [gateway] [falcon] [deep]"""
+    tests/hatari/gui_test.py OUT [browse] [scripts] [screens] [st] [gateway] [falcon] [deep] [refresh]"""
 import os
 import re
 import shutil
@@ -44,7 +56,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep", "refresh"]
 # GUI_SLOT=N gives the rigs their own ports and X display, so two trees
 # can run them at once
 SLOT = int(os.environ.get("GUI_SLOT", "0"))
@@ -894,6 +906,143 @@ def deep():
             r.end()
 
 
+def bar(r):
+    """what the status bar says now: win_status() logs each change ("status ...")"""
+    said = [e for e in r.events() if e == "status" or e.startswith("status ")]
+    return said[-1][7:] if said else None
+
+
+LOOP_NOTE = "This page sends EWeb on at once again and again: it stays here."
+
+
+def refresh():
+    """a refresh (<meta http-equiv=refresh>) on the Falcon, from the disk:
+    the idle loop's timer, the status line, Esc, the loop stopped"""
+    hd = hd_for("refresh", r"C:\TABLES.HTM")
+    pages = {"REFRESH.HTM": "<meta http-equiv=refresh content='20; url=TEXT.HTM'><p>On to the text in 20 s.",
+             "STAY.HTM": "<meta http-equiv=refresh content='600; url=TABLES.HTM'><p>Esc keeps this page."
+                         "<p><img src=PHOTO.JPG width=120 height=80 alt=photo> <img src=LOGO.PNG alt=logo>",
+             # (a picture this group shows nowhere else: not yet decoded)
+             "LOOP.HTM": "<meta http-equiv=refresh content=0><p>Again and again. <img src=PROG.JPG width=80 alt=p>",
+             # two that send each other on at once; the one it stops on has
+             # pictures shown nowhere else in the group, which come after
+             # the message
+             "ONE.HTM": "<meta http-equiv=refresh content='0; url=TWO.HTM'><p>One. <img src=BIG.PNG width=200 alt=big>",
+             "TWO.HTM": "<meta http-equiv=refresh content='0; url=ONE.HTM'><p>Two. <img src=ANIM.GIF alt=gif>"
+                        " <img src=COUNTER.PNG width=40 height=40 alt=counter>"}
+    for name, body in pages.items():
+        with open(os.path.join(hd, name), "w") as f:
+            f.write("<!DOCTYPE html><title>%s</title>%s" % (name[:-4].title(), body))
+    r = Run("refresh", "Falcon:16", hd)
+    try:
+        ev = r.wait(r"shown ", 600)
+        if not check("refresh: the start page", ev is not None and ev.startswith("shown file:///C:/TABLES.HTM "),
+                     str(r.events())):
+            return
+        r.key(L, (CTRL,))
+        r.type("file:///C:/REFRESH.HTM")
+        mark = len(r.events())
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 300)
+        t0 = time.time()
+        time.sleep(0.5)
+        r.shot(0)
+        said = [e for e in r.events()[mark:] if e.startswith("status ")]
+        check("refresh: a page that goes on, said on the status line", ev is not None and
+              ev.startswith("shown file:///C:/REFRESH.HTM ") and
+              "status Going on to TEXT.HTM in 20 s: Esc stays here." in said and
+              re.match(r"Going on to TEXT\.HTM in (20|1?\d) s: Esc stays here\.$", bar(r) or "") is not None,
+              "\n".join(r.events()[mark:]))
+        went = r.wait(r"refresh ", 120)
+        span = time.time() - t0     # the emulated 20 s, in real seconds (fast-forward)
+        ev = r.wait(r"shown ", 300)
+        r.shot(1)
+        check("refresh: on to the page it names when its time is up", went == "refresh 20 file:///C:/TEXT.HTM" and
+              ev is not None and ev.startswith("shown file:///C:/TEXT.HTM "), str(r.events()))
+        r.key(UNDO)
+        ev = r.wait(r"shown ", 300)
+        check("refresh: in the page's place (Undo goes to the one before)", ev is not None and
+              ev.startswith("shown file:///C:/TABLES.HTM "), str(r.events()))
+        r.key(L, (CTRL,))
+        r.type("file:///C:/STAY.HTM")
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 300)
+        mark = r.seen
+        # its pictures' lines on the status bar, then the refresh again
+        pics = r.wait(r"pictures file:///C:/STAY\.HTM ", 300)
+        time.sleep(1)
+        r.shot(5)
+        check("refresh: said again once the pictures are in", pics is not None and
+              any(e.startswith("status Pictures: ") for e in r.events()[mark:]) and
+              bar(r) == "Going on to TABLES.HTM in 10 min: Esc stays here.", "\n".join(r.events()[mark:]))
+        r.key(ESC)
+        stopped = r.wait(r"refresh stopped$", 30)
+        time.sleep(4)
+        r.shot(2)
+        check("refresh: Esc keeps the page", ev is not None and ev.startswith("shown file:///C:/STAY.HTM ") and
+              stopped is not None and not any(e.startswith("refresh ") for e in r.events()[r.seen:]) and
+              bar(r) == "Staying on this page.", str(r.events()[-10:]))
+        # while the address field has the keyboard it waits (what is typed
+        # there would go); Tab gives the keyboard back, and it goes on
+        r.key(L, (CTRL,))
+        r.type("file:///C:/REFRESH.HTM")
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 300)
+        r.key(L, (CTRL,))
+        time.sleep(max(2 * span, 4))
+        held = not any(e.startswith("refresh ") for e in r.events()[r.seen:])
+        r.shot(4)
+        r.key(TAB)
+        went = r.wait(r"refresh ", 120)
+        after = r.wait(r"shown ", 300)
+        check("refresh: it waits while the address field has the keyboard (%.1f s)" % span,
+              ev is not None and ev.startswith("shown file:///C:/REFRESH.HTM ") and held and
+              went == "refresh 20 file:///C:/TEXT.HTM" and after is not None and
+              after.startswith("shown file:///C:/TEXT.HTM "), str(r.events()))
+        # itself at once: each time once its picture is in (read again,
+        # the same: not decoded again), stopped after five, and said so
+        # on the status line once its picture is in the last time
+        r.key(L, (CTRL,))
+        r.type("file:///C:/LOOP.HTM")
+        r.key(RETURN)
+        note = r.wait(r"note ", 600)
+        pics = r.wait(r"pictures file:///C:/LOOP\.HTM ", 300)
+        time.sleep(1)
+        r.shot(3)
+        evs = r.events()
+        start = max(i for i, e in enumerate(evs) if e.startswith("shown file:///C:/TEXT.HTM "))
+        shown = [e for e in evs[start:] if e.startswith("shown file:///C:/LOOP.HTM ")]
+        went = [e for e in evs[start:] if e.startswith("refresh 0 file:///C:/LOOP.HTM")]
+        first = [e.split()[0] for e in evs[start:] if e.startswith(("pictures file:///C:/LOOP.HTM ", "refresh 0 "))]
+        prog = [e.split()[2] for e in evs[start:] if e.startswith("picture file:///C:/PROG.JPG ")]
+        check("refresh: a page that refreshes itself at once stops after 5", len(shown) == 6 and len(went) == 5 and
+              note == "note " + LOOP_NOTE and pics is not None and bar(r) == LOOP_NOTE, "\n".join(evs[start:]))
+        check("refresh: itself again once its picture is in, read again (not decoded again)",
+              first[:2] == ["pictures", "refresh"] and prog.count("unchanged") == 5 and
+              prog.count("decoded") + prog.count("from") == 1, "\n".join(evs[start:]))
+        # two that send each other on at once: stopped after five, and the
+        # status line says so after the pictures of the one it stops on
+        r.key(L, (CTRL,))
+        r.type("file:///C:/ONE.HTM")
+        r.key(RETURN)
+        note = r.wait(r"note ", 600)
+        mark = r.seen
+        pics = r.wait(r"pictures file:///C:/TWO\.HTM ", 300)
+        time.sleep(2)
+        r.shot(6)
+        evs = r.events()
+        start = max(i for i, e in enumerate(evs) if e.startswith("shown file:///C:/LOOP.HTM "))
+        went = [e for e in evs[start:] if e.startswith("refresh 0 ")]
+        check("refresh: two that send each other on stop after 5, said once the pictures are in",
+              len(went) == 5 and note == "note " + LOOP_NOTE and pics is not None and
+              any(e.startswith("status Pictures: ") for e in evs[mark:]) and bar(r) == LOOP_NOTE,
+              "\n".join(evs[start:]))
+        r.key(Q, (CTRL,))
+        check("refresh: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
+    finally:
+        r.end()
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -917,5 +1066,7 @@ if "falcon" in WHICH:
     falcon()
 if "deep" in WHICH:
     deep()
+if "refresh" in WHICH:
+    refresh()
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

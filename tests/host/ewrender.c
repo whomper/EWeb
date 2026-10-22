@@ -51,6 +51,10 @@
  * answering OK; then -K ID clicks the element with that id (again for
  * more; "a script loaded" and the load's result when one sent the
  * browser on), and -T MS lets the page's timers run for MS ms.
+ * -r N follows the page's refresh (<meta http-equiv=refresh>, the
+ * Refresh header) when it is due, up to N times ("refresh:" where to,
+ * "refreshed:" what came); -b then goes Back ("(refresh)" when the page
+ * there has one waiting).
  * -S KB: the stack the cascade and the layout may take (ec_stack_floor;
  * all but a MB of the stack by default); "deep:" on stderr when a page was
  * cut there.
@@ -385,7 +389,7 @@ int main(int argc, char **argv)
 	SBUF extra;
 	const char *fill[32], *send = NULL;
 	int rc = 0;
-	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0;
+	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0, refreshes = 0;
 	const char *clicks[16];
 	const char *save_to = NULL;
 
@@ -460,6 +464,8 @@ int main(int argc, char **argv)
 			clicks[nclick++] = argv[++i];
 		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
 			timers = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-r") && i + 1 < argc)
+			refreshes = atoi(argv[++i]);	/* refreshes followed, each when it is due */
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
 			save_to = argv[++i];
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
@@ -645,6 +651,25 @@ int main(int argc, char **argv)
 	for (i = 0; i < nclick; i++) {
 		click(&b, clicks[i]);
 		pictures(&b);
+	}
+	if (refreshes > 0) {
+		/* the page's refresh (<meta http-equiv=refresh>, the Refresh
+		   header), waited for and followed, as EWEB.PRG's idle loop does;
+		   -b then goes Back */
+		long due;
+		int k;
+		for (k = 0; k < refreshes && (due = br_refresh_due(&b)) >= 0; k++) {
+			printf("refresh: %lu s %s\n", b.refresh_s, b.refresh);
+			if (due > 0)
+				usleep((useconds_t) due * 1000);
+			r = br_refresh_go(&b);
+			pictures(&b);
+			printf("refreshed: %d \"%s\" %s\n", r, b.title, b.url);
+		}
+		if (back_after && send == NULL) {
+			r = br_back(&b);
+			printf("back: %d \"%s\" %s%s\n", r, b.title, b.url, br_refresh_due(&b) >= 0 ? " (refresh)" : "");
+		}
 	}
 	if (b.note[0])
 		printf("note: %s\n", b.note);

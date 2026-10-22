@@ -19,6 +19,8 @@ void *heap_realloc(void *p, size_t n);
 
 #define CORE (96L * 1024 * 1024)
 
+short _is_acc;		/* crt0.S's, which the heap asks: a program here */
+
 static char *core;
 static size_t used;
 

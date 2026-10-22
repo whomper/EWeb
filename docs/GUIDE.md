@@ -73,6 +73,22 @@ connects, cyan as the page comes, magenta for its stylesheets, yellow
 while the page is laid out, green as its pictures come. **Esc**,
 **Undo** or the Stop button stop it, and the page you were on stays.
 
+## Pages that go on by themselves
+
+Some pages send you on to another after a while, or load themselves
+again (a "refresh"): a page that has moved, a search engine's link
+to a result, a news page that keeps itself up to date. EWeb does as
+they ask once the page is shown (a page that loads itself again,
+once its pictures are in too, and then shows its pictures as they
+are now: a camera's, a weather map), and the status bar says what is
+coming: "Going on to example.com in 5 s: Esc stays here." **Esc** or
+the Stop button keep the page you are on, and while you type in the
+address field the page waits for you. The page that sent you on isn't
+kept in Back's list, so **Undo** goes to the page before it; Back and
+Forward show a page without sending you on again. A page that sends
+you on at once, again and again, is stopped after five times, and the
+status bar says so until you go elsewhere.
+
 ## Pictures
 
 A page is shown as soon as its text is laid out; its pictures come
@@ -278,7 +294,7 @@ choose all of it.
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |
-| Esc | stop a page loading, or its pictures |
+| Esc | stop a page loading, or its pictures; stay on a page that would go on |
 | Up, Down | scroll; with Shift, a page |
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |

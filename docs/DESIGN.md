@@ -1196,9 +1196,10 @@ stays fresh (`max-age`, else `Expires` less `Date`, else a tenth of the time sin
 `Last-Modified`, a day at most, less its `Age`; a year at most), then asked for again with its
 `ETag` or date, a 304 keeping what is there. Not kept: `no-store`, `Vary: *`, a page that sets
 a cookie (it may be one person's; a picture or stylesheet that does is kept, as browsers' own
-caches keep them, since 21 Oct 2026), one with nothing to go by, and one bigger than a quarter of
-the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it however old it is, as browsers do; Reload asks the
-server again (a 304 when it is unchanged).
+caches keep them, since 21 Oct 2026), one with a `Refresh` header (the index keeps no headers, so
+from the cache it wouldn't go on; since 22 Oct 2026), one with nothing to go by, and one bigger
+than a quarter of the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it
+however old it is, as browsers do; Reload asks the server again (a 304 when it is unchanged).
 
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
 `CACHE\EWEB.IDX` the index, read in one open the first time the cache is needed and written at quit.
@@ -1490,6 +1491,86 @@ before this went to 49,149 bytes of its 49,152 on a page 60 deep, and a page 300
 ewrender `-S`, and 60 deep, whole). The crash catcher (`common/atari/crash.c`) now also takes a fault
 in the program's own supervisor code, a wild jump while it runs and line F, so a crash leaves
 `CRASH.LOG` even when only a cold boot recovers the machine.
+
+## Refresh: `<meta http-equiv=refresh>` and the `Refresh` header (22 Oct 2026)
+
+A page that sends you on with a `<meta http-equiv=refresh>` or the `Refresh` header went nowhere:
+EWeb read neither. Pages that have moved do it, and DuckDuckGo's HTML results lead to the site
+through a page of theirs (`/l/?uddg=`) believed to forward this way (not yet seen from here: the
+audit couldn't fetch one), so a result clicked would show a blank page. Now EWeb does as the HTML
+Standard says (4.2.5.3, the Refresh state and the shared declarative refresh steps):
+- **Which:** the page's `Refresh` header first (the document is made with it), else the first
+  `<meta http-equiv=refresh>` the parser puts in whose content is one. The standard runs its steps
+  as each `<meta>` is inserted, so the parser notes each such meta then (`src/doc/html.c`, the
+  in-head rules every `<meta>` goes through; `doc.refresh`, at most 16): its content as it is then
+  (a script changing it after changes nothing), whether a `<base href>` was in by then, and in the
+  order they went in, which a table's foster parenting can make other than the tree's. No element
+  pays for it: one in a `<template>` isn't in the document, one in `<noscript>` is there only when
+  the site's scripts don't run (the parser keeps `<noscript>` as text when they do), and
+  innerHTML's don't count. The content is parsed step by step as the standard does it
+  (`doc_refresh_parse`: the time, its fraction ignored, `;` or `,`, `url=` with or without quotes);
+  the address is resolved against the `<base>` if one was in when the meta went in (one after it
+  doesn't count). One that is `javascript:`, or doesn't parse, is passed over for the next.
+- **When:** the standard's "completely loaded", the page with its pictures, for a refresh of the
+  page itself or a place on it, as Chrome does: a page that reloads itself every ten seconds shows
+  its pictures each time, however slowly they come (from 22 Oct 2026, review: the countdown began
+  when the page was shown, and a picture slower than it was cut short, and fetched again from its
+  start, each time). A refresh to another page counts from when the page is shown, without waiting
+  for the pictures of the page being left: one that goes on at once fetches none, and one that goes
+  on in five seconds goes even while its pictures still come (the one coming is cut short). The GEM
+  side's idle loop (both editions) wakes for it as for a script's timer.
+- **How:** in the page's place in the history (the standard's "replace"), so Back goes to the page
+  before it, not to one that sends you on again. The page itself is fetched anew (`NAV_REFRESH`:
+  its stylesheets as any page's, not again as Reload asks for them; Chrome validates the page
+  only), which a page that refreshes itself is for; a place on it (`url=#top`, or no address on a
+  page shown at a fragment) is scrolled to, the page staying, as the standard and Chrome do (until
+  the review it was loaded again, five times, and then stopped as a loop). Back and Forward don't
+  start a page's refresh again, as the standard allows ("do nothing"); Reload does. An address
+  EWeb doesn't open on its own (`mailto:`, `data:`, a file from a page on the web) leaves the page.
+- **Its pictures, as they are now:** a page fetched anew for its refresh asks for its pictures
+  again as their HTTP freshness says, as browsers do for a document made anew (`img_recheck`, from
+  the layout of a `NAV_REFRESH` page): one sent `no-store`, or out of date, comes again from the
+  server (a 304 when it is unchanged), one still fresh is read from the disk cache, and a file from
+  the disk again; meanwhile the picture EWeb has is shown, and one that came the same isn't decoded
+  again. A picture opened on its own with a `Refresh` header (a camera's JPEG) is the page itself,
+  and changes with it. Until the review's second round (22 Oct 2026) `img.c` kept each picture by
+  its address, so a camera's picture or a weather map stayed the first one for ever while the page
+  around it came again. Reload (^R) still shows the pictures EWeb has, as before: asking for them
+  all again would read every picture of the page again from the disk cache or the network.
+- **What you see:** "Going on to example.com in 5 s: Esc stays here." (or "This page loads again in
+  30 min: Esc stops it.") on the status line, with the time left, whenever nothing else is said
+  there (a picture's line, a button's or a link's name), so it comes back after them; Esc, Stop
+  (enabled meanwhile) or any other load cancel it, and EWeb says "Staying on this page." Stop then
+  stops only that, not the requests of the page's scripts. While the address field has the keyboard
+  it waits, so that what is typed there isn't lost. A page that goes on at once, again and again
+  (itself, or two that send each other on), stops after five in a row (`BR_REFRESH_RUN`): "This page
+  sends EWeb on at once again and again: it stays here." Browsers go on for ever. That is what the
+  status line says at rest until the next load, so it comes back after the pictures of the page it
+  stops on (until the review's second round it was said once, and the pictures' lines took its
+  place: two pages sending each other on fetch no pictures until the last).
+- **The caches:** a page with a `Refresh` header isn't kept, in memory or on the disk, as the header
+  wouldn't come with it. Through the Pi webgate passes the header on as the server sent it; the Pi's
+  browser (snapshots, live view) follows a refresh itself.
+
+Measured: 68030 instructions for EWeb's document (`build/m68k/docparse`) on the page set, 1,328.0 M
+before and 1,328.3 M after (+0.02%; the median page +912 instructions, the most +4,942: each
+`<meta>`'s attributes looked at for `http-equiv`). Noting the meta in `doc.c`'s walk after the parse
+instead cost +0.12%, a test on every element; that is why the parser does it. The code that works
+out the refresh after the page is built is kept out of `load_post` (`noinline`): inlined, its 8 KB
+of addresses sat on the stack under the whole load, and the ST edition's 48 KB ran out under a
+stylesheet fetched through the gateway (3 bombs, `make hatarigui`'s `st` group); `load_post`'s frame
+is as before, 4,252 bytes on the ST.
+`tests/browse/rftest.c` (`make test`) has the Web Platform Tests' 73 parsing cases, each address
+resolved as the test does, and which `<meta>`s count; `make itest` the pages of `/site/refresh/`
+(the header before the meta, a `<base>` before and after, `<noscript>` with scripts and without, a
+`javascript:` address, a script changing the content, a table's order, the loop, a page refreshing
+itself with its stylesheet asked for once and after its slow picture, a place on the page, Back,
+the disk cache, the header through webgate, and a camera's page whose pictures are asked for again:
+no-store each time, one kept an hour once, a no-cache one a 304); `make hatarigui`'s `refresh` group
+the status line (again after the pictures), the timer, Undo, Esc, the address field and the loops
+(itself, its picture read again but not decoded again; two pages sending each other on) on the
+Falcon. The status line is read from what `win_status` logs at each change (`status ...`), not
+worked out from the browser's state.
 
 ## The design
 

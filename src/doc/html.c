@@ -364,6 +364,10 @@ typedef struct P {
 	const ec_atom *a_class, *a_id;
 	uint16_t enc;			/* the encoding (MIB enum) */
 	uint16_t changed;		/* <meta charset> said this one: start again */
+	/* the page's refresh: a <base href> is in, and the <meta>s noted
+	   (meta_refresh), the next going at *rend */
+	uint8_t based, nrefresh;
+	drefresh **rend;
 } P;
 
 static void oom(P *p)
@@ -2725,6 +2729,36 @@ static void meta_charset(P *p)
 	p->stop = 1;
 }
 
+/* a <meta> inserted: the Refresh state's steps run for it then, so one
+   whose content is one is noted as it is now (a script may change it
+   after) with the <base> the page has now, in the order put in (which
+   a table's foster parenting can make other than the tree's); the
+   first whose address can be used is the page's refresh (src/browse).
+   Not a fragment's. */
+static void meta_refresh(P *p, dnode *n)
+{
+	uint32_t i;
+	if (p->ctx != NULL || p->nrefresh >= DOC_REFRESH_METAS)
+		return;
+	/* most <meta>s have no http-equiv: its length first */
+	for (i = 0; i < p->t.na; i++)
+		if (p->t.a[i].nl == 10 && memcmp(p->t.a[i].n, "http-equiv", 10) == 0) {
+			if (tval_is(&p->t.a[i], "refresh") && doc_refresh_meta(n)) {
+				const char *c = dn_attr(n, "content");
+				size_t len = strlen(c);
+				drefresh *r = dalloc(p, sizeof *r + len + 1);
+				r->next = NULL;
+				r->content = (char *) (r + 1);
+				memcpy(r + 1, c, len + 1);
+				r->based = p->based;
+				*p->rend = r;
+				p->rend = &r->next;
+				p->nrefresh++;
+			}
+			return;
+		}
+}
+
 static int m_in_head(P *p)
 {
 	TOKEN *t = &p->t;
@@ -2745,6 +2779,11 @@ static int m_in_head(P *p)
 			process_in(p, M_IN_BODY);
 			return DONE;
 		case H_BASE:
+			/* the document's base from now on (a template's contents
+			   aren't in the document) */
+			if (tok_attr(t, "href") != NULL && !template_open(p))
+				p->based = 1;
+			/* fall through */
 		case H_BASEFONT:
 		case H_BGSOUND:
 		case H_LINK:
@@ -2752,7 +2791,7 @@ static int m_in_head(P *p)
 			pop(p);
 			return DONE;
 		case H_META:
-			insert_tok(p, DN_NS_HTML);
+			meta_refresh(p, insert_tok(p, DN_NS_HTML));
 			pop(p);
 			meta_charset(p);
 			return DONE;
@@ -4970,6 +5009,9 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		p.enc = enc;
 		p.tentative = (uint8_t) tentative;
 		d->elements = 0;
+		if (o->context == NULL)
+			d->refresh = NULL;	/* (a try before was another tree) */
+		p.rend = &d->refresh;
 		ok = run(&p, in, n, o);
 		free(in);
 		p_free(&p);

@@ -50,6 +50,13 @@ struct dnode {
 	struct fctl *ctl;		/* a form control: its state (form.h) */
 };
 
+/* a <meta http-equiv=refresh> as the parser put it in (doc.refresh) */
+typedef struct drefresh {
+	struct drefresh *next;		/* the next put in, or NULL */
+	const char *content;		/* its content then (a script may change it) */
+	uint8_t based;			/* a <base href> was in the document then */
+} drefresh;
+
 typedef struct doc {
 	dnode *root;			/* the document node */
 	dnode *html, *body;		/* NULL if the page has none */
@@ -62,6 +69,9 @@ typedef struct doc {
 	struct dblk *mem;		/* the blocks of memory (doc_alloc) */
 	uint32_t elements;
 	struct fctl *ctls;		/* the form controls, in document order (form.h) */
+	/* the <meta http-equiv=refresh>s the parser put in whose content is
+	   one (the HTML Standard's Refresh state), in that order, or NULL */
+	struct drefresh *refresh;
 	/* its scripts' state (src/js), let go first by doc_free */
 	void *js;
 	void (*js_free)(void *js);
@@ -92,6 +102,21 @@ void dn_remove_attr(doc *d, dnode *n, const char *name);
 /* after a script changed the tree: the element links, flags and hints
    the CSS engine reads, and the form controls, made again */
 void doc_refresh(doc *d);
+
+/* The parsing in the HTML Standard's shared declarative refresh steps
+   (4.2.5.3), for a <meta http-equiv=refresh>'s content and the Refresh
+   header: 1 when in is one, *secs its time (whole seconds, at most
+   DOC_REFRESH_MAX) and *url, *ulen the address as written, its quotes
+   gone (*url NULL: none, the page itself); 0 when it isn't (ignored). */
+#define DOC_REFRESH_MAX 2000000UL	/* 23 days: ms of it fit a long */
+int doc_refresh_parse(const char *in, unsigned long *secs, const char **url, size_t *ulen);
+/* n is a <meta http-equiv=refresh> whose content is one, not in a
+   template's contents (html.c asks as it inserts each <meta>) */
+int doc_refresh_meta(const dnode *n);
+/* the most doc.refresh holds: the first whose address can be used is
+   the page's refresh, so those after are wanted only when the ones
+   before are javascript: */
+#define DOC_REFRESH_METAS 16
 
 /* The page's stylesheets in document order: cb is called for each
    <style> with its text (is_link 0) and each <link rel=stylesheet> for a

@@ -108,7 +108,17 @@ typedef struct browser {
 	int scripts;
 	const char *script_sites;
 	char note[96];		/* about the page shown, for the status line ("" none): its
-				   scripts were too much, it came from the cache out of date */
+				   scripts were too much, it came from the cache out of date,
+				   it goes on to another page in a while */
+	/* the page shown's refresh (br_refresh_due): where it goes (malloc'ed;
+	   NULL none), after how many seconds, and when that is (pf_ms) */
+	char *refresh;
+	unsigned long refresh_s, refresh_at;
+	int refresh_run;	/* refreshes at once in a row that brought the page shown */
+	int refresh_pics;	/* the page itself again: its time counts once its
+				   pictures are in (refresh_at not yet set) */
+	int refresh_loop;	/* its refresh was stopped, at once again and again
+				   (BR_REFRESH_RUN): br_refresh_note says so */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening
@@ -171,6 +181,30 @@ enum {
 int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1);
 /* stop fetching this page's pictures (Esc) */
 void br_pictures_stop(browser *b);
+
+/* ---- the page shown's refresh: its Refresh header, else the first
+   <meta http-equiv=refresh> the parser put in (the HTML Standard's shared
+   declarative refresh steps). A page loaded anew (not by Back or Forward)
+   goes on to the address it gives its seconds after it is shown, or
+   comes again its seconds after its pictures are in (the standard's
+   "completely loaded"); any load, and Esc, cancel it. */
+
+/* refreshes at once (0 s) in a row EWeb follows: a page that refreshes
+   itself, or two that send each other on, stop after these */
+#define BR_REFRESH_RUN 5
+/* ms until it is due (0: now), -1 for none; the page itself again while
+   its pictures come: all its seconds (at least 1 ms) */
+long br_refresh_due(const browser *b);
+/* it is due: the page it goes to loaded in place of the page shown in
+   the history, the page itself fetched anew, or a place on it (BR_*) */
+int br_refresh_go(browser *b);
+/* Esc: no refresh for the page shown */
+void br_refresh_cancel(browser *b);
+/* what the status line says at rest while it waits, with the time left
+   ("Going on to example.com in 5 s: Esc stays here."), or once refreshes
+   at once in a row were stopped (until the next load): 0 when there is
+   nothing to say (none, or at once) */
+int br_refresh_note(const browser *b, char *out, int size);
 
 /* ---- the page shown's scripts (js.h) */
 

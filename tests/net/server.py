@@ -66,6 +66,23 @@ Pages:
                  the page set, and the cookies a script's request sends;
                  /site/tabs.html: tabs a click shows, an alert (EWEB.PRG
                  in Hatari)
+  /site/refresh/ a refresh: meta.html (a <meta http-equiv=refresh>),
+                 header.html (the Refresh header, before the page's meta),
+                 loop.html (itself at once, again and again), based.html
+                 and after.html (a <base> before the meta and after it),
+                 noscript.html, js.html (a javascript: address, then
+                 another), later.html (in a minute), selfcss.html (itself,
+                 with a stylesheet kept an hour), frag.html (a place on
+                 itself), jsset.html (a script changes the content),
+                 foster.html (a table puts the second meta first),
+                 slowpic.html (itself in 2 s, its picture 1.5 s coming),
+                 cam.html (itself every second: cam.png no-store, another
+                 each time; still.png kept an hour; valid.png no-cache, a
+                 304 when unchanged), campic.png (a picture on its own,
+                 itself every second by its Refresh header, another each
+                 time);
+                 to.html's title is "Arrived|QUERY|REFERER"; count (how
+                 often each was asked for)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
@@ -77,6 +94,7 @@ import ssl
 import subprocess
 import sys
 import threading
+import time
 import zlib
 
 rnd = random.Random(7)
@@ -92,6 +110,57 @@ FILES_PAGE = (b"<!DOCTYPE html><html><head><title>Files</title></head><body><p><
               b"<a href=/site/small.bin>A small file</a></p></body></html>")
 SMALL = bytes(range(256)) * 80
 CACHE_COUNT = {"fresh": 0, "etag": 0, "304": 0}
+# a refresh (<meta http-equiv=refresh>, the Refresh header): each page and
+# the headers it comes with; /site/refresh/to.html's title says what came
+# ("Arrived|QUERY|REFERER"), /site/refresh/count how often each was asked for
+REFRESH = {
+    "meta.html": (b"<!DOCTYPE html><title>Going on</title>"
+                  b"<meta http-equiv=\"Refresh\" content=\"0; URL='to.html?from=meta'\"><p>On to the next page.", ()),
+    # the header comes before any meta (it is kept an hour: not from the cache)
+    "header.html": (b"<!DOCTYPE html><title>Header</title><meta http-equiv=refresh content='0; url=wrong.html'>"
+                    b"<p>The header goes first.", (("Refresh", "1; url=to.html?from=header"),
+                                                   ("Cache-Control", "max-age=3600"))),
+    "loop.html": (b"<!DOCTYPE html><title>Loop</title><meta http-equiv=refresh content=0><p>Again.", ()),
+    # resolved against the base the page had when the meta was put in
+    "based.html": (b"<!DOCTYPE html><title>Based</title><base href=/site/refresh/sub/>"
+                   b"<meta http-equiv=refresh content='0;url=to.html?b=before'>", ()),
+    "after.html": (b"<!DOCTYPE html><title>After</title><meta http-equiv=refresh content='0;url=to.html?b=after'>"
+                   b"<base href=/site/refresh/sub/>", ()),
+    # a <noscript>'s, only when scripts don't run
+    "noscript.html": (b"<!DOCTYPE html><title>Noscript</title><noscript>"
+                      b"<meta http-equiv=refresh content='0; url=to.html?from=noscript'></noscript>", ()),
+    # javascript: isn't followed, so the next one is
+    "js.html": (b"<!DOCTYPE html><title>Script address</title>"
+                b"<meta http-equiv=refresh content='0; url=javascript:alert(1)'>"
+                b"<meta http-equiv=refresh content='0; url=to.html?from=second'>", ()),
+    "later.html": (b"<!DOCTYPE html><title>Later</title><meta http-equiv=refresh content='60; url=to.html'>", ()),
+    # itself again: the page asked for anew, its stylesheet as any page's
+    # (kept an hour, so asked for once)
+    "selfcss.html": (b"<!DOCTYPE html><title>Itself</title><link rel=stylesheet href=s.css>"
+                     b"<meta http-equiv=refresh content=0><p>Again.", ()),
+    "s.css": (b"p { color: #800 }\n", (("Cache-Control", "max-age=3600"), ("ETag", '"s1"'))),
+    # a place on the page itself: scrolled to, not loaded again
+    "frag.html": (b"<!DOCTYPE html><title>Place</title><meta http-equiv=refresh content='0; url=#x'>"
+                  b"<div style='height: 2000px'></div><p id=x>Here.", ()),
+    # a script changes the content after the parser put the meta in: as it was
+    "jsset.html": (b"<!DOCTYPE html><title>Script set</title>"
+                   b"<meta id=m http-equiv=refresh content='0; url=to.html?from=orig'><script>"
+                   b"document.getElementById('m').setAttribute('content', '0; url=javascript:void 0')</script>", ()),
+    # the first put in is first, though a table puts the second before itself
+    "foster.html": (b"<!DOCTYPE html><title>Foster</title><table><tr><td>"
+                    b"<meta http-equiv=refresh content='0; url=javascript:x'></td></tr>"
+                    b"<meta http-equiv=refresh content='0; url=to.html?from=foster'></table>", ()),
+    # itself in 2 s, counted from when its picture is in (slow.png: 1.5 s)
+    # itself every second, its pictures asked for again as their headers
+    # say: a camera's (no-store, another each time), one kept an hour, one
+    # asked about each time (a 304)
+    "cam.html": (b"<!DOCTYPE html><title>Camera</title><meta http-equiv=refresh content=1><p>"
+                 b"<img src=cam.png width=8 height=8 alt=cam> <img src=still.png width=8 height=8 alt=still> "
+                 b"<img src=valid.png width=8 height=8 alt=valid>", ()),
+    "slowpic.html": (b"<!DOCTYPE html><title>Slow</title><meta http-equiv=refresh content=2>"
+                     b"<p><img src=slow.png width=16 height=16 alt=slow>", ()),
+}
+REFRESH_COUNT = {}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
@@ -406,6 +475,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, ("fresh=%d etag=%d 304=%d" % (CACHE_COUNT["fresh"], CACHE_COUNT["etag"],
                                                         CACHE_COUNT["304"])).encode(), "text/plain",
                       extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/refresh/"):
+            name, _, query = p[14:].partition("?")
+            REFRESH_COUNT[name] = REFRESH_COUNT.get(name, 0) + 1
+            if name == "s.css" and self.headers.get("If-None-Match") == '"s1"':
+                self.send(304, b"", "text/css", extra=REFRESH[name][1])
+            elif name in REFRESH:
+                self.send(200, REFRESH[name][0], "text/css" if name.endswith(".css") else "text/html; charset=utf-8",
+                          extra=REFRESH[name][1])
+            elif name == "cam.png":
+                self.send(200, PICS["logo.png" if REFRESH_COUNT[name] % 2 else "counter.png"][0], "image/png",
+                          extra=[("Cache-Control", "no-store")])
+            elif name == "campic.png":
+                self.send(200, PICS["logo.png" if REFRESH_COUNT[name] % 2 else "counter.png"][0], "image/png",
+                          extra=[("Cache-Control", "no-store"), ("Refresh", "1")])
+            elif name == "still.png":
+                self.send(200, PICS["logo.png"][0], "image/png", extra=[("Cache-Control", "max-age=3600")])
+            elif name == "valid.png":
+                v = [("Cache-Control", "no-cache"), ("ETag", '"v1"')]
+                if self.headers.get("If-None-Match") == '"v1"':
+                    self.send(304, b"", "image/png", extra=v)
+                else:
+                    self.send(200, PICS["counter.png"][0], "image/png", extra=v)
+            elif name == "slow.png":
+                time.sleep(1.5)
+                self.send(200, PICS["logo.png"][0], "image/png", extra=[("Cache-Control", "max-age=3600")])
+            elif name in ("to.html", "sub/to.html"):
+                self.send(200, ("<!DOCTYPE html><title>%s|%s|%s</title><p>Here." % (
+                    "Arrived" if name == "to.html" else "Sub", query, self.headers.get("Referer", ""))).encode())
+            elif name == "count":
+                self.send(200, " ".join("%s=%d" % kv for kv in sorted(REFRESH_COUNT.items())).encode(),
+                          "text/plain", extra=[("Cache-Control", "no-store")])
+            else:
+                self.send(404, b"not here\n", "text/plain")
         elif p in ("/site/small.bin", "/site/small.zip"):
             self.send(200, SMALL, "application/octet-stream" if p.endswith(".bin") else "application/zip")
         elif p.startswith("/site/cookie/") and cookie_get(self, p):

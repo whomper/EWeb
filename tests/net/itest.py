@@ -8,7 +8,8 @@ HTTPS, chunks, a charset in Content-Type, and the certificates that must be
 refused (another host's, one nobody signed). With EWRENDER, the browser
 too (src/browse, through tests/host/ewrender.c): a page and its
 stylesheet over HTTP and HTTPS, its links made absolute, EWeb's own page
-when a server isn't there and when what came isn't a page.
+when a server isn't there and when what came isn't a page, a page's
+refresh (<meta http-equiv=refresh>, the Refresh header).
 
     tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
@@ -16,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -538,6 +540,102 @@ try:
               and '"fetch atari"' in out and '"xhr atari"' in out and "js error" not in out, out)
         check("scripts: document.cookie, HttpOnly kept from them", p.returncode == 0
               and '"cookies seen=2; js=1"' in out and '"sent hidden=1; seen=2; js=1"' in out, out)
+        # a refresh (<meta http-equiv=refresh>, the Refresh header): followed
+        # when due, in place of the page in the history, the page it came
+        # from as the Referer
+        rsite = "http://localhost:%d/site/refresh/" % HTTP
+
+        def refresh(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d", "-r", "8"] + list(args), cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            out = p.stdout + p.stderr
+            return p.returncode, re.findall(r'^(refresh|refreshed|back|note): (.*)$', out, re.M), out
+
+        rc, steps, out = refresh("-P", "http://localhost:%d/site/" % HTTP, "-b", rsite + "meta.html")
+        check("refresh: a meta's, at once, in the page's place (Back goes before it)", rc == 0 and steps == [
+            ("refresh", "0 s %sto.html?from=meta" % rsite),
+            ("refreshed", '0 "Arrived|from=meta|%smeta.html" %sto.html?from=meta' % (rsite, rsite)),
+            ("back", '0 "EWeb site" http://localhost:%d/site/' % HTTP)], out)
+        cache = os.path.join(work, "rfcache")
+        shutil.rmtree(cache, ignore_errors=True)
+        for k in range(2):
+            rc, steps, out = refresh("-C", cache, rsite + "header.html")
+            check("refresh: the Refresh header, before the page's meta (%s)" % ("again: not from the disk cache"
+                  if k else "kept an hour"), rc == 0 and steps == [
+                      ("refresh", "1 s %sto.html?from=header" % rsite),
+                      ("refreshed", '0 "Arrived|from=header|%sheader.html" %sto.html?from=header' % (rsite, rsite))],
+                  out)
+        rc, steps, out = refresh(rsite + "loop.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode()
+        check("refresh: a page that refreshes itself at once stops after %d" % 5, rc == 0 and
+              [s[0] for s in steps] == ["refresh", "refreshed"] * 5 + ["note"] and
+              steps[1] == ("refreshed", '0 "Loop" %sloop.html' % rsite) and "again and again" in steps[-1][1]
+              and "loop.html=6" in count.split(), out + count)
+        rc, steps, out = refresh(rsite + "based.html")
+        rc2, steps2, out2 = refresh(rsite + "after.html")
+        check("refresh: resolved against the <base> before the meta, not one after", rc == 0 and rc2 == 0 and
+              steps[:1] == [("refresh", "0 s http://localhost:%d/site/refresh/sub/to.html?b=before" % HTTP)] and
+              steps2[:1] == [("refresh", "0 s %sto.html?b=after" % rsite)], out + out2)
+        rc, steps, out = refresh(rsite + "noscript.html")
+        rc2, steps2, out2 = refresh("-J", rsite + "noscript.html")
+        check("refresh: a <noscript>'s only without scripts", rc == 0 and rc2 == 0 and
+              steps[:1] == [("refresh", "0 s %sto.html?from=noscript" % rsite)] and steps2 == [], out + out2)
+        rc, steps, out = refresh(rsite + "js.html")
+        check("refresh: a javascript: address passed over for the next", rc == 0 and
+              steps[:1] == [("refresh", "0 s %sto.html?from=second" % rsite)], out)
+        rc, steps, out = refresh("-r", "0", rsite + "later.html")
+        check("refresh: one in a minute, said on the status line", rc == 0 and
+              ("note", "Going on to localhost:%d in 60 s: Esc stays here." % HTTP) in steps, out)
+        rc, steps, out = refresh("-P", rsite + "later.html", "-b", "http://localhost:%d/site/two.html" % HTTP)
+        check("refresh: none for a page Back goes to", rc == 0 and
+              steps == [("back", '0 "Later" %slater.html' % rsite)], out)
+        rc, steps, out = refresh("-r", "3", rsite + "selfcss.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        check("refresh: itself asked for anew, its stylesheet (kept an hour) once", rc == 0 and
+              [s[0] for s in steps] == ["refresh", "refreshed"] * 3 and
+              "selfcss.html=4" in count and "s.css=1" in count, out + " ".join(count))
+        rc, steps, out = refresh(rsite + "frag.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        check("refresh: a place on the page itself, scrolled to, not loaded again", rc == 0 and steps == [
+            ("refresh", "0 s %sfrag.html#x" % rsite), ("refreshed", '2 "Place" %sfrag.html#x' % rsite)] and
+              "frag.html=1" in count, out + " ".join(count))
+        rc, steps, out = refresh("-J", rsite + "jsset.html")
+        rc2, steps2, out2 = refresh(rsite + "foster.html")
+        check("refresh: each meta as the parser put it in (a script's change after, a table's order)",
+              rc == 0 and rc2 == 0 and steps[:1] == [("refresh", "0 s %sto.html?from=orig" % rsite)] and
+              steps2[:1] == [("refresh", "0 s %sto.html?from=foster" % rsite)], out + out2)
+        t0 = time.time()
+        rc, steps, out = refresh("-r", "1", rsite + "slowpic.html")
+        took = time.time() - t0
+        check("refresh: itself in 2 s from when its picture (1.5 s) is in (%.1f s)" % took, rc == 0 and steps == [
+            ("refresh", "2 s %sslowpic.html" % rsite), ("refreshed", '0 "Slow" %sslowpic.html' % rsite),
+            ("note", "This page loads again in 2 s: Esc stops it.")] and took >= 3.4, out)
+        # a page that refreshes itself (a camera's): its pictures asked for
+        # again as their headers say, through the disk cache, and decoded
+        # again only when they changed
+        cache = os.path.join(work, "camcache")
+        shutil.rmtree(cache, ignore_errors=True)
+        rc, steps, out = refresh("-v", "-C", cache, "-r", "2", rsite + "cam.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        pics = re.findall(r"^picture %s(\w+)\.png (decoded|unchanged) " % re.escape(rsite), out, re.M)
+        check("refresh: itself, its pictures asked for again as they say (no-store each time and decoded, "
+              "kept an hour from the cache, no-cache a 304)", rc == 0 and
+              [s[0] for s in steps[:4]] == ["refresh", "refreshed"] * 2 and
+              "cam.html=3" in count and "cam.png=3" in count and "still.png=1" in count and "valid.png=3" in count and
+              pics.count(("cam", "decoded")) == 3 and pics.count(("still", "unchanged")) == 2 and
+              pics.count(("valid", "unchanged")) == 2 and pics.count(("still", "decoded")) == 1 and
+              pics.count(("valid", "decoded")) == 1, out + " ".join(count))
+        # a picture on its own that refreshes itself (its Refresh header):
+        # the one that came each time is shown
+        rc, steps, out = refresh("-v", "-r", "2", rsite + "campic.png")
+        sizes = re.findall(r"^picture %scampic\.png decoded at \S+ (\S+) " % re.escape(rsite), out, re.M)
+        check("refresh: a picture on its own, itself again: the one that came each time",
+              rc == 0 and [s[0] for s in steps[:4]] == ["refresh", "refreshed"] * 2 and
+              sizes == ["150x60", "1x1", "150x60"], out)
     # through AERA-Gateway's webgate (EWEB.INF's GATEWAY=, EWGET -g): the
     # Pi makes the secure connection (TLS 1.3 here), passes the server's
     # gzip, redirects, cookies and big answers through, and refuses a
@@ -646,6 +744,13 @@ try:
                 m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)
                 check("the gateway: a login's POST, its 303 and cookie", p.returncode == 0 and m is not None
                       and m.group(1) == "COOKIE|sid=xyz", p.stdout + p.stderr)
+                # the Refresh header comes through webgate as the server sent it
+                rs = "https://localhost:%d/site/refresh/" % HTTPS
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-r", "2", rs + "header.html"], cwd=work,
+                                   capture_output=True, text=True, timeout=120)
+                check("the gateway: a page's Refresh header passed on", p.returncode == 0 and
+                      "refresh: 1 s %sto.html?from=header\n" % rs in p.stdout and
+                      'refreshed: 0 "Arrived|from=header|%sheader.html" ' % rs in p.stdout, p.stdout + p.stderr)
         finally:
             gate.terminate()
             gate.wait(timeout=10)

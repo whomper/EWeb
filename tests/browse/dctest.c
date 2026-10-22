@@ -110,6 +110,9 @@ int main(int argc, char **argv)
 	want("no-store, Vary *, a page that sets a cookie, nothing to go by: not kept",
 	     got("http://b/1", NULL, NULL) == -1 && got("http://b/2", NULL, NULL) == -1 &&
 	     got("http://b/3", NULL, NULL) == -1 && got("http://b/4", NULL, NULL) == -1);
+	put("http://b/7", "Cache-Control: max-age=60\nRefresh: 5; url=https://example.com/a/longer/address\n", "x");
+	want("a page with a Refresh header (from the cache it wouldn't go on): not kept",
+	     got("http://b/7", NULL, NULL) == -1);
 	dc_put("http://b/6", "http://b/6", "Cache-Control: max-age=60\nSet-Cookie: id=1\n", "image/png", "", "",
 	       "png", 3);
 	want("a picture that sets a cookie: kept", got("http://b/6", "png", NULL) == 1);

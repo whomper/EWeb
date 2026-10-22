@@ -54,6 +54,8 @@ extern short gl_wchar, gl_hchar;
 extern short ap_id;
 extern browser br;		/* the page shown, its history */
 extern int loading;		/* a page is on its way: Esc and Stop stop it */
+/* what happened, for the Hatari rigs (main.c): an "EWEB ..." line through NatFeats */
+void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 /* drawing (draw.c): the window's parts, menus and dialogs, in the system
    font (what common/ui's About box, alerts and pop-ups take, gemui.h) */
@@ -112,7 +114,11 @@ void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything 
 void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
 void win_title(void);
-void win_status(const char *s);		/* the status bar's text; "" for what the page says */
+/* the status bar's text; "" for what the page says: its refresh while
+   that waits (the time left), or that it stopped refreshes at once,
+   else its security. Each change is logged ("status ...") */
+void win_status(const char *s);
+void win_status_again(void);		/* what the page says, again if the bar says it (the time left) */
 /* the status bar's ribbon: a load has come so far (0..1024) in a phase
    (BRPH_*: its colour); phase -1 clears it */
 void win_progress(int phase, int at);

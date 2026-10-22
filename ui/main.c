@@ -198,8 +198,6 @@ static void enable(int cmd, int on)
 		menu_ienable(mb.tree, i, on ? 1 : 0);
 }
 
-static void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-
 #ifndef EW_ST
 /* the site a page is of, as SCRIPTS= names it: its host, or "file" for
    pages on the disk; 0 for none (EWeb's own pages) */
@@ -269,7 +267,7 @@ void menu_update(void)
 {
 	int addr = win_address_has_focus();
 	enable(C_RELOAD, !loading && br.cur >= 0);
-	enable(C_STOP, loading || br_pictures_pending(&br));
+	enable(C_STOP, loading || br_pictures_pending(&br) || br_refresh_due(&br) >= 0);
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
@@ -522,8 +520,7 @@ int settings_save(void)
 /* what happened, for the Hatari rigs (tests/hatari/gui_test.py): "EWEB
    ..." lines on the emulator's console through NatFeats; nothing on a
    real Atari */
-static void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void log_event(const char *fmt, ...)
+void log_event(const char *fmt, ...)
 {
 	char buf[600];
 	va_list ap;
@@ -645,6 +642,26 @@ static void keys_flush(void)
 	esc_quiet_until = pf_ms() + 1000;
 }
 
+/* ms until the page's refresh is due (0: now), -1 none; it waits while
+   the address field has the keyboard, so that what is typed there stays */
+static long refresh_due(void)
+{
+	return loading || win_iconified || win_address_has_focus() ? -1 : br_refresh_due(&br);
+}
+
+/* Esc or Stop while the page's refresh waits: the page stays (said on
+   the status line unless the pictures' end says what stopped) */
+static void refresh_stop(int tell)
+{
+	if (br_refresh_due(&br) < 0)
+		return;
+	br_refresh_cancel(&br);
+	log_event("refresh stopped");
+	if (tell)
+		status("Staying on this page.");
+	win_toolbar();
+}
+
 /* a picture is stopped for what came: it is done after */
 static void put_off(short which, const short *msg, const AEVENT *ev)
 {
@@ -667,11 +684,17 @@ static void idle(void)
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
 	win_throb(1);
 	if (pics) {
+		/* the page's refresh to another page is due: the picture is
+		   cut short (it is fetched again if the page stays; one of the
+		   page itself counts from when its pictures are in) */
+		if (refresh_due() == 0)
+			conn_stop = 1;
 		if (which & MU_MESAG) {
 			if (msg[0] == MN_SELECTED) {
 				if (mbar_command(&mb, msg[4]) == C_STOP) {
 					conn_stop = 1;
 					br_pictures_stop(&br);
+					refresh_stop(0);
 					menu_tnormal(mb.tree, msg[3], 1);
 				} else {
 					put_off(MU_MESAG, msg, &ev);
@@ -687,6 +710,7 @@ static void idle(void)
 			if (scan == 0x01) {
 				conn_stop = 1;
 				br_pictures_stop(&br);
+				refresh_stop(0);
 			} else if (scan == 0x48 || scan == 0x50 ||
 				   (!win_address_has_focus() && (scan == 0x39 || scan == 0x47) &&
 				    !key_ctrl(ev.kstate, ev.kreturn))) {
@@ -817,7 +841,11 @@ static void loaded(int r)
 		if (br.p && br.p->deep)
 			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
 		if (br.note[0]) {
-			win_status(br.note);
+			char t[96];
+			/* a refresh's (or that refreshes at once were stopped) is
+			   what the bar says at rest (win_status("")), so it comes
+			   back after the pictures' lines and a button's or a link's */
+			win_status(br_refresh_note(&br, t, sizeof t) ? "" : br.note);
 			log_event("note %s", br.note);
 		} else if (br.p && br.p->deep) {
 			win_status("Part of this page is nested too deeply to show.");
@@ -1188,9 +1216,17 @@ void command(int cmd)
 		loaded(br_reload(&br));
 		break;
 	case C_STOP:
-		conn_stop = 1;
-		br_pictures_stop(&br);
-		win_status("");
+		/* a load, or a picture as it comes, idle() stops; here, between
+		   them, what is still to come: the pictures, the page's refresh.
+		   conn_stop stays clear, as the page's scripts' requests need it */
+		if (loading)
+			conn_stop = 1;
+		if (br_pictures_pending(&br))
+			br_pictures_stop(&br);
+		if (br_refresh_due(&br) >= 0)
+			refresh_stop(1);
+		else
+			win_status("");
 		break;
 	case C_QUIT: quit = 1; break;
 	case C_CUT: win_clip(CLIP_CUT); break;
@@ -1435,7 +1471,9 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 	if (win_iconified)	/* an icon takes no keys or clicks */
 		which &= ~(MU_KEYBD | MU_BUTTON);
 	if (which & MU_KEYBD) {
-		if (!shortcut(ev.kstate, ev.kreturn))
+		if (KEY_SCAN(ev.kreturn) == 0x01 && br_refresh_due(&br) >= 0)
+			refresh_stop(1);	/* Esc: the page's refresh first */
+		else if (!shortcut(ev.kstate, ev.kreturn))
 			win_key(ev.kstate, ev.kreturn);
 		menu_update();
 	}
@@ -1452,6 +1490,15 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 				evnt_timer_(10);
 		} while (mbt & 3);
 	}
+}
+
+/* the page's refresh is due: on to where it goes, in its place in the
+   history (its address in the log without a query, 7.3) */
+static void refreshed(void)
+{
+	log_event("refresh %lu %.*s", br.refresh_s, (int) strcspn(br.refresh, "?"), br.refresh);
+	loading_on();
+	loaded(br_refresh_go(&br));
 }
 
 /* the next of the page's pictures: fetched and decoded, then drawn */
@@ -1722,12 +1769,26 @@ int main(void)
 		short which;
 		int more = !loading && !win_iconified && br_pictures_pending(&br);
 		long due = loading || win_iconified ? -1 : br_js_due(&br);
-		/* the ribbon, full: gone a moment later */
-		int rib = !more && due < 0 && win_progress_shown();
-		short wait = more ? 0 : due >= 0 ? (short) (due > 1000 ? 1000 : due) : rib ? 200 : 0;
+		long rdue = refresh_due();
+		int rib;
+		short wait;
+		if (rdue >= 0 && (due < 0 || rdue < due))
+			due = rdue;	/* the page's refresh comes before its scripts' next timer */
+		/* the ribbon, full: gone a moment later, whatever else is waited for */
+		rib = !more && win_progress_shown();
+		wait = more ? 0 : due >= 0 && due < 1000 ? (short) due : 1000;
+		if (rib && wait > 200)
+			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 || rib ? MU_TIMER : 0),
 				    0x102, 3, 0, wait, msg, &ev);
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+		if ((which & MU_TIMER) && !quit && rdue >= 0) {
+			if (refresh_due() == 0) {
+				refreshed();	/* before the page's pictures: it is going */
+				continue;
+			}
+			win_status_again();	/* the time left, on the status bar at rest */
+		}
 #ifndef EW_ST
 		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)
 			js_timers();

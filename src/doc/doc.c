@@ -414,6 +414,97 @@ static void hints(dnode *n)
 	}
 }
 
+/* ---------------------------------------------------------------- refresh */
+
+#define RWS(c) ((c) == ' ' || (c) == '\t' || (c) == '\n' || (c) == '\f' || (c) == '\r')
+
+/* the shared declarative refresh steps (the HTML Standard, 4.2.5.3), up
+   to the address's parse, step by step */
+int doc_refresh_parse(const char *in, unsigned long *secs, const char **url, size_t *ulen)
+{
+	const char *p = in, *u;
+	unsigned long t = 0;
+	size_t n;
+	char quote;
+	while (RWS(*p))
+		p++;
+	/* the time: digits, or none before a '.' (".5" is 0) */
+	if (*p >= '0' && *p <= '9') {
+		for (; *p >= '0' && *p <= '9'; p++)
+			if (t < DOC_REFRESH_MAX)
+				t = t * 10 + (unsigned long) (*p - '0');
+		if (t > DOC_REFRESH_MAX)
+			t = DOC_REFRESH_MAX;
+	} else if (*p != '.') {
+		return 0;
+	}
+	while ((*p >= '0' && *p <= '9') || *p == '.')
+		p++;		/* the fraction, ignored */
+	*secs = t;
+	*url = NULL;
+	*ulen = 0;
+	if (*p) {
+		if (*p != ';' && *p != ',' && !RWS(*p))
+			return 0;
+		while (RWS(*p))
+			p++;
+		if (*p == ';' || *p == ',')
+			p++;
+		while (RWS(*p))
+			p++;
+	}
+	if (*p == 0)
+		return 1;	/* no address: the page itself */
+	u = p;			/* urlString, if "url=" doesn't follow */
+	n = strlen(u);
+	if ((*p | 0x20) == 'u') {
+		p++;
+		if ((*p | 0x20) != 'r')
+			goto parse;
+		p++;
+		if ((*p | 0x20) != 'l')
+			goto parse;
+		p++;
+		while (RWS(*p))
+			p++;
+		if (*p != '=')
+			goto parse;
+		p++;
+		while (RWS(*p))
+			p++;
+	}
+	/* skip quotes: the address ends at the same quote, if there is one */
+	quote = *p == '\'' || *p == '"' ? *p++ : 0;
+	u = p;
+	n = strlen(u);
+	if (quote) {
+		const char *q = strchr(u, quote);
+		if (q != NULL)
+			n = (size_t) (q - u);
+	}
+parse:
+	*url = u;
+	*ulen = n;
+	return 1;
+}
+
+/* (a template's contents aren't in the document: the Refresh state's
+   steps don't run for a <meta> there) */
+int doc_refresh_meta(const dnode *n)
+{
+	const char *v = dn_attr(n, "http-equiv"), *c, *u;
+	const dnode *a;
+	unsigned long s;
+	size_t ul;
+	if (n->ns != DN_NS_HTML || v == NULL || !is(v, "refresh") || (c = dn_attr(n, "content")) == NULL || !*c ||
+	    !doc_refresh_parse(c, &s, &u, &ul))
+		return 0;
+	for (a = n->parent; a != NULL; a = a->parent)
+		if (a->tag == T_TEMPLATE && a->ns == DN_NS_HTML)
+			return 0;
+	return 1;
+}
+
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
