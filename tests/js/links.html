@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- args: -v -K badge -T 300 -->
+<!-- expect: #00cc66 -->
+<!-- expect: console: links done -->
+<!-- expect: console: timer done -->
+<!-- absent: sheets added again -->
+<html><head><title>links</title>
+<!-- the <link>s that are no sheets a script adds or changes (a preconnect,
+     a preload of a script, an icon, a <style> of another type): the
+     page's sheets are as they were, and aren't added again -->
+<link rel=stylesheet href="sheets/links.css">
+<link rel=icon id=icon href="sheets/a.ico">
+<style id=plain type="text/plain">.links { background: #cc0000 }</style>
+<script>
+function add(rel, href, as) {
+	var l = document.createElement("link");
+	l.rel = rel;
+	l.href = href;
+	if (as)
+		l.setAttribute("as", as);
+	document.head.appendChild(l);
+}
+add("preconnect", "https://fonts.example.com");
+add("dns-prefetch", "https://cdn.example.com");
+add("preload", "sheets/app.js", "script");
+document.getElementById("icon").href = "sheets/b.ico";
+document.getElementById("plain").textContent = ".links { background: #cc0001 }";
+console.log("links done");
+setTimeout(function () {
+	add("preconnect", "https://other.example.com");
+	console.log("timer done");
+}, 100);
+</script>
+</head><body>
+<p class=links>a sheet the page has: applied once</p>
+<button type=button id=badge onclick="document.getElementById('icon').href = 'sheets/c.ico'">Badge</button>
+</body></html>

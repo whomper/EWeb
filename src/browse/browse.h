@@ -33,6 +33,11 @@ typedef struct {
 	char mime[64];		/* what it is ("" a file) */
 	int status;
 	char *security;
+	/* its encoding (View > Encoding): the one chosen by hand (1 + its
+	   place in br_encodings, 0 Auto), whether it may be read in another,
+	   and while it is kept the HTTP answer's charset (NULL none) */
+	uint8_t enc, encodable;
+	char *charset;
 } BR_ENTRY;
 
 /* the memory pages kept for Back and Forward may take, roughly (the
@@ -45,9 +50,17 @@ enum {
 	BR_STOPPED,		/* stopped (Esc, Stop): the page before stays */
 	BR_SAME,		/* a place on the page shown: br.scroll_to says where */
 	BR_ELSEWHERE,		/* an address EWeb doesn't open itself (mailto:): br.elsewhere */
-	BR_DOWNLOAD		/* a file EWeb doesn't show: br.dl holds it, to be saved
-				   (br_dl_save) or let go (br_dl_free); the page shown stays */
+	BR_DOWNLOAD,		/* a file EWeb doesn't show, or one its server says to
+				   save (Content-Disposition: attachment): br.dl holds it, to
+				   be saved (br_dl_save) or let go (br_dl_free) */
+	BR_SAVE			/* a link to save, not to follow (<a download> to the page's
+				   own site): br.dl's url and name say which, for br_save_url
+				   to fetch */
 };
+/* Each but BR_SHOWN leaves the page shown as it was, unless the load
+   showed a new one on the way: a page whose script, as it loaded, clicked
+   a download link ("your download starts now") or sent the browser on to
+   a file, elsewhere or to a page that was stopped. br.shows tells. */
 
 typedef struct browser {
 	/* the page shown */
@@ -58,6 +71,9 @@ typedef struct browser {
 	char security[96];	/* how it came: "TLS 1.2, ..." or "" */
 	int status;		/* the server's answer (200...), 0 for a file or EWeb's own page */
 	int32_t scroll_to;	/* after a load: where to scroll (device px), -1 the top */
+	unsigned long shows;	/* pages shown so far, each new one counts: a front end
+				   that remembers it knows when one is to be drawn, whatever
+				   the load came to */
 	char elsewhere[1024];	/* BR_ELSEWHERE: the address */
 	/* how long the last page took, ms: fetching it (its stylesheets
 	   too), parsing, styling, laying out */
@@ -75,13 +91,24 @@ typedef struct browser {
 				   answer, EWeb's own page), for Save page */
 	long src_len;		/* its bytes (what keeping the page costs) */
 	char mime[64];		/* what the server said it is ("" a file) */
+	/* its encoding (View > Encoding): the HTTP answer's charset ("" none),
+	   the one chosen by hand ("" Auto: the page's own, as the HTML
+	   Standard's sniffing finds it; d->charset says which that was), and
+	   whether it may be read in another (a page or text file that came,
+	   not EWeb's own page or a picture's) */
+	char charset[24], enc[16];
+	int encodable;
 
-	/* BR_DOWNLOAD: what came */
+	/* BR_DOWNLOAD: what came; BR_SAVE: what to save; br_save_url: what
+	   is being saved */
 	struct {
 		char *data;
 		long len;
 		char url[1024];	/* where from, after redirects */
 		char mime[64];
+		/* the name its server gave (Content-Disposition's filename) or
+		   the link (<a download>'s), UTF-8; "" none */
+		char name[256];
 	} dl;
 
 	/* the page shown's pictures, fetched after it is shown */
@@ -108,7 +135,17 @@ typedef struct browser {
 	int scripts;
 	const char *script_sites;
 	char note[96];		/* about the page shown, for the status line ("" none): its
-				   scripts were too much, it came from the cache out of date */
+				   scripts were too much, it came from the cache out of date,
+				   it goes on to another page in a while */
+	/* the page shown's refresh (br_refresh_due): where it goes (malloc'ed;
+	   NULL none), after how many seconds, and when that is (pf_ms) */
+	char *refresh;
+	unsigned long refresh_s, refresh_at;
+	int refresh_run;	/* refreshes at once in a row that brought the page shown */
+	int refresh_pics;	/* the page itself again: its time counts once its
+				   pictures are in (refresh_at not yet set) */
+	int refresh_loop;	/* its refresh was stopped, at once again and again
+				   (BR_REFRESH_RUN): br_refresh_note says so */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening
@@ -127,6 +164,10 @@ typedef struct browser {
 	int (*ask)(void *ud, int kind, const char *text, char *out, int size);
 	/* what a script's console.log writes; NULL: nowhere */
 	void (*console)(void *ud, const char *line);
+	/* where a file br_save_url saves goes, asked once its answer has
+	   begun (its name is known then): name the TOS name to offer; 1 and
+	   path (size bytes) set, 0 cancelled. NULL: none is saved */
+	int (*save_as)(void *ud, const char *name, char *path, int size);
 	void *ud;
 } browser;
 
@@ -154,6 +195,35 @@ void br_scrolled(browser *b, int32_t y);
 int br_relayout(browser *b, int32_t width);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
+/* a link's download attribute (<a download>): its value, "" when it
+   gives no name, NULL when the link has none */
+const char *br_link_download(const browser *b, int link);
+
+/* ---- encodings */
+
+/* the page shown read again from its source in another encoding (View >
+   Encoding): name one of br_encodings (or a label of one), or "" for
+   Auto (the page's own). The choice stays with the page until another
+   is loaded: Reload, Back and Forward to it read it so too. BR_SHOWN;
+   BR_STOPPED when it can't be (not encodable, a name not offered) and
+   the page stays */
+int br_encoding(browser *b, const char *name);
+/* the encodings View > Encoding offers: those EWeb decodes whose
+   letters EWEB.FNT has (no Greek, Cyrillic, Arabic or Thai), each by
+   its name as html_encoding gives it and as d->charset has it */
+typedef struct {
+	const char *label, *name;
+} BR_ENC;
+extern const BR_ENC br_encodings[];
+extern const int br_nencodings;
+/* the label of an encoding of br_encodings, else its name */
+const char *br_encoding_label(const char *name);
+
+/* the encoding of a page at url that names none and isn't UTF-8 (the
+   sniffing's last step, the locale's default, which the standard lets
+   come from the address's top-level domain): windows-1255 for Israel's
+   .il, windows-1252 for the rest */
+const char *br_fallback(const char *url);
 
 /* the page's pictures still to come (or to decode at the size shown) */
 int br_pictures_pending(browser *b);
@@ -171,6 +241,30 @@ enum {
 int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1);
 /* stop fetching this page's pictures (Esc) */
 void br_pictures_stop(browser *b);
+
+/* ---- the page shown's refresh: its Refresh header, else the first
+   <meta http-equiv=refresh> the parser put in (the HTML Standard's shared
+   declarative refresh steps). A page loaded anew (not by Back or Forward)
+   goes on to the address it gives its seconds after it is shown, or
+   comes again its seconds after its pictures are in (the standard's
+   "completely loaded"); any load, and Esc, cancel it. */
+
+/* refreshes at once (0 s) in a row EWeb follows: a page that refreshes
+   itself, or two that send each other on, stop after these */
+#define BR_REFRESH_RUN 5
+/* ms until it is due (0: now), -1 for none; the page itself again while
+   its pictures come: all its seconds (at least 1 ms) */
+long br_refresh_due(const browser *b);
+/* it is due: the page it goes to loaded in place of the page shown in
+   the history, the page itself fetched anew, or a place on it (BR_*) */
+int br_refresh_go(browser *b);
+/* Esc: no refresh for the page shown */
+void br_refresh_cancel(browser *b);
+/* what the status line says at rest while it waits, with the time left
+   ("Going on to example.com in 5 s: Esc stays here."), or once refreshes
+   at once in a row were stopped (until the next load): 0 when there is
+   nothing to say (none, or at once) */
+int br_refresh_note(const browser *b, char *out, int size);
 
 /* ---- the page shown's scripts (js.h) */
 
@@ -203,23 +297,33 @@ int br_bookmark(browser *b);
 
 /* ---- saving (File > Save page, a link's file, a file EWeb doesn't show) */
 
-/* a name for a file from url on a TOS disk: 8.3, capitals, what a page
-   is ending in .HTM (mime: what it is, "" if not known) */
-void br_file_name(const char *url, const char *mime, char *out, int size);
+/* a name for a file from url on a TOS disk: 8.3, capitals, only the
+   characters GEMDOS takes, what a page is ending in .HTM (mime: what it
+   is, "" if not known). given: the name its server or link gave (dl.name;
+   NULL or "" none), used before the address's: its last part, its ending
+   kept */
+void br_file_name(const char *url, const char *given, const char *mime, char *out, int size);
 /* the page shown's source to path, as it came (one safe save): 1 saved */
 int br_save_page(browser *b, const char *path);
 /* BR_DOWNLOAD's file to path (one safe save), then let go: 1 saved */
 int br_dl_save(browser *b, const char *path);
 void br_dl_free(browser *b);
-/* url's file fetched to path as it comes, gathered br_save_buf bytes at
-   a time in memory and written in pieces, the file open for the job
-   (6.5); the status line tells how much has come. */
+/* url's file fetched to a file as it comes, gathered br_save_buf bytes
+   at a time in memory and written in pieces, the file open for the job
+   (6.5); the status line tells how much has come. The file is path, or
+   when path is "" the one b->save_as gives once the answer has begun,
+   with the name to offer: Content-Disposition's, else given (the link's
+   download attribute, when the answer is from the page's own site), else
+   the address's (the HTML Standard's suggested filename); path is then
+   the one chosen. b->dl's url, mime and name say what came. A gzip file
+   is saved as it came (nothing packed is asked for). */
 enum {
 	BRS_SAVED,
 	BRS_FAILED,		/* err says why; nothing is left at path */
-	BRS_STOPPED		/* Esc; nothing is left at path */
+	BRS_STOPPED,		/* Esc; nothing is left at path */
+	BRS_CANCELLED		/* save_as said no: nothing was written */
 };
-int br_save_url(browser *b, const char *url, const char *path, char *err, int errlen);
+int br_save_url(browser *b, const char *url, const char *given, char *path, int size, char *err, int errlen);
 /* the bytes br_save_url gathers before each write (256 KB; the front
    end may set less on a small machine), and how many the last brought */
 extern long br_save_buf, br_saved;

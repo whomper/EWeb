@@ -6,9 +6,11 @@
 /* ------------------------------------------------------------ memory */
 
 /* a context's memory comes in pieces of this: in the ST edition small
-   ones, as a 1 MB ST has 200 KB for everything */
+   ones, as a 1 MB ST has 200 KB for everything, and there an arena's
+   first pieces smaller still (ec_alloc_slow) */
 #ifdef EW_ST
 #define EC_CHUNK 4096
+#define EC_FIRST 512
 #else
 #define EC_CHUNK 65536
 #endif
@@ -18,13 +20,26 @@ void *ec_alloc_slow(ec_arena *a, size_t n)
 	size_t size = a->chunk_size ? a->chunk_size : 32768;
 	ec_chunk *ch;
 
+#ifdef EC_FIRST
+	/* from EC_FIRST, each piece as big as those before it together: a
+	   small page's names, sheets and styles (a context has an arena for
+	   each) take about what they need, not a piece each. Only in the ST
+	   edition: on the Falcon the pieces more cost more time than the
+	   memory they save is worth (+0.08% of the page set's 68030
+	   instructions) */
+	if (a->size < size)
+		size = a->size > EC_FIRST ? a->size : EC_FIRST;
+#endif
 	if (n + sizeof(ec_chunk) + EC_ALIGN > size)
 		size = n + sizeof(ec_chunk) + EC_ALIGN;
 	ch = malloc(size);
-	if (ch == NULL)
+	if (ch == NULL) {
+		a->nomem = 1;
 		return NULL;
+	}
 	ch->next = a->chunks;
 	a->chunks = ch;
+	a->size += size;
 	a->p = (char *) ch + ((sizeof(ec_chunk) + EC_ALIGN - 1) & ~(EC_ALIGN - 1));
 	a->end = (char *) ch + size;
 	return ec_alloc(a, n);
@@ -40,6 +55,8 @@ void ec_arena_free(ec_arena *a)
 	}
 	a->chunks = NULL;
 	a->p = a->end = NULL;
+	a->size = 0;
+	a->nomem = 0;
 }
 
 const ec_str *ec_str_new(ec_arena *a, const char *s, size_t len)
@@ -360,8 +377,12 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 	}
 	c->media = *media;
 	c->opts = opts;
+	c->span_lo = 0;
+	c->span_hi = INT32_MAX;
 	c->mem.chunk_size = EC_CHUNK;
+	c->rmem.chunk_size = EC_CHUNK;
 	c->smem.chunk_size = EC_CHUNK;
+	c->pmem = &c->rmem;
 	if (atoms_grow(c) != 0) {
 		free(c);
 		return NULL;
@@ -392,6 +413,7 @@ void ec_destroy(ec_ctx *c)
 	if (c == NULL)
 		return;
 	ec_arena_free(&c->smem);
+	ec_arena_free(&c->rmem);
 	ec_arena_free(&c->mem);
 	free(c->atoms);
 	free(c->shadow);
@@ -404,7 +426,7 @@ static void parse_all(ec_ctx *c, const ec_vec *v)
 	for (i = 0; v != NULL && i < v->n; i++) {
 		ec_block *b = (ec_block *) v->e[i].sel->block;
 		if (!b->parsed)
-			ec_parse_block(c, b);
+			ec_parse_block(c, b, &c->rmem);
 	}
 }
 
@@ -440,7 +462,7 @@ ec_shadow *ec_shadow_of(ec_ctx *c, const ec_atom *a, int make)
 		return NULL;
 	if (c->shadow == NULL && (c->shadow = calloc(EC_SHADOW_SIZE, sizeof *c->shadow)) == NULL)
 		return NULL;
-	s = ec_alloc(&c->mem, sizeof *s);
+	s = ec_alloc(&c->rmem, sizeof *s);
 	if (s == NULL)
 		return NULL;
 	memset(s, 0, sizeof *s);
@@ -454,6 +476,64 @@ void ec_unstyle(ec_ctx *c)
 {
 	ec_arena_free(&c->smem);
 	c->root_style = NULL;
+}
+
+void ec_set_media(ec_ctx *c, const ec_media *m)
+{
+	c->media = *m;
+	c->initial.v[EP_FONT_SIZE].i = EC_FX(m->font_size);
+}
+
+void ec_media_span(const ec_ctx *c, int32_t *lo, int32_t *hi)
+{
+	*lo = c->span_lo;
+	*hi = c->span_hi;
+}
+
+void ec_drop_sheets(ec_ctx *c)
+{
+	uint32_t i;
+
+	ec_unstyle(c);
+	/* the rules on its own atoms, on the base's (its shadow), and on none */
+	for (i = 0; i <= c->atom_mask; i++) {
+		ec_atom *a;
+		for (a = c->atoms[i]; a != NULL; a = a->next) {
+			memset(a->rules, 0, sizeof a->rules);
+			memset(a->sibrules, 0, sizeof a->sibrules);
+		}
+	}
+	free(c->shadow);
+	c->shadow = NULL;
+	/* and what they were: their text, rules and declarations (a page's
+	   sheets added again as often as its window is sized take no more) */
+	ec_arena_free(&c->rmem);
+	c->pmem = &c->rmem;
+	memset(&c->universal, 0, sizeof c->universal);
+	memset(&c->universal_sib, 0, sizeof c->universal_sib);
+	memset(&c->never, 0, sizeof c->never);
+	c->order = c->base != NULL ? c->base->order : 0;
+	c->sibling_rules = c->base != NULL ? c->base->sibling_rules : 0;
+	c->layer = 0;
+	memset(&c->st, 0, sizeof c->st);
+	c->span_lo = 0;
+	c->span_hi = INT32_MAX;
+}
+
+int ec_sheets_short(const ec_ctx *c)
+{
+	return c->rmem.nomem;
+}
+
+/* an arena's pieces but what is left of the last */
+static size_t arena_used(const ec_arena *a)
+{
+	return a->size - (size_t) (a->end - a->p);
+}
+
+size_t ec_mem(const ec_ctx *c)
+{
+	return arena_used(&c->mem) + arena_used(&c->rmem) + arena_used(&c->smem);
 }
 
 const ec_stats *ec_get_stats(const ec_ctx *c)

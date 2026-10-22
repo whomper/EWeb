@@ -1,0 +1,37 @@
+page 608 x 558, background ffffff, 36 items, 0 links, title "Sheets by their media, type and set"
+text 9,23 579x17 #000000 sans13 link 0 "Green: the sheet holds for a screen 760 CSS px wide. White: it doesn't, or isn't CSS, or isn't"
+text 9,39 50x17 #000000 sans13 link 0 "chosen."
+text 9,61 121x17 #000000 sans13 link 0 "media=print: white"
+fill 6,68 596x20 #00cc00
+text 9,83 239x17 #000000 sans13 link 0 "screen and (min-width: 600px): green"
+text 9,105 269x17 #000000 sans13 link 0 "only screen and (max-width: 600px): white"
+fill 6,112 596x20 #00cc00
+text 9,127 262x17 #000000 sans13 link 0 "(min-width: 40em), no media type: green"
+text 9,149 189x17 #000000 sans13 link 0 "an alternate stylesheet: white"
+fill 6,156 596x20 #00cc00
+text 9,171 341x17 #000000 sans13 link 0 "an alternate titled Main, the set named after it: green"
+text 9,193 196x17 #000000 sans13 link 0 "an alternate with no title: white"
+text 9,215 94x17 #000000 sans13 link 0 "disabled: white"
+text 9,237 139x17 #000000 sans13 link 0 "type=text/plain: white"
+fill 6,244 596x20 #00cc00
+text 9,259 249x17 #000000 sans13 link 0 "type="Text/CSS; charset=utf-8": green"
+fill 6,266 596x20 #00cc00
+text 9,281 191x17 #000000 sans13 link 0 "title=Main, the first set: green"
+text 9,303 194x17 #000000 sans13 link 0 "title=Other, another set: white"
+fill 6,310 596x20 #00cc00
+text 9,325 182x17 #000000 sans13 link 0 "style media=SCREEN: green"
+text 9,347 204x17 #000000 sans13 link 0 "style media="not screen": white"
+text 9,369 160x17 #000000 sans13 link 0 "style media=small: white"
+text 9,391 273x17 #000000 sans13 link 0 "style screen and (max-width: 600px): white"
+fill 6,398 596x20 #00cc00
+text 9,413 140x17 #000000 sans13 link 0 "style media="": green"
+fill 6,420 596x20 #00cc00
+text 9,435 235x17 #000000 sans13 link 0 "style print, (min-width: 700px): green"
+fill 6,442 596x20 #00cc00
+text 9,457 304x17 #000000 sans13 link 0 "style (orientation: landscape) and (color): green"
+text 9,479 168x17 #000000 sans13 link 0 "style type=text/less: white"
+fill 6,486 596x20 #00cc00
+text 9,501 144x17 #000000 sans13 link 0 "style title=Main: green"
+text 9,523 146x17 #000000 sans13 link 0 "style title=Other: white"
+fill 6,530 596x20 #00cc00
+text 9,545 157x17 #000000 sans13 link 0 "linked in the body: green"

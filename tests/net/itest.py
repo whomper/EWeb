@@ -7,8 +7,16 @@ packed, kept connections, a resumed TLS session, redirects from HTTP to
 HTTPS, chunks, a charset in Content-Type, and the certificates that must be
 refused (another host's, one nobody signed). With EWRENDER, the browser
 too (src/browse, through tests/host/ewrender.c): a page and its
-stylesheet over HTTP and HTTPS, its links made absolute, EWeb's own page
-when a server isn't there and when what came isn't a page.
+stylesheet over HTTP and HTTPS, its links made absolute, only the
+stylesheets whose media holds fetched (and those that come to hold as the
+window is sized, then), EWeb's own page when a server isn't
+there and when what came isn't a page, a page's refresh (<meta
+http-equiv=refresh>, the Refresh header), and pages that name no encoding
+(UTF-8 found; Windows-1255 under .il, through EW_HOSTS, or chosen by hand;
+their links' and forms' queries in it; a text file), the queries of a
+page's other addresses (pictures, sheets, CSS's url()s, scripts'), and
+downloads' names (Content-Disposition, <a download>, gzip files kept as
+they came).
 
     tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
@@ -16,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -293,6 +302,52 @@ try:
               [(s[0], s[1]) for s in steps] == want and
               all(s[3] == "0" and s[4] == "0" for s in steps if s[0] in ("back", "forward")) and
               steps[5][2] == "508", p.stdout + p.stderr)
+        # a stylesheet's media (the HTML Standard's 4.2.4), at two widths
+        # (760 and 500 CSS px): only the sheets that hold for the screen
+        # asked for and applied, none alternate, disabled, of another type
+        # or with an empty href (two sheets each time, said on the status line)
+        murl = "http://localhost:%d/site/media/page.html" % HTTP
+        mouts = []
+        for w in ("608", "400"):
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", w, murl], cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            mouts.append((p.returncode, p.stdout + p.stderr, urllib.request.build_opener(
+                urllib.request.ProxyHandler({})).open("http://localhost:%d/site/media/count" % HTTP,
+                                                     timeout=10).read().decode()))
+        check("the browser: stylesheets by their media, type and rel",
+              [o[0] for o in mouts] == [0, 0] and
+              mouts[0][2] == "body.css=1 page.html=1 wide.css=1" and
+              mouts[1][2] == "body.css=2 narrow.css=1 page.html=2 wide.css=1" and
+              re.search(r'#0000aa \S+ link 0 "Sheets by', mouts[0][1]) and
+              re.search(r'#00aa00 \S+ link 0 "Sheets by', mouts[1][1]) and
+              all("fill" in o[1] and "#eeeeee" in o[1] and "stylesheet 2..." in o[1] and
+                  "stylesheet 3" not in o[1] for o in mouts),
+              "\n".join(o[1] + "count: " + o[2] for o in mouts))
+        # the window sized (Media Queries 4, 2): at 400 px the sheet for
+        # a narrow screen is fetched then, quietly (no status line), and
+        # back at 608 the wide one comes from the cache, as body.css
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "608", "-L", "400", "-L", "608", murl],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        rcount = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/media/count" % HTTP, timeout=10).read().decode()
+        check("the browser: a stylesheet's media again as the window is sized",
+              p.returncode == 0 and rcount == "body.css=3 narrow.css=2 page.html=3 wide.css=2" and
+              re.search(r'resized: 1 "Media" width 400\nresized: 1 "Media" width 608\n', p.stdout) and
+              re.search(r'#0000aa \S+ link 0 "Sheets by', p.stdout) and "stylesheet 3" not in p.stdout,
+              p.stdout + p.stderr + "count: " + rcount)
+        # sized while a picture comes (GEM's messages come as a request
+        # waits): no request inside it, the narrow sheet after it
+        p = subprocess.run([ewrender, "-f", font, "-d", "-w", "608", "-Y", "400",
+                            "http://localhost:%d/site/media/pics.html" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        rcount = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/media/count" % HTTP, timeout=10).read().decode()
+        check("the browser: the window sized while a picture comes",
+              p.returncode == 0 and "sized in a request: 1" in p.stdout and
+              rcount == "body.css=3 narrow.css=3 page.html=3 pic.png=1 pics.html=1 wide.css=3" and
+              re.search(r'page 400 x', p.stdout) and re.search(r'#00aa00 \S+ link 0 "Sheets by', p.stdout) and
+              "image " in p.stdout,
+              p.stdout + p.stderr + "count: " + rcount)
         rc, out = browse("http://localhost:%d/site/two.html#end" % HTTP)
         check("the browser: a page's anchor", rc == 0 and '"The end"' in out
               and "link 1 http://localhost:%d/site/\n" % HTTP in out, out)
@@ -301,6 +356,54 @@ try:
         rc, out = browse("http://localhost:%d/hebrew" % HTTP)
         check("the browser: a page in windows-1255", rc == 0 and re.search(r'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"', out),
               out)
+        # pages that name no encoding: UTF-8 found by its bytes; windows-1255
+        # read as windows-1252 but under Israel's .il, or as chosen by hand
+        # (View > Encoding), its link's and form's queries in it
+        enc = "http://localhost:%d/site/enc/" % HTTP
+        rc, out = browse(enc + "utf8.html")
+        check("encodings: UTF-8 that names none", rc == 0 and 'title "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and "link 1 %secho?q=%%D7%%A9%%D7%%9C%%D7%%95%%D7%%9D\n" % enc[:-4] in out, out)
+        rc, out = browse(enc + "w1255.html")
+        check("encodings: windows-1255 that names none is windows-1252 here", rc == 0
+              and 'title "\u00f9\u00ec\u00e5\u00ed \u00f2\u00e5\u00ec\u00ed"' in out
+              and "link 1 %secho?q=%%F9%%EC%%E5%%ED\n" % enc[:-4] in out, out)
+        il = "http://hebrew.il:%d/site/enc/" % HTTP
+
+        def encoded(*args, url=il + "w1255.html"):
+            p = subprocess.run([ewrender, "-f", font, "-d"] + list(args) + [url], cwd=work, capture_output=True,
+                               text=True, timeout=120, env=dict(os.environ, EW_HOSTS="hebrew.il=127.0.0.1"))
+            return p.returncode, p.stdout + p.stderr
+
+        rc, out = encoded()
+        check("encodings: windows-1255 that names none, under .il", rc == 0
+              and 'title "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and "link 1 %secho?q=%%F9%%EC%%E5%%ED\n" % il[:-4] in out, out)
+        rc, out = encoded("-F", "q=\u05d0\u05d1", "-S", "go")
+        check("encodings: its form sends windows-1255", rc == 0 and re.search(
+            r'^sent: 0 "GET\|\|q=%E0%E1&go=%E7%F4%F9" ', out, re.M), out)
+        rc, out = encoded("-e", "windows-1255", "-N", "http://localhost:%d/site/two.html" % HTTP,
+                          url=enc + "w1255.html")
+        check("encodings: chosen by hand, kept with the page for Back", rc == 0
+              and 'encoding: 0 windows-1255 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and re.search(r'^to: 0 "Two" ', out, re.M)
+              and re.search(r'^back: 0 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd" ', out, re.M), out)
+        rc, out = encoded("-e", "windows-1255", "-F", "q=\u05d0", "-S", "go", url=enc + "w1255.html")
+        check("encodings: chosen by hand, its form sends in it", rc == 0
+              and re.search(r'^sent: 0 "GET\|\|q=%E0&go=%E7%F4%F9" ', out, re.M), out)
+        rc, out = encoded("-e", "auto", url=il + "utf8.html")
+        check("encodings: Auto again", rc == 0 and 'encoding: 0 UTF-8 "\u05e9' in out, out)
+        rc, out = browse(enc + "plain.txt")
+        check("encodings: a text file that names none, in UTF-8", rc == 0
+              and 'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"' in out and '"<b>not bold</b> & caf\u00e9"' in out, out)
+        # a page's addresses: their query in its encoding for the HTML's, in
+        # UTF-8 for CSS's url()s (a <style>'s, a style attribute's, a sheet's)
+        # and fetch()
+        p = subprocess.run([ewrender, "-f", font, "-J", "-d", enc + "addr.html"], cwd=work, capture_output=True,
+                           text=True, timeout=120)
+        seen = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(enc + "seen", timeout=10).read().decode()
+        check("encodings: a page's addresses, their queries in its encoding or in UTF-8", p.returncode == 0 and
+              seen == "ext.png?q=%D7%90 f?q=%D7%90 img.png?q=%E0 inl.png?q=%D7%90 pts.png?q=%CA%81 s.css?q=%E0 "
+                      "st.png?q=%D7%90 x?q=%E0", p.stdout + p.stderr + "seen: " + seen)
         rc, out = browse("http://localhost:1/")
         check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
         # saving: a file EWeb doesn't show (kept in memory, saved in one
@@ -330,6 +433,110 @@ try:
         rc, data, out = save("https://localhost:%d/site/" % HTTPS)
         check("the browser: the page shown saved", rc == 0 and data == server.SITE and
               "saved page: 1 %d INDEX.HTM\n" % len(server.SITE) in out, out)
+        # downloads' names (RFC 6266): Content-Disposition's attachment saves
+        # what EWeb would show, its filename (filename* first) the name
+        # offered; a gzip file is saved as it came; <a download> to the
+        # page's own site saves (the HTML Standard's suggested filename),
+        # to another is followed
+        dl = "http://localhost:%d/site/dl/" % HTTP
+        rc, data, out = save(dl + "report")
+        check("downloads: attachment, its filename", rc == 0 and data == server.REPORT and
+              "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        cache = os.path.join(work, "dlcache")
+        shutil.rmtree(cache, ignore_errors=True)
+
+        def browse_cached(cache, url):
+            p = subprocess.run([ewrender, "-f", font, "-C", cache, "-d", url], cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            return p.returncode, p.stdout + p.stderr
+
+        for i in range(2):
+            rc, data, out = save("-C", cache, dl + "report")
+            check("downloads: attachment, not from the cache (%d)" % i, rc == 0 and data == server.REPORT and
+                  "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        rc, data, out = save(dl + "euro")
+        check("downloads: filename* before filename", rc == 0 and data == server.SMALL and
+              "download: application/octet-stream %d RATES.PDF\n" % len(server.SMALL) in out, out)
+        rc, data, out = save(dl + "files.tar.gz")
+        check("downloads: a gzip file (x-gzip), as it came", rc == 0 and data == server.TARGZ and
+              "download: application/x-gzip %d FILES.TGZ\n" % len(server.TARGZ) in out, out)
+        rc, data, out = save(dl + "backup")
+        check("downloads: a gzip file by its name, as it came", rc == 0 and data == server.TARGZ and
+              "download: application/octet-stream %d BACKUP.TGZ\n" % len(server.TARGZ) in out, out)
+        for name, title in (("notes.html.gz", "Notes, packed"), ("inline", None), ("denied", "Denied"),
+                            ("bad", None)):
+            rc, out = browse(dl + name)
+            check("downloads: shown, not saved: " + name, rc == 0 and "download:" not in out and
+                  (title is None or ('title "%s"' % title) in out), out)
+        links = dl + "links.html"
+        rc, data, out = save("-K", "named", links)
+        check("downloads: <a download=NAME>", rc == 0 and data == server.SMALL and "followed: 5 " in out and
+              "saved link: 0 %d MYFILE.BIN \n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-K", "plain", links)
+        check("downloads: <a download> to a page: saved", rc == 0 and data == server.SITE_TWO and
+              "saved link: 0 %d TWO.HTM \n" % len(server.SITE_TWO) in out, out)
+        rc, data, out = save("-K", "cd", links)
+        check("downloads: <a download>, Content-Disposition's name first", rc == 0 and data == server.REPORT and
+              "saved link: 0 %d REPORT20.TXT \n" % len(server.REPORT) in out, out)
+        rc, data, out = save("-K", "other", links)
+        check("downloads: <a download> to another site: followed", rc == 0 and data == server.SMALL and
+              "followed: 4 " in out and "download: application/zip %d SMALL.ZIP\n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-K", "othercd", links)
+        check("downloads: to another site, attachment", rc == 0 and data == server.REPORT and
+              "followed: 4 " in out and "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        rc, data, out = save("-g", "5", links)
+        check("downloads: a gzip file streamed, as it came", rc == 0 and data == server.TARGZ and
+              "saved link: 0 %d FILES.TGZ \n" % len(server.TARGZ) in out, out)
+        # a script's a.click() on <a download> downloads as a click does
+        # (the HTML Standard, 4.6.5): saved under the attribute's name; to
+        # another site, followed
+        rc, data, out = save("-J", "-K", "jsnamed", links)
+        check("downloads: a.click() on <a download=NAME>", rc == 0 and data == server.SMALL and
+              "load: 5 " in out and "saved link: 0 %d MYFILE.BIN \n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-J", "-K", "jsother", links)
+        check("downloads: a.click() on <a download> to another site: followed", rc == 0 and
+              data == server.SMALL and "load: 4 " in out and
+              "download: application/zip %d SMALL.ZIP\n" % len(server.SMALL) in out, out)
+        # a page whose script clicks its <a download> as it loads ("your
+        # download starts now"): the page shown on the way (br.shows: the
+        # front end draws it), then its file saved
+        rc, data, out = save("-J", dl + "starts.html")
+        check("downloads: a.click() as the page loads: shown, then saved", rc == 0 and data == server.SMALL and
+              'shown on the way: 5 "Your download"\n' in out and
+              "saved link: 0 %d GOT.BIN \n" % len(server.SMALL) in out and 'title "Your download"' in out, out)
+        # a .tar.gz as Apache sends one (application/x-tar, x-gzip), known
+        # by its address alone: as it came
+        rc, data, out = save(dl + "apache.tar.gz")
+        check("downloads: a gzip file by its address, as it came", rc == 0 and data == server.TARGZ and
+              "download: application/x-tar %d APACHE.TGZ\n" % len(server.TARGZ) in out, out)
+
+        def dl_counts():
+            import urllib.request
+            with urllib.request.urlopen(dl + "count", timeout=10) as r:
+                return dict(kv.split("=") for kv in r.read().decode().split())
+
+        # the caches: a page that says only "inline" is kept as any other;
+        # a file named by "inline" isn't (from the cache it would lose its
+        # name)
+        for i in range(2):
+            rc, out = browse_cached(cache, dl + "inline.html")
+            check("downloads: inline, kept (%d)" % i, rc == 0 and 'title "Inline"' in out, out)
+            rc, data, out = save("-C", cache, dl + "manual")
+            check("downloads: a file named by inline, not from the cache (%d)" % i, rc == 0 and
+                  data == server.SMALL and "download: application/pdf %d MANUAL.PDF\n" % len(server.SMALL) in out,
+                  out)
+        n = dl_counts()
+        check("downloads: inline kept, a named file not", n.get("inline.html") == "1" and n.get("manual") == "2",
+              repr(n))
+        # the file selector up for longer than the server waits (its send
+        # timeout: a second here, a minute for nginx and Apache): the
+        # connection lost, and the file asked for once more into the file
+        # chosen
+        rc, data, out = save("-Z", "3000", "-g", "6", links)
+        check("downloads: asked again after a long file selector", rc == 0 and data == server.HELD and
+              "selector: HELD.BIN\n" in out and out.count("selector:") == 1 and
+              "saved link: 0 %d HELD.BIN \n" % len(server.HELD) in out and dl_counts().get("held.bin") == "2",
+              out + repr(dl_counts()))
         # the disk cache: a page fresh for an hour shown again with no
         # request (the next run reads the pack and the index), one asked
         # again each time answered with a 304, Reload asking again
@@ -538,6 +745,102 @@ try:
               and '"fetch atari"' in out and '"xhr atari"' in out and "js error" not in out, out)
         check("scripts: document.cookie, HttpOnly kept from them", p.returncode == 0
               and '"cookies seen=2; js=1"' in out and '"sent hidden=1; seen=2; js=1"' in out, out)
+        # a refresh (<meta http-equiv=refresh>, the Refresh header): followed
+        # when due, in place of the page in the history, the page it came
+        # from as the Referer
+        rsite = "http://localhost:%d/site/refresh/" % HTTP
+
+        def refresh(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d", "-r", "8"] + list(args), cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            out = p.stdout + p.stderr
+            return p.returncode, re.findall(r'^(refresh|refreshed|back|note): (.*)$', out, re.M), out
+
+        rc, steps, out = refresh("-P", "http://localhost:%d/site/" % HTTP, "-b", rsite + "meta.html")
+        check("refresh: a meta's, at once, in the page's place (Back goes before it)", rc == 0 and steps == [
+            ("refresh", "0 s %sto.html?from=meta" % rsite),
+            ("refreshed", '0 "Arrived|from=meta|%smeta.html" %sto.html?from=meta' % (rsite, rsite)),
+            ("back", '0 "EWeb site" http://localhost:%d/site/' % HTTP)], out)
+        cache = os.path.join(work, "rfcache")
+        shutil.rmtree(cache, ignore_errors=True)
+        for k in range(2):
+            rc, steps, out = refresh("-C", cache, rsite + "header.html")
+            check("refresh: the Refresh header, before the page's meta (%s)" % ("again: not from the disk cache"
+                  if k else "kept an hour"), rc == 0 and steps == [
+                      ("refresh", "1 s %sto.html?from=header" % rsite),
+                      ("refreshed", '0 "Arrived|from=header|%sheader.html" %sto.html?from=header' % (rsite, rsite))],
+                  out)
+        rc, steps, out = refresh(rsite + "loop.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode()
+        check("refresh: a page that refreshes itself at once stops after %d" % 5, rc == 0 and
+              [s[0] for s in steps] == ["refresh", "refreshed"] * 5 + ["note"] and
+              steps[1] == ("refreshed", '0 "Loop" %sloop.html' % rsite) and "again and again" in steps[-1][1]
+              and "loop.html=6" in count.split(), out + count)
+        rc, steps, out = refresh(rsite + "based.html")
+        rc2, steps2, out2 = refresh(rsite + "after.html")
+        check("refresh: resolved against the <base> before the meta, not one after", rc == 0 and rc2 == 0 and
+              steps[:1] == [("refresh", "0 s http://localhost:%d/site/refresh/sub/to.html?b=before" % HTTP)] and
+              steps2[:1] == [("refresh", "0 s %sto.html?b=after" % rsite)], out + out2)
+        rc, steps, out = refresh(rsite + "noscript.html")
+        rc2, steps2, out2 = refresh("-J", rsite + "noscript.html")
+        check("refresh: a <noscript>'s only without scripts", rc == 0 and rc2 == 0 and
+              steps[:1] == [("refresh", "0 s %sto.html?from=noscript" % rsite)] and steps2 == [], out + out2)
+        rc, steps, out = refresh(rsite + "js.html")
+        check("refresh: a javascript: address passed over for the next", rc == 0 and
+              steps[:1] == [("refresh", "0 s %sto.html?from=second" % rsite)], out)
+        rc, steps, out = refresh("-r", "0", rsite + "later.html")
+        check("refresh: one in a minute, said on the status line", rc == 0 and
+              ("note", "Going on to localhost:%d in 60 s: Esc stays here." % HTTP) in steps, out)
+        rc, steps, out = refresh("-P", rsite + "later.html", "-b", "http://localhost:%d/site/two.html" % HTTP)
+        check("refresh: none for a page Back goes to", rc == 0 and
+              steps == [("back", '0 "Later" %slater.html' % rsite)], out)
+        rc, steps, out = refresh("-r", "3", rsite + "selfcss.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        check("refresh: itself asked for anew, its stylesheet (kept an hour) once", rc == 0 and
+              [s[0] for s in steps] == ["refresh", "refreshed"] * 3 and
+              "selfcss.html=4" in count and "s.css=1" in count, out + " ".join(count))
+        rc, steps, out = refresh(rsite + "frag.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        check("refresh: a place on the page itself, scrolled to, not loaded again", rc == 0 and steps == [
+            ("refresh", "0 s %sfrag.html#x" % rsite), ("refreshed", '2 "Place" %sfrag.html#x' % rsite)] and
+              "frag.html=1" in count, out + " ".join(count))
+        rc, steps, out = refresh("-J", rsite + "jsset.html")
+        rc2, steps2, out2 = refresh(rsite + "foster.html")
+        check("refresh: each meta as the parser put it in (a script's change after, a table's order)",
+              rc == 0 and rc2 == 0 and steps[:1] == [("refresh", "0 s %sto.html?from=orig" % rsite)] and
+              steps2[:1] == [("refresh", "0 s %sto.html?from=foster" % rsite)], out + out2)
+        t0 = time.time()
+        rc, steps, out = refresh("-r", "1", rsite + "slowpic.html")
+        took = time.time() - t0
+        check("refresh: itself in 2 s from when its picture (1.5 s) is in (%.1f s)" % took, rc == 0 and steps == [
+            ("refresh", "2 s %sslowpic.html" % rsite), ("refreshed", '0 "Slow" %sslowpic.html' % rsite),
+            ("note", "This page loads again in 2 s: Esc stops it.")] and took >= 3.4, out)
+        # a page that refreshes itself (a camera's): its pictures asked for
+        # again as their headers say, through the disk cache, and decoded
+        # again only when they changed
+        cache = os.path.join(work, "camcache")
+        shutil.rmtree(cache, ignore_errors=True)
+        rc, steps, out = refresh("-v", "-C", cache, "-r", "2", rsite + "cam.html")
+        with urllib.request.urlopen(rsite + "count", timeout=10) as r:
+            count = r.read().decode().split()
+        pics = re.findall(r"^picture %s(\w+)\.png (decoded|unchanged) " % re.escape(rsite), out, re.M)
+        check("refresh: itself, its pictures asked for again as they say (no-store each time and decoded, "
+              "kept an hour from the cache, no-cache a 304)", rc == 0 and
+              [s[0] for s in steps[:4]] == ["refresh", "refreshed"] * 2 and
+              "cam.html=3" in count and "cam.png=3" in count and "still.png=1" in count and "valid.png=3" in count and
+              pics.count(("cam", "decoded")) == 3 and pics.count(("still", "unchanged")) == 2 and
+              pics.count(("valid", "unchanged")) == 2 and pics.count(("still", "decoded")) == 1 and
+              pics.count(("valid", "decoded")) == 1, out + " ".join(count))
+        # a picture on its own that refreshes itself (its Refresh header):
+        # the one that came each time is shown
+        rc, steps, out = refresh("-v", "-r", "2", rsite + "campic.png")
+        sizes = re.findall(r"^picture %scampic\.png decoded at \S+ (\S+) " % re.escape(rsite), out, re.M)
+        check("refresh: a picture on its own, itself again: the one that came each time",
+              rc == 0 and [s[0] for s in steps[:4]] == ["refresh", "refreshed"] * 2 and
+              sizes == ["150x60", "1x1", "150x60"], out)
     # through AERA-Gateway's webgate (EWEB.INF's GATEWAY=, EWGET -g): the
     # Pi makes the secure connection (TLS 1.3 here), passes the server's
     # gzip, redirects, cookies and big answers through, and refuses a
@@ -646,6 +949,13 @@ try:
                 m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)
                 check("the gateway: a login's POST, its 303 and cookie", p.returncode == 0 and m is not None
                       and m.group(1) == "COOKIE|sid=xyz", p.stdout + p.stderr)
+                # the Refresh header comes through webgate as the server sent it
+                rs = "https://localhost:%d/site/refresh/" % HTTPS
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-r", "2", rs + "header.html"], cwd=work,
+                                   capture_output=True, text=True, timeout=120)
+                check("the gateway: a page's Refresh header passed on", p.returncode == 0 and
+                      "refresh: 1 s %sto.html?from=header\n" % rs in p.stdout and
+                      'refreshed: 0 "Arrived|from=header|%sheader.html" ' % rs in p.stdout, p.stdout + p.stderr)
         finally:
             gate.terminate()
             gate.wait(timeout=10)

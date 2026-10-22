@@ -166,6 +166,23 @@ static int sink(void *ud, const char *d, long n)
 	return 1;
 }
 
+/* HTTPREQ.head: counts its calls, keeps the body packed or stops the
+   request as asked, and notes the Content-Disposition it saw */
+static int head_calls, head_keep, head_stop;
+static char head_cd[64];
+static int head(void *ud, HTTPRESP *rs)
+{
+	const char *v = http_header_at(rs, "Content-Disposition");
+	(void)ud;
+	head_calls++;
+	head_cd[0] = 0;
+	if (v)
+		snprintf(head_cd, sizeof(head_cd), "%.*s", (int)strcspn(v, "\n"), v);
+	if (head_keep)
+		rs->packed = 1;
+	return !head_stop;
+}
+
 static void get(RES *r, const char *url, const HTTPREQ *with)
 {
 	HTTPREQ rq;
@@ -291,6 +308,71 @@ static void https(void)
 		cases++;
 		if (r.ok && r.body.len == sizeof(v_text) && !memcmp(r.body.s, v_text, r.body.len))
 			fail("damaged gzip", "came out whole");
+		done(&r);
+	}
+
+	/* a head hook: the headers before the body; a gzip file kept as it
+	   came (packed), or the request stopped there */
+	{
+		char hd[200];
+		snprintf(hd, sizeof(hd), "HTTP/1.1 200 OK\r\nContent-Type: application/x-gzip\r\nContent-Encoding: "
+			 "x-gzip\r\nContent-Disposition: attachment; filename=a.tar.gz\r\nContent-Length: %d\r\n\r\n",
+			 (int)sizeof(v_gz));
+		say(hd);
+		say_bin(v_gz, sizeof(v_gz));
+		memset(&rq, 0, sizeof(rq));
+		rq.head = head;
+		head_calls = 0;
+		head_keep = 1;
+		one(&r, u, &rq);
+		cases++;
+		if (!r.ok || r.body.len != sizeof(v_gz) || memcmp(r.body.s, v_gz, r.body.len) || !r.rs.packed ||
+		    r.rs.encoding != 1 || r.rs.size != sizeof(v_gz) || head_calls != 1 ||
+		    strcmp(head_cd, "attachment; filename=a.tar.gz"))
+			fail("head: kept packed", "%s, %ld bytes, packed %d, %d calls, \"%s\"", r.ok ? "wrong" : r.err,
+			     r.body.len, r.rs.packed, head_calls, head_cd);
+		done(&r);
+		say(hd);
+		say_bin(v_gz, sizeof(v_gz));
+		head_keep = 0;
+		one(&r, u, &rq);
+		cases++;
+		if (!r.ok || r.body.len != sizeof(v_text) || memcmp(r.body.s, v_text, r.body.len) || r.rs.packed)
+			fail("head: unpacked", "%s, %ld bytes", r.ok ? "wrong" : r.err, r.body.len);
+		done(&r);
+		/* stopped: the connection goes (the next request makes another) */
+		say("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
+		say("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+		head_stop = 1;
+		http_close_all();
+		fuzz_net_set(said, said_n);
+		get(&r, u, &rq);
+		want_err("head: stopped", &r, "stopped");
+		done(&r);
+		head_stop = 0;
+		get(&r, u, 0);
+		said_n = 0;
+		cases++;
+		if (r.ok && r.rs.reused)
+			fail("head: stopped", "its connection was kept");
+		done(&r);
+		/* not for an error's answer; with a sink, before its first byte */
+		say("HTTP/1.1 404 Not Found\r\nContent-Length: 4\r\n\r\ngone");
+		head_calls = 0;
+		one(&r, u, &rq);
+		want_body("head: not for a 404", &r, 404, "gone");
+		cases++;
+		if (head_calls)
+			fail("head: not for a 404", "called");
+		done(&r);
+		say("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
+		rq.sink = sink;
+		sink_bytes = 0;
+		head_calls = 0;
+		one(&r, u, &rq);
+		cases++;
+		if (!r.ok || head_calls != 1 || sink_bytes != 5)
+			fail("head: a sink", "%s, %d calls, %d bytes", r.ok ? "ok" : r.err, head_calls, sink_bytes);
 		done(&r);
 	}
 

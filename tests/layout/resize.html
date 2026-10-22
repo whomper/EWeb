@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- args: -L 400 -L 608 -L 400 -->
+<html><head><title>Sheets as the window is sized</title>
+<style>
+body { font-family: sans-serif; margin: 8px }
+p { margin: 2px 0; padding: 2px 4px }
+@media (min-width: 700px) { .m700 { background: #f00 } }
+@media (max-width: 40em) { .m40em { background: #0c0 } }
+</style>
+<link rel=stylesheet media=print href="resize/print.css">
+<link rel=stylesheet media="screen and (min-width: 600px)" href="resize/wide.css">
+<link rel=stylesheet media="(max-width: 599px)" href="resize/narrow.css">
+<link rel=stylesheet media="(450px <= width <= 550px)" href="resize/band.css">
+<style media="(min-width: 700px)">.s700 { background: #f00 }</style>
+</head>
+<body>
+<p>Built 760 CSS px wide, then the window made 500, 760 and 500 again (Media Queries 4, 2: evaluated again). Green: it holds at 500. White: it doesn't.</p>
+<p class=print>link media=print: white</p>
+<p class=wide>link screen and (min-width: 600px), applied at 760: white</p>
+<p class=narrow>link (max-width: 599px), fetched when the window came to 500: green</p>
+<p class=band>link (450px &lt;= width &lt;= 550px): green</p>
+<p class=m700>@media (min-width: 700px): white</p>
+<p class=m40em>@media (max-width: 40em): green</p>
+<p class=s700>style media="(min-width: 700px)": white</p>
+</body></html>

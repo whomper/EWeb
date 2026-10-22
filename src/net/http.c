@@ -292,8 +292,10 @@ typedef struct {
 	int failed;			/* 1 the sink refused, 2 too big */
 } BODY;
 
+/* a sink's pieces, and the most one read copies into memory (what comes
+   is in the connection's own buffer: this sizes only the copies) */
 #ifdef EW_ST
-static char rbuf[8192];		/* the ST edition: 8 KB less for a 1 MB ST */
+static char rbuf[2048];		/* the ST edition: 14 KB less for a 1 MB ST */
 #else
 static char rbuf[16384];
 #endif
@@ -447,6 +449,7 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		h->http10 = line.s[7] == '0';
 		sb_reset(&rs->headers);
 		rs->mime[0] = rs->charset[0] = 0;
+		rs->packed = 0;
 		for (;;) {
 			r = get_line(c, &line, LINE_MAX_);
 			if (r == -2)
@@ -482,6 +485,13 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	if (rq->refuse && rs->status >= 200 && rs->status < 300 && refused(rs->mime, rq->refuse)) {
 		snprintf(err, errlen, "%s sent %s, which EWeb doesn't show", hostport, rs->mime);
 		goto fail;
+	}
+	if (rq->head != NULL && rs->status >= 200 && rs->status < 300) {
+		rs->encoding = h->encoding;
+		if (!rq->head(rq->ud, rs)) {
+			str_copy(err, "stopped", errlen);
+			goto fail;
+		}
 	}
 	if (h->http10 && !h->keep_alive)
 		h->close_after = 1;
@@ -551,7 +561,7 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	rs->t.body_ms += pf_ms() - t0;
 	rs->encoding = h->encoding;
 	rs->size = rs->length;
-	if ((h->encoding == 1 || h->encoding == 2) && !b.to_sink && body && body->len > start) {
+	if ((h->encoding == 1 || h->encoding == 2) && !b.to_sink && !rs->packed && body && body->len > start) {
 		SBUF plain;
 		int good;
 		t0 = pf_ms();
@@ -697,7 +707,7 @@ void http_resp_free(HTTPRESP *rs)
 	sb_free(&rs->headers);
 }
 
-const char *http_header(const HTTPRESP *rs, const char *name, char *out, int size)
+const char *http_header_at(const HTTPRESP *rs, const char *name)
 {
 	const char *p = rs->headers.s;
 	int n = (int)strlen(name);
@@ -707,17 +717,253 @@ const char *http_header(const HTTPRESP *rs, const char *name, char *out, int siz
 			e = p + strlen(p);
 		if (e - p > n && p[n] == ':' && !strncasecmp(p, name, n)) {
 			const char *v = p + n + 1;
-			int m;
 			while (*v == ' ' || *v == '\t')
 				v++;
-			m = (int)(e - v);
-			if (m >= size)
-				m = size - 1;
-			memcpy(out, v, m);
-			out[m] = 0;
-			return out;
+			return v;
 		}
 		p = *e ? e + 1 : e;
 	}
 	return 0;
+}
+
+const char *http_header(const HTTPRESP *rs, const char *name, char *out, int size)
+{
+	const char *v = http_header_at(rs, name);
+	int m;
+	if (!v)
+		return 0;
+	m = (int)strcspn(v, "\n");
+	if (m >= size)
+		m = size - 1;
+	memcpy(out, v, m);
+	out[m] = 0;
+	return out;
+}
+
+/* ---------------- Content-Disposition (RFC 6266) ---------------- */
+
+#define CD_END(c) ((c) == 0 || (c) == '\n')
+
+/* a character of a token: RFC 2616's, whose grammar RFC 6266 takes */
+static int tchar(int c)
+{
+	return c > 32 && c < 127 && !strchr("()<>@,;:\\\"/[]?={}", c);
+}
+
+static const char *ows(const char *p)
+{
+	while (*p == ' ' || *p == '\t')
+		p++;
+	return p;
+}
+
+/* the bytes at the start of s (n of them) that are whole UTF-8
+   characters; -1 when one that isn't UTF-8 comes before the end */
+static int utf8_whole(const unsigned char *s, int n)
+{
+	int i = 0;
+	while (i < n) {
+		int c = s[i], k, need;
+		if (c < 0x80) {
+			i++;
+			continue;
+		}
+		need = c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : 0;
+		if (!need)
+			return -1;
+		for (k = 1; k <= need; k++) {
+			int lo = 0x80, hi = 0xbf;
+			if (i + k >= n)
+				return i;	/* cut short at the end */
+			if (k == 1) {	/* no overlong forms, no surrogates, nothing past U+10FFFF */
+				if (c == 0xe0)
+					lo = 0xa0;
+				else if (c == 0xed)
+					hi = 0x9f;
+				else if (c == 0xf0)
+					lo = 0x90;
+				else if (c == 0xf4)
+					hi = 0x8f;
+			}
+			if (s[i + k] < lo || s[i + k] > hi)
+				return -1;
+		}
+		i += need + 1;
+	}
+	return i;
+}
+
+/* byte c of ISO-8859-1 to out[*n] as UTF-8: 0 when it doesn't fit */
+static int put_latin1(int c, char *out, int *n, int size)
+{
+	if (c < 0x80) {
+		if (*n + 1 >= size)
+			return 0;
+		out[(*n)++] = (char)c;
+		return 1;
+	}
+	if (*n + 2 >= size)
+		return 0;
+	out[(*n)++] = (char)(0xc0 | c >> 6);
+	out[(*n)++] = (char)(0x80 | (c & 0x3f));
+	return 1;
+}
+
+static int alnum(int c)
+{
+	return (c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'z');
+}
+
+static int hexdig(int c)
+{
+	return c >= '0' && c <= '9' ? c - '0' : (c | 0x20) >= 'a' && (c | 0x20) <= 'f' ? (c | 0x20) - 'a' + 10 : -1;
+}
+
+/* filename*'s ext-value (RFC 8187, 3.2.1: charset'language'value-chars)
+   to out as UTF-8: 1, or 0 when it isn't one (or its charset isn't
+   UTF-8 or ISO-8859-1, which are all a recipient must know, or its bytes
+   aren't UTF-8) */
+static int ext_value(const char *v, const char *e, char *out, int size)
+{
+	static const char cschars[] = "!#$%&+-^_`{}~";
+	static const char attr[] = "!#$&+-.^_`|~";
+	const char *cs = v;
+	int utf8, n = 0, cut = 0, w;
+	while (v < e && *v != '\'' && (alnum((unsigned char)*v) || strchr(cschars, *v)))
+		v++;
+	if (v == e || *v != '\'')
+		return 0;
+	if (v - cs == 5 && !strncasecmp(cs, "UTF-8", 5))
+		utf8 = 1;
+	else if (v - cs == 10 && !strncasecmp(cs, "ISO-8859-1", 10))
+		utf8 = 0;
+	else
+		return 0;
+	for (v++; v < e && *v != '\''; v++)	/* the language, which names don't need */
+		if (!alnum((unsigned char)*v) && *v != '-')
+			return 0;
+	if (v == e)
+		return 0;
+	for (v++; v < e; v++) {
+		int c = (unsigned char)*v;
+		if (c == '%') {
+			if (e - v < 3 || hexdig(v[1]) < 0 || hexdig(v[2]) < 0)
+				return 0;
+			c = hexdig(v[1]) * 16 + hexdig(v[2]);
+			v += 2;
+			if (!c)
+				return 0;	/* a NUL: no name holds one */
+		} else if (!alnum(c) && !strchr(attr, c)) {
+			return 0;
+		}
+		if (cut)
+			continue;	/* (the rest still checked) */
+		if (!utf8)
+			cut = !put_latin1(c, out, &n, size);
+		else if (n + 1 < size)
+			out[n++] = (char)c;
+		else
+			cut = 1;
+	}
+	if (utf8) {
+		w = utf8_whole((const unsigned char *)out, n);
+		if (w < 0 || (w < n && !cut))
+			return 0;
+		n = w;
+	}
+	out[n] = 0;
+	return 1;
+}
+
+/* filename's value, a token or a quoted-string (its quoted-pairs
+   unescaped), read as ISO-8859-1 */
+static void plain_value(const char *v, const char *e, char *out, int size)
+{
+	int n = 0;
+	if (*v == '"') {
+		v++;
+		e--;
+	}
+	for (; v < e; v++) {
+		if (*v == '\\')
+			v++;
+		if (!put_latin1((unsigned char)*v, out, &n, size))
+			break;
+	}
+	out[n] = 0;
+}
+
+/* RFC 6266, 4.1:
+     disposition-type *( ";" disposition-parm )
+     disposition-parm = token "=" ( token / quoted-string )
+   with filename and filename* (whose value is RFC 8187's ext-value)
+   read, the others passed over. As the grammar's implied LWS has it,
+   spaces may come between any two of its parts. What isn't this is
+   ignored whole: a quoted type, a value with a space or a comma in it,
+   text after a quoted-string, a parameter twice, no type at all (tc2231).
+   An empty parameter (a ';' too many) is passed over, as browsers do:
+   nothing in it can be misread. */
+int http_disposition(const char *v, char *name, int size)
+{
+	const char *p = ows(v), *t, *fn = 0, *fne = 0, *fs = 0, *fse = 0;
+	int type;
+	name[0] = 0;
+	for (t = p; tchar((unsigned char)*p); p++)
+		;
+	if (p == t)
+		return -1;
+	/* 4.2: unknown types are handled as attachment */
+	type = !(p - t == 6 && !strncasecmp(t, "inline", 6));
+	for (;;) {
+		const char *val;
+		int n;
+		p = ows(p);
+		if (CD_END(*p))
+			break;
+		if (*p != ';')
+			return -1;
+		p = ows(p + 1);
+		if (CD_END(*p) || *p == ';')
+			continue;
+		for (t = p; tchar((unsigned char)*p); p++)
+			;
+		n = (int)(p - t);
+		p = ows(p);
+		if (!n || *p != '=')
+			return -1;
+		val = p = ows(p + 1);
+		if (*p == '"') {
+			for (p++; *p != '"'; p++) {
+				if (*p == '\\')
+					p++;
+				if (CD_END(*p) || ((unsigned char)*p < 32 && *p != '\t') || *p == 127)
+					return -1;
+			}
+			p++;
+		} else {
+			while (tchar((unsigned char)*p))
+				p++;
+			if (p == val)
+				return -1;
+		}
+		if (n == 8 && !strncasecmp(t, "filename", 8)) {
+			if (fn)
+				return -1;
+			fn = val;
+			fne = p;
+		} else if (n == 9 && !strncasecmp(t, "filename*", 9)) {
+			if (fs)
+				return -1;
+			fs = val;
+			fse = p;
+		}
+	}
+	/* 4.3: filename* first; one that isn't good is passed over (RFC 8187,
+	   3.2: a recipient ignores what it can't read) for filename */
+	if (!(fs && *fs != '"' && ext_value(fs, fse, name, size))) {
+		name[0] = 0;
+		if (fn)
+			plain_value(fn, fne, name, size);
+	}
+	return type;
 }

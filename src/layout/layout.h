@@ -26,8 +26,9 @@ typedef struct {
 	/* a picture: its handle for an <img>'s src or a background's url()
 	   (as the page has it; NULL: pictures aren't shown, an <img>'s alt
 	   text is), and its size in CSS px once it is known (0 x 0 until its
-	   file has come) */
-	void *(*image)(void *ud, const char *src, int32_t *w, int32_t *h);
+	   file has come). css: a url() of the page's CSS, whose query is
+	   UTF-8 (CSS parses it without the page's encoding) */
+	void *(*image)(void *ud, const char *src, int css, int32_t *w, int32_t *h);
 	void *ud;
 } LAYOUT_OPT;
 
@@ -75,7 +76,8 @@ typedef struct page {
 	doc *d;				/* not owned */
 	dl_item *items;
 	long nitems, cap;
-	char **links;			/* each link's href as the page has it */
+	char **links;			/* each link's href as the page has it (and its
+					   download attribute: page_link_download) */
 	int nlinks, linkcap;
 	struct fctl **ctls;		/* the form controls shown (their state is the document's) */
 	int nctls, ctlcap;
@@ -111,6 +113,8 @@ void page_free(page *p);
 
 /* the link under (x, y) on the page: an index into links, or -1 */
 int page_link_at(const page *p, int32_t x, int32_t y);
+/* a link's download attribute (<a download>): its value, NULL for none */
+const char *page_link_download(const page *p, int link);
 /* the form control under (x, y), and its item; NULL: none */
 struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it);
 /* a control's item on the page (its content's place), or NULL when it

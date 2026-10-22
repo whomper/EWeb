@@ -61,7 +61,7 @@ static int enabled(int i)
 	case B_RELOAD: return !loading && br.cur >= 0;
 	case B_HOME: return !loading;
 	case B_SEARCH: return !loading && opt.search[0];
-	case B_STOP: return loading;
+	case B_STOP: return loading || br_refresh_due(&br) >= 0;	/* or the page's refresh */
 	}
 	return 0;
 }
@@ -702,11 +702,16 @@ void win_title(void)
 		wind_set_str(win_h, WF_NAME, title);
 }
 
+static int at_rest;	/* the status bar says what the page says (win_status("")) */
+
 void win_status(const char *s)
 {
 	char t[sizeof info];
+	at_rest = !*s;
 	if (*s)
 		snprintf(t, sizeof t, " %s", s);
+	else if (br_refresh_note(&br, t + 1, (int) sizeof t - 1))
+		t[0] = ' ';	/* "Going on to example.com in 5 s: Esc stays here." */
 	else if (br.security[0])
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else
@@ -714,11 +719,20 @@ void win_status(const char *s)
 	if (strcmp(t, info) == 0)
 		return;
 	str_copy(info, t, sizeof info);
+	/* what the bar says now, for the rigs (a link's address without its
+	   query, 7.3) */
+	log_event("status %.*s", (int) strcspn(t + (t[0] == ' '), "?"), t + (t[0] == ' '));
 	if (win_h > 0 && !win_iconified) {
 		GRECT r = r_stat;
 		r.h -= rib_rows();
 		redraw(&r, 1);
 	}
+}
+
+void win_status_again(void)
+{
+	if (at_rest)
+		win_status("");
 }
 
 /* ---------------------------------------------------------------- the address field */
@@ -1023,7 +1037,7 @@ static void choose(fctl *c, short mx, short my)
 			form_option_text(c->opt[i], t, sizeof t);
 			atari_text(t, a, sizeof a);
 			snprintf(lab[n], sizeof lab[n], "%s%s%s", dn_attr(c->opt[i], "disabled") ? "~" : "",
-				 c->sel[i] ? "\x08" : "  ", a[0] ? a : " ");
+				 c->sel[i] ? "\x08 " : "  ", a[0] ? a : " ");
 			items[n] = lab[n];
 			n++;
 		}
@@ -1645,9 +1659,14 @@ static void resized(void)
 	get_work();
 	save_place();
 	if (br.p != NULL && win_page_w() != old_w) {
-		/* the same place in the text, as near as it can be */
+		/* the same place in the text, as near as it can be; the busy
+		   bee, as the page's sheets may be fetched for the new width */
 		int32_t h0 = br.p->height;
+		if (!loading)
+			graf_mouse(BUSYBEE, 0);
 		br_relayout(&br, win_page_w());
+		if (!loading)
+			graf_mouse(ARROW, 0);
 		if (h0 > 0)
 			top = (int32_t) ((int64_t) top * br.p->height / h0);
 	}

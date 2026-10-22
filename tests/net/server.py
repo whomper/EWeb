@@ -26,6 +26,13 @@ Pages:
                  and no size (the page is laid out again when it comes), a
                  GIF, a progressive JPEG with only its width, a big PNG held
                  to the width, and one that isn't there (made with Pillow)
+  /site/media/page.html  stylesheets by their media, type and rel: one
+                 for print, one for a wide screen, one for a narrow one, an
+                 alternate, a disabled, one of another type, an empty href
+                 and one linked in the body; pics.html the wide and narrow
+                 ones with a picture that comes after 0.3 s (pic.png: a
+                 window sized while it comes); count (how often each was
+                 asked for)
   /site/bg.html  pictures from CSS and srcset: a stylesheet in
                  /site/css/ whose url(tile.png) is its folder's, and a
                  <picture> whose WebP source is passed over and whose img's
@@ -56,6 +63,28 @@ Pages:
   /site/files.html  files to save: links to /chunked (2 MB), a file that
                  isn't there, /site/ and /site/small.bin (20 KB; the same
                  bytes as /site/small.zip, application/zip)
+  /site/dl/      downloads' names: report (text/plain that says
+                 attachment, its filename with a space; kept an hour, which
+                 the browser mustn't do), euro (filename and filename*),
+                 files.tar.gz (application/x-gzip with Content-Encoding
+                 x-gzip, always, as Apache sends one), backup (octet-stream,
+                 Content-Encoding gzip, named backup.tgz), notes.html.gz (a
+                 page, packed: shown), inline (a text file named but shown),
+                 denied (a 403 that says attachment: shown), bad (a header
+                 that isn't RFC 6266's: shown), apache.tar.gz (a .tar.gz as
+                 Apache sends one: application/x-tar with Content-Encoding
+                 x-gzip, no Content-Disposition), inline.html (a page with
+                 "inline", kept an hour), manual (a PDF named by "inline",
+                 kept an hour, which the browser mustn't do), held.bin (4
+                 MB, sent as nginx and Apache send a file: the connection
+                 ended when a piece can't go within a second, as their
+                 send timeouts end it after 60 s); links.html,
+                 <a download> links to the page's own site and to the other
+                 name of the same server (localhost and 127.0.0.1), and
+                 buttons whose scripts click two of them (a.click());
+                 starts.html, a page whose script clicks its <a download> as
+                 it loads ("your download starts now"); count (how often
+                 each was asked for)
   /site/cache/   the disk cache: fresh.html (fresh for an hour; a POST to
                  it changes it), etag.html (asked again each time: a 304 to
                  its ETag), post.html (a form that POSTs to fresh.html),
@@ -66,17 +95,47 @@ Pages:
                  the page set, and the cookies a script's request sends;
                  /site/tabs.html: tabs a click shows, an alert (EWEB.PRG
                  in Hatari)
+  /site/enc/     pages that name no encoding (Content-Type without a
+                 charset, no <meta>): utf8.html in UTF-8, w1255.html in
+                 windows-1255 with a link and a form whose queries are
+                 Hebrew (its own when fetched as hebrew.il, ewrender's
+                 EW_HOSTS), plain.txt a text file in UTF-8; addr.html, in
+                 windows-1255, whose addresses have Hebrew in their query:
+                 two pictures (one's query the bytes 0xCA and 0x81, which
+                 the decoder once left out), a sheet (a/s.css, with a
+                 url()), a <style>'s and a style attribute's url(), a
+                 script's fetch() and XMLHttpRequest; seen: the queries
+                 under /site/enc/a/ as they came (never kept)
+  /site/refresh/ a refresh: meta.html (a <meta http-equiv=refresh>),
+                 header.html (the Refresh header, before the page's meta),
+                 loop.html (itself at once, again and again), based.html
+                 and after.html (a <base> before the meta and after it),
+                 noscript.html, js.html (a javascript: address, then
+                 another), later.html (in a minute), selfcss.html (itself,
+                 with a stylesheet kept an hour), frag.html (a place on
+                 itself), jsset.html (a script changes the content),
+                 foster.html (a table puts the second meta first),
+                 slowpic.html (itself in 2 s, its picture 1.5 s coming),
+                 cam.html (itself every second: cam.png no-store, another
+                 each time; still.png kept an hour; valid.png no-cache, a
+                 304 when unchanged), campic.png (a picture on its own,
+                 itself every second by its Refresh header, another each
+                 time);
+                 to.html's title is "Arrived|QUERY|REFERER"; count (how
+                 often each was asked for)
 It prints "ready" when the servers listen."""
 import argparse
 import gzip
 import http.server
 import os
 import random
+import socket
 import socketserver
 import ssl
 import subprocess
 import sys
 import threading
+import time
 import zlib
 
 rnd = random.Random(7)
@@ -91,8 +150,112 @@ FILES_PAGE = (b"<!DOCTYPE html><html><head><title>Files</title></head><body><p><
               b"file</a> <a href=/site/none.zip>A file that isn't there</a> <a href=/site/>A page</a> "
               b"<a href=/site/small.bin>A small file</a></p></body></html>")
 SMALL = bytes(range(256)) * 80
+# downloads (/site/dl/): what each sends, and the page of links to them
+REPORT = b"Takings, 2026\r\n" * 40
+TARGZ = gzip.compress(SMALL, mtime=0)
+NOTES = b"<!DOCTYPE html><title>Notes, packed</title><p>A page sent packed, its name ending in .gz."
+DL_PAGE = ("<!DOCTYPE html><title>Downloads</title><p><a id=named href=/site/small.bin download='My File.bin'>"
+           "named</a> <a id=plain href=/site/two.html download>plain</a> <a id=cd href=/site/dl/report "
+           "download=ignored.txt>cd</a> <a id=other href=http://OTHER/site/small.zip download=x.zip>other</a> "
+           "<a id=othercd href=http://OTHER/site/dl/report download=y.txt>othercd</a> "
+           "<a id=tgz href=/site/dl/files.tar.gz>tgz</a> <a id=held href=/site/dl/held.bin>held</a> "
+           "<button id=jsnamed onclick=\"document.getElementById('named').click()\">jsnamed</button> "
+           "<button id=jsother onclick=\"document.getElementById('other').click()\">jsother</button>")
+DL_STARTS = (b"<!DOCTYPE html><title>Your download</title><p>Your download starts now. If it doesn't, "
+             b"<a id=again href=/site/small.bin download=got.bin>save it</a>."
+             b"<script>document.getElementById('again').click()</script>")
+DL = {
+    "report": (200, REPORT, "text/plain", [("Content-Disposition", 'attachment; filename="Report 2026.txt"'),
+                                           ("Cache-Control", "max-age=3600")]),
+    "euro": (200, SMALL, "application/octet-stream",
+             [("Content-Disposition", "attachment; filename=\"EURO rates.pdf\"; "
+                                      "filename*=UTF-8''%E2%82%AC%20rates.pdf")]),
+    "files.tar.gz": (200, TARGZ, "application/x-gzip", [("Content-Encoding", "x-gzip")]),
+    "backup": (200, TARGZ, "application/octet-stream", [("Content-Encoding", "gzip"),
+                                                        ("Content-Disposition", "attachment; filename=backup.tgz")]),
+    "notes.html.gz": (200, gzip.compress(NOTES, mtime=0), "text/html; charset=utf-8", [("Content-Encoding", "gzip")]),
+    "inline": (200, REPORT, "text/plain", [("Content-Disposition", 'inline; filename="notes.txt"')]),
+    "denied": (403, b"<!DOCTYPE html><title>Denied</title><p>Not for you.", "text/html",
+               [("Content-Disposition", "attachment; filename=secret.txt")]),
+    "bad": (200, REPORT, "text/plain", [("Content-Disposition", "attachment; filename=foo bar.txt")]),
+    "apache.tar.gz": (200, TARGZ, "application/x-tar", [("Content-Encoding", "x-gzip")]),
+    "inline.html": (200, b"<!DOCTYPE html><title>Inline</title><p>Shown, and kept.", "text/html",
+                    [("Content-Disposition", "inline"), ("Cache-Control", "max-age=3600")]),
+    "manual": (200, SMALL, "application/pdf", [("Content-Disposition", 'inline; filename="Manual.pdf"'),
+                                               ("Cache-Control", "max-age=3600")]),
+}
+DL_COUNT = {}
+HELD = bytes(range(256)) * 16384
 CACHE_COUNT = {"fresh": 0, "etag": 0, "304": 0}
+# a refresh (<meta http-equiv=refresh>, the Refresh header): each page and
+# the headers it comes with; /site/refresh/to.html's title says what came
+# ("Arrived|QUERY|REFERER"), /site/refresh/count how often each was asked for
+REFRESH = {
+    "meta.html": (b"<!DOCTYPE html><title>Going on</title>"
+                  b"<meta http-equiv=\"Refresh\" content=\"0; URL='to.html?from=meta'\"><p>On to the next page.", ()),
+    # the header comes before any meta (it is kept an hour: not from the cache)
+    "header.html": (b"<!DOCTYPE html><title>Header</title><meta http-equiv=refresh content='0; url=wrong.html'>"
+                    b"<p>The header goes first.", (("Refresh", "1; url=to.html?from=header"),
+                                                   ("Cache-Control", "max-age=3600"))),
+    "loop.html": (b"<!DOCTYPE html><title>Loop</title><meta http-equiv=refresh content=0><p>Again.", ()),
+    # resolved against the base the page had when the meta was put in
+    "based.html": (b"<!DOCTYPE html><title>Based</title><base href=/site/refresh/sub/>"
+                   b"<meta http-equiv=refresh content='0;url=to.html?b=before'>", ()),
+    "after.html": (b"<!DOCTYPE html><title>After</title><meta http-equiv=refresh content='0;url=to.html?b=after'>"
+                   b"<base href=/site/refresh/sub/>", ()),
+    # a <noscript>'s, only when scripts don't run
+    "noscript.html": (b"<!DOCTYPE html><title>Noscript</title><noscript>"
+                      b"<meta http-equiv=refresh content='0; url=to.html?from=noscript'></noscript>", ()),
+    # javascript: isn't followed, so the next one is
+    "js.html": (b"<!DOCTYPE html><title>Script address</title>"
+                b"<meta http-equiv=refresh content='0; url=javascript:alert(1)'>"
+                b"<meta http-equiv=refresh content='0; url=to.html?from=second'>", ()),
+    "later.html": (b"<!DOCTYPE html><title>Later</title><meta http-equiv=refresh content='60; url=to.html'>", ()),
+    # itself again: the page asked for anew, its stylesheet as any page's
+    # (kept an hour, so asked for once)
+    "selfcss.html": (b"<!DOCTYPE html><title>Itself</title><link rel=stylesheet href=s.css>"
+                     b"<meta http-equiv=refresh content=0><p>Again.", ()),
+    "s.css": (b"p { color: #800 }\n", (("Cache-Control", "max-age=3600"), ("ETag", '"s1"'))),
+    # a place on the page itself: scrolled to, not loaded again
+    "frag.html": (b"<!DOCTYPE html><title>Place</title><meta http-equiv=refresh content='0; url=#x'>"
+                  b"<div style='height: 2000px'></div><p id=x>Here.", ()),
+    # a script changes the content after the parser put the meta in: as it was
+    "jsset.html": (b"<!DOCTYPE html><title>Script set</title>"
+                   b"<meta id=m http-equiv=refresh content='0; url=to.html?from=orig'><script>"
+                   b"document.getElementById('m').setAttribute('content', '0; url=javascript:void 0')</script>", ()),
+    # the first put in is first, though a table puts the second before itself
+    "foster.html": (b"<!DOCTYPE html><title>Foster</title><table><tr><td>"
+                    b"<meta http-equiv=refresh content='0; url=javascript:x'></td></tr>"
+                    b"<meta http-equiv=refresh content='0; url=to.html?from=foster'></table>", ()),
+    # itself in 2 s, counted from when its picture is in (slow.png: 1.5 s)
+    # itself every second, its pictures asked for again as their headers
+    # say: a camera's (no-store, another each time), one kept an hour, one
+    # asked about each time (a 304)
+    "cam.html": (b"<!DOCTYPE html><title>Camera</title><meta http-equiv=refresh content=1><p>"
+                 b"<img src=cam.png width=8 height=8 alt=cam> <img src=still.png width=8 height=8 alt=still> "
+                 b"<img src=valid.png width=8 height=8 alt=valid>", ()),
+    "slowpic.html": (b"<!DOCTYPE html><title>Slow</title><meta http-equiv=refresh content=2>"
+                     b"<p><img src=slow.png width=16 height=16 alt=slow>", ()),
+}
+REFRESH_COUNT = {}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
+# a stylesheet's media (the HTML Standard's 4.2.4): only the sheets that
+# hold for the screen are asked for, and none that isn't to be applied
+MEDIA_PAGE = (b"<!DOCTYPE html><title>Media</title><link rel=stylesheet media=print href=print.css>"
+              b"<link rel=stylesheet media='screen and (min-width: 600px)' href=wide.css>"
+              b"<link rel=stylesheet media='only screen and (max-width: 600px)' href=narrow.css>"
+              b"<link rel='alternate stylesheet' title=Alt href=alt.css><link rel=stylesheet disabled href=off.css>"
+              b"<link rel=stylesheet type=text/plain href=plain.css><link rel=stylesheet href=''>"
+              b"<p>Sheets by their media.<link rel=stylesheet href=body.css>")
+MEDIA_CSS = {"print.css": b"p { color: #ff0000 }", "wide.css": b"p { color: #0000aa }",
+             "narrow.css": b"p { color: #00aa00 }", "alt.css": b"p { color: #ff0000 }",
+             "off.css": b"p { color: #ff0000 }", "plain.css": b"p { color: #ff0000 }",
+             "body.css": b"p { background: #eeeeee }"}
+MEDIA_PICS = (b"<!DOCTYPE html><title>Media pics</title>"
+              b"<link rel=stylesheet media='screen and (min-width: 600px)' href=wide.css>"
+              b"<link rel=stylesheet media='only screen and (max-width: 600px)' href=narrow.css>"
+              b"<p>Sheets by their media, a picture.<p><img src=pic.png alt=pic>")
+MEDIA_COUNT = {}
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
@@ -106,6 +269,29 @@ FORM_PAGE = ("<!DOCTYPE html><html><head><meta charset=utf-8><title>Forms</title
              "<input type=file name=f> <input type=submit name=up value=Send></p></form>"
              "<form action=/site/after method=post><p><input name=n value=1> <input type=submit name=s value=Go>"
              "</p></form></body></html>\n").encode("utf-8")
+
+
+# pages that name no encoding (/site/enc/): the same Hebrew in UTF-8 and
+# in windows-1255; the second's link and form send Hebrew in its query
+ENC_PAGE = ("<!DOCTYPE html><html dir=rtl><head><title>שלום עולם</title></head><body>"
+            "<p>אטארי פלקון <a href='/site/echo?q=שלום'>חיפוש</a></p>"
+            "<form action=/site/echo><p><input name=q value=אבג> <input type=submit name=go value=חפש></p></form>"
+            "</body></html>\n")
+ENC_PLAIN = "שלום עולם\n<b>not bold</b> & café\n".encode("utf-8")
+# a page in windows-1255 whose addresses have Hebrew in their query: in its
+# encoding for the HTML's (a picture, a sheet, XMLHttpRequest), in UTF-8 for
+# CSS's url()s and fetch() (the URL, CSS and Fetch standards)
+ENC_ADDR = ("<!DOCTYPE html><html><head><title>addr</title><link rel=stylesheet href='a/s.css?q=א'>"
+            "<style>.a{background:url(a/st.png?q=א)}</style></head><body>"
+            "<img src='a/img.png?q=א' width=8 height=8 alt=''>"
+            "<div class=a>a</div><div class=b>b</div><div style='background:url(a/inl.png?q=א)'>c</div>"
+            "<script>fetch('a/f?q=א');var x=new XMLHttpRequest();x.open('GET','a/x?q=א');x.send()</script>"
+            "</body></html>\n").encode("cp1255").replace(
+                # and one with bytes its decoder once left out (U+05BA, a C1
+                # control), sent as they are
+                b"<div class=a>", b"<img src='a/pts.png?q=\xca\x81' width=8 height=8 alt=''><div class=a>")
+ENC_CSS = ".b{background:url(ext.png?q=א)}\n".encode("utf-8")
+ENC_SEEN = []
 
 
 def echo_page(method, ctype, body):
@@ -371,8 +557,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, WIKI_PAGE)
         elif p == "/site/wikitls.html":
             self.send(200, WIKI_TLS_PAGE.replace(b"https://localhost:PORT", b"https://127.0.0.1:%d" % self.ecdsa_port))
+        elif p.startswith("/site/media/"):
+            name = p[12:]
+            MEDIA_COUNT[name] = MEDIA_COUNT.get(name, 0) + 1
+            if name == "page.html":
+                self.send(200, MEDIA_PAGE)
+            elif name == "pics.html":
+                self.send(200, MEDIA_PICS)
+            elif name == "pic.png":
+                time.sleep(0.3)
+                self.send(200, PICS["logo.png"][0], "image/png")
+            elif name in MEDIA_CSS:
+                self.send(200, MEDIA_CSS[name], "text/css")
+            elif name == "count":
+                self.send(200, " ".join("%s=%d" % kv for kv in sorted(MEDIA_COUNT.items())
+                                        if kv[0] != "count").encode(), "text/plain",
+                          extra=[("Cache-Control", "no-store")])
+            else:
+                self.send(404, b"not here\n", "text/plain")
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
+        elif p in ("/site/enc/utf8.html", "/site/enc/w1255.html"):
+            self.send(200, ENC_PAGE.encode("utf-8" if "utf8" in p else "cp1255"), "text/html")
+        elif p == "/site/enc/plain.txt":
+            self.send(200, ENC_PLAIN, "text/plain")
+        elif p == "/site/enc/addr.html":
+            self.send(200, ENC_ADDR, "text/html; charset=windows-1255", extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/enc/a/"):
+            ENC_SEEN.append(p[12:])
+            name = p[12:].partition("?")[0]
+            body, ctype = ((ENC_CSS, "text/css; charset=utf-8") if name == "s.css" else
+                           (PICS["counter.png"][0], "image/png") if name.endswith(".png") else (b"ok", "text/plain"))
+            self.send(200, body, ctype, extra=[("Cache-Control", "no-store")])
+        elif p == "/site/enc/seen":
+            self.send(200, " ".join(sorted(ENC_SEEN)).encode(), "text/plain", extra=[("Cache-Control", "no-store")])
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
         elif p == "/site/files.html":
@@ -406,6 +624,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, ("fresh=%d etag=%d 304=%d" % (CACHE_COUNT["fresh"], CACHE_COUNT["etag"],
                                                         CACHE_COUNT["304"])).encode(), "text/plain",
                       extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/refresh/"):
+            name, _, query = p[14:].partition("?")
+            REFRESH_COUNT[name] = REFRESH_COUNT.get(name, 0) + 1
+            if name == "s.css" and self.headers.get("If-None-Match") == '"s1"':
+                self.send(304, b"", "text/css", extra=REFRESH[name][1])
+            elif name in REFRESH:
+                self.send(200, REFRESH[name][0], "text/css" if name.endswith(".css") else "text/html; charset=utf-8",
+                          extra=REFRESH[name][1])
+            elif name == "cam.png":
+                self.send(200, PICS["logo.png" if REFRESH_COUNT[name] % 2 else "counter.png"][0], "image/png",
+                          extra=[("Cache-Control", "no-store")])
+            elif name == "campic.png":
+                self.send(200, PICS["logo.png" if REFRESH_COUNT[name] % 2 else "counter.png"][0], "image/png",
+                          extra=[("Cache-Control", "no-store"), ("Refresh", "1")])
+            elif name == "still.png":
+                self.send(200, PICS["logo.png"][0], "image/png", extra=[("Cache-Control", "max-age=3600")])
+            elif name == "valid.png":
+                v = [("Cache-Control", "no-cache"), ("ETag", '"v1"')]
+                if self.headers.get("If-None-Match") == '"v1"':
+                    self.send(304, b"", "image/png", extra=v)
+                else:
+                    self.send(200, PICS["counter.png"][0], "image/png", extra=v)
+            elif name == "slow.png":
+                time.sleep(1.5)
+                self.send(200, PICS["logo.png"][0], "image/png", extra=[("Cache-Control", "max-age=3600")])
+            elif name in ("to.html", "sub/to.html"):
+                self.send(200, ("<!DOCTYPE html><title>%s|%s|%s</title><p>Here." % (
+                    "Arrived" if name == "to.html" else "Sub", query, self.headers.get("Referer", ""))).encode())
+            elif name == "count":
+                self.send(200, " ".join("%s=%d" % kv for kv in sorted(REFRESH_COUNT.items())).encode(),
+                          "text/plain", extra=[("Cache-Control", "no-store")])
+            else:
+                self.send(404, b"not here\n", "text/plain")
+        elif p == "/site/dl/links.html":
+            host, _, port = self.headers.get("Host", "localhost").rpartition(":")
+            other = ("127.0.0.1" if host == "localhost" else "localhost") + ":" + port
+            self.send(200, DL_PAGE.replace("OTHER", other).encode())
+        elif p == "/site/dl/starts.html":
+            self.send(200, DL_STARTS)
+        elif p == "/site/dl/held.bin":
+            # a piece that can't go within a second (the client reads
+            # nothing) ends the connection, as a server's send timeout does
+            DL_COUNT["held.bin"] = DL_COUNT.get("held.bin", 0) + 1
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(HELD)))
+            self.end_headers()
+            self.close_connection = True
+            if self.command != "HEAD":
+                self.connection.settimeout(1)
+                try:
+                    for k in range(0, len(HELD), 65536):
+                        self.connection.sendall(HELD[k:k + 65536])
+                except OSError:
+                    pass
+        elif p == "/site/dl/count":
+            self.send(200, " ".join("%s=%d" % kv for kv in sorted(DL_COUNT.items())).encode(), "text/plain",
+                      extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/dl/") and p[9:] in DL:
+            # as they are, whatever was asked for (send() packs only text/)
+            DL_COUNT[p[9:]] = DL_COUNT.get(p[9:], 0) + 1
+            status, body, ctype, extra = DL[p[9:]]
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in extra:
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
         elif p in ("/site/small.bin", "/site/small.zip"):
             self.send(200, SMALL, "application/octet-stream" if p.endswith(".bin") else "application/zip")
         elif p.startswith("/site/cookie/") and cookie_get(self, p):

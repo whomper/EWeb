@@ -440,7 +440,7 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 			s = add_simple(b, name[0] == 'l' ? S_LANG : S_DIR);
 			if (s == NULL)
 				return 0;
-			s->arg = ec_str_new(&c->mem, txt, len);
+			s->arg = ec_str_new(c->pmem, txt, len);
 			pc_attrs(c, s->op);
 			b->b++;
 			return s->arg != NULL;
@@ -485,7 +485,7 @@ static int attribute(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		if (k >= n || (t[k].type != T_IDENT && t[k].type != T_STR))
 			return 0;
 		v = ec_tok_text(&t[k], vb, sizeof vb, &vl);
-		s->arg = ec_str_new(&c->mem, v, vl);
+		s->arg = ec_str_new(c->pmem, v, vl);
 		k = skip_ws(t, k + 1, n);
 		if (k < n && t[k].type == T_IDENT && t[k].len == 1) {
 			if ((t[k].s[0] | 32) == 'i')
@@ -622,7 +622,7 @@ static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 	/* store them right to left: the subject first, each compound's comb
 	 * saying how the one after it (to the left) relates */
 	ns = b->ns;
-	sel = ec_alloc(&c->mem, sizeof *sel + b->ncomp * sizeof *comp + ns * sizeof *simple + 8);
+	sel = ec_alloc(c->pmem, sizeof *sel + b->ncomp * sizeof *comp + ns * sizeof *simple + 8);
 	if (sel == NULL)
 		goto out;
 	comp = (ec_compound *) (sel + 1);
@@ -688,7 +688,7 @@ static const ec_sellist *sellist(ec_ctx *c, const ec_tok *t, int i, int n, int f
 	if (ns == 0 && !forgiving)
 		return NULL;
 	*never_all = ns > 0 && nnever == ns;
-	l = ec_alloc(&c->mem, sizeof *l + ns * sizeof sels[0]);
+	l = ec_alloc(c->pmem, sizeof *l + ns * sizeof sels[0]);
 	if (l == NULL)
 		return NULL;
 	l->n = ns;
@@ -800,7 +800,7 @@ static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
 		e.bloom[k] = anc[k]->bloom;
 	e.sib = sib_sel(s);
 	if (s->never) {
-		vec_push(&c->mem, &c->never, &e);
+		vec_push(&c->rmem, &c->never, &e);
 		return;
 	}
 	if (s->pseudo == PE_OTHER) {
@@ -808,9 +808,9 @@ static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
 		return;
 	}
 	if (key == NULL) {
-		vec_push(&c->mem, &c->universal, &e);
+		vec_push(&c->rmem, &c->universal, &e);
 		if (e.sib)
-			vec_push(&c->mem, &c->universal_sib, &e);
+			vec_push(&c->rmem, &c->universal_sib, &e);
 		return;
 	}
 	{
@@ -826,23 +826,23 @@ static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
 		}
 		v = rules[kind];
 		if (v == NULL) {
-			v = ec_alloc(&c->mem, sizeof *v);
+			v = ec_alloc(&c->rmem, sizeof *v);
 			if (v == NULL)
 				return;
 			memset(v, 0, sizeof *v);
 			rules[kind] = v;
 		}
-		vec_push(&c->mem, v, &e);
+		vec_push(&c->rmem, v, &e);
 		if (e.sib) {
 			v = sibrules[kind];
 			if (v == NULL) {
-				v = ec_alloc(&c->mem, sizeof *v);
+				v = ec_alloc(&c->rmem, sizeof *v);
 				if (v == NULL)
 					return;
 				memset(v, 0, sizeof *v);
 				sibrules[kind] = v;
 			}
-			vec_push(&c->mem, v, &e);
+			vec_push(&c->rmem, v, &e);
 		}
 	}
 }
@@ -854,6 +854,56 @@ typedef struct mq {
 	const ec_tok *t;
 	int n;
 } mq;
+
+/* the widths a media query holds at as it does at c's (ec_media_span):
+   each comparison the width takes part in narrows them */
+static void span_narrow(ec_ctx *c, int64_t lo, int64_t hi)
+{
+	/* lo <= c's width <= hi: in 32 bits when they narrow */
+	if (lo > c->span_lo)
+		c->span_lo = (int32_t) lo;
+	if (hi < c->span_hi)
+		c->span_hi = (int32_t) hi;
+}
+
+/* only c's width itself */
+static void span_pin(ec_ctx *c)
+{
+	span_narrow(c, c->media.width, c->media.width);
+}
+
+/* "width op x" (x in 22.10): the widths w (whole px) it goes the same
+   way at; ge is the first w with w x 1024 >= x, le the last with
+   w x 1024 <= x */
+static void span_cmp(ec_ctx *c, int op, int64_t x)
+{
+	int64_t w = c->media.width, ge = -((-x) >> 10), le = x >> 10;
+
+	switch (op) {
+	case '<': if (w < ge) span_narrow(c, 0, ge - 1); else span_narrow(c, ge, INT32_MAX); break;
+	case 'l': if (w <= le) span_narrow(c, 0, le); else span_narrow(c, le + 1, INT32_MAX); break;
+	case '>': if (w > le) span_narrow(c, le + 1, INT32_MAX); else span_narrow(c, 0, le); break;
+	case 'g': if (w >= ge) span_narrow(c, ge, INT32_MAX); else span_narrow(c, 0, ge - 1); break;
+	default:
+		if (w < ge)
+			span_narrow(c, 0, ge - 1);
+		else if (w > le)
+			span_narrow(c, le + 1, INT32_MAX);
+		else
+			span_pin(c);
+		break;
+	}
+}
+
+/* a feature compared, as it goes with the width (feature_value's dep):
+   the width itself, or the aspect ratio (only this width) */
+static void span_of(ec_ctx *c, int dep, int op, int64_t x)
+{
+	if (dep == 'w')
+		span_cmp(c, op, x);
+	else if (dep == 'a')
+		span_pin(c);
+}
 
 /* a length in a media query: px, with em and rem the default font size */
 static int mq_length(ec_ctx *c, const ec_tok *t, int32_t *px)
@@ -872,9 +922,10 @@ static int mq_length(ec_ctx *c, const ec_tok *t, int32_t *px)
 		*px = t->num * c->media.font_size;
 	else if (u == EC_UNIT_REL(CU_EX) || u == EC_UNIT_REL(CU_CH))
 		*px = t->num * c->media.font_size / 2;
-	else if (u == EC_UNIT_REL(CU_VW))
+	else if (u == EC_UNIT_REL(CU_VW)) {
 		*px = t->num * c->media.width / 100;
-	else if (u == EC_UNIT_REL(CU_VH))
+		span_pin(c);		/* a length that goes with the width */
+	} else if (u == EC_UNIT_REL(CU_VH))
 		*px = t->num * c->media.height / 100;
 	else
 		return 0;
@@ -892,19 +943,24 @@ static int cmp_ok(int64_t a, int op, int64_t b)
 	}
 }
 
-/* a feature's value for the Falcon: 1 if it has one of this kind */
-static int feature_value(ec_ctx *c, const char *name, int *kind, int64_t *v, const char **word)
+/* a feature's value for the Falcon: 1 if it has one of this kind; *dep
+   how it goes with the viewport's width ('w' it is the width, 'a' the
+   aspect ratio, 'o' the orientation, 0 not) */
+static int feature_value(ec_ctx *c, const char *name, int *kind, int64_t *v, const char **word, int *dep)
 {
 	*word = NULL;
+	*dep = 0;
 	if (!strcmp(name, "width") || !strcmp(name, "device-width")) {
 		*kind = 'L';
 		*v = EC_FX(c->media.width);
+		*dep = 'w';
 	} else if (!strcmp(name, "height") || !strcmp(name, "device-height")) {
 		*kind = 'L';
 		*v = EC_FX(c->media.height);
 	} else if (!strcmp(name, "aspect-ratio") || !strcmp(name, "device-aspect-ratio")) {
 		*kind = 'R';
 		*v = ((int64_t) c->media.width << 10) / c->media.height;
+		*dep = 'a';
 	} else if (!strcmp(name, "color")) {
 		*kind = 'N';
 		*v = EC_FX(5);		/* the Falcon's 16-bit colour: 5 bits */
@@ -918,6 +974,7 @@ static int feature_value(ec_ctx *c, const char *name, int *kind, int64_t *v, con
 	} else if (!strcmp(name, "orientation")) {
 		*kind = 'W';
 		*word = c->media.width >= c->media.height ? "landscape" : "portrait";
+		*dep = 'o';
 	} else if (!strcmp(name, "hover") || !strcmp(name, "any-hover")) {
 		*kind = 'W';
 		*word = "hover";
@@ -1049,7 +1106,7 @@ static int flip(int op)
 static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 {
 	char name[64];
-	int kind, j, prefix = 0;
+	int kind, j, prefix = 0, dep;
 	int64_t v, x;
 	const char *word;
 
@@ -1064,7 +1121,7 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 			prefix = 'g', nm = name + 4;
 		else if (!strncmp(name, "max-", 4))
 			prefix = 'l', nm = name + 4;
-		if (!feature_value(c, nm, &kind, &v, &word))
+		if (!feature_value(c, nm, &kind, &v, &word, &dep))
 			return 2;		/* unknown (Media Queries 4, 3) */
 		/* LibCSS 0.9 knows width, height and prefers-color-scheme */
 		if ((c->opts & EC_COMPAT_MEDIA) && strcmp(nm, "width") && strcmp(nm, "height") &&
@@ -1081,10 +1138,13 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 						skip_ws(t, j + 1, n) != n)
 					return -1;
 				ident_lower(&t[j], w, sizeof w);
+				if (dep == 'o')	/* landscape: the width at least the height */
+					span_cmp(c, 'g', EC_FX((int64_t) c->media.height));
 				return strcmp(w, word) == 0;
 			}
 			if (!mq_operand(c, t, &j, n, kind, &x) || skip_ws(t, j, n) != n)
 				return -1;
+			span_of(c, dep, prefix ? prefix : '=', x);
 			return cmp_ok(v, prefix ? prefix : '=', x);
 		}
 		/* feature op value */
@@ -1097,6 +1157,7 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 			j = skip_ws(t, j, n);
 			if (!mq_operand(c, t, &j, n, kind, &x) || skip_ws(t, j, n) != n)
 				return -1;
+			span_of(c, dep, op, x);
 			return cmp_ok(v, op, x);
 		}
 	}
@@ -1112,7 +1173,7 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 			return -1;
 		ft = &t[j2];
 		ident_lower(ft, name, sizeof name);
-		if (!feature_value(c, name, &kind, &v, &word))
+		if (!feature_value(c, name, &kind, &v, &word, &dep))
 			return 2;
 		if (kind == 'W')
 			return -1;
@@ -1131,9 +1192,13 @@ static int mq_feature(ec_ctx *c, const ec_tok *t, int i, int n)
 			j = skip_ws(t, j, n);
 			if (!op2 || !mq_operand(c, t, &j, n, kind, &x) || skip_ws(t, j, n) != n)
 				return -1;
-			r = r && cmp_ok(v, op2, x);
-			(void) flip;
+			/* the second comparison only when the first held */
+			span_of(c, dep, flip(op1), a);
+			if (r)
+				span_of(c, dep, op2, x);
+			return r && cmp_ok(v, op2, x);
 		}
+		span_of(c, dep, flip(op1), a);
 		return r;
 	}
 }
@@ -1600,7 +1665,7 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 		c->st.dropped++;
 		return bend;
 	}
-	b = ec_alloc(&c->mem, sizeof *b);
+	b = ec_alloc(&c->rmem, sizeof *b);
 	if (b == NULL)
 		return bend;
 	memset(b, 0, sizeof *b);
@@ -1678,9 +1743,12 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 #ifndef EW_ST	/* scripts' selectors: the ST edition runs no scripts */
 const ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len)
 {
+	/* kept by the scripts as long as the page: not with the sheets */
 	char *copy = ec_alloc(&c->mem, len + 1);
 	uint32_t spec;
 	int never, stop, n;
+	ec_arena *pm = c->pmem;
+	const ec_sellist *l;
 	ec_lex lx;
 
 	if (copy == NULL)
@@ -1691,7 +1759,10 @@ const ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len)
 	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
 	if (n <= 0 || stop != T_EOF)
 		return NULL;
-	return sellist(c, prelude, 0, n, 0, &spec, &never);
+	c->pmem = &c->mem;
+	l = sellist(c, prelude, 0, n, 0, &spec, &never);
+	c->pmem = pm;
+	return l;
 }
 
 int ec_matches(ec_ctx *c, const ec_sellist *l, const ec_node *e)
@@ -1704,7 +1775,7 @@ int ec_matches(ec_ctx *c, const ec_sellist *l, const ec_node *e)
 
 int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin)
 {
-	char *copy = ec_alloc(&c->mem, len + 1);
+	char *copy = ec_alloc(&c->rmem, len + 1);
 
 	if (copy == NULL)
 		return -1;
@@ -1725,7 +1796,7 @@ int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *
 	int r;
 	if (base != NULL) {
 		size_t n = strlen(base);
-		char *b = ec_alloc(&c->mem, n + 1);
+		char *b = ec_alloc(&c->rmem, n + 1);
 		if (b == NULL)
 			return -1;
 		memcpy(b, base, n + 1);
@@ -1801,7 +1872,7 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 			ec_cdecl *cd;
 			if (bad)
 				continue;
-			cd = ec_alloc(&c->mem, sizeof *cd);
+			cd = ec_alloc(c->pmem, sizeof *cd);
 			if (cd == NULL)
 				continue;
 			cd->name = ec_intern(c, ns, nl);
@@ -1827,7 +1898,7 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 			ec_pend *pd;
 			if (c->opts & EC_OPT_NO_VAR)
 				continue;
-			pd = ec_alloc(&c->mem, sizeof *pd);
+			pd = ec_alloc(c->pmem, sizeof *pd);
 			if (pd == NULL)
 				continue;
 			pd->txt = vs;
@@ -1860,7 +1931,7 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 	c->st.decls += nd;
 	*out = NULL;
 	if (nd) {
-		*out = ec_alloc(&c->mem, nd * sizeof d[0]);
+		*out = ec_alloc(c->pmem, nd * sizeof d[0]);
 		if (*out == NULL)
 			return 0;
 		memcpy(*out, d, nd * sizeof d[0]);
@@ -1868,13 +1939,16 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 	return nd;
 }
 
-void ec_parse_block(ec_ctx *c, ec_block *b)
+void ec_parse_block(ec_ctx *c, ec_block *b, ec_arena *a)
 {
 	int custom;
 	int k;
+	ec_arena *pm = c->pmem;
 
 	c->parse_base = b->base;
+	c->pmem = a;
 	b->n = ec_parse_decls(c, b->src, b->len, &b->d, &custom);
+	c->pmem = pm;
 	c->parse_base = NULL;
 	b->custom = custom;
 	for (k = 0; k < b->n; k++)

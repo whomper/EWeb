@@ -50,6 +50,13 @@ struct dnode {
 	struct fctl *ctl;		/* a form control: its state (form.h) */
 };
 
+/* a <meta http-equiv=refresh> as the parser put it in (doc.refresh) */
+typedef struct drefresh {
+	struct drefresh *next;		/* the next put in, or NULL */
+	const char *content;		/* its content then (a script may change it) */
+	uint8_t based;			/* a <base href> was in the document then */
+} drefresh;
+
 typedef struct doc {
 	dnode *root;			/* the document node */
 	dnode *html, *body;		/* NULL if the page has none */
@@ -62,9 +69,18 @@ typedef struct doc {
 	struct dblk *mem;		/* the blocks of memory (doc_alloc) */
 	uint32_t elements;
 	struct fctl *ctls;		/* the form controls, in document order (form.h) */
+	/* the <meta http-equiv=refresh>s the parser put in whose content is
+	   one (the HTML Standard's Refresh state), in that order, or NULL */
+	struct drefresh *refresh;
 	/* its scripts' state (src/js), let go first by doc_free */
 	void *js;
 	void (*js_free)(void *js);
+	uint8_t scripting;		/* parsed for scripts run (its <noscript>s text) */
+	/* its sheets as they were added (src/browse): the widths, CSS px,
+	   their media queries hold at as they did then (ec_media_span), and
+	   with scripting, which they were (doc_sheets_key) */
+	int32_t span_lo, span_hi;
+	uint32_t sheets_key;
 } doc;
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or
@@ -93,10 +109,38 @@ void dn_remove_attr(doc *d, dnode *n, const char *name);
    the CSS engine reads, and the form controls, made again */
 void doc_refresh(doc *d);
 
+/* The parsing in the HTML Standard's shared declarative refresh steps
+   (4.2.5.3), for a <meta http-equiv=refresh>'s content and the Refresh
+   header: 1 when in is one, *secs its time (whole seconds, at most
+   DOC_REFRESH_MAX) and *url, *ulen the address as written, its quotes
+   gone (*url NULL: none, the page itself); 0 when it isn't (ignored). */
+#define DOC_REFRESH_MAX 2000000UL	/* 23 days: ms of it fit a long */
+int doc_refresh_parse(const char *in, unsigned long *secs, const char **url, size_t *ulen);
+/* n is a <meta http-equiv=refresh> whose content is one, not in a
+   template's contents (html.c asks as it inserts each <meta>) */
+int doc_refresh_meta(const dnode *n);
+/* the most doc.refresh holds: the first whose address can be used is
+   the page's refresh, so those after are wanted only when the ones
+   before are javascript: */
+#define DOC_REFRESH_METAS 16
+
 /* The page's stylesheets in document order: cb is called for each
-   <style> with its text (is_link 0) and each <link rel=stylesheet> for a
-   screen with its href (is_link 1). */
+   <style> with its text (is_link 0) and each <link rel=stylesheet> with
+   its href (is_link 1) that is to be applied: its media holding for the
+   document's screen (the CSS engine's media queries, as for @media), its
+   type CSS, not disabled, and of the preferred set (an alternative sheet
+   only when it is that set's). With d->scripting, d->sheets_key is set. */
 void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t len), void *ud);
+/* which elements and attributes the page's sheets are now, as a number:
+   another than d->sheets_key when a script changed them (a <link>'s
+   media, rel or disabled, a <style> added or its text). Only the elements
+   that are sheets count: another <link> added or changed (a preconnect,
+   an icon) leaves it as it was */
+uint32_t doc_sheets_key(const doc *d);
+/* n is a <link> whose sheet is fetched when its media holds (rel
+   stylesheet, an alternative too, href, not disabled, a CSS type) or
+   one preloaded as a style: for scripts, its load event */
+int doc_link_loads(const dnode *n);
 
 /* styles every element: the UA sheet, then the sheets added with
    ec_sheet() in between (the loader's), then selection */

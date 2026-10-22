@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH] [-e ENC]
  *            PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
@@ -38,8 +38,12 @@
  * reached from it: what one page's sheets did must not show in the next.
  * -s FILE saves the page shown at the end as it came (File > Save page
  * as), or a file EWeb doesn't show (a download); -g LINK saves that
- * link's file to FILE instead (Alternate-click). Each prints what it
- * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
+ * link's file to FILE instead (Alternate-click), and so does a click
+ * (-K) on a link to save (<a download>: "save:") or to a file EWeb
+ * doesn't show. Each prints what it did and the name EWEB.PRG would
+ * offer. -Z MS: a link's file is put where it goes as EWEB.PRG's file
+ * selector puts it, once its answer has begun, and the selector takes
+ * MS ms (the answer waits unread meanwhile). -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
@@ -51,9 +55,24 @@
  * answering OK; then -K ID clicks the element with that id (again for
  * more; "a script loaded" and the load's result when one sent the
  * browser on), and -T MS lets the page's timers run for MS ms.
+ * -r N follows the page's refresh (<meta http-equiv=refresh>, the
+ * Refresh header) when it is due, up to N times ("refresh:" where to,
+ * "refreshed:" what came); -b then goes Back ("(refresh)" when the page
+ * there has one waiting).
  * -S KB: the stack the cascade and the layout may take (ec_stack_floor;
  * all but a MB of the stack by default); "deep:" on stderr when a page was
  * cut there.
+ * -L WIDTH (again for more): once the page is shown, the window made
+ * WIDTH px wide (br_relayout, as EWEB.PRG does when it is sized: the
+ * page's sheets added again when a media query of theirs goes the other
+ * way), "resized:" printed; what is drawn or dumped is the page at the
+ * last width. -Y WIDTH: the window sized so from inside the first
+ * request the page's pictures make (as GEM's messages come in pf_idle
+ * while one is under way): "sized in a request:" printed, and the
+ * page's sheets come after it.
+ * -e NAME: once the page is shown, it is read again in that encoding
+ * (View > Encoding; "auto": the page's own), "encoding:" printed with
+ * what it was read in and its title.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -326,6 +345,65 @@ static dnode *by_id(dnode *n, const char *id)
 	return NULL;
 }
 
+/* -s FILE, and whether a click saved to it already (the page isn't then) */
+static const char *save_to;
+static int click_saved;
+/* -Z: how long the file selector takes, ms (-1: none is shown) */
+static long selector_ms = -1;
+
+/* browser.save_as with -Z: the file selector, MS ms, choosing -s's file */
+static int selector(void *ud, const char *name, char *path, int size)
+{
+	(void) ud;
+	printf("selector: %s\n", name);
+	fflush(stdout);
+	usleep((useconds_t) selector_ms * 1000);
+	str_copy(path, save_to, size);
+	return 1;
+}
+
+/* url's file saved to save_to as it comes (br_save_url), given: its
+   link's download attribute or NULL; what it did, and the name EWEB.PRG
+   would offer */
+static int save_url(browser *b, const char *url, const char *given)
+{
+	char path[1024], name[16], err[200];
+	int r;
+	str_copy(path, selector_ms >= 0 ? "" : save_to, sizeof path);
+	if (selector_ms >= 0)
+		b->save_as = selector;
+	r = br_save_url(b, url, given, path, sizeof path, err, sizeof err);
+	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+	printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+	return r;
+}
+
+/* a file a click came to (r: BR_DOWNLOAD, what came; BR_SAVE, a link to
+   save as it comes), saved to -s's file as EWEB.PRG saves it */
+static void click_file(browser *b, int r)
+{
+	if (r == BR_DOWNLOAD) {
+		char name[16];
+		br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+		printf("download: %s %ld %s\n", b->dl.mime, b->dl.len, name);
+		if (save_to != NULL) {
+			br_dl_save(b, save_to);
+			click_saved = 1;
+		}
+		br_dl_free(b);
+	} else if (r == BR_SAVE) {
+		/* a link to save (<a download>): as EWEB.PRG saves it */
+		char url[1024], given[256];
+		str_copy(url, b->dl.url, sizeof url);
+		str_copy(given, b->dl.name, sizeof given);
+		printf("save: %s \"%s\"\n", url, given);
+		if (save_to != NULL) {
+			save_url(b, url, given);
+			click_saved = 1;
+		}
+	}
+}
+
 /* a click on the element with that id, as EWEB.PRG does one: its click
    event, then (unless a script said no) its link or control */
 static int click(browser *b, const char *id)
@@ -342,9 +420,10 @@ static int click(browser *b, const char *id)
 	r = br_js_click(b, x, y, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
-	if (r == BRJ_LOAD)
+	if (r == BRJ_LOAD) {
 		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
-	else if (!cancelled) {
+		click_file(b, load);
+	} else if (!cancelled) {
 		int link = page_link_at(b->p, x, y);
 		fctl *c = page_ctl_at(b->p, x, y, NULL);
 		if (c != NULL && (c->kind == FC_SUBMIT || c->kind == FC_IMAGE)) {
@@ -356,9 +435,23 @@ static int click(browser *b, const char *id)
 		} else if (link >= 0) {
 			r = br_follow(b, link);
 			printf("followed: %d \"%s\" %s\n", r, b->title, b->url);
+			click_file(b, r);
 		}
 	}
 	return 1;
+}
+
+/* -Y: the window sized inside a request (pf_idle), once */
+static browser *in_req_b;
+static int32_t in_req_w;
+
+static void in_request(void)
+{
+	if (in_req_w > 0) {
+		int32_t w = in_req_w;
+		in_req_w = 0;
+		printf("sized in a request: %d\n", br_relayout(in_req_b, w));
+	}
 }
 
 /* every picture of the page shown, fetched and decoded */
@@ -384,10 +477,13 @@ int main(int argc, char **argv)
 	page *p;
 	SBUF extra;
 	const char *fill[32], *send = NULL;
+	unsigned long shows;
 	int rc = 0;
-	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0;
+	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0, refreshes = 0;
+	int32_t resize[8];
+	int nresize = 0;
 	const char *clicks[16];
-	const char *save_to = NULL;
+	const char *enc = NULL;
 
 	{
 		/* the stack's floor, as EWEB.PRG has one (ui/main.c): all of the
@@ -424,6 +520,10 @@ int main(int argc, char **argv)
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
 			next = argv[++i];
+		else if (!strcmp(argv[i], "-L") && i + 1 < argc && nresize < 8)
+			resize[nresize++] = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-Y") && i + 1 < argc)
+			in_req_w = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
 			prev = argv[++i];
 		else if (!strcmp(argv[i], "-t"))
@@ -460,10 +560,16 @@ int main(int argc, char **argv)
 			clicks[nclick++] = argv[++i];
 		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
 			timers = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-r") && i + 1 < argc)
+			refreshes = atoi(argv[++i]);	/* refreshes followed, each when it is due */
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
 			save_to = argv[++i];
+		else if (!strcmp(argv[i], "-e") && i + 1 < argc)
+			enc = argv[++i];	/* View > Encoding */
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
 			save_link = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-Z") && i + 1 < argc)
+			selector_ms = atol(argv[++i]);	/* the file selector's time */
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
 			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
@@ -477,7 +583,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-e ENCODING] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -535,10 +641,19 @@ int main(int argc, char **argv)
 		}
 		pictures(&b);
 	}
+	shows = b.shows;
 	r = br_go(&b, where);
+	if ((r == BR_SAVE || r == BR_DOWNLOAD) && b.shows != shows && b.p != NULL) {
+		/* a page shown on the way, whose script then clicked a download
+		   link as it loaded: its file saved, then the page drawn, as
+		   EWEB.PRG does */
+		printf("shown on the way: %d \"%s\"\n", r, b.title);
+		click_file(&b, r);
+		r = BR_SHOWN;
+	}
 	if (r == BR_DOWNLOAD) {
 		char name[16];
-		br_file_name(b.dl.url, b.dl.mime, name, sizeof name);
+		br_file_name(b.dl.url, b.dl.name, b.dl.mime, name, sizeof name);
 		printf("download: %s %ld %s\n", b.dl.mime, b.dl.len, name);
 		if (save_to != NULL && !br_dl_save(&b, save_to))
 			rc = 1;
@@ -552,7 +667,22 @@ int main(int argc, char **argv)
 	}
 	if (b.p->deep)
 		fprintf(stderr, "ewrender: deep: nested deeper than the stack holds, the rest left out\n");
+	if (in_req_w > 0) {
+		in_req_b = &b;
+		pf_idle = in_request;
+	}
 	pictures(&b);
+	pf_idle = NULL;
+	if (enc != NULL) {
+		r = br_encoding(&b, strcmp(enc, "auto") == 0 ? "" : enc);
+		pictures(&b);
+		printf("encoding: %d %s \"%s\"\n", r, b.d != NULL ? b.d->charset : "", b.title);
+	}
+	for (i = 0; i < nresize; i++) {
+		r = br_relayout(&b, resize[i]);
+		pictures(&b);
+		printf("resized: %d \"%s\" width %d\n", r, b.title, b.p ? (int) b.p->opt.width : 0);
+	}
 	if (nfill > 0 || send != NULL) {
 		fctl *first = NULL, *by = NULL;
 		int k;
@@ -638,13 +768,34 @@ int main(int argc, char **argv)
 			if (due > 0)
 				usleep((useconds_t) due * 1000);
 			k = br_js_step(&b, &load);
-			if (k == BRJ_LOAD)
+			if (k == BRJ_LOAD) {
 				printf("load: %d \"%s\" %s\n", load, b.title, b.url);
+				click_file(&b, load);
+			}
 		}
 	}
 	for (i = 0; i < nclick; i++) {
 		click(&b, clicks[i]);
 		pictures(&b);
+	}
+	if (refreshes > 0) {
+		/* the page's refresh (<meta http-equiv=refresh>, the Refresh
+		   header), waited for and followed, as EWEB.PRG's idle loop does;
+		   -b then goes Back */
+		long due;
+		int k;
+		for (k = 0; k < refreshes && (due = br_refresh_due(&b)) >= 0; k++) {
+			printf("refresh: %lu s %s\n", b.refresh_s, b.refresh);
+			if (due > 0)
+				usleep((useconds_t) due * 1000);
+			r = br_refresh_go(&b);
+			pictures(&b);
+			printf("refreshed: %d \"%s\" %s\n", r, b.title, b.url);
+		}
+		if (back_after && send == NULL) {
+			r = br_back(&b);
+			printf("back: %d \"%s\" %s%s\n", r, b.title, b.url, br_refresh_due(&b) >= 0 ? " (refresh)" : "");
+		}
 	}
 	if (b.note[0])
 		printf("note: %s\n", b.note);
@@ -652,16 +803,17 @@ int main(int argc, char **argv)
 		int k = br_bookmark(&b);
 		printf("bookmarked: %d %d\n", k, bm_n);
 	}
-	if (save_to != NULL) {
+	if (save_to != NULL && !click_saved) {
 		char name[16];
 		if (save_link >= 0) {
-			char url[4096], err[200];
+			char url[4096], given[256];
+			const char *g = br_link_download(&b, save_link);
 			br_link_url(&b, save_link, url, sizeof url);
-			br_file_name(url, "", name, sizeof name);
-			r = br_save_url(&b, url, save_to, err, sizeof err);
-			printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+			if (g != NULL)
+				str_copy(given, g, sizeof given);
+			save_url(&b, url, g != NULL ? given : NULL);
 		} else {
-			br_file_name(b.url, b.mime, name, sizeof name);
+			br_file_name(b.url, NULL, b.mime, name, sizeof name);
 			r = br_save_page(&b, save_to);
 			printf("saved page: %d %ld %s\n", r, b.src_len, name);
 		}

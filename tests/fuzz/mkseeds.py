@@ -7,7 +7,9 @@ what the server says; for fuzz_url, an href, a newline and a base; for
 fuzz_cookie, Set-Cookie values a line each, the first byte picking the
 address it came from (see fuzz_cookie.c); for fuzz_html, a page, the first
 byte picking its charset, scripting and a fragment's context (see
-fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them.
+fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them;
+for fuzz_disposition, a Content-Disposition value, the first byte picking
+the room for its name (see fuzz_disposition.c).
 
 tests/fuzz/found/ holds the inputs that once broke a parser, as the fuzzer
 saved them; make test runs them all again (common/tests/fuzz/replay.c)."""
@@ -112,8 +114,30 @@ for name, first, page in [
     ("utf16", 5, "<\0p\0>\0h\0\x01\xd8\x37\xdc"),
     ("broken", 0, "<p>\xff\xc3(\xe2\x82\xf0\x9f\x98<a <b\0c=\"\0\" d='' e=f\0g> "
      "</b x=1/> &# &#x; &#99999999999; &unknown; &amp"),
+    ("refresh", 0, "<meta http-equiv=refresh content=x><template><meta http-equiv=Refresh content=1>"
+     "</template><noscript><meta http-equiv=REFRESH content='.5, URL=\"a\"b'></noscript><base href=/b/>"
+     "<p><meta http-equiv=refresh content='0;url=javascript:x'><meta http-equiv=refresh content=3>"),
+    ("sheets", 0, "<link rel=stylesheet media='screen and (min-width: 40em), not print' href=a.css>"
+     "<link rel='alternate stylesheet' title=A href=b><link rel=stylesheet disabled href=c>"
+     "<link rel=StyleSheet type=' text/css ; x=y' title=M href=d><link rel=stylesheet href=''>"
+     "<style media='(400px <= width < 1000px) and (color), (orientation: portrait)'>p{}</style>"
+     "<style type=TEXT/CSS title=N>q{}</style><style media=only\x0cscreen>r{}</style>"
+     "<svg><style>s{}</style></svg><template><style>t{}</style></template><p><link rel=stylesheet href=e>"),
+    ("sheetsjs", 8, "<link rel='alternate stylesheet' title=M href=a><link rel=stylesheet media=print href=b "
+     "onload=\"this.media='all'\"><link rel=preload as=STYLE href=c><noscript><link rel=stylesheet href=b>"
+     "</noscript><style title=M media='(width < 40em) or (orientation: portrait)'>p{}</style>"
+     "<link rel='alternate stylesheet' title=N href=d><template><link rel=stylesheet title=X href=f></template>"),
 ]:
     put("html", name, bytes([first]) + page.encode("latin-1"))
+
+# Content-Disposition values (the first byte: the name's room)
+for name, value in [
+    ("attachment", b"attachment; filename=\"Report 2026.txt\""),
+    ("both", b"attachment; filename=\"EURO rates.pdf\"; filename*=UTF-8''%E2%82%AC%20rates.pdf"),
+    ("latin1", b"inline; FILENAME= \"f\\oo-\xe4.html\"; filename*=iso-8859-1'en'foo-%E4.html"),
+    ("odd", b"ext ; ; a=\"\\\";\" ; filename*=''x ;filename*0*=UTF-8''%c3%a4"),
+]:
+    put("disposition", name, bytes([255]) + value)
 
 # bookmark files: Netscape's, as Firefox and Chrome export it, and odd ones
 for name, data in [

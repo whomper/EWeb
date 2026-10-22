@@ -12,9 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <parserutils/charset/codec.h>
-
 #include "form.h"
+#include "html.h"
 
 static int lower_eq(const char *a, const char *b)
 {
@@ -723,50 +722,43 @@ fctl *form_default(doc *d, fctl *c, int *send)
 	return NULL;
 }
 
-/* the page's charset for a form: one byte a letter, each byte's letter
-   (from libparserutils' own tables), else UTF-8 */
+/* the encoding a form's text goes in: one of a byte a character (each
+   byte's character, html_enc_table), else UTF-8 */
 typedef struct {
 	int utf8;
 	char name[40];
-	uint32_t uni[256];
+	uint16_t hi[128];
 } CSET;
 
+/* the HTML Standard's "pick an encoding for the form" (4.10.21.3): the
+   first of accept-charset's labels that names an encoding EWeb has (none:
+   UTF-8), else the page's; then its output encoding (UTF-16's is UTF-8) */
 static void cset_init(CSET *cs, const doc *d, const dnode *form)
 {
-	parserutils_charset_codec *codec = NULL;
-	const char *ac = dn_attr(form, "accept-charset");
-	int i;
+	const char *ac = dn_attr(form, "accept-charset"), *name = d->charset;
 	memset(cs, 0, sizeof *cs);
 	cs->utf8 = 1;
 	strcpy(cs->name, "UTF-8");
-	if (ac != NULL && (strstr(ac, "utf-8") || strstr(ac, "UTF-8") || strstr(ac, "Utf-8")))
-		return;
-	if (d->charset[0] == 0 || lower_eq(d->charset, "utf-8") ||
-	    parserutils_charset_codec_create(d->charset, &codec) != PARSERUTILS_OK)
-		return;
-	for (i = 0; i < 256; i++) {
-		uint8_t in = (uint8_t) i, outb[16];
-		const uint8_t *src = &in;
-		uint8_t *dst = outb;
-		size_t sl = 1, dl = sizeof outb;
-		cs->uni[i] = 0xfffd;
-		parserutils_charset_codec_reset(codec);
-		if (parserutils_charset_codec_decode(codec, &src, &sl, &dst, &dl) == PARSERUTILS_OK &&
-		    sizeof outb - dl == 4) {
-			uint32_t u = (uint32_t) outb[0] << 24 | (uint32_t) outb[1] << 16 | (uint32_t) outb[2] << 8 | outb[3];
-			cs->uni[i] = u;
-		} else if (i < 0x80) {
-			/* a multibyte charset: UTF-8 instead */
-			parserutils_charset_codec_destroy(codec);
-			return;
+	if (ac != NULL) {
+		name = NULL;
+		while (*ac && name == NULL) {
+			char label[48];
+			size_t n;
+			while (*ac == ' ' || *ac == '\t' || *ac == '\n' || *ac == '\f' || *ac == '\r')
+				ac++;
+			n = strcspn(ac, " \t\n\f\r");
+			if (n > 0 && n < sizeof label) {
+				memcpy(label, ac, n);
+				label[n] = 0;
+				name = html_encoding(label);
+			}
+			ac += n;
 		}
 	}
-	parserutils_charset_codec_destroy(codec);
-	for (i = 0; i < 0x80; i++)
-		if (cs->uni[i] != (uint32_t) i)
-			return;		/* not ASCII below: UTF-8 */
+	if (name == NULL || !html_enc_table(name, cs->hi))
+		return;
 	cs->utf8 = 0;
-	snprintf(cs->name, sizeof cs->name, "%s", d->charset);
+	snprintf(cs->name, sizeof cs->name, "%s", name);
 }
 
 static int sb_room(char **s, long *len, long *cap, long n)
@@ -835,11 +827,14 @@ static void encode(OUT *o, const CSET *cs, const char *s, long n)
 		for (k = 1; k < len; k++)
 			u = u << 6 | ((unsigned char) s[i + k] & 0x3f);
 		i += len;
-		for (k = 0x80; k < 256; k++)
-			if (cs->uni[k] == u)
-				break;
-		if (k < 256) {
-			char b = (char) k;
+		/* its byte (U+FFFD has none: the table has it for each byte
+		   the encoding leaves out) */
+		k = 128;
+		if (u != 0xfffd)
+			for (k = 0; k < 128 && cs->hi[k] != u; k++)
+				;
+		if (k < 128) {
+			char b = (char) (0x80 + k);
 			out_add(o, &b, 1);
 		} else {
 			char t[16];

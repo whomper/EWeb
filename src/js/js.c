@@ -78,6 +78,8 @@ typedef struct ejs {
 	dnode **started;		/* scripts that have run (or never will) */
 	long nstarted, startcap;
 	char *nav, *nav_body;		/* where a script sent the browser */
+	char *nav_dl;			/* the download attribute of the link it clicked
+					   to get there (a.click()), NULL none */
 	long nav_len;
 	char nav_ctype[96];
 	const page *pg;
@@ -1401,7 +1403,7 @@ static JSValue el_attributes(JSContext *ctx, JSValueConst this_val)
 /* attributes as properties: strings, addresses (made absolute), flags */
 #define REFLECT(X) \
 	X(id, "id", 0) X(className, "class", 0) X(title, "title", 0) X(lang, "lang", 0) X(dir, "dir", 0) \
-	X(name, "name", 0) X(alt, "alt", 0) X(rel, "rel", 0) X(target, "target", 0) \
+	X(name, "name", 0) X(alt, "alt", 0) X(rel, "rel", 0) X(target, "target", 0) X(media, "media", 0) \
 	X(placeholder, "placeholder", 0) X(htmlFor, "for", 0) X(method, "method", 0) \
 	X(enctype, "enctype", 0) X(content, "content", 0) X(accessKey, "accesskey", 0) \
 	X(autocomplete, "autocomplete", 0) X(pattern, "pattern", 0) X(min, "min", 0) X(max, "max", 0) \
@@ -1433,7 +1435,7 @@ static JSValue reflect_get(JSContext *ctx, JSValueConst this_val, int magic)
 		JSValue r;
 		if (out == NULL)
 			return JS_ThrowOutOfMemory(ctx);
-		j->h.resolve(j->h.ud, j->base, v, out, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, v, out, URL_MAX, 0);
 		r = JS_NewString(ctx, out[0] ? out : v);
 		free(out);
 		return r;
@@ -2369,6 +2371,16 @@ static JSValue fprop_set(JSContext *ctx, JSValueConst this_val, JSValueConst v, 
 	return JS_UNDEFINED;
 }
 
+/* where a script sent the browser forgotten, before it sends it elsewhere */
+static void nav_clear(ejs *j)
+{
+	free(j->nav);
+	free(j->nav_body);
+	free(j->nav_dl);
+	j->nav = j->nav_body = j->nav_dl = NULL;
+	j->nav_len = 0;
+}
+
 /* click(), focus(), blur(), submit(), reset() (magic) */
 enum { EC_CLICK, EC_FOCUS, EC_BLUR, EC_SUBMIT, EC_RESET };
 static int fire(ejs *j, dnode *n, const char *type, int bubbles, int cancelable);
@@ -2397,10 +2409,16 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 			} else if (is_html(n, T_A) && dn_attr(n, "href") != NULL && j->h.resolve != NULL) {
 				char *out = malloc(URL_MAX);
 				if (out != NULL) {
-					j->h.resolve(j->h.ud, j->base, dn_attr(n, "href"), out, URL_MAX);
+					j->h.resolve(j->h.ud, j->base, dn_attr(n, "href"), out, URL_MAX, 0);
 					if (out[0] && strncmp(out, "javascript:", 11) != 0) {
-						free(j->nav);
+						/* a link with a download attribute is
+						   downloaded however it is activated
+						   (the HTML Standard, 4.6.5): src/browse
+						   saves it, as a click on it */
+						const char *dl = dn_attr(n, "download");
+						nav_clear(j);
 						j->nav = out;
+						j->nav_dl = dl != NULL ? strdup(dl) : NULL;
 						out = NULL;
 					}
 					free(out);
@@ -3287,13 +3305,10 @@ static void send_form(ejs *j, dnode *form, fctl *submitter)
 		return;
 	}
 	if (j->h.resolve != NULL)
-		j->h.resolve(j->h.ud, j->base, action && *action ? action : j->url, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, action && *action ? action : j->url, to, URL_MAX, 0);
 	else
 		str_copy(to, j->url, URL_MAX);
-	free(j->nav);
-	free(j->nav_body);
-	j->nav_body = NULL;
-	j->nav_len = 0;
+	nav_clear(j);
 	if (made && s.post) {
 		j->nav_body = s.body;
 		j->nav_len = s.len;
@@ -3429,8 +3444,10 @@ static JSValue win_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
 	return JS_UNDEFINED;
 }
 
-/* the prelude's __ew_fetch(method, url, body, ctype): [status, text,
-   mime, url], or a TypeError */
+/* the prelude's __ew_fetch(method, url, body, ctype, utf8): [status,
+   text, mime, url], or a TypeError. utf8: fetch()'s (the Fetch
+   Standard's Request parses its URL in UTF-8), else XMLHttpRequest's
+   (in the page's encoding) */
 static JSValue win_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	ejs *j = J(ctx);
@@ -3454,7 +3471,7 @@ static JSValue win_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		ctype = cstr(ctx, argv[3], NULL);
 	to = malloc(URL_MAX);
 	if (to != NULL && j->h.resolve != NULL)
-		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, argc > 4 && JS_ToBool(ctx, argv[4]));
 	t = pf_ms();
 	ok = to != NULL && to[0] &&
 	     j->h.fetch(j->h.ud, j->url, to, strcmp(method, "POST") == 0 ? "POST" : "GET", body, (long) blen,
@@ -3612,7 +3629,7 @@ static const char *const part_src[] = {
 	"function ct(h){return h?(h instanceof H?h.get('content-type'):h['Content-Type']||h['content-type']"
 	"||null):null}"
 	"g.fetch=function(u,o){o=o||{};return new Promise(function(y,n){var r;try{r=__ew_fetch(String(o.method"
-	"||'GET').toUpperCase(),String(u&&u.url||u),o.body==null?null:String(o.body),ct(o.headers))}"
+	"||'GET').toUpperCase(),String(u&&u.url||u),o.body==null?null:String(o.body),ct(o.headers),1)}"
 	"catch(e){n(new TypeError('Failed to fetch'));return}y(new R(r))})};"
 	"function X(){this.readyState=0;this.status=0;this.responseText='';this.response='';"
 	"this.responseType='';this._l={};this._h=null}var P=X.prototype;"
@@ -3693,7 +3710,7 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_DEF("addEventListener", 3, add_listener),
 	JS_CFUNC_DEF("removeEventListener", 3, remove_listener),
 	JS_CFUNC_DEF("dispatchEvent", 1, dispatch_event),
-	JS_CFUNC_DEF("__ew_fetch", 4, win_fetch),
+	JS_CFUNC_DEF("__ew_fetch", 5, win_fetch),
 	JS_CGETSET_MAGIC_DEF("innerWidth", win_get, NULL, WP_WIDTH),
 	JS_CGETSET_MAGIC_DEF("innerHeight", win_get, NULL, WP_HEIGHT),
 	JS_CGETSET_MAGIC_DEF("outerWidth", win_get, NULL, WP_WIDTH),
@@ -3816,7 +3833,7 @@ static JSValue go(JSContext *ctx, JSValueConst v, int hash)
 			strcat(to, href);
 		}
 	} else if (j->h.resolve != NULL) {
-		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, 0);
 	} else {
 		str_copy(to, href, URL_MAX);
 	}
@@ -3825,9 +3842,7 @@ static JSValue go(JSContext *ctx, JSValueConst v, int hash)
 		free(to);
 		return JS_UNDEFINED;
 	}
-	free(j->nav);
-	free(j->nav_body);
-	j->nav_body = NULL;
+	nav_clear(j);
 	j->nav = to;
 	return JS_UNDEFINED;
 }
@@ -3885,7 +3900,7 @@ static JSValue hist_call(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		if ((href = cstr(ctx, argv[2], NULL)) == NULL)
 			return JS_EXCEPTION;
 		if ((to = malloc(URL_MAX)) != NULL && j->h.resolve != NULL) {
-			j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+			j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, 0);
 			if (to[0])
 				str_copy(j->url, to, sizeof j->url);
 		}
@@ -3893,7 +3908,7 @@ static JSValue hist_call(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		free(href);
 		return JS_UNDEFINED;
 	}
-	free(j->nav);
+	nav_clear(j);
 	j->nav = strdup(magic == 1 ? "about:back" : "about:forward");
 	return JS_UNDEFINED;
 }
@@ -4106,7 +4121,7 @@ static void run_script(ejs *j, dnode *n)
 		int status = 0;
 		if (*src == 0 || j->h.fetch == NULL || j->h.resolve == NULL || (name = malloc(URL_MAX)) == NULL)
 			return;
-		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
 		if (!name[0] || !j->h.fetch(j->h.ud, j->url, name, "GET", NULL, 0, NULL, &code, &len, &status, mime, sizeof mime) ||
 		    (status != 0 && (status < 200 || status >= 300))) {
 			say(j, "not fetched", name);
@@ -4156,6 +4171,27 @@ static void run_script(ejs *j, dnode *n)
 	j->write_after = wrote;
 	if (src != NULL && !j->over)
 		fire(j, n, "load", 0, 0);
+}
+
+/* each stylesheet's load event, as its sheet came, at the <link>s
+   whose sheet is fetched when its media holds and at those preloaded as
+   a style (doc_link_loads), when a handler may hear it: what it does
+   then (the async-CSS pattern's media='all' or rel='stylesheet') changes
+   the page's sheets, and they are taken again (src/browse). A sheet
+   whose media holds on no screen (print) isn't fetched until it is made
+   to hold: its load comes as if it had been */
+static void sheet_loads(ejs *j)
+{
+	dnode *n;
+	listener *l;
+	int any = 0;
+	for (l = j->ls; l != NULL; l = l->next)
+		if (!l->gone && l->n != NULL && !strcmp(l->type, "load"))
+			any = 1;		/* (the window's hears no element's) */
+	for (n = j->d->root; n != NULL && !j->over; n = next_in(n, j->d->root, !is_html(n, T_TEMPLATE)))
+		if (is_html(n, T_LINK) && doc_link_loads(n) &&
+		    (any || dn_attr(n, "onload") != NULL || map_find(j, n) != NULL))
+			fire(j, n, "load", 0, 0);
 }
 
 /* does the page have scripts (or handlers in its attributes) */
@@ -4218,6 +4254,7 @@ int js_page(doc *d, const char *url, const char *base, const js_host *h)
 		j->write_after = NULL;
 		fire(j, d->root, "readystatechange", 0, 0);
 		fire(j, d->root, "DOMContentLoaded", 1, 0);
+		sheet_loads(j);
 		j->loaded = 1;
 		fire(j, d->root, "readystatechange", 0, 0);
 		if (!j->over)
@@ -4262,15 +4299,18 @@ const char *js_navigation(doc *d, const char **post, long *len, const char **cty
 	return j->nav;
 }
 
+const char *js_navigation_download(doc *d)
+{
+	ejs *j = d->js;
+	return j != NULL && j->nav != NULL ? j->nav_dl : NULL;
+}
+
 void js_navigation_done(doc *d)
 {
 	ejs *j = d->js;
 	if (j == NULL)
 		return;
-	free(j->nav);
-	free(j->nav_body);
-	j->nav = j->nav_body = NULL;
-	j->nav_len = 0;
+	nav_clear(j);
 }
 
 long js_due(doc *d)
@@ -4430,7 +4470,6 @@ static void js_drop(void *p)
 		free(j->sel[i].s);
 	free(j->map);
 	free(j->started);
-	free(j->nav);
-	free(j->nav_body);
+	nav_clear(j);
 	free(j);
 }

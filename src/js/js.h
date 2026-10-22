@@ -29,8 +29,10 @@ typedef struct js_host {
 	   method "GET" or "POST" (body, its ctype). */
 	int (*fetch)(void *ud, const char *site, const char *url, const char *method, const char *body, long blen,
 		     const char *ctype, char **data, long *len, int *status, char *mime, int msize);
-	/* href made absolute against base ("" when it can't be) */
-	void (*resolve)(void *ud, const char *base, const char *href, char *out, int size);
+	/* href made absolute against base ("" when it can't be), its query
+	   in the page's encoding (HTML's "encoding-parsing a URL"), or in
+	   UTF-8 when utf8 (fetch(), whose Request parses it so) */
+	void (*resolve)(void *ud, const char *base, const char *href, char *out, int size, int utf8);
 	/* document.cookie: the cookies a script may see for url (no
 	   HttpOnly ones), and one it sets */
 	void (*cookie_get)(void *ud, const char *url, char *out, int size);
@@ -75,6 +77,9 @@ int js_changed(doc *d);
 /* where a script sent the browser (location, form.submit's address),
    or NULL; its method and body for a form sent with POST (NULL: GET) */
 const char *js_navigation(doc *d, const char **post, long *len, const char **ctype);
+/* when that is a link a script clicked (a.click()) that has a download
+   attribute: its value ("" for no name), else NULL */
+const char *js_navigation_download(doc *d);
 void js_navigation_done(doc *d);
 /* ms until the next timer is due (0: now), -1 for none */
 long js_due(doc *d);

@@ -3,10 +3,14 @@
 /*
  * Pages from the fuzz input (src/doc/html.c, EWeb's HTML parser): the
  * first byte picks the charset the answer gave (none, so the page is
- * sniffed, or one of a few), scripting on or off and a fragment's context
- * element; the rest is the page. The tree that comes out must hold
+ * sniffed, with the locale's default windows-1255 or not, or one of a
+ * few), scripting on or off and a fragment's context element, or else a
+ * text file (text/plain); the rest is the page. The tree that comes out must hold
  * together: each node's parent, siblings and first and last children
- * agree.
+ * agree; the page's refresh (a <meta http-equiv=refresh>) is one; its
+ * stylesheets are found (doc_sheets: each <link>'s and <style>'s type,
+ * set and media, by the CSS engine's media queries), each a whole string,
+ * and with scripting the key of them its walk made is doc_sheets_key's.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -26,12 +30,24 @@ static long check(const dnode *n, int depth)
 			abort();
 		if (c->type == DN_TEXT && (c->text == NULL || c->text[c->len] != 0))
 			abort();
+		if (c->type == DN_ELEMENT)
+			(void) doc_link_loads(c);
 		k += check(c, depth + 1);
 		prev = c;
 	}
 	if (n->last != prev)
 		abort();
 	return k;
+}
+
+static void sheet(void *ud, int is_link, const char *s, size_t len)
+{
+	size_t i;
+	unsigned long *sum = ud;
+	for (i = 0; i < len; i++)
+		*sum += (unsigned char) s[i];
+	if (s[len] != 0 || (is_link && len == 0))
+		abort();
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
@@ -49,12 +65,30 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		return 0;
 	memset(&o, 0, sizeof o);
 	o.charset = charsets[d[0] & 7];
+	o.fallback = (d[0] & 7) == 1 ? "windows-1255" : NULL;
+	o.plaintext = d[0] >> 7;
 	o.scripting = (d[0] >> 3) & 1;
 	o.context = contexts[(d[0] >> 4) & 7].name;
 	o.context_ns = contexts[(d[0] >> 4) & 7].ns;
 	doc = doc_parse_opts((const char *) d + 1, n - 1, &o, &m);
-	if (doc != NULL)
+	if (doc != NULL) {
+		const drefresh *r;
+		int k = 0;
+		unsigned long sum = 0;
 		check(doc->root, 0);
+		doc_sheets(doc, sheet, &sum);
+		if (doc->scripting && doc_sheets_key(doc) != doc->sheets_key)
+			abort();
+		/* the page's refresh: the <meta>s whose content is one, as
+		   they were put in (some taken out of the tree since, perhaps) */
+		for (r = doc->refresh; r != NULL; r = r->next) {
+			unsigned long secs;
+			const char *u;
+			size_t ul;
+			if (!doc_refresh_parse(r->content, &secs, &u, &ul) || r->based > 1 || ++k > DOC_REFRESH_METAS)
+				abort();
+		}
+	}
 	doc_free(doc);
 	return 0;
 }

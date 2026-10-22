@@ -18,7 +18,9 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `NEWS.HTM` 240 of 947 blocks are ever read; on a page with Bootstrap,
   about one in twenty.
 - **`@media` blocks that don't apply aren't read at all.** Media queries
-  are evaluated as the sheet is parsed, for the Falcon's screen.
+  are evaluated as the sheet is parsed, for the Falcon's screen; the
+  context keeps the widths they would all hold at as they did, and only a
+  window sized beyond them has the sheets parsed again.
 - **No callbacks while matching.** The document gives the engine its
   elements as `ec_node`s whose names, ids and classes are atoms. Each atom
   points straight at the rules whose subject has it, so finding an element's
@@ -39,8 +41,13 @@ Falcons, and a divide that costs 40 to 80 cycles.
   most important down, so nothing is written and then overwritten.
 - **Integer fixed point** (22.10) throughout; absolute units become px as
   the sheet is parsed.
-- **Arenas** for sheets and styles: no `malloc` per rule or per style, and
-  a document's styles go in one free.
+- **Arenas** for names, sheets and styles: no `malloc` per rule or per
+  style; a document's styles go in one free, and its sheets in another
+  (what a style attribute or a `var()` makes as the styles are computed
+  goes with the styles). An arena's pieces are 64 KB; in the ST edition
+  4 KB, its first ones smaller, from 512 bytes, each as large as those
+  before it together, so a small page's names, sheets and styles take
+  about what they need.
 
 ## What it supports
 
@@ -130,10 +137,29 @@ A sheet that came from an address of its own (a `<link>`'s) is added with
 `ec_sheet_at(c, css, len, origin, its_address)` once the context has a
 resolver (`ec_set_resolver`): its `url()`s are made absolute against that
 address when its declarations are read, as CSS Values 4 says, not against
-the page's. For pictures, `ec_media_ok(c, s, n)` tells whether a media
-query list holds (a `<source media>`), and `ec_sizes(c, s, n)` gives the
+the page's. `ec_media_ok(c, s, n)` tells whether a media query list
+holds for c's screen, as an `@media`'s would (a `<link>`'s or a
+`<style>`'s `media`, a `<source media>`), and `ec_sizes(c, s, n)` gives the
 width an `<img sizes>` names (its first entry whose condition holds, with
 `calc()`, `min()`, `max()` and `clamp()` of lengths), or -1.
+
+Media queries are evaluated again when the screen changes (Media Queries
+4, 2). `ec_media_span(c, &lo, &hi)` gives the viewport widths at which
+every media query c has evaluated (`@media`, `ec_media_ok`) would go the
+way it went: each comparison with the width narrows them (`min-width:
+600px` on: 600 and up), and an aspect ratio or a `vw` in a query keeps
+only the width it was at. `ec_set_media(c, &m)` gives c another screen
+for what is evaluated after (`ec_media_ok`, `ec_sizes`, viewport units in
+styles computed). At a width outside the span, `ec_drop_sheets(c)` takes
+out every sheet c was given (a base's rules stay; the atoms stay, so the
+document's nodes keep theirs, and so do a script's selectors) and its
+styles, for the sheets to be added again for the new screen. Their memory
+is given back with them (their text, rules and declarations are an arena
+of their own), so added again they take what they took, however often.
+`ec_sheets_short(c)` says whether a sheet added since didn't all fit in
+memory, and `ec_mem(c)` how many bytes c takes. EWeb's browser does so as
+the window is sized, and when a script changes the page's sheets
+(DESIGN.md, Stylesheets by their media, type and set).
 
 `tests/bench/ecstyle.c` builds `ec_node`s from nsbench's document tree;
 in EWeb the document's own nodes will be them.

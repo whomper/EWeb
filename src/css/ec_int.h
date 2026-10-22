@@ -44,6 +44,8 @@ typedef struct ec_arena {
 	char *p, *end;
 	ec_chunk *chunks;
 	size_t chunk_size;
+	size_t size;			/* its pieces' bytes */
+	uint8_t nomem;			/* a piece of it couldn't be had */
 } ec_arena;
 
 void *ec_alloc_slow(ec_arena *a, size_t n);
@@ -261,8 +263,13 @@ struct ec_ctx {
 	unsigned opts;
 	const struct ec_ctx *base;	/* ec_create_on's, or NULL */
 	ec_shadow **shadow;		/* EC_SHADOW_SIZE lists, or NULL: none yet */
-	ec_arena mem;			/* atoms, sheets, rules */
-	ec_arena smem;			/* styles */
+	ec_arena mem;			/* atoms, scripts' selectors */
+	ec_arena rmem;			/* the sheets: their text, rules and declarations
+					   (given back by ec_drop_sheets) */
+	ec_arena smem;			/* styles, and what is parsed as they are made:
+					   style attributes, var()'s values */
+	ec_arena *pmem;			/* where what is parsed goes: rmem, smem while
+					   styling, mem for a script's selector */
 	ec_atom **atoms;
 	uint32_t natoms, atom_mask;
 	ec_vec universal;		/* rules with no id, class, tag or attribute to index */
@@ -271,6 +278,9 @@ struct ec_ctx {
 	uint32_t order;
 	uint8_t layer;			/* inside @layer: below unlayered rules */
 	ec_stats st;
+	/* the widths (px) every media query evaluated holds at as it did
+	   (ec_media_span) */
+	int32_t span_lo, span_hi;
 
 	int sibling_rules;		/* any selector looks at siblings */
 
@@ -321,7 +331,8 @@ int ec_parse_color(const ec_tok *t, int n, int *used, uint32_t *argb, int *cur);
 int ec_shorthand_props(int sh, uint8_t *props);
 
 /* sheets (sheet.c) */
-void ec_parse_block(ec_ctx *c, ec_block *b);
+/* its declarations parsed into a: a sheet's rmem, a style attribute's smem */
+void ec_parse_block(ec_ctx *c, ec_block *b, ec_arena *a);
 int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *custom);
 const ec_sellist *ec_parse_sellist(ec_ctx *c, ec_lex *lx, int forgiving, int *ok);
 

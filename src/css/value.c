@@ -256,7 +256,7 @@ static int calc_value(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec
 			return 1;
 		}
 	}
-	x = ec_alloc(&c->mem, sizeof(ec_calcx) + na * sizeof x->c[0]);
+	x = ec_alloc(c->pmem, sizeof(ec_calcx) + na * sizeof x->c[0]);
 	if (x == NULL)
 		return 0;
 	x->op = op;
@@ -557,7 +557,7 @@ static const ec_str *tok_str(ec_ctx *c, const ec_tok *t)
 	char buf[1024];
 	size_t len;
 	const char *s = ec_tok_text(t, buf, sizeof buf, &len);
-	return ec_str_new(&c->mem, s, len);
+	return ec_str_new(c->pmem, s, len);
 }
 
 /* a url(): made absolute when its sheet has an address of its own */
@@ -571,9 +571,9 @@ static const ec_str *url_str(ec_ctx *c, const ec_tok *t)
 		memcpy(rel, s, len);
 		rel[len] = 0;
 		if (c->resolve(c->parse_base, rel, abs, sizeof abs))
-			return ec_str_new(&c->mem, abs, strlen(abs));
+			return ec_str_new(c->pmem, abs, strlen(abs));
 	}
-	return ec_str_new(&c->mem, s, len);
+	return ec_str_new(c->pmem, s, len);
 }
 
 static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
@@ -886,7 +886,7 @@ static int family(ec_ctx *c, const ec_tok *t, int n, ec_decl *d)
 					len += l;
 				}
 				if (nn < 32 && !generic)
-					names[nn++] = ec_str_new(&c->mem, buf, len);
+					names[nn++] = ec_str_new(c->pmem, buf, len);
 				i = j;
 			}
 		} else {
@@ -901,7 +901,7 @@ next:
 	}
 	if (nn == 0 && !generic)
 		return -1;
-	f = ec_alloc(&c->mem, sizeof(ec_family) + nn * sizeof f->name[0]);
+	f = ec_alloc(c->pmem, sizeof(ec_family) + nn * sizeof f->name[0]);
 	if (f == NULL)
 		return -1;
 	f->n = nn;
@@ -927,7 +927,7 @@ static int content(ec_ctx *c, const ec_tok *t, int n, ec_decl *d)
 			return 1;
 		}
 	}
-	ct = ec_alloc(&c->mem, sizeof(ec_content) + n * sizeof ct->item[0]);
+	ct = ec_alloc(c->pmem, sizeof(ec_content) + n * sizeof ct->item[0]);
 	if (ct == NULL)
 		return -1;
 	for (i = 0; i < n; i++) {
@@ -1130,7 +1130,7 @@ static int position(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *x, ec_de
 				} else if (off.kind == EK_PCT) {
 					put(dst, 0, EK_PCT, EC_FX(100) - off.v.i);
 				} else if (off.kind == EK_PX) {
-					ec_calcx *cx = ec_alloc(&c->mem, sizeof(ec_calcx) + sizeof cx->c[0]);
+					ec_calcx *cx = ec_alloc(c->pmem, sizeof(ec_calcx) + sizeof cx->c[0]);
 					if (cx == NULL)
 						return 0;
 					memset(cx, 0, sizeof(ec_calcx) + sizeof cx->c[0]);
@@ -1670,7 +1670,7 @@ static int tracks(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *d)
 	}
 	if (nt == 0)
 		return -1;
-	r = ec_alloc(&c->mem, sizeof *r + (size_t) nt * sizeof r->t[0]);
+	r = ec_alloc(c->pmem, sizeof *r + (size_t) nt * sizeof r->t[0]);
 	if (r == NULL)
 		return -1;
 	r->n = (uint16_t) nt;
@@ -1727,7 +1727,7 @@ static int areas(ec_ctx *c, const ec_tok *t, int n, ec_decl *d)
 			}
 			if (nn >= 1024)
 				return -1;
-			name[nn] = s[p] == '.' ? NULL : ec_str_new(&c->mem, s + p, q - p);
+			name[nn] = s[p] == '.' ? NULL : ec_str_new(c->pmem, s + p, q - p);
 			if (s[p] != '.' && name[nn] == NULL)
 				return -1;
 			nn++;
@@ -1740,7 +1740,7 @@ static int areas(ec_ctx *c, const ec_tok *t, int n, ec_decl *d)
 	}
 	if (n == 0 || n > 1000)
 		return -1;
-	a = ec_alloc(&c->mem, sizeof *a + (size_t) nn * sizeof a->name[0]);
+	a = ec_alloc(c->pmem, sizeof *a + (size_t) nn * sizeof a->name[0]);
 	if (a == NULL)
 		return -1;
 	a->rows = (uint16_t) n;

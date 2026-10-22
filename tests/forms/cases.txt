@@ -95,6 +95,65 @@ submit -
 expect get x
 body h=%D7%90
 
+case accept-charset windows-1255 on a UTF-8 page: the form's encoding is its first label's
+html <meta charset=utf-8><form action=x accept-charset="windows-1255"><input name=h value="&#1488;&#233;"><input type=hidden name=_charset_><input type=submit></form>
+submit -
+expect get x
+body h=%E0%26%23233%3B&_charset_=windows-1255
+
+case accept-charset: labels split at white space, the first one that names an encoding, its name as the standard has it
+html <meta charset=utf-8><form action=x accept-charset="  bogus	Logical utf-8"><input name=h value="&#1488;"><input type=hidden name=_charset_><input type=submit></form>
+submit -
+expect get x
+body h=%E0&_charset_=ISO-8859-8-I
+
+case accept-charset that names no encoding is UTF-8, not the page's
+charset windows-1255
+html <form action=x accept-charset="x-nothing klingon"><input name=h value="&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%D7%90
+
+case accept-charset UTF-16 sends UTF-8 (its output encoding)
+charset windows-1255
+html <form action=x accept-charset="utf-16le"><input name=h value="&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%D7%90
+
+case accept-charset x-cp1255 and cp1255: the Encoding Standard's labels of windows-1255
+html <meta charset=utf-8><form action=x accept-charset="x-cp1255"><input name=h value="&#1488;"><input type=hidden name=_charset_><input type=submit></form>
+submit -
+expect get x
+body h=%E0&_charset_=windows-1255
+
+case accept-charset cp1255
+html <meta charset=utf-8><form action=x accept-charset="cp1255"><input name=h value="&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%E0
+
+case a page whose charset is x-cp1255 (its HTTP answer's) sends windows-1255
+charset x-cp1255
+html <form action=x><input name=h value="&#1488;"><input type=hidden name=_charset_><input type=submit></form>
+submit -
+expect get x
+body h=%E0&_charset_=windows-1255
+
+case U+FFFD in a windows-1255 form is a character it lacks (not a byte it leaves out)
+charset windows-1255
+html <form action=x><input name=h value="&#65533;&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%26%2365533%3B%E0
+
+case windows-1255's U+05BA (0xCA) and a C1 control (0x81) are their bytes (the Encoding Standard's index)
+charset windows-1255
+html <form action=x><input name=h value="&#1466;&#x81;&#1488;"><input type=submit></form>
+submit -
+expect get x
+body h=%CA%81%E0
+
 case a page in ISO-8859-1 is windows-1252 (the Encoding Standard): the euro is 0x80
 charset iso-8859-1
 html <form action=x><input name=n value="&#233;&#8364;&#1513;"><input type=submit></form>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- args: -v -K dark -->
+<!-- expect: sheets added again: a script changed them -->
+<!-- expect: console: listen loaded -->
+<!-- expect: console: print loaded -->
+<!-- expect: #00cc11 --><!-- expect: #00cc22 --><!-- expect: #00cc33 --><!-- expect: #00cc44 --><!-- expect: #00cc55 -->
+<!-- absent: #cc0000 -->
+<html><head><title>sheets</title>
+<!-- the async-CSS pattern: a sheet for print made all as it loads, or one
+     preloaded made a stylesheet; the <noscript> one is for without scripts -->
+<link rel=stylesheet href="sheets/async.css" media=print onload="this.media='all'">
+<noscript><link rel=stylesheet href="sheets/async.css"></noscript>
+<link rel=preload as=style href="sheets/preload.css" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel=stylesheet href="sheets/preload.css"></noscript>
+<link rel=stylesheet id=lis href="sheets/listen.css" media="only x">
+<script>
+document.getElementById("lis").addEventListener("load", function () {
+	this.media = "all";
+	console.log("listen loaded");
+});
+</script>
+<!-- a print sheet stays one: its load comes, it isn't applied -->
+<link rel=stylesheet href="sheets/print.css" media=print onload="console.log('print loaded')">
+<!-- a theme a button turns on; a <style> a script adds -->
+<link rel=stylesheet id=theme href="sheets/theme.css" disabled>
+<script>
+var s = document.createElement("style");
+s.textContent = ".added { background: #00cc55 }";
+document.head.appendChild(s);
+</script>
+</head><body>
+<p class=async>media=print, onload media='all': applied</p>
+<p class=preload>rel=preload as=style, onload rel='stylesheet': applied</p>
+<p class=listen>media="only x", a load listener makes it all: applied</p>
+<p class=print>media=print, an onload that leaves it: not applied</p>
+<p class=theme>disabled, the button turns it on: applied</p>
+<p class=added>a style a script added: applied</p>
+<button type=button id=dark onclick="document.getElementById('theme').disabled = false">Dark</button>
+</body></html>

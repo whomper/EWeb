@@ -31,8 +31,19 @@ void img_ref(ew_img *im, int d);
 /* its file came (data is taken, malloc'ed): 1, or 0 when it isn't a
    picture EWeb shows (it is failed then, why says what it is). The
    file may be pens made on the Pi's gateway (webgate, AERA-Atari's
-   aerapens: "EWPN", the screen's pens at one size, for one palette) */
+   aerapens: "EWPN", the screen's pens at one size, for one palette).
+   Asked for again (img_recheck): 2 when it came the same, its decoded
+   sizes kept; changed, they go (decoded again) */
 int img_set_file(ew_img *im, char *data, long len);
+/* a page fetched anew for its refresh shows it: its file is to be asked
+   for again, as its HTTP freshness says (the disk cache's, or the
+   server's), and meanwhile it is shown as it is. Only one that is here,
+   and not a data: address */
+void img_recheck(ew_img *im);
+/* it is to be asked for again (img_recheck) */
+int img_stale(const ew_img *im);
+/* it didn't come again (the server couldn't be reached): kept as it is */
+void img_kept(ew_img *im);
 /* its file is pens from the Pi that can't be shown at w x h on this
    screen (another size, another palette): it is to be asked for again,
    at that size (img_decode gives 0 meanwhile, and tries nothing) */

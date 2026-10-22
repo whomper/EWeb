@@ -83,6 +83,22 @@ as the page comes, magenta for its stylesheets, yellow while the page is
 laid out, green as its pictures come. **Esc**,
 **Undo** or the Stop button stop it, and the page you were on stays.
 
+## Pages that go on by themselves
+
+Some pages send you on to another after a while, or load themselves
+again (a "refresh"): a page that has moved, a search engine's link
+to a result, a news page that keeps itself up to date. EWeb does as
+they ask once the page is shown (a page that loads itself again,
+once its pictures are in too, and then shows its pictures as they
+are now: a camera's, a weather map), and the status bar says what is
+coming: "Going on to example.com in 5 s: Esc stays here." **Esc** or
+the Stop button keep the page you are on, and while you type in the
+address field the page waits for you. The page that sent you on isn't
+kept in Back's list, so **Undo** goes to the page before it; Back and
+Forward show a page without sending you on again. A page that sends
+you on at once, again and again, is stopped after five times, and the
+status bar says so until you go elsewhere.
+
 ## Pictures
 
 A page is shown as soon as its text is laid out; its pictures come
@@ -177,14 +193,25 @@ EWeb lists its links, or open EWeb's in another browser.
   (`INDEX.HTM` for a site's front page). Its pictures and stylesheets
   stay on the server; open the file again with ^O.
 - **A link's file**: Alternate-click the link, or right-click it and
-  choose Save the link's file. It goes straight to the disk as it comes,
-  so it can be bigger than your memory; the status bar counts it, and
-  Esc stops it (nothing is left behind).
+  choose Save the link's file. EWeb asks where to save it as soon as the
+  site answers, then it goes straight to the disk as it comes, so it can
+  be bigger than your memory; the status bar counts it, and Esc stops it
+  (nothing is left behind). Sites wait about a minute for you to choose;
+  if one gives up, EWeb asks it for the file once more. A link the page
+  marks as a download (its site's own) is saved this way when you click
+  it.
 - **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
-  page: EWeb asks where to save it, and the page you were on stays.
+  page, and one its site says to save rather than show (a text file it
+  sends as an attachment): EWeb asks where to save it, and the page you
+  were on stays.
 
-The file selector offers the name; if there is a file of that name
-already, EWeb asks before replacing it.
+The file selector offers a name: the one the site or the link gives the
+file when there is one (so `download.php?id=12` comes as `GAME.ZIP`),
+else one made from its address, made to fit the Atari's disks (eight
+letters and three, in capitals, only the characters TOS takes, `.tar.gz`
+as `.TGZ`). If there is a file of that name already, EWeb asks before
+replacing it. A packed archive (`.gz`, `.tgz`) is saved as it came, not
+unpacked.
 
 ## The cache
 
@@ -271,6 +298,43 @@ their size and stay as they were decoded, so nothing is fetched or
 decoded again (a page's pixel is 0.8 of the screen's, so that pages
 made for wider screens fit the Falcon's 640).
 
+## Encodings
+
+Most pages say which encoding their text is in (UTF-8, Windows-1255
+for Hebrew, Windows-1252 for Western European languages, and so on),
+and EWeb reads them so. A page that doesn't say is read as UTF-8 when
+its text is UTF-8; otherwise as Windows-1255 when its address ends in
+.il (an Israeli site), else as Windows-1252, as browsers do. Text files
+(.TXT on your disks, or text from a server) are read the same way, and
+shown as their lines.
+
+When a page's letters still come out wrong (Latin letters where there
+should be Hebrew, or two odd signs in place of each accented letter),
+**View > Encoding...** lists the
+encodings EWeb has; choose the right one and the page is read again in
+it, from what came (nothing is fetched again). The choice stays with
+that page, when you reload it and when you come back to it, until you
+open another; **Auto** goes back to what the page says. The list:
+
+- Unicode (UTF-8)
+- Western (Windows-1252, ISO-8859-1) and Western (ISO-8859-15)
+- Hebrew (Windows-1255), Hebrew, logical (ISO-8859-8-I) and Hebrew,
+  visual (ISO-8859-8)
+- Central European (Windows-1250, ISO-8859-2), Turkish (Windows-1254,
+  ISO-8859-9), Baltic (Windows-1257, ISO-8859-13, ISO-8859-4), Nordic
+  (ISO-8859-10) and South European (ISO-8859-3)
+
+EWeb's fonts have the Latin and Hebrew letters, so pages in Greek,
+Cyrillic or Arabic can't be shown yet, whatever the encoding. A page in
+visual Hebrew (ISO-8859-8, its letters stored in the order they are
+shown) is shown as it is stored, left to right, as browsers show it;
+if its Hebrew comes out reversed, the page is logical Hebrew: choose
+Hebrew, logical (ISO-8859-8-I).
+
+What you type into a page's forms, and the words in its links, go to
+the site in the page's encoding (or the one its form asks for), as
+sites made for those pages expect.
+
 ## Copying
 
 **^C** copies the page's text to the GEM clipboard (to paste into
@@ -291,7 +355,7 @@ choose all of it.
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |
-| Esc | stop a page loading, or its pictures |
+| Esc | stop a page loading, or its pictures; stay on a page that would go on |
 | Up, Down | scroll; with Shift, a page |
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |
@@ -330,6 +394,13 @@ show:
 
 Sites made for small screens and for text, such as FrogFind, 68k.news,
 Wikipedia and many blogs, read well.
+
+A page's styles for printing, and those a site keeps for screens wider
+or narrower than the window, are left out (EWeb doesn't fetch them).
+When you make the window wider or narrower, a page made for several
+sizes takes the styles it has for the new one, fetching them then if
+they hadn't come yet (the mouse is busy meanwhile); what you typed into
+its fields stays.
 
 ## Pages made by scripts
 

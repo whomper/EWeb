@@ -101,6 +101,7 @@ static const MBAR_ITEM m_view[] = {
 	{ "Larger text", "^+", C_LARGER },
 	{ "Smaller text", "^-", C_SMALLER },
 	{ "Actual size", "^0", C_ACTUAL },
+	{ "Encoding...", 0, C_ENCODING },
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
 	{ "-", 0, 0 },
@@ -198,8 +199,6 @@ static void enable(int cmd, int on)
 		menu_ienable(mb.tree, i, on ? 1 : 0);
 }
 
-static void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-
 #ifndef EW_ST
 /* the site a page is of, as SCRIPTS= names it: its host, or "file" for
    pages on the disk; 0 for none (EWeb's own pages) */
@@ -269,7 +268,7 @@ void menu_update(void)
 {
 	int addr = win_address_has_focus();
 	enable(C_RELOAD, !loading && br.cur >= 0);
-	enable(C_STOP, loading || br_pictures_pending(&br));
+	enable(C_STOP, loading || br_pictures_pending(&br) || br_refresh_due(&br) >= 0);
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
@@ -284,6 +283,7 @@ void menu_update(void)
 	enable(C_SMALLER, !loading && opt.zoom > 50);
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
+	enable(C_ENCODING, !loading && br.encodable && br.src != NULL);
 	enable(C_PICTURES, !loading);
 	enable(C_SNAPSHOT, !loading && http_gateway[0]);
 	enable(C_LIVE, !loading && http_gateway[0]);
@@ -551,8 +551,7 @@ int settings_save(void)
 /* what happened, for the Hatari rigs (tests/hatari/gui_test.py): "EWEB
    ..." lines on the emulator's console through NatFeats; nothing on a
    real Atari */
-static void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void log_event(const char *fmt, ...)
+void log_event(const char *fmt, ...)
 {
 	char buf[600];
 	va_list ap;
@@ -674,6 +673,26 @@ static void keys_flush(void)
 	esc_quiet_until = pf_ms() + 1000;
 }
 
+/* ms until the page's refresh is due (0: now), -1 none; it waits while
+   the address field has the keyboard, so that what is typed there stays */
+static long refresh_due(void)
+{
+	return loading || win_iconified || win_address_has_focus() ? -1 : br_refresh_due(&br);
+}
+
+/* Esc or Stop while the page's refresh waits: the page stays (said on
+   the status line unless the pictures' end says what stopped) */
+static void refresh_stop(int tell)
+{
+	if (br_refresh_due(&br) < 0)
+		return;
+	br_refresh_cancel(&br);
+	log_event("refresh stopped");
+	if (tell)
+		status("Staying on this page.");
+	win_toolbar();
+}
+
 /* a picture is stopped for what came: it is done after */
 static void put_off(short which, const short *msg, const AEVENT *ev)
 {
@@ -696,11 +715,17 @@ static void idle(void)
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
 	win_throb(1);
 	if (pics) {
+		/* the page's refresh to another page is due: the picture is
+		   cut short (it is fetched again if the page stays; one of the
+		   page itself counts from when its pictures are in) */
+		if (refresh_due() == 0)
+			conn_stop = 1;
 		if (which & MU_MESAG) {
 			if (msg[0] == MN_SELECTED) {
 				if (mbar_command(&mb, msg[4]) == C_STOP) {
 					conn_stop = 1;
 					br_pictures_stop(&br);
+					refresh_stop(0);
 					menu_tnormal(mb.tree, msg[3], 1);
 				} else {
 					put_off(MU_MESAG, msg, &ev);
@@ -716,6 +741,7 @@ static void idle(void)
 			if (scan == 0x01) {
 				conn_stop = 1;
 				br_pictures_stop(&br);
+				refresh_stop(0);
 			} else if (scan == 0x48 || scan == 0x50 ||
 				   (!win_address_has_focus() && (scan == 0x39 || scan == 0x47) &&
 				    !key_ctrl(ev.kstate, ev.kreturn))) {
@@ -805,6 +831,18 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 	       alert(2, "[2][There is a file of that name.|Replace it?][Replace|Cancel]") == 1;
 }
 
+/* br_save_url's: where a file goes, asked once its answer has begun (its
+   server may name it) */
+static int save_where(void *ud, const char *name, char *path, int size)
+{
+	int r;
+	(void) ud;
+	graf_mouse(ARROW, 0);
+	r = ask_save("Save the link's file", name, path, size);
+	graf_mouse(BUSYBEE, 0);
+	return r;
+}
+
 /* said on the status line, and in the log (its size, no path) */
 static void saved(const char *path, long len)
 {
@@ -815,22 +853,31 @@ static void saved(const char *path, long len)
 	log_event("saved %ld", len);
 }
 
+static void save_file(const char *url, const char *given);
+
+static unsigned long drawn;		/* br.shows when the window last drew a new page */
+
 /* what a load came to, on the screen */
 static void loaded(int r)
 {
+	/* a new page: the load's own (BR_SHOWN), or one shown on the way to
+	   what it came to (its script, as it loaded, clicked a download link
+	   or sent the browser on): drawn first, then what the load came to
+	   (the file selector for a file, EMail for a mail address) */
+	int fresh = r == BR_SHOWN || br.shows != drawn;
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
-	if (r == BR_SHOWN || r == BR_SAME)
+	if (fresh || r == BR_SAME)
 		ph_pictures();		/* full, or on to the pictures */
 	else {
 		win_progress(-1, 0);
 		ph = -1;
 	}
-	switch (r) {
-	case BR_SHOWN: {
+	if (fresh) {
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
+		drawn = br.shows;
 		win_page_changed();
 		ms_drawn = pf_ms() - ms_drawn;
 		log_url(shown, sizeof shown);
@@ -846,13 +893,19 @@ static void loaded(int r)
 		if (br.p && br.p->deep)
 			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
 		if (br.note[0]) {
-			win_status(br.note);
+			char t[96];
+			/* a refresh's (or that refreshes at once were stopped) is
+			   what the bar says at rest (win_status("")), so it comes
+			   back after the pictures' lines and a button's or a link's */
+			win_status(br_refresh_note(&br, t, sizeof t) ? "" : br.note);
 			log_event("note %s", br.note);
 		} else if (br.p && br.p->deep) {
 			win_status("Part of this page is nested too deeply to show.");
 		}
-		break;
 	}
+	switch (r) {
+	case BR_SHOWN:
+		break;
 	case BR_SAME:
 		log_event("same %.*s top %ld", (int) strcspn(br.url, "?"), br.url, (long) br.scroll_to);
 		win_address(br.url);
@@ -868,13 +921,25 @@ static void loaded(int r)
 		win_status("");
 		win_toolbar();
 		log_event("download %.60s %ld", br.dl.mime, len);
-		br_file_name(br.dl.url, br.dl.mime, name, sizeof name);
+		br_file_name(br.dl.url, br.dl.name, br.dl.mime, name, sizeof name);
 		if (!ask_save("Save the file", name, full, sizeof full))
 			br_dl_free(&br);
 		else if (br_dl_save(&br, full))
 			saved(full, len);
 		else
 			alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+		break;
+	}
+	case BR_SAVE: {
+		/* a link to save (<a download>): as it comes, as Alternate-click
+		   saves one */
+		char url[1024], given[256];
+		str_copy(url, br.dl.url, sizeof url);
+		str_copy(given, br.dl.name, sizeof given);
+		win_address(br.url);
+		win_status("");
+		log_event("save link");
+		save_file(url, given);
 		break;
 	}
 	case BR_ELSEWHERE:
@@ -1109,6 +1174,45 @@ static int can_open(void *ud, const char *url)
 	return 0;
 }
 
+/* View > Encoding: the encodings EWeb offers (br_encodings) in a popup
+   at the mouse, by the menu item (TOS's AES has no submenus), the one
+   the page is read in ticked (its tick in place of the first of the two
+   spaces the others start with: popup()'s way); the page read again
+   from what came in the one chosen, until another page is loaded
+   (br_encoding) */
+static void encoding_menu(void)
+{
+	char lab[1 + 16][44];	/* (on the stack while the popup is up: not kept) */
+	const char *items[2 + 16];
+	short mx, my, mb, ks, r, n = 0;
+	int i;
+	if (br.d == NULL)
+		return;
+	if (br.enc[0])
+		snprintf(lab[0], sizeof lab[0], "  Auto");
+	else
+		snprintf(lab[0], sizeof lab[0], "\x08 Auto: %.35s", br_encoding_label(br.d->charset));
+	items[n++] = lab[0];
+	items[n++] = "-";
+	for (i = 0; i < br_nencodings && i < 16; i++) {
+		snprintf(lab[1 + i], sizeof lab[1 + i], "%s%s", strcmp(br.enc, br_encodings[i].name) == 0 ? "\x08 " : "  ",
+			 br_encodings[i].label);
+		items[n++] = lab[1 + i];
+	}
+	graf_mkstate(&mx, &my, &mb, &ks);
+	r = popup(mx, my, items, n);
+	if (r < 0 || r == 1)
+		return;
+	{
+		const char *name = r == 0 ? "" : br_encodings[r - 2].name;
+		if (strcmp(name, br.enc) == 0)
+			return;		/* as it is */
+		log_event("encoding %s", name[0] ? name : "auto");
+		loading_on();
+		loaded(br_encoding(&br, name));
+	}
+}
+
 /* the text's size, per cent: only text grows or shrinks, the page's
    pictures keep their size (decoded once) and the page its width in CSS
    px (the same pictures chosen, the same media queries) */
@@ -1155,7 +1259,7 @@ static void save_page(void)
 	char name[16], full[320];
 	if (br.src == NULL)
 		return;
-	br_file_name(br.url, br.mime, name, sizeof name);
+	br_file_name(br.url, NULL, br.mime, name, sizeof name);
 	if (!ask_save("Save the page", name, full, sizeof full))
 		return;
 	if (br_save_page(&br, full))
@@ -1164,20 +1268,16 @@ static void save_page(void)
 		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
 }
 
-void save_link(int link)
+/* url's file saved as it comes (br_save_url), where the user says once
+   the answer has begun; given: the name its link gives (<a download>),
+   or NULL */
+static void save_file(const char *url, const char *given)
 {
-	char url[2048], name[16], full[320], err[200];
+	char full[320], err[200];
 	int r;
-	if (loading)
-		return;
-	br_link_url(&br, link, url, sizeof url);
-	if (url[0] == 0)
-		return;
-	br_file_name(url, "", name, sizeof name);
-	if (!ask_save("Save the link's file", name, full, sizeof full))
-		return;
+	full[0] = 0;
 	loading_on();
-	r = br_save_url(&br, url, full, err, sizeof err);
+	r = br_save_url(&br, url, given, full, sizeof full, err, sizeof err);
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
@@ -1188,7 +1288,7 @@ void save_link(int link)
 		keys_flush();
 		log_event("stopped heap %ld peak %ld free %ld", heap_use, heap_peak, ram_free());
 		win_status("Stopped.");
-	} else {
+	} else if (r == BRS_FAILED) {
 		char t[220];
 		char *c;
 		atari_text(err, t, sizeof t);
@@ -1201,6 +1301,22 @@ void save_link(int link)
 	conn_stop = 0;
 	win_toolbar();
 	menu_update();
+}
+
+void save_link(int link)
+{
+	char url[2048], given[256];
+	const char *g;
+	if (loading)
+		return;
+	br_link_url(&br, link, url, sizeof url);
+	if (url[0] == 0)
+		return;
+	/* copied: a window sized while the file comes lays the page out anew */
+	g = br_link_download(&br, link);
+	if (g != NULL)
+		str_copy(given, g, sizeof given);
+	save_file(url, g != NULL ? given : NULL);
 }
 
 void command(int cmd)
@@ -1217,9 +1333,17 @@ void command(int cmd)
 		loaded(br_reload(&br));
 		break;
 	case C_STOP:
-		conn_stop = 1;
-		br_pictures_stop(&br);
-		win_status("");
+		/* a load, or a picture as it comes, idle() stops; here, between
+		   them, what is still to come: the pictures, the page's refresh.
+		   conn_stop stays clear, as the page's scripts' requests need it */
+		if (loading)
+			conn_stop = 1;
+		if (br_pictures_pending(&br))
+			br_pictures_stop(&br);
+		if (br_refresh_due(&br) >= 0)
+			refresh_stop(1);
+		else
+			win_status("");
 		break;
 	case C_QUIT: quit = 1; break;
 	case C_CUT: win_clip(CLIP_CUT); break;
@@ -1243,6 +1367,7 @@ void command(int cmd)
 	case C_LARGER: set_zoom(opt.zoom + 10); break;
 	case C_SMALLER: set_zoom(opt.zoom - 10); break;
 	case C_ACTUAL: set_zoom(100); break;
+	case C_ENCODING: encoding_menu(); break;
 	case C_PICTURES:
 		/* a setting: on the disk at once (6.5); the page laid out again
 		   with its pictures or without */
@@ -1464,7 +1589,9 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 	if (win_iconified)	/* an icon takes no keys or clicks */
 		which &= ~(MU_KEYBD | MU_BUTTON);
 	if (which & MU_KEYBD) {
-		if (!shortcut(ev.kstate, ev.kreturn))
+		if (KEY_SCAN(ev.kreturn) == 0x01 && br_refresh_due(&br) >= 0)
+			refresh_stop(1);	/* Esc: the page's refresh first */
+		else if (!shortcut(ev.kstate, ev.kreturn))
 			win_key(ev.kstate, ev.kreturn);
 		menu_update();
 	}
@@ -1481,6 +1608,15 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 				evnt_timer_(10);
 		} while (mbt & 3);
 	}
+}
+
+/* the page's refresh is due: on to where it goes, in its place in the
+   history (its address in the log without a query, 7.3) */
+static void refreshed(void)
+{
+	log_event("refresh %lu %.*s", br.refresh_s, (int) strcspn(br.refresh, "?"), br.refresh);
+	loading_on();
+	loaded(br_refresh_go(&br));
 }
 
 /* the next of the page's pictures: fetched and decoded, then drawn */
@@ -1725,6 +1861,7 @@ int main(void)
 	br.phase = on_phase;
 	br.log = log_line;
 	br.can_open = can_open;
+	br.save_as = save_where;
 	br.snapshot = opt.snapshot;
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen */
 #ifndef EW_ST
@@ -1751,12 +1888,26 @@ int main(void)
 		short which;
 		int more = !loading && !win_iconified && br_pictures_pending(&br);
 		long due = loading || win_iconified ? -1 : br_js_due(&br);
-		/* the ribbon, full: gone a moment later */
-		int rib = !more && due < 0 && win_progress_shown();
-		short wait = more ? 0 : due >= 0 ? (short) (due > 1000 ? 1000 : due) : rib ? 200 : 0;
+		long rdue = refresh_due();
+		int rib;
+		short wait;
+		if (rdue >= 0 && (due < 0 || rdue < due))
+			due = rdue;	/* the page's refresh comes before its scripts' next timer */
+		/* the ribbon, full: gone a moment later, whatever else is waited for */
+		rib = !more && win_progress_shown();
+		wait = more ? 0 : due >= 0 && due < 1000 ? (short) due : 1000;
+		if (rib && wait > 200)
+			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 || rib ? MU_TIMER : 0),
 				    0x102, 3, 0, wait, msg, &ev);
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+		if ((which & MU_TIMER) && !quit && rdue >= 0) {
+			if (refresh_due() == 0) {
+				refreshed();	/* before the page's pictures: it is going */
+				continue;
+			}
+			win_status_again();	/* the time left, on the status bar at rest */
+		}
 #ifndef EW_ST
 		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)
 			js_timers();

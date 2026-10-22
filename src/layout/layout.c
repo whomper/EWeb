@@ -181,6 +181,9 @@ typedef struct {
 	int32_t *cols;			/* the table being laid out: its column widths */
 	int ncols;
 	int32_t sp_h, sp_v;		/* and its border-spacing */
+	/* a page in visual Hebrew (ISO-8859-8): its letters stored in the
+	   order they are shown, so lines aren't reordered (visual_order) */
+	int visual;
 } L;
 
 static int32_t dev(L *l, ec_fx v)
@@ -419,9 +422,13 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 #endif
 }
 
-static uint16_t add_link(L *l, const char *href)
+/* a link: its href, and after its NUL its download attribute (1 and the
+   value, else 0: page_link_download) */
+static uint16_t add_link(L *l, const char *href, const char *download)
 {
 	page *p = l->p;
+	size_t hn = strlen(href), dn = download != NULL ? strlen(download) : 0;
+	char *s;
 	if (p->nlinks == p->linkcap) {
 		int cap = p->linkcap ? p->linkcap * 2 : 64;
 		char **n = realloc(p->links, cap * sizeof *n);
@@ -432,10 +439,33 @@ static uint16_t add_link(L *l, const char *href)
 	}
 	if (p->nlinks >= 65534)
 		return 0;
-	p->links[p->nlinks] = astrdup(l->a, href, strlen(href));
-	if (p->links[p->nlinks] == NULL)
+	s = amalloc(l->a, hn + dn + 3);
+	if (s == NULL)
 		return 0;
+	memcpy(s, href, hn);
+	s[hn] = 0;
+	s[hn + 1] = download != NULL;
+	memcpy(s + hn + 2, download != NULL ? download : "", dn + 1);
+	p->links[p->nlinks] = s;
 	return (uint16_t) (++p->nlinks);
+}
+
+/* an <a>'s href and download attribute, found in one pass (a look for
+   each went through its attributes twice more) */
+static const char *link_attrs(const dnode *n, const char **download)
+{
+	const char *href = NULL;
+	uint16_t i;
+	*download = NULL;
+	for (i = 0; i < n->nattr; i++) {
+		size_t al;
+		const char *an = ec_atom_text(n->attrs[i].name, &al);
+		if (al == 4 && href == NULL && memcmp(an, "href", 4) == 0)
+			href = n->attrs[i].val;
+		else if (al == 8 && *download == NULL && memcmp(an, "download", 8) == 0)
+			*download = n->attrs[i].val;
+	}
+	return href;
 }
 
 static uint16_t add_ctl(L *l, fctl *c)
@@ -575,7 +605,7 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		int32_t iw = 0, ih = 0;
 		void *im = NULL;
 		if (src != NULL && *src && l->p->opt.image != NULL)
-			im = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
+			im = l->p->opt.image(l->p->opt.ud, src, 0, &iw, &ih);
 		if (im != NULL) {
 			form_label(c, lab, sizeof lab);
 			atom(l, parent, n, st, AT_IMAGE, astrdup(l->a, lab, strlen(lab)), AUTO, AUTO);
@@ -888,7 +918,7 @@ static void build_element(L *l, box *parent, dnode *c)
 		const char *alt = dn_attr(c, "alt"), *src = img_src(l, c, &dens);
 		void *h = NULL;
 		if (src != NULL && l->p->opt.image != NULL)
-			h = l->p->opt.image(l->p->opt.ud, src, &iw, &ih);
+			h = l->p->opt.image(l->p->opt.ud, src, 0, &iw, &ih);
 		if (h != NULL && dens != 1024 && iw > 0 && ih > 0) {
 			/* chosen for another density: its size in CSS px */
 			iw = (int32_t) ((int64_t) iw * 1024 / dens);
@@ -933,8 +963,11 @@ static void build_element(L *l, box *parent, dnode *c)
 	b = new_box(l, block_level(d) ? BX_BLOCK : BX_INLINE, c, st, parent);
 	if (b == NULL)
 		return;
-	if (c->tag == T_A && dn_attr(c, "href") != NULL)
-		b->link = add_link(l, dn_attr(c, "href"));
+	if (c->tag == T_A) {
+		const char *dl, *href = link_attrs(c, &dl);
+		if (href != NULL)
+			b->link = add_link(l, href, dl);
+	}
 	b->list = d == KW_LIST_ITEM;
 	b->tablerow = d == KW_TABLE_ROW;
 	b->table = d == KW_TABLE || d == KW_INLINE_TABLE;
@@ -1149,6 +1182,14 @@ static int word_dir(const char *s, uint32_t n)
 	return ltr;
 }
 
+/* the same in the page: in visual Hebrew a Hebrew word is drawn as its
+   letters are stored, first to last (not DLF_RTL) */
+static int word_dir_in(const L *l, const char *s, uint32_t n)
+{
+	int d = word_dir(s, n);
+	return d == 2 && l->visual ? 1 : d;
+}
+
 typedef struct {
 	const ec_style *st;
 	ew_font *font;
@@ -1229,7 +1270,7 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->len = n;
 	it->w = w;
 	if (kind == IT_WORD)
-		it->dir = (uint8_t) word_dir(s, n);
+		it->dir = (uint8_t) word_dir_in(l, s, n);
 }
 
 /* text into words and spaces, collapsed as its white-space says, copied
@@ -1445,7 +1486,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			put_item(l, &r, IT_ATOM, c->text, c->len, atom_w(l, c, r.font));
 			it = &l->it[l->nit - 1];
 			it->atom = c;
-			it->dir = (uint8_t) word_dir(c->text, c->len);
+			it->dir = (uint8_t) word_dir_in(l, c->text, c->len);
 			if (c->atom == AT_IMAGE) {
 				int32_t iw, ih;
 				image_size(l, c, &iw, &ih);
@@ -1598,11 +1639,15 @@ static void reverse(long *o, uint8_t *d, long a, long b)
 }
 
 /* the items i..j-1 of a line in the order they are drawn (Hebrew words
-   right to left): word-level bidi, enough for Hebrew mixed with Latin */
+   right to left): word-level bidi, enough for Hebrew mixed with Latin.
+   A page in visual Hebrew is already in that order: as it is (the HTML
+   Standard's rendering for ISO-8859-8, 15.3.5: unicode-bidi:
+   isolate-override; for the whole page, as browsers do it, and whatever
+   the line's direction) */
 static void visual_order(L *l, long i, long j, int rtl, long *ord)
 {
 	long k, n = j - i, s, e;
-	uint8_t *d = malloc(n ? 2 * n : 1), *strong;
+	uint8_t *d = l->visual ? NULL : malloc(n ? 2 * n : 1), *strong;
 	if (d == NULL) {
 		for (k = 0; k < n; k++)
 			ord[k] = i + k;
@@ -1676,7 +1721,7 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	u = s->v[EP_BACKGROUND_IMAGE].p;
 	if (u == NULL || u->len == 0)
 		return -1;
-	h = l->p->opt.image(l->p->opt.ud, u->s, &iw, &ih);
+	h = l->p->opt.image(l->p->opt.ud, u->s, 1, &iw, &ih);
 	if (h == NULL)
 		return -1;
 	d = dl_add(l);
@@ -4276,6 +4321,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
 	l.last_bg = -1;
+	l.visual = strcmp(d->charset, "ISO-8859-8") == 0;
 	if (html == NULL || html->e.style == NULL) {
 		p->height = 0;
 		return p;
@@ -4395,6 +4441,13 @@ int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_
 	return found;
 }
 #endif
+
+const char *page_link_download(const page *p, int link)
+{
+	const char *s = p->links[link];
+	s += strlen(s) + 1;
+	return *s ? s + 1 : NULL;
+}
 
 int page_link_at(const page *p, int32_t x, int32_t y)
 {

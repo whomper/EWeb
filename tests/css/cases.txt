@@ -7,6 +7,10 @@
 # out from the specifications named; where the engine's fixed point (1/1024)
 # rounds, the comment says so. The UA sheet is nsbench's
 # (tests/bench/style.c), the viewport 640x480, the default font 16px.
+# Among the expected values, @span LO HI is the widths the media queries
+# hold at as they did, @width W the sheets added again at another width,
+# and @again N the sheets added again N times taking no more memory
+# (tests/css/ectest.c).
 
 === the cascade: specificity, then order (CSS Cascade 4, 6.4)
 --- css
@@ -528,6 +532,96 @@ p { margin-left: var(--x, 5px) }
 #f margin-left 0px
 #f margin-right 0px
 #g margin-left 1px
+
+=== media queries again at another width: the widths they hold at, and the sheets added again for one outside them (Media Queries 4, 2)
+--- css
+@media (min-width: 600px) { #a { margin-left: 1px } }
+@media (max-width: 699.5px) { #a { margin-right: 1px } }
+@media (width < 40em) { #b { margin-left: 1px } }
+@media (orientation: portrait) { #b { margin-right: 1px } }
+@media (500px < width <= 520px) { #c { margin-left: 1px } }
+@media print { #c { margin-right: 1px } }
+--- html
+<p id=a></p><p id=b></p><p id=c></p>
+--- expect
+# at 640: from min-width: 600px (on) and width < 40em (off: 640 is not
+# under 640) to max-width: 699.5px (the last whole px it holds at)
+@span 640 699
+#a margin-left 1px
+#a margin-right 1px
+#b margin-left 0px
+#b margin-right 0px
+#c margin-left 0px
+#c margin-right 0px
+@width 510
+# landscape from the height (480) on; the range's both ends
+@span 501 520
+#a margin-left 0px
+#a margin-right 1px
+#b margin-left 1px
+#b margin-right 0px
+#c margin-left 1px
+#c margin-right 0px
+@width 400
+# portrait under the height; the range's second end not looked at
+@span 0 479
+#b margin-right 1px
+#c margin-left 0px
+
+=== the sheets added again take no more memory: theirs, a style attribute's and var()'s given back each time
+--- css
+@media (min-width: 600px) { #a { margin-left: 1px } }
+#a { --f: "Atari Sans", serif; font-family: var(--f); margin-right: calc(1em + 2px) }
+p.x > span:is(.y, .z)[title="t"]::before { content: "a" attr(title) "b" }
+@supports (display: grid) { #b { grid-template-columns: [a] 1fr [b] 2fr; grid-template-areas: "x y" } }
+--- html
+<p id=a class=x><span id=b class=y title=t style="font-family: Arial, sans-serif; width: calc(50% - 3px)"></span></p>
+--- expect
+@again 50
+#a margin-left 1px
+#a margin-right 18px
+#a font-family Atari Sans|serif
+#b font-family Arial|sans-serif
+#b::before content set
+#b grid-template-areas 1x2/x y
+
+=== media queries that hold at one width alone: =, an aspect ratio, vw
+--- css
+@media print { #a { margin-right: 1px } }
+@media (width: 640px) { #a { margin-left: 1px } }
+--- html
+<p id=a></p>
+--- expect
+@span 640 640
+#a margin-left 1px
+@width 641
+@span 641 2147483647
+#a margin-left 0px
+#a margin-right 0px
+
+=== an aspect ratio or vw in a media query: only the width it was at
+--- css
+@media (min-aspect-ratio: 1/1) { #a { margin-left: 1px } }
+@media (min-width: 50vw) { #a { margin-right: 1px } }
+--- html
+<p id=a></p>
+--- expect
+@span 640 640
+#a margin-left 1px
+#a margin-right 1px
+
+=== no media query: every width
+--- css
+@media print { #a { margin-left: 1px } }
+#a { margin-right: 1px }
+--- html
+<p id=a></p>
+--- expect
+@span 0 2147483647
+#a margin-left 0px
+#a margin-right 1px
+@width 300
+#a margin-right 1px
 
 === @supports and @layer
 --- css

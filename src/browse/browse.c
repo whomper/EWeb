@@ -30,7 +30,12 @@
 
 long br_cache_max = 4L << 20;
 
-enum { NAV_NEW, NAV_HISTORY, NAV_RELOAD };
+/* NAV_REPLACE: a new page in place of the one shown in the history (a
+   refresh: the HTML Standard's historyHandling "replace"); NAV_REFRESH:
+   the page shown again for its refresh, fetched anew as Reload does but
+   its stylesheets as any page's (Chrome's "reload": the page validated,
+   not what it uses) */
+enum { NAV_NEW, NAV_HISTORY, NAV_RELOAD, NAV_REPLACE, NAV_REFRESH };
 
 /* the load's phase, for the front end's ribbon */
 static void phase(browser *b, int ph)
@@ -260,8 +265,10 @@ static void file_resolve(const char *base, const char *href, char *out, int size
 	}
 }
 
-/* href resolved against base (a page's address, or its <base>) */
-static int resolve(const char *base, const char *href, char *out, int size)
+/* href resolved against base (a page's address, or its <base>), its
+   query in enc, the page's encoding (the HTML Standard's "encoding-parsing
+   a URL", 2.4.2: NULL UTF-8, as a stylesheet's url()s are) */
+static int resolve_enc(const char *base, const char *href, char *out, int size, const URL_ENC *enc)
 {
 	URL *u, *bu;
 	int ok = 0;
@@ -279,15 +286,40 @@ static int resolve(const char *base, const char *href, char *out, int size)
 	bu = malloc(sizeof *bu);
 	if (u != NULL && bu != NULL) {
 		if (url_parse(bu, base, NULL))
-			ok = url_parse(u, href, bu);
+			ok = url_parse_enc(u, href, bu, enc);
 		else
-			ok = url_parse(u, href, NULL);
+			ok = url_parse_enc(u, href, NULL, enc);
 		if (ok)
 			str_copy(out, u->href, size);
 	}
 	free(u);
 	free(bu);
 	return ok;
+}
+
+static int resolve(const char *base, const char *href, char *out, int size)
+{
+	return resolve_enc(base, href, out, size, NULL);
+}
+
+/* the encoding a document's addresses put their query in: its own, NULL
+   for UTF-8 (and UTF-16, whose output encoding that is). One table is
+   kept (from the first page in one: none for UTF-8 alone), made again
+   when a page in another comes. */
+static const URL_ENC *doc_enc(const doc *d)
+{
+	static char name[sizeof ((doc *) 0)->charset];
+	static URL_ENC *tab;
+	static int have;
+	if (d == NULL || d->charset[0] == 0 || strcmp(d->charset, "UTF-8") == 0)
+		return NULL;
+	if (strcmp(name, d->charset) != 0) {
+		if (tab == NULL && (tab = malloc(sizeof *tab)) == NULL)
+			return NULL;
+		str_copy(name, d->charset, sizeof name);
+		have = html_enc_table(name, tab->hi);
+	}
+	return have ? tab : NULL;
 }
 
 /* the page's address without its fragment, and the fragment ("" none) */
@@ -465,22 +497,6 @@ static void error_page(SBUF *s, const char *url, const char *what, const char *w
 	sb_adds(s, "</body></html>");
 }
 
-/* a text file as a page: its lines as they are */
-static void text_page(SBUF *s, const char *data, long len)
-{
-	long i;
-	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8></head><body><pre>");
-	for (i = 0; i < len; i++) {
-		switch (data[i]) {
-		case '&': sb_adds(s, "&amp;"); break;
-		case '<': sb_adds(s, "&lt;"); break;
-		case '>': sb_adds(s, "&gt;"); break;
-		default: sb_addc(s, data[i]);
-		}
-	}
-	sb_adds(s, "</pre></body></html>");
-}
-
 /* ---------------------------------------------------------------- fetching */
 
 typedef struct {
@@ -491,10 +507,20 @@ typedef struct {
 	int status;		/* 0: a file or the cache */
 	char err[200];		/* when nothing came */
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
+	char refresh[2048];	/* a page's Refresh header, "" none */
+	/* a page's Content-Disposition (RFC 6266): the caches would lose
+	   what it says (so it isn't kept: they keep no headers), it says
+	   attachment (to save, not to show), and the file name it gives
+	   (UTF-8, "" none) */
+	int disposed, attach;
+	char name[256];
 } FETCH;
 
 #ifndef EW_ST
 static void js_host_of(browser *b, js_host *h);
+/* the document whose scripts run as it is built (b->d is the page
+   before it then), NULL: the page shown's */
+static const doc *js_doc;
 #endif
 static int js_after(browser *b, int *load_r);
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post);
@@ -558,6 +584,62 @@ static const char *fetch_more, *fetch_refuse;
 /* for the disk cache: the request's variant (the pens asked for), after
    the address, or NULL */
 static const char *fetch_variant;
+/* requests under way: GEM's messages come meanwhile (pf_idle), and a
+   window sized then doesn't fetch the page's sheets inside one
+   (br_relayout) */
+static int net_busy;
+
+/* does name (s to e: a file's, or an address's path) end in ending */
+static int ends_in(const char *s, const char *e, const char *ending)
+{
+	size_t n = strlen(ending);
+	return (size_t) (e - s) >= n && strncasecmp(e - n, ending, n) == 0;
+}
+
+/* is an answer a gzip file, to be saved as it came rather than unpacked
+   (what browsers do): Content-Encoding gzip with a gzip type, or with a
+   name (name: Content-Disposition's, else the address's) ending in .gz
+   or .tgz */
+static int gzip_file(const HTTPRESP *rs, const char *name)
+{
+	static const char *const types[] = { "application/gzip", "application/x-gzip", "application/x-tar+gzip" };
+	const char *s = name, *e;
+	size_t i;
+	if (rs->encoding != 1)
+		return 0;
+	for (i = 0; i < sizeof types / sizeof types[0]; i++)
+		if (strcmp(rs->mime, types[i]) == 0)
+			return 1;
+	if (*s)
+		e = s + strlen(s);
+	else {
+		s = rs->url.href + rs->url.path;
+		e = rs->url.href + rs->url.query;
+	}
+	return ends_in(s, e, ".gz") || ends_in(s, e, ".tgz");
+}
+
+/* fetch's HTTPREQ.head for a page: its Content-Disposition, and a gzip
+   file that is to be saved (one it says to, or of a type EWeb doesn't
+   show) kept as it came */
+static int page_head(void *ud, HTTPRESP *rs)
+{
+	FETCH *f = ud;
+	const char *v = http_header_at(rs, "Content-Disposition");
+	int t = v != NULL ? http_disposition(v, f->name, sizeof f->name) : -1;
+	/* shown as a page whatever its name (a picture may yet be saved:
+	   one EWeb can't decode) */
+	int page = rs->mime[0] == 0 || strncmp(rs->mime, "text/", 5) == 0 ||
+		   strcmp(rs->mime, "application/xhtml+xml") == 0;
+	f->attach = t == 1;
+	/* not kept when the caches, which keep no headers, would lose what
+	   it says: attachment, or the name of a file to be saved ("inline"
+	   on a page is kept, as without the header) */
+	f->disposed = f->attach || (t == 0 && f->name[0] && !page);
+	if ((f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) && gzip_file(rs, f->name))
+		rs->packed = 1;
+	return 1;
+}
 
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
@@ -571,6 +653,14 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		if (f->data == NULL) {
 			snprintf(f->err, sizeof f->err, "There is no file %.150s, or it can't be read.", path);
 			return 0;
+		}
+		/* a text file by its name, as a server would say: the rest are
+		   read as pages ("") */
+		{
+			size_t n = strlen(path);
+			if (n > 4 && path[n - 4] == '.' && (path[n - 3] | 32) == 't' && (path[n - 2] | 32) == 'x' &&
+			    (path[n - 1] | 32) == 't')
+				str_copy(f->mime, "text/plain", sizeof f->mime);
 		}
 		return 1;
 	}
@@ -656,6 +746,10 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		}
 		rq.refuse = fetch_refuse;
 		rq.accept = accept;
+		if (accept == NULL) {
+			rq.head = page_head;
+			rq.ud = f;
+		}
 		if (post != NULL) {
 			rq.method = "POST";
 			rq.body = post->body;
@@ -669,7 +763,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		sb_init(&body);
 		{
 			unsigned long t0 = pf_ms(), ms;
+			net_busy++;
 			ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+			net_busy--;
 			ms = pf_ms() - t0;
 			/* how fast answers come, from one big enough to tell */
 			if (ok && body.len >= 8192 && ms > 0)
@@ -727,10 +823,23 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 					f->data[0] = 0;
 				f->len = 0;
 			}
-			if (f->status == 200 && post == NULL)
+			/* a page's Refresh header (one too long for the buffer is
+			   dropped: its address cut short would be another) */
+			if (accept == NULL && http_header(rs, "Refresh", f->refresh, sizeof f->refresh) != NULL &&
+			    strlen(f->refresh) == sizeof f->refresh - 1)
+				f->refresh[0] = 0;
+			/* an answer whose Content-Disposition says attachment, or
+			   names a file to save, isn't kept, here or on the disk:
+			   from the cache it would have neither its name nor
+			   "attachment" */
+			if (f->status == 200 && post == NULL && !f->disposed)
 				dc_put(key, f->url, rs->headers.s ? rs->headers.s : "", f->mime, f->charset, f->security,
 				       f->data, f->len);
-			if (f->status == 200 && keep) {
+			else if (f->disposed)
+				dc_drop(key);
+			/* a page with a Refresh header isn't kept, here or on the disk
+			   (dc_put): from the cache it wouldn't go on */
+			if (f->status == 200 && keep && !f->refresh[0] && !f->disposed) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				/* after a redirect, under where it came from too: the
 				   history keeps that address, and Back asks for it */
@@ -753,6 +862,7 @@ typedef struct {
 	const char *base;
 	int fresh;
 	int n;
+	int quiet;		/* not a load: nothing said on the status line */
 } SHEETS;
 
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
@@ -768,13 +878,13 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		return;
 	memcpy(href, s, len);
 	href[len] = 0;
-	if (!resolve(sh->base, href, url, sizeof url))
+	if (!resolve_enc(sh->base, href, url, sizeof url, doc_enc(sh->d)))
 		return;
 	f = malloc(sizeof *f);
 	if (f == NULL)
 		return;
 	sh->n++;
-	{
+	if (!sh->quiet) {
 		char host[128], msg[200];
 		host_of(url, host, sizeof host);
 		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
@@ -799,18 +909,99 @@ static ec_media media_of(const browser *b)
 	return m;
 }
 
+/* the page's sheets into its CSS context, in the cascade's order: the
+   UA's (when it isn't on the base), the one that hides <noscript> when
+   scripts run, the page's in document order (doc_sheets: a <link>'s
+   fetched, fresh as fetch() takes it) and the user's (extra_css). What
+   they hang on is kept with the document: the widths their media queries
+   hold at as they did (at another, br_relayout adds them again) and, with
+   scripts, which they were (doc_sheets_key: a script that changes them,
+   they are added again) */
+static void add_sheets(browser *b, doc *d, const char *base, int fresh, int quiet)
+{
+	SHEETS sh;
+	int stop = conn_stop;
+	doc_add_ua(d);
+	if (d->scripting)
+		ec_sheet(d->css, "noscript { display: none !important }", 37, EC_ORIGIN_UA);
+	sh.b = b;
+	sh.d = d;
+	sh.base = base;
+	sh.fresh = fresh;
+	sh.n = 0;
+	sh.quiet = quiet;
+	doc_sheets(d, sheet_cb, &sh);
+	if (b->extra_css != NULL)
+		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
+	ec_media_span(d->css, &d->span_lo, &d->span_hi);
+	if (conn_stop && !stop) {
+		/* stopped while its sheets came: at any other width they are
+		   taken again */
+		ec_media m = media_of(b);
+		d->span_lo = d->span_hi = m.width;
+	}
+}
+
+/* the page's sheets being added again: its styles are gone meanwhile,
+   and a window sized as a sheet comes (GEM's messages come in pf_idle)
+   isn't laid out then (br_relayout) */
+static int resheeting;
+
+static int unkeep_all(browser *b);
+
+/* the page's sheets added again: for the screen as it is now (another
+   width), or as a script changed them. Those fetched before come from
+   the cache, those that hold now for the first time over the network.
+   What they took is given back first (ec_drop_sheets), so they take what
+   they took; when they don't fit even so (a 1 MB ST), the pages kept for
+   Back go and they are added once more. by_script: a script changed
+   them, else the window was sized; the log says which */
+static void readd_sheets(browser *b, doc *d, const char *base, int fresh, int quiet, int by_script)
+{
+	ec_media m = media_of(b);
+	int tries;
+	resheeting++;
+	for (tries = 0; tries < 2; tries++) {
+		ec_drop_sheets(d->css);
+		ec_set_media(d->css, &m);
+		add_sheets(b, d, base, fresh, quiet);
+		if (!ec_sheets_short(d->css) || conn_stop || tries > 0 || !unkeep_all(b))
+			break;
+	}
+	if (b->log != NULL) {
+		char line[100];
+		if (by_script)
+			snprintf(line, sizeof line, "sheets added again: a script changed them");
+		else
+			snprintf(line, sizeof line, "sheets added again: the window %ld CSS px wide", (long) m.width);
+		if (ec_sheets_short(d->css))
+			str_copy(line + strlen(line), ", short of memory", (long) (sizeof line - strlen(line)));
+		b->log(b->ud, line);
+	}
+	resheeting--;
+}
+
 /* ---------------------------------------------------------------- pictures in the layout */
 
 /* the address the page's pictures are resolved against, while it is
-   laid out */
+   laid out, and the page (its encoding, for their queries) */
 static const char *lay_base;
+static const doc *lay_doc;
+/* the page is fetched anew for its refresh (NAV_REFRESH): its pictures
+   are asked for again, as their HTTP freshness says, as browsers do for
+   a document made anew (a camera's, a weather map, sent no-store) */
+static int lay_recheck;
 
-static void *image_cb(void *ud, const char *src, int32_t *w, int32_t *h)
+/* (a url() of the page's CSS: its query in UTF-8, as an external
+   sheet's, which the CSS engine has made absolute already; an <img>'s in
+   the page's encoding) */
+static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h)
 {
 	browser *b = ud;
 	char url[4096];
 	ew_img *im;
-	if (!b->pictures || lay_base == NULL || !resolve(lay_base, src, url, sizeof url))
+	if (!b->pictures || lay_base == NULL ||
+	    !resolve_enc(lay_base, src, url, sizeof url, css ? NULL : doc_enc(lay_doc)))
 		return NULL;
 	if (!has_scheme(url, "http") && !has_scheme(url, "https") && !has_scheme(url, "file") &&
 	    !has_scheme(url, "data"))
@@ -818,6 +1009,8 @@ static void *image_cb(void *ud, const char *src, int32_t *w, int32_t *h)
 	im = img_get(url);
 	if (im == NULL)
 		return NULL;
+	if (lay_recheck)
+		img_recheck(im);
 	img_size(im, w, h);
 	return im;
 }
@@ -880,8 +1073,10 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.image = image_cb;
 	o.ud = b;
 	lay_base = base;
+	lay_doc = d;
 	p = layout_page(d, &o);
 	lay_base = NULL;
+	lay_doc = NULL;
 	page_imgs(p, 1);
 	return p;
 }
@@ -889,16 +1084,14 @@ static page *lay(browser *b, doc *d, const char *base)
 /* the address a document's links and pictures are resolved against */
 static void base_of(const browser *b, const doc *d, const char *url, char *out, int size)
 {
-	if (d == NULL || d->base[0] == 0 || !resolve(url, d->base, out, size))
+	if (d == NULL || d->base[0] == 0 || !resolve_enc(url, d->base, out, size, doc_enc(d)))
 		str_copy(out, url, size);
 }
 
-/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
-   Back and the one shown go, and the pictures not in use; 1 when
-   something was given back */
 static void unkeep(BR_ENTRY *e);
 
-static int make_room(browser *b)
+/* the pages kept for Back given back: 1 when there was one */
+static int unkeep_all(browser *b)
 {
 	int i, freed = 0;
 	for (i = 0; i < b->nhist; i++)
@@ -906,6 +1099,15 @@ static int make_room(browser *b)
 			unkeep(&b->hist[i]);
 			freed = 1;
 		}
+	return freed;
+}
+
+/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
+   Back and the one shown go, and the pictures not in use; 1 when
+   something was given back */
+static int make_room(browser *b)
+{
+	int freed = unkeep_all(b);
 	if (b->p != NULL) {
 		pg_free(b->p);
 		doc_free(b->d);
@@ -921,9 +1123,13 @@ static int make_room(browser *b)
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout);
 
+/* the next build is a text file's (text/plain): its bytes are the text */
+static int build_plain;
+
 /* the source made into a page (doc styled and laid out): 1, or 0 when
    out of memory or stopped while fetching its sheets. Out of memory, the
-   pages kept go and it is tried once more */
+   pages kept go and it is tried once more. charset: the encoding chosen
+   by hand, else the HTTP answer's, else NULL (the page's own) */
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
 {
@@ -941,7 +1147,6 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	doc *d;
 	page *p;
 	char base[4096];
-	SHEETS sh;
 
 	unsigned long t = pf_ms(), t_sheets;
 	int scripts = br_scripts_for(b, url), again = 0;
@@ -955,28 +1160,20 @@ parse:
 	say(b, "%s", "Reading the page...");
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
+	o.fallback = br_fallback(url);
+	o.plaintext = build_plain;
 	o.scripting = scripts;
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d == NULL)
 		return 0;
-	doc_add_ua(d);
 	ec_set_resolver(d->css, resolve);
-	/* <noscript> is shown when scripts aren't run (the HTML Standard's
-	   rendering: hidden only with scripting) */
-	if (scripts)
-		ec_sheet(d->css, "noscript { display: none !important }", 37, EC_ORIGIN_UA);
 	b->ms_parse = pf_ms() - t;
-	if (d->base[0] == 0 || !resolve(url, d->base, base, sizeof base))
+	if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
 		str_copy(base, url, sizeof base);
-	sh.b = b;
-	sh.d = d;
-	sh.base = base;
-	sh.fresh = again ? 0 : fresh;
-	sh.n = 0;
 	t_sheets = pf_ms();
-	doc_sheets(d, sheet_cb, &sh);
-	if (b->extra_css != NULL)
-		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
+	/* <noscript> is shown when scripts aren't run (the HTML Standard's
+	   rendering: hidden only with scripting): d->scripting */
+	add_sheets(b, d, base, again ? 0 : fresh, 0);
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
 #ifndef EW_ST
@@ -987,7 +1184,9 @@ parse:
 		long bytes;
 		say(b, "%s", "Running the page's scripts...");
 		js_host_of(b, &h);
+		js_doc = d;
 		r = js_page(d, url, base, &h);
+		js_doc = NULL;
 		js_stats(d, &ms, &bytes);
 		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
 			/* over the budget: the page as it is without them */
@@ -1013,6 +1212,12 @@ parse:
 			}
 			doc_refresh(d);
 			js_changed(d);
+			/* its scripts changed its sheets (a handler that made a
+			   <link>'s media all or its rel stylesheet as it loaded,
+			   a <style> added): taken again, those fetched from the
+			   cache */
+			if (doc_sheets_key(d) != d->sheets_key)
+				readd_sheets(b, d, base, fresh == 2 ? 2 : 0, 0, 1);
 		}
 		t = pf_ms();
 	}
@@ -1045,10 +1250,12 @@ static void unkeep(BR_ENTRY *e)
 	if (e->d != NULL)
 		doc_free(e->d);
 	free(e->security);
+	free(e->charset);
 	free(e->src);
 	e->p = NULL;
 	e->d = NULL;
 	e->security = NULL;
+	e->charset = NULL;
 	e->src = NULL;
 	e->src_len = 0;
 }
@@ -1102,6 +1309,7 @@ static void keep_shown(browser *b)
 		str_copy(e->mime, b->mime, sizeof e->mime);
 		e->status = b->status;
 		e->security = str_ndup(b->security, (long) strlen(b->security));
+		e->charset = b->charset[0] ? str_ndup(b->charset, (long) strlen(b->charset)) : NULL;
 	}
 	b->d = NULL;
 	b->p = NULL;
@@ -1125,6 +1333,7 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 	}
 	b->d = d;
 	b->p = p;
+	b->shows++;
 	js_set_page(d, p);
 	b->pic_stopped = 0;
 	b->pic_relayout = 0;
@@ -1173,6 +1382,26 @@ static void hist_set_url(browser *b, const char *url)
 	b->hist[b->cur].url = u;
 }
 
+/* the page shown's encoding (browse.h): the HTTP answer's charset, the
+   one chosen by hand, whether it may be read in another; kept in its
+   history entry too, where Reload, Back and Forward find the choice */
+static void enc_set(browser *b, const char *charset, const char *enc, int encodable)
+{
+	char cs[sizeof b->charset];
+	int i = 0;
+	str_copy(cs, charset, sizeof cs);	/* (either may be b's own) */
+	if (encodable)
+		for (i = br_nencodings; i > 0 && strcmp(br_encodings[i - 1].name, enc) != 0; i--)
+			;
+	memcpy(b->charset, cs, sizeof cs);
+	str_copy(b->enc, i ? br_encodings[i - 1].name : "", sizeof b->enc);
+	b->encodable = encodable;
+	if (b->cur >= 0 && b->cur < b->nhist) {
+		b->hist[b->cur].enc = (uint8_t) i;
+		b->hist[b->cur].encodable = (uint8_t) encodable;
+	}
+}
+
 static int32_t anchor_y(const browser *b, const char *url)
 {
 	const char *fr = fragment(url);
@@ -1190,21 +1419,26 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 	page *p;
 	if (!build(b, src->s, src->len, "utf-8", url, 0, &d, &p))
 		return BR_STOPPED;
-	show(b, d, p, url, "", 0, mode != NAV_RELOAD);
+	show(b, d, p, url, "", 0, mode == NAV_NEW || mode == NAV_HISTORY);
 	b->src_len = src->len;
 	b->src = sb_steal(src);
 	str_copy(b->mime, "text/html", sizeof b->mime);
 	if (mode == NAV_NEW)
 		hist_push(b, url);
+	else if (mode == NAV_REPLACE)
+		hist_set_url(b, url);
 	b->at = b->cur;
+	enc_set(b, "", "", 0);
 	keep_trim(b);
-	b->scroll_to = mode == NAV_NEW ? -1 : b->hist[b->cur].y;
+	b->scroll_to = mode == NAV_NEW || mode == NAV_REPLACE ? -1 : b->hist[b->cur].y;
 	return BR_SHOWN;
 }
 
 /* a picture opened on its own: kept as the page's picture, and a page
-   that shows it, its name and size the title */
-static int picture_page(SBUF *s, FETCH *f)
+   that shows it, its name and size the title. anew: the page fetched
+   anew for its refresh (a camera's picture with a Refresh header), so
+   what came is the picture, changed or not */
+static int picture_page(SBUF *s, FETCH *f, int anew)
 {
 	ew_img *im = img_get(f->url);
 	const char *name = strrchr(f->url, '/');
@@ -1212,7 +1446,9 @@ static int picture_page(SBUF *s, FETCH *f)
 	long w, h;
 	if (im == NULL || !pic_size((const unsigned char *) f->data, f->len, &w, &h))
 		return 0;
-	if (img_state(im) != IMG_HERE) {
+	if (anew)
+		img_recheck(im);	/* (unchanged: as it was decoded) */
+	if (img_state(im) != IMG_HERE || img_stale(im)) {
 		char *copy = malloc((size_t) f->len);
 		if (copy == NULL)
 			return 0;
@@ -1230,6 +1466,196 @@ static int picture_page(SBUF *s, FETCH *f)
 	return 1;
 }
 
+/* ---------------------------------------------------------------- refresh */
+/* the HTML Standard's shared declarative refresh steps (4.2.5.3): the
+   Refresh header's value, else the content of the first <meta
+   http-equiv=refresh> the parser put in, parsed by doc_refresh_parse */
+
+static int refreshing;		/* the load is a refresh's (br_refresh_go) */
+
+/* what the status line says at rest once refreshes at once in a row
+   are stopped (refresh_arm), until the next load */
+static const char loop_note[] = "This page sends EWeb on at once again and again: it stays here.";
+
+void br_refresh_cancel(browser *b)
+{
+	if (b->refresh != NULL && b->refresh_s > 0)
+		b->note[0] = 0;		/* its "Going on to ..." */
+	free(b->refresh);
+	b->refresh = NULL;
+	b->refresh_pics = 0;
+	b->refresh_loop = 0;
+}
+
+long br_refresh_due(const browser *b)
+{
+	long ms;
+	if (b->refresh == NULL)
+		return -1;
+	if (b->refresh_pics)	/* not counting yet: its pictures come */
+		return b->refresh_s > 0 ? (long) b->refresh_s * 1000 : 1;
+	ms = (long) (b->refresh_at - pf_ms());
+	return ms > 0 ? ms : 0;
+}
+
+/* the page's pictures are in (br_pictures_pending): a refresh of the
+   page itself counts its seconds from now */
+static void refresh_count(browser *b)
+{
+	if (b->refresh_pics) {
+		b->refresh_pics = 0;
+		b->refresh_at = pf_ms() + b->refresh_s * 1000;
+	}
+}
+
+int br_refresh_note(const browser *b, char *out, int size)
+{
+	long ms = br_refresh_due(b);
+	unsigned long s;
+	char in[24];
+	if (b->refresh_loop) {
+		snprintf(out, size, "%s", loop_note);
+		return 1;
+	}
+	if (ms < 0 || b->refresh_s == 0)
+		return 0;	/* none, or at once: nothing to say */
+	s = b->refresh_pics ? b->refresh_s : ((unsigned long) ms + 999) / 1000;
+	if (s >= 120)
+		snprintf(in, sizeof in, "%lu min", (s + 30) / 60);
+	else
+		snprintf(in, sizeof in, "%lu s", s);
+	if (same_but_fragment(b->refresh, b->url)) {
+		if (*fragment(b->refresh))
+			snprintf(out, size, "This page goes to #%.24s in %s: Esc stops it.", fragment(b->refresh), in);
+		else
+			snprintf(out, size, "This page loads again in %s: Esc stops it.", in);
+	} else {
+		char host[128];
+		const char *name = strrchr(b->refresh, '/');
+		if (has_scheme(b->refresh, "file") && name != NULL)
+			str_copy(host, name + 1, sizeof host);
+		else
+			host_of(b->refresh, host, sizeof host);
+		snprintf(out, size, "Going on to %.48s in %.10s: Esc stays here.", host, in);
+	}
+	return 1;
+}
+
+/* one refresh (the header's value, a meta's content) for the page
+   shown, its address resolved against base: 0 when it isn't one (its
+   address doesn't parse, or is javascript:), so the next may be. (This
+   and refresh_arm are kept out of load_post: inlined, their 8 KB of
+   addresses sat on the stack under the whole load, and the ST edition's
+   48 KB ran out under a stylesheet fetched through the gateway.) */
+static __attribute__((noinline)) int refresh_set(browser *b, const char *value, const char *base)
+{
+	unsigned long secs;
+	const char *u;
+	size_t n;
+	char to[4096];
+	if (value == NULL || !doc_refresh_parse(value, &secs, &u, &n))
+		return 0;
+	if (u == NULL) {
+		str_copy(to, b->url, sizeof to);	/* the page itself */
+	} else {
+		char *href = str_ndup(u, (long) n);
+		int ok = href != NULL && resolve_enc(base, href, to, sizeof to, doc_enc(b->d));
+		free(href);
+		if (!ok || has_scheme(to, "javascript"))
+			return 0;
+	}
+	/* one EWeb doesn't follow on its own (mailto:, data:, a file from a
+	   page on the web): the page stays, as the standard lets it ("do
+	   nothing") */
+	if (!has_scheme(to, "http") && !has_scheme(to, "https") &&
+	    !(has_scheme(to, "file") && has_scheme(b->url, "file")))
+		return 1;
+	b->refresh = str_ndup(to, (long) strlen(to));
+	b->refresh_s = secs;
+	b->refresh_at = pf_ms() + secs * 1000;
+	/* another page: its seconds count from now, the pictures of the
+	   page left not waited for (one that goes on at once fetches none);
+	   the page itself, or a place on it: from when its pictures are in,
+	   as the standard says ("completely loaded"), so that a page that
+	   refreshes itself shows them each time */
+	b->refresh_pics = b->refresh != NULL && same_but_fragment(to, b->url);
+	return 1;
+}
+
+/* after a page is shown: its refresh, if it has one; hdr its Refresh
+   header ("" none), which the document is made with, before any meta */
+static __attribute__((noinline)) void refresh_arm(browser *b, const char *hdr)
+{
+	char base[4096];
+	doc *d = b->d;
+	const drefresh *m;
+	int found = hdr[0] && refresh_set(b, hdr, b->url);
+	for (m = d != NULL ? d->refresh : NULL; !found && m != NULL; m = m->next) {
+		/* as the parser put it in, against the base the page had then */
+		if (m->based)
+			base_of(b, d, b->url, base, sizeof base);
+		else
+			str_copy(base, b->url, sizeof base);
+		found = refresh_set(b, m->content, base);
+	}
+	if (b->refresh == NULL)
+		return;
+	if (b->refresh_s == 0 && b->refresh_run >= BR_REFRESH_RUN) {
+		/* at once, again and again (a page that refreshes itself, two
+		   that send each other on): browsers go on for ever. Said at
+		   rest, so it comes back after the pictures' lines */
+		br_refresh_cancel(b);
+		b->refresh_loop = 1;
+		snprintf(b->note, sizeof b->note, "%s", loop_note);
+		return;
+	}
+	br_refresh_note(b, b->note, sizeof b->note);
+}
+
+int br_refresh_go(browser *b)
+{
+	char *to = b->refresh;
+	int r;
+	if (to == NULL)
+		return BR_STOPPED;
+	b->refresh = NULL;
+	b->refresh_pics = 0;
+	if (b->refresh_s > 0)
+		b->note[0] = 0;		/* its "Going on to ..." */
+	b->refresh_run = b->refresh_s == 0 ? b->refresh_run + 1 : 0;
+	if (*fragment(to) && same_but_fragment(to, b->url)) {
+		/* a place on the page: scrolled to, the page staying, its
+		   address in the history changed (the standard's navigation to
+		   a fragment, "replace"; Chrome's too) */
+		hist_set_url(b, to);
+		str_copy(b->url, to, sizeof b->url);
+		b->scroll_to = anchor_y(b, to);
+		free(to);
+		return BR_SAME;
+	}
+	refreshing = 1;
+	/* the page itself is asked for anew (NAV_REFRESH: as Chrome does, a
+	   page that refreshes itself is there for that), its stylesheets
+	   as any page's; another takes its place in the history */
+	r = load(b, to, same_but_fragment(to, b->url) ? NAV_REFRESH : NAV_REPLACE);
+	refreshing = 0;
+	free(to);
+	return r;
+}
+
+/* a file to save (BR_DOWNLOAD): what came, kept in b->dl; f goes */
+static int download(browser *b, FETCH *f)
+{
+	br_dl_free(b);
+	b->dl.data = f->data;
+	b->dl.len = f->len;
+	str_copy(b->dl.url, f->url, sizeof b->dl.url);
+	str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
+	str_copy(b->dl.name, f->name, sizeof b->dl.name);
+	free(f);
+	return BR_DOWNLOAD;
+}
+
 /* post: a form sent with POST to url, else NULL */
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
@@ -1237,11 +1663,14 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	SBUF src;
 	doc *d;
 	page *p;
-	int r;
-	char host[128];
+	int r, encodable = 0;
+	char host[128], enc[sizeof b->enc];
 
 	conn_stop = 0;
 	b->elsewhere[0] = 0;
+	br_refresh_cancel(b);		/* any load: the page shown's refresh goes */
+	if (!refreshing)
+		b->refresh_run = 0;
 	if (has_scheme(url, "javascript") || has_scheme(url, "data"))
 		return BR_STOPPED;	/* nothing EWeb can do with it */
 	if (has_scheme(url, "mailto")) {
@@ -1250,9 +1679,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	if (b->can_open != NULL && !b->can_open(b->ud, url))
 		return BR_STOPPED;	/* the page shown stays */
+	/* the encoding chosen by hand for the page (View > Encoding): kept
+	   when it comes again (Reload, a refresh of itself, Back, Forward),
+	   not for another */
+	str_copy(enc, mode == NAV_NEW || mode == NAV_REPLACE || b->cur < 0 || b->hist[b->cur].enc == 0 ? "" :
+		 br_encodings[b->hist[b->cur].enc - 1].name, sizeof enc);
 	/* a place on the page shown */
 	if (mode == NAV_NEW && post == NULL && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
 		hist_push(b, url);
+		enc_set(b, b->charset, b->enc, b->encodable);	/* the same page */
 		str_copy(b->url, url, sizeof b->url);
 		b->scroll_to = anchor_y(b, url);
 		return BR_SAME;
@@ -1292,8 +1727,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
-	r = fetch(b, url, b->typed ? NULL : b->url, mode == NAV_RELOAD ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0,
-		  1, post, f);
+	r = fetch(b, url, b->typed ? NULL : b->url,
+		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {
@@ -1309,33 +1744,38 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		sb_free(&src);
 		return r;
 	}
-	/* what it is */
-	if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
-		r = build(b, f->data, f->len, f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+	/* what it is: a file its server says to save (RFC 6266, 4.2: not on
+	   an error's page, which is shown, as tc2231 has it), else by its type */
+	if (f->attach && f->status >= 200 && f->status < 300) {
+		sb_free(&src);
+		return download(b, f);
+	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
+		lay_recheck = mode == NAV_REFRESH;
+		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+		lay_recheck = 0;
+		encodable = 1;
 	} else if (strncmp(f->mime, "text/", 5) == 0) {
-		text_page(&src, f->data, f->len);
-		r = build(b, src.s, src.len, f->charset[0] ? f->charset : "windows-1252", f->url, 0, &d, &p);
+		/* a text file: sniffed as a page is, but for a <meta> */
+		build_plain = 1;
+		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, 0, &d, &p);
+		build_plain = 0;
+		encodable = 1;
 	} else if (b->pictures && (pic_kind((const unsigned char *) f->data, f->len) == PIC_JPEG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_PNG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF) &&
-		   picture_page(&src, f)) {
+		   picture_page(&src, f, mode == NAV_REFRESH)) {
 		/* a picture on its own: a page that shows it */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	} else if (!has_scheme(f->url, "file") && f->status >= 200 && f->status < 300) {
 		/* a file to save: the page shown stays */
 		sb_free(&src);
-		br_dl_free(b);
-		b->dl.data = f->data;
-		b->dl.len = f->len;
-		str_copy(b->dl.url, f->url, sizeof b->dl.url);
-		str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
-		free(f);
-		return BR_DOWNLOAD;
+		return download(b, f);
 	} else {
 		char why[200];
 		snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and "
 			 "JPEG, PNG and GIF pictures; other files it saves.", f->mime, f->len);
 		error_page(&src, f->url, "EWeb can't show this", why, NULL);
+		f->refresh[0] = 0;	/* EWeb's own page in its place goes nowhere */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	}
 	sb_free(&src);
@@ -1369,7 +1809,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			strcat(shown, "#");
 			strcat(shown, fr);
 		}
-		show(b, d, p, shown, f->security, f->status, mode != NAV_RELOAD);
+		show(b, d, p, shown, f->security, f->status, mode == NAV_NEW || mode == NAV_HISTORY);
 		if (f->stale && b->note[0] == 0)
 			snprintf(b->note, sizeof b->note, "%s",
 				 "From the cache: the server couldn't be reached, so it may be out of date.");
@@ -1382,9 +1822,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		else
 			hist_set_url(b, shown);
 		b->at = b->cur;
+		enc_set(b, f->charset, enc, encodable);
 		keep_trim(b);
+		/* a page loaded anew: its refresh. Back and Forward leave it be,
+		   as the standard lets them (a page that goes on at once would
+		   otherwise make Back go nowhere) */
+		if (mode != NAV_HISTORY)
+			refresh_arm(b, f->refresh);
 	}
-	if (mode == NAV_NEW)
+	if (mode == NAV_NEW || mode == NAV_REPLACE)
 		b->scroll_to = anchor_y(b, b->url);
 	else
 		b->scroll_to = b->hist[b->cur].y;
@@ -1404,6 +1850,124 @@ static int load(browser *b, const char *url, int mode)
 	int r = load_post(b, url, mode, NULL);
 	dc_job_end();		/* the page and its stylesheets: into the pack */
 	return r;
+}
+
+/* ---------------------------------------------------------------- encodings */
+
+/* ISO-8859-1 and ISO-8859-9 are the Encoding Standard's labels of
+   windows-1252 and windows-1254, which are theirs with more letters */
+const BR_ENC br_encodings[] = {
+	{ "Unicode (UTF-8)", "UTF-8" },
+	{ "Western (Windows-1252, ISO-8859-1)", "windows-1252" },
+	{ "Western (ISO-8859-15)", "ISO-8859-15" },
+	{ "Hebrew (Windows-1255)", "windows-1255" },
+	{ "Hebrew, logical (ISO-8859-8-I)", "ISO-8859-8-I" },
+	{ "Hebrew, visual (ISO-8859-8)", "ISO-8859-8" },
+	{ "Central European (Windows-1250)", "windows-1250" },
+	{ "Central European (ISO-8859-2)", "ISO-8859-2" },
+	{ "Turkish (Windows-1254, ISO-8859-9)", "windows-1254" },
+	{ "Baltic (Windows-1257)", "windows-1257" },
+	{ "Baltic (ISO-8859-13)", "ISO-8859-13" },
+	{ "Baltic (ISO-8859-4)", "ISO-8859-4" },
+	{ "Nordic (ISO-8859-10)", "ISO-8859-10" },
+	{ "South European (ISO-8859-3)", "ISO-8859-3" }
+};
+const int br_nencodings = (int) (sizeof br_encodings / sizeof br_encodings[0]);
+
+const char *br_encoding_label(const char *name)
+{
+	int i;
+	for (i = 0; i < br_nencodings; i++)
+		if (strcmp(br_encodings[i].name, name) == 0)
+			return br_encodings[i].label;
+	return name;
+}
+
+const char *br_fallback(const char *url)
+{
+	char host[256], *h;
+	size_t n;
+	if (!has_scheme(url, "http") && !has_scheme(url, "https"))
+		return "windows-1252";
+	host_of(url, host, sizeof host);
+	h = strrchr(host, '@');		/* user:password@ */
+	h = h != NULL ? h + 1 : host;
+	if (*h != '[')
+		h[strcspn(h, ":")] = 0;	/* the port */
+	n = strlen(h);
+	if (n > 0 && h[n - 1] == '.')	/* "example.co.il." is example.co.il */
+		h[--n] = 0;
+	/* Hebrew's only, for now: the other locales' (Cyrillic, Greek,
+	   Arabic...) have letters EWEB.FNT hasn't got */
+	if (n > 3 && h[n - 3] == '.' && (h[n - 2] | 32) == 'i' && (h[n - 1] | 32) == 'l')
+		return "windows-1255";
+	return "windows-1252";
+}
+
+int br_encoding(browser *b, const char *name)
+{
+	char security[96], *src = b->src, *url;
+	const char *canon = name[0] ? html_encoding(name) : "";
+	long len = b->src_len;
+	doc *d;
+	page *p;
+	int r;
+	if (canon != NULL && canon[0] && strcmp(br_encoding_label(canon), canon) == 0)
+		canon = NULL;		/* not one of br_encodings */
+	if (!b->encodable || src == NULL || b->p == NULL || b->cur < 0 || canon == NULL)
+		return BR_STOPPED;
+	/* (the address on the heap: not on the stack under the whole build,
+	   which the ST edition's 48 KB must hold) */
+	if ((url = str_ndup(b->url, (long) strlen(b->url))) == NULL)
+		return BR_STOPPED;
+	conn_stop = 0;
+	str_copy(security, b->security, sizeof security);
+	b->ms_fetch = 0;
+	b->src = NULL;		/* show() lets the page shown go: this is its source */
+	/* read again from what came, its stylesheets from the cache of any
+	   age (as Back takes them): nothing is fetched anew */
+	build_plain = strncmp(b->mime, "text/", 5) == 0 && strcmp(b->mime, "text/html") != 0;
+	r = build(b, src, len, canon[0] ? canon : b->charset, url, 2, &d, &p);
+	build_plain = 0;
+	if (r && conn_stop) {
+		pg_free(p);
+		doc_free(d);
+		r = 0;
+	}
+	if (!r) {
+		conn_stop = 0;
+		if (b->p != NULL) {	/* stopped: the page stays as it was */
+			b->src = src;
+			free(url);
+			return BR_STOPPED;
+		}
+		/* no memory for it, even with the kept pages gone (the page
+		   shown went too): said on a page of EWeb's own */
+		free(src);
+		{
+			SBUF s;
+			sb_init(&s);
+			error_page(&s, url, "EWeb can't show this page", "There isn't enough memory for it on this Atari.",
+				   NULL);
+			r = own_page(b, url, &s, NAV_RELOAD);
+			sb_free(&s);
+		}
+		free(url);
+		return r;
+	}
+	show(b, d, p, url, security, b->status, 0);
+	free(url);
+	b->src = src;
+	b->src_len = len;
+	enc_set(b, b->charset, canon, 1);
+	b->scroll_to = b->hist[b->cur].y;
+	if (b->d->js != NULL && js_navigation(b->d, NULL, NULL, NULL) != NULL) {
+		/* its scripts sent the browser on (location = ...) */
+		int lr;
+		if (js_after(b, &lr) == BRJ_LOAD)
+			return lr;
+	}
+	return BR_SHOWN;
 }
 
 /* ---------------------------------------------------------------- what the front end asks */
@@ -1451,6 +2015,7 @@ void br_free(browser *b)
 		doc_free(b->d);
 	free(b->src);
 	br_dl_free(b);
+	br_refresh_cancel(b);
 	b->p = NULL;
 	b->d = NULL;
 	b->src = NULL;
@@ -1483,8 +2048,42 @@ void br_link_url(const browser *b, int link, char *out, int size)
 	if (b->p == NULL || link < 0 || link >= b->p->nlinks)
 		return;
 	base_of(b, b->d, b->url, base, sizeof base);
-	if (!resolve(base, b->p->links[link], out, size))
+	if (!resolve_enc(base, b->p->links[link], out, size, doc_enc(b->d)))
 		str_copy(out, b->p->links[link], size);
+}
+
+const char *br_link_download(const browser *b, int link)
+{
+	if (b->p == NULL || link < 0 || link >= b->p->nlinks)
+		return NULL;
+	return page_link_download(b->p, link);
+}
+
+/* are two addresses of the same origin (the HTML Standard's: scheme,
+   host and port; http and https only, the rest have none to share) */
+static int same_origin(const char *a, const char *c)
+{
+	URL *u = malloc(2 * sizeof *u);
+	int r = u != NULL && url_parse(&u[0], a, NULL) && url_parse(&u[1], c, NULL) && u[0].special &&
+		u[1].special && u[0].tls == u[1].tls && u[0].port == u[1].port && u[0].hostlen == u[1].hostlen &&
+		memcmp(u[0].href + u[0].host, u[1].href + u[1].host, u[0].hostlen) == 0;
+	free(u);
+	return r;
+}
+
+/* a link to url with a download attribute (dl, NULL none): the HTML
+   Standard's "download the hyperlink" (4.6.5) in place of following it,
+   for a link to the page's own site: 1, and b->dl says what to save
+   (BR_SAVE). One to another site is followed as a link, as browsers do
+   (its server may still say attachment), and so is one too long for dl */
+static int link_to_save(browser *b, const char *url, const char *dl)
+{
+	if (dl == NULL || strlen(url) >= sizeof b->dl.url || !same_origin(url, b->url))
+		return 0;
+	br_dl_free(b);
+	str_copy(b->dl.url, url, sizeof b->dl.url);
+	str_copy(b->dl.name, dl, sizeof b->dl.name);
+	return 1;
 }
 
 int br_follow(browser *b, int link)
@@ -1493,6 +2092,8 @@ int br_follow(browser *b, int link)
 	br_link_url(b, link, url, sizeof url);
 	if (url[0] == 0)
 		return BR_STOPPED;
+	if (link_to_save(b, url, br_link_download(b, link)))
+		return BR_SAVE;
 	if (has_scheme(url, "javascript")) {
 		int lr, r = br_js_url(b, url, &lr);
 		if (r == BRJ_LOAD)
@@ -1530,7 +2131,7 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 	if (s.action[0] == 0) {
 		str_copy(url, base, sizeof url);
 		url[strcspn(url, "#")] = 0;
-	} else if (!resolve(base, s.action, url, sizeof url)) {
+	} else if (!resolve_enc(base, s.action, url, sizeof url, doc_enc(b->d))) {
 		form_submit_free(&s);
 		return BR_STOPPED;
 	}
@@ -1630,10 +2231,10 @@ static int jh_fetch(void *ud, const char *site, const char *url, const char *met
 	return r;
 }
 
-static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size)
+static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size, int utf8)
 {
-	(void) ud;
-	if (!resolve(base, href, out, size))
+	browser *b = ud;
+	if (!resolve_enc(base, href, out, size, utf8 ? NULL : doc_enc(js_doc != NULL ? js_doc : b->d)))
 		out[0] = 0;
 }
 
@@ -1712,9 +2313,12 @@ static int restyle(browser *b)
 	doc *d = b->d;
 	page *p;
 	doc_refresh(d);
-	ec_unstyle(d->css);
-	doc_select(d);
 	base_of(b, d, b->url, base, sizeof base);
+	if (doc_sheets_key(d) != d->sheets_key)
+		readd_sheets(b, d, base, 0, 1, 1);	/* it changed the page's sheets */
+	else
+		ec_unstyle(d->css);
+	doc_select(d);
 	p = lay(b, d, base);
 	if (p == NULL)
 		return 0;
@@ -1737,6 +2341,14 @@ static int js_after(browser *b, int *load_r)
 	if ((to = js_navigation(b->d, &post, &len, &ctype)) != NULL && depth < 4) {
 		char *u = str_ndup(to, (long) strlen(to));
 		FSUBMIT s;
+		/* a link with a download attribute it clicked (a.click()):
+		   saved, as a click on the link is */
+		if (u != NULL && link_to_save(b, u, js_navigation_download(b->d))) {
+			js_navigation_done(b->d);
+			free(u);
+			*load_r = BR_SAVE;
+			return BRJ_LOAD;
+		}
 		memset(&s, 0, sizeof s);
 		if (post != NULL) {
 			s.post = 1;
@@ -1888,11 +2500,15 @@ static int js_after(browser *b, int *load_r)
 
 static int go_to(browser *b, int i)
 {
+	unsigned long shows;
 	int old = b->cur, r;
 	if (i < 0 || i >= b->nhist)
 		return BR_STOPPED;
+	br_refresh_cancel(b);
+	b->refresh_run = 0;
 	if (b->p != NULL && same_but_fragment(b->hist[i].url, b->url)) {
 		b->cur = i;
+		enc_set(b, b->charset, b->enc, b->encodable);	/* the same page */
 		str_copy(b->url, b->hist[i].url, sizeof b->url);
 		b->scroll_to = b->hist[i].y;
 		return BR_SAME;
@@ -1905,8 +2521,9 @@ static int go_to(browser *b, int i)
 		int status = e->status;
 		long src_len = e->src_len;
 		char *src = e->src;
-		char security[96];
+		char security[96], cs[sizeof b->charset];
 		str_copy(security, e->security ? e->security : "", sizeof security);
+		str_copy(cs, e->charset ? e->charset : "", sizeof cs);
 		e->d = NULL;
 		e->p = NULL;
 		e->src = NULL;
@@ -1915,8 +2532,10 @@ static int go_to(browser *b, int i)
 		b->src_len = src_len;
 		b->src = src;
 		str_copy(b->mime, e->mime, sizeof b->mime);
+		b->note[0] = 0;		/* (the last page built's) */
 		b->cur = i;
 		b->at = i;
+		enc_set(b, cs, e->enc ? br_encodings[e->enc - 1].name : "", e->encodable);
 		b->ms_fetch = b->ms_parse = b->ms_style = b->ms_layout = 0;
 		if (p->opt.width != b->width) {
 			unsigned long t = pf_ms();
@@ -1928,9 +2547,10 @@ static int go_to(browser *b, int i)
 		return BR_SHOWN;
 	}
 	b->cur = i;
+	shows = b->shows;
 	r = load(b, b->hist[i].url, NAV_HISTORY);
-	if (r == BR_STOPPED || r == BR_DOWNLOAD)
-		b->cur = old;
+	if ((r == BR_STOPPED || r == BR_DOWNLOAD) && b->shows == shows)
+		b->cur = old;	/* (not when its page was shown, and its script went on) */
 	return r;
 }
 
@@ -1971,10 +2591,43 @@ int br_relayout(browser *b, int32_t width)
 {
 	char base[4096];
 	page *p;
+	int32_t w;
 	b->width = width;
 	if (b->d == NULL)
 		return 1;
+	if (resheeting) {
+		/* sized as the page's sheets are added again (a sheet coming):
+		   laid out at this width after them, as for a picture's size;
+		   for one of br_relayout's own, at once (below) */
+		b->pic_relayout = 1;
+		return 1;
+	}
 	base_of(b, b->d, b->url, base, sizeof base);
+	do {
+		/* a media query the page's sheets have (theirs, or an @media in
+		   them) goes the other way at this width: its sheets are added
+		   again (Media Queries 4, 2), those that hold now fetched (the
+		   window's messages go on meanwhile: another resize is done
+		   after) */
+		ec_media m;
+		w = b->width;
+		m = media_of(b);
+		if (m.width >= b->d->span_lo && m.width <= b->d->span_hi) {
+			ec_set_media(b->d->css, &m);	/* <source media>, sizes */
+		} else if (net_busy) {
+			/* sized while a request is under way (a picture's): not
+			   another inside it; its sheets after it, as for a
+			   picture's size (br_pictures_step) */
+			ec_set_media(b->d->css, &m);
+			b->pic_relayout = 1;
+		} else {
+			int stop = conn_stop;
+			conn_stop = 0;
+			readd_sheets(b, b->d, base, 0, 1, 0);
+			doc_select(b->d);
+			conn_stop = stop;
+		}
+	} while (b->width != w);
 	p = lay(b, b->d, base);
 	if (p == NULL)
 		return 0;
@@ -2074,9 +2727,16 @@ static int to_do(const browser *b, const dl_item *d)
 	if (d->type != DL_IMAGE)
 		return 0;
 	st = img_state(im);
-	if (st == IMG_WAITING)
-		return !b->pic_stopped;
+	/* to fetch, or to fetch again (img_recheck), unless Esc stopped them */
+	if ((st == IMG_WAITING || img_stale(im)) && !b->pic_stopped)
+		return 1;
 	return st == IMG_HERE && !(d->flags & DLF_ALT) && !img_tried(im, DL_PIC_W(d), DL_PIC_H(d));
+}
+
+/* the picture is to be fetched now (to_do's first case) */
+static int to_fetch(const browser *b, const ew_img *im)
+{
+	return img_state(im) == IMG_WAITING || (img_stale(im) && !b->pic_stopped);
 }
 
 /* the item to work on next: in the window first, then below, then above */
@@ -2116,6 +2776,7 @@ int br_pictures_pending(browser *b)
 		if (to_do(b, &b->p->items[i]))
 			return 1;
 	dc_job_end();		/* the page's pictures have come: into the pack */
+	refresh_count(b);	/* (the page loaded, as the standard has it) */
 	return 0;
 }
 
@@ -2132,7 +2793,7 @@ static int waiting(const browser *b)
 	int n = 0;
 	for (i = 0; i < b->p->nitems; i++) {
 		const dl_item *d = &b->p->items[i];
-		if (d->type != DL_IMAGE || img_state(d->img) != IMG_WAITING)
+		if (d->type != DL_IMAGE || !to_fetch(b, d->img))
 			continue;
 		for (k = 0; k < i; k++)
 			if (b->p->items[k].type == DL_IMAGE && b->p->items[k].img == d->img)
@@ -2334,17 +2995,25 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 		goto relayout;
 	}
 	im = b->p->items[k].img;
-	if (img_state(im) == IMG_WAITING) {
+	if (to_fetch(b, im)) {
+		int again = img_stale(im);
 		int r = fetch_picture(b, im, 0, 0);
 		if (r < 0) {
 			img_waiting(im);
 			return BRP_STOPPED;
 		}
 		ms_fetch = pf_ms() - t0;
-		if (r == 0) {
+		if (r == 0 && again && img_state(im) == IMG_HERE) {
+			/* asked for again, it didn't come (the server couldn't
+			   be reached): shown as it was */
+			img_kept(im);
+			log_img(b, im, "kept (it didn't come again)", ms_fetch, 0);
+		} else if (r == 0) {
 			img_failed(im);
 			snprintf(what, sizeof what, "failed (%s)", img_why(im));
 			log_img(b, im, what, ms_fetch, 0);
+		} else if (r == 2) {
+			log_img(b, im, "unchanged", ms_fetch, 0);	/* asked for again: as it was decoded */
 		}
 		fetched = 1;
 		/* laid out with a size it hasn't: laid out again */
@@ -2437,14 +3106,15 @@ static int to_upper(int c)
 }
 
 /* n characters of s that a TOS name may hold, in capitals, to out (max
-   of them); '%' and the two digits after it left out */
-static int name_part(const char *s, long n, char *out, int max)
+   of them); in an address (pct), '%' and the two digits after it left
+   out */
+static int name_part(const char *s, long n, int pct, char *out, int max)
 {
 	int k = 0;
 	long i;
 	for (i = 0; i < n && k < max; i++) {
 		int c = to_upper((unsigned char) s[i]);
-		if (c == '%' && i + 2 < n) {
+		if (c == '%' && pct && i + 2 < n) {
 			i += 2;
 			continue;
 		}
@@ -2455,44 +3125,82 @@ static int name_part(const char *s, long n, char *out, int max)
 	return k;
 }
 
-void br_file_name(const char *url, const char *mime, char *out, int size)
+/* s to e (an address's last part, pct, or a name given) as a TOS name's
+   base (8) and ending (5, cut to 3 later), from its last dot; ".tar.gz"
+   is ".TGZ" */
+static void split_name(const char *s, const char *e, int pct, char *base, char *ext)
+{
+	const char *dot;
+	for (dot = e; dot > s && dot[-1] != '.'; dot--)
+		;
+	if (dot > s) {
+		const char *b = dot - 1;
+		name_part(dot, e - dot, pct, ext, 5);
+		if (strcmp(ext, "GZ") == 0 && ends_in(s, b, ".tar")) {
+			b -= 4;
+			strcpy(ext, "TGZ");
+		}
+		name_part(s, b - s, pct, base, 8);
+	} else {
+		name_part(s, e - s, pct, base, 8);
+		ext[0] = 0;
+	}
+}
+
+void br_file_name(const char *url, const char *given, const char *mime, char *out, int size)
 {
 	static const char *const by_mime[][2] = {
 		{ "text/html", "HTM" }, { "application/xhtml+xml", "HTM" }, { "text/plain", "TXT" },
 		{ "text/css", "CSS" }, { "image/jpeg", "JPG" }, { "image/png", "PNG" }, { "image/gif", "GIF" },
-		{ "application/zip", "ZIP" }, { "application/pdf", "PDF" }
+		{ "application/zip", "ZIP" }, { "application/pdf", "PDF" }, { "application/gzip", "GZ" },
+		{ "application/x-gzip", "GZ" }, { "application/x-tar+gzip", "TGZ" }, { "application/x-tar", "TAR" }
 	};
 	static const char *const pages[] = { "HTML", "HTM", "XHTML", "SHTML", "PHP", "ASP", "ASPX", "JSP" };
-	const char *p = strstr(url, "://"), *e, *seg, *dot;
-	char base[9], ext[9];
+	const char *p = strstr(url, "://"), *e, *seg;
+	char base[9], ext[6], kext[6];
 	int page = strcmp(mime, "text/html") == 0 || strcmp(mime, "application/xhtml+xml") == 0;
+	int kept = 0, script = 0;	/* the ending is a given name's; the address's is a script's */
 	size_t i;
 
-	/* the path's last part, without its query and fragment */
-	p = p != NULL ? p + 3 : url;
-	e = p + strcspn(p, "?#");
-	seg = e;
-	while (seg > p && seg[-1] != '/')
-		seg--;
-	if (seg == p)		/* the host alone */
-		seg = e;
-	for (dot = e; dot > seg && dot[-1] != '.'; dot--)
-		;
-	if (dot > seg) {
-		name_part(seg, dot - 1 - seg, base, 8);
-		name_part(dot, e - dot, ext, 5);
-	} else {
-		name_part(seg, e - seg, base, 8);
-		ext[0] = 0;
+	base[0] = ext[0] = kext[0] = 0;
+	if (given != NULL && *given) {
+		/* the name given: its last part only (RFC 6266, 4.3), its ending kept */
+		const char *g = given;
+		e = given + strlen(given);
+		for (seg = given; seg < e; seg++)
+			if (*seg == '/' || *seg == '\\')
+				g = seg + 1;
+		split_name(g, e, 0, base, kext);
+		kept = kext[0] != 0;
 	}
-	for (i = 0; i < sizeof pages / sizeof pages[0]; i++)
-		if (strcmp(ext, pages[i]) == 0 && (page || mime[0] == 0))
-			page = 1;
-	if (strcmp(ext, "JPEG") == 0)
-		strcpy(ext, "JPG");
-	if (page) {
+	if (base[0] == 0) {
+		/* the address's path's last part, without its query and fragment */
+		p = p != NULL ? p + 3 : url;
+		e = p + strcspn(p, "?#");
+		seg = e;
+		while (seg > p && seg[-1] != '/')
+			seg--;
+		if (seg == p)		/* the host alone */
+			seg = e;
+		split_name(seg, e, 1, base, ext);
+		if (!kept)
+			for (i = 0; i < sizeof pages / sizeof pages[0]; i++)
+				if (strcmp(ext, pages[i]) == 0) {
+					/* a script's ending: a page's, or not the file's */
+					if (mime[0] == 0)
+						page = 1;
+					script = !page;
+				}
+	}
+	if (kept) {
+		strcpy(ext, kext);
+		for (i = 0; page && i < sizeof pages / sizeof pages[0]; i++)
+			if (strcmp(ext, pages[i]) == 0)
+				strcpy(ext, "HTM");
+	} else if (page) {
 		strcpy(ext, "HTM");
-	} else if (ext[0] == 0) {
+	} else if (ext[0] == 0 || script) {
+		ext[0] = 0;
 		for (i = 0; i < sizeof by_mime / sizeof by_mime[0]; i++)
 			if (strcmp(mime, by_mime[i][0]) == 0)
 				strcpy(ext, by_mime[i][1]);
@@ -2501,6 +3209,8 @@ void br_file_name(const char *url, const char *mime, char *out, int size)
 			strcpy(ext, "HTM");
 		}
 	}
+	if (strcmp(ext, "JPEG") == 0)
+		strcpy(ext, "JPG");
 	ext[3] = 0;
 	snprintf(out, (size_t) size, "%s%s%s", base[0] ? base : page ? "INDEX" : "DOWNLOAD", ext[0] ? "." : "", ext);
 }
@@ -2527,11 +3237,16 @@ long br_save_buf = 256L << 10, br_saved;
 
 typedef struct {
 	browser *b;
-	int h;
+	int h;			/* the file, once the answer has begun (-1 before) */
 	char *buf;
 	long n, size;
 	unsigned long said;
-	int failed;		/* the disk wouldn't take it */
+	int failed;		/* the disk wouldn't take it: 1 a write, 2 the file itself */
+	int cancelled;		/* save_as said no */
+	int asked;		/* save_as was asked, the answer held unread meanwhile */
+	const char *given;	/* the link's download attribute, or NULL */
+	char *path;
+	int pathsize;
 } SAVING;
 
 static int save_out(SAVING *s)
@@ -2566,24 +3281,69 @@ static int save_sink(void *ud, const char *data, long n)
 	return 1;
 }
 
-int br_save_url(browser *b, const char *url, const char *path, char *err, int errlen)
+/* br_save_url's HTTPREQ.head: what came named (the HTML Standard's "get
+   the suggested filename", 4.6.5: Content-Disposition's when it says
+   attachment, else the download attribute's for an answer from the page's
+   own site, else Content-Disposition's inline one), where it goes asked
+   of the front end, and the file made */
+static int save_head(void *ud, HTTPRESP *rs)
+{
+	SAVING *s = ud;
+	browser *b = s->b;
+	const char *v = http_header_at(rs, "Content-Disposition");
+	char cd[256], name[16];
+	int t = -1;
+	cd[0] = 0;
+	if (v != NULL)
+		t = http_disposition(v, cd, sizeof cd);
+	str_copy(b->dl.url, rs->url.href, sizeof b->dl.url);
+	str_copy(b->dl.mime, rs->mime, sizeof b->dl.mime);
+	if (!(t == 1 && cd[0]) && s->given != NULL && *s->given && same_origin(rs->url.href, b->url))
+		str_copy(b->dl.name, s->given, sizeof b->dl.name);
+	else
+		str_copy(b->dl.name, cd, sizeof b->dl.name);
+	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+	if (s->path[0] == 0) {
+		if (b->save_as == NULL || !b->save_as(b->ud, name, s->path, s->pathsize)) {
+			s->cancelled = 1;
+			return 0;
+		}
+		s->asked = 1;
+	}
+	s->h = pf_open(s->path, PF_WRITE);
+	if (s->h < 0) {
+		s->failed = 2;
+		return 0;
+	}
+	return 1;
+}
+
+int br_save_url(browser *b, const char *url, const char *given, char *path, int size, char *err, int errlen)
 {
 	HTTPREQ rq;
 	HTTPRESP *rs;
 	SBUF body;
 	SAVING s;
 	char host[128];
-	int ok;
+	int ok, tries = 0, made = 0;
 
 	br_saved = 0;
 	err[0] = 0;
 	conn_stop = 0;
+	/* what is being saved, until the answer says more */
+	br_dl_free(b);
+	str_copy(b->dl.url, url, sizeof b->dl.url);
+	str_copy(b->dl.name, given != NULL ? given : "", sizeof b->dl.name);
 	if (!has_scheme(url, "http") && !has_scheme(url, "https")) {
 		snprintf(err, (size_t) errlen, "EWeb saves files from http and https addresses.");
 		return BRS_FAILED;
 	}
 	memset(&s, 0, sizeof s);
 	s.b = b;
+	s.h = -1;
+	s.given = given;
+	s.path = path;
+	s.pathsize = size;
 	s.size = br_save_buf > 8192 ? br_save_buf : 8192;
 	while ((s.buf = malloc((size_t) s.size)) == NULL && s.size > 8192)
 		s.size /= 2;
@@ -2594,39 +3354,60 @@ int br_save_url(browser *b, const char *url, const char *path, char *err, int er
 		snprintf(err, (size_t) errlen, "Out of memory.");
 		return BRS_FAILED;
 	}
-	s.h = pf_open(path, PF_WRITE);
-	if (s.h < 0) {
-		free(s.buf);
-		free(rs);
-		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
-		return BRS_FAILED;
-	}
 	host_of(url, host, sizeof host);
 	say(b, "Opening %s...", host);
 	memset(&rq, 0, sizeof rq);
 	rq.url = url;
 	rq.sink = save_sink;
+	rq.head = save_head;
 	rq.ud = &s;
 	rq.top = 1;		/* a link followed, for its cookies */
 	rq.site = has_scheme(b->url, "http") || has_scheme(b->url, "https") ? b->url : NULL;
 	rq.referrer = rq.site;
 	sb_init(&body);
-	ok = http_request(&rq, rs, &body, err, errlen);
+	for (;;) {
+		net_busy++;
+		ok = http_request(&rq, rs, &body, err, errlen);
+		net_busy--;
+		/* lost once the file selector had been up, the answer unread
+		   meanwhile: its server may have given up waiting (nginx and
+		   Apache end a connection that takes nothing for 60 s), so it is
+		   asked for once more, into the file chosen */
+		if (ok || !s.asked || s.h < 0 || s.failed || conn_stop || tries++)
+			break;
+		pf_close(s.h);
+		s.h = -1;
+		made = 1;
+		s.asked = 0;
+		s.n = 0;
+		br_saved = 0;
+		err[0] = 0;
+		http_resp_free(rs);
+		sb_free(&body);
+		sb_init(&body);
+		say(b, "Opening %s again...", host);
+	}
 	if (ok && (rs->status < 200 || rs->status >= 300)) {
 		snprintf(err, (size_t) errlen, "The server answered %d %.60s.", rs->status, rs->reason);
 		ok = 0;
 	}
-	if (ok)
+	if (ok && s.h >= 0)
 		ok = save_out(&s);
-	if (s.failed)
+	if (s.failed == 2)
+		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
+	else if (s.failed)
 		snprintf(err, (size_t) errlen, "The disk is full, or %.150s can't be written.", path);
-	pf_close(s.h);
+	if (s.h >= 0)
+		pf_close(s.h);
 	sb_free(&body);
 	http_resp_free(rs);
 	free(rs);
 	free(s.buf);
 	if (!ok) {
-		pf_remove(path);
+		if (s.h >= 0 || made)
+			pf_remove(path);
+		if (s.cancelled)
+			return BRS_CANCELLED;
 		if (conn_stop) {
 			conn_stop = 0;
 			return BRS_STOPPED;

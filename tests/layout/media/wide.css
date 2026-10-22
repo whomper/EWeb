@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/* media="screen and (min-width: 600px)": the page is 760 CSS px wide */
+.wide { background: #0c0 }

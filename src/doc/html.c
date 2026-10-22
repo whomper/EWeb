@@ -364,6 +364,10 @@ typedef struct P {
 	const ec_atom *a_class, *a_id;
 	uint16_t enc;			/* the encoding (MIB enum) */
 	uint16_t changed;		/* <meta charset> said this one: start again */
+	/* the page's refresh: a <base href> is in, and the <meta>s noted
+	   (meta_refresh), the next going at *rend */
+	uint8_t based, nrefresh;
+	drefresh **rend;
 } P;
 
 static void oom(P *p)
@@ -2725,6 +2729,36 @@ static void meta_charset(P *p)
 	p->stop = 1;
 }
 
+/* a <meta> inserted: the Refresh state's steps run for it then, so one
+   whose content is one is noted as it is now (a script may change it
+   after) with the <base> the page has now, in the order put in (which
+   a table's foster parenting can make other than the tree's); the
+   first whose address can be used is the page's refresh (src/browse).
+   Not a fragment's. */
+static void meta_refresh(P *p, dnode *n)
+{
+	uint32_t i;
+	if (p->ctx != NULL || p->nrefresh >= DOC_REFRESH_METAS)
+		return;
+	/* most <meta>s have no http-equiv: its length first */
+	for (i = 0; i < p->t.na; i++)
+		if (p->t.a[i].nl == 10 && memcmp(p->t.a[i].n, "http-equiv", 10) == 0) {
+			if (tval_is(&p->t.a[i], "refresh") && doc_refresh_meta(n)) {
+				const char *c = dn_attr(n, "content");
+				size_t len = strlen(c);
+				drefresh *r = dalloc(p, sizeof *r + len + 1);
+				r->next = NULL;
+				r->content = (char *) (r + 1);
+				memcpy(r + 1, c, len + 1);
+				r->based = p->based;
+				*p->rend = r;
+				p->rend = &r->next;
+				p->nrefresh++;
+			}
+			return;
+		}
+}
+
 static int m_in_head(P *p)
 {
 	TOKEN *t = &p->t;
@@ -2745,6 +2779,11 @@ static int m_in_head(P *p)
 			process_in(p, M_IN_BODY);
 			return DONE;
 		case H_BASE:
+			/* the document's base from now on (a template's contents
+			   aren't in the document) */
+			if (tok_attr(t, "href") != NULL && !template_open(p))
+				p->based = 1;
+			/* fall through */
 		case H_BASEFONT:
 		case H_BGSOUND:
 		case H_LINK:
@@ -2752,7 +2791,7 @@ static int m_in_head(P *p)
 			pop(p);
 			return DONE;
 		case H_META:
-			insert_tok(p, DN_NS_HTML);
+			meta_refresh(p, insert_tok(p, DN_NS_HTML));
 			pop(p);
 			meta_charset(p);
 			return DONE;
@@ -4246,16 +4285,39 @@ static void mibs_init(void)
 	mib_1252 = mib_of("windows-1252");
 }
 
+/* the Encoding Standard's labels that libparserutils' list of names
+   hasn't got, or has for another encoding (ISO-8859-1 is windows-1252
+   on the web), for the encodings it decodes: each encoding's name, its
+   labels, NULL */
+static const char *const labels[] = {
+	"windows-1252", "iso-8859-1", "us-ascii", "ascii", "latin1", "l1", "iso_8859-1", "iso8859-1",
+	"iso88591", "cp819", "ibm819", "csisolatin1", "iso-ir-100", "iso_8859-1:1987", "ansi_x3.4-1968",
+	"x-cp1252", "cp1252", NULL,
+	"windows-1254", "iso-8859-9", "iso8859-9", "iso88599", "latin5", "l5", "iso_8859-9", "iso-ir-148",
+	"csisolatin5", "iso_8859-9:1989", "x-cp1254", NULL,
+	"windows-1255", "cp1255", "x-cp1255", NULL,
+	"iso-8859-8", "iso-8859-8-e", "csiso88598e", NULL,
+	"utf-8", "x-unicode20utf8", NULL,
+	"iso-8859-15", "csisolatin9", "l9", NULL,
+	"windows-1250", "x-cp1250", NULL,
+	"windows-1257", "x-cp1257", NULL,
+	"windows-1251", "x-cp1251", NULL,
+	"windows-1253", "x-cp1253", NULL,
+	"windows-1256", "x-cp1256", NULL,
+	"windows-1258", "cp1258", "x-cp1258", NULL,
+	"iso-8859-6", "iso-8859-6-e", "iso-8859-6-i", "csiso88596e", "csiso88596i", NULL,
+	"iso-8859-7", "sun_eu_greek", NULL,
+	"utf-16le", "utf-16", "unicode", "ucs-2", "unicodefeff", "csunicode", "iso-10646-ucs-2", NULL,
+	"utf-16be", "unicodefffe", NULL,
+	NULL
+};
+
 /* WHATWG's "get an encoding" for what libparserutils decodes, and what
    HTML does with it: the MIB enum, or 0. meta: from the page, where
    UTF-16 means UTF-8 and x-user-defined windows-1252 */
 static uint16_t enc_of(const uint8_t *s, size_t n, int meta)
 {
-	static const char *const latin[] = { "iso-8859-1", "us-ascii", "ascii", "latin1", "l1",
-		"iso_8859-1", "iso8859-1", "iso88591", "cp819", "ibm819", "csisolatin1",
-		"iso-ir-100", "iso_8859-1:1987", "ansi_x3.4-1968", "x-cp1252", "cp1252", NULL };
-	static const char *const turkish[] = { "iso-8859-9", "iso8859-9", "iso88599", "latin5",
-		"l5", "iso_8859-9", "iso-ir-148", "csisolatin5", "iso_8859-9:1989", NULL };
+	const char *const *l;
 	char name[48];
 	size_t i;
 	uint16_t mib;
@@ -4270,17 +4332,18 @@ static uint16_t enc_of(const uint8_t *s, size_t n, int meta)
 	for (i = 0; i < n; i++)
 		name[i] = (char) (s[i] >= 'A' && s[i] <= 'Z' ? s[i] + 32 : s[i]);
 	name[n] = 0;
-	for (i = 0; latin[i]; i++)
-		if (strcmp(name, latin[i]) == 0)
-			strcpy(name, "windows-1252");
-	for (i = 0; turkish[i]; i++)
-		if (strcmp(name, turkish[i]) == 0)
-			strcpy(name, "windows-1254");
+	for (l = labels; *l != NULL; l++) {
+		const char *to = *l;
+		while (*++l != NULL && ((*l)[0] != name[0] || strcmp(name, *l) != 0))
+			;
+		if (*l != NULL) {
+			strcpy(name, to);
+			break;
+		}
+	}
 	if (strcmp(name, "x-user-defined") == 0)
 		strcpy(name, meta ? "windows-1252" : "x-user-defined");
-	if (meta && (strcmp(name, "utf-16") == 0 || strcmp(name, "utf-16le") == 0 ||
-		     strcmp(name, "utf-16be") == 0 || strcmp(name, "unicode") == 0 ||
-		     strcmp(name, "ucs-2") == 0 || strcmp(name, "unicodefeff") == 0))
+	if (meta && (strcmp(name, "utf-16le") == 0 || strcmp(name, "utf-16be") == 0))
 		strcpy(name, "utf-8");
 	if (strcmp(name, "utf-8") == 0 || strcmp(name, "utf8") == 0)
 		return mib_utf8;
@@ -4567,8 +4630,16 @@ static size_t ascii_copy(uint8_t *o, const uint8_t *s, const uint8_t *e)
 }
 
 /* The page decoded to UTF-8, its newlines normalised (CR LF and CR are
-   LF), with a 0 after it; *n its length. NULL if out of memory. */
-static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n)
+   LF), with a 0 after it; *n its length. NULL if out of memory.
+   found: UTF-8 is to be found by the bytes (the sniffing's step 8, whose
+   note singles it out: "a highly detectable bit pattern"), the page read
+   as UTF-8 meanwhile: NULL with *found -1 at the first byte UTF-8 can't
+   have (in a page of Windows-1255 or -1252 mostly its first letter beyond
+   ASCII, so little is read twice), else *found 1 when there was a
+   character beyond ASCII and 0 when there was none (the same text in any
+   encoding EWeb has). A sequence cut short at the end is let be (more
+   may have been coming) when there was one before it. */
+static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n, int *found)
 {
 	const uint8_t *e = s + len;
 	uint8_t *out, *o;
@@ -4613,6 +4684,7 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n)
 		/* the WHATWG decoder: each byte that can't start a sequence,
 		   and each sequence cut short, is one U+FFFD. Only those make
 		   the text longer, so only they ask for room. */
+		int multi = 0;
 		cap = len + 16;
 		if ((out = malloc(cap)) == NULL)
 			return NULL;
@@ -4662,6 +4734,11 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n)
 				hi = 0xbf;
 			}
 			if (k == 0 || i < k) {
+				if (found != NULL && !(k > 0 && s + i >= e && multi)) {
+					free(out);
+					*found = -1;
+					return NULL;
+				}
 				if (cap - (size_t) (o - out) < (size_t) (e - s) + 8) {
 					size_t at = (size_t) (o - out);
 					uint8_t *m;
@@ -4677,6 +4754,7 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n)
 				s += k == 0 ? 1 : i;
 				continue;
 			}
+			multi = 1;
 			o[0] = s[0];
 			o[1] = s[1];
 			if (k > 2) {
@@ -4687,6 +4765,8 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n)
 			o += k;
 			s += k;
 		}
+		if (found != NULL)
+			*found = multi;
 	} else {
 		/* a byte a character: a table of 0x80-0xff from the codec, kept
 		   for the next page in the same charset */
@@ -4888,6 +4968,21 @@ static __attribute__((noinline)) void parse(P *p, const uint8_t *in, size_t n, c
 		if (is(p->ctx, H_TEMPLATE))
 			tmode_push(p, M_IN_TEMPLATE);
 		reset_mode(p);
+	} else if (o->plaintext) {
+		/* a text file (the standard's page load processing model
+		   for text files): as if a <pre> start tag and a line feed had
+		   come (the feed <pre> drops, so the file's own first stays),
+		   then the PLAINTEXT state: all the rest is text. (Straight to
+		   the insertion mode: dispatch() stays inlined in the loop.) */
+		TOKEN *t = &p->t;
+		memset(t, 0, sizeof *t);
+		t->type = TK_START;
+		t->s = (const uint8_t *) "pre";
+		t->n = 3;
+		t->hid = H_PRE;
+		process_in(p, p->mode);
+		p->skip_lf = 0;		/* (the line feed, dropped) */
+		p->state = S_PLAINTEXT;
 	}
 	for (;;) {
 		int t = tok(p);
@@ -4920,8 +5015,8 @@ static int run(P *p, const uint8_t *in, size_t n, const html_opts *o)
 int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 {
 	const uint8_t *s = (const uint8_t *) data;
-	uint16_t enc = 0;
-	int tentative = 1, tries;
+	uint16_t enc = 0, fallback = 0;
+	int tentative = 1, tries, sniff = 0;
 
 	if (!ready) {
 		names_init();
@@ -4945,23 +5040,45 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		len -= 2;
 		tentative = 0;
 	}
+	/* the user's choice, else the HTTP answer's: certain */
 	if (enc == 0 && o->charset != NULL && o->charset[0] &&
 	    (enc = enc_of((const uint8_t *) o->charset, strlen(o->charset), 0)) != 0)
 		tentative = 0;
 	if (o->context != NULL)
 		tentative = 0;
-	else if (enc == 0)
+	else if (enc == 0 && !o->plaintext)
 		enc = prescan(s, len);
-	if (enc == 0)
-		enc = mib_1252;
+	/* nothing names one: UTF-8 if the bytes are (decode() finds it),
+	   else the locale's default; tentative (a <meta> further on may
+	   still say) */
+	if (enc == 0) {
+		enc = mib_utf8;
+		sniff = 1;
+		if (o->fallback != NULL)
+			fallback = enc_of((const uint8_t *) o->fallback, strlen(o->fallback), 0);
+		if (fallback == 0)
+			fallback = mib_1252;
+	}
 	if (enc == 0)
 		return 0;
 
 	for (tries = 0; tries < 2; tries++) {
 		P p;
 		size_t n;
-		uint8_t *in = decode(s, len, enc, &n);
+		int found = 0;
+		uint8_t *in = decode(s, len, enc, &n, sniff ? &found : NULL);
 		int ok;
+		if (sniff) {
+			sniff = 0;
+			if (in == NULL && found < 0) {
+				/* not UTF-8: read in the default (not a try) */
+				enc = fallback;
+				tries--;
+				continue;
+			}
+			if (found == 0)
+				enc = fallback;		/* ASCII throughout: the same text */
+		}
 		if (in == NULL)
 			return 0;
 		memset(&p, 0, sizeof p);
@@ -4970,6 +5087,9 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		p.enc = enc;
 		p.tentative = (uint8_t) tentative;
 		d->elements = 0;
+		if (o->context == NULL)
+			d->refresh = NULL;	/* (a try before was another tree) */
+		p.rend = &d->refresh;
 		ok = run(&p, in, n, o);
 		free(in);
 		p_free(&p);
@@ -4990,6 +5110,45 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		strncpy(d->charset, name ? name : "", sizeof d->charset - 1);
 		d->charset[sizeof d->charset - 1] = 0;
 	}
+	return 1;
+}
+
+const char *html_encoding(const char *label)
+{
+	uint16_t mib;
+	if (mib_utf8 == 0)
+		mibs_init();
+	mib = enc_of((const uint8_t *) label, strlen(label), 0);
+	return mib != 0 ? parserutils_charset_mibenum_to_name(mib) : NULL;
+}
+
+int html_enc_table(const char *name, uint16_t hi[128])
+{
+	parserutils_charset_codec *c;
+	unsigned b;
+	/* (by the encoding's name, not the label's: "latin1" is windows-1252) */
+	if (name == NULL || (name = html_encoding(name)) == NULL ||
+	    enc_of((const uint8_t *) name, strlen(name), 0) == mib_utf8 ||
+	    parserutils_charset_codec_create(name, &c) != PARSERUTILS_OK)
+		return 0;
+	/* each byte's character from the codec (as decode() takes them),
+	   ASCII below 0x80 or none of it */
+	for (b = 0; b < 256; b++) {
+		uint8_t byte = (uint8_t) b, ucs[4], *d = ucs;
+		const uint8_t *src = &byte;
+		size_t sl = 1, dl = 4;
+		uint32_t u = 0xfffd;
+		parserutils_charset_codec_reset(c);
+		if (parserutils_charset_codec_decode(c, &src, &sl, &d, &dl) == PARSERUTILS_OK && dl == 0)
+			u = (uint32_t) ucs[0] << 24 | (uint32_t) ucs[1] << 16 | (uint32_t) ucs[2] << 8 | ucs[3];
+		if (b < 0x80 ? u != b : u > 0xffff) {
+			parserutils_charset_codec_destroy(c);
+			return 0;
+		}
+		if (b >= 0x80)
+			hi[b - 0x80] = (uint16_t) u;
+	}
+	parserutils_charset_codec_destroy(c);
 	return 1;
 }
 

@@ -435,7 +435,8 @@ grew from that one. When it has settled, it can move into `common/` for those ap
 
 What it does:
 - **Addresses** as the WHATWG URL Standard parses them: links resolved against the page, `.` and `..`,
-  backslashes, IPv4 and IPv6 addresses, percent-encoding as UTF-8, and names that aren't ASCII
+  backslashes, IPv4 and IPv6 addresses, percent-encoding as UTF-8 (but a query in its page's own
+  encoding: Encodings, below), and names that aren't ASCII
   (Hebrew ones too) in punycode, with the part of UTS #46's mapping pages meet.
 - **HTTP/1.1:** answers by length, in chunks, or up to the close; gzip and deflate unpacked; redirects
   (up to 20, a POST answered with 301, 302 or 303 becoming a GET, as browsers do); the charset of the
@@ -1110,7 +1111,8 @@ the HTML Standard:
   left out), then `application/x-www-form-urlencoded`, `multipart/form-data` (a file field sends no
   file: EWeb can't upload yet) or `text/plain`, line breaks as CR LF; `formaction`, `formmethod`,
   `formenctype`; a dialog's form sends nothing. The text goes in the page's character set (a letter
-  it lacks as `&#N;`, as browsers do; `accept-charset="utf-8"` honoured), so Windows-1255 sites get
+  it lacks as `&#N;`, as browsers do; `accept-charset` as the standard picks from it: Encodings,
+  below), so Windows-1255 sites get
   their Hebrew as they expect. GET puts it in the address, POST through the HTTP client (a 301, 302
   or 303 answer fetched with GET; a POST's answer isn't cached; Back to it, once it isn't kept,
   fetches its address with GET rather than sending again). Return in a field sends the form by its
@@ -1174,7 +1176,9 @@ open for the job and written a piece at a time (the guidelines' 6.5), so a downl
 than the memory, and Esc leaves nothing behind. A file EWeb doesn't show, opened as a page, is
 already in memory (up to 8 MB): EWeb asks where to save it and writes it in one safe save; the
 page shown stays. The name offered is 8.3 from the address (`INDEX.HTM` for `/`, the type's
-ending when the address has none). `make itest` and `make hatarigui` save each kind.
+ending when the address has none); from 22 Oct 2026 the name the server or the link gives comes
+first, and a link's file is asked for once its answer has begun (Downloads, below). `make itest`
+and `make hatarigui` save each kind.
 
 ## Bookmarks (19 Oct 2026)
 
@@ -1196,9 +1200,10 @@ stays fresh (`max-age`, else `Expires` less `Date`, else a tenth of the time sin
 `Last-Modified`, a day at most, less its `Age`; a year at most), then asked for again with its
 `ETag` or date, a 304 keeping what is there. Not kept: `no-store`, `Vary: *`, a page that sets
 a cookie (it may be one person's; a picture or stylesheet that does is kept, as browsers' own
-caches keep them, since 21 Oct 2026), one with nothing to go by, and one bigger than a quarter of
-the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it however old it is, as browsers do; Reload asks the
-server again (a 304 when it is unchanged).
+caches keep them, since 21 Oct 2026), one with a `Refresh` header (the index keeps no headers, so
+from the cache it wouldn't go on; since 22 Oct 2026), one with nothing to go by, and one bigger
+than a quarter of the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it
+however old it is, as browsers do; Reload asks the server again (a 304 when it is unchanged).
 
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
 `CACHE\EWEB.IDX` the index, read in one open the first time the cache is needed and written at quit.
@@ -1327,10 +1332,11 @@ BSS):
 | TJpgDec (and jpegdc for what it won't take) in place of libjpeg-turbo | 92 KB of code |
 | `-Os` | 115 KB of code |
 | `EW_ST`: the CSS engine's prelude 1024 tokens, 512 hits, a 256-entry style cache, 256 values and declarations, 4 levels of `:not()`, 1024 names | 128 KB of BSS |
-| `EW_ST`: the HTTP client's read buffer 8 KB, the stack 48 KB | 24 KB of BSS |
+| `EW_ST`: the HTTP client's read buffer 8 KB (2 KB since the downloads' names, below), the stack 48 KB | 24 KB of BSS (6 KB more for the 2 KB buffer) |
 
-At run time the arenas take small pieces on the ST (the CSS engine 4 KB, the document and the
-layout 8 KB, not 64 and 16), as a context's empty pieces were most of a small page's memory; a
+At run time the arenas take small pieces on the ST (the CSS engine 4 KB, its first ones from 512
+bytes, the document and the layout 8 KB, not 64 and 16), as a context's empty pieces were most of a
+small page's memory; a
 font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
 grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
 in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
@@ -1491,6 +1497,405 @@ ewrender `-S`, and 60 deep, whole). The crash catcher (`common/atari/crash.c`) n
 in the program's own supervisor code, a wild jump while it runs and line F, so a crash leaves
 `CRASH.LOG` even when only a cold boot recovers the machine.
 
+## Refresh: `<meta http-equiv=refresh>` and the `Refresh` header (22 Oct 2026)
+
+A page that sends you on with a `<meta http-equiv=refresh>` or the `Refresh` header went nowhere:
+EWeb read neither. Pages that have moved do it, and DuckDuckGo's HTML results lead to the site
+through a page of theirs (`/l/?uddg=`) believed to forward this way (not yet seen from here: the
+audit couldn't fetch one), so a result clicked would show a blank page. Now EWeb does as the HTML
+Standard says (4.2.5.3, the Refresh state and the shared declarative refresh steps):
+- **Which:** the page's `Refresh` header first (the document is made with it), else the first
+  `<meta http-equiv=refresh>` the parser puts in whose content is one. The standard runs its steps
+  as each `<meta>` is inserted, so the parser notes each such meta then (`src/doc/html.c`, the
+  in-head rules every `<meta>` goes through; `doc.refresh`, at most 16): its content as it is then
+  (a script changing it after changes nothing), whether a `<base href>` was in by then, and in the
+  order they went in, which a table's foster parenting can make other than the tree's. No element
+  pays for it: one in a `<template>` isn't in the document, one in `<noscript>` is there only when
+  the site's scripts don't run (the parser keeps `<noscript>` as text when they do), and
+  innerHTML's don't count. The content is parsed step by step as the standard does it
+  (`doc_refresh_parse`: the time, its fraction ignored, `;` or `,`, `url=` with or without quotes);
+  the address is resolved against the `<base>` if one was in when the meta went in (one after it
+  doesn't count). One that is `javascript:`, or doesn't parse, is passed over for the next.
+- **When:** the standard's "completely loaded", the page with its pictures, for a refresh of the
+  page itself or a place on it, as Chrome does: a page that reloads itself every ten seconds shows
+  its pictures each time, however slowly they come (from 22 Oct 2026, review: the countdown began
+  when the page was shown, and a picture slower than it was cut short, and fetched again from its
+  start, each time). A refresh to another page counts from when the page is shown, without waiting
+  for the pictures of the page being left: one that goes on at once fetches none, and one that goes
+  on in five seconds goes even while its pictures still come (the one coming is cut short). The GEM
+  side's idle loop (both editions) wakes for it as for a script's timer.
+- **How:** in the page's place in the history (the standard's "replace"), so Back goes to the page
+  before it, not to one that sends you on again. The page itself is fetched anew (`NAV_REFRESH`:
+  its stylesheets as any page's, not again as Reload asks for them; Chrome validates the page
+  only), which a page that refreshes itself is for; a place on it (`url=#top`, or no address on a
+  page shown at a fragment) is scrolled to, the page staying, as the standard and Chrome do (until
+  the review it was loaded again, five times, and then stopped as a loop). Back and Forward don't
+  start a page's refresh again, as the standard allows ("do nothing"); Reload does. An address
+  EWeb doesn't open on its own (`mailto:`, `data:`, a file from a page on the web) leaves the page.
+- **Its pictures, as they are now:** a page fetched anew for its refresh asks for its pictures
+  again as their HTTP freshness says, as browsers do for a document made anew (`img_recheck`, from
+  the layout of a `NAV_REFRESH` page): one sent `no-store`, or out of date, comes again from the
+  server (a 304 when it is unchanged), one still fresh is read from the disk cache, and a file from
+  the disk again; meanwhile the picture EWeb has is shown, and one that came the same isn't decoded
+  again. A picture opened on its own with a `Refresh` header (a camera's JPEG) is the page itself,
+  and changes with it. Until the review's second round (22 Oct 2026) `img.c` kept each picture by
+  its address, so a camera's picture or a weather map stayed the first one for ever while the page
+  around it came again. Reload (^R) still shows the pictures EWeb has, as before: asking for them
+  all again would read every picture of the page again from the disk cache or the network.
+- **What you see:** "Going on to example.com in 5 s: Esc stays here." (or "This page loads again in
+  30 min: Esc stops it.") on the status line, with the time left, whenever nothing else is said
+  there (a picture's line, a button's or a link's name), so it comes back after them; Esc, Stop
+  (enabled meanwhile) or any other load cancel it, and EWeb says "Staying on this page." Stop then
+  stops only that, not the requests of the page's scripts. While the address field has the keyboard
+  it waits, so that what is typed there isn't lost. A page that goes on at once, again and again
+  (itself, or two that send each other on), stops after five in a row (`BR_REFRESH_RUN`): "This page
+  sends EWeb on at once again and again: it stays here." Browsers go on for ever. That is what the
+  status line says at rest until the next load, so it comes back after the pictures of the page it
+  stops on (until the review's second round it was said once, and the pictures' lines took its
+  place: two pages sending each other on fetch no pictures until the last).
+- **The caches:** a page with a `Refresh` header isn't kept, in memory or on the disk, as the header
+  wouldn't come with it. Through the Pi webgate passes the header on as the server sent it; the Pi's
+  browser (snapshots, live view) follows a refresh itself.
+
+Measured: 68030 instructions for EWeb's document (`build/m68k/docparse`) on the page set, 1,328.0 M
+before and 1,328.3 M after (+0.02%; the median page +912 instructions, the most +4,942: each
+`<meta>`'s attributes looked at for `http-equiv`). Noting the meta in `doc.c`'s walk after the parse
+instead cost +0.12%, a test on every element; that is why the parser does it. The code that works
+out the refresh after the page is built is kept out of `load_post` (`noinline`): inlined, its 8 KB
+of addresses sat on the stack under the whole load, and the ST edition's 48 KB ran out under a
+stylesheet fetched through the gateway (3 bombs, `make hatarigui`'s `st` group); `load_post`'s frame
+is as before, 4,252 bytes on the ST.
+`tests/browse/rftest.c` (`make test`) has the Web Platform Tests' 73 parsing cases, each address
+resolved as the test does, and which `<meta>`s count; `make itest` the pages of `/site/refresh/`
+(the header before the meta, a `<base>` before and after, `<noscript>` with scripts and without, a
+`javascript:` address, a script changing the content, a table's order, the loop, a page refreshing
+itself with its stylesheet asked for once and after its slow picture, a place on the page, Back,
+the disk cache, the header through webgate, and a camera's page whose pictures are asked for again:
+no-store each time, one kept an hour once, a no-cache one a 304); `make hatarigui`'s `refresh` group
+the status line (again after the pictures), the timer, Undo, Esc, the address field and the loops
+(itself, its picture read again but not decoded again; two pages sending each other on) on the
+Falcon. The status line is read from what `win_status` logs at each change (`status ...`), not
+worked out from the browser's state.
+
+## Stylesheets by their media, type and set (22 Oct 2026)
+
+A `<link rel=stylesheet>`'s or a `<style>`'s `media` was looked at only as text: taken when
+"screen" or "all" appeared anywhere in it, in lower case, so `media="screen and (max-width: 600px)"`
+was applied at any width, `(min-width: 40em)` never, `not screen` and `small` always, `SCREEN` never.
+Now `doc_sheets` (`src/doc/doc.c`) does as the HTML Standard says (4.2.4, 4.2.6) and CSSOM's
+"add a CSS style sheet":
+- **Media:** the attribute "matches the environment" by the CSS engine's own media queries
+  (`ec_media_ok`, Media Queries 4: types, `not` and `only`, features, ranges, three-valued logic),
+  against the very screen `@media` blocks see (the window's width in CSS pixels, 16-bit colour,
+  and so on); none, empty or white space is all. `screen`, `all` and `print`, nine in ten of the
+  page set's 673 media attributes, are told without the engine's tokens.
+- **Type:** a `<style>`'s none, empty or `text/css` in any case; a `<link>`'s none, empty (as
+  browsers take it) or a MIME type whose essence is `text/css` (`Text/CSS; charset=utf-8` too).
+  Others aren't CSS: not read, not fetched.
+- **Not applied:** `rel="alternate stylesheet"` (only when chosen, and EWeb has no menu to choose
+  with), a `<link disabled>`, one whose `href` is empty (it would fetch the page itself), and a sheet
+  of another set: the first sheet with a `title` that isn't an alternative names the preferred set,
+  and a later one with another title is left out, as browsers do. An alternative whose title is the
+  preferred set's is applied (CSSOM's "enable a CSS style sheet set"; Gecko and Blink do so), though
+  the set be named by a sheet after it: then the rest of the page is looked through for the name,
+  which only a page with an alternative before its first titled sheet costs. One with no title is
+  never applied, as in Gecko. None on the page set is left out by its set.
+- **Where:** a `<link rel=stylesheet>` in the body applies as one in the head, in document order.
+- **What isn't fetched:** a sheet whose media doesn't hold isn't fetched at all, whether it never
+  can (print, speech, `not all`) or holds only at another width (the standard lets a browser fetch
+  only the sheets it applies). On the page set 11 of the 673 go the other way at 760 CSS pixels
+  (`ewrender`'s width), all linked: sheets for screens 768 px wide and more, or 480 px and less.
+- **The window sized:** media queries are evaluated again when the screen changes (Media Queries 4,
+  2), so a sheet not fetched for its width is fetched when the window comes to one it holds at. As
+  the CSS engine evaluates media queries (a sheet's own and every `@media` in the sheets) it keeps
+  the widths at which they would all go the way they went (`ec_media_span`: each comparison with
+  the width narrows them; an aspect ratio or `vw` in a query keeps only that width). A resize
+  within them (most of them: a page's breakpoints are few) lays the same styles out again, its
+  `<source media>` and `sizes` at the new width (`ec_set_media`). One outside them adds the page's
+  sheets again (`ec_drop_sheets`, then `doc_sheets` for the new width: those fetched before come
+  from the cache, those that hold now for the first time over the network, without a word on the
+  status line), styles the page and lays it out: the document, its form fields and its scripts
+  stay. A window sized while a request is under way (GEM's messages come as it waits) fetches no
+  sheet inside it: inside a picture's the page is laid out with the styles it has, inside a sheet's
+  (the sheets being added again) not at all, and the rest comes after it, as for a picture's size.
+  So a page opened narrow gets its sheets for 768 px and up when the window is fulled.
+- **Memory:** the sheets taken out give theirs back. The CSS engine keeps a page's sheets (their
+  text, rules and declarations) in an arena of their own, which `ec_drop_sheets` frees, and what a
+  style attribute or a `var()` makes as the page is styled goes with the styles; so the sheets
+  added again take what they took, however often the window crosses a breakpoint or a script
+  changes them. Before, each time took about 2.4 to 2.7 times the sheets' text again, kept until
+  the page went: Bootstrap 5.3 (233 KB) took 676 KB on a Falcon and 548 KB more at each crossing,
+  20 KB of the news page's sheet 59 KB on an ST and 52 KB more, so a page that fitted a 1 MB ST
+  lost its styles after a few crossings; now 676 KB and 59 KB each time. A context's third arena,
+  in the ST edition's 4 KB pieces, took a small page 4 KB more, and the 1 MB ST's rig no longer
+  fitted the pictures page with the tables page still shown (`make hatarigui`'s `st`: its styles
+  ran out of memory, and it came out empty); so there an arena's first pieces are smaller, from
+  512 bytes, each as large as those before it together: a page with a small `<style>` takes 1 KB
+  for its names and sheet where it took 4 KB, the UA sheet 38 KB where it took 40 KB. On the
+  Falcon they stay 64 KB: the pieces more cost +0.08% of the page set's instructions. When the
+  sheets don't fit even so (the engine says so: `ec_sheets_short`), the pages kept for Back go and
+  they are added once more, as for a page that doesn't fit. The log has a line each time the sheets
+  are added again, and why.
+- **Scripts:** with scripts run, each stylesheet `<link>`'s `load` event comes after
+  `DOMContentLoaded` (and one preloaded as a style), when a handler may hear it, so the async-CSS
+  pattern works: `media=print onload="this.media='all'"` and `rel=preload as=style
+  onload="this.rel='stylesheet'"` (the Filament Group's loadCSS, WP Rocket, Autoptimize, Jetpack
+  Boost), whose `<noscript>` copy is text when scripts run. A print sheet isn't fetched until a
+  handler makes it hold, so its `load` comes as if it had been. When a script changed the page's
+  sheets (`doc_sheets_key`: the elements that are sheets, their attributes and a `<style>`'s
+  text), they are added again before the page is styled, and after a click or a timer too (a theme
+  a button turns on by `link.disabled = false`). Only the sheets count: a script that adds a
+  preconnect, a DNS prefetch or a preload of a script, or gives the icon another address, leaves
+  them as they are (each time they are added again they are all parsed again: Bootstrap's 233 KB
+  are about 6.9 M instructions on a 68030, some 1.3 s on the DFB1, so a script that rewrites a
+  `<style>` on a timer costs that each time, but no more memory). `media` is a property of
+  elements now, as `rel` was.
+
+Measured: 68030 instructions for EWeb's document styled with its `<style>`s
+(`build/m68k/docparse -s`) on the page set, 1,575.7 M before and 1,575.1 M after (-0.04%; the
+median page -2,464, the most +5,896: two media queries the engine evaluates). Looking each
+attribute up on its own (`dn_attr`, six looks a `<link>`) cost +0.13% (+7,004 the median page),
+more than the media queries; the sheet's attributes are now found in one pass. With the widths
+kept, the alternatives' set and the scripts' key: 1,575.4 M (+0.02%, the median page +86; pages
+with no media query or title move by up to 0.1 M either way as the document's memory lies
+otherwise). With the sheets' memory an arena of their own, measured again in one run: 1,575.2 M
+before, 1,575.8 M after (+0.04%, the median page +2.7 K, every page within 55 K); the media
+attribute's text test, in that run, 1,575.9 M (so -0.01% in all). `make test` has
+`tests/layout/media.html` (print, a wide and a narrow screen, `em`, `SCREEN`, `not screen`,
+`small`, an empty media, a list, orientation and colour, alternate (of another set, of the
+preferred one named after it, untitled), disabled, types, two sets, one linked in the body),
+`tests/layout/resize.html` (built at 760 CSS px, the window made 500, 760 and 500: the list as a
+page built at 500 has it), `tests/css/cases.txt`'s widths (`@span`, `@width`) and memory (`@again`:
+the sheets, a style attribute and `var()` added again 50 times take no more),
+`tests/js/sheets.html` (the async-CSS pattern, a load listener, a print sheet's load, a theme a
+click turns on, a `<style>` a script adds) and `tests/js/links.html` (a preconnect, a DNS prefetch,
+a preload of a script and an icon a script adds or changes, at once, after a click and after a
+timer: the sheets aren't added again); `make itest` `/site/media/page.html` at two widths, and at
+608 px sized to 400 and back, and `/site/media/pics.html` sized while its picture comes
+(`ewrender -Y`), which sheets the server was asked for; `make hatarigui`'s `st` the 1 MB ST's
+pictures page with the tables page still shown.
+
+## Encodings: pages that name none, and a choice by hand (22 Oct 2026)
+
+A page that named no encoding (no BOM, no charset in Content-Type, no `<meta>` in its first 1,024
+bytes) was read as Windows-1252, so an unlabelled UTF-8 page showed `Ã©` for `é` and Hebrew as
+Latin letters, and so did a text file; a text file on the disk was read as a page (its `<` a tag);
+nothing let the user say better; and a link's query was sent in UTF-8 whatever the page's encoding.
+Now EWeb does as the HTML Standard and the URL Standard say:
+- **Labels** (`enc_of`, `html_encoding`): the Encoding Standard's. libparserutils' list of names
+  lacks some for the encodings it decodes (`cp1255`, `x-cp1255`, `iso-8859-8-e`, `csiso88598e`,
+  `l9`, the `x-cp125N`s...), has ISO-8859-1 and -9 as encodings of their own and `utf-16` as
+  big-endian, so a table of EWeb's is looked at first (by its first letter, then the name): every
+  label of the encodings EWeb decodes comes to the standard's encoding (`tests/browse/enctest.c`
+  has all 160), `utf-16` and its kin to UTF-16LE, UTF-8 in a `<meta>`. A page whose `<meta>` or
+  HTTP answer said `cp1255`, and a form's `accept-charset="x-cp1255"`, were taken as naming none.
+- **Sniffing** (13.2.3.2, `src/doc/html.c`): a BOM, then the encoding chosen by hand, then the
+  HTTP answer's, then the prescan (all certain but the prescan's, as before); then, when nothing
+  named one, UTF-8 if the bytes are (step 8, whose note singles UTF-8 out), else the locale's
+  default (step 9), both tentative, so a `<meta>` further on still says. The detection is the UTF-8
+  decoder itself: an unlabelled page is read as UTF-8, and the first byte UTF-8 can't have stops
+  it and the page is read again in the default (in a Windows-1255 or -1252 page mostly its first
+  letter beyond ASCII, so little is read twice). A page that is ASCII throughout is the same text in
+  either and takes the default's name, which its forms and links use. A sequence cut short at the
+  end counts as UTF-8 when one came before it (more may have been coming). A first try scanned
+  the bytes before decoding them: 11 instructions a long on the 68030, +2.75 an ASCII byte.
+- **The default** (`br_fallback`, `src/browse`): the standard lets it come from the address, as
+  Firefox does from the top-level domain: Windows-1255 for Israel's `.il` (the owner's sites and
+  the older Israeli ones that send no charset), Windows-1252 for the rest and for files (a file has
+  no address to tell by). Other domains' encodings (Cyrillic, Greek, Arabic) would show letters
+  `EWEB.FNT` hasn't got, so only Hebrew's is there; the table can take more.
+- **Text files** (`text/plain`, and `.TXT` on the disk, which was read as a page) follow the same
+  steps but the prescan, and are made as the standard's page load processing model for text files
+  says: a `<pre>` and a line feed it drops (so the file's own first stays), then the PLAINTEXT
+  state, all the rest text (`html_opts.plaintext`), where EWeb used to escape the file into a page
+  of its own and read that in Windows-1252.
+- **By hand** (View > Encoding..., `br_encoding`): the page shown read again from its source as it
+  came (`b->src`, kept for Save page), its stylesheets from the cache of any age, nothing fetched.
+  The choice is the standard's step 2, after the BOM and before the HTTP answer's; it stays with the
+  page (a byte of its history entry, and the HTTP answer's charset while it is kept: Reload, Back
+  and Forward to it, a refresh of itself, a place on it) until another page is loaded; Auto goes
+  back to the page's own. TOS's AES has no submenus, so
+  the item opens a popup at the mouse (the shared `popup()`, Esc closes it with nothing chosen),
+  Auto first with what it found, the choice ticked. The list (`br_encodings`) is those EWeb decodes
+  whose letters `EWEB.FNT` has: UTF-8, Windows-1252 (ISO-8859-1 is its label in the Encoding
+  Standard, so one item for both; likewise ISO-8859-9 is Windows-1254's), ISO-8859-15,
+  Windows-1255, ISO-8859-8-I, ISO-8859-8, Windows-1250, ISO-8859-2, Windows-1254, Windows-1257,
+  ISO-8859-13, ISO-8859-4, ISO-8859-10 and ISO-8859-3 (the visual one laid out as it is stored:
+  Hebrew, above). Greek, Cyrillic, Arabic and Thai would show as boxes whatever the encoding, so
+  they aren't offered. The ticked item's tick stands in the first of the two spaces the others
+  start with, as the shared popup draws it (one cell to the left of them at first).
+- **Addresses in the page's encoding** (the URL Standard's query state, "percent-encode after
+  encoding"; HTML's "encoding-parsing a URL"): a link's, an `<img>`'s, a `<link>`ed stylesheet's, a
+  `<base>`'s, a form's action, a refresh's and a script's address (`<script src>`,
+  XMLHttpRequest, `location`) put its query in the page's encoding, a character the encoding lacks
+  as `&#N;` percent-encoded (`%26%23N%3B`); U+FFFD too (`%26%2365533%3B`: the table holds it for
+  each byte an encoding leaves out, so it isn't looked for there). The path and the fragment stay
+  UTF-8, and so do CSS's `url()`s, in a sheet, a `<style>` or a `style` attribute alike (CSS parses
+  them without an encoding; the layout tells the picture callback which it has, as the last two
+  reach it still relative), and `fetch()`'s (the Fetch Standard's Request parses its URL in UTF-8;
+  `__ew_fetch` is told which asks).
+  `url_parse_enc` (`src/net/url.c`) takes the page's encoding as a table of its bytes 0x80-0xFF
+  (`html_enc_table`, from libparserutils' codec, made once for each encoding met); a page in
+  UTF-8 or UTF-16 sends UTF-8, as the standard's output encoding says.
+- **The single-byte decoders** (libparserutils' codecs, `third_party/netsurf/patches`, 0005) are
+  the Encoding Standard's indexes, which browsers decode with. They had U+FFFD for the ISO-8859
+  encodings' bytes 0x80-0x9F (the indexes' C1 controls), the Windows code pages' unassigned bytes
+  there (C1 controls too) and Windows-1255's 0xCA (U+05BA, a Hebrew point, drawn as nothing as
+  the others are): in a page's text, and in its links' and forms' queries, which sent `&#65533;`
+  where browsers send the byte. A C1 control is drawn as `?`, as any character `EWEB.FNT` hasn't
+  got (CSS Text has it visible). Only the bytes the indexes leave out are U+FFFD now.
+- **Forms** pick their encoding as the standard's "pick an encoding for the form" says: the first
+  of `accept-charset`'s labels (split at white space) that names an encoding EWeb has, none naming
+  one meaning UTF-8 (EWeb looked for "utf-8" anywhere in it, and kept the page's otherwise), else
+  the page's; `_charset_` is the encoding's name as the standard has it. U+FFFD goes as `&#65533;`,
+  as in a query.
+
+Measured: 68030 instructions for EWeb's document (`build/m68k/docparse`, which gives no HTTP
+charset, so every page is sniffed) on the page set, 1,328.3 M before and 1,279.6 M after (-3.7%;
+the median page 4.57 M, now 4.36 M). The 187 pages whose prescan finds their encoding are as they
+were (+0.01% the median, at most +0.2%, in the CSS engine's functions: the document's memory lies
+otherwise; at first +0.67%: the text file's `<pre>` sent through `dispatch()` took it out of the
+parse's loop, a call a token, and now goes to the insertion mode itself). Of the 71 it doesn't,
+the 23 in ASCII are 11.0% quicker (the median), read by the UTF-8 decoder, which copies ASCII four
+bytes at a time, where the Windows-1252 table first counted every byte; 42 with UTF-8 in them are
+9.1% to 24.6% quicker (their `<meta>` past the prescan says UTF-8, which they are now read as from
+the start, where they were parsed again); and six are 11.6% to 17.9% slower: UTF-8 whose late
+`<meta>` says ISO-8859-1, so they are parsed twice, as the standard says (and end in Windows-1252,
+as before). The review's fixes (the labels' table, looked at by its first letter) leave the page set
+at 1,278.9 M, from 1,279.4 M for the same commit's binary counted the same way (-0.04%; each
+page within 0.2%).
+
+The ST edition is 4.4 KB larger (its code, the history's choice, the menu's list, the labels), and the 1
+MB ST has 3.5 KB less free at start (185,754 bytes, from 189,282). That is close to its edge: a
+first version, with the popup's labels kept in memory (1.6 KB) and the decoder called from two
+places, left 184,704 and no longer fitted `make hatarigui`'s pictures page with the tables page
+shown; so the labels are on the stack while the popup is up, the table for a page's queries is
+made only when a page in a legacy encoding comes, and the decoder is called from one place. On the web most pages come with a charset in Content-Type,
+which none of this touches. `make test` has `tests/browse/enctest.c` (the sniffing's steps in each
+order that matters, UTF-8 at every place of a run of ASCII from even and odd addresses, overlong
+forms, surrogates, a sequence cut short; text files; `br_fallback`'s addresses; every label of the
+encodings EWeb decodes; View > Encoding's list; each single-byte decoder against the Encoding
+Standard's index; the Web Platform Tests' `url/resources/percent-encoding.json` for UTF-8,
+Windows-1252 and ISO-8859-2, Hebrew's queries, U+FFFD and bytes that aren't UTF-8; the detection
+against a plain validator on 20,000 random pages), `tests/forms/cases.txt` (`accept-charset`, its
+labels, U+FFFD, U+05BA and a C1 control in Windows-1255), `tests/layout/run.py` (the Hebrew page the
+same in six encodings, two with no label: UTF-8 found, Windows-1255 chosen by hand; visual Hebrew
+drawn as the same text in logical order; a text file); `make itest` `/site/enc/` (UTF-8 unlabelled;
+Windows-1255 unlabelled as `localhost`, as `hebrew.il` through `EW_HOSTS`, the host build's name
+table, and chosen by hand, kept for Back; its link's query and its form in Windows-1255; a text
+file; the queries a page's pictures (one with 0xCA and 0x81), sheet, CSS `url()`s, `fetch()` and
+XMLHttpRequest send, as the server got them); `make hatarigui`'s `browse` View > Encoding... on the
+emulated Falcon; `make fuzz`'s `fuzz_html` (text files, the default) and `fuzz_url` (a query in an
+encoding of a byte a character).
+
+## Downloads: their names, attachments and gzip files (22 Oct 2026)
+
+A file was named from its address alone and handled by its type alone: `download.php?id=123` was
+offered as `DOWNLOAD.HTM` (`.PHP` a page's ending), a GitHub release's file (which redirects to a
+storage address that isn't its name) lost its name, a text file its server says to save
+(`Content-Disposition: attachment`) was shown, `<a download>` was a plain link, and a `.tar.gz`
+served as Apache serves one (`Content-Type: application/x-gzip`, `Content-Encoding: x-gzip`) was
+unpacked and saved as a tar under its `.GZ` name. Now:
+- **Content-Disposition** (RFC 6266, with RFC 8187's `filename*`; `http_disposition` in
+  `src/net/http.c`): read after 4.1's grammar, with spaces wherever its implied LWS lets them;
+  `filename*` before `filename` (4.3), in UTF-8 or ISO-8859-1 (what RFC 8187 asks a recipient to
+  know); `filename` read as ISO-8859-1. A header that isn't RFC 6266's (a quoted type, a value with
+  a space or a comma in it or text after its quotes, a parameter twice, no type) is ignored whole,
+  as tc2231 (the test suite RFC 6266 was written with) has it; a `filename*` that isn't RFC 8187's
+  (no charset or another one, quoted, a bad `%`, bytes that aren't UTF-8) is passed over for
+  `filename`, so the header still says attachment. An empty parameter (`attachment;
+  filename=a.zip;`, common from PHP) is passed over, as browsers take it: tc2231 and the strict
+  grammar would throw such a header away, and nothing in it can be misread. `attachment`, or a
+  type EWeb doesn't know (4.2), on a 2xx answer saves the file whatever its type; on an error's
+  answer (a 403) the page is shown, as tc2231's `attonly403` has it. The name counts with `inline`
+  too, when the type is one EWeb saves. An answer whose header says attachment, or names a file
+  EWeb saves (`inline; filename="Manual.pdf"`), isn't kept in the memory or disk cache, which keep
+  no headers (as one with a Refresh header isn't): from there it would lose the name or the
+  attachment. A page or text file that says only `inline`, or names itself (a name never used), is
+  kept as without the header; pictures and stylesheets with one (CDNs send `inline; filename=`) are
+  kept as before.
+- **`<a download>`** (the HTML Standard, 4.6.5, "download the hyperlink"): a link with the
+  attribute to the page's own origin is saved, not followed, through the HTTP client's sink as
+  Alternate-click saves one (so it may be bigger than the memory), however it is activated: a
+  click, or a script's `a.click()` (common for `a.download = name; a.click()`: `src/js` keeps the
+  link's attribute with the address it sends the browser to, `js_navigation_download`, and
+  `src/browse` saves it as a click on the link). A page whose script clicks one as it loads ("your
+  download starts now") is shown first, then its file asked for: a load can come to `BR_SAVE`
+  (or `BR_DOWNLOAD`, a mail address, a stop) after showing a page on the way, and `br.shows`, which
+  counts the pages shown, tells the front end to draw it. One to another origin is
+  followed as a link, as Chrome and Firefox do (its server may still say attachment). The name is
+  the standard's "suggested filename": Content-Disposition's when it says attachment, else the
+  attribute's when the answer (after redirects) is from the page's origin, else
+  Content-Disposition's inline one, else the address's. The layout keeps each link's attribute
+  after its href in `page.links` (`page_link_download`): one more attribute looked at for each
+  `<a href>`, nothing for other elements.
+- **When the name is asked:** a link's file (Alternate-click, the link's menu, `<a download>`) has
+  its name only once its server answers, so the file selector now comes when the answer's headers
+  are in and its body not yet (`HTTPREQ.head`, called by the HTTP client for a 2xx answer). The
+  connection waits meanwhile (STinG holds what comes, and the server waits for its window), and
+  the file is made only then: an answer that is an error leaves no empty file behind (until now
+  the file was made first, and removed), and Cancel ends the request (`BRS_CANCELLED`, nothing
+  said). A server waits only so long: nginx's `send_timeout` and Apache's `Timeout` end a
+  connection that takes nothing for 60 s, so a file bigger than STinG's window was lost when the
+  selector stayed up longer (choosing a folder, a floppy). So when the connection is lost once the
+  selector has been up, the file is asked for once more, into the file chosen, with no selector;
+  a link that gives its file only once answers that with an error, which is said. `make itest`
+  holds a 4 MB file's selector for 3 s against a server that gives up after a second
+  (`ewrender -Z`).
+- **The TOS name** (`br_file_name`): of a name given, its last part only (RFC 6266, 4.3: no path,
+  no `..\`, no drive), its base cut to 8 and its ending to 3, in capitals, with only what every
+  GEMDOS takes (A to Z, 0 to 9, `_`, `-`), as Save page as names a page; a page's ending (`.html`,
+  `.php`) is `.HTM` when it is a page, any other is kept (`DATA.PHP` for an octet-stream so named);
+  a name with no ending takes the type's (`README.TXT` for text, `LICENSE` for an octet-stream);
+  `.tar.gz` is `.TGZ`; a name with nothing a TOS name can hold (a Hebrew one) gives its ending to
+  the address's base (`GET.ZIP`). From an address, a script's ending on what isn't a page gives
+  way to the type's (`DOWNLOAD.ZIP` for a ZIP from `download.php`, `DOWNLOAD.PHP` before).
+- **gzip files**, as browsers save them (Firefox keeps the encoding of a gzip type, and of a
+  download whose name ends in `.gz`): an answer with `Content-Encoding: gzip` (`x-gzip` too) that
+  is a gzip file (`application/gzip`, `application/x-gzip`, `application/x-tar+gzip`, or a name,
+  Content-Disposition's else the address's, ending in `.gz` or `.tgz`) and is to be saved
+  (attachment, or a type EWeb doesn't show) is kept as it came: the page's `HTTPREQ.head` sets
+  `rs->packed`, and the HTTP client doesn't unpack it. A page sent packed whose name ends in `.gz`
+  (`text/html`) is unpacked and shown, as before. A link's file streamed to the disk asks for
+  nothing packed, and what a server packs anyway was always saved as it came.
+
+Not done: a file EWeb doesn't show, opened by a plain click, still comes into memory (up to 8 MB)
+before the file selector; streaming it to the disk too is the audit's other download item. A
+`data:` link with `download` isn't saved (EWeb opens no `data:` page).
+
+Measured: nothing here runs on a hot path but the layout's look at a link's attributes, which now
+finds `href` and `download` in one pass where it looked for `href` twice; there is no 68030 count of
+the layout, so it was counted on this computer (callgrind, `layout_page` alone, 20 pages of the page
+set: the ten with the most links, 591 to 474, and ten about the median's 149): 223.77 M x86
+instructions before, 223.21 M after (-0.25%; each page -0.07% to -0.37%). A first version that
+looked for `download` on its own cost +0.30% (about 100 instructions a link). The ST edition's
+`load_post` frame is 4 bytes larger (4,272), `fetch`'s 4 (5,636); the hook that asks where a link's
+file goes takes 272 bytes, under a request. Its code and the browser's name for a file made
+`EWEBST.PRG` 4.3 KB larger, and the 1 MB ST, with 182,538 bytes free at start, no longer fitted
+`make hatarigui`'s pictures page with the tables page shown (the edge the encodings found, above).
+So the HTTP client's read buffer is 2 KB on the ST edition, from 8 KB (16 KB on the Falcon): it
+sizes only a sink's pieces and each copy into memory, since what comes waits in the connection's own
+buffer, so a page or a file comes in more, smaller copies (some two thousand instructions more for a
+50 KB page, which the network's pace hides). The 1 MB ST now has 186,888 bytes free at start, and
+the `st` group passes.
+
+`tests/browse/dltest.c` (`make test`) has RFC 6266's four examples and tc2231's cases by their names
+there (inline, attachment, the extra parameters, the extension types, the character sets, RFC 2231's
+continuations, the fallback, RFC 2047), and a few more (spaces and tabs, a charset other than the
+two, a language, a value cut short, a NUL encoded, a name cut to its room at a character), and the
+TOS names (each after a call that leaves an ending on the stack, which a name with none of its own
+mustn't take); `nettest` the hook (a gzip file kept packed, unpacked when not asked, a request
+stopped there and its connection gone, none for a 404, with a sink); `tests/fuzz/fuzz_disposition.c`
+(`make fuzz`: values at every room for the name, which must come out whole UTF-8; 38 M runs in 300
+s, nothing found); `make itest` `/site/dl/` (attachment, not shown and not kept by the disk cache;
+filename* before filename; a gzip file by its type and by its name, saved as they came, also
+streamed; `notes.html.gz` shown; an inline name, a 403 and a header that isn't RFC 6266's shown;
+`<a download>` named, empty, with the server's name first, to another origin followed with and without
+attachment, and clicked by a script; a `.tar.gz` as Apache sends one, known by its address alone; a
+page that says `inline` kept by the disk cache, a file named by `inline` not; a file asked for again
+after the file selector outlasted its server); `make hatarigui`'s `browse` (the file selector
+offering the server's name, and an `<a download>` clicked, on the emulated Falcon).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1577,7 +1982,13 @@ lives in the other parts:
   `common/bidi.c` (from ClaudeST) handles one line of Atari-charset text, so EWeb needs the fuller
   algorithm, which can move to `common/` for every app.
 - **Visual Hebrew:** a page labelled plain ISO-8859-8 (or "visual") is already in display order, so
-  layout shows it as it is, without reordering. EWeb knows which kind it has from the page's charset.
+  layout shows it as it is: its lines aren't reordered and its Hebrew words aren't drawn right to
+  left (the HTML Standard's rendering rules for an ISO-8859-8 document, `unicode-bidi:
+  isolate-override`, which browsers apply to the whole page; whatever the line's direction, which
+  still aligns it). EWeb knows which kind it has from the page's charset (`d->charset`, and View >
+  Encoding offers both); a form control's text is still put in logical order. `tests/layout/run.py`
+  draws the same lines stored visually and logically (`tests/hebrew/visual`) and compares the
+  pictures.
 - **Fonts:** EWeb's own fonts have the Hebrew letters (DejaVu's), so pages don't go through the Atari
   character set. Vowel points (niqqud) take no room and aren't drawn yet.
 - **Typing:** Hebrew is typed into forms with the Atari's Hebrew keyboard, and fields show it right
