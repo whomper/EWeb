@@ -274,6 +274,43 @@ their size and stay as they were decoded, so nothing is fetched or
 decoded again (a page's pixel is 0.8 of the screen's, so that pages
 made for wider screens fit the Falcon's 640).
 
+## Encodings
+
+Most pages say which encoding their text is in (UTF-8, Windows-1255
+for Hebrew, Windows-1252 for Western European languages, and so on),
+and EWeb reads them so. A page that doesn't say is read as UTF-8 when
+its text is UTF-8; otherwise as Windows-1255 when its address ends in
+.il (an Israeli site), else as Windows-1252, as browsers do. Text files
+(.TXT on your disks, or text from a server) are read the same way, and
+shown as their lines.
+
+When a page's letters still come out wrong (Latin letters where there
+should be Hebrew, or two odd signs in place of each accented letter),
+**View > Encoding...** lists the
+encodings EWeb has; choose the right one and the page is read again in
+it, from what came (nothing is fetched again). The choice stays with
+that page, when you reload it and when you come back to it, until you
+open another; **Auto** goes back to what the page says. The list:
+
+- Unicode (UTF-8)
+- Western (Windows-1252, ISO-8859-1) and Western (ISO-8859-15)
+- Hebrew (Windows-1255), Hebrew, logical (ISO-8859-8-I) and Hebrew,
+  visual (ISO-8859-8)
+- Central European (Windows-1250, ISO-8859-2), Turkish (Windows-1254,
+  ISO-8859-9), Baltic (Windows-1257, ISO-8859-13, ISO-8859-4), Nordic
+  (ISO-8859-10) and South European (ISO-8859-3)
+
+EWeb's fonts have the Latin and Hebrew letters, so pages in Greek,
+Cyrillic or Arabic can't be shown yet, whatever the encoding. A page in
+visual Hebrew (ISO-8859-8, its letters stored in the order they are
+shown) is shown as it is stored, left to right, as browsers show it;
+if its Hebrew comes out reversed, the page is logical Hebrew: choose
+Hebrew, logical (ISO-8859-8-I).
+
+What you type into a page's forms, and the words in its links, go to
+the site in the page's encoding (or the one its form asks for), as
+sites made for those pages expect.
+
 ## Copying
 
 **^C** copies the page's text to the GEM clipboard (to paste into

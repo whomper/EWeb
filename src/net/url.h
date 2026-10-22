@@ -6,7 +6,7 @@
  * page's address, the host made lower case and checked, IPv4 and IPv6
  * addresses in their usual form, the default port left out, "." and ".."
  * in the path worked out, and what may not stand in a URL percent-encoded
- * (as UTF-8). Other schemes (mailto:, javascript:, data:, about:) are kept
+ * (as UTF-8, but a query in a page's own encoding). Other schemes (mailto:, javascript:, data:, about:) are kept
  * as they are, for the browser to recognise; names that aren't ASCII
  * (which need IDNA) aren't taken yet.
  */
@@ -31,6 +31,17 @@ typedef struct {
 /* parse s, relative to base (NULL: s must be absolute). 1 with *u set,
    0 if it isn't a URL (the standard's "failure") */
 int url_parse(URL *u, const char *s, const URL *base);
+
+/* a page's encoding for the query of a URL in it (the URL Standard's
+   "encoding", the document's): one of a byte a character, ASCII below
+   0x80, hi[b] the character the byte 0x80 + b stands for (0xFFFD none) */
+typedef struct {
+	unsigned short hi[128];
+} URL_ENC;
+/* the same, s (UTF-8) in a page in enc (NULL: UTF-8): the query is
+   percent-encoded after encoding in it, a character it lacks as "&#N;"
+   (http and https: the standard's other schemes keep UTF-8) */
+int url_parse_enc(URL *u, const char *s, const URL *base, const URL_ENC *enc);
 
 /* what goes in a request: the path and the query ("/a/b?c") */
 void url_target(const URL *u, char *out, int size);

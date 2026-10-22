@@ -73,6 +73,63 @@ static void put_enc(OUT *o, const char *s, int n, int set)
 	}
 }
 
+/* the query's encoding for this parse (url_parse_enc), NULL UTF-8 */
+static const URL_ENC *q_enc;
+
+/* the query: percent-encoded after encoding (the URL Standard's query
+   state, 4.4, and 1.3), in q_enc when there is one: its byte for each
+   character, or "&#N;" percent-encoded for one it lacks */
+static void put_query(OUT *o, const char *s, int n)
+{
+	if (q_enc == NULL) {
+		put_enc(o, s, n, SET_SQUERY);
+		return;
+	}
+	while (n > 0) {
+		const unsigned char *b = (const unsigned char *)s;
+		unsigned long c = b[0];
+		int k = c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : c >= 0xc2 ? 2 : 1, i;
+		if (c < 0x80 || k == 1 || c > 0xf4 || k > n) {
+			put_enc(o, s, 1, SET_SQUERY);	/* ASCII, or not UTF-8: the byte */
+			s++;
+			n--;
+			continue;
+		}
+		c &= 0x3f >> (k - 1);
+		for (i = 1; i < k && (b[i] & 0xc0) == 0x80; i++)
+			c = c << 6 | (b[i] & 0x3f);
+		if (i < k) {
+			put_enc(o, s, 1, SET_SQUERY);
+			s++;
+			n--;
+			continue;
+		}
+		s += k;
+		n -= k;
+		/* its byte (U+FFFD has none: the table has it for each byte
+		   the encoding leaves out) */
+		i = 128;
+		if (c != 0xfffd)
+			for (i = 0; i < 128 && q_enc->hi[i] != c; i++)
+				;
+		if (i < 128) {
+			put(o, '%');
+			put(o, hexd[(0x80 + i) >> 4]);
+			put(o, hexd[i & 15]);
+		} else {
+			char d[12];
+			int l = 0;
+			do
+				d[l++] = (char)('0' + c % 10);
+			while ((c /= 10) != 0);
+			put_n(o, "%26%23", 6);
+			while (l > 0)
+				put(o, d[--l]);
+			put_n(o, "%3B", 3);
+		}
+	}
+}
+
 static int is_alpha(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
 static int is_digit(int c) { return c >= '0' && c <= '9'; }
 static int is_hex(int c) { return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
@@ -561,7 +618,7 @@ static void finish(URL *u, OUT *o, const char *p)
 		if (!e)
 			e = p + strlen(p);
 		put(o, '?');
-		put_enc(o, p + 1, (int)(e - p - 1), SET_SQUERY);
+		put_query(o, p + 1, (int)(e - p - 1));
 		p = e;
 	}
 	u->frag = (unsigned short)o->n;
@@ -757,6 +814,11 @@ done:
 
 int url_parse(URL *u, const char *s, const URL *base)
 {
+	return url_parse_enc(u, s, base, 0);
+}
+
+int url_parse_enc(URL *u, const char *s, const URL *base, const URL_ENC *enc)
+{
 	static char in[URL_MAX];
 	static URL b;
 	int n = 0, ok;
@@ -777,7 +839,9 @@ int url_parse(URL *u, const char *s, const URL *base)
 		b = *base;
 		base = &b;
 	}
+	q_enc = enc;
 	ok = parse(u, in, base);
+	q_enc = 0;
 	if (!ok)
 		u->href[0] = 0;
 	return ok;

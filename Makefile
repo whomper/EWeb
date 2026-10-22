@@ -626,6 +626,14 @@ build/asan/rftest: $(RF_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(RF_SRC) \
 		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
 
+# the encoding of pages that name none, the default by the address, a
+# page's queries in its encoding (tests/browse/enctest.c)
+ENC_SRC := tests/browse/enctest.c tests/host/dsp_none.c $(HOSTNET_SRC)
+build/asan/enctest: $(ENC_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
+		build/asan/pic.a build/asan/js/js_none.o
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(ENC_SRC) \
+		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
+
 # the forms: what a form sends (tests/forms/cases.txt)
 FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
 build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
@@ -860,7 +868,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest build/asan/pentest \
-		build/asan/rftest binary/EWEB.FNT
+		build/asan/rftest build/asan/enctest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
@@ -868,6 +876,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/dctest build/asan
 	build/asan/pentest
 	build/asan/rftest
+	build/asan/enctest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

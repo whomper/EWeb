@@ -73,6 +73,17 @@ Pages:
                  the page set, and the cookies a script's request sends;
                  /site/tabs.html: tabs a click shows, an alert (EWEB.PRG
                  in Hatari)
+  /site/enc/     pages that name no encoding (Content-Type without a
+                 charset, no <meta>): utf8.html in UTF-8, w1255.html in
+                 windows-1255 with a link and a form whose queries are
+                 Hebrew (its own when fetched as hebrew.il, ewrender's
+                 EW_HOSTS), plain.txt a text file in UTF-8; addr.html, in
+                 windows-1255, whose addresses have Hebrew in their query:
+                 two pictures (one's query the bytes 0xCA and 0x81, which
+                 the decoder once left out), a sheet (a/s.css, with a
+                 url()), a <style>'s and a style attribute's url(), a
+                 script's fetch() and XMLHttpRequest; seen: the queries
+                 under /site/enc/a/ as they came (never kept)
   /site/refresh/ a refresh: meta.html (a <meta http-equiv=refresh>),
                  header.html (the Refresh header, before the page's meta),
                  loop.html (itself at once, again and again), based.html
@@ -199,6 +210,29 @@ FORM_PAGE = ("<!DOCTYPE html><html><head><meta charset=utf-8><title>Forms</title
              "<input type=file name=f> <input type=submit name=up value=Send></p></form>"
              "<form action=/site/after method=post><p><input name=n value=1> <input type=submit name=s value=Go>"
              "</p></form></body></html>\n").encode("utf-8")
+
+
+# pages that name no encoding (/site/enc/): the same Hebrew in UTF-8 and
+# in windows-1255; the second's link and form send Hebrew in its query
+ENC_PAGE = ("<!DOCTYPE html><html dir=rtl><head><title>שלום עולם</title></head><body>"
+            "<p>אטארי פלקון <a href='/site/echo?q=שלום'>חיפוש</a></p>"
+            "<form action=/site/echo><p><input name=q value=אבג> <input type=submit name=go value=חפש></p></form>"
+            "</body></html>\n")
+ENC_PLAIN = "שלום עולם\n<b>not bold</b> & café\n".encode("utf-8")
+# a page in windows-1255 whose addresses have Hebrew in their query: in its
+# encoding for the HTML's (a picture, a sheet, XMLHttpRequest), in UTF-8 for
+# CSS's url()s and fetch() (the URL, CSS and Fetch standards)
+ENC_ADDR = ("<!DOCTYPE html><html><head><title>addr</title><link rel=stylesheet href='a/s.css?q=א'>"
+            "<style>.a{background:url(a/st.png?q=א)}</style></head><body>"
+            "<img src='a/img.png?q=א' width=8 height=8 alt=''>"
+            "<div class=a>a</div><div class=b>b</div><div style='background:url(a/inl.png?q=א)'>c</div>"
+            "<script>fetch('a/f?q=א');var x=new XMLHttpRequest();x.open('GET','a/x?q=א');x.send()</script>"
+            "</body></html>\n").encode("cp1255").replace(
+                # and one with bytes its decoder once left out (U+05BA, a C1
+                # control), sent as they are
+                b"<div class=a>", b"<img src='a/pts.png?q=\xca\x81' width=8 height=8 alt=''><div class=a>")
+ENC_CSS = ".b{background:url(ext.png?q=א)}\n".encode("utf-8")
+ENC_SEEN = []
 
 
 def echo_page(method, ctype, body):
@@ -484,6 +518,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send(404, b"not here\n", "text/plain")
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
+        elif p in ("/site/enc/utf8.html", "/site/enc/w1255.html"):
+            self.send(200, ENC_PAGE.encode("utf-8" if "utf8" in p else "cp1255"), "text/html")
+        elif p == "/site/enc/plain.txt":
+            self.send(200, ENC_PLAIN, "text/plain")
+        elif p == "/site/enc/addr.html":
+            self.send(200, ENC_ADDR, "text/html; charset=windows-1255", extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/enc/a/"):
+            ENC_SEEN.append(p[12:])
+            name = p[12:].partition("?")[0]
+            body, ctype = ((ENC_CSS, "text/css; charset=utf-8") if name == "s.css" else
+                           (PICS["counter.png"][0], "image/png") if name.endswith(".png") else (b"ok", "text/plain"))
+            self.send(200, body, ctype, extra=[("Cache-Control", "no-store")])
+        elif p == "/site/enc/seen":
+            self.send(200, " ".join(sorted(ENC_SEEN)).encode(), "text/plain", extra=[("Cache-Control", "no-store")])
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
         elif p == "/site/files.html":

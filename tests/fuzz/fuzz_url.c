@@ -5,7 +5,8 @@
  * resolved against a base (src/net/url.c). The input is the href, then
  * after the first newline the base (none, if there is no newline); each
  * result is parsed again, and must come out the same (the standard's
- * serialisation is idempotent).
+ * serialisation is idempotent); so must the href parsed in a page of a
+ * byte a character (url_parse_enc: its query in that encoding).
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -36,5 +37,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 	url_host(&u, t, sizeof(t));
 	if (!url_parse(&again, u.href, 0) || strcmp(again.href, u.href))
 		abort();
+	{
+		/* an encoding with letters at some bytes and none at others */
+		static URL_ENC e;
+		int i;
+		for (i = 0; i < 128; i++)
+			e.hi[i] = (unsigned short)(i % 3 ? 0x5d0 + i : i % 2 ? 0xe0 + i : 0xfffd);
+		if (url_parse_enc(&u, s, have_base ? &base : 0, &e) &&
+		    (!url_parse(&again, u.href, 0) || strcmp(again.href, u.href)))
+			abort();
+	}
 	return 0;
 }

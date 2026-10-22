@@ -43,9 +43,9 @@ static char *slurp(const char *path, size_t *n)
 	return d;
 }
 
-static void resolve(void *ud, const char *base, const char *href, char *out, int size)
+static void resolve(void *ud, const char *base, const char *href, char *out, int size, int utf8)
 {
-	(void) ud, (void) base;
+	(void) ud, (void) base, (void) utf8;
 	snprintf(out, (size_t) size, "%s", href);
 }
 

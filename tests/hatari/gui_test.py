@@ -15,7 +15,8 @@
   selector's OK: the page as it came; Alternate-click: a link's file; a
   file EWeb doesn't show, opened: saved), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
-  clicked), ^Q;
+  clicked), a page that names no encoding read again in Windows-1255
+  (View > Encoding..., its popup by the keyboard), ^Q;
 - scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
   a page whose script makes tabs, one clicked (the page laid out again),
   a button whose onclick says hello in an alert, answered with Return;
@@ -514,6 +515,29 @@ def browse():
                           "HREF" not in (saved("BOOKMARK.HTM") or b"HREF").decode("utf-8", "replace"),
                           str(r.events()))
                     r.shot(14)
+        # a page in windows-1255 that names no encoding: windows-1252 here
+        # (not under .il); View > Encoding... reads it again in windows-1255
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/enc/w1255.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("encoding: a page that names none, read as windows-1252", ev is not None and
+              ev.startswith("shown %senc/w1255.html " % site) and ev.endswith("title \u00f9\u00ec\u00e5\u00ed "
+                                                                          "\u00f2\u00e5\u00ec\u00ed"),
+              str(r.events()))
+        r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
+        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 7 * 16 + 8)	# Encoding...
+        time.sleep(1)
+        for _ in range(5):		# Auto, UTF-8, Western twice, Hebrew (Windows-1255)
+            r.key(DOWN)
+        r.shot(15)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        evs = r.events()
+        check("encoding: View > Encoding... reads it in windows-1255", ev is not None and
+              "encoding windows-1255" in evs and ev.startswith("shown %senc/w1255.html " % site) and
+              ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
+        r.shot(16)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

@@ -145,8 +145,26 @@ const char *net_stack(void) { return "POSIX"; }
 int net_open(const char *host, unsigned short port, char *err, int errlen)
 {
 	struct addrinfo hints, *res, *ai;
-	char ps[8];
+	char ps[8], to[64];
 	int fd = -1, r;
+	const char *map = getenv("EW_HOSTS");
+	/* EW_HOSTS="NAME=ADDRESS ...": names found there first (make itest's
+	   host under Israel's .il, for the encoding of pages that name none) */
+	while (map != NULL && *map) {
+		size_t n = strcspn(map, "="), hl = strlen(host), v;
+		if (map[n] != '=')
+			break;
+		v = strcspn(map + n + 1, " ");
+		if (n == hl && strncmp(map, host, hl) == 0 && v < sizeof to) {
+			memcpy(to, map + n + 1, v);
+			to[v] = 0;
+			host = to;
+			break;
+		}
+		map += n + 1 + v;
+		while (*map == ' ')
+			map++;
+	}
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;

@@ -521,8 +521,9 @@ parserutils_error charset_8859_from_ucs4(charset_8859_codec *c,
 	if (*len < 1)
 		return PARSERUTILS_NOMEM;
 
-	if (ucs4 < 0x80) {
-		/* ASCII */
+	if (ucs4 < 0xA0) {
+		/* ASCII, and (EWeb) the C1 controls as the WHATWG Encoding
+		 * Standard's indexes have them */
 		out = ucs4;
 	} else {
 		uint32_t i;
@@ -569,15 +570,15 @@ parserutils_error charset_8859_to_ucs4(charset_8859_codec *c,
 	if (len < 1)
 		return PARSERUTILS_NEEDDATA;
 
-	if (*s < 0x80) {
+	if (*s < 0xA0) {
+		/* ASCII, and (EWeb) 0x80-0x9F the C1 controls, as the WHATWG
+		 * Encoding Standard's indexes have them */
 		out = *s;
-	} else if (*s >= 0xA0) {
+	} else {
 		if (c->table[*s - 0xA0] == 0xFFFF)
 			return PARSERUTILS_INVALID;
 
 		out = c->table[*s - 0xA0];
-	} else {
-		return PARSERUTILS_INVALID;
 	}
 
 	*ucs4 = out;

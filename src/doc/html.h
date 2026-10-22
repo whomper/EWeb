@@ -10,11 +10,20 @@
 #define EW_HTML_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "doc.h"
 
 typedef struct html_opts {
-	const char *charset;	/* the HTTP answer's (certain), or NULL: sniff */
+	/* the encoding (certain, after a BOM): the HTTP answer's, or the one
+	   the user chose (View > Encoding); NULL: sniff */
+	const char *charset;
+	/* when nothing names one and the bytes aren't UTF-8: the locale's
+	   default (the sniffing's last step); NULL: windows-1252 */
+	const char *fallback;
+	/* a text file (text/plain): its bytes are text, in a <pre> (no
+	   prescan for a <meta>) */
+	int plaintext;
 	int scripting;		/* 0: <noscript> is parsed as markup (EWeb) */
 	/* the fragment case (13.4): the context element's name and
 	   namespace (DN_NS_*), or NULL for a whole document */
@@ -26,6 +35,17 @@ typedef struct html_opts {
    In the fragment case d->root is a document node holding the
    fragment's nodes. Returns 0 if out of memory. */
 int html_parse(doc *d, const char *data, size_t len, const html_opts *o);
+
+/* the Encoding Standard's "get an encoding" for a label, among those
+   EWeb decodes: the encoding's name ("windows-1255", "UTF-8", as the
+   standard names it), or NULL for none */
+const char *html_encoding(const char *label);
+/* For a page's links and forms (their text goes in the page's
+   encoding): 1 when name is an encoding of a byte a character, ASCII
+   below 0x80 (windows-1255, ISO-8859-8...), with hi[b] the character
+   the byte 0x80 + b stands for (0xFFFD: none); 0 for UTF-8, UTF-16 and
+   any other, whose text goes as UTF-8 */
+int html_enc_table(const char *name, uint16_t hi[128]);
 
 /* an attribute of an SVG or MathML element (ns) as the HTML Standard
    names it: the document keeps attribute names in lower case, the

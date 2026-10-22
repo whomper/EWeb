@@ -29,8 +29,10 @@ typedef struct js_host {
 	   method "GET" or "POST" (body, its ctype). */
 	int (*fetch)(void *ud, const char *site, const char *url, const char *method, const char *body, long blen,
 		     const char *ctype, char **data, long *len, int *status, char *mime, int msize);
-	/* href made absolute against base ("" when it can't be) */
-	void (*resolve)(void *ud, const char *base, const char *href, char *out, int size);
+	/* href made absolute against base ("" when it can't be), its query
+	   in the page's encoding (HTML's "encoding-parsing a URL"), or in
+	   UTF-8 when utf8 (fetch(), whose Request parses it so) */
+	void (*resolve)(void *ud, const char *base, const char *href, char *out, int size, int utf8);
 	/* document.cookie: the cookies a script may see for url (no
 	   HttpOnly ones), and one it sets */
 	void (*cookie_get)(void *ud, const char *url, char *out, int size);

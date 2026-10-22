@@ -33,6 +33,11 @@ typedef struct {
 	char mime[64];		/* what it is ("" a file) */
 	int status;
 	char *security;
+	/* its encoding (View > Encoding): the one chosen by hand (1 + its
+	   place in br_encodings, 0 Auto), whether it may be read in another,
+	   and while it is kept the HTTP answer's charset (NULL none) */
+	uint8_t enc, encodable;
+	char *charset;
 } BR_ENTRY;
 
 /* the memory pages kept for Back and Forward may take, roughly (the
@@ -75,6 +80,13 @@ typedef struct browser {
 				   answer, EWeb's own page), for Save page */
 	long src_len;		/* its bytes (what keeping the page costs) */
 	char mime[64];		/* what the server said it is ("" a file) */
+	/* its encoding (View > Encoding): the HTTP answer's charset ("" none),
+	   the one chosen by hand ("" Auto: the page's own, as the HTML
+	   Standard's sniffing finds it; d->charset says which that was), and
+	   whether it may be read in another (a page or text file that came,
+	   not EWeb's own page or a picture's) */
+	char charset[24], enc[16];
+	int encodable;
 
 	/* BR_DOWNLOAD: what came */
 	struct {
@@ -164,6 +176,32 @@ void br_scrolled(browser *b, int32_t y);
 int br_relayout(browser *b, int32_t width);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
+
+/* ---- encodings */
+
+/* the page shown read again from its source in another encoding (View >
+   Encoding): name one of br_encodings (or a label of one), or "" for
+   Auto (the page's own). The choice stays with the page until another
+   is loaded: Reload, Back and Forward to it read it so too. BR_SHOWN;
+   BR_STOPPED when it can't be (not encodable, a name not offered) and
+   the page stays */
+int br_encoding(browser *b, const char *name);
+/* the encodings View > Encoding offers: those EWeb decodes whose
+   letters EWEB.FNT has (no Greek, Cyrillic, Arabic or Thai), each by
+   its name as html_encoding gives it and as d->charset has it */
+typedef struct {
+	const char *label, *name;
+} BR_ENC;
+extern const BR_ENC br_encodings[];
+extern const int br_nencodings;
+/* the label of an encoding of br_encodings, else its name */
+const char *br_encoding_label(const char *name);
+
+/* the encoding of a page at url that names none and isn't UTF-8 (the
+   sniffing's last step, the locale's default, which the standard lets
+   come from the address's top-level domain): windows-1255 for Israel's
+   .il, windows-1252 for the rest */
+const char *br_fallback(const char *url);
 
 /* the page's pictures still to come (or to decode at the size shown) */
 int br_pictures_pending(browser *b);

@@ -265,8 +265,10 @@ static void file_resolve(const char *base, const char *href, char *out, int size
 	}
 }
 
-/* href resolved against base (a page's address, or its <base>) */
-static int resolve(const char *base, const char *href, char *out, int size)
+/* href resolved against base (a page's address, or its <base>), its
+   query in enc, the page's encoding (the HTML Standard's "encoding-parsing
+   a URL", 2.4.2: NULL UTF-8, as a stylesheet's url()s are) */
+static int resolve_enc(const char *base, const char *href, char *out, int size, const URL_ENC *enc)
 {
 	URL *u, *bu;
 	int ok = 0;
@@ -284,15 +286,40 @@ static int resolve(const char *base, const char *href, char *out, int size)
 	bu = malloc(sizeof *bu);
 	if (u != NULL && bu != NULL) {
 		if (url_parse(bu, base, NULL))
-			ok = url_parse(u, href, bu);
+			ok = url_parse_enc(u, href, bu, enc);
 		else
-			ok = url_parse(u, href, NULL);
+			ok = url_parse_enc(u, href, NULL, enc);
 		if (ok)
 			str_copy(out, u->href, size);
 	}
 	free(u);
 	free(bu);
 	return ok;
+}
+
+static int resolve(const char *base, const char *href, char *out, int size)
+{
+	return resolve_enc(base, href, out, size, NULL);
+}
+
+/* the encoding a document's addresses put their query in: its own, NULL
+   for UTF-8 (and UTF-16, whose output encoding that is). One table is
+   kept (from the first page in one: none for UTF-8 alone), made again
+   when a page in another comes. */
+static const URL_ENC *doc_enc(const doc *d)
+{
+	static char name[sizeof ((doc *) 0)->charset];
+	static URL_ENC *tab;
+	static int have;
+	if (d == NULL || d->charset[0] == 0 || strcmp(d->charset, "UTF-8") == 0)
+		return NULL;
+	if (strcmp(name, d->charset) != 0) {
+		if (tab == NULL && (tab = malloc(sizeof *tab)) == NULL)
+			return NULL;
+		str_copy(name, d->charset, sizeof name);
+		have = html_enc_table(name, tab->hi);
+	}
+	return have ? tab : NULL;
 }
 
 /* the page's address without its fragment, and the fragment ("" none) */
@@ -470,22 +497,6 @@ static void error_page(SBUF *s, const char *url, const char *what, const char *w
 	sb_adds(s, "</body></html>");
 }
 
-/* a text file as a page: its lines as they are */
-static void text_page(SBUF *s, const char *data, long len)
-{
-	long i;
-	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8></head><body><pre>");
-	for (i = 0; i < len; i++) {
-		switch (data[i]) {
-		case '&': sb_adds(s, "&amp;"); break;
-		case '<': sb_adds(s, "&lt;"); break;
-		case '>': sb_adds(s, "&gt;"); break;
-		default: sb_addc(s, data[i]);
-		}
-	}
-	sb_adds(s, "</pre></body></html>");
-}
-
 /* ---------------------------------------------------------------- fetching */
 
 typedef struct {
@@ -501,6 +512,9 @@ typedef struct {
 
 #ifndef EW_ST
 static void js_host_of(browser *b, js_host *h);
+/* the document whose scripts run as it is built (b->d is the page
+   before it then), NULL: the page shown's */
+static const doc *js_doc;
 #endif
 static int js_after(browser *b, int *load_r);
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post);
@@ -581,6 +595,14 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		if (f->data == NULL) {
 			snprintf(f->err, sizeof f->err, "There is no file %.150s, or it can't be read.", path);
 			return 0;
+		}
+		/* a text file by its name, as a server would say: the rest are
+		   read as pages ("") */
+		{
+			size_t n = strlen(path);
+			if (n > 4 && path[n - 4] == '.' && (path[n - 3] | 32) == 't' && (path[n - 2] | 32) == 'x' &&
+			    (path[n - 1] | 32) == 't')
+				str_copy(f->mime, "text/plain", sizeof f->mime);
 		}
 		return 1;
 	}
@@ -788,7 +810,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		return;
 	memcpy(href, s, len);
 	href[len] = 0;
-	if (!resolve(sh->base, href, url, sizeof url))
+	if (!resolve_enc(sh->base, href, url, sizeof url, doc_enc(sh->d)))
 		return;
 	f = malloc(sizeof *f);
 	if (f == NULL)
@@ -894,19 +916,24 @@ static void readd_sheets(browser *b, doc *d, const char *base, int fresh, int qu
 /* ---------------------------------------------------------------- pictures in the layout */
 
 /* the address the page's pictures are resolved against, while it is
-   laid out */
+   laid out, and the page (its encoding, for their queries) */
 static const char *lay_base;
+static const doc *lay_doc;
 /* the page is fetched anew for its refresh (NAV_REFRESH): its pictures
    are asked for again, as their HTTP freshness says, as browsers do for
    a document made anew (a camera's, a weather map, sent no-store) */
 static int lay_recheck;
 
-static void *image_cb(void *ud, const char *src, int32_t *w, int32_t *h)
+/* (a url() of the page's CSS: its query in UTF-8, as an external
+   sheet's, which the CSS engine has made absolute already; an <img>'s in
+   the page's encoding) */
+static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h)
 {
 	browser *b = ud;
 	char url[4096];
 	ew_img *im;
-	if (!b->pictures || lay_base == NULL || !resolve(lay_base, src, url, sizeof url))
+	if (!b->pictures || lay_base == NULL ||
+	    !resolve_enc(lay_base, src, url, sizeof url, css ? NULL : doc_enc(lay_doc)))
 		return NULL;
 	if (!has_scheme(url, "http") && !has_scheme(url, "https") && !has_scheme(url, "file") &&
 	    !has_scheme(url, "data"))
@@ -978,8 +1005,10 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.image = image_cb;
 	o.ud = b;
 	lay_base = base;
+	lay_doc = d;
 	p = layout_page(d, &o);
 	lay_base = NULL;
+	lay_doc = NULL;
 	page_imgs(p, 1);
 	return p;
 }
@@ -987,7 +1016,7 @@ static page *lay(browser *b, doc *d, const char *base)
 /* the address a document's links and pictures are resolved against */
 static void base_of(const browser *b, const doc *d, const char *url, char *out, int size)
 {
-	if (d == NULL || d->base[0] == 0 || !resolve(url, d->base, out, size))
+	if (d == NULL || d->base[0] == 0 || !resolve_enc(url, d->base, out, size, doc_enc(d)))
 		str_copy(out, url, size);
 }
 
@@ -1026,9 +1055,13 @@ static int make_room(browser *b)
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout);
 
+/* the next build is a text file's (text/plain): its bytes are the text */
+static int build_plain;
+
 /* the source made into a page (doc styled and laid out): 1, or 0 when
    out of memory or stopped while fetching its sheets. Out of memory, the
-   pages kept go and it is tried once more */
+   pages kept go and it is tried once more. charset: the encoding chosen
+   by hand, else the HTTP answer's, else NULL (the page's own) */
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
 {
@@ -1059,13 +1092,15 @@ parse:
 	say(b, "%s", "Reading the page...");
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
+	o.fallback = br_fallback(url);
+	o.plaintext = build_plain;
 	o.scripting = scripts;
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d == NULL)
 		return 0;
 	ec_set_resolver(d->css, resolve);
 	b->ms_parse = pf_ms() - t;
-	if (d->base[0] == 0 || !resolve(url, d->base, base, sizeof base))
+	if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
 		str_copy(base, url, sizeof base);
 	t_sheets = pf_ms();
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
@@ -1081,7 +1116,9 @@ parse:
 		long bytes;
 		say(b, "%s", "Running the page's scripts...");
 		js_host_of(b, &h);
+		js_doc = d;
 		r = js_page(d, url, base, &h);
+		js_doc = NULL;
 		js_stats(d, &ms, &bytes);
 		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
 			/* over the budget: the page as it is without them */
@@ -1145,10 +1182,12 @@ static void unkeep(BR_ENTRY *e)
 	if (e->d != NULL)
 		doc_free(e->d);
 	free(e->security);
+	free(e->charset);
 	free(e->src);
 	e->p = NULL;
 	e->d = NULL;
 	e->security = NULL;
+	e->charset = NULL;
 	e->src = NULL;
 	e->src_len = 0;
 }
@@ -1202,6 +1241,7 @@ static void keep_shown(browser *b)
 		str_copy(e->mime, b->mime, sizeof e->mime);
 		e->status = b->status;
 		e->security = str_ndup(b->security, (long) strlen(b->security));
+		e->charset = b->charset[0] ? str_ndup(b->charset, (long) strlen(b->charset)) : NULL;
 	}
 	b->d = NULL;
 	b->p = NULL;
@@ -1273,6 +1313,26 @@ static void hist_set_url(browser *b, const char *url)
 	b->hist[b->cur].url = u;
 }
 
+/* the page shown's encoding (browse.h): the HTTP answer's charset, the
+   one chosen by hand, whether it may be read in another; kept in its
+   history entry too, where Reload, Back and Forward find the choice */
+static void enc_set(browser *b, const char *charset, const char *enc, int encodable)
+{
+	char cs[sizeof b->charset];
+	int i = 0;
+	str_copy(cs, charset, sizeof cs);	/* (either may be b's own) */
+	if (encodable)
+		for (i = br_nencodings; i > 0 && strcmp(br_encodings[i - 1].name, enc) != 0; i--)
+			;
+	memcpy(b->charset, cs, sizeof cs);
+	str_copy(b->enc, i ? br_encodings[i - 1].name : "", sizeof b->enc);
+	b->encodable = encodable;
+	if (b->cur >= 0 && b->cur < b->nhist) {
+		b->hist[b->cur].enc = (uint8_t) i;
+		b->hist[b->cur].encodable = (uint8_t) encodable;
+	}
+}
+
 static int32_t anchor_y(const browser *b, const char *url)
 {
 	const char *fr = fragment(url);
@@ -1299,6 +1359,7 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 	else if (mode == NAV_REPLACE)
 		hist_set_url(b, url);
 	b->at = b->cur;
+	enc_set(b, "", "", 0);
 	keep_trim(b);
 	b->scroll_to = mode == NAV_NEW || mode == NAV_REPLACE ? -1 : b->hist[b->cur].y;
 	return BR_SHOWN;
@@ -1429,7 +1490,7 @@ static __attribute__((noinline)) int refresh_set(browser *b, const char *value, 
 		str_copy(to, b->url, sizeof to);	/* the page itself */
 	} else {
 		char *href = str_ndup(u, (long) n);
-		int ok = href != NULL && resolve(base, href, to, sizeof to);
+		int ok = href != NULL && resolve_enc(base, href, to, sizeof to, doc_enc(b->d));
 		free(href);
 		if (!ok || has_scheme(to, "javascript"))
 			return 0;
@@ -1520,8 +1581,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	SBUF src;
 	doc *d;
 	page *p;
-	int r;
-	char host[128];
+	int r, encodable = 0;
+	char host[128], enc[sizeof b->enc];
 
 	conn_stop = 0;
 	b->elsewhere[0] = 0;
@@ -1536,9 +1597,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	if (b->can_open != NULL && !b->can_open(b->ud, url))
 		return BR_STOPPED;	/* the page shown stays */
+	/* the encoding chosen by hand for the page (View > Encoding): kept
+	   when it comes again (Reload, a refresh of itself, Back, Forward),
+	   not for another */
+	str_copy(enc, mode == NAV_NEW || mode == NAV_REPLACE || b->cur < 0 || b->hist[b->cur].enc == 0 ? "" :
+		 br_encodings[b->hist[b->cur].enc - 1].name, sizeof enc);
 	/* a place on the page shown */
 	if (mode == NAV_NEW && post == NULL && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
 		hist_push(b, url);
+		enc_set(b, b->charset, b->enc, b->encodable);	/* the same page */
 		str_copy(b->url, url, sizeof b->url);
 		b->scroll_to = anchor_y(b, url);
 		return BR_SAME;
@@ -1598,11 +1665,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	/* what it is */
 	if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
 		lay_recheck = mode == NAV_REFRESH;
-		r = build(b, f->data, f->len, f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
 		lay_recheck = 0;
+		encodable = 1;
 	} else if (strncmp(f->mime, "text/", 5) == 0) {
-		text_page(&src, f->data, f->len);
-		r = build(b, src.s, src.len, f->charset[0] ? f->charset : "windows-1252", f->url, 0, &d, &p);
+		/* a text file: sniffed as a page is, but for a <meta> */
+		build_plain = 1;
+		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, 0, &d, &p);
+		build_plain = 0;
+		encodable = 1;
 	} else if (b->pictures && (pic_kind((const unsigned char *) f->data, f->len) == PIC_JPEG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_PNG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF) &&
@@ -1671,6 +1742,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		else
 			hist_set_url(b, shown);
 		b->at = b->cur;
+		enc_set(b, f->charset, enc, encodable);
 		keep_trim(b);
 		/* a page loaded anew: its refresh. Back and Forward leave it be,
 		   as the standard lets them (a page that goes on at once would
@@ -1698,6 +1770,124 @@ static int load(browser *b, const char *url, int mode)
 	int r = load_post(b, url, mode, NULL);
 	dc_job_end();		/* the page and its stylesheets: into the pack */
 	return r;
+}
+
+/* ---------------------------------------------------------------- encodings */
+
+/* ISO-8859-1 and ISO-8859-9 are the Encoding Standard's labels of
+   windows-1252 and windows-1254, which are theirs with more letters */
+const BR_ENC br_encodings[] = {
+	{ "Unicode (UTF-8)", "UTF-8" },
+	{ "Western (Windows-1252, ISO-8859-1)", "windows-1252" },
+	{ "Western (ISO-8859-15)", "ISO-8859-15" },
+	{ "Hebrew (Windows-1255)", "windows-1255" },
+	{ "Hebrew, logical (ISO-8859-8-I)", "ISO-8859-8-I" },
+	{ "Hebrew, visual (ISO-8859-8)", "ISO-8859-8" },
+	{ "Central European (Windows-1250)", "windows-1250" },
+	{ "Central European (ISO-8859-2)", "ISO-8859-2" },
+	{ "Turkish (Windows-1254, ISO-8859-9)", "windows-1254" },
+	{ "Baltic (Windows-1257)", "windows-1257" },
+	{ "Baltic (ISO-8859-13)", "ISO-8859-13" },
+	{ "Baltic (ISO-8859-4)", "ISO-8859-4" },
+	{ "Nordic (ISO-8859-10)", "ISO-8859-10" },
+	{ "South European (ISO-8859-3)", "ISO-8859-3" }
+};
+const int br_nencodings = (int) (sizeof br_encodings / sizeof br_encodings[0]);
+
+const char *br_encoding_label(const char *name)
+{
+	int i;
+	for (i = 0; i < br_nencodings; i++)
+		if (strcmp(br_encodings[i].name, name) == 0)
+			return br_encodings[i].label;
+	return name;
+}
+
+const char *br_fallback(const char *url)
+{
+	char host[256], *h;
+	size_t n;
+	if (!has_scheme(url, "http") && !has_scheme(url, "https"))
+		return "windows-1252";
+	host_of(url, host, sizeof host);
+	h = strrchr(host, '@');		/* user:password@ */
+	h = h != NULL ? h + 1 : host;
+	if (*h != '[')
+		h[strcspn(h, ":")] = 0;	/* the port */
+	n = strlen(h);
+	if (n > 0 && h[n - 1] == '.')	/* "example.co.il." is example.co.il */
+		h[--n] = 0;
+	/* Hebrew's only, for now: the other locales' (Cyrillic, Greek,
+	   Arabic...) have letters EWEB.FNT hasn't got */
+	if (n > 3 && h[n - 3] == '.' && (h[n - 2] | 32) == 'i' && (h[n - 1] | 32) == 'l')
+		return "windows-1255";
+	return "windows-1252";
+}
+
+int br_encoding(browser *b, const char *name)
+{
+	char security[96], *src = b->src, *url;
+	const char *canon = name[0] ? html_encoding(name) : "";
+	long len = b->src_len;
+	doc *d;
+	page *p;
+	int r;
+	if (canon != NULL && canon[0] && strcmp(br_encoding_label(canon), canon) == 0)
+		canon = NULL;		/* not one of br_encodings */
+	if (!b->encodable || src == NULL || b->p == NULL || b->cur < 0 || canon == NULL)
+		return BR_STOPPED;
+	/* (the address on the heap: not on the stack under the whole build,
+	   which the ST edition's 48 KB must hold) */
+	if ((url = str_ndup(b->url, (long) strlen(b->url))) == NULL)
+		return BR_STOPPED;
+	conn_stop = 0;
+	str_copy(security, b->security, sizeof security);
+	b->ms_fetch = 0;
+	b->src = NULL;		/* show() lets the page shown go: this is its source */
+	/* read again from what came, its stylesheets from the cache of any
+	   age (as Back takes them): nothing is fetched anew */
+	build_plain = strncmp(b->mime, "text/", 5) == 0 && strcmp(b->mime, "text/html") != 0;
+	r = build(b, src, len, canon[0] ? canon : b->charset, url, 2, &d, &p);
+	build_plain = 0;
+	if (r && conn_stop) {
+		pg_free(p);
+		doc_free(d);
+		r = 0;
+	}
+	if (!r) {
+		conn_stop = 0;
+		if (b->p != NULL) {	/* stopped: the page stays as it was */
+			b->src = src;
+			free(url);
+			return BR_STOPPED;
+		}
+		/* no memory for it, even with the kept pages gone (the page
+		   shown went too): said on a page of EWeb's own */
+		free(src);
+		{
+			SBUF s;
+			sb_init(&s);
+			error_page(&s, url, "EWeb can't show this page", "There isn't enough memory for it on this Atari.",
+				   NULL);
+			r = own_page(b, url, &s, NAV_RELOAD);
+			sb_free(&s);
+		}
+		free(url);
+		return r;
+	}
+	show(b, d, p, url, security, b->status, 0);
+	free(url);
+	b->src = src;
+	b->src_len = len;
+	enc_set(b, b->charset, canon, 1);
+	b->scroll_to = b->hist[b->cur].y;
+	if (b->d->js != NULL && js_navigation(b->d, NULL, NULL, NULL) != NULL) {
+		/* its scripts sent the browser on (location = ...) */
+		int lr;
+		if (js_after(b, &lr) == BRJ_LOAD)
+			return lr;
+	}
+	return BR_SHOWN;
 }
 
 /* ---------------------------------------------------------------- what the front end asks */
@@ -1778,7 +1968,7 @@ void br_link_url(const browser *b, int link, char *out, int size)
 	if (b->p == NULL || link < 0 || link >= b->p->nlinks)
 		return;
 	base_of(b, b->d, b->url, base, sizeof base);
-	if (!resolve(base, b->p->links[link], out, size))
+	if (!resolve_enc(base, b->p->links[link], out, size, doc_enc(b->d)))
 		str_copy(out, b->p->links[link], size);
 }
 
@@ -1825,7 +2015,7 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 	if (s.action[0] == 0) {
 		str_copy(url, base, sizeof url);
 		url[strcspn(url, "#")] = 0;
-	} else if (!resolve(base, s.action, url, sizeof url)) {
+	} else if (!resolve_enc(base, s.action, url, sizeof url, doc_enc(b->d))) {
 		form_submit_free(&s);
 		return BR_STOPPED;
 	}
@@ -1925,10 +2115,10 @@ static int jh_fetch(void *ud, const char *site, const char *url, const char *met
 	return r;
 }
 
-static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size)
+static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size, int utf8)
 {
-	(void) ud;
-	if (!resolve(base, href, out, size))
+	browser *b = ud;
+	if (!resolve_enc(base, href, out, size, utf8 ? NULL : doc_enc(js_doc != NULL ? js_doc : b->d)))
 		out[0] = 0;
 }
 
@@ -2193,6 +2383,7 @@ static int go_to(browser *b, int i)
 	b->refresh_run = 0;
 	if (b->p != NULL && same_but_fragment(b->hist[i].url, b->url)) {
 		b->cur = i;
+		enc_set(b, b->charset, b->enc, b->encodable);	/* the same page */
 		str_copy(b->url, b->hist[i].url, sizeof b->url);
 		b->scroll_to = b->hist[i].y;
 		return BR_SAME;
@@ -2205,8 +2396,9 @@ static int go_to(browser *b, int i)
 		int status = e->status;
 		long src_len = e->src_len;
 		char *src = e->src;
-		char security[96];
+		char security[96], cs[sizeof b->charset];
 		str_copy(security, e->security ? e->security : "", sizeof security);
+		str_copy(cs, e->charset ? e->charset : "", sizeof cs);
 		e->d = NULL;
 		e->p = NULL;
 		e->src = NULL;
@@ -2218,6 +2410,7 @@ static int go_to(browser *b, int i)
 		b->note[0] = 0;		/* (the last page built's) */
 		b->cur = i;
 		b->at = i;
+		enc_set(b, cs, e->enc ? br_encodings[e->enc - 1].name : "", e->encodable);
 		b->ms_fetch = b->ms_parse = b->ms_style = b->ms_layout = 0;
 		if (p->opt.width != b->width) {
 			unsigned long t = pf_ms();

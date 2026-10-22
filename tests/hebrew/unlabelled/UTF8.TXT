@@ -1,0 +1,8 @@
+SPDX-License-Identifier: GPL-2.0-or-later
+Copyright (C) 2026 AERA | Erez Yaary
+A text file in UTF-8 with no label (tests/layout/run.py)
+
+שלום עולם
+
+אטארי פלקון 030 עם DFB1 - 50 מגה-הרץ.
+Mixed: עברית and English, <b>not bold</b> & "ציטוט" (סוגריים) 1990

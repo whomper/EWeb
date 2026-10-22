@@ -1037,7 +1037,7 @@ static void choose(fctl *c, short mx, short my)
 			form_option_text(c->opt[i], t, sizeof t);
 			atari_text(t, a, sizeof a);
 			snprintf(lab[n], sizeof lab[n], "%s%s%s", dn_attr(c->opt[i], "disabled") ? "~" : "",
-				 c->sel[i] ? "\x08" : "  ", a[0] ? a : " ");
+				 c->sel[i] ? "\x08 " : "  ", a[0] ? a : " ");
 			items[n] = lab[n];
 			n++;
 		}

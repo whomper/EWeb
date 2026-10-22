@@ -435,7 +435,8 @@ grew from that one. When it has settled, it can move into `common/` for those ap
 
 What it does:
 - **Addresses** as the WHATWG URL Standard parses them: links resolved against the page, `.` and `..`,
-  backslashes, IPv4 and IPv6 addresses, percent-encoding as UTF-8, and names that aren't ASCII
+  backslashes, IPv4 and IPv6 addresses, percent-encoding as UTF-8 (but a query in its page's own
+  encoding: Encodings, below), and names that aren't ASCII
   (Hebrew ones too) in punycode, with the part of UTS #46's mapping pages meet.
 - **HTTP/1.1:** answers by length, in chunks, or up to the close; gzip and deflate unpacked; redirects
   (up to 20, a POST answered with 301, 302 or 303 becoming a GET, as browsers do); the charset of the
@@ -1110,7 +1111,8 @@ the HTML Standard:
   left out), then `application/x-www-form-urlencoded`, `multipart/form-data` (a file field sends no
   file: EWeb can't upload yet) or `text/plain`, line breaks as CR LF; `formaction`, `formmethod`,
   `formenctype`; a dialog's form sends nothing. The text goes in the page's character set (a letter
-  it lacks as `&#N;`, as browsers do; `accept-charset="utf-8"` honoured), so Windows-1255 sites get
+  it lacks as `&#N;`, as browsers do; `accept-charset` as the standard picks from it: Encodings,
+  below), so Windows-1255 sites get
   their Hebrew as they expect. GET puts it in the address, POST through the HTTP client (a 301, 302
   or 303 answer fetched with GET; a POST's answer isn't cached; Back to it, once it isn't kept,
   fetches its address with GET rather than sending again). Return in a field sends the form by its
@@ -1671,6 +1673,119 @@ timer: the sheets aren't added again); `make itest` `/site/media/page.html` at t
 (`ewrender -Y`), which sheets the server was asked for; `make hatarigui`'s `st` the 1 MB ST's
 pictures page with the tables page still shown.
 
+## Encodings: pages that name none, and a choice by hand (22 Oct 2026)
+
+A page that named no encoding (no BOM, no charset in Content-Type, no `<meta>` in its first 1,024
+bytes) was read as Windows-1252, so an unlabelled UTF-8 page showed `Ã©` for `é` and Hebrew as
+Latin letters, and so did a text file; a text file on the disk was read as a page (its `<` a tag);
+nothing let the user say better; and a link's query was sent in UTF-8 whatever the page's encoding.
+Now EWeb does as the HTML Standard and the URL Standard say:
+- **Labels** (`enc_of`, `html_encoding`): the Encoding Standard's. libparserutils' list of names
+  lacks some for the encodings it decodes (`cp1255`, `x-cp1255`, `iso-8859-8-e`, `csiso88598e`,
+  `l9`, the `x-cp125N`s...), has ISO-8859-1 and -9 as encodings of their own and `utf-16` as
+  big-endian, so a table of EWeb's is looked at first (by its first letter, then the name): every
+  label of the encodings EWeb decodes comes to the standard's encoding (`tests/browse/enctest.c`
+  has all 160), `utf-16` and its kin to UTF-16LE, UTF-8 in a `<meta>`. A page whose `<meta>` or
+  HTTP answer said `cp1255`, and a form's `accept-charset="x-cp1255"`, were taken as naming none.
+- **Sniffing** (13.2.3.2, `src/doc/html.c`): a BOM, then the encoding chosen by hand, then the
+  HTTP answer's, then the prescan (all certain but the prescan's, as before); then, when nothing
+  named one, UTF-8 if the bytes are (step 8, whose note singles UTF-8 out), else the locale's
+  default (step 9), both tentative, so a `<meta>` further on still says. The detection is the UTF-8
+  decoder itself: an unlabelled page is read as UTF-8, and the first byte UTF-8 can't have stops
+  it and the page is read again in the default (in a Windows-1255 or -1252 page mostly its first
+  letter beyond ASCII, so little is read twice). A page that is ASCII throughout is the same text in
+  either and takes the default's name, which its forms and links use. A sequence cut short at the
+  end counts as UTF-8 when one came before it (more may have been coming). A first try scanned
+  the bytes before decoding them: 11 instructions a long on the 68030, +2.75 an ASCII byte.
+- **The default** (`br_fallback`, `src/browse`): the standard lets it come from the address, as
+  Firefox does from the top-level domain: Windows-1255 for Israel's `.il` (the owner's sites and
+  the older Israeli ones that send no charset), Windows-1252 for the rest and for files (a file has
+  no address to tell by). Other domains' encodings (Cyrillic, Greek, Arabic) would show letters
+  `EWEB.FNT` hasn't got, so only Hebrew's is there; the table can take more.
+- **Text files** (`text/plain`, and `.TXT` on the disk, which was read as a page) follow the same
+  steps but the prescan, and are made as the standard's page load processing model for text files
+  says: a `<pre>` and a line feed it drops (so the file's own first stays), then the PLAINTEXT
+  state, all the rest text (`html_opts.plaintext`), where EWeb used to escape the file into a page
+  of its own and read that in Windows-1252.
+- **By hand** (View > Encoding..., `br_encoding`): the page shown read again from its source as it
+  came (`b->src`, kept for Save page), its stylesheets from the cache of any age, nothing fetched.
+  The choice is the standard's step 2, after the BOM and before the HTTP answer's; it stays with the
+  page (a byte of its history entry, and the HTTP answer's charset while it is kept: Reload, Back
+  and Forward to it, a refresh of itself, a place on it) until another page is loaded; Auto goes
+  back to the page's own. TOS's AES has no submenus, so
+  the item opens a popup at the mouse (the shared `popup()`, Esc closes it with nothing chosen),
+  Auto first with what it found, the choice ticked. The list (`br_encodings`) is those EWeb decodes
+  whose letters `EWEB.FNT` has: UTF-8, Windows-1252 (ISO-8859-1 is its label in the Encoding
+  Standard, so one item for both; likewise ISO-8859-9 is Windows-1254's), ISO-8859-15,
+  Windows-1255, ISO-8859-8-I, ISO-8859-8, Windows-1250, ISO-8859-2, Windows-1254, Windows-1257,
+  ISO-8859-13, ISO-8859-4, ISO-8859-10 and ISO-8859-3 (the visual one laid out as it is stored:
+  Hebrew, above). Greek, Cyrillic, Arabic and Thai would show as boxes whatever the encoding, so
+  they aren't offered. The ticked item's tick stands in the first of the two spaces the others
+  start with, as the shared popup draws it (one cell to the left of them at first).
+- **Addresses in the page's encoding** (the URL Standard's query state, "percent-encode after
+  encoding"; HTML's "encoding-parsing a URL"): a link's, an `<img>`'s, a `<link>`ed stylesheet's, a
+  `<base>`'s, a form's action, a refresh's and a script's address (`<script src>`,
+  XMLHttpRequest, `location`) put its query in the page's encoding, a character the encoding lacks
+  as `&#N;` percent-encoded (`%26%23N%3B`); U+FFFD too (`%26%2365533%3B`: the table holds it for
+  each byte an encoding leaves out, so it isn't looked for there). The path and the fragment stay
+  UTF-8, and so do CSS's `url()`s, in a sheet, a `<style>` or a `style` attribute alike (CSS parses
+  them without an encoding; the layout tells the picture callback which it has, as the last two
+  reach it still relative), and `fetch()`'s (the Fetch Standard's Request parses its URL in UTF-8;
+  `__ew_fetch` is told which asks).
+  `url_parse_enc` (`src/net/url.c`) takes the page's encoding as a table of its bytes 0x80-0xFF
+  (`html_enc_table`, from libparserutils' codec, made once for each encoding met); a page in
+  UTF-8 or UTF-16 sends UTF-8, as the standard's output encoding says.
+- **The single-byte decoders** (libparserutils' codecs, `third_party/netsurf/patches`, 0005) are
+  the Encoding Standard's indexes, which browsers decode with. They had U+FFFD for the ISO-8859
+  encodings' bytes 0x80-0x9F (the indexes' C1 controls), the Windows code pages' unassigned bytes
+  there (C1 controls too) and Windows-1255's 0xCA (U+05BA, a Hebrew point, drawn as nothing as
+  the others are): in a page's text, and in its links' and forms' queries, which sent `&#65533;`
+  where browsers send the byte. A C1 control is drawn as `?`, as any character `EWEB.FNT` hasn't
+  got (CSS Text has it visible). Only the bytes the indexes leave out are U+FFFD now.
+- **Forms** pick their encoding as the standard's "pick an encoding for the form" says: the first
+  of `accept-charset`'s labels (split at white space) that names an encoding EWeb has, none naming
+  one meaning UTF-8 (EWeb looked for "utf-8" anywhere in it, and kept the page's otherwise), else
+  the page's; `_charset_` is the encoding's name as the standard has it. U+FFFD goes as `&#65533;`,
+  as in a query.
+
+Measured: 68030 instructions for EWeb's document (`build/m68k/docparse`, which gives no HTTP
+charset, so every page is sniffed) on the page set, 1,328.3 M before and 1,279.6 M after (-3.7%;
+the median page 4.57 M, now 4.36 M). The 187 pages whose prescan finds their encoding are as they
+were (+0.01% the median, at most +0.2%, in the CSS engine's functions: the document's memory lies
+otherwise; at first +0.67%: the text file's `<pre>` sent through `dispatch()` took it out of the
+parse's loop, a call a token, and now goes to the insertion mode itself). Of the 71 it doesn't,
+the 23 in ASCII are 11.0% quicker (the median), read by the UTF-8 decoder, which copies ASCII four
+bytes at a time, where the Windows-1252 table first counted every byte; 42 with UTF-8 in them are
+9.1% to 24.6% quicker (their `<meta>` past the prescan says UTF-8, which they are now read as from
+the start, where they were parsed again); and six are 11.6% to 17.9% slower: UTF-8 whose late
+`<meta>` says ISO-8859-1, so they are parsed twice, as the standard says (and end in Windows-1252,
+as before). The review's fixes (the labels' table, looked at by its first letter) leave the page set
+at 1,278.9 M, from 1,279.4 M for the same commit's binary counted the same way (-0.04%; each
+page within 0.2%).
+
+The ST edition is 4.4 KB larger (its code, the history's choice, the menu's list, the labels), and the 1
+MB ST has 3.5 KB less free at start (185,754 bytes, from 189,282). That is close to its edge: a
+first version, with the popup's labels kept in memory (1.6 KB) and the decoder called from two
+places, left 184,704 and no longer fitted `make hatarigui`'s pictures page with the tables page
+shown; so the labels are on the stack while the popup is up, the table for a page's queries is
+made only when a page in a legacy encoding comes, and the decoder is called from one place. On the web most pages come with a charset in Content-Type,
+which none of this touches. `make test` has `tests/browse/enctest.c` (the sniffing's steps in each
+order that matters, UTF-8 at every place of a run of ASCII from even and odd addresses, overlong
+forms, surrogates, a sequence cut short; text files; `br_fallback`'s addresses; every label of the
+encodings EWeb decodes; View > Encoding's list; each single-byte decoder against the Encoding
+Standard's index; the Web Platform Tests' `url/resources/percent-encoding.json` for UTF-8,
+Windows-1252 and ISO-8859-2, Hebrew's queries, U+FFFD and bytes that aren't UTF-8; the detection
+against a plain validator on 20,000 random pages), `tests/forms/cases.txt` (`accept-charset`, its
+labels, U+FFFD, U+05BA and a C1 control in Windows-1255), `tests/layout/run.py` (the Hebrew page the
+same in six encodings, two with no label: UTF-8 found, Windows-1255 chosen by hand; visual Hebrew
+drawn as the same text in logical order; a text file); `make itest` `/site/enc/` (UTF-8 unlabelled;
+Windows-1255 unlabelled as `localhost`, as `hebrew.il` through `EW_HOSTS`, the host build's name
+table, and chosen by hand, kept for Back; its link's query and its form in Windows-1255; a text
+file; the queries a page's pictures (one with 0xCA and 0x81), sheet, CSS `url()`s, `fetch()` and
+XMLHttpRequest send, as the server got them); `make hatarigui`'s `browse` View > Encoding... on the
+emulated Falcon; `make fuzz`'s `fuzz_html` (text files, the default) and `fuzz_url` (a query in an
+encoding of a byte a character).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -1757,7 +1872,13 @@ lives in the other parts:
   `common/bidi.c` (from ClaudeST) handles one line of Atari-charset text, so EWeb needs the fuller
   algorithm, which can move to `common/` for every app.
 - **Visual Hebrew:** a page labelled plain ISO-8859-8 (or "visual") is already in display order, so
-  layout shows it as it is, without reordering. EWeb knows which kind it has from the page's charset.
+  layout shows it as it is: its lines aren't reordered and its Hebrew words aren't drawn right to
+  left (the HTML Standard's rendering rules for an ISO-8859-8 document, `unicode-bidi:
+  isolate-override`, which browsers apply to the whole page; whatever the line's direction, which
+  still aligns it). EWeb knows which kind it has from the page's charset (`d->charset`, and View >
+  Encoding offers both); a form control's text is still put in logical order. `tests/layout/run.py`
+  draws the same lines stored visually and logically (`tests/hebrew/visual`) and compares the
+  pictures.
 - **Fonts:** EWeb's own fonts have the Hebrew letters (DejaVu's), so pages don't go through the Atari
   character set. Vowel points (niqqud) take no room and aren't drawn yet.
 - **Typing:** Hebrew is typed into forms with the Atari's Hebrew keyboard, and fields show it right

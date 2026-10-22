@@ -1433,7 +1433,7 @@ static JSValue reflect_get(JSContext *ctx, JSValueConst this_val, int magic)
 		JSValue r;
 		if (out == NULL)
 			return JS_ThrowOutOfMemory(ctx);
-		j->h.resolve(j->h.ud, j->base, v, out, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, v, out, URL_MAX, 0);
 		r = JS_NewString(ctx, out[0] ? out : v);
 		free(out);
 		return r;
@@ -2397,7 +2397,7 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 			} else if (is_html(n, T_A) && dn_attr(n, "href") != NULL && j->h.resolve != NULL) {
 				char *out = malloc(URL_MAX);
 				if (out != NULL) {
-					j->h.resolve(j->h.ud, j->base, dn_attr(n, "href"), out, URL_MAX);
+					j->h.resolve(j->h.ud, j->base, dn_attr(n, "href"), out, URL_MAX, 0);
 					if (out[0] && strncmp(out, "javascript:", 11) != 0) {
 						free(j->nav);
 						j->nav = out;
@@ -3287,7 +3287,7 @@ static void send_form(ejs *j, dnode *form, fctl *submitter)
 		return;
 	}
 	if (j->h.resolve != NULL)
-		j->h.resolve(j->h.ud, j->base, action && *action ? action : j->url, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, action && *action ? action : j->url, to, URL_MAX, 0);
 	else
 		str_copy(to, j->url, URL_MAX);
 	free(j->nav);
@@ -3429,8 +3429,10 @@ static JSValue win_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueC
 	return JS_UNDEFINED;
 }
 
-/* the prelude's __ew_fetch(method, url, body, ctype): [status, text,
-   mime, url], or a TypeError */
+/* the prelude's __ew_fetch(method, url, body, ctype, utf8): [status,
+   text, mime, url], or a TypeError. utf8: fetch()'s (the Fetch
+   Standard's Request parses its URL in UTF-8), else XMLHttpRequest's
+   (in the page's encoding) */
 static JSValue win_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	ejs *j = J(ctx);
@@ -3454,7 +3456,7 @@ static JSValue win_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		ctype = cstr(ctx, argv[3], NULL);
 	to = malloc(URL_MAX);
 	if (to != NULL && j->h.resolve != NULL)
-		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, argc > 4 && JS_ToBool(ctx, argv[4]));
 	t = pf_ms();
 	ok = to != NULL && to[0] &&
 	     j->h.fetch(j->h.ud, j->url, to, strcmp(method, "POST") == 0 ? "POST" : "GET", body, (long) blen,
@@ -3612,7 +3614,7 @@ static const char *const part_src[] = {
 	"function ct(h){return h?(h instanceof H?h.get('content-type'):h['Content-Type']||h['content-type']"
 	"||null):null}"
 	"g.fetch=function(u,o){o=o||{};return new Promise(function(y,n){var r;try{r=__ew_fetch(String(o.method"
-	"||'GET').toUpperCase(),String(u&&u.url||u),o.body==null?null:String(o.body),ct(o.headers))}"
+	"||'GET').toUpperCase(),String(u&&u.url||u),o.body==null?null:String(o.body),ct(o.headers),1)}"
 	"catch(e){n(new TypeError('Failed to fetch'));return}y(new R(r))})};"
 	"function X(){this.readyState=0;this.status=0;this.responseText='';this.response='';"
 	"this.responseType='';this._l={};this._h=null}var P=X.prototype;"
@@ -3693,7 +3695,7 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_DEF("addEventListener", 3, add_listener),
 	JS_CFUNC_DEF("removeEventListener", 3, remove_listener),
 	JS_CFUNC_DEF("dispatchEvent", 1, dispatch_event),
-	JS_CFUNC_DEF("__ew_fetch", 4, win_fetch),
+	JS_CFUNC_DEF("__ew_fetch", 5, win_fetch),
 	JS_CGETSET_MAGIC_DEF("innerWidth", win_get, NULL, WP_WIDTH),
 	JS_CGETSET_MAGIC_DEF("innerHeight", win_get, NULL, WP_HEIGHT),
 	JS_CGETSET_MAGIC_DEF("outerWidth", win_get, NULL, WP_WIDTH),
@@ -3816,7 +3818,7 @@ static JSValue go(JSContext *ctx, JSValueConst v, int hash)
 			strcat(to, href);
 		}
 	} else if (j->h.resolve != NULL) {
-		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, 0);
 	} else {
 		str_copy(to, href, URL_MAX);
 	}
@@ -3885,7 +3887,7 @@ static JSValue hist_call(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		if ((href = cstr(ctx, argv[2], NULL)) == NULL)
 			return JS_EXCEPTION;
 		if ((to = malloc(URL_MAX)) != NULL && j->h.resolve != NULL) {
-			j->h.resolve(j->h.ud, j->base, href, to, URL_MAX);
+			j->h.resolve(j->h.ud, j->base, href, to, URL_MAX, 0);
 			if (to[0])
 				str_copy(j->url, to, sizeof j->url);
 		}
@@ -4106,7 +4108,7 @@ static void run_script(ejs *j, dnode *n)
 		int status = 0;
 		if (*src == 0 || j->h.fetch == NULL || j->h.resolve == NULL || (name = malloc(URL_MAX)) == NULL)
 			return;
-		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX);
+		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
 		if (!name[0] || !j->h.fetch(j->h.ud, j->url, name, "GET", NULL, 0, NULL, &code, &len, &status, mime, sizeof mime) ||
 		    (status != 0 && (status < 200 || status >= 300))) {
 			say(j, "not fetched", name);

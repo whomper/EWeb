@@ -3,8 +3,9 @@
 /*
  * Pages from the fuzz input (src/doc/html.c, EWeb's HTML parser): the
  * first byte picks the charset the answer gave (none, so the page is
- * sniffed, or one of a few), scripting on or off and a fragment's context
- * element; the rest is the page. The tree that comes out must hold
+ * sniffed, with the locale's default windows-1255 or not, or one of a
+ * few), scripting on or off and a fragment's context element, or else a
+ * text file (text/plain); the rest is the page. The tree that comes out must hold
  * together: each node's parent, siblings and first and last children
  * agree; the page's refresh (a <meta http-equiv=refresh>) is one; its
  * stylesheets are found (doc_sheets: each <link>'s and <style>'s type,
@@ -64,6 +65,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		return 0;
 	memset(&o, 0, sizeof o);
 	o.charset = charsets[d[0] & 7];
+	o.fallback = (d[0] & 7) == 1 ? "windows-1255" : NULL;
+	o.plaintext = d[0] >> 7;
 	o.scripting = (d[0] >> 3) & 1;
 	o.context = contexts[(d[0] >> 4) & 7].name;
 	o.context_ns = contexts[(d[0] >> 4) & 7].ns;

@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH] [-e ENC]
  *            PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
@@ -66,6 +66,9 @@
  * request the page's pictures make (as GEM's messages come in pf_idle
  * while one is under way): "sized in a request:" printed, and the
  * page's sheets come after it.
+ * -e NAME: once the page is shown, it is read again in that encoding
+ * (View > Encoding; "auto": the page's own), "encoding:" printed with
+ * what it was read in and its title.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -414,7 +417,7 @@ int main(int argc, char **argv)
 	int32_t resize[8];
 	int nresize = 0;
 	const char *clicks[16];
-	const char *save_to = NULL;
+	const char *save_to = NULL, *enc = NULL;
 
 	{
 		/* the stack's floor, as EWEB.PRG has one (ui/main.c): all of the
@@ -495,6 +498,8 @@ int main(int argc, char **argv)
 			refreshes = atoi(argv[++i]);	/* refreshes followed, each when it is due */
 		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
 			save_to = argv[++i];
+		else if (!strcmp(argv[i], "-e") && i + 1 < argc)
+			enc = argv[++i];	/* View > Encoding */
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
 			save_link = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
@@ -510,7 +515,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-e ENCODING] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -591,6 +596,11 @@ int main(int argc, char **argv)
 	}
 	pictures(&b);
 	pf_idle = NULL;
+	if (enc != NULL) {
+		r = br_encoding(&b, strcmp(enc, "auto") == 0 ? "" : enc);
+		pictures(&b);
+		printf("encoding: %d %s \"%s\"\n", r, b.d != NULL ? b.d->charset : "", b.title);
+	}
 	for (i = 0; i < nresize; i++) {
 		r = br_relayout(&b, resize[i]);
 		pictures(&b);

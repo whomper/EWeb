@@ -11,7 +11,10 @@ stylesheet over HTTP and HTTPS, its links made absolute, only the
 stylesheets whose media holds fetched (and those that come to hold as the
 window is sized, then), EWeb's own page when a server isn't
 there and when what came isn't a page, a page's refresh (<meta
-http-equiv=refresh>, the Refresh header).
+http-equiv=refresh>, the Refresh header), and pages that name no encoding
+(UTF-8 found; Windows-1255 under .il, through EW_HOSTS, or chosen by hand;
+their links' and forms' queries in it; a text file), and the queries of a
+page's other addresses (pictures, sheets, CSS's url()s, scripts').
 
     tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
@@ -351,6 +354,54 @@ try:
         rc, out = browse("http://localhost:%d/hebrew" % HTTP)
         check("the browser: a page in windows-1255", rc == 0 and re.search(r'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"', out),
               out)
+        # pages that name no encoding: UTF-8 found by its bytes; windows-1255
+        # read as windows-1252 but under Israel's .il, or as chosen by hand
+        # (View > Encoding), its link's and form's queries in it
+        enc = "http://localhost:%d/site/enc/" % HTTP
+        rc, out = browse(enc + "utf8.html")
+        check("encodings: UTF-8 that names none", rc == 0 and 'title "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and "link 1 %secho?q=%%D7%%A9%%D7%%9C%%D7%%95%%D7%%9D\n" % enc[:-4] in out, out)
+        rc, out = browse(enc + "w1255.html")
+        check("encodings: windows-1255 that names none is windows-1252 here", rc == 0
+              and 'title "\u00f9\u00ec\u00e5\u00ed \u00f2\u00e5\u00ec\u00ed"' in out
+              and "link 1 %secho?q=%%F9%%EC%%E5%%ED\n" % enc[:-4] in out, out)
+        il = "http://hebrew.il:%d/site/enc/" % HTTP
+
+        def encoded(*args, url=il + "w1255.html"):
+            p = subprocess.run([ewrender, "-f", font, "-d"] + list(args) + [url], cwd=work, capture_output=True,
+                               text=True, timeout=120, env=dict(os.environ, EW_HOSTS="hebrew.il=127.0.0.1"))
+            return p.returncode, p.stdout + p.stderr
+
+        rc, out = encoded()
+        check("encodings: windows-1255 that names none, under .il", rc == 0
+              and 'title "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and "link 1 %secho?q=%%F9%%EC%%E5%%ED\n" % il[:-4] in out, out)
+        rc, out = encoded("-F", "q=\u05d0\u05d1", "-S", "go")
+        check("encodings: its form sends windows-1255", rc == 0 and re.search(
+            r'^sent: 0 "GET\|\|q=%E0%E1&go=%E7%F4%F9" ', out, re.M), out)
+        rc, out = encoded("-e", "windows-1255", "-N", "http://localhost:%d/site/two.html" % HTTP,
+                          url=enc + "w1255.html")
+        check("encodings: chosen by hand, kept with the page for Back", rc == 0
+              and 'encoding: 0 windows-1255 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out
+              and re.search(r'^to: 0 "Two" ', out, re.M)
+              and re.search(r'^back: 0 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd" ', out, re.M), out)
+        rc, out = encoded("-e", "windows-1255", "-F", "q=\u05d0", "-S", "go", url=enc + "w1255.html")
+        check("encodings: chosen by hand, its form sends in it", rc == 0
+              and re.search(r'^sent: 0 "GET\|\|q=%E0&go=%E7%F4%F9" ', out, re.M), out)
+        rc, out = encoded("-e", "auto", url=il + "utf8.html")
+        check("encodings: Auto again", rc == 0 and 'encoding: 0 UTF-8 "\u05e9' in out, out)
+        rc, out = browse(enc + "plain.txt")
+        check("encodings: a text file that names none, in UTF-8", rc == 0
+              and 'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"' in out and '"<b>not bold</b> & caf\u00e9"' in out, out)
+        # a page's addresses: their query in its encoding for the HTML's, in
+        # UTF-8 for CSS's url()s (a <style>'s, a style attribute's, a sheet's)
+        # and fetch()
+        p = subprocess.run([ewrender, "-f", font, "-J", "-d", enc + "addr.html"], cwd=work, capture_output=True,
+                           text=True, timeout=120)
+        seen = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(enc + "seen", timeout=10).read().decode()
+        check("encodings: a page's addresses, their queries in its encoding or in UTF-8", p.returncode == 0 and
+              seen == "ext.png?q=%D7%90 f?q=%D7%90 img.png?q=%E0 inl.png?q=%D7%90 pts.png?q=%CA%81 s.css?q=%E0 "
+                      "st.png?q=%D7%90 x?q=%E0", p.stdout + p.stderr + "seen: " + seen)
         rc, out = browse("http://localhost:1/")
         check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
         # saving: a file EWeb doesn't show (kept in memory, saved in one

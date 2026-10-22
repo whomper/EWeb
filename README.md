@@ -19,7 +19,11 @@ EWeb's own fonts.
   times as fast as NetSurf's on the 68030), EWeb's CSS engine
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
   and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
-  grid, colours, borders, background pictures, and Hebrew right to left.
+  grid, colours, borders, background pictures, and Hebrew right to left, in
+  every Hebrew encoding (visual Hebrew, ISO-8859-8, shown in the order it is
+  stored, as browsers show it): a page that names none is read as browsers
+  read it (UTF-8 when it is, Windows-1255 on Israeli sites), and View >
+  Encoding reads one again in another.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, fetched after the page is shown (you read and scroll meanwhile),
   decoded straight at the size shown, dithered to the screen's colours in
@@ -210,13 +214,15 @@ tests/bench/          nsbench: the document tree, LibCSS's selection handler,
 tests/css/            the CSS engine's cases (from the specifications), and
                       csscmp, which compares it with LibCSS value by value
 tests/html5lib/       EWeb's parser (ewh5test.c) and Hubbub against the Web Platform Tests' tree-construction tests
-tests/hebrew/         a Hebrew page in every Hebrew encoding
+tests/hebrew/         a Hebrew page in every Hebrew encoding, with no label (unlabelled/), and visual (visual/)
 tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py), cookies.txt
 tests/url/            the URL parser against the URL Standard's tests
 tests/fuzz/           fuzz targets for the HTTP client, the URL and HTML parsers and cookies, their seeds
 tests/hatari/         EWGET.TTP and EWEB.PRG in Hatari (through common/tools/fakesting)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
+tests/browse/         the bookmarks, the disk cache, the Pi's pens, a refresh, and a page's
+                      encoding (enctest.c: the sniffing, the default by address, queries)
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
@@ -251,7 +257,10 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   might send), the cookies (`tests/net/cookies.txt`, from RFC 6265bis), and
   the fuzz targets' seeds and past finds (`tests/fuzz`), and the scripts'
   test pages (`tests/js`: the DOM, events, forms, `document.write`,
-  timers, computed styles, errors and the budget).
+  timers, computed styles, errors and the budget), and a page's encoding
+  (`tests/browse/enctest.c`: the HTML Standard's sniffing for pages that
+  name none, the default by the address, the Encoding Standard's labels,
+  links' queries in the page's encoding).
 - `make itest`: ewget against `tests/net/server.py` on this computer, over
   TCP and TLS with a test authority: pages plain and packed, a kept
   connection, a resumed TLS session, redirects from HTTP to HTTPS, a server

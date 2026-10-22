@@ -101,6 +101,7 @@ static const MBAR_ITEM m_view[] = {
 	{ "Larger text", "^+", C_LARGER },
 	{ "Smaller text", "^-", C_SMALLER },
 	{ "Actual size", "^0", C_ACTUAL },
+	{ "Encoding...", 0, C_ENCODING },
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
 	{ "-", 0, 0 },
@@ -282,6 +283,7 @@ void menu_update(void)
 	enable(C_SMALLER, !loading && opt.zoom > 50);
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
+	enable(C_ENCODING, !loading && br.encodable && br.src != NULL);
 	enable(C_PICTURES, !loading);
 	enable(C_SNAPSHOT, !loading && http_gateway[0]);
 	enable(C_LIVE, !loading && http_gateway[0]);
@@ -1108,6 +1110,45 @@ static int can_open(void *ud, const char *url)
 	return 0;
 }
 
+/* View > Encoding: the encodings EWeb offers (br_encodings) in a popup
+   at the mouse, by the menu item (TOS's AES has no submenus), the one
+   the page is read in ticked (its tick in place of the first of the two
+   spaces the others start with: popup()'s way); the page read again
+   from what came in the one chosen, until another page is loaded
+   (br_encoding) */
+static void encoding_menu(void)
+{
+	char lab[1 + 16][44];	/* (on the stack while the popup is up: not kept) */
+	const char *items[2 + 16];
+	short mx, my, mb, ks, r, n = 0;
+	int i;
+	if (br.d == NULL)
+		return;
+	if (br.enc[0])
+		snprintf(lab[0], sizeof lab[0], "  Auto");
+	else
+		snprintf(lab[0], sizeof lab[0], "\x08 Auto: %.35s", br_encoding_label(br.d->charset));
+	items[n++] = lab[0];
+	items[n++] = "-";
+	for (i = 0; i < br_nencodings && i < 16; i++) {
+		snprintf(lab[1 + i], sizeof lab[1 + i], "%s%s", strcmp(br.enc, br_encodings[i].name) == 0 ? "\x08 " : "  ",
+			 br_encodings[i].label);
+		items[n++] = lab[1 + i];
+	}
+	graf_mkstate(&mx, &my, &mb, &ks);
+	r = popup(mx, my, items, n);
+	if (r < 0 || r == 1)
+		return;
+	{
+		const char *name = r == 0 ? "" : br_encodings[r - 2].name;
+		if (strcmp(name, br.enc) == 0)
+			return;		/* as it is */
+		log_event("encoding %s", name[0] ? name : "auto");
+		loading_on();
+		loaded(br_encoding(&br, name));
+	}
+}
+
 /* the text's size, per cent: only text grows or shrinks, the page's
    pictures keep their size (decoded once) and the page its width in CSS
    px (the same pictures chosen, the same media queries) */
@@ -1250,6 +1291,7 @@ void command(int cmd)
 	case C_LARGER: set_zoom(opt.zoom + 10); break;
 	case C_SMALLER: set_zoom(opt.zoom - 10); break;
 	case C_ACTUAL: set_zoom(100); break;
+	case C_ENCODING: encoding_menu(); break;
 	case C_PICTURES:
 		/* a setting: on the disk at once (6.5); the page laid out again
 		   with its pictures or without */

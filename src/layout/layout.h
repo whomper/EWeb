@@ -26,8 +26,9 @@ typedef struct {
 	/* a picture: its handle for an <img>'s src or a background's url()
 	   (as the page has it; NULL: pictures aren't shown, an <img>'s alt
 	   text is), and its size in CSS px once it is known (0 x 0 until its
-	   file has come) */
-	void *(*image)(void *ud, const char *src, int32_t *w, int32_t *h);
+	   file has come). css: a url() of the page's CSS, whose query is
+	   UTF-8 (CSS parses it without the page's encoding) */
+	void *(*image)(void *ud, const char *src, int css, int32_t *w, int32_t *h);
 	void *ud;
 } LAYOUT_OPT;
 
