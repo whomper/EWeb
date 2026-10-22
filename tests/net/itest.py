@@ -7,9 +7,11 @@ packed, kept connections, a resumed TLS session, redirects from HTTP to
 HTTPS, chunks, a charset in Content-Type, and the certificates that must be
 refused (another host's, one nobody signed). With EWRENDER, the browser
 too (src/browse, through tests/host/ewrender.c): a page and its
-stylesheet over HTTP and HTTPS, its links made absolute, EWeb's own page
-when a server isn't there and when what came isn't a page, a page's
-refresh (<meta http-equiv=refresh>, the Refresh header).
+stylesheet over HTTP and HTTPS, its links made absolute, only the
+stylesheets whose media holds fetched (and those that come to hold as the
+window is sized, then), EWeb's own page when a server isn't
+there and when what came isn't a page, a page's refresh (<meta
+http-equiv=refresh>, the Refresh header).
 
     tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
@@ -295,6 +297,52 @@ try:
               [(s[0], s[1]) for s in steps] == want and
               all(s[3] == "0" and s[4] == "0" for s in steps if s[0] in ("back", "forward")) and
               steps[5][2] == "508", p.stdout + p.stderr)
+        # a stylesheet's media (the HTML Standard's 4.2.4), at two widths
+        # (760 and 500 CSS px): only the sheets that hold for the screen
+        # asked for and applied, none alternate, disabled, of another type
+        # or with an empty href (two sheets each time, said on the status line)
+        murl = "http://localhost:%d/site/media/page.html" % HTTP
+        mouts = []
+        for w in ("608", "400"):
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", w, murl], cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            mouts.append((p.returncode, p.stdout + p.stderr, urllib.request.build_opener(
+                urllib.request.ProxyHandler({})).open("http://localhost:%d/site/media/count" % HTTP,
+                                                     timeout=10).read().decode()))
+        check("the browser: stylesheets by their media, type and rel",
+              [o[0] for o in mouts] == [0, 0] and
+              mouts[0][2] == "body.css=1 page.html=1 wide.css=1" and
+              mouts[1][2] == "body.css=2 narrow.css=1 page.html=2 wide.css=1" and
+              re.search(r'#0000aa \S+ link 0 "Sheets by', mouts[0][1]) and
+              re.search(r'#00aa00 \S+ link 0 "Sheets by', mouts[1][1]) and
+              all("fill" in o[1] and "#eeeeee" in o[1] and "stylesheet 2..." in o[1] and
+                  "stylesheet 3" not in o[1] for o in mouts),
+              "\n".join(o[1] + "count: " + o[2] for o in mouts))
+        # the window sized (Media Queries 4, 2): at 400 px the sheet for
+        # a narrow screen is fetched then, quietly (no status line), and
+        # back at 608 the wide one comes from the cache, as body.css
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "608", "-L", "400", "-L", "608", murl],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        rcount = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/media/count" % HTTP, timeout=10).read().decode()
+        check("the browser: a stylesheet's media again as the window is sized",
+              p.returncode == 0 and rcount == "body.css=3 narrow.css=2 page.html=3 wide.css=2" and
+              re.search(r'resized: 1 "Media" width 400\nresized: 1 "Media" width 608\n', p.stdout) and
+              re.search(r'#0000aa \S+ link 0 "Sheets by', p.stdout) and "stylesheet 3" not in p.stdout,
+              p.stdout + p.stderr + "count: " + rcount)
+        # sized while a picture comes (GEM's messages come as a request
+        # waits): no request inside it, the narrow sheet after it
+        p = subprocess.run([ewrender, "-f", font, "-d", "-w", "608", "-Y", "400",
+                            "http://localhost:%d/site/media/pics.html" % HTTP],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        rcount = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/media/count" % HTTP, timeout=10).read().decode()
+        check("the browser: the window sized while a picture comes",
+              p.returncode == 0 and "sized in a request: 1" in p.stdout and
+              rcount == "body.css=3 narrow.css=3 page.html=3 pic.png=1 pics.html=1 wide.css=3" and
+              re.search(r'page 400 x', p.stdout) and re.search(r'#00aa00 \S+ link 0 "Sheets by', p.stdout) and
+              "image " in p.stdout,
+              p.stdout + p.stderr + "count: " + rcount)
         rc, out = browse("http://localhost:%d/site/two.html#end" % HTTP)
         check("the browser: a page's anchor", rc == 0 and '"The end"' in out
               and "link 1 http://localhost:%d/site/\n" % HTTP in out, out)

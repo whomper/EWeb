@@ -75,6 +75,12 @@ typedef struct doc {
 	/* its scripts' state (src/js), let go first by doc_free */
 	void *js;
 	void (*js_free)(void *js);
+	uint8_t scripting;		/* parsed for scripts run (its <noscript>s text) */
+	/* its sheets as they were added (src/browse): the widths, CSS px,
+	   their media queries hold at as they did then (ec_media_span), and
+	   with scripting, which they were (doc_sheets_key) */
+	int32_t span_lo, span_hi;
+	uint32_t sheets_key;
 } doc;
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or
@@ -119,9 +125,22 @@ int doc_refresh_meta(const dnode *n);
 #define DOC_REFRESH_METAS 16
 
 /* The page's stylesheets in document order: cb is called for each
-   <style> with its text (is_link 0) and each <link rel=stylesheet> for a
-   screen with its href (is_link 1). */
+   <style> with its text (is_link 0) and each <link rel=stylesheet> with
+   its href (is_link 1) that is to be applied: its media holding for the
+   document's screen (the CSS engine's media queries, as for @media), its
+   type CSS, not disabled, and of the preferred set (an alternative sheet
+   only when it is that set's). With d->scripting, d->sheets_key is set. */
 void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t len), void *ud);
+/* which elements and attributes the page's sheets are now, as a number:
+   another than d->sheets_key when a script changed them (a <link>'s
+   media, rel or disabled, a <style> added or its text). Only the elements
+   that are sheets count: another <link> added or changed (a preconnect,
+   an icon) leaves it as it was */
+uint32_t doc_sheets_key(const doc *d);
+/* n is a <link> whose sheet is fetched when its media holds (rel
+   stylesheet, an alternative too, href, not disabled, a CSS type) or
+   one preloaded as a style: for scripts, its load event */
+int doc_link_loads(const dnode *n);
 
 /* styles every element: the UA sheet, then the sheets added with
    ec_sheet() in between (the loader's), then selection */

@@ -216,6 +216,30 @@ int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *
 int ec_media_ok(ec_ctx *c, const char *s, size_t len);
 int32_t ec_sizes(ec_ctx *c, const char *s, size_t len);
 
+/* Another screen (the window made wider or narrower): what is evaluated
+ * from now on is for m (ec_media_ok, ec_sizes, a sheet added, viewport
+ * units in a style computed); the sheets added before keep what their
+ * @media gave. */
+void ec_set_media(ec_ctx *c, const ec_media *m);
+/* The viewport widths, *lo to *hi px, at which every media query c has
+ * evaluated (made, or since ec_drop_sheets) gives what it gave: at a
+ * width outside them a sheet or an @media in it goes the other way, and
+ * the sheets are to be added again (Media Queries 4, 2: media queries
+ * are evaluated again when the environment changes). */
+void ec_media_span(const ec_ctx *c, int32_t *lo, int32_t *hi);
+/* Every sheet added to c taken out (a base's rules stay), with the
+ * styles (ec_unstyle): for them to be added again, as they now are for
+ * another screen (ec_set_media). Their memory is given back (their text,
+ * rules and declarations: added again, they take what they took); the
+ * atoms stay, and a script's selectors (ec_selector). */
+void ec_drop_sheets(ec_ctx *c);
+/* 1 when a sheet added since ec_create or ec_drop_sheets didn't all fit
+ * in memory: a rule of it, or the whole of it, left out. */
+int ec_sheets_short(const ec_ctx *c);
+/* the bytes c's memory takes: its atoms, sheets and styles (the pieces
+ * they are in, but what is left of the last of each) */
+size_t ec_mem(const ec_ctx *c);
+
 /* The stack's floor: the cascade, the layout and the scripts go no deeper
  * into a document than this; what is deeper isn't laid out (a page nested
  * deeper than the stack holds overwrote the program's data, and bombed).

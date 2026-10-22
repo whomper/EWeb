@@ -1659,9 +1659,14 @@ static void resized(void)
 	get_work();
 	save_place();
 	if (br.p != NULL && win_page_w() != old_w) {
-		/* the same place in the text, as near as it can be */
+		/* the same place in the text, as near as it can be; the busy
+		   bee, as the page's sheets may be fetched for the new width */
 		int32_t h0 = br.p->height;
+		if (!loading)
+			graf_mouse(BUSYBEE, 0);
 		br_relayout(&br, win_page_w());
+		if (!loading)
+			graf_mouse(ARROW, 0);
 		if (h0 > 0)
 			top = (int32_t) ((int64_t) top * br.p->height / h0);
 	}

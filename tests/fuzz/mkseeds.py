@@ -115,6 +115,16 @@ for name, first, page in [
     ("refresh", 0, "<meta http-equiv=refresh content=x><template><meta http-equiv=Refresh content=1>"
      "</template><noscript><meta http-equiv=REFRESH content='.5, URL=\"a\"b'></noscript><base href=/b/>"
      "<p><meta http-equiv=refresh content='0;url=javascript:x'><meta http-equiv=refresh content=3>"),
+    ("sheets", 0, "<link rel=stylesheet media='screen and (min-width: 40em), not print' href=a.css>"
+     "<link rel='alternate stylesheet' title=A href=b><link rel=stylesheet disabled href=c>"
+     "<link rel=StyleSheet type=' text/css ; x=y' title=M href=d><link rel=stylesheet href=''>"
+     "<style media='(400px <= width < 1000px) and (color), (orientation: portrait)'>p{}</style>"
+     "<style type=TEXT/CSS title=N>q{}</style><style media=only\x0cscreen>r{}</style>"
+     "<svg><style>s{}</style></svg><template><style>t{}</style></template><p><link rel=stylesheet href=e>"),
+    ("sheetsjs", 8, "<link rel='alternate stylesheet' title=M href=a><link rel=stylesheet media=print href=b "
+     "onload=\"this.media='all'\"><link rel=preload as=STYLE href=c><noscript><link rel=stylesheet href=b>"
+     "</noscript><style title=M media='(width < 40em) or (orientation: portrait)'>p{}</style>"
+     "<link rel='alternate stylesheet' title=N href=d><template><link rel=stylesheet title=X href=f></template>"),
 ]:
     put("html", name, bytes([first]) + page.encode("latin-1"))
 

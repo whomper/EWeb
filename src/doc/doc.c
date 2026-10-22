@@ -629,6 +629,7 @@ doc *doc_parse_opts(const char *data, size_t len, const html_opts *o, const ec_m
 	d->css = ua_base(media) ? ec_create_on(media, 0, ua) : ec_create(media, 0);
 	if (d->css != NULL && ua != NULL)
 		d->ua = ua;
+	d->scripting = o != NULL && o->scripting;
 	if (d->css == NULL || !html_parse(d, data, len, o)) {
 		doc_free(d);
 		return NULL;
@@ -811,78 +812,292 @@ static int word_in(const char *list, const char *word)
 	return 0;
 }
 
-/* a media attribute EWeb takes: none, all or screen (or a list with one) */
-static int media_ok(const char *m)
+/* is the text from s to e, in any case, word (in lower case) */
+static int word_is(const char *s, const char *e, const char *word)
 {
-	const char *s;
-	if (m == NULL || *m == 0)
+	for (; s < e && *word; s++, word++)
+		if ((*s >= 'A' && *s <= 'Z' ? *s | 0x20 : *s) != *word)
+			return 0;
+	return s == e && *word == 0;
+}
+
+/* the HTML Standard's "matches the environment" for a <link>'s or a
+   <style>'s media (4.2.4, 4.2.6): none is all; else the media query list
+   evaluated as an @media's is (Media Queries 4, the same screen). The
+   commonest three, nine in ten on the page set, are told without the
+   CSS engine's tokens */
+static int media_ok(doc *d, const char *m)
+{
+	const char *e;
+	if (m == NULL)
 		return 1;
-	for (s = m; *s; s++) {
-		if ((s[0] | 0x20) == 's' && strncmp(s, "screen", 6) == 0)
-			return 1;
-		if ((s[0] | 0x20) == 'a' && strncmp(s, "all", 3) == 0)
-			return 1;
+	e = m + strlen(m);
+	if (word_is(m, e, "screen") || word_is(m, e, "all"))
+		return 1;
+	if (word_is(m, e, "print"))
+		return 0;
+	return ec_media_ok(d->css, m, (size_t) (e - m));
+}
+
+/* a type EWeb reads a sheet of. A <style>'s (4.2.6, "update a style
+   block"): none, empty or text/css. A <link>'s (4.2.4, "processing the
+   type attribute"): none or a MIME type whose essence is text/css; an
+   empty one too, as browsers take it */
+static int css_type(const char *t, int link)
+{
+	const char *e;
+	if (t == NULL || *t == 0)
+		return 1;
+	if (!link)
+		return word_is(t, t + strlen(t), "text/css");
+	while (*t == ' ' || *t == '\t' || *t == '\n' || *t == '\r' || *t == '\f')
+		t++;
+	for (e = t; *e && *e != ';'; e++)
+		;
+	while (e > t && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\n' || e[-1] == '\r' || e[-1] == '\f'))
+		e--;
+	return e == t || word_is(t, e, "text/css");
+}
+
+/* the attributes a sheet's element is read by, found in one pass (a
+   <link> has many: a look for each cost more than the rest) */
+enum { SA_REL, SA_HREF, SA_TYPE, SA_MEDIA, SA_TITLE, SA_DISABLED, SA_AS, SA_N };
+
+static void sheet_attrs(const dnode *n, const char **v)
+{
+	uint16_t i;
+	int k;
+	for (k = 0; k < SA_N; k++)
+		v[k] = NULL;
+	for (i = 0; i < n->nattr; i++) {
+		size_t al;
+		const char *an = ec_atom_text(n->attrs[i].name, &al);
+		switch (al) {
+		case 2: k = memcmp(an, "as", 2) ? -1 : SA_AS; break;
+		case 3: k = memcmp(an, "rel", 3) ? -1 : SA_REL; break;
+		case 4: k = !memcmp(an, "href", 4) ? SA_HREF : !memcmp(an, "type", 4) ? SA_TYPE : -1; break;
+		case 5: k = !memcmp(an, "media", 5) ? SA_MEDIA : !memcmp(an, "title", 5) ? SA_TITLE : -1; break;
+		case 8: k = memcmp(an, "disabled", 8) ? -1 : SA_DISABLED; break;
+		default: k = -1; break;
+		}
+		if (k >= 0 && v[k] == NULL)
+			v[k] = n->attrs[i].val;
 	}
-	return 0;
+}
+
+/* what a style or link element is as a sheet, by its attributes a: 0
+   none (a type not CSS; a link not to a stylesheet, disabled, or with an
+   empty href, which would fetch the page itself: 4.2.4), 1 a sheet, 2 an
+   alternative sheet (rel="alternate stylesheet" with a title: applied
+   only when its title is the preferred set's; with none, never, as in
+   Gecko) */
+static int sheet_kind(const dnode *n, const char **a)
+{
+	if (n->tag == T_STYLE)
+		return css_type(a[SA_TYPE], 0);
+	if (a[SA_REL] == NULL || a[SA_HREF] == NULL || *a[SA_HREF] == 0 || !word_in(a[SA_REL], "stylesheet") ||
+	    a[SA_DISABLED] != NULL || !css_type(a[SA_TYPE], 1))
+		return 0;
+	if (!word_in(a[SA_REL], "alternate"))
+		return 1;
+	return a[SA_TITLE] != NULL && *a[SA_TITLE] ? 2 : 0;
+}
+
+typedef struct {
+	doc *d;
+	void (*cb)(void *, int, const char *, size_t);
+	void *ud;
+	dnode *top;
+	const char *set;	/* the preferred style sheet set's name, or NULL */
+	uint8_t looked;		/* the rest of the page looked through for it */
+	uint32_t key;		/* doc_sheets_key's, as the walk goes */
+} SHEETS_WALK;
+
+/* the node after n as doc_sheets walks the tree: into n's children when
+   down */
+static dnode *walk_next(const dnode *top, dnode *n, int down)
+{
+	if (down && n->first != NULL)
+		return n->first;
+	while (n != top && n->next == NULL)
+		n = n->parent;
+	return n == top ? NULL : n->next;
+}
+
+/* nothing under n is looked at: a style or link element, a template,
+   SVG (as sheet_of says) */
+static int sheet_leaf(const dnode *n)
+{
+	if (n->type != DN_ELEMENT)
+		return 0;
+	if (n->ns != DN_NS_HTML)
+		return n->tag == T_SVG;
+	return n->tag == T_STYLE || n->tag == T_LINK || n->tag == T_TEMPLATE;
+}
+
+/* the title the first sheet after n names a set by (a titled sheet, not
+   an alternative), or NULL */
+static const char *set_after(const dnode *top, dnode *n)
+{
+	const char *a[SA_N];
+	for (n = walk_next(top, n, 0); n != NULL; n = walk_next(top, n, !sheet_leaf(n)))
+		if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && (n->tag == T_STYLE || n->tag == T_LINK)) {
+			sheet_attrs(n, a);
+			if (a[SA_TITLE] != NULL && *a[SA_TITLE] && sheet_kind(n, a) == 1)
+				return a[SA_TITLE];
+		}
+	return NULL;
+}
+
+/* CSSOM's "add a CSS style sheet" for n, a sheet (kind 1) or an
+   alternative (2) titled t: an untitled sheet is always enabled; the
+   first titled sheet that isn't an alternative names the preferred set,
+   and as EWeb has no menu to choose another, a sheet of another set (its
+   title another) is disabled. An alternative is enabled when its title
+   is the preferred set's, though that be named after it ("enable a CSS
+   style sheet set" as the name is given; Gecko and Blink do so): the
+   rest of the page is looked through for the name then, which a page
+   with no alternatives never costs. 1 when enabled */
+static int in_set(SHEETS_WALK *w, dnode *n, int kind, const char *t)
+{
+	if (t == NULL || *t == 0)
+		return 1;
+	if (w->set == NULL && kind == 1) {
+		w->set = t;
+	} else if (w->set == NULL && !w->looked) {
+		w->set = set_after(w->top, n);
+		w->looked = 1;
+	}
+	return w->set != NULL && strcmp(t, w->set) == 0;
+}
+
+/* a sheet's element into doc_sheets_key: which element, its attributes,
+   and a <style>'s text (a script's change makes it anew, at another
+   address). Only an element that is a sheet (sheet_kind): one that a
+   script makes one, or makes no longer one, comes into it or goes, and
+   the other <link>s a script adds or changes (a preconnect, a preload of
+   a script, an icon) leave it as it was */
+static uint32_t key_of(uint32_t h, const dnode *n, const char **a)
+{
+	const dnode *c;
+	int k;
+	h = h * 33 + (uint32_t) (uintptr_t) n;
+	for (k = 0; k < SA_N; k++) {
+		const char *s = a[k];
+		if (s == NULL) {
+			h = h * 33 + 1;
+			continue;
+		}
+		for (; *s; s++)
+			h = h * 33 + (uint8_t) *s;
+		h *= 33;
+	}
+	if (n->tag == T_STYLE)
+		for (c = n->first; c != NULL; c = c->next)
+			h = (h * 33 + (uint32_t) (uintptr_t) c->text) * 33 + c->len;
+	return h;
 }
 
 /* n's sheet, if it is a style or link element: 1 when nothing under it
-   is looked at (those, a template, SVG) */
-static int sheet_of(dnode *n, void (*cb)(void *, int, const char *, size_t), void *ud)
+   is looked at (those, a template, SVG). A sheet whose media doesn't
+   match isn't fetched (the HTML Standard lets a browser fetch only the
+   sheets it applies, 4.2.4): when the window comes to a width it holds
+   at, the sheets are taken again (src/browse, as the @media in them) */
+static int sheet_of(SHEETS_WALK *w, dnode *n)
 {
+	const char *a[SA_N];
 	dnode *c;
-	if (n->type == DN_ELEMENT) {
-		if (n->tag == T_STYLE && n->ns == DN_NS_HTML && media_ok(dn_attr(n, "media"))) {
-			size_t len = 0;
-			char *buf;
+	int kind;
+	if (n->type != DN_ELEMENT || n->ns != DN_NS_HTML)
+		return n->type == DN_ELEMENT && n->tag == T_SVG;
+	if (n->tag != T_STYLE && n->tag != T_LINK)
+		return n->tag == T_TEMPLATE;
+	sheet_attrs(n, a);
+	kind = sheet_kind(n, a);
+	if (kind == 0)
+		return 1;
+	if (w->d->scripting)
+		w->key = key_of(w->key, n, a);
+	if (!in_set(w, n, kind, a[SA_TITLE]) || !media_ok(w->d, a[SA_MEDIA]))
+		return 1;
+	if (n->tag == T_LINK) {
+		w->cb(w->ud, 1, a[SA_HREF], strlen(a[SA_HREF]));
+	} else {
+		size_t len = 0;
+		char *buf;
+		for (c = n->first; c != NULL; c = c->next)
+			if (c->type == DN_TEXT)
+				len += c->len;
+		buf = malloc(len + 1);
+		if (buf != NULL) {
+			len = 0;
 			for (c = n->first; c != NULL; c = c->next)
-				if (c->type == DN_TEXT)
+				if (c->type == DN_TEXT) {
+					memcpy(buf + len, c->text, c->len);
 					len += c->len;
-			buf = malloc(len + 1);
-			if (buf != NULL) {
-				len = 0;
-				for (c = n->first; c != NULL; c = c->next)
-					if (c->type == DN_TEXT) {
-						memcpy(buf + len, c->text, c->len);
-						len += c->len;
-					}
-				buf[len] = 0;
-				cb(ud, 0, buf, len);
-				free(buf);
-			}
-			return 1;
+				}
+			buf[len] = 0;
+			w->cb(w->ud, 0, buf, len);
+			free(buf);
 		}
-		if (n->tag == T_LINK) {
-			const char *rel = dn_attr(n, "rel"), *href = dn_attr(n, "href");
-			if (rel != NULL && href != NULL && word_in(rel, "stylesheet") && !word_in(rel, "alternate") &&
-			    media_ok(dn_attr(n, "media")))
-				cb(ud, 1, href, strlen(href));
-			return 1;
-		}
-		if (n->tag == T_TEMPLATE || n->tag == T_SVG)
-			return 1;
 	}
-	return 0;
+	return 1;
 }
 
 /* in document order, without recursion (a page can be nested deeper than
-   the Atari's stack holds) */
+   the Atari's stack would go) */
 void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t len), void *ud)
 {
 	dnode *top = d->root, *n = top;
-	if (top == NULL)
-		return;
-	for (;;) {
-		if (!sheet_of(n, cb, ud) && n->first != NULL) {
+	SHEETS_WALK w;
+	w.d = d;
+	w.cb = cb;
+	w.ud = ud;
+	w.top = top;
+	w.set = NULL;
+	w.looked = 0;
+	w.key = 5381;
+	for (n = top; n != NULL;) {
+		if (!sheet_of(&w, n) && n->first != NULL) {
 			n = n->first;
 			continue;
 		}
 		while (n != top && n->next == NULL)
 			n = n->parent;
 		if (n == top)
-			return;
+			break;
 		n = n->next;
 	}
+	if (d->scripting)
+		d->sheets_key = w.key;
+}
+
+uint32_t doc_sheets_key(const doc *d)
+{
+	const char *a[SA_N];
+	dnode *n;
+	uint32_t h = 5381;
+	for (n = d->root; n != NULL; n = walk_next(d->root, n, !sheet_leaf(n)))
+		if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && (n->tag == T_STYLE || n->tag == T_LINK)) {
+			sheet_attrs(n, a);
+			if (sheet_kind(n, a) != 0)
+				h = key_of(h, n, a);
+		}
+	return h;
+}
+
+int doc_link_loads(const dnode *n)
+{
+	const char *a[SA_N];
+	if (n->type != DN_ELEMENT || n->ns != DN_NS_HTML || n->tag != T_LINK)
+		return 0;
+	sheet_attrs(n, a);
+	if (sheet_kind(n, a) != 0)
+		return 1;
+	/* rel=preload as=style: what the async-CSS pattern's handler makes
+	   a stylesheet as it loads */
+	return a[SA_REL] != NULL && word_in(a[SA_REL], "preload") && a[SA_HREF] != NULL && *a[SA_HREF] &&
+	       a[SA_AS] != NULL && word_is(a[SA_AS], a[SA_AS] + strlen(a[SA_AS]), "style");
 }
 
 void doc_add_ua(doc *d)

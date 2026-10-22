@@ -19,7 +19,20 @@
  * at most), percentages, numbers, integers, keywords, colours as #rrggbb
  * (#rrggbbaa if not opaque), currentcolor, calc(Apx + B%), min(...),
  * url(...), gradient, and font families as names|generic. The UA sheet is
- * nsbench's, the viewport 640x480, the default font 16px. */
+ * nsbench's, the viewport 640x480, the default font 16px. Two lines
+ * among the expected values look at the media queries:
+ *
+ *   @span LO HI    the widths every media query evaluated holds at as
+ *                  it did (ec_media_span)
+ *   @width W       the window made W px wide: the sheets taken out
+ *                  (ec_drop_sheets) and added again for it (the UA's and
+ *                  the case's css), and the page styled again; what
+ *                  follows is at that width
+ *   @again N       the sheets taken out and added again as @width does,
+ *                  once and then N times more at the same width: the
+ *                  context's memory (ec_mem) after them must be what it
+ *                  was after the first (what was the sheets' and the
+ *                  styles' given back each time) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -197,6 +210,45 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 		int p;
 		if (line[0] == 0 || (line[0] == '#' && line[1] == ' '))
 			continue;
+		if (!strncmp(line, "@span ", 6)) {
+			int32_t lo, hi;
+			long wlo, whi;
+			ec_media_span(c, &lo, &hi);
+			if (sscanf(line + 6, "%ld %ld", &wlo, &whi) != 2 || wlo != lo || whi != hi) {
+				fprintf(stderr, "FAIL %s: the span is %ld %ld, not %s\n", name, (long) lo, (long) hi,
+					line + 6);
+				fails++;
+			}
+			continue;
+		}
+		if (!strncmp(line, "@width ", 7)) {
+			ec_media m = { 640, 480, 16 };
+			m.width = atoi(line + 7);
+			ec_drop_sheets(c);
+			ec_set_media(c, &m);
+			ec_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA);
+			ec_sheet(c, css, csslen, EC_ORIGIN_AUTHOR);
+			ecs_select(c, doc, &ss);
+			continue;
+		}
+		if (!strncmp(line, "@again ", 7)) {
+			int k, times = atoi(line + 7);
+			size_t m0 = 0;
+			for (k = 0; k <= times; k++) {
+				ec_drop_sheets(c);
+				ec_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA);
+				ec_sheet(c, css, csslen, EC_ORIGIN_AUTHOR);
+				ecs_select(c, doc, &ss);
+				if (k == 0)
+					m0 = ec_mem(c);
+			}
+			if (ec_mem(c) > m0 || ec_sheets_short(c)) {
+				fprintf(stderr, "FAIL %s: added again %d times, the memory went from %lu to %lu bytes\n",
+					name, times, (unsigned long) m0, (unsigned long) ec_mem(c));
+				fails++;
+			}
+			continue;
+		}
 		if (sscanf(line, "%127s %63s %255[^\n]", sel, prop, want) != 3) {
 			fprintf(stderr, "FAIL %s: can't read \"%s\"\n", name, line);
 			fails++;

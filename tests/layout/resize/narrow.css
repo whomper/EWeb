@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/* media="(max-width: 599px)": fetched when the window is made narrower */
+.narrow { background: #0c0 }

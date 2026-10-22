@@ -5,7 +5,8 @@
 tests/layout and of tests/bench/sample.html, against the one kept beside
 it (PAGE.txt), with the repository's folder taken out of the links; and
 the Hebrew test page laid out the same in each of its encodings
-(tests/hebrew: UTF-8, windows-1255, ISO-8859-8 logical and -I).
+(tests/hebrew: UTF-8, windows-1255, ISO-8859-8 logical and -I). A page's
+<!-- args: ... --> line gives ewrender more (-L WIDTH: the window sized).
 
     tests/layout/run.py EWRENDER EWEB.FNT [--update]
 
@@ -13,6 +14,7 @@ the Hebrew test page laid out the same in each of its encodings
 without -d draws them) before keeping them."""
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -23,7 +25,11 @@ update = "--update" in sys.argv[3:]
 
 
 def dump(page):
-    p = subprocess.run([os.path.abspath(ewrender), "-f", os.path.abspath(font), "-d", os.path.abspath(page)],
+    args = []
+    with open(page, encoding="latin-1") as f:
+        for m in re.finditer(r"<!-- args: (.*?) -->", f.read()):
+            args += m.group(1).split()
+    p = subprocess.run([os.path.abspath(ewrender), "-f", os.path.abspath(font), "-d"] + args + [os.path.abspath(page)],
                        capture_output=True, text=True, timeout=120)
     if p.returncode != 0:
         sys.exit("layout: %s: ewrender failed\n%s" % (page, p.stderr))

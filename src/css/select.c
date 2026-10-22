@@ -486,7 +486,7 @@ static ec_block *inline_block(ec_ctx *c, const char *val, uint32_t len)
 	memset(b, 0, sizeof *b);
 	b->src = copy;
 	b->len = len;
-	ec_parse_block(c, b);
+	ec_parse_block(c, b, &c->smem);
 	e->hash = h;
 	e->len = len;
 	e->s = copy;
@@ -1333,7 +1333,7 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	for (i = 0; i < nhits; i++) {
 		ec_block *b = (ec_block *) hits[i].b;
 		if (!b->parsed)
-			ec_parse_block(c, b);
+			ec_parse_block(c, b, &c->rmem);	/* a sheet's: kept with it */
 		if (hits[i].pseudo == PE_BEFORE)
 			any_before = 1;
 		else if (hits[i].pseudo == PE_AFTER)
@@ -1431,9 +1431,13 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 
 void ec_select(ec_ctx *c, ec_node *root)
 {
+	ec_arena *pm = c->pmem;
 	memset(cache, 0, sizeof cache);
 	memset(icache, 0, sizeof icache);
 	memset(c->bloom, 0, sizeof c->bloom);
+	/* what var() makes parsed goes with the styles (ec_unstyle gives
+	   it back), not with the sheets */
+	c->pmem = &c->smem;
 	if (root->parent != NULL) {
 		/* a subtree: its ancestors go in the filter */
 		ec_node *p;
@@ -1442,8 +1446,9 @@ void ec_select(ec_ctx *c, ec_node *root)
 		style_list(c, root, root->parent->style, 1);
 		for (p = root->parent; p != NULL; p = p->parent)
 			bloom_pop(c, p);
-		return;
+	} else {
+		c->root_style = NULL;
+		style_list(c, root, NULL, 1);
 	}
-	c->root_style = NULL;
-	style_list(c, root, NULL, 1);
+	c->pmem = pm;
 }

@@ -564,6 +564,10 @@ static const char *fetch_more, *fetch_refuse;
 /* for the disk cache: the request's variant (the pens asked for), after
    the address, or NULL */
 static const char *fetch_variant;
+/* requests under way: GEM's messages come meanwhile (pf_idle), and a
+   window sized then doesn't fetch the page's sheets inside one
+   (br_relayout) */
+static int net_busy;
 
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
@@ -675,7 +679,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		sb_init(&body);
 		{
 			unsigned long t0 = pf_ms(), ms;
+			net_busy++;
 			ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+			net_busy--;
 			ms = pf_ms() - t0;
 			/* how fast answers come, from one big enough to tell */
 			if (ok && body.len >= 8192 && ms > 0)
@@ -766,6 +772,7 @@ typedef struct {
 	const char *base;
 	int fresh;
 	int n;
+	int quiet;		/* not a load: nothing said on the status line */
 } SHEETS;
 
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
@@ -787,7 +794,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 	if (f == NULL)
 		return;
 	sh->n++;
-	{
+	if (!sh->quiet) {
 		char host[128], msg[200];
 		host_of(url, host, sizeof host);
 		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
@@ -810,6 +817,78 @@ static ec_media media_of(const browser *b)
 	m.height = (int32_t) ((int64_t) 400 * 1024 / b->zoom);
 	m.font_size = 16;
 	return m;
+}
+
+/* the page's sheets into its CSS context, in the cascade's order: the
+   UA's (when it isn't on the base), the one that hides <noscript> when
+   scripts run, the page's in document order (doc_sheets: a <link>'s
+   fetched, fresh as fetch() takes it) and the user's (extra_css). What
+   they hang on is kept with the document: the widths their media queries
+   hold at as they did (at another, br_relayout adds them again) and, with
+   scripts, which they were (doc_sheets_key: a script that changes them,
+   they are added again) */
+static void add_sheets(browser *b, doc *d, const char *base, int fresh, int quiet)
+{
+	SHEETS sh;
+	int stop = conn_stop;
+	doc_add_ua(d);
+	if (d->scripting)
+		ec_sheet(d->css, "noscript { display: none !important }", 37, EC_ORIGIN_UA);
+	sh.b = b;
+	sh.d = d;
+	sh.base = base;
+	sh.fresh = fresh;
+	sh.n = 0;
+	sh.quiet = quiet;
+	doc_sheets(d, sheet_cb, &sh);
+	if (b->extra_css != NULL)
+		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
+	ec_media_span(d->css, &d->span_lo, &d->span_hi);
+	if (conn_stop && !stop) {
+		/* stopped while its sheets came: at any other width they are
+		   taken again */
+		ec_media m = media_of(b);
+		d->span_lo = d->span_hi = m.width;
+	}
+}
+
+/* the page's sheets being added again: its styles are gone meanwhile,
+   and a window sized as a sheet comes (GEM's messages come in pf_idle)
+   isn't laid out then (br_relayout) */
+static int resheeting;
+
+static int unkeep_all(browser *b);
+
+/* the page's sheets added again: for the screen as it is now (another
+   width), or as a script changed them. Those fetched before come from
+   the cache, those that hold now for the first time over the network.
+   What they took is given back first (ec_drop_sheets), so they take what
+   they took; when they don't fit even so (a 1 MB ST), the pages kept for
+   Back go and they are added once more. by_script: a script changed
+   them, else the window was sized; the log says which */
+static void readd_sheets(browser *b, doc *d, const char *base, int fresh, int quiet, int by_script)
+{
+	ec_media m = media_of(b);
+	int tries;
+	resheeting++;
+	for (tries = 0; tries < 2; tries++) {
+		ec_drop_sheets(d->css);
+		ec_set_media(d->css, &m);
+		add_sheets(b, d, base, fresh, quiet);
+		if (!ec_sheets_short(d->css) || conn_stop || tries > 0 || !unkeep_all(b))
+			break;
+	}
+	if (b->log != NULL) {
+		char line[100];
+		if (by_script)
+			snprintf(line, sizeof line, "sheets added again: a script changed them");
+		else
+			snprintf(line, sizeof line, "sheets added again: the window %ld CSS px wide", (long) m.width);
+		if (ec_sheets_short(d->css))
+			str_copy(line + strlen(line), ", short of memory", (long) (sizeof line - strlen(line)));
+		b->log(b->ud, line);
+	}
+	resheeting--;
 }
 
 /* ---------------------------------------------------------------- pictures in the layout */
@@ -912,12 +991,10 @@ static void base_of(const browser *b, const doc *d, const char *url, char *out, 
 		str_copy(out, url, size);
 }
 
-/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
-   Back and the one shown go, and the pictures not in use; 1 when
-   something was given back */
 static void unkeep(BR_ENTRY *e);
 
-static int make_room(browser *b)
+/* the pages kept for Back given back: 1 when there was one */
+static int unkeep_all(browser *b)
 {
 	int i, freed = 0;
 	for (i = 0; i < b->nhist; i++)
@@ -925,6 +1002,15 @@ static int make_room(browser *b)
 			unkeep(&b->hist[i]);
 			freed = 1;
 		}
+	return freed;
+}
+
+/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
+   Back and the one shown go, and the pictures not in use; 1 when
+   something was given back */
+static int make_room(browser *b)
+{
+	int freed = unkeep_all(b);
 	if (b->p != NULL) {
 		pg_free(b->p);
 		doc_free(b->d);
@@ -960,7 +1046,6 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	doc *d;
 	page *p;
 	char base[4096];
-	SHEETS sh;
 
 	unsigned long t = pf_ms(), t_sheets;
 	int scripts = br_scripts_for(b, url), again = 0;
@@ -978,24 +1063,14 @@ parse:
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d == NULL)
 		return 0;
-	doc_add_ua(d);
 	ec_set_resolver(d->css, resolve);
-	/* <noscript> is shown when scripts aren't run (the HTML Standard's
-	   rendering: hidden only with scripting) */
-	if (scripts)
-		ec_sheet(d->css, "noscript { display: none !important }", 37, EC_ORIGIN_UA);
 	b->ms_parse = pf_ms() - t;
 	if (d->base[0] == 0 || !resolve(url, d->base, base, sizeof base))
 		str_copy(base, url, sizeof base);
-	sh.b = b;
-	sh.d = d;
-	sh.base = base;
-	sh.fresh = again ? 0 : fresh;
-	sh.n = 0;
 	t_sheets = pf_ms();
-	doc_sheets(d, sheet_cb, &sh);
-	if (b->extra_css != NULL)
-		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
+	/* <noscript> is shown when scripts aren't run (the HTML Standard's
+	   rendering: hidden only with scripting): d->scripting */
+	add_sheets(b, d, base, again ? 0 : fresh, 0);
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
 #ifndef EW_ST
@@ -1032,6 +1107,12 @@ parse:
 			}
 			doc_refresh(d);
 			js_changed(d);
+			/* its scripts changed its sheets (a handler that made a
+			   <link>'s media all or its rel stylesheet as it loaded,
+			   a <style> added): taken again, those fetched from the
+			   cache */
+			if (doc_sheets_key(d) != d->sheets_key)
+				readd_sheets(b, d, base, fresh == 2 ? 2 : 0, 0, 1);
 		}
 		t = pf_ms();
 	}
@@ -1926,9 +2007,12 @@ static int restyle(browser *b)
 	doc *d = b->d;
 	page *p;
 	doc_refresh(d);
-	ec_unstyle(d->css);
-	doc_select(d);
 	base_of(b, d, b->url, base, sizeof base);
+	if (doc_sheets_key(d) != d->sheets_key)
+		readd_sheets(b, d, base, 0, 1, 1);	/* it changed the page's sheets */
+	else
+		ec_unstyle(d->css);
+	doc_select(d);
 	p = lay(b, d, base);
 	if (p == NULL)
 		return 0;
@@ -2188,10 +2272,43 @@ int br_relayout(browser *b, int32_t width)
 {
 	char base[4096];
 	page *p;
+	int32_t w;
 	b->width = width;
 	if (b->d == NULL)
 		return 1;
+	if (resheeting) {
+		/* sized as the page's sheets are added again (a sheet coming):
+		   laid out at this width after them, as for a picture's size;
+		   for one of br_relayout's own, at once (below) */
+		b->pic_relayout = 1;
+		return 1;
+	}
 	base_of(b, b->d, b->url, base, sizeof base);
+	do {
+		/* a media query the page's sheets have (theirs, or an @media in
+		   them) goes the other way at this width: its sheets are added
+		   again (Media Queries 4, 2), those that hold now fetched (the
+		   window's messages go on meanwhile: another resize is done
+		   after) */
+		ec_media m;
+		w = b->width;
+		m = media_of(b);
+		if (m.width >= b->d->span_lo && m.width <= b->d->span_hi) {
+			ec_set_media(b->d->css, &m);	/* <source media>, sizes */
+		} else if (net_busy) {
+			/* sized while a request is under way (a picture's): not
+			   another inside it; its sheets after it, as for a
+			   picture's size (br_pictures_step) */
+			ec_set_media(b->d->css, &m);
+			b->pic_relayout = 1;
+		} else {
+			int stop = conn_stop;
+			conn_stop = 0;
+			readd_sheets(b, b->d, base, 0, 1, 0);
+			doc_select(b->d);
+			conn_stop = stop;
+		}
+	} while (b->width != w);
 	p = lay(b, b->d, base);
 	if (p == NULL)
 		return 0;
@@ -2844,7 +2961,9 @@ int br_save_url(browser *b, const char *url, const char *path, char *err, int er
 	rq.site = has_scheme(b->url, "http") || has_scheme(b->url, "https") ? b->url : NULL;
 	rq.referrer = rq.site;
 	sb_init(&body);
+	net_busy++;
 	ok = http_request(&rq, rs, &body, err, errlen);
+	net_busy--;
 	if (ok && (rs->status < 200 || rs->status >= 300)) {
 		snprintf(err, (size_t) errlen, "The server answered %d %.60s.", rs->status, rs->reason);
 		ok = 0;

@@ -1330,8 +1330,9 @@ BSS):
 | `EW_ST`: the CSS engine's prelude 1024 tokens, 512 hits, a 256-entry style cache, 256 values and declarations, 4 levels of `:not()`, 1024 names | 128 KB of BSS |
 | `EW_ST`: the HTTP client's read buffer 8 KB, the stack 48 KB | 24 KB of BSS |
 
-At run time the arenas take small pieces on the ST (the CSS engine 4 KB, the document and the
-layout 8 KB, not 64 and 16), as a context's empty pieces were most of a small page's memory; a
+At run time the arenas take small pieces on the ST (the CSS engine 4 KB, its first ones from 512
+bytes, the document and the layout 8 KB, not 64 and 16), as a context's empty pieces were most of a
+small page's memory; a
 font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
 grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
 in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
@@ -1571,6 +1572,104 @@ the status line (again after the pictures), the timer, Undo, Esc, the address fi
 (itself, its picture read again but not decoded again; two pages sending each other on) on the
 Falcon. The status line is read from what `win_status` logs at each change (`status ...`), not
 worked out from the browser's state.
+
+## Stylesheets by their media, type and set (22 Oct 2026)
+
+A `<link rel=stylesheet>`'s or a `<style>`'s `media` was looked at only as text: taken when
+"screen" or "all" appeared anywhere in it, in lower case, so `media="screen and (max-width: 600px)"`
+was applied at any width, `(min-width: 40em)` never, `not screen` and `small` always, `SCREEN` never.
+Now `doc_sheets` (`src/doc/doc.c`) does as the HTML Standard says (4.2.4, 4.2.6) and CSSOM's
+"add a CSS style sheet":
+- **Media:** the attribute "matches the environment" by the CSS engine's own media queries
+  (`ec_media_ok`, Media Queries 4: types, `not` and `only`, features, ranges, three-valued logic),
+  against the very screen `@media` blocks see (the window's width in CSS pixels, 16-bit colour,
+  and so on); none, empty or white space is all. `screen`, `all` and `print`, nine in ten of the
+  page set's 673 media attributes, are told without the engine's tokens.
+- **Type:** a `<style>`'s none, empty or `text/css` in any case; a `<link>`'s none, empty (as
+  browsers take it) or a MIME type whose essence is `text/css` (`Text/CSS; charset=utf-8` too).
+  Others aren't CSS: not read, not fetched.
+- **Not applied:** `rel="alternate stylesheet"` (only when chosen, and EWeb has no menu to choose
+  with), a `<link disabled>`, one whose `href` is empty (it would fetch the page itself), and a sheet
+  of another set: the first sheet with a `title` that isn't an alternative names the preferred set,
+  and a later one with another title is left out, as browsers do. An alternative whose title is the
+  preferred set's is applied (CSSOM's "enable a CSS style sheet set"; Gecko and Blink do so), though
+  the set be named by a sheet after it: then the rest of the page is looked through for the name,
+  which only a page with an alternative before its first titled sheet costs. One with no title is
+  never applied, as in Gecko. None on the page set is left out by its set.
+- **Where:** a `<link rel=stylesheet>` in the body applies as one in the head, in document order.
+- **What isn't fetched:** a sheet whose media doesn't hold isn't fetched at all, whether it never
+  can (print, speech, `not all`) or holds only at another width (the standard lets a browser fetch
+  only the sheets it applies). On the page set 11 of the 673 go the other way at 760 CSS pixels
+  (`ewrender`'s width), all linked: sheets for screens 768 px wide and more, or 480 px and less.
+- **The window sized:** media queries are evaluated again when the screen changes (Media Queries 4,
+  2), so a sheet not fetched for its width is fetched when the window comes to one it holds at. As
+  the CSS engine evaluates media queries (a sheet's own and every `@media` in the sheets) it keeps
+  the widths at which they would all go the way they went (`ec_media_span`: each comparison with
+  the width narrows them; an aspect ratio or `vw` in a query keeps only that width). A resize
+  within them (most of them: a page's breakpoints are few) lays the same styles out again, its
+  `<source media>` and `sizes` at the new width (`ec_set_media`). One outside them adds the page's
+  sheets again (`ec_drop_sheets`, then `doc_sheets` for the new width: those fetched before come
+  from the cache, those that hold now for the first time over the network, without a word on the
+  status line), styles the page and lays it out: the document, its form fields and its scripts
+  stay. A window sized while a request is under way (GEM's messages come as it waits) fetches no
+  sheet inside it: inside a picture's the page is laid out with the styles it has, inside a sheet's
+  (the sheets being added again) not at all, and the rest comes after it, as for a picture's size.
+  So a page opened narrow gets its sheets for 768 px and up when the window is fulled.
+- **Memory:** the sheets taken out give theirs back. The CSS engine keeps a page's sheets (their
+  text, rules and declarations) in an arena of their own, which `ec_drop_sheets` frees, and what a
+  style attribute or a `var()` makes as the page is styled goes with the styles; so the sheets
+  added again take what they took, however often the window crosses a breakpoint or a script
+  changes them. Before, each time took about 2.4 to 2.7 times the sheets' text again, kept until
+  the page went: Bootstrap 5.3 (233 KB) took 676 KB on a Falcon and 548 KB more at each crossing,
+  20 KB of the news page's sheet 59 KB on an ST and 52 KB more, so a page that fitted a 1 MB ST
+  lost its styles after a few crossings; now 676 KB and 59 KB each time. A context's third arena,
+  in the ST edition's 4 KB pieces, took a small page 4 KB more, and the 1 MB ST's rig no longer
+  fitted the pictures page with the tables page still shown (`make hatarigui`'s `st`: its styles
+  ran out of memory, and it came out empty); so there an arena's first pieces are smaller, from
+  512 bytes, each as large as those before it together: a page with a small `<style>` takes 1 KB
+  for its names and sheet where it took 4 KB, the UA sheet 38 KB where it took 40 KB. On the
+  Falcon they stay 64 KB: the pieces more cost +0.08% of the page set's instructions. When the
+  sheets don't fit even so (the engine says so: `ec_sheets_short`), the pages kept for Back go and
+  they are added once more, as for a page that doesn't fit. The log has a line each time the sheets
+  are added again, and why.
+- **Scripts:** with scripts run, each stylesheet `<link>`'s `load` event comes after
+  `DOMContentLoaded` (and one preloaded as a style), when a handler may hear it, so the async-CSS
+  pattern works: `media=print onload="this.media='all'"` and `rel=preload as=style
+  onload="this.rel='stylesheet'"` (the Filament Group's loadCSS, WP Rocket, Autoptimize, Jetpack
+  Boost), whose `<noscript>` copy is text when scripts run. A print sheet isn't fetched until a
+  handler makes it hold, so its `load` comes as if it had been. When a script changed the page's
+  sheets (`doc_sheets_key`: the elements that are sheets, their attributes and a `<style>`'s
+  text), they are added again before the page is styled, and after a click or a timer too (a theme
+  a button turns on by `link.disabled = false`). Only the sheets count: a script that adds a
+  preconnect, a DNS prefetch or a preload of a script, or gives the icon another address, leaves
+  them as they are (each time they are added again they are all parsed again: Bootstrap's 233 KB
+  are about 6.9 M instructions on a 68030, some 1.3 s on the DFB1, so a script that rewrites a
+  `<style>` on a timer costs that each time, but no more memory). `media` is a property of
+  elements now, as `rel` was.
+
+Measured: 68030 instructions for EWeb's document styled with its `<style>`s
+(`build/m68k/docparse -s`) on the page set, 1,575.7 M before and 1,575.1 M after (-0.04%; the
+median page -2,464, the most +5,896: two media queries the engine evaluates). Looking each
+attribute up on its own (`dn_attr`, six looks a `<link>`) cost +0.13% (+7,004 the median page),
+more than the media queries; the sheet's attributes are now found in one pass. With the widths
+kept, the alternatives' set and the scripts' key: 1,575.4 M (+0.02%, the median page +86; pages
+with no media query or title move by up to 0.1 M either way as the document's memory lies
+otherwise). With the sheets' memory an arena of their own, measured again in one run: 1,575.2 M
+before, 1,575.8 M after (+0.04%, the median page +2.7 K, every page within 55 K); the media
+attribute's text test, in that run, 1,575.9 M (so -0.01% in all). `make test` has
+`tests/layout/media.html` (print, a wide and a narrow screen, `em`, `SCREEN`, `not screen`,
+`small`, an empty media, a list, orientation and colour, alternate (of another set, of the
+preferred one named after it, untitled), disabled, types, two sets, one linked in the body),
+`tests/layout/resize.html` (built at 760 CSS px, the window made 500, 760 and 500: the list as a
+page built at 500 has it), `tests/css/cases.txt`'s widths (`@span`, `@width`) and memory (`@again`:
+the sheets, a style attribute and `var()` added again 50 times take no more),
+`tests/js/sheets.html` (the async-CSS pattern, a load listener, a print sheet's load, a theme a
+click turns on, a `<style>` a script adds) and `tests/js/links.html` (a preconnect, a DNS prefetch,
+a preload of a script and an icon a script adds or changes, at once, after a click and after a
+timer: the sheets aren't added again); `make itest` `/site/media/page.html` at two widths, and at
+608 px sized to 400 and back, and `/site/media/pics.html` sized while its picture comes
+(`ewrender -Y`), which sheets the server was asked for; `make hatarigui`'s `st` the 1 MB ST's
+pictures page with the tables page still shown.
 
 ## The design
 

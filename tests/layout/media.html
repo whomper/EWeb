@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Sheets by their media, type and set</title>
+<style>
+body { font-family: sans-serif; margin: 8px }
+p { margin: 2px 0; padding: 2px 4px }
+</style>
+<link rel=stylesheet media=print href="media/print.css">
+<link rel=stylesheet media="screen and (min-width: 600px)" href="media/wide.css">
+<link rel=stylesheet media="only screen and (max-width: 600px)" href="media/narrow.css">
+<link rel=stylesheet media="(min-width: 40em)" href="media/em.css">
+<link rel="alternate stylesheet" title=Other href="media/alt.css">
+<link rel="alternate stylesheet" title=Main href="media/altmain.css">
+<link rel="alternate stylesheet" href="media/altnone.css">
+<link rel=stylesheet disabled href="media/disabled.css">
+<link rel=stylesheet type=text/plain href="media/plain.css">
+<link rel=StyleSheet type="Text/CSS; charset=utf-8" href="media/typed.css">
+<link rel=stylesheet title=Main href="media/main.css">
+<link rel=stylesheet title=Other href="media/other.css">
+<style media=SCREEN>.upper { background: #0c0 }</style>
+<style media="not screen">.notscreen { background: #f00 }</style>
+<style media=small>.small { background: #f00 }</style>
+<style media="screen and (max-width: 600px)">.max { background: #f00 }</style>
+<style media="">.empty { background: #0c0 }</style>
+<style media="print, (min-width: 700px)">.list { background: #0c0 }</style>
+<style media="(orientation: landscape) and (color)">.feature { background: #0c0 }</style>
+<style type="text/less">.less { background: #f00 }</style>
+<style title=Main>.mainstyle { background: #0c0 }</style>
+<style title=Other>.otherstyle { background: #f00 }</style>
+</head>
+<body>
+<p>Green: the sheet holds for a screen 760 CSS px wide. White: it doesn't, or isn't CSS, or isn't chosen.</p>
+<p class=print>media=print: white</p>
+<p class=wide>screen and (min-width: 600px): green</p>
+<p class=narrow>only screen and (max-width: 600px): white</p>
+<p class=em>(min-width: 40em), no media type: green</p>
+<p class=alt>an alternate stylesheet: white</p>
+<p class=altmain>an alternate titled Main, the set named after it: green</p>
+<p class=altnone>an alternate with no title: white</p>
+<p class=disabled>disabled: white</p>
+<p class=plain>type=text/plain: white</p>
+<p class=typed>type="Text/CSS; charset=utf-8": green</p>
+<p class=main>title=Main, the first set: green</p>
+<p class=other>title=Other, another set: white</p>
+<p class=upper>style media=SCREEN: green</p>
+<p class=notscreen>style media="not screen": white</p>
+<p class=small>style media=small: white</p>
+<p class=max>style screen and (max-width: 600px): white</p>
+<p class=empty>style media="": green</p>
+<p class=list>style print, (min-width: 700px): green</p>
+<p class=feature>style (orientation: landscape) and (color): green</p>
+<p class=less>style type=text/less: white</p>
+<p class=mainstyle>style title=Main: green</p>
+<p class=otherstyle>style title=Other: white</p>
+<link rel=stylesheet href="media/body.css">
+<p class=body>linked in the body: green</p>
+</body></html>

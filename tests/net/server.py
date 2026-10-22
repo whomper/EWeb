@@ -26,6 +26,13 @@ Pages:
                  and no size (the page is laid out again when it comes), a
                  GIF, a progressive JPEG with only its width, a big PNG held
                  to the width, and one that isn't there (made with Pillow)
+  /site/media/page.html  stylesheets by their media, type and rel: one
+                 for print, one for a wide screen, one for a narrow one, an
+                 alternate, a disabled, one of another type, an empty href
+                 and one linked in the body; pics.html the wide and narrow
+                 ones with a picture that comes after 0.3 s (pic.png: a
+                 window sized while it comes); count (how often each was
+                 asked for)
   /site/bg.html  pictures from CSS and srcset: a stylesheet in
                  /site/css/ whose url(tile.png) is its folder's, and a
                  <picture> whose WebP source is passed over and whose img's
@@ -162,6 +169,23 @@ REFRESH = {
 }
 REFRESH_COUNT = {}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
+# a stylesheet's media (the HTML Standard's 4.2.4): only the sheets that
+# hold for the screen are asked for, and none that isn't to be applied
+MEDIA_PAGE = (b"<!DOCTYPE html><title>Media</title><link rel=stylesheet media=print href=print.css>"
+              b"<link rel=stylesheet media='screen and (min-width: 600px)' href=wide.css>"
+              b"<link rel=stylesheet media='only screen and (max-width: 600px)' href=narrow.css>"
+              b"<link rel='alternate stylesheet' title=Alt href=alt.css><link rel=stylesheet disabled href=off.css>"
+              b"<link rel=stylesheet type=text/plain href=plain.css><link rel=stylesheet href=''>"
+              b"<p>Sheets by their media.<link rel=stylesheet href=body.css>")
+MEDIA_CSS = {"print.css": b"p { color: #ff0000 }", "wide.css": b"p { color: #0000aa }",
+             "narrow.css": b"p { color: #00aa00 }", "alt.css": b"p { color: #ff0000 }",
+             "off.css": b"p { color: #ff0000 }", "plain.css": b"p { color: #ff0000 }",
+             "body.css": b"p { background: #eeeeee }"}
+MEDIA_PICS = (b"<!DOCTYPE html><title>Media pics</title>"
+              b"<link rel=stylesheet media='screen and (min-width: 600px)' href=wide.css>"
+              b"<link rel=stylesheet media='only screen and (max-width: 600px)' href=narrow.css>"
+              b"<p>Sheets by their media, a picture.<p><img src=pic.png alt=pic>")
+MEDIA_COUNT = {}
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
@@ -440,6 +464,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, WIKI_PAGE)
         elif p == "/site/wikitls.html":
             self.send(200, WIKI_TLS_PAGE.replace(b"https://localhost:PORT", b"https://127.0.0.1:%d" % self.ecdsa_port))
+        elif p.startswith("/site/media/"):
+            name = p[12:]
+            MEDIA_COUNT[name] = MEDIA_COUNT.get(name, 0) + 1
+            if name == "page.html":
+                self.send(200, MEDIA_PAGE)
+            elif name == "pics.html":
+                self.send(200, MEDIA_PICS)
+            elif name == "pic.png":
+                time.sleep(0.3)
+                self.send(200, PICS["logo.png"][0], "image/png")
+            elif name in MEDIA_CSS:
+                self.send(200, MEDIA_CSS[name], "text/css")
+            elif name == "count":
+                self.send(200, " ".join("%s=%d" % kv for kv in sorted(MEDIA_COUNT.items())
+                                        if kv[0] != "count").encode(), "text/plain",
+                          extra=[("Cache-Control", "no-store")])
+            else:
+                self.send(404, b"not here\n", "text/plain")
         elif p == "/site/css/bg.css":
             self.send(200, BG_CSS, "text/css")
         elif p == "/site/form.html":

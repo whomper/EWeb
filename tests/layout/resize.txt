@@ -1,0 +1,15 @@
+page 400 x 238, background ffffff, 14 items, 0 links, title "Sheets as the window is sized"
+text 9,23 378x17 #000000 sans13 link 0 "Built 760 CSS px wide, then the window made 500, 760 and"
+text 9,39 369x17 #000000 sans13 link 0 "500 again (Media Queries 4, 2: evaluated again). Green: it"
+text 9,55 193x17 #000000 sans13 link 0 "holds at 500. White: it doesn't."
+text 9,77 146x17 #000000 sans13 link 0 "link media=print: white"
+text 9,99 359x17 #000000 sans13 link 0 "link screen and (min-width: 600px), applied at 760: white"
+fill 6,106 388x36 #00cc00
+text 9,121 372x17 #000000 sans13 link 0 "link (max-width: 599px), fetched when the window came to"
+text 9,137 69x17 #000000 sans13 link 0 "500: green"
+fill 6,144 388x20 #00cc00
+text 9,159 251x17 #000000 sans13 link 0 "link (450px <= width <= 550px): green"
+text 9,181 217x17 #000000 sans13 link 0 "@media (min-width: 700px): white"
+fill 6,188 388x20 #00cc00
+text 9,203 223x17 #000000 sans13 link 0 "@media (max-width: 40em): green"
+text 9,225 255x17 #000000 sans13 link 0 "style media="(min-width: 700px)": white"

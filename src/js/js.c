@@ -1401,7 +1401,7 @@ static JSValue el_attributes(JSContext *ctx, JSValueConst this_val)
 /* attributes as properties: strings, addresses (made absolute), flags */
 #define REFLECT(X) \
 	X(id, "id", 0) X(className, "class", 0) X(title, "title", 0) X(lang, "lang", 0) X(dir, "dir", 0) \
-	X(name, "name", 0) X(alt, "alt", 0) X(rel, "rel", 0) X(target, "target", 0) \
+	X(name, "name", 0) X(alt, "alt", 0) X(rel, "rel", 0) X(target, "target", 0) X(media, "media", 0) \
 	X(placeholder, "placeholder", 0) X(htmlFor, "for", 0) X(method, "method", 0) \
 	X(enctype, "enctype", 0) X(content, "content", 0) X(accessKey, "accesskey", 0) \
 	X(autocomplete, "autocomplete", 0) X(pattern, "pattern", 0) X(min, "min", 0) X(max, "max", 0) \
@@ -4158,6 +4158,27 @@ static void run_script(ejs *j, dnode *n)
 		fire(j, n, "load", 0, 0);
 }
 
+/* each stylesheet's load event, as its sheet came, at the <link>s
+   whose sheet is fetched when its media holds and at those preloaded as
+   a style (doc_link_loads), when a handler may hear it: what it does
+   then (the async-CSS pattern's media='all' or rel='stylesheet') changes
+   the page's sheets, and they are taken again (src/browse). A sheet
+   whose media holds on no screen (print) isn't fetched until it is made
+   to hold: its load comes as if it had been */
+static void sheet_loads(ejs *j)
+{
+	dnode *n;
+	listener *l;
+	int any = 0;
+	for (l = j->ls; l != NULL; l = l->next)
+		if (!l->gone && l->n != NULL && !strcmp(l->type, "load"))
+			any = 1;		/* (the window's hears no element's) */
+	for (n = j->d->root; n != NULL && !j->over; n = next_in(n, j->d->root, !is_html(n, T_TEMPLATE)))
+		if (is_html(n, T_LINK) && doc_link_loads(n) &&
+		    (any || dn_attr(n, "onload") != NULL || map_find(j, n) != NULL))
+			fire(j, n, "load", 0, 0);
+}
+
 /* does the page have scripts (or handlers in its attributes) */
 static int has_scripts(const doc *d)
 {
@@ -4218,6 +4239,7 @@ int js_page(doc *d, const char *url, const char *base, const js_host *h)
 		j->write_after = NULL;
 		fire(j, d->root, "readystatechange", 0, 0);
 		fire(j, d->root, "DOMContentLoaded", 1, 0);
+		sheet_loads(j);
 		j->loaded = 1;
 		fire(j, d->root, "readystatechange", 0, 0);
 		if (!j->over)

@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH]
  *            PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
@@ -58,6 +58,14 @@
  * -S KB: the stack the cascade and the layout may take (ec_stack_floor;
  * all but a MB of the stack by default); "deep:" on stderr when a page was
  * cut there.
+ * -L WIDTH (again for more): once the page is shown, the window made
+ * WIDTH px wide (br_relayout, as EWEB.PRG does when it is sized: the
+ * page's sheets added again when a media query of theirs goes the other
+ * way), "resized:" printed; what is drawn or dumped is the page at the
+ * last width. -Y WIDTH: the window sized so from inside the first
+ * request the page's pictures make (as GEM's messages come in pf_idle
+ * while one is under way): "sized in a request:" printed, and the
+ * page's sheets come after it.
  */
 #define _DEFAULT_SOURCE		/* realpath */
 #include <stdio.h>
@@ -365,6 +373,19 @@ static int click(browser *b, const char *id)
 	return 1;
 }
 
+/* -Y: the window sized inside a request (pf_idle), once */
+static browser *in_req_b;
+static int32_t in_req_w;
+
+static void in_request(void)
+{
+	if (in_req_w > 0) {
+		int32_t w = in_req_w;
+		in_req_w = 0;
+		printf("sized in a request: %d\n", br_relayout(in_req_b, w));
+	}
+}
+
 /* every picture of the page shown, fetched and decoded */
 static void pictures(browser *b)
 {
@@ -390,6 +411,8 @@ int main(int argc, char **argv)
 	const char *fill[32], *send = NULL;
 	int rc = 0;
 	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0, refreshes = 0;
+	int32_t resize[8];
+	int nresize = 0;
 	const char *clicks[16];
 	const char *save_to = NULL;
 
@@ -428,6 +451,10 @@ int main(int argc, char **argv)
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
 			next = argv[++i];
+		else if (!strcmp(argv[i], "-L") && i + 1 < argc && nresize < 8)
+			resize[nresize++] = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-Y") && i + 1 < argc)
+			in_req_w = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
 			prev = argv[++i];
 		else if (!strcmp(argv[i], "-t"))
@@ -483,7 +510,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] "
 			"PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -558,7 +585,17 @@ int main(int argc, char **argv)
 	}
 	if (b.p->deep)
 		fprintf(stderr, "ewrender: deep: nested deeper than the stack holds, the rest left out\n");
+	if (in_req_w > 0) {
+		in_req_b = &b;
+		pf_idle = in_request;
+	}
 	pictures(&b);
+	pf_idle = NULL;
+	for (i = 0; i < nresize; i++) {
+		r = br_relayout(&b, resize[i]);
+		pictures(&b);
+		printf("resized: %d \"%s\" width %d\n", r, b.title, b.p ? (int) b.p->opt.width : 0);
+	}
 	if (nfill > 0 || send != NULL) {
 		fctl *first = NULL, *by = NULL;
 		int k;

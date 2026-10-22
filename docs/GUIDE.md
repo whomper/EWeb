@@ -329,6 +329,13 @@ show:
 Sites made for small screens and for text, such as FrogFind, 68k.news,
 Wikipedia and many blogs, read well.
 
+A page's styles for printing, and those a site keeps for screens wider
+or narrower than the window, are left out (EWeb doesn't fetch them).
+When you make the window wider or narrower, a page made for several
+sizes takes the styles it has for the new one, fetching them then if
+they hadn't come yet (the mouse is busy meanwhile); what you typed into
+its fields stays.
+
 ## Pages made by scripts
 
 **On the Falcon itself:** `EWEB.PRG` runs a little JavaScript, on a
