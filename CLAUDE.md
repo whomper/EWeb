@@ -172,7 +172,7 @@ hub stay complete, with the evidence.
   (the hub, 20 Oct 2026): `EW_ST` makes the CSS engine's buffers and the arenas' pieces small, and a
   page that doesn't fit gives back the kept pages and the fonts and is tried once more. `make
   hatarigui`'s `st` group runs it on the 1 MB ST and the 1040 ST (TOS 1.04) and through the gateway.
-- **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`, `tools/icon/make_rsc.py`),
+- **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`),
   `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, and `PICBENCH.TTP` with `PICBENCH.TXT`

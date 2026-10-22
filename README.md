@@ -1,6 +1,6 @@
 # EWeb
 
-<img src="docs/icon16.png" width="96" align="right" alt="EWeb icon: an Atari SM124-style monitor whose dark screen shows a green globe with an orange mouse pointer">
+<img src="docs/icon.png" width="96" align="right" alt="EWeb's icon: a globe, Europe, Africa and Arabia in green on a blue sea with a grid of lines, drawn pixel by pixel">
 
 A web browser for the Atari Falcon and TT, written in C for GEM, made for a
 Falcon with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and
@@ -91,7 +91,7 @@ and unpack it into a folder of its own. It contains:
 | `EWEB.FNT` | its fonts (keep it next to `EWEB.PRG`) |
 | `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
 | `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list) |
-| `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white and 16 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor), `EWEB.ICN` and its mask `EWEBMK.ICN` |
+| `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor), `EWEB.ICN` and its mask `EWEBMK.ICN` |
 | `NSBENCH.TTP`, `NSBENCH.TXT`, `SAMPLE.HTM`, `NEWS.HTM`, `NEWS.CSS` | the measuring tool, its guide and two pages to try it on |
 | `PICBENCH.TTP`, `PICBENCH.TXT`, `PHOTO.JPG` | times a JPEG on the 68030 and with the DSP, its guide and a photo to try it on |
 | `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
@@ -256,7 +256,8 @@ tests/forms/          what forms send (cases.txt, from the HTML Standard), formt
 tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
 tests/browse/         bookmarks (bmtest.c), the disk cache (dctest.c), pictures as the Pi's pens (pentest.c)
-icons/                the desktop icon (EWEB.RSC, EWEB.ICN, EWEBMK.ICN; tools/icon/make_rsc.py)
+icons/                the desktop icon (EWEB.RSC, EWEB.ICN, EWEBMK.ICN), made by make icons from
+                      the family's drawing, common/icons/EWEB.txt (common/tools/appicon.py)
 atari/                the C library pieces NetSurf and QuickJS need beyond common/ (libc_extra.c;
                       include/js, js_libc.c), the ST edition's 64-bit arithmetic (ll68000.c),
                       and plat_tos.c
@@ -266,7 +267,7 @@ third_party/quickjs/  QuickJS, the JavaScript engine (MIT)
 third_party/libm/     musl's maths functions, for QuickJS on the Atari (MIT)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py (EWEB.HYP), mkentities.py (the HTML parser's
                       named characters), mktbicons.py and mkthrobber.py (the toolbar's pictures and
-                      throbber), icon/ (the desktop icon), bump.py (a release), sync-common.sh and
+                      throbber), bump.py (a release), sync-common.sh and
                       sync-gateway.sh, and QEMU with plugins for counting 68030 instructions
                       (build-qemu.sh, count68k.sh, prof68k.py)
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here

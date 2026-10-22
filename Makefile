@@ -688,6 +688,14 @@ hatarigui: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
+# the app's icon, from the family's drawing (common/icons/EWEB.txt, the
+# guidelines' 5.5): the desktop icon's RSC and ICN files, ui/icon.h and
+# icon16.h (the About box, the iconified window), docs/icon*.png
+icons:
+	python3 common/tools/appicon.py EWEB --rsc icons/EWEB.RSC --icn icons/EWEB.ICN --mask icons/EWEBMK.ICN \
+	    --headers ui --docs docs
+.PHONY: icons
+
 # EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: Erez's
 # TOS 4.04 from ~/.aera/tos, else EmuTOS), through FAKESTNG, against
 # tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
