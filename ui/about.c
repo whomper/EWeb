@@ -14,6 +14,7 @@
 #include "plat.h"
 #include "icon.h"
 #include "icon16.h"
+#include "icon256.h"
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -29,13 +30,13 @@ void dlg_about(void)
 		    { "Fonts drawn from DejaVu. From NetSurf (MIT):",
 		      "libparserutils, libnsgif. JPEG: TJpgDec",
 		      "(ChaN's licence)." },
-		    icon_bits, icon16_px, icon16_rgb };
+		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 #else
 	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, where, 0 },
 		    { "DejaVu fonts. MIT: BearSSL, QuickJS, musl's",
 		      "maths, NetSurf's libparserutils and libnsgif.",
 		      "JPEG: libjpeg-turbo (IJG's and BSD licences)." },
-		    icon_bits, icon16_px, icon16_rgb };
+		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 #endif
 	snprintf(net, sizeof net, "%s  \xF9  secure sites: %s",
 		 strcmp(net_stack(), "none") ? net_stack() : "no network",
