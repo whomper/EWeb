@@ -19,10 +19,13 @@ own fonts.
   followed with a click, scrolling with the slider and the keys, 50 pages of
   history, the page's text to the clipboard, larger and smaller text. Words
   typed in the address go to FrogFind, the search engine made for vintage
-  computers (Settings > General for another).
+  computers (Settings > General for another). A page that sends you on
+  (`<meta http-equiv=refresh>`, the Refresh header) goes on when its time
+  comes, as the status line says; Esc stays.
 - **EWeb's own engine**: EWeb's HTML parser (the HTML Standard's, nearly three
   times as fast as NetSurf's on the 68030), EWeb's CSS engine
-  (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
+  (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md);
+  a sheet for print or another width, by its `media`, left out)
   and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
   grid, colours (translucent ones and opacity too, mixed with what is under
   them in every screen mode), borders, background pictures, colour
@@ -367,9 +370,13 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   pictures as JPEG and PNG and as the Pi's pens; `falcon`, a secure page
   whose pictures come from another secure host, TLS and the JPEGs on the
   DSP; `deep`, a page nested 1000 deep on the Falcon and the 1 MB ST, cut,
-  not crashed. From 0.27, `screens` and `st` also type a search address
-  longer than its field into the Settings (on the ST with Shift+arrows at
-  its ends) and check that it is saved whole.
+  not crashed; `refresh`, pages that send you on, one that waits while
+  Esc keeps it, and one that sends itself on again and again, stopped;
+  `details`, a summary clicked open and closed on the Falcon, the 1040 ST
+  and the 1 MB ST, and an address whose #fragment is in a closed details.
+  `screens` and `st` also type a search address longer than its field
+  into the Settings (on the ST with Shift+arrows at its ends) and check
+  that it is saved whole.
 - `make itest` also loads a page of pictures (`tests/net/server.py`'s
   `/site/pics.html`): each decoded at the size shown, the page laid out
   again for the one whose size it didn't give, the missing one failed; a
@@ -404,8 +411,7 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   budget. Apart from the first page (the cookies and the cache's index
   read) and the first secure page (the certificates and the seed), pages,
   history and idle touch nothing, and a quit with nothing changed writes
-  nothing. From 0.27 it starts from an `EWEB.INF` as 0.26 wrote it and
-  checks that the one saved has an empty line after each setting (the
+  nothing. It starts from an `EWEB.INF` as 0.26 wrote it and checks that the one saved has an empty line after each setting (the
   guidelines' 6.1).
 - `make urltest`: the URL parser against the URL Standard's tests (Web
   Platform Tests, `tests/url/fetch.sh`), for http and https.
@@ -419,7 +425,7 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   family's machines (`common/tools/machines.py`): the owner's own TOS when
   `~/.aera/tos` has it (1.04 on the STs, 4.04 on the Falcon, 3.06 on the
   TT), else EmuTOS 1.4.
-- From 0.27, `ITEST_PORTS=N make itest` moves the servers' ports up by N,
+- `ITEST_PORTS=N make itest` moves the servers' ports up by N,
   and `GUI_SLOT=N make hatarigui` gives the rigs their own ports and X
   display, so two trees can run them at once.
 
