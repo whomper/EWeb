@@ -158,7 +158,9 @@ static const char *dimension(const char *v, char *out)
 	return out;
 }
 
-/* a colour: #rgb or #rrggbb, with or without the #, or a name */
+/* a colour: #rgb or #rrggbb, with or without the #, or a name; not
+   "transparent", which the HTML Standard's rules for parsing a legacy
+   colour value turn down (the colour is then the inherited one) */
 static const char *colour(const char *v, char *out)
 {
 	size_t i, n;
@@ -188,6 +190,11 @@ static const char *colour(const char *v, char *out)
 		return out;
 	}
 	if (alpha) {
+		static const char tr[] = "transparent";
+		for (i = 0; i < n && i < sizeof tr - 1 && (v[i] | 0x20) == tr[i]; i++)
+			;
+		if (i == n && n == sizeof tr - 1)
+			return NULL;
 		memcpy(out, v, n);
 		out[n] = 0;
 		return out;
@@ -801,14 +808,13 @@ void doc_add_ua(doc *d)
 		ec_sheet(d->css, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA);
 }
 
-void doc_select(doc *d)
+int doc_select(doc *d)
 {
 	dnode *c;
 	if (d->root == NULL)
-		return;
+		return 0;
 	for (c = d->root->first; c != NULL; c = c->next)
-		if (c->type == DN_ELEMENT) {
-			ec_select(d->css, &c->e);
-			break;
-		}
+		if (c->type == DN_ELEMENT)
+			return ec_select(d->css, &c->e);
+	return 0;
 }

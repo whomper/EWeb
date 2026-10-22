@@ -1019,7 +1019,12 @@ parse:
 #endif
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
-	doc_select(d);
+	if (doc_select(d) < 0) {
+		/* out of memory styling it (a 1 MB ST): as when laying it out,
+		   not a page with no styles, which lays out to nothing */
+		doc_free(d);
+		return 0;
+	}
 	b->ms_style = pf_ms() - t;
 	t = pf_ms();
 	p = lay(b, d, base);
@@ -1713,7 +1718,8 @@ static int restyle(browser *b)
 	page *p;
 	doc_refresh(d);
 	ec_unstyle(d->css);
-	doc_select(d);
+	if (doc_select(d) < 0)
+		return 0;		/* (out of memory: as laying it out) */
 	base_of(b, d, b->url, base, sizeof base);
 	p = lay(b, d, base);
 	if (p == NULL)

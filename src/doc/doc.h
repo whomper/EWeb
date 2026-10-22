@@ -99,9 +99,10 @@ void doc_refresh(doc *d);
 void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t len), void *ud);
 
 /* styles every element: the UA sheet, then the sheets added with
-   ec_sheet() in between (the loader's), then selection */
+   ec_sheet() in between (the loader's), then selection; doc_select:
+   0, or -1 when out of memory (some elements have no style) */
 void doc_add_ua(doc *d);
-void doc_select(doc *d);
+int doc_select(doc *d);
 
 /* EWeb's UA stylesheet */
 extern const char doc_ua_css[];

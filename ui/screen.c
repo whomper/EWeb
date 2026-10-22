@@ -456,6 +456,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 	c.ox = px;
 	c.pen = pen;
 	c.shade = shade;
+	c.pal = (const uint8_t (*)[3]) pal;	/* (translucent items mixed through it) */
 	c.picture = picture;
 	for (y0 = 0; y0 < area->h; y0 += rows) {
 		short h = area->h - y0 > rows ? rows : area->h - y0;

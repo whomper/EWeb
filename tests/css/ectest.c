@@ -81,9 +81,18 @@ static void value(const ec_style *s, int p, char *buf, size_t cap)
 			snprintf(buf, cap, "%ld", (long) v.i);
 		return;
 	case EK_CURCOLOR: snprintf(buf, cap, "currentcolor"); return;
-	case EK_IMAGE: snprintf(buf, cap, "gradient"); return;
+	case EK_IMAGE:
 	case EK_COLOR: {
-		uint32_t c = (uint32_t) v.i;
+		/* a gradient: and its first colour that shows */
+		uint32_t c = s->k[p] == EK_COLOR ? (uint32_t) v.i : v.p != NULL ? *(const uint32_t *) v.p : 0;
+		size_t o = 0;
+		if (s->k[p] == EK_IMAGE) {
+			o = (size_t) snprintf(buf, cap, v.p != NULL ? "gradient " : "gradient");
+			if (v.p == NULL)
+				return;
+			buf += o;
+			cap -= o;
+		}
 		if ((c >> 24) == 0xff)
 			snprintf(buf, cap, "#%06lx", (unsigned long) (c & 0xffffff));
 		else

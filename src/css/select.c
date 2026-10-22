@@ -1429,8 +1429,9 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 	}
 }
 
-void ec_select(ec_ctx *c, ec_node *root)
+int ec_select(ec_ctx *c, ec_node *root)
 {
+	c->smem.failed = 0;
 	memset(cache, 0, sizeof cache);
 	memset(icache, 0, sizeof icache);
 	memset(c->bloom, 0, sizeof c->bloom);
@@ -1442,8 +1443,9 @@ void ec_select(ec_ctx *c, ec_node *root)
 		style_list(c, root, root->parent->style, 1);
 		for (p = root->parent; p != NULL; p = p->parent)
 			bloom_pop(c, p);
-		return;
+		return c->smem.failed ? -1 : 0;
 	}
 	c->root_style = NULL;
 	style_list(c, root, NULL, 1);
+	return c->smem.failed ? -1 : 0;
 }

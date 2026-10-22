@@ -249,8 +249,9 @@ input:read-only { padding-top: 5px }
 #a background-repeat no-repeat
 #a background-position-x calc(-10px + 100%)
 #a background-position-y 0%
-#b background-image gradient
+#b background-image gradient #ff0000
 #b background-color #00000000
+#b background-clip border-box
 #c background-color #ff0000
 #c background-image url(y.gif)
 #d background-position-x 50%
@@ -429,6 +430,110 @@ input:read-only { padding-top: 5px }
 #i color #ffffff
 #j color #1a334d
 #k color #ff0000
+
+=== translucent colours and opacity (CSS Color 4: rgb() and hsl() with alpha, hex with alpha, transparent, opacity)
+--- css
+#a { color: rgba(0, 128, 0, 0.25) }
+#b { color: hsla(240, 100%, 50%, .5) }
+#c { background-color: #f008 }
+#d { background-color: #11223380; border: 1px solid rgb(0 0 0 / 75%) }
+#e { background-color: transparent; color: rgb(0 0 0 / 0) }
+#f { opacity: .5 }
+#g { opacity: 1.5 }
+#h { opacity: -2 }
+#i { opacity: 25% }
+#j { opacity: calc(1 / 4) }
+#k { opacity: half }
+#p { opacity: .5; color: hsl(0 100% 50% / .75) }
+#r { opacity: inherit }
+--- html
+<p id=a></p><p id=b></p><p id=c></p><p id=d></p><p id=e></p><p id=f></p><p id=g></p><p id=h></p><p id=i></p><p id=j></p><p id=k></p>
+<div id=p><span id=q>x</span><span id=r>y</span></div>
+--- expect
+#a color #00800040
+#b color #0000ff80
+#c background-color #ff000088
+#d background-color #11223380
+#d border-top-color #000000bf
+#e background-color #00000000
+#e color #00000000
+#f opacity 0.5
+# out of range: clamped to 0..1 (the computed value)
+#g opacity 1
+#h opacity 0
+#i opacity 0.25
+#j opacity 0.25
+# invalid: the initial value
+#k opacity 1
+# opacity isn't inherited; a colour with its alpha is
+#q opacity 1
+#q color #ff0000bf
+#r opacity 0.5
+
+=== what shows text of a transparent colour, pointer-events, animations (DESIGN.md, Translucency)
+--- css
+#a { background: linear-gradient(to right, transparent, #ec4899 20%, #8b5cf6); -webkit-background-clip: text; color: transparent }
+#b { background-image: radial-gradient(circle at center, rgb(0 0 255 / .5), red); background-clip: text }
+#c { background: #fff content-box }
+#d { background: url(x.png) padding-box border-box }
+#e { background-clip: text; background: red }
+#f { text-shadow: 0 0 0 #c00 }
+#g { text-shadow: 1px 2px 3px, 0 0 red }
+#h { text-shadow: 1px }
+#i { text-shadow: #00f 1px 1px; text-shadow: 1px 1px 2px #0f0 2px }
+#j { -webkit-text-stroke: 1px #000 }
+#k { -webkit-text-stroke: thin; -webkit-text-stroke-color: rgba(0, 0, 255, .5) }
+#l { pointer-events: none }
+#m { pointer-events: visiblePainted }
+#n { pointer-events: bogus }
+#o { animation: fadeInUp .8s ease .2s forwards }
+#p { animation: .3s none ease-in }
+#q { animation-name: none, spin }
+#r { animation-name: 1s }
+#s { animation: a 1s, b 2s; animation: a b 1s }
+#t { text-shadow: 0 0 0 #000; text-shadow: 1px 1px -2px red }
+--- html
+<p id=a></p><p id=b></p><p id=c></p><p id=d></p><p id=e></p><div id=f><span id=f2>x</span></div>
+<p id=g></p><p id=h></p><p id=i></p><div id=j><span id=j2>x</span></div><p id=k></p>
+<div id=l><span id=l2>x</span><span id=l3 style="pointer-events: auto">y</span></div><p id=m></p><p id=n></p>
+<div id=o><span id=o2>x</span></div><p id=p></p><p id=q></p><p id=r></p><p id=s></p><p id=t></p>
+--- expect
+# a gradient's first colour that shows is kept: text painted with it is drawn in it
+#a background-image gradient #ec4899
+#a background-clip text
+#a color #00000000
+#b background-image gradient #0000ff80
+#b background-clip text
+# the background shorthand: one box is origin and clip, two are origin then clip
+#c background-clip content-box
+#c background-color #ffffff
+#d background-clip border-box
+#e background-clip border-box
+# text-shadow (inherited): the first shadow's colour, currentcolor when it has none
+#f text-shadow #cc0000
+#f2 text-shadow #cc0000
+#g text-shadow currentcolor
+#h text-shadow none
+#i text-shadow #0000ff
+#t text-shadow #000000
+#j -webkit-text-stroke-width 1px
+#j -webkit-text-stroke-color #000000
+#j2 -webkit-text-stroke-width 1px
+#k -webkit-text-stroke-width 1px
+#k -webkit-text-stroke-color #0000ff80
+# pointer-events is inherited (CSS UI 4)
+#l pointer-events none
+#l2 pointer-events none
+#l3 pointer-events auto
+#m pointer-events visiblepainted
+#n pointer-events auto
+# an animation: there is one or none (not inherited)
+#o animation-name 1
+#o2 animation-name none
+#p animation-name none
+#q animation-name 1
+#r animation-name none
+#s animation-name 1
 
 === inherit, initial, unset and currentcolor (CSS Cascade 4, 7)
 --- css
@@ -723,7 +828,7 @@ p:hover::before { color: blue }
 --- expect
 #a background-image url(a b.png)
 #b list-style-image url(i.gif)
-#c background-image gradient
+#c background-image gradient #ff0000
 
 === escapes in selectors (CSS Syntax 3, 4.3.7)
 --- css

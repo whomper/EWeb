@@ -576,6 +576,30 @@ static const ec_str *url_str(ec_ctx *c, const ec_tok *t)
 	return ec_str_new(&c->mem, s, len);
 }
 
+/* a gradient's first colour that shows (its alpha not 0), from its
+   arguments t[from..to): EWeb draws no gradients, but text the page
+   paints with one (background-clip: text) is drawn in it; 0: none */
+static uint32_t grad_colour(const ec_tok *t, int from, int to)
+{
+	int j = from;
+
+	while (j < to) {
+		uint32_t argb;
+		int used, cur;
+		if (t[j].type != T_COMMA && ec_parse_color(&t[j], to - j, &used, &argb, &cur)) {
+			if (!cur && (argb >> 24) != 0)
+				return argb;
+			j += used;
+		} else if (t[j].type == T_FUNC) {
+			int e = block_end(t, to, j);
+			j = e < 0 ? to : e;
+		} else {
+			j++;
+		}
+	}
+	return 0;
+}
+
 static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 {
 	const ec_tok *k = &t[*i];
@@ -610,8 +634,11 @@ static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 				ec_tok_is(k, "conic-gradient") || ec_tok_is(k, "repeating-linear-gradient") ||
 				ec_tok_is(k, "repeating-radial-gradient") ||
 				ec_tok_is(k, "repeating-conic-gradient")) {
+			uint32_t first = grad_colour(t, *i + 1, end - 1), *fp = NULL;
+			if (first != 0 && (fp = ec_alloc(&c->mem, sizeof *fp)) != NULL)
+				*fp = first;
 			d->kind = EK_IMAGE;
-			d->v.p = NULL;
+			d->v.p = fp;
 			*i = end;
 			return 1;
 		}
@@ -1183,7 +1210,7 @@ static int bg_size(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *w, ec_dec
 
 static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 {
-	ec_decl col, img, rep, px, py, sw, sh;
+	ec_decl col, img, rep, px, py, sw, sh, clip;
 	int i = 0, layer = 0;
 
 	put(&col, EP_BACKGROUND_COLOR, EK_COLOR, 0);
@@ -1193,9 +1220,10 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	put(&py, EP_BACKGROUND_POSITION_Y, EK_PCT, 0);
 	put(&sw, EP_BACKGROUND_SIZE_W, EK_KW, KW_AUTO);
 	put(&sh, EP_BACKGROUND_SIZE_H, EK_KW, KW_AUTO);
+	put(&clip, EP_BACKGROUND_CLIP, EK_KW, KW_BORDER_BOX);
 	while (i <= n) {
 		int hcol = 0, himg = 0, hrep = 0, hpos = 0, hatt = 0, hbox = 0, hsize = 0;
-		int r1 = 0, r2 = 0;
+		int r1 = 0, r2 = 0, box = 0;
 		ec_decl lcol, limg, lx, ly, lw, lh;
 		while (i < n && t[i].type != T_COMMA) {
 			int j = i, kw = t[i].type == T_IDENT ? ec_kw(&t[i]) : 0;
@@ -1219,8 +1247,10 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 				hatt = 1;
 				j++;
 			} else if (hbox < 2 && (kw == KW_BORDER_BOX || kw == KW_PADDING_BOX ||
-					kw == KW_CONTENT_BOX || ec_tok_is(&t[i], "text"))) {
+					kw == KW_CONTENT_BOX || kw == KW_TEXT)) {
+				/* one: origin and clip; two: origin, then clip */
 				hbox++;
+				box = kw;
 				j++;
 			} else if (!hpos && position(c, t, n, &j, &lx, &ly)) {
 				hpos = 1;
@@ -1267,6 +1297,8 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 				sw = lw;
 				sh = lh;
 			}
+			if (hbox)
+				put(&clip, EP_BACKGROUND_CLIP, EK_KW, box);
 		}
 		if (i >= n)
 			break;
@@ -1282,7 +1314,132 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	out[4] = py;
 	out[5] = sw;
 	out[6] = sh;
-	return 7;
+	out[7] = clip;
+	return 8;
+}
+
+/* -webkit-text-stroke: <line-width> || <color> */
+static int text_stroke(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
+{
+	ec_decl w, col;
+	int i = 0, hw = 0, hc = 0;
+
+	put(&w, EP_TEXT_STROKE_WIDTH, EK_PX, 0);
+	put(&col, EP_TEXT_STROKE_COLOR, EK_CURCOLOR, 0);
+	while (i < n) {
+		int j = i;
+		ec_decl v;
+		if (!hw && one(c, EP_TEXT_STROKE_WIDTH, t, n, &j, &v)) {
+			hw = 1;
+			w = v;
+		} else if (j = i, !hc && one(c, EP_TEXT_STROKE_COLOR, t, n, &j, &v)) {
+			hc = 1;
+			col = v;
+		} else {
+			return -1;
+		}
+		i = j;
+	}
+	out[0] = w;
+	out[1] = col;
+	return 2;
+}
+
+/* text-shadow: none, or shadows ([<color>? && <length>{2,3}]#). EWeb
+   draws no shadows; it keeps the first one's colour (currentcolor when
+   it has none), as text whose own colour is transparent is shown in it */
+static int text_shadow(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
+{
+	ec_decl first;
+	int i = 0, k = 0;
+
+	put(&first, EP_TEXT_SHADOW, EK_CURCOLOR, 0);
+	if (n == 1 && ec_kw(&t[0]) == KW_NONE) {
+		put(out, EP_TEXT_SHADOW, EK_KW, KW_NONE);
+		return 1;
+	}
+	while (i < n) {
+		ec_decl col, len;
+		int nlen = 0, hcol = 0;
+		put(&col, EP_TEXT_SHADOW, EK_CURCOLOR, 0);
+		while (i < n && t[i].type != T_COMMA) {
+			int j = i;
+			/* the colour before the lengths or after them */
+			if (!hcol && (nlen == 0 || nlen >= 2) && color(t, n, &j, &col))
+				hcol = 1;
+			else if (j = i, nlen < 3 && length(c, t, n, &j, LF_NOPCT, &len) &&
+				 !(nlen == 2 && len.kind == EK_PX && len.v.i < 0))
+				nlen++;
+			else
+				return -1;
+			i = j;
+		}
+		if (nlen < 2)
+			return -1;
+		if (k++ == 0)
+			first = col;
+		if (i < n && ++i >= n)
+			return -1;	/* a comma at the end */
+	}
+	*out = first;
+	out->prop = EP_TEXT_SHADOW;
+	return 1;
+}
+
+/* animation-name: none, or names (identifiers or strings), a comma
+   between each; and the animation shorthand's names (in each animation
+   the identifier that is none of its other parts' keywords). EWeb runs
+   no animations: it keeps whether there is one (EK_INT 1) or none, as
+   the layout draws an animated element as its animation leaves it
+   (DESIGN.md, Translucency) */
+static int animation(const ec_tok *t, int n, int shorthand, ec_decl *out)
+{
+	static const char *const parts[] = {
+		"ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end",
+		"infinite", "normal", "reverse", "alternate", "alternate-reverse", "forwards",
+		"backwards", "both", "running", "paused", "none"
+	};
+	int i = 0, named = 0;
+
+	while (i < n) {
+		int name = 0, k = 0;
+		while (i < n && t[i].type != T_COMMA) {
+			const ec_tok *a = &t[i];
+			size_t w = 0;
+			if (a->type == T_IDENT) {
+				int kw = ec_kw(a);
+				if (kw == KW_INHERIT || kw == KW_INITIAL || kw == KW_UNSET || kw == KW_REVERT ||
+						kw == KW_REVERT_LAYER || ec_tok_is(a, "default"))
+					return -1;
+				for (; w < sizeof parts / sizeof parts[0] && !ec_tok_is(a, parts[w]); w++)
+					;
+				if (!shorthand && w < sizeof parts / sizeof parts[0] - 1)
+					w = sizeof parts / sizeof parts[0];	/* a name, in the longhand */
+			} else if (a->type != T_STR) {
+				int e = a->type == T_FUNC ? block_end(t, n, i) : i + 1;
+				if (!shorthand || e < 0 || !(a->type == T_FUNC || a->type == T_DIM ||
+							     a->type == T_NUM))
+					return -1;
+				i = e;
+				k++;
+				continue;
+			}
+			if (w == sizeof parts / sizeof parts[0]) {	/* a name */
+				if (name)
+					return -1;
+				name = 1;
+			}
+			i++;
+			k++;
+		}
+		if (k == 0 || (!shorthand && k != 1))
+			return -1;
+		named |= name;
+		if (i < n && ++i >= n)
+			return -1;
+	}
+	put(out, EP_ANIMATION_NAME, named ? EK_INT : EK_KW, named ? 1 : KW_NONE);
+	return 1;
 }
 
 static int font(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
@@ -1913,8 +2070,8 @@ int ec_shorthand_props(int sh, uint8_t *p)
 	case ES_BACKGROUND:
 		p[0] = EP_BACKGROUND_COLOR; p[1] = EP_BACKGROUND_IMAGE; p[2] = EP_BACKGROUND_REPEAT;
 		p[3] = EP_BACKGROUND_POSITION_X; p[4] = EP_BACKGROUND_POSITION_Y;
-		p[5] = EP_BACKGROUND_SIZE_W; p[6] = EP_BACKGROUND_SIZE_H;
-		return 7;
+		p[5] = EP_BACKGROUND_SIZE_W; p[6] = EP_BACKGROUND_SIZE_H; p[7] = EP_BACKGROUND_CLIP;
+		return 8;
 	case ES_BACKGROUND_POSITION:
 		p[0] = EP_BACKGROUND_POSITION_X; p[1] = EP_BACKGROUND_POSITION_Y;
 		return 2;
@@ -1955,6 +2112,15 @@ int ec_shorthand_props(int sh, uint8_t *p)
 	case ES_GRID_TEMPLATE:
 		p[0] = EP_GRID_TEMPLATE_ROWS; p[1] = EP_GRID_TEMPLATE_COLUMNS; p[2] = EP_GRID_TEMPLATE_AREAS;
 		return 3;
+	case ES_WEBKIT_BACKGROUND_CLIP:
+		p[0] = EP_BACKGROUND_CLIP;
+		return 1;
+	case ES_WEBKIT_TEXT_STROKE:
+		p[0] = EP_TEXT_STROKE_WIDTH; p[1] = EP_TEXT_STROKE_COLOR;
+		return 2;
+	case ES_ANIMATION:
+		p[0] = EP_ANIMATION_NAME;
+		return 1;
 	}
 	return 0;
 }
@@ -2003,12 +2169,15 @@ static int shorthand(ec_ctx *c, int sh, const ec_tok *t, int n, ec_decl *out)
 	case ES_GRID_COLUMN: return grid_lines(c, sh_grid_col, 2, t, n, out);
 	case ES_GRID_AREA: return grid_lines(c, sh_grid_area, 4, t, n, out);
 	case ES_GRID_TEMPLATE: return grid_template(c, t, n, out);
-	case ES_WORD_WRAP: {
+	case ES_WORD_WRAP: case ES_WEBKIT_BACKGROUND_CLIP: {
 		int i = 0;
-		if (!one(c, EP_OVERFLOW_WRAP, t, n, &i, &out[0]) || i != n)
+		if (!one(c, sh == ES_WORD_WRAP ? EP_OVERFLOW_WRAP : EP_BACKGROUND_CLIP, t, n, &i, &out[0]) ||
+		    i != n)
 			return -1;
 		return 1;
 	}
+	case ES_WEBKIT_TEXT_STROKE: return text_stroke(c, t, n, out);
+	case ES_ANIMATION: return animation(t, n, 1, out);
 	}
 	return -1;
 }
@@ -2065,6 +2234,10 @@ int ec_parse_value(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *out, in
 		return autoflow(t, n, out);
 	case VP_GRIDLINE:
 		return gridline(c, prop, t, n, out) == 1 ? 1 : -1;
+	case VP_SHADOW:
+		return text_shadow(c, t, n, out);
+	case VP_ANIM:
+		return animation(t, n, 0, out);
 	case VP_DECO: {
 		int bits = 0;
 		if (n == 1 && ec_kw(&t[0]) == KW_NONE) {

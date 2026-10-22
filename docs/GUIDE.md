@@ -297,8 +297,18 @@ paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
 text, pictures in the background of a page or a box, positioned
 boxes, tables with cells over several rows, flexible boxes and grids
-(CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
-show:
+(CSS flexbox and grid), forms, Hebrew right to left. Translucent
+colours and see-through boxes (CSS's opacity) are mixed with what is
+under them, as near as your screen's colours allow: with 16 colours or
+fewer a faint tint may not show, and but for true colour a see-through
+picture is drawn as a fine pattern. What a page hides with no opacity
+at all isn't drawn, though its links still work (unless the page lets
+clicks through it to what is under it). What a page would fade in with
+an animation, or as you scroll to it (AOS, Webflow, pictures loaded as
+you scroll), is shown, but other text a page's script would show may
+stay hidden while scripts are off. Text a page paints with a gradient,
+a shadow or an outline, which EWeb doesn't draw, is shown in their
+colour. It doesn't yet show:
 
 - file fields (EWeb can't send files yet)
 - WebP and AVIF pictures (EWeb asks servers for JPEG, PNG and GIF,

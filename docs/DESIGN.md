@@ -728,7 +728,8 @@ releases.
   true colour's fills a row at a time. A page drawn, on the emulated 32 MHz Falcon (the window,
   `make hatarigui`'s pages): 16 colours 410-455 ms to 310-365 ms (a long page, 850 to 760), 256
   colours 585-625 to 560-570, true colour 120-140 to 105-130; the TT in 16 colours 440 to 350, its
-  1280 x 960 monochrome 2.6-3.6 s to 1.9-2.0 s.
+  1280 x 960 monochrome 2.6-3.6 s to 1.9-2.0 s. Translucent items are mixed with what is under them
+  since 22 Oct 2026 (Translucent colours and opacity, below).
 - **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
@@ -1334,7 +1335,9 @@ layout 8 KB, not 64 and 16), as a context's empty pieces were most of a small pa
 font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
 grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
 in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
-fit, EWeb says so on a page of its own, which is small. Pictures may take a sixteenth of the free
+fit, EWeb says so on a page of its own, which is small. Running out while styling it counts too
+(since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style made a page
+that laid out to nothing, which translucency's 3 KB more code brought about on the pictures page. Pictures may take a sixteenth of the free
 RAM (12 KB on the 1 MB ST, so few come; the photo is refused for memory).
 
 Measured in Hatari (8 MHz, TOS 1.04), the tables page from the disk:
@@ -1490,6 +1493,159 @@ before this went to 49,149 bytes of its 49,152 on a page 60 deep, and a page 300
 ewrender `-S`, and 60 deep, whole). The crash catcher (`common/atari/crash.c`) now also takes a fault
 in the program's own supervisor code, a wild jump while it runs and line F, so a crash leaves
 `CRASH.LOG` even when only a cold boot recovers the machine.
+
+## Translucent colours and opacity (22 Oct 2026)
+
+The CSS engine kept every colour's alpha (`rgba()`, `hsla()`, `#rrggbbaa`, `#rgba`, `transparent`)
+and computed `opacity`, but the layout threw both away: a translucent background or border was
+painted solid (Bootstrap's card caps, `rgba(0,0,0,.03)`, and Pico's table stripes came out dark),
+`color: transparent` text was drawn black, a translucent overlay hid what was under it, and
+`opacity: 0` content (fading menus, hidden overlays, inputs laid invisibly over a styled button)
+showed. Now, after CSS Color 4:
+
+- **Alpha** is kept from the computed colour to the screen: the display list's colour is
+  `0xAARRGGBB`, for backgrounds, the four borders, text and its decorations, form controls' text and
+  frames, list markers and pictures. Alpha 0 draws nothing. Two inline backgrounds one in another
+  make one colour at layout time (source-over, Compositing and Blending 1), so a run is still one
+  fill; a translucent canvas background is shown on white, as browsers do, and painted once (the
+  root's or the body's box, whichever gave the canvas its colour, doesn't paint it again: CSS
+  Backgrounds 3, The Canvas Background). A block's background colour stops at the box
+  `background-clip` names (border, padding or content box), which shows with translucent borders
+  (Bootstrap's modals and menus: `padding-box`).
+- **Text of a transparent colour that the page shows another way**, with a paint EWeb doesn't draw,
+  is drawn in that paint's colour rather than not at all (browsers show it; before translucency
+  EWeb drew it black), the first it has of: a background through the text (`background-clip: text`,
+  Tailwind's gradient headings: the gradient's first colour that shows, or the background colour;
+  a picture, or a gradient EWeb can't compute: the text's own colour, solid), its outline
+  (`-webkit-text-stroke`) and its shadow (`text-shadow`, the first one's colour: recoloured text,
+  an input's hidden caret). The background and the outline are what the glyphs show; a shadow is
+  under them, offset, blurred, often faint, and inherited, so taken first it drew gradient headings
+  with a soft shadow at its 10% black (in 16 colours not at all). `background-clip: text` never
+  leaves the text undrawn: pages don't hide text so, and its gradient often fails to compute here
+  (Tailwind 4 makes it of custom properties that only `@property`, which EWeb doesn't read, starts:
+  its `var()` is invalid at computed-value time and the image `none`). For this the CSS engine now
+  computes `background-clip` (and `-webkit-background-clip`, and the `background` shorthand's box),
+  `text-shadow` (the first shadow's colour), `-webkit-text-stroke-width` and `-color`, and keeps a
+  gradient's first colour; none of them is drawn otherwise. Text a picture replaces (`color:
+  transparent` over a `url()` background) stays undrawn. A legacy colour attribute of `transparent`
+  (`<font color>`, `<body text>`) is turned down, as the HTML Standard's rules for parsing a legacy
+  colour value say, so the text keeps the colour it inherits.
+- **Opacity** (Transparency: the opacity property) isn't inherited, but applies to the element and
+  everything in it as a group, clamped to 0..1. EWeb multiplies it into each item the group draws
+  rather than drawing the group off screen and mixing it in. Your rules decide it (the fastest code,
+  and the ST edition on a 1 MB ST): an off-screen group needs a buffer the element's size (the whole
+  page for `body`, more than a 1 MB ST has) and a second pass over its pixels; multiplied in, it
+  costs the layout nothing and the drawing below is all there is. It is the group's look wherever
+  the group's items don't lie over one another (text on the page, borders, pictures, controls);
+  where they do (text on its own background), the background shows through the text a little more
+  than in a browser. **Opacity 0 draws nothing**, and its items stay in the list: it keeps its room,
+  and its links, controls and scripts' clicks still work, as CSS has it (unlike `visibility:
+  hidden`), unless it has `pointer-events: none` (CSS UI 4, inherited), as hidden menus, dropdowns
+  and modals nearly always do (Tailwind's `opacity-0 pointer-events-none`): then a click goes through
+  its items to what is under them. The CSS engine computes `pointer-events`; the layout marks such
+  items (`DLF_NOHIT`, ewrender `-d`'s "nohit") and the hit tests (a link, a control, a script's
+  click) pass them by. Opacity makes no stacking context: EWeb has no z-order yet.
+- **What lifts an opacity of 0** that EWeb doesn't run or draw (`own_opacity()` in the layout).
+  Pages ship content at opacity 0 and have something reveal it; drawn as CSS has it, that content
+  would be missing for good. EWeb draws such an element whole:
+  - one with an animation (`animation-name` or the `animation` shorthand: the engine keeps whether
+    there is one): EWeb runs no animations and reads no `@keyframes`, and an element of opacity 0
+    with an animation is nearly always faded in (`animation: fadeIn .8s forwards`, whose
+    fill-mode keeps the last keyframe); so it is drawn as its animation leaves it, taken to be in
+    full;
+  - an `<img>` whose picture EWeb took from `data-src`, `data-srcset` and the like (as it does when
+    `src` is missing or a placeholder, in place of the lazy loader's script): the script would have
+    lifted its opacity too (lazysizes' `.lazyload { opacity: 0 }`);
+  - elements AOS (`data-aos`) and Webflow (`data-w-id`) fade in with their scripts as the page is
+    scrolled to them: EWeb's own scripts are off unless a site is in `SCRIPTS=`, and its lean DOM
+    has no scrolling events or IntersectionObserver for them anyway;
+  - a checkbox or radio button of its own opacity under 1/16: a page that hides the native control
+    draws its own from generated content (`label::before` with no text: Bootstrap 4's custom
+    controls), which EWeb doesn't draw, so without its control the box's state couldn't be seen.
+    Its own opacity only: one inside a group of opacity 0 stays hidden.
+
+  Other content a page's script reveals stays hidden while scripts are off, as in a browser with
+  JavaScript off (a reveal-on-scroll class of a site's own has no marker EWeb could know). This is
+  the most common way opacity removes content, and EWeb's default is scripts off: the markers above
+  are the common ones, kept short so as not to show what pages really hide.
+- **Form controls**: a control's text (its value, a button's label, a list's choice, the caret,
+  whose `caret-color` is the text's) is drawn at its colour's alpha; the rest of it (its frame, a
+  box's tick and a button's dot, a placeholder, the keyboard's frame) at the control's opacity, as
+  browsers draw those in colours of their own, so `color: transparent` on a control or an ancestor
+  doesn't hide a checkbox's state or a radio button.
+- **Drawing** (`src/gfx/canvas.c`): an item less than solid is mixed with what is already drawn
+  under it, in every mode, rather than with the colour the layout knows is behind it (the cheaper
+  way the audit offered): only reading back shows what is under a translucent cover, text and
+  pictures included, and it is nearly as quick.
+  - True colour: each pixel read back and mixed in 32nds (the 5-6-5 parts spread out in a long, one
+    multiply), two pixels a long, a long as the last one taking the last one's result (what is under
+    is mostly one colour), a pixel as the last one likewise.
+  - 4, 16 and 256 colours: a pen's colour comes from the screen's own palette (`ui/screen.c` reads
+    it from the VDI already), mixed, and the screen's nearest pen taken, once per pen for each
+    colour and alpha; then a pixel is a look-up in a table of 256 (`mix_to[]`, an array the 68030's
+    code indexes in one instruction, not through a pointer), four pixels a long where they are
+    alike. What each colour's pens became is kept for the last four colours (two in the ST
+    edition): a change of colour takes out of the table only the pens the last one put in and puts
+    back those the next one had, so runs in a few translucent colours one after another (Material's
+    `.87` titles beside `.54` text, muted text beside links) neither empty the whole table nor work
+    the pens out again (the review's 3,000 runs alternating two translucent colours, 16 colours:
+    22.46 M instructions of drawing to 20.90 M, one colour 21.48 M to 20.79 M).
+  - Monochrome: a translucent fill's mix is patterned as solid fills are (the greys of black and
+    white, fixed to the page); text takes the nearest of black and white.
+  - Pictures at an opacity: mixed per pixel in true colour; with a palette, an ordered pattern (4 x
+    4, fixed to the page) draws the share of their pixels the opacity says, as mixing two pens has
+    no cheap table (65,536 pairs).
+  - The ST edition draws the same way; it keeps 16 pens for each of two colours (its screens have
+    no more; with more, what isn't kept is worked out again), 0.6 KB in all (the Falcon's 2.6 KB).
+  - Each depth has its own loops for a cover (8 bits a look-up a pixel, 16 bits a mix), and a
+    glyph's mixing loop takes its depth once a glyph: the dearest case below, a translucent cover
+    over a whole page, 16 colours 36.7 M to 31.1 M instructions, true colour 65.1 M to 56.9 M.
+- **Limits:** a mix is the screen's nearest pen, so on a screen of few colours a tint of a few per
+  cent vanishes (as near as makes no difference), TOS's 256 colours have no pale pink for half red
+  on light grey (a grey is nearest), and with 4 colours half black on white is black. Group opacity
+  is approximate where a group's items overlap (above). Text at a low alpha may vanish on a
+  monochrome screen.
+- **Measured** with `build/m68k/drawbench` (new, `tests/bench/drawbench.c`: a page laid out and
+  drawn as `EWEB.PRG` does, 400 rows at a time, at 8 bits in 16 colours or at 16, counted with
+  `tools/count68k.sh`), before and after, on 29 pages of the page set alone and with each of its two
+  sheets (87): the layout 0.34% fewer instructions (the CSS engine, the same code in both, differed
+  by up to 1% a page between the two builds: no more than the noise), the drawing 0.04% fewer in 16
+  colours and 0.02% fewer in true colour (pages with translucent items up to 1.3% and 2.5% more, one
+  8.6% fewer as what has no alpha isn't drawn now); solid text's glyph loops are kept apart from the
+  mixing ones, so they cost what they did. The dearest case, a translucent cover over a whole page
+  (the news page without its sheet, 608 x 8,000): 16 colours 21.0 M to 36.7 M instructions (3.2 more
+  a pixel), true colour 44.9 M to 65.1 M (4.2 more), so a screenful (608 x 400) of cover costs 0.8 M
+  and 1.0 M more, 0.15 to 0.2 s on the DFB1; since each depth has its own loops, 31.1 M and 56.9 M
+  (2.1 and 2.5 more a pixel, a screenful 0.5 M and 0.6 M). All
+  its text at alpha .75: 19.3 M to 21.3 M (16 colours), 33.1 M to 35.5 M (true colour); everything in
+  it at opacity .5: 21.5 M and 35.6 M (19.3 M and 33.1 M solid). The review's fixes (what shows
+  text of a transparent colour, `pointer-events`, what lifts an opacity of 0, the new properties),
+  on 12 page-set pages alone and with Bootstrap (24 runs): the styling 0.20% more instructions (six
+  properties more, Bootstrap's `pointer-events`, `text-shadow`, `animation` and `background-clip`
+  now read and cascaded, a style 30 bytes larger), the layout 0.40% more, the drawing the same
+  (+0.002%). In all, `EWEB.PRG`'s code grew 8.3 KB and its memory 2.6 KB (the mixing tables), the ST
+  edition's 6.0 KB and 0.6 KB: on the 1 MB ST the pictures page now needs the tables page given
+  back first (above, It runs on a 1 MB ST).
+- **Tested:** `tests/css/cases.txt` (the colours' alpha, `transparent`, opacity's clamping, a
+  percentage, `calc()`, inheritance; `background-clip` and its shorthands, a gradient's first
+  colour, `text-shadow`, `-webkit-text-stroke`, `pointer-events` and its inheritance,
+  `animation-name` and `animation`); `tests/layout/alpha.html`'s display list (ewrender `-d` shows
+  a colour less than solid as `#rrggbbaa`, a picture's and a control's opacity as `alpha`, and
+  "nohit"; the page has gradient, shadow and outlined text (and both under a faint shadow, and a
+  gradient that doesn't compute), a replaced one, a legacy colour of
+  `transparent`, an animated and an AOS paragraph, a lazy picture, a custom checkbox, a veil a click
+  goes through and `background-clip: padding-box`); `tests/layout/alpha.py` (`make test`) reads
+  back the pixels ewrender draws in true colour and in 2, 4, 16 and 256 colours (its new `-p`):
+  opacity 0 draws nothing, fills, text and text under a cover come out half way, a picture at
+  opacity .5 is half way to white (or half its pixels), text of a transparent colour is drawn in its
+  gradient's, shadow's or outline's colour (the gradient's or the outline's over a faint shadow's,
+  one EWeb can't compute in the text's own colour) and not where a picture replaces it, a
+  checkbox's tick shows in a transparent colour and at its own opacity 0 but not in a group of
+  opacity 0, a translucent root background is one colour down the window, a click (`-J -K`) on a
+  link under a veil of `pointer-events: none` follows it, and the page drawn in bands at 8 and 16
+  bits under AddressSanitizer; `make hatarigui`'s screens group shows the page on the Falcon in 256 colours
+  and true colour and on the TT in 16 colours and monochrome, and its st group in `EWEBST.PRG` on
+  the 1040 ST in monochrome and medium resolution.
 
 ## The design
 

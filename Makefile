@@ -805,6 +805,15 @@ build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build
 		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
 		build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU)
 	$(M68KCC) -m68030 -static -o $@ $^
+# a page laid out and drawn as EWEB.PRG does it (src/layout, src/gfx), as
+# 68030 code on the Atari's heap, for counting (tools/count68k.sh
+# build/m68k/drawbench [-P 2] [-b 16] PAGE.HTM [SHEET.CSS...])
+build/m68k/drawbench: tests/bench/drawbench.c build/m68k/bench/atheap.o build/m68k/atheap/libc.o \
+		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o \
+		build/m68k/ewb/layout/layout.o build/m68k/ewb/gfx/canvas.o build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) \
+		$(EWB_HDRS)
+	$(M68KCC) -m68030 -O2 -std=gnu99 -DNDEBUG $(EWB_FLAGS) $(NSINC) -static -o $@ tests/bench/drawbench.c \
+		tests/host/plat_posix.c common/src/util.c common/src/inflate.c $(filter %.o,$^)
 # a page's scripts as EWEB.PRG runs them (src/js), as 68030 code with the
 # FPU, for counting (tools/count68k.sh build/m68k/jsbench PAGE.HTM)
 m68k_JS := build/m68k/js/js.o $(addprefix build/m68k/qjs/,$(addsuffix .o,$(QJS_C)))
@@ -866,6 +875,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/alpha.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT

@@ -129,7 +129,9 @@ typedef struct {
 	uint16_t link;
 	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
-	uint32_t color, bg;		/* 0xAARRGGBB; bg 0: none */
+	uint32_t color, bg;		/* 0xAARRGGBB, as solid as drawn (its alpha, then the
+					   opacity it is in); bg 0: none */
+	uint8_t alpha;			/* the opacity it is in, 0..255 (CSS Color 4) */
 	const char *text;
 	uint32_t len;
 	int32_t w;
@@ -155,7 +157,7 @@ typedef struct {
 	int32_t text;			/* LAYOUT_OPT.text */
 	ITEM *it;
 	long nit, itcap;
-	int body_bg_taken;
+	dnode *bg_taken;		/* the element whose background colour the canvas took */
 	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
@@ -181,6 +183,11 @@ typedef struct {
 	int32_t *cols;			/* the table being laid out: its column widths */
 	int ncols;
 	int32_t sp_h, sp_v;		/* and its border-spacing */
+	unsigned alpha;			/* the opacity of the box being laid out, times its
+					   ancestors', 0..255 */
+	uint32_t clip;			/* a background it is in painted through its text
+					   (background-clip: text): the colour that text is
+					   drawn in when its own is transparent; 0: none */
 } L;
 
 static int32_t dev(L *l, ec_fx v)
@@ -244,6 +251,134 @@ static uint32_t color(const ec_style *s, int p)
 	if (s->k[p] == EK_CURCOLOR)
 		return (uint32_t) s->v[EP_COLOR].i;
 	return 0;
+}
+
+/* opacity (CSS Color 4, Transparency: the opacity property), 0..255:
+   not inherited, but it applies to the element and all that is in it as
+   a group. EWeb takes it into each item the group draws (their alphas
+   multiplied), which is the group's look wherever its items don't lie
+   over one another; opacity 0 draws nothing, and the element still takes
+   its room and its clicks */
+static unsigned opacity(const ec_style *s)
+{
+	int32_t v = s->k[EP_OPACITY] == EK_NUM ? s->v[EP_OPACITY].i : 1024;
+	return v >= 1024 ? 255 : v <= 0 ? 0 : (unsigned) ((v * 255 + 512) >> 10);
+}
+
+static int is_data(const char *u)
+{
+	return strncmp(u, "data:", 5) == 0;
+}
+
+/* the opacity EWeb draws an element at: its own, but whole where the
+   page has something lift it that EWeb doesn't run or draw:
+   - an animation (EWeb runs none): the element as its animation leaves
+     it, which EWeb takes to be in full (a fade-in, what an element of
+     opacity 0 with an animation nearly always has; CSS Animations 1's
+     fill-mode keeps its last keyframe);
+   - an <img> whose picture EWeb took from data-src and the like (as the
+     page's lazy loader would, which also lifts its opacity: lazysizes'
+     .lazyload);
+   - AOS's (data-aos) and Webflow's (data-w-id) elements, which their
+     scripts fade in as the page is scrolled to them;
+   - a checkbox or radio button of next to no opacity: a page's own
+     control drawn in its place from generated content, which EWeb
+     doesn't draw (Bootstrap 4's custom controls), would leave none */
+static unsigned own_opacity(const ec_style *s, const dnode *n)
+{
+	unsigned a = opacity(s);
+	if (a == 255 || s->k[EP_ANIMATION_NAME] != EK_KW)
+		return 255;
+	if (n == NULL || n->type != DN_ELEMENT || n->ns != DN_NS_HTML)
+		return a;
+	if (dn_attr(n, "data-aos") != NULL || dn_attr(n, "data-w-id") != NULL)
+		return 255;
+	if (n->tag == T_IMG) {
+		static const char *const lazy[] = { "data-src", "data-srcset", "data-lazy-src", "data-original" };
+		const char *src = dn_attr(n, "src"), *v;
+		size_t i;
+		if (src == NULL || *src == 0 || is_data(src))
+			for (i = 0; i < sizeof lazy / sizeof lazy[0]; i++)
+				if ((v = dn_attr(n, lazy[i])) != NULL && *v != 0 && !is_data(v))
+					return 255;
+	}
+	if (n->tag == T_INPUT && n->ctl != NULL && (n->ctl->kind == FC_CHECKBOX || n->ctl->kind == FC_RADIO) &&
+	    a < 16)
+		return 255;
+	return a;
+}
+
+/* text whose own colour is transparent that the page shows another way,
+   which EWeb doesn't draw: a background painted through it
+   (background-clip: text, clip), its outline (-webkit-text-stroke) or
+   its shadow (text-shadow); the colour of the first of these it has (of
+   alpha 0: not drawn). The glyphs show the background painted through them,
+   else their outline; a shadow is only under them, offset, blurred and
+   often faint (and inherited: a page's soft shadow on all its text would
+   otherwise be what its gradient headings are drawn in) */
+static uint32_t text_paint(const ec_style *s, uint32_t clip)
+{
+	uint32_t c;
+	if (clip != 0)
+		return clip;
+	if (s->k[EP_TEXT_STROKE_WIDTH] == EK_PX && s->v[EP_TEXT_STROKE_WIDTH].i > 0 &&
+	    ((c = color(s, EP_TEXT_STROKE_COLOR)) >> 24) != 0)
+		return c;
+	return color(s, EP_TEXT_SHADOW);
+}
+
+/* background-clip: text: the colour its text is drawn in, in place of
+   the background: the gradient's first colour that shows, else the
+   background colour, else (a picture, a gradient of no colour, or none:
+   most often a gradient EWeb couldn't compute, as Tailwind 4's, made
+   of custom properties only @property starts) the text's own colour,
+   solid; pages don't hide text this way. 0: not background-clip: text */
+static uint32_t clip_paint(const ec_style *s)
+{
+	uint32_t c;
+	if (kw(s, EP_BACKGROUND_CLIP) != KW_TEXT)
+		return 0;
+	if (s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE && s->v[EP_BACKGROUND_IMAGE].p != NULL)
+		return *(const uint32_t *) s->v[EP_BACKGROUND_IMAGE].p;
+	if (((c = color(s, EP_BACKGROUND_COLOR)) >> 24) != 0)
+		return c;
+	return 0xff000000 | color(s, EP_COLOR);
+}
+
+/* pointer-events: none (CSS UI 4): its items aren't what a click is on */
+static int no_hit(const ec_style *s)
+{
+	return kw(s, EP_POINTER_EVENTS) == KW_NONE;
+}
+
+/* two alphas together (0..255 each): a times b */
+static unsigned alpha_mul(unsigned a, unsigned b)
+{
+	return b == 255 ? a : a == 255 ? b : (a * b + 127) / 255;
+}
+
+/* a colour (0xAARRGGBB) in a group of opacity a */
+static uint32_t fade(uint32_t argb, unsigned a)
+{
+	return a == 255 ? argb : (uint32_t) alpha_mul(argb >> 24, a) << 24 | (argb & 0xffffff);
+}
+
+/* colour s laid over colour b, both 0xAARRGGBB: the one colour they
+   make (source-over, Compositing and Blending 1), for a translucent
+   background on one beneath it */
+static uint32_t over(uint32_t s, uint32_t b)
+{
+	unsigned as = s >> 24, ab = b >> 24, ao, k;
+	uint32_t r = 0;
+	if (as == 255 || ab == 0)
+		return s;
+	ab = (ab * (255 - as) + 127) / 255;
+	ao = as + ab;
+	if (ao == 0)
+		return 0;
+	for (k = 0; k < 24; k += 8)
+		r |= (((s >> k & 255) * as + (b >> k & 255) * ab + ao / 2) / ao) << k;
+	return (uint32_t) ao << 24 | r;
 }
 
 static int contains_ci(const char *s, size_t n, const char *w)
@@ -392,7 +527,7 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
 	d->y = y;
 	d->w = w;
 	d->h = h;
-	d->rgb = argb & 0xffffff;
+	d->rgb = argb;
 	return l->p->nitems - 1;
 }
 
@@ -407,7 +542,7 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 	d->w = w;
 	d->h = it->font->ascent + it->font->descent;
 	d->base = it->font->ascent;
-	d->rgb = it->color & 0xffffff;
+	d->rgb = it->color;		/* (alpha 0: kept for its link and clicks, not drawn) */
 	d->flags = it->flags;
 	d->link = it->link;
 	d->ctl = it->ctl;
@@ -700,11 +835,6 @@ static int srcset(const char *s, CAND *c, int max)
 			s++;
 	}
 	return n;
-}
-
-static int is_data(const char *u)
-{
-	return strncmp(u, "data:", 5) == 0;
 }
 
 /* from a srcset (and an img's src as 1x when it may be one), the
@@ -1152,8 +1282,10 @@ static int word_dir(const char *s, uint32_t n)
 typedef struct {
 	const ec_style *st;
 	ew_font *font;
-	uint32_t color, bg;
-	uint8_t deco, hidden;
+	uint32_t color, bg;		/* as ITEM's */
+	uint32_t clip;			/* as L's: a background painted through its text */
+	uint8_t deco, hidden;		/* deco: DLF_UNDER..., and DLF_NOHIT */
+	uint8_t alpha;			/* the opacity it is in, 0..255 */
 	uint16_t link;
 	uint16_t ctl;			/* in a <label>: its control (1 + index into page.ctls) */
 	int32_t asc, desc, shift;
@@ -1162,22 +1294,35 @@ typedef struct {
 #endif
 } RUNSTATE;
 
-static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *parent, uint16_t link)
+/* a run's state from its element (n, st; NULL and the block's style for
+   the block's own text) */
+static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, const RUNSTATE *parent,
+		     uint16_t link)
 {
 	int32_t lh, lead;
 	int va;
-	uint32_t bg;
+	uint32_t bg, col;
 	int d;
 
 	r->st = st;
 	r->font = font_of(l, st);
-	r->color = color(st, EP_COLOR);
+	/* the block's own opacity is in l->alpha already (and an atom that
+	   is a block of its own has its block's style) */
+	r->alpha = (uint8_t) (parent == NULL ? l->alpha : st == parent->st ? parent->alpha :
+			      alpha_mul(parent->alpha, own_opacity(st, n)));
+	r->clip = parent == NULL ? l->clip : st == parent->st ? parent->clip : clip_paint(st);
+	if (r->clip == 0 && parent != NULL)
+		r->clip = parent->clip;
+	col = color(st, EP_COLOR);
+	if ((col >> 24) == 0)
+		col = text_paint(st, r->clip);
+	r->color = fade(col, r->alpha);
 	r->link = link;
 #ifndef EW_ST
 	r->node = parent ? parent->node : NULL;
 #endif
 	r->ctl = parent ? parent->ctl : 0;
-	r->deco = parent ? parent->deco : 0;
+	r->deco = (uint8_t) ((parent ? parent->deco & ~DLF_NOHIT : 0) | (no_hit(st) ? DLF_NOHIT : 0));
 	r->bg = parent ? parent->bg : 0;
 	r->shift = parent ? parent->shift : 0;
 	r->hidden = kw(st, EP_VISIBILITY) == KW_HIDDEN || kw(st, EP_VISIBILITY) == KW_COLLAPSE;
@@ -1191,8 +1336,8 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *pare
 			r->deco |= DLF_STRIKE;
 	}
 	bg = color(st, EP_BACKGROUND_COLOR);
-	if (parent != NULL && (bg >> 24) != 0)
-		r->bg = bg;
+	if (parent != NULL && (bg >> 24) != 0 && kw(st, EP_BACKGROUND_CLIP) != KW_TEXT)
+		r->bg = over(fade(bg, r->alpha), r->bg);	/* one fill for both, as solid as they are together */
 	va = kw(st, EP_VERTICAL_ALIGN);
 	if (parent != NULL) {
 		if (va == KW_SUB)
@@ -1219,6 +1364,7 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->link = r->link;
 	it->ctl = r->ctl;
 	it->hidden = r->hidden;
+	it->alpha = r->alpha;
 #ifndef EW_ST
 	it->node = r->node;
 #endif
@@ -1437,7 +1583,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			break;
 		case BX_ATOM: {
 			ITEM *it;
-			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+			runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
 #ifndef EW_ST
 			if (c->n != NULL)
 				r.node = c->n;
@@ -1479,7 +1625,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		}
 		case BX_INLINE: {
 			int32_t gl, gr;
-			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+			runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
 #ifndef EW_ST
 			if (c->n != NULL)
 				r.node = c->n;
@@ -1639,7 +1785,7 @@ static void visual_order(L *l, long i, long j, int rtl, long *ord)
 
 /* a picture's item in the display list */
 static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
-		       int flags)
+		       int flags, unsigned alpha)
 {
 	dl_item *d = dl_add(l);
 	if (d == NULL)
@@ -1656,7 +1802,7 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 	d->text = b->text;	/* its alt text, while it comes */
 	d->len = b->len;
 	d->font = f;
-	d->rgb = 0x606060;
+	d->rgb = (uint32_t) alpha << 24 | 0x606060;	/* its opacity; its alt text's colour */
 #ifndef EW_ST
 	d->node = b->n;
 #endif
@@ -1684,6 +1830,7 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 		return -1;
 	d->type = DL_IMAGE;
 	d->img = h;
+	d->rgb = (uint32_t) l->alpha << 24;	/* its box's opacity */
 	d->flags = DLF_TILE | DLF_NOSIZE | DLF_ALT;
 	d->x = iw;
 	d->y = ih;
@@ -1804,8 +1951,8 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 	int framed = c->kind != FC_RADIO, button = !form_typed(c) && c->kind != FC_CHECKBOX;
 	int32_t in = framed ? 1 : 0;
 	if (framed) {
-		uint32_t edge = 0xff808080;
-		fill(l, x, y, it->w, h, c->disabled ? 0xfff0f0f0 : button ? 0xffe0e0e0 : 0xffffffff);
+		uint32_t edge = fade(0xff808080, it->alpha);
+		fill(l, x, y, it->w, h, fade(c->disabled ? 0xfff0f0f0 : button ? 0xffe0e0e0 : 0xffffffff, it->alpha));
 		fill(l, x, y, it->w, 1, edge);
 		fill(l, x, y + h - 1, it->w, 1, edge);
 		fill(l, x, y, 1, h, edge);
@@ -1823,7 +1970,11 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 	d->w = it->w - 2 * in;
 	d->h = h - 2 * in;
 	d->base = (int16_t) (base - d->y);
-	d->rgb = c->disabled ? 0x808080 : it->color & 0xffffff;
+	/* its text in its colour; the rest of it as solid as its opacity
+	   (browsers draw a box's tick and the like in colours of their own) */
+	d->ink = c->disabled ? fade(0xff808080, it->alpha) : it->color;
+	d->rgb = (uint32_t) it->alpha << 24 | (d->ink & 0xffffff);
+	d->flags = it->flags & DLF_NOHIT;
 	d->font = it->font;
 	d->ctl = b->ctl;
 	d->link = it->link;
@@ -1841,7 +1992,7 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 		/* with no size yet: its alt text, drawn below, and its place for
 		   the picture to be fetched (DLF_ALT: nothing drawn) */
 		image_item(l, b, x, y, sized ? iw : it->w, sized ? ih : h, it->link, it->font,
-			   (guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT));
+			   (guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT) | (it->flags & DLF_NOHIT), it->alpha);
 		if (sized)
 			return;
 	}
@@ -1849,7 +2000,7 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 		control_item(l, it, x, y, h, base + it->shift);
 	} else {
 		ITEM t = *it;
-		t.color = 0xff606060;
+		t.color = fade(0xff606060, it->alpha);
 		t.flags &= (uint8_t) ~(DLF_UNDER);
 		text(l, x, base, &t, b->text, b->len, it->w);
 	}
@@ -2022,7 +2173,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
-				if (it->bg && !it->hidden && it->kind != IT_BREAK) {
+				if ((it->bg >> 24) != 0 && !it->hidden && it->kind != IT_BREAK) {
 					/* a run of one background: one fill */
 					int32_t x0 = it->x, x1 = it->x + it->w;
 					while (k + 1 < end - i && l->it[ord[k + 1]].bg == it->bg) {
@@ -2077,7 +2228,7 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	int32_t h;
 	l->nit = 0;
 	l->cw = w;
-	runstate(l, &r, b->st, NULL, b->link);
+	runstate(l, &r, b->st, NULL, NULL, b->link);
 #ifndef EW_ST
 	{
 		box *e;
@@ -2104,7 +2255,8 @@ static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
 	guess = image_size(l, a, &iw, &ih);
 	if (iw <= 0 || ih <= 0)
 		return inline_layout(l, b, x, y, w, &fb);
-	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st), guess ? DLF_NOSIZE : 0);
+	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st),
+		   (guess ? DLF_NOSIZE : 0) | (no_hit(b->st) ? DLF_NOHIT : 0), l->alpha);
 	return ih;
 }
 
@@ -2123,7 +2275,7 @@ static int32_t inline_measure(L *l, box *b)
 	int32_t lw = 0, best = 0;
 	l->nit = 0;
 	l->cw = AUTO;
-	runstate(l, &r, b->st, NULL, b->link);
+	runstate(l, &r, b->st, NULL, NULL, b->link);
 	collect(l, b, &r, &line_start);
 	if (l->minw && !keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
 		/* the narrowest: its widest word or picture */
@@ -2303,7 +2455,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 	}
 	default: s = "\xe2\x80\xa2"; break;		/* • */
 	}
-	runstate(l, &r, st, NULL, 0);
+	runstate(l, &r, st, NULL, NULL, 0);
 	memset(&it, 0, sizeof it);
 	it.font = r.font;
 	it.color = r.color;
@@ -3875,6 +4027,9 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
 	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems;
 	struct span *saved_spans = l->spans;
+	unsigned saved_alpha = l->alpha;
+	uint32_t saved_clip = l->clip;
+	int32_t bg_top = 0, bg_bottom = 0;	/* the background colour's fill short of the border box */
 
 	if (l->fail)
 		return 0;
@@ -4018,13 +4173,39 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 	}
 	if (!b->anon) {
-		bg = color(s, EP_BACKGROUND_COLOR);
-		if ((bg >> 24) != 0 && !(b->n != NULL && b->n->tag == T_BODY && l->body_bg_taken))
-			bgi = fill(l, x + ml, y + mt, bl + pl + w + pr + br, 1, bg);
-		if (b->n != l->canvas_bg) {
-			bgp = bg_item(l, s, b->n);
-			if (bgp >= 0 && bgi >= 0)
-				l->p->items[bgi].flags |= DLF_TILE;
+		int clip = kw(s, EP_BACKGROUND_CLIP);
+		/* what it draws, and all in it, as solid as its opacity says */
+		l->alpha = alpha_mul(l->alpha, own_opacity(s, b->n));
+		if (clip == KW_TEXT) {
+			/* its background painted through its text, not under it:
+			   text of a transparent colour drawn in it (text_paint) */
+			uint32_t cp = clip_paint(s);
+			if (cp != 0)
+				l->clip = cp;
+		} else {
+			/* its colour to the edge of the box background-clip says
+			   (CSS Backgrounds 3, 3.7); not where the canvas has it */
+			int32_t in_l = 0, in_r = 0;
+			if (clip == KW_PADDING_BOX || clip == KW_CONTENT_BOX) {
+				in_l = bl;
+				in_r = br;
+				bg_top = bt;
+				bg_bottom = bb;
+			}
+			if (clip == KW_CONTENT_BOX) {
+				in_l += pl;
+				in_r += pr;
+				bg_top += pt;
+				bg_bottom += pb;
+			}
+			bg = fade(color(s, EP_BACKGROUND_COLOR), l->alpha);
+			if ((bg >> 24) != 0 && !(b->n != NULL && b->n == l->bg_taken))
+				bgi = fill(l, x + ml + in_l, y + mt + bg_top, bl + pl + w + pr + br - in_l - in_r, 1, bg);
+			if (b->n != l->canvas_bg) {
+				bgp = bg_item(l, s, b->n);
+				if (bgp >= 0 && bgi >= 0)
+					l->p->items[bgi].flags |= DLF_TILE;
+			}
 		}
 	}
 	cx = x + ml + bl + pl;
@@ -4152,14 +4333,14 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (mx != AUTO && ch > mx && kw(s, EP_OVERFLOW_Y) != KW_VISIBLE)
 			ch = mx;
 		if (bgi >= 0)
-			l->p->items[bgi].h = bt + pt + ch + pb + bb;
+			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
 		bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb);
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
-			bd[0] = fill(l, bx, by, bw, bt, color(s, EP_BORDER_TOP_COLOR));
-			bd[1] = fill(l, bx, by + bh - bb, bw, bb, color(s, EP_BORDER_BOTTOM_COLOR));
-			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, color(s, EP_BORDER_LEFT_COLOR));
-			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, color(s, EP_BORDER_RIGHT_COLOR));
+			bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
+			bd[1] = fill(l, bx, by + bh - bb, bw, bb, fade(color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
+			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, fade(color(s, EP_BORDER_LEFT_COLOR), l->alpha));
+			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, fade(color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
 #ifndef EW_ST
 			if (b->n != NULL && !b->anon)
 				block_rect(l, b->n, bx, by, bw, bh);
@@ -4195,6 +4376,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	l->last_bg = bgi >= 0 ? bgi : bgp;
 	memcpy(l->last_bd, bd, sizeof bd);
+	l->alpha = saved_alpha;
+	l->clip = saved_clip;
 	*mb_out = mb;
 	*first = fb;
 	return mt + bt + pt + ch + pb + bb + mb;
@@ -4272,6 +4455,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->opt = *o;
 	p->width = o->width;
 	p->bg = 0xffffff;
+	l.alpha = 255;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
 	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
@@ -4280,17 +4464,22 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->height = 0;
 		return p;
 	}
-	/* the canvas: the root's background, else the body's */
+	/* the canvas: the root's background, else the body's; one less than
+	   solid on white, as browsers show what is under a canvas (CSS
+	   Backgrounds 3, The Canvas Background, leaves it to them) */
 	{
 		uint32_t hb = color(html->e.style, EP_BACKGROUND_COLOR);
 		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR) {
-			p->bg = (hb >> 24) != 0 ? hb & 0xffffff : p->bg;
+			if ((hb >> 24) != 0) {
+				p->bg = over(hb, 0xffffffff) & 0xffffff;
+				l.bg_taken = html;	/* painted once, there */
+			}
 			l.canvas_bg = html;
 		} else if (d->body != NULL && d->body->e.style != NULL) {
 			uint32_t bb = color(d->body->e.style, EP_BACKGROUND_COLOR);
 			if ((bb >> 24) != 0) {
-				p->bg = bb & 0xffffff;
-				l.body_bg_taken = 1;
+				p->bg = over(bb, 0xffffffff) & 0xffffff;
+				l.bg_taken = d->body;
 			}
 			l.canvas_bg = d->body;
 		}
@@ -4344,13 +4533,17 @@ dnode *page_node_at(const page *p, int32_t x, int32_t y)
 	long i, best = -1;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->node != NULL && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h)
+		if (d->node != NULL && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h)
 			return d->node;
 	}
 	/* the innermost block there: the last laid out of those holding it
-	   (a block's rectangle is put when its children are done) */
+	   (a block's rectangle is put when its children are done); not one
+	   a click goes through (pointer-events: none) */
 	for (i = 0; i < p->nblocks; i++) {
 		const struct pg_block *b = &p->blocks[i];
+		if (b->n->e.style != NULL && no_hit(b->n->e.style))
+			continue;
 		if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h &&
 		    (best < 0 || (int64_t) b->w * b->h <= (int64_t) p->blocks[best].w * p->blocks[best].h))
 			best = i;
@@ -4396,12 +4589,14 @@ int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_
 }
 #endif
 
+/* (the last item drawn there first; not one a click goes through) */
 int page_link_at(const page *p, int32_t x, int32_t y)
 {
 	long i;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->link && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h)
+		if (d->link && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h)
 			return d->link - 1;
 	}
 	return -1;
@@ -4412,7 +4607,8 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 	long i;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->ctl && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h) {
+		if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h) {
 			if (it != NULL)
 				*it = d;
 			return p->ctls[d->ctl - 1];

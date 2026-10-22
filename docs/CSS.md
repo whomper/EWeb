@@ -71,7 +71,7 @@ Falcons, and a divide that costs 40 to 80 cycles.
   logic), `@supports` (declarations, `not`, `and`, `or`, `selector()`),
   `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
   `@container` are skipped.
-- **Properties:** the 98 EWeb draws: box model, positioning, floats,
+- **Properties:** the 103 EWeb draws or needs: box model, positioning, floats,
   borders, backgrounds (first layer; `background-size` since 21 Oct 2026,
   kept as two longhands of the engine's own, `-ec-background-size-w` and
   `-h`), fonts, text (including `direction`,
@@ -83,9 +83,17 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `justify-items` and `justify-self`; the shorthands `grid-row`,
   `grid-column`, `grid-area` and `grid-template` (rows / columns); line
   names are read past), `gap`, `overflow`, `opacity`, `content`, and their
-  shorthands. Unknown properties are skipped. Not yet: logical
-  properties (`margin-inline-start` and so on, which matter for Hebrew),
-  transforms, animations, `border-radius`, shadows.
+  shorthands. Since 22 Oct 2026, for translucency (`DESIGN.md`):
+  `pointer-events`; `background-clip` (with `-webkit-background-clip` and
+  the `background` shorthand's box); and of what EWeb doesn't draw, what
+  it needs to show text of a transparent colour or content an animation
+  reveals: `text-shadow` (the first shadow's colour), `-webkit-text-stroke`
+  (`-width`, `-color` and the shorthand), `animation-name` and the
+  `animation` shorthand (whether there is an animation), and a gradient's
+  first colour that shows. Unknown properties are skipped. Not yet:
+  logical properties (`margin-inline-start` and so on, which matter for
+  Hebrew), transforms, running animations, `border-radius`, drawing
+  shadows.
 - **Computed values** as CSS defines them: relative lengths become px
   (percentages stay), `bolder` and `lighter` become weights, display is
   blockified for floats, absolute positioning, the root and flex items,
@@ -100,7 +108,8 @@ Falcons, and a divide that costs 40 to 80 cycles.
   test pages.
 - `make csscmp` compares the engine with LibCSS, value by value, on the
   whole page set (`tests/bench/pages.sh` first): every element, every
-  property both engines have. A difference counts as explained only when
+  property both engines have (LibCSS has none of the translucency ones
+  above, nor `overflow-wrap`, `row-gap`, grid's or `background-size`). A difference counts as explained only when
   it is a known gap in LibCSS. Most are found exactly: the page is styled
   again with one of the engine's `EC_COMPAT_*` switches on (each leaves out
   one thing LibCSS lacks), and the difference is put down to that thing
@@ -114,7 +123,7 @@ ec_ctx *c = ec_create(&m, 0);
 ec_sheet(c, ua_css, ua_len, EC_ORIGIN_UA);
 ec_sheet(c, page_css, page_len, EC_ORIGIN_AUTHOR);
 /* the document: ec_nodes with atoms from ec_intern(c, ...) */
-ec_select(c, root);                     /* every node's style is set */
+ec_select(c, root);                     /* every node's style is set (-1: out of memory, not all) */
 /* node->style->v[EP_COLOR].i, node->style->k[EP_WIDTH], ... */
 ec_destroy(c);
 ```

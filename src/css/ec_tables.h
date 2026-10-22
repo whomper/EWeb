@@ -33,7 +33,11 @@
 	P(BORDER_COLLAPSE,     "border-collapse",     VP_KW,     KL_BORDER_COLLAPSE,  EK_KW,    KW_SEPARATE) \
 	P(BORDER_SPACING_H,    "-ec-border-spacing-h",VP_LEN,    LF_NN | LF_NOPCT,    EK_PX,    0) \
 	P(BORDER_SPACING_V,    "-ec-border-spacing-v",VP_LEN,    LF_NN | LF_NOPCT,    EK_PX,    0) \
-	P(OVERFLOW_WRAP,       "overflow-wrap",       VP_KW,     KL_OVERFLOW_WRAP,    EK_KW,    KW_NORMAL)
+	P(OVERFLOW_WRAP,       "overflow-wrap",       VP_KW,     KL_OVERFLOW_WRAP,    EK_KW,    KW_NORMAL) \
+	P(POINTER_EVENTS,      "pointer-events",      VP_KW,     KL_POINTER_EVENTS,   EK_KW,    KW_AUTO) \
+	P(TEXT_SHADOW,         "text-shadow",         VP_SHADOW, 0,                   EK_KW,    KW_NONE) \
+	P(TEXT_STROKE_WIDTH,   "-webkit-text-stroke-width", VP_BWIDTH, 0,             EK_PX,    0) \
+	P(TEXT_STROKE_COLOR,   "-webkit-text-stroke-color", VP_COLOR,  0,             EK_CURCOLOR, 0)
 
 #define EC_PROPS_OTHER(P) \
 	P(DISPLAY,             "display",             VP_KW,     KL_DISPLAY,          EK_KW,    KW_INLINE) \
@@ -77,6 +81,7 @@
 	P(BACKGROUND_POSITION_Y,"background-position-y",VP_BGPOS,1,                   EK_PCT,   0) \
 	P(BACKGROUND_SIZE_W,   "-ec-background-size-w",VP_LEN,   LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
 	P(BACKGROUND_SIZE_H,   "-ec-background-size-h",VP_LEN,   LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
+	P(BACKGROUND_CLIP,     "background-clip",     VP_KW,     KL_BG_CLIP,          EK_KW,    KW_BORDER_BOX) \
 	P(OVERFLOW_X,          "overflow-x",          VP_KW,     KL_OVERFLOW,         EK_KW,    KW_VISIBLE) \
 	P(OVERFLOW_Y,          "overflow-y",          VP_KW,     KL_OVERFLOW,         EK_KW,    KW_VISIBLE) \
 	P(Z_INDEX,             "z-index",             VP_INT,    LF_AUTO,             EK_KW,    KW_AUTO) \
@@ -85,6 +90,7 @@
 	P(UNICODE_BIDI,        "unicode-bidi",        VP_KW,     KL_UNICODE_BIDI,     EK_KW,    KW_NORMAL) \
 	P(BOX_SIZING,          "box-sizing",          VP_KW,     KL_BOX_SIZING,       EK_KW,    KW_CONTENT_BOX) \
 	P(OPACITY,             "opacity",             VP_ALPHA,  0,                   EK_NUM,   1 << 10) \
+	P(ANIMATION_NAME,      "animation-name",      VP_ANIM,   0,                   EK_KW,    KW_NONE) \
 	P(CONTENT,             "content",             VP_CONTENT,0,                   EK_KW,    KW_NORMAL) \
 	P(FLEX_DIRECTION,      "flex-direction",      VP_KW,     KL_FLEX_DIRECTION,   EK_KW,    KW_ROW) \
 	P(FLEX_WRAP,           "flex-wrap",           VP_KW,     KL_FLEX_WRAP,        EK_KW,    KW_NOWRAP) \
@@ -126,7 +132,9 @@
 	S(TEXT_DECORATION, "text-decoration") S(INSET, "inset") \
 	S(BORDER_SPACING, "border-spacing") S(WORD_WRAP, "word-wrap") \
 	S(GRID_ROW, "grid-row") S(GRID_COLUMN, "grid-column") S(GRID_AREA, "grid-area") \
-	S(GRID_TEMPLATE, "grid-template")
+	S(GRID_TEMPLATE, "grid-template") \
+	S(WEBKIT_BACKGROUND_CLIP, "-webkit-background-clip") S(WEBKIT_TEXT_STROKE, "-webkit-text-stroke") \
+	S(ANIMATION, "animation")
 
 /* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". */
 #define EC_KEYWORDS(K) \
@@ -198,7 +206,10 @@
 	K(ULTRA_EXPANDED, "ultra-expanded") K(WAVY, "wavy") K(FROM_FONT, "from-font") \
 	K(SAFE, "safe") K(UNSAFE, "unsafe") K(FIRST, "first") K(LAST, "last") \
 	K(MIN_CONTENT, "min-content") K(MAX_CONTENT, "max-content") K(FIT_CONTENT, "fit-content") \
-	K(AUTO_FILL, "auto-fill") K(AUTO_FIT, "auto-fit") K(SPAN, "span") K(DENSE, "dense")
+	K(AUTO_FILL, "auto-fill") K(AUTO_FIT, "auto-fit") K(SPAN, "span") K(DENSE, "dense") \
+	K(TEXT, "text") K(ALL, "all") K(FILL, "fill") K(STROKE, "stroke") K(PAINTED, "painted") \
+	K(VISIBLEPAINTED, "visiblepainted") K(VISIBLEFILL, "visiblefill") \
+	K(VISIBLESTROKE, "visiblestroke") K(BOUNDING_BOX, "bounding-box")
 
 /* The keyword lists of VP_KW properties: L(id, keywords...) */
 #define EC_KWLISTS(L) \
@@ -223,6 +234,9 @@
 	L(BORDER_STYLE, KW_NONE, KW_HIDDEN, KW_DOTTED, KW_DASHED, KW_SOLID, KW_DOUBLE, \
 		KW_GROOVE, KW_RIDGE, KW_INSET, KW_OUTSET) \
 	L(BG_REPEAT, KW_REPEAT, KW_REPEAT_X, KW_REPEAT_Y, KW_NO_REPEAT, KW_SPACE, KW_ROUND) \
+	L(BG_CLIP, KW_BORDER_BOX, KW_PADDING_BOX, KW_CONTENT_BOX, KW_TEXT) \
+	L(POINTER_EVENTS, KW_AUTO, KW_NONE, KW_VISIBLEPAINTED, KW_VISIBLEFILL, KW_VISIBLESTROKE, \
+		KW_VISIBLE, KW_PAINTED, KW_FILL, KW_STROKE, KW_ALL, KW_BOUNDING_BOX) \
 	L(OVERFLOW, KW_VISIBLE, KW_HIDDEN, KW_SCROLL, KW_AUTO, KW_CLIP) \
 	L(UNICODE_BIDI, KW_NORMAL, KW_EMBED, KW_ISOLATE, KW_BIDI_OVERRIDE, KW_ISOLATE_OVERRIDE, \
 		KW_PLAINTEXT) \

@@ -45,7 +45,8 @@ enum ec_kind {
 	EK_EM, EK_EX, EK_CH, EK_REM, EK_VW, EK_VH, EK_VMIN, EK_VMAX,
 	EK_CALCX,	/* v.p: a calc() not yet computed */
 	EK_VAR,		/* v.p: a value waiting for var() */
-	EK_IMAGE	/* v.p: ec_str, a gradient: an image without a URL */
+	EK_IMAGE	/* a gradient: an image without a URL; v.p its first colour
+			   that shows (const uint32_t *, 0xAARRGGBB), or NULL */
 };
 
 /* text-decoration-line's bits */
@@ -227,8 +228,9 @@ extern char *ec_stack_floor;
 #define EC_DEEP() EC_DEEP_BY(0)
 
 /* Styles root and every element under it: sets each node's style. The
- * styles last until ec_unstyle() or ec_destroy(). */
-void ec_select(ec_ctx *c, ec_node *root);
+ * styles last until ec_unstyle() or ec_destroy(). Returns 0, or -1 when
+ * out of memory: some elements have no style (NULL). */
+int ec_select(ec_ctx *c, ec_node *root);
 void ec_unstyle(ec_ctx *c);
 
 const ec_stats *ec_get_stats(const ec_ctx *c);

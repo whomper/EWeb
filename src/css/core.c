@@ -21,8 +21,10 @@ void *ec_alloc_slow(ec_arena *a, size_t n)
 	if (n + sizeof(ec_chunk) + EC_ALIGN > size)
 		size = n + sizeof(ec_chunk) + EC_ALIGN;
 	ch = malloc(size);
-	if (ch == NULL)
+	if (ch == NULL) {
+		a->failed = 1;
 		return NULL;
+	}
 	ch->next = a->chunks;
 	a->chunks = ch;
 	a->p = (char *) ch + ((sizeof(ec_chunk) + EC_ALIGN - 1) & ~(EC_ALIGN - 1));

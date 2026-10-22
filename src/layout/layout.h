@@ -41,6 +41,8 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL };
 					   is an item of its own), nothing drawn */
 #define DLF_TILE 64			/* DL_IMAGE: a background picture, tiled over the item
 					   (tile); DL_FILL: its picture is the next item */
+#define DLF_NOHIT 128			/* pointer-events: none: a click goes through it to what
+					   is under it (its link, its control) */
 
 /* a background picture's tiles: one at (item's x + dx, y + dy), w x h
    device px, and the others on from it across (rx) and down (ry) */
@@ -51,7 +53,12 @@ typedef struct dl_tile {
 
 typedef struct dl_item {
 	int32_t x, y, w, h;		/* device px on the page; text: its line box part */
-	uint32_t rgb;			/* 0xRRGGBB */
+	uint32_t rgb;			/* 0xAARRGGBB: AA how solid it is drawn, 255 solid, 0 not
+					   at all (a transparent colour, opacity 0: the item is
+					   kept for clicks); a picture's AA is its opacity, a
+					   control's its opacity (its frame, a box's tick, a
+					   button's dot, the keyboard's frame), with its text's
+					   colour (ink) */
 	uint8_t type, flags;
 	uint16_t link;			/* 0: none, else 1 + index into page.links */
 	int16_t base;			/* text and controls: the baseline, from y */
@@ -62,6 +69,8 @@ typedef struct dl_item {
 	union {
 		const char *text;	/* UTF-8, kept by the page */
 		const dl_tile *tile;	/* DL_IMAGE with DLF_TILE (NULL while its size isn't known) */
+		uint32_t ink;		/* DL_CTL: its text's colour, 0xAARRGGBB as rgb (the
+					   CSS colour's alpha, then the opacity it is in) */
 	};
 	uint32_t len;			/* DL_CTL: a textarea's line step */
 	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h
