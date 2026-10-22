@@ -42,6 +42,8 @@ typedef struct {
 	URL url;			/* where the answer came from, after redirects */
 	int redirects;			/* how many were followed */
 	int encoding;			/* 0 as sent, 1 gzip, 2 deflate */
+	int packed;			/* the body is as it came, not unpacked: HTTPREQ.head
+					   said so (a gzip file to be saved) */
 	long length;			/* body bytes as they came (packed) */
 	long size;			/* body bytes, unpacked */
 	int reused;			/* the last request went over a kept connection */
@@ -73,6 +75,11 @@ typedef struct {
 	   for all of them): such an answer is left unread (its connection
 	   goes) and the request fails, err naming the type. NULL: any */
 	const char *refuse;
+	/* a 2xx answer's headers have come, its body not yet (rs has them, and
+	   its encoding): 0 stops the request there (its connection goes, and
+	   it fails with err "stopped"); it may set rs->packed to keep a packed
+	   body as it came. ud is the sink's. NULL: none */
+	int (*head)(void *ud, HTTPRESP *rs);
 } HTTPREQ;
 
 /* 1: an answer came (rs->status says which), with its body appended to
@@ -82,6 +89,16 @@ int  http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int er
 void http_resp_free(HTTPRESP *rs);
 /* the first header of that name in the answer, or NULL */
 const char *http_header(const HTTPRESP *rs, const char *name, char *out, int size);
+/* the same, where its value is in rs->headers (it ends at a newline) */
+const char *http_header_at(const HTTPRESP *rs, const char *name);
+
+/* a Content-Disposition value (RFC 6266; it ends at NUL or a newline):
+   1 attachment (or a type EWeb doesn't know, which counts as one, 4.2),
+   0 inline, -1 none (a header that isn't RFC 6266's is ignored whole, as
+   tc2231's cases have it). name gets the file name it gives, UTF-8, ""
+   for none: filename* (RFC 8187) when it is good, else filename, read as
+   ISO-8859-1; cut at a character to fit size */
+int http_disposition(const char *v, char *name, int size);
 void http_close_all(void);	/* close the kept connections */
 
 /* cookies (the browser sets these to cookie.c's; NULL: none): each

@@ -422,9 +422,13 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 #endif
 }
 
-static uint16_t add_link(L *l, const char *href)
+/* a link: its href, and after its NUL its download attribute (1 and the
+   value, else 0: page_link_download) */
+static uint16_t add_link(L *l, const char *href, const char *download)
 {
 	page *p = l->p;
+	size_t hn = strlen(href), dn = download != NULL ? strlen(download) : 0;
+	char *s;
 	if (p->nlinks == p->linkcap) {
 		int cap = p->linkcap ? p->linkcap * 2 : 64;
 		char **n = realloc(p->links, cap * sizeof *n);
@@ -435,10 +439,33 @@ static uint16_t add_link(L *l, const char *href)
 	}
 	if (p->nlinks >= 65534)
 		return 0;
-	p->links[p->nlinks] = astrdup(l->a, href, strlen(href));
-	if (p->links[p->nlinks] == NULL)
+	s = amalloc(l->a, hn + dn + 3);
+	if (s == NULL)
 		return 0;
+	memcpy(s, href, hn);
+	s[hn] = 0;
+	s[hn + 1] = download != NULL;
+	memcpy(s + hn + 2, download != NULL ? download : "", dn + 1);
+	p->links[p->nlinks] = s;
 	return (uint16_t) (++p->nlinks);
+}
+
+/* an <a>'s href and download attribute, found in one pass (a look for
+   each went through its attributes twice more) */
+static const char *link_attrs(const dnode *n, const char **download)
+{
+	const char *href = NULL;
+	uint16_t i;
+	*download = NULL;
+	for (i = 0; i < n->nattr; i++) {
+		size_t al;
+		const char *an = ec_atom_text(n->attrs[i].name, &al);
+		if (al == 4 && href == NULL && memcmp(an, "href", 4) == 0)
+			href = n->attrs[i].val;
+		else if (al == 8 && *download == NULL && memcmp(an, "download", 8) == 0)
+			*download = n->attrs[i].val;
+	}
+	return href;
 }
 
 static uint16_t add_ctl(L *l, fctl *c)
@@ -936,8 +963,11 @@ static void build_element(L *l, box *parent, dnode *c)
 	b = new_box(l, block_level(d) ? BX_BLOCK : BX_INLINE, c, st, parent);
 	if (b == NULL)
 		return;
-	if (c->tag == T_A && dn_attr(c, "href") != NULL)
-		b->link = add_link(l, dn_attr(c, "href"));
+	if (c->tag == T_A) {
+		const char *dl, *href = link_attrs(c, &dl);
+		if (href != NULL)
+			b->link = add_link(l, href, dl);
+	}
 	b->list = d == KW_LIST_ITEM;
 	b->tablerow = d == KW_TABLE_ROW;
 	b->table = d == KW_TABLE || d == KW_INLINE_TABLE;
@@ -4411,6 +4441,13 @@ int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_
 	return found;
 }
 #endif
+
+const char *page_link_download(const page *p, int link)
+{
+	const char *s = p->links[link];
+	s += strlen(s) + 1;
+	return *s ? s + 1 : NULL;
+}
 
 int page_link_at(const page *p, int32_t x, int32_t y)
 {

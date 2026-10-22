@@ -802,6 +802,18 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 	       alert(2, "[2][There is a file of that name.|Replace it?][Replace|Cancel]") == 1;
 }
 
+/* br_save_url's: where a file goes, asked once its answer has begun (its
+   server may name it) */
+static int save_where(void *ud, const char *name, char *path, int size)
+{
+	int r;
+	(void) ud;
+	graf_mouse(ARROW, 0);
+	r = ask_save("Save the link's file", name, path, size);
+	graf_mouse(BUSYBEE, 0);
+	return r;
+}
+
 /* said on the status line, and in the log (its size, no path) */
 static void saved(const char *path, long len)
 {
@@ -812,22 +824,31 @@ static void saved(const char *path, long len)
 	log_event("saved %ld", len);
 }
 
+static void save_file(const char *url, const char *given);
+
+static unsigned long drawn;		/* br.shows when the window last drew a new page */
+
 /* what a load came to, on the screen */
 static void loaded(int r)
 {
+	/* a new page: the load's own (BR_SHOWN), or one shown on the way to
+	   what it came to (its script, as it loaded, clicked a download link
+	   or sent the browser on): drawn first, then what the load came to
+	   (the file selector for a file, EMail for a mail address) */
+	int fresh = r == BR_SHOWN || br.shows != drawn;
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
-	if (r == BR_SHOWN || r == BR_SAME)
+	if (fresh || r == BR_SAME)
 		ph_pictures();		/* full, or on to the pictures */
 	else {
 		win_progress(-1, 0);
 		ph = -1;
 	}
-	switch (r) {
-	case BR_SHOWN: {
+	if (fresh) {
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
+		drawn = br.shows;
 		win_page_changed();
 		ms_drawn = pf_ms() - ms_drawn;
 		log_url(shown, sizeof shown);
@@ -852,8 +873,10 @@ static void loaded(int r)
 		} else if (br.p && br.p->deep) {
 			win_status("Part of this page is nested too deeply to show.");
 		}
-		break;
 	}
+	switch (r) {
+	case BR_SHOWN:
+		break;
 	case BR_SAME:
 		log_event("same %.*s top %ld", (int) strcspn(br.url, "?"), br.url, (long) br.scroll_to);
 		win_address(br.url);
@@ -869,13 +892,25 @@ static void loaded(int r)
 		win_status("");
 		win_toolbar();
 		log_event("download %.60s %ld", br.dl.mime, len);
-		br_file_name(br.dl.url, br.dl.mime, name, sizeof name);
+		br_file_name(br.dl.url, br.dl.name, br.dl.mime, name, sizeof name);
 		if (!ask_save("Save the file", name, full, sizeof full))
 			br_dl_free(&br);
 		else if (br_dl_save(&br, full))
 			saved(full, len);
 		else
 			alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+		break;
+	}
+	case BR_SAVE: {
+		/* a link to save (<a download>): as it comes, as Alternate-click
+		   saves one */
+		char url[1024], given[256];
+		str_copy(url, br.dl.url, sizeof url);
+		str_copy(given, br.dl.name, sizeof given);
+		win_address(br.url);
+		win_status("");
+		log_event("save link");
+		save_file(url, given);
 		break;
 	}
 	case BR_ELSEWHERE:
@@ -1195,7 +1230,7 @@ static void save_page(void)
 	char name[16], full[320];
 	if (br.src == NULL)
 		return;
-	br_file_name(br.url, br.mime, name, sizeof name);
+	br_file_name(br.url, NULL, br.mime, name, sizeof name);
 	if (!ask_save("Save the page", name, full, sizeof full))
 		return;
 	if (br_save_page(&br, full))
@@ -1204,20 +1239,16 @@ static void save_page(void)
 		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
 }
 
-void save_link(int link)
+/* url's file saved as it comes (br_save_url), where the user says once
+   the answer has begun; given: the name its link gives (<a download>),
+   or NULL */
+static void save_file(const char *url, const char *given)
 {
-	char url[2048], name[16], full[320], err[200];
+	char full[320], err[200];
 	int r;
-	if (loading)
-		return;
-	br_link_url(&br, link, url, sizeof url);
-	if (url[0] == 0)
-		return;
-	br_file_name(url, "", name, sizeof name);
-	if (!ask_save("Save the link's file", name, full, sizeof full))
-		return;
+	full[0] = 0;
 	loading_on();
-	r = br_save_url(&br, url, full, err, sizeof err);
+	r = br_save_url(&br, url, given, full, sizeof full, err, sizeof err);
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
@@ -1228,7 +1259,7 @@ void save_link(int link)
 		keys_flush();
 		log_event("stopped heap %ld peak %ld free %ld", heap_use, heap_peak, ram_free());
 		win_status("Stopped.");
-	} else {
+	} else if (r == BRS_FAILED) {
 		char t[220];
 		char *c;
 		atari_text(err, t, sizeof t);
@@ -1241,6 +1272,22 @@ void save_link(int link)
 	conn_stop = 0;
 	win_toolbar();
 	menu_update();
+}
+
+void save_link(int link)
+{
+	char url[2048], given[256];
+	const char *g;
+	if (loading)
+		return;
+	br_link_url(&br, link, url, sizeof url);
+	if (url[0] == 0)
+		return;
+	/* copied: a window sized while the file comes lays the page out anew */
+	g = br_link_download(&br, link);
+	if (g != NULL)
+		str_copy(given, g, sizeof given);
+	save_file(url, g != NULL ? given : NULL);
 }
 
 void command(int cmd)
@@ -1785,6 +1832,7 @@ int main(void)
 	br.phase = on_phase;
 	br.log = log_line;
 	br.can_open = can_open;
+	br.save_as = save_where;
 	br.snapshot = opt.snapshot;
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen */
 #ifndef EW_ST

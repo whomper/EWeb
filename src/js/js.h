@@ -77,6 +77,9 @@ int js_changed(doc *d);
 /* where a script sent the browser (location, form.submit's address),
    or NULL; its method and body for a form sent with POST (NULL: GET) */
 const char *js_navigation(doc *d, const char **post, long *len, const char **ctype);
+/* when that is a link a script clicked (a.click()) that has a download
+   attribute: its value ("" for no name), else NULL */
+const char *js_navigation_download(doc *d);
 void js_navigation_done(doc *d);
 /* ms until the next timer is due (0: now), -1 for none */
 long js_due(doc *d);

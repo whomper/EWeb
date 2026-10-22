@@ -1176,7 +1176,9 @@ open for the job and written a piece at a time (the guidelines' 6.5), so a downl
 than the memory, and Esc leaves nothing behind. A file EWeb doesn't show, opened as a page, is
 already in memory (up to 8 MB): EWeb asks where to save it and writes it in one safe save; the
 page shown stays. The name offered is 8.3 from the address (`INDEX.HTM` for `/`, the type's
-ending when the address has none). `make itest` and `make hatarigui` save each kind.
+ending when the address has none); from 22 Oct 2026 the name the server or the link gives comes
+first, and a link's file is asked for once its answer has begun (Downloads, below). `make itest`
+and `make hatarigui` save each kind.
 
 ## Bookmarks (19 Oct 2026)
 
@@ -1330,7 +1332,7 @@ BSS):
 | TJpgDec (and jpegdc for what it won't take) in place of libjpeg-turbo | 92 KB of code |
 | `-Os` | 115 KB of code |
 | `EW_ST`: the CSS engine's prelude 1024 tokens, 512 hits, a 256-entry style cache, 256 values and declarations, 4 levels of `:not()`, 1024 names | 128 KB of BSS |
-| `EW_ST`: the HTTP client's read buffer 8 KB, the stack 48 KB | 24 KB of BSS |
+| `EW_ST`: the HTTP client's read buffer 8 KB (2 KB since the downloads' names, below), the stack 48 KB | 24 KB of BSS (6 KB more for the 2 KB buffer) |
 
 At run time the arenas take small pieces on the ST (the CSS engine 4 KB, its first ones from 512
 bytes, the document and the layout 8 KB, not 64 and 16), as a context's empty pieces were most of a
@@ -1785,6 +1787,114 @@ file; the queries a page's pictures (one with 0xCA and 0x81), sheet, CSS `url()`
 XMLHttpRequest send, as the server got them); `make hatarigui`'s `browse` View > Encoding... on the
 emulated Falcon; `make fuzz`'s `fuzz_html` (text files, the default) and `fuzz_url` (a query in an
 encoding of a byte a character).
+
+## Downloads: their names, attachments and gzip files (22 Oct 2026)
+
+A file was named from its address alone and handled by its type alone: `download.php?id=123` was
+offered as `DOWNLOAD.HTM` (`.PHP` a page's ending), a GitHub release's file (which redirects to a
+storage address that isn't its name) lost its name, a text file its server says to save
+(`Content-Disposition: attachment`) was shown, `<a download>` was a plain link, and a `.tar.gz`
+served as Apache serves one (`Content-Type: application/x-gzip`, `Content-Encoding: x-gzip`) was
+unpacked and saved as a tar under its `.GZ` name. Now:
+- **Content-Disposition** (RFC 6266, with RFC 8187's `filename*`; `http_disposition` in
+  `src/net/http.c`): read after 4.1's grammar, with spaces wherever its implied LWS lets them;
+  `filename*` before `filename` (4.3), in UTF-8 or ISO-8859-1 (what RFC 8187 asks a recipient to
+  know); `filename` read as ISO-8859-1. A header that isn't RFC 6266's (a quoted type, a value with
+  a space or a comma in it or text after its quotes, a parameter twice, no type) is ignored whole,
+  as tc2231 (the test suite RFC 6266 was written with) has it; a `filename*` that isn't RFC 8187's
+  (no charset or another one, quoted, a bad `%`, bytes that aren't UTF-8) is passed over for
+  `filename`, so the header still says attachment. An empty parameter (`attachment;
+  filename=a.zip;`, common from PHP) is passed over, as browsers take it: tc2231 and the strict
+  grammar would throw such a header away, and nothing in it can be misread. `attachment`, or a
+  type EWeb doesn't know (4.2), on a 2xx answer saves the file whatever its type; on an error's
+  answer (a 403) the page is shown, as tc2231's `attonly403` has it. The name counts with `inline`
+  too, when the type is one EWeb saves. An answer whose header says attachment, or names a file
+  EWeb saves (`inline; filename="Manual.pdf"`), isn't kept in the memory or disk cache, which keep
+  no headers (as one with a Refresh header isn't): from there it would lose the name or the
+  attachment. A page or text file that says only `inline`, or names itself (a name never used), is
+  kept as without the header; pictures and stylesheets with one (CDNs send `inline; filename=`) are
+  kept as before.
+- **`<a download>`** (the HTML Standard, 4.6.5, "download the hyperlink"): a link with the
+  attribute to the page's own origin is saved, not followed, through the HTTP client's sink as
+  Alternate-click saves one (so it may be bigger than the memory), however it is activated: a
+  click, or a script's `a.click()` (common for `a.download = name; a.click()`: `src/js` keeps the
+  link's attribute with the address it sends the browser to, `js_navigation_download`, and
+  `src/browse` saves it as a click on the link). A page whose script clicks one as it loads ("your
+  download starts now") is shown first, then its file asked for: a load can come to `BR_SAVE`
+  (or `BR_DOWNLOAD`, a mail address, a stop) after showing a page on the way, and `br.shows`, which
+  counts the pages shown, tells the front end to draw it. One to another origin is
+  followed as a link, as Chrome and Firefox do (its server may still say attachment). The name is
+  the standard's "suggested filename": Content-Disposition's when it says attachment, else the
+  attribute's when the answer (after redirects) is from the page's origin, else
+  Content-Disposition's inline one, else the address's. The layout keeps each link's attribute
+  after its href in `page.links` (`page_link_download`): one more attribute looked at for each
+  `<a href>`, nothing for other elements.
+- **When the name is asked:** a link's file (Alternate-click, the link's menu, `<a download>`) has
+  its name only once its server answers, so the file selector now comes when the answer's headers
+  are in and its body not yet (`HTTPREQ.head`, called by the HTTP client for a 2xx answer). The
+  connection waits meanwhile (STinG holds what comes, and the server waits for its window), and
+  the file is made only then: an answer that is an error leaves no empty file behind (until now
+  the file was made first, and removed), and Cancel ends the request (`BRS_CANCELLED`, nothing
+  said). A server waits only so long: nginx's `send_timeout` and Apache's `Timeout` end a
+  connection that takes nothing for 60 s, so a file bigger than STinG's window was lost when the
+  selector stayed up longer (choosing a folder, a floppy). So when the connection is lost once the
+  selector has been up, the file is asked for once more, into the file chosen, with no selector;
+  a link that gives its file only once answers that with an error, which is said. `make itest`
+  holds a 4 MB file's selector for 3 s against a server that gives up after a second
+  (`ewrender -Z`).
+- **The TOS name** (`br_file_name`): of a name given, its last part only (RFC 6266, 4.3: no path,
+  no `..\`, no drive), its base cut to 8 and its ending to 3, in capitals, with only what every
+  GEMDOS takes (A to Z, 0 to 9, `_`, `-`), as Save page as names a page; a page's ending (`.html`,
+  `.php`) is `.HTM` when it is a page, any other is kept (`DATA.PHP` for an octet-stream so named);
+  a name with no ending takes the type's (`README.TXT` for text, `LICENSE` for an octet-stream);
+  `.tar.gz` is `.TGZ`; a name with nothing a TOS name can hold (a Hebrew one) gives its ending to
+  the address's base (`GET.ZIP`). From an address, a script's ending on what isn't a page gives
+  way to the type's (`DOWNLOAD.ZIP` for a ZIP from `download.php`, `DOWNLOAD.PHP` before).
+- **gzip files**, as browsers save them (Firefox keeps the encoding of a gzip type, and of a
+  download whose name ends in `.gz`): an answer with `Content-Encoding: gzip` (`x-gzip` too) that
+  is a gzip file (`application/gzip`, `application/x-gzip`, `application/x-tar+gzip`, or a name,
+  Content-Disposition's else the address's, ending in `.gz` or `.tgz`) and is to be saved
+  (attachment, or a type EWeb doesn't show) is kept as it came: the page's `HTTPREQ.head` sets
+  `rs->packed`, and the HTTP client doesn't unpack it. A page sent packed whose name ends in `.gz`
+  (`text/html`) is unpacked and shown, as before. A link's file streamed to the disk asks for
+  nothing packed, and what a server packs anyway was always saved as it came.
+
+Not done: a file EWeb doesn't show, opened by a plain click, still comes into memory (up to 8 MB)
+before the file selector; streaming it to the disk too is the audit's other download item. A
+`data:` link with `download` isn't saved (EWeb opens no `data:` page).
+
+Measured: nothing here runs on a hot path but the layout's look at a link's attributes, which now
+finds `href` and `download` in one pass where it looked for `href` twice; there is no 68030 count of
+the layout, so it was counted on this computer (callgrind, `layout_page` alone, 20 pages of the page
+set: the ten with the most links, 591 to 474, and ten about the median's 149): 223.77 M x86
+instructions before, 223.21 M after (-0.25%; each page -0.07% to -0.37%). A first version that
+looked for `download` on its own cost +0.30% (about 100 instructions a link). The ST edition's
+`load_post` frame is 4 bytes larger (4,272), `fetch`'s 4 (5,636); the hook that asks where a link's
+file goes takes 272 bytes, under a request. Its code and the browser's name for a file made
+`EWEBST.PRG` 4.3 KB larger, and the 1 MB ST, with 182,538 bytes free at start, no longer fitted
+`make hatarigui`'s pictures page with the tables page shown (the edge the encodings found, above).
+So the HTTP client's read buffer is 2 KB on the ST edition, from 8 KB (16 KB on the Falcon): it
+sizes only a sink's pieces and each copy into memory, since what comes waits in the connection's own
+buffer, so a page or a file comes in more, smaller copies (some two thousand instructions more for a
+50 KB page, which the network's pace hides). The 1 MB ST now has 186,888 bytes free at start, and
+the `st` group passes.
+
+`tests/browse/dltest.c` (`make test`) has RFC 6266's four examples and tc2231's cases by their names
+there (inline, attachment, the extra parameters, the extension types, the character sets, RFC 2231's
+continuations, the fallback, RFC 2047), and a few more (spaces and tabs, a charset other than the
+two, a language, a value cut short, a NUL encoded, a name cut to its room at a character), and the
+TOS names (each after a call that leaves an ending on the stack, which a name with none of its own
+mustn't take); `nettest` the hook (a gzip file kept packed, unpacked when not asked, a request
+stopped there and its connection gone, none for a 404, with a sink); `tests/fuzz/fuzz_disposition.c`
+(`make fuzz`: values at every room for the name, which must come out whole UTF-8; 38 M runs in 300
+s, nothing found); `make itest` `/site/dl/` (attachment, not shown and not kept by the disk cache;
+filename* before filename; a gzip file by its type and by its name, saved as they came, also
+streamed; `notes.html.gz` shown; an inline name, a 403 and a header that isn't RFC 6266's shown;
+`<a download>` named, empty, with the server's name first, to another origin followed with and without
+attachment, and clicked by a script; a `.tar.gz` as Apache sends one, known by its address alone; a
+page that says `inline` kept by the disk cache, a file named by `inline` not; a file asked for again
+after the file selector outlasted its server); `make hatarigui`'s `browse` (the file selector
+offering the server's name, and an `<a download>` clicked, on the emulated Falcon).
 
 ## The design
 

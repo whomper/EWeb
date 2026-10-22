@@ -78,6 +78,8 @@ typedef struct ejs {
 	dnode **started;		/* scripts that have run (or never will) */
 	long nstarted, startcap;
 	char *nav, *nav_body;		/* where a script sent the browser */
+	char *nav_dl;			/* the download attribute of the link it clicked
+					   to get there (a.click()), NULL none */
 	long nav_len;
 	char nav_ctype[96];
 	const page *pg;
@@ -2369,6 +2371,16 @@ static JSValue fprop_set(JSContext *ctx, JSValueConst this_val, JSValueConst v, 
 	return JS_UNDEFINED;
 }
 
+/* where a script sent the browser forgotten, before it sends it elsewhere */
+static void nav_clear(ejs *j)
+{
+	free(j->nav);
+	free(j->nav_body);
+	free(j->nav_dl);
+	j->nav = j->nav_body = j->nav_dl = NULL;
+	j->nav_len = 0;
+}
+
 /* click(), focus(), blur(), submit(), reset() (magic) */
 enum { EC_CLICK, EC_FOCUS, EC_BLUR, EC_SUBMIT, EC_RESET };
 static int fire(ejs *j, dnode *n, const char *type, int bubbles, int cancelable);
@@ -2399,8 +2411,14 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 				if (out != NULL) {
 					j->h.resolve(j->h.ud, j->base, dn_attr(n, "href"), out, URL_MAX, 0);
 					if (out[0] && strncmp(out, "javascript:", 11) != 0) {
-						free(j->nav);
+						/* a link with a download attribute is
+						   downloaded however it is activated
+						   (the HTML Standard, 4.6.5): src/browse
+						   saves it, as a click on it */
+						const char *dl = dn_attr(n, "download");
+						nav_clear(j);
 						j->nav = out;
+						j->nav_dl = dl != NULL ? strdup(dl) : NULL;
 						out = NULL;
 					}
 					free(out);
@@ -3290,10 +3308,7 @@ static void send_form(ejs *j, dnode *form, fctl *submitter)
 		j->h.resolve(j->h.ud, j->base, action && *action ? action : j->url, to, URL_MAX, 0);
 	else
 		str_copy(to, j->url, URL_MAX);
-	free(j->nav);
-	free(j->nav_body);
-	j->nav_body = NULL;
-	j->nav_len = 0;
+	nav_clear(j);
 	if (made && s.post) {
 		j->nav_body = s.body;
 		j->nav_len = s.len;
@@ -3827,9 +3842,7 @@ static JSValue go(JSContext *ctx, JSValueConst v, int hash)
 		free(to);
 		return JS_UNDEFINED;
 	}
-	free(j->nav);
-	free(j->nav_body);
-	j->nav_body = NULL;
+	nav_clear(j);
 	j->nav = to;
 	return JS_UNDEFINED;
 }
@@ -3895,7 +3908,7 @@ static JSValue hist_call(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 		free(href);
 		return JS_UNDEFINED;
 	}
-	free(j->nav);
+	nav_clear(j);
 	j->nav = strdup(magic == 1 ? "about:back" : "about:forward");
 	return JS_UNDEFINED;
 }
@@ -4286,15 +4299,18 @@ const char *js_navigation(doc *d, const char **post, long *len, const char **cty
 	return j->nav;
 }
 
+const char *js_navigation_download(doc *d)
+{
+	ejs *j = d->js;
+	return j != NULL && j->nav != NULL ? j->nav_dl : NULL;
+}
+
 void js_navigation_done(doc *d)
 {
 	ejs *j = d->js;
 	if (j == NULL)
 		return;
-	free(j->nav);
-	free(j->nav_body);
-	j->nav = j->nav_body = NULL;
-	j->nav_len = 0;
+	nav_clear(j);
 }
 
 long js_due(doc *d)
@@ -4454,7 +4470,6 @@ static void js_drop(void *p)
 		free(j->sel[i].s);
 	free(j->map);
 	free(j->started);
-	free(j->nav);
-	free(j->nav_body);
+	nav_clear(j);
 	free(j);
 }

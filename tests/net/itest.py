@@ -13,8 +13,10 @@ window is sized, then), EWeb's own page when a server isn't
 there and when what came isn't a page, a page's refresh (<meta
 http-equiv=refresh>, the Refresh header), and pages that name no encoding
 (UTF-8 found; Windows-1255 under .il, through EW_HOSTS, or chosen by hand;
-their links' and forms' queries in it; a text file), and the queries of a
-page's other addresses (pictures, sheets, CSS's url()s, scripts').
+their links' and forms' queries in it; a text file), the queries of a
+page's other addresses (pictures, sheets, CSS's url()s, scripts'), and
+downloads' names (Content-Disposition, <a download>, gzip files kept as
+they came).
 
     tests/net/itest.py EWGET [WORK [EWRENDER EWEB.FNT]]"""
 import os
@@ -431,6 +433,110 @@ try:
         rc, data, out = save("https://localhost:%d/site/" % HTTPS)
         check("the browser: the page shown saved", rc == 0 and data == server.SITE and
               "saved page: 1 %d INDEX.HTM\n" % len(server.SITE) in out, out)
+        # downloads' names (RFC 6266): Content-Disposition's attachment saves
+        # what EWeb would show, its filename (filename* first) the name
+        # offered; a gzip file is saved as it came; <a download> to the
+        # page's own site saves (the HTML Standard's suggested filename),
+        # to another is followed
+        dl = "http://localhost:%d/site/dl/" % HTTP
+        rc, data, out = save(dl + "report")
+        check("downloads: attachment, its filename", rc == 0 and data == server.REPORT and
+              "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        cache = os.path.join(work, "dlcache")
+        shutil.rmtree(cache, ignore_errors=True)
+
+        def browse_cached(cache, url):
+            p = subprocess.run([ewrender, "-f", font, "-C", cache, "-d", url], cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            return p.returncode, p.stdout + p.stderr
+
+        for i in range(2):
+            rc, data, out = save("-C", cache, dl + "report")
+            check("downloads: attachment, not from the cache (%d)" % i, rc == 0 and data == server.REPORT and
+                  "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        rc, data, out = save(dl + "euro")
+        check("downloads: filename* before filename", rc == 0 and data == server.SMALL and
+              "download: application/octet-stream %d RATES.PDF\n" % len(server.SMALL) in out, out)
+        rc, data, out = save(dl + "files.tar.gz")
+        check("downloads: a gzip file (x-gzip), as it came", rc == 0 and data == server.TARGZ and
+              "download: application/x-gzip %d FILES.TGZ\n" % len(server.TARGZ) in out, out)
+        rc, data, out = save(dl + "backup")
+        check("downloads: a gzip file by its name, as it came", rc == 0 and data == server.TARGZ and
+              "download: application/octet-stream %d BACKUP.TGZ\n" % len(server.TARGZ) in out, out)
+        for name, title in (("notes.html.gz", "Notes, packed"), ("inline", None), ("denied", "Denied"),
+                            ("bad", None)):
+            rc, out = browse(dl + name)
+            check("downloads: shown, not saved: " + name, rc == 0 and "download:" not in out and
+                  (title is None or ('title "%s"' % title) in out), out)
+        links = dl + "links.html"
+        rc, data, out = save("-K", "named", links)
+        check("downloads: <a download=NAME>", rc == 0 and data == server.SMALL and "followed: 5 " in out and
+              "saved link: 0 %d MYFILE.BIN \n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-K", "plain", links)
+        check("downloads: <a download> to a page: saved", rc == 0 and data == server.SITE_TWO and
+              "saved link: 0 %d TWO.HTM \n" % len(server.SITE_TWO) in out, out)
+        rc, data, out = save("-K", "cd", links)
+        check("downloads: <a download>, Content-Disposition's name first", rc == 0 and data == server.REPORT and
+              "saved link: 0 %d REPORT20.TXT \n" % len(server.REPORT) in out, out)
+        rc, data, out = save("-K", "other", links)
+        check("downloads: <a download> to another site: followed", rc == 0 and data == server.SMALL and
+              "followed: 4 " in out and "download: application/zip %d SMALL.ZIP\n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-K", "othercd", links)
+        check("downloads: to another site, attachment", rc == 0 and data == server.REPORT and
+              "followed: 4 " in out and "download: text/plain %d REPORT20.TXT\n" % len(server.REPORT) in out, out)
+        rc, data, out = save("-g", "5", links)
+        check("downloads: a gzip file streamed, as it came", rc == 0 and data == server.TARGZ and
+              "saved link: 0 %d FILES.TGZ \n" % len(server.TARGZ) in out, out)
+        # a script's a.click() on <a download> downloads as a click does
+        # (the HTML Standard, 4.6.5): saved under the attribute's name; to
+        # another site, followed
+        rc, data, out = save("-J", "-K", "jsnamed", links)
+        check("downloads: a.click() on <a download=NAME>", rc == 0 and data == server.SMALL and
+              "load: 5 " in out and "saved link: 0 %d MYFILE.BIN \n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-J", "-K", "jsother", links)
+        check("downloads: a.click() on <a download> to another site: followed", rc == 0 and
+              data == server.SMALL and "load: 4 " in out and
+              "download: application/zip %d SMALL.ZIP\n" % len(server.SMALL) in out, out)
+        # a page whose script clicks its <a download> as it loads ("your
+        # download starts now"): the page shown on the way (br.shows: the
+        # front end draws it), then its file saved
+        rc, data, out = save("-J", dl + "starts.html")
+        check("downloads: a.click() as the page loads: shown, then saved", rc == 0 and data == server.SMALL and
+              'shown on the way: 5 "Your download"\n' in out and
+              "saved link: 0 %d GOT.BIN \n" % len(server.SMALL) in out and 'title "Your download"' in out, out)
+        # a .tar.gz as Apache sends one (application/x-tar, x-gzip), known
+        # by its address alone: as it came
+        rc, data, out = save(dl + "apache.tar.gz")
+        check("downloads: a gzip file by its address, as it came", rc == 0 and data == server.TARGZ and
+              "download: application/x-tar %d APACHE.TGZ\n" % len(server.TARGZ) in out, out)
+
+        def dl_counts():
+            import urllib.request
+            with urllib.request.urlopen(dl + "count", timeout=10) as r:
+                return dict(kv.split("=") for kv in r.read().decode().split())
+
+        # the caches: a page that says only "inline" is kept as any other;
+        # a file named by "inline" isn't (from the cache it would lose its
+        # name)
+        for i in range(2):
+            rc, out = browse_cached(cache, dl + "inline.html")
+            check("downloads: inline, kept (%d)" % i, rc == 0 and 'title "Inline"' in out, out)
+            rc, data, out = save("-C", cache, dl + "manual")
+            check("downloads: a file named by inline, not from the cache (%d)" % i, rc == 0 and
+                  data == server.SMALL and "download: application/pdf %d MANUAL.PDF\n" % len(server.SMALL) in out,
+                  out)
+        n = dl_counts()
+        check("downloads: inline kept, a named file not", n.get("inline.html") == "1" and n.get("manual") == "2",
+              repr(n))
+        # the file selector up for longer than the server waits (its send
+        # timeout: a second here, a minute for nginx and Apache): the
+        # connection lost, and the file asked for once more into the file
+        # chosen
+        rc, data, out = save("-Z", "3000", "-g", "6", links)
+        check("downloads: asked again after a long file selector", rc == 0 and data == server.HELD and
+              "selector: HELD.BIN\n" in out and out.count("selector:") == 1 and
+              "saved link: 0 %d HELD.BIN \n" % len(server.HELD) in out and dl_counts().get("held.bin") == "2",
+              out + repr(dl_counts()))
         # the disk cache: a page fresh for an hour shown again with no
         # request (the next run reads the pack and the index), one asked
         # again each time answered with a 304, Reload asking again

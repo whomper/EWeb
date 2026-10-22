@@ -55,8 +55,10 @@ EWeb's own fonts.
   instead of twenty); a kept page shown when its site can't be reached;
   Settings > General for its size, Options > Empty the cache.
 - **Saving**: the page shown as it came (^S), a link's file (Alternate-click,
-  as Safari's Option-click) straight to the disk as it comes, and a file EWeb
-  doesn't show, opened as a page.
+  as Safari's Option-click, or a link marked as a download) straight to the
+  disk as it comes, and a file EWeb doesn't show, or one its site says to
+  save, opened as a page; under the name the site gives it (RFC 6266), made
+  to fit a TOS disk, archives as they came.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true

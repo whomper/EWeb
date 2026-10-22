@@ -13,13 +13,17 @@
   Tab from field to field, a box ticked with Space and its label clicked,
   sent with POST by its button clicked), saving (^S and the file
   selector's OK: the page as it came; Alternate-click: a link's file; a
-  file EWeb doesn't show, opened: saved), bookmarks (^D adds the page,
+  file EWeb doesn't show, opened: saved; one its server says to save,
+  under its filename's name; a link with a download attribute, clicked:
+  saved under its name), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
   clicked), a page that names no encoding read again in Windows-1255
   (View > Encoding..., its popup by the keyboard), ^Q;
 - scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
   a page whose script makes tabs, one clicked (the page laid out again),
-  a button whose onclick says hello in an alert, answered with Return;
+  a button whose onclick says hello in an alert, answered with Return; a
+  page whose script clicks its <a download> as it loads: drawn, then its
+  file saved;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -482,6 +486,42 @@ def browse():
             ev = r.wait(r"saved ", 60)
             check("saving: a file EWeb doesn't show", dl == "download application/zip %d" % len(server.SMALL) and
                   ev == "saved %d" % len(server.SMALL) and saved("SMALL.ZIP") == server.SMALL, str(r.events()))
+            # a text file its server says to save (Content-Disposition:
+            # attachment): the file selector offers its filename's name
+            r.key(L, (CTRL,))
+            r.type("127.0.0.1:%d/site/dl/report" % HTTP)
+            r.key(RETURN)
+            dl = r.wait(r"download ", 120)
+            time.sleep(3)
+            r.shot(17)
+            r.key(RETURN)
+            ev = r.wait(r"saved ", 60)
+            check("saving: attachment, its filename", dl == "download text/plain %d" % len(server.REPORT) and
+                  ev == "saved %d" % len(server.REPORT) and saved("REPORT20.TXT") == server.REPORT,
+                  str(r.events()))
+            # a link with a download attribute, clicked: saved as it comes
+            # under its name, not shown; Undo goes back to the files
+            r.key(L, (CTRL,))
+            r.type("127.0.0.1:%d/site/dl/links.html" % HTTP)
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            m2 = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+            pt = link_point(site + "dl/links.html", tuple(int(m2.group(i)) for i in range(1, 5)),
+                            int(m2.group(5)), "named") if m2 else None
+            if check("saving: the download links shown", ev is not None and
+                     ev.startswith("shown %sdl/links.html " % site) and pt is not None, str(r.events())):
+                r.mouse.click(*pt)
+                sv = r.wait(r"save link", 60)
+                time.sleep(3)
+                r.shot(18)
+                r.key(RETURN)
+                ev = r.wait(r"saved ", 120)
+                check("saving: <a download>, its name", sv is not None and ev == "saved %d" % len(server.SMALL) and
+                      saved("MYFILE.BIN") == server.SMALL, str(r.events()))
+                r.key(UNDO)
+                ev = r.wait(r"shown ", 60)
+                check("saving: Back to the files", ev is not None and ev.startswith("shown %sfiles.html " % site),
+                      str(r.events()))
             # bookmarks: ^D adds the page shown (on the disk at once), ^B
             # shows them; the Bookmarks menu has it; Remove takes it away
             r.key(D, (CTRL,))
@@ -557,8 +597,8 @@ def scripts():
         return check("scripts: the test server", False)
     xvfb = machines.xvfb(DISPLAY)
     site = "http://127.0.0.1:%d/site/" % HTTP
-    r = Run("scripts", "Falcon:16", hd_for("scripts", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n"), windowed=True,
-            network=True)
+    hd = hd_for("scripts", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
+    r = Run("scripts", "Falcon:16", hd, windowed=True, network=True)
     try:
         ran = r.wait(r"scripts ran ", 300)
         ev = r.wait(r"shown ", 120)
@@ -580,6 +620,25 @@ def scripts():
         r.shot(2)
         r.key(RETURN)
         check("scripts: onclick's alert, answered", ev is not None, str(r.events()))
+        # a page whose script clicks its <a download> as it loads ("your
+        # download starts now"): the window draws the page first, then the
+        # file selector comes; saved under the link's name
+        import server
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/dl/starts.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        sv = r.wait(r"save link", 60)
+        time.sleep(3)
+        r.shot(3)
+        r.key(RETURN)
+        got = r.wait(r"saved ", 120)
+        path = os.path.join(hd, "GOT.BIN")
+        check("scripts: a download clicked as the page loads: the page drawn, then saved", ev is not None and
+              ev.startswith("shown %sdl/starts.html " % site) and ev.endswith("title Your download") and
+              sv is not None and got == "saved %d" % len(server.SMALL) and os.path.exists(path) and
+              open(path, "rb").read() == server.SMALL, str(r.events()))
+        r.shot(4)
         r.key(Q, (CTRL,))
         check("scripts: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

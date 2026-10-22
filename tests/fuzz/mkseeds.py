@@ -7,7 +7,9 @@ what the server says; for fuzz_url, an href, a newline and a base; for
 fuzz_cookie, Set-Cookie values a line each, the first byte picking the
 address it came from (see fuzz_cookie.c); for fuzz_html, a page, the first
 byte picking its charset, scripting and a fragment's context (see
-fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them.
+fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them;
+for fuzz_disposition, a Content-Disposition value, the first byte picking
+the room for its name (see fuzz_disposition.c).
 
 tests/fuzz/found/ holds the inputs that once broke a parser, as the fuzzer
 saved them; make test runs them all again (common/tests/fuzz/replay.c)."""
@@ -127,6 +129,15 @@ for name, first, page in [
      "<link rel='alternate stylesheet' title=N href=d><template><link rel=stylesheet title=X href=f></template>"),
 ]:
     put("html", name, bytes([first]) + page.encode("latin-1"))
+
+# Content-Disposition values (the first byte: the name's room)
+for name, value in [
+    ("attachment", b"attachment; filename=\"Report 2026.txt\""),
+    ("both", b"attachment; filename=\"EURO rates.pdf\"; filename*=UTF-8''%E2%82%AC%20rates.pdf"),
+    ("latin1", b"inline; FILENAME= \"f\\oo-\xe4.html\"; filename*=iso-8859-1'en'foo-%E4.html"),
+    ("odd", b"ext ; ; a=\"\\\";\" ; filename*=''x ;filename*0*=UTF-8''%c3%a4"),
+]:
+    put("disposition", name, bytes([255]) + value)
 
 # bookmark files: Netscape's, as Firefox and Chrome export it, and odd ones
 for name, data in [

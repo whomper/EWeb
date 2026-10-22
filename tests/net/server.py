@@ -63,6 +63,28 @@ Pages:
   /site/files.html  files to save: links to /chunked (2 MB), a file that
                  isn't there, /site/ and /site/small.bin (20 KB; the same
                  bytes as /site/small.zip, application/zip)
+  /site/dl/      downloads' names: report (text/plain that says
+                 attachment, its filename with a space; kept an hour, which
+                 the browser mustn't do), euro (filename and filename*),
+                 files.tar.gz (application/x-gzip with Content-Encoding
+                 x-gzip, always, as Apache sends one), backup (octet-stream,
+                 Content-Encoding gzip, named backup.tgz), notes.html.gz (a
+                 page, packed: shown), inline (a text file named but shown),
+                 denied (a 403 that says attachment: shown), bad (a header
+                 that isn't RFC 6266's: shown), apache.tar.gz (a .tar.gz as
+                 Apache sends one: application/x-tar with Content-Encoding
+                 x-gzip, no Content-Disposition), inline.html (a page with
+                 "inline", kept an hour), manual (a PDF named by "inline",
+                 kept an hour, which the browser mustn't do), held.bin (4
+                 MB, sent as nginx and Apache send a file: the connection
+                 ended when a piece can't go within a second, as their
+                 send timeouts end it after 60 s); links.html,
+                 <a download> links to the page's own site and to the other
+                 name of the same server (localhost and 127.0.0.1), and
+                 buttons whose scripts click two of them (a.click());
+                 starts.html, a page whose script clicks its <a download> as
+                 it loads ("your download starts now"); count (how often
+                 each was asked for)
   /site/cache/   the disk cache: fresh.html (fresh for an hour; a POST to
                  it changes it), etag.html (asked again each time: a 304 to
                  its ETag), post.html (a form that POSTs to fresh.html),
@@ -107,6 +129,7 @@ import gzip
 import http.server
 import os
 import random
+import socket
 import socketserver
 import ssl
 import subprocess
@@ -127,6 +150,42 @@ FILES_PAGE = (b"<!DOCTYPE html><html><head><title>Files</title></head><body><p><
               b"file</a> <a href=/site/none.zip>A file that isn't there</a> <a href=/site/>A page</a> "
               b"<a href=/site/small.bin>A small file</a></p></body></html>")
 SMALL = bytes(range(256)) * 80
+# downloads (/site/dl/): what each sends, and the page of links to them
+REPORT = b"Takings, 2026\r\n" * 40
+TARGZ = gzip.compress(SMALL, mtime=0)
+NOTES = b"<!DOCTYPE html><title>Notes, packed</title><p>A page sent packed, its name ending in .gz."
+DL_PAGE = ("<!DOCTYPE html><title>Downloads</title><p><a id=named href=/site/small.bin download='My File.bin'>"
+           "named</a> <a id=plain href=/site/two.html download>plain</a> <a id=cd href=/site/dl/report "
+           "download=ignored.txt>cd</a> <a id=other href=http://OTHER/site/small.zip download=x.zip>other</a> "
+           "<a id=othercd href=http://OTHER/site/dl/report download=y.txt>othercd</a> "
+           "<a id=tgz href=/site/dl/files.tar.gz>tgz</a> <a id=held href=/site/dl/held.bin>held</a> "
+           "<button id=jsnamed onclick=\"document.getElementById('named').click()\">jsnamed</button> "
+           "<button id=jsother onclick=\"document.getElementById('other').click()\">jsother</button>")
+DL_STARTS = (b"<!DOCTYPE html><title>Your download</title><p>Your download starts now. If it doesn't, "
+             b"<a id=again href=/site/small.bin download=got.bin>save it</a>."
+             b"<script>document.getElementById('again').click()</script>")
+DL = {
+    "report": (200, REPORT, "text/plain", [("Content-Disposition", 'attachment; filename="Report 2026.txt"'),
+                                           ("Cache-Control", "max-age=3600")]),
+    "euro": (200, SMALL, "application/octet-stream",
+             [("Content-Disposition", "attachment; filename=\"EURO rates.pdf\"; "
+                                      "filename*=UTF-8''%E2%82%AC%20rates.pdf")]),
+    "files.tar.gz": (200, TARGZ, "application/x-gzip", [("Content-Encoding", "x-gzip")]),
+    "backup": (200, TARGZ, "application/octet-stream", [("Content-Encoding", "gzip"),
+                                                        ("Content-Disposition", "attachment; filename=backup.tgz")]),
+    "notes.html.gz": (200, gzip.compress(NOTES, mtime=0), "text/html; charset=utf-8", [("Content-Encoding", "gzip")]),
+    "inline": (200, REPORT, "text/plain", [("Content-Disposition", 'inline; filename="notes.txt"')]),
+    "denied": (403, b"<!DOCTYPE html><title>Denied</title><p>Not for you.", "text/html",
+               [("Content-Disposition", "attachment; filename=secret.txt")]),
+    "bad": (200, REPORT, "text/plain", [("Content-Disposition", "attachment; filename=foo bar.txt")]),
+    "apache.tar.gz": (200, TARGZ, "application/x-tar", [("Content-Encoding", "x-gzip")]),
+    "inline.html": (200, b"<!DOCTYPE html><title>Inline</title><p>Shown, and kept.", "text/html",
+                    [("Content-Disposition", "inline"), ("Cache-Control", "max-age=3600")]),
+    "manual": (200, SMALL, "application/pdf", [("Content-Disposition", 'inline; filename="Manual.pdf"'),
+                                               ("Cache-Control", "max-age=3600")]),
+}
+DL_COUNT = {}
+HELD = bytes(range(256)) * 16384
 CACHE_COUNT = {"fresh": 0, "etag": 0, "304": 0}
 # a refresh (<meta http-equiv=refresh>, the Refresh header): each page and
 # the headers it comes with; /site/refresh/to.html's title says what came
@@ -598,6 +657,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
                           "text/plain", extra=[("Cache-Control", "no-store")])
             else:
                 self.send(404, b"not here\n", "text/plain")
+        elif p == "/site/dl/links.html":
+            host, _, port = self.headers.get("Host", "localhost").rpartition(":")
+            other = ("127.0.0.1" if host == "localhost" else "localhost") + ":" + port
+            self.send(200, DL_PAGE.replace("OTHER", other).encode())
+        elif p == "/site/dl/starts.html":
+            self.send(200, DL_STARTS)
+        elif p == "/site/dl/held.bin":
+            # a piece that can't go within a second (the client reads
+            # nothing) ends the connection, as a server's send timeout does
+            DL_COUNT["held.bin"] = DL_COUNT.get("held.bin", 0) + 1
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(HELD)))
+            self.end_headers()
+            self.close_connection = True
+            if self.command != "HEAD":
+                self.connection.settimeout(1)
+                try:
+                    for k in range(0, len(HELD), 65536):
+                        self.connection.sendall(HELD[k:k + 65536])
+                except OSError:
+                    pass
+        elif p == "/site/dl/count":
+            self.send(200, " ".join("%s=%d" % kv for kv in sorted(DL_COUNT.items())).encode(), "text/plain",
+                      extra=[("Cache-Control", "no-store")])
+        elif p.startswith("/site/dl/") and p[9:] in DL:
+            # as they are, whatever was asked for (send() packs only text/)
+            DL_COUNT[p[9:]] = DL_COUNT.get(p[9:], 0) + 1
+            status, body, ctype, extra = DL[p[9:]]
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in extra:
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
         elif p in ("/site/small.bin", "/site/small.zip"):
             self.send(200, SMALL, "application/octet-stream" if p.endswith(".bin") else "application/zip")
         elif p.startswith("/site/cookie/") and cookie_get(self, p):

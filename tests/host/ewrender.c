@@ -38,8 +38,12 @@
  * reached from it: what one page's sheets did must not show in the next.
  * -s FILE saves the page shown at the end as it came (File > Save page
  * as), or a file EWeb doesn't show (a download); -g LINK saves that
- * link's file to FILE instead (Alternate-click). Each prints what it
- * did and the name EWEB.PRG would offer. -m FILE keeps the bookmarks in
+ * link's file to FILE instead (Alternate-click), and so does a click
+ * (-K) on a link to save (<a download>: "save:") or to a file EWeb
+ * doesn't show. Each prints what it did and the name EWEB.PRG would
+ * offer. -Z MS: a link's file is put where it goes as EWEB.PRG's file
+ * selector puts it, once its answer has begun, and the selector takes
+ * MS ms (the answer waits unread meanwhile). -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
@@ -341,6 +345,65 @@ static dnode *by_id(dnode *n, const char *id)
 	return NULL;
 }
 
+/* -s FILE, and whether a click saved to it already (the page isn't then) */
+static const char *save_to;
+static int click_saved;
+/* -Z: how long the file selector takes, ms (-1: none is shown) */
+static long selector_ms = -1;
+
+/* browser.save_as with -Z: the file selector, MS ms, choosing -s's file */
+static int selector(void *ud, const char *name, char *path, int size)
+{
+	(void) ud;
+	printf("selector: %s\n", name);
+	fflush(stdout);
+	usleep((useconds_t) selector_ms * 1000);
+	str_copy(path, save_to, size);
+	return 1;
+}
+
+/* url's file saved to save_to as it comes (br_save_url), given: its
+   link's download attribute or NULL; what it did, and the name EWEB.PRG
+   would offer */
+static int save_url(browser *b, const char *url, const char *given)
+{
+	char path[1024], name[16], err[200];
+	int r;
+	str_copy(path, selector_ms >= 0 ? "" : save_to, sizeof path);
+	if (selector_ms >= 0)
+		b->save_as = selector;
+	r = br_save_url(b, url, given, path, sizeof path, err, sizeof err);
+	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+	printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+	return r;
+}
+
+/* a file a click came to (r: BR_DOWNLOAD, what came; BR_SAVE, a link to
+   save as it comes), saved to -s's file as EWEB.PRG saves it */
+static void click_file(browser *b, int r)
+{
+	if (r == BR_DOWNLOAD) {
+		char name[16];
+		br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+		printf("download: %s %ld %s\n", b->dl.mime, b->dl.len, name);
+		if (save_to != NULL) {
+			br_dl_save(b, save_to);
+			click_saved = 1;
+		}
+		br_dl_free(b);
+	} else if (r == BR_SAVE) {
+		/* a link to save (<a download>): as EWEB.PRG saves it */
+		char url[1024], given[256];
+		str_copy(url, b->dl.url, sizeof url);
+		str_copy(given, b->dl.name, sizeof given);
+		printf("save: %s \"%s\"\n", url, given);
+		if (save_to != NULL) {
+			save_url(b, url, given);
+			click_saved = 1;
+		}
+	}
+}
+
 /* a click on the element with that id, as EWEB.PRG does one: its click
    event, then (unless a script said no) its link or control */
 static int click(browser *b, const char *id)
@@ -357,9 +420,10 @@ static int click(browser *b, const char *id)
 	r = br_js_click(b, x, y, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
-	if (r == BRJ_LOAD)
+	if (r == BRJ_LOAD) {
 		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
-	else if (!cancelled) {
+		click_file(b, load);
+	} else if (!cancelled) {
 		int link = page_link_at(b->p, x, y);
 		fctl *c = page_ctl_at(b->p, x, y, NULL);
 		if (c != NULL && (c->kind == FC_SUBMIT || c->kind == FC_IMAGE)) {
@@ -371,6 +435,7 @@ static int click(browser *b, const char *id)
 		} else if (link >= 0) {
 			r = br_follow(b, link);
 			printf("followed: %d \"%s\" %s\n", r, b->title, b->url);
+			click_file(b, r);
 		}
 	}
 	return 1;
@@ -412,12 +477,13 @@ int main(int argc, char **argv)
 	page *p;
 	SBUF extra;
 	const char *fill[32], *send = NULL;
+	unsigned long shows;
 	int rc = 0;
 	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0, refreshes = 0;
 	int32_t resize[8];
 	int nresize = 0;
 	const char *clicks[16];
-	const char *save_to = NULL, *enc = NULL;
+	const char *enc = NULL;
 
 	{
 		/* the stack's floor, as EWEB.PRG has one (ui/main.c): all of the
@@ -502,6 +568,8 @@ int main(int argc, char **argv)
 			enc = argv[++i];	/* View > Encoding */
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
 			save_link = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-Z") && i + 1 < argc)
+			selector_ms = atol(argv[++i]);	/* the file selector's time */
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
 			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
@@ -573,10 +641,19 @@ int main(int argc, char **argv)
 		}
 		pictures(&b);
 	}
+	shows = b.shows;
 	r = br_go(&b, where);
+	if ((r == BR_SAVE || r == BR_DOWNLOAD) && b.shows != shows && b.p != NULL) {
+		/* a page shown on the way, whose script then clicked a download
+		   link as it loaded: its file saved, then the page drawn, as
+		   EWEB.PRG does */
+		printf("shown on the way: %d \"%s\"\n", r, b.title);
+		click_file(&b, r);
+		r = BR_SHOWN;
+	}
 	if (r == BR_DOWNLOAD) {
 		char name[16];
-		br_file_name(b.dl.url, b.dl.mime, name, sizeof name);
+		br_file_name(b.dl.url, b.dl.name, b.dl.mime, name, sizeof name);
 		printf("download: %s %ld %s\n", b.dl.mime, b.dl.len, name);
 		if (save_to != NULL && !br_dl_save(&b, save_to))
 			rc = 1;
@@ -691,8 +768,10 @@ int main(int argc, char **argv)
 			if (due > 0)
 				usleep((useconds_t) due * 1000);
 			k = br_js_step(&b, &load);
-			if (k == BRJ_LOAD)
+			if (k == BRJ_LOAD) {
 				printf("load: %d \"%s\" %s\n", load, b.title, b.url);
+				click_file(&b, load);
+			}
 		}
 	}
 	for (i = 0; i < nclick; i++) {
@@ -724,16 +803,17 @@ int main(int argc, char **argv)
 		int k = br_bookmark(&b);
 		printf("bookmarked: %d %d\n", k, bm_n);
 	}
-	if (save_to != NULL) {
+	if (save_to != NULL && !click_saved) {
 		char name[16];
 		if (save_link >= 0) {
-			char url[4096], err[200];
+			char url[4096], given[256];
+			const char *g = br_link_download(&b, save_link);
 			br_link_url(&b, save_link, url, sizeof url);
-			br_file_name(url, "", name, sizeof name);
-			r = br_save_url(&b, url, save_to, err, sizeof err);
-			printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+			if (g != NULL)
+				str_copy(given, g, sizeof given);
+			save_url(&b, url, g != NULL ? given : NULL);
 		} else {
-			br_file_name(b.url, b.mime, name, sizeof name);
+			br_file_name(b.url, NULL, b.mime, name, sizeof name);
 			r = br_save_page(&b, save_to);
 			printf("saved page: %d %ld %s\n", r, b.src_len, name);
 		}

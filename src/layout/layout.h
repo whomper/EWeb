@@ -76,7 +76,8 @@ typedef struct page {
 	doc *d;				/* not owned */
 	dl_item *items;
 	long nitems, cap;
-	char **links;			/* each link's href as the page has it */
+	char **links;			/* each link's href as the page has it (and its
+					   download attribute: page_link_download) */
 	int nlinks, linkcap;
 	struct fctl **ctls;		/* the form controls shown (their state is the document's) */
 	int nctls, ctlcap;
@@ -112,6 +113,8 @@ void page_free(page *p);
 
 /* the link under (x, y) on the page: an index into links, or -1 */
 int page_link_at(const page *p, int32_t x, int32_t y);
+/* a link's download attribute (<a download>): its value, NULL for none */
+const char *page_link_download(const page *p, int link);
 /* the form control under (x, y), and its item; NULL: none */
 struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it);
 /* a control's item on the page (its content's place), or NULL when it

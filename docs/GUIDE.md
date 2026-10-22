@@ -181,14 +181,25 @@ EWeb lists its links, or open EWeb's in another browser.
   (`INDEX.HTM` for a site's front page). Its pictures and stylesheets
   stay on the server; open the file again with ^O.
 - **A link's file**: Alternate-click the link, or right-click it and
-  choose Save the link's file. It goes straight to the disk as it comes,
-  so it can be bigger than your memory; the status bar counts it, and
-  Esc stops it (nothing is left behind).
+  choose Save the link's file. EWeb asks where to save it as soon as the
+  site answers, then it goes straight to the disk as it comes, so it can
+  be bigger than your memory; the status bar counts it, and Esc stops it
+  (nothing is left behind). Sites wait about a minute for you to choose;
+  if one gives up, EWeb asks it for the file once more. A link the page
+  marks as a download (its site's own) is saved this way when you click
+  it.
 - **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
-  page: EWeb asks where to save it, and the page you were on stays.
+  page, and one its site says to save rather than show (a text file it
+  sends as an attachment): EWeb asks where to save it, and the page you
+  were on stays.
 
-The file selector offers the name; if there is a file of that name
-already, EWeb asks before replacing it.
+The file selector offers a name: the one the site or the link gives the
+file when there is one (so `download.php?id=12` comes as `GAME.ZIP`),
+else one made from its address, made to fit the Atari's disks (eight
+letters and three, in capitals, only the characters TOS takes, `.tar.gz`
+as `.TGZ`). If there is a file of that name already, EWeb asks before
+replacing it. A packed archive (`.gz`, `.tgz`) is saved as it came, not
+unpacked.
 
 ## The cache
 

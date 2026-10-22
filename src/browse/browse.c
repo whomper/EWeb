@@ -508,6 +508,12 @@ typedef struct {
 	char err[200];		/* when nothing came */
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
 	char refresh[2048];	/* a page's Refresh header, "" none */
+	/* a page's Content-Disposition (RFC 6266): the caches would lose
+	   what it says (so it isn't kept: they keep no headers), it says
+	   attachment (to save, not to show), and the file name it gives
+	   (UTF-8, "" none) */
+	int disposed, attach;
+	char name[256];
 } FETCH;
 
 #ifndef EW_ST
@@ -582,6 +588,58 @@ static const char *fetch_variant;
    window sized then doesn't fetch the page's sheets inside one
    (br_relayout) */
 static int net_busy;
+
+/* does name (s to e: a file's, or an address's path) end in ending */
+static int ends_in(const char *s, const char *e, const char *ending)
+{
+	size_t n = strlen(ending);
+	return (size_t) (e - s) >= n && strncasecmp(e - n, ending, n) == 0;
+}
+
+/* is an answer a gzip file, to be saved as it came rather than unpacked
+   (what browsers do): Content-Encoding gzip with a gzip type, or with a
+   name (name: Content-Disposition's, else the address's) ending in .gz
+   or .tgz */
+static int gzip_file(const HTTPRESP *rs, const char *name)
+{
+	static const char *const types[] = { "application/gzip", "application/x-gzip", "application/x-tar+gzip" };
+	const char *s = name, *e;
+	size_t i;
+	if (rs->encoding != 1)
+		return 0;
+	for (i = 0; i < sizeof types / sizeof types[0]; i++)
+		if (strcmp(rs->mime, types[i]) == 0)
+			return 1;
+	if (*s)
+		e = s + strlen(s);
+	else {
+		s = rs->url.href + rs->url.path;
+		e = rs->url.href + rs->url.query;
+	}
+	return ends_in(s, e, ".gz") || ends_in(s, e, ".tgz");
+}
+
+/* fetch's HTTPREQ.head for a page: its Content-Disposition, and a gzip
+   file that is to be saved (one it says to, or of a type EWeb doesn't
+   show) kept as it came */
+static int page_head(void *ud, HTTPRESP *rs)
+{
+	FETCH *f = ud;
+	const char *v = http_header_at(rs, "Content-Disposition");
+	int t = v != NULL ? http_disposition(v, f->name, sizeof f->name) : -1;
+	/* shown as a page whatever its name (a picture may yet be saved:
+	   one EWeb can't decode) */
+	int page = rs->mime[0] == 0 || strncmp(rs->mime, "text/", 5) == 0 ||
+		   strcmp(rs->mime, "application/xhtml+xml") == 0;
+	f->attach = t == 1;
+	/* not kept when the caches, which keep no headers, would lose what
+	   it says: attachment, or the name of a file to be saved ("inline"
+	   on a page is kept, as without the header) */
+	f->disposed = f->attach || (t == 0 && f->name[0] && !page);
+	if ((f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) && gzip_file(rs, f->name))
+		rs->packed = 1;
+	return 1;
+}
 
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
@@ -688,6 +746,10 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		}
 		rq.refuse = fetch_refuse;
 		rq.accept = accept;
+		if (accept == NULL) {
+			rq.head = page_head;
+			rq.ud = f;
+		}
 		if (post != NULL) {
 			rq.method = "POST";
 			rq.body = post->body;
@@ -766,12 +828,18 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			if (accept == NULL && http_header(rs, "Refresh", f->refresh, sizeof f->refresh) != NULL &&
 			    strlen(f->refresh) == sizeof f->refresh - 1)
 				f->refresh[0] = 0;
-			if (f->status == 200 && post == NULL)
+			/* an answer whose Content-Disposition says attachment, or
+			   names a file to save, isn't kept, here or on the disk:
+			   from the cache it would have neither its name nor
+			   "attachment" */
+			if (f->status == 200 && post == NULL && !f->disposed)
 				dc_put(key, f->url, rs->headers.s ? rs->headers.s : "", f->mime, f->charset, f->security,
 				       f->data, f->len);
+			else if (f->disposed)
+				dc_drop(key);
 			/* a page with a Refresh header isn't kept, here or on the disk
 			   (dc_put): from the cache it wouldn't go on */
-			if (f->status == 200 && keep && !f->refresh[0]) {
+			if (f->status == 200 && keep && !f->refresh[0] && !f->disposed) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				/* after a redirect, under where it came from too: the
 				   history keeps that address, and Back asks for it */
@@ -1265,6 +1333,7 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 	}
 	b->d = d;
 	b->p = p;
+	b->shows++;
 	js_set_page(d, p);
 	b->pic_stopped = 0;
 	b->pic_relayout = 0;
@@ -1574,6 +1643,19 @@ int br_refresh_go(browser *b)
 	return r;
 }
 
+/* a file to save (BR_DOWNLOAD): what came, kept in b->dl; f goes */
+static int download(browser *b, FETCH *f)
+{
+	br_dl_free(b);
+	b->dl.data = f->data;
+	b->dl.len = f->len;
+	str_copy(b->dl.url, f->url, sizeof b->dl.url);
+	str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
+	str_copy(b->dl.name, f->name, sizeof b->dl.name);
+	free(f);
+	return BR_DOWNLOAD;
+}
+
 /* post: a form sent with POST to url, else NULL */
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
@@ -1662,8 +1744,12 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		sb_free(&src);
 		return r;
 	}
-	/* what it is */
-	if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
+	/* what it is: a file its server says to save (RFC 6266, 4.2: not on
+	   an error's page, which is shown, as tc2231 has it), else by its type */
+	if (f->attach && f->status >= 200 && f->status < 300) {
+		sb_free(&src);
+		return download(b, f);
+	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
 		lay_recheck = mode == NAV_REFRESH;
 		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
 		lay_recheck = 0;
@@ -1683,13 +1769,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	} else if (!has_scheme(f->url, "file") && f->status >= 200 && f->status < 300) {
 		/* a file to save: the page shown stays */
 		sb_free(&src);
-		br_dl_free(b);
-		b->dl.data = f->data;
-		b->dl.len = f->len;
-		str_copy(b->dl.url, f->url, sizeof b->dl.url);
-		str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
-		free(f);
-		return BR_DOWNLOAD;
+		return download(b, f);
 	} else {
 		char why[200];
 		snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and "
@@ -1972,12 +2052,48 @@ void br_link_url(const browser *b, int link, char *out, int size)
 		str_copy(out, b->p->links[link], size);
 }
 
+const char *br_link_download(const browser *b, int link)
+{
+	if (b->p == NULL || link < 0 || link >= b->p->nlinks)
+		return NULL;
+	return page_link_download(b->p, link);
+}
+
+/* are two addresses of the same origin (the HTML Standard's: scheme,
+   host and port; http and https only, the rest have none to share) */
+static int same_origin(const char *a, const char *c)
+{
+	URL *u = malloc(2 * sizeof *u);
+	int r = u != NULL && url_parse(&u[0], a, NULL) && url_parse(&u[1], c, NULL) && u[0].special &&
+		u[1].special && u[0].tls == u[1].tls && u[0].port == u[1].port && u[0].hostlen == u[1].hostlen &&
+		memcmp(u[0].href + u[0].host, u[1].href + u[1].host, u[0].hostlen) == 0;
+	free(u);
+	return r;
+}
+
+/* a link to url with a download attribute (dl, NULL none): the HTML
+   Standard's "download the hyperlink" (4.6.5) in place of following it,
+   for a link to the page's own site: 1, and b->dl says what to save
+   (BR_SAVE). One to another site is followed as a link, as browsers do
+   (its server may still say attachment), and so is one too long for dl */
+static int link_to_save(browser *b, const char *url, const char *dl)
+{
+	if (dl == NULL || strlen(url) >= sizeof b->dl.url || !same_origin(url, b->url))
+		return 0;
+	br_dl_free(b);
+	str_copy(b->dl.url, url, sizeof b->dl.url);
+	str_copy(b->dl.name, dl, sizeof b->dl.name);
+	return 1;
+}
+
 int br_follow(browser *b, int link)
 {
 	char url[4096];
 	br_link_url(b, link, url, sizeof url);
 	if (url[0] == 0)
 		return BR_STOPPED;
+	if (link_to_save(b, url, br_link_download(b, link)))
+		return BR_SAVE;
 	if (has_scheme(url, "javascript")) {
 		int lr, r = br_js_url(b, url, &lr);
 		if (r == BRJ_LOAD)
@@ -2225,6 +2341,14 @@ static int js_after(browser *b, int *load_r)
 	if ((to = js_navigation(b->d, &post, &len, &ctype)) != NULL && depth < 4) {
 		char *u = str_ndup(to, (long) strlen(to));
 		FSUBMIT s;
+		/* a link with a download attribute it clicked (a.click()):
+		   saved, as a click on the link is */
+		if (u != NULL && link_to_save(b, u, js_navigation_download(b->d))) {
+			js_navigation_done(b->d);
+			free(u);
+			*load_r = BR_SAVE;
+			return BRJ_LOAD;
+		}
 		memset(&s, 0, sizeof s);
 		if (post != NULL) {
 			s.post = 1;
@@ -2376,6 +2500,7 @@ static int js_after(browser *b, int *load_r)
 
 static int go_to(browser *b, int i)
 {
+	unsigned long shows;
 	int old = b->cur, r;
 	if (i < 0 || i >= b->nhist)
 		return BR_STOPPED;
@@ -2422,9 +2547,10 @@ static int go_to(browser *b, int i)
 		return BR_SHOWN;
 	}
 	b->cur = i;
+	shows = b->shows;
 	r = load(b, b->hist[i].url, NAV_HISTORY);
-	if (r == BR_STOPPED || r == BR_DOWNLOAD)
-		b->cur = old;
+	if ((r == BR_STOPPED || r == BR_DOWNLOAD) && b->shows == shows)
+		b->cur = old;	/* (not when its page was shown, and its script went on) */
 	return r;
 }
 
@@ -2980,14 +3106,15 @@ static int to_upper(int c)
 }
 
 /* n characters of s that a TOS name may hold, in capitals, to out (max
-   of them); '%' and the two digits after it left out */
-static int name_part(const char *s, long n, char *out, int max)
+   of them); in an address (pct), '%' and the two digits after it left
+   out */
+static int name_part(const char *s, long n, int pct, char *out, int max)
 {
 	int k = 0;
 	long i;
 	for (i = 0; i < n && k < max; i++) {
 		int c = to_upper((unsigned char) s[i]);
-		if (c == '%' && i + 2 < n) {
+		if (c == '%' && pct && i + 2 < n) {
 			i += 2;
 			continue;
 		}
@@ -2998,44 +3125,82 @@ static int name_part(const char *s, long n, char *out, int max)
 	return k;
 }
 
-void br_file_name(const char *url, const char *mime, char *out, int size)
+/* s to e (an address's last part, pct, or a name given) as a TOS name's
+   base (8) and ending (5, cut to 3 later), from its last dot; ".tar.gz"
+   is ".TGZ" */
+static void split_name(const char *s, const char *e, int pct, char *base, char *ext)
+{
+	const char *dot;
+	for (dot = e; dot > s && dot[-1] != '.'; dot--)
+		;
+	if (dot > s) {
+		const char *b = dot - 1;
+		name_part(dot, e - dot, pct, ext, 5);
+		if (strcmp(ext, "GZ") == 0 && ends_in(s, b, ".tar")) {
+			b -= 4;
+			strcpy(ext, "TGZ");
+		}
+		name_part(s, b - s, pct, base, 8);
+	} else {
+		name_part(s, e - s, pct, base, 8);
+		ext[0] = 0;
+	}
+}
+
+void br_file_name(const char *url, const char *given, const char *mime, char *out, int size)
 {
 	static const char *const by_mime[][2] = {
 		{ "text/html", "HTM" }, { "application/xhtml+xml", "HTM" }, { "text/plain", "TXT" },
 		{ "text/css", "CSS" }, { "image/jpeg", "JPG" }, { "image/png", "PNG" }, { "image/gif", "GIF" },
-		{ "application/zip", "ZIP" }, { "application/pdf", "PDF" }
+		{ "application/zip", "ZIP" }, { "application/pdf", "PDF" }, { "application/gzip", "GZ" },
+		{ "application/x-gzip", "GZ" }, { "application/x-tar+gzip", "TGZ" }, { "application/x-tar", "TAR" }
 	};
 	static const char *const pages[] = { "HTML", "HTM", "XHTML", "SHTML", "PHP", "ASP", "ASPX", "JSP" };
-	const char *p = strstr(url, "://"), *e, *seg, *dot;
-	char base[9], ext[9];
+	const char *p = strstr(url, "://"), *e, *seg;
+	char base[9], ext[6], kext[6];
 	int page = strcmp(mime, "text/html") == 0 || strcmp(mime, "application/xhtml+xml") == 0;
+	int kept = 0, script = 0;	/* the ending is a given name's; the address's is a script's */
 	size_t i;
 
-	/* the path's last part, without its query and fragment */
-	p = p != NULL ? p + 3 : url;
-	e = p + strcspn(p, "?#");
-	seg = e;
-	while (seg > p && seg[-1] != '/')
-		seg--;
-	if (seg == p)		/* the host alone */
-		seg = e;
-	for (dot = e; dot > seg && dot[-1] != '.'; dot--)
-		;
-	if (dot > seg) {
-		name_part(seg, dot - 1 - seg, base, 8);
-		name_part(dot, e - dot, ext, 5);
-	} else {
-		name_part(seg, e - seg, base, 8);
-		ext[0] = 0;
+	base[0] = ext[0] = kext[0] = 0;
+	if (given != NULL && *given) {
+		/* the name given: its last part only (RFC 6266, 4.3), its ending kept */
+		const char *g = given;
+		e = given + strlen(given);
+		for (seg = given; seg < e; seg++)
+			if (*seg == '/' || *seg == '\\')
+				g = seg + 1;
+		split_name(g, e, 0, base, kext);
+		kept = kext[0] != 0;
 	}
-	for (i = 0; i < sizeof pages / sizeof pages[0]; i++)
-		if (strcmp(ext, pages[i]) == 0 && (page || mime[0] == 0))
-			page = 1;
-	if (strcmp(ext, "JPEG") == 0)
-		strcpy(ext, "JPG");
-	if (page) {
+	if (base[0] == 0) {
+		/* the address's path's last part, without its query and fragment */
+		p = p != NULL ? p + 3 : url;
+		e = p + strcspn(p, "?#");
+		seg = e;
+		while (seg > p && seg[-1] != '/')
+			seg--;
+		if (seg == p)		/* the host alone */
+			seg = e;
+		split_name(seg, e, 1, base, ext);
+		if (!kept)
+			for (i = 0; i < sizeof pages / sizeof pages[0]; i++)
+				if (strcmp(ext, pages[i]) == 0) {
+					/* a script's ending: a page's, or not the file's */
+					if (mime[0] == 0)
+						page = 1;
+					script = !page;
+				}
+	}
+	if (kept) {
+		strcpy(ext, kext);
+		for (i = 0; page && i < sizeof pages / sizeof pages[0]; i++)
+			if (strcmp(ext, pages[i]) == 0)
+				strcpy(ext, "HTM");
+	} else if (page) {
 		strcpy(ext, "HTM");
-	} else if (ext[0] == 0) {
+	} else if (ext[0] == 0 || script) {
+		ext[0] = 0;
 		for (i = 0; i < sizeof by_mime / sizeof by_mime[0]; i++)
 			if (strcmp(mime, by_mime[i][0]) == 0)
 				strcpy(ext, by_mime[i][1]);
@@ -3044,6 +3209,8 @@ void br_file_name(const char *url, const char *mime, char *out, int size)
 			strcpy(ext, "HTM");
 		}
 	}
+	if (strcmp(ext, "JPEG") == 0)
+		strcpy(ext, "JPG");
 	ext[3] = 0;
 	snprintf(out, (size_t) size, "%s%s%s", base[0] ? base : page ? "INDEX" : "DOWNLOAD", ext[0] ? "." : "", ext);
 }
@@ -3070,11 +3237,16 @@ long br_save_buf = 256L << 10, br_saved;
 
 typedef struct {
 	browser *b;
-	int h;
+	int h;			/* the file, once the answer has begun (-1 before) */
 	char *buf;
 	long n, size;
 	unsigned long said;
-	int failed;		/* the disk wouldn't take it */
+	int failed;		/* the disk wouldn't take it: 1 a write, 2 the file itself */
+	int cancelled;		/* save_as said no */
+	int asked;		/* save_as was asked, the answer held unread meanwhile */
+	const char *given;	/* the link's download attribute, or NULL */
+	char *path;
+	int pathsize;
 } SAVING;
 
 static int save_out(SAVING *s)
@@ -3109,24 +3281,69 @@ static int save_sink(void *ud, const char *data, long n)
 	return 1;
 }
 
-int br_save_url(browser *b, const char *url, const char *path, char *err, int errlen)
+/* br_save_url's HTTPREQ.head: what came named (the HTML Standard's "get
+   the suggested filename", 4.6.5: Content-Disposition's when it says
+   attachment, else the download attribute's for an answer from the page's
+   own site, else Content-Disposition's inline one), where it goes asked
+   of the front end, and the file made */
+static int save_head(void *ud, HTTPRESP *rs)
+{
+	SAVING *s = ud;
+	browser *b = s->b;
+	const char *v = http_header_at(rs, "Content-Disposition");
+	char cd[256], name[16];
+	int t = -1;
+	cd[0] = 0;
+	if (v != NULL)
+		t = http_disposition(v, cd, sizeof cd);
+	str_copy(b->dl.url, rs->url.href, sizeof b->dl.url);
+	str_copy(b->dl.mime, rs->mime, sizeof b->dl.mime);
+	if (!(t == 1 && cd[0]) && s->given != NULL && *s->given && same_origin(rs->url.href, b->url))
+		str_copy(b->dl.name, s->given, sizeof b->dl.name);
+	else
+		str_copy(b->dl.name, cd, sizeof b->dl.name);
+	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+	if (s->path[0] == 0) {
+		if (b->save_as == NULL || !b->save_as(b->ud, name, s->path, s->pathsize)) {
+			s->cancelled = 1;
+			return 0;
+		}
+		s->asked = 1;
+	}
+	s->h = pf_open(s->path, PF_WRITE);
+	if (s->h < 0) {
+		s->failed = 2;
+		return 0;
+	}
+	return 1;
+}
+
+int br_save_url(browser *b, const char *url, const char *given, char *path, int size, char *err, int errlen)
 {
 	HTTPREQ rq;
 	HTTPRESP *rs;
 	SBUF body;
 	SAVING s;
 	char host[128];
-	int ok;
+	int ok, tries = 0, made = 0;
 
 	br_saved = 0;
 	err[0] = 0;
 	conn_stop = 0;
+	/* what is being saved, until the answer says more */
+	br_dl_free(b);
+	str_copy(b->dl.url, url, sizeof b->dl.url);
+	str_copy(b->dl.name, given != NULL ? given : "", sizeof b->dl.name);
 	if (!has_scheme(url, "http") && !has_scheme(url, "https")) {
 		snprintf(err, (size_t) errlen, "EWeb saves files from http and https addresses.");
 		return BRS_FAILED;
 	}
 	memset(&s, 0, sizeof s);
 	s.b = b;
+	s.h = -1;
+	s.given = given;
+	s.path = path;
+	s.pathsize = size;
 	s.size = br_save_buf > 8192 ? br_save_buf : 8192;
 	while ((s.buf = malloc((size_t) s.size)) == NULL && s.size > 8192)
 		s.size /= 2;
@@ -3137,41 +3354,60 @@ int br_save_url(browser *b, const char *url, const char *path, char *err, int er
 		snprintf(err, (size_t) errlen, "Out of memory.");
 		return BRS_FAILED;
 	}
-	s.h = pf_open(path, PF_WRITE);
-	if (s.h < 0) {
-		free(s.buf);
-		free(rs);
-		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
-		return BRS_FAILED;
-	}
 	host_of(url, host, sizeof host);
 	say(b, "Opening %s...", host);
 	memset(&rq, 0, sizeof rq);
 	rq.url = url;
 	rq.sink = save_sink;
+	rq.head = save_head;
 	rq.ud = &s;
 	rq.top = 1;		/* a link followed, for its cookies */
 	rq.site = has_scheme(b->url, "http") || has_scheme(b->url, "https") ? b->url : NULL;
 	rq.referrer = rq.site;
 	sb_init(&body);
-	net_busy++;
-	ok = http_request(&rq, rs, &body, err, errlen);
-	net_busy--;
+	for (;;) {
+		net_busy++;
+		ok = http_request(&rq, rs, &body, err, errlen);
+		net_busy--;
+		/* lost once the file selector had been up, the answer unread
+		   meanwhile: its server may have given up waiting (nginx and
+		   Apache end a connection that takes nothing for 60 s), so it is
+		   asked for once more, into the file chosen */
+		if (ok || !s.asked || s.h < 0 || s.failed || conn_stop || tries++)
+			break;
+		pf_close(s.h);
+		s.h = -1;
+		made = 1;
+		s.asked = 0;
+		s.n = 0;
+		br_saved = 0;
+		err[0] = 0;
+		http_resp_free(rs);
+		sb_free(&body);
+		sb_init(&body);
+		say(b, "Opening %s again...", host);
+	}
 	if (ok && (rs->status < 200 || rs->status >= 300)) {
 		snprintf(err, (size_t) errlen, "The server answered %d %.60s.", rs->status, rs->reason);
 		ok = 0;
 	}
-	if (ok)
+	if (ok && s.h >= 0)
 		ok = save_out(&s);
-	if (s.failed)
+	if (s.failed == 2)
+		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
+	else if (s.failed)
 		snprintf(err, (size_t) errlen, "The disk is full, or %.150s can't be written.", path);
-	pf_close(s.h);
+	if (s.h >= 0)
+		pf_close(s.h);
 	sb_free(&body);
 	http_resp_free(rs);
 	free(rs);
 	free(s.buf);
 	if (!ok) {
-		pf_remove(path);
+		if (s.h >= 0 || made)
+			pf_remove(path);
+		if (s.cancelled)
+			return BRS_CANCELLED;
 		if (conn_stop) {
 			conn_stop = 0;
 			return BRS_STOPPED;
