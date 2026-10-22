@@ -8,7 +8,7 @@
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
  *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH] [-e ENC]
- *            PAGE.HTM|URL [SHEET.CSS...]
+ *            [-p COLOURS] PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -z device pixels per CSS pixel
  * in 1024ths (819), -X the text's size in per cent (100: Larger text and
@@ -16,7 +16,15 @@
  * -t the document tree with each element's display first, -v what
  * the browser says while it loads (its status line), -c the root
  * certificates for https (binary/CACERT.PEM),
- * -y and -H the part of the page drawn (all of it). -N URL: then to URL,
+ * -y and -H the part of the page drawn (all of it); -p 2, 4, 16 or 256 draws
+ * it as EWEB.PRG does on a screen of that many colours (pens, a byte a
+ * pixel: monochrome's greys patterned, translucent items mixed through
+ * the palette), with the ST's and Falcon's standard colours (256: the 16,
+ * a 6 x 6 x 6 cube and 24 greys), rather than in true colour. In -d's
+ * list a colour less than solid is #rrggbbaa, a picture's and a
+ * control's opacity "alpha N" (0-255; a control's colour is its
+ * text's), and an item a click goes through (pointer-events: none)
+ * "nohit". -N URL: then to URL,
  * Back, Forward, Back, the width 100 px less, Forward, Back, each step's
  * title and times printed (kept pages come back with no fetch or parse);
  * what is drawn or dumped is the page at the end. -B draws the page as
@@ -54,7 +62,11 @@
  * log, console.log and alert ("js ...", "console: ", "alert: ") and
  * answering OK; then -K ID clicks the element with that id (again for
  * more; "a script loaded" and the load's result when one sent the
- * browser on), and -T MS lets the page's timers run for MS ms.
+ * browser on; a details' summary, or the details, opened or closed, in
+ * the ST edition too; a link followed says where EWEB.PRG scrolls to,
+ * "top", as "top:" does for an address with a #fragment, and "opened"
+ * when a closed details was opened to show it), and -T MS lets the
+ * page's timers run for MS ms.
  * -r N follows the page's refresh (<meta http-equiv=refresh>, the
  * Refresh header) when it is due, up to N times ("refresh:" where to,
  * "refreshed:" what came); -b then goes Back ("(refresh)" when the page
@@ -178,7 +190,9 @@ static int write_png(const char *path, const canvas *c)
 		unsigned char *r = rawbuf + y * row;
 		const unsigned char *p = c->pix + y * c->stride;
 		r[0] = 0;
-		for (x = 0; x < c->w; x++) {
+		for (x = 0; c->bpp == 8 && x < c->w; x++)
+			memcpy(r + 1 + 3 * x, c->pal[p[x]], 3);
+		for (x = 0; c->bpp == 16 && x < c->w; x++) {
 			unsigned v = (unsigned) p[2 * x] << 8 | p[2 * x + 1];
 			r[1 + 3 * x] = (unsigned char) ((v >> 8 & 0xf8) | (v >> 13));
 			r[2 + 3 * x] = (unsigned char) ((v >> 3 & 0xfc) | (v >> 9 & 3));
@@ -216,6 +230,67 @@ static int write_png(const char *path, const canvas *c)
 	free(rawbuf);
 	free(zbuf);
 	return 1;
+}
+
+/* a picture's opacity in -d's list: nothing when it is opaque */
+static const char *alpha_of(const dl_item *it)
+{
+	static char b[16];
+	if (it->rgb >> 24 == 255)
+		return "";
+	snprintf(b, sizeof b, " alpha %u", (unsigned) (it->rgb >> 24));
+	return b;
+}
+
+/* a gradient as the display list has it (device px, rounded): its kind,
+   then linear: its angle or to its side or corner; radial: circle or
+   ellipse, its extent or radii, at its centre; conic: from its angle at
+   its centre; then its stops, a colour less than solid as #rrggbbaa,
+   each position px+pct% (a conic one's pct of the turn), and its hints */
+static const char *grad_of(const ec_grad *g)
+{
+	static char b[1024];
+	static const char *const kind[] = { "linear", "radial", "conic" };
+	static const char *const ext[] = { "", " closest-side", " closest-corner", " farthest-side", " farthest-corner" };
+	size_t n;
+	int i;
+	n = (size_t) snprintf(b, sizeof b, "%s%s", g->repeat ? "repeating-" : "", kind[g->type]);
+	if (g->approx)
+		n += snprintf(b + n, sizeof b - n, " averaged");	/* (its stops can't be placed) */
+	else if (g->type == EC_GRAD_LINEAR) {
+		if (g->to)
+			n += snprintf(b + n, sizeof b - n, " to%s%s%s%s", g->to & EC_TO_TOP ? " top" : "",
+				      g->to & EC_TO_BOTTOM ? " bottom" : "", g->to & EC_TO_LEFT ? " left" : "",
+				      g->to & EC_TO_RIGHT ? " right" : "");
+		else
+			n += snprintf(b + n, sizeof b - n, " %ddeg", (int) (g->angle >> 10));
+	} else {
+		if (g->type == EC_GRAD_RADIAL) {
+			n += snprintf(b + n, sizeof b - n, " %s", g->circle ? "circle" : "ellipse");
+			if (g->extent)
+				n += snprintf(b + n, sizeof b - n, "%s", ext[g->extent]);
+			else
+				n += snprintf(b + n, sizeof b - n, " %d+%d%% %d+%d%%", (int) (g->rx.px >> 10),
+					      (int) (g->rx.pct >> 10), (int) (g->ry.px >> 10), (int) (g->ry.pct >> 10));
+		} else {
+			n += snprintf(b + n, sizeof b - n, " from %ddeg", (int) (g->angle >> 10));
+		}
+		n += snprintf(b + n, sizeof b - n, " at %d+%d%% %d+%d%%", (int) (g->x.px >> 10), (int) (g->x.pct >> 10),
+			      (int) (g->y.px >> 10), (int) (g->y.pct >> 10));
+	}
+	for (i = 0; i < g->n && n < sizeof b - 40; i++) {
+		const ec_gstop *s = &g->s[i];
+		if (s->flags & EC_GS_HINT)
+			n += snprintf(b + n, sizeof b - n, ", hint");
+		else if (s->argb >> 24 == 255)
+			n += snprintf(b + n, sizeof b - n, ", #%06lx", (unsigned long) (s->argb & 0xffffff));
+		else
+			n += snprintf(b + n, sizeof b - n, ", #%06lx%02lx", (unsigned long) (s->argb & 0xffffff),
+				      (unsigned long) (s->argb >> 24));
+		if (s->flags & EC_GS_AT)
+			n += snprintf(b + n, sizeof b - n, " %d+%d%%", (int) (s->at.px >> 10), (int) (s->at.pct >> 10));
+	}
+	return b;
 }
 
 /* ---------------------------------------------------------------- the tree, with each element's display */
@@ -266,6 +341,62 @@ static const unsigned char falcon16[16][3] = {
 	{ 0, 0, 170 }, { 170, 0, 170 }, { 0, 170, 170 }, { 0, 0, 0 }
 };
 
+/* -p: the screen's colours, and its pens as ui/screen.c finds them */
+static unsigned char scr_pal[256][3];
+static int scr_n;
+
+static void make_pal(int n)
+{
+	static const unsigned char mono[2][3] = { { 255, 255, 255 }, { 0, 0, 0 } };
+	static const unsigned char med[4][3] = { { 255, 255, 255 }, { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 0 } };
+	int k;
+	scr_n = n;
+	if (n == 2)
+		memcpy(scr_pal, mono, sizeof mono);
+	else if (n == 4)
+		memcpy(scr_pal, med, sizeof med);
+	else
+		memcpy(scr_pal, falcon16, sizeof falcon16);
+	if (n == 256) {
+		for (k = 0; k < 216; k++) {
+			scr_pal[16 + k][0] = (unsigned char) (k / 36 * 51);
+			scr_pal[16 + k][1] = (unsigned char) (k / 6 % 6 * 51);
+			scr_pal[16 + k][2] = (unsigned char) (k % 6 * 51);
+		}
+		for (k = 232; k < 256; k++)
+			scr_pal[k][0] = scr_pal[k][1] = scr_pal[k][2] = (unsigned char) ((k - 232) * 11);
+	}
+}
+
+static uint8_t pen_n(void *ud, uint32_t rgb)
+{
+	int r = (int) (rgb >> 16 & 255), g = (int) (rgb >> 8 & 255), b = (int) (rgb & 255), i, pick = 0;
+	long best = 0x7fffffffL;
+	(void) ud;
+	if (scr_n == 2)
+		return 299L * r + 587L * g + 114L * b >= 127500L ? 0 : 1;
+	for (i = 0; i < scr_n; i++) {
+		long dr = r - scr_pal[i][0], dg = g - scr_pal[i][1], db = b - scr_pal[i][2];
+		long d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+		if (d < best) {
+			best = d;
+			pick = i;
+		}
+	}
+	return (uint8_t) pick;
+}
+
+static int shade_n(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light)
+{
+	long y = 299L * (rgb >> 16 & 255) + 587L * (rgb >> 8 & 255) + 114L * (rgb & 255);
+	(void) ud;
+	if (scr_n != 2)
+		return -1;
+	*light = 0;
+	*dark = 1;
+	return (int) ((y * 16 + 127500L) / 255000L);
+}
+
 /* -B: the page as ui/screen.c draws it, a band of 32 rows at a time, at
    every scroll position (each row the top of a band) and in pieces across
    (an area of the window uncovered), each into a buffer of just its size */
@@ -290,6 +421,7 @@ static long bands(const page *p, int32_t width)
 				c.oy = y;
 				c.pen = pen8;
 				c.shade = k & 1 ? shade8 : NULL;
+				c.pal = (const uint8_t (*)[3]) scr_pal;
 				c.picture = picture;
 				c.pix = malloc(c.stride * c.h);
 				if (c.pix == NULL)
@@ -404,14 +536,49 @@ static void click_file(browser *b, int r)
 	}
 }
 
+/* where a details' summary is on the page (its DL_SUM item): n the
+   summary, or the details (a click on a details is one on its summary,
+   one of the layout's own too) */
+static int summary_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
+{
+	long k;
+	for (k = 0; k < p->nitems; k++) {
+		const dl_item *it = &p->items[k];
+		if (it->type == DL_SUM && (it->det == n || (DN_IS(n, T_SUMMARY) && it->det == n->parent))) {
+			*x = it->x;
+			*y = it->y;
+			*w = it->w;
+			*h = it->h;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* a click on the element with that id, as EWEB.PRG does one: its click
-   event, then (unless a script said no) its link or control */
+   event, then (unless a script said no) its link, control or details'
+   summary; then the page's tasks due at once (a toggle event), as
+   EWEB.PRG's loop runs them. The ST edition (no scripts, no element's
+   place kept) clicks only a summary */
 static int click(browser *b, const char *id)
 {
-	dnode *n = b->d ? by_id(b->d->root, id) : NULL;
+	dnode *n = b->d ? by_id(b->d->root, id) : NULL, *det;
 	int32_t x, y, w, h;
-	int cancelled = 0, load = 0, r;
-	if (n == NULL || !page_node_rect(b->p, n, &x, &y, &w, &h)) {
+	int cancelled = 0, load = 0, r = BRJ_NONE, k;
+#ifdef EW_ST
+	if (n == NULL || !summary_rect(b->p, n, &x, &y, &w, &h)) {
+		printf("click %s: not shown\n", id);
+		return 0;
+	}
+	x += w / 2;
+	y += h / 2;
+#else
+	/* a summary where its DL_SUM is, as in the ST edition (an element's
+	   block isn't moved with a float it is in) */
+	k = n != NULL && (DN_IS(n, T_DETAILS) || DN_IS(n, T_SUMMARY)) && summary_rect(b->p, n, &x, &y, &w, &h);
+	if (!k && n != NULL && !DN_IS(n, T_DETAILS))
+		k = page_node_rect(b->p, n, &x, &y, &w, &h);
+	if (!k) {
 		printf("click %s: not shown\n", id);
 		return 0;
 	}
@@ -420,6 +587,7 @@ static int click(browser *b, const char *id)
 	r = br_js_click(b, x, y, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
+#endif
 	if (r == BRJ_LOAD) {
 		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
 		click_file(b, load);
@@ -434,8 +602,19 @@ static int click(browser *b, const char *id)
 			br_js_event(b, c, "change", &cancelled, &load);
 		} else if (link >= 0) {
 			r = br_follow(b, link);
-			printf("followed: %d \"%s\" %s\n", r, b->title, b->url);
+			printf("followed: %d \"%s\" %s top %d%s\n", r, b->title, b->url, (int) b->scroll_to,
+			       r == BR_SAME && b->relaid ? " opened" : "");
 			click_file(b, r);
+		} else if (c == NULL && (det = page_summary_at(b->p, x, y)) != NULL) {
+			r = br_details(b, det);
+			printf("details %s: %s, height %d\n", dn_attr(det, "id") ? dn_attr(det, "id") : "-",
+			       !r ? "failed" : dn_attr(det, "open") ? "opened" : "closed", b->p ? (int) b->p->height : 0);
+		}
+	}
+	for (k = 0; k < 64 && br_js_due(b) == 0; k++) {
+		if (br_js_step(b, &load) == BRJ_LOAD) {
+			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+			break;
 		}
 	}
 	return 1;
@@ -470,6 +649,7 @@ int main(int argc, char **argv)
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
+	int colours = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
 	char where[4096];
@@ -518,6 +698,8 @@ int main(int argc, char **argv)
 			band = 1;
 		else if (!strcmp(argv[i], "-E"))
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
+		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
+			colours = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
 			next = argv[++i];
 		else if (!strcmp(argv[i], "-L") && i + 1 < argc && nresize < 8)
@@ -584,7 +766,11 @@ int main(int argc, char **argv)
 	}
 	if (i >= argc) {
 		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-e ENCODING] "
-			"PAGE|URL [SHEET...]\n");
+			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
+		return 2;
+	}
+	if (colours != 0 && colours != 2 && colours != 4 && colours != 16 && colours != 256) {
+		fprintf(stderr, "ewrender: -p takes 2, 4, 16 or 256\n");
 		return 2;
 	}
 	page_arg = argv[i++];
@@ -627,8 +813,9 @@ int main(int argc, char **argv)
 	b.pictures = !nopics;
 	b.snapshot = snapshot;
 	b.pens = pens;
-	if (band || penlist) {
-		pic_pal_init(&pal, 16, falcon16);
+	make_pal(band ? 256 : colours ? colours : 16);
+	if (band || penlist || colours) {
+		pic_pal_init(&pal, colours ? colours : 16, (const unsigned char (*)[3]) scr_pal);
 		img_pal = &pal;
 	}
 	if (prev != NULL) {
@@ -671,6 +858,8 @@ int main(int argc, char **argv)
 		in_req_b = &b;
 		pf_idle = in_request;
 	}
+	if (strchr(b.url, '#') != NULL)
+		printf("top: %d\n", (int) b.scroll_to);	/* where EWEB.PRG scrolls to */
 	pictures(&b);
 	pf_idle = NULL;
 	if (enc != NULL) {
@@ -852,21 +1041,43 @@ int main(int argc, char **argv)
 			printf("address %s, security \"%s\"\n", b.url, b.security);
 		for (k = 0; k < p->nitems; k++) {
 			const dl_item *it = &p->items[k];
+			char col[16];
+			/* a colour less than solid as CSS's #rrggbbaa (a control's:
+			   its text's, and its opacity as a picture's) */
+			uint32_t rgb = it->type == DL_CTL ? it->ink : it->rgb;
+			const char *nohit = it->flags & DLF_NOHIT ? " nohit" : "";
+			if (rgb >> 24 == 255)
+				snprintf(col, sizeof col, "#%06lx", (unsigned long) (rgb & 0xffffff));
+			else
+				snprintf(col, sizeof col, "#%06lx%02lx", (unsigned long) (rgb & 0xffffff),
+					 (unsigned long) (rgb >> 24));
 			if (it->type == DL_FILL)
-				printf("fill %d,%d %dx%d #%06lx\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
-				       (unsigned long) it->rgb);
+				printf("fill %d,%d %dx%d %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h, col);
 			else if (it->type == DL_IMAGE && (it->flags & DLF_TILE))
-				printf("background %d,%d %dx%d%s%s tile %d,%d %dx%d%s%s %s\n", (int) it->x, (int) it->y,
+				printf("background %d,%d %dx%d%s%s tile %d,%d %dx%d%s%s %s%s\n", (int) it->x, (int) it->y,
 				       (int) it->w, (int) it->h, it->flags & DLF_NOSIZE ? " unsized" : "",
 				       it->tile == NULL && !(it->flags & DLF_NOSIZE) ? " none" : "",
 				       it->tile ? (int) it->tile->dx : 0, it->tile ? (int) it->tile->dy : 0,
 				       it->tile ? (int) it->tile->w : 0, it->tile ? (int) it->tile->h : 0,
 				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
-				       img_url(it->img));
+				       img_url(it->img), alpha_of(it));
+			else if (it->type == DL_SUM)
+				/* (a details' summary: where a click opens and closes it) */
+				printf("summary %d,%d %dx%d %s %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
+				       dn_attr(it->det, "open") ? "open" : "closed",
+				       dn_attr(it->det, "id") ? dn_attr(it->det, "id") : "-");
+			else if (it->type == DL_GRAD)
+				printf("gradient %d,%d %dx%d tile %d,%d %dx%d%s%s%s %s%s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, it->tile ? (int) it->tile->dx : 0,
+				       it->tile ? (int) it->tile->dy : 0, it->tile ? (int) it->tile->w : 0,
+				       it->tile ? (int) it->tile->h : 0, it->tile == NULL ? " none" : "",
+				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
+				       grad_of(it->img), alpha_of(it));
 			else if (it->type == DL_IMAGE)
-				printf("image %d,%d %dx%d%s%s link %d \"%.*s\" %s\n", (int) it->x, (int) it->y, (int) it->w,
-				       (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "", it->flags & DLF_ALT ? " alt" : "",
-				       it->link, (int) it->len, it->text, img_url(it->img));
+				printf("image %d,%d %dx%d%s%s%s link %d \"%.*s\" %s%s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "",
+				       it->flags & DLF_ALT ? " alt" : "", nohit, it->link, (int) it->len, it->text,
+				       img_url(it->img), alpha_of(it));
 			else if (it->type == DL_CTL) {
 				static const char *const kinds[] = { "text", "password", "hidden", "checkbox", "radio",
 								     "submit", "reset", "button", "image", "file",
@@ -877,16 +1088,16 @@ int main(int argc, char **argv)
 				for (q = lab; *q; q++)
 					if (*q == '\n')
 						*q = '|';	/* a textarea's lines on one line */
-				printf("control %d,%d %dx%d #%06lx %s%s \"%s\"%s%s\n", (int) it->x, (int) it->y, (int) it->w,
-				       (int) it->h, (unsigned long) it->rgb, kinds[c->kind], c->disabled ? " disabled" : "",
+				printf("control %d,%d %dx%d %s %s%s%s \"%s\"%s%s%s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, col, kinds[c->kind], c->disabled ? " disabled" : "", nohit,
 				       lab, form_placeholder(c) ? " placeholder " : "",
-				       form_placeholder(c) ? form_placeholder(c) : "");
+				       form_placeholder(c) ? form_placeholder(c) : "", alpha_of(it));
 			} else
-				printf("text %d,%d %dx%d #%06lx %s%d%s%s%s link %d \"%.*s\"\n", (int) it->x,
-				       (int) (it->y + it->base), (int) it->w, (int) it->h, (unsigned long) it->rgb,
+				printf("text %d,%d %dx%d %s %s%d%s%s%s%s link %d \"%.*s\"\n", (int) it->x,
+				       (int) (it->y + it->base), (int) it->w, (int) it->h, col,
 				       it->font->family == FF_SANS ? "sans" : it->font->family == FF_SERIF ? "serif" : "mono",
 				       it->font->px, it->font->style & FS_BOLD ? " bold" : "",
-				       it->font->style & FS_ITALIC ? " italic" : "", it->flags & DLF_RTL ? " rtl" : "",
+				       it->font->style & FS_ITALIC ? " italic" : "", it->flags & DLF_RTL ? " rtl" : "", nohit,
 				       it->link, (int) it->len, it->text);
 		}
 		for (k = 0; k < p->nlinks; k++) {
@@ -901,9 +1112,12 @@ int main(int argc, char **argv)
 		c.h = height > 0 ? height : (p->height > 0 ? p->height : 1);
 		if (c.h > 30000)
 			c.h = 30000;
-		c.bpp = 16;
-		c.stride = 2L * c.w;
+		c.bpp = colours ? 8 : 16;
+		c.stride = colours ? c.w : 2L * c.w;
 		c.oy = top;
+		c.pen = pen_n;
+		c.shade = shade_n;
+		c.pal = (const uint8_t (*)[3]) scr_pal;
 		c.picture = picture;
 		c.pix = malloc(c.stride * c.h);
 		if (c.pix == NULL)

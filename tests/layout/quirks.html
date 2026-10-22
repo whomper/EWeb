@@ -1,0 +1,16 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     EWeb's layout test: a page in quirks mode (no DOCTYPE), where a table
+     starts its text-align afresh (the HTML Standard's rendering, 15.3.8):
+     <center> and td align=center still place the tables, but not the
+     text in them; th is centred all the same. -->
+<html><head><meta charset="utf-8"><title>Quirks</title></head>
+<body>
+<center>
+<table border=1 width=300><tr><th>a th, centred</th></tr>
+<tr><td>in quirks mode the text in a table that center centres starts at the left</td></tr></table>
+<p>but a paragraph in center is centred</p>
+</center>
+<table width="100%" border=1><tr><td align=center>td align=center centres this
+<table border=1 width=200><tr><td>and this table, not its text</td></tr></table></td></tr></table>
+</body></html>

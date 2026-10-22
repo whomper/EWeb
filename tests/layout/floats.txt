@@ -1,4 +1,4 @@
-page 608 x 442, background ffffff, 90 items, 0 links, title "Floats, positions, rows"
+page 608 x 787, background ffffff, 150 items, 1 links, title "Floats, positions, rows"
 fill 6,6 596x24 #003366
 text 11,24 24x17 #ffffff sans13 link 0 "Left"
 text 565,24 32x17 #ffffff sans13 link 0 "Right"
@@ -89,3 +89,62 @@ fill 406,412 41x1 #888888
 fill 406,433 41x1 #888888
 fill 406,413 1x20 #888888
 fill 446,413 1x20 #888888
+image 199,443 48x24 link 0 "fits" file://./tests/layout/img/one.png
+text 7,456 88x17 #000000 sans13 link 0 "Words before "
+text 95,456 86x17 #000000 sans13 link 0 "a picture that"
+text 7,472 187x17 #000000 sans13 link 0 "fits on this line, which goes at"
+text 7,488 44x17 #000000 sans13 link 0 "its top."
+text 7,504 234x17 #000000 sans13 link 0 "Here are words enough to fill the line"
+image 151,507 96x48 link 0 "too wide" file://./tests/layout/img/two.png
+text 7,520 132x17 #000000 sans13 link 0 "and the picture goes"
+text 7,536 52x17 #000000 sans13 link 0 "below it."
+text 7,552 127x17 #000000 sans13 link 0 "Posted by someone"
+image 7,555 48x24 link 1 "in a link" file://./tests/layout/img/one.png
+text 55,568 104x17 #000000 sans13 link 0 "with text after it."
+fill 55,571 48x32 #ffeedd
+text 55,584 44x17 #000000 sans13 link 0 "floated"
+text 55,600 31x17 #000000 sans13 link 0 "span"
+text 103,584 40x17 #000000 sans13 link 0 "A box "
+text 143,584 99x17 #000000 sans13 link 0 "met in the text."
+fill 6,442 242x1 #888888
+fill 6,587 242x1 #888888
+fill 6,443 1x144 #888888
+fill 247,443 1x144 #888888
+image 108,596 48x24 link 0 "cell" file://./tests/layout/img/one.png
+text 156,609 54x17 #000000 sans13 link 0 "beside it"
+fill 106,594 106x1 #888888
+fill 106,621 106x1 #888888
+fill 106,595 1x26 #888888
+fill 211,595 1x26 #888888
+text 216,613 28x17 #000000 sans13 link 0 "next"
+fill 214,594 32x1 #888888
+fill 214,621 32x1 #888888
+fill 214,595 1x26 #888888
+fill 245,595 1x26 #888888
+fill 103,591 146x1 #808080
+fill 103,624 146x1 #808080
+fill 103,592 1x32 #808080
+fill 248,592 1x32 #808080
+fill 6,625 96x24 #eeeeff
+image 6,625 48x24 link 0 "a" file://./tests/layout/img/one.png
+image 54,625 48x24 link 0 "b" file://./tests/layout/img/one.png
+text 38,662 116x17 #000000 sans13 link 0 "a radio floated left"
+fill 504,667 62x18 #ffffff
+fill 504,667 62x1 #808080
+fill 504,684 62x1 #808080
+fill 504,667 1x18 #808080
+fill 565,667 1x18 #808080
+text 6,680 148x17 #000000 sans13 link 0 "a text field floated right"
+text 7,713 180x17 #000000 sans13 link 0 "Words before a wide picture "
+text 187,713 36x17 #000000 sans13 link 0 "and a"
+image 151,716 96x48 link 0 "pushed" file://./tests/layout/img/two.png
+image 103,716 48x24 link 0 "after it" file://./tests/layout/img/one.png
+text 7,729 71x17 #000000 sans13 link 0 "narrow one"
+text 7,745 86x17 #000000 sans13 link 0 "that would fit:"
+text 7,761 124x17 #000000 sans13 link 0 "both below the line,"
+text 7,777 236x17 #000000 sans13 link 0 "the narrow one at the wide one's left."
+fill 6,699 242x1 #888888
+fill 6,780 242x1 #888888
+fill 6,700 1x80 #888888
+fill 247,700 1x80 #888888
+link 1 file://./tests/layout/floats.html#x

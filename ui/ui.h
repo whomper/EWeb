@@ -113,6 +113,7 @@ void win_redraw_page(void);
 void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything drawn */
 void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
+void win_page_relaid_at(int32_t y);	/* laid out again: at y on it, drawn */
 void win_title(void);
 /* the status bar's text; "" for what the page says: its refresh while
    that waits (the time left), or that it stopped refreshes at once,
@@ -168,6 +169,7 @@ struct fctl;
 /* a form sent (form.h): by the button by, or from the field from with
    Return; (x, y) on a picture button */
 void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y);
+void details(dnode *det);		/* a details' summary clicked: opened or closed */
 void menu_update(void);
 void status(const char *s);
 /* the page's scripts (src/js): a click at (x, y) on the page, before

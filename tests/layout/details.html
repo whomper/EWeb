@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>details and summary</title>
+<style>
+body { font-family: sans-serif }
+.box { border: 1px solid #888; padding: 4px; margin: 4px 0 }
+.plain > summary { list-style: none }
+.flex > summary { display: flex; justify-content: space-between; background: #eef }
+ol.in { list-style-position: inside; padding-left: 0 }
+ul.in { list-style: square inside; padding-left: 0 }
+.str { list-style-type: "\2192  " }
+.btn { display: inline-block; padding: 2px 8px; border: 1px solid #888 }
+</style>
+</head><body>
+<details id="c1" class="box"><summary id="s1">Closed: only this line shows</summary>
+Text straight in the details, hidden.
+<p id="c1p">A paragraph, hidden.</p></details>
+
+<details id="o1" class="box" open><summary id="s2">Open: the rest shows</summary>
+Text straight in the details.
+<p>A paragraph under it.</p></details>
+
+<details id="outer" class="box" open><summary>Outer, open</summary>
+<details id="inner" class="box"><summary id="s3">Inner, closed</summary><p>Inner text, hidden.</p></details>
+<details id="inner2" class="box" open><summary>Inner, open</summary><p>Inner text shown.</p></details>
+</details>
+
+<details id="nosum" class="box"><p id="nosump">No summary: a "Details" of the layout's own, the rest hidden.</p></details>
+<details id="nosumo" class="box" open><p>No summary, open: shown under "Details".</p></details>
+
+<details class="box"><p>Before the summary, hidden.</p><summary>A summary that isn't first</summary><summary>A second summary, hidden</summary></details>
+
+<details class="box" open><summary><h3 style="margin:0">A heading in the summary</h3></summary><p>The triangle on a line of its own, as in browsers.</p></details>
+
+<details class="box plain"><summary>No marker (list-style: none)</summary><p>hidden</p></details>
+<details class="box flex" open><summary><span>A flex summary</span><span>no marker</span></summary><p>shown</p></details>
+
+<details class="box" dir="rtl" lang="he"><summary>סגור: המשולש מצביע שמאלה</summary><p>hidden</p></details>
+<details class="box" dir="rtl" lang="he" open><summary>פתוח</summary><p>מוצג</p></details>
+
+<details id="gd1" name="g" class="box" open><summary id="g1">Group g, open</summary><p>The first of its group open stays open.</p></details>
+<details id="gd2" name="g" class="box" open><summary id="g2">Group g, opened too: starts closed</summary><p>hidden</p></details>
+
+<ol class="in"><li>Inside markers: one</li><li value="7">seven</li><li>eight, a long item that wraps on to the next line to show where its second line starts: under the marker, as the marker is in the text</li></ol>
+<ul class="in"><li>a square inside</li><li class="str">a string marker</li></ul>
+<ul><li class="str">a string marker outside</li></ul>
+
+<details id="ob" class="box" open><p>Before the summary, drawn after it.</p><summary>Open: its summary drawn first</summary><p>After it.</p></details>
+
+<details id="ib" class="box"><summary id="sib" class="btn">An inline-block summary (a button)</summary><p>Under the button, hidden.</p></details>
+<details id="il" class="box"><summary id="sil" style="display: inline">An inline summary</summary><p>Under the inline one, hidden.</p></details>
+<details id="dc" class="box"><summary id="sdc" style="display: contents">A summary with display: contents</summary><p>Under the contents one, hidden.</p></details>
+
+<details id="dout" class="box"><summary>A summary with a details in it
+<details id="din"><summary id="sin">The details in the summary</summary><p>The inner one's text, hidden.</p></details>
+</summary><p>The outer one's text, hidden.</p></details>
+
+<template><details name="h" open><summary>t</summary>A template's: a tree of its own</details></template>
+<details id="h1" name="h" class="box" open><summary>Group h, open: one in a template is no rival</summary><p>Shown.</p></details>
+
+<p><a id="toc1p" href="#c1p">To the paragraph in the first details</a>, which opens it.</p>
+</body></html>

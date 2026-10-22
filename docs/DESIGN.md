@@ -729,7 +729,8 @@ releases.
   true colour's fills a row at a time. A page drawn, on the emulated 32 MHz Falcon (the window,
   `make hatarigui`'s pages): 16 colours 410-455 ms to 310-365 ms (a long page, 850 to 760), 256
   colours 585-625 to 560-570, true colour 120-140 to 105-130; the TT in 16 colours 440 to 350, its
-  1280 x 960 monochrome 2.6-3.6 s to 1.9-2.0 s.
+  1280 x 960 monochrome 2.6-3.6 s to 1.9-2.0 s. Translucent items are mixed with what is under them
+  since 22 Oct 2026 (Translucent colours and opacity, below).
 - **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
@@ -964,8 +965,8 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
   tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
-  those. Not yet: SVG, animation, CSS gradients. `<input type=image>` shows its picture (forms,
-  below).
+  those. Not yet: SVG, animation. CSS gradients are drawn since 22 Oct 2026 (CSS gradients,
+  below). `<input type=image>` shows its picture (forms, below).
 - **Which picture** (21 Oct 2026, the HTML Standard's 4.8.4.3): a `<picture>`'s first `<source>`
   whose `type` EWeb reads (none, JPEG, PNG or GIF: a WebP or AVIF one is passed over) and whose
   `media` holds (the CSS engine's media queries, `ec_media_ok`), else the `<img>`'s own `srcset`
@@ -1065,14 +1066,17 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 - **Background pictures** (21 Oct 2026, CSS Backgrounds 3): the first layer's `url()`, over the
   border box, at `background-position` in the padding box, `background-size` (`cover`,
   `contain`, lengths, percentages, `auto`) and `background-repeat`; the root's or the body's over
-  the whole page. Each is one item in the display list (`DLF_TILE`: the item is where it is drawn,
-  the tile where the first one goes and its size), its picture decoded once at the tile's size,
-  and the canvas draws the tiles where the item and the window meet: an opaque picture's first
-  rows of tiles, the rest copied from the rows a tile above. Laid out before its file has come,
-  it is drawn when the page is laid out again with its size. A sheet's `url()` is its own address's
-  (`ec_sheet_at`), not the page's. Not taken: more layers, `background-attachment: fixed` (drawn as
-  `scroll`), `background-clip` and `-origin`, `space` and `round` (drawn as `repeat`), pictures in
-  inline boxes' backgrounds, `list-style-image`.
+  the whole canvas (since 22 Oct 2026 its tiles go on below a page shorter than the window, as CSS
+  Backgrounds 3, 2.11.2 has them; before, the window was white there). Each is one item in the
+  display list (`DLF_TILE`: the item is where it is drawn, the tile where the first one goes and its
+  size), its picture decoded once at the tile's size, and the canvas draws the tiles where the item
+  and the window meet: an opaque picture's first rows of tiles, the rest copied from the rows a tile
+  above. Laid out before its file has come, it is drawn when the page is laid out again with its
+  size. A sheet's `url()` is its own address's (`ec_sheet_at`), not the page's. Not taken: more
+  layers (the top one is drawn: CSS gradients, below), `background-attachment: fixed` (drawn as
+  `scroll`), `background-origin`, `space` and `round` (drawn as `repeat`), pictures in inline boxes'
+  backgrounds, `list-style-image`. `background-clip` stops the picture at the box it names since 22
+  Oct 2026, as it stops the colour.
 - **Off on a slow line:** View > Show pictures (`PICTURES=` in `EWEB.INF`): pages show their
   pictures' alt text instead.
 - **Checked:** `common/tests/pic` (PngSuite, libjpeg-turbo's and libnsgif's test pictures and more
@@ -1335,13 +1339,16 @@ BSS):
 | `EW_ST`: the HTTP client's read buffer 8 KB (2 KB since the downloads' names, below), the stack 48 KB | 24 KB of BSS (6 KB more for the 2 KB buffer) |
 
 At run time the arenas take small pieces on the ST (the CSS engine 4 KB, its first ones from 512
-bytes, the document and the layout 8 KB, not 64 and 16), as a context's empty pieces were most of a
-small page's memory; a
-font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
-grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
-in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
-fit, EWeb says so on a page of its own, which is small. Pictures may take a sixteenth of the free
-RAM (12 KB on the 1 MB ST, so few come; the photo is refused for memory).
+bytes, the document and the layout 8 KB, not 64 and 16), and so does the display list (128 items at first, 5.5 KB, not 1024,
+45 KB; since 22 Oct 2026, Details and summary), as a context's empty pieces were most of a small
+page's memory; a font face is unpacked into its exact size (in every edition: before, its buffer
+doubled as it grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the
+pictures not in use and the fonts' glyphs (read again when used), and is built once more; if it
+still doesn't fit, EWeb says so on a page of its own, which is small. Running out while styling it
+counts too (since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style
+made a page that laid out to nothing, which translucency's 3 KB more code brought about on the
+pictures page. Pictures may take a sixteenth of the free RAM (12 KB on the 1 MB ST, so few come;
+the photo is refused for memory).
 
 Measured in Hatari (8 MHz, TOS 1.04), the tables page from the disk:
 
@@ -1895,6 +1902,660 @@ attachment, and clicked by a script; a `.tar.gz` as Apache sends one, known by i
 page that says `inline` kept by the disk cache, a file named by `inline` not; a file asked for again
 after the file selector outlasted its server); `make hatarigui`'s `browse` (the file selector
 offering the server's name, and an `<a download>` clicked, on the emulated Falcon).
+
+## Translucent colours and opacity (22 Oct 2026)
+
+The CSS engine kept every colour's alpha (`rgba()`, `hsla()`, `#rrggbbaa`, `#rgba`, `transparent`)
+and computed `opacity`, but the layout threw both away: a translucent background or border was
+painted solid (Bootstrap's card caps, `rgba(0,0,0,.03)`, and Pico's table stripes came out dark),
+`color: transparent` text was drawn black, a translucent overlay hid what was under it, and
+`opacity: 0` content (fading menus, hidden overlays, inputs laid invisibly over a styled button)
+showed. Now, after CSS Color 4:
+
+- **Alpha** is kept from the computed colour to the screen: the display list's colour is
+  `0xAARRGGBB`, for backgrounds, the four borders, text and its decorations, form controls' text and
+  frames, list markers and pictures. Alpha 0 draws nothing. Two inline backgrounds one in another
+  make one colour at layout time (source-over, Compositing and Blending 1), so a run is still one
+  fill; a translucent canvas background is shown on white, as browsers do, and painted once (the
+  root's or the body's box, whichever gave the canvas its colour, doesn't paint it again: CSS
+  Backgrounds 3, The Canvas Background). A block's background colour stops at the box
+  `background-clip` names (border, padding or content box), which shows with translucent borders
+  (Bootstrap's modals and menus: `padding-box`).
+- **Text of a transparent colour that the page shows another way**, with a paint EWeb doesn't draw,
+  is drawn in that paint's colour rather than not at all (browsers show it; before translucency
+  EWeb drew it black), the first it has of: a background through the text (`background-clip: text`,
+  Tailwind's gradient headings: the gradient's first colour that shows, or the background colour;
+  a picture, or a gradient EWeb can't compute: the text's own colour, solid), its outline
+  (`-webkit-text-stroke`) and its shadow (`text-shadow`, the first one's colour: recoloured text,
+  an input's hidden caret). The background and the outline are what the glyphs show; a shadow is
+  under them, offset, blurred, often faint, and inherited, so taken first it drew gradient headings
+  with a soft shadow at its 10% black (in 16 colours not at all). `background-clip: text` never
+  leaves the text undrawn: pages don't hide text so, and its gradient often fails to compute here
+  (Tailwind 4 makes it of custom properties that only `@property`, which EWeb doesn't read, starts:
+  its `var()` is invalid at computed-value time and the image `none`). For this the CSS engine now
+  computes `background-clip` (and `-webkit-background-clip`, and the `background` shorthand's box),
+  `text-shadow` (the first shadow's colour), `-webkit-text-stroke-width` and `-color`, and keeps a
+  gradient's first colour; none of them is drawn otherwise. Text a picture replaces (`color:
+  transparent` over a `url()` background) stays undrawn. A legacy colour attribute of `transparent`
+  (`<font color>`, `<body text>`) is turned down, as the HTML Standard's rules for parsing a legacy
+  colour value say, so the text keeps the colour it inherits.
+- **Opacity** (Transparency: the opacity property) isn't inherited, but applies to the element and
+  everything in it as a group, clamped to 0..1. EWeb multiplies it into each item the group draws
+  rather than drawing the group off screen and mixing it in. Your rules decide it (the fastest code,
+  and the ST edition on a 1 MB ST): an off-screen group needs a buffer the element's size (the whole
+  page for `body`, more than a 1 MB ST has) and a second pass over its pixels; multiplied in, it
+  costs the layout nothing and the drawing below is all there is. It is the group's look wherever
+  the group's items don't lie over one another (text on the page, borders, pictures, controls);
+  where they do (text on its own background), the background shows through the text a little more
+  than in a browser. **Opacity 0 draws nothing**, and its items stay in the list: it keeps its room,
+  and its links, controls and scripts' clicks still work, as CSS has it (unlike `visibility:
+  hidden`), unless it has `pointer-events: none` (CSS UI 4, inherited), as hidden menus, dropdowns
+  and modals nearly always do (Tailwind's `opacity-0 pointer-events-none`): then a click goes through
+  its items to what is under them. The CSS engine computes `pointer-events`; the layout marks such
+  items (`DLF_NOHIT`, ewrender `-d`'s "nohit") and the hit tests (a link, a control, a script's
+  click) pass them by. Opacity makes no stacking context: EWeb has no z-order yet.
+- **What lifts an opacity of 0** that EWeb doesn't run or draw (`own_opacity()` in the layout).
+  Pages ship content at opacity 0 and have something reveal it; drawn as CSS has it, that content
+  would be missing for good. EWeb draws such an element whole:
+  - one with an animation (`animation-name` or the `animation` shorthand: the engine keeps whether
+    there is one): EWeb runs no animations and reads no `@keyframes`, and an element of opacity 0
+    with an animation is nearly always faded in (`animation: fadeIn .8s forwards`, whose
+    fill-mode keeps the last keyframe); so it is drawn as its animation leaves it, taken to be in
+    full;
+  - an `<img>` whose picture EWeb took from `data-src`, `data-srcset` and the like (as it does when
+    `src` is missing or a placeholder, in place of the lazy loader's script): the script would have
+    lifted its opacity too (lazysizes' `.lazyload { opacity: 0 }`);
+  - elements AOS (`data-aos`) and Webflow (`data-w-id`) fade in with their scripts as the page is
+    scrolled to them: EWeb's own scripts are off unless a site is in `SCRIPTS=`, and its lean DOM
+    has no scrolling events or IntersectionObserver for them anyway;
+  - a checkbox or radio button of its own opacity under 1/16: a page that hides the native control
+    draws its own from generated content (`label::before` with no text: Bootstrap 4's custom
+    controls), which EWeb doesn't draw, so without its control the box's state couldn't be seen.
+    Its own opacity only: one inside a group of opacity 0 stays hidden.
+
+  Other content a page's script reveals stays hidden while scripts are off, as in a browser with
+  JavaScript off (a reveal-on-scroll class of a site's own has no marker EWeb could know). This is
+  the most common way opacity removes content, and EWeb's default is scripts off: the markers above
+  are the common ones, kept short so as not to show what pages really hide.
+- **Form controls**: a control's text (its value, a button's label, a list's choice, the caret,
+  whose `caret-color` is the text's) is drawn at its colour's alpha; the rest of it (its frame, a
+  box's tick and a button's dot, a placeholder, the keyboard's frame) at the control's opacity, as
+  browsers draw those in colours of their own, so `color: transparent` on a control or an ancestor
+  doesn't hide a checkbox's state or a radio button.
+- **Drawing** (`src/gfx/canvas.c`): an item less than solid is mixed with what is already drawn
+  under it, in every mode, rather than with the colour the layout knows is behind it (the cheaper
+  way the audit offered): only reading back shows what is under a translucent cover, text and
+  pictures included, and it is nearly as quick.
+  - True colour: each pixel read back and mixed in 32nds (the 5-6-5 parts spread out in a long, one
+    multiply), two pixels a long, a long as the last one taking the last one's result (what is under
+    is mostly one colour), a pixel as the last one likewise.
+  - 4, 16 and 256 colours: a pen's colour comes from the screen's own palette (`ui/screen.c` reads
+    it from the VDI already), mixed, and the screen's nearest pen taken, once per pen for each
+    colour and alpha; then a pixel is a look-up in a table of 256 (`mix_to[]`, an array the 68030's
+    code indexes in one instruction, not through a pointer), four pixels a long where they are
+    alike. What each colour's pens became is kept for the last four colours (two in the ST
+    edition): a change of colour takes out of the table only the pens the last one put in and puts
+    back those the next one had, so runs in a few translucent colours one after another (Material's
+    `.87` titles beside `.54` text, muted text beside links) neither empty the whole table nor work
+    the pens out again (the review's 3,000 runs alternating two translucent colours, 16 colours:
+    22.46 M instructions of drawing to 20.90 M, one colour 21.48 M to 20.79 M).
+  - Monochrome: a translucent fill's mix is patterned as solid fills are (the greys of black and
+    white, fixed to the page); text takes the nearest of black and white.
+  - Pictures at an opacity: mixed per pixel in true colour; with a palette, an ordered pattern (4 x
+    4, fixed to the page) draws the share of their pixels the opacity says, as mixing two pens has
+    no cheap table (65,536 pairs).
+  - The ST edition draws the same way; it keeps 16 pens for each of two colours (its screens have
+    no more; with more, what isn't kept is worked out again), 0.6 KB in all (the Falcon's 2.6 KB).
+  - Each depth has its own loops for a cover (8 bits a look-up a pixel, 16 bits a mix), and a
+    glyph's mixing loop takes its depth once a glyph: the dearest case below, a translucent cover
+    over a whole page, 16 colours 36.7 M to 31.1 M instructions, true colour 65.1 M to 56.9 M.
+- **Limits:** a mix is the screen's nearest pen, so on a screen of few colours a tint of a few per
+  cent vanishes (as near as makes no difference), TOS's 256 colours have no pale pink for half red
+  on light grey (a grey is nearest), and with 4 colours half black on white is black. Group opacity
+  is approximate where a group's items overlap (above). Text at a low alpha may vanish on a
+  monochrome screen.
+- **Measured** with `build/m68k/drawbench` (new, `tests/bench/drawbench.c`: a page laid out and
+  drawn as `EWEB.PRG` does, 400 rows at a time, at 8 bits in 16 colours or at 16, counted with
+  `tools/count68k.sh`), before and after, on 29 pages of the page set alone and with each of its two
+  sheets (87): the layout 0.34% fewer instructions (the CSS engine, the same code in both, differed
+  by up to 1% a page between the two builds: no more than the noise), the drawing 0.04% fewer in 16
+  colours and 0.02% fewer in true colour (pages with translucent items up to 1.3% and 2.5% more, one
+  8.6% fewer as what has no alpha isn't drawn now); solid text's glyph loops are kept apart from the
+  mixing ones, so they cost what they did. The dearest case, a translucent cover over a whole page
+  (the news page without its sheet, 608 x 8,000): 16 colours 21.0 M to 36.7 M instructions (3.2 more
+  a pixel), true colour 44.9 M to 65.1 M (4.2 more), so a screenful (608 x 400) of cover costs 0.8 M
+  and 1.0 M more, 0.15 to 0.2 s on the DFB1; since each depth has its own loops, 31.1 M and 56.9 M
+  (2.1 and 2.5 more a pixel, a screenful 0.5 M and 0.6 M). All
+  its text at alpha .75: 19.3 M to 21.3 M (16 colours), 33.1 M to 35.5 M (true colour); everything in
+  it at opacity .5: 21.5 M and 35.6 M (19.3 M and 33.1 M solid). The review's fixes (what shows
+  text of a transparent colour, `pointer-events`, what lifts an opacity of 0, the new properties),
+  on 12 page-set pages alone and with Bootstrap (24 runs): the styling 0.20% more instructions (six
+  properties more, Bootstrap's `pointer-events`, `text-shadow`, `animation` and `background-clip`
+  now read and cascaded, a style 30 bytes larger), the layout 0.40% more, the drawing the same
+  (+0.002%). In all, `EWEB.PRG`'s code grew 8.3 KB and its memory 2.6 KB (the mixing tables), the ST
+  edition's 6.0 KB and 0.6 KB: on the 1 MB ST the pictures page now needs the tables page given
+  back first (above, It runs on a 1 MB ST).
+- **Tested:** `tests/css/cases.txt` (the colours' alpha, `transparent`, opacity's clamping, a
+  percentage, `calc()`, inheritance; `background-clip` and its shorthands, a gradient's first
+  colour, `text-shadow`, `-webkit-text-stroke`, `pointer-events` and its inheritance,
+  `animation-name` and `animation`); `tests/layout/alpha.html`'s display list (ewrender `-d` shows
+  a colour less than solid as `#rrggbbaa`, a picture's and a control's opacity as `alpha`, and
+  "nohit"; the page has gradient, shadow and outlined text (and both under a faint shadow, and a
+  gradient that doesn't compute), a replaced one, a legacy colour of
+  `transparent`, an animated and an AOS paragraph, a lazy picture, a custom checkbox, a veil a click
+  goes through and `background-clip: padding-box`); `tests/layout/alpha.py` (`make test`) reads
+  back the pixels ewrender draws in true colour and in 2, 4, 16 and 256 colours (its new `-p`):
+  opacity 0 draws nothing, fills, text and text under a cover come out half way, a picture at
+  opacity .5 is half way to white (or half its pixels), text of a transparent colour is drawn in its
+  gradient's, shadow's or outline's colour (the gradient's or the outline's over a faint shadow's,
+  one EWeb can't compute in the text's own colour) and not where a picture replaces it, a
+  checkbox's tick shows in a transparent colour and at its own opacity 0 but not in a group of
+  opacity 0, a translucent root background is one colour down the window, a click (`-J -K`) on a
+  link under a veil of `pointer-events: none` follows it, and the page drawn in bands at 8 and 16
+  bits under AddressSanitizer; `make hatarigui`'s screens group shows the page on the Falcon in 256 colours
+  and true colour and on the TT in 16 colours and monochrome, and its st group in `EWEBST.PRG` on
+  the 1040 ST in monochrome and medium resolution.
+
+## CSS gradients (22 Oct 2026)
+
+The CSS engine took gradients as valid and kept their first colour alone, and the layout drew
+nothing for them: a header or a button with white text on a dark gradient came out white on white
+(and as the `background` shorthand resets the colour, a fallback colour written before the gradient
+was gone too). Now, after CSS Images 3 and 4:
+
+- **Kept whole** (the CSS engine, `ec_grad` in `ecss.h`): `linear-gradient()`, `radial-gradient()`,
+  `conic-gradient()` and their `repeating-` forms, in `background-image` and the `background`
+  shorthand: a linear one's direction (an angle in `deg`, `grad`, `rad` or `turn`, a unitless 0, or
+  `to` a side or a corner), a radial one's shape (`circle`, `ellipse`), size (the four extent
+  keywords, one length, two lengths or percentages) and centre (`at` any position), a conic one's
+  `from` and centre, and the colour stops with up to two positions each (lengths and percentages,
+  `calc()` of the two; a conic one's angles and percentages) and the hints between them. Lengths in
+  `em`, `rem`, `vw` and the like are computed with the style, as other lengths are; `currentcolor`
+  becomes the element's colour in the layout. An interpolation method (`in oklab`, `in hsl longer
+  hue`: Tailwind 4 writes one) is read, and the gradient drawn in sRGB, as browsers draw one between
+  sRGB colours with none named; EWeb's colours are all sRGB, so only a named Oklab or polar method
+  comes out a little different. A gradient that isn't valid (a hint first, last or two in a row,
+  three positions, a circle's size in per cent, an unknown method) makes its declaration invalid, so
+  a fallback before it stays; one stop alone is valid (CSS Images 4). `tests/css/cases.txt` prints
+  each as CSS writes it.
+- **Math functions** (CSS Values 4, 10, which allows them wherever an angle or a length goes):
+  an angle may be `calc()`, `min()`, `max()` or `clamp()` of angles (`calc(var(--a) * 1deg)`),
+  worked out as the sheet is read (a conic gradient's stop a percentage of the turn too); a
+  position or a radius `min()`, `max()` or `clamp()` of one unit is worked out (`min(10px, 20px)`,
+  `max(1em, 2em)`), and so is one inside `calc()` (`calc(100% - min(10px, 20px))`). One of px and
+  % together (`min(10%, 5px)`) can't be until the gradient line's length is known: such a gradient
+  is valid all the same, kept as its colours alone (`approx`) and drawn as their average, never as
+  nothing (and the `background` shorthand's colour stays with it); so is one of more stops than
+  EWeb keeps (64, 32 in the ST edition: their first ones' average) or of more relative lengths.
+  Before (the review of 22 Oct 2026), each of these made its declaration invalid. An angle is kept
+  within a turn (`10000turn` is `0deg`), so neither the parser's arithmetic nor the canvas's can
+  overflow, and so is a length in `vw`, `vh`, `vmin` or `vmax` within the fixed point (`1e9vw` is
+  the most a length can be, 2,097,152px; before the second review its product overflowed, as
+  `width: 1e9vw`'s did before gradients: undefined behaviour, and a stop in the wrong place). The
+  ST edition, short of memory, works no `min()` out, inside `calc()` or not: such a gradient is its
+  average, the shorthand's colour kept with it (850 bytes less; before the second review one inside
+  `calc()` made the declaration invalid there, and white text meant for a dark gradient came out
+  on white).
+- **`-webkit-` forms** (the Compatibility Standard): `-webkit-linear-gradient()` and
+  `-webkit-repeating-linear-gradient()` (a side it starts from, not `to` one; an angle from east,
+  counter-clockwise) are kept as their modern forms, and `-webkit-gradient(linear, ...)` (WebKit's
+  first: two points and `from()`, `to()`, `color-stop()`) as `linear-gradient()` to the side its
+  line runs to, its stops placed on that line between the points; one across a corner and
+  `-webkit-gradient(radial, ...)` as their average. Of the page set's 16 pages with gradients 7
+  have only these (old Bootstrap's buttons and bars: 28 `-webkit-linear-gradient(top, ...)` and 18
+  `-webkit-gradient(linear, left top, left bottom, ...)`), which drew nothing before. The ST
+  edition takes `-webkit-linear-gradient()` but not `-webkit-gradient()` (2 KB of its code).
+- **One layer, the top one.** The `background` shorthand kept its first layer already;
+  `background-image` of several layers, invalid to EWeb before (and so dropped), now keeps its first
+  too (csscmp's new reason: LibCSS drops such a declaration). More layers would need a list in each
+  of the six background longhands (four hidden properties more, a style 20 bytes larger) and the
+  layout's table and flex stretching to take several items for a box's background: not cheap. So a
+  gradient over a picture (often a translucent darkening for a hero picture's white text) shows the
+  gradient over the background colour, and a picture over a gradient the picture.
+- **Laid out** as a background picture is: one item (`DL_GRAD`, the gradient with its lengths in
+  device px) and a tile. A gradient has no size of its own, so its tile is the positioning area's
+  size (the padding box) or `background-size`'s, placed by `background-position` and repeated by
+  `background-repeat` (a stripe pattern of `linear-gradient(...) 0 0 / 100% 8px`); the root's or the
+  body's over the whole canvas, its tiles placed as for the root and going on below a page shorter
+  than the window (CSS Backgrounds 3, 2.11.2; the canvas draws that item, `page.cbg`, down to the
+  window's foot). A box laid out with no height and stretched afterwards (a table row's
+  cell, a flex line's item) takes its gradient's height with it. `background-clip` now stops
+  pictures and gradients, not only the colour, at the box it names. An inline's gradient (a
+  `<span>`'s, and an inline-block's, which EWeb lays out as an inline) is its stops' average over
+  its colour, a run being one fill. Text painted with a gradient (`background-clip: text`) keeps the
+  gradient's first colour that shows (Translucent colours, above): an average with a transparent
+  stop would be too faint to read.
+- **Drawn** (`src/gfx/canvas.c`): each pixel's place along the gradient line (linear: from the
+  angle, or at right angles to the diagonal for a corner), the ray (radial: the ellipse's distance)
+  or the turn (conic) picks an entry of a ramp: the gradient's colours, mixed premultiplied (CSS
+  Images 4, 3.5: red to `transparent` stays red), at 256 points at most, no more than one a pixel
+  and no more than its colours need (two levels of 255 an entry where they change most; a sharp edge
+  or a hint all there can be), and the colours before and after the stops as entries of their own,
+  so that a sharp edge at either end falls where it is; a hint bends the mix by its power curve
+  (fixed-point log and exponent tables). The stops are fixed up as CSS Images 3, 3.4.3 says
+  (unplaced ones spread evenly, none before the one before it). An entry is its colour made for the
+  screen as a 4 x 4 pattern on the canvas's own ordered thresholds, fixed to the page as the fills'
+  greys are:
+  - **Palette modes: an ordered dither, not the pictures' Floyd-Steinberg.** Floyd-Steinberg
+    (`common/src/pic.c` and the DSP's) carries each pixel's error to the next: drawn a band at a
+    time, as the window is (32 rows when memory is short), or scrolled, a gradient would show seams
+    between bands, and keeping its pens as a picture's are kept would take a megabyte for a body's
+    gradient. So the thresholds are the canvas's own, those monochrome fills and pictures at an
+    opacity use already, and what is new is how an entry's 16 pens are chosen, so that together they
+    make its colour (Knoll's pattern dither, 30 lines: each the screen's nearest, `ui/screen.c`'s
+    cached `pen()`, to the colour plus the error the pens before it left, sorted by brightness, so
+    light and dark spread evenly over the thresholds); on a monochrome screen they are the fills'
+    grey pattern.
+  - **True colour** has 16 5-6-5 values for each entry a step apart, so that a gentle gradient
+    (`#fff` to `#eee`, two 5-bit steps) isn't drawn in bands.
+  - **Fast where it can be:** a linear gradient at right angles is drawn a row at a time (one entry:
+    a long of its four pens at a time, four longs a turn of a loop counted down) or a column at a
+    time (the first four rows worked out, the others copied from four rows up); any other a pixel at
+    a time, an entry index stepped along each row (a shift, a mask and a look-up: runs of one entry,
+    each written a long at a time, measured a quarter slower for entries 15 px wide), the pixels
+    before and after its span as runs of the first and last colours; a radial one from each pixel's
+    square distance (a 16-bit multiply) against the squares of the entry's thresholds, the next
+    pixel's entry the same or one either side, the pixels past its last stop as runs; a conic one
+    from each pixel's offsets by a division and an eighth of a turn of atan's table (to a quarter of
+    an entry), each row in two spans, either side of the centre. Each depth has its own loops, four
+    pixels a turn.
+  - **Tiles** (a pattern of dots or checks, `0 0 / 16px 16px`): a solid gradient's are drawn only as
+    far as its tiles and the 4 x 4 pattern come round together (across and down: 52 px for tiles of
+    13, a 16 px CSS tile at 0.8), and copied on from there, each copy across twice the last; a
+    translucent one's (most dot patterns: dots on `transparent`) have their entries worked out once
+    for one tile (64 KB at most), each row then drawn from them, a tile's row copied across; a
+    linear gradient whose rows are each one entry is drawn across all its tiles at once. Before (the
+    review of 22 Oct 2026) each tile was worked out on its own, its set-up (64-bit divisions) for
+    each, 50 to 60 instructions a pixel for 16 px dots.
+  - **A translucent gradient** at right angles is as cheap as a translucent fill: a row of one entry
+    is its four pens put in a long at a time through a mask of where its alpha is above the
+    thresholds (8 bits), or mixed as a translucent fill is (16 bits: a run of pixels as the last
+    ones takes their result); one across has its row's entries worked out once for all its rows; a
+    row of entries is drawn in runs of one entry at 16 bits, its transparent ones passed over, each
+    entry's last pixel under it and what that became kept from run to run (what is under is mostly
+    one colour, so an entry is mixed once, not at each of its runs a few pixels wide); and one
+    across keeps that for each column (`mix_cols16`: its rows are alike, so a pixel is a load, a
+    compare and a store, as a hero picture's scrim `linear-gradient(to right, rgba(0,0,0,.7),
+    transparent)` is drawn). Before, each pixel was mixed on its own, 22 to 29 instructions a pixel;
+    after the first review a fade across was still 25 a pixel in true colour (each run of an entry,
+    a few pixels, mixed again), now 10.9.
+  - **A ramp is kept** for the last four gradients drawn, with the screen it was made for, so a band
+    of the window, a scroll or a page of like buttons doesn't work it out again (up to 10 KB each).
+    Making one is most of a small gradient's cost (an entry's 16 pens are 16 of `pen()`'s look-ups,
+    some 2,000 instructions an entry): so its entries are as many as its colours need, not one a
+    pixel, and a header from `#2c3e50` to `#4ca1af` 600 px wide is 50 of them, not 256. On a page of
+    typical gradients (a header, a hero at 135deg, three buttons, two cards with a sheen) that took
+    the drawing from 4.54 M to 3.20 M instructions in 16 colours and from 4.83 M to 4.50 M in true
+    colour (with two solid stops' mix worked out without a division). In 256 colours `pen()` costs
+    more the first time a colour is met (`ui/screen.c` looks through all 256 pens, then keeps the
+    answer for its 12-bit colour): the dithers' colours wander, so the first gradients drawn after
+    the start fill much of that cache, up to 11 M instructions once (the test page of 22 gradients:
+    17.6 M to draw, 11.3 M of them `pen()`; the page above 5.2 M; in Hatari's Falcon the test page
+    took 3.5 s the first time). A faster nearest pen there (for later) would save that.
+  - **Translucent** stops or a box's opacity: true colour mixes each pixel with what is under it (in
+    32nds, as translucent fills are); with a palette an entry is drawn where its alpha is above the
+    transposed thresholds, as pictures at an opacity are.
+  - **Where it can't be drawn**, its stops' average (premultiplied), never nothing: a repeating
+    gradient of no length (CSS Images 3, 3.6 says so), one whose stops can't be placed (`approx`,
+    above), a ramp's memory not there, a radial gradient thousands of entries off its tile.
+  - **A radial gradient of no size** is drawn as CSS Images 3, 3.2.3 says: a circle of no radius as
+    one a 256th of a px round (its stops' percentages all 0, those in px where they are), an ellipse
+    of no width as one a 256th of a px wide and as tall as can be (a linear gradient across,
+    mirrored at its centre), one of no height its last colour (a repeating one's average). Before,
+    any of them was its last colour, so `radial-gradient(circle closest-side at 0 0, red 20px, blue
+    40px)` was all blue.
+- **The ST edition draws a linear gradient at right angles, and any other in its colours' average.**
+  The Falcon's drawing is about 11 KB of 68000 code (linear ones alone 7 KB). The 1 MB ST had
+  190,090 bytes free at the start before this change, and its tables page needs between 177,886 and
+  181,758 (it failed with the first and showed with the second: builds padded for the purpose, in
+  Hatari); with all the Falcon's drawing it had 177,886, and the tables page no longer showed. So
+  the ST edition has a drawing of its own, 2 KB: a gradient to a side, or at an angle a multiple of
+  90deg (most of the web's: a header's, a button's), a row or a column at a time, each row's colour
+  from the same stops as the Falcon's (`grad_place`, `stop_colour`) and drawn as a fill is (the grey
+  pattern in monochrome, so a gradient is a ramp of 17 greys; the nearest pen in 4 and 16 colours,
+  so it is a few bands); rows the screen shows alike are one fill (a solid colour's grey level in
+  monochrome, its 5-6-5 value in true colour, else its 12-bit colour, as `pen()` keeps them), in a
+  colour of that alone (the grey's or the 5-6-5 value's own colour, or the 12-bit colour with each
+  nibble twice, so black and white stay so), and the colour between two stops is worked out in 32
+  bits (a 64-bit division is a loop of 64 turns on the 68000). Before the second review (22 Oct
+  2026) a run of rows was drawn in its first row's colour; a run starts where a band of the window
+  or a scroll's new rows start, so in monochrome a gentle gradient's greys changed with them (the 1
+  MB ST draws in bands of 32 rows): seams, now gone (`tests/layout/gradients.py` draws tall gentle
+  gradients in bands from anywhere). A hint mixes its stops evenly (its power curve would be 700
+  bytes more). Any other gradient is its stops' average, drawn as a fill. On the 1040 ST in
+  monochrome (8 MHz, Hatari) the test page's window of 22 gradients is drawn in 13.6 s, against
+  12.5 s with every gradient its average (a fill a row: 16.4 s). In all `EWEBST.PRG` grew 6.7 KB
+  (the gradients the CSS engine keeps 3.7 KB, the layout's items 1.1 KB, the drawing 2 KB), and the
+  1 MB ST has 185,068 bytes free at the start and shows the tables and the pictures pages as before.
+  After the review (22 Oct 2026) it grew 1.1 KB more (angles in `calc()`, `min()` and the like, the
+  averages and `-webkit-linear-gradient()` in the CSS engine, the canvas's background on down the
+  window; it leaves out `-webkit-gradient()` and working `min()` out, 2.8 KB), and the 1 MB ST has
+  184,204 bytes free at the start and shows the tables and the pictures pages as before. After the
+  second review it grew 714 bytes more (the rows' keys, `min()` inside `calc()` taken as lost,
+  lengths in `vw` kept within 32 bits), and the 1 MB ST has 183,670 bytes free at the start and
+  shows the tables and the pictures pages as before. The rest of the Falcon's drawing (dithered,
+  diagonal, radial, conic) could be had for about 9 KB more if the ST's memory is found elsewhere:
+  **the owner's call**.
+- **Limits:** one layer; `background-origin` (the padding box always) and `background-attachment:
+  fixed` (a body's fixed gradient is spread over the whole page, not the window); a position or a
+  radius `min()` of px and % together (its average, above); colours in `oklch()`, `lab()`,
+  `color-mix()` and the like, which EWeb's colours don't read anywhere (such a stop makes the
+  gradient invalid, as it makes `background-color` invalid, so a fallback before it stays); sRGB
+  interpolation; a sharp edge inside a gradient longer than 256 px within half an entry of its place
+  (on a 600 px one, a pixel); a conic gradient's angles to a quarter of an entry; `list-style-image`
+  gradients aren't drawn (the marker of its type is); the radial and conic per-pixel work is the
+  68030's (the DSP could take the distances and the angles: for later).
+- **Measured** (`build/m68k/drawbench`, the whole page drawn 400 rows at a time, counted with
+  `tools/count68k.sh`), a page of one 608 x 3,200 px gradient, instructions a pixel at 8 bits (16
+  colours) and in true colour, against a solid fill's 0.88 and 6.04: to bottom 1.51 and 4.24, to
+  right 1.47 and 4.16, 45deg 10.2 and 12.4, repeating stripes at -45deg 9.4 and 12.0, radial 27.5
+  and 29.7, conic 35.7 and 36.0, a translucent fade over a colour (to bottom) 22.9 and 34.7. So a
+  screenful (608 x 400) of radial gradient is 6.7 M instructions, about 1.3 s on the DFB1 at the
+  rate measured for translucency above; a vertical one 0.4 M. The first versions took 39 and 55
+  instructions a pixel for radial and conic, 18 for 45deg and 2.04 for to bottom: each row's entries
+  were worked out into a buffer, then drawn; now the pens go straight in, the radial and conic rows
+  are functions of their own (their variables in registers), a conic row is split at its centre, a
+  run of longs is a loop counted down, four a turn, and a ramp has the entries its colours need
+  (above). On the page set, before and after, the same 29 pages as for translucency, alone and with
+  each sheet (87 runs; its pages and sheets hold only six different gradients, two of them the old
+  `linear-gradient(top, ...)` that isn't valid): the styling 0.05% more instructions, the layout
+  0.04% more, the drawing 0.01% more in 16 colours and the same in true colour.
+  `tests/bench/measure.py -E ewcss` on all 258 pages: the CSS parse 0.05% more with either sheet,
+  the selection 0.2% more with Bootstrap (a `background-image` of two layers through `var()`, as its
+  `.form-select` has, is read now where the first comma made it invalid before) and the same with
+  Pico (0.01%). `EWEB.PRG`'s code grew 28.1 KB (the drawing 22.1 KB: each depth its own loops, four
+  pixels a turn) and its memory 2.6 KB (the four ramps' stops), and up to 40 KB while a page with
+  gradients is drawn (the ramps' entries). After the review (22 Oct 2026), the translucent fade to
+  bottom is 2.54 and 7.32 a pixel (against a translucent fill's 2.98 and 7.06; the review's code
+  measured again: 22.9 and 32.1), one across 9.1 and 28.5 (40.9 and 58.5). On the review's page of
+  one 608 x 960 px box (583,680 pixels, its page included: 2.1 and 5.3 a pixel with no gradient), 16
+  CSS px dots (`radial-gradient(#999 1px, #fff 1px) 0 0 / 16px 16px`) are 3.4 and 7.0 a pixel (58.0
+  and 61.0 before), the same dots on `transparent` 9.5 and 12.6 (61.0 and 61.6), checks
+  (`repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px`) 4.3 and 7.2 (50.7 and 50.9);
+  each drawn as before to the pixel (every mode and slice compared with the review's drawing). The
+  review's changes to the CSS engine cost nothing measurable: the news page styled 0.16% more
+  instructions, less than moving the engine's code does (a function never called, 7 KB, put in
+  `value.c`: 2.2% more), the sample page with Bootstrap 0.05%. `EWEB.PRG`'s code grew 6.8 KB more.
+  Its memory: up to 64 KB more while translucent tiles are drawn (a tile's entries). After the
+  second review (22 Oct 2026) the translucent fade across is 8.4 and 14.2 a pixel (9.1 and 28.5
+  before it), on the 608 x 960 box 10.9 a pixel more than the page alone in true colour (25.1
+  before); at 16 bits a translucent radial gradient 46.2 (49.0), a conic one 49.8 (52.5), one at
+  45deg 31.3 (34.2), the dots on `transparent` 12.6 as before; each drawn as before to the pixel
+  (263 random pages of translucent gradients over colours, gradients and stripes, in every mode and
+  three slices); `EWEB.PRG`'s code 1 KB more, its memory 6 bytes an entry of each ramp and 6 a
+  column of a fade across. The CSS engine's arithmetic kept within 32 bits costs nothing
+  measurable (the news page styled 0.002% fewer instructions, the sample page 0.002% more).
+  Counting, the program's path matters: QEMU puts it on the stack, and a longer one moved the news
+  page's count by 1.1% (the buffers on the stack aligned otherwise), so the two programs compared
+  are run from paths of one length.
+- **Tested:** `tests/css/cases.txt` (what is kept of 18 gradients, 24 that aren't valid, the layers,
+  14 with math functions, one of more stops than are kept, 12 `-webkit-` ones, and huge lengths in
+  `vw` and the like, kept within the fixed point);
+  `tests/layout/gradients.html` and its list (ewrender `-d` shows a gradient item, its tile and the
+  gradient as the display list has it, `averaged` for one kept as its average);
+  `tests/layout/gradients.py` in `make test` (318 checks of pixels read back in true colour and 2,
+  4, 16 and 256 colours: ends and middles, angles, sides and corners, sharp edges at their pixel, a
+  hint's bend, radial centres, corners, circles and ones of no size, repeating periods and one of no
+  length, conic quarters, translucency and opacity, background-size, -position, -repeat and -clip,
+  stretched boxes, the root's gradient and on below a short page, an inline's average, averages of
+  stops that can't be placed, calc() angles, `-webkit-` forms, small tiles each alike, translucent
+  fades, and every page drawn in slices of 13 rows the same as whole; the test page in bands at 8
+  and 16 bits under AddressSanitizer; in 4 colours brightness, as in 2: before the review its checks
+  there were counted and not made; huge lengths drawn with no undefined behaviour, as UBSan's report
+  stops it); and since the review 239 more of the ST edition's drawing, through
+  `build/asanst/ewrender` (ewrender built `-DEW_ST`, now in the Makefile and `make test`: rows and
+  columns each one colour, ramps each way, stripes, averages, one with `min()` inside `calc()`,
+  slices, and since the second review tall gentle gradients in bands of 32 rows from anywhere the
+  same as whole, which the drawing before it failed in three of the four modes). While it was made:
+  7,000 random pages of gradients (valid and not) drawn under AddressSanitizer and UBSan at every
+  depth and in slices, and 1,500 on its final code, with no fault, and 1,500 through the ST
+  edition's drawing; after the review 700 more, each in every mode of both editions and every fifth
+  in bands (they found two overflows, `fx_mul`'s of a huge `calc()` product and the ST's of a tile
+  hundreds of millions of px tall, both fixed), and libFuzzer's `fuzz_html` four minutes from them
+  (574,549 pages); every tiled and translucent page of the review drawn the same to the pixel as
+  before in every mode and slice; after the second review the 263 pages above through the Falcon's
+  drawing and 41 through the ST's, under AddressSanitizer and UBSan with no fault, and
+  `fuzz_html` 150 s (1,045,378 pages); `make csscmp` (no new difference without a reason, and none
+  at all from the second review's changes; the page set's
+  `-webkit-` gradients, valid now, are 20 and 25 values under "gradients as images", as LibCSS has
+  none); `make hatarigui`'s screens group shows the page on the Falcon in 256 colours and true
+  colour and on the TT in 16 colours and monochrome, its st group on the 1 MB ST and the 1040 ST;
+  `make itest` (background pictures, which `background-clip` now stops too, and the canvas's now
+  drawn on down the window).
+
+## Legacy centring and HTML's `align` (22 Oct 2026)
+
+Old pages, and many forums and banks, centre with `<center>` and `align`, and EWeb centred only
+their lines: `<center><table width=600>`, `<td align=center><table>` and `<div align=center>`
+round a box of a set width came out at the left, the text in them centred. Now, after the HTML
+Standard's rendering section (15.3.3 flow content, 15.3.8 tables, 15.3.11 hr, 15.4.3 pictures)
+and as Gecko and Blink do it:
+
+- **HTML's own `text-align` values** (the CSS engine): `-webkit-left`, `-webkit-right` and
+  `-webkit-center` (Gecko's `-moz-` names read as the same), Blink's names for the standard's "align
+  descendants". They inherit as any `text-align` does, align the lines as `left`, `right` and
+  `center`, and also place the blocks inside (below). The UA sheet gives `<center>` and `caption`
+  `-webkit-center`; `align` (left, right, center or middle) on `div`, `p` (as both engines),
+  `thead`, `tbody`, `tfoot`, `tr`, `td` and `th` is a hint of the legacy value; `justify` stays
+  plain `justify`, as in both engines (the standard aligns the blocks to the left); on headings and
+  other elements `align` is plain `text-align`, as Blink has it. A sheet's own
+  `text-align: -webkit-center`, which some sites use to centre boxes, works the same.
+- **Where a block goes** (`room_left` in `src/layout`): the room a block in the flow leaves beside
+  it (one with a width, a table shrunk to its columns, a picture as a block) goes by CSS 2.1,
+  10.3.3: its auto margins share it (one auto margin alone now moves a table too, where before
+  only both centred one); with none, the end margin takes it by the container's
+  direction, so in a right-to-left container (Hebrew pages) a narrower block now sits at the right;
+  unless the container's `text-align` is one of the legacy values, which centre it or put it left
+  or right. The nearest such container wins, as `text-align` inherits; a block's own `text-align`
+  doesn't move it (`<center><div style="width:300px; text-align:left">`: the box centred, its text
+  at the left); floats and positioned boxes aren't moved. As in both engines, a block with an
+  `align` of its own is still placed by its container's (the standard leaves it alone).
+- **`th`** is centred only where its parent's `text-align` is still the initial one (15.3.8): the
+  UA sheet's `-ec-center-or-inherit`, computed to `center` or to the parent's value, so
+  `<tr align=right>` puts its `th`s at the right and `<tr align=left>` at the left.
+- **Quirks mode** (no DOCTYPE, or an old one): a table starts its `text-align` afresh (15.3.8's
+  quirks rule), a small UA sheet `doc_add_ua` adds for such a page, so in `<center><table>` the
+  table is centred and the text in it starts at the left, as browsers show such pages. The rule's
+  font, `line-height` and `white-space` parts (a table not inheriting its page's font size there)
+  are left out: they would change many old pages' text and are a decision of their own.
+- **Tables, rules and pictures:** `<table align=left|right>` floats and `align=center` centres by
+  its margins (as before); `<hr align>` left, right or center by its margins (new); on `img` and
+  an image button `align=left|right` floats (an `img` as before; an image button now too: it, and
+  any form control a page floats, has a block of its own round it, as a floated picture has, the
+  control drawing its own frame in it as on a line), `top` and `absbottom` go to the line's top
+  and bottom (CSS 2.1, 10.8.2, the line grown to hold them, in a `sup` or `sub` too; before, `top`
+  sat on the baseline), `middle` and `center` put the picture's middle on the baseline (the
+  standard's, Blink's `-webkit-baseline-middle`; before CSS's `middle`, a few pixels higher),
+  `texttop` hangs it from the text's top, `absmiddle` and `abscenter` are CSS's `middle`, and
+  `bottom` and `baseline` sit on the baseline (HTML 3.2's meaning of bottom, and both engines').
+  `iframe`, `object` and `embed` take the same hints, but EWeb doesn't show them yet. A picture or
+  a form control in a `sup` or `sub` now grows its line by the shift, as a word there does (before,
+  a raised picture went over the line above). `valign` on rows and cells is `vertical-align`, the
+  cells inheriting their row's (as before); `baseline` now puts the first lines of a row's cells on
+  one baseline (CSS 2.1, 17.5.3; before, such a cell sat at the top; one taking rows below stays at
+  its top). `<caption align=bottom>` is not done: it is `caption-side`, which EWeb doesn't have yet.
+- **Floats in the text** (CSS 2.1, 9.5.1): a float met partway through a line, `<img align=right>`
+  after a few words, a floated span or form control, goes at that line's top when it fits beside
+  what is on the line (the line shorter beside it), else just below the line, and so does every
+  float after it on that line, though it would fit (as Gecko and Blink do), and the text either
+  side goes on in the same lines (`fixup`'s `text_float`, placed by `lines`). Before, the text was
+  cut into two anonymous blocks at the float: the line broke there and the float sat a line lower.
+  A float in an inline (`<a href><img align=left></a>`) no longer turns the inline into a block. A
+  box's widest (a float's or a cell's width, a table's columns) counts floats side by side, beside
+  the text of their line or one after another until one clears, as browsers do; before it took the
+  widest of them. A float still starts no higher than one before it, and `<br clear>` is not done
+  yet.
+- **Measured** (`build/m68k/drawbench -P 1` and `-P 2`, `tools/count68k.sh`, the two programs run
+  from paths of one length), the page set's 258 pages, the sample page and the news page: the layout
+  0.02% more instructions (a page from 0.81% fewer to 0.38% more, the Atari heap's own variation
+  between two builds among it; the first version 0.064%, 0.13% before the lines looked for pictures
+  at a line's top or bottom only in text that has one, and the room beside a block was worked out
+  only for one whose width isn't automatic; the floats in the text next to nothing: a float in the
+  text measured once, and looked for only in text that has one), the styling 0.17% more (10.6 K a
+  page: 5.9 K once a program run, the nine new names and the longer UA sheet, which `EWEB.PRG` reads
+  once; 2.6 K for the quirks rule on a page in quirks mode; the rest within the cascade's own noise
+  between two builds). `EWEB.PRG` grew 4.5 KB, `EWEBST.PRG` 3.0 KB (2.1 KB and 1.4 KB of it the
+  first version's).
+  29 pages of the page set lay out differently. Seven for the alignment: the tables and boxes in a
+  `<div align=center>` centred (CNN, three of eWeek's, the Daily Bulletin, the Salt Lake Tribune's
+  weather), and Ynet's side menu (quirks mode) with its pictures' alt text at the left of their
+  cells, as browsers have it. 22 for the floats in the text, each looked at before and after:
+  Wired's "View all", TIME's comments' likes, share buttons (JPL, NECN) and NECN's poll question on
+  one line with the text they float beside, CBS Sports' "| Sign In Register" on one line rather than
+  three, floated radio buttons, check boxes and fields beside their labels (PCMag, WebMD, Mother
+  Jones), the Dallas Morning News's footer columns side by side, and the Guardian's boxes of floated
+  numbers a few pixels wider.
+- **Tested:** `tests/css/cases.txt` (the legacy values inherited and Gecko's names, a misspelt one
+  not taken; `th`'s value under the initial, a legacy and a plain parent;
+  `-webkit-baseline-middle`); `tests/layout/align.html` (each case above, in a standards-mode page:
+  pictures at the top and bottom in `sup` and `sub`, image buttons floated, a row of baseline
+  cells), `floats.html` (a float that fits on its line, one that doesn't, one in a link, a floated
+  span, a cell's width with one, floats side by side, floated form controls) and `quirks.html`,
+  their lists looked at with ewrender first; the changed pages looked at before and after; `make
+  csscmp`: no new difference (the legacy values join `start`, `end` and `match-parent` under
+  `EC_COMPAT_START`; the page set has none); 400 random pages of nested `center`, `align`, `valign`,
+  widths, directions and legacy values drawn by both editions under AddressSanitizer and UBSan with
+  no fault, and 400 more of floats in text, links, `sup`, `sub`, cells and lists (pictures, spans,
+  tables, image buttons and form controls floated); `fuzz_html` 180 s (1,142,385 pages); `make
+  h5test` (EWeb's parser 1,868 passed, the six scripted ones failed, here and on the 68030); `make
+  itest`; `make hatarigui`'s browse group (its forms page among them) and st group (`EWEBST.PRG` on
+  the 1 MB ST and the 1040 ST, the tables page with its centred table among them), on the real TOS
+  (4.04 on the Falcon, 1.04 on the STs).
+
+## Details and summary (22 Oct 2026)
+
+FAQ pages, documentation, forums and GitHub-style READMEs fold their parts away in `<details>`,
+and EWeb showed everything inside a closed one, with no sign that it folds. Now, after the HTML
+Standard (4.11 the elements, 15.5.4 their rendering) and as browsers show them:
+
+- **What shows** (`src/layout`): a details element's summary (its first `summary` child) always,
+  the rest (elements and text) only when it has its `open` attribute: the layout builds only the
+  summary's boxes of a closed one (the standard's two slots, the second "removed from the
+  rendering"), so what is hidden costs no boxes and no layout (it is still styled, as scripts may
+  ask for its style). One without a summary has one of
+  the layout's own, a triangle and "Details", in its style. An open one's summary comes first,
+  whatever is before it in the page (the summary's slot is the first; browsers draw it so).
+- **The triangle** (the UA sheet, 15.5.4): `details > summary:first-of-type` is `display:
+  list-item` with `list-style: disclosure-closed inside`, `disclosure-open` when its details is
+  open (the standard's `counter-increment: list-item 0` left out: the layout doesn't number a
+  summary). The CSS engine now knows the two counter styles (CSS Counter Styles 3, 6.1), and the
+  layout draws them as ▸ and ▾ (◂ in a right-to-left one), three characters added to `EWEB.FNT`
+  from DejaVu (`tools/mkfont.py`) rather than drawn: they are the standard's own, and
+  pages use them as text too. A page's own markers work as in browsers: `list-style: none` (the
+  usual way, Pico's and GitHub's) hides the triangle, `summary { display: flex }` has none, and
+  `::before` or `[open]` rules draw their own; `::marker` and `::-webkit-details-marker` are read
+  but not applied (as before).
+- **`list-style-position: inside`**, which the summary's triangle needs, now works for every list:
+  the marker is the first thing on the item's first line, followed by a space (its counter
+  style's suffix; CSS Lists 3, 3.1) that is no place the line chooses to break at, though a first
+  word that doesn't fit beside the marker goes on the next line, as any word that doesn't fit
+  where the line has no space does (CSS Text 3 allows a break there, the item's `white-space`
+  being `normal`), and the lines after it start under it; before, EWeb drew every marker outside.
+  A `list-style-type` that is a string is now that string, inside or outside, where EWeb drew a
+  bullet.
+- **A click on the summary** opens or closes its details (4.11.2, the summary's activation
+  behaviour): `ui/win.c` asks the page what is under the pointer after a form control and a link,
+  as browsers do (a link in a summary is followed, not toggled), then `page_summary_at`, an
+  invisible display-list item (`DL_SUM`) the size of the summary's box, so it moves with the box
+  when a cell, a flex line or `position: relative` moves it, in both editions. A summary a page
+  lays out inline (`display: inline`, or `inline-block` as GitHub's and Bootstrap's button-like
+  `<summary class="btn">` are, which EWeb lays out as inline) has an item for each of its parts
+  on the lines instead (the line's run of its items, as an inline background is drawn; no cost
+  where there is none, `L.sums`). A summary with `display: contents` has no box, but a click on
+  its text is one in the summary all the same: its blocks are marked, and each run of its inline
+  boxes goes in an anonymous inline (laid out as its parent's run, as before) whose parts on the
+  lines are its click areas. Where summaries hold each other (a details in a summary), the
+  smallest under the pointer is the one clicked. `br_details`
+  (`src/browse`) sets or removes `open` (`dn_set_open`, keeping the element's hints and the CSS
+  engine's links, so no `doc_refresh` is needed), styles the page again (all of it, as after a
+  script: the triangle, and a page's own `[open]` rules, which may reach any element after the
+  details) and lays it out again, with the busy bee meanwhile; the window stays where it was. Out
+  of memory (a 1 MB ST) it gives back what a page that doesn't fit does, in two steps: the pages
+  kept for Back, the pictures no page shows and the fonts' glyphs, and it is tried once more; then
+  the page shown (its tree kept), and it is tried a last time. If even that doesn't fit, the
+  window is left empty and EWeb says so (an alert after a click, the status line after a
+  `#fragment`). On the 1 MB ST this came to nothing at first: the display list's first piece was
+  1024 items, 45 KB, most of a small page's 61 KB, and the second page beside the first took the
+  last of the RAM, so a FAQ page of three details didn't open at all; the ST edition's first piece
+  is now 128 items (and the line items' 64, not 256: 15 KB at the time), so that page costs 14 KB,
+  and a click opens it at the first try, in 335 ms (`make hatarigui`'s `details` group runs it on
+  the 1 MB ST too, from a page of its own: `tests/layout/details.html` doesn't fit there).
+  Measured in Hatari on `tests/layout/details.html` (912 pixels tall): 145 ms on the emulated
+  32 MHz Falcon, 1.7 s on the 1040 ST (8 MHz), against 375 ms and 3.6 s to style and lay out the
+  page as it was opened; with the review's cases the page is 1,215 pixels tall, and a click takes
+  190 ms and 2.25 s. Tab in EWeb moves only between form controls, not to links, and so not to a
+  summary either: no key opens one yet.
+- **A place in a closed details** (a link to `#id`, or an address with one): the details it is
+  in are opened first and the page laid out again, then the window goes there (7.4.6.4, scroll
+  to the fragment, runs 4.11.1's ancestor details revealing algorithm; Chrome and Firefox do
+  it): `page_anchor_node` finds the element, `dn_folded` says a closed details hides it (its `y`
+  is then from an earlier layout, or none, and is not used), `dn_reveal` opens them, innermost
+  first, each closing its group's open one. A link on the page shown that does it says so
+  (`BR_SAME` with `relaid`), and `EWEB.PRG` draws the page again there.
+- **A group** (the `name` attribute, 4.11.1, the exclusive accordion): opening one closes the
+  group's open one, and as a page is parsed a later open one of a group starts closed (eight
+  groups a page are kept track of). A group is a tree's: a details not in the page (made by a
+  script) or in a `<template>`'s contents is in none of the page's groups; a script's details
+  put in the page closes when its group has an open one (its insertion steps).
+- **Scripts** (`EWEB.PRG`): `open` is the attribute, as before; setting or removing it (a click,
+  `open`, `setAttribute`, `toggleAttribute`, a summary's `click()`) queues a `toggle` event,
+  fired after the script, with the timers, as the standard's task: one an element, the first old
+  state kept if it changes again before it fires (`oldState`, `newState`; `ToggleEvent` for
+  scripts' own, the two `""` when not given); a group's other one closed gets its own. A details
+  open as the page (or `innerHTML`) is parsed has its toggle event too, `closed` to `open`, as the
+  parser's setting `open` runs the same steps (browsers fire it as the page loads; pages fill a
+  details' content from it). One the parser closes for its group gets none.
+  `HTMLDetailsElement` is there for pages that test for it. The CSS engine matches `:open` (a
+  details or dialog with `open`; Selectors 4, HTML 4.16.3), which it took for a pseudo-class that
+  never matches.
+- **Measured** (`build/m68k/drawbench -P 1` and `-P 2`, `tools/count68k.sh`, the two programs run
+  from paths of one length), the page set's 258 pages, the sample page and the news page (none of
+  them has a `details`): the layout 0.042% more instructions (3.5 K a page in the middle, a page
+  from 0.07% fewer to 0.11% more; 0.092% in the first version, whose details called the element
+  builder from a second place, so GCC stopped inlining it into `build`); the
+  styling 0.47% more, 25.8 K of it once a program run (the two rules of the UA sheet, which
+  `EWEB.PRG` reads once, and the new names), 1.7 K a page. The font's new characters make each face
+  39 to 120 bytes larger, 7 K instructions a page more to unpack the faces it uses (once a run, as
+  `EWEB.PRG` keeps them). `EWEB.PRG` grew 4.7 KB, `EWEBST.PRG` 2.7 KB, `EWEB.FNT` 5.4 KB. No page
+  of the page set lays out differently (ewrender's display lists before and after). The review's
+  fixes (inline summaries, a place in a closed details, the rest above) then made the layout
+  0.88% fewer instructions on the same pages (0.84% a page in the middle, from 1.85% fewer to
+  0.06% more), the styling the same: the line's text items (`ITEM`) carry the inline summary's
+  details, which makes them 64 bytes on the 68030, not 60, and an index into them a shift; that
+  alone is 1.03% fewer (13 of the pages, the old code with the record padded), so the fixes
+  themselves cost about 0.13%. `EWEB.PRG` grew 1.4 KB more (6.1 KB in all), `EWEBST.PRG` 1.3 KB
+  (4.0 KB). The second review's fixes (the 1 MB ST, a summary with `display: contents`) change no
+  page of the set either (ewrender's display lists), and leave 16 of its pages 0.003% fewer
+  instructions to the end of the layout (`drawbench -P 2`); `EWEB.PRG` 0.5 KB more (6.6 KB in
+  all), `EWEBST.PRG` 0.5 KB (4.4 KB).
+- **Tested:** `tests/layout/details.html` (closed, open, nested, without a summary, the summary not
+  first and a second one, a heading in the summary, `list-style: none`, a flex summary, right to
+  left, a group, inside markers, strings) and its list, looked at with ewrender first;
+  `tests/layout/details.py` (make test: summaries clicked through ewrender `-K`, which now clicks
+  a summary in both editions: opened, closed again to the very same list, a group, the ST edition
+  the same as `EWEB.PRG`); `tests/js/details.html` (the toggle events, their order, coalescing, a
+  group, `click()` on a summary's child, a cancelled click, a summary clicked as a user does);
+  after the review (same day): the summary first in an open one, `inline-block` and `inline`
+  summaries clicked, a details in a summary, a group with one in a template, an address and a
+  link to a place in a closed details (`tests/layout/details.py`), the toggle events of details
+  open as parsed, a detached one and one put in the page, `ToggleEvent`'s defaults, a user's click
+  on a closed summary going to the summary, not its details, when the two are the same size
+  (`page_node_at`: of two blocks the same size, the child), in `tests/js/details.html`;
+  `tests/css/cases.txt` (`:open`, the disclosure styles); `make csscmp` (no new difference: the
+  disclosure styles are left out under `EC_COMPAT_KEYWORDS`, `:open` under
+  `EC_COMPAT_SELECTORS`); `make h5test` (EWeb's parser 1,868 passed, the six scripted ones failed,
+  here and on the 68030); `fuzz_html` 180 s (984,644 pages); `make itest`; `make hatarigui`'s
+  new `details` group (a summary clicked open and closed on the emulated Falcon and with
+  `EWEBST.PRG` on the 1040 ST, on the real TOS; after the review also an address with a
+  `#fragment` in a closed details, a summary clicked with the window scrolled down, which stays
+  there, and a place on the same page in a closed details), and its `browse` and `scripts` groups.
+  After the second review: the group runs `EWEBST.PRG` on the 1 MB ST too (TOS 1.04, a FAQ page of
+  its own: a summary clicked open and closed twice, a page loaded with a `#fragment` in a closed
+  details, the page before kept for Back, and a place on the same page in another); its last
+  attempt (the page shown given back) and its failure (the window empty, the alert) were forced
+  once in a build of their own and looked at; `tests/layout/details.py` clicks a summary with
+  `display: contents`; `tests/js/details.html` listens to the template's details, so that its
+  having no toggle event is tested.
 
 ## The design
 

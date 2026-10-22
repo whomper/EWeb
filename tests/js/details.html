@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- args: -K sum -K nosum -->
+<!-- expect: console: sync: no toggle yet -->
+<!-- expect: console: toggle a closed>open -->
+<!-- expect: console: toggle b closed>closed -->
+<!-- expect: console: toggle g1 closed>closed -->
+<!-- expect: console: toggle g2 closed>open -->
+<!-- expect: console: toggle c closed>open -->
+<!-- expect: console: toggle u closed>open -->
+<!-- expect: console: ToggleEvent closed open -->
+<!-- expect: details u: opened -->
+<!-- expect: "Under u, shown after the click" -->
+<!-- expect: "Under c, opened by click()" -->
+<!-- expect: details nosum: closed -->
+<!-- expect: console: toggle nosum closed>open -->
+<!-- expect: console: toggle nosum open>closed -->
+<!-- expect: console: summary clicked, target sum -->
+<!-- expect: console: ToggleEvent defaults [] [] -->
+<!-- expect: console: toggle x closed>closed -->
+<!-- expect: console: toggle y closed>open -->
+<!-- absent: "no summary" -->
+<!-- absent: "Under nc, its click cancelled" -->
+<!-- absent: "Under g1" -->
+<!-- absent: console: toggle nc -->
+<!-- absent: console: toggle t -->
+<html><head><title>details</title></head><body>
+<details id="a"><summary>a</summary>Under a</details>
+<details id="b"><summary>b</summary>Under b</details>
+<details id="g1" name="g" open><summary>g1</summary>Under g1</details>
+<details id="g2" name="g"><summary>g2</summary>Under g2</details>
+<details id="c"><summary id="cs"><span id="cspan">c</span></summary>Under c, opened by click()</details>
+<details id="nc"><summary id="ncs">nc</summary>Under nc, its click cancelled</details>
+<details id="u"><summary id="sum">u</summary>Under u, shown after the click</details>
+<details id="nosum" open>no summary</details>
+<details id="q1" name="q" open><summary>q1</summary>Under q1</details>
+<template><details id="t" name="q" open><summary>t</summary>in a template</details></template>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+var log = [];
+document.querySelectorAll("details").forEach(function (d) {
+	d.addEventListener("toggle", function (e) {
+		check(e.target === d && !e.bubbles && !e.cancelable, "toggle's target " + d.id);
+		console.log("toggle " + d.id + " " + e.oldState + ">" + e.newState);
+		log.push(d.id);
+	});
+});
+// the template's details too (its contents in EWeb are the template's
+// children): open as parsed, it has no toggle event (an inert tree's)
+var tpl = document.querySelector("template");
+var tdet = tpl.content && tpl.content.querySelector ? tpl.content.querySelector("details") : tpl.firstElementChild;
+check(tdet !== null && tdet.id === "t", "the template's details reached");
+tdet.addEventListener("toggle", function (e) { console.log("toggle t " + e.oldState + ">" + e.newState); });
+var a = document.getElementById("a"), b = document.getElementById("b");
+check(a.open === false && document.getElementById("g1").open === true, "open reflected");
+a.open = true;
+check(a.hasAttribute("open") && a.getAttribute("open") === "", "open set");
+// two changes before the task runs: one event, the first old state kept
+b.open = true;
+b.open = false;
+// opening one of a group closes the other (ensure details exclusivity)
+document.getElementById("g2").setAttribute("open", "");
+check(!document.getElementById("g1").open, "the group's other one closed");
+// click(): the summary's activation behaviour, from a child of it too
+document.getElementById("cspan").click();
+check(document.getElementById("c").open, "click() on a summary's child opens");
+document.getElementById("ncs").addEventListener("click", function (e) { e.preventDefault(); });
+document.getElementById("ncs").click();
+check(!document.getElementById("nc").open, "a cancelled click leaves it closed");
+console.log(log.length === 0 ? "sync: no toggle yet" : "FAIL toggle fired at once");
+var t = new ToggleEvent("toggle", { oldState: "closed", newState: "open" });
+console.log("ToggleEvent " + t.oldState + " " + t.newState);
+t = new ToggleEvent("toggle");
+console.log("ToggleEvent defaults [" + t.oldState + "] [" + t.newState + "]");
+// a user's click on a closed summary (as big as its details) goes to the
+// summary, not the details
+document.getElementById("sum").addEventListener("click", function (e) {
+	console.log("summary clicked, target " + e.target.id);
+});
+// a group is a tree's: a detached details opened leaves q1 open (its
+// group is itself), and put in the document it closes (its insertion
+// steps), its open and close one toggle event; one innerHTML makes open
+// has one too
+var x = document.createElement("details");
+x.id = "x";
+x.setAttribute("name", "q");
+x.open = true;
+check(document.getElementById("q1").open, "a detached details closes no other");
+x.addEventListener("toggle", function (e) { console.log("toggle x " + e.oldState + ">" + e.newState); });
+document.body.appendChild(x);
+check(!x.open && document.getElementById("q1").open, "put in, it closes, the group's open one stays");
+var holder = document.createElement("div");
+holder.innerHTML = "<details id=y open><summary>y</summary>made open</details>";
+holder.firstChild.addEventListener("toggle", function (e) { console.log("toggle y " + e.oldState + ">" + e.newState); });
+document.body.appendChild(holder);
+check(typeof HTMLDetailsElement === "function", "HTMLDetailsElement");
+</script>
+</body></html>

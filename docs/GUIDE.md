@@ -277,7 +277,12 @@ lays the page out again for the new width.
 - **Up** and **Down**: a few lines; with **Shift**, a page
 - **Space**: a page down; **Shift-Space**: a page up
 - **ClrHome**: the top; **Shift-ClrHome**: the end
-- a link to a place on the same page (`#...`) scrolls there
+- a link to a place on the same page (`#...`) scrolls there, opening
+  the folded part it is in (below)
+- a heading with a small triangle pointing right is a part the page
+  has folded away (FAQ pages and documentation have them): click it to
+  open the part (the triangle points down), and again to fold it; the
+  window stays where it is
 
 ## Back, Forward and Home
 
@@ -378,15 +383,34 @@ paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
 text, pictures in the background of a page or a box, positioned
 boxes, tables with cells over several rows, flexible boxes and grids
-(CSS flexbox and grid), forms, Hebrew right to left. It doesn't yet
-show:
+(CSS flexbox and grid), forms, Hebrew right to left. Translucent
+colours and see-through boxes (CSS's opacity) are mixed with what is
+under them, as near as your screen's colours allow: with 16 colours or
+fewer a faint tint may not show, and but for true colour a see-through
+picture is drawn as a fine pattern. What a page hides with no opacity
+at all isn't drawn, though its links still work (unless the page lets
+clicks through it to what is under it). What a page would fade in with
+an animation, or as you scroll to it (AOS, Webflow, pictures loaded as
+you scroll), is shown, but other text a page's script would show may
+stay hidden while scripts are off. Colour gradients (CSS's linear,
+radial and conic ones) are drawn, smooth in true colour and in a fine
+pattern of the screen's colours otherwise. The ST edition, short of
+memory, draws those that run straight down or across in the screen's
+own colours (in greys on a monochrome screen, in a few bands with 4 or
+16 colours) and any other in its colours' average. A gradient painted
+through text, a shadow or an outline, which EWeb doesn't draw, shows
+the text in their colour. Of a background in several layers EWeb draws
+the top one. Older pages that centre their tables and boxes with
+`<center>` or `align` show them centred (or at the right) as they were
+meant, with pictures beside or within the text where `align` puts them.
+It doesn't yet show:
 
 - a file to send: a file field shows "No file" (EWeb can't send files
   yet)
 - WebP and AVIF pictures (EWeb asks servers for JPEG, PNG and GIF,
   which most send then; of a picture offered in several forms and
   sizes it takes a JPEG, PNG or GIF one at the size the screen needs),
-  SVG drawings, and colour gradients
+  and SVG drawings
 - what a page's JavaScript makes, unless you let that site's scripts
   run (see [Pages made by scripts](#pages-made-by-scripts)); without
   them EWeb shows the page's `<noscript>` parts, as browsers do with

@@ -24,11 +24,17 @@ own fonts.
   times as fast as NetSurf's on the 68030), EWeb's CSS engine
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
   and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
-  grid, colours, borders, background pictures, and Hebrew right to left, in
-  every Hebrew encoding (visual Hebrew, ISO-8859-8, shown in the order it is
-  stored, as browsers show it): a page that names none is read as browsers
-  read it (UTF-8 when it is, Windows-1255 on Israeli sites), and View >
-  Encoding reads one again in another.
+  grid, colours (translucent ones and opacity too, mixed with what is under
+  them in every screen mode), borders, background pictures, colour
+  gradients (linear, radial and conic, dithered to the screen's colours;
+  the ST edition draws those that run straight down or across, in the
+  screen's own colours, and any other in its colours' average), the old
+  centring (`<center>`, `align`), and Hebrew right to left, in every Hebrew
+  encoding (visual Hebrew, ISO-8859-8, shown in the order it is stored, as
+  browsers show it): a page that names none is read as browsers read it
+  (UTF-8 when it is, Windows-1255 on Israeli sites), and View > Encoding
+  reads one again in another. The parts a page folds away (`<details>`)
+  open and close with a click.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, fetched after the page is shown (you read and scroll meanwhile),
   decoded straight at the size shown, dithered to the screen's colours in

@@ -142,7 +142,9 @@ static void names_init(void)
 		{ H_EMBED, T_EMBED }, { H_TEMPLATE, T_TEMPLATE }, { H_LABEL, T_LABEL },
 		{ H_FORM, T_FORM }, { H_WBR, T_WBR }, { H_FIELDSET, T_FIELDSET },
 		{ H_LEGEND, T_LEGEND }, { H_OPTGROUP, T_OPTGROUP }, { H_PICTURE, T_PICTURE },
-		{ H_SOURCE, T_SOURCE } };
+		{ H_SOURCE, T_SOURCE }, { H_DIV, T_DIV }, { H_P, T_P }, { H_CAPTION, T_CAPTION },
+		{ H_THEAD, T_THEAD }, { H_TBODY, T_TBODY }, { H_TFOOT, T_TFOOT },
+		{ H_DETAILS, T_DETAILS }, { H_SUMMARY, T_SUMMARY } };
 	const uint8_t *l;
 	unsigned i;
 

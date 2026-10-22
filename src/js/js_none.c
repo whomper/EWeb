@@ -62,6 +62,11 @@ void js_run(doc *d, const char *code)
 	(void) d, (void) code;
 }
 
+void js_toggled(doc *d, dnode *n)
+{
+	(void) d, (void) n;
+}
+
 void js_set_page(doc *d, const struct page *p)
 {
 	(void) d, (void) p;

@@ -18,7 +18,9 @@
 #   make test        nsbench on the test pages, the Hebrew pages, the CSS
 #                    engine's cases, the input stream, the HTTP client, the
 #                    fuzz targets' inputs and the layout's pages
-#                    (tests/layout), with AddressSanitizer and UBSan
+#                    (tests/layout, and the ST edition's gradients and
+#                    details clicked), with
+#                    AddressSanitizer and UBSan
 #   make itest       ewget and the browser against servers on this computer
 #                    (TCP, TLS)
 #   make hatarinet   EWGET.TTP in Hatari through FAKESTNG, against them
@@ -642,6 +644,18 @@ build/asan/dltest: $(DL_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(DL_SRC) \
 		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
 
+# the ST edition's layout and drawing on this computer (-DEW_ST: its CSS
+# limits, its gradients as rows of fills), for make test's
+# tests/layout/gradients.py
+$(eval $(call target_rules,asanst,$(HOSTCC),$(ASAN_CFLAGS) -DEW_ST))
+build/asanst/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -DEW_ST $(EWB_FLAGS) $(NSINC) -c $< -o $@
+build/asanst/ewrender: $(EWR_SRC) $(asanst_EWB) $(asanst_EC) $(asan_PU) build/asanst/js/js_none.o $(NET_HDRS) \
+		build/host/libbearssl.a build/asan/pic.a
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -DEW_ST $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asanst_EWB) $(asanst_EC) \
+		$(asan_PU) build/asanst/js/js_none.o build/asan/pic.a build/host/libbearssl.a -lm
+
 # the forms: what a form sends (tests/forms/cases.txt)
 FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
 build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
@@ -837,6 +851,15 @@ build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build
 		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o \
 		build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o $(m68k_EC) $(m68k_PU)
 	$(M68KCC) -m68030 -static -o $@ $^
+# a page laid out and drawn as EWEB.PRG does it (src/layout, src/gfx), as
+# 68030 code on the Atari's heap, for counting (tools/count68k.sh
+# build/m68k/drawbench [-P 2] [-b 16] PAGE.HTM [SHEET.CSS...])
+build/m68k/drawbench: tests/bench/drawbench.c build/m68k/bench/atheap.o build/m68k/atheap/libc.o \
+		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o \
+		build/m68k/ewb/layout/layout.o build/m68k/ewb/gfx/canvas.o build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) \
+		$(EWB_HDRS)
+	$(M68KCC) -m68030 -O2 -std=gnu99 -DNDEBUG $(EWB_FLAGS) $(NSINC) -static -o $@ tests/bench/drawbench.c \
+		tests/host/plat_posix.c common/src/util.c common/src/inflate.c $(filter %.o,$^)
 # a page's scripts as EWEB.PRG runs them (src/js), as 68030 code with the
 # FPU, for counting (tools/count68k.sh build/m68k/jsbench PAGE.HTM)
 m68k_JS := build/m68k/js/js.o $(addprefix build/m68k/qjs/,$(addsuffix .o,$(QJS_C)))
@@ -883,8 +906,8 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest build/asan/pentest \
-		build/asan/rftest build/asan/enctest build/asan/dltest binary/EWEB.FNT
+		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
+		build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/dltest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
@@ -902,7 +925,10 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/alpha.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

@@ -38,8 +38,14 @@ struct arena { struct achunk *head; };
 #define AALIGN (sizeof(void *) > 4 ? 8 : 4)
 #ifdef EW_ST
 #define ACHUNK 8192	/* the ST edition: smaller pieces, for a 1 MB ST */
+#define DL_FIRST 128	/* the display list's first piece: 1024 items were 45 KB,
+			   most of a small page's memory (a 1 MB ST couldn't
+			   lay a details' page out again beside it) */
+#define IT_FIRST 64	/* and the line items' (15 KB) */
 #else
 #define ACHUNK 16384
+#define DL_FIRST 1024
+#define IT_FIRST 256
 #endif
 
 static void *amalloc(struct arena *a, size_t n)
@@ -84,7 +90,9 @@ static char *astrdup(struct arena *a, const char *s, size_t n)
 
 /* ---------------------------------------------------------------- boxes */
 
-enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM };
+/* BX_MARK: a list item's marker inside it (list-style-position: inside),
+   its text made when it is laid out (the item's number is known then) */
+enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM, BX_MARK };
 /* an atom: alt text; a picture; a form control (drawn from its state, form.h) */
 enum { AT_LABEL, AT_IMAGE, AT_CONTROL };
 
@@ -96,7 +104,7 @@ struct box {
 	uint8_t wrap;			/* a flex row that wraps (flex-wrap) */
 	uint8_t flex;			/* a flex container: its children are flex items */
 	uint8_t grid;			/* a grid container: its children are grid items */
-	uint8_t list;			/* a list item */
+	uint8_t list;			/* LB_*: a list item; a details' summary */
 	uint8_t anon;			/* an anonymous block: no box of its own */
 	uint8_t atom;			/* AT_* */
 	uint8_t tablerow;
@@ -110,33 +118,47 @@ struct box {
 	const char *text;		/* text, or an atom's label */
 	uint32_t len;
 	int32_t aw, ah;			/* an atom's size, device px (AUTO: from its label) */
-	int32_t num;			/* a list item's number */
-	void *img;			/* AT_IMAGE: the picture's handle */
+	int32_t num;			/* a list item's number; a marker's counter
+					   style when it has one of its own (KW_*) */
+	void *img;			/* AT_IMAGE: the picture's handle; LB_SUM: the
+					   details element (dnode *) */
 	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
 };
 
+/* box.list: a list item (display: list-item); the summary a click opens
+   and closes a details by (the HTML Standard, 4.11), whatever its display */
+#define LB_ITEM 1
+#define LB_SUM 2
+
 /* ---------------------------------------------------------------- the context */
 
-enum { IT_WORD, IT_SPACE, IT_BREAK, IT_ATOM, IT_GAP };
+/* IT_FLOAT: a float in the text (its box in atom), placed by the line
+   it is met on; it takes no room on the line itself */
+enum { IT_WORD, IT_SPACE, IT_BREAK, IT_ATOM, IT_GAP, IT_FLOAT };
 
 typedef struct {
 	uint8_t kind;
 	uint8_t flags;			/* DLF_* */
 	uint8_t canbreak;		/* a space a line may end at */
-	uint8_t collapse;		/* a space dropped at the start or end of a line */
+	uint8_t collapse;		/* a space dropped at the start or end of a line;
+					   IT_FLOAT: placed */
 	uint8_t hidden;			/* visibility: hidden */
 	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left */
 	uint16_t link;
 	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
-	uint32_t color, bg;		/* 0xAARRGGBB; bg 0: none */
+	uint32_t color, bg;		/* 0xAARRGGBB, as solid as drawn (its alpha, then the
+					   opacity it is in); bg 0: none */
+	uint8_t alpha;			/* the opacity it is in, 0..255 (CSS Color 4) */
 	const char *text;
-	uint32_t len;
+	uint32_t len;			/* IT_FLOAT: its width once measured (0: not yet) */
 	int32_t w;
 	int32_t asc, desc;		/* above and below the baseline, leading included */
 	int32_t shift;			/* vertical-align: + down */
 	box *atom;
 	int32_t x;			/* where it went on its line */
+	dnode *det;			/* in a summary laid out inline: its details (its
+					   click areas are the line's, DL_SUM) */
 #ifndef EW_ST
 	dnode *node;			/* the element it is in (for scripts' events) */
 #endif
@@ -155,11 +177,14 @@ typedef struct {
 	int32_t text;			/* LAYOUT_OPT.text */
 	ITEM *it;
 	long nit, itcap;
-	int body_bg_taken;
+	dnode *bg_taken;		/* the element whose background colour the canvas took */
 	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
+	int lined;			/* the items have a picture placed by its line's top or bottom */
+	int floats;			/* the items have a float in the text (IT_FLOAT) */
+	int sums;			/* the items have an inline summary's (ITEM.det) */
 	/* the last block laid out: its background and border items (-1:
 	   none), for a row to stretch its cells to the row's height */
 	long last_bg, last_bd[4];
@@ -184,6 +209,11 @@ typedef struct {
 	/* a page in visual Hebrew (ISO-8859-8): its letters stored in the
 	   order they are shown, so lines aren't reordered (visual_order) */
 	int visual;
+	unsigned alpha;			/* the opacity of the box being laid out, times its
+					   ancestors', 0..255 */
+	uint32_t clip;			/* a background it is in painted through its text
+					   (background-clip: text): the colour that text is
+					   drawn in when its own is transparent; 0: none */
 } L;
 
 static int32_t dev(L *l, ec_fx v)
@@ -247,6 +277,168 @@ static uint32_t color(const ec_style *s, int p)
 	if (s->k[p] == EK_CURCOLOR)
 		return (uint32_t) s->v[EP_COLOR].i;
 	return 0;
+}
+
+/* opacity (CSS Color 4, Transparency: the opacity property), 0..255:
+   not inherited, but it applies to the element and all that is in it as
+   a group. EWeb takes it into each item the group draws (their alphas
+   multiplied), which is the group's look wherever its items don't lie
+   over one another; opacity 0 draws nothing, and the element still takes
+   its room and its clicks */
+static unsigned opacity(const ec_style *s)
+{
+	int32_t v = s->k[EP_OPACITY] == EK_NUM ? s->v[EP_OPACITY].i : 1024;
+	return v >= 1024 ? 255 : v <= 0 ? 0 : (unsigned) ((v * 255 + 512) >> 10);
+}
+
+static int is_data(const char *u)
+{
+	return strncmp(u, "data:", 5) == 0;
+}
+
+/* the opacity EWeb draws an element at: its own, but whole where the
+   page has something lift it that EWeb doesn't run or draw:
+   - an animation (EWeb runs none): the element as its animation leaves
+     it, which EWeb takes to be in full (a fade-in, what an element of
+     opacity 0 with an animation nearly always has; CSS Animations 1's
+     fill-mode keeps its last keyframe);
+   - an <img> whose picture EWeb took from data-src and the like (as the
+     page's lazy loader would, which also lifts its opacity: lazysizes'
+     .lazyload);
+   - AOS's (data-aos) and Webflow's (data-w-id) elements, which their
+     scripts fade in as the page is scrolled to them;
+   - a checkbox or radio button of next to no opacity: a page's own
+     control drawn in its place from generated content, which EWeb
+     doesn't draw (Bootstrap 4's custom controls), would leave none */
+static unsigned own_opacity(const ec_style *s, const dnode *n)
+{
+	unsigned a = opacity(s);
+	if (a == 255 || s->k[EP_ANIMATION_NAME] != EK_KW)
+		return 255;
+	if (n == NULL || n->type != DN_ELEMENT || n->ns != DN_NS_HTML)
+		return a;
+	if (dn_attr(n, "data-aos") != NULL || dn_attr(n, "data-w-id") != NULL)
+		return 255;
+	if (n->tag == T_IMG) {
+		static const char *const lazy[] = { "data-src", "data-srcset", "data-lazy-src", "data-original" };
+		const char *src = dn_attr(n, "src"), *v;
+		size_t i;
+		if (src == NULL || *src == 0 || is_data(src))
+			for (i = 0; i < sizeof lazy / sizeof lazy[0]; i++)
+				if ((v = dn_attr(n, lazy[i])) != NULL && *v != 0 && !is_data(v))
+					return 255;
+	}
+	if (n->tag == T_INPUT && n->ctl != NULL && (n->ctl->kind == FC_CHECKBOX || n->ctl->kind == FC_RADIO) &&
+	    a < 16)
+		return 255;
+	return a;
+}
+
+/* text whose own colour is transparent that the page shows another way,
+   which EWeb doesn't draw: a background painted through it
+   (background-clip: text, clip), its outline (-webkit-text-stroke) or
+   its shadow (text-shadow); the colour of the first of these it has (of
+   alpha 0: not drawn). The glyphs show the background painted through them,
+   else their outline; a shadow is only under them, offset, blurred and
+   often faint (and inherited: a page's soft shadow on all its text would
+   otherwise be what its gradient headings are drawn in) */
+static uint32_t text_paint(const ec_style *s, uint32_t clip)
+{
+	uint32_t c;
+	if (clip != 0)
+		return clip;
+	if (s->k[EP_TEXT_STROKE_WIDTH] == EK_PX && s->v[EP_TEXT_STROKE_WIDTH].i > 0 &&
+	    ((c = color(s, EP_TEXT_STROKE_COLOR)) >> 24) != 0)
+		return c;
+	return color(s, EP_TEXT_SHADOW);
+}
+
+/* a gradient's first colour that shows (its alpha not 0), 0: none */
+static uint32_t grad_first(const ec_grad *g, uint32_t cur)
+{
+	int i;
+	for (i = 0; i < g->n; i++) {
+		uint32_t c = g->s[i].flags & EC_GS_CUR ? cur : g->s[i].argb;
+		if (!(g->s[i].flags & EC_GS_HINT) && (c >> 24) != 0)
+			return c;
+	}
+	return 0;
+}
+
+uint32_t grad_average(const ec_grad *g, uint32_t cur)
+{
+	uint32_t a = 0, r = 0, gr = 0, b = 0, n = 0;
+	int i;
+	for (i = 0; i < g->n; i++) {
+		uint32_t c = g->s[i].flags & EC_GS_CUR ? cur : g->s[i].argb, ca = c >> 24;
+		if (g->s[i].flags & EC_GS_HINT)
+			continue;
+		a += ca;
+		r += (c >> 16 & 255) * ca;
+		gr += (c >> 8 & 255) * ca;
+		b += (c & 255) * ca;
+		n++;
+	}
+	if (a == 0)
+		return 0;
+	return (a + n / 2) / n << 24 | (r + a / 2) / a << 16 | (gr + a / 2) / a << 8 | (b + a / 2) / a;
+}
+
+/* background-clip: text: the colour its text is drawn in, in place of
+   the background: the gradient's first colour that shows (the glyphs
+   aren't drawn through the gradient, and its first colour reads where
+   an average with a transparent stop would be faint), else the
+   background colour, else (a picture, a gradient of no colour, or none:
+   most often a gradient EWeb couldn't compute, as Tailwind 4's, made
+   of custom properties only @property starts) the text's own colour,
+   solid; pages don't hide text this way. 0: not background-clip: text */
+static uint32_t clip_paint(const ec_style *s)
+{
+	uint32_t c;
+	if (kw(s, EP_BACKGROUND_CLIP) != KW_TEXT)
+		return 0;
+	if (s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE &&
+	    (c = grad_first(s->v[EP_BACKGROUND_IMAGE].p, color(s, EP_COLOR))) != 0)
+		return c;
+	if (((c = color(s, EP_BACKGROUND_COLOR)) >> 24) != 0)
+		return c;
+	return 0xff000000 | color(s, EP_COLOR);
+}
+
+/* pointer-events: none (CSS UI 4): its items aren't what a click is on */
+static int no_hit(const ec_style *s)
+{
+	return kw(s, EP_POINTER_EVENTS) == KW_NONE;
+}
+
+/* two alphas together (0..255 each): a times b */
+static unsigned alpha_mul(unsigned a, unsigned b)
+{
+	return b == 255 ? a : a == 255 ? b : (a * b + 127) / 255;
+}
+
+/* a colour (0xAARRGGBB) in a group of opacity a */
+static uint32_t fade(uint32_t argb, unsigned a)
+{
+	return a == 255 ? argb : (uint32_t) alpha_mul(argb >> 24, a) << 24 | (argb & 0xffffff);
+}
+
+/* colour s laid over colour b, both 0xAARRGGBB: the one colour they
+   make (source-over, Compositing and Blending 1), for a translucent
+   background on one beneath it */
+static uint32_t over(uint32_t s, uint32_t b)
+{
+	unsigned as = s >> 24, ab = b >> 24, ao, k;
+	uint32_t r = 0;
+	if (as == 255 || ab == 0)
+		return s;
+	ab = (ab * (255 - as) + 127) / 255;
+	ao = as + ab;
+	if (ao == 0)
+		return 0;
+	for (k = 0; k < 24; k += 8)
+		r |= (((s >> k & 255) * as + (b >> k & 255) * ab + ao / 2) / ao) << k;
+	return (uint32_t) ao << 24 | r;
 }
 
 static int contains_ci(const char *s, size_t n, const char *w)
@@ -346,7 +538,7 @@ static dl_item *dl_add(L *l)
 {
 	page *p = l->p;
 	if (p->nitems == p->cap) {
-		long cap = p->cap ? p->cap * 2 : 1024;
+		long cap = p->cap ? p->cap * 2 : DL_FIRST;
 		dl_item *n = realloc(p->items, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
@@ -395,8 +587,32 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
 	d->y = y;
 	d->w = w;
 	d->h = h;
-	d->rgb = argb & 0xffffff;
+	d->rgb = argb;
 	return l->p->nitems - 1;
+}
+
+/* where a click opens and closes the details det: its summary's box,
+   or a part of a line of a summary laid out inline */
+static void sum_rect(L *l, dnode *det, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	dl_item *d;
+	if (w <= 0 || h <= 0 || (d = dl_add(l)) == NULL)
+		return;
+	d->type = DL_SUM;
+	d->x = x;
+	d->y = y;
+	d->w = w;
+	d->h = h;
+	d->rgb = 0;		/* (not drawn) */
+	d->det = det;
+}
+
+/* a details' summary's box (not one a click goes through, pointer-events:
+   none, nor a hidden one) */
+static void sum_item(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	if (!no_hit(b->st) && kw(b->st, EP_VISIBILITY) != KW_HIDDEN)
+		sum_rect(l, b->img, x, y, w, h);
 }
 
 static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_t n, int32_t w)
@@ -410,7 +626,7 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 	d->w = w;
 	d->h = it->font->ascent + it->font->descent;
 	d->base = it->font->ascent;
-	d->rgb = it->color & 0xffffff;
+	d->rgb = it->color;		/* (alpha 0: kept for its link and clicks, not drawn) */
 	d->flags = it->flags;
 	d->link = it->link;
 	d->ctl = it->ctl;
@@ -551,7 +767,9 @@ static int32_t char_w(L *l, const ec_style *st)
 }
 
 /* a form control: an atom of its size, drawn from its state (form.h),
-   so that typing in it draws it again without laying the page out */
+   so that typing in it draws it again without laying the page out; a
+   floated one (and an image button as a block) in a block of its own
+   round it, as an <img> */
 static void control(L *l, box *parent, dnode *n, const ec_style *st)
 {
 	fctl *c = n->ctl;
@@ -562,6 +780,11 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 
 	if (c == NULL || c->kind == FC_HIDDEN)
 		return;
+	if (kw(st, EP_FLOAT) != KW_NONE && block_level(kw(st, EP_DISPLAY))) {
+		parent = new_box(l, BX_BLOCK, n, st, parent);
+		if (parent == NULL)
+			return;
+	}
 	switch (c->kind) {
 	case FC_TEXT:
 	case FC_PASSWORD: {
@@ -607,6 +830,14 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		if (src != NULL && *src && l->p->opt.image != NULL)
 			im = l->p->opt.image(l->p->opt.ud, src, 0, &iw, &ih);
 		if (im != NULL) {
+			if (parent->n == n) {
+				parent->repl = 1;	/* the picture is the block */
+			} else if (block_level(kw(st, EP_DISPLAY))) {
+				parent = new_box(l, BX_BLOCK, n, st, parent);
+				if (parent == NULL)
+					return;
+				parent->repl = 1;
+			}
 			form_label(c, lab, sizeof lab);
 			atom(l, parent, n, st, AT_IMAGE, astrdup(l->a, lab, strlen(lab)), AUTO, AUTO);
 			if (parent->last != NULL && parent->last->n == n) {
@@ -730,11 +961,6 @@ static int srcset(const char *s, CAND *c, int max)
 			s++;
 	}
 	return n;
-}
-
-static int is_data(const char *u)
-{
-	return strncmp(u, "data:", 5) == 0;
 }
 
 /* from a srcset (and an img's src as 1x when it may be one), the
@@ -968,7 +1194,9 @@ static void build_element(L *l, box *parent, dnode *c)
 		if (href != NULL)
 			b->link = add_link(l, href, dl);
 	}
-	b->list = d == KW_LIST_ITEM;
+	b->list = d == KW_LIST_ITEM ? LB_ITEM : 0;
+	if (d == KW_LIST_ITEM && kw(st, EP_LIST_STYLE_POSITION) == KW_INSIDE && kw(st, EP_LIST_STYLE_TYPE) != KW_NONE)
+		new_box(l, BX_MARK, NULL, st, b);	/* the marker first, before ::before (CSS Lists 3, 3.1) */
 	b->tablerow = d == KW_TABLE_ROW;
 	b->table = d == KW_TABLE || d == KW_INLINE_TABLE;
 	if (d == KW_TABLE_ROW)
@@ -985,15 +1213,113 @@ static void build_element(L *l, box *parent, dnode *c)
 	pseudo(l, b, c, st->after);
 }
 
+/* a details element (the HTML Standard, 15.5.4: its two slots): its
+   summary is shown always, the rest only when it is open. Without a
+   summary it has one of the layout's own, "Details" after the triangle,
+   in its style. The summary's box is where a click opens and closes it
+   (LB_SUM). Returns 1 when it is closed; *sum: its summary */
+static int details_start(L *l, box *parent, dnode *n, const ec_style *pst, dnode **sum)
+{
+	int open = dn_attr(n, "open") != NULL;
+	*sum = dn_summary(n);
+	if (*sum == NULL) {
+		box *b = new_box(l, BX_BLOCK, NULL, pst, parent), *m;
+		if (b != NULL) {
+			b->anon = 1;
+			b->list = LB_SUM;
+			b->img = n;
+			m = new_box(l, BX_MARK, NULL, pst, b);
+			if (m != NULL)
+				m->num = open ? KW_DISCLOSURE_OPEN : KW_DISCLOSURE_CLOSED;
+			add_text_box(l, b, pst, "Details", 7);
+		}
+	}
+	return !open;
+}
+
+/* a details' summary (det's first summary child) built: its box is where
+   a click opens and closes det (LB_SUM). One with display: contents has
+   no box, but a click on what is in it is one in it all the same (the
+   HTML Standard's activation behaviour): its blocks are marked, and each
+   run of its inline boxes goes in an anonymous inline of its own, laid
+   out as its parent's run, whose parts on the lines are where a click
+   opens and closes det, as an inline summary's are (collect) */
+static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
+{
+	box *before = parent->last, *b, *prev;
+	build_element(l, parent, sum);
+	b = before != NULL ? before->next : parent->first;
+	if (sum->e.style == NULL || kw(sum->e.style, EP_DISPLAY) != KW_CONTENTS) {
+		for (; b != NULL; b = b->next)
+			if (b->n == sum) {	/* (none when display: none) */
+				b->list |= LB_SUM;
+				b->img = det;
+				break;
+			}
+		return;
+	}
+	for (prev = before; b != NULL; prev = b, b = b->next) {
+		box *w, *end, *k;
+		if (b->kind == BX_BLOCK) {
+			b->list |= LB_SUM;
+			b->img = det;
+			continue;
+		}
+		for (end = b; end->next != NULL && end->next->kind != BX_BLOCK; end = end->next)
+			;
+		w = amalloc(l->a, sizeof *w);
+		if (w == NULL) {
+			l->fail = 1;
+			return;
+		}
+		memset(w, 0, sizeof *w);
+		w->kind = BX_INLINE;
+		w->anon = 1;
+		w->list = LB_SUM;
+		w->img = det;
+		w->st = parent->st;
+		w->parent = parent;
+		w->link = parent->link;
+		w->aw = w->ah = AUTO;
+		w->first = b;
+		w->last = end;
+		for (k = b; ; k = k->next) {
+			k->parent = w;
+			if (k == end)
+				break;
+		}
+		w->next = end->next;
+		end->next = NULL;
+		if (prev != NULL)
+			prev->next = w;
+		else
+			parent->first = w;
+		if (w->next == NULL)
+			parent->last = w;
+		b = w;
+	}
+}
+
 static void build(L *l, box *parent, dnode *n)
 {
-	dnode *c;
+	dnode *c = n->first, *sum = NULL;
 	const ec_style *pst = n->type == DN_ELEMENT && n->e.style ? n->e.style : parent->st;
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: no deeper */
 		return;
 	}
-	for (c = n->first; c != NULL && !l->fail; c = c->next) {
+	if (n->tag == T_DETAILS && n->ns == DN_NS_HTML) {
+		int closed = details_start(l, parent, n, pst, &sum);
+		/* its summary first, whatever comes before it (the summary's
+		   slot comes first); closed, nothing else */
+		if (sum != NULL)
+			build_summary(l, parent, sum, n);
+		if (closed)
+			return;
+	}
+	for (; c != NULL && !l->fail; c = c->next) {
+		if (c == sum)
+			continue;
 		if (c->type == DN_TEXT) {
 			if (c->len > 0)
 				add_text_box(l, parent, pst, c->text, c->len);
@@ -1020,10 +1346,25 @@ static int keeps_space(const ec_style *s)
 	return w == KW_PRE || w == KW_PRE_WRAP || w == KW_BREAK_SPACES;
 }
 
+static inline int floated(const box *c)
+{
+	return c->kind == BX_BLOCK && !c->anon && c->n != NULL && kw(c->st, EP_FLOAT) != KW_NONE;
+}
+
+/* a float among a block's (or an inline's) text: it goes with the line
+   it is met on (CSS 2.1, 9.5.1: at that line's top, or below it when it
+   doesn't fit there), so the text round it isn't broken into anonymous
+   blocks there; but not in a flex or grid container (its children are
+   items) nor among a table's parts */
+static inline int text_float(const box *b, const box *c)
+{
+	return !b->row && !b->flex && !b->grid && !b->table && floated(c);
+}
+
 static void fixup(L *l, box *b)
 {
 	box *c, *prev, *next;
-	int has_block = 0, has_inline = 0;
+	int has_block = 0, has_inline = 0, has_float = 0, tf;
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: what is in it left out */
 		b->first = b->last = NULL;
@@ -1036,7 +1377,7 @@ static void fixup(L *l, box *b)
 		if (c->kind == BX_INLINE) {
 			box *k;
 			for (k = c->first; k != NULL; k = k->next)
-				if (k->kind == BX_BLOCK)
+				if (k->kind == BX_BLOCK && !text_float(c, k))
 					c->kind = BX_BLOCK;
 		}
 	}
@@ -1051,13 +1392,19 @@ static void fixup(L *l, box *b)
 				fixup(l, c);
 			}
 	}
+	tf = !b->row && !b->flex && !b->grid && !b->table;	/* text_float's */
 	for (c = b->first; c != NULL; c = c->next) {
-		if (c->kind == BX_BLOCK)
-			has_block = 1;
-		else if (c->kind != BX_TEXT || !blank(c->text, c->len) || keeps_space(c->st))
+		if (c->kind == BX_BLOCK) {
+			if (tf && floated(c))
+				has_float = 1;
+			else
+				has_block = 1;
+		} else if (c->kind != BX_TEXT || !blank(c->text, c->len) || keeps_space(c->st)) {
 			has_inline = 1;
+		}
 	}
-	if (!has_block && !b->row && !b->flex && !b->grid) {
+	if (!has_block && (has_inline || !has_float) && !b->row && !b->flex && !b->grid) {
+		/* text (the floats in it with their lines), or nothing */
 		b->inl = 1;
 		return;
 	}
@@ -1079,22 +1426,25 @@ static void fixup(L *l, box *b)
 		}
 		return;
 	}
-	/* runs of inline boxes go in anonymous blocks */
+	/* runs of inline boxes (and the floats among them) go in anonymous
+	   blocks */
 	prev = NULL;
 	for (c = b->first; c != NULL; c = next) {
 		box *a, *k, *end;
 		next = c->next;
-		if (c->kind == BX_BLOCK) {
+		if (c->kind == BX_BLOCK && !(has_float && floated(c))) {
 			prev = c;
 			continue;
 		}
 		end = c;
-		while (end->next != NULL && end->next->kind != BX_BLOCK)
+		while (end->next != NULL && (end->next->kind != BX_BLOCK || (has_float && floated(end->next))))
 			end = end->next;
 		next = end->next;
-		/* a run of nothing but collapsible white space: dropped */
+		/* a run of nothing but collapsible white space (and floats):
+		   the white space dropped, the floats left as blocks */
 		for (k = c; ; k = k->next) {
-			if (k->kind != BX_TEXT || !blank(k->text, k->len) || keeps_space(k->st))
+			if (k->kind != BX_BLOCK &&
+			    (k->kind != BX_TEXT || !blank(k->text, k->len) || keeps_space(k->st)))
 				break;
 			if (k == end) {
 				k = NULL;
@@ -1102,6 +1452,17 @@ static void fixup(L *l, box *b)
 			}
 		}
 		if (k == NULL) {
+			for (k = c; ; k = k->next) {
+				if (k->kind == BX_BLOCK) {
+					if (prev)
+						prev->next = k;
+					else
+						b->first = k;
+					prev = k;
+				}
+				if (k == end)
+					break;
+			}
 			if (prev)
 				prev->next = next;
 			else
@@ -1147,7 +1508,7 @@ static void fixup(L *l, box *b)
 static ITEM *item(L *l)
 {
 	if (l->nit == l->itcap) {
-		long cap = l->itcap ? l->itcap * 2 : 256;
+		long cap = l->itcap ? l->itcap * 2 : IT_FIRST;
 		ITEM *n = realloc(l->it, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
@@ -1193,32 +1554,49 @@ static int word_dir_in(const L *l, const char *s, uint32_t n)
 typedef struct {
 	const ec_style *st;
 	ew_font *font;
-	uint32_t color, bg;
-	uint8_t deco, hidden;
+	uint32_t color, bg;		/* as ITEM's */
+	uint32_t clip;			/* as L's: a background painted through its text */
+	uint8_t deco, hidden;		/* deco: DLF_UNDER..., and DLF_NOHIT */
+	uint8_t alpha;			/* the opacity it is in, 0..255 */
 	uint16_t link;
 	uint16_t ctl;			/* in a <label>: its control (1 + index into page.ctls) */
 	int32_t asc, desc, shift;
+	dnode *det;			/* in a summary laid out inline: its details */
 #ifndef EW_ST
 	dnode *node;			/* the element whose run it is */
 #endif
 } RUNSTATE;
 
-static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *parent, uint16_t link)
+/* a run's state from its element (n, st; NULL and the block's style for
+   the block's own text) */
+static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, const RUNSTATE *parent,
+		     uint16_t link)
 {
 	int32_t lh, lead;
 	int va;
-	uint32_t bg;
+	uint32_t bg, col;
 	int d;
 
 	r->st = st;
 	r->font = font_of(l, st);
-	r->color = color(st, EP_COLOR);
+	/* the block's own opacity is in l->alpha already (and an atom that
+	   is a block of its own has its block's style) */
+	r->alpha = (uint8_t) (parent == NULL ? l->alpha : st == parent->st ? parent->alpha :
+			      alpha_mul(parent->alpha, own_opacity(st, n)));
+	r->clip = parent == NULL ? l->clip : st == parent->st ? parent->clip : clip_paint(st);
+	if (r->clip == 0 && parent != NULL)
+		r->clip = parent->clip;
+	col = color(st, EP_COLOR);
+	if ((col >> 24) == 0)
+		col = text_paint(st, r->clip);
+	r->color = fade(col, r->alpha);
 	r->link = link;
 #ifndef EW_ST
 	r->node = parent ? parent->node : NULL;
 #endif
 	r->ctl = parent ? parent->ctl : 0;
-	r->deco = parent ? parent->deco : 0;
+	r->det = parent ? parent->det : NULL;
+	r->deco = (uint8_t) ((parent ? parent->deco & ~DLF_NOHIT : 0) | (no_hit(st) ? DLF_NOHIT : 0));
 	r->bg = parent ? parent->bg : 0;
 	r->shift = parent ? parent->shift : 0;
 	r->hidden = kw(st, EP_VISIBILITY) == KW_HIDDEN || kw(st, EP_VISIBILITY) == KW_COLLAPSE;
@@ -1232,8 +1610,12 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const RUNSTATE *pare
 			r->deco |= DLF_STRIKE;
 	}
 	bg = color(st, EP_BACKGROUND_COLOR);
-	if (parent != NULL && (bg >> 24) != 0)
-		r->bg = bg;
+	if (parent != NULL && st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE)
+		/* an inline's gradient: its colours' average over its colour
+		   (a run is one fill) */
+		bg = over(grad_average(st->v[EP_BACKGROUND_IMAGE].p, color(st, EP_COLOR)), bg);
+	if (parent != NULL && (bg >> 24) != 0 && kw(st, EP_BACKGROUND_CLIP) != KW_TEXT)
+		r->bg = over(fade(bg, r->alpha), r->bg);	/* one fill for both, as solid as they are together */
 	va = kw(st, EP_VERTICAL_ALIGN);
 	if (parent != NULL) {
 		if (va == KW_SUB)
@@ -1259,7 +1641,9 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->flags = r->deco;
 	it->link = r->link;
 	it->ctl = r->ctl;
+	it->det = r->det;
 	it->hidden = r->hidden;
+	it->alpha = r->alpha;
 #ifndef EW_ST
 	it->node = r->node;
 #endif
@@ -1283,6 +1667,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 	int wrap = !(ws == KW_PRE || ws == KW_NOWRAP);
 	int32_t sw = font_advance(r->font, ' ');
 	uint32_t i = 0, o = 0;
+	long k;
 	char *t = amalloc(l->a, n + 1);
 
 	if (t == NULL) {
@@ -1315,8 +1700,10 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 			}
 			while (i < n && is_space((unsigned char) s[i]) && !(s[i] == '\n' && newlines))
 				i++;
-			if (!*line_start && !(l->nit > 0 && l->it[l->nit - 1].kind == IT_SPACE &&
-					      l->it[l->nit - 1].collapse)) {
+			/* one space for the white space either side of a float */
+			for (k = l->nit - 1; k >= 0 && l->it[k].kind == IT_FLOAT; k--)
+				;
+			if (!*line_start && !(k >= 0 && l->it[k].kind == IT_SPACE && l->it[k].collapse)) {
 				t[o] = ' ';
 				put_item(l, r, IT_SPACE, t + o, 1, sw);
 				o++;
@@ -1459,6 +1846,43 @@ static uint16_t label_for(L *l, dnode *n)
 	return 0;
 }
 
+static const char *marker_text(const ec_style *st, int fixed, int n, char *buf);
+
+/* an inside marker: its text, and a space after it (the counter style's
+   suffix) that the white space after it goes into (as ::marker's
+   white-space: pre; CSS Lists 3, 3.1). It isn't a place the line chooses
+   to break at, but the first word still goes on the next line when it
+   doesn't fit beside the marker, as lines breaks before any word that
+   doesn't fit where the line has no space to break at (CSS Text 3 allows
+   a break there: the summary's or item's white-space is normal) */
+static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
+{
+	const box *li = m->parent;
+	char buf[24];
+	const char *s;
+	ITEM *it;
+	uint32_t n;
+
+	while (li != NULL && !(li->list & LB_ITEM) && !m->num)
+		li = li->parent;
+	if (li == NULL || (s = marker_text(li->st, m->num, li->num, buf)) == NULL || *s == 0)
+		return;
+	n = (uint32_t) strlen(s);
+	if (s == buf && (s = astrdup(l->a, buf, n)) == NULL) {
+		l->fail = 1;
+		return;
+	}
+	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n));
+	if (!m->num && li->st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
+		return;		/* a string: as it is, the white space after it dropped */
+	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '));
+	if (l->fail)
+		return;
+	it = &l->it[l->nit - 1];
+	it->collapse = 1;
+	*line_start = 0;
+}
+
 static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 {
 	box *c;
@@ -1472,13 +1896,16 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		case BX_TEXT:
 			text_items(l, pr, c->text, c->len, line_start);
 			break;
+		case BX_MARK:
+			mark_items(l, pr, c, line_start);
+			break;
 		case BX_BR:
 			put_item(l, pr, IT_BREAK, NULL, 0, 0);
 			*line_start = 1;
 			break;
 		case BX_ATOM: {
 			ITEM *it;
-			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+			runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
 #ifndef EW_ST
 			if (c->n != NULL)
 				r.node = c->n;
@@ -1491,20 +1918,41 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				int32_t iw, ih;
 				image_size(l, c, &iw, &ih);
 				if (iw > 0 && ih > 0) {
-					/* on the baseline, or its middle on the text's */
+					/* on the baseline, or its middle on the text's, or
+					   at the line's top or bottom, or its middle on the
+					   baseline itself (<img align=middle>), or hanging
+					   from the text's top */
 					int va = kw(c->st, EP_VERTICAL_ALIGN);
 					it->asc = ih;
 					it->desc = 0;
 					if (va == KW_MIDDLE) {
 						it->asc = ih / 2 + (r.font->ascent - r.font->descent) / 2;
 						it->desc = ih - it->asc;
-					} else if (va == KW_TEXT_BOTTOM || va == KW_BOTTOM) {
+					} else if (va == KW_TOP || va == KW_BOTTOM) {
+						/* left out of the line's height until it
+						   is known (line_edges) */
+						it->asc = 0;
+						l->lined = 1;
+					} else if (va == KW_WEBKIT_BASELINE_MIDDLE) {
+						it->asc = ih - ih / 2;
+						it->desc = ih / 2;
+					} else if (va == KW_TEXT_TOP) {
+						it->asc = r.font->ascent;
+						it->desc = ih - it->asc;
+					} else if (va == KW_TEXT_BOTTOM) {
 						it->asc = ih - r.font->descent;
 						it->desc = r.font->descent;
 					}
-					if (it->desc < 0) {
+					if (it->desc < 0 && va != KW_TEXT_TOP) {
 						it->asc += it->desc;
 						it->desc = 0;
+					}
+					if (va != KW_TOP && va != KW_BOTTOM) {
+						/* moved with its sup or sub, the line
+						   as tall as that needs (its top and
+						   bottom: line_edges's, by the line) */
+						it->asc -= it->shift;
+						it->desc += it->shift;
 					}
 					it->dir = 0;
 				}
@@ -1514,19 +1962,41 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				it->desc = r.font->descent + 2;
 				if (it->asc < r.asc)
 					it->asc = r.asc;
+				it->asc -= it->shift;
+				it->desc += it->shift;
 			}
 			*line_start = 0;
 			break;
 		}
 		case BX_INLINE: {
 			int32_t gl, gr;
-			runstate(l, &r, c->st, pr, c->link ? c->link : pr->link);
+			if (c->anon) {
+				/* a display: contents summary's run (build_summary):
+				   laid out as its parent's, its parts on the lines
+				   where a click opens and closes its details; its
+				   text is the summary's, for scripts */
+				r = *pr;
+				r.det = c->img;
+#ifndef EW_ST
+				r.node = dn_summary(c->img);
+#endif
+				l->sums = 1;
+				collect(l, c, &r, line_start);
+				break;
+			}
+			runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
 #ifndef EW_ST
 			if (c->n != NULL)
 				r.node = c->n;
 #endif
 			if (c->n != NULL && c->n->tag == T_LABEL && c->n->ns == DN_NS_HTML)
 				r.ctl = label_for(l, c->n);
+			if (c->list & LB_SUM) {
+				/* a summary laid out inline (inline-block too): its
+				   click areas are its parts on the lines */
+				r.det = c->img;
+				l->sums = 1;
+			}
 			gl = len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_PADDING_LEFT, AUTO) +
 			     (kw(c->st, EP_BORDER_LEFT_STYLE) > KW_HIDDEN ? len0(l, c->st, EP_BORDER_LEFT_WIDTH, AUTO) : 0);
 			gr = len0(l, c->st, EP_MARGIN_RIGHT, AUTO) + len0(l, c->st, EP_PADDING_RIGHT, AUTO) +
@@ -1538,6 +2008,16 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			collect(l, c, &r, line_start);
 			if (gr > 0)
 				put_item(l, &r, IT_GAP, NULL, 0, gr);
+			break;
+		}
+		case BX_BLOCK: {
+			/* a float in the text (fixup's text_float) */
+			ITEM *it = item(l);
+			if (it != NULL) {
+				it->kind = IT_FLOAT;
+				it->atom = c;
+				l->floats = 1;
+			}
 			break;
 		}
 		default:
@@ -1684,7 +2164,7 @@ static void visual_order(L *l, long i, long j, int rtl, long *ord)
 
 /* a picture's item in the display list */
 static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
-		       int flags)
+		       int flags, unsigned alpha)
 {
 	dl_item *d = dl_add(l);
 	if (d == NULL)
@@ -1701,21 +2181,66 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 	d->text = b->text;	/* its alt text, while it comes */
 	d->len = b->len;
 	d->font = f;
-	d->rgb = 0x606060;
+	d->rgb = (uint32_t) alpha << 24 | 0x606060;	/* its opacity; its alt text's colour */
 #ifndef EW_ST
 	d->node = b->n;
 #endif
 }
 
-/* a background picture (the first layer's url()): its item, here in
-   the painting order, with the picture's size in CSS px in x and y until
-   bg_place puts it where the box is; -1: none */
+/* a CSS length of a gradient (22.10 px) in device px, 22.10 */
+static ec_fx dev_fx(L *l, ec_fx v)
+{
+	return (ec_fx) ((int64_t) v * l->zoom >> 10);
+}
+
+/* a gradient as the canvas draws it: its lengths in device px,
+   currentcolor the element's colour; NULL when out of memory */
+static const ec_grad *grad_dev(L *l, const ec_style *s, const ec_grad *g)
+{
+	ec_grad *r = amalloc(l->a, sizeof *r + g->n * sizeof r->s[0]);
+	uint32_t cur = color(s, EP_COLOR);
+	int i;
+	if (r == NULL) {
+		l->fail = 1;
+		return NULL;
+	}
+	memcpy(r, g, sizeof *r + g->n * sizeof r->s[0]);
+	r->x.px = dev_fx(l, g->x.px);
+	r->y.px = dev_fx(l, g->y.px);
+	r->rx.px = dev_fx(l, g->rx.px);
+	r->ry.px = dev_fx(l, g->ry.px);
+	for (i = 0; i < g->n; i++) {
+		if (g->s[i].flags & EC_GS_CUR)
+			r->s[i].argb = cur;
+		if (g->type != EC_GRAD_CONIC)
+			r->s[i].at.px = dev_fx(l, g->s[i].at.px);
+	}
+	return r;
+}
+
+/* a background picture (the first layer's url()) or gradient: its item,
+   here in the painting order, with the picture's size in CSS px in x and
+   y (a gradient's 0 x 0: none of its own) until bg_place puts it where
+   the box is; -1: none */
 static long bg_item(L *l, const ec_style *s, dnode *n)
 {
 	const ec_str *u;
 	void *h;
 	int32_t iw = 0, ih = 0;
 	dl_item *d;
+	if (s != NULL && s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
+		const ec_grad *g = grad_dev(l, s, s->v[EP_BACKGROUND_IMAGE].p);
+		if (g == NULL || (d = dl_add(l)) == NULL)
+			return -1;
+		d->type = DL_GRAD;
+		d->img = (void *) g;
+		d->rgb = (uint32_t) l->alpha << 24;	/* its box's opacity */
+		d->flags = DLF_TILE;
+#ifndef EW_ST
+		d->node = n;
+#endif
+		return l->p->nitems - 1;
+	}
 	if (s == NULL || s->k[EP_BACKGROUND_IMAGE] != EK_PTR || l->p->opt.image == NULL)
 		return -1;
 	u = s->v[EP_BACKGROUND_IMAGE].p;
@@ -1729,6 +2254,7 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 		return -1;
 	d->type = DL_IMAGE;
 	d->img = h;
+	d->rgb = (uint32_t) l->alpha << 24;	/* its box's opacity */
 	d->flags = DLF_TILE | DLF_NOSIZE | DLF_ALT;
 	d->x = iw;
 	d->y = ih;
@@ -1738,30 +2264,34 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	return l->p->nitems - 1;
 }
 
-/* the background picture at item i over a box's border box (x, y, w, h),
-   by its background-size, -position and -repeat; its file not come yet:
+/* the background picture or gradient at item i over a box's border box
+   (x, y, w, h), by its background-size, -position and -repeat, drawn
+   short of it by the insets in (left, top, right, bottom: the box
+   background-clip names) or NULL; a picture whose file hasn't come yet:
    over the box, nothing drawn, and the page laid out again when it has */
 static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int32_t w, int32_t h,
-		     int32_t bl, int32_t bt, int32_t br, int32_t bb)
+		     int32_t bl, int32_t bt, int32_t br, int32_t bb, const int32_t *in)
 {
 	dl_item *d;
 	dl_tile *t;
-	int32_t iw, ih, pw = w - bl - br, ph = h - bt - bb, tw, th, ox, oy, x1, y1;
-	int rep, sw;
+	int32_t iw, ih, pw = w - bl - br, ph = h - bt - bb, ph0 = ph, tw, th, ox, oy, x1, y1;
+	int rep, sw, grad, grow = 0;
 	if (i < 0 || l->fail)
 		return;
 	d = &l->p->items[i];
+	grad = d->type == DL_GRAD;
 	iw = d->x;
 	ih = d->y;
 	d->x = x;
 	d->y = y;
 	d->w = w > 0 ? w : 0;
 	d->h = h > 0 ? h : 0;
-	if (iw <= 0 || ih <= 0)
+	if (!grad && (iw <= 0 || ih <= 0))
 		return;
-	d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
-	if (w <= 0 || h <= 0)
-		return;
+	if (!grad)
+		d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
+	if (w <= 0 || (h <= 0 && !grad))
+		return;		/* (a gradient of no height yet may grow with its box) */
 	if (pw <= 0)
 		pw = 1;
 	if (ph <= 0)
@@ -1773,7 +2303,19 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	if (ih <= 0)
 		ih = 1;
 	sw = s->k[EP_BACKGROUND_SIZE_W] == EK_KW ? s->v[EP_BACKGROUND_SIZE_W].i : 0;
-	if (sw == KW_COVER || sw == KW_CONTAIN) {
+	if (grad) {
+		/* no size of its own: the area's, in each way the size doesn't
+		   give (CSS Images 3, 5.3, the default sizing algorithm; cover
+		   and contain alike) */
+		tw = sw == KW_COVER || sw == KW_CONTAIN ? AUTO : len(l, s, EP_BACKGROUND_SIZE_W, pw);
+		th = sw == KW_COVER || sw == KW_CONTAIN ? AUTO : len(l, s, EP_BACKGROUND_SIZE_H, ph);
+		if (tw == AUTO)
+			tw = pw;
+		if (th == AUTO) {
+			th = ph0 > 0 ? ph0 : 0;
+			grow = 1;
+		}
+	} else if (sw == KW_COVER || sw == KW_CONTAIN) {
 		/* as large as covers the area, or as fits in it */
 		int wide = (int64_t) pw * ih > (int64_t) ph * iw;
 		if (wide == (sw == KW_COVER)) {
@@ -1797,7 +2339,7 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	}
 	if (tw < 1)
 		tw = 1;
-	if (th < 1)
+	if (th < 1 && !grow)
 		th = 1;
 	/* in the padding box: a percentage is of the room the tile leaves */
 	ox = x + bl + len0(l, s, EP_BACKGROUND_POSITION_X, pw - tw);
@@ -1812,9 +2354,17 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	t->ry = (uint8_t) (rep != KW_NO_REPEAT && rep != KW_REPEAT_X);
 	t->w = tw;
 	t->h = th;
-	/* drawn in the border box, and only where the tiles are */
+	t->grow = (uint8_t) grow;
+	/* drawn in the border box (or the box it is clipped to), and only
+	   where the tiles are */
 	x1 = x + w;
 	y1 = y + h;
+	if (in != NULL) {
+		x += in[0];
+		y += in[1];
+		x1 -= in[2];
+		y1 -= in[3];
+	}
 	if (!t->rx) {
 		if (ox > x)
 			x = ox;
@@ -1827,8 +2377,10 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 		if (oy + th < y1)
 			y1 = oy + th;
 	}
-	if (x1 <= x || y1 <= y)
+	if (x1 <= x || (y1 <= y && !grow))
 		return;
+	if (y1 < y)
+		y1 = y;
 	d->x = x;
 	d->y = y;
 	d->w = x1 - x;
@@ -1849,8 +2401,8 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 	int framed = c->kind != FC_RADIO, button = !form_typed(c) && c->kind != FC_CHECKBOX;
 	int32_t in = framed ? 1 : 0;
 	if (framed) {
-		uint32_t edge = 0xff808080;
-		fill(l, x, y, it->w, h, c->disabled ? 0xfff0f0f0 : button ? 0xffe0e0e0 : 0xffffffff);
+		uint32_t edge = fade(0xff808080, it->alpha);
+		fill(l, x, y, it->w, h, fade(c->disabled ? 0xfff0f0f0 : button ? 0xffe0e0e0 : 0xffffffff, it->alpha));
 		fill(l, x, y, it->w, 1, edge);
 		fill(l, x, y + h - 1, it->w, 1, edge);
 		fill(l, x, y, 1, h, edge);
@@ -1868,7 +2420,11 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 	d->w = it->w - 2 * in;
 	d->h = h - 2 * in;
 	d->base = (int16_t) (base - d->y);
-	d->rgb = c->disabled ? 0x808080 : it->color & 0xffffff;
+	/* its text in its colour; the rest of it as solid as its opacity
+	   (browsers draw a box's tick and the like in colours of their own) */
+	d->ink = c->disabled ? fade(0xff808080, it->alpha) : it->color;
+	d->rgb = (uint32_t) it->alpha << 24 | (d->ink & 0xffffff);
+	d->flags = it->flags & DLF_NOHIT;
 	d->font = it->font;
 	d->ctl = b->ctl;
 	d->link = it->link;
@@ -1876,17 +2432,19 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 		d->len = (uint32_t) line_height(l, b->st, it->font);
 }
 
+/* an atom on its line (base: the line's baseline; its asc and desc are
+   from there, its sup or sub's shift in them, as a word's are) */
 static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 {
 	box *b = it->atom;
-	int32_t h = it->asc + it->desc, y = base - it->asc + it->shift;
+	int32_t h = it->asc + it->desc, y = base - it->asc;
 	if (b->atom == AT_IMAGE) {
 		int32_t iw, ih;
 		int guess = image_size(l, b, &iw, &ih), sized = iw > 0 && ih > 0;
 		/* with no size yet: its alt text, drawn below, and its place for
 		   the picture to be fetched (DLF_ALT: nothing drawn) */
 		image_item(l, b, x, y, sized ? iw : it->w, sized ? ih : h, it->link, it->font,
-			   (guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT));
+			   (guess ? DLF_NOSIZE : 0) | (sized ? 0 : DLF_ALT) | (it->flags & DLF_NOHIT), it->alpha);
 		if (sized)
 			return;
 	}
@@ -1894,9 +2452,9 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 		control_item(l, it, x, y, h, base + it->shift);
 	} else {
 		ITEM t = *it;
-		t.color = 0xff606060;
+		t.color = fade(0xff606060, it->alpha);
 		t.flags &= (uint8_t) ~(DLF_UNDER);
-		text(l, x, base, &t, b->text, b->len, it->w);
+		text(l, x, base + it->shift, &t, b->text, b->len, it->w);
 	}
 }
 
@@ -1931,6 +2489,107 @@ static void split_word(L *l, long k, int32_t w)
 	l->it[k + 1].w = (int32_t) font_width(copy.font, last, e - last);
 }
 
+/* the pictures of items[i..end) placed by their line's top or bottom
+   (vertical-align, CSS 2.1, 10.8.2), which collect left out of the
+   line's height: the line as tall as they need, then each at its edge */
+static void line_edges(L *l, long i, long end, int32_t *asc, int32_t *desc)
+{
+	int32_t top = 0, bot = 0, iw, ih;
+	long k;
+	int pass;
+	for (pass = 0; pass < 2; pass++) {
+		for (k = i; k < end; k++) {
+			ITEM *it = &l->it[k];
+			int va;
+			if (it->kind != IT_ATOM || it->asc + it->desc != 0 || it->atom->atom != AT_IMAGE)
+				continue;
+			va = kw(it->atom->st, EP_VERTICAL_ALIGN);
+			if (va != KW_TOP && va != KW_BOTTOM)
+				continue;
+			image_size(l, it->atom, &iw, &ih);
+			if (pass == 0) {
+				if (va == KW_TOP && ih > top)
+					top = ih;
+				else if (va == KW_BOTTOM && ih > bot)
+					bot = ih;
+				continue;
+			}
+			it->asc = va == KW_TOP ? *asc : ih - *desc;
+			it->desc = ih - it->asc;
+		}
+		if (pass == 0) {
+			if (top > *asc + *desc)
+				*desc = top - *asc;
+			if (bot > *asc + *desc)
+				*asc = bot - *desc;
+		}
+	}
+}
+
+/* the items of the text being laid out or measured, set aside while a
+   float in it is measured or laid out (with items of its own) */
+typedef struct {
+	ITEM *it;
+	long nit, cap;
+	int lined, floats, sums;
+	int32_t cw;
+} STASH;
+
+static void stash(L *l, STASH *s)
+{
+	s->it = l->it;
+	s->nit = l->nit;
+	s->cap = l->itcap;
+	s->lined = l->lined;
+	s->floats = l->floats;
+	s->sums = l->sums;
+	s->cw = l->cw;
+	l->it = NULL;
+	l->nit = l->itcap = 0;
+}
+
+static void unstash(L *l, const STASH *s)
+{
+	free(l->it);
+	l->it = s->it;
+	l->nit = s->nit;
+	l->itcap = s->cap;
+	l->lined = s->lined;
+	l->floats = s->floats;
+	l->sums = s->sums;
+	l->cw = s->cw;
+}
+
+static int32_t float_width(L *l, box *c, int32_t w);
+static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t wf);
+
+/* the float in the text at items[k]: its width in a block w wide
+   (kept in its len), or placed in it, its top no higher than y */
+static int32_t item_float_w(L *l, long k, int32_t w)
+{
+	STASH s;
+	box *c = l->it[k].atom;
+	int32_t wf;
+	if (l->it[k].len != 0)
+		return (int32_t) l->it[k].len;
+	stash(l, &s);
+	wf = float_width(l, c, w);
+	unstash(l, &s);
+	l->it[k].len = (uint32_t) wf;
+	return wf;
+}
+
+static void item_float(L *l, long k, int32_t x, int32_t w, int32_t y)
+{
+	STASH s;
+	box *c = l->it[k].atom;
+	int32_t wf = l->it[k].len != 0 ? (int32_t) l->it[k].len : AUTO;
+	l->it[k].collapse = 1;
+	stash(l, &s);
+	place_float(l, c, x, w, y, wf);
+	unstash(l, &s);
+}
+
 /* lays the items out in lines from (x, y), w wide; returns the height,
    and the first baseline in *first */
 static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t *first)
@@ -1944,6 +2603,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	long i = 0, n = l->nit, *ord;
 	int firstline = 1;
 
+	/* HTML's legacy values align the lines as the plain ones do; the
+	   blocks inside are layout_block's */
+	if (ta >= KW_WEBKIT_LEFT && ta <= KW_WEBKIT_CENTER)
+		ta = ta == KW_WEBKIT_LEFT ? KW_LEFT : ta == KW_WEBKIT_RIGHT ? KW_RIGHT : KW_CENTER;
+
 	ord = malloc((n ? n : 1) * sizeof *ord);
 	if (ord == NULL) {
 		l->fail = 1;
@@ -1951,21 +2615,29 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	}
 	while (i < l->nit) {
 		long j, k, last_break = -1, end;
-		int32_t lw = 0, avail, asc = strut_a, desc = strut_d, off, base, lx = x, lwid = w;
-		int any = 0, broke = 0, justify;
+		int32_t lw = 0, avail, asc = strut_a, desc = strut_d, off, base, lx = x, lwid = w, rx;
+		int any = 0, broke = 0, justify, pend = 0;
 
-		/* the line's start: collapsible spaces go */
-		while (i < l->nit && l->it[i].kind == IT_SPACE && l->it[i].collapse)
+		/* the line's start: collapsible spaces go; a float there is
+		   placed first, from the line's top */
+		for (;;) {
+			while (i < l->nit && l->it[i].kind == IT_SPACE && l->it[i].collapse)
+				i++;
+			if (i >= l->nit || l->it[i].kind != IT_FLOAT)
+				break;
+			if (!l->it[i].collapse)
+				item_float(l, i, x, w, cy);
 			i++;
+		}
 		if (i >= l->nit)
 			break;
 		if (l->nfl > l->fl0) {
 			/* beside the floats there: below them when not even the
 			   first word fits */
-			int32_t rx, need = l->it[i].w < w ? l->it[i].w : w, hgt, nb;
+			int32_t need = l->it[i].w < w ? l->it[i].w : w, nb;
+			int32_t hgt = l->it[i].asc + l->it[i].desc > lh ? l->it[i].asc + l->it[i].desc : lh;
 			int tries;
 			for (tries = 0; tries < 64; tries++) {
-				hgt = l->it[i].asc + l->it[i].desc > lh ? l->it[i].asc + l->it[i].desc : lh;
 				if (!band(l, cy, cy + hgt, x, x + w, &lx, &rx) || rx - lx >= need)
 					break;
 				nb = next_bottom(l, cy, x, x + w);
@@ -1981,6 +2653,25 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			if (it->kind == IT_BREAK) {
 				broke = 1;
 				break;
+			}
+			if (it->kind == IT_FLOAT) {
+				/* a float met on the line: at the line's top, the line
+				   shorter beside it, when it fits beside what is on it
+				   already; else below the line, when it is done, and
+				   so is every float after it on the line, none higher
+				   than one before it (CSS 2.1, 9.5.1, rule 5) */
+				if (it->collapse) {
+					/* placed already */
+				} else if (!pend && (lw == 0 || item_float_w(l, j, w) <= avail - lw)) {
+					int32_t hgt = l->it[i].asc + l->it[i].desc;
+					item_float(l, j, x, w, cy);
+					band(l, cy, cy + (hgt > lh ? hgt : lh), x, x + w, &lx, &rx);
+					lwid = rx - lx;
+					avail = lwid - (firstline ? indent : 0);
+				} else {
+					pend = 1;
+				}
+				continue;
 			}
 			if (it->kind == IT_SPACE) {
 				lw += it->w;
@@ -2013,8 +2704,9 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 				any = 1;
 		}
 		end = j;
-		/* trailing spaces don't count */
-		while (end > i && l->it[end - 1].kind == IT_SPACE && (l->it[end - 1].collapse || l->it[end - 1].canbreak))
+		/* trailing spaces don't count (nor floats) */
+		while (end > i && ((l->it[end - 1].kind == IT_SPACE && (l->it[end - 1].collapse || l->it[end - 1].canbreak)) ||
+				   l->it[end - 1].kind == IT_FLOAT))
 			end--;
 		lw = 0;
 		for (k = i; k < end; k++) {
@@ -2027,6 +2719,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			if (it->desc > desc)
 				desc = it->desc;
 		}
+		if (l->lined)
+			line_edges(l, i, end, &asc, &desc);
 		avail = lwid - (firstline ? indent : 0);
 		off = firstline ? indent : 0;
 		if (ta == KW_RIGHT || (ta == KW_END && !rtl) || ((ta == KW_START || ta == KW_JUSTIFY || ta == 0) && rtl))
@@ -2067,7 +2761,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
-				if (it->bg && !it->hidden && it->kind != IT_BREAK) {
+				if ((it->bg >> 24) != 0 && !it->hidden && it->kind != IT_BREAK) {
 					/* a run of one background: one fill */
 					int32_t x0 = it->x, x1 = it->x + it->w;
 					while (k + 1 < end - i && l->it[ord[k + 1]].bg == it->bg) {
@@ -2075,6 +2769,21 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 						x1 = l->it[ord[k]].x + l->it[ord[k]].w;
 					}
 					fill(l, x0, base - asc, x1 - x0, asc + desc, it->bg);
+				}
+			}
+			for (k = 0; l->sums && k < end - i; k++) {
+				ITEM *it = &l->it[ord[k]];
+				if (it->det != NULL && it->kind != IT_BREAK && it->kind != IT_FLOAT && !it->hidden &&
+				    !(it->flags & DLF_NOHIT)) {
+					/* an inline summary's part of the line: one
+					   click area (not where a click goes through
+					   it, nor where it is hidden) */
+					int32_t x0 = it->x, x1 = it->x + it->w;
+					while (k + 1 < end - i && l->it[ord[k + 1]].det == it->det) {
+						k++;
+						x1 = l->it[ord[k]].x + l->it[ord[k]].w;
+					}
+					sum_rect(l, it->det, x0, base - asc, x1 - x0, asc + desc);
 				}
 			}
 			for (k = 0; k < end - i; k++) {
@@ -2108,6 +2817,10 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 		}
 		cy += asc + desc;
+		/* the line's floats that didn't fit on it: below it */
+		for (k = i; pend && k < j; k++)
+			if (l->it[k].kind == IT_FLOAT && !l->it[k].collapse)
+				item_float(l, k, x, w, cy);
 		firstline = 0;
 		i = broke ? j + 1 : j;
 	}
@@ -2121,8 +2834,9 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	int line_start = 1;
 	int32_t h;
 	l->nit = 0;
+	l->lined = l->floats = l->sums = 0;
 	l->cw = w;
-	runstate(l, &r, b->st, NULL, b->link);
+	runstate(l, &r, b->st, NULL, NULL, b->link);
 #ifndef EW_ST
 	{
 		box *e;
@@ -2149,7 +2863,8 @@ static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
 	guess = image_size(l, a, &iw, &ih);
 	if (iw <= 0 || ih <= 0)
 		return inline_layout(l, b, x, y, w, &fb);
-	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st), guess ? DLF_NOSIZE : 0);
+	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st),
+		   (guess ? DLF_NOSIZE : 0) | (no_hit(b->st) ? DLF_NOHIT : 0), l->alpha);
 	return ih;
 }
 
@@ -2167,9 +2882,20 @@ static int32_t inline_measure(L *l, box *b)
 	long i;
 	int32_t lw = 0, best = 0;
 	l->nit = 0;
+	l->floats = 0;
 	l->cw = AUTO;
-	runstate(l, &r, b->st, NULL, b->link);
+	runstate(l, &r, b->st, NULL, NULL, b->link);
 	collect(l, b, &r, &line_start);
+	for (i = 0; l->floats && i < l->nit; i++)
+		if (l->it[i].kind == IT_FLOAT) {
+			/* a float in the text: beside the text on its line */
+			STASH s;
+			int32_t fw;
+			stash(l, &s);
+			fw = measure(l, s.it[i].atom);
+			unstash(l, &s);
+			l->it[i].w = fw;
+		}
 	if (l->minw && !keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
 		/* the narrowest: its widest word or picture */
 		for (i = 0; i < l->nit; i++)
@@ -2248,11 +2974,23 @@ static int32_t measure(L *l, box *b)
 			inner += cols[i];
 	} else {
 		int k = 0;
+		int32_t run = 0;
 		for (c = b->first; c != NULL; c = c->next, k++) {
 			int32_t m = measure(l, c);
-			if (b->row && !(b->flex && b->wrap && l->minw))
+			if (b->row && !(b->flex && b->wrap && l->minw)) {
 				inner += m;
-			else if (m > inner)
+				continue;
+			}
+			if (!l->minw && text_float(b, c)) {
+				/* floats side by side at their widest, until one
+				   clears or a block comes */
+				int clr = kw(c->st, EP_CLEAR);
+				run = clr == KW_LEFT || clr == KW_RIGHT || clr == KW_BOTH ? m : run + m;
+				m = run;
+			} else {
+				run = 0;
+			}
+			if (m > inner)
 				inner = m;
 		}
 		if (b->flex && b->row && k > 1 && !(b->wrap && l->minw))
@@ -2280,21 +3018,24 @@ static int32_t collapse(int32_t a, int32_t b)
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first);
 
-static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
+/* a list item's marker (CSS Lists 3; CSS Counter Styles 3, 6 and 7), from
+   its style (or the counter style fixed, a summary's of the layout's
+   own) and its number n: its text, in buf when it is made; NULL for none.
+   A string is the marker as it is; the disclosure triangles (a details'
+   summary) point the other way in a right-to-left item */
+static const char *marker_text(const ec_style *st, int fixed, int n, char *buf)
 {
-	const ec_style *st = b->st;
-	int t = kw(st, EP_LIST_STYLE_TYPE);
-	char buf[24];
-	const char *s = buf;
-	ITEM it;
-	RUNSTATE r;
-	int32_t w;
-	int n = b->num;
+	int t = fixed ? fixed : kw(st, EP_LIST_STYLE_TYPE);
 
+	if (!fixed && st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
+		return ((const ec_str *) st->v[EP_LIST_STYLE_TYPE].p)->s;
 	switch (t) {
-	case KW_NONE: return;
-	case KW_CIRCLE: s = "\xe2\x97\xa6"; break;	/* ◦ */
-	case KW_SQUARE: s = "\xe2\x96\xaa"; break;	/* ▪ */
+	case KW_NONE: return NULL;
+	case KW_CIRCLE: return "\xe2\x97\xa6";	/* ◦ */
+	case KW_SQUARE: return "\xe2\x96\xaa";	/* ▪ */
+	case KW_DISCLOSURE_OPEN: return "\xe2\x96\xbe";	/* ▾ */
+	case KW_DISCLOSURE_CLOSED:			/* ▸, or ◂ */
+		return kw(st, EP_DIRECTION) == KW_RTL ? "\xe2\x97\x82" : "\xe2\x96\xb8";
 	case KW_DECIMAL: case KW_DECIMAL_LEADING_ZERO: case KW_HEBREW: case KW_ARMENIAN:
 	case KW_GEORGIAN: case KW_LOWER_GREEK: {
 		char d[12];
@@ -2312,7 +3053,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			buf[o++] = d[--k];
 		buf[o++] = '.';
 		buf[o] = 0;
-		break;
+		return buf;
 	}
 	case KW_LOWER_ALPHA: case KW_LOWER_LATIN: case KW_UPPER_ALPHA: case KW_UPPER_LATIN: {
 		char d[8];
@@ -2327,7 +3068,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			buf[o++] = d[--k];
 		buf[o++] = '.';
 		buf[o] = 0;
-		break;
+		return buf;
 	}
 	case KW_LOWER_ROMAN: case KW_UPPER_ROMAN: {
 		static const char *const r1[] = { "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix" };
@@ -2344,11 +3085,25 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			for (i = 0; buf[i]; i++)
 				buf[i] = (char) (buf[i] - 32);
 		strcat(buf, ".");
-		break;
+		return buf;
 	}
-	default: s = "\xe2\x80\xa2"; break;		/* • */
+	default: return "\xe2\x80\xa2";		/* • */
 	}
-	runstate(l, &r, st, NULL, 0);
+}
+
+/* an outside marker, in the margin before the item's first line */
+static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
+{
+	const ec_style *st = b->st;
+	char buf[24];
+	const char *s = marker_text(st, 0, b->num, buf);
+	ITEM it;
+	RUNSTATE r;
+	int32_t w;
+
+	if (s == NULL || *s == 0)
+		return;
+	runstate(l, &r, st, NULL, NULL, 0);
 	memset(&it, 0, sizeof it);
 	it.font = r.font;
 	it.color = r.color;
@@ -2471,6 +3226,15 @@ static void fit_columns(int32_t *cols, const int32_t *mins, int n, int32_t w, in
 		cols[n - 1] += w - given;
 }
 
+/* a background item made dh taller: a gradient as tall as its box with
+   it */
+static void taller(dl_item *d, int32_t dh)
+{
+	d->h += dh;
+	if (d->type == DL_GRAD && d->tile != NULL && d->tile->grow)
+		((dl_tile *) d->tile)->h += dh;
+}
+
 /* a block's background and borders (as layout_block left them in
    last_bg, last_bd) made dh taller */
 static void stretch(L *l, long bg, const long *bd, int32_t dh)
@@ -2479,9 +3243,9 @@ static void stretch(L *l, long bg, const long *bd, int32_t dh)
 	if (dh <= 0)
 		return;
 	if (bg >= 0) {
-		it[bg].h += dh;
+		taller(&it[bg], dh);
 		if (it[bg].type == DL_FILL && (it[bg].flags & DLF_TILE))
-			it[bg + 1].h += dh;	/* its picture */
+			taller(&it[bg + 1], dh);	/* its picture or gradient */
 	}
 	if (bd[1] >= 0)
 		it[bd[1]].y += dh;
@@ -2527,7 +3291,8 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	box **kids;
 	int *start = NULL, above[MAXCOLS];
 	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[4] = NULL;
-	int32_t *hh = NULL;
+	int32_t *hh = NULL, *fb = NULL, rbase = AUTO;
+	int fi = -1;
 
 	for (c = b->first; c != NULL; c = c->next)
 		n++;
@@ -2540,7 +3305,7 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	k1 = malloc(n * sizeof *k1);
 	kbg = malloc(n * sizeof *kbg);
 	kbd = malloc(n * sizeof *kbd);
-	hh = malloc(n * sizeof *hh);
+	hh = malloc(2 * n * sizeof *hh);
 	if (pref == NULL || kids == NULL || start == NULL || k0 == NULL || k1 == NULL || kbg == NULL || kbd == NULL ||
 	    hh == NULL) {
 		free(pref);
@@ -2554,6 +3319,7 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 		l->fail = 1;
 		return 0;
 	}
+	fb = hh + n;		/* each cell's first baseline, from the row's top */
 	if (cols != NULL) {
 		/* where each column starts; which are taken by a cell from a row above */
 		colx[0] = x + l->sp_h;
@@ -2624,12 +3390,38 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 		kbg[i] = l->last_bg;
 		memcpy(kbd[i], l->last_bd, sizeof kbd[i]);
 		hh[i] = ch;
-		if (*first == AUTO && f != AUTO)
+		fb[i] = AUTO;
+		if (*first == AUTO && f != AUTO) {
 			*first = f;
+			fi = i;
+		}
 		/* a cell taking rows below doesn't set this row's height */
 		if (ch > lineh && !(cols != NULL && rowspan(kids[i]) > 1 && l->spans != NULL))
 			lineh = ch;
+		if (b->tablerow && f != AUTO && !kids[i]->anon && kw(kids[i]->st, EP_VERTICAL_ALIGN) == KW_BASELINE &&
+		    !(cols != NULL && rowspan(kids[i]) > 1 && l->spans != NULL)) {
+			/* vertical-align: baseline (valign=baseline): its first
+			   line's baseline on the row's (CSS 2.1, 17.5.3; one
+			   taking rows below stays at its top) */
+			fb[i] = f - cy;
+			if (rbase == AUTO || fb[i] > rbase)
+				rbase = fb[i];
+		}
 		cx += pw + (cols != NULL ? l->sp_h : 0);
+	}
+	if (rbase != AUTO) {
+		/* the baseline cells' content down to the row's baseline, the
+		   row as tall as that needs */
+		for (i = 0; i < n; i++) {
+			int32_t dy = fb[i] != AUTO ? rbase - fb[i] : 0;
+			if (dy <= 0)
+				continue;
+			cell_shift(l, k0[i], k1[i], kbg[i], kbd[i], dy);
+			if (hh[i] + dy > lineh)
+				lineh = hh[i] + dy;
+			if (i == fi)
+				*first += dy;
+		}
 	}
 	if (cols != NULL && l->spans != NULL) {
 		int k;
@@ -2696,20 +3488,28 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	return h;
 }
 
-/* a float of the block being laid out (its content x..x+w), its top no
-   higher than y: laid out at its width (asked for, or its widest within
-   w), then put as far left or right as it goes where it fits beside the
-   floats already there, else below them */
-static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y)
+/* a float's width in a block w wide: the width it asks for, or its
+   widest within w */
+static int32_t float_width(L *l, box *c, int32_t w)
 {
-	int right = kw(c->st, EP_FLOAT) == KW_RIGHT, clr = kw(c->st, EP_CLEAR), tries;
-	int32_t wf = cell_pref(l, c, w), hf, mb, f = AUTO, fy, lx = x, rx = x + w, nb;
-	long k0 = l->p->nitems;
-	FLT *fl;
+	int32_t wf = cell_pref(l, c, w);
 	if (wf > w)
 		wf = w;
-	if (wf < 1)
-		wf = 1;
+	return wf < 1 ? 1 : wf;
+}
+
+/* a float of the block being laid out (its content x..x+w), its top no
+   higher than y: laid out at its width (wf, or AUTO: float_width's),
+   then put as far left or right as it goes where it fits beside the
+   floats already there, else below them */
+static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t wf)
+{
+	int right = kw(c->st, EP_FLOAT) == KW_RIGHT, clr = kw(c->st, EP_CLEAR), tries;
+	int32_t hf, mb, f = AUTO, fy, lx = x, rx = x + w, nb;
+	long k0 = l->p->nitems;
+	FLT *fl;
+	if (wf == AUTO)
+		wf = float_width(l, c, w);
 	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
 	if (l->fail)
 		return;
@@ -3905,6 +4705,32 @@ out:
 	return total;
 }
 
+/* of the room a block in the flow leaves beside it, what goes to its
+   left margin (CSS 2.1, 10.3.3): its auto margins share it; with none,
+   the end margin takes it, by its container's direction, unless the
+   container's text-align is one of HTML's legacy values (<center>, and
+   align on div, p and a table's parts), which centre the block or put it
+   left or right (the HTML Standard, 15.3.3: "align descendants"; the
+   nearest such container wins, as text-align inherits) */
+static int32_t room_left(const box *b, int32_t room, int auto_l, int auto_r)
+{
+	const ec_style *cs;
+	if (auto_l)
+		return auto_r ? room / 2 : room;
+	if (auto_r || b->parent == NULL)
+		return 0;
+	cs = b->parent->st;
+	switch (kw(cs, EP_TEXT_ALIGN)) {
+	case KW_WEBKIT_CENTER:
+		return room / 2;
+	case KW_WEBKIT_LEFT:
+		return 0;
+	case KW_WEBKIT_RIGHT:
+		return room;
+	}
+	return kw(cs, EP_DIRECTION) == KW_RTL ? room : 0;
+}
+
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first)
 {
@@ -3920,6 +4746,11 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
 	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems;
 	struct span *saved_spans = l->spans;
+	unsigned saved_alpha = l->alpha;
+	uint32_t saved_clip = l->clip;
+	int32_t bg_top = 0, bg_bottom = 0;	/* the background colour's fill short of the border box */
+	int32_t in_l = 0, in_r = 0;
+	int ctlbox = 0;
 
 	if (l->fail)
 		return 0;
@@ -3962,6 +4793,12 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN && br == 0 && s->v[EP_BORDER_RIGHT_WIDTH].i > 0) br = 1;
 		if (kw(s, EP_BORDER_TOP_STYLE) > KW_HIDDEN && bt == 0 && s->v[EP_BORDER_TOP_WIDTH].i > 0) bt = 1;
 		if (kw(s, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN && bb == 0 && s->v[EP_BORDER_BOTTOM_WIDTH].i > 0) bb = 1;
+		if (b->n != NULL && b->n->ctl != NULL && !b->repl) {
+			/* a floated form control's block (control): the control
+			   draws its own frame and ground, as on a line */
+			pl = pr = pt = pb = bl = br = bt = bb = 0;
+			ctlbox = 1;
+		}
 	}
 	if (fixed_w) {
 		w = cbw - ml - mr - bl - br - pl - pr;
@@ -3986,36 +4823,14 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			if (mn != AUTO && w < mn)
 				w = mn;
 		}
-		/* margin: auto centres a block narrower than its container */
-		if (!wauto && (auto_l || auto_r)) {
-			int32_t room = cbw - w - bl - br - pl - pr;
-			if (room > 0) {
-				if (auto_l && auto_r) {
-					ml = room / 2;
-					mr = room - ml;
-				} else if (auto_l) {
-					ml = room - mr;
-				}
-			}
-		}
 	}
 	if (b->repl && wauto && !fixed_w) {
 		/* a picture: its own width, not its container's */
 		int32_t iw, ih;
 		l->cw = cbw;
 		image_size(l, b->first, &iw, &ih);
-		if (iw > 0 && iw < w) {
+		if (iw > 0 && iw < w)
 			w = iw;
-			if (auto_l || auto_r) {
-				int32_t room = cbw - w - bl - br - pl - pr;
-				if (auto_l && auto_r) {
-					ml = room / 2;
-					mr = room - ml;
-				} else if (auto_l) {
-					ml = room - mr;
-				}
-			}
-		}
 	}
 	if (b->table) {
 		/* its columns at their widest; a table without a width shrinks to them */
@@ -4035,14 +4850,18 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		total = sp;
 		for (i = 0; i < n; i++)
 			total += cols[i];
-		if (wauto && !fixed_w && total < w) {
-			if (auto_l && auto_r)
-				ml += (w - total) / 2;
+		if (wauto && !fixed_w && total < w)
 			w = total;
-		}
 		fit_columns(cols, mins, n, w - sp > n ? w - sp : n, !wauto || fixed_w);
 		table_cols = cols;
 		table_n = n;
+	}
+	if (!fixed_w && !b->anon && (!wauto || b->table || b->repl)) {
+		/* narrower than its container (an auto width fills it): where
+		   the room goes */
+		int32_t room = cbw - ml - mr - bl - br - pl - pr - w;
+		if (room > 0)
+			ml += room_left(b, room, auto_l, auto_r);
 	}
 	if (w < 1)
 		w = 1;
@@ -4063,13 +4882,39 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 	}
 	if (!b->anon) {
-		bg = color(s, EP_BACKGROUND_COLOR);
-		if ((bg >> 24) != 0 && !(b->n != NULL && b->n->tag == T_BODY && l->body_bg_taken))
-			bgi = fill(l, x + ml, y + mt, bl + pl + w + pr + br, 1, bg);
-		if (b->n != l->canvas_bg) {
-			bgp = bg_item(l, s, b->n);
-			if (bgp >= 0 && bgi >= 0)
-				l->p->items[bgi].flags |= DLF_TILE;
+		int clip = kw(s, EP_BACKGROUND_CLIP);
+		/* what it draws, and all in it, as solid as its opacity says */
+		l->alpha = alpha_mul(l->alpha, own_opacity(s, b->n));
+		if (clip == KW_TEXT) {
+			/* its background painted through its text, not under it:
+			   text of a transparent colour drawn in it (text_paint) */
+			uint32_t cp = clip_paint(s);
+			if (cp != 0)
+				l->clip = cp;
+		} else if (!ctlbox) {
+			/* its colour, picture or gradient to the edge of the box
+			   background-clip says (CSS Backgrounds 3, 3.7); the colour
+			   not where the canvas has it */
+			if (clip == KW_PADDING_BOX || clip == KW_CONTENT_BOX) {
+				in_l = bl;
+				in_r = br;
+				bg_top = bt;
+				bg_bottom = bb;
+			}
+			if (clip == KW_CONTENT_BOX) {
+				in_l += pl;
+				in_r += pr;
+				bg_top += pt;
+				bg_bottom += pb;
+			}
+			bg = fade(color(s, EP_BACKGROUND_COLOR), l->alpha);
+			if ((bg >> 24) != 0 && !(b->n != NULL && b->n == l->bg_taken))
+				bgi = fill(l, x + ml + in_l, y + mt + bg_top, bl + pl + w + pr + br - in_l - in_r, 1, bg);
+			if (b->n != l->canvas_bg) {
+				bgp = bg_item(l, s, b->n);
+				if (bgp >= 0 && bgi >= 0)
+					l->p->items[bgi].flags |= DLF_TILE;
+			}
 		}
 	}
 	cx = x + ml + bl + pl;
@@ -4113,21 +4958,23 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				box *k;
 				int cnt = 0;
 				for (k = b->first; k != NULL; k = k->next)
-					if (k->list)
+					if (k->list == LB_ITEM)
 						cnt++;
 				num = st ? atoi(st) + 1 : cnt + 1;
 			}
 		}
 		for (c = b->first; c != NULL && !l->fail; c = c->next) {
 			int32_t cmt = c->anon ? 0 : len0(l, c->st, EP_MARGIN_TOP, w), cmb = 0, cf = AUTO, h, top;
-			if (c->list) {
+			if (c->list == LB_ITEM) {
+				/* (not a summary: the HTML Standard's counter-increment:
+				   list-item 0, 15.5.4) */
 				const char *v = c->n ? dn_attr(c->n, "value") : NULL;
 				num = v ? atoi(v) : (reversed ? num - 1 : num + 1);
 				c->num = num;
 			}
 			if (!c->anon && kw(c->st, EP_FLOAT) != KW_NONE) {
 				/* out of the flow: beside what follows */
-				place_float(l, c, cx, w, edge + (prev_mb > 0 ? prev_mb : 0));
+				place_float(l, c, cx, w, edge + (prev_mb > 0 ? prev_mb : 0), AUTO);
 				continue;
 			}
 			if (!c->anon && (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED)) {
@@ -4180,7 +5027,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->fl0 = saved_fl0;
 		l->fl_top = saved_top;
 	}
-	if (b->list)
+	if ((b->list & LB_ITEM) && kw(s, EP_LIST_STYLE_POSITION) != KW_INSIDE)
 		marker(l, b, cx, w, fb != AUTO ? fb : cy + font_of(l, s)->ascent);
 	if (!b->anon) {
 		hp = len(l, s, EP_HEIGHT, AUTO);
@@ -4197,20 +5044,30 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (mx != AUTO && ch > mx && kw(s, EP_OVERFLOW_Y) != KW_VISIBLE)
 			ch = mx;
 		if (bgi >= 0)
-			l->p->items[bgi].h = bt + pt + ch + pb + bb;
-		bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb);
+			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
+		{
+			int32_t in[4];
+			in[0] = in_l;
+			in[1] = bg_top;
+			in[2] = in_r;
+			in[3] = bg_bottom;
+			bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb,
+				 in);
+		}
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
-			bd[0] = fill(l, bx, by, bw, bt, color(s, EP_BORDER_TOP_COLOR));
-			bd[1] = fill(l, bx, by + bh - bb, bw, bb, color(s, EP_BORDER_BOTTOM_COLOR));
-			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, color(s, EP_BORDER_LEFT_COLOR));
-			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, color(s, EP_BORDER_RIGHT_COLOR));
+			bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
+			bd[1] = fill(l, bx, by + bh - bb, bw, bb, fade(color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
+			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, fade(color(s, EP_BORDER_LEFT_COLOR), l->alpha));
+			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, fade(color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
 #ifndef EW_ST
 			if (b->n != NULL && !b->anon)
 				block_rect(l, b->n, bx, by, bw, bh);
 #endif
 		}
 	}
+	if (b->list & LB_SUM)
+		sum_item(l, b, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb);
 	l->cols = saved_cols;
 	l->ncols = saved_n;
 	l->sp_h = saved_sh;
@@ -4240,6 +5097,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	l->last_bg = bgi >= 0 ? bgi : bgp;
 	memcpy(l->last_bd, bd, sizeof bd);
+	l->alpha = saved_alpha;
+	l->clip = saved_clip;
 	*mb_out = mb;
 	*first = fb;
 	return mt + bt + pt + ch + pb + bb + mb;
@@ -4317,6 +5176,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->opt = *o;
 	p->width = o->width;
 	p->bg = 0xffffff;
+	p->cbg = -1;
+	l.alpha = 255;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
 	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
@@ -4326,17 +5187,23 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->height = 0;
 		return p;
 	}
-	/* the canvas: the root's background, else the body's */
+	/* the canvas: the root's background, else the body's; one less than
+	   solid on white, as browsers show what is under a canvas (CSS
+	   Backgrounds 3, The Canvas Background, leaves it to them) */
 	{
 		uint32_t hb = color(html->e.style, EP_BACKGROUND_COLOR);
-		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR) {
-			p->bg = (hb >> 24) != 0 ? hb & 0xffffff : p->bg;
+		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR ||
+		    html->e.style->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
+			if ((hb >> 24) != 0) {
+				p->bg = over(hb, 0xffffffff) & 0xffffff;
+				l.bg_taken = html;	/* painted once, there */
+			}
 			l.canvas_bg = html;
 		} else if (d->body != NULL && d->body->e.style != NULL) {
 			uint32_t bb = color(d->body->e.style, EP_BACKGROUND_COLOR);
 			if ((bb >> 24) != 0) {
-				p->bg = bb & 0xffffff;
-				l.body_bg_taken = 1;
+				p->bg = over(bb, 0xffffffff) & 0xffffff;
+				l.bg_taken = d->body;
 			}
 			l.canvas_bg = d->body;
 		}
@@ -4353,7 +5220,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		fixup(&l, root);
 		p->height = layout_block(&l, root, 0, 0, o->width, 0, &mb, &fb);
 		bg_place(&l, cbg, l.canvas_bg != NULL ? l.canvas_bg->e.style : NULL, 0, 0, o->width,
-			 p->height, 0, 0, 0, 0);
+			 p->height, 0, 0, 0, 0, NULL);
+		p->cbg = cbg;
 	}
 	free(l.it);
 	free(l.fl);
@@ -4385,20 +5253,39 @@ void page_free(page *p)
 }
 
 #ifndef EW_ST
+/* a is n or one of its ancestors */
+static int holds(const dnode *a, const dnode *n)
+{
+	for (; n != NULL; n = n->parent)
+		if (n == a)
+			return 1;
+	return 0;
+}
+
 dnode *page_node_at(const page *p, int32_t x, int32_t y)
 {
 	long i, best = -1;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->node != NULL && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h)
+		if (d->node != NULL && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h)
 			return d->node;
 	}
-	/* the innermost block there: the last laid out of those holding it
-	   (a block's rectangle is put when its children are done) */
+	/* the innermost block there: the smallest of those holding it; of
+	   the same size a child rather than its parent (a closed details
+	   as big as its summary: the summary), else the last laid out (a
+	   block's rectangle is put when its children are done); not one a
+	   click goes through (pointer-events: none) */
 	for (i = 0; i < p->nblocks; i++) {
 		const struct pg_block *b = &p->blocks[i];
-		if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h &&
-		    (best < 0 || (int64_t) b->w * b->h <= (int64_t) p->blocks[best].w * p->blocks[best].h))
+		int64_t a, ba;
+		if (b->n->e.style != NULL && no_hit(b->n->e.style))
+			continue;
+		if (x < b->x || x >= b->x + b->w || y < b->y || y >= b->y + b->h)
+			continue;
+		a = (int64_t) b->w * b->h;
+		ba = best >= 0 ? (int64_t) p->blocks[best].w * p->blocks[best].h : 0;
+		if (best < 0 || a < ba || (a == ba && !holds(b->n, p->blocks[best].n)))
 			best = i;
 	}
 	return best >= 0 ? p->blocks[best].n : NULL;
@@ -4449,12 +5336,14 @@ const char *page_link_download(const page *p, int link)
 	return *s ? s + 1 : NULL;
 }
 
+/* (the last item drawn there first; not one a click goes through) */
 int page_link_at(const page *p, int32_t x, int32_t y)
 {
 	long i;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->link && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h)
+		if (d->link && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h)
 			return d->link - 1;
 	}
 	return -1;
@@ -4465,13 +5354,29 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 	long i;
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
-		if (d->ctl && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h) {
+		if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+		    y < d->y + d->h) {
 			if (it != NULL)
 				*it = d;
 			return p->ctls[d->ctl - 1];
 		}
 	}
 	return NULL;
+}
+
+/* (the smallest there: an inner details' summary in an outer one's,
+   whose item comes after it, as a box's comes after its children's; of
+   the same size the last laid out) */
+dnode *page_summary_at(const page *p, int32_t x, int32_t y)
+{
+	long i, best = -1;
+	for (i = p->nitems - 1; i >= 0; i--) {
+		const dl_item *d = &p->items[i];
+		if (d->type == DL_SUM && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
+		    (best < 0 || (int64_t) d->w * d->h < (int64_t) p->items[best].w * p->items[best].h))
+			best = i;
+	}
+	return best >= 0 ? p->items[best].det : NULL;
 }
 
 const dl_item *page_ctl_item(const page *p, const fctl *c)
@@ -4490,16 +5395,19 @@ const dl_item *page_ctl_item(const page *p, const fctl *c)
 	return NULL;
 }
 
-/* in document order, without recursion */
-static int32_t anchor_in(const dnode *top, const char *id)
+/* in document order, without recursion: the first element of that id
+   (or an a of that name) that is laid out, or that a closed details folds
+   away (its y then from an earlier layout, or none) */
+static dnode *anchor_in(dnode *top, const char *id)
 {
-	const dnode *n = top;
+	dnode *n = top;
 	for (;;) {
-		if (n->type == DN_ELEMENT && n->y >= 0) {
+		if (n->type == DN_ELEMENT) {
 			const char *v = dn_attr(n, "id");
-			if ((v != NULL && strcmp(v, id) == 0) ||
-			    (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0))
-				return n->y;
+			if (((v != NULL && strcmp(v, id) == 0) ||
+			     (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0)) &&
+			    (n->y >= 0 || dn_folded(n)))
+				return n;
 		}
 		if (n->first != NULL) {
 			n = n->first;
@@ -4508,14 +5416,20 @@ static int32_t anchor_in(const dnode *top, const char *id)
 		while (n != top && n->next == NULL)
 			n = n->parent;
 		if (n == top)
-			return -1;
+			return NULL;
 		n = n->next;
 	}
 }
 
-int32_t page_anchor(const page *p, const char *id)
+dnode *page_anchor_node(const page *p, const char *id)
 {
 	if (p->d == NULL || p->d->root == NULL || id == NULL || *id == 0)
-		return -1;
+		return NULL;
 	return anchor_in(p->d->root, id);
+}
+
+int32_t page_anchor(const page *p, const char *id)
+{
+	const dnode *n = page_anchor_node(p, id);
+	return n != NULL && !dn_folded(n) ? n->y : -1;
 }

@@ -158,7 +158,9 @@ static const char *dimension(const char *v, char *out)
 	return out;
 }
 
-/* a colour: #rgb or #rrggbb, with or without the #, or a name */
+/* a colour: #rgb or #rrggbb, with or without the #, or a name; not
+   "transparent", which the HTML Standard's rules for parsing a legacy
+   colour value turn down (the colour is then the inherited one) */
 static const char *colour(const char *v, char *out)
 {
 	size_t i, n;
@@ -188,6 +190,11 @@ static const char *colour(const char *v, char *out)
 		return out;
 	}
 	if (alpha) {
+		static const char tr[] = "transparent";
+		for (i = 0; i < n && i < sizeof tr - 1 && (v[i] | 0x20) == tr[i]; i++)
+			;
+		if (i == n && n == sizeof tr - 1)
+			return NULL;
 		memcpy(out, v, n);
 		out[n] = 0;
 		return out;
@@ -225,7 +232,7 @@ static const char *list_type(const char *v, int ol)
    being finished: compared as pointers, not as text */
 static struct {
 	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
-	const ec_atom *col, *font;
+	const ec_atom *col, *font, *name, *open;
 } ha;
 
 static const char *attr_atom(const dnode *n, const ec_atom *a)
@@ -265,6 +272,8 @@ static void hint_atoms(doc *d)
 	A(width);
 	A(col);
 	A(font);
+	A(name);
+	A(open);
 #undef A
 }
 
@@ -281,20 +290,45 @@ static void hints(dnode *n)
 	h.s[0] = 0;
 
 	if ((v = HA(n, align)) != NULL) {
-		if ((n->tag == T_TABLE || n->tag == T_IMG) && (is(v, "left") || is(v, "right"))) {
-			/* the HTML Standard's rendering section: a float */
-			put(&h, "float", is(v, "left") ? "left" : "right");
-		} else if (n->tag == T_IMG && (is(v, "middle") || is(v, "top") || is(v, "bottom"))) {
-			put(&h, "vertical-align", is(v, "middle") ? "middle" : is(v, "top") ? "top" : "baseline");
+		const char *t = HA(n, type);
+		int part = cell || n->tag == T_TR || n->tag == T_THEAD || n->tag == T_TBODY || n->tag == T_TFOOT;
+		if (n->tag == T_IMG || n->tag == T_IFRAME || n->tag == T_OBJECT || n->tag == T_EMBED ||
+		    (n->tag == T_INPUT && t != NULL && is(t, "image"))) {
+			/* the HTML Standard's rendering, 15.4.3: a float, or where
+			   it sits on its line; bottom on the baseline, as HTML 3.2
+			   had it and both engines do */
+			t = is(v, "left") || is(v, "right") ? NULL : is(v, "top") ? "top" :
+			    is(v, "middle") || is(v, "center") ? "-webkit-baseline-middle" :
+			    is(v, "bottom") || is(v, "baseline") ? "baseline" : is(v, "texttop") ? "text-top" :
+			    is(v, "absmiddle") || is(v, "abscenter") ? "middle" : is(v, "absbottom") ? "bottom" : NULL;
+			if (t != NULL)
+				put(&h, "vertical-align", t);
+			else if (is(v, "left") || is(v, "right"))
+				put(&h, "float", is(v, "left") ? "left" : "right");
 		} else if (n->tag == T_TABLE) {
-			if (is(v, "center"))
+			/* 15.3.8: a float, or centred by its margins */
+			if (is(v, "left") || is(v, "right"))
+				put(&h, "float", is(v, "left") ? "left" : "right");
+			else if (is(v, "center"))
 				put(&h, "margin-left", "auto"), put(&h, "margin-right", "auto");
-		} else if (n->tag != T_IMG && n->tag != T_HR && n->tag != T_INPUT) {
-			if (is(v, "left") || is(v, "right") || is(v, "center") || is(v, "justify"))
-				put(&h, "text-align", is(v, "left") ? "left" : is(v, "right") ? "right" :
-				    is(v, "center") ? "center" : "justify");
-			else if (is(v, "middle"))
-				put(&h, "text-align", "center");
+		} else if (n->tag == T_HR) {
+			/* 15.3.11: placed by its margins */
+			if (is(v, "left") || is(v, "right") || is(v, "center")) {
+				put(&h, "margin-left", is(v, "left") ? "0" : "auto");
+				put(&h, "margin-right", is(v, "right") ? "0" : "auto");
+			}
+		} else if (n->tag != T_INPUT) {
+			/* text-align. On div and a table's parts (and p, as both
+			   engines do) the legacy values, which align the blocks
+			   inside as well as the lines (15.3.3, 15.3.8: "align
+			   descendants"); justify aligns them as usual */
+			int legacy = part || n->tag == T_DIV || n->tag == T_P || n->tag == T_CAPTION;
+			t = is(v, "left") ? (legacy ? "-webkit-left" : "left") :
+			    is(v, "right") ? (legacy ? "-webkit-right" : "right") :
+			    is(v, "center") || is(v, "middle") ? (legacy ? "-webkit-center" : "center") :
+			    is(v, "justify") ? "justify" : part && is(v, "absmiddle") ? "center" : NULL;
+			if (t != NULL)
+				put(&h, "text-align", t);
 		}
 	}
 	if ((v = HA(n, valign)) != NULL &&
@@ -505,6 +539,35 @@ int doc_refresh_meta(const dnode *n)
 	return 1;
 }
 
+/* the groups of details (their name attribute) with one open, in the
+   document being finished: a later one of a group starts closed (the
+   HTML Standard, 4.11.1: a details' insertion steps, ensure details
+   exclusivity by closing the given element if needed). Eight groups are
+   kept track of; pages have one or two. */
+static struct {
+	const char *name[8];
+	int n;
+} groups;
+
+static void details_inserted(doc *d, dnode *n)
+{
+	const char *name = HA(n, name);
+	const dnode *k;
+	int i;
+	if (name == NULL || *name == 0 || HA(n, open) == NULL)
+		return;
+	for (k = n->parent; k != NULL; k = k->parent)
+		if (DN_IS(k, T_TEMPLATE))
+			return;		/* a template's contents: a tree of their own */
+	for (i = 0; i < groups.n; i++)
+		if (strcmp(groups.name[i], name) == 0) {
+			dn_set_open(d, n, 0);
+			return;
+		}
+	if (groups.n < 8)
+		groups.name[groups.n++] = name;
+}
+
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
@@ -523,6 +586,8 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 		n->e.flags |= EC_NODE_LINK;
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
+	if (n->tag == T_DETAILS && n->ns == DN_NS_HTML && n->nattr >= 2)
+		details_inserted(d, n);
 	if (n->tag == T_HTML && d->html == NULL)
 		d->html = n;
 	else if (n->tag == T_BODY && d->body == NULL)
@@ -583,6 +648,7 @@ static dnode *element_from(dnode *c)
 static void finish(doc *d, dnode *top, dnode *parent)
 {
 	dnode *n = top, *c;
+	groups.n = 0;
 	finish_one(d, top, parent);
 	for (;;) {
 		if ((c = element_from(n->first)) != NULL) {
@@ -769,6 +835,122 @@ void dn_remove_attr(doc *d, dnode *n, const char *name)
 }
 
 #endif
+
+/* ---------------------------------------------------------------- details */
+
+dnode *dn_summary(const dnode *details)
+{
+	dnode *c;
+	for (c = details->first; c != NULL; c = c->next)
+		if (DN_IS(c, T_SUMMARY))
+			return c;
+	return NULL;
+}
+
+int dn_set_open(doc *d, dnode *n, int open)
+{
+	const ec_atom *a = ec_intern(d->css, "open", 4);
+	uint16_t i;
+	if (a == NULL)
+		return 0;
+	for (i = 0; i < n->nattr && n->attrs[i].name != a; i++)
+		;
+	if (!open && i < n->nattr) {
+		/* in place: the parser shares attributes only between the
+		   formatting elements it clones, and details isn't one */
+		memmove(&n->attrs[i], &n->attrs[i + 1], (size_t) (n->nattr - i - 1) * sizeof *n->attrs);
+		n->nattr--;
+	} else if (open && i == n->nattr) {
+		ec_attr *at = doc_alloc(d, (n->nattr + 1u) * sizeof *at);
+		if (at == NULL)
+			return 0;
+		if (n->nattr)
+			memcpy(at, n->attrs, n->nattr * sizeof *at);
+		at[n->nattr].name = a;
+		at[n->nattr].val = "";
+		at[n->nattr].len = 0;
+		n->attrs = at;
+		n->nattr++;
+	}
+	n->e.attr = n->attrs;
+	n->e.nattr = n->nattr;
+	return 1;
+}
+
+/* the tree n is in (the HTML Standard's root): its topmost ancestor, or
+   the template whose contents it is in (a tree of their own: the
+   standard's template contents, a DocumentFragment) */
+static const dnode *tree_of(const dnode *n)
+{
+	while (n->parent != NULL && !DN_IS(n->parent, T_TEMPLATE))
+		n = n->parent;
+	return n->parent != NULL ? n->parent : n;
+}
+
+/* (in tree order, without recursion: a page can be nested deeper than the
+   Atari's stack holds; n's own tree only, not into a template's
+   contents) */
+dnode *dn_details_rival(const doc *d, const dnode *n)
+{
+	const char *name = dn_attr(n, "name");
+	const dnode *top;
+	dnode *k;
+	(void) d;
+	if (name == NULL || *name == 0)
+		return NULL;
+	top = tree_of(n);
+	k = (dnode *) top;
+	for (;;) {
+		const char *v;
+		if (k != n && DN_IS(k, T_DETAILS) && dn_attr(k, "open") != NULL && (v = dn_attr(k, "name")) != NULL &&
+		    strcmp(v, name) == 0)
+			return k;
+		if (k->first != NULL && (k == top || !DN_IS(k, T_TEMPLATE))) {
+			k = k->first;
+			continue;
+		}
+		while (k != top && k->next == NULL)
+			k = k->parent;
+		if (k == top)
+			return NULL;
+		k = k->next;
+	}
+}
+
+int dn_details_toggle(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud)
+{
+	int open = dn_attr(n, "open") == NULL;
+	dnode *k;
+	if (!dn_set_open(d, n, open))
+		return 0;
+	if (changed != NULL)
+		changed(ud, n);
+	if (open && (k = dn_details_rival(d, n)) != NULL && dn_set_open(d, k, 0) && changed != NULL)
+		changed(ud, k);
+	return 1;
+}
+
+int dn_folded(const dnode *n)
+{
+	const dnode *c, *k;
+	for (c = n, k = n->parent; k != NULL; c = k, k = k->parent)
+		if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") == NULL && c != dn_summary(k))
+			return 1;
+	return 0;
+}
+
+int dn_reveal(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud)
+{
+	dnode *c, *k;
+	int opened = 0;
+	for (c = n, k = n->parent; k != NULL; c = k, k = k->parent)
+		if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") == NULL && c != dn_summary(k)) {
+			if (!dn_details_toggle(d, k, changed, ud))
+				break;
+			opened++;
+		}
+	return opened;
+}
 
 void doc_free(doc *d)
 {
@@ -1105,16 +1287,17 @@ void doc_add_ua(doc *d)
 	/* a document on the base has the UA sheet already */
 	if (d->ua == NULL)
 		ec_sheet(d->css, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA);
+	if (d->quirks == 1)
+		ec_sheet(d->css, doc_quirks_css, strlen(doc_quirks_css), EC_ORIGIN_UA);
 }
 
-void doc_select(doc *d)
+int doc_select(doc *d)
 {
 	dnode *c;
 	if (d->root == NULL)
-		return;
+		return 0;
 	for (c = d->root->first; c != NULL; c = c->next)
-		if (c->type == DN_ELEMENT) {
-			ec_select(d->css, &c->e);
-			break;
-		}
+		if (c->type == DN_ELEMENT)
+			return ec_select(d->css, &c->e);
+	return 0;
 }

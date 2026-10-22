@@ -58,7 +58,8 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `:where()`; `:root`, `:empty`, `:first-child` and the whole child-index
   family, the `of-type` ones; `:link`, `:any-link`; `:lang()`, `:dir()`;
   `:enabled`, `:disabled`, `:checked`, `:required`, `:optional`,
-  `:read-only`, `:read-write`, `:placeholder-shown`. `:hover`, `:focus`
+  `:read-only`, `:read-write`, `:placeholder-shown`; `:open` (since 22 Oct
+  2026: a details or dialog with its `open` attribute). `:hover`, `:focus`
   and the other user-action pseudo-classes never match in a still page;
   their rules are kept apart for when EWeb is interactive. `::before` and
   `::after` get styles. Unknown pseudo-classes and pseudo-elements make a
@@ -70,19 +71,36 @@ Falcons, and a divide that costs 40 to 80 cycles.
   vmax and the small, large and dynamic viewport ones, in, cm, mm, Q, pt,
   pc); percentages; `calc()`, `min()`, `max()`, `clamp()`; colours in
   every CSS Color 4 syntax for `rgb()` and `hsl()`, hex with alpha, the
-  named and system colours, `currentcolor`; `url()`; gradients (kept as
-  "an image without a URL").
+  named and system colours, `currentcolor`; `url()`; gradients (since 22
+  Oct 2026, CSS Images 3 and 4: `linear-`, `radial-` and `conic-gradient()`
+  and their `repeating-` forms, kept whole, `ec_grad`: the direction (an
+  angle in any unit, or `calc()`, `min()`, `max()`, `clamp()` of angles,
+  worked out; or to a side or corner), the shape, size and centre, each
+  colour stop and its positions, hints; lengths px plus a percentage,
+  those in em, rem or vw computed with the style, `min()` and the like of
+  one unit worked out; one whose stops can't be placed, as `min(10%,
+  5px)`, kept as its colours and drawn as their average; an interpolation
+  method read and drawn as sRGB; the Compatibility Standard's
+  `-webkit-linear-gradient()` and `-webkit-gradient()` kept as the same;
+  `DESIGN.md`, CSS gradients).
 - **Custom properties and `var()`**, with fallbacks, inheritance and
   cycles.
 - **At-rules:** `@media` (Media Queries 4, with ranges and three-valued
   logic), `@supports` (declarations, `not`, `and`, `or`, `selector()`),
   `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
   `@container` are skipped.
-- **Properties:** the 98 EWeb draws: box model, positioning, floats,
-  borders, backgrounds (first layer; `background-size` since 21 Oct 2026,
+- **Properties:** the 103 EWeb draws or needs: box model, positioning, floats,
+  borders, backgrounds (the first layer, the top one, in the `background`
+  shorthand and, since 22 Oct 2026, in a `background-image` of several;
+  `background-size` since 21 Oct 2026,
   kept as two longhands of the engine's own, `-ec-background-size-w` and
   `-h`), fonts, text (including `direction`,
-  `unicode-bidi`, `text-align: start | end`), lists, tables, flexbox,
+  `unicode-bidi`, `text-align: start | end`, and since 22 Oct 2026 HTML's
+  `-webkit-left | -right | -center`, with Gecko's `-moz-` names, and
+  `vertical-align: -webkit-baseline-middle`: `DESIGN.md`, Legacy
+  centring), lists (since 22 Oct 2026 with CSS Counter Styles 3's
+  `disclosure-open` and `disclosure-closed`, a details' summary's
+  triangles: `DESIGN.md`, Details and summary), tables, flexbox,
   grid (since 21 Oct 2026: `grid-template-columns` and `-rows` as track
   lists with `fr`, `minmax()`, `fit-content()` and `repeat()`, `auto-fill`
   and `auto-fit` too; `grid-template-areas`; `grid-auto-columns`, `-rows`
@@ -90,9 +108,17 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `justify-items` and `justify-self`; the shorthands `grid-row`,
   `grid-column`, `grid-area` and `grid-template` (rows / columns); line
   names are read past), `gap`, `overflow`, `opacity`, `content`, and their
-  shorthands. Unknown properties are skipped. Not yet: logical
-  properties (`margin-inline-start` and so on, which matter for Hebrew),
-  transforms, animations, `border-radius`, shadows.
+  shorthands. Since 22 Oct 2026, for translucency (`DESIGN.md`):
+  `pointer-events`; `background-clip` (with `-webkit-background-clip` and
+  the `background` shorthand's box); and of what EWeb doesn't draw, what
+  it needs to show text of a transparent colour or content an animation
+  reveals: `text-shadow` (the first shadow's colour), `-webkit-text-stroke`
+  (`-width`, `-color` and the shorthand), `animation-name` and the
+  `animation` shorthand (whether there is an animation). Unknown properties
+  are skipped. Not yet:
+  logical properties (`margin-inline-start` and so on, which matter for
+  Hebrew), transforms, running animations, `border-radius`, drawing
+  shadows.
 - **Computed values** as CSS defines them: relative lengths become px
   (percentages stay), `bolder` and `lighter` become weights, display is
   blockified for floats, absolute positioning, the root and flex items,
@@ -107,7 +133,8 @@ Falcons, and a divide that costs 40 to 80 cycles.
   test pages.
 - `make csscmp` compares the engine with LibCSS, value by value, on the
   whole page set (`tests/bench/pages.sh` first): every element, every
-  property both engines have. A difference counts as explained only when
+  property both engines have (LibCSS has none of the translucency ones
+  above, nor `overflow-wrap`, `row-gap`, grid's or `background-size`). A difference counts as explained only when
   it is a known gap in LibCSS. Most are found exactly: the page is styled
   again with one of the engine's `EC_COMPAT_*` switches on (each leaves out
   one thing LibCSS lacks), and the difference is put down to that thing
@@ -121,7 +148,7 @@ ec_ctx *c = ec_create(&m, 0);
 ec_sheet(c, ua_css, ua_len, EC_ORIGIN_UA);
 ec_sheet(c, page_css, page_len, EC_ORIGIN_AUTHOR);
 /* the document: ec_nodes with atoms from ec_intern(c, ...) */
-ec_select(c, root);                     /* every node's style is set */
+ec_select(c, root);                     /* every node's style is set (-1: out of memory, not all) */
 /* node->style->v[EP_COLOR].i, node->style->k[EP_WIDTH], ... */
 ec_destroy(c);
 ```

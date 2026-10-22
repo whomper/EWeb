@@ -1,7 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /* EWeb's UA stylesheet: the HTML Standard's rendering section, cut to
- * what EWeb draws. */
+ * what EWeb draws. <center> and caption centre their blocks as well as
+ * their lines (15.3.3, 15.3.8: -webkit-center), and th is centred only
+ * where its row's text-align is still the initial (-ec-center-or-inherit).
+ * A details' summary is a list item with a disclosure triangle (15.5.4;
+ * its counter-increment left out: EWeb's layout doesn't number it); what
+ * a closed details hides, and the summary one without has, are the
+ * layout's. */
 #include "doc.h"
 
 const char doc_ua_css[] =
@@ -13,15 +19,17 @@ const char doc_ua_css[] =
 	"area, base, basefont, datalist, head, link, meta, noembed, noframes,"
 	" param, rp, script, style, template, title, [hidden], dialog:not([open]) { display: none }\n"
 	"li { display: list-item }\n"
+	"details > summary:first-of-type { display: list-item; list-style: disclosure-closed inside }\n"
+	"details[open] > summary:first-of-type { list-style-type: disclosure-open }\n"
 	"table { display: table; border-spacing: 2px; border-collapse: separate }\n"
-	"caption { display: table-caption; text-align: center }\n"
+	"caption { display: table-caption; text-align: -webkit-center }\n"
 	"colgroup { display: table-column-group } col { display: table-column }\n"
 	"thead { display: table-header-group; vertical-align: middle }\n"
 	"tbody { display: table-row-group; vertical-align: middle }\n"
 	"tfoot { display: table-footer-group; vertical-align: middle }\n"
 	"tr { display: table-row; vertical-align: inherit }\n"
 	"td, th { display: table-cell; vertical-align: inherit; padding: 1px }\n"
-	"th { font-weight: bold; text-align: center }\n"
+	"th { font-weight: bold; text-align: -ec-center-or-inherit }\n"
 	"input, select, button, textarea { display: inline-block }\n"
 	"input, select, textarea, button { font-size: 13.33px }\n"
 	"body { margin: 8px }\n"
@@ -52,8 +60,14 @@ const char doc_ua_css[] =
 	"sub { vertical-align: sub; font-size: smaller } sup { vertical-align: super; font-size: smaller }\n"
 	"small { font-size: smaller } big { font-size: larger }\n"
 	"mark { background-color: yellow; color: black }\n"
-	"center { text-align: center }\n"
+	"center { text-align: -webkit-center }\n"
 	"img, svg, video, canvas, iframe, object, embed { display: inline-block }\n"
 	"[dir=rtl] { direction: rtl } [dir=ltr] { direction: ltr }\n"
 	"bdi, bdo { unicode-bidi: isolate } bdo[dir] { unicode-bidi: isolate-override }\n"
 	"q:before { content: open-quote } q:after { content: close-quote }\n";
+
+/* and in quirks mode (15.3.8): a table starts its text-align afresh, so
+   the text in a table that <center> centres starts at the left. The
+   rule's font, line-height and white-space parts are left out: EWeb
+   keeps them inherited (DESIGN.md, Legacy centring). */
+const char doc_quirks_css[] = "table { text-align: start }";

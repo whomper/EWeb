@@ -18,9 +18,11 @@
  * Values are written as ectest prints them: lengths in px (two decimals
  * at most), percentages, numbers, integers, keywords, colours as #rrggbb
  * (#rrggbbaa if not opaque), currentcolor, calc(Apx + B%), min(...),
- * url(...), gradient, and font families as names|generic. The UA sheet is
- * nsbench's, the viewport 640x480, the default font 16px. Two lines
- * among the expected values look at the media queries:
+ * url(...), gradients as CSS writes them (each stop's position as kept:
+ * px, % or calc(), a conic one's as a percentage of the turn), and font
+ * families as names|generic. The UA sheet is nsbench's, the viewport
+ * 640x480, the default font 16px. Two lines among the expected values
+ * look at the media queries:
  *
  *   @span LO HI    the widths every media query evaluated holds at as
  *                  it did (ec_media_span)
@@ -76,6 +78,108 @@ static void tsize_str(char *buf, size_t cap, const ec_tsize *z)
 	}
 }
 
+static void color_str(char *buf, size_t cap, uint32_t c)
+{
+	if ((c >> 24) == 0xff)
+		snprintf(buf, cap, "#%06lx", (unsigned long) (c & 0xffffff));
+	else
+		snprintf(buf, cap, "#%06lx%02lx", (unsigned long) (c & 0xffffff), (unsigned long) (c >> 24));
+}
+
+/* a gradient's length: px, %, or calc(Apx + B%) */
+static void glen_str(char *buf, size_t cap, const ec_glen *l)
+{
+	char a[32], b[32];
+	fx_str(a, sizeof a, l->px, "px");
+	fx_str(b, sizeof b, l->pct, "%");
+	if (l->pct == 0)
+		snprintf(buf, cap, "%s", a);
+	else if (l->px == 0)
+		snprintf(buf, cap, "%s", b);
+	else
+		snprintf(buf, cap, "calc(%s + %s)", a, b);
+}
+
+/* a gradient as the engine keeps it, in CSS's words: its kind, then
+   linear: its angle, or to its side or corner; radial: circle or
+   ellipse, its extent or radii, at its centre; conic: from its angle at
+   its centre; then each stop's colour (currentcolor) and its position
+   if it has one, and each hint's position (a conic gradient's as a
+   percentage of the turn). One kept as its average (approx): its kind
+   and its colours, then "averaged" */
+static void grad_str(char *buf, size_t cap, const ec_grad *g)
+{
+	static const char *const kind[] = { "linear", "radial", "conic" };
+	static const char *const ext[] = { "", "closest-side", "closest-corner", "farthest-side", "farthest-corner" };
+	char a[64], b[64];
+	size_t n;
+	int i;
+
+	n = (size_t) snprintf(buf, cap, "%s%s-gradient(", g->repeat ? "repeating-" : "", kind[g->type]);
+	if (g->approx) {
+		for (i = 0; i < g->n && n < cap; i++) {
+			if (g->s[i].flags & EC_GS_CUR)
+				snprintf(a, sizeof a, "currentcolor");
+			else
+				color_str(a, sizeof a, g->s[i].argb);
+			n += snprintf(buf + n, cap - n, "%s%s", i ? ", " : "", a);
+		}
+		if (n < cap)
+			snprintf(buf + n, cap - n, ") averaged");
+		return;
+	}
+	if (g->type == EC_GRAD_LINEAR) {
+		if (g->to)
+			n += snprintf(buf + n, cap - n, "to%s%s%s%s", g->to & EC_TO_TOP ? " top" : "",
+				      g->to & EC_TO_BOTTOM ? " bottom" : "", g->to & EC_TO_LEFT ? " left" : "",
+				      g->to & EC_TO_RIGHT ? " right" : "");
+		else {
+			fx_str(a, sizeof a, g->angle, "deg");
+			n += snprintf(buf + n, cap - n, "%s", a);
+		}
+	} else {
+		if (g->type == EC_GRAD_RADIAL) {
+			n += snprintf(buf + n, cap - n, "%s ", g->circle ? "circle" : "ellipse");
+			if (g->extent) {
+				n += snprintf(buf + n, cap - n, "%s ", ext[g->extent]);
+			} else {
+				glen_str(a, sizeof a, &g->rx);
+				glen_str(b, sizeof b, &g->ry);
+				n += g->circle ? snprintf(buf + n, cap - n, "%s ", a) :
+					snprintf(buf + n, cap - n, "%s %s ", a, b);
+			}
+		} else {
+			fx_str(a, sizeof a, g->angle, "deg");
+			n += snprintf(buf + n, cap - n, "from %s ", a);
+		}
+		glen_str(a, sizeof a, &g->x);
+		glen_str(b, sizeof b, &g->y);
+		n += snprintf(buf + n, cap - n, "at %s %s", a, b);
+	}
+	for (i = 0; i < g->n && n < cap; i++) {
+		const ec_gstop *s = &g->s[i];
+		n += snprintf(buf + n, cap - n, ", ");
+		if (n >= cap)
+			break;
+		if (!(s->flags & EC_GS_HINT)) {
+			if (s->flags & EC_GS_CUR)
+				snprintf(a, sizeof a, "currentcolor");
+			else
+				color_str(a, sizeof a, s->argb);
+			n += snprintf(buf + n, cap - n, "%s%s", a, s->flags & EC_GS_AT ? " " : "");
+		}
+		if (s->flags & EC_GS_AT && n < cap) {
+			if (g->type == EC_GRAD_CONIC)
+				fx_str(a, sizeof a, s->at.pct, "%");
+			else
+				glen_str(a, sizeof a, &s->at);
+			n += snprintf(buf + n, cap - n, "%s", a);
+		}
+	}
+	if (n < cap)
+		snprintf(buf + n, cap - n, ")");
+}
+
 static void value(const ec_style *s, int p, char *buf, size_t cap)
 {
 	ec_v v = s->v[p];
@@ -94,16 +198,12 @@ static void value(const ec_style *s, int p, char *buf, size_t cap)
 			snprintf(buf, cap, "%ld", (long) v.i);
 		return;
 	case EK_CURCOLOR: snprintf(buf, cap, "currentcolor"); return;
-	case EK_IMAGE: snprintf(buf, cap, "gradient"); return;
-	case EK_COLOR: {
-		uint32_t c = (uint32_t) v.i;
-		if ((c >> 24) == 0xff)
-			snprintf(buf, cap, "#%06lx", (unsigned long) (c & 0xffffff));
-		else
-			snprintf(buf, cap, "#%06lx%02lx", (unsigned long) (c & 0xffffff),
-				(unsigned long) (c >> 24));
+	case EK_IMAGE:
+		grad_str(buf, cap, v.p);
 		return;
-	}
+	case EK_COLOR:
+		color_str(buf, cap, (uint32_t) v.i);
+		return;
 	case EK_CALC: {
 		const ec_calc *c = v.p;
 		static const char *const ops[] = { "calc", "min", "max", "clamp" };
@@ -203,7 +303,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 	c = ecs_sheets(doc, &css, &csslen, 1, &ss);
 	ecs_select(c, doc, &ss);
 	for (line = strtok_r(expect, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save)) {
-		char sel[128], prop[64], want[256], got[256], id[128];
+		char sel[128], prop[64], want[512], got[512], id[128];
 		const node *n;
 		const ec_style *st;
 		const char *pseudo;
@@ -249,7 +349,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 			}
 			continue;
 		}
-		if (sscanf(line, "%127s %63s %255[^\n]", sel, prop, want) != 3) {
+		if (sscanf(line, "%127s %63s %511[^\n]", sel, prop, want) != 3) {
 			fprintf(stderr, "FAIL %s: can't read \"%s\"\n", name, line);
 			fails++;
 			continue;

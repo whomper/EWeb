@@ -462,7 +462,7 @@ enum {
 	R_NONE, R_MIN_AUTO, R_BORDER_NONE, R_FLEX_ITEM, R_GAP, R_CALC, R_GRADIENT, R_EM_INHERIT,
 	R_USED_OFFSET, R_FLEX_BASIS, R_WEIGHT, R_MEDIUM, R_FLOAT, R_UNITS,
 	R_V_CALC, R_V_GAP, R_V_START, R_V_SELECTORS, R_V_MEDIA, R_V_ATRULES, R_V_COLOR,
-	R_V_INSET, R_V_KEYWORDS, R_V_GRADIENT, R_V_DECO, R_V_NOINLINE, R_V_ALL, R_LH_PCT, R_N
+	R_V_INSET, R_V_KEYWORDS, R_V_GRADIENT, R_V_DECO, R_V_NOINLINE, R_V_LAYERS, R_V_ALL, R_LH_PCT, R_N
 };
 static struct { const char *why; unsigned long n; unsigned opt; } reasons[R_N] = {
 	{ NULL, 0, 0 },
@@ -481,7 +481,8 @@ static struct { const char *why; unsigned long n; unsigned opt; } reasons[R_N] =
 	{ "LibCSS's px (unit.c) rounds the px in a unit down, and swaps vw and vh", 0, 0 },
 	{ "calc(), min(), max(), clamp(): LibCSS drops them", 0, EC_COMPAT_CALC },
 	{ "gap and row-gap: LibCSS has neither", 0, EC_COMPAT_GAP },
-	{ "text-align: start, end, match-parent (CSS Text 3): LibCSS has none", 0, EC_COMPAT_START },
+	{ "text-align: start, end, match-parent (CSS Text 3), -webkit-center and the like: LibCSS has none",
+		0, EC_COMPAT_START },
 	{ "Selectors 4 (:is(), :where(), :not() of a list), form pseudo-classes, :lang()", 0,
 		EC_COMPAT_SELECTORS },
 	{ "media features other than width, height and prefers-color-scheme", 0, EC_COMPAT_MEDIA },
@@ -493,10 +494,12 @@ static struct { const char *why; unsigned long n; unsigned opt; } reasons[R_N] =
 	{ "text-decoration with a style or colour (CSS Text Decoration 3)", 0, EC_COMPAT_DECO },
 	{ "LibCSS left out the element's style attribute (on a few pages: a LibCSS fault)", 0,
 		EC_COMPAT_NOINLINE },
+	{ "background-image of several layers: LibCSS drops it, EWeb keeps the top one", 0,
+		EC_COMPAT_LAYERS },
 	{ "several of the switches above together", 0, EC_COMPAT_CALC | EC_COMPAT_GAP |
 		EC_COMPAT_START | EC_COMPAT_SELECTORS | EC_COMPAT_MEDIA | EC_COMPAT_ATRULES |
 		EC_COMPAT_COLOR | EC_COMPAT_INSET | EC_COMPAT_KEYWORDS | EC_COMPAT_GRADIENT |
-		EC_COMPAT_DECO },
+		EC_COMPAT_DECO | EC_COMPAT_LAYERS },
 	{ "a line-height percentage computes to a length (CSS 2.1, 10.8.1)", 0, 0 },
 };
 
@@ -676,6 +679,9 @@ static void compare(const node *n, const css_computed_style *ls, const ec_style 
 			continue;		/* nor grid's */
 		if (p == EP_BACKGROUND_SIZE_W || p == EP_BACKGROUND_SIZE_H)
 			continue;		/* nor background-size */
+		if (p == EP_POINTER_EVENTS || p == EP_TEXT_SHADOW || p == EP_TEXT_STROKE_WIDTH ||
+		    p == EP_TEXT_STROKE_COLOR || p == EP_BACKGROUND_CLIP || p == EP_ANIMATION_NAME)
+			continue;		/* nor these (translucency's: DESIGN.md) */
 		lc_get(p, ls, root, &a);
 		ec_get(p, es, &b);
 

@@ -22,14 +22,13 @@
 static inline ec_fx fx_mul(ec_fx a, ec_fx b)
 {
 	int neg = 0;
-	uint32_t ua, ub, r;
+	uint32_t ua = (uint32_t) a, ub = (uint32_t) b, r;
 
-	if (a < 0) { a = -a; neg = 1; }
-	if (b < 0) { b = -b; neg ^= 1; }
-	ua = (uint32_t) a;
-	ub = (uint32_t) b;
+	/* (in unsigned arithmetic: out of range wraps, it isn't undefined) */
+	if (a < 0) { ua = 0u - ua; neg = 1; }
+	if (b < 0) { ub = 0u - ub; neg ^= 1; }
 	r = (ua >> 10) * ub + (((ua & 1023) * ub) >> 10);
-	return neg ? -(ec_fx) r : (ec_fx) r;
+	return (ec_fx) (neg ? 0u - r : r);
 }
 
 /* ------------------------------------------------------------ memory */
@@ -201,7 +200,7 @@ enum {
 	S_FIRST_OF_TYPE, S_LAST_OF_TYPE, S_ONLY_OF_TYPE, S_NTH_OF_TYPE, S_NTH_LAST_OF_TYPE,
 	S_LINK, S_NEVER, S_NOT, S_IS, S_LANG, S_DIR,
 	S_ENABLED, S_DISABLED, S_CHECKED, S_REQUIRED, S_OPTIONAL, S_READ_WRITE, S_READ_ONLY,
-	S_PLACEHOLDER_SHOWN
+	S_PLACEHOLDER_SHOWN, S_OPEN
 };
 
 #define SF_ICASE	1		/* [attr=value i] */
@@ -291,9 +290,9 @@ struct ec_ctx {
 
 	/* names the matcher and the cascade look for */
 	const ec_atom *a_style, *a_href, *a_lang, *a_dir, *a_type, *a_disabled, *a_checked,
-		*a_selected, *a_required, *a_readonly, *a_placeholder, *a_value, *a_hidden;
+		*a_selected, *a_required, *a_readonly, *a_placeholder, *a_value, *a_hidden, *a_open;
 	const ec_atom *t_a, *t_area, *t_input, *t_button, *t_select, *t_textarea,
-		*t_option, *t_optgroup, *t_fieldset, *t_html;
+		*t_option, *t_optgroup, *t_fieldset, *t_html, *t_details, *t_dialog;
 
 	ec_style initial;		/* every property's initial value */
 	const ec_style *root_style;	/* for rem */
@@ -319,7 +318,7 @@ int ec_prop_lookup(const char *s, size_t len);	/* EP_*, EC_SH_BASE + ES_*, or -1
 enum {
 	VP_KW, VP_LEN, VP_COLOR, VP_FAMILY, VP_FSIZE, VP_WEIGHT, VP_LHEIGHT, VP_LISTTYPE,
 	VP_IMAGE, VP_BWIDTH, VP_BGPOS, VP_INT, VP_NUM, VP_ALPHA, VP_VALIGN, VP_DECO, VP_CONTENT,
-	VP_TRACKS, VP_AREAS, VP_AUTOFLOW, VP_GRIDLINE
+	VP_TRACKS, VP_AREAS, VP_AUTOFLOW, VP_GRIDLINE, VP_SHADOW, VP_ANIM
 };
 
 /* Parses a property's (or shorthand's) value from its tokens (no

@@ -28,7 +28,8 @@ enum {
 	T_NOSCRIPT, T_A, T_IMG, T_BR, T_HR, T_LI, T_UL, T_OL, T_TABLE, T_TR, T_TD, T_TH,
 	T_INPUT, T_BUTTON, T_SELECT, T_OPTION, T_TEXTAREA, T_PRE, T_IFRAME, T_SVG, T_CANVAS,
 	T_VIDEO, T_AUDIO, T_OBJECT, T_EMBED, T_TEMPLATE, T_LABEL, T_FORM, T_WBR,
-	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_PICTURE, T_SOURCE, T_NTAGS
+	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_PICTURE, T_SOURCE, T_DIV, T_P, T_CAPTION,
+	T_THEAD, T_TBODY, T_TFOOT, T_DETAILS, T_SUMMARY, T_NTAGS
 };
 
 typedef struct dnode dnode;
@@ -123,6 +124,34 @@ int doc_refresh_meta(const dnode *n);
    the page's refresh, so those after are wanted only when the ones
    before are javascript: */
 #define DOC_REFRESH_METAS 16
+/* details and summary (the HTML Standard, 4.11.1 and 4.11.2), in both
+   editions: an HTML element of that tag */
+#define DN_IS(n, t) ((n)->type == DN_ELEMENT && (n)->ns == DN_NS_HTML && (n)->tag == (t))
+/* a details element's summary, the one a click opens and closes it by
+   (its first summary child), or NULL (the layout shows one of its own) */
+dnode *dn_summary(const dnode *details);
+/* its open attribute set ("") or removed, its hints and the CSS engine's
+   links kept, so that styling it again needs no doc_refresh; 0 if out of
+   memory */
+int dn_set_open(doc *d, dnode *n, int open);
+/* the other open details of n's group (the same, not empty, name
+   attribute, in the same tree: a detached one's, a template's contents'
+   own), or NULL */
+dnode *dn_details_rival(const doc *d, const dnode *n);
+/* details opened or closed, as a click on its summary does (4.11.2, the
+   summary's activation behaviour): opened, the open one of its group is
+   closed (4.11.1, ensure details exclusivity by closing other elements if
+   needed). changed(ud, k) for each whose open attribute changed, n
+   first; 0 if out of memory */
+int dn_details_toggle(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud);
+/* 1 when a closed details folds n away: n is in its content, not its
+   summary (n then has no box, whatever its y says) */
+int dn_folded(const dnode *n);
+/* the ancestor details revealing algorithm (4.11.1; scroll to the
+   fragment, 7.4.6.4): each closed details n is in the content of opened,
+   the innermost first, as dn_details_toggle does (changed for each).
+   Returns how many were opened */
+int dn_reveal(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud);
 
 /* The page's stylesheets in document order: cb is called for each
    <style> with its text (is_link 0) and each <link rel=stylesheet> with
@@ -143,11 +172,13 @@ uint32_t doc_sheets_key(const doc *d);
 int doc_link_loads(const dnode *n);
 
 /* styles every element: the UA sheet, then the sheets added with
-   ec_sheet() in between (the loader's), then selection */
+   ec_sheet() in between (the loader's), then selection; doc_select:
+   0, or -1 when out of memory (some elements have no style) */
 void doc_add_ua(doc *d);
-void doc_select(doc *d);
+int doc_select(doc *d);
 
-/* EWeb's UA stylesheet */
+/* EWeb's UA stylesheet, and what it adds in quirks mode */
 extern const char doc_ua_css[];
+extern const char doc_quirks_css[];
 
 #endif

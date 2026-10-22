@@ -28,7 +28,20 @@
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
   the page of pictures from the disk, each picture in the screen's own
-  colours.
+  colours, the page of translucent colours and opacity
+  (tests/layout/alpha.html), mixed through the screen's own palette, and
+  the page of CSS gradients (tests/layout/gradients.html), dithered to it;
+- details (the Falcon, 16 colours, in a window; then EWEBST.PRG on the
+  1040 ST): tests/layout/details.html from the disk, a closed details'
+  summary clicked (it opens, the page taller, the window where it was),
+  clicked again (closed, the page as tall as before); then the page
+  typed with a #fragment in a closed details (it opens, the window
+  there), a summary further down clicked (the window still there), and a
+  #fragment of the same page in another closed details typed (it opens
+  and the window goes there, the page laid out again); first EWEBST.PRG on
+  the 1 MB ST (TOS 1.04), on a small FAQ page of its own: a summary
+  clicked open and closed twice, the page loaded with a #fragment in a
+  closed details and then one of the same page in another (each opens).
 
 - refresh (the Falcon, pages from the disk): a page whose <meta
   http-equiv=refresh> goes on to another in 20 s, said on the status line,
@@ -45,7 +58,7 @@
 EWEB.PRG says what it does as "EWEB ..." lines through NatFeats; each step
 waits for the line it expects, then a screenshot goes to OUT.
 
-    tests/hatari/gui_test.py OUT [browse] [scripts] [screens] [st] [gateway] [falcon] [deep] [refresh]"""
+    tests/hatari/gui_test.py OUT [browse] [scripts] [screens] [st] [gateway] [falcon] [deep] [refresh] [details]"""
 import os
 import re
 import shutil
@@ -61,7 +74,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep", "refresh"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep", "refresh", "details"]
 # GUI_SLOT=N gives the rigs their own ports and X display, so two trees
 # can run them at once
 SLOT = int(os.environ.get("GUI_SLOT", "0"))
@@ -87,6 +100,10 @@ def hd_for(name, home, inf=""):
             shutil.copy(os.path.join(ROOT, f), hd)
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
+    shutil.copy(os.path.join(ROOT, "tests/layout/alpha.html"), os.path.join(hd, "ALPHA.HTM"))
+    shutil.copy(os.path.join(ROOT, "tests/layout/gradients.html"), os.path.join(hd, "GRAD.HTM"))
+    os.makedirs(os.path.join(hd, "IMG"), exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "tests/layout/img/one.png"), os.path.join(hd, "IMG", "ONE.PNG"))
     import server
     with open(os.path.join(hd, "PICS.HTM"), "wb") as f:
         f.write(server.PICS_PAGE)
@@ -679,6 +696,27 @@ def screens():
             check("screens: %s pictures" % name, ev is not None and len(dec) == 5, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
+            # translucent colours and opacity, mixed with what is under them
+            # through the screen's palette (looked at in its screenshot)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/ALPHA.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            check("screens: %s translucent colours" % name,
+                  ev is not None and ev.startswith("shown file:///C:/ALPHA.HTM "), str(r.events()[-5:]))
+            r.wait(r"pictures ", 120)
+            time.sleep(2)
+            r.shot(3)
+            # CSS gradients, in the screen's colours (looked at in its
+            # screenshot)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/GRAD.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            check("screens: %s gradients" % name,
+                  ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
+            time.sleep(2)
+            r.shot(5)
             if name == "falcon256":
                 # ^, the Settings dialog (looked at in its screenshot); Esc
                 # leaves it as it was
@@ -742,8 +780,11 @@ def cached_pictures(name, spec, dec):
 def st():
     """EWEBST.PRG, the ST edition, on the 1 MB ST and Erez's 1040 ST (68000
     at 8 MHz, TOS 1.04): a page and its pictures from the disk in
-    monochrome and in medium resolution; then, over the network, a secure
-    page through AERA-Gateway's webgate (the ST has no TLS of its own)"""
+    monochrome and in medium resolution, and on the 1040 the pages of
+    translucent colours and opacity (tests/layout/alpha.html) and of CSS
+    gradients (tests/layout/gradients.html); then, over
+    the network, a secure page through AERA-Gateway's webgate (the ST has
+    no TLS of its own)"""
     if not os.path.exists(os.path.join(ROOT, "binary/EWEBST.PRG")):
         return check("st: EWEBST.PRG made", False, "make binary/EWEBST.PRG first")
     for name, spec in (("stone", "ST-1:mono"), ("stmono", "ST:mono"), ("stmed", "ST:med")):
@@ -774,6 +815,32 @@ def st():
                       ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
+            if name != "stone":
+                # translucent colours and opacity as the ST edition's 68000
+                # code mixes them: monochrome's patterns, medium's 4 colours
+                # (looked at in its screenshot)
+                r.key(L, (CTRL,))
+                r.type("file:///C:/ALPHA.HTM")
+                r.key(RETURN)
+                ev = r.wait(r"shown ", 300)
+                check("st: %s translucent colours" % name,
+                      ev is not None and ev.startswith("shown file:///C:/ALPHA.HTM "), str(r.events()[-5:]))
+                r.wait(r"pictures ", 300)
+                time.sleep(2)
+                r.shot(4)
+                # CSS gradients as the ST edition draws them: those to a
+                # side or at right angles a row or a column at a time, any
+                # other its colours' average (DESIGN.md, CSS gradients;
+                # make test checks the pixels, tests/layout/gradients.py);
+                # here that the page shows (looked at in its screenshot)
+                r.key(L, (CTRL,))
+                r.type("file:///C:/GRAD.HTM")
+                r.key(RETURN)
+                ev = r.wait(r"shown ", 300)
+                check("st: %s gradients" % name,
+                      ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
+                time.sleep(3)
+                r.shot(5)
             if name == "stmono":
                 # a secure page with no gateway set: said plainly, the page
                 # stays (the hub, 20 Oct 2026)
@@ -1169,6 +1236,179 @@ def refresh():
         r.end()
 
 
+# a small FAQ page for the 1 MB ST, which tests/layout/details.html is
+# too much for
+FAQ_PAGE = b"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>FAQ</title></head><body>
+<h1>FAQ</h1>
+<details id="q1"><summary>Question one is here</summary>
+<p>The answer to the first question, a sentence or two long, hidden until opened.</p></details>
+<details id="q2"><summary>Question two</summary><p id="a2">The second answer.</p></details>
+<details id="q3"><summary>Question three</summary><p id="a3">The third answer.</p></details>
+<p>The end.</p>
+</body></html>
+"""
+
+
+def details_st1():
+    """on the 1 MB ST (TOS 1.04), where the page shown and another laid
+    out beside it once didn't fit: a summary clicked opens and closes its
+    details, again and again; a #fragment in a closed details opens it,
+    on a page loaded (the one before kept for Back) and on the page shown"""
+    name = "detailsst1"
+    page = os.path.join(OUT, "faq.html")
+    with open(page, "wb") as f:
+        f.write(FAQ_PAGE)
+    hd = hd_for(name, r"C:\FAQ.HTM")
+    shutil.copy(page, os.path.join(hd, "FAQ.HTM"))
+    r = Run(name, "ST-1:mono", hd, windowed=True, prg="EWEBST.PRG")
+    try:
+        ev = r.wait(r"shown ", 300)
+        if not check("details: %s shows the page" % name, ev is not None and ev.startswith("shown file:///C:/FAQ.HTM "),
+                     str(r.events())):
+            return
+        time.sleep(2)
+        r.shot(0)
+        m = re.search(r"height (\d+) .*area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev)
+        h0, area, top = int(m.group(1)), tuple(int(m.group(i)) for i in range(2, 6)), int(m.group(6))
+        pt = text_point(page, area, top, "Question one")
+        if not check("details: %s, the summary found" % name, pt is not None):
+            return
+        h1 = None
+        for k, want in enumerate(("opened", "closed", "opened", "closed")):
+            r.mouse.click(*pt)
+            ev = r.wait(r"details ", 120)
+            m = re.match(r"details (\w+) height (\d+) top (\d+) ms (\d+)", ev or "")
+            ok = m is not None and m.group(1) == want and (int(m.group(2)) > h0 if want == "opened" else
+                                                            int(m.group(2)) == h0)
+            if ok and want == "opened":
+                ok = h1 is None or int(m.group(2)) == h1
+                h1 = int(m.group(2))
+            check("details: %s, click %d: %s (%s ms)" % (name, k + 1, want, m.group(4) if m else "?"), ok,
+                  str(r.events()[-5:]))
+            time.sleep(2)
+            r.shot(k + 1)
+        # the page loaded again with a #fragment in a closed details (the
+        # one shown kept for Back): opened
+        r.key(L, (CTRL,))
+        r.type("c:/faq.htm#a3")
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 300)
+        m = re.search(r"height (\d+) ", ev or "")
+        check("details: %s, a page loaded with a #fragment in a closed details: opened" % name,
+              ev is not None and re.match(r"shown file:///c:/faq\.htm#a3 ", ev, re.I) and m is not None and
+              int(m.group(1)) > h0, str(r.events()[-5:]))
+        if m is None:
+            return
+        h2 = int(m.group(1))
+        time.sleep(8)  # (the 8 MHz ST draws the page meanwhile)
+        r.shot(5)
+        # a place on the page shown in another closed details
+        r.key(L, (CTRL,))
+        r.type("c:/faq.htm#a2")
+        r.key(RETURN)
+        ev = r.wait(r"same ", 120)
+        m = re.search(r"opened height (\d+)", ev or "")
+        check("details: %s, a #fragment on the page in a closed details: opened" % name,
+              m is not None and int(m.group(1)) > h2, str(r.events()[-5:]))
+        time.sleep(8)
+        r.shot(6)
+        r.key(Q, (CTRL,))
+        check("details: %s quits" % name, r.wait(r"quit$", 120) is not None and
+              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+    finally:
+        r.end()
+
+
+def details():
+    """a details' summary clicked: it opens where it is (the page laid out
+    again, taller, the window's place kept), and closes again; and on the
+    1 MB ST (details_st1)"""
+    xvfb = machines.xvfb(DISPLAY)
+    page = os.path.join(ROOT, "tests/layout/details.html")
+    try:
+        details_st1()
+        for name, spec, prg in (("details", "Falcon:16", "EWEB.PRG"), ("detailsst", "ST:mono", "EWEBST.PRG")):
+            hd = hd_for(name, r"C:\DETAILS.HTM")
+            shutil.copy(page, os.path.join(hd, "DETAILS.HTM"))
+            r = Run(name, spec, hd, windowed=True, prg=prg)
+            try:
+                ev = r.wait(r"shown ", 300)
+                check("details: %s shows the page" % name,
+                      ev is not None and ev.startswith("shown file:///C:/DETAILS.HTM "), str(r.events()))
+                if ev is None:
+                    continue
+                time.sleep(2)
+                r.shot(0)
+                m = re.search(r"height (\d+) .*area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev)
+                h0, area, top = int(m.group(1)), tuple(int(m.group(i)) for i in range(2, 6)), int(m.group(6))
+                pt = text_point(page, area, top, "Closed: only")
+                if not check("details: %s, the summary found" % name, pt is not None):
+                    continue
+                r.mouse.click(*pt)
+                ev = r.wait(r"details ", 120)
+                m = re.match(r"details (\w+) height (\d+) top (\d+) ms (\d+)", ev or "")
+                check("details: %s, a summary clicked opens it (%s ms)" % (name, m.group(4) if m else "?"),
+                      m is not None and m.group(1) == "opened" and int(m.group(2)) > h0 and int(m.group(3)) == top,
+                      str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(1)
+                r.mouse.click(*pt)
+                ev = r.wait(r"details ", 120)
+                m = re.match(r"details (\w+) height (\d+) top (\d+) ms (\d+)", ev or "")
+                check("details: %s, clicked again it closes (%s ms)" % (name, m.group(4) if m else "?"),
+                      m is not None and m.group(1) == "closed" and int(m.group(2)) == h0, str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(2)
+                # an address whose #fragment is in a closed details: it
+                # opens, and the window is there
+                r.key(L, (CTRL,))
+                r.type("c:/details.htm#nosump")
+                r.key(RETURN)
+                ev = r.wait(r"shown ", 120)
+                m = re.search(r"height (\d+) .*top (\d+)", ev or "")
+                check("details: %s, a #fragment in a closed details: opened, the window there" % name,
+                      ev is not None and re.match(r"shown file:///c:/details\.htm#nosump ", ev, re.I) and
+                      m is not None and int(m.group(1)) > h0 and int(m.group(2)) > 0, str(r.events()[-5:]))
+                if ev is None or m is None:
+                    continue
+                time.sleep(2)
+                r.shot(3)
+                # a summary further down clicked: the window stays where
+                # it was (not at the page's top)
+                h1, top = int(m.group(1)), int(m.group(2))
+                pt = text_point(page + "#nosump", area, top, "A summary that isn")
+                if not check("details: %s, a summary further down found in the window" % name,
+                             pt is not None and area[1] < pt[1] < area[1] + area[3], str(pt)):
+                    continue
+                r.mouse.click(*pt)
+                ev = r.wait(r"details ", 120)
+                m = re.match(r"details (\w+) height (\d+) top (\d+) ms (\d+)", ev or "")
+                check("details: %s, scrolled down, a summary clicked opens it where the window was" % name,
+                      m is not None and m.group(1) == "opened" and int(m.group(2)) > h1 and int(m.group(3)) == top,
+                      str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(4)
+                # a place on the same page in another closed details: it
+                # opens, the page laid out again, the window there
+                r.key(L, (CTRL,))
+                r.type("c:/details.htm#c1p")
+                r.key(RETURN)
+                ev = r.wait(r"same ", 120)
+                m = re.search(r"top (\d+) opened height (\d+)", ev or "")
+                check("details: %s, a #fragment on the page in a closed details: opened, the window there" % name,
+                      m is not None and 0 < int(m.group(1)) < top, str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(5)
+                r.key(Q, (CTRL,))
+                check("details: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-5:]))
+            finally:
+                r.end()
+    finally:
+        if xvfb is not None:
+            xvfb.terminate()
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -1194,5 +1434,10 @@ if "deep" in WHICH:
     deep()
 if "refresh" in WHICH:
     refresh()
+if "details" in WHICH:
+    if shutil.which("Xvfb") and shutil.which("xdotool"):
+        details()
+    else:
+        print("skip  details: needs Xvfb and xdotool")
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>CSS gradients</title>
+<style>
+body { font-family: sans-serif; margin: 8px; font-size: 13px }
+.all { display: flex; flex-wrap: wrap }
+.g { width: 180px; height: 48px; margin: 3px; color: #000 }
+.l1 { background: linear-gradient(red, blue); color: #fff }
+.l2 { background: linear-gradient(to right, #000, #fff) }
+.l3 { background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet) }
+.l4 { background: linear-gradient(to bottom right, #fff 0%, #036 100%) }
+.l5 { background: linear-gradient(90deg, #c00 50%, #00c 50%); color: #fff }
+.l6 { background: repeating-linear-gradient(-45deg, #fc0 0 10px, #333 10px 20px) }
+.l7 { background: linear-gradient(to right, #000, 20%, #fff) }
+.l8 { background: linear-gradient(0.25turn, #3f87a6, #ebf8e1, #f69d3c) }
+.r1 { background: radial-gradient(#e66465, #9198e5) }
+.r2 { background: radial-gradient(circle closest-side at 30% 40%, #fff, #369 90%, #036) }
+.r3 { background: repeating-radial-gradient(circle at 0 0, #fff 0 8px, #c00 8px 16px) }
+.r4 { background: radial-gradient(ellipse 60px 20px at right bottom, gold, transparent) #036 }
+.c1 { background: conic-gradient(red 0 25%, gold 0 60%, green 0) }
+.c2 { background: conic-gradient(from 90deg at 40% 60%, red, yellow, lime, aqua, blue, magenta, red) }
+.c3 { background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px }
+.t1 { background: #6a6; position: relative }
+.t1 span { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; color: #fff;
+	background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .8)) }
+.dark { background: #333; background: linear-gradient(#2c3e50, #4ca1af); color: #fff }
+.stripes { background: linear-gradient(#ccc 50%, #fff 50%) 0 0 / 100% 8px }
+.small { background: linear-gradient(red, blue) center / 50% 50% no-repeat #eee }
+.clip { border: 6px solid rgba(0, 0, 0, .3); background: linear-gradient(#f80, #08f) padding-box; width: 168px; height: 36px }
+.em { font-size: 10px; background: linear-gradient(to right, #000 2em, #fff 2em 4em, #000 calc(100% - 4em)); height: 48px }
+.fade { opacity: .5; background: linear-gradient(to right, #c00, #00c); color: #fff }
+.mark { background: linear-gradient(transparent 60%, #ff0 60%) }
+.cell { background: linear-gradient(#fff, #9c9) }
+.top { background: linear-gradient(#0c0, #060), url(img/one.png) }
+.cur { color: #c06; background: linear-gradient(to right, currentcolor, #fff) }
+</style></head>
+<body>
+<div class="all">
+<div class="g l1">to bottom</div><div class="g l2">to right, grey</div><div class="g l3">45deg, seven stops</div>
+<div class="g l4">to bottom right</div><div class="g l5">a sharp edge</div><div class="g l6">repeating stripes</div>
+<div class="g l7">a hint at 20%</div><div class="g l8">0.25turn</div>
+<div class="g r1">radial</div><div class="g r2">closest-side circle</div><div class="g r3">repeating rings</div>
+<div class="g r4">ellipse at a corner</div>
+<div class="g c1">conic pie</div><div class="g c2">conic wheel</div><div class="g c3">conic checks</div>
+<div class="g t1"><span>a fade over green</span></div>
+<div class="g dark">white on a dark gradient</div><div class="g stripes">tiled stripes</div>
+<div class="g small">centred, no-repeat</div><div class="g clip">padding-box</div>
+<div class="g em">em and calc()</div><div class="g fade">opacity .5</div>
+<div class="g cur">currentcolor</div><div class="g top">the top layer</div>
+</div>
+<p>Some <span class="mark">marked text</span> in a line, its gradient an average.</p>
+<table><tr><td class="cell">a cell<br>two lines</td><td class="cell">one</td></tr></table>
+</body></html>

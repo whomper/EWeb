@@ -1,0 +1,204 @@
+page 608 x 1016, background ffffff, 203 items, 0 links, title "Alignment"
+text 283,16 41x17 #000000 sans13 link 0 "centre"
+fill 240,19 128x20 #ccddee
+text 282,34 44x17 #000000 sans13 link 0 "a table"
+fill 240,19 128x1 #888888
+fill 240,38 128x1 #888888
+fill 240,20 1x18 #888888
+fill 367,20 1x18 #888888
+fill 256,39 96x16 #eeddcc
+text 256,52 78x17 #000000 sans13 link 0 "own left text"
+fill 240,55 128x16 #ccddee
+text 262,68 84x17 #000000 sans13 link 0 "through a div"
+fill 477,71 128x16 #ccddee
+text 519,84 86x17 #000000 sans13 link 0 "nearest: right"
+fill 152,93 303x1 #808080
+fill 152,94 303x1 #808080
+image 280,101 48x24 link 0 "block picture" file://./tests/layout/img/one.png
+fill 240,125 128x16 #ccddee
+text 252,138 104x17 #000000 sans13 link 0 "div align=center"
+fill 240,141 128x16 #ccddee
+text 251,154 106x17 #000000 sans13 link 0 "div align=middle"
+fill 477,157 128x20 #ccddee
+text 511,172 92x17 #000000 sans13 link 0 "div align=right"
+fill 477,157 128x1 #888888
+fill 477,176 128x1 #888888
+fill 477,158 1x18 #888888
+fill 604,158 1x18 #888888
+fill 3,177 128x16 #ccddee
+text 3,190 52x17 #000000 sans13 link 0 "left in rtl"
+fill 3,193 128x16 #ccddee
+text 3,206 98x17 #000000 sans13 link 0 "justify: as usual"
+text 3,222 511x17 #000000 sans13 link 0 "justified text runs from one edge to the other on every line but the last one here"
+text 257,251 94x17 #000000 sans13 link 0 "p align=center"
+text 500,284 105x17 #000000 sans13 bold link 0 "h4 align=right"
+fill 477,304 128x16 #ccddee
+text 477,317 107x17 #000000 sans13 link 0 "margin-left: auto"
+text 444,335 159x17 #000000 sans13 link 0 "a table, margin-left: auto"
+fill 442,320 163x1 #888888
+fill 442,339 163x1 #888888
+fill 442,321 1x18 #888888
+fill 604,321 1x18 #888888
+fill 477,340 128x16 #ccddee
+text 513,353 92x17 #000000 sans13 link 0 "rtl: at the right"
+text 484,371 119x17 #000000 sans13 link 0 "a table at the right"
+fill 482,356 123x1 #888888
+fill 482,375 123x1 #888888
+fill 482,357 1x18 #888888
+fill 604,357 1x18 #888888
+fill 110,378 128x20 #ccddee
+text 117,393 114x17 #000000 sans13 link 0 "in td align=center"
+fill 110,378 128x1 #888888
+fill 110,397 128x1 #888888
+fill 110,379 1x18 #888888
+fill 237,379 1x18 #888888
+fill 3,376 342x1 #888888
+fill 3,399 342x1 #888888
+fill 3,377 1x22 #888888
+fill 344,377 1x22 #888888
+fill 507,380 96x16 #eeddcc
+text 507,393 87x17 #000000 sans13 link 0 "td align=right"
+fill 345,376 260x1 #888888
+fill 345,399 260x1 #888888
+fill 345,377 1x22 #888888
+fill 604,377 1x22 #888888
+text 272,415 84x17 #000000 sans13 link 0 "tr align=right"
+fill 3,400 355x1 #888888
+fill 3,419 355x1 #888888
+fill 3,401 1x18 #888888
+fill 357,401 1x18 #888888
+text 565,415 38x17 #000000 sans13 bold link 0 "its th"
+fill 358,400 247x1 #888888
+fill 358,419 247x1 #888888
+fill 358,401 1x18 #888888
+fill 604,401 1x18 #888888
+text 142,435 77x17 #000000 sans13 bold link 0 "th centred"
+fill 3,420 355x1 #888888
+fill 3,439 355x1 #888888
+fill 3,421 1x18 #888888
+fill 357,421 1x18 #888888
+text 360,435 78x17 #000000 sans13 link 0 "td align=left"
+fill 358,420 247x1 #888888
+fill 358,439 247x1 #888888
+fill 358,421 1x18 #888888
+fill 604,421 1x18 #888888
+text 5,455 114x17 #000000 sans13 bold link 0 "tr align=left: th"
+fill 3,440 355x1 #888888
+fill 3,459 355x1 #888888
+fill 3,441 1x18 #888888
+fill 357,441 1x18 #888888
+text 360,455 7x17 #000000 sans13 link 0 "x"
+fill 358,440 247x1 #888888
+fill 358,459 247x1 #888888
+fill 358,441 1x18 #888888
+fill 604,441 1x18 #888888
+text 280,473 47x17 #000000 sans13 link 0 "caption"
+fill 256,476 96x16 #eeddcc
+text 256,489 49x17 #000000 sans13 link 0 "centred"
+text 143,507 122x17 #000000 sans13 link 0 "tbody align=center"
+fill 3,492 403x1 #888888
+fill 3,511 403x1 #888888
+fill 3,493 1x18 #888888
+fill 405,493 1x18 #888888
+text 545,507 58x17 #000000 sans13 link 0 "own right"
+fill 406,492 199x1 #888888
+fill 406,511 199x1 #888888
+fill 406,493 1x18 #888888
+fill 604,493 1x18 #888888
+text 5,527 83x17 #000000 sans13 link 0 "tr valign=top"
+fill 3,512 185x1 #888888
+fill 3,563 185x1 #888888
+fill 3,513 1x50 #888888
+fill 187,513 1x50 #888888
+text 190,559 112x17 #000000 sans13 link 0 "td valign=bottom"
+fill 188,512 246x1 #888888
+fill 188,563 246x1 #888888
+fill 188,513 1x50 #888888
+fill 433,513 1x50 #888888
+text 436,543 43x17 #000000 sans13 link 0 "middle"
+fill 434,512 99x1 #888888
+fill 434,563 99x1 #888888
+fill 434,513 1x50 #888888
+fill 532,513 1x50 #888888
+text 535,527 22x17 #000000 sans13 link 0 "two"
+text 535,543 29x17 #000000 sans13 link 0 "lines"
+text 535,559 29x17 #000000 sans13 link 0 "here"
+fill 533,512 72x1 #888888
+fill 533,563 72x1 #888888
+fill 533,513 1x50 #888888
+fill 604,513 1x50 #888888
+text 245,579 118x17 #000000 sans13 link 0 "table align=center"
+fill 243,564 122x1 #888888
+fill 243,583 122x1 #888888
+fill 243,565 1x18 #888888
+fill 364,565 1x18 #888888
+text 497,599 106x17 #000000 sans13 link 0 "table align=right"
+fill 495,584 110x1 #888888
+fill 495,603 110x1 #888888
+fill 495,585 1x18 #888888
+fill 604,585 1x18 #888888
+text 3,610 447x17 #000000 sans13 link 0 "Text beside the table floated right, which goes on long enough to wrap"
+text 3,626 58x17 #000000 sans13 link 0 "beside it."
+fill 3,642 182x1 #808080
+fill 3,643 182x1 #808080
+fill 423,650 182x1 #808080
+fill 423,651 182x1 #808080
+fill 213,658 182x1 #808080
+fill 213,659 182x1 #808080
+image 3,673 48x24 link 0 "left" file://./tests/layout/img/one.png
+image 557,673 48x24 link 0 "right" file://./tests/layout/img/one.png
+text 51,686 305x17 #000000 sans13 link 0 "img align=left floats with the text beside it, and "
+text 356,686 187x17 #000000 sans13 link 0 "align=right on the other side."
+text 3,726 25x17 #000000 sans13 link 0 "top "
+image 28,702 48x24 link 0 "top" file://./tests/layout/img/one.png
+text 80,726 47x17 #000000 sans13 link 0 "middle "
+image 127,714 48x24 link 0 "middle" file://./tests/layout/img/one.png
+text 179,726 51x17 #000000 sans13 link 0 "bottom "
+image 230,702 48x24 link 0 "bottom" file://./tests/layout/img/one.png
+text 282,726 50x17 #000000 sans13 link 0 "texttop "
+image 332,713 48x24 link 0 "texttop" file://./tests/layout/img/one.png
+text 384,726 70x17 #000000 sans13 link 0 "absmiddle "
+image 454,710 48x24 link 0 "absmiddle" file://./tests/layout/img/one.png
+text 3,799 63x17 #000000 sans13 link 0 "a tall one "
+image 66,751 96x48 link 0 "tall" file://./tests/layout/img/two.png
+text 166,799 29x17 #000000 sans13 link 0 "with "
+image 195,751 48x24 link 0 "top" file://./tests/layout/img/one.png
+text 247,799 95x17 #000000 sans13 link 0 "at the top and "
+image 342,778 48x24 link 0 "absbottom" file://./tests/layout/img/one.png
+text 394,799 89x17 #000000 sans13 link 0 "at the bottom"
+text 3,838 122x29 #000000 sans24 link 0 "line above"
+text 3,874 14x29 #000000 sans24 link 0 "a"
+text 17,868 36x24 #000000 sans20 link 0 "sup"
+image 53,844 48x24 link 0 "top in sup" file://./tests/layout/img/one.png
+text 101,874 15x29 #000000 sans24 link 0 "b"
+text 116,879 36x24 #000000 sans20 link 0 "sub"
+image 152,860 48x24 link 0 "absbottom in sub" file://./tests/layout/img/one.png
+text 200,874 13x29 #000000 sans24 link 0 "c"
+image 213,844 48x24 link 0 "raised" file://./tests/layout/img/one.png
+text 3,907 119x29 #000000 sans24 link 0 "line below"
+image 557,926 48x24 link 0 "image button right" file://./tests/layout/img/one.png
+image 3,926 48x24 link 0 "image button left" file://./tests/layout/img/one.png
+text 51,939 110x17 #000000 sans13 link 0 "an image button "
+text 161,939 104x17 #000000 sans13 link 0 "floats right, and "
+text 265,939 24x17 #000000 sans13 link 0 "left."
+text 5,1005 38x29 #000000 sans24 link 0 "Big"
+fill 3,955 42x1 #888888
+fill 3,1012 42x1 #888888
+fill 3,956 1x56 #888888
+fill 44,956 1x56 #888888
+text 47,1005 34x17 #000000 sans13 link 0 "small"
+fill 45,955 38x1 #888888
+fill 45,1012 38x1 #888888
+fill 45,956 1x56 #888888
+fill 82,956 1x56 #888888
+text 85,970 21x17 #000000 sans13 link 0 "top"
+fill 83,955 25x1 #888888
+fill 83,1012 25x1 #888888
+fill 83,956 1x56 #888888
+fill 107,956 1x56 #888888
+image 110,957 96x48 link 0 "baseline picture" file://./tests/layout/img/two.png
+text 206,1005 18x17 #000000 sans13 link 0 "pic"
+fill 108,955 118x1 #888888
+fill 108,1012 118x1 #888888
+fill 108,956 1x56 #888888
+fill 225,956 1x56 #888888

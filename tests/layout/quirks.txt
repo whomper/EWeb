@@ -1,0 +1,36 @@
+page 608 x 186, background ffffff, 35 items, 0 links, title "Quirks"
+text 256,24 96x17 #000000 sans13 bold link 0 "a th, centred"
+fill 186,9 236x1 #808080
+fill 186,28 236x1 #808080
+fill 186,10 1x18 #808080
+fill 421,10 1x18 #808080
+text 188,46 211x17 #000000 sans13 link 0 "in quirks mode the text in a table"
+text 188,62 230x17 #000000 sans13 link 0 "that center centres starts at the left"
+fill 186,31 236x1 #808080
+fill 186,66 236x1 #808080
+fill 186,32 1x34 #808080
+fill 421,32 1x34 #808080
+fill 183,6 242x1 #808080
+fill 183,69 242x1 #808080
+fill 183,7 1x62 #808080
+fill 424,7 1x62 #808080
+text 189,96 230x17 #000000 sans13 link 0 "but a paragraph in center is centred"
+text 216,130 178x17 #000000 sans13 link 0 "td align=center centres this"
+text 229,151 135x17 #000000 sans13 link 0 "and this table, not its"
+text 229,167 25x17 #000000 sans13 link 0 "text"
+fill 227,136 156x1 #808080
+fill 227,171 156x1 #808080
+fill 227,137 1x34 #808080
+fill 382,137 1x34 #808080
+fill 224,133 162x1 #808080
+fill 224,174 162x1 #808080
+fill 224,134 1x40 #808080
+fill 385,134 1x40 #808080
+fill 9,115 592x1 #808080
+fill 9,176 592x1 #808080
+fill 9,116 1x60 #808080
+fill 600,116 1x60 #808080
+fill 6,112 598x1 #808080
+fill 6,179 598x1 #808080
+fill 6,113 1x66 #808080
+fill 603,113 1x66 #808080

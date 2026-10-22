@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Translucent colours and opacity</title>
+<style>
+body { font-family: sans-serif; margin: 8px; background: rgba(255, 204, 0, .25) }
+.box { width: 240px; padding: 4px; margin: 4px 0; border: 3px solid rgba(0, 0, 128, .5) }
+.a1 { background: rgba(255, 0, 0, .5) }
+.a2 { background: hsla(120, 100%, 25%, .25); color: #0008 }
+.a3 { background: #0000ff40; color: hsl(0 100% 50% / 75%) }
+.a4 { background: transparent; border-color: transparent }
+.tint { background: rgba(0, 0, 0, .03) }
+.on { background: #036; color: #fff; padding: 4px }
+.on .a1 { margin: 2px 0 }
+.gone { opacity: 0; background: #c00; border: 2px solid #000 }
+.half { opacity: .5; background: #c00; color: #fff; border: 2px solid #000 }
+.half .half { background: #00c }
+.child { opacity: 1 }
+.clear { color: transparent; text-decoration: underline }
+.mark { background: #ff0 }
+.mark span { background: rgba(255, 0, 0, .5) }
+.faint { opacity: .3 }
+.stage { position: relative; height: 60px; width: 240px }
+.cover { position: absolute; left: 0; top: 0; width: 240px; height: 60px; background: rgba(0, 0, 0, .5) }
+input.hidden { opacity: 0 }
+li.dim { opacity: .5 }
+img.half { opacity: .5; border: 0; background: none }
+.grad { background: linear-gradient(to right, #c0c, #00c); -webkit-background-clip: text; background-clip: text; color: transparent }
+.shade { color: transparent; text-shadow: 0 0 0 #c00 }
+.outline { color: transparent; -webkit-text-stroke: 1px #060 }
+.replaced { color: transparent; background: url(img/one.png) }
+.soft { text-shadow: 0 2px 4px rgba(0, 0, 0, .1) }
+.unknown { background-image: linear-gradient(to right, var(--from), var(--to)); background-clip: text; color: transparent }
+@keyframes rise { from { opacity: 0 } to { opacity: 1 } }
+.rise { opacity: 0; animation: rise .8s ease .2s forwards }
+[data-aos^=fade] { opacity: 0 }
+.lazyload { opacity: 0 }
+.custom { position: relative; padding-left: 24px }
+.custom-input { position: absolute; left: 0; opacity: 0 }
+.under { position: relative; height: 40px; width: 240px }
+.veil { position: absolute; left: 0; top: 0; width: 240px; height: 40px; background: #fff; opacity: 0; pointer-events: none }
+.padded { background: rgba(0, 0, 255, .25); background-clip: padding-box; border: 6px solid rgba(0, 0, 0, .25) }
+</style></head>
+<body>
+<p>Translucent backgrounds, borders and text: rgba, hsla, #rrggbbaa, #rgba and transparent.</p>
+<div class="box a1">rgba(255, 0, 0, .5) on the page</div>
+<div class="box a2">hsla(120, 100%, 25%, .25), text #0008</div>
+<div class="box a3">#0000ff40, text hsl(0 100% 50% / 75%)</div>
+<div class="box a4">transparent background and border</div>
+<div class="box tint">a tint of 3%, as Bootstrap's card caps</div>
+<div class="on"><div class="box a1">half red on dark blue</div></div>
+<p>Opacity: none at all (still taking its room, its <a href="#gone">link</a> still there),
+half, half in half, and a child of opacity 1 in a half (still half: a group).</p>
+<div class="box gone">opacity 0 <a href="#gone">a link</a></div>
+<div class="box half">opacity .5 <div class="box half">in another</div><div class="child">opacity 1 in .5</div></div>
+<p>Text: <span class="clear">transparent, underlined</span>; <span class="mark">yellow under
+<span>half red over it</span></span>; <span class="faint">opacity .3 inline</span>.</p>
+<div class="stage"><p>Text under a cover of rgba(0, 0, 0, .5)</p><div class="cover"></div></div>
+<form><input class="hidden" type="text" value="unseen"> <input type="submit" value="Send" style="opacity: .5"></form>
+<ul><li>solid</li><li class="dim">half, its marker too</li></ul>
+<p><img src="img/one.png" alt="opaque"> <img class="half" src="img/one.png" alt="half"></p>
+<p>Text of a transparent colour shown another way: <span class="grad">a gradient through it</span>,
+<span class="shade">its shadow</span>, <span class="outline">its outline</span>, <span class="soft"><span
+class="grad">a gradient under a faint shadow</span>, <span class="outline">an outline under one</span></span>,
+<span class="unknown">a gradient EWeb can't compute</span>; not
+<span class="replaced">a picture in its place</span>; <font color="transparent">a font colour of
+transparent</font> (no colour: HTML turns it down).</p>
+<p class="rise">Of opacity 0, faded in by an animation</p><p data-aos="fade-up">and by AOS's script</p>
+<p><img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="img/one.png" alt="lazy">
+a picture a lazy loader would show</p>
+<form><div class="custom"><input type="checkbox" class="custom-input" id="c1" checked><label for="c1">a box of opacity 0
+for a custom control</label></div>
+<div style="color: transparent"><input type="checkbox" checked> a tick in a transparent colour</div></form>
+<div class="under"><a href="#under">under a veil</a><div class="veil"><a href="#veil">a veil of opacity 0 a click goes
+through</a></div></div>
+<div class="box padded">background-clip: padding-box</div>
+</body></html>

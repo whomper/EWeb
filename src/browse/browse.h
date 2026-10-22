@@ -74,6 +74,9 @@ typedef struct browser {
 	unsigned long shows;	/* pages shown so far, each new one counts: a front end
 				   that remembers it knows when one is to be drawn, whatever
 				   the load came to */
+	int relaid;		/* BR_SAME: the page laid out again first (a closed
+				   details opened to show the place), or gone when
+				   that didn't fit even alone (p NULL, and a note) */
 	char elsewhere[1024];	/* BR_ELSEWHERE: the address */
 	/* how long the last page took, ms: fetching it (its stylesheets
 	   too), parsing, styling, laying out */
@@ -136,7 +139,8 @@ typedef struct browser {
 	const char *script_sites;
 	char note[96];		/* about the page shown, for the status line ("" none): its
 				   scripts were too much, it came from the cache out of date,
-				   it goes on to another page in a while */
+				   it goes on to another page in a while, it didn't fit when
+				   laid out again */
 	/* the page shown's refresh (br_refresh_due): where it goes (malloc'ed;
 	   NULL none), after how many seconds, and when that is (pf_ms) */
 	char *refresh;
@@ -193,6 +197,11 @@ int br_can_forward(const browser *b);
 void br_scrolled(browser *b, int32_t y);
 /* the window's width changed: lay out again (returns 0 if out of memory) */
 int br_relayout(browser *b, int32_t width);
+/* a details element's summary clicked (page_summary_at): the details
+   opened or closed (the HTML Standard, 4.11.2), the page styled and laid
+   out again (1; 0 if out of memory, after giving back the pages kept and
+   the fonts and trying once more), its scrolling left to the front end */
+int br_details(browser *b, dnode *det);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
 /* a link's download attribute (<a download>): its value, "" when it
