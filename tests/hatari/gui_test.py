@@ -45,8 +45,11 @@ import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep"]
-HTTP, HTTPS, GATE = 18280, 18643, 18289
-DISPLAY = ":98"
+# GUI_SLOT=N gives the rigs their own ports and X display, so two trees
+# can run them at once
+SLOT = int(os.environ.get("GUI_SLOT", "0"))
+HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
+DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
 COMMA, ESC = 0x33, 0x01
