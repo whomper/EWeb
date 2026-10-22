@@ -825,10 +825,21 @@ static void loaded(int r)
 		break;
 	}
 	case BR_SAME:
-		log_event("same %.*s top %ld", (int) strcspn(br.url, "?"), br.url, (long) br.scroll_to);
+		log_event("same %.*s top %ld%s%ld", (int) strcspn(br.url, "?"), br.url, (long) br.scroll_to,
+			  br.relaid ? " opened height " : " height ", br.p ? (long) br.p->height : 0L);
 		win_address(br.url);
-		win_scroll_to(br.scroll_to >= 0 ? br.scroll_to : 0);
-		win_status("");
+		if (br.relaid) {
+			/* a closed details opened to show the place: the page
+			   laid out again, drawn there (or, out of memory, gone:
+			   its note says so) */
+			win_ctl_check();
+			win_page_relaid_at(br.scroll_to >= 0 ? br.scroll_to : 0);
+		} else {
+			win_scroll_to(br.scroll_to >= 0 ? br.scroll_to : 0);
+		}
+		win_status(br.note);
+		if (br.note[0])
+			log_event("note %s", br.note);
 		win_toolbar();
 		break;
 	case BR_DOWNLOAD: {
@@ -972,6 +983,34 @@ void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y)
 		return;
 	loading_on();
 	loaded(br_submit(&br, from, by, x, y));
+}
+
+/* where it is: the page laid out again, the window's place kept (the
+   page's scripts get its toggle event after, with their timers) */
+void details(dnode *det)
+{
+	unsigned long t = pf_ms();
+	int ok;
+	if (loading)
+		return;
+	graf_mouse(BUSYBEE, 0);		/* (1.7 s on a 1040 ST) */
+	ok = br_details(&br, det);
+	graf_mouse(ARROW, 0);
+	if (!ok) {
+		/* (the page shown went to make room: the window empty) */
+		if (br.p == NULL) {
+			win_ctl_check();
+			win_page_relaid();
+		}
+		log_event("details failed");
+		alert(1, "[3][EWeb hasn't the memory to lay|the page out again.][ OK ]");
+		return;
+	}
+	t = pf_ms() - t;
+	win_ctl_check();
+	win_page_relaid();
+	log_event("details %s height %ld top %ld ms %lu", dn_attr(det, "open") ? "opened" : "closed",
+		  br.p ? (long) br.p->height : 0L, (long) win_top(), t);
 }
 
 static void home(void)

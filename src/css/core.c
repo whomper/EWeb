@@ -387,10 +387,11 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 	A(a_style, "style"); A(a_href, "href"); A(a_lang, "lang"); A(a_dir, "dir");
 	A(a_type, "type"); A(a_disabled, "disabled"); A(a_checked, "checked");
 	A(a_selected, "selected"); A(a_required, "required"); A(a_readonly, "readonly");
-	A(a_placeholder, "placeholder"); A(a_value, "value"); A(a_hidden, "hidden");
+	A(a_placeholder, "placeholder"); A(a_value, "value"); A(a_hidden, "hidden"); A(a_open, "open");
 	A(t_a, "a"); A(t_area, "area"); A(t_input, "input"); A(t_button, "button");
 	A(t_select, "select"); A(t_textarea, "textarea"); A(t_option, "option");
 	A(t_optgroup, "optgroup"); A(t_fieldset, "fieldset"); A(t_html, "html");
+	A(t_details, "details"); A(t_dialog, "dialog");
 #undef A
 	/* elements sharing a style must have the same inline style */
 	((ec_atom *) c->a_style)->ref = 1;

@@ -288,6 +288,12 @@ static int match_compound(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, 
 				return 0;
 			break;
 		}
+		case S_OPEN:
+			/* a details or dialog with its open attribute (the HTML
+			   Standard, 4.16.3; a select's picker never is, here) */
+			if ((e->name != c->t_details && e->name != c->t_dialog) || !find_attr(e, c->a_open))
+				return 0;
+			break;
 		case S_REQUIRED: case S_OPTIONAL: {
 			int f = e->name == c->t_input || e->name == c->t_select || e->name == c->t_textarea;
 			int r = f && find_attr(e, c->a_required) != NULL;

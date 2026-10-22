@@ -1334,14 +1334,16 @@ BSS):
 | `EW_ST`: the HTTP client's read buffer 8 KB, the stack 48 KB | 24 KB of BSS |
 
 At run time the arenas take small pieces on the ST (the CSS engine 4 KB, the document and the
-layout 8 KB, not 64 and 16), as a context's empty pieces were most of a small page's memory; a
-font face is unpacked into its exact size (in every edition: before, its buffer doubled as it
-grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the pictures not
-in use and the fonts' glyphs (read again when used), and is built once more; if it still doesn't
-fit, EWeb says so on a page of its own, which is small. Running out while styling it counts too
-(since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style made a page
-that laid out to nothing, which translucency's 3 KB more code brought about on the pictures page. Pictures may take a sixteenth of the free
-RAM (12 KB on the 1 MB ST, so few come; the photo is refused for memory).
+layout 8 KB, not 64 and 16), and so does the display list (128 items at first, 5.5 KB, not 1024,
+45 KB; since 22 Oct 2026, Details and summary), as a context's empty pieces were most of a small
+page's memory; a font face is unpacked into its exact size (in every edition: before, its buffer
+doubled as it grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the
+pictures not in use and the fonts' glyphs (read again when used), and is built once more; if it
+still doesn't fit, EWeb says so on a page of its own, which is small. Running out while styling it
+counts too (since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style
+made a page that laid out to nothing, which translucency's 3 KB more code brought about on the
+pictures page. Pictures may take a sixteenth of the free RAM (12 KB on the 1 MB ST, so few come;
+the photo is refused for memory).
 
 Measured in Hatari (8 MHz, TOS 1.04), the tables page from the disk:
 
@@ -2015,6 +2017,141 @@ and as Gecko and Blink do it:
   itest`; `make hatarigui`'s browse group (its forms page among them) and st group (`EWEBST.PRG` on
   the 1 MB ST and the 1040 ST, the tables page with its centred table among them), on the real TOS
   (4.04 on the Falcon, 1.04 on the STs).
+
+## Details and summary (22 Oct 2026)
+
+FAQ pages, documentation, forums and GitHub-style READMEs fold their parts away in `<details>`,
+and EWeb showed everything inside a closed one, with no sign that it folds. Now, after the HTML
+Standard (4.11 the elements, 15.5.4 their rendering) and as browsers show them:
+
+- **What shows** (`src/layout`): a details element's summary (its first `summary` child) always,
+  the rest (elements and text) only when it has its `open` attribute: the layout builds only the
+  summary's boxes of a closed one (the standard's two slots, the second "removed from the
+  rendering"), so what is hidden costs no boxes and no layout (it is still styled, as scripts may
+  ask for its style). One without a summary has one of
+  the layout's own, a triangle and "Details", in its style. An open one's summary comes first,
+  whatever is before it in the page (the summary's slot is the first; browsers draw it so).
+- **The triangle** (the UA sheet, 15.5.4): `details > summary:first-of-type` is `display:
+  list-item` with `list-style: disclosure-closed inside`, `disclosure-open` when its details is
+  open (the standard's `counter-increment: list-item 0` left out: the layout doesn't number a
+  summary). The CSS engine now knows the two counter styles (CSS Counter Styles 3, 6.1), and the
+  layout draws them as ▸ and ▾ (◂ in a right-to-left one), three characters added to `EWEB.FNT`
+  from DejaVu (`tools/mkfont.py`) rather than drawn: they are the standard's own, and
+  pages use them as text too. A page's own markers work as in browsers: `list-style: none` (the
+  usual way, Pico's and GitHub's) hides the triangle, `summary { display: flex }` has none, and
+  `::before` or `[open]` rules draw their own; `::marker` and `::-webkit-details-marker` are read
+  but not applied (as before).
+- **`list-style-position: inside`**, which the summary's triangle needs, now works for every list:
+  the marker is the first thing on the item's first line, followed by a space (its counter
+  style's suffix; CSS Lists 3, 3.1) that is no place the line chooses to break at, though a first
+  word that doesn't fit beside the marker goes on the next line, as any word that doesn't fit
+  where the line has no space does (CSS Text 3 allows a break there, the item's `white-space`
+  being `normal`), and the lines after it start under it; before, EWeb drew every marker outside.
+  A `list-style-type` that is a string is now that string, inside or outside, where EWeb drew a
+  bullet.
+- **A click on the summary** opens or closes its details (4.11.2, the summary's activation
+  behaviour): `ui/win.c` asks the page what is under the pointer after a form control and a link,
+  as browsers do (a link in a summary is followed, not toggled), then `page_summary_at`, an
+  invisible display-list item (`DL_SUM`) the size of the summary's box, so it moves with the box
+  when a cell, a flex line or `position: relative` moves it, in both editions. A summary a page
+  lays out inline (`display: inline`, or `inline-block` as GitHub's and Bootstrap's button-like
+  `<summary class="btn">` are, which EWeb lays out as inline) has an item for each of its parts
+  on the lines instead (the line's run of its items, as an inline background is drawn; no cost
+  where there is none, `L.sums`). A summary with `display: contents` has no box, but a click on
+  its text is one in the summary all the same: its blocks are marked, and each run of its inline
+  boxes goes in an anonymous inline (laid out as its parent's run, as before) whose parts on the
+  lines are its click areas. Where summaries hold each other (a details in a summary), the
+  smallest under the pointer is the one clicked. `br_details`
+  (`src/browse`) sets or removes `open` (`dn_set_open`, keeping the element's hints and the CSS
+  engine's links, so no `doc_refresh` is needed), styles the page again (all of it, as after a
+  script: the triangle, and a page's own `[open]` rules, which may reach any element after the
+  details) and lays it out again, with the busy bee meanwhile; the window stays where it was. Out
+  of memory (a 1 MB ST) it gives back what a page that doesn't fit does, in two steps: the pages
+  kept for Back, the pictures no page shows and the fonts' glyphs, and it is tried once more; then
+  the page shown (its tree kept), and it is tried a last time. If even that doesn't fit, the
+  window is left empty and EWeb says so (an alert after a click, the status line after a
+  `#fragment`). On the 1 MB ST this came to nothing at first: the display list's first piece was
+  1024 items, 45 KB, most of a small page's 61 KB, and the second page beside the first took the
+  last of the RAM, so a FAQ page of three details didn't open at all; the ST edition's first piece
+  is now 128 items (and the line items' 64, not 256: 15 KB at the time), so that page costs 14 KB,
+  and a click opens it at the first try, in 335 ms (`make hatarigui`'s `details` group runs it on
+  the 1 MB ST too, from a page of its own: `tests/layout/details.html` doesn't fit there).
+  Measured in Hatari on `tests/layout/details.html` (912 pixels tall): 145 ms on the emulated
+  32 MHz Falcon, 1.7 s on the 1040 ST (8 MHz), against 375 ms and 3.6 s to style and lay out the
+  page as it was opened; with the review's cases the page is 1,215 pixels tall, and a click takes
+  190 ms and 2.25 s. Tab in EWeb moves only between form controls, not to links, and so not to a
+  summary either: no key opens one yet.
+- **A place in a closed details** (a link to `#id`, or an address with one): the details it is
+  in are opened first and the page laid out again, then the window goes there (7.4.6.4, scroll
+  to the fragment, runs 4.11.1's ancestor details revealing algorithm; Chrome and Firefox do
+  it): `page_anchor_node` finds the element, `dn_folded` says a closed details hides it (its `y`
+  is then from an earlier layout, or none, and is not used), `dn_reveal` opens them, innermost
+  first, each closing its group's open one. A link on the page shown that does it says so
+  (`BR_SAME` with `relaid`), and `EWEB.PRG` draws the page again there.
+- **A group** (the `name` attribute, 4.11.1, the exclusive accordion): opening one closes the
+  group's open one, and as a page is parsed a later open one of a group starts closed (eight
+  groups a page are kept track of). A group is a tree's: a details not in the page (made by a
+  script) or in a `<template>`'s contents is in none of the page's groups; a script's details
+  put in the page closes when its group has an open one (its insertion steps).
+- **Scripts** (`EWEB.PRG`): `open` is the attribute, as before; setting or removing it (a click,
+  `open`, `setAttribute`, `toggleAttribute`, a summary's `click()`) queues a `toggle` event,
+  fired after the script, with the timers, as the standard's task: one an element, the first old
+  state kept if it changes again before it fires (`oldState`, `newState`; `ToggleEvent` for
+  scripts' own, the two `""` when not given); a group's other one closed gets its own. A details
+  open as the page (or `innerHTML`) is parsed has its toggle event too, `closed` to `open`, as the
+  parser's setting `open` runs the same steps (browsers fire it as the page loads; pages fill a
+  details' content from it). One the parser closes for its group gets none.
+  `HTMLDetailsElement` is there for pages that test for it. The CSS engine matches `:open` (a
+  details or dialog with `open`; Selectors 4, HTML 4.16.3), which it took for a pseudo-class that
+  never matches.
+- **Measured** (`build/m68k/drawbench -P 1` and `-P 2`, `tools/count68k.sh`, the two programs run
+  from paths of one length), the page set's 258 pages, the sample page and the news page (none of
+  them has a `details`): the layout 0.042% more instructions (3.5 K a page in the middle, a page
+  from 0.07% fewer to 0.11% more; 0.092% in the first version, whose details called the element
+  builder from a second place, so GCC stopped inlining it into `build`); the
+  styling 0.47% more, 25.8 K of it once a program run (the two rules of the UA sheet, which
+  `EWEB.PRG` reads once, and the new names), 1.7 K a page. The font's new characters make each face
+  39 to 120 bytes larger, 7 K instructions a page more to unpack the faces it uses (once a run, as
+  `EWEB.PRG` keeps them). `EWEB.PRG` grew 4.7 KB, `EWEBST.PRG` 2.7 KB, `EWEB.FNT` 5.4 KB. No page
+  of the page set lays out differently (ewrender's display lists before and after). The review's
+  fixes (inline summaries, a place in a closed details, the rest above) then made the layout
+  0.88% fewer instructions on the same pages (0.84% a page in the middle, from 1.85% fewer to
+  0.06% more), the styling the same: the line's text items (`ITEM`) carry the inline summary's
+  details, which makes them 64 bytes on the 68030, not 60, and an index into them a shift; that
+  alone is 1.03% fewer (13 of the pages, the old code with the record padded), so the fixes
+  themselves cost about 0.13%. `EWEB.PRG` grew 1.4 KB more (6.1 KB in all), `EWEBST.PRG` 1.3 KB
+  (4.0 KB). The second review's fixes (the 1 MB ST, a summary with `display: contents`) change no
+  page of the set either (ewrender's display lists), and leave 16 of its pages 0.003% fewer
+  instructions to the end of the layout (`drawbench -P 2`); `EWEB.PRG` 0.5 KB more (6.6 KB in
+  all), `EWEBST.PRG` 0.5 KB (4.4 KB).
+- **Tested:** `tests/layout/details.html` (closed, open, nested, without a summary, the summary not
+  first and a second one, a heading in the summary, `list-style: none`, a flex summary, right to
+  left, a group, inside markers, strings) and its list, looked at with ewrender first;
+  `tests/layout/details.py` (make test: summaries clicked through ewrender `-K`, which now clicks
+  a summary in both editions: opened, closed again to the very same list, a group, the ST edition
+  the same as `EWEB.PRG`); `tests/js/details.html` (the toggle events, their order, coalescing, a
+  group, `click()` on a summary's child, a cancelled click, a summary clicked as a user does);
+  after the review (same day): the summary first in an open one, `inline-block` and `inline`
+  summaries clicked, a details in a summary, a group with one in a template, an address and a
+  link to a place in a closed details (`tests/layout/details.py`), the toggle events of details
+  open as parsed, a detached one and one put in the page, `ToggleEvent`'s defaults, a user's click
+  on a closed summary going to the summary, not its details, when the two are the same size
+  (`page_node_at`: of two blocks the same size, the child), in `tests/js/details.html`;
+  `tests/css/cases.txt` (`:open`, the disclosure styles); `make csscmp` (no new difference: the
+  disclosure styles are left out under `EC_COMPAT_KEYWORDS`, `:open` under
+  `EC_COMPAT_SELECTORS`); `make h5test` (EWeb's parser 1,868 passed, the six scripted ones failed,
+  here and on the 68030); `fuzz_html` 180 s (984,644 pages); `make itest`; `make hatarigui`'s
+  new `details` group (a summary clicked open and closed on the emulated Falcon and with
+  `EWEBST.PRG` on the 1040 ST, on the real TOS; after the review also an address with a
+  `#fragment` in a closed details, a summary clicked with the window scrolled down, which stays
+  there, and a place on the same page in a closed details), and its `browse` and `scripts` groups.
+  After the second review: the group runs `EWEBST.PRG` on the 1 MB ST too (TOS 1.04, a FAQ page of
+  its own: a summary clicked open and closed twice, a page loaded with a `#fragment` in a closed
+  details, the page before kept for Back, and a place on the same page in another); its last
+  attempt (the page shown given back) and its failure (the window empty, the alert) were forced
+  once in a build of their own and looked at; `tests/layout/details.py` clicks a summary with
+  `display: contents`; `tests/js/details.html` listens to the template's details, so that its
+  having no toggle event is tested.
 
 ## The design
 

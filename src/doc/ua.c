@@ -3,7 +3,11 @@
 /* EWeb's UA stylesheet: the HTML Standard's rendering section, cut to
  * what EWeb draws. <center> and caption centre their blocks as well as
  * their lines (15.3.3, 15.3.8: -webkit-center), and th is centred only
- * where its row's text-align is still the initial (-ec-center-or-inherit). */
+ * where its row's text-align is still the initial (-ec-center-or-inherit).
+ * A details' summary is a list item with a disclosure triangle (15.5.4;
+ * its counter-increment left out: EWeb's layout doesn't number it); what
+ * a closed details hides, and the summary one without has, are the
+ * layout's. */
 #include "doc.h"
 
 const char doc_ua_css[] =
@@ -15,6 +19,8 @@ const char doc_ua_css[] =
 	"area, base, basefont, datalist, head, link, meta, noembed, noframes,"
 	" param, rp, script, style, template, title, [hidden], dialog:not([open]) { display: none }\n"
 	"li { display: list-item }\n"
+	"details > summary:first-of-type { display: list-item; list-style: disclosure-closed inside }\n"
+	"details[open] > summary:first-of-type { list-style-type: disclosure-open }\n"
 	"table { display: table; border-spacing: 2px; border-collapse: separate }\n"
 	"caption { display: table-caption; text-align: -webkit-center }\n"
 	"colgroup { display: table-column-group } col { display: table-column }\n"

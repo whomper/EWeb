@@ -85,6 +85,9 @@ void js_run_timers(doc *d);
 int js_event(doc *d, dnode *n, const char *type);
 /* a javascript: address followed: its code run */
 void js_run(doc *d, const char *code);
+/* a details element opened or closed by the user (a click on its
+   summary): its toggle event queued, fired with the timers (js_due 0) */
+void js_toggled(doc *d, dnode *n);
 /* where elements are, for getBoundingClientRect and the like: the
    front end's page (layout.h) as it is now, or NULL */
 struct page;

@@ -258,7 +258,7 @@ static const char *const never_pc[] = {
 	"target-within", "current", "past", "future", "playing", "paused", "autofill",
 	"user-invalid", "user-valid", "modal", "fullscreen", "popover-open",
 	"picture-in-picture", "valid", "invalid", "in-range", "out-of-range", "default",
-	"indeterminate", "open", "closed", "local-link", "blank", "user-error", NULL
+	"indeterminate", "closed", "local-link", "blank", "user-error", NULL
 };
 
 static const struct { const char *s; int op; } simple_pc[] = {
@@ -269,7 +269,7 @@ static const struct { const char *s; int op; } simple_pc[] = {
 	{ "link", S_LINK }, { "any-link", S_LINK }, { "enabled", S_ENABLED },
 	{ "disabled", S_DISABLED }, { "checked", S_CHECKED }, { "required", S_REQUIRED },
 	{ "optional", S_OPTIONAL }, { "read-write", S_READ_WRITE }, { "read-only", S_READ_ONLY },
-	{ "placeholder-shown", S_PLACEHOLDER_SHOWN }, { "defined", -1 }, { NULL, 0 }
+	{ "placeholder-shown", S_PLACEHOLDER_SHOWN }, { "open", S_OPEN }, { "defined", -1 }, { NULL, 0 }
 };
 
 static const char *const known_pe[] = {
@@ -296,6 +296,7 @@ static void pc_attrs(ec_ctx *c, int op)
 	case S_REQUIRED: case S_OPTIONAL: refattr(c, c->a_required); break;
 	case S_READ_WRITE: case S_READ_ONLY: refattr(c, c->a_readonly); refattr(c, c->a_disabled); break;
 	case S_PLACEHOLDER_SHOWN: refattr(c, c->a_placeholder); refattr(c, c->a_value); break;
+	case S_OPEN: refattr(c, c->a_open); break;
 	case S_LANG: refattr(c, c->a_lang); break;
 	case S_DIR: refattr(c, c->a_dir); break;
 	}
@@ -353,7 +354,7 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		if (c->opts & EC_COMPAT_SELECTORS) {
 			/* what LibCSS 0.9 parses, and nsbench's handler answers */
 			int o = simple_pc[op].op;
-			if (o == S_ENABLED || o == S_DISABLED || o == S_CHECKED) {
+			if (o == S_ENABLED || o == S_DISABLED || o == S_CHECKED || o == S_OPEN) {
 				b->b++;
 				b->never = 1;
 				return add_simple(b, S_NEVER) != NULL;

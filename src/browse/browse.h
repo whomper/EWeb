@@ -58,6 +58,9 @@ typedef struct browser {
 	char security[96];	/* how it came: "TLS 1.2, ..." or "" */
 	int status;		/* the server's answer (200...), 0 for a file or EWeb's own page */
 	int32_t scroll_to;	/* after a load: where to scroll (device px), -1 the top */
+	int relaid;		/* BR_SAME: the page laid out again first (a closed
+				   details opened to show the place), or gone when
+				   that didn't fit even alone (p NULL, and a note) */
 	char elsewhere[1024];	/* BR_ELSEWHERE: the address */
 	/* how long the last page took, ms: fetching it (its stylesheets
 	   too), parsing, styling, laying out */
@@ -108,7 +111,8 @@ typedef struct browser {
 	int scripts;
 	const char *script_sites;
 	char note[96];		/* about the page shown, for the status line ("" none): its
-				   scripts were too much, it came from the cache out of date */
+				   scripts were too much, it came from the cache out of date,
+				   it didn't fit when laid out again */
 	const char *extra_css;	/* a stylesheet after the page's own (ewrender's), or NULL */
 
 	/* the front end: what is happening, for the status line ("Opening
@@ -152,6 +156,11 @@ int br_can_forward(const browser *b);
 void br_scrolled(browser *b, int32_t y);
 /* the window's width changed: lay out again (returns 0 if out of memory) */
 int br_relayout(browser *b, int32_t width);
+/* a details element's summary clicked (page_summary_at): the details
+   opened or closed (the HTML Standard, 4.11.2), the page styled and laid
+   out again (1; 0 if out of memory, after giving back the pages kept and
+   the fonts and trying once more), its scrolling left to the front end */
+int br_details(browser *b, dnode *det);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
 

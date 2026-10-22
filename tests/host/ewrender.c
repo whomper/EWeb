@@ -58,7 +58,11 @@
  * log, console.log and alert ("js ...", "console: ", "alert: ") and
  * answering OK; then -K ID clicks the element with that id (again for
  * more; "a script loaded" and the load's result when one sent the
- * browser on), and -T MS lets the page's timers run for MS ms.
+ * browser on; a details' summary, or the details, opened or closed, in
+ * the ST edition too; a link followed says where EWEB.PRG scrolls to,
+ * "top", as "top:" does for an address with a #fragment, and "opened"
+ * when a closed details was opened to show it), and -T MS lets the
+ * page's timers run for MS ms.
  * -S KB: the stack the cascade and the layout may take (ec_stack_floor;
  * all but a MB of the stack by default); "deep:" on stderr when a page was
  * cut there.
@@ -454,20 +458,49 @@ static dnode *by_id(dnode *n, const char *id)
 	return NULL;
 }
 
+/* where a details' summary is on the page (its DL_SUM item): n the
+   summary, or the details (a click on a details is one on its summary,
+   one of the layout's own too) */
+static int summary_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
+{
+	long k;
+	for (k = 0; k < p->nitems; k++) {
+		const dl_item *it = &p->items[k];
+		if (it->type == DL_SUM && (it->det == n || (DN_IS(n, T_SUMMARY) && it->det == n->parent))) {
+			*x = it->x;
+			*y = it->y;
+			*w = it->w;
+			*h = it->h;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* a click on the element with that id, as EWEB.PRG does one: its click
-   event, then (unless a script said no) its link or control */
+   event, then (unless a script said no) its link, control or details'
+   summary; then the page's tasks due at once (a toggle event), as
+   EWEB.PRG's loop runs them. The ST edition (no scripts, no element's
+   place kept) clicks only a summary */
 static int click(browser *b, const char *id)
 {
-#ifdef EW_ST
-	/* (the ST edition: no scripts, and no element's place kept) */
-	(void) by_id;
-	printf("click %s: not in the ST edition\n", id);
-	return 0;
-#else
-	dnode *n = b->d ? by_id(b->d->root, id) : NULL;
+	dnode *n = b->d ? by_id(b->d->root, id) : NULL, *det;
 	int32_t x, y, w, h;
-	int cancelled = 0, load = 0, r;
-	if (n == NULL || !page_node_rect(b->p, n, &x, &y, &w, &h)) {
+	int cancelled = 0, load = 0, r = BRJ_NONE, k;
+#ifdef EW_ST
+	if (n == NULL || !summary_rect(b->p, n, &x, &y, &w, &h)) {
+		printf("click %s: not shown\n", id);
+		return 0;
+	}
+	x += w / 2;
+	y += h / 2;
+#else
+	/* a summary where its DL_SUM is, as in the ST edition (an element's
+	   block isn't moved with a float it is in) */
+	k = n != NULL && (DN_IS(n, T_DETAILS) || DN_IS(n, T_SUMMARY)) && summary_rect(b->p, n, &x, &y, &w, &h);
+	if (!k && n != NULL && !DN_IS(n, T_DETAILS))
+		k = page_node_rect(b->p, n, &x, &y, &w, &h);
+	if (!k) {
 		printf("click %s: not shown\n", id);
 		return 0;
 	}
@@ -476,6 +509,7 @@ static int click(browser *b, const char *id)
 	r = br_js_click(b, x, y, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
+#endif
 	if (r == BRJ_LOAD)
 		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
 	else if (!cancelled) {
@@ -489,11 +523,21 @@ static int click(browser *b, const char *id)
 			br_js_event(b, c, "change", &cancelled, &load);
 		} else if (link >= 0) {
 			r = br_follow(b, link);
-			printf("followed: %d \"%s\" %s\n", r, b->title, b->url);
+			printf("followed: %d \"%s\" %s top %d%s\n", r, b->title, b->url, (int) b->scroll_to,
+			       r == BR_SAME && b->relaid ? " opened" : "");
+		} else if (c == NULL && (det = page_summary_at(b->p, x, y)) != NULL) {
+			r = br_details(b, det);
+			printf("details %s: %s, height %d\n", dn_attr(det, "id") ? dn_attr(det, "id") : "-",
+			       !r ? "failed" : dn_attr(det, "open") ? "opened" : "closed", b->p ? (int) b->p->height : 0);
+		}
+	}
+	for (k = 0; k < 64 && br_js_due(b) == 0; k++) {
+		if (br_js_step(b, &load) == BRJ_LOAD) {
+			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+			break;
 		}
 	}
 	return 1;
-#endif
 }
 
 /* every picture of the page shown, fetched and decoded */
@@ -695,6 +739,8 @@ int main(int argc, char **argv)
 	}
 	if (b.p->deep)
 		fprintf(stderr, "ewrender: deep: nested deeper than the stack holds, the rest left out\n");
+	if (strchr(b.url, '#') != NULL)
+		printf("top: %d\n", (int) b.scroll_to);	/* where EWEB.PRG scrolls to */
 	pictures(&b);
 	if (nfill > 0 || send != NULL) {
 		fctl *first = NULL, *by = NULL;
@@ -863,6 +909,11 @@ int main(int argc, char **argv)
 				       it->tile ? (int) it->tile->w : 0, it->tile ? (int) it->tile->h : 0,
 				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
 				       img_url(it->img), alpha_of(it));
+			else if (it->type == DL_SUM)
+				/* (a details' summary: where a click opens and closes it) */
+				printf("summary %d,%d %dx%d %s %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
+				       dn_attr(it->det, "open") ? "open" : "closed",
+				       dn_attr(it->det, "id") ? dn_attr(it->det, "id") : "-");
 			else if (it->type == DL_GRAD)
 				printf("gradient %d,%d %dx%d tile %d,%d %dx%d%s%s%s %s%s\n", (int) it->x, (int) it->y,
 				       (int) it->w, (int) it->h, it->tile ? (int) it->tile->dx : 0,

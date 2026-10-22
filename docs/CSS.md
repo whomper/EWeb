@@ -51,7 +51,8 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `:where()`; `:root`, `:empty`, `:first-child` and the whole child-index
   family, the `of-type` ones; `:link`, `:any-link`; `:lang()`, `:dir()`;
   `:enabled`, `:disabled`, `:checked`, `:required`, `:optional`,
-  `:read-only`, `:read-write`, `:placeholder-shown`. `:hover`, `:focus`
+  `:read-only`, `:read-write`, `:placeholder-shown`; `:open` (since 22 Oct
+  2026: a details or dialog with its `open` attribute). `:hover`, `:focus`
   and the other user-action pseudo-classes never match in a still page;
   their rules are kept apart for when EWeb is interactive. `::before` and
   `::after` get styles. Unknown pseudo-classes and pseudo-elements make a
@@ -90,7 +91,9 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `unicode-bidi`, `text-align: start | end`, and since 22 Oct 2026 HTML's
   `-webkit-left | -right | -center`, with Gecko's `-moz-` names, and
   `vertical-align: -webkit-baseline-middle`: `DESIGN.md`, Legacy
-  centring), lists, tables, flexbox,
+  centring), lists (since 22 Oct 2026 with CSS Counter Styles 3's
+  `disclosure-open` and `disclosure-closed`, a details' summary's
+  triangles: `DESIGN.md`, Details and summary), tables, flexbox,
   grid (since 21 Oct 2026: `grid-template-columns` and `-rows` as track
   lists with `fr`, `minmax()`, `fit-content()` and `repeat()`, `auto-fill`
   and `auto-fit` too; `grid-template-areas`; `grid-auto-columns`, `-rows`

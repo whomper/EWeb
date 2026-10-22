@@ -672,8 +672,16 @@ void win_page_drawn(int32_t y0, int32_t y1)
    it, all drawn */
 void win_page_relaid(void)
 {
+	win_page_relaid_at(top);
+}
+
+void win_page_relaid_at(int32_t y)
+{
+	top = y;
 	if (top > max_top())
 		top = max_top();
+	if (top < 0)
+		top = 0;
 	br_scrolled(&br, top);
 	sliders();
 	win_redraw_page();
@@ -1518,6 +1526,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	if (rect_hit(&r_page, mx, my)) {
 		const dl_item *it = NULL;
 		fctl *c;
+		dnode *det;
 		addr_blur();
 		if (button & 2) {
 			context_menu(mx, my);
@@ -1552,6 +1561,8 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			save_link(l);	/* Alternate-click (0x08): its file saved, as Safari's Option-click */
 		else if (l >= 0)
 			follow(l);
+		else if (br.p != NULL && (det = page_summary_at(br.p, mx - r_page.x, my - r_page.y + top)) != NULL)
+			details(det);	/* a details' summary: it opens or closes */
 		return 1;
 	}
 	return 1;

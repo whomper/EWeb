@@ -191,6 +191,32 @@ input:read-only { padding-top: 5px }
 #d padding-top 5px
 #c padding-top 0px
 
+=== :open, a details or dialog with its open attribute (HTML, 4.16.3)
+--- css
+:open { margin-left: 1px }
+details:not(:open) { margin-left: 2px }
+div[open] { margin-left: 3px }
+--- html
+<details id=a open><summary>s</summary></details><details id=b><summary>s</summary></details><dialog id=c open>d</dialog><div id=d open>x</div>
+--- expect
+#a margin-left 1px
+#b margin-left 2px
+#c margin-left 1px
+#d margin-left 3px
+
+=== a summary's disclosure triangles (CSS Counter Styles 3, 6.1; HTML, 15.5.4)
+--- css
+#a { list-style: disclosure-closed inside }
+#b { list-style-type: disclosure-open }
+#c { list-style: disclosure-sideways }
+--- html
+<summary id=a>a</summary><summary id=b>b</summary><li id=c>c</li>
+--- expect
+#a list-style-type disclosure-closed
+#a list-style-position inside
+#b list-style-type disclosure-open
+#c list-style-type decimal
+
 === margin and padding: one to four values
 --- css
 #a { margin: 1px }

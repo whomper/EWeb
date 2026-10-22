@@ -1656,8 +1656,10 @@ static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 		if (kw == KW_INHERIT || kw == KW_INITIAL || kw == KW_UNSET || kw == KW_REVERT ||
 				kw == KW_REVERT_LAYER)
 			return 0;
-		/* a counter style EWeb doesn't know is decimal (CSS Counter Styles 3) */
-		if ((c->opts & EC_COMPAT_KEYWORDS) && !in_list(KL_LIST_TYPE, kw))
+		/* a counter style EWeb doesn't know is decimal (CSS Counter Styles 3);
+		   LibCSS knows neither, nor the disclosure triangles */
+		if ((c->opts & EC_COMPAT_KEYWORDS) &&
+		    (!in_list(KL_LIST_TYPE, kw) || kw == KW_DISCLOSURE_OPEN || kw == KW_DISCLOSURE_CLOSED))
 			return 0;
 		d->kind = EK_KW;
 		d->v.i = in_list(KL_LIST_TYPE, kw) ? kw : KW_DECIMAL;

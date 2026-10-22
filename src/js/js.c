@@ -40,6 +40,15 @@ struct listener {
 	uint8_t capture, once, gone;
 };
 
+/* a details' toggle event to come (the HTML Standard, 4.11.1: its
+   details toggle task tracker) */
+typedef struct toggle toggle;
+struct toggle {
+	toggle *next;
+	dnode *n;
+	uint8_t was;			/* open before */
+};
+
 typedef struct timer timer;
 struct timer {
 	timer *next;
@@ -74,6 +83,7 @@ typedef struct ejs {
 	long nmap, mapcap;
 	listener *ls;
 	timer *ts;
+	toggle *tog;			/* toggle events to fire, in order */
 	int next_timer;
 	dnode **started;		/* scripts that have run (or never will) */
 	long nstarted, startcap;
@@ -470,16 +480,29 @@ static void mark_started(ejs *j, dnode *n)
 	j->started[j->nstarted++] = n;
 }
 
-/* scripts in n (from innerHTML) never run */
+static void toggle_queue(ejs *j, dnode *n, int was);
+
+/* what the parser made of a script's HTML (innerHTML): its scripts
+   never run; a details open in it has its toggle event to come (the
+   attribute change steps as the parser sets open, 4.11.1) */
 static void mark_all(ejs *j, dnode *n)
 {
-	dnode *k;
+	dnode *k, *t;
 	for (k = n; k != NULL; k = next_in(k, n, 1))
-		if (is_html(k, T_SCRIPT))
+		if (is_html(k, T_SCRIPT)) {
 			mark_started(j, k);
+		} else if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") != NULL) {
+			for (t = k->parent; t != NULL && t != n && !is_html(t, T_TEMPLATE); t = t->parent)
+				;
+			if (t == NULL || t == n)	/* (not in a template's contents) */
+				toggle_queue(j, k, 0);
+		}
 }
 
-/* the scripts a script put in the document run when they are put in */
+/* the scripts a script put in the document run when they are put in; a
+   details put in closes if its group has an open one (4.11.1, its
+   insertion steps: ensure details exclusivity by closing the given
+   element if needed) */
 static void run_inserted(ejs *j, dnode *n)
 {
 	dnode *k;
@@ -488,6 +511,9 @@ static void run_inserted(ejs *j, dnode *n)
 	for (k = n; k != NULL; k = next_in(k, n, 1))
 		if (is_html(k, T_SCRIPT) && !started(j, k))
 			run_script(j, k);
+		else if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") != NULL && dn_details_rival(j->d, k) != NULL &&
+			 dn_set_open(j->d, k, 0))
+			toggle_queue(j, k, 1);
 }
 
 /* n put into p before `before` (a fragment: its children); a script's
@@ -1289,13 +1315,95 @@ static char *attr_name(JSContext *ctx, JSValueConst v)
 	return s;
 }
 
+/* ---------------------------------------------------------------- details */
+
+/* a details' toggle event queued (the HTML Standard, 4.11.1, queue a
+   details toggle event task): one an element, the old state of the one
+   it replaces kept */
+static void toggle_queue(ejs *j, dnode *n, int was)
+{
+	toggle *t, **p;
+	for (p = &j->tog; (t = *p) != NULL; p = &t->next)
+		if (t->n == n) {
+			*p = t->next;
+			was = t->was;
+			free(t);
+			break;
+		}
+	if ((t = malloc(sizeof *t)) == NULL)
+		return;
+	t->next = NULL;
+	t->n = n;
+	t->was = (uint8_t) was;
+	for (p = &j->tog; *p != NULL; p = &(*p)->next)
+		;
+	*p = t;
+}
+
+static void toggle_cb(void *ud, dnode *k)
+{
+	toggle_queue(ud, k, dn_attr(k, "open") == NULL);
+}
+
+/* after a script set or removed an attribute (was: it was there): a
+   details' attribute change steps (4.11.1) */
+static void attr_changed(ejs *j, dnode *n, const char *name, int was)
+{
+	int now;
+	dnode *k;
+	if (!DN_IS(n, T_DETAILS))
+		return;
+	now = dn_attr(n, "open") != NULL;
+	if (strcmp(name, "name") == 0) {
+		/* ensure details exclusivity by closing the given element if
+		   needed */
+		if (now && dn_details_rival(j->d, n) != NULL && dn_set_open(j->d, n, 0))
+			toggle_queue(j, n, 1);
+	} else if (strcmp(name, "open") == 0 && was != now) {
+		toggle_queue(j, n, was);
+		/* ensure details exclusivity by closing other elements if
+		   needed */
+		if (now && (k = dn_details_rival(j->d, n)) != NULL && dn_set_open(j->d, k, 0))
+			toggle_queue(j, k, 1);
+	}
+}
+
+static fctl *ctl_of(ejs *j, dnode *n);
+
+/* the details whose summary a click on n activates (4.11.2: n in a
+   summary, the summary for its parent details, with no link or control
+   nearer n, which a click activates instead), or NULL */
+static dnode *summary_of(ejs *j, dnode *n)
+{
+	for (; n != NULL && n->type == DN_ELEMENT; n = n->parent) {
+		if ((is_html(n, T_A) && dn_attr(n, "href") != NULL) || ctl_of(j, n) != NULL || is_html(n, T_LABEL))
+			return NULL;
+		if (DN_IS(n, T_SUMMARY))
+			return n->parent != NULL && DN_IS(n->parent, T_DETAILS) && dn_summary(n->parent) == n ?
+			       n->parent : NULL;
+	}
+	return NULL;
+}
+
+/* ---------------------------------------------------------------- Element: attributes, again */
+
 static JSValue set_attr(JSContext *ctx, dnode *n, const char *name, const char *v, size_t len)
 {
 	ejs *j = J(ctx);
+	int was = dn_attr(n, name) != NULL;
 	if (!dn_set_attr(j->d, n, name, v, len))
 		return JS_ThrowOutOfMemory(ctx);
 	touch(j);
+	attr_changed(j, n, name, was);
 	return JS_UNDEFINED;
+}
+
+static void remove_attr(ejs *j, dnode *n, const char *name)
+{
+	int was = dn_attr(n, name) != NULL;
+	dn_remove_attr(j->d, n, name);
+	touch(j);
+	attr_changed(j, n, name, was);
 }
 
 static JSValue el_get_attr(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -1346,8 +1454,7 @@ static JSValue el_remove_attr(JSContext *ctx, JSValueConst this_val, int argc, J
 	THIS_ELEM(n);
 	if (argc < 1 || (name = attr_name(ctx, argv[0])) == NULL)
 		return JS_EXCEPTION;
-	dn_remove_attr(J(ctx)->d, n, name);
-	touch(J(ctx));
+	remove_attr(J(ctx), n, name);
 	free(name);
 	return JS_UNDEFINED;
 }
@@ -1363,7 +1470,7 @@ static JSValue el_toggle_attr(JSContext *ctx, JSValueConst this_val, int argc, J
 	if (on && dn_attr(n, name) == NULL)
 		set_attr(ctx, n, name, "", 0);
 	else if (!on)
-		dn_remove_attr(J(ctx)->d, n, name);
+		remove_attr(J(ctx), n, name);
 	touch(J(ctx));
 	free(name);
 	return JS_NewBool(ctx, on);
@@ -1450,8 +1557,7 @@ static JSValue reflect_set(JSContext *ctx, JSValueConst this_val, JSValueConst v
 	if (r_kind[magic] == 2) {
 		if (JS_ToBool(ctx, val))
 			return dn_attr(n, r_attr[magic]) ? JS_UNDEFINED : set_attr(ctx, n, r_attr[magic], "", 0);
-		dn_remove_attr(J(ctx)->d, n, r_attr[magic]);
-		touch(J(ctx));
+		remove_attr(J(ctx), n, r_attr[magic]);
 		return JS_UNDEFINED;
 	}
 	if ((s = cstr(ctx, val, &len)) == NULL)
@@ -2378,6 +2484,7 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 {
 	ejs *j = J(ctx);
 	fctl *c;
+	dnode *det;
 	THIS_ELEM(n);
 	switch (magic) {
 	case EC_CLICK:
@@ -2405,6 +2512,8 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 					}
 					free(out);
 				}
+			} else if ((det = summary_of(j, n)) != NULL && dn_details_toggle(j->d, det, toggle_cb, j)) {
+				dirty(j);	/* a details opened or closed */
 			}
 		}
 		return JS_UNDEFINED;
@@ -2935,6 +3044,35 @@ static JSValue ev_construct(JSContext *ctx, JSValueConst new_target, int argc, J
 	return o;
 }
 
+/* new ToggleEvent(type, {oldState, newState}): the two "" when not given
+   (the HTML Standard, 6.13, ToggleEventInit) */
+static JSValue toggle_construct(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv)
+{
+	static const char *const names[] = { "oldState", "newState" };
+	JSValue o = ev_construct(ctx, new_target, argc, argv);
+	int i;
+	for (i = 0; i < 2 && !JS_IsException(o); i++) {
+		JSValue v = argc > 1 && JS_IsObject(argv[1]) ? JS_GetPropertyStr(ctx, argv[1], names[i]) : JS_UNDEFINED;
+		if (JS_IsException(v)) {
+			JS_FreeValue(ctx, o);
+			return v;
+		}
+		if (JS_IsUndefined(v)) {
+			v = JS_NewString(ctx, "");
+		} else {
+			JSValue t = JS_ToString(ctx, v);
+			JS_FreeValue(ctx, v);
+			if (JS_IsException(t)) {
+				JS_FreeValue(ctx, o);
+				return t;
+			}
+			v = t;
+		}
+		JS_SetPropertyStr(ctx, o, names[i], v);
+	}
+	return o;
+}
+
 static JSValue doc_create_event(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	return new_event(ctx, "", 0, 0);
@@ -3316,6 +3454,29 @@ static void send_form(ejs *j, dnode *form, fctl *submitter)
 	j->nav = to;
 	if (made)
 		form_submit_free(&s);
+}
+
+/* the queued toggle events fired (ToggleEvent's oldState and newState) */
+static void toggles(ejs *j)
+{
+	int k = 0;
+	while (j->tog != NULL && !j->over && k++ < 64) {
+		toggle *t = j->tog;
+		JSValue ev = new_event(j->ctx, "toggle", 0, 0);
+		j->tog = t->next;
+		if (JS_IsException(ev)) {
+			report(j);
+		} else {
+			ev_of(ev)->trusted = 1;
+			JS_SetPropertyStr(j->ctx, ev, "oldState", JS_NewString(j->ctx, t->was ? "open" : "closed"));
+			JS_SetPropertyStr(j->ctx, ev, "newState",
+					  JS_NewString(j->ctx, dn_attr(t->n, "open") ? "open" : "closed"));
+			dispatch(j, t->n, ev);
+			JS_FreeValue(j->ctx, ev);
+		}
+		free(t);
+		jobs(j);
+	}
 }
 
 /* ---------------------------------------------------------------- timers */
@@ -3950,7 +4111,8 @@ static int setup(ejs *j)
 		"HTMLInputElement", "HTMLFormElement", "HTMLSelectElement", "HTMLOptionElement",
 		"HTMLTextAreaElement", "HTMLButtonElement", "HTMLScriptElement", "HTMLTableElement",
 		"HTMLLIElement", "HTMLUListElement", "HTMLParagraphElement", "HTMLBodyElement",
-		"HTMLIFrameElement", "HTMLCanvasElement", "HTMLTemplateElement", "SVGElement", NULL };
+		"HTMLIFrameElement", "HTMLCanvasElement", "HTMLTemplateElement", "HTMLDetailsElement", "SVGElement",
+		NULL };
 	static const char *const ev_names[] = { "CustomEvent", "UIEvent", "MouseEvent", "KeyboardEvent",
 						 "FocusEvent", "InputEvent", "SubmitEvent", "PointerEvent", NULL };
 	JSContext *ctx;
@@ -4052,6 +4214,7 @@ static int setup(ejs *j)
 	ctor(ctx, g, "Event", j->ev_proto, ev_construct, 0);
 	for (i = 0; ev_names[i]; i++)
 		ctor(ctx, g, ev_names[i], j->ev_proto, ev_construct, 1);
+	ctor(ctx, g, "ToggleEvent", j->ev_proto, toggle_construct, 1);
 	JS_FreeValue(ctx, g);
 #undef LIST
 	o = JS_Eval(ctx, prelude, sizeof prelude - 1, "<eweb>", JS_EVAL_TYPE_GLOBAL);
@@ -4204,6 +4367,13 @@ int js_page(doc *d, const char *url, const char *base, const js_host *h)
 		return JS_NO_MEMORY;
 	}
 	arm(j, JS_PAGE_MS);
+	/* the details open as parsed: a toggle event each to come (the
+	   parser's setting open runs the attribute change steps, 4.11.1),
+	   fired after the scripts with the timers; not in a template's
+	   contents (an inert document's) */
+	for (n = d->root; n != NULL; n = next_in(n, d->root, !is_html(n, T_TEMPLATE)))
+		if (DN_IS(n, T_DETAILS) && dn_attr(n, "open") != NULL)
+			toggle_queue(j, n, 0);
 	/* in document order; what a script writes comes after it, and is
 	   run in its turn */
 	for (n = d->root; n != NULL && !j->over;) {
@@ -4281,7 +4451,7 @@ long js_due(doc *d)
 	unsigned long now = pf_ms();
 	if (j == NULL)
 		return -1;
-	if (JS_IsJobPending(j->rt))
+	if (JS_IsJobPending(j->rt) || j->tog != NULL)
 		return 0;
 	for (t = j->ts; t != NULL; t = t->next) {
 		long w = (long) (t->due - now);
@@ -4300,6 +4470,8 @@ void js_run_timers(doc *d)
 	int k = 0;
 	if (j == NULL)
 		return;
+	arm(j, JS_EVENT_MS);
+	toggles(j);
 	now = pf_ms();
 	while (k++ < 64) {
 		timer **p, **due = NULL, *t;
@@ -4376,6 +4548,12 @@ void js_run(doc *d, const char *code)
 	sweep(j);
 }
 
+void js_toggled(doc *d, dnode *n)
+{
+	if (d->js != NULL)
+		toggle_queue(d->js, n, dn_attr(n, "open") == NULL);
+}
+
 void js_set_page(doc *d, const page *p)
 {
 	ejs *j = d->js;
@@ -4408,6 +4586,11 @@ static void js_drop(void *p)
 		for (t = j->ts; t != NULL; t = tn) {
 			tn = t->next;
 			timer_free(j, t);
+		}
+		while (j->tog != NULL) {
+			toggle *g = j->tog;
+			j->tog = g->next;
+			free(g);
 		}
 		for (i = 0; i < j->mapcap; i++)
 			if (j->map[i].n != NULL)

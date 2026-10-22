@@ -24,7 +24,8 @@ EWeb's own fonts.
   gradients (linear, radial and conic, dithered to the screen's colours;
   the ST edition draws those that run straight down or across, in the
   screen's own colours, and any other in its colours' average), and Hebrew
-  right to left.
+  right to left; the parts a page folds away (`<details>`) open and close
+  with a click.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, fetched after the page is shown (you read and scroll meanwhile),
   decoded straight at the size shown, dithered to the screen's colours in

@@ -237,7 +237,12 @@ lays the page out again for the new width.
 - **Up** and **Down**: a few lines; with **Shift**, a page
 - **Space**: a page down; **Shift-Space**: a page up
 - **ClrHome**: the top; **Shift-ClrHome**: the end
-- a link to a place on the same page (`#...`) scrolls there
+- a link to a place on the same page (`#...`) scrolls there, opening
+  the folded part it is in (below)
+- a heading with a small triangle pointing right is a part the page
+  has folded away (FAQ pages and documentation have them): click it to
+  open the part (the triangle points down), and again to fold it; the
+  window stays where it is
 
 ## Back, Forward and Home
 

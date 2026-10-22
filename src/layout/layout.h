@@ -31,7 +31,9 @@ typedef struct {
 	void *ud;
 } LAYOUT_OPT;
 
-enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD };
+/* DL_SUM: a details element's summary (the HTML Standard, 4.11): its
+   box, drawn not at all (rgb's AA 0), where a click opens and closes det */
+enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
@@ -76,6 +78,7 @@ typedef struct dl_item {
 					   known), DL_GRAD (NULL: none drawn) */
 		uint32_t ink;		/* DL_CTL: its text's colour, 0xAARRGGBB as rgb (the
 					   CSS colour's alpha, then the opacity it is in) */
+		dnode *det;		/* DL_SUM: the details element */
 	};
 	uint32_t len;			/* DL_CTL: a textarea's line step */
 	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h
@@ -140,6 +143,9 @@ struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it
 /* a control's item on the page (its content's place), or NULL when it
    isn't shown */
 const dl_item *page_ctl_item(const page *p, const struct fctl *c);
+/* the details element whose summary is under (x, y) (the innermost: a
+   details in a summary), or NULL */
+dnode *page_summary_at(const page *p, int32_t x, int32_t y);
 #ifndef EW_ST
 /* for scripts: the element under (x, y) (the innermost), or NULL; an
    element's place on the page (its block, or what its items cover): 0
@@ -147,7 +153,11 @@ const dl_item *page_ctl_item(const page *p, const struct fctl *c);
 dnode *page_node_at(const page *p, int32_t x, int32_t y);
 int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h);
 #endif
-/* where the element with that id (or an <a name>) is, or -1 */
+/* where the element with that id (or an <a name>) is, or -1 (not laid
+   out, or folded away in a closed details) */
 int32_t page_anchor(const page *p, const char *id);
+/* that element (the first laid out, or folded away: dn_reveal opens its
+   details), or NULL */
+dnode *page_anchor_node(const page *p, const char *id);
 
 #endif

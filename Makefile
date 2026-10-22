@@ -18,7 +18,8 @@
 #   make test        nsbench on the test pages, the Hebrew pages, the CSS
 #                    engine's cases, the input stream, the HTTP client, the
 #                    fuzz targets' inputs and the layout's pages
-#                    (tests/layout, and the ST edition's gradients), with
+#                    (tests/layout, and the ST edition's gradients and
+#                    details clicked), with
 #                    AddressSanitizer and UBSan
 #   make itest       ewget and the browser against servers on this computer
 #                    (TCP, TLS)
@@ -892,6 +893,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/layout/alpha.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

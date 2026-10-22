@@ -898,7 +898,9 @@ static void base_of(const browser *b, const doc *d, const char *url, char *out, 
    something was given back */
 static void unkeep(BR_ENTRY *e);
 
-static int make_room(browser *b)
+/* all that, but the page shown and its pictures (the fonts' glyphs are
+   read again when drawn); 1 when a kept page went */
+static int shed(browser *b)
 {
 	int i, freed = 0;
 	for (i = 0; i < b->nhist; i++)
@@ -906,6 +908,14 @@ static int make_room(browser *b)
 			unkeep(&b->hist[i]);
 			freed = 1;
 		}
+	img_clear();
+	font_drop();
+	return freed;
+}
+
+static int make_room(browser *b)
+{
+	int freed = 0;
 	if (b->p != NULL) {
 		pg_free(b->p);
 		doc_free(b->d);
@@ -913,9 +923,7 @@ static int make_room(browser *b)
 		b->d = NULL;
 		freed = 1;
 	}
-	img_clear();
-	font_drop();
-	return freed;
+	return shed(b) || freed;
 }
 
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
@@ -1178,14 +1186,29 @@ static void hist_set_url(browser *b, const char *url)
 	b->hist[b->cur].url = u;
 }
 
-static int32_t anchor_y(const browser *b, const char *url)
+static void toggled(void *ud, dnode *k);
+static int relay(browser *b);
+
+/* where url's #fragment is on the page shown, or -1 (the top). A closed
+   details it is in is opened first and the page laid out again (b->relaid
+   then): the HTML Standard's scroll to the fragment (7.4.6.4), its
+   ancestor details revealing algorithm (4.11.1). Out of memory even
+   without the page shown (relay), that is gone (b->relaid, and a note) */
+static int32_t anchor_y(browser *b, const char *url)
 {
 	const char *fr = fragment(url);
-	int32_t y;
+	dnode *n;
 	if (b->p == NULL || *fr == 0)
 		return -1;
-	y = page_anchor(b->p, fr);
-	return y;
+	n = page_anchor_node(b->p, fr);
+	if (n != NULL && dn_folded(n) && dn_reveal(b->d, n, toggled, b) > 0) {
+		b->relaid = 1;
+		if (!relay(b)) {
+			snprintf(b->note, sizeof b->note, "%s", "EWeb hasn't the memory to lay the page out again.");
+			return -1;
+		}
+	}
+	return page_anchor(b->p, fr);
 }
 
 /* a page of EWeb's own, shown in place of url */
@@ -1259,6 +1282,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	if (mode == NAV_NEW && post == NULL && b->p != NULL && fragment(url)[0] && same_but_fragment(url, b->url)) {
 		hist_push(b, url);
 		str_copy(b->url, url, sizeof b->url);
+		b->relaid = 0;
+		b->note[0] = 0;
 		b->scroll_to = anchor_y(b, url);
 		return BR_SAME;
 	}
@@ -1901,6 +1926,8 @@ static int go_to(browser *b, int i)
 		b->cur = i;
 		str_copy(b->url, b->hist[i].url, sizeof b->url);
 		b->scroll_to = b->hist[i].y;
+		b->relaid = 0;
+		b->note[0] = 0;
 		return BR_SAME;
 	}
 	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom && b->hist[i].p->opt.text == b->text) {
@@ -1989,6 +2016,55 @@ int br_relayout(browser *b, int32_t width)
 	js_set_page(b->d, p);
 	shown_imgs(b);
 	return 1;
+}
+
+/* (the page's scripts get a toggle event, after: js_toggled) */
+static void toggled(void *ud, dnode *k)
+{
+	browser *b = ud;
+	if (b->d->js != NULL)
+		js_toggled(b->d, k);
+}
+
+/* the page shown styled again (details[open] > summary's triangle, and
+   the page's own [open] rules), as after a script, and laid out again;
+   its tree is as it was. Out of memory (a 1 MB ST), what a page that
+   doesn't fit gives back goes, as for build: what shed gives back, and it
+   is tried once more; then the page shown itself (its tree kept), and it
+   is tried a last time. 0 when it still doesn't fit: b->p is then NULL */
+static int relay(browser *b)
+{
+	char base[4096];
+	doc *d = b->d;
+	page *p = NULL;
+	int k;
+	base_of(b, d, b->url, base, sizeof base);
+	for (k = 0; k < 3 && p == NULL; k++) {
+		if (k == 1) {
+			shed(b);
+		} else if (k == 2) {
+			js_set_page(d, NULL);
+			pg_free(b->p);
+			b->p = NULL;
+		}
+		ec_unstyle(d->css);
+		if (doc_select(d) >= 0)
+			p = lay(b, d, base);
+	}
+	if (p == NULL)
+		return 0;
+	pg_free(b->p);
+	b->p = p;
+	js_set_page(d, p);
+	shown_imgs(b);
+	return 1;
+}
+
+int br_details(browser *b, dnode *det)
+{
+	if (b->d == NULL || det == NULL || !dn_details_toggle(b->d, det, toggled, b))
+		return 0;
+	return relay(b);
 }
 
 /* ---------------------------------------------------------------- the page's pictures */

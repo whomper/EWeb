@@ -232,7 +232,7 @@ static const char *list_type(const char *v, int ol)
    being finished: compared as pointers, not as text */
 static struct {
 	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
-	const ec_atom *col, *font;
+	const ec_atom *col, *font, *name, *open;
 } ha;
 
 static const char *attr_atom(const dnode *n, const ec_atom *a)
@@ -272,6 +272,8 @@ static void hint_atoms(doc *d)
 	A(width);
 	A(col);
 	A(font);
+	A(name);
+	A(open);
 #undef A
 }
 
@@ -446,6 +448,35 @@ static void hints(dnode *n)
 	}
 }
 
+/* the groups of details (their name attribute) with one open, in the
+   document being finished: a later one of a group starts closed (the
+   HTML Standard, 4.11.1: a details' insertion steps, ensure details
+   exclusivity by closing the given element if needed). Eight groups are
+   kept track of; pages have one or two. */
+static struct {
+	const char *name[8];
+	int n;
+} groups;
+
+static void details_inserted(doc *d, dnode *n)
+{
+	const char *name = HA(n, name);
+	const dnode *k;
+	int i;
+	if (name == NULL || *name == 0 || HA(n, open) == NULL)
+		return;
+	for (k = n->parent; k != NULL; k = k->parent)
+		if (DN_IS(k, T_TEMPLATE))
+			return;		/* a template's contents: a tree of their own */
+	for (i = 0; i < groups.n; i++)
+		if (strcmp(groups.name[i], name) == 0) {
+			dn_set_open(d, n, 0);
+			return;
+		}
+	if (groups.n < 8)
+		groups.name[groups.n++] = name;
+}
+
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
@@ -464,6 +495,8 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 		n->e.flags |= EC_NODE_LINK;
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
+	if (n->tag == T_DETAILS && n->ns == DN_NS_HTML && n->nattr >= 2)
+		details_inserted(d, n);
 	if (n->tag == T_HTML && d->html == NULL)
 		d->html = n;
 	else if (n->tag == T_BODY && d->body == NULL)
@@ -524,6 +557,7 @@ static dnode *element_from(dnode *c)
 static void finish(doc *d, dnode *top, dnode *parent)
 {
 	dnode *n = top, *c;
+	groups.n = 0;
 	finish_one(d, top, parent);
 	for (;;) {
 		if ((c = element_from(n->first)) != NULL) {
@@ -709,6 +743,122 @@ void dn_remove_attr(doc *d, dnode *n, const char *name)
 }
 
 #endif
+
+/* ---------------------------------------------------------------- details */
+
+dnode *dn_summary(const dnode *details)
+{
+	dnode *c;
+	for (c = details->first; c != NULL; c = c->next)
+		if (DN_IS(c, T_SUMMARY))
+			return c;
+	return NULL;
+}
+
+int dn_set_open(doc *d, dnode *n, int open)
+{
+	const ec_atom *a = ec_intern(d->css, "open", 4);
+	uint16_t i;
+	if (a == NULL)
+		return 0;
+	for (i = 0; i < n->nattr && n->attrs[i].name != a; i++)
+		;
+	if (!open && i < n->nattr) {
+		/* in place: the parser shares attributes only between the
+		   formatting elements it clones, and details isn't one */
+		memmove(&n->attrs[i], &n->attrs[i + 1], (size_t) (n->nattr - i - 1) * sizeof *n->attrs);
+		n->nattr--;
+	} else if (open && i == n->nattr) {
+		ec_attr *at = doc_alloc(d, (n->nattr + 1u) * sizeof *at);
+		if (at == NULL)
+			return 0;
+		if (n->nattr)
+			memcpy(at, n->attrs, n->nattr * sizeof *at);
+		at[n->nattr].name = a;
+		at[n->nattr].val = "";
+		at[n->nattr].len = 0;
+		n->attrs = at;
+		n->nattr++;
+	}
+	n->e.attr = n->attrs;
+	n->e.nattr = n->nattr;
+	return 1;
+}
+
+/* the tree n is in (the HTML Standard's root): its topmost ancestor, or
+   the template whose contents it is in (a tree of their own: the
+   standard's template contents, a DocumentFragment) */
+static const dnode *tree_of(const dnode *n)
+{
+	while (n->parent != NULL && !DN_IS(n->parent, T_TEMPLATE))
+		n = n->parent;
+	return n->parent != NULL ? n->parent : n;
+}
+
+/* (in tree order, without recursion: a page can be nested deeper than the
+   Atari's stack holds; n's own tree only, not into a template's
+   contents) */
+dnode *dn_details_rival(const doc *d, const dnode *n)
+{
+	const char *name = dn_attr(n, "name");
+	const dnode *top;
+	dnode *k;
+	(void) d;
+	if (name == NULL || *name == 0)
+		return NULL;
+	top = tree_of(n);
+	k = (dnode *) top;
+	for (;;) {
+		const char *v;
+		if (k != n && DN_IS(k, T_DETAILS) && dn_attr(k, "open") != NULL && (v = dn_attr(k, "name")) != NULL &&
+		    strcmp(v, name) == 0)
+			return k;
+		if (k->first != NULL && (k == top || !DN_IS(k, T_TEMPLATE))) {
+			k = k->first;
+			continue;
+		}
+		while (k != top && k->next == NULL)
+			k = k->parent;
+		if (k == top)
+			return NULL;
+		k = k->next;
+	}
+}
+
+int dn_details_toggle(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud)
+{
+	int open = dn_attr(n, "open") == NULL;
+	dnode *k;
+	if (!dn_set_open(d, n, open))
+		return 0;
+	if (changed != NULL)
+		changed(ud, n);
+	if (open && (k = dn_details_rival(d, n)) != NULL && dn_set_open(d, k, 0) && changed != NULL)
+		changed(ud, k);
+	return 1;
+}
+
+int dn_folded(const dnode *n)
+{
+	const dnode *c, *k;
+	for (c = n, k = n->parent; k != NULL; c = k, k = k->parent)
+		if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") == NULL && c != dn_summary(k))
+			return 1;
+	return 0;
+}
+
+int dn_reveal(doc *d, dnode *n, void (*changed)(void *ud, dnode *k), void *ud)
+{
+	dnode *c, *k;
+	int opened = 0;
+	for (c = n, k = n->parent; k != NULL; c = k, k = k->parent)
+		if (DN_IS(k, T_DETAILS) && dn_attr(k, "open") == NULL && c != dn_summary(k)) {
+			if (!dn_details_toggle(d, k, changed, ud))
+				break;
+			opened++;
+		}
+	return opened;
+}
 
 void doc_free(doc *d)
 {

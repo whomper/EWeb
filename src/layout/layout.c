@@ -38,8 +38,14 @@ struct arena { struct achunk *head; };
 #define AALIGN (sizeof(void *) > 4 ? 8 : 4)
 #ifdef EW_ST
 #define ACHUNK 8192	/* the ST edition: smaller pieces, for a 1 MB ST */
+#define DL_FIRST 128	/* the display list's first piece: 1024 items were 45 KB,
+			   most of a small page's memory (a 1 MB ST couldn't
+			   lay a details' page out again beside it) */
+#define IT_FIRST 64	/* and the line items' (15 KB) */
 #else
 #define ACHUNK 16384
+#define DL_FIRST 1024
+#define IT_FIRST 256
 #endif
 
 static void *amalloc(struct arena *a, size_t n)
@@ -84,7 +90,9 @@ static char *astrdup(struct arena *a, const char *s, size_t n)
 
 /* ---------------------------------------------------------------- boxes */
 
-enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM };
+/* BX_MARK: a list item's marker inside it (list-style-position: inside),
+   its text made when it is laid out (the item's number is known then) */
+enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM, BX_MARK };
 /* an atom: alt text; a picture; a form control (drawn from its state, form.h) */
 enum { AT_LABEL, AT_IMAGE, AT_CONTROL };
 
@@ -96,7 +104,7 @@ struct box {
 	uint8_t wrap;			/* a flex row that wraps (flex-wrap) */
 	uint8_t flex;			/* a flex container: its children are flex items */
 	uint8_t grid;			/* a grid container: its children are grid items */
-	uint8_t list;			/* a list item */
+	uint8_t list;			/* LB_*: a list item; a details' summary */
 	uint8_t anon;			/* an anonymous block: no box of its own */
 	uint8_t atom;			/* AT_* */
 	uint8_t tablerow;
@@ -110,10 +118,17 @@ struct box {
 	const char *text;		/* text, or an atom's label */
 	uint32_t len;
 	int32_t aw, ah;			/* an atom's size, device px (AUTO: from its label) */
-	int32_t num;			/* a list item's number */
-	void *img;			/* AT_IMAGE: the picture's handle */
+	int32_t num;			/* a list item's number; a marker's counter
+					   style when it has one of its own (KW_*) */
+	void *img;			/* AT_IMAGE: the picture's handle; LB_SUM: the
+					   details element (dnode *) */
 	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
 };
+
+/* box.list: a list item (display: list-item); the summary a click opens
+   and closes a details by (the HTML Standard, 4.11), whatever its display */
+#define LB_ITEM 1
+#define LB_SUM 2
 
 /* ---------------------------------------------------------------- the context */
 
@@ -142,6 +157,8 @@ typedef struct {
 	int32_t shift;			/* vertical-align: + down */
 	box *atom;
 	int32_t x;			/* where it went on its line */
+	dnode *det;			/* in a summary laid out inline: its details (its
+					   click areas are the line's, DL_SUM) */
 #ifndef EW_ST
 	dnode *node;			/* the element it is in (for scripts' events) */
 #endif
@@ -167,6 +184,7 @@ typedef struct {
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
 	int floats;			/* the items have a float in the text (IT_FLOAT) */
+	int sums;			/* the items have an inline summary's (ITEM.det) */
 	/* the last block laid out: its background and border items (-1:
 	   none), for a row to stretch its cells to the row's height */
 	long last_bg, last_bd[4];
@@ -517,7 +535,7 @@ static dl_item *dl_add(L *l)
 {
 	page *p = l->p;
 	if (p->nitems == p->cap) {
-		long cap = p->cap ? p->cap * 2 : 1024;
+		long cap = p->cap ? p->cap * 2 : DL_FIRST;
 		dl_item *n = realloc(p->items, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
@@ -568,6 +586,30 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
 	d->h = h;
 	d->rgb = argb;
 	return l->p->nitems - 1;
+}
+
+/* where a click opens and closes the details det: its summary's box,
+   or a part of a line of a summary laid out inline */
+static void sum_rect(L *l, dnode *det, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	dl_item *d;
+	if (w <= 0 || h <= 0 || (d = dl_add(l)) == NULL)
+		return;
+	d->type = DL_SUM;
+	d->x = x;
+	d->y = y;
+	d->w = w;
+	d->h = h;
+	d->rgb = 0;		/* (not drawn) */
+	d->det = det;
+}
+
+/* a details' summary's box (not one a click goes through, pointer-events:
+   none, nor a hidden one) */
+static void sum_item(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	if (!no_hit(b->st) && kw(b->st, EP_VISIBILITY) != KW_HIDDEN)
+		sum_rect(l, b->img, x, y, w, h);
 }
 
 static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_t n, int32_t w)
@@ -1119,7 +1161,9 @@ static void build_element(L *l, box *parent, dnode *c)
 		return;
 	if (c->tag == T_A && dn_attr(c, "href") != NULL)
 		b->link = add_link(l, dn_attr(c, "href"));
-	b->list = d == KW_LIST_ITEM;
+	b->list = d == KW_LIST_ITEM ? LB_ITEM : 0;
+	if (d == KW_LIST_ITEM && kw(st, EP_LIST_STYLE_POSITION) == KW_INSIDE && kw(st, EP_LIST_STYLE_TYPE) != KW_NONE)
+		new_box(l, BX_MARK, NULL, st, b);	/* the marker first, before ::before (CSS Lists 3, 3.1) */
 	b->tablerow = d == KW_TABLE_ROW;
 	b->table = d == KW_TABLE || d == KW_INLINE_TABLE;
 	if (d == KW_TABLE_ROW)
@@ -1136,15 +1180,113 @@ static void build_element(L *l, box *parent, dnode *c)
 	pseudo(l, b, c, st->after);
 }
 
+/* a details element (the HTML Standard, 15.5.4: its two slots): its
+   summary is shown always, the rest only when it is open. Without a
+   summary it has one of the layout's own, "Details" after the triangle,
+   in its style. The summary's box is where a click opens and closes it
+   (LB_SUM). Returns 1 when it is closed; *sum: its summary */
+static int details_start(L *l, box *parent, dnode *n, const ec_style *pst, dnode **sum)
+{
+	int open = dn_attr(n, "open") != NULL;
+	*sum = dn_summary(n);
+	if (*sum == NULL) {
+		box *b = new_box(l, BX_BLOCK, NULL, pst, parent), *m;
+		if (b != NULL) {
+			b->anon = 1;
+			b->list = LB_SUM;
+			b->img = n;
+			m = new_box(l, BX_MARK, NULL, pst, b);
+			if (m != NULL)
+				m->num = open ? KW_DISCLOSURE_OPEN : KW_DISCLOSURE_CLOSED;
+			add_text_box(l, b, pst, "Details", 7);
+		}
+	}
+	return !open;
+}
+
+/* a details' summary (det's first summary child) built: its box is where
+   a click opens and closes det (LB_SUM). One with display: contents has
+   no box, but a click on what is in it is one in it all the same (the
+   HTML Standard's activation behaviour): its blocks are marked, and each
+   run of its inline boxes goes in an anonymous inline of its own, laid
+   out as its parent's run, whose parts on the lines are where a click
+   opens and closes det, as an inline summary's are (collect) */
+static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
+{
+	box *before = parent->last, *b, *prev;
+	build_element(l, parent, sum);
+	b = before != NULL ? before->next : parent->first;
+	if (sum->e.style == NULL || kw(sum->e.style, EP_DISPLAY) != KW_CONTENTS) {
+		for (; b != NULL; b = b->next)
+			if (b->n == sum) {	/* (none when display: none) */
+				b->list |= LB_SUM;
+				b->img = det;
+				break;
+			}
+		return;
+	}
+	for (prev = before; b != NULL; prev = b, b = b->next) {
+		box *w, *end, *k;
+		if (b->kind == BX_BLOCK) {
+			b->list |= LB_SUM;
+			b->img = det;
+			continue;
+		}
+		for (end = b; end->next != NULL && end->next->kind != BX_BLOCK; end = end->next)
+			;
+		w = amalloc(l->a, sizeof *w);
+		if (w == NULL) {
+			l->fail = 1;
+			return;
+		}
+		memset(w, 0, sizeof *w);
+		w->kind = BX_INLINE;
+		w->anon = 1;
+		w->list = LB_SUM;
+		w->img = det;
+		w->st = parent->st;
+		w->parent = parent;
+		w->link = parent->link;
+		w->aw = w->ah = AUTO;
+		w->first = b;
+		w->last = end;
+		for (k = b; ; k = k->next) {
+			k->parent = w;
+			if (k == end)
+				break;
+		}
+		w->next = end->next;
+		end->next = NULL;
+		if (prev != NULL)
+			prev->next = w;
+		else
+			parent->first = w;
+		if (w->next == NULL)
+			parent->last = w;
+		b = w;
+	}
+}
+
 static void build(L *l, box *parent, dnode *n)
 {
-	dnode *c;
+	dnode *c = n->first, *sum = NULL;
 	const ec_style *pst = n->type == DN_ELEMENT && n->e.style ? n->e.style : parent->st;
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: no deeper */
 		return;
 	}
-	for (c = n->first; c != NULL && !l->fail; c = c->next) {
+	if (n->tag == T_DETAILS && n->ns == DN_NS_HTML) {
+		int closed = details_start(l, parent, n, pst, &sum);
+		/* its summary first, whatever comes before it (the summary's
+		   slot comes first); closed, nothing else */
+		if (sum != NULL)
+			build_summary(l, parent, sum, n);
+		if (closed)
+			return;
+	}
+	for (; c != NULL && !l->fail; c = c->next) {
+		if (c == sum)
+			continue;
 		if (c->type == DN_TEXT) {
 			if (c->len > 0)
 				add_text_box(l, parent, pst, c->text, c->len);
@@ -1333,7 +1475,7 @@ static void fixup(L *l, box *b)
 static ITEM *item(L *l)
 {
 	if (l->nit == l->itcap) {
-		long cap = l->itcap ? l->itcap * 2 : 256;
+		long cap = l->itcap ? l->itcap * 2 : IT_FIRST;
 		ITEM *n = realloc(l->it, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
@@ -1378,6 +1520,7 @@ typedef struct {
 	uint16_t link;
 	uint16_t ctl;			/* in a <label>: its control (1 + index into page.ctls) */
 	int32_t asc, desc, shift;
+	dnode *det;			/* in a summary laid out inline: its details */
 #ifndef EW_ST
 	dnode *node;			/* the element whose run it is */
 #endif
@@ -1411,6 +1554,7 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 	r->node = parent ? parent->node : NULL;
 #endif
 	r->ctl = parent ? parent->ctl : 0;
+	r->det = parent ? parent->det : NULL;
 	r->deco = (uint8_t) ((parent ? parent->deco & ~DLF_NOHIT : 0) | (no_hit(st) ? DLF_NOHIT : 0));
 	r->bg = parent ? parent->bg : 0;
 	r->shift = parent ? parent->shift : 0;
@@ -1456,6 +1600,7 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->flags = r->deco;
 	it->link = r->link;
 	it->ctl = r->ctl;
+	it->det = r->det;
 	it->hidden = r->hidden;
 	it->alpha = r->alpha;
 #ifndef EW_ST
@@ -1660,6 +1805,43 @@ static uint16_t label_for(L *l, dnode *n)
 	return 0;
 }
 
+static const char *marker_text(const ec_style *st, int fixed, int n, char *buf);
+
+/* an inside marker: its text, and a space after it (the counter style's
+   suffix) that the white space after it goes into (as ::marker's
+   white-space: pre; CSS Lists 3, 3.1). It isn't a place the line chooses
+   to break at, but the first word still goes on the next line when it
+   doesn't fit beside the marker, as lines breaks before any word that
+   doesn't fit where the line has no space to break at (CSS Text 3 allows
+   a break there: the summary's or item's white-space is normal) */
+static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
+{
+	const box *li = m->parent;
+	char buf[24];
+	const char *s;
+	ITEM *it;
+	uint32_t n;
+
+	while (li != NULL && !(li->list & LB_ITEM) && !m->num)
+		li = li->parent;
+	if (li == NULL || (s = marker_text(li->st, m->num, li->num, buf)) == NULL || *s == 0)
+		return;
+	n = (uint32_t) strlen(s);
+	if (s == buf && (s = astrdup(l->a, buf, n)) == NULL) {
+		l->fail = 1;
+		return;
+	}
+	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n));
+	if (!m->num && li->st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
+		return;		/* a string: as it is, the white space after it dropped */
+	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '));
+	if (l->fail)
+		return;
+	it = &l->it[l->nit - 1];
+	it->collapse = 1;
+	*line_start = 0;
+}
+
 static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 {
 	box *c;
@@ -1672,6 +1854,9 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		switch (c->kind) {
 		case BX_TEXT:
 			text_items(l, pr, c->text, c->len, line_start);
+			break;
+		case BX_MARK:
+			mark_items(l, pr, c, line_start);
 			break;
 		case BX_BR:
 			put_item(l, pr, IT_BREAK, NULL, 0, 0);
@@ -1744,6 +1929,20 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		}
 		case BX_INLINE: {
 			int32_t gl, gr;
+			if (c->anon) {
+				/* a display: contents summary's run (build_summary):
+				   laid out as its parent's, its parts on the lines
+				   where a click opens and closes its details; its
+				   text is the summary's, for scripts */
+				r = *pr;
+				r.det = c->img;
+#ifndef EW_ST
+				r.node = dn_summary(c->img);
+#endif
+				l->sums = 1;
+				collect(l, c, &r, line_start);
+				break;
+			}
 			runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
 #ifndef EW_ST
 			if (c->n != NULL)
@@ -1751,6 +1950,12 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 #endif
 			if (c->n != NULL && c->n->tag == T_LABEL && c->n->ns == DN_NS_HTML)
 				r.ctl = label_for(l, c->n);
+			if (c->list & LB_SUM) {
+				/* a summary laid out inline (inline-block too): its
+				   click areas are its parts on the lines */
+				r.det = c->img;
+				l->sums = 1;
+			}
 			gl = len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_PADDING_LEFT, AUTO) +
 			     (kw(c->st, EP_BORDER_LEFT_STYLE) > KW_HIDDEN ? len0(l, c->st, EP_BORDER_LEFT_WIDTH, AUTO) : 0);
 			gr = len0(l, c->st, EP_MARGIN_RIGHT, AUTO) + len0(l, c->st, EP_PADDING_RIGHT, AUTO) +
@@ -2281,7 +2486,7 @@ static void line_edges(L *l, long i, long end, int32_t *asc, int32_t *desc)
 typedef struct {
 	ITEM *it;
 	long nit, cap;
-	int lined, floats;
+	int lined, floats, sums;
 	int32_t cw;
 } STASH;
 
@@ -2292,6 +2497,7 @@ static void stash(L *l, STASH *s)
 	s->cap = l->itcap;
 	s->lined = l->lined;
 	s->floats = l->floats;
+	s->sums = l->sums;
 	s->cw = l->cw;
 	l->it = NULL;
 	l->nit = l->itcap = 0;
@@ -2305,6 +2511,7 @@ static void unstash(L *l, const STASH *s)
 	l->itcap = s->cap;
 	l->lined = s->lined;
 	l->floats = s->floats;
+	l->sums = s->sums;
 	l->cw = s->cw;
 }
 
@@ -2519,6 +2726,21 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					fill(l, x0, base - asc, x1 - x0, asc + desc, it->bg);
 				}
 			}
+			for (k = 0; l->sums && k < end - i; k++) {
+				ITEM *it = &l->it[ord[k]];
+				if (it->det != NULL && it->kind != IT_BREAK && it->kind != IT_FLOAT && !it->hidden &&
+				    !(it->flags & DLF_NOHIT)) {
+					/* an inline summary's part of the line: one
+					   click area (not where a click goes through
+					   it, nor where it is hidden) */
+					int32_t x0 = it->x, x1 = it->x + it->w;
+					while (k + 1 < end - i && l->it[ord[k + 1]].det == it->det) {
+						k++;
+						x1 = l->it[ord[k]].x + l->it[ord[k]].w;
+					}
+					sum_rect(l, it->det, x0, base - asc, x1 - x0, asc + desc);
+				}
+			}
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
 				if (it->hidden)
@@ -2567,7 +2789,7 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	int line_start = 1;
 	int32_t h;
 	l->nit = 0;
-	l->lined = l->floats = 0;
+	l->lined = l->floats = l->sums = 0;
 	l->cw = w;
 	runstate(l, &r, b->st, NULL, NULL, b->link);
 #ifndef EW_ST
@@ -2751,21 +2973,24 @@ static int32_t collapse(int32_t a, int32_t b)
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first);
 
-static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
+/* a list item's marker (CSS Lists 3; CSS Counter Styles 3, 6 and 7), from
+   its style (or the counter style fixed, a summary's of the layout's
+   own) and its number n: its text, in buf when it is made; NULL for none.
+   A string is the marker as it is; the disclosure triangles (a details'
+   summary) point the other way in a right-to-left item */
+static const char *marker_text(const ec_style *st, int fixed, int n, char *buf)
 {
-	const ec_style *st = b->st;
-	int t = kw(st, EP_LIST_STYLE_TYPE);
-	char buf[24];
-	const char *s = buf;
-	ITEM it;
-	RUNSTATE r;
-	int32_t w;
-	int n = b->num;
+	int t = fixed ? fixed : kw(st, EP_LIST_STYLE_TYPE);
 
+	if (!fixed && st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
+		return ((const ec_str *) st->v[EP_LIST_STYLE_TYPE].p)->s;
 	switch (t) {
-	case KW_NONE: return;
-	case KW_CIRCLE: s = "\xe2\x97\xa6"; break;	/* ◦ */
-	case KW_SQUARE: s = "\xe2\x96\xaa"; break;	/* ▪ */
+	case KW_NONE: return NULL;
+	case KW_CIRCLE: return "\xe2\x97\xa6";	/* ◦ */
+	case KW_SQUARE: return "\xe2\x96\xaa";	/* ▪ */
+	case KW_DISCLOSURE_OPEN: return "\xe2\x96\xbe";	/* ▾ */
+	case KW_DISCLOSURE_CLOSED:			/* ▸, or ◂ */
+		return kw(st, EP_DIRECTION) == KW_RTL ? "\xe2\x97\x82" : "\xe2\x96\xb8";
 	case KW_DECIMAL: case KW_DECIMAL_LEADING_ZERO: case KW_HEBREW: case KW_ARMENIAN:
 	case KW_GEORGIAN: case KW_LOWER_GREEK: {
 		char d[12];
@@ -2783,7 +3008,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			buf[o++] = d[--k];
 		buf[o++] = '.';
 		buf[o] = 0;
-		break;
+		return buf;
 	}
 	case KW_LOWER_ALPHA: case KW_LOWER_LATIN: case KW_UPPER_ALPHA: case KW_UPPER_LATIN: {
 		char d[8];
@@ -2798,7 +3023,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			buf[o++] = d[--k];
 		buf[o++] = '.';
 		buf[o] = 0;
-		break;
+		return buf;
 	}
 	case KW_LOWER_ROMAN: case KW_UPPER_ROMAN: {
 		static const char *const r1[] = { "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix" };
@@ -2815,10 +3040,24 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 			for (i = 0; buf[i]; i++)
 				buf[i] = (char) (buf[i] - 32);
 		strcat(buf, ".");
-		break;
+		return buf;
 	}
-	default: s = "\xe2\x80\xa2"; break;		/* • */
+	default: return "\xe2\x80\xa2";		/* • */
 	}
+}
+
+/* an outside marker, in the margin before the item's first line */
+static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
+{
+	const ec_style *st = b->st;
+	char buf[24];
+	const char *s = marker_text(st, 0, b->num, buf);
+	ITEM it;
+	RUNSTATE r;
+	int32_t w;
+
+	if (s == NULL || *s == 0)
+		return;
 	runstate(l, &r, st, NULL, NULL, 0);
 	memset(&it, 0, sizeof it);
 	it.font = r.font;
@@ -4674,14 +4913,16 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				box *k;
 				int cnt = 0;
 				for (k = b->first; k != NULL; k = k->next)
-					if (k->list)
+					if (k->list == LB_ITEM)
 						cnt++;
 				num = st ? atoi(st) + 1 : cnt + 1;
 			}
 		}
 		for (c = b->first; c != NULL && !l->fail; c = c->next) {
 			int32_t cmt = c->anon ? 0 : len0(l, c->st, EP_MARGIN_TOP, w), cmb = 0, cf = AUTO, h, top;
-			if (c->list) {
+			if (c->list == LB_ITEM) {
+				/* (not a summary: the HTML Standard's counter-increment:
+				   list-item 0, 15.5.4) */
 				const char *v = c->n ? dn_attr(c->n, "value") : NULL;
 				num = v ? atoi(v) : (reversed ? num - 1 : num + 1);
 				c->num = num;
@@ -4741,7 +4982,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->fl0 = saved_fl0;
 		l->fl_top = saved_top;
 	}
-	if (b->list)
+	if ((b->list & LB_ITEM) && kw(s, EP_LIST_STYLE_POSITION) != KW_INSIDE)
 		marker(l, b, cx, w, fb != AUTO ? fb : cy + font_of(l, s)->ascent);
 	if (!b->anon) {
 		hp = len(l, s, EP_HEIGHT, AUTO);
@@ -4780,6 +5021,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 #endif
 		}
 	}
+	if (b->list & LB_SUM)
+		sum_item(l, b, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb);
 	l->cols = saved_cols;
 	l->ncols = saved_n;
 	l->sp_h = saved_sh;
@@ -4964,6 +5207,15 @@ void page_free(page *p)
 }
 
 #ifndef EW_ST
+/* a is n or one of its ancestors */
+static int holds(const dnode *a, const dnode *n)
+{
+	for (; n != NULL; n = n->parent)
+		if (n == a)
+			return 1;
+	return 0;
+}
+
 dnode *page_node_at(const page *p, int32_t x, int32_t y)
 {
 	long i, best = -1;
@@ -4973,15 +5225,21 @@ dnode *page_node_at(const page *p, int32_t x, int32_t y)
 		    y < d->y + d->h)
 			return d->node;
 	}
-	/* the innermost block there: the last laid out of those holding it
-	   (a block's rectangle is put when its children are done); not one
-	   a click goes through (pointer-events: none) */
+	/* the innermost block there: the smallest of those holding it; of
+	   the same size a child rather than its parent (a closed details
+	   as big as its summary: the summary), else the last laid out (a
+	   block's rectangle is put when its children are done); not one a
+	   click goes through (pointer-events: none) */
 	for (i = 0; i < p->nblocks; i++) {
 		const struct pg_block *b = &p->blocks[i];
+		int64_t a, ba;
 		if (b->n->e.style != NULL && no_hit(b->n->e.style))
 			continue;
-		if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h &&
-		    (best < 0 || (int64_t) b->w * b->h <= (int64_t) p->blocks[best].w * p->blocks[best].h))
+		if (x < b->x || x >= b->x + b->w || y < b->y || y >= b->y + b->h)
+			continue;
+		a = (int64_t) b->w * b->h;
+		ba = best >= 0 ? (int64_t) p->blocks[best].w * p->blocks[best].h : 0;
+		if (best < 0 || a < ba || (a == ba && !holds(b->n, p->blocks[best].n)))
 			best = i;
 	}
 	return best >= 0 ? p->blocks[best].n : NULL;
@@ -5053,6 +5311,21 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 	return NULL;
 }
 
+/* (the smallest there: an inner details' summary in an outer one's,
+   whose item comes after it, as a box's comes after its children's; of
+   the same size the last laid out) */
+dnode *page_summary_at(const page *p, int32_t x, int32_t y)
+{
+	long i, best = -1;
+	for (i = p->nitems - 1; i >= 0; i--) {
+		const dl_item *d = &p->items[i];
+		if (d->type == DL_SUM && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
+		    (best < 0 || (int64_t) d->w * d->h < (int64_t) p->items[best].w * p->items[best].h))
+			best = i;
+	}
+	return best >= 0 ? p->items[best].det : NULL;
+}
+
 const dl_item *page_ctl_item(const page *p, const fctl *c)
 {
 	long i;
@@ -5069,16 +5342,19 @@ const dl_item *page_ctl_item(const page *p, const fctl *c)
 	return NULL;
 }
 
-/* in document order, without recursion */
-static int32_t anchor_in(const dnode *top, const char *id)
+/* in document order, without recursion: the first element of that id
+   (or an a of that name) that is laid out, or that a closed details folds
+   away (its y then from an earlier layout, or none) */
+static dnode *anchor_in(dnode *top, const char *id)
 {
-	const dnode *n = top;
+	dnode *n = top;
 	for (;;) {
-		if (n->type == DN_ELEMENT && n->y >= 0) {
+		if (n->type == DN_ELEMENT) {
 			const char *v = dn_attr(n, "id");
-			if ((v != NULL && strcmp(v, id) == 0) ||
-			    (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0))
-				return n->y;
+			if (((v != NULL && strcmp(v, id) == 0) ||
+			     (n->tag == T_A && (v = dn_attr(n, "name")) != NULL && strcmp(v, id) == 0)) &&
+			    (n->y >= 0 || dn_folded(n)))
+				return n;
 		}
 		if (n->first != NULL) {
 			n = n->first;
@@ -5087,14 +5363,20 @@ static int32_t anchor_in(const dnode *top, const char *id)
 		while (n != top && n->next == NULL)
 			n = n->parent;
 		if (n == top)
-			return -1;
+			return NULL;
 		n = n->next;
 	}
 }
 
-int32_t page_anchor(const page *p, const char *id)
+dnode *page_anchor_node(const page *p, const char *id)
 {
 	if (p->d == NULL || p->d->root == NULL || id == NULL || *id == 0)
-		return -1;
+		return NULL;
 	return anchor_in(p->d->root, id);
+}
+
+int32_t page_anchor(const page *p, const char *id)
+{
+	const dnode *n = page_anchor_node(p, id);
+	return n != NULL && !dn_folded(n) ? n->y : -1;
 }

@@ -199,7 +199,7 @@ enum {
 	S_FIRST_OF_TYPE, S_LAST_OF_TYPE, S_ONLY_OF_TYPE, S_NTH_OF_TYPE, S_NTH_LAST_OF_TYPE,
 	S_LINK, S_NEVER, S_NOT, S_IS, S_LANG, S_DIR,
 	S_ENABLED, S_DISABLED, S_CHECKED, S_REQUIRED, S_OPTIONAL, S_READ_WRITE, S_READ_ONLY,
-	S_PLACEHOLDER_SHOWN
+	S_PLACEHOLDER_SHOWN, S_OPEN
 };
 
 #define SF_ICASE	1		/* [attr=value i] */
@@ -281,9 +281,9 @@ struct ec_ctx {
 
 	/* names the matcher and the cascade look for */
 	const ec_atom *a_style, *a_href, *a_lang, *a_dir, *a_type, *a_disabled, *a_checked,
-		*a_selected, *a_required, *a_readonly, *a_placeholder, *a_value, *a_hidden;
+		*a_selected, *a_required, *a_readonly, *a_placeholder, *a_value, *a_hidden, *a_open;
 	const ec_atom *t_a, *t_area, *t_input, *t_button, *t_select, *t_textarea,
-		*t_option, *t_optgroup, *t_fieldset, *t_html;
+		*t_option, *t_optgroup, *t_fieldset, *t_html, *t_details, *t_dialog;
 
 	ec_style initial;		/* every property's initial value */
 	const ec_style *root_style;	/* for rem */
