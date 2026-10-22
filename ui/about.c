@@ -22,11 +22,21 @@
 void dlg_about(void)
 {
 	static char net[80], where[80];
-	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, where, 0 },
+	/* what the program takes from others: the ST edition has no TLS
+	   and no scripts, and TJpgDec in place of libjpeg-turbo */
+#ifdef EW_ST
+	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari ST and STE", { net, where, 0 },
 		    { "Fonts drawn from DejaVu. From NetSurf (MIT):",
-		      "Hubbub, libparserutils, libnsgif. JPEG:",
-		      "libjpeg-turbo (the IJG's and BSD licences)." },
+		      "libparserutils, libnsgif. JPEG: TJpgDec",
+		      "(ChaN's licence)." },
 		    icon_bits, icon16_px, icon16_rgb };
+#else
+	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, where, 0 },
+		    { "DejaVu fonts. MIT: BearSSL, QuickJS, musl's",
+		      "maths, NetSurf's libparserutils and libnsgif.",
+		      "JPEG: libjpeg-turbo (IJG's and BSD licences)." },
+		    icon_bits, icon16_px, icon16_rgb };
+#endif
 	snprintf(net, sizeof net, "%s  \xF9  secure sites: %s",
 		 strcmp(net_stack(), "none") ? net_stack() : "no network",
 		 !opt.falcon ? (opt.gate[0] ? "the Pi gateway" : "none") :
