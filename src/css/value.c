@@ -1559,7 +1559,8 @@ static int valign(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 	if (t[*i].type == T_IDENT) {
 		int kw = ec_kw(&t[*i]);
 		if (kw == KW_BASELINE || kw == KW_SUB || kw == KW_SUPER || kw == KW_TEXT_TOP ||
-				kw == KW_MIDDLE || kw == KW_TEXT_BOTTOM || kw == KW_TOP || kw == KW_BOTTOM) {
+				kw == KW_MIDDLE || kw == KW_TEXT_BOTTOM || kw == KW_TOP || kw == KW_BOTTOM ||
+				(kw == KW_WEBKIT_BASELINE_MIDDLE && !(c->opts & EC_COMPAT_START))) {
 			d->kind = EK_KW;
 			d->v.i = kw;
 			(*i)++;
@@ -1596,7 +1597,8 @@ static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 			return 0;
 		if (EC_UNLIKELY(c->opts & (EC_COMPAT_START | EC_COMPAT_KEYWORDS)) &&
 				(((c->opts & EC_COMPAT_START) && prop == EP_TEXT_ALIGN &&
-				  (kw == KW_START || kw == KW_END || kw == KW_MATCH_PARENT)) ||
+				  (kw == KW_START || kw == KW_END || kw == KW_MATCH_PARENT ||
+				   (kw >= KW_WEBKIT_LEFT && kw <= KW_EC_CENTER_OR_INHERIT))) ||
 				 ((c->opts & EC_COMPAT_KEYWORDS) && prop == EP_DISPLAY &&
 				  (kw == KW_FLOW_ROOT || kw == KW_CONTENTS))))
 			return 0;

@@ -138,7 +138,7 @@ typedef struct name {
 } name;
 
 #ifdef EW_ST
-#define NAMES_SIZE 1024		/* 295 names: room enough, 10 KB less for a 1 MB ST */
+#define NAMES_SIZE 1024		/* 530 names: room enough, 10 KB less for a 1 MB ST */
 #else
 #define NAMES_SIZE 2048
 #endif
@@ -227,6 +227,12 @@ static const struct { const char *s; int32_t v; } units[] = {
 	{ "svh", EC_UNIT_REL(CU_VH) }, { "lvh", EC_UNIT_REL(CU_VH) }, { "dvh", EC_UNIT_REL(CU_VH) },
 };
 
+/* other engines' names for a keyword: Gecko's for the legacy alignments */
+static const struct { const char *s; int kw; } kw_aliases[] = {
+	{ "-moz-left", KW_WEBKIT_LEFT }, { "-moz-right", KW_WEBKIT_RIGHT },
+	{ "-moz-center", KW_WEBKIT_CENTER }, { "-moz-middle-with-baseline", KW_WEBKIT_BASELINE_MIDDLE },
+};
+
 static inline uint8_t lower(uint8_t ch)
 {
 	return ch >= 'A' && ch <= 'Z' ? ch + 32 : ch;
@@ -262,6 +268,8 @@ static void names_init(void)
 		return;
 	for (i = 1; i < EC_NKW; i++)
 		name_add(kw_names[i], KC_KW, i);
+	for (i = 0; i < sizeof kw_aliases / sizeof kw_aliases[0]; i++)
+		name_add(kw_aliases[i].s, KC_KW, kw_aliases[i].kw);
 	for (i = 0; i < EC_NPROP; i++)
 		name_add(prop_names[i], KC_PROP, i);
 	for (i = 0; i < EC_NSH; i++)

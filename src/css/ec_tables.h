@@ -136,7 +136,11 @@
 	S(WEBKIT_BACKGROUND_CLIP, "-webkit-background-clip") S(WEBKIT_TEXT_STROKE, "-webkit-text-stroke") \
 	S(ANIMATION, "animation")
 
-/* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". */
+/* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". The last few
+ * are HTML's: -webkit-left, -right and -center the text-align <center> and
+ * align give, which also place the blocks inside (the HTML Standard,
+ * 15.3.3; -moz- spells them too), -ec-center-or-inherit th's (15.3.8),
+ * and -webkit-baseline-middle <img align=middle>'s vertical-align (15.4.3). */
 #define EC_KEYWORDS(K) \
 	K(AUTO, "auto") K(NONE, "none") K(NORMAL, "normal") K(INHERIT, "inherit") \
 	K(COVER, "cover") K(CONTAIN, "contain") \
@@ -209,13 +213,17 @@
 	K(AUTO_FILL, "auto-fill") K(AUTO_FIT, "auto-fit") K(SPAN, "span") K(DENSE, "dense") \
 	K(TEXT, "text") K(ALL, "all") K(FILL, "fill") K(STROKE, "stroke") K(PAINTED, "painted") \
 	K(VISIBLEPAINTED, "visiblepainted") K(VISIBLEFILL, "visiblefill") \
-	K(VISIBLESTROKE, "visiblestroke") K(BOUNDING_BOX, "bounding-box")
+	K(VISIBLESTROKE, "visiblestroke") K(BOUNDING_BOX, "bounding-box") \
+	K(WEBKIT_LEFT, "-webkit-left") K(WEBKIT_RIGHT, "-webkit-right") \
+	K(WEBKIT_CENTER, "-webkit-center") K(EC_CENTER_OR_INHERIT, "-ec-center-or-inherit") \
+	K(WEBKIT_BASELINE_MIDDLE, "-webkit-baseline-middle")
 
 /* The keyword lists of VP_KW properties: L(id, keywords...) */
 #define EC_KWLISTS(L) \
 	L(FONT_STYLE, KW_NORMAL, KW_ITALIC, KW_OBLIQUE) \
 	L(FONT_VARIANT, KW_NORMAL, KW_SMALL_CAPS) \
-	L(TEXT_ALIGN, KW_LEFT, KW_RIGHT, KW_CENTER, KW_JUSTIFY, KW_START, KW_END, KW_MATCH_PARENT) \
+	L(TEXT_ALIGN, KW_LEFT, KW_RIGHT, KW_CENTER, KW_JUSTIFY, KW_START, KW_END, KW_MATCH_PARENT, \
+		KW_WEBKIT_LEFT, KW_WEBKIT_RIGHT, KW_WEBKIT_CENTER, KW_EC_CENTER_OR_INHERIT) \
 	L(TEXT_TRANSFORM, KW_NONE, KW_CAPITALIZE, KW_UPPERCASE, KW_LOWERCASE) \
 	L(WHITE_SPACE, KW_NORMAL, KW_PRE, KW_NOWRAP, KW_PRE_WRAP, KW_PRE_LINE, KW_BREAK_SPACES) \
 	L(LIST_POS, KW_INSIDE, KW_OUTSIDE) \

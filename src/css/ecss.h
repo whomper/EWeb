@@ -223,7 +223,7 @@ enum { EC_ORIGIN_UA, EC_ORIGIN_USER, EC_ORIGIN_AUTHOR };
  * so that a difference between the two engines can be put down to it. */
 #define EC_COMPAT_CALC		0x0002	/* calc(), min(), max(), clamp() */
 #define EC_COMPAT_GAP		0x0004	/* gap, grid-gap, row-gap */
-#define EC_COMPAT_START		0x0008	/* text-align: start, end, match-parent */
+#define EC_COMPAT_START		0x0008	/* text-align: start, end, match-parent, HTML's -webkit-*; -webkit-baseline-middle */
 #define EC_COMPAT_SELECTORS	0x0010	/* Selectors 4, and pseudo-classes nsbench's LibCSS handler says no to */
 #define EC_COMPAT_MEDIA		0x0020	/* media features but width, height and prefers-color-scheme */
 #define EC_COMPAT_ATRULES	0x0040	/* @supports and @layer */

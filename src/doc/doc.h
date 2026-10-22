@@ -28,7 +28,8 @@ enum {
 	T_NOSCRIPT, T_A, T_IMG, T_BR, T_HR, T_LI, T_UL, T_OL, T_TABLE, T_TR, T_TD, T_TH,
 	T_INPUT, T_BUTTON, T_SELECT, T_OPTION, T_TEXTAREA, T_PRE, T_IFRAME, T_SVG, T_CANVAS,
 	T_VIDEO, T_AUDIO, T_OBJECT, T_EMBED, T_TEMPLATE, T_LABEL, T_FORM, T_WBR,
-	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_PICTURE, T_SOURCE, T_NTAGS
+	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_PICTURE, T_SOURCE, T_DIV, T_P, T_CAPTION,
+	T_THEAD, T_TBODY, T_TFOOT, T_NTAGS
 };
 
 typedef struct dnode dnode;
@@ -104,7 +105,8 @@ void doc_sheets(doc *d, void (*cb)(void *ud, int is_link, const char *s, size_t 
 void doc_add_ua(doc *d);
 int doc_select(doc *d);
 
-/* EWeb's UA stylesheet */
+/* EWeb's UA stylesheet, and what it adds in quirks mode */
 extern const char doc_ua_css[];
+extern const char doc_quirks_css[];
 
 #endif

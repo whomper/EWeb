@@ -804,6 +804,43 @@ p:hover::before { color: blue }
 #d text-align end
 #e text-align start
 
+=== text-align: HTML's legacy values inherit as they are; -moz- spells them too (the HTML Standard, 15.3.3)
+--- css
+#a { text-align: -webkit-center }
+#b { text-align: -moz-right }
+#c { text-align: -MOZ-LEFT }
+#d { text-align: -webkit-centre }
+--- html
+<div id=a><p id=a1>x</p></div><div id=b></div><div id=c></div><div id=d></div>
+--- expect
+#a text-align -webkit-center
+#a1 text-align -webkit-center
+#b text-align -webkit-right
+#c text-align -webkit-left
+#d text-align start
+
+=== text-align: th's -ec-center-or-inherit, centre only under the initial (the HTML Standard, 15.3.8)
+--- css
+th { text-align: -ec-center-or-inherit }
+#r2 { text-align: -webkit-right }
+#r3 { text-align: left }
+--- html
+<table><tr id=r1><th id=a>x</th></tr><tr id=r2><th id=b>y</th></tr><tr id=r3><th id=c>z</th></tr></table>
+--- expect
+#a text-align center
+#b text-align -webkit-right
+#c text-align left
+
+=== vertical-align: -webkit-baseline-middle, and Gecko's name for it (the HTML Standard, 15.4.3)
+--- css
+#a { vertical-align: -webkit-baseline-middle }
+#b { vertical-align: -moz-middle-with-baseline }
+--- html
+<img id=a><img id=b>
+--- expect
+#a vertical-align -webkit-baseline-middle
+#b vertical-align -webkit-baseline-middle
+
 === font-family (CSS Fonts 4, 2.1)
 --- css
 #a { font-family: "Times New Roman", Times, serif }

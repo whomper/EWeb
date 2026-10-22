@@ -314,7 +314,10 @@ own colours (in greys on a monochrome screen, in a few bands with 4 or
 16 colours) and any other in its colours' average. A gradient painted
 through text, a shadow or an outline, which EWeb doesn't draw, shows
 the text in their colour. Of a background in several layers EWeb draws
-the top one. It doesn't yet show:
+the top one. Older pages that centre their tables and boxes with
+`<center>` or `align` show them centred (or at the right) as they were
+meant, with pictures beside or within the text where `align` puts them.
+It doesn't yet show:
 
 - file fields (EWeb can't send files yet)
 - WebP and AVIF pictures (EWeb asks servers for JPEG, PNG and GIF,

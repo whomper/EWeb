@@ -996,8 +996,14 @@ static void compute(cascade *k)
 			}
 			continue;
 		case EP_TEXT_ALIGN:
-			if (st->v[p].i == KW_MATCH_PARENT)
+			/* match-parent, and th's centre where its parent's
+			   isn't the initial start (the HTML Standard, 15.3.8):
+			   the parent's; else th's is center */
+			if (st->v[p].i == KW_MATCH_PARENT ||
+			    (st->v[p].i == KW_EC_CENTER_OR_INHERIT && ps != NULL && ps->v[p].i != KW_START))
 				parent_value(k, p);
+			else if (st->v[p].i == KW_EC_CENTER_OR_INHERIT)
+				st->v[p].i = KW_CENTER;
 			continue;
 		case EP_COLOR:
 			if (st->k[p] == EK_CURCOLOR)

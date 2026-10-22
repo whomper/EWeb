@@ -1917,6 +1917,105 @@ was gone too). Now, after CSS Images 3 and 4:
   `make itest` (background pictures, which `background-clip` now stops too, and the canvas's now
   drawn on down the window).
 
+## Legacy centring and HTML's `align` (22 Oct 2026)
+
+Old pages, and many forums and banks, centre with `<center>` and `align`, and EWeb centred only
+their lines: `<center><table width=600>`, `<td align=center><table>` and `<div align=center>`
+round a box of a set width came out at the left, the text in them centred. Now, after the HTML
+Standard's rendering section (15.3.3 flow content, 15.3.8 tables, 15.3.11 hr, 15.4.3 pictures)
+and as Gecko and Blink do it:
+
+- **HTML's own `text-align` values** (the CSS engine): `-webkit-left`, `-webkit-right` and
+  `-webkit-center` (Gecko's `-moz-` names read as the same), Blink's names for the standard's "align
+  descendants". They inherit as any `text-align` does, align the lines as `left`, `right` and
+  `center`, and also place the blocks inside (below). The UA sheet gives `<center>` and `caption`
+  `-webkit-center`; `align` (left, right, center or middle) on `div`, `p` (as both engines),
+  `thead`, `tbody`, `tfoot`, `tr`, `td` and `th` is a hint of the legacy value; `justify` stays
+  plain `justify`, as in both engines (the standard aligns the blocks to the left); on headings and
+  other elements `align` is plain `text-align`, as Blink has it. A sheet's own
+  `text-align: -webkit-center`, which some sites use to centre boxes, works the same.
+- **Where a block goes** (`room_left` in `src/layout`): the room a block in the flow leaves beside
+  it (one with a width, a table shrunk to its columns, a picture as a block) goes by CSS 2.1,
+  10.3.3: its auto margins share it (one auto margin alone now moves a table too, where before
+  only both centred one); with none, the end margin takes it by the container's
+  direction, so in a right-to-left container (Hebrew pages) a narrower block now sits at the right;
+  unless the container's `text-align` is one of the legacy values, which centre it or put it left
+  or right. The nearest such container wins, as `text-align` inherits; a block's own `text-align`
+  doesn't move it (`<center><div style="width:300px; text-align:left">`: the box centred, its text
+  at the left); floats and positioned boxes aren't moved. As in both engines, a block with an
+  `align` of its own is still placed by its container's (the standard leaves it alone).
+- **`th`** is centred only where its parent's `text-align` is still the initial one (15.3.8): the
+  UA sheet's `-ec-center-or-inherit`, computed to `center` or to the parent's value, so
+  `<tr align=right>` puts its `th`s at the right and `<tr align=left>` at the left.
+- **Quirks mode** (no DOCTYPE, or an old one): a table starts its `text-align` afresh (15.3.8's
+  quirks rule), a small UA sheet `doc_add_ua` adds for such a page, so in `<center><table>` the
+  table is centred and the text in it starts at the left, as browsers show such pages. The rule's
+  font, `line-height` and `white-space` parts (a table not inheriting its page's font size there)
+  are left out: they would change many old pages' text and are a decision of their own.
+- **Tables, rules and pictures:** `<table align=left|right>` floats and `align=center` centres by
+  its margins (as before); `<hr align>` left, right or center by its margins (new); on `img` and
+  an image button `align=left|right` floats (an `img` as before; an image button now too: it, and
+  any form control a page floats, has a block of its own round it, as a floated picture has, the
+  control drawing its own frame in it as on a line), `top` and `absbottom` go to the line's top
+  and bottom (CSS 2.1, 10.8.2, the line grown to hold them, in a `sup` or `sub` too; before, `top`
+  sat on the baseline), `middle` and `center` put the picture's middle on the baseline (the
+  standard's, Blink's `-webkit-baseline-middle`; before CSS's `middle`, a few pixels higher),
+  `texttop` hangs it from the text's top, `absmiddle` and `abscenter` are CSS's `middle`, and
+  `bottom` and `baseline` sit on the baseline (HTML 3.2's meaning of bottom, and both engines').
+  `iframe`, `object` and `embed` take the same hints, but EWeb doesn't show them yet. A picture or
+  a form control in a `sup` or `sub` now grows its line by the shift, as a word there does (before,
+  a raised picture went over the line above). `valign` on rows and cells is `vertical-align`, the
+  cells inheriting their row's (as before); `baseline` now puts the first lines of a row's cells on
+  one baseline (CSS 2.1, 17.5.3; before, such a cell sat at the top; one taking rows below stays at
+  its top). `<caption align=bottom>` is not done: it is `caption-side`, which EWeb doesn't have yet.
+- **Floats in the text** (CSS 2.1, 9.5.1): a float met partway through a line, `<img align=right>`
+  after a few words, a floated span or form control, goes at that line's top when it fits beside
+  what is on the line (the line shorter beside it), else just below the line, and so does every
+  float after it on that line, though it would fit (as Gecko and Blink do), and the text either
+  side goes on in the same lines (`fixup`'s `text_float`, placed by `lines`). Before, the text was
+  cut into two anonymous blocks at the float: the line broke there and the float sat a line lower.
+  A float in an inline (`<a href><img align=left></a>`) no longer turns the inline into a block. A
+  box's widest (a float's or a cell's width, a table's columns) counts floats side by side, beside
+  the text of their line or one after another until one clears, as browsers do; before it took the
+  widest of them. A float still starts no higher than one before it, and `<br clear>` is not done
+  yet.
+- **Measured** (`build/m68k/drawbench -P 1` and `-P 2`, `tools/count68k.sh`, the two programs run
+  from paths of one length), the page set's 258 pages, the sample page and the news page: the layout
+  0.02% more instructions (a page from 0.81% fewer to 0.38% more, the Atari heap's own variation
+  between two builds among it; the first version 0.064%, 0.13% before the lines looked for pictures
+  at a line's top or bottom only in text that has one, and the room beside a block was worked out
+  only for one whose width isn't automatic; the floats in the text next to nothing: a float in the
+  text measured once, and looked for only in text that has one), the styling 0.17% more (10.6 K a
+  page: 5.9 K once a program run, the nine new names and the longer UA sheet, which `EWEB.PRG` reads
+  once; 2.6 K for the quirks rule on a page in quirks mode; the rest within the cascade's own noise
+  between two builds). `EWEB.PRG` grew 4.5 KB, `EWEBST.PRG` 3.0 KB (2.1 KB and 1.4 KB of it the
+  first version's).
+  29 pages of the page set lay out differently. Seven for the alignment: the tables and boxes in a
+  `<div align=center>` centred (CNN, three of eWeek's, the Daily Bulletin, the Salt Lake Tribune's
+  weather), and Ynet's side menu (quirks mode) with its pictures' alt text at the left of their
+  cells, as browsers have it. 22 for the floats in the text, each looked at before and after:
+  Wired's "View all", TIME's comments' likes, share buttons (JPL, NECN) and NECN's poll question on
+  one line with the text they float beside, CBS Sports' "| Sign In Register" on one line rather than
+  three, floated radio buttons, check boxes and fields beside their labels (PCMag, WebMD, Mother
+  Jones), the Dallas Morning News's footer columns side by side, and the Guardian's boxes of floated
+  numbers a few pixels wider.
+- **Tested:** `tests/css/cases.txt` (the legacy values inherited and Gecko's names, a misspelt one
+  not taken; `th`'s value under the initial, a legacy and a plain parent;
+  `-webkit-baseline-middle`); `tests/layout/align.html` (each case above, in a standards-mode page:
+  pictures at the top and bottom in `sup` and `sub`, image buttons floated, a row of baseline
+  cells), `floats.html` (a float that fits on its line, one that doesn't, one in a link, a floated
+  span, a cell's width with one, floats side by side, floated form controls) and `quirks.html`,
+  their lists looked at with ewrender first; the changed pages looked at before and after; `make
+  csscmp`: no new difference (the legacy values join `start`, `end` and `match-parent` under
+  `EC_COMPAT_START`; the page set has none); 400 random pages of nested `center`, `align`, `valign`,
+  widths, directions and legacy values drawn by both editions under AddressSanitizer and UBSan with
+  no fault, and 400 more of floats in text, links, `sup`, `sub`, cells and lists (pictures, spans,
+  tables, image buttons and form controls floated); `fuzz_html` 180 s (1,142,385 pages); `make
+  h5test` (EWeb's parser 1,868 passed, the six scripted ones failed, here and on the 68030); `make
+  itest`; `make hatarigui`'s browse group (its forms page among them) and st group (`EWEBST.PRG` on
+  the 1 MB ST and the 1040 ST, the tables page with its centred table among them), on the real TOS
+  (4.04 on the Falcon, 1.04 on the STs).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

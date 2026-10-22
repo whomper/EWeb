@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     EWeb's layout test: legacy centring and HTML's align (the HTML
+     Standard's rendering, 15.3.3, 15.3.8, 15.3.11, 15.4.3): <center> and
+     align on div, p and a table's parts centre (or put left or right) the
+     blocks inside as well as the lines, the nearest such element winning;
+     a block's own text-align doesn't move it; th centred unless its row
+     says otherwise; table align as a float or by its margins; hr align;
+     valign (baseline: the cells' first lines on one baseline); img
+     align (a picture on top or bottom in sup or sub on its line's edge,
+     an image button's align=left|right a float); and a narrower block's
+     place by direction. -->
+<html><head><meta charset="utf-8"><title>Alignment</title>
+<style>
+body { font-family: sans-serif; margin: 4px }
+.w { width: 160px; background: #cde }
+.n { width: 120px; background: #edc; text-align: left }
+table { border-spacing: 0 }
+td, th { border: 1px solid #888 }
+</style></head>
+<body>
+<center>centre
+<table class=w><tr><td>a table</td></tr></table>
+<div class=n>own left text</div>
+<div><div class=w>through a div</div></div>
+<div align=right><div class=w>nearest: right</div></div>
+<hr width="50%">
+<img src="img/one.png" style="display: block" alt="block picture">
+</center>
+<div align=center><div class=w>div align=center</div></div>
+<div align=middle><div class=w>div align=middle</div></div>
+<div align=right><table class=w><tr><td>div align=right</td></tr></table></div>
+<div align=left style="direction: rtl"><div class=w>left in rtl</div></div>
+<div align=justify><div class=w>justify: as usual</div>justified text runs from one edge to the other on every line but the last one here</div>
+<p align=center>p align=center</p>
+<h4 align=right>h4 align=right</h4>
+<div class=w style="margin-left: auto">margin-left: auto</div>
+<table style="margin-left: auto"><tr><td>a table, margin-left: auto</td></tr></table>
+<div dir=rtl><div class=w>rtl: at the right</div><table><tr><td>a table at the right</td></tr></table></div>
+<table width="100%"><tr><td align=center><table class=w><tr><td>in td align=center</td></tr></table></td>
+<td align=right><div class=n>td align=right</div></td></tr></table>
+<table width="100%"><tr align=right><td>tr align=right</td><th>its th</th></tr>
+<tr><th>th centred</th><td align=left>td align=left</td></tr>
+<tr align=left><th>tr align=left: th</th><td>x</td></tr></table>
+<table width="100%"><caption>caption <div class=n>centred</div></caption>
+<tbody align=center><tr><td>tbody align=center</td><td style="text-align: right">own right</td></tr></tbody></table>
+<table width="100%" style="height: 60px"><tr valign=top><td>tr valign=top</td><td valign=bottom>td valign=bottom</td>
+<td valign=middle>middle</td><td>two<br>lines<br>here</td></tr></table>
+<table align=center><tr><td>table align=center</td></tr></table>
+<table align=right><tr><td>table align=right</td></tr></table>
+<p>Text beside the table floated right, which goes on long enough to wrap beside it.</p>
+<hr align=left width="30%"><hr align=right width="30%"><hr align=center width="30%">
+<p><img src="img/one.png" align=left alt="left">img align=left floats with the text beside it,
+and <img src="img/one.png" align=right alt="right">align=right on the other side.</p>
+<p style="clear: both">top <img src="img/one.png" align=top alt="top"> middle
+<img src="img/one.png" align=middle alt="middle"> bottom <img src="img/one.png" align=bottom alt="bottom">
+texttop <img src="img/one.png" align=texttop alt="texttop"> absmiddle
+<img src="img/one.png" align=absmiddle alt="absmiddle"></p>
+<p>a tall one <img src="img/two.png" alt="tall"> with <img src="img/one.png" align=top alt="top"> at the top
+and <img src="img/one.png" align=absbottom alt="absbottom"> at the bottom</p>
+<p style="font-size: 30px; margin: 0">line above</p>
+<p style="font-size: 30px; margin: 0">a<sup>sup<img src="img/one.png" align=top alt="top in sup"></sup>b<sub>sub<img
+src="img/one.png" align=absbottom alt="absbottom in sub"></sub>c<sup><img src="img/one.png" alt="raised"></sup></p>
+<p style="font-size: 30px; margin: 0">line below</p>
+<form><p>an image button <input type=image src="img/one.png" align=right alt="image button right"> floats
+right, and <input type=image src="img/one.png" align=left alt="image button left"> left.</p></form>
+<table style="clear: both"><tr valign=baseline><td style="font-size: 30px">Big</td><td>small</td>
+<td valign=top>top</td><td><img src="img/two.png" alt="baseline picture">pic</td></tr></table>
+</body></html>

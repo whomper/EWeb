@@ -288,20 +288,45 @@ static void hints(dnode *n)
 	h.s[0] = 0;
 
 	if ((v = HA(n, align)) != NULL) {
-		if ((n->tag == T_TABLE || n->tag == T_IMG) && (is(v, "left") || is(v, "right"))) {
-			/* the HTML Standard's rendering section: a float */
-			put(&h, "float", is(v, "left") ? "left" : "right");
-		} else if (n->tag == T_IMG && (is(v, "middle") || is(v, "top") || is(v, "bottom"))) {
-			put(&h, "vertical-align", is(v, "middle") ? "middle" : is(v, "top") ? "top" : "baseline");
+		const char *t = HA(n, type);
+		int part = cell || n->tag == T_TR || n->tag == T_THEAD || n->tag == T_TBODY || n->tag == T_TFOOT;
+		if (n->tag == T_IMG || n->tag == T_IFRAME || n->tag == T_OBJECT || n->tag == T_EMBED ||
+		    (n->tag == T_INPUT && t != NULL && is(t, "image"))) {
+			/* the HTML Standard's rendering, 15.4.3: a float, or where
+			   it sits on its line; bottom on the baseline, as HTML 3.2
+			   had it and both engines do */
+			t = is(v, "left") || is(v, "right") ? NULL : is(v, "top") ? "top" :
+			    is(v, "middle") || is(v, "center") ? "-webkit-baseline-middle" :
+			    is(v, "bottom") || is(v, "baseline") ? "baseline" : is(v, "texttop") ? "text-top" :
+			    is(v, "absmiddle") || is(v, "abscenter") ? "middle" : is(v, "absbottom") ? "bottom" : NULL;
+			if (t != NULL)
+				put(&h, "vertical-align", t);
+			else if (is(v, "left") || is(v, "right"))
+				put(&h, "float", is(v, "left") ? "left" : "right");
 		} else if (n->tag == T_TABLE) {
-			if (is(v, "center"))
+			/* 15.3.8: a float, or centred by its margins */
+			if (is(v, "left") || is(v, "right"))
+				put(&h, "float", is(v, "left") ? "left" : "right");
+			else if (is(v, "center"))
 				put(&h, "margin-left", "auto"), put(&h, "margin-right", "auto");
-		} else if (n->tag != T_IMG && n->tag != T_HR && n->tag != T_INPUT) {
-			if (is(v, "left") || is(v, "right") || is(v, "center") || is(v, "justify"))
-				put(&h, "text-align", is(v, "left") ? "left" : is(v, "right") ? "right" :
-				    is(v, "center") ? "center" : "justify");
-			else if (is(v, "middle"))
-				put(&h, "text-align", "center");
+		} else if (n->tag == T_HR) {
+			/* 15.3.11: placed by its margins */
+			if (is(v, "left") || is(v, "right") || is(v, "center")) {
+				put(&h, "margin-left", is(v, "left") ? "0" : "auto");
+				put(&h, "margin-right", is(v, "right") ? "0" : "auto");
+			}
+		} else if (n->tag != T_INPUT) {
+			/* text-align. On div and a table's parts (and p, as both
+			   engines do) the legacy values, which align the blocks
+			   inside as well as the lines (15.3.3, 15.3.8: "align
+			   descendants"); justify aligns them as usual */
+			int legacy = part || n->tag == T_DIV || n->tag == T_P || n->tag == T_CAPTION;
+			t = is(v, "left") ? (legacy ? "-webkit-left" : "left") :
+			    is(v, "right") ? (legacy ? "-webkit-right" : "right") :
+			    is(v, "center") || is(v, "middle") ? (legacy ? "-webkit-center" : "center") :
+			    is(v, "justify") ? "justify" : part && is(v, "absmiddle") ? "center" : NULL;
+			if (t != NULL)
+				put(&h, "text-align", t);
 		}
 	}
 	if ((v = HA(n, valign)) != NULL &&
@@ -806,6 +831,8 @@ void doc_add_ua(doc *d)
 	/* a document on the base has the UA sheet already */
 	if (d->ua == NULL)
 		ec_sheet(d->css, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA);
+	if (d->quirks == 1)
+		ec_sheet(d->css, doc_quirks_css, strlen(doc_quirks_css), EC_ORIGIN_UA);
 }
 
 int doc_select(doc *d)

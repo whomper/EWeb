@@ -87,7 +87,10 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `background-size` since 21 Oct 2026,
   kept as two longhands of the engine's own, `-ec-background-size-w` and
   `-h`), fonts, text (including `direction`,
-  `unicode-bidi`, `text-align: start | end`), lists, tables, flexbox,
+  `unicode-bidi`, `text-align: start | end`, and since 22 Oct 2026 HTML's
+  `-webkit-left | -right | -center`, with Gecko's `-moz-` names, and
+  `vertical-align: -webkit-baseline-middle`: `DESIGN.md`, Legacy
+  centring), lists, tables, flexbox,
   grid (since 21 Oct 2026: `grid-template-columns` and `-rows` as track
   lists with `fr`, `minmax()`, `fit-content()` and `repeat()`, `auto-fill`
   and `auto-fit` too; `grid-template-areas`; `grid-auto-columns`, `-rows`
