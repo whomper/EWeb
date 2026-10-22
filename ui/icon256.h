@@ -3,6 +3,10 @@
 /* EWEB's icon, 32x32 in 256 colours (VDI pens, a byte a pixel; 0 isn't
  * drawn), from common/icons/EWEB.txt by common/tools/appicon.py:
  * don't edit. Used with 256 colours or more (the About box) */
+#ifdef NO_ICON256	/* an ST edition: never 256 colours, 2 KB kept */
+#define icon256_px ((const unsigned char *)0)
+#define icon256_rgb ((const short (*)[4])0)
+#else
 static const unsigned char icon256_px[32 * 32] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 29, 29, 29, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 29, 29, 29, 29, 73, 73, 73, 73, 29, 29, 29, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -52,3 +56,4 @@ static const short icon256_rgb[11][4] = {
 	{ 214, 0, 467, 133 },
 	{ 0, 0, 0, 0 }
 };
+#endif

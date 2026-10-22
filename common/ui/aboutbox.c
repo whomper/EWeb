@@ -114,6 +114,7 @@ void about_icon16(const unsigned char *px, short x, short y, short sx, short sy,
 	}
 }
 
+#ifndef NO_ICON256
 /* the 256-colour icon, a byte a pixel, as runs of VDI fills; map[] turns
    its pens into the screen's */
 static void icon256_draw(const unsigned char *px, const unsigned char *map, short x, short y, short sx, short sy)
@@ -155,6 +156,7 @@ static void icon256_pens(const short (*rgb)[4], unsigned char *map)
 		map[rgb[i][0]] = (unsigned char)pen;
 	}
 }
+#endif
 
 const char *about_ram(void)
 {
@@ -224,15 +226,19 @@ void about_show(const ABOUT *a)
 	short sx = 2, sy = gl_hchar >= 16 ? 2 : 1;
 	short ih, lh, y, i, nst = 0, widest = 0, nfine, fcw, fch, fstep;
 	short saved_rgb[8][3], colour;
+#ifndef NO_ICON256
 	static unsigned char map256[256];	/* the icon's pens to the screen's */
+#endif
 	short bw, bh, by;
 
 	font_sys_push();
 	ih = ICON_H * sy;
 	lh = ch + (ch >= 16 ? 2 : 1);
 	colour = planes >= 4 && a->icon16 && a->icon16_rgb;
+#ifndef NO_ICON256
 	if (planes >= 8 && a->icon256 && a->icon256_rgb)
 		colour = 2;
+#endif
 	bw = 10 * cw;
 	bh = ch + 6;
 	for (i = 0; i < 3 && a->status[i]; i++) {
@@ -276,10 +282,13 @@ void about_show(const ABOUT *a)
 	box(dx, dy, dw, dh);
 
 	y = dy + lh;
+#ifndef NO_ICON256
 	if (colour == 2) {
 		icon256_pens(a->icon256_rgb, map256);
 		icon256_draw(a->icon256, map256, dx + (dw - ICON_W * sx) / 2, y, sx, sy);
-	} else if (colour) {
+	} else
+#endif
+	if (colour) {
 		for (i = 0; i < 8; i++) {
 			vq_color(vdi_h, 8 + i, saved_rgb[i]);
 			vs_color(vdi_h, 8 + i, a->icon16_rgb[i]);

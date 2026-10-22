@@ -503,7 +503,7 @@ STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
 STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
-STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) $(EWB_INC) $(NSINC)
+STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) -DNO_ICON256 $(EWB_INC) $(NSINC)
 build/st/rt/%.o: common/atari/%.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DSTACK_SIZE=$(ST_STACK) -c $< -o $@
