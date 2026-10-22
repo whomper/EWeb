@@ -964,8 +964,8 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
   tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
 - **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
-  those. Not yet: SVG, animation, CSS gradients. `<input type=image>` shows its picture (forms,
-  below).
+  those. Not yet: SVG, animation. CSS gradients are drawn since 22 Oct 2026 (CSS gradients,
+  below). `<input type=image>` shows its picture (forms, below).
 - **Which picture** (21 Oct 2026, the HTML Standard's 4.8.4.3): a `<picture>`'s first `<source>`
   whose `type` EWeb reads (none, JPEG, PNG or GIF: a WebP or AVIF one is passed over) and whose
   `media` holds (the CSS engine's media queries, `ec_media_ok`), else the `<img>`'s own `srcset`
@@ -1065,14 +1065,17 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 - **Background pictures** (21 Oct 2026, CSS Backgrounds 3): the first layer's `url()`, over the
   border box, at `background-position` in the padding box, `background-size` (`cover`,
   `contain`, lengths, percentages, `auto`) and `background-repeat`; the root's or the body's over
-  the whole page. Each is one item in the display list (`DLF_TILE`: the item is where it is drawn,
-  the tile where the first one goes and its size), its picture decoded once at the tile's size,
-  and the canvas draws the tiles where the item and the window meet: an opaque picture's first
-  rows of tiles, the rest copied from the rows a tile above. Laid out before its file has come,
-  it is drawn when the page is laid out again with its size. A sheet's `url()` is its own address's
-  (`ec_sheet_at`), not the page's. Not taken: more layers, `background-attachment: fixed` (drawn as
-  `scroll`), `background-clip` and `-origin`, `space` and `round` (drawn as `repeat`), pictures in
-  inline boxes' backgrounds, `list-style-image`.
+  the whole canvas (since 22 Oct 2026 its tiles go on below a page shorter than the window, as CSS
+  Backgrounds 3, 2.11.2 has them; before, the window was white there). Each is one item in the
+  display list (`DLF_TILE`: the item is where it is drawn, the tile where the first one goes and its
+  size), its picture decoded once at the tile's size, and the canvas draws the tiles where the item
+  and the window meet: an opaque picture's first rows of tiles, the rest copied from the rows a tile
+  above. Laid out before its file has come, it is drawn when the page is laid out again with its
+  size. A sheet's `url()` is its own address's (`ec_sheet_at`), not the page's. Not taken: more
+  layers (the top one is drawn: CSS gradients, below), `background-attachment: fixed` (drawn as
+  `scroll`), `background-origin`, `space` and `round` (drawn as `repeat`), pictures in inline boxes'
+  backgrounds, `list-style-image`. `background-clip` stops the picture at the box it names since 22
+  Oct 2026, as it stops the colour.
 - **Off on a slow line:** View > Show pictures (`PICTURES=` in `EWEB.INF`): pages show their
   pictures' alt text instead.
 - **Checked:** `common/tests/pic` (PngSuite, libjpeg-turbo's and libnsgif's test pictures and more
@@ -1646,6 +1649,273 @@ showed. Now, after CSS Color 4:
   bits under AddressSanitizer; `make hatarigui`'s screens group shows the page on the Falcon in 256 colours
   and true colour and on the TT in 16 colours and monochrome, and its st group in `EWEBST.PRG` on
   the 1040 ST in monochrome and medium resolution.
+
+## CSS gradients (22 Oct 2026)
+
+The CSS engine took gradients as valid and kept their first colour alone, and the layout drew
+nothing for them: a header or a button with white text on a dark gradient came out white on white
+(and as the `background` shorthand resets the colour, a fallback colour written before the gradient
+was gone too). Now, after CSS Images 3 and 4:
+
+- **Kept whole** (the CSS engine, `ec_grad` in `ecss.h`): `linear-gradient()`, `radial-gradient()`,
+  `conic-gradient()` and their `repeating-` forms, in `background-image` and the `background`
+  shorthand: a linear one's direction (an angle in `deg`, `grad`, `rad` or `turn`, a unitless 0, or
+  `to` a side or a corner), a radial one's shape (`circle`, `ellipse`), size (the four extent
+  keywords, one length, two lengths or percentages) and centre (`at` any position), a conic one's
+  `from` and centre, and the colour stops with up to two positions each (lengths and percentages,
+  `calc()` of the two; a conic one's angles and percentages) and the hints between them. Lengths in
+  `em`, `rem`, `vw` and the like are computed with the style, as other lengths are; `currentcolor`
+  becomes the element's colour in the layout. An interpolation method (`in oklab`, `in hsl longer
+  hue`: Tailwind 4 writes one) is read, and the gradient drawn in sRGB, as browsers draw one between
+  sRGB colours with none named; EWeb's colours are all sRGB, so only a named Oklab or polar method
+  comes out a little different. A gradient that isn't valid (a hint first, last or two in a row,
+  three positions, a circle's size in per cent, an unknown method) makes its declaration invalid, so
+  a fallback before it stays; one stop alone is valid (CSS Images 4). `tests/css/cases.txt` prints
+  each as CSS writes it.
+- **Math functions** (CSS Values 4, 10, which allows them wherever an angle or a length goes):
+  an angle may be `calc()`, `min()`, `max()` or `clamp()` of angles (`calc(var(--a) * 1deg)`),
+  worked out as the sheet is read (a conic gradient's stop a percentage of the turn too); a
+  position or a radius `min()`, `max()` or `clamp()` of one unit is worked out (`min(10px, 20px)`,
+  `max(1em, 2em)`), and so is one inside `calc()` (`calc(100% - min(10px, 20px))`). One of px and
+  % together (`min(10%, 5px)`) can't be until the gradient line's length is known: such a gradient
+  is valid all the same, kept as its colours alone (`approx`) and drawn as their average, never as
+  nothing (and the `background` shorthand's colour stays with it); so is one of more stops than
+  EWeb keeps (64, 32 in the ST edition: their first ones' average) or of more relative lengths.
+  Before (the review of 22 Oct 2026), each of these made its declaration invalid. An angle is kept
+  within a turn (`10000turn` is `0deg`), so neither the parser's arithmetic nor the canvas's can
+  overflow, and so is a length in `vw`, `vh`, `vmin` or `vmax` within the fixed point (`1e9vw` is
+  the most a length can be, 2,097,152px; before the second review its product overflowed, as
+  `width: 1e9vw`'s did before gradients: undefined behaviour, and a stop in the wrong place). The
+  ST edition, short of memory, works no `min()` out, inside `calc()` or not: such a gradient is its
+  average, the shorthand's colour kept with it (850 bytes less; before the second review one inside
+  `calc()` made the declaration invalid there, and white text meant for a dark gradient came out
+  on white).
+- **`-webkit-` forms** (the Compatibility Standard): `-webkit-linear-gradient()` and
+  `-webkit-repeating-linear-gradient()` (a side it starts from, not `to` one; an angle from east,
+  counter-clockwise) are kept as their modern forms, and `-webkit-gradient(linear, ...)` (WebKit's
+  first: two points and `from()`, `to()`, `color-stop()`) as `linear-gradient()` to the side its
+  line runs to, its stops placed on that line between the points; one across a corner and
+  `-webkit-gradient(radial, ...)` as their average. Of the page set's 16 pages with gradients 7
+  have only these (old Bootstrap's buttons and bars: 28 `-webkit-linear-gradient(top, ...)` and 18
+  `-webkit-gradient(linear, left top, left bottom, ...)`), which drew nothing before. The ST
+  edition takes `-webkit-linear-gradient()` but not `-webkit-gradient()` (2 KB of its code).
+- **One layer, the top one.** The `background` shorthand kept its first layer already;
+  `background-image` of several layers, invalid to EWeb before (and so dropped), now keeps its first
+  too (csscmp's new reason: LibCSS drops such a declaration). More layers would need a list in each
+  of the six background longhands (four hidden properties more, a style 20 bytes larger) and the
+  layout's table and flex stretching to take several items for a box's background: not cheap. So a
+  gradient over a picture (often a translucent darkening for a hero picture's white text) shows the
+  gradient over the background colour, and a picture over a gradient the picture.
+- **Laid out** as a background picture is: one item (`DL_GRAD`, the gradient with its lengths in
+  device px) and a tile. A gradient has no size of its own, so its tile is the positioning area's
+  size (the padding box) or `background-size`'s, placed by `background-position` and repeated by
+  `background-repeat` (a stripe pattern of `linear-gradient(...) 0 0 / 100% 8px`); the root's or the
+  body's over the whole canvas, its tiles placed as for the root and going on below a page shorter
+  than the window (CSS Backgrounds 3, 2.11.2; the canvas draws that item, `page.cbg`, down to the
+  window's foot). A box laid out with no height and stretched afterwards (a table row's
+  cell, a flex line's item) takes its gradient's height with it. `background-clip` now stops
+  pictures and gradients, not only the colour, at the box it names. An inline's gradient (a
+  `<span>`'s, and an inline-block's, which EWeb lays out as an inline) is its stops' average over
+  its colour, a run being one fill. Text painted with a gradient (`background-clip: text`) keeps the
+  gradient's first colour that shows (Translucent colours, above): an average with a transparent
+  stop would be too faint to read.
+- **Drawn** (`src/gfx/canvas.c`): each pixel's place along the gradient line (linear: from the
+  angle, or at right angles to the diagonal for a corner), the ray (radial: the ellipse's distance)
+  or the turn (conic) picks an entry of a ramp: the gradient's colours, mixed premultiplied (CSS
+  Images 4, 3.5: red to `transparent` stays red), at 256 points at most, no more than one a pixel
+  and no more than its colours need (two levels of 255 an entry where they change most; a sharp edge
+  or a hint all there can be), and the colours before and after the stops as entries of their own,
+  so that a sharp edge at either end falls where it is; a hint bends the mix by its power curve
+  (fixed-point log and exponent tables). The stops are fixed up as CSS Images 3, 3.4.3 says
+  (unplaced ones spread evenly, none before the one before it). An entry is its colour made for the
+  screen as a 4 x 4 pattern on the canvas's own ordered thresholds, fixed to the page as the fills'
+  greys are:
+  - **Palette modes: an ordered dither, not the pictures' Floyd-Steinberg.** Floyd-Steinberg
+    (`common/src/pic.c` and the DSP's) carries each pixel's error to the next: drawn a band at a
+    time, as the window is (32 rows when memory is short), or scrolled, a gradient would show seams
+    between bands, and keeping its pens as a picture's are kept would take a megabyte for a body's
+    gradient. So the thresholds are the canvas's own, those monochrome fills and pictures at an
+    opacity use already, and what is new is how an entry's 16 pens are chosen, so that together they
+    make its colour (Knoll's pattern dither, 30 lines: each the screen's nearest, `ui/screen.c`'s
+    cached `pen()`, to the colour plus the error the pens before it left, sorted by brightness, so
+    light and dark spread evenly over the thresholds); on a monochrome screen they are the fills'
+    grey pattern.
+  - **True colour** has 16 5-6-5 values for each entry a step apart, so that a gentle gradient
+    (`#fff` to `#eee`, two 5-bit steps) isn't drawn in bands.
+  - **Fast where it can be:** a linear gradient at right angles is drawn a row at a time (one entry:
+    a long of its four pens at a time, four longs a turn of a loop counted down) or a column at a
+    time (the first four rows worked out, the others copied from four rows up); any other a pixel at
+    a time, an entry index stepped along each row (a shift, a mask and a look-up: runs of one entry,
+    each written a long at a time, measured a quarter slower for entries 15 px wide), the pixels
+    before and after its span as runs of the first and last colours; a radial one from each pixel's
+    square distance (a 16-bit multiply) against the squares of the entry's thresholds, the next
+    pixel's entry the same or one either side, the pixels past its last stop as runs; a conic one
+    from each pixel's offsets by a division and an eighth of a turn of atan's table (to a quarter of
+    an entry), each row in two spans, either side of the centre. Each depth has its own loops, four
+    pixels a turn.
+  - **Tiles** (a pattern of dots or checks, `0 0 / 16px 16px`): a solid gradient's are drawn only as
+    far as its tiles and the 4 x 4 pattern come round together (across and down: 52 px for tiles of
+    13, a 16 px CSS tile at 0.8), and copied on from there, each copy across twice the last; a
+    translucent one's (most dot patterns: dots on `transparent`) have their entries worked out once
+    for one tile (64 KB at most), each row then drawn from them, a tile's row copied across; a
+    linear gradient whose rows are each one entry is drawn across all its tiles at once. Before (the
+    review of 22 Oct 2026) each tile was worked out on its own, its set-up (64-bit divisions) for
+    each, 50 to 60 instructions a pixel for 16 px dots.
+  - **A translucent gradient** at right angles is as cheap as a translucent fill: a row of one entry
+    is its four pens put in a long at a time through a mask of where its alpha is above the
+    thresholds (8 bits), or mixed as a translucent fill is (16 bits: a run of pixels as the last
+    ones takes their result); one across has its row's entries worked out once for all its rows; a
+    row of entries is drawn in runs of one entry at 16 bits, its transparent ones passed over, each
+    entry's last pixel under it and what that became kept from run to run (what is under is mostly
+    one colour, so an entry is mixed once, not at each of its runs a few pixels wide); and one
+    across keeps that for each column (`mix_cols16`: its rows are alike, so a pixel is a load, a
+    compare and a store, as a hero picture's scrim `linear-gradient(to right, rgba(0,0,0,.7),
+    transparent)` is drawn). Before, each pixel was mixed on its own, 22 to 29 instructions a pixel;
+    after the first review a fade across was still 25 a pixel in true colour (each run of an entry,
+    a few pixels, mixed again), now 10.9.
+  - **A ramp is kept** for the last four gradients drawn, with the screen it was made for, so a band
+    of the window, a scroll or a page of like buttons doesn't work it out again (up to 10 KB each).
+    Making one is most of a small gradient's cost (an entry's 16 pens are 16 of `pen()`'s look-ups,
+    some 2,000 instructions an entry): so its entries are as many as its colours need, not one a
+    pixel, and a header from `#2c3e50` to `#4ca1af` 600 px wide is 50 of them, not 256. On a page of
+    typical gradients (a header, a hero at 135deg, three buttons, two cards with a sheen) that took
+    the drawing from 4.54 M to 3.20 M instructions in 16 colours and from 4.83 M to 4.50 M in true
+    colour (with two solid stops' mix worked out without a division). In 256 colours `pen()` costs
+    more the first time a colour is met (`ui/screen.c` looks through all 256 pens, then keeps the
+    answer for its 12-bit colour): the dithers' colours wander, so the first gradients drawn after
+    the start fill much of that cache, up to 11 M instructions once (the test page of 22 gradients:
+    17.6 M to draw, 11.3 M of them `pen()`; the page above 5.2 M; in Hatari's Falcon the test page
+    took 3.5 s the first time). A faster nearest pen there (for later) would save that.
+  - **Translucent** stops or a box's opacity: true colour mixes each pixel with what is under it (in
+    32nds, as translucent fills are); with a palette an entry is drawn where its alpha is above the
+    transposed thresholds, as pictures at an opacity are.
+  - **Where it can't be drawn**, its stops' average (premultiplied), never nothing: a repeating
+    gradient of no length (CSS Images 3, 3.6 says so), one whose stops can't be placed (`approx`,
+    above), a ramp's memory not there, a radial gradient thousands of entries off its tile.
+  - **A radial gradient of no size** is drawn as CSS Images 3, 3.2.3 says: a circle of no radius as
+    one a 256th of a px round (its stops' percentages all 0, those in px where they are), an ellipse
+    of no width as one a 256th of a px wide and as tall as can be (a linear gradient across,
+    mirrored at its centre), one of no height its last colour (a repeating one's average). Before,
+    any of them was its last colour, so `radial-gradient(circle closest-side at 0 0, red 20px, blue
+    40px)` was all blue.
+- **The ST edition draws a linear gradient at right angles, and any other in its colours' average.**
+  The Falcon's drawing is about 11 KB of 68000 code (linear ones alone 7 KB). The 1 MB ST had
+  190,090 bytes free at the start before this change, and its tables page needs between 177,886 and
+  181,758 (it failed with the first and showed with the second: builds padded for the purpose, in
+  Hatari); with all the Falcon's drawing it had 177,886, and the tables page no longer showed. So
+  the ST edition has a drawing of its own, 2 KB: a gradient to a side, or at an angle a multiple of
+  90deg (most of the web's: a header's, a button's), a row or a column at a time, each row's colour
+  from the same stops as the Falcon's (`grad_place`, `stop_colour`) and drawn as a fill is (the grey
+  pattern in monochrome, so a gradient is a ramp of 17 greys; the nearest pen in 4 and 16 colours,
+  so it is a few bands); rows the screen shows alike are one fill (a solid colour's grey level in
+  monochrome, its 5-6-5 value in true colour, else its 12-bit colour, as `pen()` keeps them), in a
+  colour of that alone (the grey's or the 5-6-5 value's own colour, or the 12-bit colour with each
+  nibble twice, so black and white stay so), and the colour between two stops is worked out in 32
+  bits (a 64-bit division is a loop of 64 turns on the 68000). Before the second review (22 Oct
+  2026) a run of rows was drawn in its first row's colour; a run starts where a band of the window
+  or a scroll's new rows start, so in monochrome a gentle gradient's greys changed with them (the 1
+  MB ST draws in bands of 32 rows): seams, now gone (`tests/layout/gradients.py` draws tall gentle
+  gradients in bands from anywhere). A hint mixes its stops evenly (its power curve would be 700
+  bytes more). Any other gradient is its stops' average, drawn as a fill. On the 1040 ST in
+  monochrome (8 MHz, Hatari) the test page's window of 22 gradients is drawn in 13.6 s, against
+  12.5 s with every gradient its average (a fill a row: 16.4 s). In all `EWEBST.PRG` grew 6.7 KB
+  (the gradients the CSS engine keeps 3.7 KB, the layout's items 1.1 KB, the drawing 2 KB), and the
+  1 MB ST has 185,068 bytes free at the start and shows the tables and the pictures pages as before.
+  After the review (22 Oct 2026) it grew 1.1 KB more (angles in `calc()`, `min()` and the like, the
+  averages and `-webkit-linear-gradient()` in the CSS engine, the canvas's background on down the
+  window; it leaves out `-webkit-gradient()` and working `min()` out, 2.8 KB), and the 1 MB ST has
+  184,204 bytes free at the start and shows the tables and the pictures pages as before. After the
+  second review it grew 714 bytes more (the rows' keys, `min()` inside `calc()` taken as lost,
+  lengths in `vw` kept within 32 bits), and the 1 MB ST has 183,670 bytes free at the start and
+  shows the tables and the pictures pages as before. The rest of the Falcon's drawing (dithered,
+  diagonal, radial, conic) could be had for about 9 KB more if the ST's memory is found elsewhere:
+  **the owner's call**.
+- **Limits:** one layer; `background-origin` (the padding box always) and `background-attachment:
+  fixed` (a body's fixed gradient is spread over the whole page, not the window); a position or a
+  radius `min()` of px and % together (its average, above); colours in `oklch()`, `lab()`,
+  `color-mix()` and the like, which EWeb's colours don't read anywhere (such a stop makes the
+  gradient invalid, as it makes `background-color` invalid, so a fallback before it stays); sRGB
+  interpolation; a sharp edge inside a gradient longer than 256 px within half an entry of its place
+  (on a 600 px one, a pixel); a conic gradient's angles to a quarter of an entry; `list-style-image`
+  gradients aren't drawn (the marker of its type is); the radial and conic per-pixel work is the
+  68030's (the DSP could take the distances and the angles: for later).
+- **Measured** (`build/m68k/drawbench`, the whole page drawn 400 rows at a time, counted with
+  `tools/count68k.sh`), a page of one 608 x 3,200 px gradient, instructions a pixel at 8 bits (16
+  colours) and in true colour, against a solid fill's 0.88 and 6.04: to bottom 1.51 and 4.24, to
+  right 1.47 and 4.16, 45deg 10.2 and 12.4, repeating stripes at -45deg 9.4 and 12.0, radial 27.5
+  and 29.7, conic 35.7 and 36.0, a translucent fade over a colour (to bottom) 22.9 and 34.7. So a
+  screenful (608 x 400) of radial gradient is 6.7 M instructions, about 1.3 s on the DFB1 at the
+  rate measured for translucency above; a vertical one 0.4 M. The first versions took 39 and 55
+  instructions a pixel for radial and conic, 18 for 45deg and 2.04 for to bottom: each row's entries
+  were worked out into a buffer, then drawn; now the pens go straight in, the radial and conic rows
+  are functions of their own (their variables in registers), a conic row is split at its centre, a
+  run of longs is a loop counted down, four a turn, and a ramp has the entries its colours need
+  (above). On the page set, before and after, the same 29 pages as for translucency, alone and with
+  each sheet (87 runs; its pages and sheets hold only six different gradients, two of them the old
+  `linear-gradient(top, ...)` that isn't valid): the styling 0.05% more instructions, the layout
+  0.04% more, the drawing 0.01% more in 16 colours and the same in true colour.
+  `tests/bench/measure.py -E ewcss` on all 258 pages: the CSS parse 0.05% more with either sheet,
+  the selection 0.2% more with Bootstrap (a `background-image` of two layers through `var()`, as its
+  `.form-select` has, is read now where the first comma made it invalid before) and the same with
+  Pico (0.01%). `EWEB.PRG`'s code grew 28.1 KB (the drawing 22.1 KB: each depth its own loops, four
+  pixels a turn) and its memory 2.6 KB (the four ramps' stops), and up to 40 KB while a page with
+  gradients is drawn (the ramps' entries). After the review (22 Oct 2026), the translucent fade to
+  bottom is 2.54 and 7.32 a pixel (against a translucent fill's 2.98 and 7.06; the review's code
+  measured again: 22.9 and 32.1), one across 9.1 and 28.5 (40.9 and 58.5). On the review's page of
+  one 608 x 960 px box (583,680 pixels, its page included: 2.1 and 5.3 a pixel with no gradient), 16
+  CSS px dots (`radial-gradient(#999 1px, #fff 1px) 0 0 / 16px 16px`) are 3.4 and 7.0 a pixel (58.0
+  and 61.0 before), the same dots on `transparent` 9.5 and 12.6 (61.0 and 61.6), checks
+  (`repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px`) 4.3 and 7.2 (50.7 and 50.9);
+  each drawn as before to the pixel (every mode and slice compared with the review's drawing). The
+  review's changes to the CSS engine cost nothing measurable: the news page styled 0.16% more
+  instructions, less than moving the engine's code does (a function never called, 7 KB, put in
+  `value.c`: 2.2% more), the sample page with Bootstrap 0.05%. `EWEB.PRG`'s code grew 6.8 KB more.
+  Its memory: up to 64 KB more while translucent tiles are drawn (a tile's entries). After the
+  second review (22 Oct 2026) the translucent fade across is 8.4 and 14.2 a pixel (9.1 and 28.5
+  before it), on the 608 x 960 box 10.9 a pixel more than the page alone in true colour (25.1
+  before); at 16 bits a translucent radial gradient 46.2 (49.0), a conic one 49.8 (52.5), one at
+  45deg 31.3 (34.2), the dots on `transparent` 12.6 as before; each drawn as before to the pixel
+  (263 random pages of translucent gradients over colours, gradients and stripes, in every mode and
+  three slices); `EWEB.PRG`'s code 1 KB more, its memory 6 bytes an entry of each ramp and 6 a
+  column of a fade across. The CSS engine's arithmetic kept within 32 bits costs nothing
+  measurable (the news page styled 0.002% fewer instructions, the sample page 0.002% more).
+  Counting, the program's path matters: QEMU puts it on the stack, and a longer one moved the news
+  page's count by 1.1% (the buffers on the stack aligned otherwise), so the two programs compared
+  are run from paths of one length.
+- **Tested:** `tests/css/cases.txt` (what is kept of 18 gradients, 24 that aren't valid, the layers,
+  14 with math functions, one of more stops than are kept, 12 `-webkit-` ones, and huge lengths in
+  `vw` and the like, kept within the fixed point);
+  `tests/layout/gradients.html` and its list (ewrender `-d` shows a gradient item, its tile and the
+  gradient as the display list has it, `averaged` for one kept as its average);
+  `tests/layout/gradients.py` in `make test` (318 checks of pixels read back in true colour and 2,
+  4, 16 and 256 colours: ends and middles, angles, sides and corners, sharp edges at their pixel, a
+  hint's bend, radial centres, corners, circles and ones of no size, repeating periods and one of no
+  length, conic quarters, translucency and opacity, background-size, -position, -repeat and -clip,
+  stretched boxes, the root's gradient and on below a short page, an inline's average, averages of
+  stops that can't be placed, calc() angles, `-webkit-` forms, small tiles each alike, translucent
+  fades, and every page drawn in slices of 13 rows the same as whole; the test page in bands at 8
+  and 16 bits under AddressSanitizer; in 4 colours brightness, as in 2: before the review its checks
+  there were counted and not made; huge lengths drawn with no undefined behaviour, as UBSan's report
+  stops it); and since the review 239 more of the ST edition's drawing, through
+  `build/asanst/ewrender` (ewrender built `-DEW_ST`, now in the Makefile and `make test`: rows and
+  columns each one colour, ramps each way, stripes, averages, one with `min()` inside `calc()`,
+  slices, and since the second review tall gentle gradients in bands of 32 rows from anywhere the
+  same as whole, which the drawing before it failed in three of the four modes). While it was made:
+  7,000 random pages of gradients (valid and not) drawn under AddressSanitizer and UBSan at every
+  depth and in slices, and 1,500 on its final code, with no fault, and 1,500 through the ST
+  edition's drawing; after the review 700 more, each in every mode of both editions and every fifth
+  in bands (they found two overflows, `fx_mul`'s of a huge `calc()` product and the ST's of a tile
+  hundreds of millions of px tall, both fixed), and libFuzzer's `fuzz_html` four minutes from them
+  (574,549 pages); every tiled and translucent page of the review drawn the same to the pixel as
+  before in every mode and slice; after the second review the 263 pages above through the Falcon's
+  drawing and 41 through the ST's, under AddressSanitizer and UBSan with no fault, and
+  `fuzz_html` 150 s (1,045,378 pages); `make csscmp` (no new difference without a reason, and none
+  at all from the second review's changes; the page set's
+  `-webkit-` gradients, valid now, are 20 and 25 values under "gradients as images", as LibCSS has
+  none); `make hatarigui`'s screens group shows the page on the Falcon in 256 colours and true
+  colour and on the TT in 16 colours and monochrome, its st group on the 1 MB ST and the 1040 ST;
+  `make itest` (background pictures, which `background-clip` now stops too, and the canvas's now
+  drawn on down the window).
 
 ## The design
 

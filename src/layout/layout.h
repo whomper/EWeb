@@ -31,7 +31,7 @@ typedef struct {
 	void *ud;
 } LAYOUT_OPT;
 
-enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL };
+enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
@@ -40,15 +40,19 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL };
 #define DLF_ALT 32			/* and with no size at all: its alt text's room (the text
 					   is an item of its own), nothing drawn */
 #define DLF_TILE 64			/* DL_IMAGE: a background picture, tiled over the item
-					   (tile); DL_FILL: its picture is the next item */
+					   (tile); DL_GRAD: always; DL_FILL: its picture or
+					   gradient is the next item */
 #define DLF_NOHIT 128			/* pointer-events: none: a click goes through it to what
 					   is under it (its link, its control) */
 
-/* a background picture's tiles: one at (item's x + dx, y + dy), w x h
-   device px, and the others on from it across (rx) and down (ry) */
+/* a background picture's or gradient's tiles: one at (item's x + dx,
+   y + dy), w x h device px, and the others on from it across (rx) and
+   down (ry) */
 typedef struct dl_tile {
 	int32_t dx, dy, w, h;
 	uint8_t rx, ry;
+	uint8_t grow;			/* a gradient as tall as its box: it grows with it
+					   (a table's row, a flex line) */
 } dl_tile;
 
 typedef struct dl_item {
@@ -68,13 +72,17 @@ typedef struct dl_item {
 	ew_font *font;
 	union {
 		const char *text;	/* UTF-8, kept by the page */
-		const dl_tile *tile;	/* DL_IMAGE with DLF_TILE (NULL while its size isn't known) */
+		const dl_tile *tile;	/* DL_IMAGE with DLF_TILE (NULL while its size isn't
+					   known), DL_GRAD (NULL: none drawn) */
 		uint32_t ink;		/* DL_CTL: its text's colour, 0xAARRGGBB as rgb (the
 					   CSS colour's alpha, then the opacity it is in) */
 	};
 	uint32_t len;			/* DL_CTL: a textarea's line step */
 	void *img;			/* DL_IMAGE: the picture's handle (LAYOUT_OPT.image), drawn at w x h
-					   (a tile's size with DLF_TILE: DL_PIC_W, DL_PIC_H) */
+					   (a tile's size with DLF_TILE: DL_PIC_W, DL_PIC_H);
+					   DL_GRAD: its gradient (const ec_grad *, lengths in
+					   device px, currentcolor made the colour), as solid as
+					   rgb's AA says (its box's opacity) */
 #ifndef EW_ST
 	dnode *node;			/* the element it is of: a click's target for scripts */
 #endif
@@ -95,6 +103,9 @@ typedef struct page {
 	long nstrips;
 	int32_t width, height;		/* device px */
 	uint32_t bg;			/* what the page is drawn on (0xRRGGBB) */
+	long cbg;			/* the canvas's background picture or gradient item (the
+					   root's or the body's), drawn on past the page's foot
+					   to the window's; -1: none */
 #ifndef EW_ST
 	/* each element's block (border box, device px), for scripts */
 	struct pg_block {
@@ -113,6 +124,10 @@ typedef struct page {
 /* the size a picture item's picture is drawn at */
 #define DL_PIC_W(d) ((d)->flags & DLF_TILE ? ((d)->tile ? (d)->tile->w : 0) : (d)->w)
 #define DL_PIC_H(d) ((d)->flags & DLF_TILE ? ((d)->tile ? (d)->tile->h : 0) : (d)->h)
+
+/* a gradient's colour where it can't be drawn: its stops' colours
+   mixed evenly (premultiplied), 0xAARRGGBB; cur is currentcolor's */
+uint32_t grad_average(const ec_grad *g, uint32_t cur);
 
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);

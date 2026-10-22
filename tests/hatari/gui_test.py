@@ -23,8 +23,9 @@
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
   the page of pictures from the disk, each picture in the screen's own
-  colours, and the page of translucent colours and opacity
-  (tests/layout/alpha.html), mixed through the screen's own palette.
+  colours, the page of translucent colours and opacity
+  (tests/layout/alpha.html), mixed through the screen's own palette, and
+  the page of CSS gradients (tests/layout/gradients.html), dithered to it.
 
 EWEB.PRG says what it does as "EWEB ..." lines through NatFeats; each step
 waits for the line it expects, then a screenshot goes to OUT.
@@ -71,6 +72,7 @@ def hd_for(name, home, inf=""):
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/alpha.html"), os.path.join(hd, "ALPHA.HTM"))
+    shutil.copy(os.path.join(ROOT, "tests/layout/gradients.html"), os.path.join(hd, "GRAD.HTM"))
     os.makedirs(os.path.join(hd, "IMG"), exist_ok=True)
     shutil.copy(os.path.join(ROOT, "tests/layout/img/one.png"), os.path.join(hd, "IMG", "ONE.PNG"))
     import server
@@ -598,6 +600,16 @@ def screens():
             r.wait(r"pictures ", 120)
             time.sleep(2)
             r.shot(3)
+            # CSS gradients, in the screen's colours (looked at in its
+            # screenshot)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/GRAD.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            check("screens: %s gradients" % name,
+                  ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
+            time.sleep(2)
+            r.shot(5)
             if name == "falcon256":
                 # ^, the Settings dialog (looked at in its screenshot); Esc
                 # leaves it as it was
@@ -643,8 +655,9 @@ def cached_pictures(name, spec, dec):
 def st():
     """EWEBST.PRG, the ST edition, on the 1 MB ST and Erez's 1040 ST (68000
     at 8 MHz, TOS 1.04): a page and its pictures from the disk in
-    monochrome and in medium resolution, and on the 1040 the page of
-    translucent colours and opacity (tests/layout/alpha.html); then, over
+    monochrome and in medium resolution, and on the 1040 the pages of
+    translucent colours and opacity (tests/layout/alpha.html) and of CSS
+    gradients (tests/layout/gradients.html); then, over
     the network, a secure page through AERA-Gateway's webgate (the ST has
     no TLS of its own)"""
     if not os.path.exists(os.path.join(ROOT, "binary/EWEBST.PRG")):
@@ -690,6 +703,19 @@ def st():
                 r.wait(r"pictures ", 300)
                 time.sleep(2)
                 r.shot(4)
+                # CSS gradients as the ST edition draws them: those to a
+                # side or at right angles a row or a column at a time, any
+                # other its colours' average (DESIGN.md, CSS gradients;
+                # make test checks the pixels, tests/layout/gradients.py);
+                # here that the page shows (looked at in its screenshot)
+                r.key(L, (CTRL,))
+                r.type("file:///C:/GRAD.HTM")
+                r.key(RETURN)
+                ev = r.wait(r"shown ", 300)
+                check("st: %s gradients" % name,
+                      ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
+                time.sleep(3)
+                r.shot(5)
             if name == "stmono":
                 # a secure page with no gateway set: said plainly, the page
                 # stays (the hub, 20 Oct 2026)

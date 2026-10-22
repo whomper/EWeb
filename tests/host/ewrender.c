@@ -219,6 +219,57 @@ static const char *alpha_of(const dl_item *it)
 	return b;
 }
 
+/* a gradient as the display list has it (device px, rounded): its kind,
+   then linear: its angle or to its side or corner; radial: circle or
+   ellipse, its extent or radii, at its centre; conic: from its angle at
+   its centre; then its stops, a colour less than solid as #rrggbbaa,
+   each position px+pct% (a conic one's pct of the turn), and its hints */
+static const char *grad_of(const ec_grad *g)
+{
+	static char b[1024];
+	static const char *const kind[] = { "linear", "radial", "conic" };
+	static const char *const ext[] = { "", " closest-side", " closest-corner", " farthest-side", " farthest-corner" };
+	size_t n;
+	int i;
+	n = (size_t) snprintf(b, sizeof b, "%s%s", g->repeat ? "repeating-" : "", kind[g->type]);
+	if (g->approx)
+		n += snprintf(b + n, sizeof b - n, " averaged");	/* (its stops can't be placed) */
+	else if (g->type == EC_GRAD_LINEAR) {
+		if (g->to)
+			n += snprintf(b + n, sizeof b - n, " to%s%s%s%s", g->to & EC_TO_TOP ? " top" : "",
+				      g->to & EC_TO_BOTTOM ? " bottom" : "", g->to & EC_TO_LEFT ? " left" : "",
+				      g->to & EC_TO_RIGHT ? " right" : "");
+		else
+			n += snprintf(b + n, sizeof b - n, " %ddeg", (int) (g->angle >> 10));
+	} else {
+		if (g->type == EC_GRAD_RADIAL) {
+			n += snprintf(b + n, sizeof b - n, " %s", g->circle ? "circle" : "ellipse");
+			if (g->extent)
+				n += snprintf(b + n, sizeof b - n, "%s", ext[g->extent]);
+			else
+				n += snprintf(b + n, sizeof b - n, " %d+%d%% %d+%d%%", (int) (g->rx.px >> 10),
+					      (int) (g->rx.pct >> 10), (int) (g->ry.px >> 10), (int) (g->ry.pct >> 10));
+		} else {
+			n += snprintf(b + n, sizeof b - n, " from %ddeg", (int) (g->angle >> 10));
+		}
+		n += snprintf(b + n, sizeof b - n, " at %d+%d%% %d+%d%%", (int) (g->x.px >> 10), (int) (g->x.pct >> 10),
+			      (int) (g->y.px >> 10), (int) (g->y.pct >> 10));
+	}
+	for (i = 0; i < g->n && n < sizeof b - 40; i++) {
+		const ec_gstop *s = &g->s[i];
+		if (s->flags & EC_GS_HINT)
+			n += snprintf(b + n, sizeof b - n, ", hint");
+		else if (s->argb >> 24 == 255)
+			n += snprintf(b + n, sizeof b - n, ", #%06lx", (unsigned long) (s->argb & 0xffffff));
+		else
+			n += snprintf(b + n, sizeof b - n, ", #%06lx%02lx", (unsigned long) (s->argb & 0xffffff),
+				      (unsigned long) (s->argb >> 24));
+		if (s->flags & EC_GS_AT)
+			n += snprintf(b + n, sizeof b - n, " %d+%d%%", (int) (s->at.px >> 10), (int) (s->at.pct >> 10));
+	}
+	return b;
+}
+
 /* ---------------------------------------------------------------- the tree, with each element's display */
 
 static void tree(const dnode *n, int depth)
@@ -407,6 +458,12 @@ static dnode *by_id(dnode *n, const char *id)
    event, then (unless a script said no) its link or control */
 static int click(browser *b, const char *id)
 {
+#ifdef EW_ST
+	/* (the ST edition: no scripts, and no element's place kept) */
+	(void) by_id;
+	printf("click %s: not in the ST edition\n", id);
+	return 0;
+#else
 	dnode *n = b->d ? by_id(b->d->root, id) : NULL;
 	int32_t x, y, w, h;
 	int cancelled = 0, load = 0, r;
@@ -436,6 +493,7 @@ static int click(browser *b, const char *id)
 		}
 	}
 	return 1;
+#endif
 }
 
 /* every picture of the page shown, fetched and decoded */
@@ -805,6 +863,13 @@ int main(int argc, char **argv)
 				       it->tile ? (int) it->tile->w : 0, it->tile ? (int) it->tile->h : 0,
 				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
 				       img_url(it->img), alpha_of(it));
+			else if (it->type == DL_GRAD)
+				printf("gradient %d,%d %dx%d tile %d,%d %dx%d%s%s%s %s%s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, it->tile ? (int) it->tile->dx : 0,
+				       it->tile ? (int) it->tile->dy : 0, it->tile ? (int) it->tile->w : 0,
+				       it->tile ? (int) it->tile->h : 0, it->tile == NULL ? " none" : "",
+				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
+				       grad_of(it->img), alpha_of(it));
 			else if (it->type == DL_IMAGE)
 				printf("image %d,%d %dx%d%s%s%s link %d \"%.*s\" %s%s\n", (int) it->x, (int) it->y,
 				       (int) it->w, (int) it->h, it->flags & DLF_NOSIZE ? " guessed" : "",

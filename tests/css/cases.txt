@@ -249,7 +249,7 @@ input:read-only { padding-top: 5px }
 #a background-repeat no-repeat
 #a background-position-x calc(-10px + 100%)
 #a background-position-y 0%
-#b background-image gradient #ff0000
+#b background-image linear-gradient(180deg, #ff0000, #0000ff)
 #b background-color #00000000
 #b background-clip border-box
 #c background-color #ff0000
@@ -498,11 +498,11 @@ input:read-only { padding-top: 5px }
 <div id=l><span id=l2>x</span><span id=l3 style="pointer-events: auto">y</span></div><p id=m></p><p id=n></p>
 <div id=o><span id=o2>x</span></div><p id=p></p><p id=q></p><p id=r></p><p id=s></p><p id=t></p>
 --- expect
-# a gradient's first colour that shows is kept: text painted with it is drawn in it
-#a background-image gradient #ec4899
+# the gradient is kept: text painted with it is drawn in its first colour that shows
+#a background-image linear-gradient(to right, #00000000, #ec4899 20%, #8b5cf6)
 #a background-clip text
 #a color #00000000
-#b background-image gradient #0000ff80
+#b background-image radial-gradient(circle farthest-corner at 50% 50%, #0000ff80, #ff0000)
 #b background-clip text
 # the background shorthand: one box is origin and clip, two are origin then clip
 #c background-clip content-box
@@ -828,7 +828,245 @@ p:hover::before { color: blue }
 --- expect
 #a background-image url(a b.png)
 #b list-style-image url(i.gif)
-#c background-image gradient #ff0000
+#c background-image radial-gradient(ellipse farthest-corner at 50% 50%, #ff0000, #0000ff)
+
+=== gradients (CSS Images 3 and 4, 3.1-3.4): what is kept
+--- css
+#a { background-image: linear-gradient(red, blue) }
+#b { background-image: linear-gradient(45deg, red 10%, blue 50px 80%) }
+#c { background-image: linear-gradient(to top right, #000, 30%, #fff) }
+#d { background-image: linear-gradient(0.25turn, red, blue) }
+#e { background-image: linear-gradient(-100grad, red, blue) }
+#f { background-image: linear-gradient(0, red, blue) }
+#g { background-image: linear-gradient(to left in oklab, red, blue) }
+#h { background-image: repeating-linear-gradient(-45deg, #000 0 10px, #fff 10px 20px) }
+#i { font-size: 10px; background-image: linear-gradient(red 1em, blue calc(100% - 2em)) }
+#j { background-image: radial-gradient(circle 20px at left 10px top 5px, red, blue) }
+#k { background-image: radial-gradient(closest-side, red, blue) }
+#l { background-image: radial-gradient(10% 20px ellipse at bottom, red, blue) }
+#m { background-image: conic-gradient(from 90deg at 25% 75%, red 0 25%, blue 0.5turn, green) }
+#n { color: lime; background-image: radial-gradient(in hsl longer hue, red, currentcolor) }
+#o { font-size: 10px; background-image: radial-gradient(2em 1em at 1em 50%, red, blue) }
+#p { background-image: linear-gradient(red) }
+#q { background-image: repeating-radial-gradient(circle closest-corner at 0 0, red, blue 5px) }
+#r { background-image: conic-gradient(in srgb from 0.5turn, rgb(0 0 255 / 50%), red 25%, 50%, blue) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+<div id=g></div><div id=h></div><div id=i></div><div id=j></div><div id=k></div><div id=l></div>
+<div id=m></div><div id=n></div><div id=o></div><div id=p></div><div id=q></div><div id=r></div>
+--- expect
+# to bottom when no direction is given; two positions are two stops
+#a background-image linear-gradient(180deg, #ff0000, #0000ff)
+#b background-image linear-gradient(45deg, #ff0000 10%, #0000ff 50px, #0000ff 80%)
+#c background-image linear-gradient(to top right, #000000, 30%, #ffffff)
+#d background-image linear-gradient(90deg, #ff0000, #0000ff)
+#e background-image linear-gradient(-90deg, #ff0000, #0000ff)
+#f background-image linear-gradient(0deg, #ff0000, #0000ff)
+# an interpolation method is read, and drawn in sRGB
+#g background-image linear-gradient(to left, #ff0000, #0000ff)
+#h background-image repeating-linear-gradient(-45deg, #000000 0px, #000000 10px, #ffffff 10px, #ffffff 20px)
+# lengths in em are computed with the style
+#i background-image linear-gradient(180deg, #ff0000 10px, #0000ff calc(-20px + 100%))
+#j background-image radial-gradient(circle 20px at 10px 5px, #ff0000, #0000ff)
+#k background-image radial-gradient(ellipse closest-side at 50% 50%, #ff0000, #0000ff)
+#l background-image radial-gradient(ellipse 10% 20px at 50% 100%, #ff0000, #0000ff)
+# a conic gradient's positions: percentages of the turn
+#m background-image conic-gradient(from 90deg at 25% 75%, #ff0000 0%, #ff0000 25%, #0000ff 50%, #008000)
+#n background-image radial-gradient(ellipse farthest-corner at 50% 50%, #ff0000, currentcolor)
+#o background-image radial-gradient(ellipse 20px 10px at 10px 50%, #ff0000, #0000ff)
+# one stop (CSS Images 4)
+#p background-image linear-gradient(180deg, #ff0000)
+#q background-image repeating-radial-gradient(circle closest-corner at 0px 0px, #ff0000, #0000ff 5px)
+#r background-image conic-gradient(from 180deg at 50% 50%, #0000ff80, #ff0000 25%, 50%, #0000ff)
+
+=== gradients that aren't valid leave the value before them
+--- css
+div { background-image: url(ok.png) }
+#a { background-image: linear-gradient(red, 10%) }
+#b { background-image: linear-gradient(10%, red, blue) }
+#c { background-image: linear-gradient(to left right, red, blue) }
+#d { background-image: radial-gradient(circle 10%, red, blue) }
+#e { background-image: radial-gradient(ellipse 10px, red, blue) }
+#f { background-image: linear-gradient(red, , blue) }
+#g { background-image: linear-gradient(red, blue,) }
+#h { background-image: linear-gradient(45, red, blue) }
+#i { background-image: radial-gradient(circle -5px, red, blue) }
+#j { background-image: linear-gradient(red 10% 20% 30%, blue) }
+#k { background-image: conic-gradient(red 10px, blue) }
+#l { background-image: linear-gradient(red, 20%, 30%, blue) }
+#m { background-image: radial-gradient(at center circle, red, blue) }
+#n { background-image: linear-gradient(to left, to right, red) }
+#o { background-image: linear-gradient(in bogus, red, blue) }
+#p { background-image: linear-gradient() }
+#q { background-image: conic-gradient(from 10px, red, blue) }
+#r { background-image: linear-gradient(to left 45deg, red, blue) }
+#s { background-image: linear-gradient(calc(10px), red, blue) }
+#t { background-image: radial-gradient(circle min(10px, 5%), red, blue) }
+#u { background-image: -webkit-linear-gradient(to bottom, red, blue) }
+#v { background-image: -webkit-gradient(linear, left top, left bottom, color-stop(red), to(blue)) }
+#w { background-image: conic-gradient(from calc(10%), red, blue) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+<div id=g></div><div id=h></div><div id=i></div><div id=j></div><div id=k></div><div id=l></div>
+<div id=m></div><div id=n></div><div id=o></div><div id=p></div><div id=q></div><div id=r></div>
+<div id=s></div><div id=t></div><div id=u></div><div id=v></div><div id=w></div>
+--- expect
+# a hint first or last, or two in a row; three positions; an empty or trailing argument
+#a background-image url(ok.png)
+#b background-image url(ok.png)
+#c background-image url(ok.png)
+# a circle's size is one length, not a percentage; an ellipse's two
+#d background-image url(ok.png)
+#e background-image url(ok.png)
+#f background-image url(ok.png)
+#g background-image url(ok.png)
+#h background-image url(ok.png)
+#i background-image url(ok.png)
+#j background-image url(ok.png)
+#k background-image url(ok.png)
+#l background-image url(ok.png)
+#m background-image url(ok.png)
+#n background-image url(ok.png)
+#o background-image url(ok.png)
+#p background-image url(ok.png)
+#q background-image url(ok.png)
+#r background-image url(ok.png)
+# calc() of a length where an angle goes; a circle's size with a percentage in min()
+#s background-image url(ok.png)
+#t background-image url(ok.png)
+# -webkit-linear-gradient() has no "to"; a color-stop() with no place; from with a percentage
+#u background-image url(ok.png)
+#v background-image url(ok.png)
+#w background-image url(ok.png)
+
+=== gradients with calc(), min(), max() and clamp() (CSS Values 4, 10): worked out, or their average
+--- css
+#a { background-image: linear-gradient(calc(90deg + 45deg), red, blue) }
+#b { --a: 30; background-image: linear-gradient(calc(var(--a) * 1deg), red, blue) }
+#c { background-image: linear-gradient(max(0.25turn, 10deg), red, blue) }
+#d { background-image: conic-gradient(from calc(-90deg / 2), red calc(10% + 18deg), blue min(50%, 90deg)) }
+#e { background-image: linear-gradient(red min(10px, 20px), blue max(50%, 60%)) }
+#f { font-size: 10px; background-image: linear-gradient(red clamp(1em, 3em, 2em), blue calc(100% - min(5px, 1px))) }
+#g { background-image: linear-gradient(red min(10%, 5px), blue) }
+#h { color: lime; background-image: linear-gradient(red clamp(10px, 5%, 30px), 40%, currentcolor 50% 60%) }
+#i { background-image: radial-gradient(circle max(10px, 2em), red, blue) }
+#j { background: #123 linear-gradient(red calc(100% - min(10px, 2em)), blue) }
+#k { background-image: linear-gradient(1e9deg, red, blue) }
+#l { background-image: linear-gradient(10000turn, red, blue) }
+#m { background-image: linear-gradient(calc(1e9deg + 1e9deg), red, blue) }
+#n { background-image: radial-gradient(min(10px, 20px) max(1em, 2em) at min(10%, 20%) 0, red, blue) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+<div id=g></div><div id=h></div><div id=i></div><div id=j></div><div id=k></div><div id=l></div>
+<div id=m></div><div id=n></div>
+--- expect
+#a background-image linear-gradient(135deg, #ff0000, #0000ff)
+#b background-image linear-gradient(30deg, #ff0000, #0000ff)
+#c background-image linear-gradient(90deg, #ff0000, #0000ff)
+#d background-image conic-gradient(from -45deg at 50% 50%, #ff0000 15%, #0000ff 25%)
+#e background-image linear-gradient(180deg, #ff0000 10px, #0000ff 60%)
+# of one unit, worked out; with the style's em
+#f background-image linear-gradient(180deg, #ff0000 20px, #0000ff calc(-1px + 100%))
+# of px and %: valid, its stops' average (positions and hints not kept)
+#g background-image linear-gradient(#ff0000, #0000ff) averaged
+#h background-image linear-gradient(#ff0000, currentcolor, currentcolor) averaged
+#i background-image radial-gradient(#ff0000, #0000ff) averaged
+# the shorthand's colour stays
+#j background-image linear-gradient(#ff0000, #0000ff) averaged
+#j background-color #112233
+# huge angles: kept within a turn
+#k background-image linear-gradient(152deg, #ff0000, #0000ff)
+#l background-image linear-gradient(0deg, #ff0000, #0000ff)
+#m background-image linear-gradient(152deg, #ff0000, #0000ff)
+#n background-image radial-gradient(ellipse 10px 32px at 10% 0px, #ff0000, #0000ff)
+
+=== huge lengths in vw, vh, vmin and vmax: kept within the fixed point (no overflow)
+--- css
+#a { background-image: linear-gradient(red 1e9vw, blue) }
+#b { background-image: radial-gradient(1e9vw 1e9vh at 1e9vmax -1e9vmin, red, blue) }
+#c { background-image: linear-gradient(red calc(1e9vw + 1e9px), blue calc(-1e9vh - 1e9px)) }
+#d { width: 1e9vw; margin-left: -1e9vh; grid-template-columns: 1e9vw }
+#e { width: calc(1e9vw + 1e9px); height: 50vh; margin-right: 12.5vw }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div>
+--- expect
+# the most a length can be (2^31 1024ths of a px), either way
+#a background-image linear-gradient(180deg, #ff0000 2097152px, #0000ff)
+#b background-image radial-gradient(ellipse 2097152px 2097152px at 2097152px -2097152px, #ff0000, #0000ff)
+#c background-image linear-gradient(180deg, #ff0000 2097152px, #0000ff -2097152px)
+#d width 2097152px
+#d margin-left -2097152px
+#d grid-template-columns 2097152px
+#e width 2097152px
+# and ordinary ones as before
+#e height 240px
+#e margin-right 80px
+
+=== more stops than are kept: their average (CSS Images 3, 3.4)
+--- css
+#a { background-image: linear-gradient(#000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000,
+	#000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000,
+	#000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000,
+	#000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #000, #fff) }
+--- html
+<div id=a></div>
+--- expect
+#a background-image linear-gradient(#000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000, #000000) averaged
+
+=== -webkit-linear-gradient() and -webkit-gradient() (the Compatibility Standard)
+--- css
+#a { background-image: -webkit-linear-gradient(top, #fff, #000) }
+#b { background-image: -webkit-linear-gradient(left top, #fff 10%, #000) }
+#c { background-image: -webkit-linear-gradient(0deg, red, blue) }
+#d { background-image: -webkit-repeating-linear-gradient(45deg, red 0 5px, blue 5px 10px) }
+#e { background-image: -webkit-gradient(linear, center top, center bottom, color-stop(0%, #fff), color-stop(100%, #dcdddf)) }
+#f { background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#fff), to(#e6e6e6)) }
+#g { background-image: -webkit-gradient(linear, left bottom, left top, color-stop(0.5, red), from(blue)) }
+#h { background-image: -webkit-gradient(linear, 10 0, 60 0, from(red), to(blue)) }
+#k { background-image: -webkit-gradient(linear, 0 0, 50% 0, from(red), to(blue)) }
+#l { background-image: -webkit-gradient(linear, 10 0, 50% 0, from(red), to(blue)) }
+#i { background-image: -webkit-gradient(linear, left top, right bottom, from(red), to(blue)) }
+#j { background-image: -webkit-gradient(radial, 50% 50%, 0, 50% 50%, 100, from(red), to(blue)) }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+<div id=g></div><div id=h></div><div id=i></div><div id=j></div><div id=k></div><div id=l></div>
+--- expect
+# a side it starts from; an angle from east, counter-clockwise
+#a background-image linear-gradient(to bottom, #ffffff, #000000)
+#b background-image linear-gradient(to bottom right, #ffffff 10%, #000000)
+#c background-image linear-gradient(90deg, #ff0000, #0000ff)
+#d background-image repeating-linear-gradient(45deg, #ff0000 0px, #ff0000 5px, #0000ff 5px, #0000ff 10px)
+# along a side: to that side, the stops on the line between its points, in order
+#e background-image linear-gradient(to bottom, #ffffff 0px, #dcdddf 100%)
+#f background-image linear-gradient(to bottom, #ffffff 0px, #e6e6e6 100%)
+#g background-image linear-gradient(to top, #0000ff 0px, #ff0000 50%)
+#h background-image linear-gradient(to right, #ff0000 10px, #0000ff 60px)
+#k background-image linear-gradient(to right, #ff0000 0px, #0000ff 50%)
+# across a corner, and radial: their average
+#i background-image linear-gradient(#ff0000, #0000ff) averaged
+#j background-image radial-gradient(#ff0000, #0000ff) averaged
+# (one way in px, the other in %: which way it goes depends on the box)
+#l background-image linear-gradient(#ff0000, #0000ff) averaged
+
+=== background layers (CSS Backgrounds 3, 2.1): the top one is kept
+--- css
+#a { background: url(x.png) center / cover, linear-gradient(red, blue) #123 }
+#b { background-image: linear-gradient(red, blue), url(y.png) }
+#c { background-image: none, url(z.png) }
+#d { background-image: url(ok.png); background-image: url(a.png), bogus }
+#e { background-image: url(ok.png); background-image: url(a.png), }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div>
+--- expect
+#a background-image url(x.png)
+#a background-color #112233
+#a background-position-x 50%
+#a -ec-background-size-w cover
+#b background-image linear-gradient(180deg, #ff0000, #0000ff)
+#c background-image none
+# a layer that isn't an image makes the whole list invalid
+#d background-image url(ok.png)
+#e background-image url(ok.png)
 
 === escapes in selectors (CSS Syntax 3, 4.3.7)
 --- css

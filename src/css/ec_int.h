@@ -22,14 +22,13 @@
 static inline ec_fx fx_mul(ec_fx a, ec_fx b)
 {
 	int neg = 0;
-	uint32_t ua, ub, r;
+	uint32_t ua = (uint32_t) a, ub = (uint32_t) b, r;
 
-	if (a < 0) { a = -a; neg = 1; }
-	if (b < 0) { b = -b; neg ^= 1; }
-	ua = (uint32_t) a;
-	ub = (uint32_t) b;
+	/* (in unsigned arithmetic: out of range wraps, it isn't undefined) */
+	if (a < 0) { ua = 0u - ua; neg = 1; }
+	if (b < 0) { ub = 0u - ub; neg ^= 1; }
 	r = (ua >> 10) * ub + (((ua & 1023) * ub) >> 10);
-	return neg ? -(ec_fx) r : (ec_fx) r;
+	return (ec_fx) (neg ? 0u - r : r);
 }
 
 /* ------------------------------------------------------------ memory */

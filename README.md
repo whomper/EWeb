@@ -20,7 +20,10 @@ EWeb's own fonts.
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md))
   and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
   grid, colours (translucent ones and opacity too, mixed with what is under
-  them in every screen mode), borders, background pictures, and Hebrew
+  them in every screen mode), borders, background pictures, colour
+  gradients (linear, radial and conic, dithered to the screen's colours;
+  the ST edition draws those that run straight down or across, in the
+  screen's own colours, and any other in its colours' average), and Hebrew
   right to left.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, fetched after the page is shown (you read and scroll meanwhile),

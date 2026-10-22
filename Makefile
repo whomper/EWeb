@@ -18,7 +18,8 @@
 #   make test        nsbench on the test pages, the Hebrew pages, the CSS
 #                    engine's cases, the input stream, the HTTP client, the
 #                    fuzz targets' inputs and the layout's pages
-#                    (tests/layout), with AddressSanitizer and UBSan
+#                    (tests/layout, and the ST edition's gradients), with
+#                    AddressSanitizer and UBSan
 #   make itest       ewget and the browser against servers on this computer
 #                    (TCP, TLS)
 #   make hatarinet   EWGET.TTP in Hatari through FAKESTNG, against them
@@ -618,6 +619,18 @@ build/asan/ewrender: $(EWR_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(asan_JS) $(N
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asan_EWB) $(asan_EC) \
 		$(asan_PU) $(asan_JS) build/asan/pic.a build/host/libbearssl.a -lm
 
+# the ST edition's layout and drawing on this computer (-DEW_ST: its CSS
+# limits, its gradients as rows of fills), for make test's
+# tests/layout/gradients.py
+$(eval $(call target_rules,asanst,$(HOSTCC),$(ASAN_CFLAGS) -DEW_ST))
+build/asanst/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -DEW_ST $(EWB_FLAGS) $(NSINC) -c $< -o $@
+build/asanst/ewrender: $(EWR_SRC) $(asanst_EWB) $(asanst_EC) $(asan_PU) build/asanst/js/js_none.o $(NET_HDRS) \
+		build/host/libbearssl.a build/asan/pic.a
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -DEW_ST $(EWB_FLAGS) $(NSINC) -o $@ $(EWR_SRC) $(asanst_EWB) $(asanst_EC) \
+		$(asan_PU) build/asanst/js/js_none.o build/asan/pic.a build/host/libbearssl.a -lm
+
 # the forms: what a form sends (tests/forms/cases.txt)
 FT_SRC := tests/forms/formtest.c tests/host/dsp_none.c $(HOSTNET_SRC)
 build/asan/formtest: $(FT_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
@@ -860,7 +873,8 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/dctest build/asan/pentest binary/EWEB.FNT
+		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
+		build/asan/dctest build/asan/pentest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
@@ -876,6 +890,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/alpha.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT

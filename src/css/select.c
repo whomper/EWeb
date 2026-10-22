@@ -719,7 +719,8 @@ static void apply(cascade *k, const ec_decl *d)
 			(p == EP_LINE_HEIGHT && d->kind == EK_PCT) ||
 			(p == EP_COLOR && d->kind == EK_CURCOLOR) ||
 			(d->kind == EK_PTR && (p == EP_GRID_TEMPLATE_COLUMNS || p == EP_GRID_TEMPLATE_ROWS ||
-			 p == EP_GRID_AUTO_COLUMNS || p == EP_GRID_AUTO_ROWS) && ((const ec_tracks *) d->v.p)->rel))
+			 p == EP_GRID_AUTO_COLUMNS || p == EP_GRID_AUTO_ROWS) && ((const ec_tracks *) d->v.p)->rel) ||
+			(d->kind == EK_IMAGE && ((const ec_grad *) d->v.p)->nrel))
 		k->todo[k->ntodo++] = p;
 }
 
@@ -747,15 +748,35 @@ static void take(cascade *k, const ec_decl *d)
 	apply(k, d);
 }
 
+/* a sum kept within 32 bits (1e9vw + 1e9px: no overflow) */
+static ec_fx fx_clamp(int64_t v)
+{
+	return v > INT32_MAX ? INT32_MAX : v < -INT32_MAX ? -INT32_MAX : (ec_fx) v;
+}
+
+/* v vw (or vh...) of a viewport d px wide: v * d / 100, kept within 32
+   bits (one of 512vw or more: its product in 64 bits, the division in
+   32, which is a loop on the 68000). Not inlined: rare, and the callers'
+   loops kept as they were */
+static __attribute__((noinline)) ec_fx vw_px(ec_fx v, int32_t d)
+{
+	if (v < (1L << 19) && v > -(1L << 19) && d < 4096)
+		return v * d / 100;
+	return fx_clamp((int64_t) (v / 100) * d + (v % 100) * d / 100);
+}
+
 /* one calc() operand in px, its percentage left out */
 static ec_fx calc_px(const ec_ctx *c, const ec_fx *u, ec_fx fs, ec_fx rfs)
 {
 	int32_t w = c->media.width, h = c->media.height;
 
-	return u[CU_PX] + fx_mul(u[CU_EM], fs) + fx_mul(fx_mul(u[CU_EX], fs), 614) +
-		fx_mul(fx_mul(u[CU_CH], fs), 410) + fx_mul(u[CU_REM], rfs) +
-		u[CU_VW] * w / 100 + u[CU_VH] * h / 100 +
-		u[CU_VMIN] * (w < h ? w : h) / 100 + u[CU_VMAX] * (w > h ? w : h) / 100;
+	int64_t s = (int64_t) u[CU_PX] + fx_mul(u[CU_EM], fs) + fx_mul(fx_mul(u[CU_EX], fs), 614) +
+		    fx_mul(fx_mul(u[CU_CH], fs), 410) + fx_mul(u[CU_REM], rfs);
+
+	if (u[CU_VW] | u[CU_VH] | u[CU_VMIN] | u[CU_VMAX])
+		s += (int64_t) vw_px(u[CU_VW], w) + vw_px(u[CU_VH], h) + vw_px(u[CU_VMIN], w < h ? w : h) +
+		     vw_px(u[CU_VMAX], w > h ? w : h);
+	return fx_clamp(s);
 }
 
 /* min(), max() or clamp() of operands in px */
@@ -792,10 +813,10 @@ static void compute_length(cascade *k, int p, ec_fx fs)
 	case EK_EX: v = fx_mul(fx_mul(v, fs), 614); break;
 	case EK_CH: v = fx_mul(fx_mul(v, fs), 410); break;
 	case EK_REM: v = fx_mul(v, rfs); break;
-	case EK_VW: v = v * w / 100; break;
-	case EK_VH: v = v * h / 100; break;
-	case EK_VMIN: v = v * (w < h ? w : h) / 100; break;
-	case EK_VMAX: v = v * (w > h ? w : h) / 100; break;
+	case EK_VW: v = vw_px(v, w); break;
+	case EK_VH: v = vw_px(v, h); break;
+	case EK_VMIN: v = vw_px(v, w < h ? w : h); break;
+	case EK_VMAX: v = vw_px(v, w > h ? w : h); break;
 	case EK_CALCX: {
 		const ec_calcx *x = st->v[p].p;
 		ec_calc *r;
@@ -848,15 +869,44 @@ static void compute_tracks(cascade *k, int p, ec_fx fs)
 			case EK_EX: z->v = fx_mul(fx_mul(z->v, fs), 614); break;
 			case EK_CH: z->v = fx_mul(fx_mul(z->v, fs), 410); break;
 			case EK_REM: z->v = fx_mul(z->v, rfs); break;
-			case EK_VW: z->v = z->v * w / 100; break;
-			case EK_VH: z->v = z->v * h / 100; break;
-			case EK_VMIN: z->v = z->v * (w < h ? w : h) / 100; break;
-			case EK_VMAX: z->v = z->v * (w > h ? w : h) / 100; break;
+			case EK_VW: z->v = vw_px(z->v, w); break;
+			case EK_VH: z->v = vw_px(z->v, h); break;
+			case EK_VMIN: z->v = vw_px(z->v, w < h ? w : h); break;
+			case EK_VMAX: z->v = vw_px(z->v, w > h ? w : h); break;
 			default: break;
 			}
 			z->rel = 0;
 		}
 	r->rel = 0;
+	k->st->v[p].p = r;
+}
+
+/* a gradient's lengths in em, rem, vw... made px: a copy, for this style */
+static void compute_grad(cascade *k, int p, ec_fx fs)
+{
+	ec_ctx *c = k->c;
+	const ec_grad *g = k->st->v[p].p;
+	size_t size = sizeof *g + g->n * sizeof g->s[0];
+	ec_grad *r = ec_alloc(&c->smem, size);
+	ec_fx u[CU_N];
+	int i;
+
+	if (r == NULL)
+		return;
+	memcpy(r, g, size);
+	memset(u, 0, sizeof u);
+	for (i = 0; i < g->nrel; i++) {
+		const ec_grel *e = &g->rel[i];
+		ec_glen *l = e->at < g->n ? &r->s[e->at].at : e->at == EC_GL_X(g) ? &r->x :
+			     e->at == EC_GL_Y(g) ? &r->y : e->at == EC_GL_RX(g) ? &r->rx : &r->ry;
+		u[e->unit] = e->v;
+		l->px = fx_clamp((int64_t) l->px + calc_px(c, u, fs, root_font(c)));
+		u[e->unit] = 0;
+	}
+	if (r->extent == EC_EXT_LENGTH && r->circle)
+		r->ry = r->rx;
+	r->rel = NULL;
+	r->nrel = 0;
 	k->st->v[p].p = r;
 }
 
@@ -917,8 +967,8 @@ static void compute(cascade *k)
 			ec_fx px[3];
 			int a;
 			for (a = 0; a < x->n; a++)
-				px[a] = calc_px(c, x->c[a], pfs, root_font(c)) +
-					fx_mul(x->c[a][CU_PCT], pfs) / 100;
+				px[a] = fx_clamp((int64_t) calc_px(c, x->c[a], pfs, root_font(c)) +
+						 fx_mul(x->c[a][CU_PCT], pfs) / 100);
 			v = calc_fold(x->op, px, x->n);
 			break;
 		}
@@ -957,6 +1007,10 @@ static void compute(cascade *k)
 		case EP_GRID_AUTO_COLUMNS: case EP_GRID_AUTO_ROWS:
 			if (st->k[p] == EK_PTR)
 				compute_tracks(k, p, fs);
+			continue;
+		case EP_BACKGROUND_IMAGE: case EP_LIST_STYLE_IMAGE:
+			if (st->k[p] == EK_IMAGE)
+				compute_grad(k, p, fs);
 			continue;
 		case EP_LINE_HEIGHT:
 			if (st->k[p] == EK_PCT) {

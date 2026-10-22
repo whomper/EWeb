@@ -327,8 +327,41 @@ static uint32_t text_paint(const ec_style *s, uint32_t clip)
 	return color(s, EP_TEXT_SHADOW);
 }
 
+/* a gradient's first colour that shows (its alpha not 0), 0: none */
+static uint32_t grad_first(const ec_grad *g, uint32_t cur)
+{
+	int i;
+	for (i = 0; i < g->n; i++) {
+		uint32_t c = g->s[i].flags & EC_GS_CUR ? cur : g->s[i].argb;
+		if (!(g->s[i].flags & EC_GS_HINT) && (c >> 24) != 0)
+			return c;
+	}
+	return 0;
+}
+
+uint32_t grad_average(const ec_grad *g, uint32_t cur)
+{
+	uint32_t a = 0, r = 0, gr = 0, b = 0, n = 0;
+	int i;
+	for (i = 0; i < g->n; i++) {
+		uint32_t c = g->s[i].flags & EC_GS_CUR ? cur : g->s[i].argb, ca = c >> 24;
+		if (g->s[i].flags & EC_GS_HINT)
+			continue;
+		a += ca;
+		r += (c >> 16 & 255) * ca;
+		gr += (c >> 8 & 255) * ca;
+		b += (c & 255) * ca;
+		n++;
+	}
+	if (a == 0)
+		return 0;
+	return (a + n / 2) / n << 24 | (r + a / 2) / a << 16 | (gr + a / 2) / a << 8 | (b + a / 2) / a;
+}
+
 /* background-clip: text: the colour its text is drawn in, in place of
-   the background: the gradient's first colour that shows, else the
+   the background: the gradient's first colour that shows (the glyphs
+   aren't drawn through the gradient, and its first colour reads where
+   an average with a transparent stop would be faint), else the
    background colour, else (a picture, a gradient of no colour, or none:
    most often a gradient EWeb couldn't compute, as Tailwind 4's, made
    of custom properties only @property starts) the text's own colour,
@@ -338,8 +371,9 @@ static uint32_t clip_paint(const ec_style *s)
 	uint32_t c;
 	if (kw(s, EP_BACKGROUND_CLIP) != KW_TEXT)
 		return 0;
-	if (s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE && s->v[EP_BACKGROUND_IMAGE].p != NULL)
-		return *(const uint32_t *) s->v[EP_BACKGROUND_IMAGE].p;
+	if (s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE &&
+	    (c = grad_first(s->v[EP_BACKGROUND_IMAGE].p, color(s, EP_COLOR))) != 0)
+		return c;
 	if (((c = color(s, EP_BACKGROUND_COLOR)) >> 24) != 0)
 		return c;
 	return 0xff000000 | color(s, EP_COLOR);
@@ -1336,6 +1370,10 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 			r->deco |= DLF_STRIKE;
 	}
 	bg = color(st, EP_BACKGROUND_COLOR);
+	if (parent != NULL && st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE)
+		/* an inline's gradient: its colours' average over its colour
+		   (a run is one fill) */
+		bg = over(grad_average(st->v[EP_BACKGROUND_IMAGE].p, color(st, EP_COLOR)), bg);
 	if (parent != NULL && (bg >> 24) != 0 && kw(st, EP_BACKGROUND_CLIP) != KW_TEXT)
 		r->bg = over(fade(bg, r->alpha), r->bg);	/* one fill for both, as solid as they are together */
 	va = kw(st, EP_VERTICAL_ALIGN);
@@ -1808,15 +1846,60 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 #endif
 }
 
-/* a background picture (the first layer's url()): its item, here in
-   the painting order, with the picture's size in CSS px in x and y until
-   bg_place puts it where the box is; -1: none */
+/* a CSS length of a gradient (22.10 px) in device px, 22.10 */
+static ec_fx dev_fx(L *l, ec_fx v)
+{
+	return (ec_fx) ((int64_t) v * l->zoom >> 10);
+}
+
+/* a gradient as the canvas draws it: its lengths in device px,
+   currentcolor the element's colour; NULL when out of memory */
+static const ec_grad *grad_dev(L *l, const ec_style *s, const ec_grad *g)
+{
+	ec_grad *r = amalloc(l->a, sizeof *r + g->n * sizeof r->s[0]);
+	uint32_t cur = color(s, EP_COLOR);
+	int i;
+	if (r == NULL) {
+		l->fail = 1;
+		return NULL;
+	}
+	memcpy(r, g, sizeof *r + g->n * sizeof r->s[0]);
+	r->x.px = dev_fx(l, g->x.px);
+	r->y.px = dev_fx(l, g->y.px);
+	r->rx.px = dev_fx(l, g->rx.px);
+	r->ry.px = dev_fx(l, g->ry.px);
+	for (i = 0; i < g->n; i++) {
+		if (g->s[i].flags & EC_GS_CUR)
+			r->s[i].argb = cur;
+		if (g->type != EC_GRAD_CONIC)
+			r->s[i].at.px = dev_fx(l, g->s[i].at.px);
+	}
+	return r;
+}
+
+/* a background picture (the first layer's url()) or gradient: its item,
+   here in the painting order, with the picture's size in CSS px in x and
+   y (a gradient's 0 x 0: none of its own) until bg_place puts it where
+   the box is; -1: none */
 static long bg_item(L *l, const ec_style *s, dnode *n)
 {
 	const ec_str *u;
 	void *h;
 	int32_t iw = 0, ih = 0;
 	dl_item *d;
+	if (s != NULL && s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
+		const ec_grad *g = grad_dev(l, s, s->v[EP_BACKGROUND_IMAGE].p);
+		if (g == NULL || (d = dl_add(l)) == NULL)
+			return -1;
+		d->type = DL_GRAD;
+		d->img = (void *) g;
+		d->rgb = (uint32_t) l->alpha << 24;	/* its box's opacity */
+		d->flags = DLF_TILE;
+#ifndef EW_ST
+		d->node = n;
+#endif
+		return l->p->nitems - 1;
+	}
 	if (s == NULL || s->k[EP_BACKGROUND_IMAGE] != EK_PTR || l->p->opt.image == NULL)
 		return -1;
 	u = s->v[EP_BACKGROUND_IMAGE].p;
@@ -1840,30 +1923,34 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	return l->p->nitems - 1;
 }
 
-/* the background picture at item i over a box's border box (x, y, w, h),
-   by its background-size, -position and -repeat; its file not come yet:
+/* the background picture or gradient at item i over a box's border box
+   (x, y, w, h), by its background-size, -position and -repeat, drawn
+   short of it by the insets in (left, top, right, bottom: the box
+   background-clip names) or NULL; a picture whose file hasn't come yet:
    over the box, nothing drawn, and the page laid out again when it has */
 static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int32_t w, int32_t h,
-		     int32_t bl, int32_t bt, int32_t br, int32_t bb)
+		     int32_t bl, int32_t bt, int32_t br, int32_t bb, const int32_t *in)
 {
 	dl_item *d;
 	dl_tile *t;
-	int32_t iw, ih, pw = w - bl - br, ph = h - bt - bb, tw, th, ox, oy, x1, y1;
-	int rep, sw;
+	int32_t iw, ih, pw = w - bl - br, ph = h - bt - bb, ph0 = ph, tw, th, ox, oy, x1, y1;
+	int rep, sw, grad, grow = 0;
 	if (i < 0 || l->fail)
 		return;
 	d = &l->p->items[i];
+	grad = d->type == DL_GRAD;
 	iw = d->x;
 	ih = d->y;
 	d->x = x;
 	d->y = y;
 	d->w = w > 0 ? w : 0;
 	d->h = h > 0 ? h : 0;
-	if (iw <= 0 || ih <= 0)
+	if (!grad && (iw <= 0 || ih <= 0))
 		return;
-	d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
-	if (w <= 0 || h <= 0)
-		return;
+	if (!grad)
+		d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
+	if (w <= 0 || (h <= 0 && !grad))
+		return;		/* (a gradient of no height yet may grow with its box) */
 	if (pw <= 0)
 		pw = 1;
 	if (ph <= 0)
@@ -1875,7 +1962,19 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	if (ih <= 0)
 		ih = 1;
 	sw = s->k[EP_BACKGROUND_SIZE_W] == EK_KW ? s->v[EP_BACKGROUND_SIZE_W].i : 0;
-	if (sw == KW_COVER || sw == KW_CONTAIN) {
+	if (grad) {
+		/* no size of its own: the area's, in each way the size doesn't
+		   give (CSS Images 3, 5.3, the default sizing algorithm; cover
+		   and contain alike) */
+		tw = sw == KW_COVER || sw == KW_CONTAIN ? AUTO : len(l, s, EP_BACKGROUND_SIZE_W, pw);
+		th = sw == KW_COVER || sw == KW_CONTAIN ? AUTO : len(l, s, EP_BACKGROUND_SIZE_H, ph);
+		if (tw == AUTO)
+			tw = pw;
+		if (th == AUTO) {
+			th = ph0 > 0 ? ph0 : 0;
+			grow = 1;
+		}
+	} else if (sw == KW_COVER || sw == KW_CONTAIN) {
 		/* as large as covers the area, or as fits in it */
 		int wide = (int64_t) pw * ih > (int64_t) ph * iw;
 		if (wide == (sw == KW_COVER)) {
@@ -1899,7 +1998,7 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	}
 	if (tw < 1)
 		tw = 1;
-	if (th < 1)
+	if (th < 1 && !grow)
 		th = 1;
 	/* in the padding box: a percentage is of the room the tile leaves */
 	ox = x + bl + len0(l, s, EP_BACKGROUND_POSITION_X, pw - tw);
@@ -1914,9 +2013,17 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 	t->ry = (uint8_t) (rep != KW_NO_REPEAT && rep != KW_REPEAT_X);
 	t->w = tw;
 	t->h = th;
-	/* drawn in the border box, and only where the tiles are */
+	t->grow = (uint8_t) grow;
+	/* drawn in the border box (or the box it is clipped to), and only
+	   where the tiles are */
 	x1 = x + w;
 	y1 = y + h;
+	if (in != NULL) {
+		x += in[0];
+		y += in[1];
+		x1 -= in[2];
+		y1 -= in[3];
+	}
 	if (!t->rx) {
 		if (ox > x)
 			x = ox;
@@ -1929,8 +2036,10 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 		if (oy + th < y1)
 			y1 = oy + th;
 	}
-	if (x1 <= x || y1 <= y)
+	if (x1 <= x || (y1 <= y && !grow))
 		return;
+	if (y1 < y)
+		y1 = y;
 	d->x = x;
 	d->y = y;
 	d->w = x1 - x;
@@ -2578,6 +2687,15 @@ static void fit_columns(int32_t *cols, const int32_t *mins, int n, int32_t w, in
 		cols[n - 1] += w - given;
 }
 
+/* a background item made dh taller: a gradient as tall as its box with
+   it */
+static void taller(dl_item *d, int32_t dh)
+{
+	d->h += dh;
+	if (d->type == DL_GRAD && d->tile != NULL && d->tile->grow)
+		((dl_tile *) d->tile)->h += dh;
+}
+
 /* a block's background and borders (as layout_block left them in
    last_bg, last_bd) made dh taller */
 static void stretch(L *l, long bg, const long *bd, int32_t dh)
@@ -2586,9 +2704,9 @@ static void stretch(L *l, long bg, const long *bd, int32_t dh)
 	if (dh <= 0)
 		return;
 	if (bg >= 0) {
-		it[bg].h += dh;
+		taller(&it[bg], dh);
 		if (it[bg].type == DL_FILL && (it[bg].flags & DLF_TILE))
-			it[bg + 1].h += dh;	/* its picture */
+			taller(&it[bg + 1], dh);	/* its picture or gradient */
 	}
 	if (bd[1] >= 0)
 		it[bd[1]].y += dh;
@@ -4030,6 +4148,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	unsigned saved_alpha = l->alpha;
 	uint32_t saved_clip = l->clip;
 	int32_t bg_top = 0, bg_bottom = 0;	/* the background colour's fill short of the border box */
+	int32_t in_l = 0, in_r = 0;
 
 	if (l->fail)
 		return 0;
@@ -4183,9 +4302,9 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			if (cp != 0)
 				l->clip = cp;
 		} else {
-			/* its colour to the edge of the box background-clip says
-			   (CSS Backgrounds 3, 3.7); not where the canvas has it */
-			int32_t in_l = 0, in_r = 0;
+			/* its colour, picture or gradient to the edge of the box
+			   background-clip says (CSS Backgrounds 3, 3.7); the colour
+			   not where the canvas has it */
 			if (clip == KW_PADDING_BOX || clip == KW_CONTENT_BOX) {
 				in_l = bl;
 				in_r = br;
@@ -4334,7 +4453,15 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			ch = mx;
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
-		bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb);
+		{
+			int32_t in[4];
+			in[0] = in_l;
+			in[1] = bg_top;
+			in[2] = in_r;
+			in[3] = bg_bottom;
+			bg_place(l, bgp, s, x + ml, y + mt, bl + pl + w + pr + br, bt + pt + ch + pb + bb, bl, bt, br, bb,
+				 in);
+		}
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
 			bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
@@ -4455,6 +4582,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->opt = *o;
 	p->width = o->width;
 	p->bg = 0xffffff;
+	p->cbg = -1;
 	l.alpha = 255;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
 	l.text = o->text > 0 ? o->text : 1024;
@@ -4469,7 +4597,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	   Backgrounds 3, The Canvas Background, leaves it to them) */
 	{
 		uint32_t hb = color(html->e.style, EP_BACKGROUND_COLOR);
-		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR) {
+		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR ||
+		    html->e.style->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
 			if ((hb >> 24) != 0) {
 				p->bg = over(hb, 0xffffffff) & 0xffffff;
 				l.bg_taken = html;	/* painted once, there */
@@ -4496,7 +4625,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		fixup(&l, root);
 		p->height = layout_block(&l, root, 0, 0, o->width, 0, &mb, &fb);
 		bg_place(&l, cbg, l.canvas_bg != NULL ? l.canvas_bg->e.style : NULL, 0, 0, o->width,
-			 p->height, 0, 0, 0, 0);
+			 p->height, 0, 0, 0, 0, NULL);
+		p->cbg = cbg;
 	}
 	free(l.it);
 	free(l.fl);

@@ -72,7 +72,67 @@ typedef struct lin {
 	int isnum;
 } lin;
 
+static int unit_is(const ec_tok *t, const char *u)
+{
+	uint16_t k;
+
+	for (k = 0; k < t->ulen; k++)
+		if (u[k] == 0 || (t->u[k] | 32) != u[k])
+			return 0;
+	return u[k] == 0;
+}
+
+/* a dimension that is an angle (CSS Values 4: deg, grad, rad, turn), in
+   degrees (22.10), in 32 bits: more than 5000 turns only where in the
+   turn they end, more than 30000 rad as 30000 */
+static int angle_unit(const ec_tok *t, ec_fx *deg)
+{
+	ec_fx n = t->num;
+
+	if (unit_is(t, "deg"))
+		*deg = n;
+	else if (unit_is(t, "turn"))
+		*deg = (n > EC_FX(5000) || n < -EC_FX(5000) ? n % 1024 : n) * 360;
+	else if (unit_is(t, "rad"))
+		*deg = fx_mul(n > EC_FX(30000) ? EC_FX(30000) : n < -EC_FX(30000) ? -EC_FX(30000) : n, 58671);
+	else if (unit_is(t, "grad"))
+		*deg = n - n / 10;
+	else
+		return 0;
+	return 1;
+}
+
+/* a + b (or a - b), kept within 32 bits (calc() of huge values: no
+   overflow) */
+static ec_fx fx_sum(ec_fx a, ec_fx b, int neg)
+{
+	if (neg)
+		b = b < -INT32_MAX ? INT32_MAX : -b;
+	if (b > 0 ? a > INT32_MAX - b : a < -INT32_MAX - b)
+		return b > 0 ? INT32_MAX : -INT32_MAX;
+	return a + b;
+}
+
+/* an angle's degrees and a percentage of a turn's, together */
+static ec_fx turn_pct(ec_fx deg, ec_fx pct)
+{
+	pct = pct > (1 << 26) ? 1 << 26 : pct < -(1 << 26) ? -(1 << 26) : pct;
+	return fx_sum(deg, pct * 18 / 5, 0);
+}
+
+/* what calc() is of: 0 lengths and numbers; 1 angles (in degrees, as
+   CU_PX), 2 angles and percentages (of a turn: a conic gradient's) */
+static int calc_ang;
+/* min(), max() and clamp() taken inside calc() (a gradient's), and one
+   of lengths of more than one unit met there (its value lost: the
+   gradient is drawn as its average); the ST edition works none of them
+   out (600 bytes): each one's value is lost */
+static int calc_nested, calc_lost;
+
 static int calc_sum(const ec_tok *t, int n, int *i, lin *r, int depth);
+#ifndef EW_ST
+static int calc_fn(const ec_tok *t, int n, int *i, lin *r, int depth);
+#endif
 
 static int calc_unit(const ec_tok *t, int n, int *i, lin *r, int depth)
 {
@@ -90,10 +150,18 @@ static int calc_unit(const ec_tok *t, int n, int *i, lin *r, int depth)
 		(*i)++;
 		return 1;
 	case T_PCT:
+		if (calc_ang == 1)
+			return 0;
 		r->c[CU_PCT] = k->num;
 		(*i)++;
 		return 1;
 	case T_DIM:
+		if (calc_ang) {
+			if (!angle_unit(k, &r->c[CU_PX]))
+				return 0;
+			(*i)++;
+			return 1;
+		}
 		if (!unit_of(k, &u))
 			return 0;
 		if (u < 0)
@@ -104,10 +172,25 @@ static int calc_unit(const ec_tok *t, int n, int *i, lin *r, int depth)
 		return 1;
 	case T_LPAREN:
 	case T_FUNC:
-		if (k->type == T_FUNC && !ec_tok_is(k, "calc"))
-			return 0;
 		if (depth > 16)
 			return 0;
+#ifndef EW_ST
+		if (k->type == T_FUNC && !ec_tok_is(k, "calc"))
+			return calc_nested && calc_fn(t, n, i, r, depth);
+#else
+		if (k->type == T_FUNC && !ec_tok_is(k, "calc")) {
+			/* (min(), max() or clamp() in a gradient's: its value lost,
+			   the gradient its average and the colour with it kept, as
+			   EWEB.PRG has one of more units) */
+			int end = block_end(t, n, *i);
+			if (!calc_nested || end < 0 ||
+			    !(ec_tok_is(k, "min") || ec_tok_is(k, "max") || ec_tok_is(k, "clamp")))
+				return 0;
+			*i = end;
+			calc_lost = 1;
+			return 1;
+		}
+#endif
 		(*i)++;
 		if (!calc_sum(t, n, i, r, depth + 1))
 			return 0;
@@ -133,8 +216,8 @@ static void lin_scale(lin *r, ec_fx f, int divide)
 	int u;
 
 	for (u = 0; u < CU_N; u++)
-		r->c[u] = divide ? (ec_fx) (((int64_t) r->c[u] << 10) / f) : fx_mul(r->c[u], f);
-	r->num = divide ? (ec_fx) (((int64_t) r->num << 10) / f) : fx_mul(r->num, f);
+		r->c[u] = divide ? (ec_fx) ((int64_t) r->c[u] * 1024 / f) : fx_mul(r->c[u], f);
+	r->num = divide ? (ec_fx) ((int64_t) r->num * 1024 / f) : fx_mul(r->num, f);
 }
 
 static int calc_product(const ec_tok *t, int n, int *i, lin *r, int depth)
@@ -178,19 +261,96 @@ static int calc_sum(const ec_tok *t, int n, int *i, lin *r, int depth)
 		if (b.isnum != r->isnum)
 			return 0;
 		for (u = 0; u < CU_N; u++)
-			r->c[u] += neg ? -b.c[u] : b.c[u];
-		r->num += neg ? -b.num : b.num;
+			r->c[u] = fx_sum(r->c[u], b.c[u], neg);
+		r->num = fx_sum(r->num, b.num, neg);
 	}
 	return 1;
 }
 
-/* calc(), min(), max() or clamp() of lengths at t[*i]: into an ec_calcx,
- * or a plain length when that is all it is */
-static int calc_value(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec_decl *d,
-		int number)
+#ifndef EW_ST
+/* min(), max() or clamp() at t[*i] inside calc() (calc_nested): worked
+   out when its arguments are numbers, angles, or lengths of one unit
+   (each unit's size is 0 or more: their order is their numbers'); of
+   lengths of more, 0 and calc_lost */
+static int calc_fn(const ec_tok *t, int n, int *i, lin *r, int depth)
 {
 	const ec_tok *f = &t[*i];
-	int op, end = block_end(t, n, *i), j = *i + 1, na = 0, u, maxa;
+	int op, end = block_end(t, n, *i), j = *i + 1, na = 0, k, u, unit = -1;
+	ec_fx v[3], x;
+	lin a[3];
+
+	if (end < 0)
+		return 0;
+	if (ec_tok_is(f, "min"))
+		op = EC_CALC_MIN;
+	else if (ec_tok_is(f, "max"))
+		op = EC_CALC_MAX;
+	else if (ec_tok_is(f, "clamp"))
+		op = EC_CALC_CLAMP;
+	else
+		return 0;
+	for (;;) {
+		if (na == 3 || !calc_sum(t, end - 1, &j, &a[na], depth + 1) || a[na].isnum != a[0].isnum)
+			return 0;
+		na++;
+		if (j < end - 1 && t[j].type == T_COMMA) {
+			j++;
+			continue;
+		}
+		break;
+	}
+	if (j != end - 1 || (op == EC_CALC_CLAMP && na != 3))
+		return 0;
+	*i = end;
+	memset(r, 0, sizeof *r);
+	r->isnum = a[0].isnum;
+	for (k = 0; k < na; k++) {
+		if (a[k].isnum || calc_ang) {
+			v[k] = a[k].isnum ? a[k].num : turn_pct(a[k].c[CU_PX], a[k].c[CU_PCT]);
+			unit = CU_PX;
+			continue;
+		}
+		v[k] = 0;
+		for (u = 0; u < CU_N; u++)
+			if (a[k].c[u] != 0) {
+				if (unit >= 0 && u != unit) {
+					calc_lost = 1;
+					return 1;
+				}
+				unit = u;
+				v[k] = a[k].c[u];
+			}
+	}
+	x = v[0];
+	if (op == EC_CALC_CLAMP) {
+		x = v[1] < v[2] ? v[1] : v[2];
+		if (x < v[0])
+			x = v[0];
+	} else {
+		for (k = 1; k < na; k++)
+			if (op == EC_CALC_MIN ? v[k] < x : v[k] > x)
+				x = v[k];
+	}
+	if (r->isnum)
+		r->num = x;
+	else if (unit >= 0)
+		r->c[unit] = x;
+	return 1;
+}
+#endif
+
+/* what calc_value() reads: lengths, a number, an angle, or an angle or
+   a percentage of a turn */
+enum { CV_LEN, CV_NUM, CV_ANG, CV_ANGPCT };
+
+/* calc(), min(), max() or clamp() at t[*i]: of lengths (CV_LEN) into an
+ * ec_calcx, or a plain length when that is all it is; of numbers or
+ * angles worked out now, EK_NUM (an angle in degrees) */
+static int calc_value(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec_decl *d,
+		int what)
+{
+	const ec_tok *f = &t[*i];
+	int op, end = block_end(t, n, *i), j = *i + 1, na = 0, u, maxa, ok;
 	lin a[3];
 	ec_calcx *x;
 
@@ -206,11 +366,11 @@ static int calc_value(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec
 		op = EC_CALC_CLAMP, maxa = 3;
 	else
 		return 0;
+	calc_ang = what == CV_ANG ? 1 : what == CV_ANGPCT ? 2 : 0;
 	for (;;) {
-		if (na == maxa || !calc_sum(t, end - 1, &j, &a[na], 0))
-			return 0;
-		if (a[na].isnum != number)
-			return 0;
+		ok = na < maxa && calc_sum(t, end - 1, &j, &a[na], 0) && a[na].isnum == (what == CV_NUM);
+		if (!ok)
+			break;
 		na++;
 		if (j < end - 1 && t[j].type == T_COMMA) {
 			j++;
@@ -218,24 +378,28 @@ static int calc_value(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec
 		}
 		break;
 	}
-	if (j != end - 1 || (op == EC_CALC_CLAMP && na != 3))
+	calc_ang = 0;
+	if (!ok || j != end - 1 || (op == EC_CALC_CLAMP && na != 3))
 		return 0;
 	*i = end;
-	if (number) {
-		/* a number: min, max and clamp can be done now */
-		ec_fx v = a[0].num;
+	if (what != CV_LEN) {
+		/* a number or an angle: min, max and clamp can be done now */
+		ec_fx v[3], r;
+		int k;
+		for (k = 0; k < na; k++)
+			v[k] = what == CV_NUM ? a[k].num : turn_pct(a[k].c[CU_PX], a[k].c[CU_PCT]);
+		r = v[0];
 		if (op == EC_CALC_MIN || op == EC_CALC_MAX) {
-			int k;
 			for (k = 1; k < na; k++)
-				if (op == EC_CALC_MIN ? a[k].num < v : a[k].num > v)
-					v = a[k].num;
+				if (op == EC_CALC_MIN ? v[k] < r : v[k] > r)
+					r = v[k];
 		} else if (op == EC_CALC_CLAMP) {
-			v = a[1].num < a[2].num ? a[1].num : a[2].num;
-			if (v < a[0].num)
-				v = a[0].num;
+			r = v[1] < v[2] ? v[1] : v[2];
+			if (r < v[0])
+				r = v[0];
 		}
 		d->kind = EK_NUM;
-		d->v.i = v;
+		d->v.i = r;
 		return 1;
 	}
 	if (lf & LF_NOPCT)
@@ -315,7 +479,7 @@ static int length(ec_ctx *c, const ec_tok *t, int n, int *i, unsigned lf, ec_dec
 		return 0;
 	}
 	case T_FUNC:
-		return calc_value(c, t, n, i, lf, d, 0);
+		return calc_value(c, t, n, i, lf, d, CV_LEN);
 	default:
 		return 0;
 	}
@@ -331,7 +495,7 @@ static int number(ec_ctx *c, const ec_tok *t, int n, int *i, int nn, ec_decl *d)
 		(*i)++;
 		return 1;
 	}
-	if (t[*i].type == T_FUNC && calc_value(c, t, n, i, 0, d, 1))
+	if (t[*i].type == T_FUNC && calc_value(c, t, n, i, 0, d, CV_NUM))
 		return !nn || d->v.i >= 0;
 	return 0;
 }
@@ -576,29 +740,666 @@ static const ec_str *url_str(ec_ctx *c, const ec_tok *t)
 	return ec_str_new(&c->mem, s, len);
 }
 
-/* a gradient's first colour that shows (its alpha not 0), from its
-   arguments t[from..to): EWeb draws no gradients, but text the page
-   paints with one (background-clip: text) is drawn in it; 0: none */
-static uint32_t grad_colour(const ec_tok *t, int from, int to)
-{
-	int j = from;
+/* ------------------------------------------------------------ gradients */
 
-	while (j < to) {
-		uint32_t argb;
-		int used, cur;
-		if (t[j].type != T_COMMA && ec_parse_color(&t[j], to - j, &used, &argb, &cur)) {
-			if (!cur && (argb >> 24) != 0)
-				return argb;
-			j += used;
-		} else if (t[j].type == T_FUNC) {
-			int e = block_end(t, to, j);
-			j = e < 0 ? to : e;
+/* CSS Images 3 and 4: linear-, radial- and conic-gradient() and their
+   repeating- forms, kept as ec_grad: what the layout and the canvas
+   need to draw them; and the Compatibility Standard's
+   -webkit-linear-gradient() and -webkit-gradient(), kept as the same.
+   A gradient that is valid but whose stops EWeb can't place (a min() of
+   px and %, more stops than GRAD_MAX: none of the page set's has more
+   than 12) is kept as its colours, drawn as their average (approx) */
+#ifdef EW_ST
+#define GRAD_MAX 32
+#else
+#define GRAD_MAX 64
+#endif
+#define GRAD_REL GRAD_MAX
+/* the prelude's lengths' rel numbers until the stops are counted */
+#define GL_PRE 0xfc
+
+static int position(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *x, ec_decl *y);
+
+typedef struct gb {
+	ec_gstop s[GRAD_MAX];
+	ec_grel rel[GRAD_REL];
+	int n, nrel, approx;
+} gb;
+
+/* an angle at t[*j], in degrees (22.10): a dimension, or calc(), min(),
+   max() or clamp() of them (CSS Values 4, 10); a unitless 0 where zero
+   says, a percentage of a turn in calc() where pct does */
+static int angle(ec_ctx *c, const ec_tok *t, int e, int *j, int zero, int pct, ec_fx *deg)
+{
+	const ec_tok *k = &t[*j];
+	ec_decl d;
+
+	if (*j >= e)
+		return 0;
+	if (k->type == T_NUM && zero && k->num == 0) {
+		*deg = 0;
+		(*j)++;
+		return 1;
+	}
+	if (k->type == T_DIM) {
+		if (!angle_unit(k, deg))
+			return 0;
+		(*j)++;
+		return 1;
+	}
+	if (k->type != T_FUNC || !calc_value(c, t, e, j, 0, &d, pct ? CV_ANGPCT : CV_ANG))
+		return 0;
+	*deg = d.v.i;
+	return 1;
+}
+
+/* a direction, within a turn (the canvas's sums of it can't overflow) */
+static ec_fx turn_of(ec_fx deg)
+{
+	return deg % (360 * 1024);
+}
+
+/* a length's part in a relative unit, for the style to compute (more
+   than are kept: the gradient its average) */
+static void grel(gb *b, int at, int unit, ec_fx v)
+{
+	if (b->nrel == GRAD_REL) {
+		b->approx = 1;
+		return;
+	}
+	b->rel[b->nrel].at = (uint8_t) at;
+	b->rel[b->nrel].unit = (uint8_t) unit;
+	b->rel[b->nrel++].v = v;
+}
+
+/* a length or percentage as length() read it, as px + pct% and its
+   relative parts; min(), max() and clamp() worked out when their
+   arguments are of one unit (each unit's size is 0 or more, so their
+   order is their numbers'), and of more units the gradient its average
+   (in the ST edition any min(), max() or clamp(): 250 bytes less) */
+static void glen(gb *b, const ec_decl *d, int at, ec_glen *l)
+{
+	int u;
+
+	l->px = l->pct = 0;
+	switch (d->kind) {
+	case EK_PX:
+		l->px = d->v.i;
+		return;
+	case EK_PCT:
+		l->pct = d->v.i;
+		return;
+	case EK_CALCX: {
+		const ec_calcx *x = d->v.p;
+#ifndef EW_ST
+		ec_fx v[3] = { 0, 0, 0 }, r;
+		int k, unit = -1;
+#endif
+		if (x->op == EC_CALC_SUM) {
+			l->px = x->c[0][CU_PX];
+			l->pct = x->c[0][CU_PCT];
+			for (u = CU_EM; u < CU_N; u++)
+				if (x->c[0][u] != 0)
+					grel(b, at, u, x->c[0][u]);
+			return;
+		}
+#ifdef EW_ST
+		b->approx = 1;
+#else
+		for (k = 0; k < x->n && k < 3; k++)
+			for (u = 0; u < CU_N; u++)
+				if (x->c[k][u] != 0) {
+					if (unit >= 0 && u != unit) {
+						b->approx = 1;
+						return;
+					}
+					unit = u;
+					v[k] = x->c[k][u];
+				}
+		r = v[0];
+		if (x->op == EC_CALC_CLAMP && x->n == 3) {
+			r = v[1] < v[2] ? v[1] : v[2];
+			if (r < v[0])
+				r = v[0];
+		} else {
+			for (k = 1; k < x->n && k < 3; k++)
+				if (x->op == EC_CALC_MIN ? v[k] < r : v[k] > r)
+					r = v[k];
+		}
+		if (unit == CU_PCT)
+			l->pct = r;
+		else if (unit > CU_PCT)
+			grel(b, at, unit, r);
+		else
+			l->px = r;
+#endif
+		return;
+	}
+	default:
+		if (d->kind >= EK_EM && d->kind <= EK_VMAX)
+			grel(b, at, CU_EM + (d->kind - EK_EM), d->v.i);
+		return;
+	}
+}
+
+/* a percentage in it (a circle's size is a length only) */
+static int has_pct(const ec_decl *d)
+{
+	const ec_calcx *x;
+	int k;
+
+	if (d->kind == EK_PCT)
+		return 1;
+	if (d->kind != EK_CALCX)
+		return 0;
+	x = d->v.p;
+	for (k = 0; k < x->n; k++)
+		if (x->c[k][CU_PCT] != 0)
+			return 1;
+	return 0;
+}
+
+/* the end of the argument at t[j]: its comma, or e; -1 if broken */
+static int arg_end(const ec_tok *t, int j, int e)
+{
+	while (j < e && t[j].type != T_COMMA) {
+		if (t[j].type == T_FUNC || t[j].type == T_LPAREN) {
+			j = block_end(t, e, j);
+			if (j < 0)
+				return -1;
 		} else {
 			j++;
 		}
 	}
+	return j;
+}
+
+/* in <colour space> [<hue method> hue] (CSS Color 4, 12.1): read, and
+   drawn interpolated in sRGB all the same, as browsers do between
+   EWeb's colours (sRGB ones) when none is named */
+static int interp(const ec_tok *t, int e, int *j)
+{
+	static const char *const spaces[] = {
+		"srgb", "srgb-linear", "display-p3", "a98-rgb", "prophoto-rgb", "rec2020", "lab", "oklab",
+		"xyz", "xyz-d50", "xyz-d65", "hsl", "hwb", "lch", "oklch", NULL
+	};
+	int k = *j, s;
+
+	if (k + 1 >= e || t[k].type != T_IDENT || !ec_tok_is(&t[k], "in") || t[k + 1].type != T_IDENT)
+		return 0;
+	for (s = 0; spaces[s] != NULL && !ec_tok_is(&t[k + 1], spaces[s]); s++)
+		;
+	if (spaces[s] == NULL)
+		return 0;
+	k += 2;
+	if (s >= 11 && k + 1 < e && t[k].type == T_IDENT && t[k + 1].type == T_IDENT &&
+	    ec_tok_is(&t[k + 1], "hue") && (ec_tok_is(&t[k], "shorter") || ec_tok_is(&t[k], "longer") ||
+					      ec_tok_is(&t[k], "increasing") || ec_tok_is(&t[k], "decreasing")))
+		k += 2;
+	*j = k;
+	return 1;
+}
+
+static int extent_kw(const ec_tok *t)
+{
+	if (t->type != T_IDENT)
+		return 0;
+	if (ec_tok_is(t, "closest-side"))
+		return EC_EXT_CLOSEST_SIDE;
+	if (ec_tok_is(t, "closest-corner"))
+		return EC_EXT_CLOSEST_CORNER;
+	if (ec_tok_is(t, "farthest-side"))
+		return EC_EXT_FARTHEST_SIDE;
+	if (ec_tok_is(t, "farthest-corner"))
+		return EC_EXT_FARTHEST_CORNER;
 	return 0;
 }
+
+/* at <position>: the centre */
+static int at_pos(ec_ctx *c, gb *b, const ec_tok *t, int a, int *j, ec_glen *x, ec_glen *y)
+{
+	ec_decl px, py;
+
+	(*j)++;
+	if (!position(c, t, a, j, &px, &py))
+		return 0;
+	glen(b, &px, GL_PRE, x);
+	glen(b, &py, GL_PRE + 1, y);
+	return 1;
+}
+
+/* a side or a corner: one or two of left, right, top and bottom, as
+   EC_TO_* bits (0: none); legacy (-webkit-) names where it starts */
+static int sides(const ec_tok *t, int a, int *j, int legacy)
+{
+	int h = 0, v = 0;
+
+	for (; *j < a && t[*j].type == T_IDENT; (*j)++) {
+		int kw = ec_kw(&t[*j]);
+		if ((kw == KW_LEFT || kw == KW_RIGHT) && !h)
+			h = (kw == KW_LEFT) != legacy ? EC_TO_LEFT : EC_TO_RIGHT;
+		else if ((kw == KW_TOP || kw == KW_BOTTOM) && !v)
+			v = (kw == KW_TOP) != legacy ? EC_TO_TOP : EC_TO_BOTTOM;
+		else
+			break;	/* (in <colour space>, or not valid) */
+	}
+	return h | v;
+}
+
+/* the first argument when it isn't a colour stop: a linear gradient's
+   direction, a radial one's shape, size and centre, a conic one's
+   start and centre, and any's interpolation (CSS Images 4, 3.1-3.3);
+   legacy: -webkit-linear-gradient()'s, a side it starts from or an
+   angle from east, counter-clockwise (the Compatibility Standard) */
+static int prelude(ec_ctx *c, gb *b, ec_grad *g, const ec_tok *t, int j, int a, int legacy)
+{
+	int have_in = 0, have_at = 0, have = 0, shape = 0, nl = 0;
+	ec_fx deg;
+	ec_decl l[2];
+
+	while (j < a) {
+		const ec_tok *k = &t[j];
+		if (!have_in && !legacy && interp(t, a, &j)) {
+			have_in = 1;
+			continue;
+		}
+		if (have_at)
+			return 0;
+		if (g->type == EC_GRAD_LINEAR) {
+			if (have)
+				return 0;
+			if (k->type == T_IDENT && (legacy || ec_tok_is(k, "to"))) {
+				/* to a side or a corner */
+				if (!legacy)
+					j++;
+				if ((g->to = (uint8_t) sides(t, a, &j, legacy)) == 0)
+					return 0;
+			} else if (angle(c, t, a, &j, 1, 0, &deg)) {
+				g->angle = turn_of(legacy ? 90 * 1024 - turn_of(deg) : deg);
+			} else {
+				return 0;
+			}
+			have = 1;
+		} else if (k->type == T_IDENT && ec_tok_is(k, "at")) {
+			if (!at_pos(c, b, t, a, &j, &g->x, &g->y))
+				return 0;
+			have_at = 1;
+		} else if (g->type == EC_GRAD_CONIC) {
+			if (have || !(k->type == T_IDENT && ec_tok_is(k, "from")))
+				return 0;
+			j++;
+			if (!angle(c, t, a, &j, 1, 0, &deg))
+				return 0;
+			g->angle = turn_of(deg);
+			have = 1;
+		} else if (k->type == T_IDENT && !shape && (ec_tok_is(k, "circle") || ec_tok_is(k, "ellipse"))) {
+			shape = ec_tok_is(k, "circle") ? 1 : 2;
+			j++;
+		} else if (!g->extent && !nl && (g->extent = (uint8_t) extent_kw(k)) != 0) {
+			j++;
+		} else if (!g->extent && !nl && length(c, t, a, &j, LF_NN, &l[0])) {
+			/* its radius, or its two radii */
+			nl = 1;
+			if (j < a && length(c, t, a, &j, LF_NN, &l[1]))
+				nl = 2;
+		} else {
+			return 0;
+		}
+	}
+	if (g->type == EC_GRAD_RADIAL) {
+		/* a circle's size a length, an ellipse's two (CSS Images 3, 3.2.1) */
+		if (shape == 0)
+			shape = nl == 1 ? 1 : 2;
+		if ((shape == 1 && nl == 2) || (shape == 2 && nl == 1) || (nl == 1 && has_pct(&l[0])))
+			return 0;
+		if (nl) {
+			glen(b, &l[0], GL_PRE + 2, &g->rx);
+			if (nl == 2)
+				glen(b, &l[1], GL_PRE + 3, &g->ry);
+			else
+				g->ry = g->rx;
+		} else if (!g->extent) {
+			g->extent = EC_EXT_FARTHEST_CORNER;
+		}
+		g->circle = (uint8_t) (shape == 1);
+	}
+	return have_in || have_at || have || shape || nl || g->extent;
+}
+
+/* a stop's or a hint's position (stop at): a length or percentage of
+   the gradient line or ray; a conic gradient's an angle or a
+   percentage, kept as a percentage of the turn */
+static int stop_at(ec_ctx *c, gb *b, int conic, const ec_tok *t, int a, int *j, ec_glen *l, int at)
+{
+	ec_decl d;
+	ec_fx deg;
+
+	if (!conic) {
+		if (!length(c, t, a, j, 0, &d))
+			return 0;
+		glen(b, &d, at, l);
+		return 1;
+	}
+	l->px = 0;
+	if (t[*j].type == T_PCT) {
+		l->pct = t[*j].num;
+		(*j)++;
+		return 1;
+	}
+	if (!angle(c, t, a, j, 1, 1, &deg))
+		return 0;
+	l->pct = deg / 18 * 5 + deg % 18 * 5 / 18;
+	return 1;
+}
+
+/* the gradient h with b's stops into the sheet's memory, d's value */
+static int grad_keep(ec_ctx *c, const ec_grad *h, gb *b, ec_decl *d)
+{
+	ec_grad *g;
+	ec_grel *rel = NULL;
+	int k;
+
+	if (b->approx) {
+		/* its colours alone */
+		int n = 0;
+		for (k = 0; k < b->n; k++)
+			if (!(b->s[k].flags & EC_GS_HINT)) {
+				b->s[n] = b->s[k];
+				b->s[n].flags &= EC_GS_CUR;
+				b->s[n].at.px = b->s[n].at.pct = 0;
+				n++;
+			}
+		b->n = n;
+		b->nrel = 0;
+	}
+	g = ec_alloc(&c->mem, sizeof *g + b->n * sizeof g->s[0]);
+	if (b->nrel)
+		rel = ec_alloc(&c->mem, b->nrel * sizeof *rel);
+	if (g == NULL || (b->nrel && rel == NULL))
+		return 0;
+	*g = *h;
+	g->approx = (uint8_t) !!b->approx;
+	g->n = (uint8_t) b->n;
+	memcpy(g->s, b->s, b->n * sizeof g->s[0]);
+	for (k = 0; k < b->nrel; k++) {
+		rel[k] = b->rel[k];
+		if (rel[k].at >= GL_PRE)
+			rel[k].at = (uint8_t) (b->n + rel[k].at - GL_PRE);
+	}
+	g->rel = rel;
+	g->nrel = (uint8_t) b->nrel;
+	d->kind = EK_IMAGE;
+	d->v.p = g;
+	return 1;
+}
+
+/* a gradient function at t[*i], whose block ends at end */
+static int grad_fn(ec_ctx *c, const ec_tok *t, int *i, int end, ec_decl *d)
+{
+	static const struct {
+		const char *name;
+		uint8_t type, repeat, legacy;
+	} kinds[] = {
+		{ "linear-gradient", EC_GRAD_LINEAR, 0, 0 }, { "radial-gradient", EC_GRAD_RADIAL, 0, 0 },
+		{ "conic-gradient", EC_GRAD_CONIC, 0, 0 }, { "repeating-linear-gradient", EC_GRAD_LINEAR, 1, 0 },
+		{ "repeating-radial-gradient", EC_GRAD_RADIAL, 1, 0 }, { "repeating-conic-gradient", EC_GRAD_CONIC, 1, 0 },
+		{ "-webkit-linear-gradient", EC_GRAD_LINEAR, 0, 1 },
+		{ "-webkit-repeating-linear-gradient", EC_GRAD_LINEAR, 1, 1 }
+	};
+	ec_grad h;
+	gb b;
+	int j = *i + 1, e = end - 1, k, a, stops = 0, hint = 0, used, cur, nk = (int) (sizeof kinds / sizeof kinds[0]);
+	uint32_t argb;
+
+	for (k = 0; k < nk && !ec_tok_is(&t[*i], kinds[k].name); k++)
+		;
+	if (k == nk)
+		return 0;
+	memset(&h, 0, sizeof h);
+	h.type = kinds[k].type;
+	h.repeat = kinds[k].repeat;
+	h.angle = h.type == EC_GRAD_LINEAR ? EC_FX(180) : 0;	/* to bottom */
+	h.x.pct = h.y.pct = EC_FX(50);
+	b.n = b.nrel = b.approx = 0;
+	a = arg_end(t, j, e);
+	if (a <= j)
+		return 0;
+	if (!ec_parse_color(&t[j], a - j, &used, &argb, &cur)) {
+		if (!prelude(c, &b, &h, t, j, a, kinds[k].legacy) || a == e)
+			return 0;
+		j = a + 1;
+	} else if (h.type == EC_GRAD_RADIAL) {
+		h.extent = EC_EXT_FARTHEST_CORNER;
+	}
+	/* the stops: a colour and up to two positions, or a hint between
+	   two; more than GRAD_MAX read and left out (the gradient the
+	   average of those kept) */
+	while (j < e) {
+		ec_gstop s[2];
+		int ns = 1;
+		a = arg_end(t, j, e);
+		if (a <= j)
+			return 0;
+		memset(s, 0, sizeof s);
+		if (ec_parse_color(&t[j], a - j, &used, &argb, &cur)) {
+			j += used;
+			s[0].argb = cur ? 0 : argb;
+			s[0].flags = cur ? EC_GS_CUR : 0;
+			if (j < a) {
+				if (!stop_at(c, &b, h.type == EC_GRAD_CONIC, t, a, &j, &s[0].at, b.n))
+					return 0;
+				s[0].flags |= EC_GS_AT;
+				if (j < a) {
+					/* two positions: two stops of the colour */
+					s[1] = s[0];
+					ns = 2;
+					if (!stop_at(c, &b, h.type == EC_GRAD_CONIC, t, a, &j, &s[1].at, b.n + 1))
+						return 0;
+				}
+			}
+			stops++;
+			hint = 0;
+		} else {
+			if (!stops || hint || !stop_at(c, &b, h.type == EC_GRAD_CONIC, t, a, &j, &s[0].at, b.n))
+				return 0;
+			s[0].flags = EC_GS_AT | EC_GS_HINT;
+			hint = 1;
+		}
+		if (j != a)
+			return 0;
+		if (b.n + ns <= GRAD_MAX) {
+			memcpy(&b.s[b.n], s, ns * sizeof s[0]);
+			b.n += ns;
+		} else {
+			b.approx = 1;
+		}
+		j = a + 1;
+		if (a < e && j == e)
+			return 0;	/* a comma with nothing after it */
+	}
+	if (!stops || hint)
+		return 0;
+	if (calc_lost)
+		b.approx = 1;
+	if (!grad_keep(c, &h, &b, d))
+		return 0;
+	*i = end;
+	return 1;
+}
+
+/* (min(), max() and clamp() taken inside its calc()s) */
+static int gradient(ec_ctx *c, const ec_tok *t, int *i, int end, ec_decl *d)
+{
+	int r;
+
+	calc_nested = 1;
+	calc_lost = 0;
+	r = grad_fn(c, t, i, end, d);
+	calc_nested = calc_lost = 0;
+	return r;
+}
+
+#ifndef EW_ST
+/* (-webkit-gradient(), 2 KB of 68000 code, isn't the ST edition's: the
+   1 MB ST has no more to spare) */
+
+/* -webkit-gradient()'s point: x then y, each a number (px), a
+   percentage or a keyword */
+static int wk_point(const ec_tok *t, int e, int *j, ec_glen *x, ec_glen *y)
+{
+	int k, kw;
+
+	for (k = 0; k < 2; k++, (*j)++) {
+		const ec_tok *p = &t[*j];
+		ec_glen *l = k ? y : x;
+		l->px = l->pct = 0;
+		if (*j >= e)
+			return 0;
+		if (p->type == T_NUM)
+			l->px = p->num;
+		else if (p->type == T_PCT)
+			l->pct = p->num;
+		else if (p->type == T_IDENT && ((kw = ec_kw(p)) == KW_CENTER || kw == (k ? KW_TOP : KW_LEFT) ||
+						 kw == (k ? KW_BOTTOM : KW_RIGHT)))
+			l->pct = kw == KW_CENTER ? EC_FX(50) : kw == KW_LEFT || kw == KW_TOP ? 0 : EC_FX(100);
+		else
+			return 0;
+	}
+	return 1;
+}
+
+/* the sign of a length: 0 none, 1 more than none, -1 less, 2 either
+   (its px one way, its % the other) */
+static int glen_sign(const ec_glen *l)
+{
+	int a = l->px > 0 ? 1 : l->px < 0 ? -1 : 0, b = l->pct > 0 ? 1 : l->pct < 0 ? -1 : 0;
+	return !a ? b : !b || a == b ? a : 2;
+}
+
+/* -webkit-gradient(linear, <point>, <point>, <stop>...) or (radial,
+   <point>, <radius>, <point>, <radius>, <stop>...), WebKit's first
+   gradients (the Compatibility Standard): a linear one along a side,
+   as most are, kept as linear-gradient() to that side with its stops
+   (from(), to(), color-stop(), sorted by their places) placed on its
+   line; any other kept as its average */
+static int wk_gradient(ec_ctx *c, const ec_tok *t, int *i, int end, ec_decl *d)
+{
+	ec_grad h;
+	gb b;
+	ec_glen x[2], y[2], from, by;
+	ec_fx f[GRAD_MAX];
+	int j = *i + 1, e = end - 1, radial, k, way = 0;
+
+	memset(&h, 0, sizeof h);
+	from.px = from.pct = by.px = by.pct = 0;
+	b.n = b.nrel = b.approx = 0;
+	if (j >= e || t[j].type != T_IDENT)
+		return 0;
+	radial = ec_tok_is(&t[j], "radial");
+	if (!radial && !ec_tok_is(&t[j], "linear"))
+		return 0;
+	j++;
+	/* its points (and radii) */
+	for (k = 0; k < 2; k++) {
+		if (j >= e || t[j].type != T_COMMA)
+			return 0;
+		j++;
+		if (!wk_point(t, e, &j, &x[k], &y[k]))
+			return 0;
+		if (radial) {
+			if (j + 1 >= e || t[j].type != T_COMMA || t[j + 1].type != T_NUM || t[j + 1].num < 0)
+				return 0;
+			j += 2;
+		}
+	}
+	/* its stops */
+	while (j < e) {
+		const ec_tok *s;
+		ec_fx at;
+		int fe, used, cur;
+		uint32_t argb;
+		if (t[j].type != T_COMMA || j + 1 >= e || t[j + 1].type != T_FUNC)
+			return 0;
+		s = &t[++j];
+		fe = block_end(t, e, j);
+		if (fe < 0)
+			return 0;
+		j++;
+		if (ec_tok_is(s, "from") || ec_tok_is(s, "to")) {
+			at = ec_tok_is(s, "to") ? EC_FX(1) : 0;
+		} else if (ec_tok_is(s, "color-stop") && j + 1 < fe && (t[j].type == T_NUM || t[j].type == T_PCT) &&
+			   t[j + 1].type == T_COMMA) {
+			at = t[j].type == T_PCT ? t[j].num / 100 : t[j].num;
+			at = at < 0 ? 0 : at > EC_FX(1) ? EC_FX(1) : at;
+			j += 2;
+		} else {
+			return 0;
+		}
+		if (!ec_parse_color(&t[j], fe - 1 - j, &used, &argb, &cur) || j + used != fe - 1)
+			return 0;
+		j = fe;
+		if (b.n == GRAD_MAX) {
+			b.approx = 1;
+			continue;
+		}
+		/* in order of place, as WebKit sorts them */
+		for (k = b.n; k > 0 && f[k - 1] > at; k--) {
+			f[k] = f[k - 1];
+			b.s[k] = b.s[k - 1];
+		}
+		f[k] = at;
+		memset(&b.s[k], 0, sizeof b.s[k]);
+		b.s[k].argb = cur ? 0 : argb;
+		b.s[k].flags = cur ? EC_GS_CUR : 0;
+		b.n++;
+	}
+	h.type = radial ? EC_GRAD_RADIAL : EC_GRAD_LINEAR;
+	h.angle = EC_FX(180);
+	h.x.pct = h.y.pct = EC_FX(50);
+	h.extent = radial ? EC_EXT_FARTHEST_CORNER : 0;
+	if (!radial) {
+		/* down or up, across one way or the other: its line is the
+		   gradient line's part from one point to the other */
+		ec_glen dx, dy;
+		int sx, sy;
+		dx.px = fx_sum(x[1].px, x[0].px, 1);
+		dx.pct = fx_sum(x[1].pct, x[0].pct, 1);
+		dy.px = fx_sum(y[1].px, y[0].px, 1);
+		dy.pct = fx_sum(y[1].pct, y[0].pct, 1);
+		sx = glen_sign(&dx);
+		sy = glen_sign(&dy);
+		if (!sx && (sy == 1 || sy == -1)) {
+			way = sy > 0 ? EC_TO_BOTTOM : EC_TO_TOP;
+			from = y[0];
+			by = dy;
+		} else if (!sy && (sx == 1 || sx == -1)) {
+			way = sx > 0 ? EC_TO_RIGHT : EC_TO_LEFT;
+			from = x[0];
+			by = dx;
+		}
+	}
+	if (way) {
+		h.to = (uint8_t) way;
+		for (k = 0; k < b.n; k++) {
+			ec_glen *l = &b.s[k].at;
+			l->px = fx_sum(from.px, (ec_fx) ((int64_t) f[k] * by.px / 1024), 0);
+			l->pct = fx_sum(from.pct, (ec_fx) ((int64_t) f[k] * by.pct / 1024), 0);
+			if (way == EC_TO_TOP || way == EC_TO_LEFT) {
+				/* (from the other side) */
+				l->px = fx_sum(0, l->px, 1);
+				l->pct = fx_sum(EC_FX(100), l->pct, 1);
+			}
+			b.s[k].flags |= EC_GS_AT;
+		}
+	} else {
+		b.approx = 1;
+	}
+	if (!grad_keep(c, &h, &b, d))
+		return 0;
+	*i = end;
+	return 1;
+}
+#endif
 
 static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 {
@@ -630,18 +1431,11 @@ static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 		}
 		if (c->opts & EC_COMPAT_GRADIENT)
 			return 0;
-		if (ec_tok_is(k, "linear-gradient") || ec_tok_is(k, "radial-gradient") ||
-				ec_tok_is(k, "conic-gradient") || ec_tok_is(k, "repeating-linear-gradient") ||
-				ec_tok_is(k, "repeating-radial-gradient") ||
-				ec_tok_is(k, "repeating-conic-gradient")) {
-			uint32_t first = grad_colour(t, *i + 1, end - 1), *fp = NULL;
-			if (first != 0 && (fp = ec_alloc(&c->mem, sizeof *fp)) != NULL)
-				*fp = first;
-			d->kind = EK_IMAGE;
-			d->v.p = fp;
-			*i = end;
-			return 1;
-		}
+#ifndef EW_ST
+		if (ec_tok_is(k, "-webkit-gradient"))
+			return wk_gradient(c, t, i, end, d);
+#endif
+		return gradient(c, t, i, end, d);
 	}
 	return 0;
 }
@@ -2255,6 +3049,17 @@ int ec_parse_value(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *out, in
 	}
 	}
 	r = one(c, prop, t, n, &i, out);
+	if (r && prop == EP_BACKGROUND_IMAGE && !(c->opts & EC_COMPAT_LAYERS)) {
+		/* layers (CSS Backgrounds 3, 2.1): the first, the top one, is
+		   kept, as the background shorthand keeps it; the others are
+		   read, each an image */
+		ec_decl more;
+		while (i < n && t[i].type == T_COMMA) {
+			i++;
+			if (i >= n || !image(c, t, n, &i, &more))
+				return -1;
+		}
+	}
 	if (!r || i != n)
 		return -1;
 	return 1;

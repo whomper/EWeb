@@ -45,8 +45,7 @@ enum ec_kind {
 	EK_EM, EK_EX, EK_CH, EK_REM, EK_VW, EK_VH, EK_VMIN, EK_VMAX,
 	EK_CALCX,	/* v.p: a calc() not yet computed */
 	EK_VAR,		/* v.p: a value waiting for var() */
-	EK_IMAGE	/* a gradient: an image without a URL; v.p its first colour
-			   that shows (const uint32_t *, 0xAARRGGBB), or NULL */
+	EK_IMAGE	/* v.p: a gradient (ec_grad), an image without a URL */
 };
 
 /* text-decoration-line's bits */
@@ -102,6 +101,61 @@ typedef struct ec_tracks {
 	uint8_t rep, rel;		/* rel: some length not yet in px */
 	struct { ec_tsize mn, mx; } t[];
 } ec_tracks;
+
+/* a gradient (CSS Images 3 and 4): background-image's EK_IMAGE. Lengths
+ * are px + pct% (ec_glen); a conic gradient's angles are percentages of
+ * a turn. Stops are in the order written, a double position two stops,
+ * those with no position fixed up when drawn (CSS Images 3, 3.4.3) */
+enum { EC_GRAD_LINEAR, EC_GRAD_RADIAL, EC_GRAD_CONIC };
+/* linear: to <side-or-corner>, these bits (0: the angle) */
+#define EC_TO_TOP	1
+#define EC_TO_RIGHT	2
+#define EC_TO_BOTTOM	4
+#define EC_TO_LEFT	8
+/* radial: the ending shape's size (0: its radii given) */
+enum { EC_EXT_LENGTH, EC_EXT_CLOSEST_SIDE, EC_EXT_CLOSEST_CORNER, EC_EXT_FARTHEST_SIDE,
+       EC_EXT_FARTHEST_CORNER };
+/* a stop's flags */
+#define EC_GS_AT	1	/* it has a position */
+#define EC_GS_HINT	2	/* a colour hint: a position only, where the stops on
+				   either side are mixed half and half */
+#define EC_GS_CUR	4	/* currentcolor (until the layout makes it the colour) */
+typedef struct ec_glen {
+	ec_fx px, pct;
+} ec_glen;
+typedef struct ec_gstop {
+	uint32_t argb;			/* 0xAARRGGBB */
+	uint8_t flags;			/* EC_GS_* */
+	ec_glen at;
+} ec_gstop;
+/* a length not yet in px: v of a unit (CU_EM...) added to length at
+   (stops 0..n-1, then the centre's x and y, then the radii) */
+typedef struct ec_grel {
+	uint8_t at, unit;
+	ec_fx v;
+} ec_grel;
+#define EC_GL_X(g)	((g)->n)
+#define EC_GL_Y(g)	((g)->n + 1)
+#define EC_GL_RX(g)	((g)->n + 2)
+#define EC_GL_RY(g)	((g)->n + 3)
+typedef struct ec_grad {
+	uint8_t type;			/* EC_GRAD_* */
+	uint8_t repeat;			/* repeating-* */
+	uint8_t to;			/* linear: EC_TO_* bits, 0: angle */
+	uint8_t circle;			/* radial: a circle, not an ellipse */
+	uint8_t extent;			/* radial: EC_EXT_* */
+	uint8_t nrel;			/* rel's lengths, computed with the style */
+	uint8_t approx;			/* valid, but its stops can't be placed (a min() of
+					   px and %, more stops than EWeb keeps): drawn as
+					   its stops' average, its positions and hints not
+					   kept */
+	uint8_t n;			/* stops and hints (64 at most) */
+	ec_fx angle;			/* linear: its direction; conic: from; degrees */
+	ec_glen x, y;			/* radial, conic: the centre */
+	ec_glen rx, ry;			/* radial, EC_EXT_LENGTH: the radii (a circle: rx) */
+	const ec_grel *rel;
+	ec_gstop s[];
+} ec_grad;
 
 /* grid-template-areas: rows x cols names (NULL for a cell of "."), by rows */
 typedef struct ec_areas {
@@ -179,6 +233,7 @@ enum { EC_ORIGIN_UA, EC_ORIGIN_USER, EC_ORIGIN_AUTHOR };
 #define EC_COMPAT_GRADIENT	0x0400	/* gradients as images */
 #define EC_COMPAT_DECO		0x0800	/* text-decoration with a style or colour */
 #define EC_COMPAT_NOINLINE	0x1000	/* style attributes left out */
+#define EC_COMPAT_LAYERS	0x2000	/* background-image of more than one layer */
 
 typedef struct ec_stats {
 	uint32_t sheets, rules, selectors, dropped;	/* dropped: invalid or never matching */

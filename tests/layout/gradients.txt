@@ -1,0 +1,65 @@
+page 608 x 327, background ffffff, 64 items, 0 links, title "CSS gradients"
+gradient 8,8 144x38 tile 0,0 144x38 across down linear 180deg, #ff0000, #0000ff
+text 8,18 49x13 #ffffff sans10 link 0 "to bottom"
+gradient 156,8 144x38 tile 0,0 144x38 across down linear to right, #000000, #ffffff
+text 156,18 63x13 #000000 sans10 link 0 "to right, grey"
+gradient 304,8 144x38 tile 0,0 144x38 across down linear 45deg, #ff0000, #ffa500, #ffff00, #008000, #0000ff, #4b0082, #ee82ee
+text 304,18 94x13 #000000 sans10 link 0 "45deg, seven stops"
+gradient 452,8 144x38 tile 0,0 144x38 across down linear to bottom right, #ffffff 0+0%, #003366 0+100%
+text 452,18 74x13 #000000 sans10 link 0 "to bottom right"
+gradient 8,50 144x38 tile 0,0 144x38 across down linear 90deg, #cc0000 0+50%, #0000cc 0+50%
+text 8,60 63x13 #ffffff sans10 link 0 "a sharp edge"
+gradient 156,50 144x38 tile 0,0 144x38 across down repeating-linear -45deg, #ffcc00 0+0%, #ffcc00 7+0%, #333333 7+0%, #333333 15+0%
+text 156,60 81x13 #000000 sans10 link 0 "repeating stripes"
+gradient 304,50 144x38 tile 0,0 144x38 across down linear to right, #000000, hint 0+20%, #ffffff
+text 304,60 65x13 #000000 sans10 link 0 "a hint at 20%"
+gradient 452,50 144x38 tile 0,0 144x38 across down linear 90deg, #3f87a6, #ebf8e1, #f69d3c
+text 452,60 41x13 #000000 sans10 link 0 "0.25turn"
+gradient 8,92 144x38 tile 0,0 144x38 across down radial ellipse farthest-corner at 0+50% 0+50%, #e66465, #9198e5
+text 8,102 26x13 #000000 sans10 link 0 "radial"
+gradient 156,92 144x38 tile 0,0 144x38 across down radial circle closest-side at 0+30% 0+40%, #ffffff, #336699 0+90%, #003366
+text 156,102 83x13 #000000 sans10 link 0 "closest-side circle"
+gradient 304,92 144x38 tile 0,0 144x38 across down repeating-radial circle farthest-corner at 0+0% 0+0%, #ffffff 0+0%, #ffffff 6+0%, #cc0000 6+0%, #cc0000 12+0%
+text 304,102 72x13 #000000 sans10 link 0 "repeating rings"
+fill 452,92 144x38 #003366
+gradient 452,92 144x38 tile 0,0 144x38 across down radial ellipse 47+0% 15+0% at 0+100% 0+100%, #ffd700, #00000000
+text 452,102 85x13 #000000 sans10 link 0 "ellipse at a corner"
+gradient 8,134 144x38 tile 0,0 144x38 across down conic from 0deg at 0+50% 0+50%, #ff0000 0+0%, #ff0000 0+25%, #ffd700 0+0%, #ffd700 0+60%, #008000 0+0%
+text 8,144 41x13 #000000 sans10 link 0 "conic pie"
+gradient 156,134 144x38 tile 0,0 144x38 across down conic from 90deg at 0+40% 0+60%, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000
+text 156,144 55x13 #000000 sans10 link 0 "conic wheel"
+gradient 304,134 144x38 tile 0,0 13x13 across down repeating-conic from 0deg at 0+50% 0+50%, #cccccc 0+0%, #cccccc 0+25%, #ffffff 0+0%, #ffffff 0+50%
+text 304,144 59x13 #000000 sans10 link 0 "conic checks"
+fill 452,134 144x38 #66aa66
+gradient 452,134 144x24 tile 0,0 144x24 across down linear 180deg, #00000000, #000000cc
+text 452,144 87x13 #ffffff sans10 link 0 "a fade over green"
+gradient 8,176 144x38 tile 0,0 144x38 across down linear 180deg, #2c3e50, #4ca1af
+text 8,186 117x13 #ffffff sans10 link 0 "white on a dark gradient"
+gradient 156,176 144x38 tile 0,0 144x6 across down linear 180deg, #cccccc 0+50%, #ffffff 0+50%
+text 156,186 55x13 #000000 sans10 link 0 "tiled stripes"
+fill 304,176 144x38 #eeeeee
+gradient 340,185 72x19 tile 0,0 72x19 linear 180deg, #ff0000, #0000ff
+text 304,186 91x13 #000000 sans10 link 0 "centred, no-repeat"
+gradient 457,181 134x29 tile 0,0 134x29 across down linear 180deg, #ff8800, #0088ff
+text 457,191 60x13 #000000 sans10 link 0 "padding-box"
+fill 452,176 144x5 #0000004c
+fill 452,210 144x5 #0000004c
+fill 452,181 5x29 #0000004c
+fill 591,181 5x29 #0000004c
+gradient 8,219 144x38 tile 0,0 144x38 across down linear to right, #000000 15+0%, #ffffff 15+0%, #ffffff 31+0%, #000000 -32+100%
+text 8,227 68x12 #000000 sans9 link 0 "em and calc()"
+gradient 156,219 144x38 tile 0,0 144x38 across down linear to right, #cc0000, #0000cc alpha 128
+text 156,229 47x13 #ffffff80 sans10 link 0 "opacity .5"
+gradient 304,219 144x38 tile 0,0 144x38 across down linear to right, #cc0066, #ffffff
+text 304,229 58x13 #cc0066 sans10 link 0 "currentcolor"
+gradient 452,219 144x38 tile 0,0 144x38 across down linear 180deg, #00cc00, #006600
+text 452,229 62x13 #000000 sans10 link 0 "the top layer"
+fill 38,269 60x12 #ffff0080
+text 6,279 32x13 #000000 sans10 link 0 "Some "
+text 38,279 60x13 #000000 sans10 link 0 "marked text"
+text 101,279 157x13 #000000 sans10 link 0 "in a line, its gradient an average."
+gradient 8,293 44x26 tile 0,0 44x26 across down linear 180deg, #ffffff, #99cc99
+text 9,304 24x13 #000000 sans10 link 0 "a cell"
+text 9,316 42x13 #000000 sans10 link 0 "two lines"
+gradient 54,293 20x26 tile 0,0 20x26 across down linear 180deg, #ffffff, #99cc99
+text 55,310 18x13 #000000 sans10 link 0 "one"

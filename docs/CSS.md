@@ -63,8 +63,18 @@ Falcons, and a divide that costs 40 to 80 cycles.
   vmax and the small, large and dynamic viewport ones, in, cm, mm, Q, pt,
   pc); percentages; `calc()`, `min()`, `max()`, `clamp()`; colours in
   every CSS Color 4 syntax for `rgb()` and `hsl()`, hex with alpha, the
-  named and system colours, `currentcolor`; `url()`; gradients (kept as
-  "an image without a URL").
+  named and system colours, `currentcolor`; `url()`; gradients (since 22
+  Oct 2026, CSS Images 3 and 4: `linear-`, `radial-` and `conic-gradient()`
+  and their `repeating-` forms, kept whole, `ec_grad`: the direction (an
+  angle in any unit, or `calc()`, `min()`, `max()`, `clamp()` of angles,
+  worked out; or to a side or corner), the shape, size and centre, each
+  colour stop and its positions, hints; lengths px plus a percentage,
+  those in em, rem or vw computed with the style, `min()` and the like of
+  one unit worked out; one whose stops can't be placed, as `min(10%,
+  5px)`, kept as its colours and drawn as their average; an interpolation
+  method read and drawn as sRGB; the Compatibility Standard's
+  `-webkit-linear-gradient()` and `-webkit-gradient()` kept as the same;
+  `DESIGN.md`, CSS gradients).
 - **Custom properties and `var()`**, with fallbacks, inheritance and
   cycles.
 - **At-rules:** `@media` (Media Queries 4, with ranges and three-valued
@@ -72,7 +82,9 @@ Falcons, and a divide that costs 40 to 80 cycles.
   `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
   `@container` are skipped.
 - **Properties:** the 103 EWeb draws or needs: box model, positioning, floats,
-  borders, backgrounds (first layer; `background-size` since 21 Oct 2026,
+  borders, backgrounds (the first layer, the top one, in the `background`
+  shorthand and, since 22 Oct 2026, in a `background-image` of several;
+  `background-size` since 21 Oct 2026,
   kept as two longhands of the engine's own, `-ec-background-size-w` and
   `-h`), fonts, text (including `direction`,
   `unicode-bidi`, `text-align: start | end`), lists, tables, flexbox,
@@ -89,8 +101,8 @@ Falcons, and a divide that costs 40 to 80 cycles.
   it needs to show text of a transparent colour or content an animation
   reveals: `text-shadow` (the first shadow's colour), `-webkit-text-stroke`
   (`-width`, `-color` and the shorthand), `animation-name` and the
-  `animation` shorthand (whether there is an animation), and a gradient's
-  first colour that shows. Unknown properties are skipped. Not yet:
+  `animation` shorthand (whether there is an animation). Unknown properties
+  are skipped. Not yet:
   logical properties (`margin-inline-start` and so on, which matter for
   Hebrew), transforms, running animations, `border-radius`, drawing
   shadows.
