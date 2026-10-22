@@ -54,7 +54,7 @@ CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
-BACKSPACE = 0x0E
+BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
 # takes letters and digits as they are
@@ -698,6 +698,30 @@ def st():
                 r.key(ESC)
                 check("st: ^, shows the Settings, Esc keeps them", ev is not None and
                       r.wait(r"settings ", 120) == "settings kept", str(r.events()[-5:]))
+                # the search address longer than its field, its first and
+                # last characters put in with Shift+left and Shift+right
+                # (TOS 1.04's AES gives them no Shift: field.c reads it from
+                # the key's character)
+                r.key(COMMA, (CTRL,))
+                ev = r.wait(r"settings shown", 120)
+                r.key(TAB)
+                for _ in range(30):
+                    r.key(BACKSPACE)
+                long_search = "http://search.example.com/the/words/typed/in/the/address/go/here/s"
+                r.type(long_search[1:-1])
+                r.key(LEFT, (SHIFT,))
+                r.type(long_search[0])
+                r.key(RIGHT, (SHIFT,))
+                r.type(long_search[-1])
+                time.sleep(2)
+                r.shot(4)
+                r.key(RETURN)
+                saved = r.wait(r"settings ", 120) == "settings changed"
+                time.sleep(3)
+                inf = open(os.path.join(OUT, name, "EWEB.INF"), "rb").read().decode("latin-1")
+                check("st: the search address holds more than its field shows, Shift+arrows at its ends",
+                      ev is not None and saved and "\r\nSEARCH=%s\r\n\r\n" % long_search in inf,
+                      repr(inf[:400]))
             r.key(Q, (CTRL,))
             check("st: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()))
         finally:
