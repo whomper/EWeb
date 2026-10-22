@@ -516,7 +516,7 @@ static long long lifetime(const char *h, unsigned char *flags)
 void dc_put(const char *key, const char *url, const char *headers, const char *mime, const char *charset,
 	    const char *security, const char *data, long len)
 {
-	char etag[96], lm[48], sc[8];
+	char etag[96], lm[48];
 	long long life;
 	unsigned char flags;
 	DCE *e;
@@ -529,14 +529,13 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	life = lifetime(headers, &flags);
 	header(headers, "ETag", etag, sizeof etag);
 	header(headers, "Last-Modified", lm, sizeof lm);
-	header(headers, "Set-Cookie", sc, sizeof sc);
 	/* not kept: what HTTP says not to keep, what would never be fresh
 	   and can't be asked about, a page that sets a cookie (one person's;
 	   a picture or a stylesheet that does is kept, as browsers' own
 	   caches keep them), one with a Refresh header (the index keeps no
 	   headers: from the cache it wouldn't go on), and what would take a
 	   quarter of the cache */
-	if (life < 0 || (life == 0 && !etag[0] && !lm[0]) || (sc[0] && !strcmp(mime, "text/html")) ||
+	if (life < 0 || (life == 0 && !etag[0] && !lm[0]) || (has_header(headers, "Set-Cookie") && !strcmp(mime, "text/html")) ||
 	    has_header(headers, "Refresh") || len > max_size / 4 ||
 	    strchr(etag, '\t') || strchr(lm, '\t') || strchr(key, '\t') || strchr(url, '\t') || strchr(security, '\t') ||
 	    strchr(key, '\n') || strchr(url, '\n'))

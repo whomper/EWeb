@@ -1331,3 +1331,13 @@ div { background-image: url(ok.png) }
 #b justify-items center
 #b justify-self end
 #c justify-items normal
+
+=== :host matches nothing outside a shadow tree; its list still applies (CSS Scoping 1, 3.2.1)
+--- css
+:root, :host { --c: #008000 }
+p { color: var(--c) }
+:host(.x) p, :host-context(div) p, :host p { color: red }
+--- html
+<div><p id=t1 class=x>x</p></div>
+--- expect
+#t1 color #008000

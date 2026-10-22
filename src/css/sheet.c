@@ -339,7 +339,12 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		}
 		if (b->pseudo)
 			return 0;
-		if (str_in(name, never_pc)) {
+		/* :host (CSS Scoping 1, 3.2.1) matches only in a shadow tree,
+		   which EWeb has none of; valid, so a list such as Tailwind's
+		   ":root, :host" still matches the root (LibCSS doesn't know it) */
+		if (strcmp(name, "host") == 0 && (c->opts & EC_COMPAT_SELECTORS))
+			return 0;
+		if (str_in(name, never_pc) || strcmp(name, "host") == 0) {
 			if (!add_simple(b, S_NEVER))
 				return 0;
 			b->never = 1;
@@ -425,6 +430,14 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		if (strcmp(name, "dir") == 0 && (c->opts & EC_COMPAT_SELECTORS))
 			return 0;
 		if (strcmp(name, "lang") == 0 && (c->opts & EC_COMPAT_SELECTORS)) {
+			b->b++;
+			b->never = 1;
+			return add_simple(b, S_NEVER) != NULL;
+		}
+		if ((strcmp(name, "host") == 0 || strcmp(name, "host-context") == 0) &&
+				!(c->opts & EC_COMPAT_SELECTORS)) {
+			/* :host() and :host-context(): as :host, nothing outside a
+			   shadow tree (their argument isn't looked at) */
 			b->b++;
 			b->never = 1;
 			return add_simple(b, S_NEVER) != NULL;

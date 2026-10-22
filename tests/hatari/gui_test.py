@@ -75,8 +75,9 @@ import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep", "refresh", "details"]
-# GUI_SLOT=N gives the rigs their own ports and X display, so two trees
-# can run them at once
+# GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
+# and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
+# run them at once
 SLOT = int(os.environ.get("GUI_SLOT", "0"))
 HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
@@ -318,7 +319,8 @@ def browse():
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
-                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("browse: the test server", False)
     xvfb = machines.xvfb(DISPLAY)    # once it answers (None: one was there)
@@ -610,7 +612,8 @@ def scripts():
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
-                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("scripts: the test server", False)
     xvfb = machines.xvfb(DISPLAY)
@@ -895,7 +898,8 @@ def st():
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
-                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("st: the test server", False)
     env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
@@ -961,7 +965,8 @@ def gateway():
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
-                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("gateway: the test server", False)
     env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
@@ -1035,7 +1040,8 @@ def falcon():
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
-                            "--https", str(HTTPS)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         return check("falcon: the test server", False)
     page = "https://127.0.0.1:%d/site/wikitls.html" % HTTPS

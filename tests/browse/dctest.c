@@ -107,9 +107,12 @@ int main(int argc, char **argv)
 	put("http://b/2", "Cache-Control: max-age=60\nVary: *\n", "x");
 	put("http://b/3", "Cache-Control: max-age=60\nSet-Cookie: id=1\n", "x");
 	put("http://b/4", "Content-Type: text/html\n", "x");
+	/* (a cookie longer than the old 8-byte look at the header) */
+	put("http://b/8", "Cache-Control: max-age=60\nSet-Cookie: session=0123456789abcdef; Path=/\n", "x");
 	want("no-store, Vary *, a page that sets a cookie, nothing to go by: not kept",
 	     got("http://b/1", NULL, NULL) == -1 && got("http://b/2", NULL, NULL) == -1 &&
-	     got("http://b/3", NULL, NULL) == -1 && got("http://b/4", NULL, NULL) == -1);
+	     got("http://b/3", NULL, NULL) == -1 && got("http://b/4", NULL, NULL) == -1 &&
+	     got("http://b/8", NULL, NULL) == -1);
 	put("http://b/7", "Cache-Control: max-age=60\nRefresh: 5; url=https://example.com/a/longer/address\n", "x");
 	want("a page with a Refresh header (from the cache it wouldn't go on): not kept",
 	     got("http://b/7", NULL, NULL) == -1);
