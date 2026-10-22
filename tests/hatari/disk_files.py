@@ -75,6 +75,24 @@ BUDGET = {
 fails = 0
 
 
+# an EWEB.INF from before 0.27: no empty line after each setting
+OLD_INF = ("; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n"
+           "; the start page: an address, or nothing for EWeb's own\r\nHOME=\r\n"
+           "; the size of the text, per cent (Larger text, Smaller text)\r\nZOOM=100\r\n")
+
+
+def inf_check(hd):
+    """EWEB.INF as ^+ and ^0 saved it: the guidelines' 6.1, an empty line
+    after every setting and after the heading, none doubled, the values
+    kept"""
+    text = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+    lines = text.split("\r\n")
+    alone = [l for i, l in enumerate(lines[:-1]) if re.match(r"[A-Z]+=", l) and lines[i + 1] != ""]
+    check("  EWEB.INF: an empty line after each setting",
+          not alone and lines[1] == "" and "\r\n\r\n\r\n" not in text and "\nHOME=\r\n" in text
+          and "\nZOOM=100\r\n" in text and text.endswith("\r\n\r\n"), repr(text[:600]))
+
+
 def check(name, ok, detail=""):
     global fails
     print("%s  %s%s" % ("ok  " if ok else "FAIL", name, "" if ok else "\n      " + detail))
@@ -274,6 +292,7 @@ def eweb(hd):
         r.key(PLUS, (CTRL,))
         r.key(ZERO, (CTRL,))
         r.case("page size")
+        inf_check(hd)
         r.go(secure)
         r.case("first secure page")
         r.go(secure + "two.html")
@@ -355,8 +374,8 @@ def main():
         for f in ("EWEB.PRG", "EWEB.FNT", "EWGET.TTP"):
             shutil.copy(os.path.join(ROOT, "binary", f), hd)
         shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
-        with open(os.path.join(hd, "EWEB.INF"), "w") as f:
-            f.write("HOME=\r\n")
+        with open(os.path.join(hd, "EWEB.INF"), "w", newline="") as f:     # as 0.26 wrote it
+            f.write(OLD_INF)
         with open(os.path.join(hd, "BOOKMARK.HTM"), "w", newline="") as f:     # a user's bookmarks
             f.write("<!DOCTYPE NETSCAPE-Bookmark-file-1>\r\n<DL><p>\r\n    <DT><A HREF=\"http://68k.news/\">"
                     "68k.news</A>\r\n</DL><p>\r\n")

@@ -320,10 +320,11 @@ void menu_update(void)
 /* ---------------------------------------------------------------- the settings */
 /* EWEB.INF next to the program (a program without an accessory keeps its
    settings there, the guidelines' 6.1): NAME=value lines, a ';' note
-   above each, other lines kept as they are. The file's text is read once,
+   above each and an empty line after, other lines kept as they are. The file's text is read once,
    at start, and kept: a save puts the settings into it and writes it only
    when that changed it (the guidelines' 6.5) */
 
+static const char inf_head[] = "; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n";
 static char *inf_text;		/* EWEB.INF as it is on the disk; NULL: none */
 static long inf_len;
 
@@ -428,8 +429,20 @@ static void cache_open(void)
 	dc_dir(dir, mb << 20);
 }
 
+/* the text ends with an empty line */
+static int ends_empty(const SBUF *s)
+{
+	long i = s->len;
+	if (i == 0 || s->s[i - 1] != '\n')
+		return 0;
+	if (--i > 0 && s->s[i - 1] == '\r')
+		i--;
+	return i == 0 || s->s[i - 1] == '\n';
+}
+
 /* one setting into the text: its line replaced, or its note and line
-   added at the end */
+   added at the end; an empty line after each (the guidelines' 6.1), put
+   in after a setting from an EWEB.INF before 0.27, which had none */
 static void put(SBUF *s, const char *key, const char *value, const char *note)
 {
 	char *at = s->s, want[40];
@@ -443,6 +456,8 @@ static void put(SBUF *s, const char *key, const char *value, const char *note)
 			sb_init(&t);
 			sb_add(&t, s->s, off);
 			sb_printf(&t, "%s=%s\r\n", key, value);
+			if (at[ll] != '\r' && at[ll] != '\n')
+				sb_adds(&t, "\r\n");
 			sb_adds(&t, at + ll);
 			sb_free(s);
 			*s = t;
@@ -452,7 +467,9 @@ static void put(SBUF *s, const char *key, const char *value, const char *note)
 	}
 	if (s->len > 0 && s->s[s->len - 1] != '\n')
 		sb_adds(s, "\r\n");
-	sb_printf(s, "; %s\r\n%s=%s\r\n", note, key, value);
+	if (s->len > 0 && !ends_empty(s))
+		sb_adds(s, "\r\n");
+	sb_printf(s, "; %s\r\n%s=%s\r\n\r\n", note, key, value);
 }
 
 /* the settings to EWEB.INF, a safe save when they changed it; 0: it
@@ -465,9 +482,21 @@ int settings_save(void)
 	inf_path(path, sizeof path);
 	sb_init(&s);
 	if (inf_text != NULL) {
+		long h = sizeof inf_head - 1;
 		sb_add(&s, inf_text, inf_len);
+		/* before 0.27 the first setting's note came straight after the
+		   heading: an empty line between them */
+		if (s.len > h && !strncmp(s.s, inf_head, h) && s.s[h] != '\r' && s.s[h] != '\n') {
+			SBUF t;
+			sb_init(&t);
+			sb_add(&t, s.s, h);
+			sb_adds(&t, "\r\n");
+			sb_adds(&t, s.s + h);
+			sb_free(&s);
+			s = t;
+		}
 	} else {
-		sb_adds(&s, "; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n");
+		sb_adds(&s, inf_head);
 	}
 	put(&s, "HOME", opt.home, "the start page: an address, or nothing for EWeb's own");
 	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (FrogFind: " FROGFIND ")");
