@@ -54,6 +54,7 @@ CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
+BACKSPACE = 0x0E
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
 # takes letters and digits as they are
@@ -593,6 +594,24 @@ def screens():
                 r.key(ESC)
                 check("screens: ^, shows the Settings, Esc keeps them", ev is not None and
                       r.wait(r"settings ", 60) == "settings kept", str(r.events()[-5:]))
+                # the search address holds more than its field shows (40;
+                # the guidelines' 5.4): typed in whole and saved whole
+                r.key(COMMA, (CTRL,))
+                ev = r.wait(r"settings shown", 60)
+                r.key(TAB)
+                for _ in range(30):
+                    r.key(BACKSPACE)
+                long_search = "http://search.example.com/the/words/typed/in/the/address/go/here/s"
+                r.type(long_search)
+                time.sleep(1)
+                r.shot(3)
+                r.key(RETURN)
+                saved = r.wait(r"settings ", 60) == "settings changed"
+                time.sleep(2)
+                inf = open(os.path.join(OUT, name, "EWEB.INF"), "rb").read().decode("latin-1")
+                check("screens: the search address holds more than its field shows",
+                      ev is not None and saved and "\r\nSEARCH=%s\r\n\r\n" % long_search in inf,
+                      repr(inf[:400]))
             r.key(Q, (CTRL,))
             check("screens: %s quits" % name, r.wait(r"quit$", 60) is not None, str(r.events()))
         finally:

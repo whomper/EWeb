@@ -423,8 +423,12 @@ Options > Settings (^,) has two pages:
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
+The search address and the gateway's address can be longer than their
+fields: the field moves along with the cursor (Shift+left and right: to
+the start and the end; ^C, ^X and ^V copy, cut and paste the whole text).
+
 EWeb keeps its settings in `EWEB.INF`, next to the program, with a note
-above each. A setting you change is saved there at once; where the window
+above each and an empty line after it. A setting you change is saved there at once; where the window
 was, when you quit:
 
 - `HOME=` the start page (empty: EWeb's own)

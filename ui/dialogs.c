@@ -14,6 +14,7 @@
 #include "ui.h"
 #include "charset.h"
 #include "dialog.h"
+#include "field.h"
 #include "http.h"
 #include "tls.h"
 #include "util.h"
@@ -25,12 +26,18 @@ static OBJECT tree[DMAX];
 static TEDINFO ted[TMAX];
 static char tmpl[TMAX][64], valid[TMAX][64];
 static short nobj, nted, last_child;
+/* the long fields (d_lfield), put on once the tree is fixed */
+static LFIELD *lf_pend[3];
+static char *lf_text[3];
+static short lf_obj[3], lf_cap[3], nlf;
 
 /* ---------------------------------------------------------------- the builder */
 
 static void d_begin(short w, short h)
 {
+	lf_forget(tree);	/* the last dialog's long fields */
 	memset(tree, 0, sizeof tree);
+	nlf = 0;
 	nobj = 1;
 	nted = 0;
 	last_child = 0;
@@ -113,6 +120,19 @@ static short d_field(short x, short y, char *buf, short len, char kind)
 	return d_add(G_FBOXTEXT, EDITABLE, 0, (long) t, x, y, len, 1);
 }
 
+/* a field that holds more than it shows (the guidelines' 5.4): text
+   (cap + 1 bytes) scrolls in a window of len characters */
+static short d_lfield(short x, short y, LFIELD *f, char *text, short len, short cap)
+{
+	static char view[3][LF_VIEW + 1];
+	short obj = d_field(x, y, view[nlf], len, 'X');
+	lf_pend[nlf] = f;
+	lf_text[nlf] = text;
+	lf_obj[nlf] = obj;
+	lf_cap[nlf++] = cap;
+	return obj;
+}
+
 static short d_button(short x, short y, short w, const char *s, short flags)
 {
 	return d_add(G_BUTTON, SELECTABLE | flags, 0, (long) s, x, y, w, 1);
@@ -131,6 +151,9 @@ static void d_end(void)
 	tree[nobj - 1].ob_flags |= LASTOB;
 	for (i = 0; i < nobj; i++)
 		rsrc_obfix(tree, i);
+	for (i = 0; i < nlf; i++)
+		lf_init(lf_pend[i], tree, lf_obj[i], lf_text[i], lf_cap[i], 0);
+	nlf = 0;
 }
 
 /* ---------------------------------------------------------------- ticks */
@@ -266,7 +289,10 @@ static short first_edit(void)
 
 /* ---------------------------------------------------------------- the settings */
 
-static char s_zoom[4], s_search[44], s_gate[20], s_gport[6], s_cache[4];
+/* the search address and the gateway hold as much as their settings,
+   more than their fields show */
+static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[4];
+static LFIELD f_search, f_gate;
 
 static void part_general(short x, short y)
 {
@@ -277,7 +303,7 @@ static void part_general(short x, short y)
 	d_field(x + 12, ROW(2), s_zoom, 3, '9');
 	d_text(x + 16, ROW(2), "%  (50 to 200)");
 	d_text(x, ROW(3), "Words typed in the address go to:");
-	d_field(x, ROW(4), s_search, 40, 'X');
+	d_lfield(x, ROW(4), &f_search, s_search, 40, sizeof s_search - 1);
 	d_text(x, ROW(5), "(%s for the words; nothing: none)");
 	d_text(x, ROW(6), "Disk cache");
 	d_field(x + 12, ROW(6), s_cache, 2, '9');
@@ -299,7 +325,7 @@ static void part_secure(short x, short y)
 	d_tick(x + 3, ROW(1), "Check certificates on the DSP", T_DSP);
 	d_text(x + 3, ROW(2), note);
 	d_text(x, ROW(3), "Pi gateway");
-	d_field(x + 11, ROW(3), s_gate, 18, 'X');
+	d_lfield(x + 11, ROW(3), &f_gate, s_gate, 18, sizeof s_gate - 1);
 	d_text(x + 31, ROW(3), "Port");
 	d_field(x + 36, ROW(3), s_gport, 5, '9');
 	d_text(x + 3, ROW(4), "Pages go through the Pi gateway when");
@@ -416,10 +442,7 @@ int dlg_settings(void)
 	z = atoi(s_zoom);
 	if (z >= 50 && z <= 200)
 		opt.zoom = (short) z;
-	/* a search address longer than the field stays as it was, unless
-	   the field was changed */
-	if (strlen(opt.search) < sizeof s_search - 1 || strncmp(opt.search, s_search, sizeof s_search - 1) != 0)
-		str_copy(opt.search, s_search, sizeof opt.search);
+	str_copy(opt.search, s_search, sizeof opt.search);
 	str_copy(opt.gate, s_gate, sizeof opt.gate);
 	str_trim(opt.gate);
 	port = atoi(s_gport);
@@ -438,7 +461,8 @@ int dlg_settings(void)
 #ifndef EW_ST	/* the ST edition runs no scripts */
 /* ---------------------------------------------------------------- a page's prompt */
 
-static char p_lines[3][44], p_answer[44];
+static char p_lines[3][44], p_answer[256];
+static LFIELD f_answer;
 
 int dlg_prompt(const char *text, char *answer, int size)
 {
@@ -469,7 +493,7 @@ int dlg_prompt(const char *text, char *answer, int size)
 	for (k = 0; k < 3; k++)
 		if (p_lines[k][0])
 			d_text(2, (short) (2 + k), p_lines[k]);
-	field = d_field(2, 5, p_answer, 40, 'X');
+	field = d_lfield(2, 5, &f_answer, p_answer, 40, sizeof p_answer - 1);
 	d_button(18, 7, 10, "Cancel", EXIT);
 	ok = d_button(31, 7, 10, "OK", EXIT | DEFAULT);
 	d_end();
