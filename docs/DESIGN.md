@@ -2652,13 +2652,16 @@ program as his DFB1's. What it took:
 On the emulated stock Falcon (16 MHz, no FPU, 4 MB, TOS 4.04, 640x480 in 16 colours) 1,829 KB is
 free at the start (803 KB before), and the pages of the first timings show from the disk: BBC News
 (100 KB) in 8.4 s, the WSJ page (186 KB) in 10.7 s, a 176 KB WSJ page that didn't fit at all in
-13.6 s, each loaded again too. `make hatarigui`'s `falcon4` group shows a page nearly as big (151 KB
-of long paragraphs, 2,256 elements, 300 links, the same bytes each time) and loads it again, and the
+13.6 s, each loaded again too. `make hatarigui`'s `falcon4` group shows a page of long paragraphs
+(about 130 KB, 2,256 elements, 300 links, the same bytes each time) and loads it again, and the
 pictures' page, with no scripts (no FPU, `EWEBJS.OVL` never loaded); its `scripts` group runs them
-from `EWEBJS.OVL` and shows a page without it. That page took 31 s, 26 of them its layout: 73
-million 68030 instructions, half of them measuring its text a glyph at a time, the next thing to
-make faster. A page takes about 11 times its size in memory (2 MB for the 176 KB page; about 1 KB
-an element): one of 177 KB showed, but couldn't be loaded again beside itself. With the family's
+from `EWEBJS.OVL` and shows a page without it. Such a page of 151 KB took 31 s, 26 of them its
+layout: 73 million 68030 instructions, half of them measuring its text a glyph at a time, the next
+thing to make faster. A page takes about 11 times its size in memory (2 MB for the 176 KB page;
+about 1 KB an element), and that varies by a few per cent from one build to the next, as the
+cascade's cache of styles is keyed by addresses in the heap: the 151 KB page loaded again in one
+build and not in the next (128 KB more for its styles), so 150 KB is where a 4 MB Falcon's pages
+end, and the rig's is smaller. With the family's
 three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and `EWEB.PRG` needs
 1.5 MB to load: there it takes 14 MB or TT RAM (or `EWEBST.PRG`).
 

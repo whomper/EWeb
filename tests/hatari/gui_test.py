@@ -701,7 +701,7 @@ def scripts_without(site):
 
 
 def big_page():
-    """a news page as big as most of the page set's (about 150 KB, 2,300
+    """a news page as big as most of the page set's (about 130 KB, 2,300
     elements, 300 links), the same bytes every time"""
     words = ("falcon atari window picture river garden network bread family museum engine desk city "
              "solar train joystick reader build tracker energy paper science photo flower holiday").split()
@@ -711,7 +711,7 @@ def big_page():
     k = 0
     for i in range(150):
         text = []
-        for j in range(85):
+        for j in range(65):
             text.append(words[(i * 7 + j * 3 + k) % len(words)])
             k += 1
         out.append("<div class=\"story\"><p class=\"kicker\">Section %d</p><h2><a href=\"s%d.html\">Story %d: %s</a>"
