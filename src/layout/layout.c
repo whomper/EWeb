@@ -168,6 +168,14 @@ typedef struct {
 #endif
 } ITEM;
 
+/* a border of a table's cell where borders collapse (CSS 2.1, 17.6.2):
+   its width (0: none), colour and style (which of two wins) */
+typedef struct {
+	int32_t w;
+	uint32_t c;
+	int st;
+} BEDGE;
+
 /* an inline-block laid out at (0, 0) (ib_layout): its margin box's
    height, and the display items k0..k1 and blocks b0..b1 it made, moved
    to its place on its line (ib_place). Kept beside the items, not in
@@ -214,6 +222,19 @@ typedef struct {
 		long bg, bd[4], k0, k1;	/* its background, borders and items */
 		int va;			/* its vertical-align */
 	} *spans;
+	/* the table being laid out when its borders collapse (else NULL):
+	   its own borders (top, right, bottom, left), the rows laid out, and
+	   per column the bottom border of the cell last laid out there (the
+	   cell below draws it, as its top) and the right one of the cell
+	   ending there (the cell beside draws it, as its left) */
+	struct coll {
+		BEDGE t[4];
+		long rows;
+		int first, last;	/* the row being laid out is the table's first, last */
+		BEDGE bot[MAXCOLS], right[MAXCOLS];
+	} *coll;
+	const BEDGE *cbd;		/* a cell's borders as they collapse, for its */
+	const box *cbd_box;		/* layout_block (row_layout) */
 	/* positioned boxes' containing block: the nearest positioned
 	   ancestor's padding box (the page at first) */
 	int32_t cbx, cby, cbw;
@@ -3130,7 +3151,11 @@ static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
 
 static int32_t measure(L *l, box *b);
 static int32_t gap(L *l, const ec_style *s, int p, int32_t base);
-static int columns(L *l, box *t, int32_t w, int32_t *cols);
+static int columns(L *l, box *t, int32_t w, int32_t *cols, int32_t sp);
+static int row_group(const box *g);
+static void bedge(L *l, const box *b, int side, BEDGE *e);
+static int collapses(const box *t);
+static int32_t spacing(L *l, const ec_style *s, int vertical);
 
 /* the widest line of a block of text, unbroken */
 static int32_t inline_measure(L *l, box *b)
@@ -3178,8 +3203,10 @@ static int32_t inline_measure(L *l, box *b)
 static int32_t extras(L *l, const box *b)
 {
 	const ec_style *s = b->st;
-	if (b->anon)
+	if (b->anon || b->tablerow || row_group(b))
 		return 0;
+	if (collapses(b))
+		return len0(l, s, EP_MARGIN_LEFT, AUTO) + len0(l, s, EP_MARGIN_RIGHT, AUTO);
 	return len0(l, s, EP_MARGIN_LEFT, AUTO) + len0(l, s, EP_MARGIN_RIGHT, AUTO) +
 	       len0(l, s, EP_PADDING_LEFT, AUTO) + len0(l, s, EP_PADDING_RIGHT, AUTO) +
 	       (kw(s, EP_BORDER_LEFT_STYLE) > KW_HIDDEN ? len0(l, s, EP_BORDER_LEFT_WIDTH, AUTO) : 0) +
@@ -3233,11 +3260,18 @@ static int32_t measure(L *l, box *b)
 				  t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest) + (k ? g : 0);
 	} else if (b->table) {
 		/* its columns at their widest, and the spacing between them */
-		int32_t cols[MAXCOLS];
-		const ec_style *s = b->st;
-		int n = columns(l, b, AUTO, cols), i;
-		int32_t sp = s->k[EP_BORDER_SPACING_H] == EK_PX ? dev(l, s->v[EP_BORDER_SPACING_H].i) : 0;
+		int32_t cols[MAXCOLS], sp = spacing(l, b->st, 0);
+		int n = columns(l, b, AUTO, cols, sp), i;
 		inner = sp * (n + 1);
+		if (collapses(b)) {
+			/* its borders in its edge cells: room for them, as
+			   when they are its own */
+			BEDGE e;
+			bedge(l, b, 1, &e);
+			inner += e.w;
+			bedge(l, b, 3, &e);
+			inner += e.w;
+		}
 		for (i = 0; i < n; i++)
 			inner += cols[i];
 	} else {
@@ -3396,6 +3430,16 @@ static int colspan(const box *c)
 	return n < 1 ? 1 : n > MAXCOLS ? MAXCOLS : n;
 }
 
+/* a table's border-spacing across (0) or down (1): none when its
+   borders collapse (CSS 2.1, 17.6.2) */
+static int32_t spacing(L *l, const ec_style *s, int vertical)
+{
+	int k = vertical ? EP_BORDER_SPACING_V : EP_BORDER_SPACING_H;
+	if (kw(s, EP_BORDER_COLLAPSE) == KW_COLLAPSE || s->k[k] != EK_PX)
+		return 0;
+	return dev(l, s->v[k].i);
+}
+
 /* a cell's widest, or the width it asks for */
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
@@ -3409,12 +3453,47 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 
 static int rowspan(const box *c);
 
+/* a cell over columns i.. (span of them): what it needs beyond their
+   widths (and the spacing sp between them) given to them by their
+   widths (CSS 2.1, 17.5.2.2) */
+static void span_widths(L *l, box *c, int i, int span, int32_t w, int32_t *cols, int32_t sp)
+{
+	int last = i + span > MAXCOLS ? MAXCOLS : i + span, k;
+	int32_t p = cell_pref(l, c, w), have = 0, more, given = 0;
+	for (k = i; k < last; k++)
+		have += cols[k];
+	more = p - have - (last - i - 1) * sp;
+	if (more <= 0)
+		return;
+	for (k = i; k < last; k++) {
+		int32_t add = have > 0 ? (int32_t) ((int64_t) more * cols[k] / have) : more / (last - i);
+		cols[k] += add;
+		given += add;
+	}
+	cols[last - 1] += more - given;
+}
+
+/* the cells over several columns met in pass 0 (columns), for pass 1 */
+#define SPANS 64
+typedef struct {
+	int n, over;			/* over: more than SPANS, pass 1 walks the rows */
+	struct {
+		box *c;
+		int16_t i, span;
+	} e[SPANS];
+} SPANNED;
+
 /* a row's cells' widths into their columns; occ: per column, the rows a
-   cell from a row above still takes (as row_layout skips them) */
-static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n, int *occ)
+   cell from a row above still takes (as row_layout skips them). Pass 0
+   takes the cells of one column and notes the others in sd; pass 1
+   (only when there were more than SPANS) takes those over several
+   (span_widths) */
+static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n, int *occ, int pass, int32_t sp,
+		    SPANNED *sd, int coll)
 {
 	box *c;
 	int i = 0, k, taken[MAXCOLS];
+	int32_t prev_r = 0;		/* where borders collapse, the right border of the cell before */
 	for (k = 0; k < MAXCOLS; k++)
 		taken[k] = occ[k] > 0;
 	for (c = r->first; c != NULL && i < MAXCOLS; c = c->next) {
@@ -3423,10 +3502,27 @@ static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n, int *occ)
 			i++;
 		if (i >= MAXCOLS)
 			break;
-		if (span == 1) {
-			int32_t p = cell_pref(l, c, w);
+		if (span == 1 && pass == 0) {
+			/* (where borders collapse, its left may be the wider right
+			   of the cell before: room for that) */
+			int32_t p = cell_pref(l, c, w) + prev_r;
 			if (p > cols[i])
 				cols[i] = p;
+		} else if (span > 1 && pass == 0) {
+			if (sd->n < SPANS) {
+				sd->e[sd->n].c = c;
+				sd->e[sd->n].i = (int16_t) i;
+				sd->e[sd->n++].span = (int16_t) span;
+			} else {
+				sd->over = 1;
+			}
+		} else if (span > 1 && pass == 1) {
+			span_widths(l, c, i, span, w, cols, sp);
+		}
+		if (coll && pass == 0) {
+			BEDGE e;
+			bedge(l, c, 1, &e);
+			prev_r = e.w;
 		}
 		for (k = i; k < i + span && k < MAXCOLS; k++)
 			if (rs > 1)
@@ -3442,20 +3538,30 @@ static void col_row(L *l, box *r, int32_t w, int32_t *cols, int *n, int *occ)
 		*n = i;
 }
 
-/* a table's columns at their widest; returns their number */
-static int columns(L *l, box *t, int32_t w, int32_t *cols)
+/* a table's columns at their widest, sp apart; returns their number */
+static int columns(L *l, box *t, int32_t w, int32_t *cols, int32_t sp)
 {
 	box *c, *r;
-	int n = 0, occ[MAXCOLS];
+	int n = 0, occ[MAXCOLS], pass, k, coll = collapses(t);
+	SPANNED sd;
 	memset(cols, 0, MAXCOLS * sizeof *cols);
-	memset(occ, 0, sizeof occ);
-	for (c = t->first; c != NULL; c = c->next) {
-		if (c->tablerow)
-			col_row(l, c, w, cols, &n, occ);
-		else if (!c->row)
-			for (r = c->first; r != NULL; r = r->next)
-				if (r->tablerow)
-					col_row(l, r, w, cols, &n, occ);
+	sd.n = sd.over = 0;
+	for (pass = 0; pass < 2; pass++) {
+		if (pass == 1 && !sd.over) {
+			/* the cells over several columns, as noted */
+			for (k = 0; k < sd.n; k++)
+				span_widths(l, sd.e[k].c, sd.e[k].i, sd.e[k].span, w, cols, sp);
+			break;
+		}
+		memset(occ, 0, sizeof occ);
+		for (c = t->first; c != NULL; c = c->next) {
+			if (c->tablerow)
+				col_row(l, c, w, cols, &n, occ, pass, sp, &sd, coll);
+			else if (!c->row)
+				for (r = c->first; r != NULL; r = r->next)
+					if (r->tablerow)
+						col_row(l, r, w, cols, &n, occ, pass, sp, &sd, coll);
+		}
 	}
 	return n;
 }
@@ -3555,6 +3661,263 @@ static int rowspan(const box *c)
 	return n < 1 ? 1 : n > 1000 ? 1000 : n;
 }
 
+/* ---------------------------------------------------------------- collapsed borders */
+
+/* a row group (thead, tbody, tfoot) */
+static int row_group(const box *g)
+{
+	int d;
+	if (g == NULL || g->anon || g->st == NULL)
+		return 0;
+	d = kw(g->st, EP_DISPLAY);
+	return d == KW_TABLE_ROW_GROUP || d == KW_TABLE_HEADER_GROUP || d == KW_TABLE_FOOTER_GROUP;
+}
+
+/* a table whose borders collapse into its cells (CSS 2.1, 17.6.2): one
+   that asks, with rows of its own (in it, or in its row groups); one
+   without keeps its own borders */
+static int collapses(const box *t)
+{
+	const box *c, *r;
+	if (!t->table || t->anon || kw(t->st, EP_BORDER_COLLAPSE) != KW_COLLAPSE)
+		return 0;
+	for (c = t->first; c != NULL; c = c->next) {
+		if (c->tablerow)
+			return 1;
+		if (row_group(c) || c->anon)
+			for (r = c->first; r != NULL; r = r->next)
+				if (r->tablerow)
+					return 1;
+	}
+	return 0;
+}
+
+/* a box's border on a side (0 top, 1 right, 2 bottom, 3 left), for
+   collapsing; none for an anonymous box */
+static void bedge(L *l, const box *b, int side, BEDGE *e)
+{
+	static const int st[4] = { EP_BORDER_TOP_STYLE, EP_BORDER_RIGHT_STYLE, EP_BORDER_BOTTOM_STYLE,
+				   EP_BORDER_LEFT_STYLE };
+	static const int wd[4] = { EP_BORDER_TOP_WIDTH, EP_BORDER_RIGHT_WIDTH, EP_BORDER_BOTTOM_WIDTH,
+				   EP_BORDER_LEFT_WIDTH };
+	static const int co[4] = { EP_BORDER_TOP_COLOR, EP_BORDER_RIGHT_COLOR, EP_BORDER_BOTTOM_COLOR,
+				   EP_BORDER_LEFT_COLOR };
+	e->w = 0;
+	e->c = 0;
+	e->st = KW_NONE;
+	if (b == NULL || b->anon || b->st == NULL)
+		return;
+	e->st = kw(b->st, st[side]);
+	if (e->st > KW_HIDDEN) {
+		e->w = len0(l, b->st, wd[side], AUTO);
+		if (e->w == 0 && b->st->v[wd[side]].i > 0)
+			e->w = 1;	/* a thin one: a pixel, not nothing */
+		e->c = color(b->st, co[side]);
+	}
+}
+
+static int brank(int st)
+{
+	switch (st) {
+	case KW_DOUBLE: return 8;
+	case KW_SOLID: return 7;
+	case KW_DASHED: return 6;
+	case KW_DOTTED: return 5;
+	case KW_RIDGE: return 4;
+	case KW_OUTSET: return 3;
+	case KW_GROOVE: return 2;
+	case KW_INSET: return 1;
+	default: return 0;
+	}
+}
+
+/* *a becomes the one of two borders on an edge that wins (CSS 2.1,
+   17.6.2.1): hidden, else the wider, else by its style; *a, given first
+   (a cell before its row, the cell further left or up), on a tie */
+static void bwin(BEDGE *a, const BEDGE *b)
+{
+	if (a->st == KW_HIDDEN)
+		return;
+	if (b->st == KW_HIDDEN || b->w > a->w || (b->w == a->w && brank(b->st) > brank(a->st)))
+		*a = *b;
+}
+
+/* the table's rows after row r (in its group, then in the groups
+   after), counted up to max */
+static int rows_after(const box *r, int max)
+{
+	const box *k, *g;
+	int n = 0;
+	for (k = r->next; k != NULL && n < max; k = k->next)
+		if (k->tablerow)
+			n++;
+	g = r->parent;
+	if (g == NULL || g->table)
+		return n;
+	for (g = g->next; g != NULL && n < max; g = g->next) {
+		if (g->tablerow)
+			n++;
+		else if (!g->row)
+			for (k = g->first; k != NULL && n < max; k = k->next)
+				if (k->tablerow)
+					n++;
+	}
+	return n;
+}
+
+/* the borders of a row's cells where the table's collapse: each edge
+   drawn once, by the cell after it (its top and left), its winner of the
+   borders that meet there (the cells', the row's, the group's, the
+   table's); the cells on the table's right and at its foot draw those
+   too. ce: per cell, 4 edges (top, right, bottom, left) */
+static void collapse_row(L *l, box *row, box **kids, const int *start, int n, const int *above,
+			 const int32_t *colx, int32_t cy, BEDGE (*ce)[4], int *cover)
+{
+	struct coll *t = l->coll;
+	const box *g = row->parent;
+	BEDGE re[4], ge[4], none = { 0, 0, KW_NONE }, e, own[4];
+	int grp = row_group(g), gfirst = 0, glast = 1, i, k, maxrs = 1, after;
+	const box *q;
+	for (k = 0; k < 4; k++) {
+		bedge(l, row, k, &re[k]);
+		bedge(l, grp ? g : NULL, k, &ge[k]);
+	}
+	if (grp) {
+		for (q = g->first; q != NULL && !q->tablerow; q = q->next)
+			;
+		gfirst = q == row;
+		for (q = row->next; q != NULL && !q->tablerow; q = q->next)
+			;
+		glast = q == NULL;
+	}
+	memset(cover, 0, MAXCOLS * sizeof *cover);
+	for (i = 0; i < n; i++) {
+		int r = rowspan(kids[i]);
+		if (r > maxrs)
+			maxrs = r;
+		for (k = start[i]; k < start[i] + colspan(kids[i]) && k < l->ncols; k++)
+			cover[k] = 1;
+	}
+	after = rows_after(row, maxrs);
+	t->first = t->rows == 0;
+	t->last = after == 0;
+	for (k = 0; k < l->ncols; k++) {
+		if (above[k])
+			continue;
+		if (!cover[k] && t->rows > 0 && t->bot[k].w > 0)
+			/* no cell here: the line under the one above drawn all the same */
+			fill(l, colx[k], cy, colx[k + 1] - colx[k], t->bot[k].w, fade(t->bot[k].c, l->alpha));
+		if (!cover[k])
+			t->bot[k] = none;
+		t->right[k] = none;
+	}
+	for (i = 0; i < n; i++) {
+		int c0 = start[i], c1 = c0 + colspan(kids[i]), rs = rowspan(kids[i]), end = after < rs;
+		if (c0 >= l->ncols) {
+			memset(ce[i], 0, sizeof ce[i]);
+			continue;
+		}
+		if (c1 > l->ncols)
+			c1 = l->ncols;
+		for (k = 0; k < 4; k++)
+			if (kids[i]->anon || kw(kids[i]->st, EP_VISIBILITY) == KW_VISIBLE)
+				bedge(l, kids[i], k, &own[k]);
+			else
+				own[k] = none;	/* a hidden cell's own aren't shown (collapse_gaps) */
+		/* its top: the bottom of the cells above it, or the table's */
+		if (t->rows == 0) {
+			e = own[0];
+		} else {
+			e = t->bot[c0];
+			for (k = c0 + 1; k < c1; k++)
+				bwin(&e, &t->bot[k]);
+			bwin(&e, &own[0]);
+		}
+		bwin(&e, &re[0]);
+		if (gfirst)
+			bwin(&e, &ge[0]);
+		if (t->rows == 0)
+			bwin(&e, &t->t[0]);
+		ce[i][0] = e;
+		/* its left: the right of the cell beside it, or the table's */
+		if (c0 == 0) {
+			e = own[3];
+			bwin(&e, &re[3]);
+			bwin(&e, &ge[3]);
+			bwin(&e, &t->t[3]);
+		} else {
+			e = t->right[c0 - 1];
+			bwin(&e, &own[3]);
+		}
+		ce[i][3] = e;
+		/* its right: the cell beside draws it, if there is one */
+		if (c1 >= l->ncols) {
+			e = own[1];
+			bwin(&e, &re[1]);
+			bwin(&e, &ge[1]);
+			bwin(&e, &t->t[1]);
+			ce[i][1] = e;
+		} else {
+			ce[i][1] = above[c1] || (i + 1 < n && start[i + 1] == c1) ? none : own[1];
+		}
+		t->right[c1 - 1] = own[1];
+		/* its bottom: the cell below draws it, unless the table ends here */
+		e = own[2];
+		if (rs == 1) {
+			bwin(&e, &re[2]);
+			if (glast)
+				bwin(&e, &ge[2]);
+		}
+		if (end)
+			bwin(&e, &t->t[2]);
+		ce[i][2] = end ? e : none;
+		for (k = c0; k < c1; k++)
+			t->bot[k] = end ? none : e;
+	}
+	t->rows++;
+}
+
+/* a row's edges collapse_row couldn't give a cell to draw, once its
+   height (lineh) is known: the table's own borders beside a place with no
+   cell, and the edges a hidden cell owns (its neighbours' borders, which
+   show; the cell itself draws nothing) */
+static void collapse_gaps(L *l, box **kids, const int *start, int n, const int *above, const int *cover,
+			  const int32_t *colx, int32_t cy, int32_t lineh, BEDGE (*ce)[4])
+{
+	struct coll *t = l->coll;
+	int i, k, nc = l->ncols;
+	for (k = 0; k < nc; k++) {
+		if (above[k] || cover[k])
+			continue;
+		if (t->first)
+			fill(l, colx[k], cy, colx[k + 1] - colx[k], t->t[0].w, fade(t->t[0].c, l->alpha));
+		if (t->last)
+			fill(l, colx[k], cy + lineh - t->t[2].w, colx[k + 1] - colx[k], t->t[2].w,
+			     fade(t->t[2].c, l->alpha));
+		if (k == 0)
+			fill(l, colx[0], cy, t->t[3].w, lineh, fade(t->t[3].c, l->alpha));
+		if (k == nc - 1)
+			fill(l, colx[nc] - t->t[1].w, cy, t->t[1].w, lineh, fade(t->t[1].c, l->alpha));
+	}
+	for (i = 0; i < n; i++) {
+		int c0 = start[i], c1;
+		int32_t x0, x1;
+		if (c0 >= nc || kids[i]->anon || kw(kids[i]->st, EP_VISIBILITY) == KW_VISIBLE)
+			continue;
+		c1 = c0 + colspan(kids[i]);
+		if (c1 > nc)
+			c1 = nc;
+		x0 = colx[c0];
+		x1 = colx[c1];
+		fill(l, x0, cy, x1 - x0, ce[i][0].w, fade(ce[i][0].c, l->alpha));
+		if (rowspan(kids[i]) > 1)
+			continue;	/* (its height not known yet: its top only) */
+		fill(l, x0, cy + lineh - ce[i][2].w, x1 - x0, ce[i][2].w, fade(ce[i][2].c, l->alpha));
+		fill(l, x0, cy, ce[i][3].w, lineh, fade(ce[i][3].c, l->alpha));
+		fill(l, x1 - ce[i][1].w, cy, ce[i][1].w, lineh, fade(ce[i][1].c, l->alpha));
+	}
+}
+
 /* children side by side: a table row's cells */
 static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t *first)
 {
@@ -3567,6 +3930,8 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[4] = NULL;
 	int32_t *hh = NULL, *fb = NULL, rbase = AUTO;
 	int fi = -1;
+	BEDGE (*ce)[4] = NULL;		/* its cells' borders where they collapse */
+	int cover[MAXCOLS];		/* the columns its cells take */
 
 	for (c = b->first; c != NULL; c = c->next)
 		n++;
@@ -3648,6 +4013,13 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	if (cols != NULL) {
 		cx += l->sp_h;
 		cy += l->sp_v;
+		if (l->coll != NULL) {
+			ce = malloc(n * sizeof *ce);
+			if (ce == NULL)
+				l->fail = 1;
+			else
+				collapse_row(l, b, kids, start, n, above, colx, cy, ce, cover);
+		}
 	}
 	for (i = 0; i < n; i++) {
 		int32_t mb, ch, f = AUTO, pw = pref[i] > w ? w : pref[i];
@@ -3659,7 +4031,12 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 			cx = x;
 		}
 		k0[i] = l->p->nitems;
+		if (ce != NULL) {
+			l->cbd = ce[i];
+			l->cbd_box = kids[i];
+		}
 		ch = layout_block(l, kids[i], cx, cy, pw, 1, &mb, &f);
+		l->cbd = NULL;
 		k1[i] = l->p->nitems;
 		kbg[i] = l->last_bg;
 		memcpy(kbd[i], l->last_bd, sizeof kbd[i]);
@@ -3750,7 +4127,10 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 				cell_shift(l, k0[i], k1[i], kbg[i], kbd[i], va == KW_MIDDLE ? dh / 2 : dh);
 		}
 	}
+	if (ce != NULL)
+		collapse_gaps(l, kids, start, n, above, cover, colx, cy, lineh, ce);
 	h = cy + lineh - y;
+	free(ce);
 	free(pref);
 	free(kids);
 	free(start);
@@ -5095,6 +5475,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int saved_cbmov = l->cbmov, saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
 	int vis = b->anon || kw(s, EP_VISIBILITY) == KW_VISIBLE;	/* its background and borders drawn */
 	uint16_t saved_ctl = l->ctl_in;
+	struct coll *coll = NULL, *saved_coll = l->coll;
+	BEDGE te[4];			/* a table's own borders, when they collapse */
+	const BEDGE *ov = NULL;		/* a cell's, as they collapse */
+	int collapsed = 0;		/* a table whose borders collapse */
 	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
 	struct span *saved_spans = l->spans;
 	unsigned saved_alpha = l->alpha;
@@ -5150,6 +5534,26 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			pl = pr = pt = pb = bl = br = bt = bb = 0;
 			ctlbox = 1;
 		}
+		if (b->tablerow || row_group(b)) {
+			/* rows and their groups have no borders, padding or
+			   margins (CSS 2.1, 17.6.1; 8.3, 8.4); where borders
+			   collapse, theirs are the cells' (collapse_row) */
+			ml = mr = mt = mb = pl = pr = pt = pb = bl = br = bt = bb = 0;
+		} else if (collapses(b)) {
+			/* its borders the cells' at its edges, and no padding
+			   (CSS 2.1, 17.6.2) */
+			int k;
+			for (k = 0; k < 4; k++)
+				bedge(l, b, k, &te[k]);
+			pl = pr = pt = pb = bl = br = bt = bb = 0;
+			collapsed = 1;
+		} else if (l->cbd != NULL && l->cbd_box == b) {
+			ov = l->cbd;
+			bt = ov[0].w;
+			br = ov[1].w;
+			bb = ov[2].w;
+			bl = ov[3].w;
+		}
 	}
 	if (fixed_w) {
 		w = cbw - ml - mr - bl - br - pl - pr;
@@ -5191,12 +5595,20 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			l->fail = 1;
 			return 0;
 		}
-		table_sh = s->k[EP_BORDER_SPACING_H] == EK_PX ? dev(l, s->v[EP_BORDER_SPACING_H].i) : 0;
-		table_sv = s->k[EP_BORDER_SPACING_V] == EK_PX ? dev(l, s->v[EP_BORDER_SPACING_V].i) : 0;
+		table_sh = spacing(l, s, 0);
+		table_sv = spacing(l, s, 1);
 		l->minw = 1;
-		columns(l, b, w, mins);
+		columns(l, b, w, mins, table_sh);
 		l->minw = was;
-		n = columns(l, b, w, cols);
+		n = columns(l, b, w, cols, table_sh);
+		if (collapsed && n > 0) {
+			/* its borders in its edge cells: room for them, as when
+			   they are its own */
+			cols[0] += te[3].w;
+			mins[0] += te[3].w;
+			cols[n - 1] += te[1].w;
+			mins[n - 1] += te[1].w;
+		}
 		sp = table_sh * (n + 1);
 		total = sp;
 		for (i = 0; i < n; i++)
@@ -5227,6 +5639,15 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	if (b->table) {
 		l->spans = calloc(MAXCOLS, sizeof *l->spans);
+		if (collapsed && l->spans != NULL) {
+			coll = calloc(1, sizeof *coll);
+			if (coll == NULL) {
+				free(l->spans);
+				l->spans = NULL;
+			} else {
+				memcpy(coll->t, te, sizeof te);
+			}
+		}
 		if (l->spans == NULL) {
 			l->spans = saved_spans;
 			l->fail = 1;
@@ -5278,6 +5699,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->ncols = table_n;
 		l->sp_h = table_sh;
 		l->sp_v = table_sv;
+		l->coll = coll;
 	} else if (!b->tablerow && b->n != NULL && kw(s, EP_DISPLAY) != KW_TABLE_ROW_GROUP &&
 		   kw(s, EP_DISPLAY) != KW_TABLE_HEADER_GROUP && kw(s, EP_DISPLAY) != KW_TABLE_FOOTER_GROUP) {
 		/* inside a cell: rows of their own table only */
@@ -5411,11 +5833,13 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
 			if (vis) {
-				bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
-				bd[1] = fill(l, bx, by + bh - bb, bw, bb, fade(color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
-				bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, fade(color(s, EP_BORDER_LEFT_COLOR), l->alpha));
+				bd[0] = fill(l, bx, by, bw, bt, fade(ov ? ov[0].c : color(s, EP_BORDER_TOP_COLOR), l->alpha));
+				bd[1] = fill(l, bx, by + bh - bb, bw, bb,
+					     fade(ov ? ov[2].c : color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
+				bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb,
+					     fade(ov ? ov[3].c : color(s, EP_BORDER_LEFT_COLOR), l->alpha));
 				bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb,
-					     fade(color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
+					     fade(ov ? ov[1].c : color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
 			}
 #ifndef EW_ST
 			if (b->n != NULL && !b->anon)
@@ -5433,6 +5857,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	if (b->table) {
 		free(l->spans);
 		l->spans = saved_spans;
+		free(coll);
+		l->coll = saved_coll;
 	}
 	if (pos == KW_RELATIVE) {
 		/* moved where top, left, bottom and right say, its place kept */

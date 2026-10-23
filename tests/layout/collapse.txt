@@ -1,0 +1,205 @@
+page 608 x 876, background ffffff, 204 items, 0 links, title "Collapsed borders"
+text 6,28 121x14 #000000 sans11 link 0 "A grid of single lines:"
+text 12,56 21x14 #000000 sans11 link 0 "one"
+fill 6,42 35x1 #000000
+fill 6,43 1x18 #000000
+text 47,56 20x14 #000000 sans11 link 0 "two"
+fill 41,42 33x1 #000000
+fill 41,43 1x18 #000000
+text 80,56 30x14 #000000 sans11 link 0 "three"
+fill 74,42 43x1 #000000
+fill 74,43 1x18 #000000
+fill 116,43 1x18 #000000
+text 12,75 23x14 #000000 sans11 link 0 "four"
+fill 6,61 35x1 #000000
+fill 6,80 35x1 #000000
+fill 6,62 1x18 #000000
+text 47,75 20x14 #000000 sans11 link 0 "five"
+fill 41,61 33x1 #000000
+fill 41,80 33x1 #000000
+fill 41,62 1x18 #000000
+text 80,75 16x14 #000000 sans11 link 0 "six"
+fill 74,61 43x1 #000000
+fill 74,80 43x1 #000000
+fill 74,62 1x18 #000000
+fill 116,62 1x18 #000000
+text 6,103 224x14 #000000 sans11 link 0 "The table's border wider than its cells':"
+text 13,132 21x14 #000000 sans11 link 0 "one"
+fill 6,117 44x2 #3366cc
+fill 6,119 2x18 #3366cc
+text 56,132 20x14 #000000 sans11 link 0 "two"
+fill 50,117 38x2 #3366cc
+fill 50,119 1x18 #000000
+fill 86,119 2x18 #3366cc
+text 13,151 30x14 #000000 sans11 link 0 "three"
+fill 6,137 44x1 #000000
+fill 6,156 44x2 #3366cc
+fill 6,138 2x18 #3366cc
+text 56,151 23x14 #000000 sans11 link 0 "four"
+fill 50,137 38x1 #000000
+fill 50,156 38x2 #3366cc
+fill 50,138 1x18 #000000
+fill 86,138 2x18 #3366cc
+text 6,180 299x14 #000000 sans11 link 0 "Rows and a header group with borders of their own:"
+text 13,207 36x14 #000000 sans11 bold link 0 "Name"
+text 62,207 38x14 #000000 sans11 bold link 0 "Count"
+text 12,227 38x14 #000000 sans11 link 0 "Apples"
+fill 6,212 50x2 #000000
+text 62,227 7x14 #000000 sans11 link 0 "3"
+fill 56,212 50x2 #000000
+text 12,246 33x14 #000000 sans11 link 0 "Pears"
+fill 6,232 50x1 #888888
+fill 6,251 50x1 #888888
+text 62,246 14x14 #000000 sans11 link 0 "12"
+fill 56,232 50x1 #888888
+fill 56,251 50x1 #888888
+text 6,274 254x14 #000000 sans11 link 0 "A wider cell, a double one and a hidden one:"
+text 12,303 7x14 #000000 sans11 link 0 "a"
+fill 6,288 52x1 #000000
+fill 6,289 1x20 #000000
+text 66,304 26x14 #000000 sans11 link 0 "wide"
+fill 58,288 43x3 #cc0000
+fill 58,291 3x18 #cc0000
+text 109,303 7x14 #000000 sans11 link 0 "b"
+fill 101,288 49x1 #000000
+fill 101,289 3x20 #cc0000
+fill 149,289 1x20 #000000
+text 13,324 38x14 #000000 sans11 link 0 "double"
+fill 6,309 52x2 #008800
+fill 6,311 2x19 #008800
+text 65,325 6x14 #000000 sans11 link 0 "c"
+fill 58,309 43x3 #cc0000
+fill 58,312 2x18 #008800
+text 106,323 38x14 #000000 sans11 link 0 "hidden"
+text 12,345 7x14 #000000 sans11 link 0 "d"
+fill 6,330 52x2 #008800
+fill 6,350 52x1 #000000
+fill 6,332 1x18 #000000
+text 64,344 7x14 #000000 sans11 link 0 "e"
+fill 58,330 43x1 #000000
+fill 58,350 43x1 #000000
+fill 58,331 1x19 #000000
+text 107,344 4x14 #000000 sans11 link 0 "f"
+fill 101,350 49x1 #000000
+fill 101,330 1x20 #000000
+fill 149,330 1x20 #000000
+text 6,373 355x14 #000000 sans11 link 0 "Spanning cells and a short row, from HTML's border attribute:"
+text 8,408 52x14 #000000 sans11 link 0 "two rows"
+fill 6,387 57x1 #808080
+fill 6,388 1x33 #808080
+text 65,400 72x14 #000000 sans11 link 0 "two columns"
+fill 63,387 77x1 #808080
+fill 63,388 1x16 #808080
+fill 139,388 1x16 #808080
+text 65,417 6x14 #000000 sans11 link 0 "x"
+fill 63,404 36x1 #808080
+fill 63,405 1x16 #808080
+text 101,417 6x14 #000000 sans11 link 0 "y"
+fill 99,404 41x1 #808080
+fill 99,405 1x16 #808080
+fill 139,405 1x16 #808080
+fill 63,421 36x1 #808080
+fill 99,421 41x1 #808080
+text 8,434 30x14 #000000 sans11 link 0 "short"
+fill 6,421 57x1 #808080
+fill 6,438 57x1 #808080
+fill 6,422 1x16 #808080
+fill 62,422 1x16 #808080
+fill 63,438 36x1 #808080
+fill 99,438 41x1 #808080
+fill 139,421 1x18 #808080
+text 6,461 164x14 #000000 sans11 link 0 "Backgrounds up to the lines:"
+fill 6,475 36x19 #ffffdd
+text 12,489 24x14 #000000 sans11 link 0 "pale"
+fill 6,475 36x1 #000000
+fill 6,476 1x18 #000000
+fill 42,475 37x19 #ccddff
+text 48,489 24x14 #000000 sans11 link 0 "blue"
+fill 42,475 37x1 #000000
+fill 42,476 1x18 #000000
+fill 78,476 1x18 #000000
+fill 6,494 36x20 #ccddff
+text 12,508 24x14 #000000 sans11 link 0 "blue"
+fill 6,494 36x1 #000000
+fill 6,513 36x1 #000000
+fill 6,495 1x18 #000000
+fill 42,494 37x20 #ffffdd
+text 48,508 24x14 #000000 sans11 link 0 "pale"
+fill 42,494 37x1 #000000
+fill 42,513 37x1 #000000
+fill 42,495 1x18 #000000
+fill 78,495 1x18 #000000
+text 6,536 151x14 #000000 sans11 link 0 "Separate, for comparison:"
+text 8,563 21x14 #000000 sans11 link 0 "one"
+fill 6,550 25x1 #000000
+fill 6,567 25x1 #000000
+fill 6,551 1x16 #000000
+fill 30,551 1x16 #000000
+text 33,563 20x14 #000000 sans11 link 0 "two"
+fill 31,550 24x1 #000000
+fill 31,567 24x1 #000000
+fill 31,551 1x16 #000000
+fill 54,551 1x16 #000000
+text 6,590 213x14 #000000 sans11 link 0 "A table in a cell keeps its own model:"
+text 12,618 30x14 #000000 sans11 link 0 "outer"
+text 21,638 29x14 #000000 sans11 link 0 "inner"
+fill 15,624 41x1 #888888
+fill 15,643 41x1 #888888
+fill 15,625 1x18 #888888
+fill 55,625 1x18 #888888
+text 64,638 51x14 #000000 sans11 link 0 "separate"
+fill 58,624 63x1 #888888
+fill 58,643 63x1 #888888
+fill 58,625 1x18 #888888
+fill 120,625 1x18 #888888
+fill 12,621 112x1 #888888
+fill 12,646 112x1 #888888
+fill 12,622 1x24 #888888
+fill 123,622 1x24 #888888
+fill 6,604 124x1 #000000
+fill 6,659 124x1 #000000
+fill 6,605 1x54 #000000
+text 136,636 24x14 #000000 sans11 link 0 "next"
+fill 130,604 37x1 #000000
+fill 130,659 37x1 #000000
+fill 130,605 1x54 #000000
+fill 166,605 1x54 #000000
+text 6,682 560x14 #000000 sans11 link 0 "From the review: a table with no rows, rows in a wrapper, a short row in a bordered table, a wide"
+text 6,696 166x14 #000000 sans11 link 0 "shared border, a hidden cell:"
+text 8,723 46x14 #000000 sans11 link 0 "no rows"
+fill 6,710 84x2 #00aa00
+fill 6,726 84x2 #00aa00
+fill 6,712 2x14 #00aa00
+fill 88,712 2x14 #00aa00
+text 9,742 49x14 #000000 sans11 link 0 "wrapped"
+fill 8,730 51x1 #0000cc
+fill 8,745 51x1 #0000cc
+fill 8,731 1x14 #0000cc
+fill 58,731 1x14 #0000cc
+fill 6,728 55x2 #cc0000
+fill 6,746 55x2 #cc0000
+fill 6,730 2x16 #cc0000
+fill 59,730 2x16 #cc0000
+text 10,763 7x14 #000000 sans11 link 0 "a"
+fill 6,748 12x3 #cc0000
+fill 6,751 3x16 #cc0000
+text 19,763 7x14 #000000 sans11 link 0 "b"
+fill 18,748 12x3 #cc0000
+fill 27,751 3x16 #cc0000
+text 10,779 6x14 #000000 sans11 link 0 "c"
+fill 6,783 12x3 #cc0000
+fill 6,767 3x16 #cc0000
+fill 18,783 12x3 #cc0000
+fill 27,767 3x19 #cc0000
+text 7,808 7x14 #000000 sans11 link 0 "a"
+text 28,808 30x14 #000000 sans11 link 0 "bb cc"
+fill 21,796 6x16 #cc0000
+text 9,836 7x14 #000000 sans11 link 0 "p"
+fill 6,822 13x2 #000000
+fill 6,824 2x16 #000000
+fill 19,822 2x18 #000000
+text 9,854 5x14 #000000 sans11 link 0 "r"
+fill 6,840 13x2 #000000
+fill 6,858 13x2 #000000
+fill 6,842 2x16 #000000
+fill 17,842 2x16 #000000

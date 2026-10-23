@@ -2744,9 +2744,10 @@ is one atom in its line, after CSS 2.1 (9.2.4, 10.3.9, 10.8.1) and CSS Display 3
 640 pixels, against the same code without inline blocks): the test page `tests/layout/inline.html`
 3.88 M to 4.13 M (+6.3%: each box is now laid out as a block); the two pages of the page set
 that name `inline-block` most (41 times each), 18.74 M to 18.76 M and 45.76 M to 45.86 M (+0.1%,
-+0.2%); the news page, whose sheet names it 16 times, 13.41 M to 13.34 M (-0.5%); the WSJ and BBC
-pages, without any, +0.3% and +0.08%, half of it in `memcpy` and `memset`, which move with the
-heap's addresses (Size, speed and memory, above). The first version kept an inline block's places in
++0.2%); the news page, whose sheet names it 16 times, and the WSJ and BBC pages, without any,
+within half a percent either way, which is the noise between two builds of the same code
+(`memcpy` and `memset` move with the heap's addresses: Size, speed and memory, above; the news
+page measured 13.34 M and 13.41 M in two builds of one commit). The first version kept an inline block's places in
 every item, a quarter more bytes for each word, and cost the WSJ page 1.1%; moved beside the
 items, the cost went.
 
@@ -2762,6 +2763,58 @@ round's: text after one holding a dropdown drawn once and in its place, a fixed 
 positioned box in one, an inline-block whose line is only another, a label's positioned box),
 and the page set
 with and without Bootstrap's and Pico's sheets under AddressSanitizer and UBSan: no fault.
+
+## Tables: borders that collapse, cells over several columns (23 Oct 2026)
+
+Stage 2's second part (`src/layout/layout.c`).
+
+- **`border-collapse: collapse`** (CSS 2.1, 17.6.2), which most sites' tables ask for: before,
+  EWeb laid them out with the UA sheet's 2 pixels between cells and each cell's own borders,
+  so a grid of 1-pixel lines came out as double lines with gaps. Now there is no spacing and no
+  table padding, and each edge between cells is drawn once, by the cell after it (its top and
+  its left; the cells on the table's right and at its foot draw those too): the border that
+  wins of those meeting there (17.6.2.1: `hidden` wins and hides them all, then the wider, then
+  by style, `double` first; a cell before its row, its row before its group, its group before
+  the table, and the cell further left or up on a tie). The table's own borders are its edge
+  cells' (room for them kept in the edge columns, as when they are its own), and the rows' and
+  groups' borders (a line under each row, a heavier one under the header: borders that only
+  this model draws) are their cells'. `collapse_row` works out each row's edges before its
+  cells are laid out (per column, the bottom of the cell above and the right of the cell
+  beside, through cells over several rows and columns); a place with no cell still has the
+  line under the cell above it and the table's border beside it, and a hidden cell
+  (`visibility: hidden`) shows none of its own but leaves its neighbours' (`collapse_gaps`, once
+  the row's height is known). A table collapses only when it has rows of its own (in it or in
+  its row groups): one without keeps its border (normalize.css and Bootstrap set
+  `border-collapse: collapse` on every table, and it is inherited by a `display: table` box in
+  one). A cell's widest counts the right border of the cell before it, which may be the wider
+  of the two on their shared edge. Colours as drawn: every style draws solid, as before.
+- **Rows and their groups** have no borders, padding or margins in either model (CSS 2.1, 17.6.1
+  and 8.3-8.4); EWeb drew a row's border in the separate model.
+- **Cells over several columns** gave no width to their columns, so `colspan="2"` text was
+  squeezed into two narrow columns (`two columns` became five lines). Now (17.5.2.2) each gives
+  what it needs beyond its columns' widths and the spacing between them, shared by their widths,
+  after the cells of one column; `columns()` notes them as it goes, so its second pass doesn't
+  walk the rows again (64 a table; more, and it does).
+- **Left:** columns' and column groups' borders aren't part of the collapsing; half of an edge
+  cell's border doesn't go into the table's margin (the whole of it is inside); an anonymous
+  cell (text straight in a row) draws none of the edges it would own.
+
+**Measured** (68030 instructions, drawbench, against the inline-block commit): pages without
+collapsing tables or spanning cells unchanged (WSJ +0.2%, BBC +0.03%: noise); the box scores
+page of the page set, 35 cells over several columns, 36.90 M to 37.48 M (+1.6%: those cells
+measured, as they must be; walking its rows twice made it +2.9% at first); `tests/layout/
+tables.html` +0.5%. Six of the page set's 258 pages draw differently,
+each by its spanning cells (their columns wider, "View all podcasts & RSS feeds" on one line
+where it took three).
+
+Tested by `tests/layout/collapse.html` and its list (a grid of single lines; a table border
+wider than its cells'; rows and a header with borders of their own; a wider, a double and a
+hidden cell; cells over two rows and two columns and a short row, from HTML's `border`
+attribute; backgrounds up to the lines; separate for comparison; a separate table in a
+collapsing one; and the review's (same day): a table with no rows, rows in a wrapper, a short
+row in a bordered table, a wide shared border, a hidden cell), the same in the ST edition, the
+other lists unchanged, and the page set with and without Bootstrap's and Pico's sheets (Pico
+collapses every table) under AddressSanitizer and UBSan.
 
 ## The design
 
@@ -3057,7 +3110,7 @@ out of both (their paths lead nowhere on the Atari).
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
-   (`overflow`), `@import`, scrolling sideways, `border-collapse`; **3.** reading: find in the
+   (`overflow`), `@import`, scrolling sideways, `border-collapse` (done, above); **3.** reading: find in the
    page, selecting and copying, history with visited links, a page drawn while it loads, Esc
    during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
