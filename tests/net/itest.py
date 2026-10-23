@@ -423,6 +423,34 @@ try:
                       "st.png?q=%D7%90 x?q=%E0", p.stdout + p.stderr + "seen: " + seen)
         rc, out = browse("http://localhost:1/")
         check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
+        # Google's JavaScript wall (as www.google.com): EWeb's own page in
+        # its place, with the same words on the search engine set (-q)
+        goo = "http://www.google.com:%d/" % HTTP
+
+        def google(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d", "-q", "http://localhost:%d/site/echo?q=%%s" % HTTP]
+                               + list(args), cwd=work, capture_output=True, text=True, timeout=120,
+                               env=dict(os.environ, EW_HOSTS="www.google.com=127.0.0.1"))
+            return p.returncode, p.stdout + p.stderr
+
+        wall = 'title "Google wants JavaScript that EWeb doesn\'t run"'
+        found = "link 1 http://localhost:%d/site/echo?q=atari+falcon\n" % HTTP
+        rc, out = google(goo + "search?q=atari+falcon&hl=en")
+        check("the browser: Google's JavaScript wall, the words on the search engine set", rc == 0 and wall in out
+              and found in out and "refresh" not in out, out)
+        rc, out = google("-J", goo + "search?q=atari+falcon")
+        check("the browser: Google's JavaScript wall, with scripts", rc == 0 and wall in out and found in out, out)
+        rc, out = google(goo + "search?q=atari+falcon&pass=1")
+        check("the browser: Google's results when there is no wall", rc == 0 and 'title "Results"' in out, out)
+        rc, out = google(goo + "sorry/index?continue=http://www.google.com/search%3Fq%3Datari%2Bfalcon%26hl%3Den&q=EgQ")
+        check("the browser: Google's CAPTCHA, the words from where it goes on", rc == 0 and wall in out
+              and found in out, out)
+        rc, out = google("-P", goo + "search?q=atari+falcon", goo + "httpservice/retry/enablejs?sei=k")
+        check("the browser: Google's \"turn on JavaScript\", the words from the page before", rc == 0
+              and wall in out and found in out, out)
+        rc, out = google("-q", "", goo + "search?q=atari+falcon")
+        check("the browser: Google's JavaScript wall with no search engine set", rc == 0 and wall in out
+              and "A search engine set in Settings" in out, out)
         # saving: a file EWeb doesn't show (kept in memory, saved in one
         # go), a link's file (streamed to the disk), the page shown
         def save(*args):

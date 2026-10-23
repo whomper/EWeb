@@ -527,12 +527,10 @@ static int js_after(browser *b, int *load_r);
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post);
 static int load(browser *b, const char *url, int mode);
 
-#ifndef EW_ST
 static int hexval(int c)
 {
 	return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
 }
-#endif
 
 static void host_of(const char *url, char *out, int size)
 {
@@ -544,6 +542,178 @@ static void host_of(const char *url, char *out, int size)
 		n = size - 1;
 	memcpy(out, h, n);
 	out[n] = 0;
+}
+
+/* ------------------------------------------------- Google's JavaScript wall */
+
+/* a query's parameter (as it is, %-encoded) into out, "" if none */
+static int query_param(const char *url, const char *name, char *out, int size)
+{
+	const char *q = strchr(url, '?'), *e;
+	size_t n = strlen(name);
+	out[0] = 0;
+	if (q == NULL)
+		return 0;
+	e = q + strcspn(q, "#");
+	for (q++; q < e;) {
+		const char *amp = q + strcspn(q, "&#");
+		if ((size_t) (amp - q) > n && strncmp(q, name, n) == 0 && q[n] == '=') {
+			size_t v = (size_t) (amp - q) - n - 1;
+			if (v >= (size_t) size)
+				return 0;
+			memcpy(out, q + n + 1, v);
+			out[v] = 0;
+			return 1;
+		}
+		q = *amp == '&' ? amp + 1 : e;
+	}
+	return 0;
+}
+
+/* %-decoded, '+' a space when plus */
+static void unescape(const char *s, char *out, int size, int plus)
+{
+	int o = 0;
+	for (; *s && o < size - 1; s++) {
+		if (*s == '%' && hexval(s[1]) >= 0 && hexval(s[2]) >= 0) {
+			out[o++] = (char) (hexval(s[1]) * 16 + hexval(s[2]));
+			s += 2;
+		} else {
+			out[o++] = plus && *s == '+' ? ' ' : *s;
+		}
+	}
+	out[o] = 0;
+}
+
+/* a Google search's address: google.TLD (www. or not; co.TLD, com.TLD) */
+static int google_host(const char *url)
+{
+	char h[128], *t;
+	int i;
+	host_of(url, h, sizeof h);
+	h[strcspn(h, ":")] = 0;
+	for (i = 0; h[i]; i++)
+		if (h[i] >= 'A' && h[i] <= 'Z')
+			h[i] = (char) (h[i] + 32);
+	t = strncmp(h, "www.", 4) == 0 ? h + 4 : h;
+	if (strncmp(t, "google.", 7) != 0)
+		return 0;
+	t += 7;
+	if (strncmp(t, "co.", 3) == 0)
+		t += 3;
+	else if (strncmp(t, "com.", 4) == 0)
+		t += 4;
+	return *t && strchr(t, '.') == NULL;
+}
+
+/* the path of an address ("" for none) */
+static const char *url_path(const char *url)
+{
+	const char *h = strstr(url, "://");
+	h = h ? h + 3 : url;
+	return h + strcspn(h, "/?#");
+}
+
+static int has_text(const char *s, long n, const char *w)
+{
+	size_t wl = strlen(w);
+	const char *e = s + n - (long) wl + 1;
+	for (; s < e; s++) {
+		s = memchr(s, w[0], (size_t) (e - s));
+		if (s == NULL)
+			return 0;
+		if (memcmp(s, w, wl) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+/* Google's search shows its results (since January 2025) only to a browser
+   that runs its check first, a script written for the big browsers, which
+   EWeb's little JavaScript doesn't pass; without it, a /search's
+   <noscript> sends it to /httpservice/retry/enablejs ("turn on JavaScript
+   to keep searching"), and /sorry/ is its CAPTCHA. On those EWeb shows a
+   page of its own in their place, with the same words on the search
+   engine set (SEARCH=), which needs no JavaScript and no Pi. q: the words
+   (%-encoded, as in the address), "" when they aren't known */
+static int google_wall(const browser *b, const FETCH *f, char *q, int qsize)
+{
+	const char *path;
+	q[0] = 0;
+	if (!google_host(f->url))
+		return 0;
+	path = url_path(f->url);
+	if (strncmp(path, "/search", 7) == 0 && (path[7] == 0 || path[7] == '?' || path[7] == '#')) {
+		if (!has_text(f->data, f->len, "/httpservice/retry/enablejs"))
+			return 0;	/* (results: the check passed elsewhere, or no wall yet) */
+		query_param(f->url, "q", q, qsize);
+		return 1;
+	}
+	if (strncmp(path, "/httpservice/retry/enablejs", 27) == 0) {
+		/* the page it came from, a /search refreshed to this */
+		if (b->cur >= 0 && google_host(b->hist[b->cur].url) &&
+		    strncmp(url_path(b->hist[b->cur].url), "/search", 7) == 0)
+			query_param(b->hist[b->cur].url, "q", q, qsize);
+		return 1;
+	}
+	if (strncmp(path, "/sorry/", 7) == 0) {
+		/* the search it stopped: its continue=, an address %-encoded */
+		char c[1024], u[1024];
+		if (query_param(f->url, "continue", c, sizeof c)) {
+			unescape(c, u, sizeof u, 0);
+			query_param(u, "q", q, qsize);
+		}
+		return 1;
+	}
+	return 0;
+}
+
+static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
+{
+	static const char what[] = "Google wants JavaScript that EWeb doesn't run";
+	char words[512], to[1536], host[128];
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
+	sb_adds(s, what);
+	sb_adds(s, "</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "</head><body><h1>");
+	sb_adds(s, what);
+	sb_adds(s, "</h1><p class=addr>");
+	esc(s, url);
+	sb_adds(s, "</p><p>Google shows its results only to a browser that first runs a check of its "
+		   "own, a script written for today's big browsers. EWeb runs a little JavaScript, "
+		   "and not that one.</p>");
+	if (b->search != NULL && b->search[0]) {
+		const char *pc = strstr(b->search, "%s");
+		unescape(q, words, sizeof words, 1);
+		if (q[0] && pc != NULL)
+			snprintf(to, sizeof to, "%.*s%s%s", (int) (pc - b->search), b->search, q, pc + 2);
+		else if (q[0])
+			snprintf(to, sizeof to, "%s%s", b->search, q);
+		else	/* (no words: the search engine's own page, its address up to its query) */
+			snprintf(to, sizeof to, "%.*s", (int) strcspn(b->search, "?"), b->search);
+		host_of(to, host, sizeof host);
+		sb_adds(s, "<p><a href=\"");
+		esc(s, to);
+		sb_adds(s, "\">");
+		if (words[0]) {
+			sb_adds(s, "Search for \xe2\x80\x9c");
+			esc(s, words);
+			sb_adds(s, "\xe2\x80\x9d with ");
+		} else {
+			sb_adds(s, "Search with ");
+		}
+		esc(s, host);
+		sb_adds(s, "</a>, the search engine in Settings, which needs no JavaScript (words typed "
+			   "in the address go there too).</p>");
+	} else {
+		sb_adds(s, "<p>A search engine set in Settings (General), such as FrogFind, needs no "
+			   "JavaScript: words typed in the address go there.</p>");
+	}
+	if (http_gateway[0])
+		sb_adds(s, "<p class=small>Google's own page can be shown through the Pi's browser "
+			   "(View &gt; Through the Pi's browser).</p>");
+	sb_adds(s, "</body></html>");
 }
 
 /* cookie.c's for the HTTP client's requests */
@@ -1852,10 +2022,18 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		sb_free(&src);
 		return download(b, f);
 	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
-		lay_recheck = mode == NAV_REFRESH;
-		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
-		lay_recheck = 0;
-		encodable = 1;
+		char q[512];
+		if (google_wall(b, f, q, sizeof q)) {
+			/* EWeb's own page in its place, which goes nowhere */
+			wall_page(b, &src, f->url, q);
+			f->refresh[0] = 0;
+			r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
+		} else {
+			lay_recheck = mode == NAV_REFRESH;
+			r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+			lay_recheck = 0;
+			encodable = 1;
+		}
 	} else if (strncmp(f->mime, "text/", 5) == 0) {
 		/* a text file: sniffed as a page is, but for a <meta> */
 		build_plain = 1;

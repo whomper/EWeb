@@ -2922,6 +2922,31 @@ row in a bordered table, a wide shared border, a hidden cell), the same in the S
 other lists unchanged, and the page set with and without Bootstrap's and Pico's sheets (Pico
 collapses every table) under AddressSanitizer and UBSan.
 
+## Google's JavaScript wall (23 Oct 2026)
+
+Erez's report: google.com, words typed into its field, and the next page said to turn on JavaScript
+to keep searching, with Options > Run this site's scripts ticked. Since January 2025 Google shows
+its results only to a browser that first runs a check of its own; without it, a `/search` page's
+`<noscript>` goes on to `/httpservice/retry/enablejs`, the page that says so, and `/sorry/` is its
+CAPTCHA. EWeb's little JavaScript (QuickJS on its lean DOM) doesn't pass the check, so with scripts
+on or off a search ends there; making it pass would mean chasing a check made to tell the big
+browsers from the rest, which changes as Google likes.
+
+Erez's rule (23 Oct 2026): EWeb relies on the Pi as little as it needs to and is self-contained. So
+EWeb answers the wall itself (`src/browse`, `google_wall`): a page from Google's search (its host
+`google.TLD`, `www.` or not, `co.` and `com.` before a country's) that is the wall, the "turn on
+JavaScript" page or the CAPTCHA, is shown as a page of EWeb's own in its place, which says why and
+links to the same words with the search engine in Settings (`SEARCH=`, FrogFind by default: no
+JavaScript, no Pi). The words are the `/search` address's `q`, the CAPTCHA's from the address it
+goes on to (`continue=`), and the "turn on JavaScript" page's from the page before it. Only a Google
+`/search` page is looked through for the wall, so other pages cost nothing. The Pi's browser is
+named last, and only when the Pi gateway is set up.
+
+Tested by `make itest` (`/search`, `/httpservice/retry/enablejs` and `/sorry/` as `www.google.com`
+through `EW_HOSTS`, as Google sends them to a browser without its check: the page in their place and
+its link, with scripts on and off, from the CAPTCHA's address and from the page before, with no
+search engine set, and a `/search` with results left as it is).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

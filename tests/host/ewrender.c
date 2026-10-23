@@ -56,6 +56,8 @@
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
  * Through the Pi's browser: webgate's snapshots).
+ * -q SEARCH: words typed in the address go there, %s for them (as
+ * EWEB.PRG's SEARCH=; none by default).
  * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
  * -J runs the pages' scripts (src/js, every site's), printing what they
@@ -647,6 +649,7 @@ int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
+	const char *search = NULL;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	int colours = 0;
 	static PIC_PAL pal;
@@ -733,6 +736,8 @@ int main(int argc, char **argv)
 			dc_dir(argv[++i], 8L << 20);
 		else if (!strcmp(argv[i], "-R"))
 			snapshot = 1;
+		else if (!strcmp(argv[i], "-q") && i + 1 < argc)
+			search = argv[++i];
 		else if (!strcmp(argv[i], "-A"))
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-J"))
@@ -811,6 +816,7 @@ int main(int argc, char **argv)
 	b.extra_css = extra.s;
 	b.pictures = !nopics;
 	b.snapshot = snapshot;
+	b.search = search;
 	b.pens = pens;
 	make_pal(band ? 256 : colours ? colours : 16);
 	if (band || penlist || colours) {

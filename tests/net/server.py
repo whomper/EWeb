@@ -278,6 +278,20 @@ IMP_CSS = {"css/main.css": b"@charset \"utf-8\";\n@import \"parts/one.css\";\n"
            "css/late.css": b"p { color: #ff0000 }",
            "two.css": b"#c { color: #aa0000 }", "inline.css": b"#d { color: #aa00aa }"}
 IMP_COUNT = {}
+# Google's search as a browser without its check meets it (2025): a /search
+# whose <noscript> goes on to /httpservice/retry/enablejs, that page, and
+# /sorry/, its CAPTCHA; with pass=1 the results. make itest asks for them
+# as www.google.com (EW_HOSTS), and EWeb shows its own page in their place
+GOOGLE_WALL = (b'<!DOCTYPE html><html lang="en"><head><title>Google Search</title>'
+               b'<script nonce="n">window.google={kEI:"k"};</script></head><body><noscript>'
+               b'<style>table,div,span,p{display:none}</style>'
+               b'<meta content="0;url=/httpservice/retry/enablejs?sei=k" http-equiv="refresh">'
+               b'<div style="display:block">Please click <a href="/httpservice/retry/enablejs?sei=k">here</a>'
+               b' if you are not redirected within a few seconds.</div></noscript>'
+               b'<script nonce="n">(function(){var c=0;for(var i=0;i<10;i++)c+=i;})();</script></body></html>')
+GOOGLE_RESULTS = b"<!DOCTYPE html><title>Results</title><p>Atari Falcon030, 1992</p>"
+GOOGLE_ENABLEJS = b"<!DOCTYPE html><title>Google Search</title><p>Turn on JavaScript to keep searching</p>"
+GOOGLE_SORRY = b"<!DOCTYPE html><title>Sorry</title><p>Our systems have detected unusual traffic</p>"
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
@@ -745,6 +759,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
         elif p.startswith("/site/hits/"):
             self.send(200, b"%d" % HITS.get(p[11:], 0), "text/plain")
+        elif p.startswith("/search?"):
+            self.send(200, GOOGLE_RESULTS if "pass=1" in p else GOOGLE_WALL)
+        elif p.startswith("/httpservice/retry/enablejs"):
+            self.send(200, GOOGLE_ENABLEJS)
+        elif p.startswith("/sorry/"):
+            self.send(429, GOOGLE_SORRY)
         elif p == "/redirect":
             self.send(302, b"", extra=[("Location", "/page")])
         elif p == "/secure":

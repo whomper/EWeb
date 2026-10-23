@@ -598,6 +598,12 @@ there at once; where the window was, when you quit:
 - **"EWeb can't open this page"** with the reason: the address is wrong,
   the site is down, or the network isn't there (is STinG loaded?).
   ^R tries again
+- **"Google wants JavaScript that EWeb doesn't run"**: Google's search
+  shows its results only to browsers that first run a check of its own,
+  which EWeb's little JavaScript doesn't pass. The page has a link that
+  searches for the same words with the search engine in Settings
+  (FrogFind unless you chose another), which needs no JavaScript; words
+  typed in the address go there too
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `CACERT.PEM` and `ROOTS.DAT` are
   next to `EWEB.PRG`, and the Atari's clock is right
