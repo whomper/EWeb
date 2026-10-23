@@ -2560,6 +2560,49 @@ Standard (4.11 the elements, 15.5.4 their rendering) and as browsers show them:
   `display: contents`; `tests/js/details.html` listens to the template's details, so that its
   having no toggle event is tested.
 
+## Size, speed and memory (23 Oct 2026)
+
+Erez asked whether EWeb is getting heavy. `EWEB.PRG` 0.27 is 1,856 KB; from the link map, its code
+and data:
+
+| Part | Size |
+|---|---|
+| JavaScript: QuickJS, musl's maths, the lean DOM | 897 KB |
+| GEM side: the window, menus, dialogs, `common/`'s building blocks | 144 KB |
+| Pictures (`common/src/pic.c`: libjpeg-turbo, PNG, libnsgif, the dither) | 138 KB |
+| The HTML parser and the document | 130 KB |
+| The runtime and libparserutils' character sets | 127 KB |
+| Layout and drawing | 113 KB |
+| TLS (BearSSL) | 100 KB |
+| The CSS engine | 95 KB |
+| The network | 88 KB |
+| Browsing | 63 KB |
+
+and 576 KB of BSS (the stack 256 KB, the CSS engine's buffers 189 KB). `EWEBST.PRG` is 518 KB
+(703 KB with its BSS): no JavaScript, no TLS.
+
+**Speed has gone the other way.** The two pages of the first timings (above), from the disk on the
+emulated Falcon (Hatari, a 68030 at 32 MHz with TT-RAM, TOS 4.04, 640x480 in 16 colours), each the
+second time (the first time after a start adds about a second, the fonts unpacked):
+
+| Page | 18 Oct 2026 | 23 Oct 2026 | Parse | Style | Layout | Drawn |
+|---|---|---|---|---|---|---|
+| BBC News (100 KB) | 4.35 s | 2.96 s | 1.00 s | 0.19 s | 1.23 s | 0.33 s |
+| WSJ (186 KB) | 9.49 s | 4.16 s | 1.64 s | 0.34 s | 1.70 s | 0.35 s |
+
+The parse is three to four times faster (EWeb's own parser); the layout costs 13% more on the WSJ
+page for the features since, and more on the BBC page, which now shows half as much again (7,486
+pixels tall, not 4,965).
+
+**Memory is where the size tells.** The program and its BSS take 2.4 MB before a page. On a
+**4 MB Falcon** (16 MHz, no TT-RAM, TOS 4.04) 803 KB is left at the start, and both pages are
+refused for memory. A build without JavaScript (which needs an FPU, which that Falcon has not)
+left 1.54 MB and showed them (8.4 s and 11.1 s; a 176 KB WSJ page still didn't fit). With the
+family's three accessories loaded (ECal, EContact, EHypView: about 2.4 MB of a 4 MB Falcon, the
+family's known limit) about 1.1 MB is left for a program: TOS won't start `EWEB.PRG` in any of
+these forms, and `EWEBST.PRG` starts with 319 KB free. The rigs had never run `EWEB.PRG` on the
+4 MB Falcon. Whether that Falcon is a target is open (below).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -2850,9 +2893,21 @@ out of both (their paths lead nowhere on the Atari).
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.
 5. **JavaScript:** QuickJS with the lean DOM. *Done (20 Oct 2026):* above, with an FPU.
+6. **The web as sites make it** (Erez's go, 22 Oct 2026), in five stages. *Stage 1 done (0.27):*
+   refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
+   centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
+   256-colour palette (Decisions): **2.** the layout's core: `inline-block`, boxes that scroll
+   (`overflow`), `@import`, scrolling sideways, `border-collapse`; **3.** reading: find in the
+   page, selecting and copying, history with visited links, a page drawn while it loads, Esc
+   during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
+   UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions
 
+- **`EWEB.PRG` on a 4 MB Falcon** (Size, speed and memory, above): a build without the FPU
+  (no JavaScript) with its memory sized at the start, one program with JavaScript in a file of its
+  own, or a floor of 14 MB or TT-RAM, the 4 MB Falcon running `EWEBST.PRG`. Erez left it open
+  (23 Oct 2026) while EWeb goes on; the hub records the floor in the guidelines once he decides.
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.
 
