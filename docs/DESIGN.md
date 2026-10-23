@@ -2624,18 +2624,22 @@ Erez's decision (Decisions): the stock 4 MB Falcon is a target of `EWEB.PRG`'s, 
 program as his DFB1's. What it took:
 
 - **JavaScript in a file of its own, `EWEBJS.OVL`** (`atari/js_ovl.h`): QuickJS, musl's maths and
-  `src/js/js.c`, 919 KB, next to `EWEB.PRG`, loaded the first time a site whose scripts are on is
-  opened, and only with an FPU (a stock Falcon never loads it), into the heap (TT RAM first), and
-  kept for the rest of the run. It is linked at 0 with what it takes from `EWEB.PRG` left undefined
-  (`atari/ovl.ld`); `tools/mkovl.py` makes it a TOS program's image (TOS's 14,186 fixups) with an
-  imports' part: the 858 places that call or read one of the 57 things it takes from `EWEB.PRG`
+  `src/js/js.c`, 919 KB, next to `EWEB.PRG`, loaded the first time a page with scripts (a `<script>`
+  or an `on...` attribute: `doc_has_scripts`) is opened on a site whose scripts are on, and only with
+  an FPU (a stock Falcon never loads it), into the heap (TT RAM first), and kept for the rest of the
+  run; the log says where it went, for a crash in it. It is linked at 0 with what it takes from `EWEB.PRG` left undefined
+  (`atari/ovl.ld`); `tools/mkovl.py` makes it a TOS program's image (TOS's 14,196 fixups) with an
+  imports' part: the 851 places that call or read one of the 58 things it takes from `EWEB.PRG`
   (`malloc`, the document's calls, `ec_stack_floor`), each filled in when it is loaded from
   `js_imports[]` (`build/gen/js_imports.c`, from the same tool), and its text starts with the 13
   calls `EWEB.PRG` makes (`js.h`). As the overlay reads EWeb's structures, a hash of the headers
   both are made from and `VERSION` (`JS_ABI`), and a CRC of the imports' names, must match: one from
   another build is refused. The caches are cleared after it is loaded (the 68030's CACR, CPUSHA on a
-  68040 or 68060). A page whose scripts can't run (the file missing, damaged, from another version
-  or too big for the memory) is shown as with its scripts off, and the status line says why.
+  68040 or 68060). A page whose scripts can't run (the file missing, damaged or from another version,
+  for the rest of the run; too big for the memory, until a page next needs it) is shown as with its
+  scripts off, and the status line says why. A review (same day) checked every relocation of the
+  file by loading it at another address in a model of the loader, and the loader's bounds against a
+  damaged file.
   `EWEB.PRG` is now 947 KB (1,856 before), 1.50 MB with its BSS (2.40), and has no FPU
   instruction at all.
 - **Drawing in bands when memory is short:** the window's buffers for the screen's height (460 KB

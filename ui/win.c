@@ -720,8 +720,6 @@ void win_status(const char *s)
 		snprintf(t, sizeof t, " %s", s);
 	else if (br_refresh_note(&br, t + 1, (int) sizeof t - 1))
 		t[0] = ' ';	/* "Going on to example.com in 5 s: Esc stays here." */
-	else if (br.note[0])	/* the page's ("Its scripts didn't run: ...") */
-		snprintf(t, sizeof t, " %s", br.note);
 	else if (br.security[0])
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else

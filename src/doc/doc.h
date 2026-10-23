@@ -170,6 +170,9 @@ uint32_t doc_sheets_key(const doc *d);
    stylesheet, an alternative too, href, not disabled, a CSS type) or
    one preloaded as a style: for scripts, its load event */
 int doc_link_loads(const dnode *n);
+/* has the page a script or an on... attribute: 1 (the scripts' runtime
+   is needed, EWEB.PRG's EWEBJS.OVL loaded for it) */
+int doc_has_scripts(const doc *d);
 
 /* styles every element: the UA sheet, then the sheets added with
    ec_sheet() in between (the loader's), then selection; doc_select:

@@ -27,8 +27,10 @@ import zlib
 sys.path.insert(0, __file__.rsplit("/", 2)[0] + "/common/tools")
 from elf2tos import read_elf  # noqa: E402
 
-R_68K_32, R_68K_PC32, R_68K_PLT32 = 1, 4, 7
+R_68K_32, R_68K_16, R_68K_8, R_68K_PC32, R_68K_PLT32 = 1, 2, 3, 4, 13
 PC_KINDS = (R_68K_PC32, R_68K_PLT32)
+SHN_ABS = 0xFFF1
+SHF_ALLOC = 2
 HEAD = """/* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /* Made by tools/mkovl.py: what EWEBJS.OVL takes from EWEB.PRG, in its order. */
@@ -50,6 +52,10 @@ def main():
         sys.exit(".data must follow .text directly")
     if bss and bsize and bss["addr"] != tsize + dsize:
         sys.exit(".bss must follow .data directly")
+    # nothing else may be loaded (a .got or .init_array would be lost)
+    for s in secs:
+        if s["flags"] & SHF_ALLOC and s["size"] and s["name"] not in (".text", ".data", ".bss"):
+            sys.exit("%s: a loaded section mkovl.py doesn't know" % s["name"])
     image = bytearray(data[text["off"]:text["off"] + tsize])
     if dsize:
         image += data[dat["off"]:dat["off"] + dsize]
@@ -84,7 +90,12 @@ def main():
                 else:
                     sys.exit("%s: relocation %d at %x can't reach EWEB.PRG" % (name, kind, r_off))
             elif kind == R_68K_32:
-                fixups.append(r_off)
+                # an address in the overlay (not a number: no symbol, or
+                # an absolute one)
+                if si and shndx != SHN_ABS:
+                    fixups.append(r_off)
+            elif kind in (R_68K_16, R_68K_8):
+                sys.exit("%s: a 16- or 8-bit address at %x can't be moved" % (name, r_off))
     names = sorted(set(n for _, n, _ in places))
     index = {n: i for i, n in enumerate(names)}
     crc = zlib.crc32("\n".join(names).encode()) & 0xFFFFFFFF

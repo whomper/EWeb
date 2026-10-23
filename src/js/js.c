@@ -4369,34 +4369,13 @@ static void sheet_loads(ejs *j)
 }
 
 /* does the page have scripts (or handlers in its attributes) */
-static int has_scripts(const doc *d)
-{
-	dnode *n;
-	if (d->root == NULL)
-		return 0;
-	for (n = d->root; n != NULL; n = next_in(n, d->root, 1)) {
-		uint16_t i;
-		if (n->type != DN_ELEMENT)
-			continue;
-		if (is_html(n, T_SCRIPT))
-			return 1;
-		for (i = 0; i < n->nattr; i++) {
-			size_t al;
-			const char *a = ec_atom_text(n->attrs[i].name, &al);
-			if (al > 2 && a[0] == 'o' && a[1] == 'n')
-				return 1;
-		}
-	}
-	return 0;
-}
-
 int js_page(doc *d, const char *url, const char *base, const js_host *h)
 {
 	ejs *j;
 	dnode *n;
 	unsigned long t = pf_ms();
 
-	if (!has_scripts(d))
+	if (!doc_has_scripts(d))
 		return JS_NONE;
 	if ((j = calloc(1, sizeof *j)) == NULL)
 		return JS_NO_MEMORY;

@@ -635,7 +635,8 @@ def scripts_run(site):
         ev = r.wait(r"shown ", 120)
         check("scripts: the page's ran (%s)" % (ran or "")[12:], ran is not None and ev is not None and
               ev.endswith("title Tabs ready"), str(r.events()))
-        check("scripts: from EWEBJS.OVL, loaded for them", "js: EWEBJS.OVL loaded" in r.events(),
+        check("scripts: from EWEBJS.OVL, loaded for them",
+              any(e.startswith("js: EWEBJS.OVL loaded at ") for e in r.events()),
               str(r.events()[:8]))
         r.shot(0)
         if ev is None:
@@ -690,7 +691,8 @@ def scripts_without(site):
         check("scripts: without EWEBJS.OVL the page shows without them (%s)" % (said or "")[5:],
               ev is not None and ev.startswith("shown %stabs.html " % site) and
               not any(e.startswith("scripts ran") for e in r.events()) and
-              said is not None and "EWEBJS.OVL is missing" in said and bar(r) == said[5:], str(r.events()[-8:]))
+              said is not None and "EWEBJS.OVL is missing" in said and "status " + said[5:] in r.events(),
+              str(r.events()[-8:]))
         r.shot(0)
         r.key(Q, (CTRL,))
         check("scripts: without EWEBJS.OVL, ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()[-5:]))
@@ -751,7 +753,7 @@ def falcon4():
         check("falcon4: the big page loaded again", last.startswith("shown file:///C:/BIG.HTM ") and
               " links 300 " in last, last)
         check("falcon4: no FPU, so no scripts and no EWEBJS.OVL",
-              "js: EWEBJS.OVL loaded" not in r.events() and
+              not any(e.startswith("js: EWEBJS.OVL") for e in r.events()) and
               not any(e.startswith("scripts ran") for e in r.events()), str(r.events()[-6:]))
         r.key(L, (CTRL,))
         r.type("file:///C:/PICS.HTM")

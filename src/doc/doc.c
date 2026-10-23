@@ -723,6 +723,34 @@ doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media
 }
 
 #ifndef EW_ST	/* the ST edition runs no scripts */
+int doc_has_scripts(const doc *d)
+{
+	const dnode *n = d->root;
+	while (n != NULL) {
+		if (n->type == DN_ELEMENT) {
+			uint16_t i;
+			if (n->ns == DN_NS_HTML && n->tag == T_SCRIPT)
+				return 1;
+			for (i = 0; i < n->nattr; i++) {
+				size_t al;
+				const char *a = ec_atom_text(n->attrs[i].name, &al);
+				if (al > 2 && a[0] == 'o' && a[1] == 'n')
+					return 1;
+			}
+		}
+		/* the next in tree order */
+		if (n->first != NULL)
+			n = n->first;
+		else {
+			while (n != NULL && n->next == NULL)
+				n = n->parent;
+			if (n != NULL)
+				n = n->next;
+		}
+	}
+	return 0;
+}
+
 /* the element links, flags and hints again, and the form controls, after
    a script changed the tree */
 void doc_refresh(doc *d)

@@ -652,8 +652,12 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		file_path(url, path, sizeof path);
 		f->data = pf_load(path, &f->len);
 		if (f->data == NULL) {
-			/* (there, it wouldn't fit in the memory) */
-			f->nomem = pf_size(path) >= 0;
+			/* there, and as much memory couldn't be had: short of it
+			   (not a file that can't be read) */
+			long size = pf_size(path);
+			void *room = size >= 0 ? malloc((size_t) size + 1) : NULL;
+			f->nomem = size >= 0 && room == NULL;
+			free(room);
 			snprintf(f->err, sizeof f->err, f->nomem ? "There isn't the memory to read %.150s." :
 				 "There is no file %.150s, or it can't be read.", path);
 			return 0;
@@ -1168,11 +1172,6 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 
 	b->note[0] = 0;
 #ifndef EW_ST
-	if (scripts && !js_available()) {
-		/* EWEBJS.OVL couldn't be loaded: the page as with its scripts off */
-		scripts = 0;
-		snprintf(b->note, sizeof b->note, "Its scripts didn't run: EWEBJS.OVL %s", js_problem());
-	}
 parse:
 #endif
 	phase(b, BRPH_BUILD);
@@ -1196,6 +1195,16 @@ parse:
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
 #ifndef EW_ST
+	if (scripts && !conn_stop && doc_has_scripts(d) && !js_available()) {
+		/* EWEBJS.OVL couldn't be loaded (only a page with scripts has it
+		   loaded): the page as with its scripts off, and the note says why */
+		snprintf(b->note, sizeof b->note, "Its scripts didn't run: EWEBJS.OVL %s", js_problem());
+		doc_free(d);
+		scripts = 0;
+		again = 1;
+		t = pf_ms();
+		goto parse;
+	}
 	if (scripts && !conn_stop) {
 		js_host h;
 		int r;
@@ -1702,7 +1711,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	SBUF src;
 	doc *d;
 	page *p;
-	int r, encodable = 0;
+	int r, encodable = 0, gone = 0;
 	char host[128], enc[sizeof b->enc];
 
 	conn_stop = 0;
@@ -1770,18 +1779,26 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	b->ms_fetch = pf_ms();
 	r = fetch(b, url, b->typed ? NULL : b->url,
 		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
-	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b))
+	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b)) {
 		/* it didn't fit beside the pages kept and the one shown (a page
 		   loaded again on a small machine): they go, and once more (not
 		   a form sent, which the server may have had) */
+		gone = b->p == NULL;
 		r = fetch(b, url, b->typed ? NULL : b->url,
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
+	}
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
-		if (conn_stop) {
+		if (conn_stop && !gone) {
 			conn_stop = 0;
 			free(f);
 			return BR_STOPPED;
+		}
+		if (conn_stop) {
+			/* stopped once the page shown had gone for the memory: it
+			   can't stay, so this says so in its place */
+			conn_stop = 0;
+			snprintf(f->err, sizeof f->err, "%s", "Stopped.");
 		}
 		error_page(&src, url, "EWeb can't open this page", f->err,
 			   has_scheme(url, "file") ? NULL :
