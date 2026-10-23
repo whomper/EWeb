@@ -18,7 +18,7 @@ it, and how EWeb gets past CAPTCHAs.
 | Speed | **Better than every other Atari browser, and the fastest code** (19 Oct 2026) | EWeb has to outdo the other Atari browsers (below) on what it shows and on how fast it shows it, and each part's code has to be the fastest that can be written for the machine. A part is measured in 68030 instructions on the page set and on the emulated Falcon, and timed on your DFB1; where something faster can be written, it is. NetSurf's code stays only where nothing faster beats it. |
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
 | 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb will set a palette of its own while it runs in 256 colours, and give TOS's back when it is left, with a setting to keep TOS's. Not built yet: the dither, the DSP's and the Pi's pens must use the same palette. |
-| ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its small buffers may grow and its rigs drop the 1 MB machine; it is tested on the 1040 ST with 4 MB, and no 2 MB machine is added for now. |
+| ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its buffers are the Falcon's again and its rigs dropped the 1 MB machine (The ST edition, below); it is tested on the 1040 ST with 4 MB, with the family's accessories loaded too, and no 2 MB machine is added for now. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -1396,6 +1396,21 @@ file's buffers for encrypting and decrypting values (12 KB) are now taken only w
 or written, and the planes table for 256 colours (8 KB) only on such a screen: 203.6 KB free
 without the throbber, about 197 KB with it, and the pictures page shows again.
 
+**On the 4 MB ST since 23 Oct 2026** (the 1 MB ST dropped, Decisions): what the 1 MB ST couldn't
+spare is the Falcon's again. The stack is 256 KB (not 48; its floor 16 KB, not 8), the stylesheet's
+limits 4,096 tokens a prelude, 512 values and declarations and 8 levels of `:not()` (not 1,024, 256
+and 4), the cascade's 2,048 hits and 1,024 kept styles (not 512 and 256), the names 2,048, the HTTP
+client's copies 16 KB (not 2), gradients 64 stops; and `-webkit-gradient()` is the ST edition's
+too. `EWEBST.PRG` now needs 1,036 KB to load (472 KB of code, 23 of data, 541 of BSS, from 703 KB),
+and the 1040 ST has 2,432 KB free at the start (2,787 before); the family's accessories loaded
+beside it pass (`acc_all.py ST --prg EWeb:EWEBST.PRG:EWEB.FNT`). The pages time as before (the
+tables page 12.8 s in monochrome, 7.1 s in medium resolution; styling 20 ms slower on each page,
+the larger cache to clear). A page 1000 deep is shown cut at the floor (4,892 pixels of it), where
+the 1 MB ST couldn't show it, and six tables nested in each other lay out whole (they laid out to
+nothing on the 1 MB ST). The arenas' small pieces stay: they cost 0.08% of the instructions, and a
+page that takes only what it needs leaves more of the ST to the pages kept for Back and the
+pictures.
+
 ## A little JavaScript: QuickJS on EWeb's own document (20 Oct 2026)
 
 The design's part 2 (below): QuickJS (`third_party/quickjs`, 2026-06-04, one small patch for a
@@ -1492,9 +1507,9 @@ What EWeb does now:
   `cascade_style`, a `var()` or `grid-template-areas` value) while its own recursion takes 176 bytes
   a level; the rest of the subtree takes the deepest element's style. The document's own walks
   (`finish`, the sheets, anchors) go without recursion.
-- **A larger stack for `EWEB.PRG`:** 256 KB. The ST edition keeps 48 KB: the 1 MB ST has no more to
-  give (64 KB, or the big buffers made static, which take the same memory for good, left it unable
-  to show a page). `grid_layout` is kept out of `layout_block` (it was inlined, and every level paid
+- **A larger stack for `EWEB.PRG`:** 256 KB. The ST edition kept 48 KB while the 1 MB ST had no more
+  to give (64 KB, or the big buffers made static, which take the same memory for good, left it
+  unable to show a page); 256 KB too since 23 Oct 2026 (The ST edition, above). `grid_layout` is kept out of `layout_block` (it was inlined, and every level paid
   for its locals): 736 bytes a level instead of 944.
 
 Measured again on the emulated Falcon: 25 blocks deep 37 KB, 100 deep 91 KB, 150 deep 127 KB, 300 deep

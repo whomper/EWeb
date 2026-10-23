@@ -4,7 +4,7 @@
 
 A web browser for the Atari Falcon and TT, written in C for GEM, made for a
 Falcon with a DFB1 accelerator (68030 at 50 MHz, FPU, 128 MB of TT-RAM) and
-fine on any Falcon or TT; its ST edition runs on an ST or STE from 1 MB. It
+fine on any Falcon or TT; its ST edition runs on an ST or STE with 4 MB. It
 shows the document web: pages laid out with their stylesheets, links, lists,
 tables, pictures and forms, with cookies and a little JavaScript, in EWeb's
 own fonts.
@@ -119,8 +119,8 @@ and unpack it into a folder of its own. It contains:
 
 **Needs:** a Falcon or TT, plain TOS, EmuTOS or MagiC, a screen 640 pixels
 wide, about 3 MB free (the program itself takes 2.2 MB; big pages more);
-STinG or MiNTnet for the network. On an ST or STE (TOS 1.04 or newer, from
-1 MB; 4 MB best), the ST edition `EWEBST.PRG`, with the Pi gateway's address
+STinG or MiNTnet for the network. On an ST or STE (TOS 1.04 or newer, with
+4 MB), the ST edition `EWEBST.PRG`, with the Pi gateway's address
 in Settings > Secure.
 
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
@@ -362,18 +362,18 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   clicked, an `onclick`'s alert answered; `screens`, a page and a page of
   pictures from the disk on the Falcon in 256 colours and true colour and
   on the TT in 16 colours and monochrome, the pictures read back from the
-  cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 1 MB
-  ST and a 4 MB 1040 ST (TOS 1.04) in monochrome and medium resolution, a
+  cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 4 MB
+  1040 ST (TOS 1.04) in monochrome and medium resolution, a
   secure page without the gateway, then a secure page and its pictures, as
   the Pi's pens, through AERA-Gateway's webgate; `gateway`, `EWEB.PRG` on
   the Falcon through webgate with the family's accessories loaded, the
   pictures as JPEG and PNG and as the Pi's pens; `falcon`, a secure page
   whose pictures come from another secure host, TLS and the JPEGs on the
-  DSP; `deep`, a page nested 1000 deep on the Falcon and the 1 MB ST, cut,
+  DSP; `deep`, a page nested 1000 deep on the Falcon and the 1040 ST, cut,
   not crashed; `refresh`, pages that send you on, one that waits while
   Esc keeps it, and one that sends itself on again and again, stopped;
-  `details`, a summary clicked open and closed on the Falcon, the 1040 ST
-  and the 1 MB ST, and an address whose #fragment is in a closed details.
+  `details`, a summary clicked open and closed on the Falcon and the 1040
+  ST, and an address whose #fragment is in a closed details.
   `screens` and `st` also type a search address longer than its field
   into the Settings (on the ST with Shift+arrows at its ends) and check
   that it is saved whole.

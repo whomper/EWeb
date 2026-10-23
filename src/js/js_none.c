@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * js_none.c - no JavaScript: the ST edition (no FPU for QuickJS's maths,
- * and no room on a 1 MB ST). Pages are shown without their scripts, with
+ * js_none.c - no JavaScript: the ST edition (no FPU for QuickJS's maths).
+ * Pages are shown without their scripts, with
  * their <noscript> parts, as when a site's scripts are off.
  */
 #include <stddef.h>

@@ -12,11 +12,10 @@ and white.
   a TT, with its own TOS (4 on a Falcon, 3 on a TT), EmuTOS or MagiC; a
   screen 640 pixels wide in any mode: monochrome, 4, 16 or 256 colours, or
   the Falcon's true colour.
-  On an ST or STE (TOS 1.04 or newer, 4 MB best), use `EWEBST.PRG`, the
+  On an ST or STE (TOS 1.04 or newer) with 4 MB, use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
-  gateway, in [Settings](#settings)); it runs on a 1 MB ST, which has
-  room for one page at a time and few pictures
+  gateway, in [Settings](#settings))
 - For `EWEB.PRG` about 3 MB of free memory (the program itself takes
   2.2 MB), more for big pages; TT RAM is used when there is some
 - **STinG** for the network, on a network card such as the NetUSBee

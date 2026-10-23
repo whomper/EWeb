@@ -749,11 +749,7 @@ static const ec_str *url_str(ec_ctx *c, const ec_tok *t)
    A gradient that is valid but whose stops EWeb can't place (a min() of
    px and %, more stops than GRAD_MAX: none of the page set's has more
    than 12) is kept as its colours, drawn as their average (approx) */
-#ifdef EW_ST
-#define GRAD_MAX 32
-#else
 #define GRAD_MAX 64
-#endif
 #define GRAD_REL GRAD_MAX
 /* the prelude's lengths' rel numbers until the stops are counted */
 #define GL_PRE 0xfc
@@ -1239,10 +1235,6 @@ static int gradient(ec_ctx *c, const ec_tok *t, int *i, int end, ec_decl *d)
 	return r;
 }
 
-#ifndef EW_ST
-/* (-webkit-gradient(), 2 KB of 68000 code, isn't the ST edition's: the
-   1 MB ST has no more to spare) */
-
 /* -webkit-gradient()'s point: x then y, each a number (px), a
    percentage or a keyword */
 static int wk_point(const ec_tok *t, int e, int *j, ec_glen *x, ec_glen *y)
@@ -1399,7 +1391,6 @@ static int wk_gradient(ec_ctx *c, const ec_tok *t, int *i, int end, ec_decl *d)
 	*i = end;
 	return 1;
 }
-#endif
 
 static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 {
@@ -1431,10 +1422,8 @@ static int image(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *d)
 		}
 		if (c->opts & EC_COMPAT_GRADIENT)
 			return 0;
-#ifndef EW_ST
 		if (ec_tok_is(k, "-webkit-gradient"))
 			return wk_gradient(c, t, i, end, d);
-#endif
 		return gradient(c, t, i, end, d);
 	}
 	return 0;

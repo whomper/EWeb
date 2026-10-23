@@ -37,10 +37,10 @@ struct arena { struct achunk *head; };
    pointers are 8 bytes (the build machine's checks) */
 #define AALIGN (sizeof(void *) > 4 ? 8 : 4)
 #ifdef EW_ST
-#define ACHUNK 8192	/* the ST edition: smaller pieces, for a 1 MB ST */
+#define ACHUNK 8192	/* the ST edition: smaller pieces, its pages' memory
+			   being what Back and the pictures don't get */
 #define DL_FIRST 128	/* the display list's first piece: 1024 items were 45 KB,
-			   most of a small page's memory (a 1 MB ST couldn't
-			   lay a details' page out again beside it) */
+			   most of a small page's memory */
 #define IT_FIRST 64	/* and the line items' (15 KB) */
 #else
 #define ACHUNK 16384

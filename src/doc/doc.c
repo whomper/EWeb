@@ -31,7 +31,8 @@ void *doc_alloc(doc *d, size_t n)
 	n = (n + DALIGN - 1) & ~(size_t) (DALIGN - 1);
 	if (b == NULL || b->used + n > b->size) {
 		/* 16 KB first (a small page), then 64 KB (8 KB at a time in
-		   the ST edition, for a 1 MB ST); something larger than that
+		   the ST edition, where a page's memory is what Back and the
+		   pictures don't get); something larger than that
 		   gets a block of its own, kept behind the one in use so that
 		   keeps its room */
 #ifdef EW_ST

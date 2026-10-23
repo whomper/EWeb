@@ -38,10 +38,7 @@
   typed with a #fragment in a closed details (it opens, the window
   there), a summary further down clicked (the window still there), and a
   #fragment of the same page in another closed details typed (it opens
-  and the window goes there, the page laid out again); first EWEBST.PRG on
-  the 1 MB ST (TOS 1.04), on a small FAQ page of its own: a summary
-  clicked open and closed twice, the page loaded with a #fragment in a
-  closed details and then one of the same page in another (each opens).
+  and the window goes there, the page laid out again).
 
 - refresh (the Falcon, pages from the disk): a page whose <meta
   http-equiv=refresh> goes on to another in 20 s, said on the status line,
@@ -781,16 +778,16 @@ def cached_pictures(name, spec, dec):
 
 
 def st():
-    """EWEBST.PRG, the ST edition, on the 1 MB ST and Erez's 1040 ST (68000
-    at 8 MHz, TOS 1.04): a page and its pictures from the disk in
-    monochrome and in medium resolution, and on the 1040 the pages of
+    """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, 4 MB,
+    TOS 1.04): a page and its pictures from the disk in monochrome and in
+    medium resolution, and the pages of
     translucent colours and opacity (tests/layout/alpha.html) and of CSS
     gradients (tests/layout/gradients.html); then, over
     the network, a secure page through AERA-Gateway's webgate (the ST has
     no TLS of its own)"""
     if not os.path.exists(os.path.join(ROOT, "binary/EWEBST.PRG")):
         return check("st: EWEBST.PRG made", False, "make binary/EWEBST.PRG first")
-    for name, spec in (("stone", "ST-1:mono"), ("stmono", "ST:mono"), ("stmed", "ST:med")):
+    for name, spec in (("stmono", "ST:mono"), ("stmed", "ST:med")):
         r = Run(name, spec, hd_for(name, r"C:\TABLES.HTM"), prg="EWEBST.PRG")
         try:
             ready = r.wait(r"ready ", 300)
@@ -804,46 +801,38 @@ def st():
             r.key(RETURN)
             ev = r.wait(r"pictures ", 1200)
             dec = [e for e in r.events() if " decoded at " in e]
-            shown = [e for e in r.events() if e.startswith("shown file:///C:/PICS.HTM ")]
-            if spec.startswith("ST-1"):
-                # a 1 MB ST: the page shows (the one before given back to
-                # make room), the pictures as far as their memory goes
-                check("st: %s shows the pictures' page" % name, ev is not None and len(shown) == 1,
-                      "\n".join(r.events()[-10:]))
-            else:
-                # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
-                # gives pictures (a sixteenth of its RAM), so it says so
-                big = [e for e in r.events() if "big.png not enough memory" in e]
-                check("st: %s pictures (the big one too big for the memory)" % name,
-                      ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
+            # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
+            # gives pictures (a sixteenth of its RAM), so it says so
+            big = [e for e in r.events() if "big.png not enough memory" in e]
+            check("st: %s pictures (the big one too big for the memory)" % name,
+                  ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
-            if name != "stone":
-                # translucent colours and opacity as the ST edition's 68000
-                # code mixes them: monochrome's patterns, medium's 4 colours
-                # (looked at in its screenshot)
-                r.key(L, (CTRL,))
-                r.type("file:///C:/ALPHA.HTM")
-                r.key(RETURN)
-                ev = r.wait(r"shown ", 300)
-                check("st: %s translucent colours" % name,
-                      ev is not None and ev.startswith("shown file:///C:/ALPHA.HTM "), str(r.events()[-5:]))
-                r.wait(r"pictures ", 300)
-                time.sleep(2)
-                r.shot(4)
-                # CSS gradients as the ST edition draws them: those to a
-                # side or at right angles a row or a column at a time, any
-                # other its colours' average (DESIGN.md, CSS gradients;
-                # make test checks the pixels, tests/layout/gradients.py);
-                # here that the page shows (looked at in its screenshot)
-                r.key(L, (CTRL,))
-                r.type("file:///C:/GRAD.HTM")
-                r.key(RETURN)
-                ev = r.wait(r"shown ", 300)
-                check("st: %s gradients" % name,
-                      ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
-                time.sleep(3)
-                r.shot(5)
+            # translucent colours and opacity as the ST edition's 68000
+            # code mixes them: monochrome's patterns, medium's 4 colours
+            # (looked at in its screenshot)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/ALPHA.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 300)
+            check("st: %s translucent colours" % name,
+                  ev is not None and ev.startswith("shown file:///C:/ALPHA.HTM "), str(r.events()[-5:]))
+            r.wait(r"pictures ", 300)
+            time.sleep(2)
+            r.shot(4)
+            # CSS gradients as the ST edition draws them: those to a
+            # side or at right angles a row or a column at a time, any
+            # other its colours' average (DESIGN.md, CSS gradients;
+            # make test checks the pixels, tests/layout/gradients.py);
+            # here that the page shows (looked at in its screenshot)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/GRAD.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 300)
+            check("st: %s gradients" % name,
+                  ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
+            time.sleep(3)
+            r.shot(5)
             if name == "stmono":
                 # a secure page with no gateway set: said plainly, the page
                 # stays (the hub, 20 Oct 2026)
@@ -1075,12 +1064,12 @@ def falcon():
 
 
 def deep():
-    """a page nested 1000 deep, from the disk, on the Falcon (256 KB of
-    stack) and the 1 MB ST (48 KB): shown cut at the stack's floor (the
+    """a page nested 1000 deep, from the disk, on the Falcon and the 1040 ST
+    (256 KB of stack each): shown cut at the stack's floor (the
     log's "deep"), not crashed, and the next page shown after it (DESIGN.md,
     The stack: such a page ran off the stack's end and bombed)"""
     page = "<!DOCTYPE html><title>Deep</title>" + "<div>level" * 1000 + "</div>" * 1000
-    for name, spec, prg in (("deepfalcon", "Falcon:256", "EWEB.PRG"), ("deepst", "ST-1:mono", "EWEBST.PRG")):
+    for name, spec, prg in (("deepfalcon", "Falcon:256", "EWEB.PRG"), ("deepst", "ST:mono", "EWEBST.PRG")):
         hd = hd_for(name, r"C:\DEEP.HTM")
         with open(os.path.join(hd, "DEEP.HTM"), "w") as f:
             f.write(page)
@@ -1096,10 +1085,7 @@ def deep():
             r.key(Q, (CTRL,))
             quit = r.wait(r"quit$", 300)
             ok = after is not None and quit is not None and not os.path.exists(os.path.join(hd, "CRASH.LOG"))
-            if spec.startswith("Falcon"):
-                ok = ok and cut is not None
-            check("deep: %s, a page 1000 deep cut%s, then the next page" %
-                  (name, "" if spec.startswith("Falcon") else " or not shown (the ST's memory)"), ok,
+            check("deep: %s, a page 1000 deep cut, then the next page" % name, ok and cut is not None,
                   "\n".join(r.events()[-10:]))
         finally:
             r.end()
@@ -1242,98 +1228,12 @@ def refresh():
         r.end()
 
 
-# a small FAQ page for the 1 MB ST, which tests/layout/details.html is
-# too much for
-FAQ_PAGE = b"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>FAQ</title></head><body>
-<h1>FAQ</h1>
-<details id="q1"><summary>Question one is here</summary>
-<p>The answer to the first question, a sentence or two long, hidden until opened.</p></details>
-<details id="q2"><summary>Question two</summary><p id="a2">The second answer.</p></details>
-<details id="q3"><summary>Question three</summary><p id="a3">The third answer.</p></details>
-<p>The end.</p>
-</body></html>
-"""
-
-
-def details_st1():
-    """on the 1 MB ST (TOS 1.04), where the page shown and another laid
-    out beside it once didn't fit: a summary clicked opens and closes its
-    details, again and again; a #fragment in a closed details opens it,
-    on a page loaded (the one before kept for Back) and on the page shown"""
-    name = "detailsst1"
-    page = os.path.join(OUT, "faq.html")
-    with open(page, "wb") as f:
-        f.write(FAQ_PAGE)
-    hd = hd_for(name, r"C:\FAQ.HTM")
-    shutil.copy(page, os.path.join(hd, "FAQ.HTM"))
-    r = Run(name, "ST-1:mono", hd, windowed=True, prg="EWEBST.PRG")
-    try:
-        ev = r.wait(r"shown ", 300)
-        if not check("details: %s shows the page" % name, ev is not None and ev.startswith("shown file:///C:/FAQ.HTM "),
-                     str(r.events())):
-            return
-        time.sleep(2)
-        r.shot(0)
-        m = re.search(r"height (\d+) .*area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev)
-        h0, area, top = int(m.group(1)), tuple(int(m.group(i)) for i in range(2, 6)), int(m.group(6))
-        pt = text_point(page, area, top, "Question one")
-        if not check("details: %s, the summary found" % name, pt is not None):
-            return
-        h1 = None
-        for k, want in enumerate(("opened", "closed", "opened", "closed")):
-            r.mouse.click(*pt)
-            ev = r.wait(r"details ", 120)
-            m = re.match(r"details (\w+) height (\d+) top (\d+) ms (\d+)", ev or "")
-            ok = m is not None and m.group(1) == want and (int(m.group(2)) > h0 if want == "opened" else
-                                                            int(m.group(2)) == h0)
-            if ok and want == "opened":
-                ok = h1 is None or int(m.group(2)) == h1
-                h1 = int(m.group(2))
-            check("details: %s, click %d: %s (%s ms)" % (name, k + 1, want, m.group(4) if m else "?"), ok,
-                  str(r.events()[-5:]))
-            time.sleep(2)
-            r.shot(k + 1)
-        # the page loaded again with a #fragment in a closed details (the
-        # one shown kept for Back): opened
-        r.key(L, (CTRL,))
-        r.type("c:/faq.htm#a3")
-        r.key(RETURN)
-        ev = r.wait(r"shown ", 300)
-        m = re.search(r"height (\d+) ", ev or "")
-        check("details: %s, a page loaded with a #fragment in a closed details: opened" % name,
-              ev is not None and re.match(r"shown file:///c:/faq\.htm#a3 ", ev, re.I) and m is not None and
-              int(m.group(1)) > h0, str(r.events()[-5:]))
-        if m is None:
-            return
-        h2 = int(m.group(1))
-        time.sleep(8)  # (the 8 MHz ST draws the page meanwhile)
-        r.shot(5)
-        # a place on the page shown in another closed details
-        r.key(L, (CTRL,))
-        r.type("c:/faq.htm#a2")
-        r.key(RETURN)
-        ev = r.wait(r"same ", 120)
-        m = re.search(r"opened height (\d+)", ev or "")
-        check("details: %s, a #fragment on the page in a closed details: opened" % name,
-              m is not None and int(m.group(1)) > h2, str(r.events()[-5:]))
-        time.sleep(8)
-        r.shot(6)
-        r.key(Q, (CTRL,))
-        check("details: %s quits" % name, r.wait(r"quit$", 120) is not None and
-              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
-    finally:
-        r.end()
-
-
 def details():
     """a details' summary clicked: it opens where it is (the page laid out
-    again, taller, the window's place kept), and closes again; and on the
-    1 MB ST (details_st1)"""
+    again, taller, the window's place kept), and closes again"""
     xvfb = machines.xvfb(DISPLAY)
     page = os.path.join(ROOT, "tests/layout/details.html")
     try:
-        details_st1()
         for name, spec, prg in (("details", "Falcon:16", "EWEB.PRG"), ("detailsst", "ST:mono", "EWEBST.PRG")):
             hd = hd_for(name, r"C:\DETAILS.HTM")
             shutil.copy(page, os.path.join(hd, "DETAILS.HTM"))

@@ -16,13 +16,8 @@
  * once, so nothing is written and then overwritten. */
 #include "ec_int.h"
 
-#ifdef EW_ST
-#define MAX_HITS	512	/* the ST edition: 12 KB, not 54, of a 1 MB ST */
-#define CACHE_SIZE	256
-#else
 #define MAX_HITS	2048
 #define CACHE_SIZE	1024
-#endif
 #define SHARE_CANDIDATES 8
 
 /* an element matched a rule that looks at its siblings or children: its

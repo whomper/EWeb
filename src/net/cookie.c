@@ -694,8 +694,8 @@ void ck_file(const char *path, const char *key)
 	loaded = 0;
 }
 
-/* an encrypted value's room (taken when needed: 8 KB a 1 MB ST keeps
-   for the rest otherwise) */
+/* an encrypted value's room (taken when needed: 8 KB kept for the rest
+   otherwise) */
 #define ENC_SIZE (sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1)
 
 char *ck_text(long *len)

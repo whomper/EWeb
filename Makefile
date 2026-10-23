@@ -66,6 +66,9 @@ GEN      := build/gen
 # ---------------------------------------------------------------- sources
 
 PU_SRC   := $(sort $(shell find $(NS)/libparserutils/src -name '*.c'))
+# (their headers too, as a patch changes tables kept in them)
+PU_HDRS  := $(shell find $(NS)/libparserutils -name '*.h')
+HUB_HDRS := $(shell find $(NS)/libhubbub -name '*.h')
 WAP_SRC  := $(NS)/libwapcaplet/src/libwapcaplet.c
 HUB_SRC  := $(sort $(shell find $(NS)/libhubbub/src -name '*.c'))
 CSS_SRC  := $(sort $(filter-out %/css_property_parser_gen.c,$(shell find $(NS)/libcss/src -name '*.c')))
@@ -157,13 +160,13 @@ $(1)_BENCH := $$(patsubst tests/bench/%.c,build/$(1)/bench/%.o,$$(BENCH_SRC))
 $(1)_EC   := $$(patsubst src/css/%.c,build/$(1)/ec/%.o,$$(EC_SRC))
 $(1)_EWB  := $$(patsubst src/%.c,build/$(1)/ewb/%.o,$$(EWB_SRC))
 
-build/$(1)/ns/libparserutils/%.o: $(NS)/libparserutils/%.c $$(GENERATED)
+build/$(1)/ns/libparserutils/%.o: $(NS)/libparserutils/%.c $$(GENERATED) $$(PU_HDRS)
 	@mkdir -p $$(@D)
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(PU_INC) -c $$< -o $$@
 build/$(1)/ns/libwapcaplet/%.o: $(NS)/libwapcaplet/%.c
 	@mkdir -p $$(@D)
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(WAP_INC) -c $$< -o $$@
-build/$(1)/ns/libhubbub/%.o: $(NS)/libhubbub/%.c $$(GENERATED)
+build/$(1)/ns/libhubbub/%.o: $(NS)/libhubbub/%.c $$(GENERATED) $$(PU_HDRS) $$(HUB_HDRS)
 	@mkdir -p $$(@D)
 	$(2) $(3) $$(NSDEF) $$(NSINC) $$(HUB_INC) -c $$< -o $$@
 build/$(1)/ns/libcss/%.o: $(NS)/libcss/%.c $$(GENERATED)
@@ -199,10 +202,12 @@ $(eval $(call target_rules,asan,$(HOSTCC),$(ASAN_CFLAGS)))
 GCCINC     := $(shell $(M68KCC) -print-file-name=include)
 # the programs' stacks (crt0's, in the BSS): a page's depth costs about
 # 700 bytes of stack a level in the layout, and the layout stops short of
-# the end (ui/main.c, EW_STACK_ROOM; DESIGN.md, The stack). The 1 MB ST
-# has no more to give its edition.
+# the end (ui/main.c, EW_STACK_ROOM; DESIGN.md, The stack). The ST
+# edition's the same since its 1 MB ST was dropped.
 TOS_STACK := 262144
-ST_STACK  := 49152
+ST_STACK  := $(TOS_STACK)
+# (crt0 and main.c are made again when they change: the two must agree)
+build/tos/gem/main.o build/st/gem/main.o: Makefile
 TOS_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
@@ -213,7 +218,7 @@ tos_BENCH  := $(subst plat_posix,plat_tos,$(tos_BENCH))
 tos_RT     := build/tos/rt/crt0.o build/tos/rt/nf.o build/tos/rt/libc.o build/tos/rt/tos.o \
               build/tos/rt/libc_extra.o
 
-build/tos/rt/%.o: common/atari/%.S
+build/tos/rt/%.o: common/atari/%.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DSTACK_SIZE=$(TOS_STACK) -c $< -o $@
 build/tos/rt/%.o: common/atari/%.c
@@ -506,7 +511,7 @@ STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
 STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) -DNO_ICON256 $(EWB_INC) $(NSINC)
-build/st/rt/%.o: common/atari/%.S
+build/st/rt/%.o: common/atari/%.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DSTACK_SIZE=$(ST_STACK) -c $< -o $@
 build/st/rt/%.o: common/atari/%.c

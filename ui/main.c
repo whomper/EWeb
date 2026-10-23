@@ -41,11 +41,7 @@
 #ifndef EW_STACK
 #error "EW_STACK: the Makefile gives crt0's stack size"
 #endif
-#ifdef EW_ST
-#define EW_STACK_ROOM (8L * 1024)
-#else
 #define EW_STACK_ROOM (16L * 1024)
-#endif
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""

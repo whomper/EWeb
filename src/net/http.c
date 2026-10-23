@@ -294,11 +294,7 @@ typedef struct {
 
 /* a sink's pieces, and the most one read copies into memory (what comes
    is in the connection's own buffer: this sizes only the copies) */
-#ifdef EW_ST
-static char rbuf[2048];		/* the ST edition: 14 KB less for a 1 MB ST */
-#else
 static char rbuf[16384];
-#endif
 
 /* n bytes of the body (or, n < 0, up to the close); 1 ok, 0 failed */
 static int read_body(CONN *c, BODY *b, long n, HTTPRESP *rs)

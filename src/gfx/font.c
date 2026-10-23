@@ -48,7 +48,7 @@ void font_free(void)
 	fh = -1;
 }
 
-/* the faces' glyphs given back (a 1 MB ST short of memory for a page);
+/* the faces' glyphs given back (a small machine short of memory for a page);
    each is read again when next used */
 void font_drop(void)
 {

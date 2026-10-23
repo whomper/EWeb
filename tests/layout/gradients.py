@@ -411,6 +411,13 @@ if ewrenderst:
             checks += 1
             if any(len(set(r)) != 1 for r in rows) and mode != 2:
                 fail("ST %s: a row of a gradient to bottom isn't one colour" % name(mode))
+            # -webkit-gradient(), the ST edition's too since its 1 MB ST
+            # was dropped: drawn as the same gradient to bottom
+            wk = draw(tmp, box("background:-webkit-gradient(linear, left top, left bottom, from(red), to(blue))",
+                               64), mode, 64, exe=ewrenderst)
+            checks += 1
+            if wk != rows:
+                fail("ST %s: -webkit-gradient(linear, down) isn't drawn as linear-gradient(red, blue)" % name(mode))
             # a grey ramp each way, at a tenth and nine tenths of it (in 4
             # colours: black and white, not the average's)
             rows = draw(tmp, box("background:linear-gradient(to right, #000, #fff)", 10) +
@@ -483,7 +490,7 @@ if ewrenderst:
                     break
         # tall gentle gradients, many rows to each colour the screen
         # shows, and a ramp, drawn in bands of 32 rows from anywhere (as
-        # the 1 MB ST draws its window, and a scroll the rows it shows)
+        # a small machine draws its window, and a scroll the rows it shows)
         # the same as whole: rows alike are drawn in a colour of theirs,
         # not the colour of the first of them in the band
         tall = (box("background:linear-gradient(#2c3e50, #4ca1af)", 120) +

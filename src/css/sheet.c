@@ -9,20 +9,10 @@
  * its subject's rarest part: id, class, tag or attribute name. */
 #include "ec_int.h"
 
-#ifdef EW_ST
-#define MAX_PRELUDE	1024	/* the ST edition: 20 KB, not 80, of a 1 MB ST */
-#else
 #define MAX_PRELUDE	4096
-#endif
-#ifdef EW_ST
-#define MAX_VALUE	256
-#define MAX_DECLS	256
-#define MAX_NEST	4	/* levels of :not() and :is() */
-#else
 #define MAX_VALUE	512
 #define MAX_DECLS	512
-#define MAX_NEST	8
-#endif
+#define MAX_NEST	8	/* levels of :not() and :is() */
 
 static ec_tok prelude[MAX_PRELUDE];
 

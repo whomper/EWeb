@@ -6,8 +6,9 @@
 /* ------------------------------------------------------------ memory */
 
 /* a context's memory comes in pieces of this: in the ST edition small
-   ones, as a 1 MB ST has 200 KB for everything, and there an arena's
-   first pieces smaller still (ec_alloc_slow) */
+   ones, and there an arena's first pieces smaller still (ec_alloc_slow),
+   so that a page takes about what it needs and the ST keeps more pages
+   for Back and more pictures (they cost +0.08% of the instructions) */
 #ifdef EW_ST
 #define EC_CHUNK 4096
 #define EC_FIRST 512
@@ -152,11 +153,7 @@ typedef struct name {
 	int32_t val;
 } name;
 
-#ifdef EW_ST
-#define NAMES_SIZE 1024		/* 530 names: room enough, 10 KB less for a 1 MB ST */
-#else
 #define NAMES_SIZE 2048
-#endif
 static name names[NAMES_SIZE];
 static int names_ready;
 

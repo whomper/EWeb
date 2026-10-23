@@ -953,7 +953,7 @@ static int unkeep_all(browser *b);
    width), or as a script changed them. Those fetched before come from
    the cache, those that hold now for the first time over the network.
    What they took is given back first (ec_drop_sheets), so they take what
-   they took; when they don't fit even so (a 1 MB ST), the pages kept for
+   they took; when they don't fit even so (a small machine), the pages kept for
    Back go and they are added once more. by_script: a script changed
    them, else the window was sized; the log says which */
 static void readd_sheets(browser *b, doc *d, const char *base, int fresh, int quiet, int by_script)
@@ -1112,7 +1112,7 @@ static int shed(browser *b)
 	return freed;
 }
 
-/* memory for a page that didn't fit (a 1 MB ST): the pages kept for
+/* memory for a page that didn't fit (a small machine): the pages kept for
    Back and the one shown go, and the pictures not in use; 1 when
    something was given back */
 static int make_room(browser *b)
@@ -1233,7 +1233,7 @@ parse:
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	if (doc_select(d) < 0) {
-		/* out of memory styling it (a 1 MB ST): as when laying it out,
+		/* out of memory styling it (a small machine): as when laying it out,
 		   not a page with no styles, which lays out to nothing */
 		doc_free(d);
 		return 0;
@@ -2681,7 +2681,7 @@ static void toggled(void *ud, dnode *k)
 
 /* the page shown styled again (details[open] > summary's triangle, and
    the page's own [open] rules), as after a script, and laid out again;
-   its tree is as it was. Out of memory (a 1 MB ST), what a page that
+   its tree is as it was. Out of memory (a small machine), what a page that
    doesn't fit gives back goes, as for build: what shed gives back, and it
    is tried once more; then the page shown itself (its tree kept), and it
    is tried a last time. 0 when it still doesn't fit: b->p is then NULL */
