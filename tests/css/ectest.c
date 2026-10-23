@@ -285,6 +285,43 @@ static const node *by_id(const node *n, const char *id)
 	return NULL;
 }
 
+/* a growing text */
+typedef struct buf {
+	char *s;
+	size_t n, cap;
+} buf;
+
+/* the case's other sheets (--- file NAME), for its @imports */
+#define FILES 8
+static struct {
+	char name[64];
+	buf body;
+} files[FILES];
+static int nfiles;
+
+static int importer(void *ud, const char *base, const char *href, char **data, size_t *len, char *final,
+		    int fsize)
+{
+	int k;
+	(void) ud, (void) base;
+	for (k = 0; k < nfiles; k++)
+		if (!strcmp(files[k].name, href)) {
+			*len = files[k].body.n;
+			*data = malloc(*len + 1);
+			if (*data == NULL)
+				return 0;
+			memcpy(*data, files[k].body.s ? files[k].body.s : "", *len);
+			snprintf(final, fsize, "%s", href);
+			return 1;
+		}
+	return 0;
+}
+
+static void setup(struct ec_ctx *c)
+{
+	ec_set_importer(c, importer, NULL);
+}
+
 static int run_case(const char *name, const char *css, size_t csslen, const char *html,
 		size_t htmllen, char *expect, unsigned opts)
 {
@@ -384,12 +421,6 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 	return fails;
 }
 
-/* a growing text */
-typedef struct buf {
-	char *s;
-	size_t n, cap;
-} buf;
-
 static void add(buf *b, const char *s, size_t n)
 {
 	if (b->n + n + 2 > b->cap) {
@@ -415,6 +446,8 @@ static void flush(const char *name, buf *css, buf *html, buf *expect, unsigned o
 	css->n = html->n = expect->n = 0;
 	if (css->s) css->s[0] = 0;
 	if (html->s) html->s[0] = 0;
+	while (nfiles > 0)
+		files[--nfiles].body.n = 0;
 }
 
 /* plat_posix.c's main() calls it */
@@ -429,6 +462,7 @@ int nsbench(int argc, char **argv)
 		fprintf(stderr, "usage: ectest CASES.TXT\n");
 		return 2;
 	}
+	ecs_setup = setup;
 	for (p = text; *p; ) {
 		char *e = strchr(p, '\n');
 		size_t n = e ? (size_t) (e - p) : strlen(p);
@@ -442,6 +476,10 @@ int nsbench(int argc, char **argv)
 				!strncmp(p + 4, "expect", 6) ? &expect : NULL;
 			if (!strncmp(p + 4, "options ", 8))
 				opts = strtoul(p + 12, NULL, 0);
+			if (!strncmp(p + 4, "file ", 5) && nfiles < FILES && n > 9) {
+				snprintf(files[nfiles].name, sizeof files[nfiles].name, "%.*s", (int) n - 9, p + 9);
+				cur = &files[nfiles++].body;
+			}
 		} else if (cur != NULL) {
 			add(cur, p, n);
 		}

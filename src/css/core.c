@@ -515,6 +515,7 @@ void ec_drop_sheets(ec_ctx *c)
 	   sheets added again as often as its window is sized take no more) */
 	ec_arena_free(&c->rmem);
 	c->pmem = &c->rmem;
+	c->imports = 0;
 	memset(&c->universal, 0, sizeof c->universal);
 	memset(&c->universal_sib, 0, sizeof c->universal_sib);
 	memset(&c->never, 0, sizeof c->never);

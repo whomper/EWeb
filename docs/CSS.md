@@ -87,8 +87,10 @@ Falcons, and a divide that costs 40 to 80 cycles.
   cycles.
 - **At-rules:** `@media` (Media Queries 4, with ranges and three-valued
   logic), `@supports` (declarations, `not`, `and`, `or`, `selector()`),
-  `@layer`. `@import`, `@font-face`, `@keyframes`, `@page` and
-  `@container` are skipped.
+  `@layer`, and since 23 Oct 2026 `@import` (CSS Cascade 4, 2: only before
+  any rule but `@charset` and `@layer`'s statement; with media queries,
+  `layer`, `layer()` and `supports()`) when the context has an importer.
+  `@font-face`, `@keyframes`, `@page` and `@container` are skipped.
 - **Properties:** the 103 EWeb draws or needs: box model, positioning, floats,
   borders, backgrounds (the first layer, the top one, in the `background`
   shorthand and, since 22 Oct 2026, in a `background-image` of several;
@@ -164,7 +166,13 @@ A sheet that came from an address of its own (a `<link>`'s) is added with
 `ec_sheet_at(c, css, len, origin, its_address)` once the context has a
 resolver (`ec_set_resolver`): its `url()`s are made absolute against that
 address when its declarations are read, as CSS Values 4 says, not against
-the page's. `ec_media_ok(c, s, n)` tells whether a media query list
+the page's. An `@import` asks the importer given by `ec_set_importer`
+for its sheet (by the address as written and the importing sheet's, NULL
+for a `<style>`'s): its rules are added where the `@import` is, against
+its own address, for the media it names, in a layer if it says so; at
+most `EC_MAX_IMPORTS` between `ec_drop_sheets` and `EC_IMPORT_DEPTH`
+deep, so a loop of sheets ends. Without an importer (nsbench, csscmp) an
+`@import` is passed over, as before. `ec_media_ok(c, s, n)` tells whether a media query list
 holds for c's screen, as an `@media`'s would (a `<link>`'s or a
 `<style>`'s `media`, a `<source media>`), and `ec_sizes(c, s, n)` gives the
 width an `<img sizes>` names (its first entry whose condition holds, with

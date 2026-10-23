@@ -323,6 +323,23 @@ try:
               all("fill" in o[1] and "#eeeeee" in o[1] and "stylesheet 2..." in o[1] and
                   "stylesheet 3" not in o[1] for o in mouts),
               "\n".join(o[1] + "count: " + o[2] for o in mouts))
+        # @import (CSS Cascade 4, 2): each sheet against the address of
+        # the one importing it, a <style>'s against the page's, print's
+        # never asked for, one after a rule not one, the wide screen's at
+        # 608 px; a url() in an imported sheet against its own folder
+        iurl = "http://localhost:%d/site/imp/page.html" % HTTP
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "608", iurl], cwd=work,
+                           capture_output=True, text=True, timeout=120)
+        icount = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            "http://localhost:%d/site/imp/count" % HTTP, timeout=10).read().decode()
+        check("the browser: @import",
+              p.returncode == 0 and
+              icount == ("css/main.css=1 css/parts/one.css=1 css/parts/tile.png=1 css/parts/wide.css=1 "
+                         "inline.css=1 page.html=1 two.css=1") and
+              all(re.search(r'%s \S+ link 0 "%s"' % (c, t), p.stdout) for c, t in
+                  (("#0000aa", "Main"), ("#00aa00", "One"), ("#aa0000", "Two"), ("#aa00aa", "Inline"),
+                   ("#00aaaa", "Wide"))),
+              p.stdout + p.stderr + "count: " + icount)
         # the window sized (Media Queries 4, 2): at 400 px the sheet for
         # a narrow screen is fetched then, quietly (no status line), and
         # back at 608 the wide one comes from the cache, as body.css

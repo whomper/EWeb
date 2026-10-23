@@ -1341,3 +1341,90 @@ p { color: var(--c) }
 <div><p id=t1 class=x>x</p></div>
 --- expect
 #t1 color #008000
+
+=== @import (CSS Cascade 4, 2): its rules where the @import is, before the sheet's own
+--- file a.css
+#t { color: red }
+#u { color: red }
+--- css
+@import "a.css";
+#t { color: blue }
+--- html
+<p id=t>x</p><p id=u>y</p>
+--- expect
+#t color #0000ff
+#u color #ff0000
+
+=== @import after a rule is not one (CSS Cascade 4, 2); @charset and @layer's statement may come before
+--- file a.css
+#u { color: red }
+--- file b.css
+#v { color: red }
+--- css
+@charset "utf-8";
+@layer one;
+@import url(b.css);
+#t { color: blue }
+@import "a.css";
+--- html
+<p id=t>x</p><p id=u>y</p><p id=v>z</p>
+--- expect
+#t color #0000ff
+#u color #000000
+#v color #ff0000
+
+=== @import for some media only: print not on the screen, a width that holds (640 px) taken
+--- file p.css
+#t { color: red }
+--- file s.css
+#u { color: red }
+--- css
+@import "p.css" print;
+@import url("s.css") screen and (min-width: 600px);
+--- html
+<p id=t>x</p><p id=u>y</p>
+--- expect
+#t color #000000
+#u color #ff0000
+
+=== @import in a layer: below the sheet's unlayered rules, whatever their specificity (CSS Cascade 5, 6.4.3)
+--- file l.css
+#t#t { color: red }
+#u { color: red }
+--- css
+@import "l.css" layer(base);
+#t { color: blue }
+--- html
+<p id=t>x</p><p id=u>y</p>
+--- expect
+#t color #0000ff
+#u color #ff0000
+
+=== @import with supports(): taken when it holds (CSS Cascade 4, 2)
+--- file g.css
+#t { color: red }
+--- file n.css
+#u { color: red }
+--- css
+@import "g.css" supports(display: grid);
+@import "n.css" supports(display: no-such-thing);
+--- html
+<p id=t>x</p><p id=u>y</p>
+--- expect
+#t color #ff0000
+#u color #000000
+
+=== @import inside an imported sheet, and a loop of them ended (EC_IMPORT_DEPTH)
+--- file a.css
+@import "b.css";
+#t { color: red }
+--- file b.css
+@import "a.css";
+#u { color: red }
+--- css
+@import "a.css";
+--- html
+<p id=t>x</p><p id=u>y</p>
+--- expect
+#t color #ff0000
+#u color #ff0000

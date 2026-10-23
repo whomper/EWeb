@@ -286,6 +286,12 @@ struct ec_ctx {
 	/* url()s in a sheet from another address (ec_sheet_at) */
 	int (*resolve)(const char *base, const char *rel, char *out, int size);
 	const char *sheet_base;		/* the sheet being added's */
+	/* @import: the sheets it brings (ec_set_importer) */
+	int (*import)(void *ud, const char *base, const char *href, char **data, size_t *len, char *final,
+		      int fsize);
+	void *import_ud;
+	int imports, import_depth;	/* those added since the sheets were dropped; how deep */
+	uint8_t import_ok;		/* no rule yet in the sheet being parsed: an @import may come */
 	const char *parse_base;		/* the block being parsed's */
 
 	/* names the matcher and the cascade look for */

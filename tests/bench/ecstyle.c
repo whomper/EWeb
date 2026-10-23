@@ -13,6 +13,7 @@
 #include "ecstyle.h"
 
 unsigned ecs_opts;
+void (*ecs_setup)(ec_ctx *c);
 
 /* lwc_string to atom: the same string is the same pointer, so a small
  * table keyed on it saves hashing the bytes again */
@@ -73,6 +74,8 @@ ec_ctx *ecs_sheets(node *doc, const char **data, const size_t *len, int n, style
 
 	if (c == NULL)
 		return NULL;
+	if (ecs_setup != NULL)
+		ecs_setup(c);
 	memset(amap, 0, sizeof amap);
 	add_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA, st);
 	for (i = 0; i < n; i++)

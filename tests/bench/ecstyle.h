@@ -10,6 +10,7 @@
 struct ec_ctx;
 
 extern unsigned ecs_opts;	/* ec_create()'s options */
+extern void (*ecs_setup)(struct ec_ctx *c);	/* if set, called on each context made */
 
 /* the UA sheet, the author sheets and the page's <style> elements */
 struct ec_ctx *ecs_sheets(node *doc, const char **data, const size_t *len, int n, style_stats *st);

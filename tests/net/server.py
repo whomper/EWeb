@@ -33,6 +33,12 @@ Pages:
                  ones with a picture that comes after 0.3 s (pic.png: a
                  window sized while it comes); count (how often each was
                  asked for)
+  /site/imp/page.html  @import (CSS Cascade 4, 2): a linked sheet in
+                 css/ that imports parts/one.css (which imports ../../two.css
+                 and has a url(tile.png) of its folder's), a sheet for print
+                 (never asked for) and one for a wide screen; a <style>
+                 that imports inline.css from the page's folder; count
+                 (how often each was asked for)
   /site/bg.html  pictures from CSS and srcset: a stylesheet in
                  /site/css/ whose url(tile.png) is its folder's, and a
                  <picture> whose WebP source is passed over and whose img's
@@ -256,6 +262,22 @@ MEDIA_PICS = (b"<!DOCTYPE html><title>Media pics</title>"
               b"<link rel=stylesheet media='only screen and (max-width: 600px)' href=narrow.css>"
               b"<p>Sheets by their media, a picture.<p><img src=pic.png alt=pic>")
 MEDIA_COUNT = {}
+# @import (CSS Cascade 4, 2): each sheet's address against the one that
+# imports it, print's never asked for, the wide screen's at 608 px only
+IMP_PAGE = (b"<!DOCTYPE html><title>Imports</title><link rel=stylesheet href=css/main.css>"
+            b"<style>@import 'inline.css';</style>"
+            b"<p id=a>Main</p><p id=b>One</p><p id=c>Two</p><p id=d>Inline</p><p id=f>Wide</p>"
+            b"<div id=e style='height: 20px'></div>")
+IMP_CSS = {"css/main.css": b"@charset \"utf-8\";\n@import \"parts/one.css\";\n"
+                           b"@import url(parts/print.css) print;\n"
+                           b"@import url('parts/wide.css') screen and (min-width: 600px);\n#a { color: #0000aa }\n"
+                           b"@import 'late.css';\n",
+           "css/parts/one.css": b"@import '../../two.css';\n#b { color: #00aa00 }\n"
+                                b"#e { background: url(tile.png) }\n",
+           "css/parts/print.css": b"p { color: #ff0000 }", "css/parts/wide.css": b"#f { color: #00aaaa }",
+           "css/late.css": b"p { color: #ff0000 }",
+           "two.css": b"#c { color: #aa0000 }", "inline.css": b"#d { color: #aa00aa }"}
+IMP_COUNT = {}
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
@@ -571,6 +593,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send(200, MEDIA_CSS[name], "text/css")
             elif name == "count":
                 self.send(200, " ".join("%s=%d" % kv for kv in sorted(MEDIA_COUNT.items())
+                                        if kv[0] != "count").encode(), "text/plain",
+                          extra=[("Cache-Control", "no-store")])
+            else:
+                self.send(404, b"not here\n", "text/plain")
+        elif p.startswith("/site/imp/"):
+            name = p[10:]
+            IMP_COUNT[name] = IMP_COUNT.get(name, 0) + 1
+            if name == "page.html":
+                self.send(200, IMP_PAGE)
+            elif name in IMP_CSS:
+                self.send(200, IMP_CSS[name], "text/css")
+            elif name == "css/parts/tile.png":
+                self.send(200, PICS["logo.png"][0], "image/png")
+            elif name == "count":
+                self.send(200, " ".join("%s=%d" % kv for kv in sorted(IMP_COUNT.items())
                                         if kv[0] != "count").encode(), "text/plain",
                           extra=[("Cache-Control", "no-store")])
             else:

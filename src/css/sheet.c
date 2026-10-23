@@ -1685,6 +1685,88 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 	return bend;
 }
 
+int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *base);
+
+/* @import url [layer | layer(name)] [supports(...)] [media queries], its
+   prelude in prelude[0..n): the sheet the importer brings added here,
+   if it may come here (before any rule) and its conditions hold */
+static void import_rule(ec_ctx *c, int n, int origin)
+{
+	char href[1024], fin[1024], buf[1024];
+	const char *s = NULL, *sb;
+	size_t len = 0, dlen = 0;
+	char *data = NULL;
+	int i, layer = 0;
+	uint8_t ly, iok;
+
+	if (!c->import_ok || c->import == NULL || n <= 0 || c->imports >= EC_MAX_IMPORTS ||
+	    c->import_depth >= EC_IMPORT_DEPTH)
+		return;
+	i = skip_ws(prelude, 0, n);
+	if (i < n && (prelude[i].type == T_URL || prelude[i].type == T_STR)) {
+		s = ec_tok_text(&prelude[i], buf, sizeof buf, &len);
+		i++;
+	} else if (i < n && prelude[i].type == T_FUNC && ec_tok_is(&prelude[i], "url")) {
+		int j = skip_ws(prelude, i + 1, n), end = close_of(prelude, i, n);
+		if (j >= n || prelude[j].type != T_STR || end < 0)
+			return;
+		s = ec_tok_text(&prelude[j], buf, sizeof buf, &len);
+		i = end;
+	}
+	if (s == NULL || len == 0 || len >= sizeof href)
+		return;
+	memcpy(href, s, len);
+	href[len] = 0;
+	i = skip_ws(prelude, i, n);
+	if (i < n && prelude[i].type == T_IDENT && ec_tok_is(&prelude[i], "layer")) {
+		layer = 1;
+		i = skip_ws(prelude, i + 1, n);
+	} else if (i < n && prelude[i].type == T_FUNC && ec_tok_is(&prelude[i], "layer")) {
+		int end = close_of(prelude, i, n);
+		if (end < 0)
+			return;
+		layer = 1;
+		i = skip_ws(prelude, end, n);
+	}
+	if (i < n && prelude[i].type == T_FUNC && ec_tok_is(&prelude[i], "supports")) {
+		/* a condition or a declaration in it, as in (...) */
+		int k = i, r;
+		prelude[i].type = T_LPAREN;
+		r = supports_in_parens(c, prelude, &k, n);
+		if (r != 1)
+			return;
+		i = skip_ws(prelude, k, n);
+	}
+	if (!media_list(c, prelude, i, n))
+		return;
+	/* (prelude is the nested sheet's from here) */
+	fin[0] = 0;
+	if (!c->import(c->import_ud, c->sheet_base, href, &data, &dlen, fin, sizeof fin) || data == NULL) {
+		free(data);
+		return;
+	}
+	sb = c->sheet_base;
+	ly = c->layer;
+	iok = c->import_ok;
+	c->imports++;
+	c->import_depth++;
+	if (layer)
+		c->layer = 1;
+	ec_sheet_at(c, data, dlen, origin, fin[0] ? fin : sb);
+	c->import_depth--;
+	c->sheet_base = sb;
+	c->layer = ly;
+	c->import_ok = iok;
+	free(data);
+}
+
+void ec_set_importer(ec_ctx *c, int (*import)(void *ud, const char *base, const char *href, char **data,
+					   size_t *len, char *final, int fsize), void *ud)
+{
+	c->import = import;
+	c->import_ud = ud;
+}
+
 /* an at-rule whose name is at; returns where parsing goes on */
 static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, int depth)
 {
@@ -1694,8 +1776,16 @@ static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, 
 
 	ident_lower(at, name, sizeof name);
 	n = read_prelude(lx, prelude, MAX_PRELUDE, &stop, 1);
-	if (stop != T_LBRACE)
-		return lx->p;			/* a statement: @import, @charset, @layer a; */
+	if (stop != T_LBRACE) {
+		/* a statement: @import (only before any rule but @charset and
+		   @layer's statement, CSS Cascade 4, 2), @charset, @layer a; */
+		if (!strcmp(name, "import"))
+			import_rule(c, n, origin);
+		else if (strcmp(name, "charset") && strcmp(name, "layer"))
+			c->import_ok = 0;
+		return lx->p;
+	}
+	c->import_ok = 0;
 	bstart = lx->p;
 	bend = ec_skip_block(bstart, lx->end, '{');
 	if (n < 0 || depth > 16)
@@ -1740,6 +1830,7 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 		n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
 		if (stop != T_LBRACE)
 			break;			/* the end, in the middle of a rule */
+		c->import_ok = 0;
 		lx.p = style_rule(c, n, lx.p, lx.end, origin);
 	}
 }
@@ -1786,6 +1877,7 @@ int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin)
 	memcpy(copy, css, len);
 	copy[len] = 0;
 	c->st.sheets++;
+	c->import_ok = 1;
 	rules(c, copy, copy + len, origin, 0);
 	return 0;
 }

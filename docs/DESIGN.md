@@ -2764,6 +2764,29 @@ positioned box in one, an inline-block whose line is only another, a label's pos
 and the page set
 with and without Bootstrap's and Pico's sheets under AddressSanitizer and UBSan: no fault.
 
+## `@import` (23 Oct 2026)
+
+Stage 2's third part. A sheet's `@import` was passed over, so a site whose sheets come through
+one (a `main.css` of `@import`s, WordPress themes, many older sites) had only its HTML's look.
+Now (CSS Cascade 4, 2) the CSS engine asks an importer for the sheet (`ec_set_importer`,
+`docs/CSS.md`), and its rules go where the `@import` is, before the importing sheet's own: only
+an `@import` before any rule counts (`@charset` and `@layer`'s statement may come first); its
+media queries are an `@media`'s (evaluated again when the window is sized, as all are), its
+`layer` or `layer()` puts it below the unlayered rules, its `supports()` is an `@supports`'s; at
+most 32 a page, 4 deep, so a loop of sheets ends. EWeb's importer (`import_cb` in `src/browse`)
+fetches it as a `<link>`'s sheet is (the disk cache, Esc, the status line's "stylesheet N...",
+the address made absolute against the importing sheet's, a `<style>`'s against the page's), and
+its `url()`s are against its own address. nsbench and csscmp give no importer, so their figures
+and LibCSS's comparison are as they were (`make csscmp`: the same differences, all with a
+reason).
+
+Tested by `tests/css/cases.txt` (six cases from CSS Cascade 4: where its rules go, one after a
+rule, media, a layer, `supports()`, a loop; `ectest` now takes a case's other sheets as
+`--- file NAME`) and `make itest` (`/site/imp/page.html`: a linked sheet in a folder importing
+one in a subfolder, which imports one two folders up and has a `url()` of its own folder's; a
+sheet for print never asked for; one for a wide screen; one after a rule; a `<style>`'s
+`@import`; each sheet asked for once).
+
 ## Tables: borders that collapse, cells over several columns (23 Oct 2026)
 
 Stage 2's second part (`src/layout/layout.c`).
@@ -3110,7 +3133,7 @@ out of both (their paths lead nowhere on the Atari).
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
-   (`overflow`), `@import`, scrolling sideways, `border-collapse` (done, above); **3.** reading: find in the
+   (`overflow`), `@import` (done, above), scrolling sideways, `border-collapse` (done, above); **3.** reading: find in the
    page, selecting and copying, history with visited links, a page drawn while it loads, Esc
    during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.

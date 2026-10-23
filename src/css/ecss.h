@@ -266,6 +266,20 @@ int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin);
 void ec_set_resolver(ec_ctx *c, int (*resolve)(const char *base, const char *rel, char *out, int size));
 int ec_sheet_at(ec_ctx *c, const char *css, size_t len, int origin, const char *base);
 
+/* @import (CSS Cascade 4, 2): the sheet an @import at the top of a sheet
+ * names (href, as written; base: the importing sheet's address, NULL for
+ * one in the page) is fetched by import: 1 and *data (malloc'd; the
+ * engine frees it), *len and its own address in final (fsize bytes, ""
+ * for none: its url()s against base), or 0. Its rules go where the
+ * @import is, for the media it names (as @media), in a layer if it says
+ * so (as @layer), when its supports() holds; a context's at most
+ * EC_MAX_IMPORTS between ec_drop_sheets, EC_IMPORT_DEPTH deep (a loop
+ * of sheets ends there). Without an importer, @import is passed over. */
+#define EC_MAX_IMPORTS	32
+#define EC_IMPORT_DEPTH	4
+void ec_set_importer(ec_ctx *c, int (*import)(void *ud, const char *base, const char *href, char **data,
+					   size_t *len, char *final, int fsize), void *ud);
+
 /* For pictures (<source media>, <img sizes>): does a media query list
  * match c's media; the width in px that sizes gives (its first entry
  * whose condition holds), or -1 when none does */

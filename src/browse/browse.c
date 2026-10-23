@@ -910,6 +910,42 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 	free(f);
 }
 
+/* a sheet an @import names (the CSS engine's importer): fetched as a
+   <link>'s is, its address made absolute against the importing sheet's
+   (base) or the page's */
+static int import_cb(void *ud, const char *base, const char *href, char **data, size_t *len, char *final,
+		     int fsize)
+{
+	SHEETS *sh = ud;
+	char url[2048];
+	FETCH *f;
+	int ok = 0;
+	if (conn_stop || !resolve_enc(base != NULL ? base : sh->base, href, url, sizeof url, doc_enc(sh->d)))
+		return 0;
+	f = malloc(sizeof *f);
+	if (f == NULL)
+		return 0;
+	sh->n++;
+	if (!sh->quiet) {
+		char host[128], msg[200];
+		host_of(url, host, sizeof host);
+		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		phase(sh->b, BRPH_STYLES);
+		say(sh->b, "%s", msg);
+	}
+	if (fetch(sh->b, url, sh->base, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
+	    (f->status == 0 || (f->status >= 200 && f->status < 300)) && f->data != NULL) {
+		*data = f->data;
+		*len = (size_t) f->len;
+		snprintf(final, fsize, "%s", f->url[0] ? f->url : url);
+		ok = 1;
+	} else {
+		free(f->data);
+	}
+	free(f);
+	return ok;
+}
+
 static ec_media media_of(const browser *b)
 {
 	ec_media m;
@@ -940,7 +976,9 @@ static void add_sheets(browser *b, doc *d, const char *base, int fresh, int quie
 	sh.fresh = fresh;
 	sh.n = 0;
 	sh.quiet = quiet;
+	ec_set_importer(d->css, import_cb, &sh);
 	doc_sheets(d, sheet_cb, &sh);
+	ec_set_importer(d->css, NULL, NULL);	/* (sh goes) */
 	if (b->extra_css != NULL)
 		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
 	ec_media_span(d->css, &d->span_lo, &d->span_hi);
