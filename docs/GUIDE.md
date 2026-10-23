@@ -16,8 +16,11 @@ and white.
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
   gateway, in [Settings](#settings))
-- For `EWEB.PRG` about 3 MB of free memory (the program itself takes
-  2.2 MB), more for big pages; TT RAM is used when there is some
+- For `EWEB.PRG` about 3.5 MB of free memory (the program itself takes
+  1.5 MB, a page up to about 11 times its size): a Falcon's own 4 MB is
+  enough when the family's accessories aren't loaded; TT RAM is used when
+  there is some. A page's scripts need an FPU and `EWEBJS.OVL` next to
+  `EWEB.PRG` (0.9 MB more, taken the first time they run)
 - **STinG** for the network, on a network card such as the NetUSBee
   (under FreeMiNT or MagiC-Net, their own MiNTnet works too). Without a
   network EWeb still opens pages on your disks.

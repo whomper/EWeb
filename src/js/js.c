@@ -24,6 +24,17 @@
 
 const int js_built = 1;
 
+/* (EWEB.PRG has atari/js_ovl.c's: this is the build machine's) */
+int js_available(void)
+{
+	return 1;
+}
+
+const char *js_problem(void)
+{
+	return "";
+}
+
 /* QuickJS's stack: the Atari program has 128 KB */
 #ifdef EW_TOS
 #define JS_STACK (96 * 1024)

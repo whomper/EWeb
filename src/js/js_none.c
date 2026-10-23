@@ -11,6 +11,16 @@
 
 const int js_built = 0;
 
+int js_available(void)
+{
+	return 0;
+}
+
+const char *js_problem(void)
+{
+	return "isn't part of this EWeb.";
+}
+
 int js_page(doc *d, const char *url, const char *base, const js_host *h)
 {
 	(void) d, (void) url, (void) base, (void) h;

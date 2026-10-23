@@ -71,7 +71,8 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "deep", "refresh", "details"]
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
+                         "details"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
@@ -93,7 +94,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("binary/EWEB.PRG", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
+    for f in ("binary/EWEB.PRG", "binary/EWEBJS.OVL", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
         if os.path.exists(os.path.join(ROOT, f)):
             shutil.copy(os.path.join(ROOT, f), hd)
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
@@ -615,6 +616,18 @@ def scripts():
         return check("scripts: the test server", False)
     xvfb = machines.xvfb(DISPLAY)
     site = "http://127.0.0.1:%d/site/" % HTTP
+    try:
+        scripts_run(site)
+        scripts_without(site)
+    finally:
+        if xvfb is not None:
+            xvfb.terminate()
+        srv.stdin.close()
+        srv.wait(10)
+
+
+def scripts_run(site):
+    """a page's scripts on the Falcon, from EWEBJS.OVL"""
     hd = hd_for("scripts", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
     r = Run("scripts", "Falcon:16", hd, windowed=True, network=True)
     try:
@@ -622,6 +635,8 @@ def scripts():
         ev = r.wait(r"shown ", 120)
         check("scripts: the page's ran (%s)" % (ran or "")[12:], ran is not None and ev is not None and
               ev.endswith("title Tabs ready"), str(r.events()))
+        check("scripts: from EWEBJS.OVL, loaded for them", "js: EWEBJS.OVL loaded" in r.events(),
+              str(r.events()[:8]))
         r.shot(0)
         if ev is None:
             return
@@ -661,10 +676,96 @@ def scripts():
         check("scripts: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:
         r.end()
-        if xvfb is not None:
-            xvfb.terminate()
-        srv.stdin.close()
-        srv.wait(10)
+
+
+def scripts_without(site):
+    """without EWEBJS.OVL: the page as with its scripts off, and the status
+    line says why"""
+    hd = hd_for("scriptsnoovl", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
+    os.remove(os.path.join(hd, "EWEBJS.OVL"))
+    r = Run("scriptsnoovl", "Falcon:16", hd, windowed=True, network=True)
+    try:
+        ev = r.wait(r"shown ", 300)
+        said = r.wait(r"note ", 60)
+        check("scripts: without EWEBJS.OVL the page shows without them (%s)" % (said or "")[5:],
+              ev is not None and ev.startswith("shown %stabs.html " % site) and
+              not any(e.startswith("scripts ran") for e in r.events()) and
+              said is not None and "EWEBJS.OVL is missing" in said and bar(r) == said[5:], str(r.events()[-8:]))
+        r.shot(0)
+        r.key(Q, (CTRL,))
+        check("scripts: without EWEBJS.OVL, ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()[-5:]))
+    finally:
+        r.end()
+
+
+def big_page():
+    """a news page as big as most of the page set's (about 150 KB, 2,300
+    elements, 300 links), the same bytes every time"""
+    words = ("falcon atari window picture river garden network bread family museum engine desk city "
+             "solar train joystick reader build tracker energy paper science photo flower holiday").split()
+    out = ["<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Big</title><style>"
+           ".story{margin:0 0 1em;border-bottom:1px solid #ccc} .story h2{font-size:1.2em} "
+           "td{padding:2px 6px} .kicker{color:#a00;text-transform:uppercase}</style></head><body>"]
+    k = 0
+    for i in range(150):
+        text = []
+        for j in range(85):
+            text.append(words[(i * 7 + j * 3 + k) % len(words)])
+            k += 1
+        out.append("<div class=\"story\"><p class=\"kicker\">Section %d</p><h2><a href=\"s%d.html\">Story %d: %s</a>"
+                   "</h2><p>%s.</p><ul><li><a href=\"r%d.html\">Related %d</a></li><li>%s</li></ul>"
+                   "<table><tr><td>%d</td><td>%s</td><td><em>%s</em></td></tr></table></div>" %
+                   (i % 12, i, i, " ".join(text[:5]), " ".join(text), i, i, " ".join(text[5:15]), i,
+                    " ".join(text[15:25]), " ".join(text[25:30])))
+    out.append("</body></html>")
+    return "\n".join(out).encode()
+
+
+def falcon4():
+    """EWEB.PRG on the stock Falcon (16 MHz, no FPU, 4 MB of ST RAM, no TT
+    RAM, TOS 4.04; Erez, 23 Oct 2026: one EWEB.PRG for every Falcon): the
+    window drawn in bands, a page as big as most of the page set's from the
+    disk and loaded again, scripts off (no FPU: EWEBJS.OVL never loaded),
+    the pictures' page, then ^Q"""
+    name = "falcon4"
+    hd = hd_for(name, r"C:\BIG.HTM", "SCRIPTS=file\r\n")
+    with open(os.path.join(hd, "BIG.HTM"), "wb") as f:
+        f.write(big_page())
+    r = Run(name, "Falcon-4:16", hd)
+    try:
+        ready = r.wait(r"ready ", 300)
+        ev = r.wait(r"shown ", 600)
+        m = re.search(r"height (\d+) links (\d+) ", ev or "")
+        check("falcon4: a big page shows (%s)" % (ready or "?")[6:],
+              ready is not None and " buf 32 " in ready and ev is not None and
+              ev.startswith("shown file:///C:/BIG.HTM ") and m is not None and int(m.group(2)) == 300 and
+              int(m.group(1)) > 20000, str(r.events()[-6:]))
+        time.sleep(2)
+        r.shot(0)
+        n = len([e for e in r.events() if e.startswith("shown ")])
+        r.key(0x13, (CTRL,))                   # ^R
+        t0 = time.time()
+        while time.time() - t0 < 600 and len([e for e in r.events() if e.startswith("shown ")]) == n:
+            time.sleep(2)
+        last = [e for e in r.events() if e.startswith("shown ")][-1]
+        check("falcon4: the big page loaded again", last.startswith("shown file:///C:/BIG.HTM ") and
+              " links 300 " in last, last)
+        check("falcon4: no FPU, so no scripts and no EWEBJS.OVL",
+              "js: EWEBJS.OVL loaded" not in r.events() and
+              not any(e.startswith("scripts ran") for e in r.events()), str(r.events()[-6:]))
+        r.key(L, (CTRL,))
+        r.type("file:///C:/PICS.HTM")
+        r.key(RETURN)
+        ev = r.wait(r"pictures ", 1200)
+        shown = [e for e in r.events() if e.startswith("shown file:///C:/PICS.HTM ")]
+        check("falcon4: the pictures' page", ev is not None and len(shown) == 1, "\n".join(r.events()[-8:]))
+        time.sleep(2)
+        r.shot(1)
+        r.key(Q, (CTRL,))
+        check("falcon4: ^Q quits", r.wait(r"quit$", 120) is not None and
+              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+    finally:
+        r.end()
 
 
 def screens():
@@ -1336,6 +1437,8 @@ if "gateway" in WHICH:
     gateway()
 if "falcon" in WHICH:
     falcon()
+if "falcon4" in WHICH:
+    falcon4()
 if "deep" in WHICH:
     deep()
 if "refresh" in WHICH:

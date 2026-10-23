@@ -175,7 +175,7 @@ hub stay complete, with the evidence.
   keeps the arenas' pieces small, and a page that doesn't fit gives back the kept pages and the
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
   through the gateway.
-- **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`),
+- **A release** carries `EWEB.PRG`, `EWEBJS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`),
   `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
   (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
   `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, and `PICBENCH.TTP` with `PICBENCH.TXT`
@@ -194,10 +194,13 @@ hub stay complete, with the evidence.
   is: patches in its `patches/` with the README; a runtime per document, `doc.js`; the lean DOM on
   EWeb's own nodes; the budget), run by `src/browse` for the sites in `SCRIPTS=` (Options > Run this
   site's scripts). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
-  `-m68881` and run only with an FPU (the `_FPU` cookie); no FPU instruction may appear outside them
-  (`m68k-linux-gnu-objdump -d`); the ST edition has `js_none.c`. After changing them: `make test`
+  `-m68881` and run only with an FPU (the `_FPU` cookie); with `js.c` they are `EWEBJS.OVL`, a file
+  of their own that `EWEB.PRG` loads when a site's scripts first run (`atari/js_ovl.c`, made by
+  `atari/ovl.ld` and `tools/mkovl.py`; DESIGN.md, One EWEB.PRG for every Falcon), so `EWEB.PRG`
+  has no FPU instruction at all (`m68k-linux-gnu-objdump -d`); the ST edition has `js_none.c`. After changing them: `make test`
   (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers), `make itest`
-  (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882).
+  (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882, with and without `EWEBJS.OVL`).
+  `EWEB.PRG` runs on the stock 4 MB Falcon (Erez, 23 Oct 2026): `make hatarigui`'s `falcon4` group.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). After changing it, `make test` (its cases, `tests/css/cases.txt`, worked out from the
   specifications) and `make csscmp` (against LibCSS on the page set: no difference may be left

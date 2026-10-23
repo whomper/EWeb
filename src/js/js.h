@@ -67,6 +67,10 @@ enum {
 
 /* is there JavaScript in this build (0: js_none.c) */
 extern const int js_built;
+/* can scripts run now: in EWEB.PRG, EWEBJS.OVL is loaded the first time
+   this is asked (atari/js_ovl.c); if not, js_problem says why */
+int js_available(void);
+const char *js_problem(void);
 
 /* the page's scripts run: url is its address, base what its links are
    resolved against. The document's js is set (JS_DONE). */

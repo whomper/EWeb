@@ -6,7 +6,8 @@
 # EWeb's own CSS engine; ewget, which fetches a page and times it). See
 # docs/DESIGN.md.
 #
-#   make             binary/EWEB.PRG (the browser), binary/EWEB.FNT (its
+#   make             binary/EWEB.PRG (the browser) with EWEBJS.OVL (its
+#                    JavaScript), EWEBST.PRG, binary/EWEB.FNT (its
 #                    fonts, from DejaVu), NSBENCH.TTP and EWGET.TTP for the
 #                    Atari (plain TOS, any Falcon), with common/'s
 #                    freestanding runtime, and the root certificates
@@ -31,7 +32,8 @@
 #   make fuzz        the HTTP client and the URL parser under libFuzzer
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
-#   make dist        a release's files in dist/: EWEB.PRG, EWEB.FNT, EWEB.HYP,
+#   make dist        a release's files in dist/: EWEB.PRG, EWEBJS.OVL,
+#                    EWEBST.PRG, EWEB.FNT, EWEB.HYP,
 #                    NSBENCH.TTP, NSBENCH.TXT, PICBENCH.TTP, PICBENCH.TXT,
 #                    PHOTO.JPG, EWGET.TTP, EWGET.TXT,
 #                    CACERT.PEM, ROOTS.DAT, SAMPLE.HTM, NEWS.HTM, NEWS.CSS and
@@ -109,7 +111,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
+all: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
@@ -464,6 +466,28 @@ build/st/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) $(EWB_FLAGS) $(NSINC) -c $< -o $@
 
+# EWEBJS.OVL: EWEB.PRG's JavaScript in a file of its own, loaded the first
+# time a site's scripts run (atari/js_ovl.h; DESIGN.md, One EWEB.PRG for
+# every Falcon). JS_ABI ties it to the EWEB.PRG made with it: the overlay
+# reads EWeb's structures, so both are made from the same headers.
+JS_ABI := $(shell cat VERSION $(sort $(EWB_HDRS)) atari/js_ovl.h | cksum | cut -d' ' -f1)UL
+JS_OVL_HDRS = $(EWB_HDRS) atari/js_ovl.h VERSION
+build/tos/js/js_ovl_head.o: atari/js_ovl_head.c $(JS_OVL_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSJS_CFLAGS) $(JS_FLAGS) -Iatari -DJS_ABI=$(JS_ABI) -c $< -o $@
+build/tos/ewebjs.elf: build/tos/js/js_ovl_head.o $(tos_JS) atari/ovl.ld
+	$(M68KCC) -m68030 -m68881 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/ovl.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--unresolved-symbols=ignore-all \
+		-o $@ $(filter %.o,$^) -lgcc
+binary/EWEBJS.OVL $(GEN)/js_imports.c &: build/tos/ewebjs.elf tools/mkovl.py common/tools/elf2tos.py
+	@mkdir -p binary $(GEN)
+	python3 tools/mkovl.py $< binary/EWEBJS.OVL $(GEN)/js_imports.c
+build/tos/js/js_imports.o: $(GEN)/js_imports.c
+	$(M68KCC) $(TOS_CFLAGS) -fno-builtin -c $< -o $@
+build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(EWB_INC) $(NSINC) $(NET_WARN) -DJS_ABI=$(JS_ABI) -c $< -o $@
+
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
@@ -485,10 +509,10 @@ build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
 build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h common/src/pic.h
-build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) $(tos_JS) \
-		build/tos/gem/common/dspjpeg.o build/tos/libbearssl.a
+build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
+		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/libbearssl.a
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
-binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py
+binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
@@ -963,13 +987,13 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 # certificates, the desktop icon) and the measuring tools
 build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 	python3 tests/bench/mkphoto.py build/photo
-dist: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
+dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
 		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM \
 		binary/PICBENCH.TTP docs/PICBENCH.TXT build/photo/PHOTO.JPG
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP \
-		binary/CACERT.PEM binary/ROOTS.DAT binary/PICBENCH.TTP build/photo/PHOTO.JPG dist/
+	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP \
+		binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT binary/PICBENCH.TTP build/photo/PHOTO.JPG dist/
 	cp icons/EWEB.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
@@ -977,7 +1001,7 @@ dist: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/N
 	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
 	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
 	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
-	cp dist/EWEB.PRG dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
+	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
 		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS \
 		dist/PICBENCH.TTP dist/PICBENCH.TXT dist/PHOTO.JPG dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .

@@ -11,7 +11,7 @@ it, and how EWeb gets past CAPTCHAs.
 | Hardware | A **DFB1** at **50 MHz** with an **FPU** and **128 MB of TT-RAM**, plus the Falcon's own **DSP** | The machine EWeb is tuned and measured on. It uses the FPU for JavaScript's maths and the DSP for heavy number work (below). |
 | Network | A **NetUSBee** | An NE2000-style Ethernet adapter on the cartridge port. About 300 KB/s at best (one report, measured under Linux, not STinG); EFTP on your Falcon gives the real figure. |
 | Gateway | **An option, as in the other apps** | EWeb talks to sites itself by default. AERA-Gateway's `web` service is the alternative, and is the only way past CAPTCHAs (below). |
-| Machines | **Every Falcon; the most from a fast one** | One program, in a build with the FPU and one without, that checks at start what the Falcon has (accelerator, TT-RAM, FPU) and uses it. Tuned for your DFB1. |
+| Machines | **Every Falcon; the most from a fast one** | One program that checks at start what the Falcon has (accelerator, TT-RAM, FPU) and uses it, its JavaScript (which needs the FPU) in a file of its own (23 Oct 2026: one `EWEB.PRG` for every Falcon, the stock 4 MB one too). Tuned for your DFB1. |
 | Code | **NetSurf's code where we can't do better; fresh code where we can** | Each part (HTML parser, CSS engine, DOM, layout, image decoders) uses NetSurf's version unless fresh code written for a fast 68030 is faster and at least as standards-compliant. How it's decided is below. The GEM front end and everything Atari-side are ours, on AERA-Atari's `common/`. |
 | JavaScript | **QuickJS** | The best fit measured: modern syntax, small, portable C, MIT licence. |
 | Hebrew | **Supported** | Hebrew pages in every Hebrew encoding, right to left, mixed with English. It makes layout fresh code: NetSurf's reorders no text (below). |
@@ -2616,7 +2616,48 @@ left 1.54 MB and showed them (8.4 s and 11.1 s; a 176 KB WSJ page still didn't f
 family's three accessories loaded (ECal, EContact, EHypView: about 2.4 MB of a 4 MB Falcon, the
 family's known limit) about 1.1 MB is left for a program: TOS won't start `EWEB.PRG` in any of
 these forms, and `EWEBST.PRG` starts with 319 KB free. The rigs had never run `EWEB.PRG` on the
-4 MB Falcon. Whether that Falcon is a target is open (below).
+4 MB Falcon. Erez's answer: one `EWEB.PRG` for every Falcon (below).
+
+## One EWEB.PRG for every Falcon (23 Oct 2026)
+
+Erez's decision (Decisions): the stock 4 MB Falcon is a target of `EWEB.PRG`'s, with the same
+program as his DFB1's. What it took:
+
+- **JavaScript in a file of its own, `EWEBJS.OVL`** (`atari/js_ovl.h`): QuickJS, musl's maths and
+  `src/js/js.c`, 919 KB, next to `EWEB.PRG`, loaded the first time a site whose scripts are on is
+  opened, and only with an FPU (a stock Falcon never loads it), into the heap (TT RAM first), and
+  kept for the rest of the run. It is linked at 0 with what it takes from `EWEB.PRG` left undefined
+  (`atari/ovl.ld`); `tools/mkovl.py` makes it a TOS program's image (TOS's 14,186 fixups) with an
+  imports' part: the 858 places that call or read one of the 57 things it takes from `EWEB.PRG`
+  (`malloc`, the document's calls, `ec_stack_floor`), each filled in when it is loaded from
+  `js_imports[]` (`build/gen/js_imports.c`, from the same tool), and its text starts with the 13
+  calls `EWEB.PRG` makes (`js.h`). As the overlay reads EWeb's structures, a hash of the headers
+  both are made from and `VERSION` (`JS_ABI`), and a CRC of the imports' names, must match: one from
+  another build is refused. The caches are cleared after it is loaded (the 68030's CACR, CPUSHA on a
+  68040 or 68060). A page whose scripts can't run (the file missing, damaged, from another version
+  or too big for the memory) is shown as with its scripts off, and the status line says why.
+  `EWEB.PRG` is now 947 KB (1,856 before), 1.50 MB with its BSS (2.40), and has no FPU
+  instruction at all.
+- **Drawing in bands when memory is short:** the window's buffers for the screen's height (460 KB
+  in 16 colours at 640x480) only when 2 MB is left beside them for the pages; else 32 rows at a
+  time, as on the ST (the drawing took as long).
+- **A page that doesn't fit when it is read** (a page loaded again beside the one shown) gives back
+  the pages kept for Back and the one shown and is read once more, as a page that doesn't fit when
+  it is laid out already did; a form sent isn't sent again.
+
+On the emulated stock Falcon (16 MHz, no FPU, 4 MB, TOS 4.04, 640x480 in 16 colours) 1,829 KB is
+free at the start (803 KB before), and the pages of the first timings show from the disk: BBC News
+(100 KB) in 8.4 s, the WSJ page (186 KB) in 10.7 s, a 176 KB WSJ page that didn't fit at all in
+13.6 s, each loaded again too. `make hatarigui`'s `falcon4` group shows a page nearly as big (151 KB
+of long paragraphs, 2,256 elements, 300 links, the same bytes each time) and loads it again, and the
+pictures' page, with no scripts (no FPU, `EWEBJS.OVL` never loaded); its `scripts` group runs them
+from `EWEBJS.OVL` and shows a page without it. That page took 31 s, 26 of them its layout: 73
+million 68030 instructions, half of them measuring its text a glyph at a time, the next thing to
+make faster. A page takes about 11 times its size in memory (2 MB for the 176 KB page; about 1 KB
+an element): one of 177 KB showed, but couldn't be loaded again beside itself. With the family's
+three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and `EWEB.PRG` needs
+1.5 MB to load: there it takes 14 MB or TT RAM (or `EWEBST.PRG`).
+
 
 ## The design
 
@@ -2919,10 +2960,6 @@ out of both (their paths lead nowhere on the Atari).
 
 ## Open questions
 
-- **`EWEB.PRG` on a 4 MB Falcon** (Size, speed and memory, above): a build without the FPU
-  (no JavaScript) with its memory sized at the start, one program with JavaScript in a file of its
-  own, or a floor of 14 MB or TT-RAM, the 4 MB Falcon running `EWEBST.PRG`. Erez left it open
-  (23 Oct 2026) while EWeb goes on; the hub records the floor in the guidelines once he decides.
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.
 

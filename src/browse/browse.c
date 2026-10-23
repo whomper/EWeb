@@ -506,6 +506,7 @@ typedef struct {
 	char mime[64], charset[40], security[96];
 	int status;		/* 0: a file or the cache */
 	char err[200];		/* when nothing came */
+	int nomem;		/* and that for want of memory */
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
 	char refresh[2048];	/* a page's Refresh header, "" none */
 	/* a page's Content-Disposition (RFC 6266): the caches would lose
@@ -651,7 +652,10 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		file_path(url, path, sizeof path);
 		f->data = pf_load(path, &f->len);
 		if (f->data == NULL) {
-			snprintf(f->err, sizeof f->err, "There is no file %.150s, or it can't be read.", path);
+			/* (there, it wouldn't fit in the memory) */
+			f->nomem = pf_size(path) >= 0;
+			snprintf(f->err, sizeof f->err, f->nomem ? "There isn't the memory to read %.150s." :
+				 "There is no file %.150s, or it can't be read.", path);
 			return 0;
 		}
 		/* a text file by its name, as a server would say: the rest are
@@ -731,6 +735,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			if (cached)
 				free(got.data);
 			snprintf(f->err, sizeof f->err, "Out of memory.");
+			f->nomem = 1;
 			return 0;
 		}
 		memset(&rq, 0, sizeof rq);
@@ -766,6 +771,7 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			net_busy++;
 			ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
 			net_busy--;
+			f->nomem = !ok && strstr(f->err, "memory") != NULL;
 			ms = pf_ms() - t0;
 			/* how fast answers come, from one big enough to tell */
 			if (ok && body.len >= 8192 && ms > 0)
@@ -1162,6 +1168,11 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 
 	b->note[0] = 0;
 #ifndef EW_ST
+	if (scripts && !js_available()) {
+		/* EWEBJS.OVL couldn't be loaded: the page as with its scripts off */
+		scripts = 0;
+		snprintf(b->note, sizeof b->note, "Its scripts didn't run: EWEBJS.OVL %s", js_problem());
+	}
 parse:
 #endif
 	phase(b, BRPH_BUILD);
@@ -1759,6 +1770,12 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	b->ms_fetch = pf_ms();
 	r = fetch(b, url, b->typed ? NULL : b->url,
 		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
+	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b))
+		/* it didn't fit beside the pages kept and the one shown (a page
+		   loaded again on a small machine): they go, and once more (not
+		   a form sent, which the server may have had) */
+		r = fetch(b, url, b->typed ? NULL : b->url,
+			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop) {

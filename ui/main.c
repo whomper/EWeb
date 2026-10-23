@@ -34,6 +34,7 @@
 #include "util.h"
 #ifndef EW_ST
 #include "dspjpeg.h"
+#include "js_ovl.h"
 #endif
 
 /* the stack's size (the Makefile's, crt0's too) and the room kept under
@@ -881,10 +882,11 @@ static void loaded(int r)
 			short x, y, w, h;
 			win_page_area(&x, &y, &w, &h);
 			log_event("shown %.400s height %ld links %d area %d %d %d %d top %ld ms %lu "
-				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) title %.200s", shown,
+				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) heap %ld peak %ld free %ld "
+				  "title %.200s", shown,
 				  br.p ? (long) br.p->height : 0L, br.p ? br.p->nlinks : 0, x, y, w, h, (long) win_top(),
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
-				  br.title);
+				  heap_use, heap_peak, ram_free(), br.title);
 		}
 		if (br.p && br.p->deep)
 			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
@@ -1898,8 +1900,11 @@ int main(void)
 	br.can_open = can_open;
 	br.save_as = save_where;
 	br.snapshot = opt.snapshot;
-	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen */
+	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
+	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
 #ifndef EW_ST
+	path_join(path, sizeof path, opt.workdir, "EWEBJS.OVL");
+	js_ovl_at(path);
 	br.scripts = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
 	br.script_sites = opt.scripts;
 	br.ask = js_ask;

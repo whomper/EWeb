@@ -84,11 +84,15 @@ static int bufs(short n)
 	int std = !truecolour && format != 0 && !(format == 2 && planes == 8);
 	long st = n > BAND ? (truecolour ? band_w * 2 * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
 	if (st > 0) {
-		/* ST RAM left for the rest of the system: 256 KB at least */
-		long free_st = (long) Mxalloc(-1, 0);
+		/* ST RAM left for the rest of the system: 256 KB at least; and
+		   2 MB for the pages (a 4 MB Falcon draws in bands: the screen's
+		   height would take 460 KB of its 1.5 MB in 16 colours) */
+		long free_st = (long) Mxalloc(-1, 0), free_tt = 0;
 		if (free_st == -32)
 			free_st = (long) Malloc(-1);
-		if (free_st < st + 262144L)
+		else if ((free_tt = (long) Mxalloc(-1, 1)) < 0)
+			free_tt = 0;
+		if (free_st < st + 262144L || free_st + free_tt < st + (truecolour ? 0 : band_w * n) + (2L << 20))
 			return 0;
 	}
 	rows = n;

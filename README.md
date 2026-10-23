@@ -102,6 +102,7 @@ and unpack it into a folder of its own. It contains:
 | File | What it is |
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
+| `EWEBJS.OVL` | its JavaScript (QuickJS), loaded when a site whose scripts you turned on needs it, and only with an FPU (keep it next to `EWEB.PRG`) |
 | `EWEBST.PRG` | the ST edition: 68000 code, secure sites through AERA-Gateway's web service on a Raspberry Pi |
 | `EWEB.FNT` | its fonts (keep it next to `EWEB.PRG`) |
 | `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
@@ -118,8 +119,10 @@ and unpack it into a folder of its own. It contains:
 3. Pages on your disks open too: ^O, or drop one on `EWEB.PRG`.
 
 **Needs:** a Falcon or TT, plain TOS, EmuTOS or MagiC, a screen 640 pixels
-wide, about 3 MB free (the program itself takes 2.2 MB; big pages more);
-STinG or MiNTnet for the network. On an ST or STE (TOS 1.04 or newer, with
+wide, about 3.5 MB free (the program itself takes 1.5 MB, a page up to about
+11 times its size; a Falcon's own 4 MB is enough when the family's
+accessories aren't loaded); its scripts need an FPU and 0.9 MB more; STinG
+or MiNTnet for the network. On an ST or STE (TOS 1.04 or newer, with
 4 MB), the ST edition `EWEBST.PRG`, with the Pi gateway's address
 in Settings > Secure.
 
@@ -247,7 +250,8 @@ src/layout/           the layout: boxes, lines, floats, tables, flexbox and grid
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
 src/js/               the pages' scripts: QuickJS's runtime with the budget, and the lean DOM (js.c);
-                      js_none.c for the ST edition
+                      js_none.c for the ST edition. On the Atari they are EWEBJS.OVL, a file of their own
+                      (atari/js_ovl.c loads it, atari/js_ovl_head.c and ovl.ld make it, tools/mkovl.py)
 src/net/              EWeb's URL parser and HTTP client, cookies (cookie.c), and gzip
 src/plat.h            what EWeb needs from the machine (atari/plat_tos.c, tests/host/plat_posix.c)
 tests/bench/          nsbench: the document tree, LibCSS's selection handler,
@@ -276,14 +280,14 @@ icons/                the desktop icon (EWEB.RSC, EWEB.ICN, EWEBMK.ICN), made by
                       the family's drawing, common/icons/EWEB.txt (common/tools/appicon.py)
 atari/                the C library pieces NetSurf and QuickJS need beyond common/ (libc_extra.c;
                       include/js, js_libc.c), the ST edition's 64-bit arithmetic (ll68000.c),
-                      and plat_tos.c
+                      plat_tos.c, and EWEBJS.OVL's loader (js_ovl.c)
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT; EWEB.PRG takes only
                       libparserutils: Hubbub and LibCSS are the yardsticks of nsbench, h5test and csscmp)
 third_party/quickjs/  QuickJS, the JavaScript engine (MIT)
 third_party/libm/     musl's maths functions, for QuickJS on the Atari (MIT)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py (EWEB.HYP), mkentities.py (the HTML parser's
                       named characters), mktbicons.py and mkthrobber.py (the toolbar's pictures and
-                      throbber), bump.py (a release), sync-common.sh and
+                      throbber), mkovl.py (EWEBJS.OVL), bump.py (a release), sync-common.sh and
                       sync-gateway.sh, and QEMU with plugins for counting 68030 instructions
                       (build-qemu.sh, count68k.sh, prof68k.py)
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here
@@ -359,7 +363,8 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   with Space and by its label, a login sent with POST), saving (^S,
   Alternate-click on a link, a file EWeb doesn't show), bookmarks (^D, ^B,
   Remove) and ^Q; `scripts`, the Falcon with its 68882: a page's tabs
-  clicked, an `onclick`'s alert answered; `screens`, a page and a page of
+  clicked, an `onclick`'s alert answered, from `EWEBJS.OVL`, and the page
+  without it; `screens`, a page and a page of
   pictures from the disk on the Falcon in 256 colours and true colour and
   on the TT in 16 colours and monochrome, the pictures read back from the
   cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 4 MB
@@ -369,7 +374,8 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   the Falcon through webgate with the family's accessories loaded, the
   pictures as JPEG and PNG and as the Pi's pens; `falcon`, a secure page
   whose pictures come from another secure host, TLS and the JPEGs on the
-  DSP; `deep`, a page nested 1000 deep on the Falcon and the 1040 ST, cut,
+  DSP; `falcon4`, `EWEB.PRG` on the stock 4 MB Falcon (no FPU, no TT RAM): a
+  177 KB page loaded and loaded again, and the pictures' page; `deep`, a page nested 1000 deep on the Falcon and the 1040 ST, cut,
   not crashed; `refresh`, pages that send you on, one that waits while
   Esc keeps it, and one that sends itself on again and again, stopped;
   `details`, a summary clicked open and closed on the Falcon and the 1040
