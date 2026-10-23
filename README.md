@@ -111,7 +111,7 @@ and unpack it into a folder of its own. It contains:
 | `EWEB.FNT` | its fonts (keep it next to `EWEB.PRG`) |
 | `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
 | `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list) |
-| `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor), `EWEB.ICN` and its mask `EWEBMK.ICN` |
+| `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor) for TOS, EmuTOS, and NVDI with TOS's colours loaded (COLORVDI.CPX); `EWEBNV.RSC`, the same for NVDI with its own 256 colours; `EWEB.ICN` and its mask `EWEBMK.ICN` |
 | `NSBENCH.TTP`, `NSBENCH.TXT`, `SAMPLE.HTM`, `NEWS.HTM`, `NEWS.CSS` | the measuring tool, its guide and two pages to try it on |
 | `PICBENCH.TTP`, `PICBENCH.TXT`, `PHOTO.JPG` | times a JPEG on the 68030 and with the DSP, its guide and a photo to try it on |
 | `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
@@ -280,7 +280,7 @@ tests/browse/         the bookmarks, the disk cache, the Pi's pens, a refresh, a
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
 tests/input/          libparserutils' input stream, against the WHATWG UTF-8 decoder
-icons/                the desktop icon (EWEB.RSC, EWEB.ICN, EWEBMK.ICN), made by make icons from
+icons/                the desktop icon (EWEB.RSC, EWEBNV.RSC, EWEB.ICN, EWEBMK.ICN), made by make icons from
                       the family's drawing, common/icons/EWEB.txt (common/tools/appicon.py)
 atari/                the C library pieces NetSurf and QuickJS need beyond common/ (libc_extra.c;
                       include/js, js_libc.c), the ST edition's 64-bit arithmetic (ll68000.c),

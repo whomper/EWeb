@@ -756,10 +756,12 @@ hatarigui: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
 .PHONY: hatarigui
 
 # the app's icon, from the family's drawing (common/icons/EWEB.txt, the
-# guidelines' 5.5): the desktop icon's RSC and ICN files, ui/icon.h and
+# guidelines' 5.5): the desktop icon's RSC files (EWEBNV.RSC for NVDI's own
+# 256 colours) and ICN files, ui/icon.h and
 # icon16.h (the About box, the iconified window), docs/icon*.png
 icons:
-	python3 common/tools/appicon.py EWEB --rsc icons/EWEB.RSC --icn icons/EWEB.ICN --mask icons/EWEBMK.ICN \
+	python3 common/tools/appicon.py EWEB --rsc icons/EWEB.RSC --rscnv icons/EWEBNV.RSC --icn icons/EWEB.ICN \
+	    --mask icons/EWEBMK.ICN \
 	    --headers ui --docs docs
 .PHONY: icons
 
@@ -997,7 +999,7 @@ dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary
 	mkdir -p dist/zip/icons
 	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP \
 		binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT binary/PICBENCH.TTP build/photo/PHOTO.JPG dist/
-	cp icons/EWEB.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
+	cp icons/EWEB.RSC icons/EWEBNV.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
 	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
 	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
 	sed 's/$$/\r/' docs/PICBENCH.TXT > dist/PICBENCH.TXT
