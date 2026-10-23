@@ -4976,12 +4976,15 @@ static __attribute__((noinline)) void parse(P *p, const uint8_t *in, size_t n, c
 		   come (the feed <pre> drops, so the file's own first stays),
 		   then the PLAINTEXT state: all the rest is text. (Straight to
 		   the insertion mode: dispatch() stays inlined in the loop.) */
+		static TATTR wrap = { (const uint8_t *) "style", (const uint8_t *) "white-space: pre-wrap", 5, 21 };
 		TOKEN *t = &p->t;
 		memset(t, 0, sizeof *t);
 		t->type = TK_START;
 		t->s = (const uint8_t *) "pre";
 		t->n = 3;
 		t->hid = H_PRE;
+		t->a = &wrap;	/* (its long lines wrapped, as browsers show a text file) */
+		t->na = 1;
 		process_in(p, p->mode);
 		p->skip_lf = 0;		/* (the line feed, dropped) */
 		p->state = S_PLAINTEXT;

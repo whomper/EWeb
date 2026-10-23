@@ -72,7 +72,7 @@ import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
-                         "details", "wide"]
+                         "details", "wide", "boxes"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
@@ -150,6 +150,15 @@ class Mouse:
     def click(self, x, y, button="1"):
         self.move(x, y)
         self.xdo("click", button)
+        time.sleep(0.4)
+
+    def drag(self, x0, y0, x1, y1):
+        """pressed at one place, let go at another"""
+        self.move(x0, y0)
+        self.xdo("mousedown", "1")
+        time.sleep(0.4)
+        self.move(x1, y1)
+        self.xdo("mouseup", "1")
         time.sleep(0.4)
 
 
@@ -1225,6 +1234,94 @@ def deep():
             r.end()
 
 
+def bar_of(url, area, top, n, extra=()):
+    """box n's scroll bar (from 1) on the screen, from ewrender's display
+    list: its x, y, w, h and its thumb's ends along it, else None"""
+    x0, y0, w, _ = area
+    p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
+                        "-w", str(w), "-d"] + list(extra) + [url], capture_output=True, text=True, timeout=60)
+    for line in p.stdout.splitlines():
+        m = re.match(r"bar y (\d+),(\d+) (\d+)x(\d+) box (\d+) reach \d+,(\d+) .* thumb (\d+)-(\d+)$", line)
+        if m and int(m.group(5)) == n:
+            bx, by, bw, bh, reach, t0, t1 = (int(m.group(i)) for i in (1, 2, 3, 4, 6, 7, 8))
+            return x0 + bx, y0 + by - top, bw, bh, t0, t1, reach
+    return None
+
+
+def boxes():
+    """a box that scrolls (overflow auto, 64 px high, more lines than that)
+    on the Falcon in 16 colours: a click on its bar below the thumb scrolls
+    it a boxful on (the log's "box N scrolled to X,Y"); the link brought into
+    view in it, clicked where it now is, is followed; Back, and its thumb
+    dragged to the top scrolls it back"""
+    xvfb = machines.xvfb(DISPLAY)
+    page = ("<!DOCTYPE html><title>Boxes</title><style>div{height:64px;overflow:auto;width:300px;"
+            "border:1px solid #000}</style><p>Above the box.</p><div>one<br>two<br>three<br>four<br>five<br>"
+            "six<br>seven<br>eight<br>nine<br><a href=text.htm>Deep link</a></div><p>Below the box.</p>")
+    try:
+        hd = hd_for("boxes", r"C:\BOXES.HTM")
+        with open(os.path.join(hd, "BOXES.HTM"), "w") as f:
+            f.write(page)
+        path = os.path.join(OUT, "boxes.htm")
+        with open(path, "w") as f:
+            f.write(page)
+        r = Run("boxes", "Falcon:16", hd, windowed=True)
+        try:
+            ev = r.wait(r"shown ", 300)
+            m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+            if not check("boxes: the page shown", m is not None, str(r.events())):
+                return
+            area, top = tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5))
+            bar = bar_of(path, area, top, 1)
+            if not check("boxes: the box has a bar", bar is not None, str(bar)):
+                return
+            bx, by, bw, bh, t0, t1, reach = bar
+            r.mouse.click(bx + bw // 2, by + (t1 + bh) // 2)	# below the thumb
+            ev = r.wait(r"box 1 scrolled to ", 60)
+            m = re.match(r"box 1 scrolled to 0,(\d+)", ev or "")
+            check("boxes: a click below the thumb scrolls the box on", m is not None and int(m.group(1)) > 0,
+                  str(r.events()[-5:]))
+            if m is None:
+                return
+            sy = int(m.group(1))
+            for _ in range(8):		# on to its end
+                if sy >= reach:
+                    break
+                bx, by, bw, bh, t0, t1, reach = bar_of(path, area, top, 1, ("-O", "1:0:%d" % sy))
+                r.mouse.click(bx + bw // 2, by + (t1 + bh) // 2)
+                m = re.match(r"box 1 scrolled to 0,(\d+)", r.wait(r"box 1 scrolled to 0,(?!%d$)" % sy, 60) or "")
+                if m is None:
+                    break
+                sy = int(m.group(1))
+            check("boxes: clicks below the thumb take the box to its end", sy == reach, "%d of %d" % (sy, reach))
+            time.sleep(2)
+            r.shot(0)
+            pt = link_point(path, area, top, "Deep link", ("-O", "1:0:%d" % sy))
+            if check("boxes: the deep link now in the box", pt is not None and by <= pt[1] < by + bh, str(pt)):
+                r.mouse.click(*pt)
+                ev = r.wait(r"shown ", 120)
+                check("boxes: the link in the box clicked is followed", ev is not None and
+                      re.match(r"shown file:///C:/text\.htm ", ev, re.I) is not None, str(r.events()[-5:]))
+                r.key(UNDO)
+                r.wait(r"shown ", 120)
+                time.sleep(2)
+                bar = bar_of(path, area, top, 1, ("-O", "1:0:%d" % sy))
+                if bar is not None:
+                    bx, by, bw, bh, t0, t1, reach = bar
+                    r.mouse.drag(bx + bw // 2, by + (t0 + t1) // 2, bx + bw // 2, by - 20)
+                    ev = r.wait(r"box 1 scrolled to 0,0$", 60)
+                    check("boxes: its thumb dragged to the top scrolls it back", ev is not None,
+                          str(r.events()[-5:]))
+                    time.sleep(2)
+                    r.shot(1)
+            r.key(Q, (CTRL,))
+            r.wait(r"quit$", 300)
+        finally:
+            r.end()
+    finally:
+        xvfb.terminate()
+
+
 def wide():
     """a page wider than the window (a table 1400 px wide) on the Falcon in
     16 colours: Right, then Shift+Right to the end, move it sideways (the
@@ -1546,5 +1643,10 @@ if "wide" in WHICH:
         wide()
     else:
         print("skip  wide: needs Xvfb and xdotool")
+if "boxes" in WHICH:
+    if shutil.which("Xvfb") and shutil.which("xdotool"):
+        boxes()
+    else:
+        print("skip  boxes: needs Xvfb and xdotool")
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

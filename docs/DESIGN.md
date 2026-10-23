@@ -2797,11 +2797,11 @@ to three lines, a menu folded to its first row, a picture cropped to a square. N
   (`page_clip`). The canvas draws a clipped item on a canvas of what is left of it (its patterns
   keep the page's place; a glyph's ink past its word's edge is drawn where the box shows it), and
   a click outside it, or a script's, isn't one on its link, control, summary or element. Each
-  axis clips by its own value: an axis `visible` beside one `hidden` is `auto`, which doesn't clip
-  in EWeb. Its height is the one asked for when its `overflow-y` is `hidden` or `clip`; with
-  `auto` or `scroll` it grows with what is in it, as with `visible` (before, they kept the
-  height, and what was in them ran over the boxes below: a code block with `overflow-x: auto` and
-  a `max-height` over the paragraph after it).
+  axis clips by its own value, and one `visible` beside one that isn't `visible` or `clip` is
+  `auto`, which scrolls (Boxes that scroll, below). Its height is the one asked for when its
+  `overflow-y` isn't `visible` (before, `auto` and `scroll` kept the height but cut nothing, and
+  what was in them ran over the boxes below: a code block with `overflow-x: auto` and a
+  `max-height` over the paragraph after it).
 - **Positioned boxes:** an absolutely positioned box is within its containing block's clips and
   those round it, not those of a box between the two (a dropdown placed against a box outside
   the one hiding its overflow shows past it, as in every browser); a fixed box is within none.
@@ -2820,8 +2820,7 @@ to three lines, a menu folded to its first row, a picture cropped to a square. N
   taken as the window's width (a width rounded up), the page set's pages wider than the window
   at 640 pixels went from 84 to 27 (tables and pictures of a width of their own: what
   scrolling sideways is for).
-- **Left:** `auto` and `scroll` don't clip yet: all of what is in the box shows, as before (EWeb
-  has no box that scrolls by itself; that is the second half). `text-overflow: ellipsis`,
+- **Left:** `text-overflow: ellipsis`,
   `overflow-clip-margin`, `clip-path` and the rounded clip of `border-radius` aren't done, and
   pictures and form controls draw within their boxes as they did. Text for screen readers only
   (a box of a pixel hiding what overflows it, or far off the page) still goes, with its clips.
@@ -2846,6 +2845,77 @@ a row's `overflow`, italic text in a box hiding its overflow drawn as in one tha
 (a float context hiding its overflow: its clip, drawn the same), the other lists unchanged,
 `make hatarigui` (TOS 4.04, every group), and the page set with and without Bootstrap's and
 Pico's sheets under AddressSanitizer and UBSan.
+
+## Boxes that scroll (23 Oct 2026)
+
+Stage 2's last part, the second half of "boxes that scroll" (`src/layout/layout.c`,
+`src/gfx/canvas.c`, `ui/win.c`). A box with `overflow: auto` or `scroll` (or an axis `visible`
+beside one that isn't `visible` or `clip`, which is `auto`) and more in it than it shows clips
+it, as `hidden` does, and scrolls:
+
+- **Laid out** (`scroller`): once what is in it is laid out, how far that goes right and down
+  from the box (`extent`: the items with the box's clip in their chain, each cut to the boxes
+  on the way that hide what overflows them) is kept (`page.scr`). When the page is done
+  (`scrollers_place`: a row, a flex line or a grid may stretch the box after it was laid out),
+  that, less the padding box, is how far it scrolls (a pixel or two, a glyph's box below its
+  line, doesn't count), each bar taking its room from the other way; and each way it scrolls
+  has a bar (`DL_SBAR`, 10 pixels, over the padding box's right edge or foot, made after what
+  is in the box so drawn over it, as see-through as the box), its thumb as long as the part
+  shown is of the whole. A box whose height is its own (`auto`) with a bar across its foot is
+  that much taller, as in browsers, so the bar covers none of its last line. A hidden box
+  (`visibility: hidden`) has no bars.
+- **Scrolled** (`page_scroll`): every item with the box's clip in its chain moves by the change
+  (a box in it, and that box's bar, with them), and so do the elements' places kept for scripts
+  (`page.blocks`, which now carry their clip too: a click on a place a box hides isn't one on
+  the element there, nor is a script's); the strips are made again. Drawing and every hit test
+  (links, controls, summaries, a script's click, a bar) then take the items where they are, with
+  nothing more. A box scrolled stays so when the page is laid out again (a picture's size come,
+  the window sized, Larger text): `LAYOUT_OPT.was`, the page before, by element (not a
+  `::before`'s or `::after`'s box, which has none). A link to a `#name` in a box, and a control
+  given the keyboard in one, scroll the boxes it is in to it (`page_reveal`) before the window
+  goes there.
+- **In the window:** a click on a box's bar above or below its thumb moves the box on a boxful
+  (less a line), and the thumb dragged follows the mouse; the box alone is drawn again (the
+  log's `box N scrolled to X,Y`).
+- **White space:** a line of `white-space: pre` or `nowrap` longer than its box was broken at
+  its words, so a code block never needed to scroll; now nothing in it (a word, a picture, an
+  inline-block, an inline's padding) starts a new line, as in every browser (CSS Text 3, 3): in
+  a box that scrolls it scrolls, elsewhere it overflows. A text file is shown as browsers show
+  one, `white-space: pre-wrap` (its long lines wrapped). Such a run counts whole in a table
+  cell's, a flex item's or a float's narrowest (min-content), and a table is no narrower than
+  its columns' narrowest (CSS 2.1, 17.5.2): before, a table given less room than that squeezed
+  its columns below it and broke words in the middle (`oth` / `er`); now it is wider and the
+  page scrolls sideways. That takes the page set's pages wider than the window at 640 pixels
+  from 27 to 45, most of the new ones 975 to 1050 pixels (rows of pictures and links in a
+  table); no list of `tests/layout` changed.
+- **Left:** no keys for a box (Up and Down scroll the page); a script's `scrollTop` and
+  `scrollLeft` aren't the box's; the bars are EWeb's own drawing, in the page's pens; text that
+  goes on under a vertical bar is reached by scrolling the box a bar's width sideways, as the
+  box's lines aren't laid out again a bar narrower.
+
+**Measured** (68030 instructions, drawbench, against the commit before): the page set's pages
+that name `overflow` most and the news page +0.09% to +0.12% (each box's `overflow` looked at
+once more, each picture's and inline-block's `white-space`; none of the page set's pages has a
+box with a bar, as they come without their own sheets, nor with Bootstrap's or Pico's), one of
+them 6.7% fewer (a box a pixel wide with `overflow: auto` now cuts the text that went down it a
+letter a line), `tests/layout/scroll.html` 4% fewer than when all of each box showed.
+
+Tested by `tests/layout/scroll.html`, its list and `tests/layout/scroll.py` (seven bars in six
+boxes, none for a box whose content fits; a link at a box's foot not followed when clicked until
+the box is scrolled to it, then followed; a box scrolled kept so when the page is laid out
+again; a box in a box moved with the outer one; every box scrolled to its end and drawn, in
+bands too, in both editions under the sanitizers), `tests/layout/overflow.py` (the code block
+with a `max-height` scrolls in its box, the paragraph after it below), `make hatarigui`'s
+`boxes` group (the Falcon in 16 colours, TOS 4.04: clicks below the thumb take the box to its
+end, the link brought into view clicked and followed, Back, and the thumb dragged to the top
+scrolls it back), and the page set with and without Bootstrap's and Pico's sheets under
+AddressSanitizer and UBSan. A review (same day) found thirteen faults, each fixed and checked on
+its page: bars and reach left as they were when a flex line or a row stretched the box, script
+clicks and places not moved, a nowrap run spilling out of a table cell, text under a bar out
+of reach, bars on hidden boxes, a `#name` link into a box, a box clipped one way counted as
+endless, boxes above the page's top, floated controls losing their height, room for a bar not
+made, `::before` boxes' scrolling given to another, text files no longer wrapped, and pictures
+and inline-blocks in a nowrap run still wrapped.
 
 ## `@import` (23 Oct 2026)
 
@@ -3241,7 +3311,7 @@ out of both (their paths lead nowhere on the Atari).
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
-   (`overflow`: hidden and clip done, above; auto and scroll next), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
+   (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page, selecting and copying, history with visited links, a page drawn while it loads, Esc
    during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.

@@ -24,12 +24,12 @@ body { margin: 8px; font: 14px/16px sans-serif }
 <div class="box rel">Here<span class="drop">CLIPPED DROP</span></div>
 <p>Its containing block outside the box: not within it (green below):</p>
 <div style="position: relative"><div class="box esc">Here<span class="drop">ESCAPED DROP</span></div></div>
-<p>overflow-x hidden: its y is auto, which shows all of it in EWeb (it grows); overflow-x clip: only across:</p>
-<div class="box xonly">One<br>two<br>THREE SHOWS TOO</div>
+<p>overflow-x hidden: its y is auto, so it scrolls down; overflow-x clip: only across:</p>
+<div class="box xonly">One<br>two<br>three, scrolled to</div>
 <div class="box clipx">One<br>two<br>THREE SHOWS<div class="track">wide text goes past the box's right edge and is cut there</div></div>
 <p>Nested: an inner box hiding more:</p>
 <div class="box" style="overflow: hidden; height: 48px"><div style="overflow: hidden; height: 16px; width: 120px; background: #fcc">inner first<br><span class="gone">GONE INNER</span></div>outer text<br>more<br><span class="gone">GONE OUTER</span></div>
-<p>overflow auto: all of it shows (EWeb has no scrolling box):</p>
+<p>overflow auto: it scrolls (tests/layout/scroll.html has more):</p>
 <div class="box auto">One<br>two<br>three shows</div>
 <p style="margin-top: 40px">The end.</p>
 </body></html>

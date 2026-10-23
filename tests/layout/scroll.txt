@@ -1,0 +1,83 @@
+page 608 x 506, background ffffff, 85 items, 1 links, title "Boxes that scroll"
+text 6,28 434x14 #000000 sans11 link 0 "A code block with a long line: a bar across its foot, the box that much taller:"
+fill 6,41 242x38 #eeeeee
+clip x 7+240 y 42+36 in 0
+text 7,53 70x14 #000000 mono11 link 0 "short line"
+text 7,66 588x14 #000000 mono11 link 0 "a line far too long for the box, which goes on and on past its right edge to the end"
+bar x 7,68 240x10 box 1 reach 348,0 at 0,0 thumb 0-97
+fill 6,41 242x1 #888888
+fill 6,78 242x1 #888888
+fill 6,42 1x36 #888888
+fill 247,42 1x36 #888888
+text 6,101 358x14 #000000 sans11 link 0 "A box 64 pixels high with more lines: a bar down its right side:"
+fill 6,114 244x55 #ffffdd
+clip x 8+240 y 116+51 in 0
+text 8,127 21x14 #000000 sans11 link 0 "one"
+text 8,140 20x14 #000000 sans11 link 0 "two"
+text 8,153 30x14 #000000 sans11 link 0 "three"
+text 8,166 23x14 #000000 sans11 link 0 "four"
+text 8,179 20x14 #000000 sans11 link 0 "five"
+text 8,192 16x14 #000000 sans11 link 0 "six"
+text 8,205 34x14 #000000 sans11 link 0 "seven"
+text 8,218 104x14 #0000ee sans11 link 1 "the link at the foot"
+bar y 238,116 10x51 box 2 reach 0,54 at 0,0 thumb 0-24
+fill 6,114 244x2 #000000
+fill 6,167 244x2 #000000
+fill 6,116 2x51 #000000
+fill 248,116 2x51 #000000
+text 6,191 236x14 #000000 sans11 link 0 "Both ways (overflow scroll, no wrapping):"
+fill 6,204 244x42 #ffffdd
+clip x 8+240 y 206+38 in 0
+text 8,217 425x14 #000000 sans11 link 0 "a first line that is much wider than the box it is in, to be scrolled sideways"
+text 8,230 20x14 #000000 sans11 link 0 "two"
+text 8,243 30x14 #000000 sans11 link 0 "three"
+text 8,256 23x14 #000000 sans11 link 0 "four"
+bar y 238,206 10x28 box 3 reach 195,25 at 0,0 thumb 0-16
+bar x 8,234 230x10 box 3 reach 195,25 at 0,0 thumb 0-126
+fill 6,204 244x2 #000000
+fill 6,244 244x2 #000000
+fill 6,206 2x38 #000000
+fill 248,206 2x38 #000000
+text 6,268 181x14 #000000 sans11 link 0 "max-height, all of it fits: no bar:"
+fill 6,281 244x17 #ffffdd
+clip x 8+240 y 283+13 in 0
+text 8,294 70x14 #000000 sans11 link 0 "just one line"
+fill 6,281 244x2 #000000
+fill 6,296 244x2 #000000
+fill 6,283 2x13 #000000
+fill 248,283 2x13 #000000
+text 6,320 288x14 #000000 sans11 link 0 "overflow-x hidden: its y is auto, so it scrolls down:"
+fill 6,333 244x42 #ffffdd
+clip x 8+240 y 335+38 in 0
+text 8,346 21x14 #000000 sans11 link 0 "one"
+text 8,359 20x14 #000000 sans11 link 0 "two"
+text 8,372 30x14 #000000 sans11 link 0 "three"
+text 8,385 23x14 #000000 sans11 link 0 "four"
+text 8,398 20x14 #000000 sans11 link 0 "five"
+bar y 238,335 10x38 box 4 reach 0,28 at 0,0 thumb 0-21
+fill 6,333 244x2 #000000
+fill 6,373 244x2 #000000
+fill 6,335 2x38 #000000
+fill 248,335 2x38 #000000
+text 6,397 89x14 #000000 sans11 link 0 "One in another:"
+fill 6,410 244x55 #ffffdd
+clip x 8+240 y 412+51 in 0
+text 8,423 55x14 #000000 sans11 link 0 "outer one"
+fill 8,425 160x26 #ccddff
+clip x 8+160 y 425+26 in 6
+text 8,436 54x14 #000000 sans11 link 0 "inner one"
+text 8,449 53x14 #000000 sans11 link 0 "inner two"
+text 8,462 63x14 #000000 sans11 link 0 "inner three"
+text 8,475 56x14 #000000 sans11 link 0 "inner four"
+bar y 158,425 10x26 box 5 reach 0,27 at 0,0 thumb 0-12
+text 8,462 54x14 #000000 sans11 link 0 "outer two"
+text 8,475 64x14 #000000 sans11 link 0 "outer three"
+text 8,488 57x14 #000000 sans11 link 0 "outer four"
+text 8,501 54x14 #000000 sans11 link 0 "outer five"
+bar y 238,412 10x51 box 6 reach 0,41 at 0,0 thumb 0-28
+fill 6,410 244x2 #000000
+fill 6,463 244x2 #000000
+fill 6,412 2x51 #000000
+fill 248,412 2x51 #000000
+text 6,487 50x14 #000000 sans11 link 0 "The end."
+link 1 file://./tests/layout/deep.html

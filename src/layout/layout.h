@@ -30,13 +30,19 @@ typedef struct {
 	   UTF-8 (CSS parses it without the page's encoding) */
 	void *(*image)(void *ud, const char *src, int css, int32_t *w, int32_t *h);
 	void *ud;
+	/* the page laid out before of the same document (NULL: none): its
+	   boxes' scrolling kept (an element's box scrolled as far again) */
+	const struct page *was;
 } LAYOUT_OPT;
 
 /* DL_SUM: a details element's summary (the HTML Standard, 4.11): its
    box, drawn not at all (rgb's AA 0), where a click opens and closes det.
    DL_CLIP: a box that hides what overflows it (CSS Overflow 3), drawn not
-   at all: the items in it (clip) are drawn and clicked within it */
-enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP };
+   at all: the items in it (clip) are drawn and clicked within it.
+   DL_SBAR: a box's scroll bar (overflow auto or scroll, when there is more
+   than it shows), over its padding box's right edge (base 0) or foot
+   (base 1); len is 1 + its scroller's index into page.scr */
+enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP, DL_SBAR };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
@@ -116,6 +122,18 @@ typedef struct page {
 	   an axis it doesn't clip as wide as can be): their indexes into items */
 	long *clips;
 	long nclips, clipcap;
+	/* the boxes that scroll (overflow auto or scroll with more than they
+	   show): each its DL_CLIP item, how far it scrolls and is scrolled
+	   (device px), its element, and its bars (DL_SBAR items, -1: none) */
+	struct pg_scroll {
+		long clip, bar[2];
+		int32_t mx, my, sx, sy;
+		int32_t ex, ey;		/* how far what is in it goes from its padding box's
+					   left and top (0: it doesn't scroll that way) */
+		dnode *n;
+	} *scr;
+	int nscr, scrcap;
+	int wide;			/* (the window may scroll sideways: index_items) */
 	int32_t right;			/* how far right what it draws goes (>= width; a
 					   window scrolls sideways that far), width when the
 					   root or the body hides what overflows sideways */
@@ -128,6 +146,7 @@ typedef struct page {
 	struct pg_block {
 		dnode *n;
 		int32_t x, y, w, h;
+		uint16_t clip;		/* the boxes hiding what overflows them it is in (dl_item.clip) */
 	} *blocks;
 	long nblocks, blockcap;
 #endif
@@ -154,6 +173,24 @@ int page_clip(const page *p, unsigned clip, int32_t *x0, int32_t *y0, int32_t *x
 page *layout_page(doc *d, const LAYOUT_OPT *o);
 void page_free(page *p);
 
+#define SBAR_W 10			/* a box's scroll bar's width (device px) */
+
+/* scrolls box k of page.scr to (sx, sy), within its reach: the items in it
+   moved, the strips made again. Returns 1 if it moved, with the box's
+   padding box (what to draw again) in x, y, w, h */
+int page_scroll(page *p, int k, int32_t sx, int32_t sy, int32_t *x, int32_t *y, int32_t *w, int32_t *h);
+
+/* the boxes that scroll that element n is in (outermost first) scrolled so
+   that y to y + h (where it is on the page now) shows in each: at its top
+   (top), else as little as will do. Returns 1 if one moved */
+int page_reveal(page *p, const dnode *n, int32_t y, int32_t h, int top);
+
+/* the scroll bar at (x, y): its item, else NULL */
+const dl_item *page_bar_at(const page *p, int32_t x, int32_t y);
+
+/* a bar's thumb: from t0 to t1 along it (device px from its top or left) */
+void page_bar_thumb(const page *p, const dl_item *bar, int32_t *t0, int32_t *t1);
+
 /* the link under (x, y) on the page: an index into links, or -1 */
 int page_link_at(const page *p, int32_t x, int32_t y);
 /* a link's download attribute (<a download>): its value, NULL for none */
@@ -174,8 +211,9 @@ dnode *page_node_at(const page *p, int32_t x, int32_t y);
 int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h);
 #endif
 /* where the element with that id (or an <a name>) is, or -1 (not laid
-   out, or folded away in a closed details) */
-int32_t page_anchor(const page *p, const char *id);
+   out, or folded away in a closed details); the boxes that scroll that
+   it is in scrolled to it */
+int32_t page_anchor(page *p, const char *id);
 /* that element (the first laid out, or folded away: dn_reveal opens its
    details), or NULL */
 dnode *page_anchor_node(const page *p, const char *id);

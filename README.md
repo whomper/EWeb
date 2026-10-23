@@ -16,7 +16,8 @@ own fonts.
 - **`EWEB.PRG`**: one GEM window, as a browser has it: Back, Forward,
   Reload, Home, Search and Stop, the address, the AERA throbber turning
   while a page comes, and a status bar whose line fills as it loads; links
-  followed with a click, scrolling with the slider and the keys, 50 pages of
+  followed with a click, scrolling with the sliders and the keys (a page
+  wider than the window sideways too), 50 pages of
   history, the page's text to the clipboard, larger and smaller text. Words
   typed in the address go to FrogFind, the search engine made for vintage
   computers (Settings > General for another). A page that sends you on
@@ -27,7 +28,8 @@ own fonts.
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md);
   a sheet for print or another width, by its `media`, left out)
   and fresh layout code: blocks, lines, lists, floats, inline blocks,
-  tables, flexbox and grid, colours (translucent ones and opacity too, mixed with what is under
+  tables (their borders collapsing too), flexbox and grid, boxes that hide
+  what overflows them or scroll it with bars of their own, colours (translucent ones and opacity too, mixed with what is under
   them in every screen mode), borders, background pictures, colour
   gradients (linear, radial and conic, dithered to the screen's colours;
   the ST edition draws those that run straight down or across, in the

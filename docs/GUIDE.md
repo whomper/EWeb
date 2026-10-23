@@ -282,6 +282,10 @@ lays the page out again for the new width.
   sideways; with **Shift**, a window's width
 - **Space**: a page down; **Shift-Space**: a page up
 - **ClrHome**: the top; **Shift-ClrHome**: the end
+- a box on the page with a grey bar of its own down its right side or
+  along its foot (a code block, a list in a frame) holds more than it
+  shows: click the bar above or below its darker part to move the box
+  on a boxful, or drag that part
 - a link to a place on the same page (`#...`) scrolls there, opening
   the folded part it is in (below)
 - a heading with a small triangle pointing right is a part the page

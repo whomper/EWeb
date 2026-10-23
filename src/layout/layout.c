@@ -143,7 +143,8 @@ enum { IT_WORD, IT_SPACE, IT_BREAK, IT_ATOM, IT_GAP, IT_FLOAT };
 typedef struct {
 	uint8_t kind;
 	uint8_t flags;			/* DLF_* */
-	uint8_t canbreak;		/* a space a line may end at */
+	uint8_t canbreak;		/* a space a line may end at; 2: a word of white-space
+					   pre or nowrap, no line ending before it or in it */
 	uint8_t collapse;		/* a space dropped at the start or end of a line;
 					   IT_FLOAT: placed */
 	uint8_t hidden;			/* visibility: hidden */
@@ -680,6 +681,259 @@ static int in_clips(const page *p, const dl_item *d, int32_t x, int32_t y)
 	return d->clip == 0 || page_clip(p, d->clip, &x0, &y0, &x1, &y1);
 }
 
+/* ---------------------------------------------------------------- boxes that scroll */
+
+static int scrolls(int o)
+{
+	return o == KW_AUTO || o == KW_SCROLL;
+}
+
+/* how far right and down what is in a box goes (INT32_MIN: nothing): the
+   items with its clip (n) in their chain, each cut to the boxes on the
+   way that hide what overflows them */
+static void extent(L *l, long ck, uint16_t n, int32_t *x1, int32_t *y1)
+{
+	const page *p = l->p;
+	long k;
+	*x1 = *y1 = INT32_MIN;
+	for (k = ck + 1; k < p->nitems; k++) {
+		const dl_item *d = &p->items[k];
+		unsigned c = d->clip;
+		int32_t a0, b0, a1, b1;
+		int depth = 0;
+		if (c == 0 || d->type == DL_CLIP || d->w <= 0 || d->h <= 0)
+			continue;
+		a0 = d->x;
+		b0 = d->y;
+		a1 = d->x + d->w;
+		b1 = d->y + d->h;
+		while (c != n && c != 0 && c <= (unsigned long) p->nclips && depth++ < 256) {
+			const dl_item *cc = &p->items[p->clips[c - 1]];
+			a0 = cc->x > a0 ? cc->x : a0;
+			b0 = cc->y > b0 ? cc->y : b0;
+			a1 = cc->x + cc->w < a1 ? cc->x + cc->w : a1;
+			b1 = cc->y + cc->h < b1 ? cc->y + cc->h : b1;
+			c = cc->clip;
+		}
+		if (c != n || a0 >= a1 || b0 >= b1)
+			continue;
+		*x1 = a1 > *x1 ? a1 : *x1;
+		*y1 = b1 > *y1 ? b1 : *y1;
+	}
+}
+
+/* a box with overflow auto or scroll (on x, y), its clip ck placed: when
+   what is in it goes further right than its padding box (x1, its padding
+   added) or down (y1), it scrolls: page.scr, with a bar for each such axis,
+   placed when the page is done (scrollers_place: a row or a flex line may
+   stretch the box yet). Not a hidden box (nothing of it to scroll by) */
+static void scroller(L *l, box *b, long ck, int x, int y, int32_t x1, int32_t y1)
+{
+	page *p = l->p;
+	const dl_item *c = &p->items[ck];
+	int32_t ex = x && x1 != INT32_MIN ? x1 - c->x : 0, ey = y && y1 != INT32_MIN ? y1 - c->y : 0;
+	struct pg_scroll *sc;
+	int axis;
+	if (ex - c->w <= 2 && ey - c->h <= 2)
+		return;	/* (a pixel or two, a glyph's box below its line: not) */
+	if (p->nscr == p->scrcap) {
+		int cap = p->scrcap ? p->scrcap * 2 : 8;
+		struct pg_scroll *n = realloc(p->scr, (size_t) cap * sizeof *n);
+		if (n == NULL) {
+			l->fail = 1;
+			return;
+		}
+		p->scr = n;
+		p->scrcap = cap;
+	}
+	sc = &p->scr[p->nscr++];
+	sc->clip = ck;
+	sc->ex = ex;
+	sc->ey = ey;
+	sc->mx = sc->my = sc->sx = sc->sy = 0;
+	sc->n = b->n;
+	sc->bar[0] = sc->bar[1] = -1;
+	for (axis = 0; axis < 2; axis++) {
+		dl_item *d;
+		if (axis ? ex == 0 : ey == 0)
+			continue;
+		d = dl_add(l);
+		if (d == NULL)
+			return;
+		d->type = DL_SBAR;
+		d->rgb = fade(0xff000000, l->alpha);
+		d->base = (int16_t) axis;
+		d->len = (uint32_t) p->nscr;
+		sc->bar[axis] = p->nitems - 1;
+	}
+}
+
+/* how far one way scrolls: what is in it (e) past len, else 0 */
+static int32_t reach(int32_t e, int32_t len)
+{
+	return e != 0 && e - len > 2 ? e - len : 0;
+}
+
+/* the boxes that scroll, the page done: how far each scrolls (a bar takes
+   its room from the other way), and its bars over its padding box's right
+   edge and foot (one it doesn't need: nothing, no bar) */
+static void scrollers_place(page *p)
+{
+	int k, i, axis;
+	for (k = 0; k < p->nscr; k++) {
+		struct pg_scroll *sc = &p->scr[k];
+		const dl_item *c = &p->items[sc->clip];
+		int32_t mx = 0, my = 0;
+		for (i = 0; i < 2; i++) {
+			mx = reach(sc->ex, c->w - (my ? SBAR_W : 0));
+			my = reach(sc->ey, c->h - (mx ? SBAR_W : 0));
+		}
+		sc->mx = mx;
+		sc->my = my;
+		for (axis = 0; axis < 2; axis++) {
+			dl_item *d;
+			if (sc->bar[axis] < 0)
+				continue;
+			d = &p->items[sc->bar[axis]];
+			if (axis ? mx == 0 : my == 0) {
+				d->rgb = 0;	/* (not needed: not drawn, nor clicked) */
+				d->w = d->h = 0;
+				sc->bar[axis] = -1;
+			} else if (axis == 0) {
+				d->x = c->x + c->w - SBAR_W;
+				d->y = c->y;
+				d->w = SBAR_W;
+				d->h = c->h - (mx ? SBAR_W : 0);
+			} else {
+				d->x = c->x;
+				d->y = c->y + c->h - SBAR_W;
+				d->w = c->w - (my ? SBAR_W : 0);
+				d->h = SBAR_W;
+			}
+		}
+	}
+}
+
+/* is clip number n in the chain of clip k */
+static int in_chain(const page *p, unsigned k, unsigned n)
+{
+	int depth = 0;
+	while (k != 0 && k <= (unsigned long) p->nclips && depth++ < 256) {
+		if (k == n)
+			return 1;
+		k = p->items[p->clips[k - 1]].clip;
+	}
+	return 0;
+}
+
+static void index_items(page *p, int wide, long cbg);
+
+int page_scroll(page *p, int k, int32_t sx, int32_t sy, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
+{
+	struct pg_scroll *sc;
+	const dl_item *c;
+	unsigned n;
+	int32_t dx, dy;
+	long i;
+	if (p == NULL || k < 0 || k >= p->nscr)
+		return 0;
+	sc = &p->scr[k];
+	sx = sx < 0 ? 0 : sx > sc->mx ? sc->mx : sx;
+	sy = sy < 0 ? 0 : sy > sc->my ? sc->my : sy;
+	dx = sx - sc->sx;
+	dy = sy - sc->sy;
+	c = &p->items[sc->clip];
+	*x = c->x;
+	*y = c->y;
+	*w = c->w;
+	*h = c->h;
+	if (dx == 0 && dy == 0)
+		return 0;
+	sc->sx = sx;
+	sc->sy = sy;
+	/* what is in it: its clip's number among the clips in their chain */
+	for (n = 1; n <= (unsigned long) p->nclips && p->clips[n - 1] != sc->clip; n++)
+		;
+	for (i = sc->clip + 1; i < p->nitems; i++) {
+		dl_item *d = &p->items[i];
+		if (d->clip != 0 && in_chain(p, d->clip, n)) {
+			d->x -= dx;
+			d->y -= dy;
+		}
+	}
+#ifndef EW_ST
+	for (i = 0; i < p->nblocks; i++)	/* (the elements' places, for scripts and clicks) */
+		if (p->blocks[i].clip != 0 && in_chain(p, p->blocks[i].clip, n)) {
+			p->blocks[i].x -= dx;
+			p->blocks[i].y -= dy;
+		}
+#endif
+	free(p->strip);
+	free(p->sidx);
+	p->strip = p->sidx = NULL;
+	index_items(p, p->wide, p->cbg);
+	return 1;
+}
+
+int page_reveal(page *p, const dnode *n, int32_t y, int32_t h, int top)
+{
+	int k[16], m = 0, i, moved = 0;
+	const dnode *a;
+	if (p == NULL || n == NULL || p->nscr == 0)
+		return 0;
+	/* its boxes that scroll, innermost first */
+	for (a = n->parent; a != NULL && m < 16; a = a->parent)
+		for (i = p->nscr - 1; i >= 0; i--)
+			if (p->scr[i].n == a && m < 16) {
+				k[m++] = i;
+				break;
+			}
+	while (m-- > 0) {
+		struct pg_scroll *sc = &p->scr[k[m]];
+		const dl_item *c = &p->items[sc->clip];
+		int32_t to = sc->sy, was = sc->sy, x0, y0, w0, h0;
+		if (top || y < c->y)
+			to = sc->sy + (y - c->y);
+		else if (y + h > c->y + c->h)
+			to = sc->sy + (y + h - (c->y + c->h));
+		if (page_scroll(p, k[m], sc->sx, to, &x0, &y0, &w0, &h0)) {
+			y -= sc->sy - was;
+			moved = 1;
+		}
+	}
+	return moved;
+}
+
+const dl_item *page_bar_at(const page *p, int32_t x, int32_t y)
+{
+	int k, a;
+	if (p == NULL)
+		return NULL;
+	for (k = p->nscr - 1; k >= 0; k--)
+		for (a = 0; a < 2; a++) {
+			const dl_item *d;
+			if (p->scr[k].bar[a] < 0)
+				continue;
+			d = &p->items[p->scr[k].bar[a]];
+			if ((d->rgb >> 24) != 0 && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
+			    in_clips(p, d, x, y))
+				return d;
+		}
+	return NULL;
+}
+
+void page_bar_thumb(const page *p, const dl_item *bar, int32_t *t0, int32_t *t1)
+{
+	const struct pg_scroll *sc = &p->scr[bar->len - 1];
+	int32_t len = bar->base ? bar->w : bar->h, seen = bar->base ? p->items[sc->clip].w : p->items[sc->clip].h;
+	int32_t reach = bar->base ? sc->mx : sc->my, at = bar->base ? sc->sx : sc->sy, t;
+	t = seen + reach > 0 ? (int32_t) ((int64_t) len * seen / (seen + reach)) : len;
+	if (t < SBAR_W)
+		t = SBAR_W < len ? SBAR_W : len;
+	*t0 = reach > 0 ? (int32_t) ((int64_t) (len - t) * at / reach) : 0;
+	*t1 = *t0 + t;
+}
+
 #ifndef EW_ST
 /* a block's border box, for scripts (a click's element, the element's
    place) */
@@ -699,6 +953,7 @@ static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t 
 	p->blocks[p->nblocks].y = y;
 	p->blocks[p->nblocks].w = w;
 	p->blocks[p->nblocks].h = h;
+	p->blocks[p->nblocks].clip = l->ovf;
 	p->nblocks++;
 }
 #endif
@@ -1801,6 +2056,13 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 		it->dir = (uint8_t) word_dir_in(l, s, n);
 }
 
+/* white-space pre or nowrap: no line ends in it */
+static int no_wrap(const ec_style *s)
+{
+	int w = s != NULL ? kw(s, EP_WHITE_SPACE) : 0;
+	return w == KW_PRE || w == KW_NOWRAP;
+}
+
 /* text into words and spaces, collapsed as its white-space says, copied
    so that a node's words and spaces follow on (one run to draw) */
 static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *line_start)
@@ -1868,6 +2130,8 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				t[o++] = ch;
 			}
 			put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
+			if (!wrap && !l->fail)
+				l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
 			*line_start = 0;
 			i = j;
 		}
@@ -2058,6 +2322,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			it = &l->it[l->nit - 1];
 			it->atom = c;
 			it->dir = (uint8_t) word_dir_in(l, c->text, c->len);
+			it->canbreak = (uint8_t) (no_wrap(c->st) ? 2 : 0);
 			if (c->text != NULL && l->cw != AUTO && it->w > l->cw && l->cw > 0) {
 				/* a picture's alt text (one without a size yet, or
 				   none): no wider than the line, its text cut there
@@ -2168,11 +2433,16 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			     (kw(c->st, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ? len0(l, c->st, EP_BORDER_RIGHT_WIDTH, AUTO) : 0);
 			if (gl > 0) {
 				put_item(l, &r, IT_GAP, NULL, 0, gl);
+				if (!l->fail && no_wrap(c->st))
+					l->it[l->nit - 1].canbreak = 2;
 				*line_start = 0;
 			}
 			collect(l, c, &r, line_start);
-			if (gr > 0)
+			if (gr > 0) {
 				put_item(l, &r, IT_GAP, NULL, 0, gr);
+				if (!l->fail && no_wrap(c->st))
+					l->it[l->nit - 1].canbreak = 2;
+			}
 			break;
 		}
 		case BX_BLOCK: {
@@ -2192,6 +2462,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				it->atom = c;
 				it->ib = 1;
 				it->dir = 0;
+				it->canbreak = (uint8_t) (no_wrap(pr->st) ? 2 : 0);
 				it->alpha = pr->alpha;	/* the run's, for its inside (ib_layout) */
 				l->ibs = 1;
 				*line_start = 0;
@@ -3037,13 +3308,15 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					last_break = j;
 				continue;
 			}
-			if (lw + it->w > avail && any) {
-				/* at the last space; with none, before this word */
+			if (lw + it->w > avail && any && (last_break >= i || it->canbreak != 2)) {
+				/* at the last space; with none, before this word (not
+				   one of white-space pre or nowrap: it goes on the
+				   line, past its end) */
 				if (last_break >= i)
 					j = last_break + 1;
 				break;
 			}
-			if (it->kind == IT_WORD && it->w > avail - lw && lw == 0) {
+			if (it->kind == IT_WORD && it->w > avail - lw && lw == 0 && it->canbreak != 2) {
 				split_word(l, j, avail);
 				if (l->nit > n) {
 					long *o2 = realloc(ord, l->nit * sizeof *ord);
@@ -3277,11 +3550,21 @@ static int32_t inline_measure(L *l, box *b)
 			l->it[i].w = fw;
 		}
 	if (l->minw && !keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
-		/* the narrowest: its widest word or picture */
-		for (i = 0; i < l->nit; i++)
-			if (l->it[i].kind != IT_SPACE && l->it[i].kind != IT_BREAK && l->it[i].w > best)
-				best = l->it[i].w;
-		return best;
+		/* the narrowest: its widest word or picture, or run of them no
+		   line may end in (white-space pre or nowrap: canbreak 2) */
+		for (i = 0; i < l->nit; i++) {
+			const ITEM *it = &l->it[i];
+			if (it->kind == IT_BREAK || (it->kind == IT_SPACE && it->canbreak)) {
+				best = lw > best ? lw : best;
+				lw = 0;
+			} else if (it->kind == IT_SPACE || it->canbreak == 2) {
+				lw += it->w;
+			} else {
+				best = lw > best ? lw : best;
+				lw = it->w;
+			}
+		}
+		return lw > best ? lw : best;
 	}
 	for (i = 0; i < l->nit; i++) {
 		if (l->it[i].kind == IT_BREAK) {
@@ -3676,7 +3959,7 @@ static void fit_columns(int32_t *cols, const int32_t *mins, int n, int32_t w, in
 	}
 	if (total == w || n == 0 || (total < w && !grow))
 		return;
-	if (total > w && tmin < w) {
+	if (total > w && tmin <= w) {
 		int32_t room = w - tmin, extra = total - tmin;
 		for (i = 0; i < n; i++) {
 			int32_t m = mins[i] < cols[i] ? mins[i] : cols[i];
@@ -4321,6 +4604,7 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	int32_t cbx = fixed ? 0 : l->cbx, cby = fixed ? 0 : l->cby, cbw = fixed ? l->p->width : l->cbw;
 	int32_t left, right, top, wf, mb, f = AUTO, ax, ay, lb = l->last_base;
 	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k, c0 = l->p->nclips;
+	int s0 = l->p->nscr;
 	uint16_t ovf;
 	if ((fixed ? 0 : l->cbmov) < l->mov) {
 		/* in a box laid out at (0, 0) to be moved, its containing block
@@ -4378,6 +4662,7 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		if ((hides && ((cw != AUTO && cw <= 2) || (chh != AUTO && chh <= 2))) || ax + wf <= 0 || ay < -1000) {
 			l->p->nitems = k0;
 			l->p->nclips = c0;
+			l->p->nscr = s0;
 #ifndef EW_ST
 			l->p->nblocks = b0;
 #endif
@@ -5581,6 +5866,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	struct coll *coll = NULL, *saved_coll = l->coll;
 	uint16_t saved_ovf = l->ovf, saved_cbovf = l->cbovf;
 	long ck = -1;			/* its DL_CLIP item, when it hides what overflows it */
+	uint16_t ckn = 0;		/* (its number: dl_item.clip of what is in it) */
 	int clip_x = 0, clip_y = 0;
 	int ox = KW_VISIBLE, oy = KW_VISIBLE;	/* its overflow-x and -y (not an anonymous box's) */
 	BEDGE te[4];			/* a table's own borders, when they collapse */
@@ -5722,6 +6008,16 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			total += cols[i];
 		if (wauto && !fixed_w && total < w)
 			w = total;
+		{
+			/* no narrower than its columns' narrowest (CSS 2.1,
+			   17.5.2: a word, a picture, a run of white-space nowrap
+			   or pre); wider than the room, the page scrolls sideways */
+			int32_t tmin = sp;
+			for (i = 0; i < n; i++)
+				tmin += mins[i];
+			if (w < tmin)
+				w = tmin;
+		}
 		fit_columns(cols, mins, n, w - sp > n ? w - sp : n, !wauto || fixed_w);
 		table_cols = cols;
 		table_n = n;
@@ -5809,15 +6105,19 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if ((ox != KW_VISIBLE || oy != KW_VISIBLE) &&
 		    (b->tablerow || row_group(b) || b->n == l->p->d->html || b->n == l->p->d->body))
 			ox = oy = KW_VISIBLE;
+		else if (ox == KW_VISIBLE && oy != KW_VISIBLE && oy != KW_CLIP)
+			ox = KW_AUTO;	/* (visible beside what isn't visible or clip is auto) */
+		else if (oy == KW_VISIBLE && ox != KW_VISIBLE && ox != KW_CLIP)
+			oy = KW_AUTO;
 	}
-	if ((ox == KW_HIDDEN || ox == KW_CLIP || oy == KW_HIDDEN || oy == KW_CLIP) && !ctlbox && !b->repl) {
-		/* hidden or clip: what is in it drawn and clicked within its
-		   padding box on that axis. Auto and scroll (and visible beside
-		   hidden, which is auto) don't clip: EWeb has no box scrolling
-		   by itself yet, so all of what is in one shows */
-		clip_x = ox == KW_HIDDEN || ox == KW_CLIP;
-		clip_y = oy == KW_HIDDEN || oy == KW_CLIP;
+	if ((ox != KW_VISIBLE || oy != KW_VISIBLE) && !ctlbox && !b->repl) {
+		/* what is in it drawn and clicked within its padding box on the
+		   axes that aren't visible; auto and scroll scroll there when
+		   there is more than it shows (scroller) */
+		clip_x = ox != KW_VISIBLE;
+		clip_y = oy != KW_VISIBLE;
 		ck = clip_open(l);
+		ckn = l->ovf;
 	}
 	if (pos != KW_STATIC && pos != KW_STICKY)
 		l->cbovf = l->ovf;	/* what is positioned in it: within its clips */
@@ -5934,9 +6234,12 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		marker(l, b, cx, w, fb != AUTO ? fb : cy + font_of(l, s)->ascent);
 	if (!b->anon) {
 		/* (its content taller than its height makes it taller, but
-		   where overflow-y hides it: there it keeps its height. Auto and
-		   scroll grow too, as all of what is in them shows) */
-		int keep = oy == KW_HIDDEN || oy == KW_CLIP;
+		   where overflow-y isn't visible: there it keeps its height,
+		   and what is in it is cut or scrolls) */
+		int keep = clip_y, sc = ck >= 0 && vis && (scrolls(ox) || scrolls(oy));
+		int32_t sx1 = INT32_MIN, sy1 = INT32_MIN;	/* what is in a box that scrolls: how far it goes */
+		if (sc)
+			extent(l, ck, ckn, &sx1, &sy1);
 		hp = len(l, s, EP_HEIGHT, AUTO);
 		if (hp != AUTO) {
 			if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
@@ -5950,11 +6253,17 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		mx = len(l, s, EP_MAX_HEIGHT, AUTO);
 		if (mx != AUTO && ch > mx && keep)
 			ch = mx;
+		if (sc && scrolls(ox) && sx1 != INT32_MIN && sx1 - (x + ml + bl + pl + w) > 2 && hp == AUTO &&
+		    (mx == AUTO || ch < mx))
+			ch += SBAR_W;	/* (a bar across its foot, its height its own: room for it below) */
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
 		if (ck >= 0)
 			clip_set(l, ck, clip_x, clip_y, x + ml + bl, y + mt + bt, pl + w + pr, pt + ch + pb);
 		l->ovf = saved_ovf;	/* (its own background and borders not within it) */
+		if (sc)
+			scroller(l, b, ck, scrolls(ox), scrolls(oy), sx1 == INT32_MIN ? sx1 : sx1 + pr,
+				 sy1 == INT32_MIN ? sy1 : sy1 + pb);
 		{
 			int32_t in[4];
 			in[0] = in_l;
@@ -6040,6 +6349,7 @@ static void index_items(page *p, int wide, long cbg)
 {
 	long i, k, n = 0, bottom = p->height;
 	int32_t right = p->width;
+	p->wide = wide;
 	for (i = 0; i < p->nitems; i++) {
 		const dl_item *d = &p->items[i];
 		int32_t x0, y0, x1, y1;
@@ -6195,7 +6505,24 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		page_free(p);
 		return NULL;
 	}
+	scrollers_place(p);
 	index_items(p, !hides_x(html) && !hides_x(d->body), cbg);
+	if (o->was != NULL && o->was->d == d) {
+		/* the boxes scrolled on the page before: as far again */
+		int i, j;
+		for (i = 0; i < o->was->nscr; i++) {
+			const struct pg_scroll *w = &o->was->scr[i];
+			int32_t x, y, ww, hh;
+			if ((w->sx == 0 && w->sy == 0) || w->n == NULL)
+				continue;	/* (a ::before's or ::after's: no element to know it by) */
+			for (j = 0; j < p->nscr; j++)
+				if (p->scr[j].n == w->n) {
+					page_scroll(p, j, w->sx, w->sy, &x, &y, &ww, &hh);
+					break;
+				}
+		}
+	}
+	p->opt.was = NULL;
 	return p;
 }
 
@@ -6205,6 +6532,7 @@ void page_free(page *p)
 		return;
 	free(p->items);
 	free(p->clips);
+	free(p->scr);
 	free(p->links);
 	free(p->ctls);
 #ifndef EW_ST
@@ -6250,6 +6578,12 @@ dnode *page_node_at(const page *p, int32_t x, int32_t y)
 			continue;
 		if (x < b->x || x >= b->x + b->w || y < b->y || y >= b->y + b->h)
 			continue;
+		if (b->clip != 0) {
+			/* (where a box that hides what overflows it shows it) */
+			int32_t x0 = x, y0 = y, x1 = x + 1, y1 = y + 1;
+			if (!page_clip(p, b->clip, &x0, &y0, &x1, &y1))
+				continue;
+		}
 		a = (int64_t) b->w * b->h;
 		ba = best >= 0 ? (int64_t) p->blocks[best].w * p->blocks[best].h : 0;
 		if (best < 0 || a < ba || (a == ba && !holds(b->n, p->blocks[best].n)))
@@ -6396,8 +6730,27 @@ dnode *page_anchor_node(const page *p, const char *id)
 	return anchor_in(p->d->root, id);
 }
 
-int32_t page_anchor(const page *p, const char *id)
+/* how far the boxes that scroll that n is in are scrolled down, together */
+static int32_t scrolled_y(const page *p, const dnode *n)
+{
+	const dnode *a;
+	int32_t s = 0;
+	int i;
+	for (a = n->parent; a != NULL && p->nscr > 0; a = a->parent)
+		for (i = 0; i < p->nscr; i++)
+			if (p->scr[i].n == a)
+				s += p->scr[i].sy;
+	return s;
+}
+
+int32_t page_anchor(page *p, const char *id)
 {
 	const dnode *n = page_anchor_node(p, id);
-	return n != NULL && !dn_folded(n) ? n->y : -1;
+	if (n == NULL || dn_folded(n))
+		return -1;
+	/* (n->y is where it was laid out: the boxes that scroll that it is in
+	   scrolled to it first, and it is above by how far they are) */
+	if (p->nscr > 0)
+		page_reveal(p, n, n->y - scrolled_y(p, n), 1, 1);
+	return n->y - scrolled_y(p, n);
 }

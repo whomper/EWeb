@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Boxes that scroll</title>
+<style>
+body { margin: 8px; font: 14px/16px sans-serif }
+.box { width: 300px; border: 2px solid #000; background: #ffd; margin-bottom: 12px }
+pre { overflow-x: auto; background: #eee; border: 1px solid #888; width: 300px; margin: 0 0 12px }
+.tall { height: 64px; overflow: auto }
+.both { height: 48px; overflow: scroll; white-space: nowrap }
+.fits { max-height: 200px; overflow-y: auto }
+.xonly { height: 48px; overflow-x: hidden }
+</style></head><body>
+<p>A code block with a long line: a bar across its foot, the box that much taller:</p>
+<pre>short line
+a line far too long for the box, which goes on and on past its right edge to the end</pre>
+<p>A box 64 pixels high with more lines: a bar down its right side:</p>
+<div class="box tall" id="tall">one<br>two<br>three<br>four<br>five<br>six<br>seven<br><a id="deep" href="deep.html">the link at the foot</a></div>
+<p>Both ways (overflow scroll, no wrapping):</p>
+<div class="box both">a first line that is much wider than the box it is in, to be scrolled sideways<br>two<br>three<br>four</div>
+<p>max-height, all of it fits: no bar:</p>
+<div class="box fits">just one line</div>
+<p>overflow-x hidden: its y is auto, so it scrolls down:</p>
+<div class="box xonly">one<br>two<br>three<br>four<br>five</div>
+<p>One in another:</p>
+<div class="box tall">outer one<br><div style="height:32px;overflow:auto;background:#cdf;width:200px">inner one<br>inner two<br>inner three<br>inner four</div>outer two<br>outer three<br>outer four<br>outer five</div>
+<p>The end.</p>
+</body></html>

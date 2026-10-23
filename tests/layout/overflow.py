@@ -15,8 +15,8 @@ tests/layout/overflow.html through ewrender:
   containing block, drawn past its foot when its containing block is
   outside (the green under each);
 - and the review's (23 Oct 2026), each a page of its own: a code block
-  with overflow-x auto and a max-height grows (nothing drawn over the
-  paragraph after it); the body's overflow-x hidden with a height
+  with overflow-x auto and a max-height keeps it and scrolls (the
+  paragraph after it below the box); the body's overflow-x hidden with a height
   doesn't cut the page; a control wider than its box keeps its width;
   a script's click goes to what shows, not to what a box hides; a row's
   overflow clips nothing; italic text in a box hiding its overflow is
@@ -158,9 +158,11 @@ def review(ewrender, font):
             m = re.search(r'^text \d+,(\d+) \d+x(\d+) .*"%s"$' % re.escape(t), d, re.M)
             return (int(m.group(1)), int(m.group(2))) if m else None
         d = dump("auto")
-        one, two, six, after = (text_y(d, t) for t in ("line 1", "line 2", "line 6", "AFTER"))
-        if None in (one, two, six, after) or after[0] < six[0] + two[0] - one[0]:
-            fail("a code block with overflow-x auto and a max-height was drawn over what follows:\n" + d)
+        after = text_y(d, "AFTER")
+        box = re.search(r"^clip x \S+ y (\d+)\+(\d+) in 0$", d, re.M)
+        if after is None or box is None or after[0] < int(box.group(1)) + int(box.group(2)) or \
+                not re.search(r"^bar y ", d, re.M):
+            fail("a code block with overflow-x auto and a max-height didn't scroll in its box:\n" + d)
         d = dump("body")
         m = re.search(r"^page \d+ x (\d+)", d, re.M)
         if m is None or int(m.group(1)) < 1500 or text_y(d, "Paragraph 59 of a long page.") is None:

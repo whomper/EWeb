@@ -1011,6 +1011,8 @@ static void ctl_show(const fctl *c)
 	const dl_item *it;
 	if (br.p == NULL || (it = page_ctl_item(br.p, c)) == NULL)
 		return;
+	if (page_reveal(br.p, c->n, it->y, it->h, 0))
+		win_redraw_page();	/* (a box that scrolls it is in brought it into view) */
 	if (it->y < top)
 		win_scroll_to(it->y - 8);
 	else if (it->y + it->h > top + r_page.h)
@@ -1538,6 +1540,75 @@ static int press(int i)
 	return in;
 }
 
+/* box k of the page (one that scrolls) scrolled to v along its axis, and
+   drawn again where it is on the screen */
+static void box_to(int k, int axis, int32_t v)
+{
+	const struct pg_scroll *sc = &br.p->scr[k];
+	int32_t x, y, w, h, x0, y0, x1, y1;
+	GRECT r;
+	if (!page_scroll(br.p, k, axis ? v : sc->sx, axis ? sc->sy : v, &x, &y, &w, &h))
+		return;
+	log_event("box %d scrolled to %ld,%ld", k + 1, (long) sc->sx, (long) sc->sy);
+	x0 = r_page.x + x - left;
+	y0 = r_page.y + y - top;
+	x1 = x0 + w;
+	y1 = y0 + h;
+	x0 = x0 < r_page.x ? r_page.x : x0;
+	y0 = y0 < r_page.y ? r_page.y : y0;
+	x1 = x1 > r_page.x + r_page.w ? r_page.x + r_page.w : x1;
+	y1 = y1 > r_page.y + r_page.h ? r_page.y + r_page.h : y1;
+	if (x0 >= x1 || y0 >= y1)
+		return;
+	r.x = (short) x0;
+	r.y = (short) y0;
+	r.w = (short) (x1 - x0);
+	r.h = (short) (y1 - y0);
+	redraw(&r, 2);
+}
+
+/* a click on a box's scroll bar (a box with overflow auto or scroll): before
+   or after its thumb, the box a boxful on; on it, the thumb dragged */
+static int box_bar(short mx, short my)
+{
+	const dl_item *bar;
+	const struct pg_scroll *sc;
+	int32_t px = mx - r_page.x + left, py = my - r_page.y + top, t0, t1, at, len, seen, cur, step;
+	int k, axis;
+	if (br.p == NULL || (bar = page_bar_at(br.p, px, py)) == NULL)
+		return 0;
+	k = (int) bar->len - 1;
+	axis = bar->base;
+	sc = &br.p->scr[k];
+	page_bar_thumb(br.p, bar, &t0, &t1);
+	at = axis ? px - bar->x : py - bar->y;
+	len = axis ? bar->w : bar->h;
+	seen = axis ? br.p->items[sc->clip].w : br.p->items[sc->clip].h;
+	cur = axis ? sc->sx : sc->sy;
+	if (at < t0 || at >= t1) {
+		step = seen - gl_hchar;	/* (a line of it still to be seen) */
+		if (step < gl_hchar)
+			step = gl_hchar;
+		box_to(k, axis, cur + (at < t0 ? -step : step));
+		return 1;
+	}
+	{
+		/* the thumb, where it was taken, follows the mouse */
+		short x, y, mb, ks;
+		int32_t grab = at - t0, room = len - (t1 - t0), reach = axis ? sc->mx : sc->my;
+		for (;;) {
+			graf_mkstate(&x, &y, &mb, &ks);
+			if (!(mb & 1))
+				break;
+			at = (axis ? x - r_page.x + left - bar->x : y - r_page.y + top - bar->y) - grab;
+			if (room > 0)
+				box_to(k, axis, (int32_t) ((int64_t) at * reach / room));
+			evnt_timer_(20);
+		}
+	}
+	return 1;
+}
+
 /* right-click: the link's commands, or the page's (Back first, as
    EHypView's) */
 static void context_menu(short mx, short my)
@@ -1631,6 +1702,8 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			context_menu(mx, my);
 			return 1;
 		}
+		if (box_bar(mx, my))
+			return 1;	/* a box's scroll bar */
 		/* the page's scripts first: a click event, which may say no to
 		   what the click does, or change the page */
 		if (!(kstate & 0x08) && page_click(mx - r_page.x + left, my - r_page.y + top))

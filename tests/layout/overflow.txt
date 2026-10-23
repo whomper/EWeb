@@ -1,4 +1,4 @@
-page 608 x 644, background ffffff, 92 items, 1 links, title "Overflow"
+page 608 x 618, background ffffff, 96 items, 1 links, title "Overflow"
 text 6,28 491x14 #000000 sans11 link 0 "A box two lines high hiding what overflows it (the red text below its foot is not drawn):"
 fill 6,41 212x30 #ffffdd
 clip x 8+208 y 43+26 in 0
@@ -47,48 +47,51 @@ fill 6,245 212x2 #000000
 fill 6,271 212x2 #000000
 fill 6,247 2x24 #000000
 fill 216,247 2x24 #000000
-text 6,305 572x14 #000000 sans11 link 0 "overflow-x hidden: its y is auto, which shows all of it in EWeb (it grows); overflow-x clip: only across:"
-fill 6,318 212x43 #ffffdd
-clip x 8+208 y * in 0
+text 6,305 451x14 #000000 sans11 link 0 "overflow-x hidden: its y is auto, so it scrolls down; overflow-x clip: only across:"
+fill 6,318 212x30 #ffffdd
+clip x 8+208 y 320+26 in 0
 text 8,331 23x14 #000000 sans11 link 0 "One"
 text 8,344 20x14 #000000 sans11 link 0 "two"
-text 8,357 111x14 #000000 sans11 link 0 "THREE SHOWS TOO"
+text 8,357 98x14 #000000 sans11 link 0 "three, scrolled to"
+bar y 206,320 10x26 box 1 reach 0,14 at 0,0 thumb 0-16
 fill 6,318 212x2 #000000
-fill 6,359 212x2 #000000
-fill 6,320 2x39 #000000
-fill 216,320 2x39 #000000
-fill 6,371 212x56 #ffffdd
+fill 6,346 212x2 #000000
+fill 6,320 2x26 #000000
+fill 216,320 2x26 #000000
+fill 6,358 212x56 #ffffdd
 clip x 8+208 y * in 0
-text 8,384 23x14 #000000 sans11 link 0 "One"
-text 8,397 20x14 #000000 sans11 link 0 "two"
-text 8,410 82x14 #000000 sans11 link 0 "THREE SHOWS"
-text 8,423 324x14 #000000 sans11 link 0 "wide text goes past the box's right edge and is cut there"
-fill 6,371 212x2 #000000
-fill 6,425 212x2 #000000
-fill 6,373 2x52 #000000
-fill 216,373 2x52 #000000
-text 6,449 195x14 #000000 sans11 link 0 "Nested: an inner box hiding more:"
-fill 6,462 212x42 #ffffdd
-clip x 8+208 y 464+38 in 0
-fill 8,464 96x13 #ffcccc
-clip x 8+96 y 464+13 in 7
-text 8,475 56x14 #000000 sans11 link 0 "inner first"
-text 8,488 70x14 #ff0000 sans11 link 0 "GONE INNER"
-text 8,488 55x14 #000000 sans11 link 0 "outer text"
-text 8,501 30x14 #000000 sans11 link 0 "more"
-text 8,514 75x14 #ff0000 sans11 link 0 "GONE OUTER"
-fill 6,462 212x2 #000000
-fill 6,502 212x2 #000000
-fill 6,464 2x38 #000000
-fill 216,464 2x38 #000000
-text 6,526 330x14 #000000 sans11 link 0 "overflow auto: all of it shows (EWeb has no scrolling box):"
-fill 6,539 212x43 #ffffdd
-text 8,552 23x14 #000000 sans11 link 0 "One"
-text 8,565 20x14 #000000 sans11 link 0 "two"
-text 8,578 71x14 #000000 sans11 link 0 "three shows"
-fill 6,539 212x2 #000000
-fill 6,580 212x2 #000000
-fill 6,541 2x39 #000000
-fill 216,541 2x39 #000000
-text 6,625 50x14 #000000 sans11 link 0 "The end."
+text 8,371 23x14 #000000 sans11 link 0 "One"
+text 8,384 20x14 #000000 sans11 link 0 "two"
+text 8,397 82x14 #000000 sans11 link 0 "THREE SHOWS"
+text 8,410 324x14 #000000 sans11 link 0 "wide text goes past the box's right edge and is cut there"
+fill 6,358 212x2 #000000
+fill 6,412 212x2 #000000
+fill 6,360 2x52 #000000
+fill 216,360 2x52 #000000
+text 6,436 195x14 #000000 sans11 link 0 "Nested: an inner box hiding more:"
+fill 6,449 212x42 #ffffdd
+clip x 8+208 y 451+38 in 0
+fill 8,451 96x13 #ffcccc
+clip x 8+96 y 451+13 in 7
+text 8,462 56x14 #000000 sans11 link 0 "inner first"
+text 8,475 70x14 #ff0000 sans11 link 0 "GONE INNER"
+text 8,475 55x14 #000000 sans11 link 0 "outer text"
+text 8,488 30x14 #000000 sans11 link 0 "more"
+text 8,501 75x14 #ff0000 sans11 link 0 "GONE OUTER"
+fill 6,449 212x2 #000000
+fill 6,489 212x2 #000000
+fill 6,451 2x38 #000000
+fill 216,451 2x38 #000000
+text 6,513 340x14 #000000 sans11 link 0 "overflow auto: it scrolls (tests/layout/scroll.html has more):"
+fill 6,526 212x30 #ffffdd
+clip x 8+208 y 528+26 in 0
+text 8,539 23x14 #000000 sans11 link 0 "One"
+text 8,552 20x14 #000000 sans11 link 0 "two"
+text 8,565 71x14 #000000 sans11 link 0 "three shows"
+bar y 206,528 10x26 box 2 reach 0,14 at 0,0 thumb 0-16
+fill 6,526 212x2 #000000
+fill 6,554 212x2 #000000
+fill 6,528 2x26 #000000
+fill 216,528 2x26 #000000
+text 6,599 50x14 #000000 sans11 link 0 "The end."
 link 1 file://./tests/layout/hidden.html

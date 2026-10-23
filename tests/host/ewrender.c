@@ -58,6 +58,10 @@
  * Through the Pi's browser: webgate's snapshots).
  * -q SEARCH: words typed in the address go there, %s for them (as
  * EWEB.PRG's SEARCH=; none by default).
+ * -O N:X:Y (again for more): the page's Nth box that scrolls (from 1) scrolled
+ * to X, Y once the pictures are in (before -L), "scrolled:" printed with
+ * where it went; -d lists each box's scroll bars ("bar": how far its box
+ * scrolls, and is scrolled, and the bar's thumb).
  * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
  * -J runs the pages' scripts (src/js, every site's), printing what they
@@ -649,7 +653,8 @@ int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
 	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
-	const char *search = NULL;
+	const char *search = NULL, *boxes[8];
+	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	int colours = 0;
 	static PIC_PAL pal;
@@ -738,6 +743,8 @@ int main(int argc, char **argv)
 			snapshot = 1;
 		else if (!strcmp(argv[i], "-q") && i + 1 < argc)
 			search = argv[++i];
+		else if (!strcmp(argv[i], "-O") && i + 1 < argc && nboxes < 8)
+			boxes[nboxes++] = argv[++i];
 		else if (!strcmp(argv[i], "-A"))
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-J"))
@@ -871,6 +878,16 @@ int main(int argc, char **argv)
 		r = br_encoding(&b, strcmp(enc, "auto") == 0 ? "" : enc);
 		pictures(&b);
 		printf("encoding: %d %s \"%s\"\n", r, b.d != NULL ? b.d->charset : "", b.title);
+	}
+	for (i = 0; i < nboxes && b.p != NULL; i++) {
+		int n = 0;
+		long sx = 0, sy = 0;
+		int32_t x = 0, y = 0, w = 0, h = 0;
+		sscanf(boxes[i], "%d:%ld:%ld", &n, &sx, &sy);
+		r = page_scroll(b.p, n - 1, (int32_t) sx, (int32_t) sy, &x, &y, &w, &h);
+		printf("scrolled: %d box %d to %d,%d (%d,%d %dx%d)\n", r, n, n > 0 && n <= b.p->nscr ?
+		       (int) b.p->scr[n - 1].sx : 0, n > 0 && n <= b.p->nscr ? (int) b.p->scr[n - 1].sy : 0,
+		       (int) x, (int) y, (int) w, (int) h);
 	}
 	for (i = 0; i < nresize; i++) {
 		r = br_relayout(&b, resize[i]);
@@ -1085,6 +1102,18 @@ int main(int argc, char **argv)
 				else
 					snprintf(cy, sizeof cy, "%d+%d", (int) it->y, (int) it->h);
 				printf("clip x %s y %s in %d\n", cx, cy, (int) it->clip);
+			} else if (it->type == DL_SBAR) {
+				/* (a box's scroll bar: how far the box scrolls, and is
+				   scrolled; not one it doesn't need, nor one not shown) */
+				const struct pg_scroll *sc;
+				int32_t t0, t1;
+				if (it->len == 0 || it->len > (uint32_t) p->nscr || (it->rgb >> 24) == 0 || it->w <= 0)
+					continue;
+				sc = &p->scr[it->len - 1];
+				page_bar_thumb(p, it, &t0, &t1);
+				printf("bar %s %d,%d %dx%d box %d reach %d,%d at %d,%d thumb %d-%d\n", it->base ? "x" : "y",
+				       (int) it->x, (int) it->y, (int) it->w, (int) it->h, (int) it->len, (int) sc->mx,
+				       (int) sc->my, (int) sc->sx, (int) sc->sy, (int) t0, (int) t1);
 			} else if (it->type == DL_SUM)
 				/* (a details' summary: where a click opens and closes it) */
 				printf("summary %d,%d %dx%d %s %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,

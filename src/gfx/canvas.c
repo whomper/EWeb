@@ -2852,6 +2852,23 @@ static void grad(canvas *c, const dl_item *d)
 #endif
 
 /* an item, as solid as item_a */
+/* a box's scroll bar: its track, and its thumb where the box is scrolled to */
+static void sbar(canvas *c, const page *p, const dl_item *d)
+{
+	int32_t t0, t1;
+	if (d->len == 0 || d->len > (uint32_t) p->nscr)
+		return;
+	page_bar_thumb(p, d, &t0, &t1);
+	cv_fill(c, d->x, d->y, d->w, d->h, 0xe8e8e8);
+	if (d->base) {
+		cv_fill(c, d->x, d->y, d->w, 1, 0xa0a0a0);
+		cv_fill(c, d->x + t0 + 1, d->y + 2, t1 - t0 - 2, d->h - 3, 0x909090);
+	} else {
+		cv_fill(c, d->x, d->y, 1, d->h, 0xa0a0a0);
+		cv_fill(c, d->x + 2, d->y + t0 + 1, d->w - 3, t1 - t0 - 2, 0x909090);
+	}
+}
+
 static void draw_item(canvas *c, const page *p, const dl_item *d)
 {
 	uint32_t rgb = d->rgb & 0xffffff;
@@ -2876,6 +2893,8 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 	} else if (d->type == DL_CTL) {
 		if (d->ctl > 0 && d->ctl <= p->nctls)
 			control(c, d, p->ctls[d->ctl - 1]);
+	} else if (d->type == DL_SBAR) {
+		sbar(c, p, d);
 	} else {
 		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, rgb, d->flags);
 	}
