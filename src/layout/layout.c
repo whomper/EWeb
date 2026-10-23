@@ -110,6 +110,8 @@ struct box {
 	uint8_t tablerow;
 	uint8_t table;			/* a table: shrinks to fit, its rows share column widths */
 	uint8_t repl;			/* a picture as a block (floated, display: block): its one child the atom */
+	uint8_t ib;			/* an inline-level block (inline-block, -flex, -grid, -table):
+					   an atom in its line, laid out as a block (ib_layout) */
 	uint16_t link;			/* 1 + link index, or 0 */
 	uint16_t ctl;			/* 1 + index into page.ctls, or 0 */
 	dnode *n;			/* the element, or NULL */
@@ -150,6 +152,8 @@ typedef struct {
 	uint32_t color, bg;		/* 0xAARRGGBB, as solid as drawn (its alpha, then the
 					   opacity it is in); bg 0: none */
 	uint8_t alpha;			/* the opacity it is in, 0..255 (CSS Color 4) */
+	uint8_t ib;			/* IT_ATOM of an inline-level block: 1 to be laid out,
+					   2 laid out (ib_layout), len its IBX's index + 1 */
 	const char *text;
 	uint32_t len;			/* IT_FLOAT: its width once measured (0: not yet) */
 	int32_t w;
@@ -163,6 +167,16 @@ typedef struct {
 	dnode *node;			/* the element it is in (for scripts' events) */
 #endif
 } ITEM;
+
+/* an inline-block laid out at (0, 0) (ib_layout): its margin box's
+   height, and the display items k0..k1 and blocks b0..b1 it made, moved
+   to its place on its line (ib_place). Kept beside the items, not in
+   them: every word is an item. */
+typedef struct {
+	int32_t h;
+	long k0, k1, b0, b1;
+	long f0, f1;			/* the boxes in it left for later (place_later) */
+} IBX;
 
 /* a float placed, in device px on the page */
 typedef struct {
@@ -185,6 +199,9 @@ typedef struct {
 	int lined;			/* the items have a picture placed by its line's top or bottom */
 	int floats;			/* the items have a float in the text (IT_FLOAT) */
 	int sums;			/* the items have an inline summary's (ITEM.det) */
+	int ibs;			/* the items have an inline-block (ITEM.ib) */
+	IBX *ibx;			/* their places, a stack: lines() lets go of its own */
+	long nibx, ibxcap;
 	/* the last block laid out: its background and border items (-1:
 	   none), for a row to stretch its cells to the row's height */
 	long last_bg, last_bd[4];
@@ -214,6 +231,24 @@ typedef struct {
 	uint32_t clip;			/* a background it is in painted through its text
 					   (background-clip: text): the colour that text is
 					   drawn in when its own is transparent; 0: none */
+	int32_t last_base;		/* the last line's baseline laid out (an inline-block's) */
+	long last_k;			/* its line's first item (moved with it: shift_range, cell_shift) */
+	uint16_t ctl_in;		/* a label's control: its blocks' text's (a block or
+					   inline-block label, or an inline-block in one) */
+	/* boxes laid out at (0, 0) and then moved where they go (inline-
+	   blocks, floats, absolutely positioned boxes): how many are being
+	   laid out, and how many were when the containing block (cbx) was
+	   set. An absolutely positioned box in them whose containing block is
+	   outside is left until they are moved (place_abs, place_later). */
+	int mov, cbmov;
+	struct later {
+		box *c;			/* NULL: placed */
+		int32_t sx, sy;		/* where it would have been, before the move */
+		unsigned alpha;		/* the opacity, the text's paint and the label it is in */
+		uint32_t clip;
+		uint16_t ctl;
+	} *later;
+	long nlater, latercap;
 } L;
 
 static int32_t dev(L *l, ec_fx v)
@@ -1186,9 +1221,19 @@ static void build_element(L *l, box *parent, dnode *c)
 		build(l, parent, c);
 		return;
 	}
-	b = new_box(l, block_level(d) ? BX_BLOCK : BX_INLINE, c, st, parent);
-	if (b == NULL)
-		return;
+	{
+		/* inline-block and its kin, in the flow: a block that is an atom
+		   in its line (floated or out of the flow, a block as any) */
+		int ib = (d == KW_INLINE_BLOCK || d == KW_INLINE_FLEX || d == KW_INLINE_GRID ||
+			  d == KW_INLINE_TABLE) && kw(st, EP_FLOAT) == KW_NONE &&
+			 kw(st, EP_POSITION) != KW_ABSOLUTE && kw(st, EP_POSITION) != KW_FIXED;
+		b = new_box(l, block_level(d) || ib ? BX_BLOCK : BX_INLINE, c, st, parent);
+		if (b == NULL)
+			return;
+		b->ib = (uint8_t) ib;
+		if (ib && parent->link)
+			b->link = parent->link;	/* a button in a link: the link's */
+	}
 	if (c->tag == T_A) {
 		const char *dl, *href = link_attrs(c, &dl);
 		if (href != NULL)
@@ -1377,7 +1422,7 @@ static void fixup(L *l, box *b)
 		if (c->kind == BX_INLINE) {
 			box *k;
 			for (k = c->first; k != NULL; k = k->next)
-				if (k->kind == BX_BLOCK && !text_float(c, k))
+				if (k->kind == BX_BLOCK && !k->ib && !text_float(c, k))
 					c->kind = BX_BLOCK;
 		}
 	}
@@ -1386,19 +1431,23 @@ static void fixup(L *l, box *b)
 	if (b->flex || b->grid) {
 		/* a flex or grid container's element children are its items, blocks
 		   (its text and pictures go in anonymous items) */
-		for (c = b->first; c != NULL; c = c->next)
+		for (c = b->first; c != NULL; c = c->next) {
+			c->ib = 0;	/* (an inline-block item: an item as any) */
 			if (c->kind == BX_INLINE && c->n != NULL) {
 				c->kind = BX_BLOCK;
 				fixup(l, c);
 			}
+		}
 	}
 	tf = !b->row && !b->flex && !b->grid && !b->table;	/* text_float's */
 	for (c = b->first; c != NULL; c = c->next) {
-		if (c->kind == BX_BLOCK) {
+		if (c->kind == BX_BLOCK && !c->ib) {
 			if (tf && floated(c))
 				has_float = 1;
 			else
 				has_block = 1;
+		} else if (c->ib) {
+			has_inline = 1;
 		} else if (c->kind != BX_TEXT || !blank(c->text, c->len) || keeps_space(c->st)) {
 			has_inline = 1;
 		}
@@ -1413,7 +1462,7 @@ static void fixup(L *l, box *b)
 		prev = NULL;
 		for (c = b->first; c != NULL; c = next) {
 			next = c->next;
-			if (c->kind == BX_BLOCK) {
+			if (c->kind == BX_BLOCK && !c->ib) {
 				prev = c;
 				continue;
 			}
@@ -1432,18 +1481,19 @@ static void fixup(L *l, box *b)
 	for (c = b->first; c != NULL; c = next) {
 		box *a, *k, *end;
 		next = c->next;
-		if (c->kind == BX_BLOCK && !(has_float && floated(c))) {
+		if (c->kind == BX_BLOCK && !c->ib && !(has_float && floated(c))) {
 			prev = c;
 			continue;
 		}
 		end = c;
-		while (end->next != NULL && (end->next->kind != BX_BLOCK || (has_float && floated(end->next))))
+		while (end->next != NULL && (end->next->kind != BX_BLOCK || end->next->ib ||
+					     (has_float && floated(end->next))))
 			end = end->next;
 		next = end->next;
 		/* a run of nothing but collapsible white space (and floats):
 		   the white space dropped, the floats left as blocks */
 		for (k = c; ; k = k->next) {
-			if (k->kind != BX_BLOCK &&
+			if ((k->kind != BX_BLOCK || k->ib) &&
 			    (k->kind != BX_TEXT || !blank(k->text, k->len) || keeps_space(k->st)))
 				break;
 			if (k == end) {
@@ -1594,7 +1644,7 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 #ifndef EW_ST
 	r->node = parent ? parent->node : NULL;
 #endif
-	r->ctl = parent ? parent->ctl : 0;
+	r->ctl = parent ? parent->ctl : l->ctl_in;
 	r->det = parent ? parent->det : NULL;
 	r->deco = (uint8_t) ((parent ? parent->deco & ~DLF_NOHIT : 0) | (no_hit(st) ? DLF_NOHIT : 0));
 	r->bg = parent ? parent->bg : 0;
@@ -2011,8 +2061,29 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			break;
 		}
 		case BX_BLOCK: {
+			ITEM *it;
+			if (c->ib) {
+				/* an inline-block: an atom laid out as a block when
+				   its line's width is known (lines, ib_layout) */
+				runstate(l, &r, c->st, c->n, pr, c->link ? c->link : pr->link);
+#ifndef EW_ST
+				if (c->n != NULL)
+					r.node = c->n;
+#endif
+				put_item(l, &r, IT_ATOM, NULL, 0, 0);
+				if (l->fail)
+					break;
+				it = &l->it[l->nit - 1];
+				it->atom = c;
+				it->ib = 1;
+				it->dir = 0;
+				it->alpha = pr->alpha;	/* the run's, for its inside (ib_layout) */
+				l->ibs = 1;
+				*line_start = 0;
+				break;
+			}
 			/* a float in the text (fixup's text_float) */
-			ITEM *it = item(l);
+			it = item(l);
 			if (it != NULL) {
 				it->kind = IT_FLOAT;
 				it->atom = c;
@@ -2077,6 +2148,30 @@ static int32_t floats_bottom(L *l, int side)
 	return b;
 }
 
+/* how many blocks' places (for scripts) there are so far */
+static long nblocks(const L *l)
+{
+#ifndef EW_ST
+	return l->p->nblocks;
+#else
+	(void) l;
+	return 0;
+#endif
+}
+
+/* those from b on moved by (dx, dy), with their items */
+static void shift_blocks(L *l, long b, int32_t dx, int32_t dy)
+{
+#ifndef EW_ST
+	for (; b < l->p->nblocks; b++) {
+		l->p->blocks[b].x += dx;
+		l->p->blocks[b].y += dy;
+	}
+#else
+	(void) l, (void) b, (void) dx, (void) dy;
+#endif
+}
+
 /* the display list from item k on moved by (dx, dy) */
 static void shift_items(L *l, long k, int32_t dx, int32_t dy)
 {
@@ -2097,7 +2192,8 @@ static int own_context(const box *b)
 	    kw(b->st, EP_POSITION) == KW_FIXED)
 		return 1;
 	d = kw(b->st, EP_DISPLAY);
-	if (d == KW_INLINE_BLOCK || d == KW_FLOW_ROOT || d == KW_TABLE_CELL || d == KW_FLEX || d == KW_GRID)
+	if (d == KW_INLINE_BLOCK || d == KW_FLOW_ROOT || d == KW_TABLE_CELL || d == KW_FLEX || d == KW_GRID ||
+	    d == KW_INLINE_FLEX || d == KW_INLINE_GRID || d == KW_INLINE_TABLE)
 		return 1;
 	return kw(b->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(b->st, EP_OVERFLOW_Y) != KW_VISIBLE;
 }
@@ -2501,12 +2597,15 @@ static void line_edges(L *l, long i, long end, int32_t *asc, int32_t *desc)
 		for (k = i; k < end; k++) {
 			ITEM *it = &l->it[k];
 			int va;
-			if (it->kind != IT_ATOM || it->asc + it->desc != 0 || it->atom->atom != AT_IMAGE)
+			if (it->kind != IT_ATOM || it->asc + it->desc != 0 || (it->atom->atom != AT_IMAGE && !it->ib))
 				continue;
 			va = kw(it->atom->st, EP_VERTICAL_ALIGN);
 			if (va != KW_TOP && va != KW_BOTTOM)
 				continue;
-			image_size(l, it->atom, &iw, &ih);
+			if (it->ib)
+				ih = it->ib == 2 ? l->ibx[it->len - 1].h : 0;
+			else
+				image_size(l, it->atom, &iw, &ih);
 			if (pass == 0) {
 				if (va == KW_TOP && ih > top)
 					top = ih;
@@ -2531,7 +2630,7 @@ static void line_edges(L *l, long i, long end, int32_t *asc, int32_t *desc)
 typedef struct {
 	ITEM *it;
 	long nit, cap;
-	int lined, floats, sums;
+	int lined, floats, sums, ibs;
 	int32_t cw;
 } STASH;
 
@@ -2543,6 +2642,7 @@ static void stash(L *l, STASH *s)
 	s->lined = l->lined;
 	s->floats = l->floats;
 	s->sums = l->sums;
+	s->ibs = l->ibs;
 	s->cw = l->cw;
 	l->it = NULL;
 	l->nit = l->itcap = 0;
@@ -2557,11 +2657,14 @@ static void unstash(L *l, const STASH *s)
 	l->lined = s->lined;
 	l->floats = s->floats;
 	l->sums = s->sums;
+	l->ibs = s->ibs;
 	l->cw = s->cw;
 }
 
 static int32_t float_width(L *l, box *c, int32_t w);
 static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t wf);
+static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
+			    int32_t *mb_out, int32_t *first);
 
 /* the float in the text at items[k]: its width in a block w wide
    (kept in its len), or placed in it, its top no higher than y */
@@ -2590,6 +2693,140 @@ static void item_float(L *l, long k, int32_t x, int32_t w, int32_t y)
 	unstash(l, &s);
 }
 
+/* an inline-block (item k) laid out as a block at (0, 0) in a line w
+   wide: as wide as it asks, or shrunk to fit (as a float); its baseline
+   its last line's (CSS 2.1, 10.8.1; an inline flex, grid or table's its
+   first, CSS Flexbox 8.5, Grid 11.5, CSS 2.1 17.5.1), or its bottom
+   margin edge when it has none or hides what overflows it, where
+   vertical-align puts it. Its inside has the opacity and the label of
+   the text round it. */
+static void ib_layout(L *l, long k, int32_t w)
+{
+	STASH s;
+	ITEM *it;
+	IBX *x;
+	box *c = l->it[k].atom;
+	int32_t wf, hf, mb, f = AUTO, lb, base;
+	long k0 = l->p->nitems, f0 = l->nlater;
+#ifndef EW_ST
+	long b0 = l->p->nblocks;
+#endif
+	unsigned alpha = l->alpha;
+	uint16_t ctl = l->ctl_in;
+	int va;
+	l->alpha = l->it[k].alpha;
+	l->ctl_in = l->it[k].ctl;
+	stash(l, &s);
+	wf = float_width(l, c, w);
+	l->last_base = AUTO;
+	l->mov++;
+	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+	l->mov--;
+	lb = c->flex || c->grid || c->table ? f : l->last_base;
+	unstash(l, &s);
+	l->alpha = alpha;
+	l->ctl_in = ctl;
+	if (l->nibx == l->ibxcap) {
+		long cap = l->ibxcap ? l->ibxcap * 2 : 8;
+		IBX *n = realloc(l->ibx, cap * sizeof *n);
+		if (n == NULL) {
+			l->fail = 1;
+			return;
+		}
+		l->ibx = n;
+		l->ibxcap = cap;
+	}
+	x = &l->ibx[l->nibx++];
+	x->h = hf;
+	x->k0 = k0;
+	x->k1 = l->p->nitems;
+#ifndef EW_ST
+	x->b0 = b0;
+	x->b1 = l->p->nblocks;
+#else
+	x->b0 = x->b1 = 0;
+#endif
+	x->f0 = f0;
+	x->f1 = l->nlater;
+	it = &l->it[k];
+	it->ib = 2;
+	it->len = (uint32_t) l->nibx;
+	it->w = wf;
+	base = lb == AUTO || lb > hf || kw(c->st, EP_OVERFLOW_X) != KW_VISIBLE ||
+	       kw(c->st, EP_OVERFLOW_Y) != KW_VISIBLE ? hf : lb;
+	va = kw(c->st, EP_VERTICAL_ALIGN);
+	it->asc = base;
+	it->desc = hf - base;
+	if (va == KW_MIDDLE) {
+		it->asc = hf / 2 + (it->font->ascent - it->font->descent) / 2;
+		it->desc = hf - it->asc;
+	} else if (va == KW_TOP || va == KW_BOTTOM) {
+		/* by the line's top or bottom (line_edges) */
+		it->asc = it->desc = 0;
+		l->lined = 1;
+		return;
+	} else if (va == KW_TEXT_TOP) {
+		it->asc = it->font->ascent;
+		it->desc = hf - it->asc;
+	} else if (va == KW_TEXT_BOTTOM) {
+		it->asc = hf - it->font->descent;
+		it->desc = it->font->descent;
+	}
+	it->asc -= it->shift;
+	it->desc += it->shift;
+}
+
+/* the places (anchors) of the blocks' nodes in top's box tree moved
+   down by dy, without recursion (an inline-block may be deep already);
+   those never laid out (-1) left */
+static void ib_nodes(box *top, int32_t dy)
+{
+	box *b = top;
+	for (;;) {
+		if (b->n != NULL && b->kind == BX_BLOCK && b->n->y >= 0)
+			b->n->y += dy;
+		if (b->first != NULL && (b->kind == BX_BLOCK || b->kind == BX_INLINE)) {
+			b = b->first;
+			continue;
+		}
+		while (b != top && b->next == NULL)
+			b = b->parent;
+		if (b == top)
+			return;
+		b = b->next;
+	}
+}
+
+static void place_later(L *l, long f0, long f1, int32_t dx, int32_t dy);
+
+/* an inline-block laid out (ib_layout) put at x on its line, its top
+   where its baseline (it->asc) meets the line's */
+static void ib_place(L *l, const ITEM *it, int32_t x, int32_t base)
+{
+	const IBX *b = &l->ibx[it->len - 1];
+	int32_t dy = base - it->asc;
+	long k, f0 = b->f0, f1 = b->f1;
+	for (k = b->k0; k < b->k1 && k < l->p->nitems; k++) {
+		l->p->items[k].x += x;
+		l->p->items[k].y += dy;
+	}
+#ifndef EW_ST
+	for (k = b->b0; k < b->b1 && k < l->p->nblocks; k++) {
+		l->p->blocks[k].x += x;
+		l->p->blocks[k].y += dy;
+	}
+#endif
+	if (dy != 0)
+		ib_nodes(it->atom, dy);
+	if (f1 > f0) {
+		/* laid out now, the line's items kept aside (b is let go) */
+		STASH s;
+		stash(l, &s);
+		place_later(l, f0, f1, x, dy);
+		unstash(l, &s);
+	}
+}
+
 /* lays the items out in lines from (x, y), w wide; returns the height,
    and the first baseline in *first */
 static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t *first)
@@ -2608,6 +2845,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	if (ta >= KW_WEBKIT_LEFT && ta <= KW_WEBKIT_CENTER)
 		ta = ta == KW_WEBKIT_LEFT ? KW_LEFT : ta == KW_WEBKIT_RIGHT ? KW_RIGHT : KW_CENTER;
 
+	/* the inline-blocks first, now that the width is known */
+	for (i = 0; l->ibs && i < l->nit && !l->fail; i++)
+		if (l->it[i].ib == 1)
+			ib_layout(l, i, w);
+	i = 0;
 	ord = malloc((n ? n : 1) * sizeof *ord);
 	if (ord == NULL) {
 		l->fail = 1;
@@ -2750,6 +2992,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 		base = cy + asc;
 		if (*first == AUTO)
 			*first = base;
+		l->last_base = base;
+		l->last_k = l->p->nitems;
 		visual_order(l, i, end, rtl, ord);
 		/* positions, backgrounds, then the text */
 		{
@@ -2761,10 +3005,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
-				if ((it->bg >> 24) != 0 && !it->hidden && it->kind != IT_BREAK) {
-					/* a run of one background: one fill */
+				if ((it->bg >> 24) != 0 && !it->hidden && it->kind != IT_BREAK && !it->ib) {
+					/* a run of one background: one fill (not under an
+					   inline-block, which is drawn already) */
 					int32_t x0 = it->x, x1 = it->x + it->w;
-					while (k + 1 < end - i && l->it[ord[k + 1]].bg == it->bg) {
+					while (k + 1 < end - i && l->it[ord[k + 1]].bg == it->bg && !l->it[ord[k + 1]].ib) {
 						k++;
 						x1 = l->it[ord[k]].x + l->it[ord[k]].w;
 					}
@@ -2788,6 +3033,16 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 			for (k = 0; k < end - i; k++) {
 				ITEM *it = &l->it[ord[k]];
+				if (it->ib) {
+					/* (hidden too: what is visible in it shows, and
+					   its places are kept; not when out of memory) */
+					if (it->ib == 2) {
+						if (l->ibx[it->len - 1].k0 < l->last_k)
+							l->last_k = l->ibx[it->len - 1].k0;	/* made first */
+						ib_place(l, it, it->x, base);
+					}
+					continue;
+				}
 				if (it->hidden)
 					continue;
 				if (it->kind == IT_ATOM) {
@@ -2833,8 +3088,9 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	RUNSTATE r;
 	int line_start = 1;
 	int32_t h;
+	long ibx;
 	l->nit = 0;
-	l->lined = l->floats = l->sums = 0;
+	l->lined = l->floats = l->sums = l->ibs = 0;
 	l->cw = w;
 	runstate(l, &r, b->st, NULL, NULL, b->link);
 #ifndef EW_ST
@@ -2848,7 +3104,9 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 	collect(l, b, &r, &line_start);
 	if (l->fail)
 		return 0;
+	ibx = l->nibx;
 	h = lines(l, b, x, y, w, first);
+	l->nibx = ibx;	/* its inline-blocks are placed */
 	return h;
 }
 
@@ -2882,13 +3140,15 @@ static int32_t inline_measure(L *l, box *b)
 	long i;
 	int32_t lw = 0, best = 0;
 	l->nit = 0;
-	l->floats = 0;
+	l->floats = l->ibs = 0;
 	l->cw = AUTO;
 	runstate(l, &r, b->st, NULL, NULL, b->link);
 	collect(l, b, &r, &line_start);
-	for (i = 0; l->floats && i < l->nit; i++)
-		if (l->it[i].kind == IT_FLOAT) {
-			/* a float in the text: beside the text on its line */
+	for (i = 0; (l->floats || l->ibs) && i < l->nit; i++)
+		if ((l->floats && l->it[i].kind == IT_FLOAT) || l->it[i].ib) {
+			/* a float in the text: beside the text on its line; an
+			   inline-block: on it, as wide as its widest (or its
+			   narrowest, measuring that) */
 			STASH s;
 			int32_t fw;
 			stash(l, &s);
@@ -2926,6 +3186,14 @@ static int32_t extras(L *l, const box *b)
 	       (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ? len0(l, s, EP_BORDER_RIGHT_WIDTH, AUTO) : 0);
 }
 
+/* a box positioned absolutely (or fixed): out of the flow, so no part of
+   its parent's widest (CSS 2.1, 10.3.5) */
+static int out_of_flow(const box *c)
+{
+	return !c->anon && c->kind == BX_BLOCK &&
+	       (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED);
+}
+
 /* a block's widest: its border box with margins, nothing broken */
 static int32_t measure(L *l, box *b)
 {
@@ -2956,7 +3224,7 @@ static int32_t measure(L *l, box *b)
 		int32_t widest = 0, g = gap(l, b->st, EP_COLUMN_GAP, AUTO);
 		int k;
 		for (c = b->first; c != NULL; c = c->next) {
-			int32_t m = measure(l, c);
+			int32_t m = out_of_flow(c) ? 0 : measure(l, c);
 			if (m > widest)
 				widest = m;
 		}
@@ -2975,8 +3243,12 @@ static int32_t measure(L *l, box *b)
 	} else {
 		int k = 0;
 		int32_t run = 0;
-		for (c = b->first; c != NULL; c = c->next, k++) {
-			int32_t m = measure(l, c);
+		for (c = b->first; c != NULL; c = c->next) {
+			int32_t m;
+			if (out_of_flow(c))
+				continue;
+			m = measure(l, c);
+			k++;
 			if (b->row && !(b->flex && b->wrap && l->minw)) {
 				inner += m;
 				continue;
@@ -3263,6 +3535,8 @@ static void cell_shift(L *l, long k0, long k1, long bg, const long *bd, int32_t 
 	int j;
 	if (dy <= 0)
 		return;
+	if (l->last_base != AUTO && l->last_k >= k0 && l->last_k < k1)
+		l->last_base += dy;
 	for (k = k0; k < k1; k++) {
 		if (k == bg || (bg >= 0 && k == bg + 1 && l->p->items[bg].type == DL_FILL &&
 				(l->p->items[bg].flags & DLF_TILE)))
@@ -3505,12 +3779,17 @@ static int32_t float_width(L *l, box *c, int32_t w)
 static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t wf)
 {
 	int right = kw(c->st, EP_FLOAT) == KW_RIGHT, clr = kw(c->st, EP_CLEAR), tries;
-	int32_t hf, mb, f = AUTO, fy, lx = x, rx = x + w, nb;
-	long k0 = l->p->nitems;
+	int32_t hf, mb, f = AUTO, fy, lx = x, rx = x + w, nb, lb = l->last_base;
+	long k0 = l->p->nitems, b0 = nblocks(l), f0 = l->nlater, f1, lk = l->last_k;
 	FLT *fl;
 	if (wf == AUTO)
 		wf = float_width(l, c, w);
+	l->mov++;
 	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+	l->mov--;
+	f1 = l->nlater;
+	l->last_base = lb;	/* (not in the flow: not an inline-block's baseline) */
+	l->last_k = lk;
 	if (l->fail)
 		return;
 	fy = y > l->fl_top ? y : l->fl_top;
@@ -3532,8 +3811,10 @@ static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t w
 		rx = x + w;
 	}
 	shift_items(l, k0, right ? rx - wf : lx, fy);
+	shift_blocks(l, b0, right ? rx - wf : lx, fy);
 	if (c->n != NULL)
 		c->n->y += fy;
+	place_later(l, f0, f1, right ? rx - wf : lx, fy);
 	if (l->nfl == l->flcap) {
 		int cap = l->flcap ? l->flcap * 2 : 32;
 		FLT *n2 = realloc(l->fl, cap * sizeof *n2);
@@ -3561,9 +3842,32 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 {
 	int fixed = kw(c->st, EP_POSITION) == KW_FIXED;
 	int32_t cbx = fixed ? 0 : l->cbx, cby = fixed ? 0 : l->cby, cbw = fixed ? l->p->width : l->cbw;
-	int32_t left = len(l, c->st, EP_LEFT, cbw), right = len(l, c->st, EP_RIGHT, cbw);
-	int32_t top = len(l, c->st, EP_TOP, AUTO), wf, mb, f = AUTO, ax, ay;
-	long k0 = l->p->nitems;
+	int32_t left, right, top, wf, mb, f = AUTO, ax, ay, lb = l->last_base;
+	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k;
+	if ((fixed ? 0 : l->cbmov) < l->mov) {
+		/* in a box laid out at (0, 0) to be moved, its containing block
+		   outside it: placed once that box has moved (place_later) */
+		if (l->nlater == l->latercap) {
+			long cap = l->latercap ? l->latercap * 2 : 8;
+			struct later *n = realloc(l->later, cap * sizeof *n);
+			if (n == NULL) {
+				l->fail = 1;
+				return;
+			}
+			l->later = n;
+			l->latercap = cap;
+		}
+		l->later[l->nlater].c = c;
+		l->later[l->nlater].sx = sx;
+		l->later[l->nlater].sy = sy;
+		l->later[l->nlater].alpha = l->alpha;
+		l->later[l->nlater].clip = l->clip;
+		l->later[l->nlater++].ctl = l->ctl_in;
+		return;
+	}
+	left = len(l, c->st, EP_LEFT, cbw);
+	right = len(l, c->st, EP_RIGHT, cbw);
+	top = len(l, c->st, EP_TOP, AUTO);
 	if (len(l, c->st, EP_WIDTH, cbw) == AUTO && left != AUTO && right != AUTO)
 		wf = cbw - left - right;	/* stretched between its sides */
 	else
@@ -3572,7 +3876,13 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		wf = cbw;
 	if (wf < 1)
 		wf = 1;
+	f0 = l->nlater;
+	l->mov++;
 	layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+	l->mov--;
+	f1 = l->nlater;
+	l->last_base = lb;
+	l->last_k = lk;
 	if (l->fail)
 		return;
 	ax = left != AUTO ? cbx + left : right != AUTO ? cbx + cbw - right - wf : sx;
@@ -3585,12 +3895,49 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		int hides = kw(c->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(c->st, EP_OVERFLOW_Y) != KW_VISIBLE;
 		if ((hides && ((cw != AUTO && cw <= 2) || (chh != AUTO && chh <= 2))) || ax + wf <= 0 || ay < -1000) {
 			l->p->nitems = k0;
+#ifndef EW_ST
+			l->p->nblocks = b0;
+#endif
+			place_later(l, f0, f1, AUTO, AUTO);	/* (what is in it goes too) */
 			return;
 		}
 	}
 	shift_items(l, k0, ax, ay);
+	shift_blocks(l, b0, ax, ay);
 	if (c->n != NULL)
 		c->n->y += ay;
+	place_later(l, f0, f1, ax, ay);
+}
+
+/* the absolutely positioned boxes place_abs left (f0..f1), now that the
+   box they are in has moved by (dx, dy): placed where they go, from
+   where they would have been (or left again, for a box round that one
+   that is still to move); dx AUTO: that box went, and they with it */
+static void place_later(L *l, long f0, long f1, int32_t dx, int32_t dy)
+{
+	long k;
+	unsigned alpha = l->alpha;
+	uint32_t clip = l->clip;
+	uint16_t ctl = l->ctl_in;
+	for (k = f0; k < f1 && k < l->nlater; k++) {
+		struct later e = l->later[k];
+		if (e.c == NULL)
+			continue;
+		l->later[k].c = NULL;
+		if (dx != AUTO) {
+			l->alpha = e.alpha;
+			l->clip = e.clip;
+			l->ctl_in = e.ctl;
+			place_abs(l, e.c, e.sx + dx, e.sy + dy);
+		}
+	}
+	l->alpha = alpha;
+	l->clip = clip;
+	l->ctl_in = ctl;
+	/* the placed ones let go, not below f0: a box placed from a range
+	   round this one may still have its own above it */
+	while (l->nlater > f0 && l->later[l->nlater - 1].c == NULL)
+		l->nlater--;
 }
 
 /* lays a block out with its margin box's top left at (x, y) in a
@@ -3648,6 +3995,8 @@ static void shift_range(L *l, long k0, long k1, int32_t dx, int32_t dy)
 	long k;
 	if (dx == 0 && dy == 0)
 		return;
+	if (l->last_base != AUTO && l->last_k >= k0 && l->last_k < k1)
+		l->last_base += dy;	/* an inline-block's last line with them */
 	for (k = k0; k < k1; k++) {
 		l->p->items[k].x += dx;
 		l->p->items[k].y += dy;
@@ -4743,8 +5092,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int32_t *saved_cols = l->cols, *table_cols = NULL, saved_sh = l->sp_h, saved_sv = l->sp_v;
 	int32_t table_sh = 0, table_sv = 0, saved_top = l->fl_top;
 	int32_t saved_cbx = l->cbx, saved_cby = l->cby, saved_cbw = l->cbw;
-	int saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
-	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems;
+	int saved_cbmov = l->cbmov, saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
+	int vis = b->anon || kw(s, EP_VISIBILITY) == KW_VISIBLE;	/* its background and borders drawn */
+	uint16_t saved_ctl = l->ctl_in;
+	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
 	struct span *saved_spans = l->spans;
 	unsigned saved_alpha = l->alpha;
 	uint32_t saved_clip = l->clip;
@@ -4872,6 +5223,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->cbx = x + ml + bl;
 		l->cby = y + mt + bt;
 		l->cbw = pl + w + pr;
+		l->cbmov = l->mov;
 	}
 	if (b->table) {
 		l->spans = calloc(MAXCOLS, sizeof *l->spans);
@@ -4891,7 +5243,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			uint32_t cp = clip_paint(s);
 			if (cp != 0)
 				l->clip = cp;
-		} else if (!ctlbox) {
+		} else if (!ctlbox && vis) {
 			/* its colour, picture or gradient to the edge of the box
 			   background-clip says (CSS Backgrounds 3, 3.7); the colour
 			   not where the canvas has it */
@@ -4919,6 +5271,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	cx = x + ml + bl + pl;
 	cy = y + mt + bt + pt;
+	if (b->n != NULL && !b->anon && b->n->tag == T_LABEL && b->n->ns == DN_NS_HTML)
+		l->ctl_in = label_for(l, b->n);	/* a click on its text is one on its control */
 	if (b->table) {
 		l->cols = table_cols;
 		l->ncols = table_n;
@@ -5056,10 +5410,13 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
-			bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
-			bd[1] = fill(l, bx, by + bh - bb, bw, bb, fade(color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
-			bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, fade(color(s, EP_BORDER_LEFT_COLOR), l->alpha));
-			bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb, fade(color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
+			if (vis) {
+				bd[0] = fill(l, bx, by, bw, bt, fade(color(s, EP_BORDER_TOP_COLOR), l->alpha));
+				bd[1] = fill(l, bx, by + bh - bb, bw, bb, fade(color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));
+				bd[2] = fill(l, bx, by + bt, bl, bh - bt - bb, fade(color(s, EP_BORDER_LEFT_COLOR), l->alpha));
+				bd[3] = fill(l, bx + bw - br, by + bt, br, bh - bt - bb,
+					     fade(color(s, EP_BORDER_RIGHT_COLOR), l->alpha));
+			}
 #ifndef EW_ST
 			if (b->n != NULL && !b->anon)
 				block_rect(l, b->n, bx, by, bw, bh);
@@ -5072,6 +5429,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	l->ncols = saved_n;
 	l->sp_h = saved_sh;
 	l->sp_v = saved_sv;
+	l->ctl_in = saved_ctl;
 	if (b->table) {
 		free(l->spans);
 		l->spans = saved_spans;
@@ -5087,10 +5445,13 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			dy = len(l, s, EP_BOTTOM, AUTO);
 			dy = dy == AUTO ? 0 : -dy;
 		}
-		if (dx != 0 || dy != 0)
+		if (dx != 0 || dy != 0) {
 			shift_items(l, kstart, dx, dy);
+			shift_blocks(l, bstart, dx, dy);
+		}
 	}
 	if (pos != KW_STATIC && pos != KW_STICKY) {
+		l->cbmov = saved_cbmov;
 		l->cbx = saved_cbx;
 		l->cby = saved_cby;
 		l->cbw = saved_cbw;
@@ -5178,6 +5539,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	p->bg = 0xffffff;
 	p->cbg = -1;
 	l.alpha = 255;
+	l.last_base = AUTO;
 	l.zoom = o->zoom > 0 ? o->zoom : 1024;
 	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
@@ -5224,6 +5586,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->cbg = cbg;
 	}
 	free(l.it);
+	free(l.ibx);
+	free(l.later);
 	free(l.fl);
 	if (l.fail) {
 		page_free(p);

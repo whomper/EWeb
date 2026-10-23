@@ -384,8 +384,9 @@ EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
 text, pictures in the background of a page or a box, positioned
-boxes, tables with cells over several rows, flexible boxes and grids
-(CSS flexbox and grid), forms, Hebrew right to left. Translucent
+boxes, tables with cells over several rows, boxes in a line of text
+(buttons, menus and cards: CSS's inline-block), flexible boxes and
+grids (CSS flexbox and grid), forms, Hebrew right to left. Translucent
 colours and see-through boxes (CSS's opacity) are mixed with what is
 under them, as near as your screen's colours allow: with 16 colours or
 fewer a faint tint may not show, and but for true colour a see-through

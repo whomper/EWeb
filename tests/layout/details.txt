@@ -1,4 +1,4 @@
-page 608 x 1242, background ffffff, 176 items, 1 links, title "details and summary"
+page 608 x 1248, background ffffff, 180 items, 1 links, title "details and summary"
 text 10,26 7x17 #000000 sans13 link 0 "▸"
 text 21,26 173x17 #000000 sans13 link 0 "Closed: only this line shows"
 summary 10,13 588x16 closed c1
@@ -137,42 +137,46 @@ fill 6,906 596x1 #888888
 fill 6,1000 596x1 #888888
 fill 6,907 1x93 #888888
 fill 601,907 1x93 #888888
-summary 10,1008 239x16 closed ib
-text 17,1021 225x17 #000000 sans13 link 0 "An inline-block summary (a button)"
+text 17,1024 225x17 #000000 sans13 link 0 "An inline-block summary (a button)"
+fill 10,1008 239x1 #888888
+fill 10,1029 239x1 #888888
+fill 10,1009 1x20 #888888
+fill 248,1009 1x20 #888888
+summary 10,1008 239x22 closed ib
 fill 6,1004 596x1 #888888
-fill 6,1027 596x1 #888888
-fill 6,1005 1x22 #888888
-fill 601,1005 1x22 #888888
-summary 10,1035 119x16 closed il
-text 10,1048 119x17 #000000 sans13 link 0 "An inline summary"
-fill 6,1031 596x1 #888888
-fill 6,1054 596x1 #888888
-fill 6,1032 1x22 #888888
-fill 601,1032 1x22 #888888
-summary 10,1062 215x16 closed dc
-text 10,1075 215x17 #000000 sans13 link 0 "A summary with display: contents"
-fill 6,1058 596x1 #888888
-fill 6,1081 596x1 #888888
-fill 6,1059 1x22 #888888
-fill 601,1059 1x22 #888888
-text 10,1102 7x17 #000000 sans13 link 0 "▸"
-text 21,1102 188x17 #000000 sans13 link 0 "A summary with a details in it"
-text 10,1118 7x17 #000000 sans13 link 0 "▸"
-text 21,1118 174x17 #000000 sans13 link 0 "The details in the summary"
-summary 10,1105 588x16 closed din
-summary 10,1089 588x32 closed dout
-fill 6,1085 596x1 #888888
-fill 6,1124 596x1 #888888
-fill 6,1086 1x38 #888888
-fill 601,1086 1x38 #888888
-text 10,1145 7x17 #000000 sans13 link 0 "▾"
-text 21,1145 276x17 #000000 sans13 link 0 "Group h, open: one in a template is no rival"
-summary 10,1132 588x16 open h1
-text 10,1174 46x17 #000000 sans13 link 0 "Shown."
-fill 6,1128 596x1 #888888
-fill 6,1193 596x1 #888888
-fill 6,1129 1x64 #888888
-fill 601,1129 1x64 #888888
-text 6,1220 224x17 #0000ee sans13 link 1 "To the paragraph in the first details"
-text 230,1220 102x17 #000000 sans13 link 0 ", which opens it."
+fill 6,1033 596x1 #888888
+fill 6,1005 1x28 #888888
+fill 601,1005 1x28 #888888
+summary 10,1041 119x16 closed il
+text 10,1054 119x17 #000000 sans13 link 0 "An inline summary"
+fill 6,1037 596x1 #888888
+fill 6,1060 596x1 #888888
+fill 6,1038 1x22 #888888
+fill 601,1038 1x22 #888888
+summary 10,1068 215x16 closed dc
+text 10,1081 215x17 #000000 sans13 link 0 "A summary with display: contents"
+fill 6,1064 596x1 #888888
+fill 6,1087 596x1 #888888
+fill 6,1065 1x22 #888888
+fill 601,1065 1x22 #888888
+text 10,1108 7x17 #000000 sans13 link 0 "▸"
+text 21,1108 188x17 #000000 sans13 link 0 "A summary with a details in it"
+text 10,1124 7x17 #000000 sans13 link 0 "▸"
+text 21,1124 174x17 #000000 sans13 link 0 "The details in the summary"
+summary 10,1111 588x16 closed din
+summary 10,1095 588x32 closed dout
+fill 6,1091 596x1 #888888
+fill 6,1130 596x1 #888888
+fill 6,1092 1x38 #888888
+fill 601,1092 1x38 #888888
+text 10,1151 7x17 #000000 sans13 link 0 "▾"
+text 21,1151 276x17 #000000 sans13 link 0 "Group h, open: one in a template is no rival"
+summary 10,1138 588x16 open h1
+text 10,1180 46x17 #000000 sans13 link 0 "Shown."
+fill 6,1134 596x1 #888888
+fill 6,1199 596x1 #888888
+fill 6,1135 1x64 #888888
+fill 601,1135 1x64 #888888
+text 6,1226 224x17 #0000ee sans13 link 1 "To the paragraph in the first details"
+text 230,1226 102x17 #000000 sans13 link 0 ", which opens it."
 link 1 file://./tests/layout/details.html#c1p

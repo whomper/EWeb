@@ -1,0 +1,139 @@
+page 608 x 557, background ffffff, 132 items, 6 links, title "Inline blocks"
+fill 6,6 19x96 #dddddd
+text 25,47 168x29 #000000 sans24 bold link 0 "Inline blocks"
+text 63,96 35x17 #000000 sans13 link 0 "a box"
+fill 56,79 49x2 #000000
+fill 56,101 49x2 #000000
+fill 56,81 2x20 #000000
+fill 103,81 2x20 #000000
+text 173,89 43x17 #000000 sans13 link 0 "middle"
+fill 166,72 57x2 #000000
+fill 166,110 57x2 #000000
+fill 166,74 2x36 #000000
+fill 221,74 2x36 #000000
+text 234,89 21x17 #000000 sans13 link 0 "top"
+fill 227,72 35x2 #000000
+fill 227,94 35x2 #000000
+fill 227,74 2x20 #000000
+fill 260,74 2x20 #000000
+text 301,97 47x17 #000000 sans13 link 0 "bottom"
+fill 294,80 61x2 #000000
+fill 294,110 61x2 #000000
+fill 294,82 2x28 #000000
+fill 353,82 2x28 #000000
+text 25,96 31x17 #000000 sans13 link 0 "Text "
+text 109,96 57x17 #000000 sans13 link 0 "in a line, "
+text 266,96 28x17 #000000 sans13 link 0 "and "
+text 355,96 108x17 #000000 sans13 link 0 ", then more text."
+fill 147,125 72x22 #3366cc
+text 155,141 56x17 #ffffff sans13 link 1 "Go there"
+fill 364,125 46x22 #3366cc
+text 372,141 30x17 #ffffff sans13 link 2 "Next"
+text 6,141 141x17 #000000 sans13 link 0 "A link round a button: "
+text 223,141 141x17 #000000 sans13 link 0 "and a link that is one: "
+text 410,141 4x17 #000000 sans13 link 0 "."
+text 12,175 39x17 #0000ee sans13 link 3 "Home"
+fill 57,160 1x20 #cccccc
+text 64,175 34x17 #0000ee sans13 link 4 "News"
+fill 104,160 1x20 #cccccc
+text 111,175 35x17 #0000ee sans13 link 5 "Sport"
+fill 152,160 1x20 #cccccc
+text 159,175 57x17 #0000ee sans13 link 6 "About us"
+fill 222,160 1x20 #cccccc
+text 10,197 29x17 #000000 sans13 bold link 0 "One"
+text 10,216 96x17 #000000 sans13 link 0 "A card with two"
+text 10,232 153x17 #000000 sans13 link 0 "paragraphs, its baseline"
+text 10,248 88x17 #000000 sans13 link 0 "the last line's."
+fill 6,180 180x1 #888888
+fill 6,254 180x1 #888888
+fill 6,181 1x73 #888888
+fill 185,181 1x73 #888888
+text 193,197 29x17 #000000 sans13 bold link 0 "Two"
+text 193,216 39x17 #000000 sans13 link 0 "Short."
+fill 189,180 180x1 #888888
+fill 189,222 180x1 #888888
+fill 189,181 1x41 #888888
+fill 368,181 1x41 #888888
+text 376,197 41x17 #000000 sans13 bold link 0 "Three"
+text 376,216 167x17 #000000 sans13 link 0 "Cards side by side, each a"
+text 376,232 33x17 #000000 sans13 link 0 "third."
+fill 372,180 180x1 #888888
+fill 372,238 180x1 #888888
+fill 372,181 1x57 #888888
+fill 551,181 1x57 #888888
+fill 145,274 32x16 #cc0000
+text 6,290 139x17 #000000 sans13 link 0 "Before an empty one "
+text 181,290 74x17 #000000 sans13 link 0 "and after it."
+text 112,327 32x17 #000000 sans13 link 0 "inner"
+fill 105,310 46x2 #000000
+fill 105,332 46x2 #000000
+fill 105,312 2x20 #000000
+fill 149,312 2x20 #000000
+text 67,327 38x17 #000000 sans13 link 0 "outer "
+text 155,327 34x17 #000000 sans13 link 0 "outer"
+fill 60,306 136x2 #000000
+fill 60,336 136x2 #000000
+fill 60,308 2x28 #000000
+fill 194,308 2x28 #000000
+text 6,327 54x17 #000000 sans13 link 0 "Nested: "
+text 200,327 36x17 #000000 sans13 link 0 "done."
+text 95,365 73x17 #000000 sans13 link 0 "its own text"
+fill 175,352 30x16 #ffcc00
+text 178,365 24x17 #000000 sans13 link 0 "one"
+fill 208,352 28x16 #ffcc00
+text 211,365 22x17 #000000 sans13 link 0 "two"
+fill 239,352 40x16 #ffcc00
+text 242,365 34x17 #000000 sans13 link 0 "three"
+fill 94,351 186x1 #000000
+fill 94,368 186x1 #000000
+fill 94,352 1x16 #000000
+fill 279,352 1x16 #000000
+text 6,365 88x17 #000000 sans13 link 0 "An inline flex: "
+text 284,365 66x17 #000000 sans13 link 0 "in the line."
+fill 67,387 53x24 #eeeeee
+text 74,404 39x17 #000000 sans13 link 0 "boxed"
+fill 67,387 53x2 #000000
+fill 67,409 53x2 #000000
+fill 67,389 2x20 #000000
+fill 118,389 2x20 #000000
+text 11,404 56x17 #000000 sans13 link 0 "In a cell: "
+text 124,404 37x17 #000000 sans13 link 0 "words"
+fill 9,385 154x1 #808080
+fill 9,412 154x1 #808080
+fill 9,386 1x26 #808080
+fill 162,386 1x26 #808080
+fill 167,387 49x24 #eeeeee
+text 174,404 35x17 #000000 sans13 link 0 "alone"
+fill 167,387 49x2 #000000
+fill 167,409 49x2 #000000
+fill 167,389 2x20 #000000
+fill 214,389 2x20 #000000
+fill 165,385 53x1 #808080
+fill 165,412 53x1 #808080
+fill 165,386 1x26 #808080
+fill 217,386 1x26 #808080
+fill 6,382 215x1 #808080
+fill 6,415 215x1 #808080
+fill 6,383 1x32 #808080
+fill 220,383 1x32 #808080
+text 13,478 56x17 #000000 sans13 link 0 "wide one"
+fill 6,461 134x2 #000000
+fill 6,483 134x2 #000000
+fill 6,463 2x20 #000000
+fill 138,463 2x20 #000000
+text 6,442 159x17 #000000 sans13 link 0 "A box too wide for its line"
+text 6,458 109x17 #000000 sans13 link 0 "goes to the next:"
+text 6,498 28x17 #000000 sans13 link 0 "end."
+text 528,531 36x17 #000000 sans13 rtl link 0 "קופסה"
+fill 521,514 50x2 #000000
+fill 521,536 50x2 #000000
+fill 521,516 2x20 #000000
+fill 569,516 2x20 #000000
+text 491,531 26x17 #000000 sans13 rtl link 0 "עולם"
+text 575,531 27x17 #000000 sans13 rtl link 0 "שלום"
+link 1 file://./tests/layout/go.html
+link 2 file://./tests/layout/next.html
+link 3 file:///
+link 4 file:///news
+link 5 file:///sport
+link 6 file:///about

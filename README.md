@@ -26,8 +26,8 @@ own fonts.
   times as fast as NetSurf's on the 68030), EWeb's CSS engine
   (about a tenth of LibCSS's time on the 68030, [`docs/CSS.md`](docs/CSS.md);
   a sheet for print or another width, by its `media`, left out)
-  and fresh layout code: blocks, lines, lists, floats, tables, flexbox and
-  grid, colours (translucent ones and opacity too, mixed with what is under
+  and fresh layout code: blocks, lines, lists, floats, inline blocks,
+  tables, flexbox and grid, colours (translucent ones and opacity too, mixed with what is under
   them in every screen mode), borders, background pictures, colour
   gradients (linear, radial and conic, dithered to the screen's colours;
   the ST edition draws those that run straight down or across, in the
@@ -248,7 +248,7 @@ ui/                   EWEB.PRG's GEM side: the window, the toolbar (its pictures
 src/browse/           browsing: addresses, loading, history, EWeb's own pages, saving, bookmarks (bookmark.c),
                       the disk cache (dcache.c), the pages' pictures (img.c)
 src/doc/              the document: EWeb's HTML parser (html.c), the UA stylesheet, HTML's hints, forms (form.c)
-src/layout/           the layout: boxes, lines, floats, tables, flexbox and grid, a display list
+src/layout/           the layout: boxes, lines, floats, inline blocks, tables, flexbox and grid, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
 src/css/              EWeb's CSS engine
 src/js/               the pages' scripts: QuickJS's runtime with the budget, and the lean DOM (js.c);
@@ -342,9 +342,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   test, run there).
 - `make test` also sends forms (`tests/forms/cases.txt`, worked out from the
   HTML Standard: the entry list; urlencoded, multipart and plain text; the
-  page's character set; Return in a field; typing, reset), and lays out eight
-  pages (`tests/layout`: text, tables, floats, flexbox, grid, forms and
-  pictures; and `tests/bench/sample.html`) and compares their
+  page's character set; Return in a field; typing, reset), and lays out sixteen
+  pages (`tests/layout`: text, tables, floats, inline blocks, flexbox, grid,
+  forms, pictures and more; and `tests/bench/sample.html`) and compares their
   display lists with the ones kept, and the Hebrew test page in each of its
   encodings, and pages nested deeper than the stack holds
   (`tests/layout/deep.py`: cut, not crashed), with AddressSanitizer and

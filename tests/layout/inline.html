@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Inline blocks</title>
+<style>
+body { margin: 8px; font: 16px sans-serif }
+.b { display: inline-block; border: 2px solid #000; padding: 2px 6px }
+.btn { display: inline-block; padding: 4px 10px; background: #36c; color: #fff; text-decoration: none; border-radius: 4px }
+.card { display: inline-block; width: 30%; vertical-align: top; border: 1px solid #888; margin: 0 4px 8px 0 }
+.card p { margin: 4px }
+nav a { display: inline-block; padding: 2px 8px; border-right: 1px solid #ccc }
+.flexi { display: inline-flex; gap: 4px; border: 1px dotted #000 }
+.flexi span { background: #fc0; padding: 0 4px }
+td .b { background: #eee }
+</style></head><body>
+<div style="float: left; width: 24px; height: 120px; background: #ddd"></div>
+<h1>Inline blocks</h1>
+<p>Text <span class="b">a box</span> in a line, <span class="b" style="vertical-align: middle; height: 40px">middle</span>
+<span class="b" style="vertical-align: top">top</span> and <span class="b" style="vertical-align: bottom; height: 30px">bottom</span>, then more text.</p>
+<p>A link round a button: <a href="go.html"><span class="btn">Go there</span></a> and a link that is one: <a class="btn" href="next.html">Next</a>.</p>
+<nav><a href="/">Home</a><a href="/news">News</a><a href="/sport">Sport</a><a href="/about">About us</a></nav>
+<div><div class="card"><p><b>One</b></p><p>A card with two paragraphs, its baseline the last line's.</p></div><div class="card"><p><b>Two</b></p><p>Short.</p></div><div class="card"><p><b>Three</b></p><p>Cards side by side, each a third.</p></div></div>
+<p>Before an empty one <span style="display: inline-block; width: 40px; height: 20px; background: #c00"></span> and after it.</p>
+<p>Nested: <span class="b">outer <span class="b">inner</span> outer</span> done.</p>
+<p>An inline flex: <span class="flexi">its own text <span>one</span><span>two</span><span>three</span></span> in the line.</p>
+<table border="1"><tr><td>In a cell: <span class="b">boxed</span> words</td><td><span class="b">alone</span></td></tr></table>
+<p style="width: 200px">A box too wide for its line goes to the next: <span class="b" style="width: 150px">wide one</span> end.</p>
+<p dir="rtl" lang="he">שלום <span class="b">קופסה</span> עולם</p>
+</body></html>

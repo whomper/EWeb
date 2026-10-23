@@ -2139,8 +2139,8 @@ was gone too). Now, after CSS Images 3 and 4:
   window's foot). A box laid out with no height and stretched afterwards (a table row's
   cell, a flex line's item) takes its gradient's height with it. `background-clip` now stops
   pictures and gradients, not only the colour, at the box it names. An inline's gradient (a
-  `<span>`'s, and an inline-block's, which EWeb lays out as an inline) is its stops' average over
-  its colour, a run being one fill. Text painted with a gradient (`background-clip: text`) keeps the
+  `<span>`'s) is its stops' average over its colour, a run being one fill; an inline-block's is
+  its own box's, as a block's (Inline blocks, below). Text painted with a gradient (`background-clip: text`) keeps the
   gradient's first colour that shows (Translucent colours, above): an average with a transparent
   stop would be too faint to read.
 - **Drawn** (`src/gfx/canvas.c`): each pixel's place along the gradient line (linear: from the
@@ -2476,9 +2476,9 @@ Standard (4.11 the elements, 15.5.4 their rendering) and as browsers show them:
   as browsers do (a link in a summary is followed, not toggled), then `page_summary_at`, an
   invisible display-list item (`DL_SUM`) the size of the summary's box, so it moves with the box
   when a cell, a flex line or `position: relative` moves it, in both editions. A summary a page
-  lays out inline (`display: inline`, or `inline-block` as GitHub's and Bootstrap's button-like
-  `<summary class="btn">` are, which EWeb lays out as inline) has an item for each of its parts
-  on the lines instead (the line's run of its items, as an inline background is drawn; no cost
+  lays out inline (`display: inline`) has an item for each of its parts
+  on the lines instead (one with `inline-block`, as GitHub's and Bootstrap's button-like
+  `<summary class="btn">` are, is a block in its line with its box's item: Inline blocks, below) (the line's run of its items, as an inline background is drawn; no cost
   where there is none, `L.sums`). A summary with `display: contents` has no box, but a click on
   its text is one in the summary all the same: its blocks are marked, and each run of its inline
   boxes goes in an anonymous inline (laid out as its parent's run, as before) whose parts on the
@@ -2687,6 +2687,81 @@ shows its pale yellow background and a pink red, where TOS's colours drew both g
 gradients' page and the pictures are smooth. `make hatarigui`'s `screens` group checks that the
 Falcon in 256 colours starts in EWeb's colours and gives TOS's back at the end, and runs it with
 `PALETTE=0`, its screenshots side by side.
+
+## Inline blocks (23 Oct 2026)
+
+Stage 2's first part. A box with `display: inline-block`, `inline-flex`, `inline-grid` or
+`inline-table` in the flow (not floated or positioned) was laid out as an inline: its words joined
+the line's, its width, height, padding and background on each run of them, so buttons, menu
+entries and cards of every site lost their shape. Now (`src/layout/layout.c`) it is a block that
+is one atom in its line, after CSS 2.1 (9.2.4, 10.3.9, 10.8.1) and CSS Display 3:
+
+- **Built** as a block box marked `ib` (a link round it is its link, so a button in a link
+  still goes there); the boxes round it stay inline, and it starts a float context of its own (its
+  floats are its, and the floats round it don't push its lines). A flex or grid container's
+  inline-block child is an item as any. Its inside has what the text round it passes on: the
+  opacity of the spans it is in, and the label it is in (a click on its text ticks the label's
+  checkbox). A label that is a block or an inline-block itself (Bootstrap makes every label one)
+  now passes its control to its text too (`L.ctl_in`); before, only an inline label did.
+- **Measured** as a float is (its widest and narrowest for the line's, a table cell's or a flex
+  item's width), and **laid out** once the line's width is known, before the lines are broken:
+  as a block at (0, 0), as wide as it asks or shrunk to fit as a float, its items and blocks
+  noted beside the line's items (`IBX`: kept apart, as every word is an item and a bigger item
+  costs every page; inside `inline_layout` a stack, each line's let go when they are placed).
+- **Placed** by its line: its baseline its last line's in the flow (a float or a positioned box
+  after it doesn't count; a line moved by a flex's or a cell's alignment takes its baseline
+  with it), an inline flex's, grid's or table's its first (CSS Flexbox 8.5, Grid 11.5, CSS 2.1
+  17.5.1), or its bottom margin edge if it has no line or hides what overflows it (10.8.1), where
+  `vertical-align` puts it (baseline, a length,
+  `middle`, `text-top`, `text-bottom`, and `top` and `bottom` by the line's edges as a picture's),
+  then its display items, its blocks (for scripts) and its elements' places (for an address's
+  `#name`; walked without recursion, as it may be deep already) moved there. A hidden one
+  (`visibility: hidden`) is placed too: what is visible in it shows, and the line keeps its
+  room. One too wide for what is left of a line goes to the next, as a word;
+  right to left it takes its place among the Hebrew words.
+- **Boxes laid out first and moved after** (an inline-block, a float, an absolutely positioned
+  box: each laid out at (0, 0), then moved where it goes): an absolutely positioned box in one
+  of them whose containing block is outside it (the inline-block isn't positioned; or it is
+  `position: fixed`) is left until that box has moved, then placed from where it would have
+  been (`L.later`, `place_later`), in the opacity and the label it was in: before, it was moved
+  with it, away from where its `top` and `left` put it. This was so for floats too. Placed from
+  a line, it is laid out with the line's items kept aside (as a float in the text is), and the
+  list of those left for later is let go only above the range being placed. A float's and a
+  positioned box's places for scripts (and for a click's target) now move with them, as an
+  inline-block's do; before, they stayed at (0, 0).
+- **Widths:** an absolutely positioned or fixed child is no part of its parent's widest
+  (CSS 2.1, 10.3.5): an inline-block, a float or a cell holding a dropdown was as wide as the
+  dropdown.
+- **Visibility:** a block's background and borders aren't drawn when it is hidden (they were);
+  its text never was.
+- **Left as they were:** pictures and form controls (their own atoms already, with
+  `display: inline-block` from the UA sheet), and `<svg>`, `<video>`, `<canvas>`, `<iframe>`,
+  `<object>` and `<embed>`, which EWeb doesn't show; a span's background round an inline-block
+  stops at its edges, and `::before` and `::after` with `display: inline-block` are still laid
+  out as inline.
+
+**Measured** (68030 instructions, `build/m68k/drawbench`, the page laid out and drawn at
+640 pixels, against the same code without inline blocks): the test page `tests/layout/inline.html`
+3.88 M to 4.13 M (+6.3%: each box is now laid out as a block); the two pages of the page set
+that name `inline-block` most (41 times each), 18.74 M to 18.76 M and 45.76 M to 45.86 M (+0.1%,
++0.2%); the news page, whose sheet names it 16 times, 13.41 M to 13.34 M (-0.5%); the WSJ and BBC
+pages, without any, +0.3% and +0.08%, half of it in `memcpy` and `memset`, which move with the
+heap's addresses (Size, speed and memory, above). The first version kept an inline block's places in
+every item, a quarter more bytes for each word, and cost the WSJ page 1.1%; moved beside the
+items, the cost went.
+
+Tested by `tests/layout/inline.html` and its list (baseline, `middle`, `top`, `bottom`, links
+round and as buttons, a menu, cards a third wide side by side, an empty one, nested, an inline
+flex with text of its own beside a float, in a table cell, too wide for its line, right to
+left), `tests/layout/details.txt` (an inline-block summary now has its border and padding),
+`tests/layout/inline.py` on `inline_cases.html` (the review's cases, same day: a click on the
+text of an inline-block, block and inline label; a hidden one; one in a translucent span; a box
+positioned in one; the baselines of an inline table, an inline flex, one with a float after its
+last line and one with a centred flex in it; an address's `#name` in one; and the second
+round's: text after one holding a dropdown drawn once and in its place, a fixed box in a
+positioned box in one, an inline-block whose line is only another, a label's positioned box),
+and the page set
+with and without Bootstrap's and Pico's sheets under AddressSanitizer and UBSan: no fault.
 
 ## The design
 
@@ -2981,7 +3056,7 @@ out of both (their paths lead nowhere on the Atari).
 6. **The web as sites make it** (Erez's go, 22 Oct 2026), in five stages. *Stage 1 done (0.27):*
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
-   256-colour palette (Decisions): **2.** the layout's core: `inline-block`, boxes that scroll
+   256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`), `@import`, scrolling sideways, `border-collapse`; **3.** reading: find in the
    page, selecting and copying, history with visited links, a page drawn while it loads, Esc
    during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,

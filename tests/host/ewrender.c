@@ -573,8 +573,7 @@ static int click(browser *b, const char *id)
 	x += w / 2;
 	y += h / 2;
 #else
-	/* a summary where its DL_SUM is, as in the ST edition (an element's
-	   block isn't moved with a float it is in) */
+	/* a summary where its DL_SUM is, as in the ST edition */
 	k = n != NULL && (DN_IS(n, T_DETAILS) || DN_IS(n, T_SUMMARY)) && summary_rect(b->p, n, &x, &y, &w, &h);
 	if (!k && n != NULL && !DN_IS(n, T_DETAILS))
 		k = page_node_rect(b->p, n, &x, &y, &w, &h);

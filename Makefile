@@ -955,6 +955,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/alpha.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/inline.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender

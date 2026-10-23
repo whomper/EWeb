@@ -1,0 +1,67 @@
+page 608 x 701, background ffffff, 70 items, 0 links, title "Inline blocks: cases"
+fill 6,6 16x18 #ffffff
+fill 6,6 16x1 #808080
+fill 6,23 16x1 #808080
+fill 6,6 1x18 #808080
+fill 21,6 1x18 #808080
+text 26,19 140x17 #000000 sans13 link 0 "In an inline-block label"
+fill 6,24 16x18 #ffffff
+fill 6,24 16x1 #808080
+fill 6,41 16x1 #808080
+fill 6,24 1x18 #808080
+fill 21,24 1x18 #808080
+text 26,37 94x17 #000000 sans13 link 0 "In a block label"
+fill 6,42 16x18 #ffffff
+fill 6,42 16x1 #808080
+fill 6,59 16x1 #808080
+fill 6,42 1x18 #808080
+fill 21,42 1x18 #808080
+text 26,55 102x17 #000000 sans13 link 0 "In an inline label"
+text 6,173 49x17 #000000 sans13 link 0 "Hidden "
+text 103,173 23x17 #000000 sans13 link 0 "box"
+text 46,202 57x17 #0000004c sans13 link 0 "INFADED"
+text 6,202 40x17 #0000004c sans13 link 0 "faded "
+text 197,231 35x17 #000000 sans13 link 0 "Menu"
+text 166,231 31x17 #000000 sans13 link 0 "Text "
+text 0,13 49x17 #000000 sans13 link 0 "PINNED"
+text 41,260 37x17 #000000 sans13 link 0 "ROW1"
+text 41,276 37x17 #000000 sans13 link 0 "ROW2"
+text 6,260 35x17 #000000 sans13 link 0 "TBL1 "
+text 82,260 31x17 #000000 sans13 link 0 "TBL2"
+text 40,321 35x17 #000000 sans13 link 0 "FLXIN"
+text 6,321 34x17 #000000 sans13 link 0 "FLX1 "
+text 79,321 30x17 #000000 sans13 link 0 "FLX2"
+text 39,382 34x17 #000000 sans13 link 0 "FLTIN"
+text 39,414 7x17 #000000 sans13 link 0 "x"
+text 6,382 33x17 #000000 sans13 link 0 "FLT1 "
+text 77,382 29x17 #000000 sans13 link 0 "FLT2"
+text 44,446 39x17 #000000 sans13 link 0 "NSTIN"
+text 6,446 38x17 #000000 sans13 link 0 "NST1 "
+text 87,446 34x17 #000000 sans13 link 0 "NST2"
+text 37,491 77x17 #000000 sans13 link 0 "DROPDOWN"
+fill 6,494 9x16 #ff8800
+text 6,507 9x17 #000000 sans13 link 0 "B"
+text 6,491 31x17 #000000 sans13 link 0 "Text "
+text 240,13 143x17 #000000 sans13 link 0 "one two three four five"
+text 240,29 151x17 #000000 sans13 link 0 "six seven eight nine ten"
+text 240,45 86x17 #000000 sans13 link 0 "eleven twelve"
+text 118,491 39x17 #000000 sans13 link 0 "AFTER"
+text 19,507 131x17 #000000 sans13 link 0 "TAILWORD and more"
+text 6,523 88x17 #000000 sans13 link 0 "words to wrap"
+text 17,552 19x17 #000000 sans13 link 0 "ib1"
+text 6,552 11x17 #000000 sans13 link 0 "x "
+text 0,93 9x17 #000000 sans13 link 0 "A"
+text 0,93 10x17 #000000 sans13 link 0 "Z"
+text 0,173 63x17 #000000 sans13 link 0 "FIXEDBOX"
+text 52,597 47x17 #000000 sans13 link 0 "DEEPIN"
+text 6,597 46x17 #000000 sans13 link 0 "DEEP1 "
+text 103,597 42x17 #000000 sans13 link 0 "DEEP2"
+fill 6,629 16x18 #ffffff
+fill 6,629 16x1 #808080
+fill 6,646 16x1 #808080
+fill 6,629 1x18 #808080
+fill 21,629 1x18 #808080
+text 26,642 23x17 #000000 sans13 link 0 "Lab"
+text 320,253 52x17 #000000 sans13 link 0 "LABPOS"
+text 55,692 39x17 #000000 sans13 link 0 "INNER"
+text 6,692 49x17 #000000 sans13 link 0 "Anchor "

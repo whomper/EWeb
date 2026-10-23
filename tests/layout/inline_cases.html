@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Inline blocks: cases</title>
+<style>body { margin: 8px; font: 16px sans-serif }</style></head><body>
+<form><label style="display:inline-block"><input type=checkbox name=a> <span id=ib>In an inline-block label</span></label>
+<label style="display:block"><input type=checkbox name=b> <span id=bl>In a block label</span></label>
+<label><input type=checkbox name=c> <span id=il>In an inline label</span></label></form>
+<div style="height:100px"></div>
+<p id=hid>Hidden <span style="display:inline-block;visibility:hidden;background:#f00;width:50px;height:20px;border:2px solid #00f"></span> box</p>
+<p><span style="opacity:.3">faded <span style="display:inline-block">INFADED</span></span></p>
+<p style="margin-left:200px">Text <span style="display:inline-block">Menu<span style="position:absolute;top:0;left:0">PINNED</span></span></p>
+<p>TBL1 <span style="display:inline-table"><span style="display:table-row"><span style="display:table-cell">ROW1</span></span><span style="display:table-row"><span style="display:table-cell">ROW2</span></span></span> TBL2</p>
+<p>FLX1 <span style="display:inline-flex;align-items:center;height:60px">FLXIN</span> FLX2</p>
+<div>FLT1 <span style="display:inline-block"><div style="margin:20px 0">FLTIN</div><div style="float:left">x</div></span> FLT2</div>
+<div>NST1 <span style="display:inline-block"><div style="display:flex;align-items:center;height:60px">NSTIN</div></span> NST2</div>
+<p style="width:200px">Text <span style="display:inline-block">DROPDOWN<span style="position:absolute;top:0;left:300px;width:200px">one two three four five six seven eight nine ten eleven twelve</span></span> AFTER <span style="display:inline-block;background:#f80">B</span> TAILWORD and more words to wrap</p>
+<p>x <span style="display:inline-block">ib1<span style="position:absolute;top:100px;left:0"><span style="display:block"><span style="display:inline-block">A<span style="position:absolute;left:0;top:0">Z</span></span></span><span style="position:fixed;left:0;top:200px">FIXEDBOX</span></span></span></p>
+<p>DEEP1 <span style="display:inline-block"><span style="display:flex;align-items:center;height:60px"><span><span style="display:inline-block">DEEPIN</span></span></span></span> DEEP2</p>
+<form><label style="display:inline-block"><input type=checkbox name=d> Lab<span id=lpos style="position:absolute;left:400px;top:300px">LABPOS</span></label></form>
+<div style="height:40px"></div>
+<div>Anchor <span style="display:inline-block"><div id="inner">INNER</div></span></div>
+</body></html>
