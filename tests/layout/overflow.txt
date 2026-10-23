@@ -1,0 +1,94 @@
+page 608 x 644, background ffffff, 92 items, 1 links, title "Overflow"
+text 6,28 491x14 #000000 sans11 link 0 "A box two lines high hiding what overflows it (the red text below its foot is not drawn):"
+fill 6,41 212x30 #ffffdd
+clip x 8+208 y 43+26 in 0
+text 8,54 129x14 #000000 sans11 link 0 "Shown on its first line,"
+text 8,67 88x14 #000000 sans11 link 0 "and its second."
+text 8,80 61x14 #ff0000 sans11 link 0 "GONE ONE"
+text 8,93 62x14 #ff0000 sans11 link 0 "GONE TWO"
+text 74,93 61x14 #ff0000 sans11 link 1 "GONE LINK"
+fill 6,41 212x2 #000000
+fill 6,69 212x2 #000000
+fill 6,43 2x26 #000000
+fill 216,43 2x26 #000000
+text 6,93 533x14 #000000 sans11 link 0 "A carousel: a track 2000 pixels wide in a box hiding what overflows it (the page doesn't scroll"
+text 6,106 61x14 #000000 sans11 link 0 "sideways):"
+fill 6,119 212x28 #ffffdd
+clip x 8+208 y 121+24 in 0
+fill 8,121 200x24 #99ccff
+text 8,132 21x14 #000000 sans11 link 0 "one"
+fill 211,121 200x24 #99ccff
+text 211,132 20x14 #000000 sans11 link 0 "two"
+fill 414,121 200x24 #99ccff
+text 414,132 30x14 #000000 sans11 link 0 "three"
+fill 617,121 200x24 #99ccff
+text 617,132 23x14 #000000 sans11 link 0 "four"
+fill 6,119 212x2 #000000
+fill 6,145 212x2 #000000
+fill 6,121 2x24 #000000
+fill 216,121 2x24 #000000
+text 6,169 338x14 #000000 sans11 link 0 "A box positioned in it, its containing block the box: within it."
+fill 6,182 212x28 #ffffdd
+clip x 8+208 y 184+24 in 0
+text 8,195 27x14 #000000 sans11 link 0 "Here"
+fill 16,200 85x17 #00aa00
+text 18,213 81x14 #ffffff sans11 link 0 "CLIPPED DROP"
+fill 6,182 212x2 #000000
+fill 6,208 212x2 #000000
+fill 6,184 2x24 #000000
+fill 216,184 2x24 #000000
+text 6,232 361x14 #000000 sans11 link 0 "Its containing block outside the box: not within it (green below):"
+fill 6,245 212x28 #ffffdd
+clip x 8+208 y 247+24 in 0
+text 8,258 27x14 #000000 sans11 link 0 "Here"
+fill 14,261 91x17 #00aa00
+text 16,274 87x14 #ffffff sans11 link 0 "ESCAPED DROP"
+fill 6,245 212x2 #000000
+fill 6,271 212x2 #000000
+fill 6,247 2x24 #000000
+fill 216,247 2x24 #000000
+text 6,305 572x14 #000000 sans11 link 0 "overflow-x hidden: its y is auto, which shows all of it in EWeb (it grows); overflow-x clip: only across:"
+fill 6,318 212x43 #ffffdd
+clip x 8+208 y * in 0
+text 8,331 23x14 #000000 sans11 link 0 "One"
+text 8,344 20x14 #000000 sans11 link 0 "two"
+text 8,357 111x14 #000000 sans11 link 0 "THREE SHOWS TOO"
+fill 6,318 212x2 #000000
+fill 6,359 212x2 #000000
+fill 6,320 2x39 #000000
+fill 216,320 2x39 #000000
+fill 6,371 212x56 #ffffdd
+clip x 8+208 y * in 0
+text 8,384 23x14 #000000 sans11 link 0 "One"
+text 8,397 20x14 #000000 sans11 link 0 "two"
+text 8,410 82x14 #000000 sans11 link 0 "THREE SHOWS"
+text 8,423 324x14 #000000 sans11 link 0 "wide text goes past the box's right edge and is cut there"
+fill 6,371 212x2 #000000
+fill 6,425 212x2 #000000
+fill 6,373 2x52 #000000
+fill 216,373 2x52 #000000
+text 6,449 195x14 #000000 sans11 link 0 "Nested: an inner box hiding more:"
+fill 6,462 212x42 #ffffdd
+clip x 8+208 y 464+38 in 0
+fill 8,464 96x13 #ffcccc
+clip x 8+96 y 464+13 in 7
+text 8,475 56x14 #000000 sans11 link 0 "inner first"
+text 8,488 70x14 #ff0000 sans11 link 0 "GONE INNER"
+text 8,488 55x14 #000000 sans11 link 0 "outer text"
+text 8,501 30x14 #000000 sans11 link 0 "more"
+text 8,514 75x14 #ff0000 sans11 link 0 "GONE OUTER"
+fill 6,462 212x2 #000000
+fill 6,502 212x2 #000000
+fill 6,464 2x38 #000000
+fill 216,464 2x38 #000000
+text 6,526 330x14 #000000 sans11 link 0 "overflow auto: all of it shows (EWeb has no scrolling box):"
+fill 6,539 212x43 #ffffdd
+text 8,552 23x14 #000000 sans11 link 0 "One"
+text 8,565 20x14 #000000 sans11 link 0 "two"
+text 8,578 71x14 #000000 sans11 link 0 "three shows"
+fill 6,539 212x2 #000000
+fill 6,580 212x2 #000000
+fill 6,541 2x39 #000000
+fill 216,541 2x39 #000000
+text 6,625 50x14 #000000 sans11 link 0 "The end."
+link 1 file://./tests/layout/hidden.html

@@ -2886,6 +2886,7 @@ static void item(canvas *c, const page *p, const dl_item *d)
 {
 	int32_t top = c->oy, bottom = c->oy + c->h, left = c->ox, right = c->ox + c->w;
 	unsigned a;
+	canvas sub;
 	if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
 		return;
 	/* no alpha: nothing drawn (a transparent colour, opacity 0), the item
@@ -2895,7 +2896,26 @@ static void item(canvas *c, const page *p, const dl_item *d)
 	if (a == 0)
 		return;
 	item_a = a;
-	draw_item(c, p, d);
+	if (d->clip != 0) {
+		/* in a box hiding what overflows it: drawn within it, on a
+		   canvas of that part (its patterns keep their place: they are
+		   the page's) */
+		int32_t x0 = left, y0 = top, x1 = right, y1 = bottom;
+		/* (from the canvas, not the item: a glyph's ink past its
+		   item's edge is drawn where the box shows it) */
+		if (!page_clip(p, d->clip, &x0, &y0, &x1, &y1)) {
+			item_a = 255;
+			return;
+		}
+		sub = *c;
+		sub.pix = c->pix + (long) (y0 - c->oy) * c->stride + (long) (x0 - c->ox) * (c->bpp / 8);
+		sub.ox = x0;
+		sub.oy = y0;
+		sub.w = x1 - x0;
+		sub.h = y1 - y0;
+		c = &sub;
+	}
+	draw_item(c, p, d);	/* (one call: inlined) */
 	item_a = 255;
 }
 
@@ -2909,6 +2929,10 @@ static void canvas_bg(canvas *c, const page *p)
 	if ((d.type == DL_GRAD || (d.type == DL_IMAGE && (d.flags & DLF_TILE))) && d.tile != NULL && d.tile->ry &&
 	    c->oy + c->h > d.y + d.h)
 		d.h = c->oy + c->h - d.y;
+	/* and on to the right of a page scrolled sideways, past its width */
+	if ((d.type == DL_GRAD || (d.type == DL_IMAGE && (d.flags & DLF_TILE))) && d.tile != NULL && d.tile->rx &&
+	    c->ox + c->w > d.x + d.w)
+		d.w = c->ox + c->w - d.x;
 	item(c, p, &d);
 }
 

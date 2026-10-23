@@ -686,8 +686,8 @@ releases.
   - **positioning**: `relative` moves a box and keeps its place; `absolute` takes it out of the
     flow, at `left`, `right` and `top` in its nearest positioned ancestor (the page for `fixed`:
     EWeb has no viewport of its own), else where it would have been; text meant for screen readers
-    only (a box of a pixel hiding its overflow, or put far off the page) isn't drawn, as EWeb doesn't
-    clip;
+    only (a box of a pixel hiding its overflow, or put far off the page) isn't drawn (and since
+    23 Oct 2026 a box hiding what overflows it clips it: below);
   - **tables**: `rowspan` (a cell takes its columns in the rows below; the last of them grows to
     it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
     default, top, bottom) in cells, and columns too wide for the room keep their longest word,
@@ -2764,6 +2764,89 @@ positioned box in one, an inline-block whose line is only another, a label's pos
 and the page set
 with and without Bootstrap's and Pico's sheets under AddressSanitizer and UBSan: no fault.
 
+## Scrolling sideways (23 Oct 2026)
+
+Stage 2's fourth part. A page wider than the window (a table or a picture with a width of its
+own, a site laid out for a wide screen) was cut at the window's right edge. Now the layout notes
+how far right what it draws goes (`page.right`: its widest item, the canvas's picture aside; at
+most 16384 pixels; the window's width when the root or the body hides what overflows sideways,
+as many sites do to keep a phone from scrolling that way), and the window (`ui/win.c`) has a
+horizontal slider and arrows (the guidelines' "sliders where content scrolls"), and **Left** and
+**Right** move the page a little sideways, with **Shift** a window's width, when no field has the
+keyboard (there they move the cursor, as before). The page's column at the window's left
+(`left`) goes into drawing and into every place a point on the screen becomes one on the page
+and back (links, controls, a field's cursor, summaries, a script's click); what stays on the
+screen is moved with `vro_cpyfm` and only the new columns are drawn, as up and down; a control
+given the keyboard is brought into view sideways too. A new page starts at its left; one laid
+out again keeps its place, within its new width.
+
+Tested by `make hatarigui`'s `wide` group (the Falcon in 16 colours, TOS 4.04): a table 1400
+pixels wide; Right moves it sideways (the log's `sideways LEFT of MAX`), Shift+Right to its end,
+and a link that was off to the right, clicked where it is then, is followed.
+
+## Boxes that hide what overflows them (23 Oct 2026)
+
+Stage 2's fifth part, the first half of "boxes that scroll". A box with `overflow: hidden` or
+`clip` showed all of what was in it: a carousel's slides past its edge, the rest of a teaser cut
+to three lines, a menu folded to its first row, a picture cropped to a square. Now
+(`src/layout/layout.c`, `src/gfx/canvas.c`; CSS Overflow 3, 3 and 3.1):
+
+- **What it hides isn't drawn or clicked.** Such a box has a `DL_CLIP` item (its padding box,
+  placed once its height is known), and every item made in it carries it (`dl_item.clip`, 1 +
+  its place in `page.clips`); a box in another carries the outer one, so they chain
+  (`page_clip`). The canvas draws a clipped item on a canvas of what is left of it (its patterns
+  keep the page's place; a glyph's ink past its word's edge is drawn where the box shows it), and
+  a click outside it, or a script's, isn't one on its link, control, summary or element. Each
+  axis clips by its own value: an axis `visible` beside one `hidden` is `auto`, which doesn't clip
+  in EWeb. Its height is the one asked for when its `overflow-y` is `hidden` or `clip`; with
+  `auto` or `scroll` it grows with what is in it, as with `visible` (before, they kept the
+  height, and what was in them ran over the boxes below: a code block with `overflow-x: auto` and
+  a `max-height` over the paragraph after it).
+- **Positioned boxes:** an absolutely positioned box is within its containing block's clips and
+  those round it, not those of a box between the two (a dropdown placed against a box outside
+  the one hiding its overflow shows past it, as in every browser); a fixed box is within none.
+- **Moved with its box:** an inline-block, a float or a positioned box laid out at (0, 0) and
+  moved takes its clips with it, and a cell or a flex item stretched to its row's height
+  stretches its clip too (the fifth of a block's border items, `NBD`).
+- **The root's and the body's** are the window's: they clip nothing and keep no height for it
+  (`body { overflow-x: hidden; height: 100vh }` would have cut a long page at a screen's
+  height), and their `overflow-x: hidden` keeps the window from scrolling sideways (above). Rows
+  and their groups have no `overflow` (CSS 2.1, 11.1.1): a row's clipped nothing of a cell
+  over several rows.
+- **Pictures' alt text:** a picture with no size yet (or shown as its alt text) whose alt text
+  is wider than its line (a sentence of alt text in a narrow column) made the line, and the
+  page, as wide as the text; now it is cut at the line's width, once, as it is laid out (form
+  controls keep their widths). With it, and a page no more than 8 pixels wider than the window
+  taken as the window's width (a width rounded up), the page set's pages wider than the window
+  at 640 pixels went from 84 to 27 (tables and pictures of a width of their own: what
+  scrolling sideways is for).
+- **Left:** `auto` and `scroll` don't clip yet: all of what is in the box shows, as before (EWeb
+  has no box that scrolls by itself; that is the second half). `text-overflow: ellipsis`,
+  `overflow-clip-margin`, `clip-path` and the rounded clip of `border-radius` aren't done, and
+  pictures and form controls draw within their boxes as they did. Text for screen readers only
+  (a box of a pixel hiding what overflows it, or far off the page) still goes, with its clips.
+
+**Measured** (68030 instructions, drawbench, against the `@import` commit): the five pages of
+the page set that name `overflow: hidden` most (17 or 18 times) +0.09% to +0.21%, the news page
++0.09%, `tests/layout/tables.html` +0.12% (a box's two `overflow` values read, and each display
+item 2 bytes more: 50 on the Falcon, 46 on the ST); `tests/layout/overflow.html` 1.9% fewer, as
+what is hidden isn't drawn. The first version cost up to 0.47%: the alt text cut glyph by glyph
+each time it was drawn (now once), the canvas's drawing of an item no longer inlined (called
+from two places; one now), and a pass of its own over the items for `page.right` (now in the one
+that sorts them into strips).
+
+Tested by `tests/layout/overflow.html`, its list and `tests/layout/overflow.py` (no red pixel,
+so no hidden text drawn, in `EWEB.PRG`'s edition and the ST's; a hidden link not followed when
+clicked; a carousel's 2000-pixel track doesn't widen the page; a box positioned in one within it
+when the box is its containing block, past it when that is outside; and the review's cases,
+same day: a code block with `overflow-x: auto` and a `max-height`, the body's `overflow-x:
+hidden` with a height, a button wider than its box, a script's click on a box over hidden text,
+a row's `overflow`, italic text in a box hiding its overflow drawn as in one that doesn't),
+`tests/layout/floats.txt`
+(a float context hiding its overflow: its clip, drawn the same), the other lists unchanged,
+`make hatarigui` (TOS 4.04, every group), and the page set with and without Bootstrap's and
+Pico's sheets under AddressSanitizer and UBSan.
+
 ## `@import` (23 Oct 2026)
 
 Stage 2's third part. A sheet's `@import` was passed over, so a site whose sheets come through
@@ -3133,7 +3216,7 @@ out of both (their paths lead nowhere on the Atari).
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
-   (`overflow`), `@import` (done, above), scrolling sideways, `border-collapse` (done, above); **3.** reading: find in the
+   (`overflow`: hidden and clip done, above; auto and scroll next), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page, selecting and copying, history with visited links, a page drawn while it loads, Esc
    during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.

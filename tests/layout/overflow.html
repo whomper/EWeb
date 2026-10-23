@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Overflow</title>
+<style>
+body { margin: 8px; font: 14px/16px sans-serif }
+.box { width: 260px; border: 2px solid #000; background: #ffd; margin-bottom: 12px }
+.hidden { height: 32px; overflow: hidden }
+.gone { color: #f00 }
+.track { width: 2000px; white-space: nowrap }
+.slide { display: inline-block; width: 250px; height: 30px; background: #9cf; margin-right: 4px }
+.rel { position: relative; height: 30px; overflow: hidden }
+.esc { height: 30px; overflow: hidden }
+.drop { position: absolute; top: 20px; left: 10px; background: #0a0; color: #fff; padding: 2px }
+.xonly { overflow-x: hidden; height: 32px }
+.clipx { overflow-x: clip; height: 32px }
+.auto { overflow: auto; height: 32px }
+</style></head><body>
+<p>A box two lines high hiding what overflows it (the red text below its foot is not drawn):</p>
+<div class="box hidden">Shown on its first line,<br>and its second.<br><span class="gone">GONE ONE</span><br><span class="gone">GONE TWO</span> <a id=hidlink href="hidden.html" class="gone">GONE LINK</a></div>
+<p>A carousel: a track 2000 pixels wide in a box hiding what overflows it (the page doesn't scroll sideways):</p>
+<div class="box" style="overflow: hidden"><div class="track"><span class="slide">one</span><span class="slide">two</span><span class="slide">three</span><span class="slide">four</span></div></div>
+<p>A box positioned in it, its containing block the box: within it.</p>
+<div class="box rel">Here<span class="drop">CLIPPED DROP</span></div>
+<p>Its containing block outside the box: not within it (green below):</p>
+<div style="position: relative"><div class="box esc">Here<span class="drop">ESCAPED DROP</span></div></div>
+<p>overflow-x hidden: its y is auto, which shows all of it in EWeb (it grows); overflow-x clip: only across:</p>
+<div class="box xonly">One<br>two<br>THREE SHOWS TOO</div>
+<div class="box clipx">One<br>two<br>THREE SHOWS<div class="track">wide text goes past the box's right edge and is cut there</div></div>
+<p>Nested: an inner box hiding more:</p>
+<div class="box" style="overflow: hidden; height: 48px"><div style="overflow: hidden; height: 16px; width: 120px; background: #fcc">inner first<br><span class="gone">GONE INNER</span></div>outer text<br>more<br><span class="gone">GONE OUTER</span></div>
+<p>overflow auto: all of it shows (EWeb has no scrolling box):</p>
+<div class="box auto">One<br>two<br>three shows</div>
+<p style="margin-top: 40px">The end.</p>
+</body></html>

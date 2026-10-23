@@ -27,6 +27,8 @@
 
 #define AUTO INT32_MIN
 #define MAXCOLS 64			/* a table's columns that line up; more go as they come */
+#define NBD 5				/* a block's border items (top, bottom, left, right) and
+					   its clip (DL_CLIP), for a row or a flex line to stretch */
 
 /* ---------------------------------------------------------------- memory */
 
@@ -212,14 +214,14 @@ typedef struct {
 	long nibx, ibxcap;
 	/* the last block laid out: its background and border items (-1:
 	   none), for a row to stretch its cells to the row's height */
-	long last_bg, last_bd[4];
+	long last_bg, last_bd[NBD];
 	/* the table being laid out: per column, the rows a cell from above
 	   still takes, and for the cell's first column where it began */
 	struct span {
 		int rows;
 		int head;		/* the cell's first column */
 		int32_t top, h;		/* its row's top and its height */
-		long bg, bd[4], k0, k1;	/* its background, borders and items */
+		long bg, bd[NBD], k0, k1;	/* its background, borders and items */
 		int va;			/* its vertical-align */
 	} *spans;
 	/* the table being laid out when its borders collapse (else NULL):
@@ -254,6 +256,8 @@ typedef struct {
 					   drawn in when its own is transparent; 0: none */
 	int32_t last_base;		/* the last line's baseline laid out (an inline-block's) */
 	long last_k;			/* its line's first item (moved with it: shift_range, cell_shift) */
+	uint16_t ovf, cbovf;		/* the items' clip (dl_item.clip) now, and the
+					   containing block's (cbx): a positioned box's */
 	uint16_t ctl_in;		/* a label's control: its blocks' text's (a block or
 					   inline-block label, or an inline-block in one) */
 	/* boxes laid out at (0, 0) and then moved where they go (inline-
@@ -604,7 +608,76 @@ static dl_item *dl_add(L *l)
 		p->cap = cap;
 	}
 	memset(&p->items[p->nitems], 0, sizeof p->items[0]);
+	p->items[p->nitems].clip = l->ovf;
 	return &p->items[p->nitems++];
+}
+
+/* a box that hides what overflows it: a DL_CLIP item for its padding
+   box (placed by clip_set once its size is known), and the items made
+   in it from now on drawn and clicked within it (l->ovf). -1 when there
+   are as many as can be (65535: the rest not clipped) */
+static long clip_open(L *l)
+{
+	page *p = l->p;
+	dl_item *d;
+	if (p->nclips >= 65535)
+		return -1;
+	if (p->nclips == p->clipcap) {
+		long cap = p->clipcap ? p->clipcap * 2 : 32;
+		long *n = realloc(p->clips, cap * sizeof *n);
+		if (n == NULL) {
+			l->fail = 1;
+			return -1;
+		}
+		p->clips = n;
+		p->clipcap = cap;
+	}
+	d = dl_add(l);
+	if (d == NULL)
+		return -1;
+	d->type = DL_CLIP;
+	d->flags = DLF_NOHIT;
+	p->clips[p->nclips++] = p->nitems - 1;
+	l->ovf = (uint16_t) p->nclips;
+	return p->nitems - 1;
+}
+
+#define CLIP_FAR (1L << 28)	/* an axis not clipped: as far as can be */
+
+/* its place: the padding box (x, y, w, h) on the axes it clips */
+static void clip_set(L *l, long k, int cx, int cy, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	dl_item *d = &l->p->items[k];
+	d->x = cx ? x : -CLIP_FAR;
+	d->w = cx ? (w > 0 ? w : 0) : 2 * CLIP_FAR;
+	d->y = cy ? y : -CLIP_FAR;
+	d->h = cy ? (h > 0 ? h : 0) : 2 * CLIP_FAR;
+}
+
+int page_clip(const page *p, unsigned clip, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1)
+{
+	unsigned k = clip;
+	int n = 0;
+	while (k != 0 && k <= (unsigned long) p->nclips && n++ < 256) {
+		const dl_item *c = &p->items[p->clips[k - 1]];
+		if (c->x > *x0)
+			*x0 = c->x;
+		if (c->y > *y0)
+			*y0 = c->y;
+		if (c->x + c->w < *x1)
+			*x1 = c->x + c->w;
+		if (c->y + c->h < *y1)
+			*y1 = c->y + c->h;
+		k = c->clip;
+	}
+	return *x0 < *x1 && *y0 < *y1;
+}
+
+/* is (x, y) within the boxes hiding what overflows them that d is in */
+static int in_clips(const page *p, const dl_item *d, int32_t x, int32_t y)
+{
+	int32_t x0 = x, y0 = y, x1 = x + 1, y1 = y + 1;
+	return d->clip == 0 || page_clip(p, d->clip, &x0, &y0, &x1, &y1);
 }
 
 #ifndef EW_ST
@@ -1985,6 +2058,27 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			it = &l->it[l->nit - 1];
 			it->atom = c;
 			it->dir = (uint8_t) word_dir_in(l, c->text, c->len);
+			if (c->text != NULL && l->cw != AUTO && it->w > l->cw && l->cw > 0) {
+				/* a picture's alt text (one without a size yet, or
+				   none): no wider than the line, its text cut there
+				   (it->len, drawn by draw_atom), as a browser shows
+				   it in its box */
+				int32_t iw, ih, tw = 0;
+				if (c->atom == AT_LABEL ||
+				    (c->atom == AT_IMAGE && (image_size(l, c, &iw, &ih), iw <= 0 || ih <= 0))) {
+					const char *p = c->text, *e = p + c->len;
+					it->w = l->cw;
+					while (p < e) {
+						const char *q = p;
+						int32_t a = font_advance(it->font, utf8_next(&q, e));
+						if (tw + a > it->w)
+							break;
+						tw += a;
+						p = q;
+					}
+					it->len = (uint32_t) (p - c->text);
+				}
+			}
 			if (c->atom == AT_IMAGE) {
 				int32_t iw, ih;
 				image_size(l, c, &iw, &ih);
@@ -2571,7 +2665,8 @@ static void draw_atom(L *l, ITEM *it, int32_t x, int32_t base)
 		ITEM t = *it;
 		t.color = fade(0xff606060, it->alpha);
 		t.flags &= (uint8_t) ~(DLF_UNDER);
-		text(l, x, base + it->shift, &t, b->text, b->len, it->w);
+		/* (it->len: as much of it as its width holds, collect) */
+		text(l, x, base + it->shift, &t, b->text, it->len, it->w);
 	}
 }
 
@@ -3631,6 +3726,8 @@ static void stretch(L *l, long bg, const long *bd, int32_t dh)
 		it[bd[2]].h += dh;
 	if (bd[3] >= 0)
 		it[bd[3]].h += dh;
+	if (bd[4] >= 0)
+		it[bd[4]].h += dh;	/* its clip (DL_CLIP) */
 }
 
 /* a cell's content (its items from k0 to k1, but its background and
@@ -3647,9 +3744,9 @@ static void cell_shift(L *l, long k0, long k1, long bg, const long *bd, int32_t 
 		if (k == bg || (bg >= 0 && k == bg + 1 && l->p->items[bg].type == DL_FILL &&
 				(l->p->items[bg].flags & DLF_TILE)))
 			continue;
-		for (j = 0; j < 4 && bd[j] != k; j++)
+		for (j = 0; j < NBD && bd[j] != k; j++)
 			;
-		if (j == 4)
+		if (j == NBD)
 			l->p->items[k].y += dy;
 	}
 }
@@ -3927,7 +4024,7 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	int32_t colx[MAXCOLS + 1];
 	box **kids;
 	int *start = NULL, above[MAXCOLS];
-	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[4] = NULL;
+	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[NBD] = NULL;
 	int32_t *hh = NULL, *fb = NULL, rbase = AUTO;
 	int fi = -1;
 	BEDGE (*ce)[4] = NULL;		/* its cells' borders where they collapse */
@@ -4223,7 +4320,8 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	int fixed = kw(c->st, EP_POSITION) == KW_FIXED;
 	int32_t cbx = fixed ? 0 : l->cbx, cby = fixed ? 0 : l->cby, cbw = fixed ? l->p->width : l->cbw;
 	int32_t left, right, top, wf, mb, f = AUTO, ax, ay, lb = l->last_base;
-	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k;
+	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k, c0 = l->p->nclips;
+	uint16_t ovf;
 	if ((fixed ? 0 : l->cbmov) < l->mov) {
 		/* in a box laid out at (0, 0) to be moved, its containing block
 		   outside it: placed once that box has moved (place_later) */
@@ -4257,9 +4355,12 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	if (wf < 1)
 		wf = 1;
 	f0 = l->nlater;
+	ovf = l->ovf;
+	l->ovf = fixed ? 0 : l->cbovf;	/* within its containing block's clips, no others */
 	l->mov++;
 	layout_block(l, c, 0, 0, wf, 1, &mb, &f);
 	l->mov--;
+	l->ovf = ovf;
 	f1 = l->nlater;
 	l->last_base = lb;
 	l->last_k = lk;
@@ -4269,12 +4370,14 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	ay = top != AUTO ? cby + top : sy;
 	{
 		/* text for screen readers only: a box of a pixel that hides
-		   what overflows it, or put far off the page. EWeb doesn't clip,
-		   so it would be drawn over the page: it goes */
+		   what overflows it, or put far off the page: nothing to see,
+		   so it goes (and the clips it opened: none of their items is
+		   left) */
 		int32_t cw = len(l, c->st, EP_WIDTH, cbw), chh = len(l, c->st, EP_HEIGHT, AUTO);
 		int hides = kw(c->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(c->st, EP_OVERFLOW_Y) != KW_VISIBLE;
 		if ((hides && ((cw != AUTO && cw <= 2) || (chh != AUTO && chh <= 2))) || ax + wf <= 0 || ay < -1000) {
 			l->p->nitems = k0;
+			l->p->nclips = c0;
 #ifndef EW_ST
 			l->p->nblocks = b0;
 #endif
@@ -4342,7 +4445,7 @@ typedef struct {
 	int32_t grow, shrink;			/* ec_fx */
 	int32_t pos, cross, f;			/* its place on its line; laid out: across, its first baseline */
 	int32_t top;				/* where it was laid out across */
-	long k0, k1, bg, bd[4];
+	long k0, k1, bg, bd[NBD];
 	int line, frozen, align, autos, order;
 } FITEM;
 
@@ -4792,7 +4895,7 @@ typedef struct {
 	box *b;
 	int r0, r1, c0, c1;			/* its area: rows r0..r1-1, columns c0..c1-1 */
 	int32_t h, f, top;			/* laid out: outer height, baseline, top */
-	long k0, k1, bg, bd[4];
+	long k0, k1, bg, bd[NBD];
 	int ja, aa;				/* justify-self, align-self */
 } GITEM;
 
@@ -5476,10 +5579,14 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int vis = b->anon || kw(s, EP_VISIBILITY) == KW_VISIBLE;	/* its background and borders drawn */
 	uint16_t saved_ctl = l->ctl_in;
 	struct coll *coll = NULL, *saved_coll = l->coll;
+	uint16_t saved_ovf = l->ovf, saved_cbovf = l->cbovf;
+	long ck = -1;			/* its DL_CLIP item, when it hides what overflows it */
+	int clip_x = 0, clip_y = 0;
+	int ox = KW_VISIBLE, oy = KW_VISIBLE;	/* its overflow-x and -y (not an anonymous box's) */
 	BEDGE te[4];			/* a table's own borders, when they collapse */
 	const BEDGE *ov = NULL;		/* a cell's, as they collapse */
 	int collapsed = 0;		/* a table whose borders collapse */
-	long bd[4] = { -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
+	long bd[NBD] = { -1, -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
 	struct span *saved_spans = l->spans;
 	unsigned saved_alpha = l->alpha;
 	uint32_t saved_clip = l->clip;
@@ -5694,6 +5801,26 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	cy = y + mt + bt + pt;
 	if (b->n != NULL && !b->anon && b->n->tag == T_LABEL && b->n->ns == DN_NS_HTML)
 		l->ctl_in = label_for(l, b->n);	/* a click on its text is one on its control */
+	if (!b->anon) {
+		/* its overflow (CSS Overflow 3): the root's and the body's are
+		   the window's, and rows and their groups have none */
+		ox = kw(s, EP_OVERFLOW_X);
+		oy = kw(s, EP_OVERFLOW_Y);
+		if ((ox != KW_VISIBLE || oy != KW_VISIBLE) &&
+		    (b->tablerow || row_group(b) || b->n == l->p->d->html || b->n == l->p->d->body))
+			ox = oy = KW_VISIBLE;
+	}
+	if ((ox == KW_HIDDEN || ox == KW_CLIP || oy == KW_HIDDEN || oy == KW_CLIP) && !ctlbox && !b->repl) {
+		/* hidden or clip: what is in it drawn and clicked within its
+		   padding box on that axis. Auto and scroll (and visible beside
+		   hidden, which is auto) don't clip: EWeb has no box scrolling
+		   by itself yet, so all of what is in one shows */
+		clip_x = ox == KW_HIDDEN || ox == KW_CLIP;
+		clip_y = oy == KW_HIDDEN || oy == KW_CLIP;
+		ck = clip_open(l);
+	}
+	if (pos != KW_STATIC && pos != KW_STICKY)
+		l->cbovf = l->ovf;	/* what is positioned in it: within its clips */
 	if (b->table) {
 		l->cols = table_cols;
 		l->ncols = table_n;
@@ -5806,21 +5933,28 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	if ((b->list & LB_ITEM) && kw(s, EP_LIST_STYLE_POSITION) != KW_INSIDE)
 		marker(l, b, cx, w, fb != AUTO ? fb : cy + font_of(l, s)->ascent);
 	if (!b->anon) {
+		/* (its content taller than its height makes it taller, but
+		   where overflow-y hides it: there it keeps its height. Auto and
+		   scroll grow too, as all of what is in them shows) */
+		int keep = oy == KW_HIDDEN || oy == KW_CLIP;
 		hp = len(l, s, EP_HEIGHT, AUTO);
 		if (hp != AUTO) {
 			if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 				hp -= bt + bb + pt + pb;
-			if (hp > ch || (kw(s, EP_OVERFLOW_Y) != KW_VISIBLE && hp >= 0))
+			if (hp > ch || (keep && hp >= 0))
 				ch = hp < 0 ? 0 : hp;
 		}
 		mn = len(l, s, EP_MIN_HEIGHT, AUTO);
 		if (mn != AUTO && ch < mn)
 			ch = mn;
 		mx = len(l, s, EP_MAX_HEIGHT, AUTO);
-		if (mx != AUTO && ch > mx && kw(s, EP_OVERFLOW_Y) != KW_VISIBLE)
+		if (mx != AUTO && ch > mx && keep)
 			ch = mx;
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
+		if (ck >= 0)
+			clip_set(l, ck, clip_x, clip_y, x + ml + bl, y + mt + bt, pl + w + pr, pt + ch + pb);
+		l->ovf = saved_ovf;	/* (its own background and borders not within it) */
 		{
 			int32_t in[4];
 			in[0] = in_l;
@@ -5878,10 +6012,13 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	if (pos != KW_STATIC && pos != KW_STICKY) {
 		l->cbmov = saved_cbmov;
+		l->cbovf = saved_cbovf;
 		l->cbx = saved_cbx;
 		l->cby = saved_cby;
 		l->cbw = saved_cbw;
 	}
+	l->ovf = saved_ovf;
+	bd[4] = ck;
 	l->last_bg = bgi >= 0 ? bgi : bgp;
 	memcpy(l->last_bd, bd, sizeof bd);
 	l->alpha = saved_alpha;
@@ -5893,14 +6030,38 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 
 /* ---------------------------------------------------------------- the page */
 
+#define RIGHT_MAX 16384		/* the widest a page scrolls to (device px) */
+#define RIGHT_SLACK 8		/* past the window by no more: not scrolled to */
+
 /* the items by strips of the page, so that drawing a part of it looks
-   only at the items there */
-static void index_items(page *p)
+   only at the items there; and how far right they go (page.right: wide,
+   else the page's width), the canvas's picture (cbg) aside */
+static void index_items(page *p, int wide, long cbg)
 {
 	long i, k, n = 0, bottom = p->height;
-	for (i = 0; i < p->nitems; i++)
-		if (p->items[i].y + p->items[i].h > bottom)
-			bottom = p->items[i].y + p->items[i].h;
+	int32_t right = p->width;
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		int32_t x0, y0, x1, y1;
+		if (d->type == DL_CLIP)
+			continue;	/* (not drawn: in no strip) */
+		if (d->y + d->h > bottom)
+			bottom = d->y + d->h;
+		if (d->x + d->w <= right || !wide || i == cbg || d->w <= 0)
+			continue;
+		/* (what a box hiding what overflows it hides: not shown) */
+		x0 = d->x;
+		y0 = d->y;
+		x1 = d->x + d->w;
+		y1 = d->y + d->h;
+		if (d->clip && !page_clip(p, d->clip, &x0, &y0, &x1, &y1))
+			continue;
+		if (x1 > right)
+			right = x1;
+	}
+	/* (no further than something put far off to the right; not for the
+	   few pixels a width rounded up goes past the window) */
+	p->right = right > RIGHT_MAX ? RIGHT_MAX : right <= p->width + RIGHT_SLACK ? p->width : right;
 	p->nstrips = bottom / PAGE_STRIP + 1;
 	p->strip = calloc((size_t) p->nstrips + 1, sizeof *p->strip);
 	if (p->strip == NULL)
@@ -5909,6 +6070,8 @@ static void index_items(page *p)
 	for (i = 0; i < p->nitems; i++) {
 		const dl_item *d = &p->items[i];
 		long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP, s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
+		if (d->type == DL_CLIP)
+			continue;
 		for (k = s0; k <= s1; k++)
 			p->strip[k + 1]++;
 		n += s1 - s0 + 1;
@@ -5933,11 +6096,24 @@ static void index_items(page *p)
 		for (i = 0; i < p->nitems; i++) {
 			const dl_item *d = &p->items[i];
 			long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP, s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
+			if (d->type == DL_CLIP)
+				continue;
 			for (k = s0; k <= s1; k++)
 				p->sidx[at[k]++] = i;
 		}
 		free(at);
 	}
+}
+
+/* the root or the body hides what overflows it sideways (overflow-x
+   hidden or clip): the window doesn't scroll that way */
+static int hides_x(const dnode *n)
+{
+	int o;
+	if (n == NULL || n->e.style == NULL)
+		return 0;
+	o = kw(n->e.style, EP_OVERFLOW_X);
+	return o == KW_HIDDEN || o == KW_CLIP;
 }
 
 page *layout_page(doc *d, const LAYOUT_OPT *o)
@@ -6019,7 +6195,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		page_free(p);
 		return NULL;
 	}
-	index_items(p);
+	index_items(p, !hides_x(html) && !hides_x(d->body), cbg);
 	return p;
 }
 
@@ -6028,6 +6204,7 @@ void page_free(page *p)
 	if (p == NULL)
 		return;
 	free(p->items);
+	free(p->clips);
 	free(p->links);
 	free(p->ctls);
 #ifndef EW_ST
@@ -6058,7 +6235,7 @@ dnode *page_node_at(const page *p, int32_t x, int32_t y)
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
 		if (d->node != NULL && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h)
+		    y < d->y + d->h && in_clips(p, d, x, y))
 			return d->node;
 	}
 	/* the innermost block there: the smallest of those holding it; of
@@ -6133,7 +6310,7 @@ int page_link_at(const page *p, int32_t x, int32_t y)
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
 		if (d->link && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h)
+		    y < d->y + d->h && in_clips(p, d, x, y))
 			return d->link - 1;
 	}
 	return -1;
@@ -6145,7 +6322,7 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
 		if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h) {
+		    y < d->y + d->h && in_clips(p, d, x, y)) {
 			if (it != NULL)
 				*it = d;
 			return p->ctls[d->ctl - 1];
@@ -6163,6 +6340,7 @@ dnode *page_summary_at(const page *p, int32_t x, int32_t y)
 	for (i = p->nitems - 1; i >= 0; i--) {
 		const dl_item *d = &p->items[i];
 		if (d->type == DL_SUM && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
+		    in_clips(p, d, x, y) &&
 		    (best < 0 || (int64_t) d->w * d->h < (int64_t) p->items[best].w * p->items[best].h))
 			best = i;
 	}

@@ -523,11 +523,13 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 {
 	short y0;
 	canvas c;
+	long words;
 
 	if (area->w <= 0 || area->h <= 0)
 		return;
 	memset(&c, 0, sizeof c);
 	c.w = area->w > band_w ? (int32_t) band_w : area->w;
+	words = (c.w + 15) / 16;	/* (only as wide as the area: a strip scrolled in is narrow) */
 	c.ox = px;
 	c.pen = pen;
 	c.shade = shade;
@@ -539,20 +541,20 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		c.oy = py + y0;
 		if (truecolour) {
 			c.pix = (uint8_t *) dev_buf;
-			c.stride = band_w * 2;
+			c.stride = words * 16 * 2;
 			c.bpp = 16;
 		} else {
 			c.pix = chunky;
-			c.stride = band_w;
+			c.stride = words * 16;
 			c.bpp = 8;
 		}
 		if (p != NULL) {
 			cv_page(&c, p);
 		} else if (truecolour) {
-			memset(dev_buf, 0xff, band_w * 2 * h);
+			memset(dev_buf, 0xff, words * 16 * 2 * h);
 		} else {
-			memset(chunky, pen(NULL, 0xffffff), band_w * h);
+			memset(chunky, pen(NULL, 0xffffff), words * 16 * h);
 		}
-		put(h, band_w / 16, 0, (short) c.w, area->x, area->y + y0);
+		put(h, words, 0, (short) c.w, area->x, area->y + y0);
 	}
 }

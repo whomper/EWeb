@@ -1270,7 +1270,7 @@ static void set_zoom(int z)
 		br_relayout(&br, win_page_w());
 		graf_mouse(ARROW, 0);
 	}
-	win_scroll_to(win_top());
+	win_page_clamp();
 	win_redraw(NULL);
 }
 

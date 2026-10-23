@@ -42,7 +42,8 @@ def dump(page, more=()):
     # the list's lines only: Hubbub prints its states too, with its
     # assertions on (make test's build)
     keep = [line for line in p.stdout.splitlines()
-            if line.split(" ", 1)[0] in ("page", "fill", "text", "link", "image", "background", "gradient", "summary")]
+            if line.split(" ", 1)[0] in ("page", "fill", "text", "link", "image", "background", "gradient", "summary",
+                                         "clip", "wider:")]
     return "\n".join(keep).replace("file://" + ROOT + "/", "file://./") + "\n"
 
 

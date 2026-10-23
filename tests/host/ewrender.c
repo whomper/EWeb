@@ -1036,6 +1036,13 @@ int main(int argc, char **argv)
 		long k;
 		printf("page %d x %d, background %06lx, %ld items, %d links, title \"%s\"\n", (int) p->width,
 		       (int) p->height, (unsigned long) p->bg, p->nitems, p->nlinks, b.d->title);
+		if (p->right > p->width)
+			printf("wider: to %d (the window scrolls sideways)\n", (int) p->right);
+		if (getenv("EWR_CLIPS") != NULL)	/* (each item's clip, for debugging) */
+			for (k = 0; k < p->nitems; k++)
+				if (p->items[k].clip)
+					printf("item %ld type %d at %d,%d in clip %d\n", k, p->items[k].type,
+					       (int) p->items[k].x, (int) p->items[k].y, p->items[k].clip);
 		if (verbose)
 			printf("address %s, security \"%s\"\n", b.url, b.security);
 		for (k = 0; k < p->nitems; k++) {
@@ -1060,7 +1067,19 @@ int main(int argc, char **argv)
 				       it->tile ? (int) it->tile->w : 0, it->tile ? (int) it->tile->h : 0,
 				       it->tile && it->tile->rx ? " across" : "", it->tile && it->tile->ry ? " down" : "",
 				       img_url(it->img), alpha_of(it));
-			else if (it->type == DL_SUM)
+			else if (it->type == DL_CLIP) {
+				/* (a box hiding what overflows it; * an axis it doesn't clip) */
+				char cx[32], cy[32];
+				if (it->w > (1L << 28))
+					snprintf(cx, sizeof cx, "*");
+				else
+					snprintf(cx, sizeof cx, "%d+%d", (int) it->x, (int) it->w);
+				if (it->h > (1L << 28))
+					snprintf(cy, sizeof cy, "*");
+				else
+					snprintf(cy, sizeof cy, "%d+%d", (int) it->y, (int) it->h);
+				printf("clip x %s y %s in %d\n", cx, cy, (int) it->clip);
+			} else if (it->type == DL_SUM)
 				/* (a details' summary: where a click opens and closes it) */
 				printf("summary %d,%d %dx%d %s %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
 				       dn_attr(it->det, "open") ? "open" : "closed",

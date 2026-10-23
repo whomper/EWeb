@@ -275,8 +275,11 @@ lays the page out again for the new width.
 
 ## Moving around a page
 
-- the slider and the window's arrows
+- the sliders and the window's arrows (the one along the foot moves a
+  page wider than the window sideways)
 - **Up** and **Down**: a few lines; with **Shift**, a page
+- **Left** and **Right**: a page wider than the window a little
+  sideways; with **Shift**, a window's width
 - **Space**: a page down; **Shift-Space**: a page up
 - **ClrHome**: the top; **Shift-ClrHome**: the end
 - a link to a place on the same page (`#...`) scrolls there, opening
@@ -364,6 +367,7 @@ choose all of it.
 | ^R | reload |
 | Esc | stop a page loading, or its pictures; stay on a page that would go on |
 | Up, Down | scroll; with Shift, a page |
+| Left, Right | scroll a wide page sideways; with Shift, a window's width |
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |
 | ^+ ^- ^0 | larger, smaller, as it was |

@@ -33,8 +33,10 @@ typedef struct {
 } LAYOUT_OPT;
 
 /* DL_SUM: a details element's summary (the HTML Standard, 4.11): its
-   box, drawn not at all (rgb's AA 0), where a click opens and closes det */
-enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM };
+   box, drawn not at all (rgb's AA 0), where a click opens and closes det.
+   DL_CLIP: a box that hides what overflows it (CSS Overflow 3), drawn not
+   at all: the items in it (clip) are drawn and clicked within it */
+enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP };
 #define DLF_RTL   1			/* a right-to-left word: its letters drawn last to first */
 #define DLF_UNDER 2			/* text-decoration */
 #define DLF_OVER  4
@@ -72,6 +74,9 @@ typedef struct dl_item {
 	uint16_t ctl;			/* 1 + index into page.ctls: a form control's content
 					   (DL_CTL, drawn from its state), or a picture that is
 					   a submit button (DL_IMAGE); 0: none */
+	uint16_t clip;			/* 1 + index into page.clips: the box hiding what
+					   overflows it that the item is drawn and clicked
+					   within (and that box's, within its own); 0: none */
 	ew_font *font;
 	union {
 		const char *text;	/* UTF-8, kept by the page */
@@ -107,6 +112,13 @@ typedef struct page {
 	long *strip, *sidx;
 	long nstrips;
 	int32_t width, height;		/* device px */
+	/* DL_CLIP items (a box with overflow hidden or clip: its padding box,
+	   an axis it doesn't clip as wide as can be): their indexes into items */
+	long *clips;
+	long nclips, clipcap;
+	int32_t right;			/* how far right what it draws goes (>= width; a
+					   window scrolls sideways that far), width when the
+					   root or the body hides what overflows sideways */
 	uint32_t bg;			/* what the page is drawn on (0xRRGGBB) */
 	long cbg;			/* the canvas's background picture or gradient item (the
 					   root's or the body's), drawn on past the page's foot
@@ -133,6 +145,10 @@ typedef struct page {
 /* a gradient's colour where it can't be drawn: its stops' colours
    mixed evenly (premultiplied), 0xAARRGGBB; cur is currentcolor's */
 uint32_t grad_average(const ec_grad *g, uint32_t cur);
+
+/* the rectangle x0, y0 to x1, y1 cut to the boxes hiding what overflows
+   them that clip (a dl_item's) names: 0 if none of it is left */
+int page_clip(const page *p, unsigned clip, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1);
 
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);

@@ -33,12 +33,14 @@
 short win_h = -1;
 short win_iconified;
 
-#define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | UPARROW | DNARROW | VSLIDE)
+#define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | UPARROW | DNARROW | VSLIDE | LFARROW | RTARROW | HSLIDE)
 #define POINT_HAND 3
 #define TEXT_CRSR  1
 
 static GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
 static int32_t top;			/* the page's row at r_page's top */
+static int32_t left;			/* its column at r_page's left (a page wider than
+					   the window: page.right) */
 static void redraw(const GRECT *area, int parts);
 static char info[160];			/* the status bar's text as set (Atari text) */
 static char title[160];
@@ -488,7 +490,7 @@ static void draw_page(GRECT *clip)
 	GRECT r = r_page;
 	if (!rect_and(&r, clip))
 		return;
-	scr_page(br.p, &r, r.x - r_page.x, top + (r.y - r_page.y));
+	scr_page(br.p, &r, left + (r.x - r_page.x), top + (r.y - r_page.y));
 }
 
 /* area of the window, through its rectangle list */
@@ -574,14 +576,24 @@ static int32_t max_top(void)
 	return m > 0 ? m : 0;
 }
 
+/* how far it scrolls sideways */
+static int32_t max_left(void)
+{
+	int32_t w = br.p ? br.p->right : 0, m = w - r_page.w;
+	return m > 0 ? m : 0;
+}
+
 static void sliders(void)
 {
-	int32_t h = br.p ? br.p->height : 0, m = max_top();
+	int32_t h = br.p ? br.p->height : 0, m = max_top(), w = br.p ? br.p->right : 0, mw = max_left();
 	short size = (short) (h > r_page.h ? (int32_t) ((int64_t) 1000 * r_page.h / h) : 1000);
+	short wsize = (short) (w > r_page.w ? (int32_t) ((int64_t) 1000 * r_page.w / w) : 1000);
 	if (win_h <= 0 || win_iconified)
 		return;
 	wind_set(win_h, WF_VSLSIZE, size < 30 ? 30 : size, 0, 0, 0);
 	wind_set(win_h, WF_VSLIDE, (short) (m > 0 ? (int32_t) ((int64_t) 1000 * top / m) : 0), 0, 0, 0);
+	wind_set(win_h, WF_HSLSIZE, wsize < 30 ? 30 : wsize, 0, 0, 0);
+	wind_set(win_h, WF_HSLIDE, (short) (mw > 0 ? (int32_t) ((int64_t) 1000 * left / mw) : 0), 0, 0, 0);
 }
 
 /* the window is in front and nothing covers it: one rectangle */
@@ -651,6 +663,61 @@ void win_scroll_by(int32_t dy)
 	win_scroll_to(top + dy);
 }
 
+/* sideways, to column x: what stays on the screen moves, as up and down */
+static void scroll_x_to(int32_t x)
+{
+	int32_t m = max_left(), dx;
+	if (x > m)
+		x = m;
+	if (x < 0)
+		x = 0;
+	dx = x - left;
+	if (dx == 0)
+		return;
+	left = x;
+	sliders();
+	log_event("sideways %ld of %ld", (long) left, (long) m);
+	if (win_iconified || win_h <= 0)
+		return;
+	if ((dx < 0 ? -dx : dx) < r_page.w && all_visible() &&
+	    r_page.y + r_page.h <= scr_h && r_page.x + r_page.w <= scr_w) {
+		MFDB s;
+		short pxy[8], d = (short) (dx < 0 ? -dx : dx);
+		GRECT fresh = r_page;
+		memset(&s, 0, sizeof s);
+		wind_update(BEG_UPDATE);
+		graf_mouse(M_OFF, 0);
+		clip_on(&r_page);
+		pxy[1] = pxy[5] = r_page.y;
+		pxy[3] = pxy[7] = r_page.y + r_page.h - 1;
+		if (dx > 0) {
+			pxy[0] = r_page.x + d;
+			pxy[2] = r_page.x + r_page.w - 1;
+			pxy[4] = r_page.x;
+			pxy[6] = r_page.x + r_page.w - 1 - d;
+			fresh.x = r_page.x + r_page.w - d;
+		} else {
+			pxy[0] = r_page.x;
+			pxy[2] = r_page.x + r_page.w - 1 - d;
+			pxy[4] = r_page.x + d;
+			pxy[6] = r_page.x + r_page.w - 1;
+		}
+		fresh.w = d;
+		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
+		draw_page(&fresh);
+		clip_off();
+		graf_mouse(M_ON, 0);
+		wind_update(END_UPDATE);
+		return;
+	}
+	win_redraw_page();
+}
+
+static int32_t col_step(void)
+{
+	return gl_wchar * 4;
+}
+
 /* a picture came: the part of the page from y0 to y1 drawn again, where
    it is in the window */
 void win_page_drawn(int32_t y0, int32_t y1)
@@ -675,6 +742,18 @@ void win_page_relaid(void)
 	win_page_relaid_at(top);
 }
 
+/* the page laid out again where it is (another text size): its place
+   kept, within its new height and width; drawn by the caller */
+void win_page_clamp(void)
+{
+	if (top > max_top())
+		top = max_top();
+	if (left > max_left())
+		left = max_left();
+	br_scrolled(&br, top);
+	sliders();
+}
+
 void win_page_relaid_at(int32_t y)
 {
 	top = y;
@@ -682,6 +761,8 @@ void win_page_relaid_at(int32_t y)
 		top = max_top();
 	if (top < 0)
 		top = 0;
+	if (left > max_left())
+		left = max_left();
 	br_scrolled(&br, top);
 	sliders();
 	win_redraw_page();
@@ -910,7 +991,7 @@ static int ctl_rect(const fctl *c, GRECT *r)
 	const dl_item *it;
 	if (br.p == NULL || (it = page_ctl_item(br.p, c)) == NULL)
 		return 0;
-	r->x = (short) (r_page.x + it->x - 1);
+	r->x = (short) (r_page.x + it->x - left - 1);
 	r->y = (short) (r_page.y + it->y - top - 1);
 	r->w = (short) (it->w + 2);
 	r->h = (short) (it->h + 2);
@@ -934,6 +1015,10 @@ static void ctl_show(const fctl *c)
 		win_scroll_to(it->y - 8);
 	else if (it->y + it->h > top + r_page.h)
 		win_scroll_to(it->y + it->h - r_page.h + 8);
+	if (it->x < left)
+		scroll_x_to(it->x - 8);
+	else if (it->x + it->w > left + r_page.w)
+		scroll_x_to(it->x + it->w - r_page.w + 8);
 }
 
 static int typed;		/* the field with the keyboard was typed in: change when it goes */
@@ -1095,7 +1180,7 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 		/* where on a picture, in its own pixels */
 		int32_t x = 0, y = 0;
 		if (c->kind == FC_IMAGE && it != NULL && br.zoom > 0) {
-			x = (int32_t) (mx - r_page.x - it->x) * 1024 / br.zoom;
+			x = (int32_t) (mx - r_page.x + left - it->x) * 1024 / br.zoom;
 			y = (int32_t) (my - r_page.y - (it->y - top)) * 1024 / br.zoom;
 			if (x < 0)
 				x = 0;
@@ -1188,11 +1273,11 @@ static int ctl_key(short kstate, short key)
 				ctl_submit(c, by, 0, 0);
 			return 1;
 		}
-		ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+		ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
 		return 1;
 	case 0x39:		/* Space: a button pressed, a box ticked */
 		if (!typed) {
-			ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+			ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
 			return 1;
 		}
 		break;
@@ -1360,7 +1445,7 @@ static int link_at(short mx, short my)
 {
 	if (br.p == NULL || !rect_hit(&r_page, mx, my))
 		return -1;
-	return page_link_at(br.p, mx - r_page.x, my - r_page.y + top);
+	return page_link_at(br.p, mx - r_page.x + left, my - r_page.y + top);
 }
 
 int win_stop_hit(short mx, short my)
@@ -1397,7 +1482,7 @@ void win_hover(short mx, short my)
 				b = i;
 	hot_button(b);
 	if (h == win_h && t == win_h && !win_iconified && !loading) {
-		fctl *c = br.p && rect_hit(&r_page, mx, my) ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, NULL)
+		fctl *c = br.p && rect_hit(&r_page, mx, my) ? page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, NULL)
 							     : NULL;
 		l = c == NULL ? link_at(mx, my) : -1;
 		if (l >= 0)
@@ -1548,9 +1633,9 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		/* the page's scripts first: a click event, which may say no to
 		   what the click does, or change the page */
-		if (!(kstate & 0x08) && page_click(mx - r_page.x, my - r_page.y + top))
+		if (!(kstate & 0x08) && page_click(mx - r_page.x + left, my - r_page.y + top))
 			return 1;
-		c = br.p ? page_ctl_at(br.p, mx - r_page.x, my - r_page.y + top, &it) : NULL;
+		c = br.p ? page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, &it) : NULL;
 		if (c != NULL && !loading) {
 			/* a label's text stands for its control */
 			int label = it->type == DL_TEXT;
@@ -1558,14 +1643,14 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 				return 1;
 			if (form_typed(c)) {
 				ctl_focus(c);
-				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - r_page.x, my - r_page.y + top);
+				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - r_page.x + left, my - r_page.y + top);
 				ctl_redraw(c);
 			} else {
 				ctl_focus(c);
 				if (label && c->kind == FC_SELECT)
-					ctl_press(c, it, (short) (r_page.x + it->x + 4), (short) (r_page.y + it->y - top + it->h));
+					ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
 				else
-					ctl_press(c, it, label ? (short) (r_page.x + it->x) : mx, label ? (short) (r_page.y + it->y - top) : my);
+					ctl_press(c, it, label ? (short) (r_page.x + it->x - left) : mx, label ? (short) (r_page.y + it->y - top) : my);
 			}
 			return 1;
 		}
@@ -1575,7 +1660,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			save_link(l);	/* Alternate-click (0x08): its file saved, as Safari's Option-click */
 		else if (l >= 0)
 			follow(l);
-		else if (br.p != NULL && (det = page_summary_at(br.p, mx - r_page.x, my - r_page.y + top)) != NULL)
+		else if (br.p != NULL && (det = page_summary_at(br.p, mx - r_page.x + left, my - r_page.y + top)) != NULL)
 			details(det);	/* a details' summary: it opens or closes */
 		return 1;
 	}
@@ -1607,6 +1692,10 @@ int win_key(short kstate, short key)
 	if (f_focus != NULL)
 		return ctl_key(kstate, key);
 	switch (scan) {
+	case 0x4b:		/* Left, Right: a page wider than the window sideways */
+	case 0x4d:
+		scroll_x_to(left + (scan == 0x4b ? -1 : 1) * (shift ? r_page.w - col_step() : col_step()));
+		return 1;
 	case 0x39:		/* Space: a page down, with Shift up */
 		if (key_ctrl(kstate, key))
 			return 0;
@@ -1642,6 +1731,7 @@ void win_page_changed(void)
 	win_address(br.url);
 	win_status("");
 	top = 0;
+	left = 0;
 	if (y > max_top())
 		y = max_top();
 	top = y;
@@ -1684,6 +1774,8 @@ static void resized(void)
 	br.width = win_page_w();
 	if (top > max_top())
 		top = max_top();
+	if (left > max_left())
+		left = max_left();
 	sliders();
 }
 
@@ -1814,12 +1906,21 @@ void win_message(const short *msg)
 		case WA_DNPAGE: win_scroll_by(r_page.h - line_step()); break;
 		case WA_UPLINE: win_scroll_by(-line_step()); break;
 		case WA_DNLINE: win_scroll_by(line_step()); break;
+		case WA_LFPAGE: scroll_x_to(left - (r_page.w - col_step())); break;
+		case WA_RTPAGE: scroll_x_to(left + (r_page.w - col_step())); break;
+		case WA_LFLINE: scroll_x_to(left - col_step()); break;
+		case WA_RTLINE: scroll_x_to(left + col_step()); break;
 		}
 		break;
 	case WM_VSLID:
 		if (loading)
 			break;
 		win_scroll_to((int32_t) ((int64_t) max_top() * msg[4] / 1000));
+		break;
+	case WM_HSLID:
+		if (loading)
+			break;
+		scroll_x_to((int32_t) ((int64_t) max_left() * msg[4] / 1000));
 		break;
 	}
 }

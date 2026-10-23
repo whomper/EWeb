@@ -1,4 +1,4 @@
-page 608 x 787, background ffffff, 150 items, 1 links, title "Floats, positions, rows"
+page 608 x 787, background ffffff, 151 items, 1 links, title "Floats, positions, rows"
 fill 6,6 596x24 #003366
 text 11,24 24x17 #ffffff sans13 link 0 "Left"
 text 565,24 32x17 #ffffff sans13 link 0 "Right"
@@ -21,6 +21,7 @@ text 84,162 39x17 #000000 sans13 link 0 "floats."
 text 6,193 112x17 #000000 sans13 link 0 "Below every float."
 fill 6,178 596x2 #000080
 fill 6,209 596x58 #eeeeff
+clip x 6+596 y 209+58 in 0
 fill 6,209 178x16 #ffeedd
 text 6,222 71x17 #000000 sans13 link 0 "Floated left"
 fill 424,209 178x16 #ddffee

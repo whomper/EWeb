@@ -72,7 +72,7 @@ import machines  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
-                         "details"]
+                         "details", "wide"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
@@ -1225,6 +1225,66 @@ def deep():
             r.end()
 
 
+def wide():
+    """a page wider than the window (a table 1400 px wide) on the Falcon in
+    16 colours: Right, then Shift+Right to the end, move it sideways (the
+    log's "sideways LEFT of MAX"); a link that was off to the right,
+    clicked where it is now, is followed; Left back to the start"""
+    xvfb = machines.xvfb(DISPLAY)
+    page = ("<!DOCTYPE html><title>Wide</title><table width=1400><tr><td>Left edge</td>"
+            "<td align=right><a href=text.htm>Far right link</a></td></tr></table>"
+            "<p>A paragraph as wide as the window.</p>")
+    try:
+        hd = hd_for("wide", r"C:\WIDE.HTM")
+        with open(os.path.join(hd, "WIDE.HTM"), "w") as f:
+            f.write(page)
+        path = os.path.join(OUT, "wide.htm")
+        with open(path, "w") as f:
+            f.write(page)
+        r = Run("wide", "Falcon:16", hd, windowed=True)
+        try:
+            ev = r.wait(r"shown ", 300)
+            m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+            if not check("wide: the page shown", m is not None, str(r.events())):
+                return
+            area, top = tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5))
+            pt = text_point(path, area, top, "A paragraph")
+            r.mouse.click(*pt)		# the keyboard to the page
+            time.sleep(1)
+            r.key(RIGHT)
+            ev = r.wait(r"sideways ", 60)
+            m = re.match(r"sideways (\d+) of (\d+)", ev or "")
+            check("wide: Right moves it sideways", m is not None and int(m.group(1)) > 0 and
+                  int(m.group(2)) > 300, str(r.events()[-5:]))
+            if m is None:
+                return
+            for _ in range(8):
+                if m is None or m.group(1) == m.group(2):
+                    break
+                r.key(RIGHT, (SHIFT,))
+                m = re.match(r"sideways (\d+) of (\d+)", r.wait(r"sideways ", 60) or "")
+            check("wide: Shift+Right to its right end", m is not None and m.group(1) == m.group(2),
+                  str(r.events()[-5:]))
+            time.sleep(2)
+            r.shot(0)
+            left = int(m.group(1)) if m else 0
+            pt = link_point(path, (area[0] - left, area[1], area[2], area[3]), top, "Far right link")
+            ok = pt is not None and area[0] <= pt[0] < area[0] + area[2]
+            if check("wide: the far link now in the window", ok, str(pt)):
+                r.mouse.click(*pt)
+                ev = r.wait(r"shown ", 120)
+                check("wide: the far link clicked is followed", ev is not None and
+                      re.match(r"shown file:///C:/text\.htm ", ev, re.I) is not None, str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(1)
+                r.key(Q, (CTRL,))
+                r.wait(r"quit$", 300)
+        finally:
+            r.end()
+    finally:
+        xvfb.terminate()
+
+
 def bar(r):
     """what the status bar says now: win_status() logs each change ("status ...")"""
     said = [e for e in r.events() if e == "status" or e.startswith("status ")]
@@ -1481,5 +1541,10 @@ if "details" in WHICH:
         details()
     else:
         print("skip  details: needs Xvfb and xdotool")
+if "wide" in WHICH:
+    if shutil.which("Xvfb") and shutil.which("xdotool"):
+        wide()
+    else:
+        print("skip  wide: needs Xvfb and xdotool")
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)
