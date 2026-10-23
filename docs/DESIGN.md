@@ -17,6 +17,8 @@ it, and how EWeb gets past CAPTCHAs.
 | Hebrew | **Supported** | Hebrew pages in every Hebrew encoding, right to left, mixed with English. It makes layout fresh code: NetSurf's reorders no text (below). |
 | Speed | **Better than every other Atari browser, and the fastest code** (19 Oct 2026) | EWeb has to outdo the other Atari browsers (below) on what it shows and on how fast it shows it, and each part's code has to be the fastest that can be written for the machine. A part is measured in 68030 instructions on the page set and on the emulated Falcon, and timed on your DFB1; where something faster can be written, it is. NetSurf's code stays only where nothing faster beats it. |
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
+| 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb will set a palette of its own while it runs in 256 colours, and give TOS's back when it is left, with a setting to keep TOS's. Not built yet: the dither, the DSP's and the Pi's pens must use the same palette. |
+| ST memory | **1 MB is no longer a target** (23 Oct 2026) | The ST edition no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its small buffers may grow and its rigs drop the 1 MB machine; the 1040 ST with 4 MB stays. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -1326,7 +1328,8 @@ multiplies, common's 32-bit routines, shift and subtract), matched against nativ
 million random pairs; they belong in common next to its 32-bit ones. TOS 1.x has no `Mxalloc`: the
 memory is sized from `Malloc(-1)` there.
 
-**It runs on a 1 MB ST** (the hub's rule for ST editions, 20 Oct 2026). TOS 1.04 there leaves a
+**It ran on a 1 MB ST up to 0.27** (the hub's rule for ST editions, 20 Oct 2026; no longer a target
+since 23 Oct 2026, Decisions). TOS 1.04 there leaves a
 program 940,906 bytes (919 KB, measured with a probe in Hatari); the first build needed 1015 KB to
 load (590 KB of code, 23 KB of data, 401 KB of BSS). Now 655 KB (384 KB of code, 23 of data, 249 of
 BSS):

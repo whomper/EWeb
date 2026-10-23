@@ -168,8 +168,9 @@ hub stay complete, with the evidence.
 - **The ST edition** is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
   of libjpeg-turbo, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is 68020 code); check a build
-  with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. It must run on a 1 MB ST
-  (the hub, 20 Oct 2026): `EW_ST` makes the CSS engine's buffers and the arenas' pieces small, and a
+  with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. It ran on a 1 MB ST up
+  to 0.27 (the hub, 20 Oct 2026); Erez dropped that target on 23 Oct 2026 (DESIGN.md, Decisions), so
+  the 1 MB rigs may go. `EW_ST` makes the CSS engine's buffers and the arenas' pieces small, and a
   page that doesn't fit gives back the kept pages and the fonts and is tried once more. `make
   hatarigui`'s `st` group runs it on the 1 MB ST and the 1040 ST (TOS 1.04) and through the gateway.
 - **A release** carries `EWEB.PRG`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`),
