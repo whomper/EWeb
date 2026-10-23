@@ -17,7 +17,7 @@ it, and how EWeb gets past CAPTCHAs.
 | Hebrew | **Supported** | Hebrew pages in every Hebrew encoding, right to left, mixed with English. It makes layout fresh code: NetSurf's reorders no text (below). |
 | Speed | **Better than every other Atari browser, and the fastest code** (19 Oct 2026) | EWeb has to outdo the other Atari browsers (below) on what it shows and on how fast it shows it, and each part's code has to be the fastest that can be written for the machine. A part is measured in 68030 instructions on the page set and on the emulated Falcon, and timed on your DFB1; where something faster can be written, it is. NetSurf's code stays only where nothing faster beats it. |
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
-| 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb will set a palette of its own while it runs in 256 colours, and give TOS's back when it is left, with a setting to keep TOS's. Not built yet: the dither, the DSP's and the Pi's pens must use the same palette. |
+| 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb sets a palette of its own while it runs in 256 colours, and gives TOS's back when it quits, with a setting to keep TOS's (EWeb's own 256 colours, below). |
 | ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its buffers are the Falcon's again and its rigs dropped the 1 MB machine (The ST edition, below); it is tested on the 1040 ST with 4 MB, with the family's accessories loaded too, and no 2 MB machine is added for now. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
@@ -2665,6 +2665,28 @@ end, and the rig's is smaller. With the family's
 three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and `EWEB.PRG` needs
 1.5 MB to load: there it takes 14 MB or TT RAM (or `EWEBST.PRG`).
 
+
+## EWeb's own 256 colours (23 Oct 2026)
+
+Erez's decision (Decisions): in 256 colours EWeb sets colours of its own while it runs
+(`ui/screen.c`, `PALETTE=1`, Settings > General > EWeb's own colours in 256 colours). The pixel
+values TOS's sixteen pens don't draw with (16 to 254: VDI pens 16 to 254, as `vq_scrninfo` or TOS's
+order says) get a 6x6x6 cube (each part 0, 51, 102, 153, 204 or 255) and 23 greys between the cube's,
+more of them light (212 to 253, for pages' backgrounds); the sixteen stay, so the window, menus,
+dialogs and icons keep TOS's colours. The colours set are read back as every mode's are, so the rest
+follows by itself: the canvas's nearest colours, the pictures' dither (the 68030's and the DSP's, as
+pic.c's pens), the decoded pictures (`img_pal_changed`; those kept on the disk are tied to the
+palette's CRC, so others are decoded again) and the Pi's pens (`send_colours` sends the colours,
+webgate keeps them by their CRC: no change to the protocol). TOS's colours are given back at the end
+(and on each way out after the start, a crash too); turning the setting off or on gives them back or
+sets EWeb's at once, and the page is drawn again. With `PALETTE=0` the screen's colours are left as
+they are, for another program's pictures beside EWeb's.
+
+On the emulated Falcon in 256 colours the page of translucent colours (`tests/layout/alpha.html`)
+shows its pale yellow background and a pink red, where TOS's colours drew both grey, and the
+gradients' page and the pictures are smooth. `make hatarigui`'s `screens` group checks that the
+Falcon in 256 colours starts in EWeb's colours and gives TOS's back at the end, and runs it with
+`PALETTE=0`, its screenshots side by side.
 
 ## The design
 

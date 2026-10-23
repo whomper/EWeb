@@ -13,9 +13,12 @@
  * - The Falcon's true colour: the canvas is the screen's pixels already,
  *   RRRRRGGG GGGBBBBB (bytes swapped where NVDI says the card has them so).
  *
- * The pens' colours are the screen's as they are (EWeb sets none), each
- * pixel value's VDI colour from vq_scrninfo where the VDI answers it,
- * else TOS's standard order (as EHypView's colour.c).
+ * The pens' colours are the screen's as they are, each pixel value's VDI
+ * colour from vq_scrninfo where the VDI answers it, else TOS's standard
+ * order (as EHypView's colour.c); in 256 colours EWeb sets its own first
+ * (PALETTE=1, Erez's decision of 23 Oct 2026: TOS's have no pale tints):
+ * the pixel values TOS's sixteen pens don't draw with (16 to 254) get a
+ * 6x6x6 cube and 23 greys, and TOS's are given back at the end.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +40,10 @@ static long band_w;			/* pixels, a multiple of 16 */
 static short rows;			/* rows the buffers hold: the screen's, or BAND */
 static unsigned char *chunky;		/* rows, a byte a pixel (planar modes) */
 static unsigned short *std_buf, *dev_buf;	/* ST RAM */
+static short scr_info[272], scr_have;	/* vq_scrninfo's answer */
+static short saved[256][3];		/* in 256 colours, the pens EWeb set, as they were */
+static unsigned char set_pen[256];	/* which ones */
+static int own;				/* EWeb's colours are on the screen */
 
 static unsigned char from1000(short v)
 {
@@ -109,13 +116,89 @@ static int bufs(short n)
 	return 0;
 }
 
+/* EWeb's colour for its pen k of 239 (0..1000 a part, the VDI's): the
+   cube's 6 levels of each part, then greys, more of them light (pages'
+   backgrounds) */
+static void own_colour(int k, short rgb[3])
+{
+	static const unsigned char grey[23] = { 13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191,
+						 212, 220, 226, 231, 235, 238, 241, 244, 247, 250, 253 };
+	if (k < 216) {
+		rgb[0] = (short) (k / 36 * 200);
+		rgb[1] = (short) (k / 6 % 6 * 200);
+		rgb[2] = (short) (k % 6 * 200);
+	} else
+		rgb[0] = rgb[1] = rgb[2] = (short) ((grey[k - 216] * 1000L + 127) / 255);
+}
+
+/* EWeb's colours on the pens that draw pixel values 16 to 254, or TOS's
+   given back */
+static void own_pens(int on)
+{
+	short i, rgb[3];
+	if (on == own || ncol != 256)
+		return;
+	for (i = 16; i < 256; i++) {
+		short px = scr_have ? (short) (scr_info[16 + i] & 255) : std_pixel(i);
+		if (px < 16 || px > 254)
+			continue;
+		if (on) {
+			vq_color(vdi_h, i, saved[i]);
+			set_pen[i] = 1;
+			own_colour(px - 16, rgb);
+			vs_color(vdi_h, i, rgb);
+		} else if (set_pen[i]) {
+			vs_color(vdi_h, i, saved[i]);
+			set_pen[i] = 0;
+		}
+	}
+	own = on;
+}
+
+/* each pixel value's colour, and the pictures' pens from them */
+static void read_pens(void)
+{
+	short rgb[3], i;
+	for (i = 0; i < ncol; i++)
+		pal[i][0] = pal[i][1] = pal[i][2] = 0;
+	/* each pixel value's colour: the VDI colour that draws with it */
+	for (i = (ncol == 256 ? 256 : 16); i-- > 0;) {
+		short px = scr_have ? (short) (scr_info[16 + i] & (ncol - 1)) : std_pixel(i);
+		if (i >= ncol && ncol < 16)
+			continue;
+		vq_color(vdi_h, i, rgb);
+		pal[px][0] = from1000(rgb[0]);
+		pal[px][1] = from1000(rgb[1]);
+		pal[px][2] = from1000(rgb[2]);
+	}
+	memset(nearest_of, 0, sizeof nearest_of);
+	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
+	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
+}
+
+void scr_palette(void)
+{
+	if (ncol != 256 || truecolour || opt.palette == own)
+		return;
+	own_pens(opt.palette);
+	read_pens();
+	img_pal = &pic_pal;
+	img_pal_changed();
+}
+
+int scr_exit(void)
+{
+	int was = own;
+	own_pens(0);
+	return was;
+}
+
 int scr_init(void)
 {
-	static short info[272];
-	short rgb[3], i, have;
+	short *info = scr_info, have;
 
 	band_w = (scr_w + 15) & ~15L;
-	have = vq_scrninfo(vdi_h, info);
+	have = scr_have = vq_scrninfo(vdi_h, info);
 	format = have ? info[0] : -1;
 	if (planes == 16) {
 		truecolour = 1;
@@ -127,20 +210,8 @@ int scr_init(void)
 	if (planes != 1 && planes != 2 && planes != 4 && planes != 8)
 		return 0;
 	ncol = (short) (1 << planes);
-	for (i = 0; i < ncol; i++)
-		pal[i][0] = pal[i][1] = pal[i][2] = 0;
-	/* each pixel value's colour: the VDI colour that draws with it */
-	for (i = (ncol == 256 ? 256 : 16); i-- > 0;) {
-		short px = have ? (short) (info[16 + i] & (ncol - 1)) : std_pixel(i);
-		if (i >= ncol && ncol < 16)
-			continue;
-		vq_color(vdi_h, i, rgb);
-		pal[px][0] = from1000(rgb[0]);
-		pal[px][1] = from1000(rgb[1]);
-		pal[px][2] = from1000(rgb[2]);
-	}
-	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
-	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
+	own_pens(ncol == 256 && opt.palette);
+	read_pens();
 	if (!c2p_init())
 		return 0;
 	img_pal = &pic_pal;
@@ -162,7 +233,7 @@ const char *scr_mode(void)
 	case 4: return "4 colours";
 	case 16: return "16 colours";
 	}
-	return "256 colours";
+	return own ? "256 colours (EWeb's)" : "256 colours";
 }
 
 /* the screen's nearest colour to 0xRRGGBB, as a pixel value */

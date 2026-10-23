@@ -51,7 +51,7 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1 };
 browser br;
 int loading;
 static short quit;
@@ -368,6 +368,8 @@ static void settings_load(void)
 			opt.picdsp = atoi(eq) != 0;
 		else if (!strcmp(line, "PENS"))
 			opt.pens = (short) (atoi(eq) < 0 ? -1 : atoi(eq) > 0);
+		else if (!strcmp(line, "PALETTE"))
+			opt.palette = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -509,6 +511,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.picdsp);
 	put(&s, "PICDSP", v, "1 = the DSP decodes JPEGs and dithers pictures while the 68030 hands it the bytes "
 	    "(a Falcon's EWEB.PRG), 0 = the 68030 does it all");
+	snprintf(v, sizeof v, "%d", opt.palette);
+	put(&s, "PALETTE", v, "in 256 colours: 1 = EWeb's own colours while it runs (pale tints for pages and "
+	    "pictures; TOS's first 16 kept), 0 = the system's");
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
@@ -1445,12 +1450,18 @@ void command(int cmd)
 		break;
 #endif
 	case C_SETTINGS: {
-		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, changed;
+		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed;
 		log_event("settings shown");
 		changed = dlg_settings();
 		log_event("settings %s", changed ? "changed" : "kept");
 		if (changed) {
 			gate_apply();
+			if (palette != opt.palette) {
+				/* the page drawn again in the colours now on the
+				   screen, its pictures dithered to them */
+				scr_palette();
+				win_redraw(NULL);
+			}
 			falcon_dsp_init();
 			falcon_dsp_ec_init();
 			pictures_dsp_init();
@@ -1718,6 +1729,7 @@ static void crash_quit(const char *what)
 		wind_delete(win_h);
 	}
 	menu_bar(mb.tree, 0);
+	scr_exit();
 	v_clsvwk(vdi_h);
 	appl_exit();
 }
@@ -1808,6 +1820,7 @@ int main(void)
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or the Falcon's true|colour.][ Quit ]");
+		scr_exit();
 		v_clsvwk(vdi_h);
 		appl_exit();
 		return 1;
@@ -1816,6 +1829,7 @@ int main(void)
 	if (!font_init(path)) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb's fonts are missing:|put EWEB.FNT next to|EWEB.PRG.][ Quit ]");
+		scr_exit();
 		v_clsvwk(vdi_h);
 		appl_exit();
 		return 1;
@@ -1858,6 +1872,7 @@ int main(void)
 	}
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EWeb: not enough memory.][ Quit ]");
+		scr_exit();
 		v_clsvwk(vdi_h);
 		appl_exit();
 		return 1;
@@ -1974,6 +1989,8 @@ int main(void)
 	menu_bar(mb.tree, 0);
 	av_exit();
 	font_free();
+	if (scr_exit())
+		log_event("colours given back");
 	v_clsvwk(vdi_h);
 	crash_remove();
 	appl_exit();

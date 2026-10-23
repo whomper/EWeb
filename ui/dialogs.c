@@ -200,10 +200,10 @@ static void make_ticks(void)
 	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
 }
 
-#define NTICK 4
+#define NTICK 5
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -310,6 +310,9 @@ static void part_general(short x, short y)
 	d_text(x + 15, ROW(6), "MB  (0: none)");
 #ifndef EW_ST
 	d_tick(x, ROW(7), "Pictures on the DSP (a Falcon's)", T_PICDSP);
+	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
+#else
+	d_tick(x, ROW(7), "EWeb's own colours in 256 colours", T_PALETTE);
 #endif
 }
 
@@ -341,7 +344,7 @@ static short settings_tree(short *ok)
 {
 	static const char *const names[] = { "  General", "  Secure" };
 	short k, box, from, gap = (short) (gl_hchar / 2);
-	d_begin(SX + PW, 17);
+	d_begin(SX + PW, 19);
 	nticks = 0;
 	npages = 0;
 	adding_page = 0;
@@ -349,14 +352,14 @@ static short settings_tree(short *ok)
 	d_band(SX + PW, " Settings");
 	/* the list: plain words on white, the chosen one in a black bar, a
 	   line between it and the settings */
-	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 16);
+	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 18);
 	for (k = 0; k < 2; k++) {
 		npages++;
 		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(names[k], 0, 0x1180),
 					 (short) (0 | (2 << 8)), (short) ((2 + k * 2) | ((k * gap) << 8)),
 					 (short) ((SW - 1) | (6 << 8)), 1);
 	}
-	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 13);
+	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 15);
 	for (k = 1; k <= 2; k++) {
 		from = nobj;
 		adding_page = k;
@@ -369,8 +372,8 @@ static short settings_tree(short *ok)
 		page_mark(from);
 	}
 	adding_page = 0;
-	d_button(SX + PW - 26, 15, 10, "Cancel", EXIT);
-	*ok = d_button(SX + PW - 13, 15, 10, "OK", EXIT | DEFAULT);
+	d_button(SX + PW - 26, 17, 10, "Cancel", EXIT);
+	*ok = d_button(SX + PW - 13, 17, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	show_page(1, 0);
 	return box;
@@ -429,6 +432,7 @@ int dlg_settings(void)
 	s_on[T_FALCON] = (short) opt.falcon;
 	s_on[T_DSP] = (short) opt.dsp;
 	s_on[T_PICDSP] = opt.picdsp;
+	s_on[T_PALETTE] = opt.palette;
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
 	str_copy(s_search, opt.search, sizeof s_search);
 	str_copy(s_gate, opt.gate, sizeof s_gate);
@@ -453,6 +457,7 @@ int dlg_settings(void)
 		opt.cache = (short) atoi(s_cache);
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
+	opt.palette = s_on[T_PALETTE];
 	if (s_on[T_FALCON] != opt.falcon)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */
 	return 1;

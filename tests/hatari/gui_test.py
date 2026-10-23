@@ -787,6 +787,10 @@ def screens():
                 # a mode TOS didn't take must not pass as true colour
                 check("screens: %s is true colour" % name, ready is not None and "true colour" in ready,
                       ready or "no ready line")
+            if name == "falcon256":
+                # EWeb's own 256 colours (PALETTE=1, as it starts)
+                check("screens: falcon256 in EWeb's own colours", ready is not None and
+                      "256 colours (EWeb's)" in ready, ready or "no ready line")
             time.sleep(2)
             r.shot(0)
             # the page of pictures, from the disk: dithered to the screen's
@@ -834,13 +838,14 @@ def screens():
                 # the guidelines' 5.4): typed in whole and saved whole
                 r.key(COMMA, (CTRL,))
                 ev = r.wait(r"settings shown", 60)
+                time.sleep(2)  # (drawn and waiting for keys)
                 r.key(TAB)
                 for _ in range(30):
                     r.key(BACKSPACE)
                 long_search = "http://search.example.com/the/words/typed/in/the/address/go/here/s"
                 r.type(long_search)
                 time.sleep(1)
-                r.shot(3)
+                r.shot(6)
                 r.key(RETURN)
                 saved = r.wait(r"settings ", 60) == "settings changed"
                 time.sleep(2)
@@ -850,10 +855,36 @@ def screens():
                       repr(inf[:400]))
             r.key(Q, (CTRL,))
             check("screens: %s quits" % name, r.wait(r"quit$", 60) is not None, str(r.events()))
+            if name == "falcon256":
+                check("screens: falcon256 gives TOS's colours back", r.wait(r"colours given back", 30) is not None,
+                      str(r.events()[-4:]))
         finally:
             r.end()
         if name == "falcon256":
             cached_pictures(name, spec, dec)
+    system_colours()
+
+
+def system_colours():
+    """PALETTE=0: in 256 colours, the system's own (TOS's) as they are, the
+    page of translucent colours and the pictures in them (looked at beside
+    falcon256's screenshots)"""
+    name = "falcon256tos"
+    r = Run(name, "Falcon:256", hd_for(name, r"C:\ALPHA.HTM", "PALETTE=0\r\n"))
+    try:
+        ready = r.wait(r"ready ", 120)
+        ev = r.wait(r"shown ", 120)
+        check("screens: falcon256 with PALETTE=0 in the system's colours", ready is not None and
+              "256 colours" in ready and "(EWeb's)" not in ready and ev is not None and
+              ev.startswith("shown file:///C:/ALPHA.HTM "), str(r.events()[-5:]))
+        r.wait(r"pictures ", 120)
+        time.sleep(2)
+        r.shot(0)
+        r.key(Q, (CTRL,))
+        check("screens: falcon256 with PALETTE=0 quits, with no colours to give back",
+              r.wait(r"quit$", 60) is not None and not r.wait(r"colours given back", 5), str(r.events()[-4:]))
+    finally:
+        r.end()
 
 
 def cached_pictures(name, spec, dec):

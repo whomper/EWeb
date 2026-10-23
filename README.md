@@ -80,7 +80,9 @@ own fonts.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
-  colour, through ST-RAM so that it runs from TT-RAM.
+  colour, through ST-RAM so that it runs from TT-RAM; in 256 colours EWeb's
+  own palette, with the pale tints pages need (a setting keeps the
+  system's).
 - **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP
   (Falcon mode); or through the Pi gateway, AERA-Gateway's web service on a
   Raspberry Pi (TLS 1.3 sites too).
@@ -365,9 +367,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   Remove) and ^Q; `scripts`, the Falcon with its 68882: a page's tabs
   clicked, an `onclick`'s alert answered, from `EWEBJS.OVL`, and the page
   without it; `screens`, a page and a page of
-  pictures from the disk on the Falcon in 256 colours and true colour and
-  on the TT in 16 colours and monochrome, the pictures read back from the
-  cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 4 MB
+  pictures from the disk on the Falcon in 256 colours (EWeb's own, and the
+  system's) and true colour and on the TT in 16 colours and monochrome, the
+  pictures read back from the cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 4 MB
   1040 ST (TOS 1.04) in monochrome and medium resolution, a
   secure page without the gateway, then a secure page and its pictures, as
   the Pi's pens, through AERA-Gateway's webgate; `gateway`, `EWEB.PRG` on

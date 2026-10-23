@@ -538,9 +538,10 @@ Options > Settings (^,) has two pages:
 
 - **General:** whether pages' pictures are shown, the text size (per
   cent, 50 to 200), where words typed in the address go, the disk
-  cache's size (MB, 0 for none) and, in `EWEB.PRG`, whether a Falcon's
-  DSP does the pictures. (Which sites' scripts run is Options > Run this
-  site's scripts.)
+  cache's size (MB, 0 for none), in `EWEB.PRG` whether a Falcon's DSP
+  does the pictures, and whether EWeb uses its own colours in 256
+  colours. (Which sites' scripts run is Options > Run this site's
+  scripts.)
 - **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
@@ -566,6 +567,11 @@ there at once; where the window was, when you quit:
 - `PICDSP=` 1 to let a Falcon's DSP decode JPEGs and dither pictures
   to the screen's colours (each about eight times as quick on a stock
   Falcon), 0 for the 68030 alone
+- `PALETTE=` in 256 colours, 1 for EWeb's own colours while it runs
+  (a colour cube and greys, with the pale tints pages' backgrounds and
+  pictures need; the system's first 16 stay, and its own come back when
+  EWeb quits), 0 for the system's as they are (another program's
+  pictures beside EWeb's keep their colours)
 - `PENS=` through the Pi gateway, pictures made ready for your screen on
   the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)

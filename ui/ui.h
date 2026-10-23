@@ -27,6 +27,7 @@ typedef struct {
 	short cache;			/* CACHE=: the disk cache's size, MB (0 none; -1: 8 with TT RAM, else 2) */
 	short picdsp;			/* PICDSP=: JPEGs and the dither on the DSP (EWEB.PRG) */
 	short pens;			/* PENS=: pictures as the Pi's pens: 1 always (as it starts), -1 when quicker, 0 never */
+	short palette;			/* PALETTE=: in 256 colours, EWeb's own (1) or the system's (0) */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	64	/* the most CACHE= may ask for */
@@ -85,6 +86,8 @@ void atari_text(const char *utf8, char *out, int size);
    (src/gfx) and copied to the screen through ST RAM, in every mode from
    monochrome to the Falcon's true colour */
 int scr_init(void);			/* 0: a screen EWeb can't draw on */
+void scr_palette(void);			/* PALETTE= changed: EWeb's colours set or TOS's back */
+int scr_exit(void);			/* TOS's colours back (at the end): 1 if EWeb's were on */
 const char *scr_mode(void);		/* "16 colours", "true colour", for the log */
 int scr_rows(void);			/* rows drawn at a time: the screen's, else 32 */
 /* the page's part that falls on area (on the screen), the page's point
