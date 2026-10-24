@@ -41,7 +41,9 @@ static void place(void)
 	corner.h = pb_height();
 }
 
-/* the panes white, the bars at their right */
+/* the panes white, the bars at their right, on a pattern: a pixel of a bar
+   left undrawn shows (EUpdate's finding: EmuTOS's 3D left the bar's edge
+   to what was under it) */
 static void draw(const GRECT *c)
 {
 	OBJECT t[3];
@@ -52,7 +54,7 @@ static void draw(const GRECT *c)
 		t[i].ob_type = G_BOX;
 		t[i].ob_flags = i == 2 ? LASTOB : 0;
 		t[i].ob_state = 0;
-		t[i].ob_spec = 0x00001180L;	/* white, no frame */
+		t[i].ob_spec = i ? 0x00001180L : 0x000011C3L;	/* white, no frame; under them dots */
 		t[i].ob_y = 0;
 		t[i].ob_height = wh;
 	}
@@ -62,9 +64,10 @@ static void draw(const GRECT *c)
 	t[0].ob_y = wy;
 	t[0].ob_width = ww;
 	t[1].ob_x = 0;
-	t[1].ob_width = ww / 2;
-	t[2].ob_x = ww / 2 - 1;
-	t[2].ob_width = ww - ww / 2 + 1;
+	t[1].ob_width = ww / 2 - pb_width();
+	t[1].ob_height = wh - pb_height();
+	t[2].ob_x = ww / 2;
+	t[2].ob_width = ww - ww / 2 - pb_width();
 	objc_draw(t, 0, 2, c->x, c->y, c->w, c->h);
 	pb_draw(&bar[0], c);
 	pb_draw(&bar[1], c);
