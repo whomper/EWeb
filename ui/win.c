@@ -128,7 +128,7 @@ static short paper(void)
 static const TB_ED *tb_ed;
 static char *tb_dev;			/* its pictures with their masks in the screen's own form (ST RAM), each made when first shown */
 static unsigned tb_made;		/* which of them are made, a bit each */
-static int tb_nodev;			/* no memory for them: each made as it is drawn */
+static int tb_nodev;			/* none kept: each made as it is drawn */
 
 static const TB_ED *icons(void)
 {
@@ -163,7 +163,10 @@ static void draw_icon(short x, short y, int i, int how, const GRECT *clip)
 	r = at;
 	if (!rect_and(&r, clip))
 		return;
-	if (tb_dev == NULL && !tb_nodev && (tb_dev = scr_dev_alloc(size * TB_PICS)) == NULL)
+	/* kept only beside TT RAM, where the pages are: on a machine of ST
+	   RAM alone (a 4 MB Falcon, an ST) its 4 to 14 KB go to the pages */
+	if (tb_dev == NULL && !tb_nodev && ((long) Mxalloc(-1L, 1) <= 0 ||
+					    (tb_dev = scr_dev_alloc(size * TB_PICS)) == NULL))
 		tb_nodev = 1;
 	f = tb_dev != NULL ? tb_dev + size * k : NULL;
 	if (f != NULL && (tb_made & (1u << k))) {

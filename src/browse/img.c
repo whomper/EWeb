@@ -95,8 +95,11 @@ static long var_bytes(const var *v)
 /* ---------------------------------------------------------------- the disk cache */
 
 /* pictures smaller than this are decoded each time (quicker than a look
-   in the cache, and many small entries would crowd its index) */
+   in the cache, and many small entries would crowd its index); and so is
+   one the page carries (data:): EWeb's home page has four, which would
+   open the cache at every start and write it at every quit */
 #define PIX_MIN (64L * 64)
+#define PIX_KEPT(im, w, h) ((long) (w) * (h) >= PIX_MIN && strncmp((im)->url, "data:", 5) != 0)
 
 /* "EWPX", 1, flags (PX_*), the width and height as two bytes each, then
    the pixels (2 bytes each, the machine's order), the alpha (a byte
@@ -564,7 +567,7 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		img_used += var_bytes(v);
 		return 1;
 	}
-	if ((long) w * h >= PIX_MIN && pix_load(im, v)) {
+	if (PIX_KEPT(im, w, h) && pix_load(im, v)) {
 		im->cached = 1;
 		v->used = im->used = ++tick;
 		v->next = im->vars;
@@ -590,7 +593,7 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 	v->next = im->vars;
 	im->vars = v;
 	img_used += var_bytes(v);
-	if (v->pic != NULL && (long) w * h >= PIX_MIN)
+	if (v->pic != NULL && PIX_KEPT(im, w, h))
 		pix_save(im, v);
 	return v->pic != NULL;
 }

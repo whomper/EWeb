@@ -663,11 +663,13 @@ releases.
   40 ms to 365 ms on the emulated 32 MHz Falcon, the first time only; the home page uses four, those
   most pages use). `font_get` keeps the face it picked for each family, style and size (24 Oct
   2026): it went through all 144 for every run of text, a tenth of the home page's layout (1.99 M
-  68030 instructions to 1.80 M). Text is measured from each face's advances of ASCII, kept beside
-  it (`font_width` and `font_advance` went through `font_glyph` and a `memset` for every
-  character), and the layout looks a page's lists of font names through once (`font_of` matched up
-  to 26 names in each, at every run of text): a 127 KB page of the page set laid out in 12.0 M
-  instructions, from 13.9 M, half of it unpacking the eight faces it uses, the first time. Hebrew vowel points take no room and are not drawn yet.
+  68030 instructions to 1.80 M). Text is measured from each face's advances of ASCII, read where
+  they are in it through one table of their places (`font_width` and `font_advance` went through
+  `font_glyph` and a `memset` for every character; a copy beside each face took 14 KB, which the
+  stock Falcon's pages need), and the layout looks a page's lists of font names through once
+  (`font_of` matched up to 26 names in each, at every run of text): a 127 KB page of the page set
+  laid out in 12.1 M instructions, from 13.9 M, half of it unpacking the eight faces it uses, the
+  first time. Hebrew vowel points take no room and are not drawn yet.
 - **The document** (`src/doc`): the HTML parser's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
   CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
@@ -757,7 +759,9 @@ releases.
   `about:search`), the five pages opened last and the first six bookmarks, and a tip a day. Its
   links: search (FrogFind, DuckDuckGo Lite, Wiby), news in text (68k.news, NPR, CNN Lite, Hacker
   News), reading, Atari (Atari-Forum, DHS, Demozoo, Pouët, Atarimania), the early web, and AERA.
-  It reads HISTORY.TXT at start, which the first page from the network read before. On the
+  It reads HISTORY.TXT at start, which the first page from the network read before; its pictures
+  are decoded each time, not looked for in the disk cache (no `data:` picture is), which would
+  open it at every start and write it at every quit. On the
   emulated Falcon in 256 colours it is shown in 2.0 s (the old start page 1.6 s), most of it the
   first page's work that any page pays: the UA sheet, the fonts; 4.1 M 68030 instructions to style,
   lay out and draw.
@@ -771,8 +775,10 @@ releases.
   screen's nearest when first drawn, so EWeb's palette and TOS's both show copper); the 16 system
   colours, the shading dithered 2 x 2 and lit in gold; black and white, a white fill with a black
   edge, greyed dotted and lit inverted, as GEM shows a chosen object. Each icon is a picture with
-  holes, made once into the screen's own form with its mask (ST RAM: 29 KB for the 18 in 256
-  colours, 58 KB in true colour, 14 KB in 16 colours, 4 KB in black and white) and drawn as two
+  holes, made into the screen's own form with its mask (ST RAM: 29 KB for the 18 in 256
+  colours, 58 KB in true colour, 14 KB in 16 colours, 4 KB in black and white; kept, each made
+  once, only where there is TT RAM: on a machine of ST RAM alone, a 4 MB Falcon or an ST, made
+  each time it is drawn, so that memory goes to the pages) and drawn as two
   blits, the mask clearing its pixels and the picture ORed in, the same in every mode; the address beside them, typed into in place; the
   throbber, below, at the right end), the page under it with the window's slider, a status bar at the
   foot (your choice of 21 Oct 2026, design C of four drawn: a link's address under the mouse, what a
@@ -1373,8 +1379,10 @@ At run time the arenas take small pieces on the ST (the CSS engine 4 KB, its fir
 bytes, the document and the layout 8 KB, not 64 and 16), and so does the display list (128 items at first, 5.5 KB, not 1024,
 45 KB; since 22 Oct 2026, Details and summary), as a context's empty pieces were most of a small
 page's memory; a font face is unpacked into its exact size (in every edition: before, its buffer
-doubled as it grew). A page that doesn't fit gives back the pages kept for Back, the one shown, the
-pictures not in use and the fonts' glyphs (read again when used), and is built once more; if it
+doubled as it grew). A page that doesn't fit gives back the pages kept for Back, the one shown with
+its source (since 24 Oct 2026: before, a page loaded again had its source twice, 130 KB more for
+the stock Falcon's big page), the pictures not in use and the fonts' glyphs (read again when used),
+and is built once more; if it
 still doesn't fit, EWeb says so on a page of its own, which is small. Running out while styling it
 counts too (since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style
 made a page that laid out to nothing, which translucency's 3 KB more code brought about on the

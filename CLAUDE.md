@@ -146,7 +146,8 @@ hub stay complete, with the evidence.
   file; read once a start for the Bookmarks menu, one safe save at each change), listed on
   `about:bookmarks` (`src/browse`). After changing them: `make test` (`tests/browse/bmtest.c`),
   `make hatarigui`, `make hatarifiles`. **The history** is `src/browse/history.c` (`HISTORY.TXT`
-  next to `EWEB.PRG`: read when a page's links are first marked, written once at quit; the newest
+  next to `EWEB.PRG`: read at start for the home page's list, else when a page's links are first
+  marked; written once at quit; the newest
   1000), listed on `about:history`; **visited links** are `src/browse/visited.c` (each link joined
   by `url_join_quick` where it can, else parsed; colours only, `src/css`; none on a page whose
   scripts run). After changing them: `make test` (`tests/browse/hgtest.c`, `tests/layout/visited.py`,

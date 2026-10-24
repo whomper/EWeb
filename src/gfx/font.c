@@ -21,8 +21,10 @@ static uint16_t *codes;
 static ew_font *faces;
 static uint32_t *foff, *fstored, *fsize;	/* where a face is, its packed and unpacked sizes */
 static int16_t ascii[96];		/* code index of 0x20..0x7f, -1 if none */
-static ew_font *picked[4][4][64];	/* font_get's face for a family, style and size (to 63
-					   px), kept as it is asked for: a page asks often */
+static uint8_t picked[4][4][64];	/* font_get's face (+ 1) for a family, style and size
+					   (to 63 px), kept as it is asked for: a page asks often */
+static uint16_t aoff[96];		/* where the advance of ' ' to 0x7F is in a face: most of
+					   the text a page measures */
 static int qmark;			/* the index of '?' */
 
 static unsigned be16(const uint8_t *p) { return (unsigned) p[0] << 8 | p[1]; }
@@ -110,6 +112,8 @@ int font_init(const char *path)
 		if (codes[i] == '?')
 			qmark = i;
 	}
+	for (i = 0; i < 96; i++)
+		aoff[i] = (uint16_t) (4 + 10 * (ascii[i] >= 0 ? ascii[i] : qmark));
 	ok = 1;
 done:
 	free(dir);
@@ -121,7 +125,7 @@ done:
 
 static int load(ew_font *f)
 {
-	int i = (int) (f - faces), k;
+	int i = (int) (f - faces);
 	uint8_t *packed;
 	SBUF out;
 	if (f->data || f->failed)
@@ -145,8 +149,6 @@ static int load(ew_font *f)
 	if (f->data) {
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
-		for (k = 0; k < 96; k++)
-			f->adv[k] = f->data[4 + 10 * (ascii[k] >= 0 ? ascii[k] : qmark)];
 	}
 	return f->data != NULL;
 }
@@ -159,13 +161,14 @@ static int ready(ew_font *f)
 
 ew_font *font_get(int family, int style, int px)
 {
-	ew_font *best = NULL, **pk = NULL;
+	ew_font *best = NULL;
+	uint8_t *pk = NULL;
 	int i, bd = 1 << 30;
 
 	if (family >= 0 && family < 4 && style >= 0 && style < 4 && px >= 0 && px < 64)
 		pk = &picked[family][style][px];
-	if (pk != NULL && *pk != NULL) {
-		best = *pk;
+	if (pk != NULL && *pk != 0) {
+		best = &faces[*pk - 1];
 	} else {
 		for (i = 0; i < nfaces; i++) {
 			int d;
@@ -180,8 +183,8 @@ ew_font *font_get(int family, int style, int px)
 		}
 		if (best == NULL && nfaces > 0)
 			best = &faces[0];
-		if (pk != NULL)
-			*pk = best;
+		if (pk != NULL && best != NULL && best - faces < 255)
+			*pk = (uint8_t) (best - faces + 1);
 	}
 	if (best != NULL && !best->data && !best->failed && load(best) == 0) {
 		/* a face it can't read: its metrics from its size, no glyphs */
@@ -245,7 +248,7 @@ int font_advance(ew_font *f, uint32_t cp)
 {
 	GLYPH g;
 	if (cp - 0x20 < 96)
-		return ready(f) ? f->adv[cp - 0x20] : 0;
+		return ready(f) ? f->data[aoff[cp - 0x20]] : 0;
 	font_glyph(f, cp, &g);
 	return g.adv;
 }
@@ -287,7 +290,7 @@ long font_width(ew_font *f, const char *s, size_t n)
 	while (s < e) {
 		unsigned c = (unsigned char) *s - 0x20;
 		if (c < 96) {
-			w += f->adv[c];		/* ASCII: its advance at hand */
+			w += f->data[aoff[c]];	/* ASCII: its advance at hand */
 			s++;
 		} else {
 			w += font_advance(f, utf8_next(&s, e));

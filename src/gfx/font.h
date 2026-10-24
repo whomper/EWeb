@@ -28,8 +28,6 @@ typedef struct ew_font {
 	uint8_t ascent, descent;	/* above and below the baseline */
 	uint8_t *data;			/* the face's block, read on first use */
 	int failed;
-	uint8_t adv[96];		/* the advances of ' ' to 0x7F, from data: most of the
-					   text a page measures */
 } ew_font;
 
 /* reads the file's table of faces: 0 if it can't */

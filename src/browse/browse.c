@@ -1524,8 +1524,9 @@ static int shed(browser *b)
 }
 
 /* memory for a page that didn't fit (a small machine): the pages kept for
-   Back and the one shown go, and the pictures not in use; 1 when
-   something was given back */
+   Back and the one shown go, its source with it (a page loaded again had
+   it twice), and the pictures not in use; 1 when something was given
+   back */
 static int make_room(browser *b)
 {
 	int freed = 0;
@@ -1534,6 +1535,12 @@ static int make_room(browser *b)
 		doc_free(b->d);
 		b->p = NULL;
 		b->d = NULL;
+		freed = 1;
+	}
+	if (b->src != NULL) {
+		free(b->src);
+		b->src = NULL;
+		b->src_len = 0;
 		freed = 1;
 	}
 	return shed(b) || freed;
