@@ -453,7 +453,8 @@ text, pictures in the background of a page or a box, positioned
 boxes, tables (cells over several rows and columns, borders that
 collapse into single lines), boxes in a line of text
 (buttons, menus and cards: CSS's inline-block), flexible boxes and
-grids (CSS flexbox and grid), forms, Hebrew right to left. A line ends
+grids (CSS flexbox and grid), forms, Hebrew right to left (with its
+numbers, English words and brackets the right way round). A line ends
 at a space, or inside a word where it may: after a hyphen or a slash, at
 a dash, between Chinese or Japanese characters, and at a soft hyphen,
 which then shows as a hyphen at the line's end. Translucent

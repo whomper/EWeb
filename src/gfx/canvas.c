@@ -390,6 +390,30 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 
 /* a glyph's pixels mixed, as mix_init made ready (an item less than
    solid): kept apart, so that solid text's loops stay as they were */
+
+/* c as drawn right to left: a bracket or a sign that points one way
+   turned (UAX #9, L4: Bidi_Mirrored, the pairs a page has) */
+static uint32_t mirrored(uint32_t c)
+{
+	switch (c) {
+	case '(': return ')';
+	case ')': return '(';
+	case '[': return ']';
+	case ']': return '[';
+	case '{': return '}';
+	case '}': return '{';
+	case '<': return '>';
+	case '>': return '<';
+	case 0xAB: return 0xBB;
+	case 0xBB: return 0xAB;
+	case 0x2039: return 0x203A;
+	case 0x203A: return 0x2039;
+	case 0x2264: return 0x2265;
+	case 0x2265: return 0x2264;
+	}
+	return c;
+}
+
 static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 {
 	int32_t gx = x + g->x, gy = y + g->y, row, col, stride = (g->w + 7) / 8, c0, c1, r0, r1;
@@ -443,7 +467,7 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 		while (p < e && k < 64)
 			cps[k++] = utf8_next(&p, e);
 		while (k-- > 0) {
-			font_glyph(f, cps[k], &g);
+			font_glyph(f, mirrored(cps[k]), &g);
 			draw(c, &g, px, py, pv);
 			px += g.adv;
 		}

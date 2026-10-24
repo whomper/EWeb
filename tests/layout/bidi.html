@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Hebrew with numbers and Latin</title>
+<!-- UAX #9 at the level of a line's words (layout.c's visual_order): a
+     number in Hebrew left to right, after its Hebrew (W7, N1, I2, L2); a
+     word of Hebrew and a number or Latin in pieces of one direction each
+     (word_pieces), the hyphen with the Hebrew; brackets mirrored in
+     right-to-left text (canvas.c's mirrored); neutrals between two of a
+     direction take it, else the line's -->
+<style>
+body { font: 16px sans-serif; margin: 8px; }
+p { margin: 0 0 6px; border: 1px solid #aaa; }
+</style></head><body>
+<p dir="rtl">שנת 2026 היא שנה טובה</p>
+<p dir="rtl">ב-2026 נפגשנו, ו-2027 נראה</p>
+<p dir="rtl">ה-CSS של האתר</p>
+<p dir="rtl">(שלום) [א] ו-{ב}</p>
+<p dir="rtl">עמוד 5 מתוך 10, מחיר 3.50 ש"ח</p>
+<p dir="rtl">האתר www.example.com פתוח ביום 24/10/2026.</p>
+<p dir="rtl">EWeb הוא דפדפן</p>
+<p>The word שלום (peace), ב-2026 and 10 שקלים.</p>
+<p>Hebrew at the end: שלום עולם!</p>
+<p dir="rtl">אני משתמש ב-Linux. וגם (EWeb), 50% ו-$5 ו-(10).</p>
+<p>In English (שלום) and "שלום" then 3.5% more.</p>
+</body></html>

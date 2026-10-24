@@ -82,7 +82,7 @@ fill 6,484 596x1 #888888
 fill 6,549 596x1 #888888
 fill 6,485 1x64 #888888
 fill 601,485 1x64 #888888
-text 591,570 7x17 #000000 sans13 link 0 "◂"
+text 591,570 7x17 #000000 sans13 rtl link 0 "◂"
 text 559,570 28x17 #000000 sans13 rtl link 0 "סגור:"
 text 511,570 44x17 #000000 sans13 rtl link 0 "המשולש"
 text 472,570 35x17 #000000 sans13 rtl link 0 "מצביע"
@@ -92,7 +92,7 @@ fill 6,553 596x1 #888888
 fill 6,576 596x1 #888888
 fill 6,554 1x22 #888888
 fill 601,554 1x22 #888888
-text 591,597 7x17 #000000 sans13 link 0 "▾"
+text 591,597 7x17 #000000 sans13 rtl link 0 "▾"
 text 560,597 27x17 #000000 sans13 rtl link 0 "פתוח"
 summary 10,584 588x16 open -
 text 573,626 25x17 #000000 sans13 rtl link 0 "מוצג"

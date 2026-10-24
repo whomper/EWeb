@@ -151,7 +151,9 @@ typedef struct {
 	uint8_t collapse;		/* a space dropped at the start or end of a line;
 					   IT_FLOAT: placed */
 	uint8_t hidden;			/* visibility: hidden */
-	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left */
+	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left, 3 a
+					   number (word_dir); drawn right to left (its level odd):
+					   DLF_RTL in flags (visual_order) */
 	uint16_t link;
 	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
@@ -1967,21 +1969,25 @@ static int is_space(unsigned char c)
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
 }
 
-/* the direction of a word: 2 if it has Hebrew letters, 1 if it has
-   other letters or digits, else 0 */
+static int lb_letter(uint32_t c);
+
+/* the direction of a word: 2 if it has Hebrew (or Arabic) letters, 1 if
+   it has other letters, 3 if digits and no letter (a number), else 0 */
 static int word_dir(const char *s, uint32_t n)
 {
 	const char *e = s + n;
-	int ltr = 0;
+	int ltr = 0, num = 0;
 	while (s < e) {
 		uint32_t c = utf8_next(&s, e);
-		if (c >= 0x590 && c <= 0x5FF)
+		if ((c >= 0x590 && c < 0x900) || (c >= 0xFB1D && c < 0xFE00) || (c >= 0xFE70 && c < 0xFF00))
 			return 2;
-		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-		    (c >= 0xC0 && c < 0x590))
+		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= 0xC0 && c < 0x590 && c != 0xD7 && c != 0xF7) ||
+		    (c >= 0x900 && lb_letter(c)))
 			ltr = 1;
+		else if (c >= '0' && c <= '9')
+			num = 1;
 	}
-	return ltr;
+	return ltr ? 1 : num ? 3 : 0;
 }
 
 /* the same in the page: in visual Hebrew a Hebrew word is drawn as its
@@ -2070,7 +2076,8 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 	r->desc = r->font->descent + (lead - lead / 2);
 }
 
-static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t n, int32_t w)
+/* dir: a word's (word_dir), -1 to work it out */
+static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t n, int32_t w, int dir)
 {
 	ITEM *it = item(l);
 	if (it == NULL)
@@ -2095,7 +2102,7 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 	it->len = n;
 	it->w = w;
 	if (kind == IT_WORD)
-		it->dir = (uint8_t) word_dir_in(l, s, n);
+		it->dir = (uint8_t) (dir >= 0 ? dir : word_dir_in(l, s, n));
 }
 
 /* ---------------------------------------------------------------- places inside a word a line may end at
@@ -2157,15 +2164,34 @@ static int lb_no_after(uint32_t c)
 	return 0;
 }
 
-/* text_items' bytes: 0 most, 1 white space (a word's end), 2 a hyphen or
-   a slash, 3 the first of a character from U+0080 to U+00BF (the soft
+/* text_items' bytes: 1 white space (a word's end), else bits: 2 a hyphen
+   or a slash, 4 the first of a character from U+0080 to U+00BF (the soft
    hyphen) or from U+2000 (the dashes, the zero width space, ideographs),
-   which word_pieces looks at (a letter of Latin, Greek, Cyrillic or
-   Hebrew is copied as it is) */
+   8 the first of a Hebrew one, 16 an ASCII letter, 32 a digit, 64 other
+   ASCII punctuation, 128 the first of any other (a letter of Latin, Greek,
+   Cyrillic...). A word with 2 or 4, with 8 and a letter or digit
+   (Hebrew and a number or Latin in one word), or with punctuation and
+   letters of the other direction than the text's ("2026." or "EWeb." in
+   Hebrew, "!שלום" in English), goes to word_pieces; any other is copied
+   as it is */
+#define LB_SPLIT(seen, rtl) (((seen) & 6) != 0 || (((seen) & 8) && ((seen) & 48)) || \
+			     (((seen) & 64) && ((seen) & ((rtl) ? 48 : 8))))
 static const uint8_t lb_class[256] = {
 	[' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1, ['\f'] = 1, ['-'] = 2, ['/'] = 2,
-	[0xc2] = 3, [0xe2 ... 0xff] = 3
+	['!' ... ','] = 64, ['.'] = 64, [':' ... '@'] = 64, ['['... '`'] = 64, ['{' ... '~'] = 64,
+	['0' ... '9'] = 32, ['A' ... 'Z'] = 16, ['a' ... 'z'] = 16,
+	[0xc2] = 4, [0xc3 ... 0xd5] = 128, [0xd6] = 8, [0xd7] = 8, [0xd8 ... 0xe1] = 128, [0xe2 ... 0xff] = 4
 };
+
+/* in a number (UAX #9's ET, CS, ES): a sign beside its digits, or one
+   between two */
+static int num_sign(uint32_t c)
+{
+	return c == '%' || c == '$' || c == '#' || c == '+' || c == 0xB0 || c == 0xA3 || c == 0xA5 || c == 0x20AA ||
+	       c == 0x20AC || c == 0x2030;
+}
+
+
 
 /* the code point of s that ends before *j, in the word from w; 0 at its
    start. *j: where it begins */
@@ -2205,20 +2231,43 @@ static int no_wrap(const ec_style *s)
 	return w == KW_PRE || w == KW_NOWRAP;
 }
 
+/* a letter of direction d in p..e (1 left to right, its digits too; 2
+   Hebrew, and digits, which act as right to left on what is between
+   them: UAX #9, N1) */
+static int lb_more(const char *p, const char *e, int d)
+{
+	while (p < e) {
+		uint32_t c = utf8_next(&p, e);
+		if ((c >= 0x590 && c < 0x900) ? d == 2 :
+		    (c >= '0' && c <= '9') || (d == 1 && (c < 0x80 ? (lb_class[c] & 16) != 0 : lb_letter(c))))
+			return 1;
+	}
+	return 0;
+}
+
+/* t[a..b) as a word of the line, a line ending before it as cb says */
+static void word_piece(L *l, const RUNSTATE *r, char *t, uint32_t a, uint32_t b, int cb)
+{
+	put_item(l, r, IT_WORD, t + a, b - a, (int32_t) font_width(r->font, t + a, b - a), -1);
+	if (!l->fail)
+		l->it[l->nit - 1].canbreak = (uint8_t) cb;
+}
+
 /* a word with a hyphen, a slash or a character looked at, s[i..e), into t
    from o: in pieces where a line may end inside it, each piece's canbreak
    the place before it (3, 4: at a soft hyphen), its soft hyphens and zero
-   width spaces left out. Where t ends */
+   width spaces left out; and where Hebrew meets a number or Latin, each
+   piece of one direction for visual_order. Where t ends */
 static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, const char *s, uint32_t i, uint32_t e,
-						       char *t, uint32_t o,
-			    int tt, int wrap, int *line_start)
+						       char *t, uint32_t o, int tt, int wrap, int rtl,
+						       int *line_start)
 {
-	uint32_t j = i, start = o;
-	int cb = 0, brk = 0, slow = 0;
+	uint32_t j = i, start = o, nst = o, pb = 0, est = o;
+	int cb = 0, brk = 0, slow = 0, pdir = 0;
 	while (j < e) {
 		const char *q = s + j;
 		uint32_t b = utf8_next(&q, s + e);
-		int was = slow;
+		int was = slow, d = (b >= 0x590 && b < 0x900) ? 2 : (b < 0x80 ? (lb_class[b] & 48) != 0 : lb_letter(b));
 		if (b == 0xAD || b == 0x200B) {
 			/* a soft hyphen, a zero width space: not drawn, a place
 			   to end a line */
@@ -2237,10 +2286,33 @@ static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, c
 				brk = 3;
 		}
 		if (brk != 0 && wrap) {
-			put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
-			if (!l->fail)
-				l->it[l->nit - 1].canbreak = (uint8_t) cb;
+			word_piece(l, r, t, start, o, cb);
 			cb = brk;
+			start = o;
+			pdir = 0;
+		} else if (d != 0 && pdir != 0 && d != pdir) {
+			/* Hebrew and a number or Latin in one word: a piece of
+			   each direction, no line ending between them (2), the
+			   neutrals between them with the Hebrew (as UAX #9 has
+			   them beside a number) */
+			uint32_t cut = pdir == 1 && nst > start ? nst : num_sign(pb) && est > start ? est : o;
+			word_piece(l, r, t, start, cut, wrap ? cb : 2);
+			cb = 2;
+			start = cut;
+		} else if (o > start && d == 0 && pdir == (rtl ? 1 : 2) && !(num_sign(b) && pb >= '0' && pb <= '9') &&
+			   !lb_more(q, s + e, pdir)) {
+			/* punctuation after letters of the other direction than
+			   the text's, none of theirs after it ("2026." or "EWeb."
+			   in Hebrew, "!שלום" in English): a piece of its own,
+			   which UAX #9 puts by the text around it */
+			word_piece(l, r, t, start, o, wrap ? cb : 2);
+			cb = 2;
+			start = o;
+			pdir = 0;
+		} else if (o > start && d == (rtl ? 1 : 2) && pdir == 0 && !num_sign(pb)) {
+			/* and before them ("(10" in Hebrew) */
+			word_piece(l, r, t, start, o, wrap ? cb : 2);
+			cb = 2;
 			start = o;
 		}
 		brk = 0;
@@ -2256,12 +2328,17 @@ static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, c
 			while (s + j < q)
 				t[o++] = s[j++];
 		}
+		if (d != 0) {
+			pdir = d;
+			nst = o;
+		}
+		if (!num_sign(b))
+			est = o;	/* (where the signs before a number begin: "$5") */
+		pb = b;
 	}
 	if (o == start && cb == 0)
 		return o;	/* (only soft hyphens: nothing) */
-	put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
-	if (!l->fail)
-		l->it[l->nit - 1].canbreak = (uint8_t) (wrap ? cb : 2);	/* (2: no line ends before it, or in it) */
+	word_piece(l, r, t, start, o, wrap ? cb : 2);	/* (2: no line ends before it, or in it) */
 	*line_start = 0;
 	return o;
 }
@@ -2272,6 +2349,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 {
 	int ws = kw(r->st, EP_WHITE_SPACE), tt = kw(r->st, EP_TEXT_TRANSFORM);
 	int keep = ws == KW_PRE || ws == KW_PRE_WRAP || ws == KW_BREAK_SPACES;
+	int rtl = kw(r->st, EP_DIRECTION) == KW_RTL && !l->visual;
 	int newlines = keep || ws == KW_PRE_LINE;
 	int wrap = !(ws == KW_PRE || ws == KW_NOWRAP);
 	int32_t sw = font_advance(r->font, ' ');
@@ -2287,7 +2365,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 		unsigned char c = (unsigned char) s[i];
 		ITEM *it;
 		if (c == '\n' && newlines) {
-			put_item(l, r, IT_BREAK, NULL, 0, 0);
+			put_item(l, r, IT_BREAK, NULL, 0, 0, 0);
 			*line_start = 1;
 			i++;
 			continue;
@@ -2299,7 +2377,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 		if (is_space(c)) {
 			if (keep) {
 				t[o] = ' ';
-				put_item(l, r, IT_SPACE, t + o, 1, c == '\t' ? 8 * sw : sw);
+				put_item(l, r, IT_SPACE, t + o, 1, c == '\t' ? 8 * sw : sw, 0);
 				o++;
 				i++;
 				it = &l->it[l->nit - 1];
@@ -2314,7 +2392,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				;
 			if (!*line_start && !(k >= 0 && l->it[k].kind == IT_SPACE && l->it[k].collapse)) {
 				t[o] = ' ';
-				put_item(l, r, IT_SPACE, t + o, 1, sw);
+				put_item(l, r, IT_SPACE, t + o, 1, sw, 0);
 				o++;
 				it = &l->it[l->nit - 1];
 				it->canbreak = (uint8_t) wrap;
@@ -2345,11 +2423,14 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 					t[o++] = ch;
 				}
 			}
-			if (seen > 1) {
-				o = word_pieces(l, r, s, i, j, t, start, tt, wrap, line_start);
+			if (LB_SPLIT(seen, rtl)) {
+				o = word_pieces(l, r, s, i, j, t, start, tt, wrap, rtl, line_start);
 			} else {
+				/* (its direction from its bytes: only one with
+				   Hebrew or another script's letters looked at) */
 				put_item(l, r, IT_WORD, t + start, o - start,
-					 (int32_t) font_width(r->font, t + start, o - start));
+					 (int32_t) font_width(r->font, t + start, o - start),
+					 seen & 136 ? -1 : seen & 16 ? 1 : seen & 32 ? 3 : 0);
 				if (!wrap && !l->fail)
 					l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
 				*line_start = 0;
@@ -2501,10 +2582,10 @@ static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
 		l->fail = 1;
 		return;
 	}
-	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n));
+	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n), -1);
 	if (!m->num && li->st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
 		return;		/* a string: as it is, the white space after it dropped */
-	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '));
+	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '), 0);
 	if (l->fail)
 		return;
 	it = &l->it[l->nit - 1];
@@ -2529,7 +2610,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			mark_items(l, pr, c, line_start);
 			break;
 		case BX_BR:
-			put_item(l, pr, IT_BREAK, NULL, 0, 0);
+			put_item(l, pr, IT_BREAK, NULL, 0, 0, 0);
 			*line_start = 1;
 			break;
 		case BX_ATOM: {
@@ -2539,7 +2620,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			if (c->n != NULL)
 				r.node = c->n;
 #endif
-			put_item(l, &r, IT_ATOM, c->text, c->len, atom_w(l, c, r.font));
+			put_item(l, &r, IT_ATOM, c->text, c->len, atom_w(l, c, r.font), 0);
 			it = &l->it[l->nit - 1];
 			it->atom = c;
 			it->dir = (uint8_t) word_dir_in(l, c->text, c->len);
@@ -2653,14 +2734,14 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			gr = len0(l, c->st, EP_MARGIN_RIGHT, AUTO) + len0(l, c->st, EP_PADDING_RIGHT, AUTO) +
 			     (kw(c->st, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ? len0(l, c->st, EP_BORDER_RIGHT_WIDTH, AUTO) : 0);
 			if (gl > 0) {
-				put_item(l, &r, IT_GAP, NULL, 0, gl);
+				put_item(l, &r, IT_GAP, NULL, 0, gl, 0);
 				if (!l->fail && no_wrap(c->st))
 					l->it[l->nit - 1].canbreak = 2;
 				*line_start = 0;
 			}
 			collect(l, c, &r, line_start);
 			if (gr > 0) {
-				put_item(l, &r, IT_GAP, NULL, 0, gr);
+				put_item(l, &r, IT_GAP, NULL, 0, gr, 0);
 				if (!l->fail && no_wrap(c->st))
 					l->it[l->nit - 1].canbreak = 2;
 			}
@@ -2676,7 +2757,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				if (c->n != NULL)
 					r.node = c->n;
 #endif
-				put_item(l, &r, IT_ATOM, NULL, 0, 0);
+				put_item(l, &r, IT_ATOM, NULL, 0, 0, 0);
 				if (l->fail)
 					break;
 				it = &l->it[l->nit - 1];
@@ -2821,48 +2902,71 @@ static void reverse(long *o, uint8_t *d, long a, long b)
 	}
 }
 
-/* the items i..j-1 of a line in the order they are drawn (Hebrew words
-   right to left): word-level bidi, enough for Hebrew mixed with Latin.
-   A page in visual Hebrew is already in that order: as it is (the HTML
-   Standard's rendering for ISO-8859-8, 15.3.5: unicode-bidi:
-   isolate-override; for the whole page, as browsers do it, and whatever
-   the line's direction) */
+/* the items i..j-1 of a line in the order they are drawn, and each one's
+   direction (DLF_RTL in its flags): UAX #9 with the items for its characters, each a
+   word left to right (Latin, 1), right to left (Hebrew, 2), a number (3)
+   or neutral (0: punctuation, spaces): a number after Latin is Latin
+   (W7); a neutral between two of the same direction takes it, a number
+   counting as right to left, else the line's (N1, N2); their levels (I1,
+   I2: a number in Hebrew, or Latin in a right-to-left line, one above),
+   and the runs at each level or above reversed, from the highest (L2).
+   That is all of it for one level of text (embeddings, dir on an inline
+   element, aren't yet). A page in visual Hebrew is already in its order:
+   as it is (the HTML Standard's rendering for ISO-8859-8, 15.3.5:
+   unicode-bidi: isolate-override; for the whole page, as browsers do it,
+   and whatever the line's direction) */
 static void visual_order(L *l, long i, long j, int rtl, long *ord)
 {
 	long k, n = j - i, s, e;
-	uint8_t *d = l->visual ? NULL : malloc(n ? 2 * n : 1), *strong;
-	if (d == NULL) {
-		for (k = 0; k < n; k++)
-			ord[k] = i + k;
-		return;
-	}
-	strong = d + n;
+	int last = rtl ? 2 : 1, top = 0, v;
+	uint8_t *lv, *c;
 	for (k = 0; k < n; k++) {
-		ITEM *it = &l->it[i + k];
-		strong[k] = it->kind == IT_WORD || it->kind == IT_ATOM ? it->dir : 0;
 		ord[k] = i + k;
+		l->it[i + k].flags &= (uint8_t) ~DLF_RTL;
 	}
-	/* a neutral between two of the same direction takes it; others the line's */
+	if (l->visual || n <= 0 || (lv = malloc((size_t) n * 2)) == NULL)
+		return;
+	c = lv + n;
 	for (k = 0; k < n; k++) {
-		if (strong[k] != 0) {
-			d[k] = strong[k];
+		const ITEM *it = &l->it[i + k];
+		int d = it->kind == IT_WORD || it->kind == IT_ATOM ? it->dir : 0;
+		if (d == 1 || d == 2)
+			last = d;
+		else if (d == 3 && last == 1)
+			d = 1;
+		c[k] = (uint8_t) d;
+	}
+	for (k = 0; k < n; k++) {
+		int a, b;
+		lv[k] = c[k];
+		if (c[k] != 0)
 			continue;
+		for (s = k - 1; s >= 0 && c[s] == 0; s--)
+			;
+		for (e = k + 1; e < n && c[e] == 0; e++)
+			;
+		a = s >= 0 ? (c[s] == 1 ? 1 : 2) : (rtl ? 2 : 1);
+		b = e < n ? (c[e] == 1 ? 1 : 2) : (rtl ? 2 : 1);
+		lv[k] = (uint8_t) (a == b ? a : rtl ? 2 : 1);
+	}
+	for (k = 0; k < n; k++) {
+		lv[k] = (uint8_t) (rtl ? (lv[k] == 2 ? 1 : 2) : (lv[k] == 2 ? 1 : lv[k] == 3 ? 2 : 0));
+		if ((lv[k] & 1) && l->it[i + k].kind == IT_WORD)
+			l->it[i + k].flags |= DLF_RTL;	/* (a space is drawn the same either way) */
+		if (lv[k] > top)
+			top = lv[k];
+	}
+	for (v = top; v >= 1; v--)
+		for (s = 0; s < n; s = e + 1) {
+			while (s < n && lv[s] < v)
+				s++;
+			if (s >= n)
+				break;
+			for (e = s; e + 1 < n && lv[e + 1] >= v; e++)
+				;
+			reverse(ord, lv, s, e);
 		}
-		for (s = k - 1; s >= 0 && strong[s] == 0; s--)
-			;
-		for (e = k + 1; e < n && strong[e] == 0; e++)
-			;
-		d[k] = (uint8_t) (s >= 0 && e < n && strong[s] == strong[e] ? strong[s] : rtl ? 2 : 1);
-	}
-	if (rtl)
-		reverse(ord, d, 0, n - 1);
-	for (s = 0; s < n; s = e) {
-		for (e = s; e < n && d[e] == d[s]; e++)
-			;
-		if (d[s] == (rtl ? 1 : 2))
-			reverse(ord, d, s, e - 1);
-	}
-	free(d);
+	free(lv);
 }
 
 /* a picture's item in the display list */
@@ -3672,10 +3776,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					continue;
 				if (it->kind == IT_ATOM) {
 					draw_atom(l, it, it->x, base);
-				} else if (it->kind == IT_WORD && it->dir == 2) {
-					ITEM t = *it;
-					t.flags |= DLF_RTL;
-					text(l, it->x, base + it->shift, &t, it->text, it->len, it->w);
+				} else if (it->kind == IT_WORD && (it->flags & DLF_RTL)) {
+					text(l, it->x, base + it->shift, it, it->text, it->len, it->w);
 				} else if (it->kind == IT_WORD || (it->kind == IT_SPACE && it->flags)) {
 					/* one run for words and spaces that follow on in the text */
 					const char *s = it->text;
@@ -3683,7 +3785,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					int32_t ww = it->w;
 					while (k + 1 < end - i) {
 						ITEM *nx = &l->it[i + k + 1];
-						if ((nx->kind != IT_WORD && nx->kind != IT_SPACE) || nx->dir == 2 || justify ||
+						if ((nx->kind != IT_WORD && nx->kind != IT_SPACE) || justify ||
 						    nx->text != s + len || nx->font != it->font || nx->color != it->color ||
 						    nx->flags != it->flags || nx->link != it->link || nx->hidden ||
 						    nx->shift != it->shift || nx->x != it->x + ww)

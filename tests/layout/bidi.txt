@@ -1,0 +1,110 @@
+page 608 x 265, background ffffff, 109 items, 0 links, title "Hebrew with numbers and Latin"
+text 579,20 22x17 #000000 sans13 rtl link 0 "שנת"
+text 543,20 32x17 #000000 sans13 link 0 "2026"
+text 520,20 19x17 #000000 sans13 rtl link 0 "היא"
+text 494,20 22x17 #000000 sans13 rtl link 0 "שנה"
+text 463,20 27x17 #000000 sans13 rtl link 0 "טובה"
+fill 6,6 596x1 #aaaaaa
+fill 6,23 596x1 #aaaaaa
+fill 6,7 1x16 #aaaaaa
+fill 601,7 1x16 #aaaaaa
+text 588,43 13x17 #000000 sans13 rtl link 0 "ב-"
+text 556,43 32x17 #000000 sans13 link 0 "2026"
+text 512,43 40x17 #000000 sans13 rtl link 0 "נפגשנו,"
+text 500,43 8x17 #000000 sans13 rtl link 0 "ו-"
+text 468,43 32x17 #000000 sans13 link 0 "2027"
+text 436,43 28x17 #000000 sans13 rtl link 0 "נראה"
+fill 6,29 596x1 #aaaaaa
+fill 6,46 596x1 #aaaaaa
+fill 6,30 1x16 #aaaaaa
+fill 601,30 1x16 #aaaaaa
+text 588,66 13x17 #000000 sans13 rtl link 0 "ה-"
+text 561,66 27x17 #000000 sans13 link 0 "CSS"
+text 541,66 16x17 #000000 sans13 rtl link 0 "של"
+text 506,66 31x17 #000000 sans13 rtl link 0 "האתר"
+fill 6,52 596x1 #aaaaaa
+fill 6,69 596x1 #aaaaaa
+fill 6,53 1x16 #aaaaaa
+fill 601,53 1x16 #aaaaaa
+text 564,89 37x17 #000000 sans13 rtl link 0 "(שלום)"
+text 542,89 18x17 #000000 sans13 rtl link 0 "[א]"
+text 506,89 32x17 #000000 sans13 rtl link 0 "ו-{ב}"
+fill 6,75 596x1 #aaaaaa
+fill 6,92 596x1 #aaaaaa
+fill 6,76 1x16 #aaaaaa
+fill 601,76 1x16 #aaaaaa
+text 574,112 27x17 #000000 sans13 rtl link 0 "עמוד"
+text 562,112 8x17 #000000 sans13 link 0 "5"
+text 532,112 26x17 #000000 sans13 rtl link 0 "מתוך"
+text 512,112 16x17 #000000 sans13 link 0 "10"
+text 508,112 4x17 #000000 sans13 rtl link 0 ","
+text 478,112 26x17 #000000 sans13 rtl link 0 "מחיר"
+text 446,112 28x17 #000000 sans13 link 0 "3.50"
+text 420,112 22x17 #000000 sans13 rtl link 0 "ש"ח"
+fill 6,98 596x1 #aaaaaa
+fill 6,115 596x1 #aaaaaa
+fill 6,99 1x16 #aaaaaa
+fill 601,99 1x16 #aaaaaa
+text 570,135 31x17 #000000 sans13 rtl link 0 "האתר"
+text 448,135 118x17 #000000 sans13 link 0 "www.example.com"
+text 417,135 27x17 #000000 sans13 rtl link 0 "פתוח"
+text 391,135 22x17 #000000 sans13 rtl link 0 "ביום"
+text 315,135 72x17 #000000 sans13 link 0 "24/10/2026"
+text 311,135 4x17 #000000 sans13 rtl link 0 "."
+fill 6,121 596x1 #aaaaaa
+fill 6,138 596x1 #aaaaaa
+fill 6,122 1x16 #aaaaaa
+fill 601,122 1x16 #aaaaaa
+text 566,158 35x17 #000000 sans13 link 0 "EWeb"
+text 543,158 19x17 #000000 sans13 rtl link 0 "הוא"
+text 504,158 35x17 #000000 sans13 rtl link 0 "דפדפן"
+fill 6,144 596x1 #aaaaaa
+fill 6,161 596x1 #aaaaaa
+fill 6,145 1x16 #aaaaaa
+fill 601,145 1x16 #aaaaaa
+text 7,181 61x17 #000000 sans13 link 0 "The word "
+text 68,181 27x17 #000000 sans13 rtl link 0 "שלום"
+text 99,181 57x17 #000000 sans13 link 0 "(peace), "
+text 188,181 13x17 #000000 sans13 rtl link 0 "ב-"
+text 156,181 32x17 #000000 sans13 link 0 "2026"
+text 205,181 48x17 #000000 sans13 link 0 "and 10 "
+text 253,181 36x17 #000000 sans13 rtl link 0 "שקלים"
+text 289,181 4x17 #000000 sans13 link 0 "."
+fill 6,167 596x1 #aaaaaa
+fill 6,184 596x1 #aaaaaa
+fill 6,168 1x16 #aaaaaa
+fill 601,168 1x16 #aaaaaa
+text 7,204 126x17 #000000 sans13 link 0 "Hebrew at the end: "
+text 163,204 27x17 #000000 sans13 rtl link 0 "שלום"
+text 133,204 26x17 #000000 sans13 rtl link 0 "עולם"
+text 190,204 5x17 #000000 sans13 link 0 "!"
+fill 6,190 596x1 #aaaaaa
+fill 6,207 596x1 #aaaaaa
+fill 6,191 1x16 #aaaaaa
+fill 601,191 1x16 #aaaaaa
+text 585,227 16x17 #000000 sans13 rtl link 0 "אני"
+text 539,227 42x17 #000000 sans13 rtl link 0 "משתמש"
+text 522,227 13x17 #000000 sans13 rtl link 0 "ב-"
+text 489,227 33x17 #000000 sans13 link 0 "Linux"
+text 485,227 4x17 #000000 sans13 rtl link 0 "."
+text 464,227 17x17 #000000 sans13 rtl link 0 "וגם"
+text 455,227 5x17 #000000 sans13 rtl link 0 "("
+text 379,227 76x17 #000000 sans13 link 0 "EWeb), 50%"
+text 367,227 8x17 #000000 sans13 rtl link 0 "ו-"
+text 351,227 16x17 #000000 sans13 link 0 "$5"
+text 334,227 13x17 #000000 sans13 rtl link 0 "ו-("
+text 318,227 16x17 #000000 sans13 link 0 "10"
+text 309,227 9x17 #000000 sans13 rtl link 0 ")."
+fill 6,213 596x1 #aaaaaa
+fill 6,230 596x1 #aaaaaa
+fill 6,214 1x16 #aaaaaa
+fill 601,214 1x16 #aaaaaa
+text 7,250 69x17 #000000 sans13 link 0 "In English ("
+text 76,250 27x17 #000000 sans13 rtl link 0 "שלום"
+text 103,250 42x17 #000000 sans13 link 0 ") and ""
+text 145,250 27x17 #000000 sans13 rtl link 0 "שלום"
+text 172,250 116x17 #000000 sans13 link 0 "" then 3.5% more."
+fill 6,236 596x1 #aaaaaa
+fill 6,253 596x1 #aaaaaa
+fill 6,237 1x16 #aaaaaa
+fill 601,237 1x16 #aaaaaa

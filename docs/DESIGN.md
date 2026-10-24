@@ -681,7 +681,7 @@ releases.
   `white-space`, `text-transform`, `text-decoration`, sub and superscripts; lists with every common
   marker and `start`, `reversed` and `value`; `::before` and `::after` text; tables with shared column
   widths, `colspan`, `border-spacing`, and shrinking to fit (flex rows, side by side, until flexbox had its own, below); Hebrew words
-  reordered right to left within each line (a word-level form of the bidirectional algorithm), with
+  reordered right to left within each line (UAX #9 with the line's words for its characters), with
   right-to-left paragraphs aligned right. Pictures and forms (below, 19 Oct 2026). Since 19 Oct 2026 (your order: after pictures, the layout's gaps):
   - **floats**, left and right, in each block formatting context (the page, a cell, a float, a box
     with `overflow` other than visible, absolute boxes): each at its width (asked for, or its widest
@@ -3289,6 +3289,32 @@ selection or finding words across a line ended at a soft hyphen has its hyphen i
 by `tests/layout/breaks.html` in `make test`, and 150 pages of random bytes of those kinds under
 AddressSanitizer.
 
+## Hebrew with numbers and Latin (24 Oct 2026)
+
+Stage 4's second part. Hebrew words were put right to left within a line and a neutral took its
+neighbours' direction, but a word was drawn in one direction: "ב-2026" came out with its number
+backwards ("6202-ב"), brackets in Hebrew pointed the wrong way, and a full stop after a number or
+an English word at the end of a Hebrew sentence stayed on the wrong side. Now the line is ordered
+by UAX #9 with its words for characters (`visual_order`): each word left to right (Latin), right to
+left (Hebrew), a number (digits and what is between them: "3.50", "24/10/2026", "50%", "$5") or
+neutral; a number after Latin is Latin (W7); a neutral between two of the same direction takes it,
+a number counting as right to left (N1), else the line's (N2); the levels follow (I1, I2: a number
+in Hebrew, and Latin on a right-to-left line, one above), and the runs at each level or above are
+reversed from the highest (L2). A word drawn right to left (its level odd: `DLF_RTL` in its flags)
+has its brackets and signs that point one way turned (L4: `mirrored` in `src/gfx/canvas.c`), so a
+neutral word on a right-to-left line, "(" or "?!", is drawn so too. For that a word is cut where it
+has to be (`word_pieces`, no line ending between the pieces): where Hebrew meets a number or Latin
+("ב-" "2026", the hyphen with the Hebrew, as N1 has it beside a number; "ו-" "$5", a sign with its
+number), and around punctuation beside letters of the other direction than the text's ("2026" ".",
+"EWeb" "." and "(" "10" ")" in Hebrew; "שלום" "!" in English), so that UAX #9 puts it by the text
+around it. The words' bytes say which need that (`lb_class`, the same loop as the line breaks'),
+and also each word's direction, which `word_dir` worked out from each character before: the page
+set's 127 KB page lays out in 12.01 M 68030 instructions, from 12.12 M; the Hebrew test page 1.4%
+more than before. Still to come: embeddings (`dir` on an inline element, `<bdi>`, `<bdo>`), which
+the layout's lines don't carry yet. Tested by `tests/layout/bidi.html` in `make test` (the
+results checked against the algorithm by hand), and the random pages above on lines of both
+directions.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3368,10 +3394,11 @@ lives in the other parts:
 - **CSS** (LibCSS): `direction` and `unicode-bidi` are there. EWeb's UA sheet adds the HTML rules for
   `dir="rtl"`, `dir="ltr"`, `<bdi>` and `<bdo>`; `dir="auto"` is layout's, from the first strong
   letter.
-- **Layout and drawing** (fresh code): today Hebrew words are put right to left within each line
-  after it is broken, across links and bold, and right-to-left blocks align right and put list
-  markers on the right (above). Still to come: the full Unicode bidirectional algorithm (UAX #9),
-  with numbers kept left to right, brackets mirrored and the levels `dir`, `<bdi>` and `<bdo>` set.
+- **Layout and drawing** (fresh code): Hebrew words are put right to left within each line after
+  it is broken, across links and bold, and right-to-left blocks align right and put list markers on
+  the right (above); since 24 Oct 2026 by UAX #9 with the line's words for its characters, numbers
+  left to right in Hebrew and brackets mirrored (Hebrew with numbers and Latin, above). Still to
+  come: the levels `dir` on an inline element, `<bdi>` and `<bdo>` set.
   `common/bidi.c` (from ClaudeST) handles one line of Atari-charset text, so EWeb needs the fuller
   algorithm, which can move to `common/` for every app.
 - **Visual Hebrew:** a page labelled plain ISO-8859-8 (or "visual") is already in display order, so
@@ -3585,8 +3612,9 @@ out of both (their paths lead nowhere on the Atari).
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
-   drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
-   UAX #14's line breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
+   drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full
+   (numbers, Latin and mirrored brackets in Hebrew done, above; embeddings to come), UAX #14's line
+   breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions
 
