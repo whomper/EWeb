@@ -3107,14 +3107,15 @@ the window's top down in yellow and brings it into view, a box that scrolls too
 (`page_reveal_item`, by the boxes hiding what overflows that the run is in, so the ST edition has
 it); ^G finds the next and Shift-^G the one before (Safari's keys, as the family takes a Mac
 app's), going round; the status bar says "2 of 5". `src/layout/find.c` folds the page's text runs,
-in the order they are drawn, into one string: ASCII's and Latin-1's capitals small, white space a
+in the display list's order, into one string: ASCII's and Latin-1's capitals small, white space a
 space, a space between two runs with a gap between them (a word space, a line's end) and none
 between two parts of a word (a bold "Ata" and "ri"). A space in the words matches any white space,
-a line's end among it. A line's right-to-left runs come left to right in the display list, so they
-go in last to first, as they are read (full bidirectional text is stage 4). A place on the page
-is a run and a byte, kept with the page's layout serial: when the page is laid out again (a
-picture came, the window was sized) the same match, by its number, is found again; on another page
-none is marked. Text no one sees (opacity 0) isn't found. The canvas draws the mark under the
+a line's end among it. The layout puts a line's runs in the list in the order they are read (the
+line's words in its bidi order, `visual_order`, place them on the screen; the list keeps the
+text's: a right-to-left line's runs right to left, a number or Latin words in it left to right),
+so the string is the text as it is read (full bidirectional text is stage 4). A place on the page
+is a run and a byte; the words found are the selection (below), kept the same way when the page is
+laid out again; on another page none is marked. Text no one sees (opacity 0) isn't found. The canvas draws the mark under the
 run's part (`canvas.mark`), from the run's right in a right-to-left one.
 
 What a search costs (68030 instructions, `drawbench -F`): 0.24 to 1.3 million on the page set's
@@ -3123,6 +3124,45 @@ folding by a table, the first byte tested before a match is tried); a search is 
 the text not kept. Tested by `tests/layout/find.py` in both editions (order and round, back, case,
 across runs and lines, Hebrew as it is read, hidden text, a box that scrolls, the mark drawn where
 the words are) and `make hatarigui` (^F, ^G, Shift-^G on `about:history`).
+
+## Selecting and copying (24 Oct 2026)
+
+Stage 3's third part. A drag over the page selects its text from one place to another, once the
+mouse has moved by more than 3 pixels with the button down, so a click still follows a link and a
+drag that starts on one selects; the window scrolls a line at a time while the mouse is above or
+below it. A double click selects a word (letters, digits and any character past ASCII, on into a
+run beside it: the bold "Ata" and "ri"; on a link a double click opens it, as before), Shift-click
+takes the selection on to there, Edit > Select all (^A) selects all the text (the address keeps ^A
+while it has the keyboard), and a click elsewhere lets it go. ^C copies the selection, else the
+page's text as before; Find's words are the selection, marked yellow (a selection made by the
+mouse light blue, `#99ccff`: grey in 16 colours, a light pattern in monochrome), so ^C copies
+them and ^G goes on from it, as in other browsers.
+
+`src/layout/find.c` has it all on the page's runs in the display list's order, which is the order
+they are read (above). A selection is a stretch (`pg_range`) from one place to another, the first
+earlier in the list: an item is in it between the two, so the canvas marks it with two compares
+(`canvas.mark`). The place under the mouse (`page_pos_at`) is the nearest run, on the line before
+one above or below, then the nearest to the side, not one hidden by a box hiding what overflows
+it; the byte is the nearest gap between two characters, from the right in a right-to-left run,
+never before a combining mark (an accent, a Hebrew point: it goes with its letter, whether
+`EWEB.FNT` has it or not). A double click selects a word only on text, never the nearest far away.
+A selection's ends are kept as places in the page's text, by the characters before them that
+aren't white space (`page_text_index`): when the page is laid out again its lines end elsewhere
+and its runs are others, but its text is the same, so `page_text_place` finds the same stretch
+again. A stretch's text (`page_copy_text`) is its runs in order, nothing between two parts of a
+word (a superscript's "2" in "mc2" too: runs whose heights overlap by more than half are on one
+line), a space between two runs apart on a line, CR LF between lines and an empty line before a run
+lower than two of its lines down (a paragraph's gap). A review found the first order wrong on
+right-to-left lines with a number or Latin in them, which the layout's own order put right.
+
+What it costs (68030 instructions, `drawbench -X`, on the page set's three biggest pages): the place under the mouse, at each of its moves, 20,000 to 50,000 (about 25 a display-list item: the distance down first, the clip of a box hiding what overflows only for the nearest; 1,911 items on the biggest list, under 5 ms on the DFB1; twice that at first); keeping a selection's ends when it is made, and placing them again after a layout, about 10 a byte of the text before them; copying about 5 a byte. While the mouse drags, only the
+rows of the items between where the end was and where it is now are drawn again, and nothing is
+looked for while the mouse is still. Tested by `tests/layout/select.py` in both editions (a drag either
+way, beside a line and below the page, a double click's word, Hebrew as it is read, Select all
+and the page's text, the same text laid out again at two other widths, the mark where it is
+drawn; `select.html`'s right-to-left lines with a number and Latin, super- and subscripts, an accent
+and a point with their letters, no word far from text) and `make hatarigui` (a drag over the files page's links: none followed, ^C's
+`SCRAP.TXT` as ewrender's `-x` selects it; ^A and ^C on `about:history`).
 
 ## The design
 
@@ -3419,7 +3459,7 @@ out of both (their paths lead nowhere on the Atari).
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
-   page (done, above), selecting and copying, history with visited links (done, above), a page
+   page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads, Esc during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 

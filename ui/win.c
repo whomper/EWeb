@@ -14,6 +14,7 @@
  * text, so the window has none and draws its own. The page is drawn by screen.c; scrolling
  * moves what is on the screen and draws only the new rows when it can.
  */
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1354,35 +1355,23 @@ static int ctl_key(short kstate, short key)
 
 /* ---------------------------------------------------------------- the clipboard */
 
-/* the page as text: its runs in the order they are drawn, a line break
-   where the next run starts lower down */
+static int sel_now(void);
+
+/* the selection's text, else the page's (page_copy_text), in the Atari's
+   characters */
 static char *page_text(long *n)
 {
-	SBUF s;
-	long i;
-	int32_t last_y = -1, last_x = 0;
-	char *a;
-	sb_init(&s);
+	pg_range r;
+	uint32_t rgb;
+	long k;
+	char *u, *a;
 	if (br.p == NULL)
 		return NULL;
-	for (i = 0; i < br.p->nitems; i++) {
-		const dl_item *it = &br.p->items[i];
-		int32_t y = it->y + it->base;
-		if (it->type != DL_TEXT)
-			continue;
-		if (last_y >= 0) {
-			if (y > last_y + 2)
-				sb_add(&s, y > last_y + it->font->px * 2 ? "\r\n\r\n" : "\r\n", y > last_y + it->font->px * 2 ? 4 : 2);
-			else if (it->x > last_x + 1)
-				sb_addc(&s, ' ');
-		}
-		sb_add(&s, it->text, it->len);
-		last_y = y;
-		last_x = it->x + it->w;
-	}
-	sb_add(&s, "\r\n", 2);
-	a = cs_to_atari(s.s, s.len, CS_UTF8, n);
-	sb_free(&s);
+	u = page_copy_text(br.p, win_mark(&r, &rgb) ? &r : NULL, &k);
+	if (u == NULL)
+		return NULL;
+	a = cs_to_atari(u, k, CS_UTF8, n);
+	free(u);
 	return a;
 }
 
@@ -1435,7 +1424,8 @@ void win_clip(int what)
 		char *t = page_text(&n);
 		if (t != NULL) {
 			if (clip_put(t, n))
-				status("The page's text is on the clipboard.");
+				status(sel_now() ? "The text selected is on the clipboard." : "The page's text is on the clipboard.");
+			log_event("copied %ld bytes", n);
 			free(t);
 		}
 	}
@@ -1443,31 +1433,101 @@ void win_clip(int what)
 
 /* ---------------------------------------------------------------- find in page */
 
-static char f_words[256];		/* Edit > Find's words (UTF-8) */
-static long f_nth;			/* which of them is marked (from 1), 0: none */
-static unsigned long f_shows, f_serial;	/* on which page shown, in which layout of it */
-static pg_pos f_at[2];
+/* the text selected (dragged over, a word double-clicked, all of it, the
+   words found): its two ends, where it was begun and where it goes to,
+   kept as places in the page's text by the characters before them
+   (page_text_index), so that it is the same text when the page has been
+   laid out again (a picture came, the window was sized); on the page
+   shown when it was made only */
+static struct {
+	int on, found;			/* found: Edit > Find's words (marked yellow) */
+	long ix[2];			/* -1: not known yet (while the mouse drags it) */
+	unsigned long shows, serial;	/* on which page shown, in which layout of it */
+	pg_pos at[2];			/* in that layout */
+	pg_range r;
+} sel;
 
-/* the words found, marked on the screen (screen.c): found again, the
-   same one of them, when the page has been laid out again (a picture
-   came, the window was sized); none on another page. 1 and where */
-int win_mark(pg_pos m[2])
+#define SEL_RGB 0x99ccff		/* the selection's colour (Edit > Find's: yellow) */
+
+static void sel_set(const pg_pos *from, const pg_pos *to, int found)
 {
-	if (f_nth == 0 || br.p == NULL || br.shows != f_shows)
+	sel.at[0] = *from;
+	sel.at[1] = *to;
+	sel.on = from->item != to->item || from->off != to->off;
+	sel.found = found;
+	sel.ix[0] = sel.ix[1] = -1;
+	sel.shows = br.shows;
+	sel.serial = br.p->serial;
+	page_range(br.p, from, to, &sel.r);
+}
+
+/* its ends as places in the text, once it is made */
+static void sel_keep(void)
+{
+	if (sel.on && sel.ix[0] < 0) {
+		sel.ix[0] = page_text_index(br.p, &sel.at[0]);
+		sel.ix[1] = page_text_index(br.p, &sel.at[1]);
+	}
+}
+
+/* the selection on the page shown, in its layout now: 0 none */
+static int sel_now(void)
+{
+	if (!sel.on || br.p == NULL || br.shows != sel.shows)
 		return 0;
-	if (br.p->serial != f_serial) {
-		long nth;
-		if (page_find(br.p, f_words, NULL, 0, f_nth, &f_at[0], &f_at[1], &nth) <= 0) {
-			f_nth = 0;
+	if (br.p->serial != sel.serial) {
+		int back = sel.ix[0] > sel.ix[1];
+		if (sel.ix[0] < 0 || !page_text_place(br.p, sel.ix[0], back, &sel.at[0]) ||
+		    !page_text_place(br.p, sel.ix[1], !back, &sel.at[1])) {
+			sel.on = 0;
 			return 0;
 		}
-		f_nth = nth;
-		f_serial = br.p->serial;
+		sel.serial = br.p->serial;
+		page_range(br.p, &sel.at[0], &sel.at[1], &sel.r);
 	}
-	m[0] = f_at[0];
-	m[1] = f_at[1];
 	return 1;
 }
+
+/* the selection gone (a click on the page) */
+static void sel_clear(void)
+{
+	if (sel_now()) {
+		sel.on = 0;
+		win_redraw_page();
+	}
+	sel.on = 0;
+}
+
+/* the selection marked on the screen (screen.c): 1, the stretch and its
+   colour */
+int win_mark(pg_range *r, uint32_t *rgb)
+{
+	if (!sel_now())
+		return 0;
+	*r = sel.r;
+	*rgb = sel.found ? 0xffff00 : SEL_RGB;
+	return 1;
+}
+
+/* Edit > Select all, on the page: all its text */
+void win_select_all(void)
+{
+	pg_pos a, b;
+	long n;
+	if (br.p == NULL)
+		return;
+	ctl_blur();		/* (^C then copies it, not a field's text; first: its
+				   change event may lay the page out again) */
+	if (br.p == NULL || !page_text_place(br.p, 0, 0, &a) || !page_text_place(br.p, LONG_MAX, 1, &b))
+		return;
+	sel_set(&a, &b, 0);
+	sel_keep();
+	n = sel.ix[1] - sel.ix[0];
+	log_event("selected all: %ld", n);
+	win_redraw_page();
+}
+
+static char f_words[256];		/* Edit > Find's words (UTF-8) */
 
 /* Edit > Find (how 0: the words asked for, then the first from the
    window's top), Find next (1), Find previous (-1): marked, and the
@@ -1478,18 +1538,16 @@ void win_find(int how)
 	long n, nth, i;
 	const dl_item *it;
 	char line[80];
-	int had = f_nth != 0;
 	if (br.p == NULL)
 		return;
-	if (how == 0 || f_words[0] == 0) {
-		if (!dlg_find(f_words, sizeof f_words) || f_words[0] == 0)
-			return;
-		f_nth = 0;
-	}
-	if (f_nth != 0 && br.shows == f_shows && br.p->serial == f_serial) {
-		from = f_at[0];
-		if (how >= 0)
-			from.off++;	/* (the next: after the one marked) */
+	if ((how == 0 || f_words[0] == 0) && (!dlg_find(f_words, sizeof f_words) || f_words[0] == 0))
+		return;
+	if (how != 0 && sel_now()) {
+		/* on from the selection (the words found last): the next after
+		   its start, or the one before it */
+		from = sel.r.a;
+		if (how > 0)
+			from.off++;
 	} else {
 		/* the first run at or below the window's top */
 		from.item = br.p->nitems;
@@ -1500,20 +1558,14 @@ void win_find(int how)
 				break;
 			}
 	}
-	n = page_find(br.p, f_words, &from, how < 0, 0, &a, &b, &nth);
+	n = page_find(br.p, f_words, &from, how < 0, &a, &b, &nth);
 	if (n <= 0) {
-		f_nth = 0;
-		if (had)
-			win_redraw_page();
 		log_event("found none");
 		status(n < 0 ? "No memory to look through the page." : "Not on this page.");
 		return;
 	}
-	f_at[0] = a;
-	f_at[1] = b;
-	f_nth = nth;
-	f_shows = br.shows;
-	f_serial = br.p->serial;
+	sel_set(&a, &b, 1);
+	sel_keep();
 	page_reveal_item(br.p, a.item, 0);	/* (a box that scrolls brought to it: drawn below) */
 	it = &br.p->items[a.item];
 	if (it->y < top || it->y + it->h > top + r_page.h)
@@ -1723,15 +1775,133 @@ static void context_menu(short mx, short my)
 		items[1] = fwd;
 		items[2] = "Reload           ^R";
 		items[3] = "-";
-		items[4] = "Copy the text    ^C";
-		r = popup(mx, my, items, 5);
+		items[4] = sel_now() ? "Copy             ^C" : "Copy the text    ^C";
+		items[5] = "Select all       ^A";
+		r = popup(mx, my, items, 6);
 		switch (r) {
 		case 0: command(C_BACK); break;
 		case 1: command(C_FORWARD); break;
 		case 2: command(C_RELOAD); break;
 		case 4: win_clip(CLIP_COPY); break;
+		case 5: win_select_all(); break;
 		}
 	}
+}
+
+/* the rows of the items that may be marked otherwise when the
+   selection's end moves from one place to another (those between the
+   two in the list, which has the text in the order it is read), drawn
+   again */
+static void sel_redraw(const pg_pos *was, const pg_pos *now)
+{
+	long lo = was->item < now->item ? was->item : now->item, hi = was->item < now->item ? now->item : was->item, i;
+	int32_t y0 = INT32_MAX, y1 = INT32_MIN;
+	GRECT g;
+	for (i = lo; i <= hi && i < br.p->nitems; i++) {
+		const dl_item *d = &br.p->items[i];
+		if (d->type != DL_TEXT)
+			continue;
+		if (d->y < y0)
+			y0 = d->y;
+		if (d->y + d->h > y1)
+			y1 = d->y + d->h;
+	}
+	y0 -= top;
+	y1 -= top;
+	if (y0 < 0)
+		y0 = 0;
+	if (y1 > r_page.h)
+		y1 = r_page.h;
+	if (y1 <= y0)
+		return;
+	g.x = r_page.x;
+	g.w = r_page.w;
+	g.y = (short) (r_page.y + y0);
+	g.h = (short) (y1 - y0);
+	redraw(&g, 2);
+}
+
+/* the left button pressed on the page at (mx, my), on no control: text
+   selected as the mouse is dragged over it (once it has moved by more
+   than 3 pixels), the window scrolled while it is above or below it; a
+   double click on a word selects it (the page's scripts told of the
+   click first; on a link or a summary it is theirs), a click with Shift
+   takes the selection on to there. 0: a click (the selection gone), to
+   go on as one */
+static int select_text(short mx, short my, short clicks, short kstate)
+{
+	pg_pos at, from, to;
+	short x = mx, y = my, mb = 1, ks, lx = -1, ly = -1;
+	int32_t px = mx - r_page.x + left, py = my - r_page.y + top;
+	int whole;
+	if (br.p == NULL || !page_pos_at(br.p, px, py, &at))
+		return 0;
+	if (clicks >= 2) {
+		pg_pos a, b;
+		if (link_at(mx, my) >= 0 || page_summary_at(br.p, px, py) != NULL)
+			return 0;
+		if (page_click(px, py) || br.p == NULL || page_pos_at(br.p, px, py, &at) != 2)
+			return 1;	/* (a script said no, or there is no word there) */
+		ctl_blur();
+		page_word(br.p, &at, &a, &b);
+		sel_set(&a, &b, 0);
+		sel_keep();
+		log_event("selected a word: %ld", sel.ix[1] - sel.ix[0]);
+		win_redraw_page();
+		return 1;
+	}
+	whole = sel_now();	/* (an old selection shown: the page drawn again at the first move) */
+	if ((kstate & (K_LSHIFT | K_RSHIFT)) && whole) {
+		from = sel.at[0];
+		to = sel.at[1];
+		whole = sel.found;	/* (Find's yellow becomes the selection's colour) */
+	} else {
+		for (;;) {
+			graf_mkstate(&x, &y, &mb, &ks);
+			if (!(mb & 1)) {
+				sel_clear();
+				return 0;
+			}
+			if (x < mx - 3 || x > mx + 3 || y < my - 3 || y > my + 3)
+				break;
+			evnt_timer_(10);
+		}
+		sel.on = 0;
+		from = to = at;
+	}
+	ctl_blur();		/* (^C then copies the selection, not a field's text) */
+	for (;;) {
+		int32_t step = 0;
+		if (y < r_page.y)
+			step = -line_step();
+		else if (y >= r_page.y + r_page.h)
+			step = line_step();
+		if (step != 0)
+			win_scroll_to(top + step);	/* (drawn again, the selection too) */
+		if (x != lx || y != ly || step != 0) {
+			lx = x;
+			ly = y;
+			px = (x < r_page.x ? r_page.x : x >= r_page.x + r_page.w ? r_page.x + r_page.w - 1 : x) - r_page.x + left;
+			py = (y < r_page.y ? r_page.y : y >= r_page.y + r_page.h ? r_page.y + r_page.h - 1 : y) - r_page.y + top;
+			if (page_pos_at(br.p, px, py, &at) && (whole || at.item != to.item || at.off != to.off)) {
+				sel_set(&from, &at, 0);
+				if (whole)
+					win_redraw_page();
+				else
+					sel_redraw(&to, &at);
+				whole = 0;
+				to = at;
+			}
+		}
+		if (!(mb & 1))
+			break;
+		evnt_timer_(20);
+		graf_mkstate(&x, &y, &mb, &ks);
+	}
+	sel_keep();
+	if (sel.on)
+		log_event("selected: %ld", sel.ix[1] > sel.ix[0] ? sel.ix[1] - sel.ix[0] : sel.ix[0] - sel.ix[1]);
+	return 1;
 }
 
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
@@ -1789,6 +1959,9 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		if (box_bar(mx, my))
 			return 1;	/* a box's scroll bar */
+		if (br.p != NULL && page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, &it) == NULL &&
+		    select_text(mx, my, clicks, kstate))
+			return 1;	/* text selected */
 		/* the page's scripts first: a click event, which may say no to
 		   what the click does, or change the page */
 		if (!(kstate & 0x08) && page_click(mx - r_page.x + left, my - r_page.y + top))

@@ -196,11 +196,42 @@ typedef struct pg_pos {
 /* words on the page (Edit > Find, find.c), case aside (ASCII, Latin-1)
    and a space for any white space, a line's end or the gap between two
    runs: the first match starting at or after from (NULL: the top), back:
-   the last before it, going round; or, want > 0, the want'th (the last
-   if there are fewer). Its start in *a, its end in *b, which it is in
-   *nth (from 1); how many there are in all, 0 none, -1 out of memory */
-long page_find(const page *p, const char *what, const pg_pos *from, int back, long want, pg_pos *a, pg_pos *b,
-	       long *nth);
+   the last before it, going round. Its start in *a, its end in *b, which
+   it is in *nth (from 1); how many there are in all, 0 none, -1 out of
+   memory */
+long page_find(const page *p, const char *what, const pg_pos *from, int back, pg_pos *a, pg_pos *b, long *nth);
+
+/* a stretch of the page's text (a selection, the words found): from a
+   to b, a first in the display list (a line's runs are in it in the
+   order they are read) */
+typedef struct pg_range {
+	pg_pos a, b;
+} pg_range;
+
+/* the stretch between two places, either first */
+void page_range(const page *p, const pg_pos *x, const pg_pos *y, pg_range *r);
+/* the part of item i (len bytes) in it, its bytes s to e: 0 none */
+int page_range_part(const pg_range *r, long i, uint32_t len, uint32_t *s, uint32_t *e);
+/* the place in the text nearest (x, y) (on a line there before one above
+   or below, then the nearest to the side; text hidden by a box hiding
+   what overflows it not; never before a character with no width): 2 if
+   it is text under (x, y), 1 if elsewhere, 0 when the page has no text */
+int page_pos_at(const page *p, int32_t x, int32_t y, pg_pos *at);
+/* the word a place is in or just after (its letters and digits, and any
+   character past ASCII), in its run: from a to b */
+void page_word(const page *p, const pg_pos *at, pg_pos *a, pg_pos *b);
+/* a place as the characters before it that aren't white space, in the
+   order the page is read: the same text after the page has been laid
+   out again (a picture came, the window was sized), its lines ending
+   elsewhere. page_text_place is the place again (end: just after the
+   index'th character, else at the next): 0 when the page has no text */
+long page_text_index(const page *p, const pg_pos *at);
+int page_text_place(const page *p, long index, int end, pg_pos *at);
+/* a stretch's text, or the page's (r NULL), as it is read (UTF-8, its
+   length in *n): a space between two runs apart on a line, a line break
+   (CR LF) between lines, an empty line before a run lower than two of
+   its lines down; the page's ends with a line break. NULL: no memory */
+char *page_copy_text(const page *p, const pg_range *r, long *n);
 
 /* page_reveal for item i (by the boxes hiding what overflows them that
    it is in: any edition) */

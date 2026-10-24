@@ -1402,7 +1402,13 @@ void command(int cmd)
 	case C_CUT: win_clip(CLIP_CUT); break;
 	case C_COPY: win_clip(CLIP_COPY); break;
 	case C_PASTE: win_clip(CLIP_PASTE); break;
-	case C_SELALL: win_address_focus(1); break;
+	case C_SELALL:
+		/* (in the address: all of it; else the page's text) */
+		if (win_address_has_focus() || br.p == NULL)
+			win_address_focus(1);
+		else
+			win_select_all();
+		break;
 	case C_FIND: win_find(0); break;
 	case C_FINDNEXT: win_find(1); break;
 	case C_FINDPREV: win_find(-1); break;

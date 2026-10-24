@@ -146,7 +146,8 @@ int  win_address_has_focus(void);
 int  win_stop_hit(short mx, short my);	/* on Stop, while loading */
 void win_clip(int what);		/* CLIP_COPY...: the address field, or the page's text */
 void win_find(int how);			/* Edit > Find (0), Find next (1), Find previous (-1) */
-int  win_mark(pg_pos m[2]);		/* the words found, to mark (screen.c): 1 and where */
+int  win_mark(pg_range *r, uint32_t *rgb);	/* the selection, to mark (screen.c): 1, where and its colour */
+void win_select_all(void);		/* Edit > Select all, on the page */
 
 /* main.c */
 enum {

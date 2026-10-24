@@ -37,10 +37,10 @@ typedef struct canvas {
 	   NULL: never */
 	int (*picture)(void *ud, void *img, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens);
 	void *ud;
-	/* the page's text from mark[0] to mark[1] marked (words found, a
-	   selection): filled in mark_rgb (0xRRGGBB) behind it; marked 0: none */
+	/* a stretch of the page's text marked (a selection, the words found):
+	   filled in mark_rgb (0xRRGGBB) behind it; marked 0: none */
 	int marked;
-	pg_pos mark[2];
+	pg_range mark;
 	uint32_t mark_rgb;
 } canvas;
 

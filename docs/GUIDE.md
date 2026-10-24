@@ -283,8 +283,8 @@ how it is secured. The window's title is the page's.
 
 Click a link to follow it (the pointer turns into a hand over one).
 Right-click a link for its commands (open it, save its file, copy its
-address), the page for Back, Forward, Reload and copying its text, or the
-address for Copy, Cut, Paste and Select all.
+address), the page for Back, Forward, Reload, Copy and Select all, or
+the address for Copy, Cut, Paste and Select all.
 
 The window can be moved, sized, fulled and iconified as any other; EWeb
 lays the page out again for the new width.
@@ -375,12 +375,23 @@ page's end. Capitals and small letters are the same (é and É too), a
 space finds any space or the end of a line, and Hebrew is found as it
 is read. Text the page hides isn't found.
 
-## Copying
+## Selecting and copying
 
-**^C** copies the page's text to the GEM clipboard (to paste into
-another program), or the address when the address field has the
-keyboard. In the address field **^X**, **^V** and **^A** cut, paste and
-choose all of it.
+Drag over the page's text to select it, from one place to another (on a
+link too: a drag selects, a click follows it); the window scrolls when
+the mouse goes above or below it. A double click selects a word,
+**Shift**-click takes the selection on to there, and **Edit > Select
+all** (**^A**) selects all of the page's text. A click elsewhere on the
+page lets it go. The selection stays the same text when the page is laid
+out again (a picture comes, the window is sized), and Hebrew is
+selected as it is read.
+
+**^C** copies the selection to the GEM clipboard (to paste into another
+program), or, with nothing selected, all of the page's text; the address
+when the address field has the keyboard. Words found by **^F** are
+selected too: **^C** copies them, and **^G** goes on from the selection.
+In the address field **^X**, **^V** and **^A** cut, paste and choose all
+of it.
 
 ## Keys
 
@@ -404,9 +415,9 @@ choose all of it.
 | Space, Shift-Space | a page down, up |
 | ClrHome, Shift-ClrHome | the top, the end |
 | ^+ ^- ^0 | larger, smaller, as it was |
-| ^C | copy the page's text, the address, or a field's text |
+| ^C | copy the selection (else the page's text), the address, or a field's text |
 | ^X, ^V | cut, paste (in the address or a field) |
-| ^A | the whole address, to type over |
+| ^A | all the page's text; in the address, the whole of it, to type over |
 | Tab, Shift-Tab | the page's next field (or the one before), then the address |
 | Return | in a field: send its form |
 | ^, | the Settings |

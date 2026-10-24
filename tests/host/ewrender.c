@@ -60,6 +60,13 @@
  * "found:" printed with which of how many, its runs and bytes, and its
  * run's place (a box that scrolls brought to it); what is drawn has it
  * marked, as EWEB.PRG marks it.
+ * -x X1,Y1,X2,Y2 selects the text from one point on the page to another
+ * (a drag), -x X,Y the word there (a double click: on text only), -x all all of it
+ * (Select all); "selected:" printed with its runs and bytes and its text
+ * as ^C copies it (a line break as \n), what is drawn has it marked; -x
+ * page prints the page's text as ^C copies it with nothing selected
+ * ("copied:"). -j WIDTH (again for more): then the window made WIDTH px
+ * wide, the selection placed again by its text ("selected again:").
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
  * Through the Pi's browser: webgate's snapshots).
@@ -100,6 +107,7 @@
  * what it was read in and its title.
  */
 #define _DEFAULT_SOURCE		/* realpath */
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -647,6 +655,30 @@ static void in_request(void)
 }
 
 /* every picture of the page shown, fetched and decoded */
+/* -x: a stretch's text (the page's: r NULL) as ^C copies it, a line
+   break as \n */
+static void selected(const page *p, const pg_range *r, const char *what)
+{
+	long n, k;
+	char *t = page_copy_text(p, r, &n);
+	printf("%s: ", what);
+	if (r != NULL)
+		printf("item %ld %u to item %ld %u ", r->a.item, r->a.off, r->b.item, r->b.off);
+	putchar('"');
+	for (k = 0; t != NULL && k < n; k++) {
+		if (t[k] == '\r')
+			continue;
+		if (t[k] == '\n')
+			fputs("\\n", stdout);
+		else if (t[k] == '"' || t[k] == '\\')
+			printf("\\%c", t[k]);
+		else
+			putchar(t[k]);
+	}
+	printf("\"\n");
+	free(t);
+}
+
 static void pictures(browser *b)
 {
 	int32_t y0, y1;
@@ -678,6 +710,11 @@ int main(int argc, char **argv)
 	const char *finds[16];
 	int nfind = 0, find_back[16];
 	pg_pos found[2] = { { -1, 0 }, { -1, 0 } };
+	const char *select = NULL;
+	int32_t sel_w[8];
+	int nsel_w = 0, sel_on = 0;
+	pg_range sel;
+	const page *marked_p = NULL;	/* the layout the words found or the selection are on */
 	int32_t resize[8];
 	int nresize = 0;
 	const char *clicks[16];
@@ -768,6 +805,10 @@ int main(int argc, char **argv)
 			find_back[nfind] = argv[i][1] == 'U';
 			finds[nfind++] = argv[++i];
 		}
+		else if (!strcmp(argv[i], "-x") && i + 1 < argc)
+			select = argv[++i];
+		else if (!strcmp(argv[i], "-j") && i + 1 < argc && nsel_w < 8)
+			sel_w[nsel_w++] = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
 			timers = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-r") && i + 1 < argc)
@@ -1013,17 +1054,59 @@ int main(int argc, char **argv)
 		long nth, n;
 		if (found[0].item >= 0 && !find_back[i])
 			from.off++;
-		n = page_find(b.p, finds[i], found[0].item >= 0 ? &from : NULL, find_back[i], 0, &a, &e, &nth);
+		n = page_find(b.p, finds[i], found[0].item >= 0 ? &from : NULL, find_back[i], &a, &e, &nth);
 		if (n > 0) {
 			int moved = page_reveal_item(b.p, a.item, 0);
 			found[0] = a;
 			found[1] = e;
+			marked_p = b.p;
 			const dl_item *d = &b.p->items[a.item];
 			printf("found: %ld of %ld item %ld %u to item %ld %u at %d,%d %dx%d%s\n", nth, n, a.item, a.off,
 			       e.item, e.off, (int) d->x, (int) d->y, (int) d->w, (int) d->h,
 			       moved ? " (a box scrolled)" : "");
 		} else {
 			printf("found: none (%ld)\n", n);
+		}
+	}
+	if (select != NULL && b.p != NULL && !strcmp(select, "page")) {
+		selected(b.p, NULL, "copied");
+	} else if (select != NULL && b.p != NULL) {
+		/* as EWEB.PRG selects (ui/win.c): a drag from one place to
+		   another, a double click's word, Select all */
+		pg_pos x, y, at;
+		int x1 = 0, y1 = 0, x2 = 0, y2 = 0, n = sscanf(select, "%d,%d,%d,%d", &x1, &y1, &x2, &y2);
+		if (!strcmp(select, "all"))
+			sel_on = page_text_place(b.p, 0, 0, &x) && page_text_place(b.p, LONG_MAX, 1, &y);
+		else if (n == 4)
+			sel_on = page_pos_at(b.p, x1, y1, &x) && page_pos_at(b.p, x2, y2, &y);
+		else if (n == 2 && page_pos_at(b.p, x1, y1, &at) == 2) {
+			page_word(b.p, &at, &x, &y);	/* (on text only, as EWEB.PRG's) */
+			sel_on = 1;
+		}
+		if (sel_on) {
+			long ix[2];
+			int k;
+			page_range(b.p, &x, &y, &sel);
+			marked_p = b.p;
+			selected(b.p, &sel, "selected");
+			ix[0] = page_text_index(b.p, &x);
+			ix[1] = page_text_index(b.p, &y);
+			for (k = 0; k < nsel_w; k++) {
+				int back = ix[0] > ix[1];
+				r = br_relayout(&b, sel_w[k]);
+				pictures(&b);
+				if (b.p == NULL || !page_text_place(b.p, ix[0], back, &x) ||
+				    !page_text_place(b.p, ix[1], !back, &y)) {
+					printf("selected again: none\n");
+					sel_on = 0;
+					break;
+				}
+				page_range(b.p, &x, &y, &sel);
+				marked_p = b.p;
+				selected(b.p, &sel, "selected again");
+			}
+		} else {
+			printf("selected: none\n");
 		}
 	}
 	if (refreshes > 0) {
@@ -1212,10 +1295,15 @@ int main(int argc, char **argv)
 		c.pix = malloc(c.stride * c.h);
 		if (c.pix == NULL)
 			return 1;
-		if (found[0].item >= 0) {
+		if (p != marked_p) {
+			/* (another page or layout since: none marked) */
+		} else if (sel_on) {
 			c.marked = 1;
-			c.mark[0] = found[0];
-			c.mark[1] = found[1];
+			c.mark = sel;
+			c.mark_rgb = 0x99ccff;	/* (ui/win.c's SEL_RGB) */
+		} else if (found[0].item >= 0) {
+			c.marked = 1;
+			page_range(p, &found[0], &found[1], &c.mark);
 			c.mark_rgb = 0xffff00;
 		}
 		cv_page(&c, p);

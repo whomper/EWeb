@@ -3420,8 +3420,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					sum_rect(l, it->det, x0, base - asc, x1 - x0, asc + desc);
 				}
 			}
+			/* the items in the order they are read (a right-to-left
+			   line's, and Hebrew words in a left-to-right one's, in
+			   the list as in the text: find.c reads the list so) */
 			for (k = 0; k < end - i; k++) {
-				ITEM *it = &l->it[ord[k]];
+				ITEM *it = &l->it[i + k];
 				if (it->ib) {
 					/* (hidden too: what is visible in it shows, and
 					   its places are kept; not when out of memory) */
@@ -3446,12 +3449,12 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					uint32_t len = it->len;
 					int32_t ww = it->w;
 					while (k + 1 < end - i) {
-						ITEM *nx = &l->it[ord[k + 1]];
+						ITEM *nx = &l->it[i + k + 1];
 						if ((nx->kind != IT_WORD && nx->kind != IT_SPACE) || nx->dir == 2 || justify ||
 						    nx->text != s + len || nx->font != it->font || nx->color != it->color ||
 						    nx->flags != it->flags || nx->link != it->link || nx->hidden ||
-						    nx->shift != it->shift || ord[k + 1] != ord[k] + 1)
-							break;
+						    nx->shift != it->shift || nx->x != it->x + ww)
+							break;	/* (and not one drawn elsewhere on the line) */
 						len += nx->len;
 						ww += nx->w;
 						k++;

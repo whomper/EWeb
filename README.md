@@ -69,6 +69,9 @@ own fonts.
   import and export.
 - **Find in page**: Edit > Find (^F), ^G and Shift-^G: the words marked
   and brought into view, case aside, Hebrew as it is read.
+- **Selecting and copying**: drag over the text, double-click a word or
+  Select all (^A); ^C copies it to the GEM clipboard, Hebrew as it is
+  read, and the selection keeps its text when the page is laid out again.
 - **History and visited links**: View > History (^Y) lists the pages opened,
   newest first; links to them are drawn in their visited colour (colours
   only, and never on a page whose scripts run); the newest 1000 kept in

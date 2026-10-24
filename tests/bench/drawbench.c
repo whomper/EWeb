@@ -6,7 +6,7 @@
  * ui/screen.c draws them), for counting the 68030 instructions that takes
  * (tools/count68k.sh, tools/prof68k.py):
  *
- *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] PAGE.HTM [SHEET.CSS...]
+ *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] PAGE.HTM [SHEET.CSS...]
  *
  * -P stops after a phase: 1 the document styled (its <style>s and the
  * sheets named), 2 laid out (608 px wide, a CSS px 0.8 of the screen's),
@@ -17,7 +17,12 @@
  * is), and -M the page's links marked visited from it before it is
  * styled, as at https://example.com/news/index.html (visited.c).
  * -F WORDS: once laid out, the words looked for on it (Edit > Find,
- * find.c), how many printed.
+ * find.c), how many printed. -X N: text selected as a drag selects it
+ * (ui/win.c): the place under the mouse found N times, down the page's
+ * middle (page_pos_at, at each of the mouse's moves), the selection from
+ * the first to the last kept and placed again (page_text_index,
+ * page_text_place: when the page is laid out again) and its text copied
+ * (page_copy_text, ^C); its length printed.
  * Prints the page's height and items.
  */
 #include <stdio.h>
@@ -96,6 +101,7 @@ int main(int argc, char **argv)
 	const char *fnt = "binary/EWEB.FNT";
 	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0;
 	const char *find = NULL;
+	long drags = 0;
 	size_t n;
 	char *data;
 	doc *d;
@@ -115,9 +121,11 @@ int main(int argc, char **argv)
 			mark = 1;
 		else if (!strcmp(argv[i], "-F") && i + 1 < argc)
 			find = argv[++i];
+		else if (!strcmp(argv[i], "-X") && i + 1 < argc)
+			drags = atol(argv[++i]);
 	}
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
@@ -165,7 +173,28 @@ int main(int argc, char **argv)
 	if (find != NULL) {
 		pg_pos a, b;
 		long nth;
-		printf("%ld found\n", page_find(p, find, NULL, 0, 0, &a, &b, &nth));
+		printf("%ld found\n", page_find(p, find, NULL, 0, &a, &b, &nth));
+	}
+	if (drags > 0) {
+		pg_pos a, b;
+		pg_range r;
+		long k, ia, ib, n = 0;
+		char *t;
+		for (k = 0; k < drags; k++)
+			if (!page_pos_at(p, p->width / 2, (int32_t) ((int64_t) p->height * k / drags), k == 0 ? &a : &b))
+				break;
+		if (k < drags || drags < 2) {
+			printf("0 bytes selected\n");	/* (no text, or no drag) */
+			return 0;
+		}
+		ia = page_text_index(p, &a);
+		ib = page_text_index(p, &b);
+		page_text_place(p, ia, 0, &a);
+		page_text_place(p, ib, 1, &b);
+		page_range(p, &a, &b, &r);
+		t = page_copy_text(p, &r, &n);
+		printf("%ld bytes selected\n", n);
+		free(t);
 	}
 	if (phase >= 3) {
 		canvas c;

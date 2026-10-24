@@ -11,7 +11,8 @@ editions.
   any white space and a line's end;
 - a word in two runs (a bold "Ata" and "ri") found as one;
 - Hebrew in the order it is read: two words that follow each other, the
-  end of one and the start of the next, across runs drawn right to left;
+  end of one and the start of the next, across runs drawn right to left
+  (in the list as they are read: the first word's run first);
 - text no one sees (opacity 0) not found;
 - words in a box that scrolls: the box brought to them;
 - the words marked where they are drawn: the run's part, from its right
@@ -114,7 +115,7 @@ def edition(ewr, fnt, label):
     check(label + "not what no one sees", hidden == ["none (0)"], str(hidden))
     he = finds(ewr, fnt, ["-G", "שלום עולם", "-G", "עולם, שלום", "-G", "ם עו"])
     check(label + "Hebrew as it is read", [nth(f) for f in he] == [(1, 1), (1, 1), (1, 1)] and
-          all(where(f)[0] == where(f)[2] + 1 for f in he), str(he))
+          all(where(f)[0] + 1 == where(f)[2] for f in he), str(he))
     with tempfile.TemporaryDirectory() as tmp:
         png = os.path.join(tmp, "f.png")
         one = finds(ewr, fnt, ["-G", "Falcon"], png)
@@ -145,4 +146,5 @@ def main():
           (", in 2 editions" if len(sys.argv) > 3 else ""))
 
 
-main()
+if __name__ == "__main__":
+    main()

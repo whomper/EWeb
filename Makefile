@@ -985,6 +985,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/find.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/layout/select.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

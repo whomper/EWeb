@@ -129,8 +129,8 @@ fill 521,514 50x2 #000000
 fill 521,536 50x2 #000000
 fill 521,516 2x20 #000000
 fill 569,516 2x20 #000000
-text 491,531 26x17 #000000 sans13 rtl link 0 "עולם"
 text 575,531 27x17 #000000 sans13 rtl link 0 "שלום"
+text 491,531 26x17 #000000 sans13 rtl link 0 "עולם"
 link 1 file://./tests/layout/go.html
 link 2 file://./tests/layout/next.html
 link 3 file:///

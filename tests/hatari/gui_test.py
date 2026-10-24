@@ -18,7 +18,10 @@
   saved under its name), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
   clicked), the history (^Y shows it; HISTORY.TXT written at quit, the
-  pages in it), Edit > Find on it (^F, ^G, Shift-^G), a page that names
+  pages in it), Edit > Find on it (^F, ^G, Shift-^G), text selected (a
+  drag over the links of the files page: no link followed, ^C copies it
+  as ewrender's -x has it, into the clipboard's SCRAP.TXT; Select all
+  (^A) on the history), a page that names
   no encoding read again in Windows-1255
   (View > Encoding..., its popup by the keyboard), ^Q;
 - scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
@@ -83,7 +86,7 @@ HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
-Y, F, G = 0x15, 0x21, 0x22
+Y, F, G, A = 0x15, 0x21, 0x22, 0x1E
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -492,6 +495,36 @@ def browse():
         m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
         if m:
             area = tuple(int(m.group(i)) for i in range(1, 5))
+            # selecting: a drag from one link's text into another's
+            # selects (neither followed); ^C copies it, as ewrender's -x
+            # selects it from the same places
+            top = int(m.group(5))
+            a = link_point(site + "files.html", area, top, "A big")
+            b = link_point(site + "files.html", area, top, "A small")
+            if check("selecting: the links' places", a is not None and b is not None):
+                r.mouse.drag(a[0] + 16, a[1], b[0] + 40, b[1])
+                sel = r.wait(r"selected", 60)
+                time.sleep(1)
+                r.shot(21)
+                r.key(C, (CTRL,))
+                cp = r.wait(r"copied ", 30)
+                want = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f",
+                                       os.path.join(ROOT, "binary/EWEB.FNT"), "-w", str(area[2]), "-d", "-x",
+                                       "%d,%d,%d,%d" % (a[0] + 16 - area[0], a[1] - area[1] + top,
+                                                        b[0] + 40 - area[0], b[1] - area[1] + top),
+                                       site + "files.html"], capture_output=True, text=True, timeout=60).stdout
+                wm = re.search(r'^selected: item \d+ \d+ to item \d+ \d+ "(.*)"$', want, re.M)
+                clip = None
+                for _ in range(20):
+                    clip = saved("CLIPBRD/SCRAP.TXT")
+                    if clip:
+                        break
+                    time.sleep(0.5)
+                check("selecting: a drag over links selects, none followed", sel is not None and
+                      sel.startswith("selected: ") and r.wait(r"shown ", 2) is None, str(r.events()))
+                check("selecting: ^C copies it, as ewrender selects it", wm is not None and cp is not None and
+                      clip is not None and clip.decode("latin-1") == wm.group(1).replace("\\n", "\r\n"),
+                      "%r %r %r" % (wm.group(1) if wm else want, cp, clip))
             r.key(S, (CTRL,))
             time.sleep(3)		# the file selector
             r.shot(11)
@@ -605,6 +638,18 @@ def browse():
         check("find: ^G the next", r.wait(r"found ", 60) == "found 2 of 3", str(r.events()))
         r.key(G, (CTRL, SHIFT))
         check("find: Shift-^G the one before", r.wait(r"found ", 60) == "found 1 of 3", str(r.events()))
+        # Select all (^A, the address not being typed in): the page's
+        # text; ^C copies it
+        r.key(A, (CTRL,))
+        ev = r.wait(r"selected all", 30)
+        r.shot(22)
+        r.key(C, (CTRL,))
+        cp = r.wait(r"copied ", 30)
+        time.sleep(1)
+        clip = (saved("CLIPBRD/SCRAP.TXT") or b"").decode("latin-1")
+        check("selecting: ^A all the page's text, ^C copies it", ev is not None and
+              int(ev.split()[-1]) > 20 and cp is not None and "HISTORY.TXT" in clip,
+              "%r %r %r" % (ev, cp, clip[:200]))
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))

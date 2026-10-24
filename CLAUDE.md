@@ -153,7 +153,11 @@ hub stay complete, with the evidence.
   join against the parse), `make hatarigui`, `make hatarifiles`. **Find in page** is
   `src/layout/find.c` (the page's runs as one folded string, a place a run and a byte), marked by
   the canvas (`canvas.mark`) and driven by `ui/win.c` (`win_find`, `win_mark`): after changing it,
-  `make test` (`tests/layout/find.py`, ewrender `-G`/`-U`) and `make hatarigui`. **Saving** (File > Save page as, a link's file streamed to
+  `make test` (`tests/layout/find.py`, ewrender `-G`/`-U`) and `make hatarigui`. **Selecting and
+  copying** are `find.c` too (`page_pos_at`, `page_range`, `page_copy_text`; a selection kept by
+  `page_text_index` through a relayout), dragged in `ui/win.c` (`select_text`; Find's words are the
+  selection): after changing them, `make test` (`tests/layout/select.py`, ewrender `-x`/`-j`) and
+  `make hatarigui`. **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
