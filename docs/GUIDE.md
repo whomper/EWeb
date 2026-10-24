@@ -637,8 +637,10 @@ Options > Settings (^,) has three pages (two in the ST edition):
 - **General:** whether pages' pictures are shown, the text size (per
   cent, 50 to 200), where words typed in the address go, the disk
   cache's size (MB, 0 for none), in `EWEB.PRG` whether a Falcon's DSP
-  does the pictures, and whether EWeb uses its own colours in 256
-  colours.
+  does the pictures, whether EWeb uses its own colours in 256
+  colours, and **3D dialogs**: EWeb's dialogs and alerts in the 3D look
+  where the system has one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon;
+  greyed on TOS 1 to 3, which have none).
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 - **Scripts** (`EWEB.PRG`): whether pages' scripts run, and on every site
@@ -672,6 +674,8 @@ there at once; where the window was, when you quit:
   pictures need; the system's first 16 stay, and its own come back when
   EWeb quits), 0 for the system's as they are (another program's
   pictures beside EWeb's keep their colours)
+- `DIALOGS3D=` 1 for dialogs and alerts in the 3D look where the
+  system has one, 0 for them flat everywhere
 - `PENS=` through the Pi gateway, pictures made ready for your screen on
   the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)

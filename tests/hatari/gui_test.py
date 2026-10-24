@@ -79,7 +79,7 @@ from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
-                         "details", "wide", "boxes"]
+                         "details", "wide", "boxes", "dialogs"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
@@ -948,6 +948,100 @@ def falcon4():
               not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
     finally:
         r.end()
+
+
+def dialogs():
+    """the guidelines' 5.6: the Settings (and Find, another of EWeb's own
+    dialogs) in the AES's 3D look where it has one, with DIALOGS3D=1, and
+    flat once their 3D dialogs tick is off (DIALOGS3D=0): TOS 4.04, and
+    EmuTOS 1.4, whose AES draws 3D objects as TOS 4's does; on TOS 1.04
+    (EWEBST.PRG on the ST), with no 3D look, flat with the tick greyed and
+    left as it is"""
+    saved = os.environ.get("AERA_TOS")
+    xvfb = machines.xvfb(DISPLAY)
+    try:
+        for name, spec, prg, tos, in3d in (("dialogs3d", "Falcon:16", "EWEB.PRG", None, True),
+                                           ("dialogsemu", "Falcon:16", "EWEB.PRG", "emutos", True),
+                                           ("dialogsst", "ST:mono", "EWEBST.PRG", None, False)):
+            if tos is None:
+                os.environ.pop("AERA_TOS", None)
+                if saved is not None:
+                    os.environ["AERA_TOS"] = saved
+            else:
+                os.environ["AERA_TOS"] = tos
+            hd = hd_for(name, r"C:\TEXT.HTM", "DIALOGS3D=1\r\n")
+            r = Run(name, spec, hd, windowed=True, prg=prg)
+            try:
+                if tos is None and not r.m.real:
+                    print("skip  dialogs: %s needs Erez's TOS in ~/.aera/tos" % name)
+                    continue
+                check("dialogs: %s starts" % r.m.describe(), r.wait(r"shown ", 300) is not None, str(r.events()[-3:]))
+                # the 3D dialogs tick: the General page's tenth row
+                # (EWEBST.PRG's ninth: no DSP tick); the 8 MHz ST takes
+                # seconds to draw the page again once a dialog has gone,
+                # and keys typed meanwhile may be Esc's to stop it
+                row = 9 if prg == "EWEB.PRG" else 8
+                settle = 3 if prg == "EWEB.PRG" else 20
+
+                def settings(n):
+                    """the Settings shown (8x16 characters) and their
+                    background where nothing is drawn on it: right of OK
+                    (row 18), and right of the 3D dialogs tick (a third of
+                    a character's gap between rows)"""
+                    r.key(COMMA, (CTRL,))
+                    at = r.wait(r"dialog at ", 120)
+                    if at is None:
+                        return None, []
+                    dx, dy = (int(v) for v in at.split()[2:4])
+                    time.sleep(3)
+                    im = Image.open(r.shot(n)).convert("RGB")
+                    tick = (dx + 14 * 8 + 8, dy + (4 + row) * 16 + 2 + row * 6 + 8)
+                    return tick, [im.getpixel((dx + 56 * 8 + 4, dy + 18 * 16 + 8)),
+                                  im.getpixel((dx + 40 * 8, tick[1]))]
+
+                def find(n):
+                    """Edit > Find, another of EWeb's own dialogs"""
+                    r.key(F, (CTRL,))
+                    time.sleep(3)
+                    r.shot(n)
+                    r.key(ESC)
+                    time.sleep(settle)
+
+                white = lambda px: px and all(p == (255, 255, 255) for p in px)
+                grey = lambda px: px and all(p[0] == p[1] == p[2] and 64 < p[0] < 255 for p in px)
+                find(5)
+                tick, px = settings(0)
+                check("dialogs: %s, Settings %s" % (name, "in 3D" if in3d else "flat"),
+                      tick is not None and (grey(px) if in3d else white(px)), str(px))
+                # the tick: turned off where there's a 3D look, else greyed
+                # (clicked, nothing changes); OK
+                r.mouse.click(*tick)
+                time.sleep(2)
+                r.shot(1)
+                r.key(RETURN)
+                saved_ok = r.wait(r"settings ", 120) == "settings changed"
+                time.sleep(settle)
+                inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+                want = "DIALOGS3D=0" if in3d else "DIALOGS3D=1"
+                check("dialogs: %s, the tick %s, saved as %s" % (name, "turned off" if in3d else "greyed", want),
+                      saved_ok and "\r\n%s\r\n\r\n" % want in inf, repr(inf[:600]))
+                find(2)
+                tick, px = settings(3)
+                check("dialogs: %s, Settings flat after" % name, tick is not None and white(px), str(px))
+                r.key(ESC)
+                r.wait(r"settings ", 120)
+                time.sleep(settle)
+                find(4)
+                r.key(Q, (CTRL,))
+                check("dialogs: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-4:]))
+            finally:
+                r.end()
+    finally:
+        if xvfb is not None:
+            xvfb.terminate()
+        os.environ.pop("AERA_TOS", None)
+        if saved is not None:
+            os.environ["AERA_TOS"] = saved
 
 
 def screens():
@@ -1837,5 +1931,10 @@ if "boxes" in WHICH:
         boxes()
     else:
         print("skip  boxes: needs Xvfb and xdotool")
+if "dialogs" in WHICH:
+    if shutil.which("Xvfb") and shutil.which("xdotool"):
+        dialogs()
+    else:
+        print("skip  dialogs: needs Xvfb and xdotool")
 print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
 sys.exit(1 if fails else 0)

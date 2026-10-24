@@ -132,6 +132,10 @@ hub stay complete, with the evidence.
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
   `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
+  **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
+  called by `d_end` in `ui/dialogs.c`; Settings > General > 3D dialogs, `DIALOGS3D=`): after
+  changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and EmuTOS both ways, the ST's
+  TOS 1.04 with the tick greyed).
 - **Forms** are `src/doc/form.c` (each control's state, kept with the document; what a form sends,
   after the HTML Standard), drawn from that state by `src/gfx/canvas.c` (DL_CTL items, Hebrew right
   to left), sent by `br_submit` (`src/browse`), edited in `ui/win.c`. After changing them: `make test`

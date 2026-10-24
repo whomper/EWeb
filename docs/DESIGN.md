@@ -821,6 +821,14 @@ releases.
   from black and white; in true colour the canvas is the screen's own pixels. Scrolling moves what
   is on the screen and draws only the new rows. While a page loads, the network's waits keep the
   window alive, and Esc, Undo or Stop stop the load, the page before staying.
+- **Dialogs** (the guidelines' 5.6, your decision of 24 Oct 2026: the family's look, with a
+  setting): where the AES draws 3D objects every dialog and alert is in its 3D look, by common's
+  `dlg_3d` (EWeb's own trees in `ui/dialogs.c`'s `d_end`; the About box and alerts in common's
+  code): the box on the 3D grey, buttons raised, fields white. That is TOS 4,
+  MagiC, XaAES, and EmuTOS 1.4 too (its AES has TOS 4's 3D objects); TOS 1 to 3 stay flat.
+  Settings > General > 3D dialogs (`DIALOGS3D=1`; 0: flat everywhere), greyed where there's no 3D
+  look. `make hatarigui`'s `dialogs` group shows the Settings and Find on TOS 4.04 and EmuTOS
+  both ways, and greyed on the ST's TOS 1.04.
 - **First timings,** on the emulated Falcon (Hatari 2.4.1, EmuTOS 1.4, a 68030 at 32 MHz with
   TT-RAM, 640x480 in 16 colours; `EWEB.PRG` logs each page's phases), saved pages from the disk
   without their stylesheets:

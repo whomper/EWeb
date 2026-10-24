@@ -167,6 +167,7 @@ static void d_end(void)
 	for (i = 0; i < nlf; i++)
 		lf_init(lf_pend[i], tree, lf_obj[i], lf_text[i], lf_cap[i], 0);
 	nlf = 0;
+	dlg_3d(tree);		/* the AES's 3D look where it has one (5.6) */
 }
 
 /* ---------------------------------------------------------------- ticks */
@@ -213,10 +214,10 @@ static void make_ticks(void)
 	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
 }
 
-#define NTICK 7
+#define NTICK 8
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_D3D, T_SCRIPTS, T_SCRIPTSALL };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -227,6 +228,15 @@ static short d_tick(short x, short y, const char *label, short var)
 	tick_box[k] = d_add(G_IMAGE, TOUCHEXIT, 0, (long) (s_on[var] ? &tick_on_blk : &tick_off_blk), x, y, 2, 1);
 	tick_lbl[k] = d_add(G_STRING, TOUCHEXIT, 0, (long) label, x + 3, y, (short) strlen(label), 1);
 	return k;
+}
+
+/* a tick that can't be changed here: greyed, not clicked */
+static void d_tick_off(short k)
+{
+	tree[tick_box[k]].ob_flags &= ~TOUCHEXIT;
+	tree[tick_lbl[k]].ob_flags &= ~TOUCHEXIT;
+	tree[tick_box[k]].ob_state |= DISABLED;
+	tree[tick_lbl[k]].ob_state |= DISABLED;
 }
 
 static void tick_draw(short k)
@@ -309,6 +319,7 @@ static LFIELD f_search, f_gate;
 
 static void part_general(short x, short y)
 {
+	short k;
 	rows_at(y);
 	d_tick(x, ROW(0), "Show pages' pictures", T_PICTURES);
 	d_text(x + 3, ROW(1), "(off: only their words, for a slow line)");
@@ -324,9 +335,13 @@ static void part_general(short x, short y)
 #ifndef EW_ST
 	d_tick(x, ROW(7), "Pictures on the DSP (a Falcon's)", T_PICDSP);
 	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
+	k = d_tick(x, ROW(9), "3D dialogs", T_D3D);
 #else
 	d_tick(x, ROW(7), "EWeb's own colours in 256 colours", T_PALETTE);
+	k = d_tick(x, ROW(8), "3D dialogs", T_D3D);
 #endif
+	if (!dlg_3d_ok())	/* the AES has no 3D look (TOS 1 to 3) */
+		d_tick_off(k);
 }
 
 /* the family's Secure page: TLS on this Atari, or the Pi gateway */
@@ -378,7 +393,7 @@ static short settings_tree(short *ok)
 {
 	static const char *const names[] = { "  General", "  Secure", "  Scripts" };
 	short k, box, from, gap = (short) (gl_hchar / 2);
-	d_begin(SX + PW, 19);
+	d_begin(SX + PW, 20);
 	nticks = 0;
 	npages = 0;
 	adding_page = 0;
@@ -386,14 +401,14 @@ static short settings_tree(short *ok)
 	d_band(SX + PW, " Settings");
 	/* the list: plain words on white, the chosen one in a black bar, a
 	   line between it and the settings */
-	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 18);
+	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 19);
 	for (k = 0; k < NPAGES; k++) {
 		npages++;
 		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(names[k], 0, 0x1180),
 					 (short) (0 | (2 << 8)), (short) ((2 + k * 2) | ((k * gap) << 8)),
 					 (short) ((SW - 1) | (6 << 8)), 1);
 	}
-	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 15);
+	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 16);
 	for (k = 1; k <= NPAGES; k++) {
 		from = nobj;
 		adding_page = k;
@@ -410,8 +425,8 @@ static short settings_tree(short *ok)
 		page_mark(from);
 	}
 	adding_page = 0;
-	d_button(SX + PW - 26, 17, 10, "Cancel", EXIT);
-	*ok = d_button(SX + PW - 13, 17, 10, "OK", EXIT | DEFAULT);
+	d_button(SX + PW - 26, 18, 10, "Cancel", EXIT);
+	*ok = d_button(SX + PW - 13, 18, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	show_page(1, 0);
 	return box;
@@ -472,6 +487,7 @@ int dlg_settings(void)
 	s_on[T_DSP] = (short) opt.dsp;
 	s_on[T_PICDSP] = opt.picdsp;
 	s_on[T_PALETTE] = opt.palette;
+	s_on[T_D3D] = opt.dialogs3d;
 	s_on[T_SCRIPTS] = opt.runscripts != 0;
 	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
@@ -499,6 +515,8 @@ int dlg_settings(void)
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];
+	opt.dialogs3d = s_on[T_D3D];
+	dlg_3d_on = opt.dialogs3d;	/* the next dialog follows it */
 #ifndef EW_ST
 	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
 #endif

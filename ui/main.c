@@ -22,6 +22,7 @@
 #include "crash.h"
 #include "dcache.h"
 #include "dd.h"
+#include "dialog.h"
 #include "font.h"
 #include "help.h"
 #include "http.h"
@@ -53,7 +54,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "" };
+	       1, "", 1 };
 browser br;
 int loading;
 static short quit;
@@ -405,6 +406,8 @@ static void settings_load(void)
 			opt.pens = (short) (atoi(eq) < 0 ? -1 : atoi(eq) > 0);
 		else if (!strcmp(line, "PALETTE"))
 			opt.palette = atoi(eq) != 0;
+		else if (!strcmp(line, "DIALOGS3D"))
+			opt.dialogs3d = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -553,6 +556,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.palette);
 	put(&s, "PALETTE", v, "in 256 colours: 1 = EWeb's own colours while it runs (pale tints for pages and "
 	    "pictures; TOS's first 16 kept), 0 = the system's");
+	snprintf(v, sizeof v, "%d", opt.dialogs3d);
+	put(&s, "DIALOGS3D", v, "1 = dialogs and alerts in the 3D look where the AES has one (TOS 4, MagiC, EmuTOS, "
+	    "XaAES), 0 = flat everywhere");
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
@@ -1906,6 +1912,7 @@ int main(void)
 	help_init();
 	av_init("EWEB");
 	settings_load();
+	dlg_3d_on = opt.dialogs3d;	/* before the first dialog (5.6) */
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or the Falcon's true|colour.][ Quit ]");
