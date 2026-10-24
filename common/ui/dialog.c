@@ -281,7 +281,10 @@ void dlg_3d(OBJECT *tree)
 		f = tree[i].ob_flags & ~FL3DMASK;
 		if (!dlg_3d_on)		/* flat, as asked (the setting) */
 			t = -1;
-		if (t == G_BUTTON || (t == G_BOXCHAR && (f & (EXIT | TOUCHEXIT))))
+		/* buttons, and what is clicked to act or to choose (a pop-up, an
+		   arrow box), out of a list, raised as the AES's buttons */
+		if (t == G_BUTTON || ((t == G_BOXCHAR || t == G_BOXTEXT || t == G_BOX) && (f & (EXIT | TOUCHEXIT)) &&
+				      !in_well(tree, i)))
 			f |= (f & (EXIT | TOUCHEXIT)) && !(f & RBUTTON) ? FL3DACT : FL3DIND;
 		else if (t >= 0 && t != G_FTEXT && t != G_FBOXTEXT && (i == 0 || (!is_well(tree, i) && !in_well(tree, i))))
 			f |= FL3DBAK;		/* the box, its text, its pictures */
