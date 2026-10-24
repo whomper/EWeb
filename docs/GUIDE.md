@@ -87,6 +87,13 @@ laid out, green as its pictures come. **Esc**,
 while it comes, and while a long page is read and laid out too (the
 window keeps redrawing meanwhile).
 
+A page that takes a while to come shows its start while the rest comes,
+when EWeb already has its stylesheets (a site you have been to), and a
+long one while the whole is laid out. You can scroll it; links and fields
+work once the whole page is there, and it stays where you scrolled to.
+On an Atari without TT-RAM only a page small enough to fit in memory
+beside its start does this, and EWEBST.PRG doesn't.
+
 ## Pages that go on by themselves
 
 Some pages send you on to another after a while, or load themselves

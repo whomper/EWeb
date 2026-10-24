@@ -3224,6 +3224,39 @@ before stays, nothing left behind; ewrender `-I STAGE:N`), and `make hatarigui`'
 (the Falcon: a page of 45,000 tags, Esc once the status says it is laid out: "stopped", the page
 before shown, the heap back to what it was).
 
+## A page drawn while it loads (24 Oct 2026)
+
+Stage 3's fourth part. A page was shown only once all of it had come and been laid out: on a slow
+line, or for a long page, the window kept the page before for seconds. Now a load may show a
+preview first, once: the page's start (up to 24 KB of its text, cut where a tag begins) parsed,
+styled and laid out as the page will be, without its scripts, drawn in the window in place of the
+page shown until the page itself is (`br_preview_step`, `preview` in `src/browse`). It comes
+
+- while the page comes: a second into its request, with 6 KB of its text there (the window's idle
+  turn asks; a gzip page's bytes so far unpacked as far as they go: the inflate keeps what it
+  unpacked before they ran out);
+- or, for a long page (over 48 KB) that came quicker, once its stylesheets are in, before the
+  whole is styled and laid out.
+
+Its stylesheets are only those EWeb has (the memory cache and the disk cache, of any age: the
+fetch says so with `pv_offline`); one that would have to be fetched means no preview, rather than
+a page drawn unstyled for a moment (a site visited before has its sheets). The window draws and
+scrolls the preview (`shown()` in `ui/win.c`); the mouse and keys on the page wait for the page,
+as they did, the selection isn't marked on it, and its place isn't kept for the page shown before.
+Then it goes (`loaded`): the page is drawn where the preview was scrolled to, unless it goes to an
+anchor; after Esc, the page before again.
+
+A preview takes memory beside the page: one is made only where both fit in half the RAM a machine
+of ST RAM alone has free (`pv_room`: the cost a kept page is counted at, the page's and the
+preview's, within four times `br_keep_max`), which with TT RAM any page does; a page whose length
+isn't known yet counts as a long one (48 KB, or four times the gzip bytes come). On the stock 4 MB
+Falcon a page of up to about 55 KB has one, and its big test page (130 KB, which takes 1.9 MB of
+its 2.1 MB) none; the ST edition never makes one. A preview made as the page came, when the whole
+page turns out not to fit beside it, goes before the page is read (the page shown is drawn again
+until then), and a page that doesn't fit gives it back first (make_room). Tested by `make
+hatarigui`'s browse group: the test server's `/site/slow.html` (66 KB, gzip, two parts 2.5 s apart)
+logs a preview before it is shown; and its falcon4 group's big page, loaded and loaded again.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3520,7 +3553,7 @@ out of both (their paths lead nowhere on the Atari).
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
-   drawn while it loads, Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
+   drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions

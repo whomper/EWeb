@@ -20,6 +20,7 @@
 #include "font.h"
 #include "pic.h"
 #include "http.h"
+#include "inflate.h"
 #include "conn.h"
 #include "cookie.h"
 #include "dcache.h"
@@ -709,6 +710,20 @@ typedef struct {
 	char name[256];
 } FETCH;
 
+/* a page drawn while it loads (its preview, below): the page's body as it
+   comes and its answer (set while fetch asks for a page); its sheets only
+   from the caches, and how many weren't there */
+static SBUF *pv_body;
+static HTTPRESP *pv_rs;
+static unsigned long pv_t0;
+static int pv_offline, pv_missing, pv_building;
+#define PV_AFTER 1000		/* ms into a page's request before its preview */
+#define PV_BYTES 6144		/* of its text come, at least */
+#define PV_TAKE 24576		/* the most of it a preview is made from */
+#define PV_BIG 49152		/* a page this long: a preview before it is styled and laid out */
+static int pv_room(long len);
+static void preview_drop(browser *b);
+
 #ifndef EW_ST
 static void js_host_of(browser *b, js_host *h);
 /* the document whose scripts run as it is built (b->d is the page
@@ -1096,6 +1111,14 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			if (got.validate[0])
 				have = 1;
 		}
+		if (pv_offline) {
+			/* a preview's sheet: only those EWeb has */
+			if (cached)
+				free(got.data);
+			pv_missing++;
+			snprintf(f->err, sizeof f->err, "Not kept.");
+			return 0;
+		}
 		rs = malloc(sizeof *rs);
 		if (rs == NULL) {
 			if (cached)
@@ -1135,7 +1158,15 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		{
 			unsigned long t0 = pf_ms(), ms;
 			net_busy++;
+			if (accept == NULL) {
+				/* a page: what comes of it, for its preview */
+				pv_body = &body;
+				pv_rs = rs;
+				pv_t0 = t0;
+			}
 			ok = http_request(&rq, rs, &body, f->err, sizeof f->err);
+			pv_body = NULL;
+			pv_rs = NULL;
 			net_busy--;
 			f->nomem = !ok && strstr(f->err, "memory") != NULL;
 			ms = pf_ms() - t0;
@@ -1523,13 +1554,17 @@ static int shed(browser *b)
 	return freed;
 }
 
-/* memory for a page that didn't fit (a small machine): the pages kept for
-   Back and the one shown go, its source with it (a page loaded again had
-   it twice), and the pictures not in use; 1 when something was given
-   back */
+/* memory for a page that didn't fit (a small machine): the load's
+   preview, the pages kept for Back and the one shown go, its source with
+   it (a page loaded again had it twice), and the pictures not in use; 1
+   when something was given back */
 static int make_room(browser *b)
 {
 	int freed = 0;
+	if (b->pv_p != NULL) {
+		preview_drop(b);
+		freed = 1;
+	}
 	if (b->p != NULL) {
 		pg_free(b->p);
 		doc_free(b->d);
@@ -1551,8 +1586,7 @@ static int make_room(browser *b)
 /* d's links marked visited or not (visited.c) before it is styled, when
    the history has changed since: how many changed (dry: only counted).
    Not on a page whose scripts run, which could read it (CSS Selectors 4,
-   8.2): its links stay as if not visited; nor on EWeb's own (the start
-   page: HISTORY.TXT is read with the first page fetched, not at start) */
+   8.2): its links stay as if not visited; nor on EWeb's own pages */
 static long mark_links(doc *d, const char *base, int dry)
 {
 	long k;
@@ -1575,6 +1609,7 @@ static int select_doc(doc *d, const char *base)
 
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout);
+static void preview(browser *b, const char *data, long len, long whole, const char *charset, const char *url);
 
 /* the next build is a text file's (text/plain): its bytes are the text */
 static int build_plain;
@@ -1617,6 +1652,8 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	html_opts o;
 
 	b->note[0] = 0;
+	if (b->pv_p != NULL && !pv_room(len))
+		preview_drop(b);	/* (made as it came: the whole page wouldn't fit beside it) */
 #ifndef EW_ST
 parse:
 #endif
@@ -1641,6 +1678,9 @@ parse:
 	add_sheets(b, d, base, again ? 0 : fresh, 0);
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
+	/* a long page: its start shown while the whole is styled and laid out */
+	if (len > PV_BIG && !scripts && !build_plain && !conn_stop)
+		preview(b, data, len, len, charset, url);
 #ifndef EW_ST
 	if (scripts && !conn_stop && doc_has_scripts(d) && !js_available()) {
 		/* EWEBJS.OVL couldn't be loaded (only a page with scripts has it
@@ -1918,6 +1958,117 @@ static int32_t anchor_y(browser *b, const char *url)
 }
 
 /* a page of EWeb's own, shown in place of url */
+/* ---------------------------------------------------------------- a page drawn while it loads */
+
+/* the preview: the start of data as it would be shown, without scripts,
+   with only the stylesheets EWeb has (from the caches, of any age); one
+   that would have to be fetched, none, rather than a page shown unstyled
+   for a moment. Once a load, and only where it fits beside the page
+   (whole: its length as far as it is known) */
+static void preview(browser *b, const char *data, long len, long whole, const char *charset, const char *url)
+{
+	ec_media m = media_of(b);
+	html_opts o;
+	doc *d;
+	page *p = NULL;
+	char base[4096];
+	int stop = conn_stop;
+
+	if (b->pv_tried || pv_building || len < PV_BYTES)
+		return;
+	b->pv_tried = 1;
+	if (!pv_room(whole))
+		return;
+	if (len > PV_TAKE) {
+		/* cut where a tag begins, not inside one */
+		long k = PV_TAKE;
+		while (k > PV_TAKE / 2 && data[k] != '<')
+			k--;
+		len = k > PV_TAKE / 2 ? k : PV_TAKE;
+	}
+	pv_building = 1;
+	memset(&o, 0, sizeof o);
+	o.charset = charset && *charset ? charset : NULL;
+	o.fallback = br_fallback(url);
+	d = doc_parse_opts(data, (size_t) len, &o, &m);
+	if (d != NULL) {
+		ec_set_resolver(d->css, resolve);
+		if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
+			str_copy(base, url, sizeof base);
+		pv_offline = 1;
+		pv_missing = 0;
+		add_sheets(b, d, base, 2, 1);
+		pv_offline = 0;
+		if (pv_missing == 0 && conn_stop == stop && select_doc(d, base) >= 0)
+			p = lay(b, d, base);
+		if (p != NULL) {
+			b->pv_d = d;
+			b->pv_p = p;
+			if (b->previewed != NULL)
+				b->previewed(b->ud);
+		} else {
+			doc_free(d);
+		}
+	}
+	pv_building = 0;
+}
+
+void br_preview_step(browser *b)
+{
+	const HTTPRESP *rs = pv_rs;
+	SBUF plain;
+	if (pv_body == NULL || rs == NULL || b->pv_tried || pv_building || br_building || conn_stop ||
+	    pf_ms() - pv_t0 < PV_AFTER || rs->status < 200 || rs->status >= 300 || rs->packed ||
+	    !(rs->mime[0] == 0 || strcmp(rs->mime, "text/html") == 0 ||
+	      strcmp(rs->mime, "application/xhtml+xml") == 0) || pv_body->len < 32)
+		return;
+	/* (how long the page is isn't known yet: as long as a big one at least) */
+	if (rs->encoding == 0) {
+		if (pv_body->len >= PV_BYTES)
+			preview(b, pv_body->s, pv_body->len, pv_body->len > PV_BIG ? pv_body->len : PV_BIG,
+				rs->charset, rs->url.href);
+		return;
+	}
+	/* packed: as much as has come, unpacked as far as it goes */
+	sb_init(&plain);
+	if (rs->encoding == 1)
+		inflate_gzip((const unsigned char *) pv_body->s, pv_body->len, &plain, PV_TAKE + 4096);
+	else
+		inflate_zlib((const unsigned char *) pv_body->s, pv_body->len, &plain, PV_TAKE + 4096);
+	if (plain.s != NULL && plain.len >= PV_BYTES)
+		preview(b, plain.s, plain.len, PV_BIG > 4 * pv_body->len ? PV_BIG : 4 * pv_body->len, rs->charset,
+			rs->url.href);
+	sb_free(&plain);
+}
+
+/* a preview beside a page of len bytes: within half the RAM a machine of
+   ST RAM alone has free (br_keep_max is an eighth of it), as with TT RAM
+   any page is; not beside the stock Falcon's big page, which takes most
+   of its memory */
+static int pv_room(long len)
+{
+	return cost(len) + cost(PV_TAKE) <= 4 * br_keep_max;
+}
+
+/* the preview gone before the page came (for its memory): the page shown
+   drawn again */
+static void preview_drop(browser *b)
+{
+	br_preview_free(b);
+	if (b->previewed != NULL)
+		b->previewed(b->ud);
+}
+
+void br_preview_free(browser *b)
+{
+	if (b->pv_p != NULL)
+		pg_free(b->pv_p);
+	if (b->pv_d != NULL)
+		doc_free(b->pv_d);
+	b->pv_p = NULL;
+	b->pv_d = NULL;
+}
+
 static int own_page(browser *b, const char *url, SBUF *src, int mode)
 {
 	doc *d;
@@ -2194,6 +2345,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 
 	conn_stop = 0;
 	b->elsewhere[0] = 0;
+	br_preview_free(b);		/* (a load's own preview, once) */
+	b->pv_tried = 0;
 	br_refresh_cancel(b);		/* any load: the page shown's refresh goes */
 	if (!refreshing)
 		b->refresh_run = 0;
@@ -2590,6 +2743,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 void br_free(browser *b)
 {
 	int i;
+	br_preview_free(b);
 	if (b->p != NULL)
 		pg_free(b->p);
 	if (b->d != NULL)

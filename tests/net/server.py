@@ -122,6 +122,8 @@ Pages:
                  itself), jsset.html (a script changes the content),
                  foster.html (a table puts the second meta first),
                  slowpic.html (itself in 2 s, its picture 1.5 s coming),
+                 slow.html (a long page sent in two parts 2.5 s apart,
+                 gzip when asked: a page drawn while it loads),
                  cam.html (itself every second: cam.png no-store, another
                  each time; still.png kept an hour; valid.png no-cache, a
                  304 when unchanged), campic.png (a picture on its own,
@@ -245,6 +247,13 @@ REFRESH = {
 }
 REFRESH_COUNT = {}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
+# a long page, sent in two parts 2.5 s apart: EWeb shows its start before
+# it has all come (its preview, with the site's sheet it already has)
+SLOW_PAGE = (b"<!DOCTYPE html><html><head><title>Slow</title><link rel=stylesheet href=style.css></head>"
+             b"<body><h1>A slow page</h1>" +
+             b"".join(b"<p>Paragraph %d of a page that comes slowly: the first part, then the rest "
+                      b"two and a half seconds later.</p>" % i for i in range(600)) +
+             b"</body></html>")
 # a stylesheet's media (the HTML Standard's 4.2.4): only the sheets that
 # hold for the screen are asked for, and none that isn't to be applied
 MEDIA_PAGE = (b"<!DOCTYPE html><title>Media</title><link rel=stylesheet media=print href=print.css>"
@@ -545,7 +554,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def send(self, status, body, ctype="text/html; charset=utf-8", extra=(), close=False):
+    def send(self, status, body, ctype="text/html; charset=utf-8", extra=(), close=False, pause=0):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         packed = None
@@ -560,7 +569,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.close_connection = True
         self.end_headers()
         if self.command != "HEAD":
-            self.wfile.write(packed if packed is not None else body)
+            data = packed if packed is not None else body
+            if pause:
+                # (a slow page: a part, then the rest a while later)
+                self.wfile.write(data[:len(data) * 2 // 5])
+                self.wfile.flush()
+                time.sleep(pause)
+                data = data[len(data) * 2 // 5:]
+            self.wfile.write(data)
 
     def do_HEAD(self):
         self.do_GET()
@@ -577,6 +593,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, SITE)
         elif p == "/site/style.css":
             self.send(200, SITE_CSS, "text/css")
+        elif p == "/site/slow.html":
+            self.send(200, SLOW_PAGE, pause=2.5)
         elif p == "/site/two.html":
             self.send(200, SITE_TWO)
         elif p == "/site/pics.html":

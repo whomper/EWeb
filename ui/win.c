@@ -483,12 +483,19 @@ static void draw_bars(GRECT *clip)
 
 /* ---------------------------------------------------------------- drawing */
 
+/* the page in the window: the one shown, or while one loads its preview
+   (only drawn and scrolled: what the mouse and keys do waits for the page) */
+static const page *shown(void)
+{
+	return br.pv_p != NULL ? br.pv_p : br.p;
+}
+
 static void draw_page(GRECT *clip)
 {
 	GRECT r = r_page;
 	if (!rect_and(&r, clip))
 		return;
-	scr_page(br.p, &r, left + (r.x - r_page.x), top + (r.y - r_page.y));
+	scr_page(shown(), &r, left + (r.x - r_page.x), top + (r.y - r_page.y));
 }
 
 /* area of the window, through its rectangle list */
@@ -568,22 +575,25 @@ void win_page_area(short *x, short *y, short *w, short *h)
 	*h = r_page.h;
 }
 
+static const page *shown(void);
+
 static int32_t max_top(void)
 {
-	int32_t h = br.p ? br.p->height : 0, m = h - r_page.h;
+	int32_t h = shown() ? shown()->height : 0, m = h - r_page.h;
 	return m > 0 ? m : 0;
 }
 
 /* how far it scrolls sideways */
 static int32_t max_left(void)
 {
-	int32_t w = br.p ? br.p->right : 0, m = w - r_page.w;
+	int32_t w = shown() ? shown()->right : 0, m = w - r_page.w;
 	return m > 0 ? m : 0;
 }
 
 static void sliders(void)
 {
-	int32_t h = br.p ? br.p->height : 0, m = max_top(), w = br.p ? br.p->right : 0, mw = max_left();
+	const page *p = shown();
+	int32_t h = p ? p->height : 0, m = max_top(), w = p ? p->right : 0, mw = max_left();
 	short size = (short) (h > r_page.h ? (int32_t) ((int64_t) 1000 * r_page.h / h) : 1000);
 	short wsize = (short) (w > r_page.w ? (int32_t) ((int64_t) 1000 * r_page.w / w) : 1000);
 	if (win_h <= 0 || win_iconified)
@@ -617,7 +627,8 @@ void win_scroll_to(int32_t y)
 	if (dy == 0)
 		return;
 	top = y;
-	br_scrolled(&br, top);
+	if (br.pv_p == NULL)
+		br_scrolled(&br, top);	/* (a preview's place isn't the page's) */
 	sliders();
 	if (win_iconified || win_h <= 0)
 		return;
@@ -1499,7 +1510,7 @@ static void sel_clear(void)
    colour */
 int win_mark(pg_range *r, uint32_t *rgb)
 {
-	if (!sel_now())
+	if (br.pv_p != NULL || !sel_now())	/* (a preview: the selection is the page's) */
 		return 0;
 	*r = sel.r;
 	*rgb = sel.found ? 0xffff00 : SEL_RGB;
@@ -2050,6 +2061,32 @@ int win_key(short kstate, short key)
 }
 
 /* ---------------------------------------------------------------- a new page */
+
+/* the page loading's preview: drawn from its top in place of the page,
+   whose place is kept for when the load is stopped */
+static int32_t pv_top, pv_left;
+
+void win_preview(void)
+{
+	pv_top = top;
+	pv_left = left;
+	top = 0;
+	left = 0;
+	sliders();
+	win_redraw_page();
+}
+
+void win_preview_gone(void)
+{
+	top = pv_top;
+	left = pv_left;
+	if (top > max_top())
+		top = max_top();
+	if (left > max_left())
+		left = max_left();
+	sliders();
+	win_redraw_page();
+}
 
 void win_page_changed(void)
 {

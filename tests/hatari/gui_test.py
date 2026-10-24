@@ -672,7 +672,8 @@ def browse():
         r.mouse.move(home[0], 200)
         time.sleep(1)
         dark = Image.open(r.shot(25)).convert("RGB").crop((home[0] - 15, home[1] - 12, home[0] + 15, home[1] + 12))
-        yellow = lambda im: sum(1 for p in im.getdata() if p == (255, 255, 0))
+        yellow = lambda im: sum(1 for p in (im.get_flattened_data() if hasattr(im, "get_flattened_data")
+                                            else im.getdata()) if p == (255, 255, 0))
         check("home: the toolbar's Home lit under the mouse, not when it has gone",
               yellow(lit) > 20 and yellow(dark) == 0, "%d %d" % (yellow(lit), yellow(dark)))
         r.key(TAB)
@@ -684,6 +685,17 @@ def browse():
         check("home: its search box sends the words to the search engine", ev is not None and
               ev.startswith("shown %secho " % site) and ev.endswith("title GET||q=atari+falcon"),
               str(r.events()[-3:]))
+        # a page drawn while it loads: its first part, then 2.5 s later the
+        # rest; its start is shown (a preview, with the site's sheet EWeb
+        # has) before the page
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/slow.html" % HTTP)
+        r.key(RETURN)
+        pv = r.wait(r"preview ", 60)
+        r.shot(26)
+        ev = r.wait(r"shown ", 60)
+        check("preview: a slow page's start shown before it has all come", pv is not None and ev is not None and
+              ev.startswith("shown %sslow.html " % site), "%r %r" % (pv, ev))
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))

@@ -114,6 +114,13 @@ typedef struct browser {
 		char name[256];
 	} dl;
 
+	/* a preview of the page that is loading: its start as it would be
+	   shown, from what has come of it and the stylesheets EWeb already
+	   has, drawn until the page itself is (br_preview_step); NULL none */
+	doc *pv_d;
+	page *pv_p;
+	int pv_tried;		/* one a load */
+
 	/* the page shown's pictures, fetched after it is shown */
 	int pic_stopped;	/* Esc stopped them: no more for this page */
 	int pic_relayout;	/* one came whose size the layout didn't know */
@@ -169,6 +176,10 @@ typedef struct browser {
 	int (*ask)(void *ud, int kind, const char *text, char *out, int size);
 	/* what a script's console.log writes; NULL: nowhere */
 	void (*console)(void *ud, const char *line);
+	/* a preview is ready (pv_p): draw it in place of the page shown; or,
+	   pv_p NULL, it went before the page came (memory): the page shown
+	   again. NULL none */
+	void (*previewed)(void *ud);
 	/* where a file br_save_url saves goes, asked once its answer has
 	   begun (its name is known then): name the TOS name to offer; 1 and
 	   path (size bytes) set, 0 cancelled. NULL: none is saved */
@@ -196,6 +207,11 @@ int br_can_back(const browser *b);
 int br_can_forward(const browser *b);
 /* the front end scrolled: kept in the history for Back */
 void br_scrolled(browser *b, int32_t y);
+/* while a page loads (the window's idle): its preview made, once, when
+   enough of it has come and it has taken a while */
+void br_preview_step(browser *b);
+/* the preview given back: the load is over */
+void br_preview_free(browser *b);
 /* the window's width changed: lay out again (returns 0 if out of memory) */
 int br_relayout(browser *b, int32_t width);
 /* what a page being made is at (doc_poll, ec_poll: GEM's turn and Esc

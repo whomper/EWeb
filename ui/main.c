@@ -793,8 +793,10 @@ static void idle(void)
 	}
 	if ((which & MU_BUTTON) && win_stop_hit(ev.mx, ev.my))
 		conn_stop = 1;
-	if (loading)
+	if (loading) {
 		ph_bytes_came();
+		br_preview_step(&br);	/* (once enough of the page has come) */
+	}
 	/* how much has come, as it comes */
 	if (loading && said[0] && conn_bytes - said_bytes >= 1024) {
 		char a[200];
@@ -871,13 +873,31 @@ static void save_file(const char *url, const char *given);
 static unsigned long drawn;		/* br.shows when the window last drew a new page */
 
 /* what a load came to, on the screen */
+/* the page loading's preview is ready: drawn in place of the page shown */
+static void previewed(void *ud)
+{
+	(void) ud;
+	if (br.pv_p == NULL) {
+		win_preview_gone();	/* (gone for the page's memory) */
+		log_event("preview dropped");
+		return;
+	}
+	win_preview();
+	log_event("preview height %ld items %ld", (long) br.pv_p->height, (long) br.pv_p->nitems);
+}
+
 static void loaded(int r)
 {
 	/* a new page: the load's own (BR_SHOWN), or one shown on the way to
 	   what it came to (its script, as it loaded, clicked a download link
 	   or sent the browser on): drawn first, then what the load came to
 	   (the file selector for a file, EMail for a mail address) */
-	int fresh = r == BR_SHOWN || br.shows != drawn;
+	int fresh = r == BR_SHOWN || br.shows != drawn, pv = br.pv_p != NULL;
+	int32_t pv_top = win_top();
+	/* the load's preview goes: the page in its place, where it was
+	   scrolled to (unless the page goes to an anchor), or the page shown
+	   before again */
+	br_preview_free(&br);
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;
@@ -892,6 +912,8 @@ static void loaded(int r)
 		char shown[440];
 		drawn = br.shows;
 		win_page_changed();
+		if (pv && br.scroll_to <= 0 && pv_top > 0)
+			win_scroll_to(pv_top);
 		ms_drawn = pf_ms() - ms_drawn;
 		log_url(shown, sizeof shown);
 		{
@@ -917,6 +939,8 @@ static void loaded(int r)
 			win_status("Part of this page is nested too deeply to show.");
 		}
 	}
+	if (pv && !fresh)
+		win_preview_gone();
 	switch (r) {
 	case BR_SHOWN:
 		break;
@@ -1949,6 +1973,7 @@ int main(void)
 	br.pens = opt.pens;
 	br.say = say;
 	br.phase = on_phase;
+	br.previewed = previewed;
 	br.log = log_line;
 	br.can_open = can_open;
 	br.save_as = save_where;

@@ -120,6 +120,8 @@ void win_close(void);
 void win_message(const short *msg);	/* WM_* */
 void win_redraw(const GRECT *area);	/* NULL: all of it */
 void win_redraw_page(void);
+void win_preview(void);			/* the page loading's preview (br.pv_p): drawn from its top */
+void win_preview_gone(void);		/* and gone, the load stopped: the page as it was */
 void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything drawn */
 void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
