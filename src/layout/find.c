@@ -61,10 +61,12 @@ static int one_line(const dl_item *q, const dl_item *it)
 }
 
 /* run it straight after q on a line, either side (two parts of a word, a
-   bold "Ata" and "ri", an "H", a subscript "2" and an "O") */
+   bold "Ata" and "ri", an "H", a subscript "2" and an "O"); not one that
+   starts a line box, another block's beside q's (two flex items, two
+   table cells) */
 static int touches(const dl_item *q, const dl_item *it)
 {
-	return one_line(q, it) && ((it->x >= q->x + q->w - 1 && it->x <= q->x + q->w + 1) ||
+	return one_line(q, it) && !(it->flags & DLF_LINE0) && ((it->x >= q->x + q->w - 1 && it->x <= q->x + q->w + 1) ||
 				   (it->x + it->w >= q->x - 1 && it->x + it->w <= q->x + 1));
 }
 

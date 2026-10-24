@@ -15,7 +15,10 @@ drawn right to left), worked out from UAX #9 by hand.
 - unicode-bidi: plaintext (a <pre dir=auto>): each paragraph by its
   first strong letter, and aligned so;
 - an embedding (unicode-bidi: embed) left open at a line's end goes on
-  on the next, as a paragraph's levels are worked out whole.
+  on the next, as a paragraph's levels are worked out whole;
+- a right-to-left table (its collapsed borders too), flex row and grid:
+  their first cell, item or column at the right, row-reverse from the
+  left; and in a right-to-left grid the third item under the first.
 
     tests/layout/embed.py EWRENDER EWEB.FNT"""
 import os
@@ -55,6 +58,16 @@ CASES = [
     ("no LRM: the mark at the line's left", "<p dir=rtl>%s world!" % C, ["~! world ~%s" % C]),
     ("pre dir=auto: each paragraph its own way", "<pre dir=auto>abc def\n%s xyz</pre>" % C,
      ["abc def", "xyz ~%s" % C]),
+    ("a right-to-left table: its first cell at the right", "<table dir=rtl><tr><td>one<td>two<td>three</table>",
+     ["three two one"]),
+    ("and its collapsed borders' columns too", "<table dir=rtl style='border-collapse:collapse'><tr>"
+     "<td style='border:1px solid'>one<td>two</table>", ["two one"]),
+    ("a right-to-left flex row: its first item at the right", "<div dir=rtl style='display:flex'><span>one</span>"
+     "<span>two</span><span>three</span></div>", ["three two one"]),
+    ("row-reverse right to left: from the left", "<div dir=rtl style='display:flex;flex-direction:row-reverse'>"
+     "<span>one</span><span>two</span></div>", ["one two"]),
+    ("a right-to-left grid: its first column at the right", "<div dir=rtl style='display:grid;"
+     "grid-template-columns:60px 60px'><div>one</div><div>two</div><div>three</div></div>", ["two one", "three"]),
     ("an embedding open across lines", "<p style='width:140px'>abc <span style='unicode-bidi:embed;"
      "direction:rtl'>%s %s %s %s %s</span> def" % (A, B, C, D, A),
      None),

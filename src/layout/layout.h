@@ -52,6 +52,9 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP, DL_SBAR };
 #define DLF_OVER  4
 #define DLF_STRIKE 8
 #define DLF_NOSIZE 16			/* a picture laid out before its file's size was known */
+#define DLF_LINE0 16			/* DL_TEXT: the first run of a line box (not an
+					   inline-block's): copied after a space even when it
+					   touches the run before (two flex items, two cells) */
 #define DLF_ALT 32			/* and with no size at all: its alt text's room (the text
 					   is an item of its own), nothing drawn */
 #define DLF_TILE 64			/* DL_IMAGE: a background picture, tiled over the item

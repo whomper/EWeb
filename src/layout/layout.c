@@ -225,6 +225,7 @@ typedef struct {
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
+	int line0;			/* the next text run starts a line box (DLF_LINE0) */
 	int floats;			/* the items have a float in the text (IT_FLOAT) */
 	int sums;			/* the items have an inline summary's (ITEM.det) */
 	int ibs;			/* the items have an inline-block (ITEM.ib) */
@@ -1101,6 +1102,10 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 	d->base = it->font->ascent;
 	d->rgb = it->color;		/* (alpha 0: kept for its link and clicks, not drawn) */
 	d->flags = it->flags;
+	if (l->line0) {
+		d->flags |= DLF_LINE0;
+		l->line0 = 0;
+	}
 	d->link = it->link;
 	d->ctl = it->ctl;
 	d->font = it->font;
@@ -2974,6 +2979,14 @@ static void shift_blocks(L *l, long b, int32_t dx, int32_t dy)
 #endif
 }
 
+/* items k0..k1-1 (a collapsed border's fills) mirrored in x0..x1: a
+   right-to-left table's */
+static void mirror_items(L *l, long k0, long k1, int32_t x0, int32_t x1)
+{
+	for (; k0 < k1; k0++)
+		l->p->items[k0].x = x0 + x1 - l->p->items[k0].x - l->p->items[k0].w;
+}
+
 /* the display list from item k on moved by (dx, dy) */
 static void shift_items(L *l, long k, int32_t dx, int32_t dy)
 {
@@ -4093,6 +4106,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 		l->last_base = base;
 		l->last_k = l->p->nitems;
 		visual_order(l, i, end, bidi, ord);
+		l->line0 = !b->ib;	/* (an inline-block's runs part of its line's) */
 		/* positions, backgrounds, then the text */
 		{
 			int32_t px = lx + off;
@@ -5021,8 +5035,9 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	box **kids;
 	int *start = NULL, above[MAXCOLS];
 	long *k0 = NULL, *k1 = NULL, *kbg = NULL, (*kbd)[NBD] = NULL;
-	int32_t *hh = NULL, *fb = NULL, rbase = AUTO;
-	int fi = -1;
+	int32_t *hh = NULL, *fb = NULL, rbase = AUTO, rw = 0;
+	int fi = -1, rtl;
+	long kc;
 	BEDGE (*ce)[4] = NULL;		/* its cells' borders where they collapse */
 	int cover[MAXCOLS];		/* the columns its cells take */
 
@@ -5059,7 +5074,12 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 			colx[i + 1] = colx[i] + cols[i] + l->sp_h;
 		for (i = 0; i < MAXCOLS; i++)
 			above[i] = l->spans != NULL && l->spans[i].rows > 0;
+		rw = colx[l->ncols] + l->sp_h - x;	/* (the row's width) */
 	}
+	/* a right-to-left table's columns from its right (CSS 2.1, 17.5:
+	   the table's direction): each cell laid out where its mirror is,
+	   the collapsed borders' fills mirrored once made */
+	rtl = cols != NULL && !l->visual && b->st != NULL && kw(b->st, EP_DIRECTION) == KW_RTL;
 	for (c = b->first, i = 0; c != NULL; c = c->next, i++) {
 		kids[i] = c;
 		start[i] = 0;
@@ -5108,10 +5128,14 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 		cy += l->sp_v;
 		if (l->coll != NULL) {
 			ce = malloc(n * sizeof *ce);
-			if (ce == NULL)
+			if (ce == NULL) {
 				l->fail = 1;
-			else
+			} else {
+				kc = l->p->nitems;
 				collapse_row(l, b, kids, start, n, above, colx, cy, ce, cover);
+				if (rtl)
+					mirror_items(l, kc, l->p->nitems, x, x + rw);
+			}
 		}
 	}
 	for (i = 0; i < n; i++) {
@@ -5128,7 +5152,7 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 			l->cbd = ce[i];
 			l->cbd_box = kids[i];
 		}
-		ch = layout_block(l, kids[i], cx, cy, pw, 1, &mb, &f);
+		ch = layout_block(l, kids[i], rtl ? 2 * x + rw - cx - pw : cx, cy, pw, 1, &mb, &f);
 		l->cbd = NULL;
 		k1[i] = l->p->nitems;
 		kbg[i] = l->last_bg;
@@ -5220,8 +5244,12 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 				cell_shift(l, k0[i], k1[i], kbg[i], kbd[i], va == KW_MIDDLE ? dh / 2 : dh);
 		}
 	}
-	if (ce != NULL)
+	if (ce != NULL) {
+		kc = l->p->nitems;
 		collapse_gaps(l, kids, start, n, above, cover, colx, cy, lineh, ce);
+		if (rtl)
+			mirror_items(l, kc, l->p->nitems, x, x + rw);
+	}
 	h = cy + lineh - y;
 	free(ce);
 	free(pref);
@@ -5589,6 +5617,9 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 	const ec_style *s = b->st;
 	int dir = kw(s, EP_FLEX_DIRECTION), column = dir == KW_COLUMN || dir == KW_COLUMN_REVERSE;
 	int rev = dir == KW_ROW_REVERSE || dir == KW_COLUMN_REVERSE;
+	/* right to left: a row's main start at the right, a column's cross
+	   start (CSS Flexbox 1, 2: the writing mode's) */
+	int rtl = kw(s, EP_DIRECTION) == KW_RTL && !l->visual;
 	int wrap = !column && b->wrap, wrev = kw(s, EP_FLEX_WRAP) == KW_WRAP_REVERSE;
 	int jc = kw(s, EP_JUSTIFY_CONTENT), ai = kw(s, EP_ALIGN_ITEMS), ac = kw(s, EP_ALIGN_CONTENT);
 	int32_t cgap = gap(l, s, EP_COLUMN_GAP, w), rgap = gap(l, s, EP_ROW_GAP, hdef);
@@ -5724,7 +5755,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			}
 			ltop[j] = y + total;
 			for (k = a; k < e; k++) {
-				int32_t mb, f = AUTO, ix = rev ? x + w - it[k].pos - it[k].size : x + it[k].pos;
+				int32_t mb, f = AUTO, ix = rev != rtl ? x + w - it[k].pos - it[k].size : x + it[k].pos;
 				it[k].k0 = l->p->nitems;
 				it[k].cross = layout_block(l, it[k].b, ix, ltop[j], it[k].size, 1, &mb, &f);
 				it[k].k1 = l->p->nitems;
@@ -5811,7 +5842,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 					iw = w;
 				if (it[i].align == KW_CENTER)
 					ox = (w - iw) / 2;
-				else if (it[i].align == KW_FLEX_END)
+				else if ((it[i].align == KW_FLEX_END) != rtl)
 					ox = w - iw;
 			}
 			it[i].k0 = l->p->nitems;
@@ -6184,6 +6215,7 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 	int crep = grid_repeats(l, tc, w, cg), rrep = grid_repeats(l, tr, hdef, rg);
 	int ncx = grid_explicit(tc, crep), nrx = grid_explicit(tr, rrep), ncols, nrows, n = 0, i, j, k;
 	int ji = kw(s, EP_JUSTIFY_ITEMS), ai = kw(s, EP_ALIGN_ITEMS), jc = kw(s, EP_JUSTIFY_CONTENT);
+	int rtl = kw(s, EP_DIRECTION) == KW_RTL && !l->visual;
 	GITEM *it;
 	GTRACK *col = NULL, *row = NULL;
 	GOCC occ = { NULL, 0, 0 };
@@ -6437,14 +6469,16 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 			if (g->c1 == ncols)
 				aw = cx[g->c1] - cx[g->c0] - cg;
 			iw = aw;
-			ix = cx[g->c0];
+			/* right to left: the columns from the right, an item's
+			   start its area's right */
+			ix = rtl ? 2 * x + w - cx[g->c0] - aw : cx[g->c0];
 			if (g->ja != KW_STRETCH || (!g->b->anon && g->b->st->k[EP_WIDTH] != EK_KW)) {
 				iw = cell_pref(l, g->b, aw);
 				if (iw > aw)
 					iw = aw;
 				if (g->ja == KW_CENTER)
 					ix += (aw - iw) / 2;
-				else if (g->ja == KW_FLEX_END)
+				else if ((g->ja == KW_FLEX_END) != rtl)
 					ix += aw - iw;
 			}
 			g->k0 = l->p->nitems;

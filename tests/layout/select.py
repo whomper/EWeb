@@ -186,11 +186,29 @@ def bidi(ewr, fnt, label):
     check(label + "a double click far from any text: nothing", far == [None], repr(far))
 
 
+def blocks(ewr, fnt, label):
+    """two blocks touching on a line (flex items, table cells with no
+    spacing) copy with a space between them; a word in two runs (a bold
+    part) still copies as one"""
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
+        f.write("<!DOCTYPE html><div style=display:flex><span>one</span><span>two</span></div>"
+                "<table cellspacing=0 cellpadding=0><tr><td>A<td>B</table><p>ab<b>cd</b> end")
+        page = f.name
+    try:
+        got = texts(run(ewr, fnt, ["-x", "all"], page=page))
+    finally:
+        os.unlink(page)
+    check(label + "touching flex items and cells copy apart, a word's runs together",
+          got == ["one two\nA B\n\nabcd end"], repr(got))
+
+
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     edition(sys.argv[1], sys.argv[2], "")
     bidi(sys.argv[1], sys.argv[2], "")
+    blocks(sys.argv[1], sys.argv[2], "")
     if len(sys.argv) > 3:
         edition(sys.argv[3], sys.argv[2], "ST: ")
         bidi(sys.argv[3], sys.argv[2], "ST: ")
@@ -200,7 +218,7 @@ def main():
     print("select: a drag's text as it is read either way, beside a line and below the page, a double click's "
           "word, Hebrew as it is read, Select all and the page's text, the same text laid out again, marked where "
           "it is drawn, right-to-left lines with numbers and Latin, super- and subscripts, accents and points kept with "
-          "their letters, no word far from text%s" % (", in 2 editions" if len(sys.argv) > 3 else ""))
+          "their letters, no word far from text, touching blocks apart%s" % (", in 2 editions" if len(sys.argv) > 3 else ""))
 
 
 if __name__ == "__main__":

@@ -3412,13 +3412,28 @@ drawn as it was stored.
   Hebrew, a control, `direction: rtl` or `plaintext`, and a line of left-to-right text alone isn't
   ordered at all; before, every line was, with a buffer allocated for it.
 
+- **Right-to-left rows** (the selection review's notes, 24 Oct 2026): a table, a flex row or a
+  grid whose `direction` is `rtl` was laid out from the left. Now a table row's cells are each laid
+  out where their mirror is (CSS 2.1, 17.5: the table's direction), its collapsed borders' fills
+  mirrored once made (`mirror_items`); a flex row's main start is its right (`row-reverse` then
+  from the left), a flex column's items to its right; a grid's columns from the right, an item's
+  start its area's right.
+- **Copying beside a block:** two flex items or table cells touching on a line were copied as one
+  word ("onetwo"). The first run of each line box is marked (`DLF_LINE0`, DL_TEXT's use of
+  `DLF_NOSIZE`'s bit), and a run that starts a line box is never part of the word before it
+  (`touches` in `find.c`), so they copy and are found with a space between. Not an inline-block's,
+  whose runs belong to its line. Left: an inline-block's text is copied before the line it is on
+  (it is laid out, so listed, first), as before.
+
 **Measured** (68030 instructions, `drawbench`, against 0.34): laying out the page set's three
 biggest pages 1.1% to 1.3% fewer (395 KB: 14.65 M to 14.46 M), the Hebrew test page 1.8% more,
 `tests/layout/bidi.html` 5.6% more; styling 0.3% to 1.6% more (the UA sheet's new rules for `dir`).
-Tested by `tests/layout/embed.py` in `make test` (18 cases worked out from UAX #9 by hand: `<bdo>`
+Tested by `tests/layout/embed.py` in `make test` (23 cases worked out from UAX #9 by hand: `<bdo>`
 both ways, bidi-override, RLO and LRO in the text, `dir` on a span both ways, a plain span against a
 `<bdi>` with the colon and the number after it, `dir=auto` both ways, RLM and LRM against neither, a
-`<pre dir=auto>`'s paragraphs and their alignment, an embedding open across lines); every
+`<pre dir=auto>`'s paragraphs and their alignment, an embedding open across lines, a right-to-left
+table with and without collapsed borders, flex row, `row-reverse` and grid) and
+`tests/layout/select.py` (touching flex items and cells copied apart, a word's two runs together); every
 `tests/layout` list unchanged, the Hebrew pages in every encoding.
 
 ## The design
