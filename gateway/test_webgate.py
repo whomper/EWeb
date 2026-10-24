@@ -677,6 +677,191 @@ class SnapshotTest(unittest.TestCase):
         self.assertTrue(data.startswith(b"webgate: snapshots need the Pi's browser"))
 
 
+CF_CHECK = (b'<!DOCTYPE html><html><head><title>Just a moment...</title></head><body><noscript>Enable '
+            b'JavaScript and cookies to continue</noscript><script>(function(){window._cf_chl_opt={cType: '
+            b'"managed"};})();</script></body></html>')
+
+
+class CheckSite(BaseHTTPRequestHandler):
+    """a site behind Cloudflare's check: /forum and /next answer every
+    request webgate makes itself with the check (only a browser that has
+    passed it gets in, and the pass stays in the browser); an older check
+    says so only in its page (/old, a 503 gzip'd); /refused is a plain 403
+    from Cloudflare"""
+    protocol_version = "HTTP/1.1"
+    seen = []
+
+    def log_message(self, *a):
+        pass
+
+    def version_string(self):
+        return "cloudflare"
+
+    def do_GET(self):
+        CheckSite.seen.append((self.path, self.headers.get("Cookie"), self.headers.get("User-Agent")))
+        extra = []
+        if self.path in ("/forum", "/next", "/smiley.gif"):
+            status, body, extra = 403, CF_CHECK, [("cf-mitigated", "challenge")]
+        elif self.path == "/old":
+            status, body, extra = 503, gzip.compress(CF_CHECK), [("Content-Encoding", "gzip")]
+        else:
+            status, body = 403, b"<!DOCTYPE html><title>Forbidden</title><p>no"
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html")
+        for k, v in extra:
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class CheckTest(unittest.TestCase):
+    """--browser and Cloudflare's check: the page through the browser, the
+    site's next pages there too for the visit, nothing of its pass moved
+    out of it; a check that wants a click, or that the browser didn't pass
+    in time, as it came and said so"""
+
+    @classmethod
+    def setUpClass(cls):
+        webgate.Config.browser = True
+        webgate.Config.allow_local = True
+        webgate.Config.snapshot_wait = 5
+        cls.site = ThreadingHTTPServer(("127.0.0.1", 0), CheckSite)
+        cls.ext = ThreadingHTTPServer(("127.0.0.1", 0), webgate.ExtHandler)
+        cls.gw = ThreadingHTTPServer(("127.0.0.1", 0), webgate.Handler)
+        for srv in (cls.site, cls.ext, cls.gw):
+            srv.daemon_threads = True
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.site.server_address[1]
+
+    @classmethod
+    def tearDownClass(cls):
+        for srv in (cls.site, cls.ext, cls.gw):
+            srv.shutdown()
+            srv.server_close()
+        webgate.Config.browser = False
+        webgate.Config.allow_local = False
+        webgate.Config.snapshot_wait = 60
+
+    def setUp(self):
+        webgate.VISITS.clear()
+        CheckSite.seen.clear()
+
+    def extension(self, snap=None):
+        """one turn of webgate-ext: the address, then the page it went on
+        to after the check, or snap; False: no answer"""
+        c = http.client.HTTPConnection("127.0.0.1", self.ext.server_address[1], timeout=30)
+        c.request("GET", "/next")
+        w = json.loads(c.getresponse().read())
+        if snap is not False:
+            body = json.dumps(snap or {"url": w["url"], "title": "Forum", "challenge": False,
+                                       "html": "<title>Forum</title><p>via the browser: " + w["url"]})
+            c.request("POST", "/snapshot?id=" + w["id"], body=body.encode(), headers={"Content-Type": "application/json"})
+            c.getresponse().read()
+        c.close()
+        return w
+
+    def ask(self, path, ext=None, accept="text/html,application/xhtml+xml,*/*;q=0.8"):
+        t = None
+        if ext is not None:
+            t = threading.Thread(target=lambda: self.extension(ext))
+            t.start()
+        c = http.client.HTTPConnection("127.0.0.1", self.gw.server_address[1], timeout=30)
+        self.addCleanup(c.close)
+        c.request("GET", self.base + path, headers={"User-Agent": "EWeb/0.33 (Atari Falcon030)", "Cookie": "mine=1",
+                                                    "Accept": accept})
+        r = c.getresponse()
+        data = r.read()
+        if t is not None:
+            t.join()
+        return r, data
+
+    def test_through_the_browser_then_on_it_for_the_visit(self):
+        r, data = self.ask("/forum", ext={})
+        self.assertEqual(r.status, 200)
+        self.assertEqual(r.getheader("X-Gateway-Snapshot-URL"), self.base + "/forum")
+        self.assertIn(b"via the browser: " + self.base.encode() + b"/forum", data)
+        # the site's next page: straight to the browser, not to the site
+        # first; what webgate sent the site was EWeb's own, as it came
+        r, data = self.ask("/next", ext={})
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"via the browser: " + self.base.encode() + b"/next", data)
+        self.assertEqual(CheckSite.seen, [("/forum", "mine=1", "EWeb/0.33 (Atari Falcon030)")])
+
+    def test_visit_ends_after_25_minutes(self):
+        self.ask("/forum", ext={})
+        host = urlsplit_host(self.base)
+        self.assertTrue(webgate.visiting(host))
+        webgate.VISITS[host] -= webgate.VISIT_KEEP + 1
+        self.assertFalse(webgate.visiting(host))
+        self.assertNotIn(host, webgate.VISITS)
+
+    def test_a_visit_the_browser_cant_go_on_with(self):
+        """the check again in the browser: the visit ends, and the page is
+        asked for as usual (the check, then the browser again)"""
+        self.ask("/forum", ext={})
+        turns = threading.Thread(target=lambda: (self.extension({"url": "x", "html": "x", "challenge": True}),
+                                                 self.extension()))
+        turns.start()
+        r, data = self.ask("/next")
+        turns.join()
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"via the browser", data)
+        self.assertEqual(CheckSite.seen[-1][0], "/next")
+
+    def test_wants_a_click(self):
+        r, data = self.ask("/forum", ext={"url": "x", "html": "<title>Just a moment...</title>", "challenge": True})
+        self.assertEqual(r.status, 403)
+        self.assertEqual(r.getheader("X-Gateway-Check"), "click")
+        self.assertEqual(r.getheader("cf-mitigated"), "challenge")
+        self.assertEqual(data, CF_CHECK)
+        self.assertEqual(webgate.VISITS, {})
+
+    def test_browser_too_slow(self):
+        r, data = self.ask("/forum", ext=False)
+        self.assertEqual(r.status, 403)
+        self.assertEqual(r.getheader("X-Gateway-Check"), "failed")
+        self.assertEqual(data, CF_CHECK)
+
+    def test_an_older_check_by_its_page(self):
+        r, data = self.ask("/old", ext={})
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"via the browser", data)
+
+    def test_a_plain_refusal_as_it_came(self):
+        r, data = self.ask("/refused")
+        self.assertEqual(r.status, 403)
+        self.assertIsNone(r.getheader("X-Gateway-Check"))
+        self.assertIn(b"Forbidden", data)
+        self.assertIsNone(webgate.BRIDGE.wanted)
+
+    def test_a_picture_as_it_came(self):
+        """not a page: no browser for it, during the visit too (its pass
+        stays in the browser)"""
+        r, data = self.ask("/smiley.gif", accept="image/jpeg,image/png,image/gif;q=0.9")
+        self.assertEqual(r.status, 403)
+        self.assertIsNone(r.getheader("X-Gateway-Check"))
+        self.assertIsNone(webgate.BRIDGE.wanted)
+        self.ask("/forum", ext={})
+        r, data = self.ask("/smiley.gif", accept="image/jpeg,image/png,image/gif;q=0.9")
+        self.assertEqual(r.status, 403)
+        self.assertEqual(CheckSite.seen[-1], ("/smiley.gif", "mine=1", "EWeb/0.33 (Atari Falcon030)"))
+
+    def test_without_the_browser_as_it_came(self):
+        webgate.Config.browser = False
+        try:
+            r, data = self.ask("/forum")
+        finally:
+            webgate.Config.browser = True
+        self.assertEqual(r.status, 403)
+        self.assertIsNone(r.getheader("X-Gateway-Check"))
+        self.assertEqual(data, CF_CHECK)
+
+
+def urlsplit_host(url):
+    return url.split("//", 1)[1].rsplit(":", 1)[0]
+
+
 class BrowserProxyTest(unittest.TestCase):
     """the Pi's browser goes out through webgate (127.0.0.1:8281): every
     connection to the address webgate checked, so a name whose answer is
