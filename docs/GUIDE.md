@@ -699,6 +699,14 @@ there at once; where the window was, when you quit:
   searches for the same words with the search engine in Settings
   (FrogFind unless you chose another), which needs no JavaScript; words
   typed in the address go there too
+- **"This site lets in only browsers that pass Cloudflare's check"**:
+  the site has Cloudflare's check ("Just a moment...") in front of it, a
+  script for the big browsers that EWeb can't run. The page links to the
+  Internet Archive's copy of the page, if it has one. Through the Pi
+  gateway with its browser (AERA-Gateway with `--browser`), the Pi passes
+  the check itself and EWeb shows the page; when the check wants a click,
+  the page's **Live view** link shows the Pi's screen to tick it, and
+  then ^R loads the page
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `CACERT.PEM` and `ROOTS.DAT` are
   next to `EWEB.PRG`, and the Atari's clock is right

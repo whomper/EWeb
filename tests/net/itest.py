@@ -89,6 +89,14 @@ def snapshots():
                 w = json.loads(body)
                 if w.get("shot"):
                     c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg)
+                elif "/site/cf/" in w["url"]:
+                    # Cloudflare's check: passed, the page it goes on to;
+                    # or one that wants a click
+                    click = "/site/cf/click" in w["url"]
+                    title = "Just a moment..." if click else "Through the Pi: " + w["url"].rsplit("/", 1)[-1]
+                    c.request("POST", "/snapshot?id=" + w["id"], body=json.dumps(
+                        {"url": w["url"], "title": title, "challenge": click,
+                         "html": "<!DOCTYPE html><title>%s</title><p>the forum" % title}).encode())
                 else:
                     url = w["url"] or "https://localhost:%d/site/now.html" % HTTPS
                     page = ("<!DOCTYPE html><html><head><base href='%s'><title>Made by script</title></head>"
@@ -126,6 +134,28 @@ def snapshots():
         check("the Pi's browser: live view, its screen a picture button", p.returncode == 0
               and 'title "Live: Made by script"' in out
               and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None, out)
+        if "X-Gateway-Check" in open(WEBGATE).read():
+            # Cloudflare's check through the Pi: the page through its
+            # browser, then the quick way with the clearance it kept; a
+            # check that wants a click, EWeb's own page with live view
+            cf = "http://localhost:%d/site/cf/" % HTTP
+
+            def through(url):
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", url], cwd=work,
+                                   capture_output=True, text=True, timeout=120)
+                return p.returncode, p.stdout + p.stderr
+            rc, out = through(cf)
+            check("the Pi's browser: Cloudflare's check passed there", rc == 0 and
+                  'title "Through the Pi:"' in out and "a snapshot from the Pi's browser" in out, out)
+            rc, out = through(cf + "next")
+            seen = opener.open("http://localhost:%d/site/cf/seen" % HTTP).read().decode()
+            check("the Pi's browser: the site's next page there too, for the visit", rc == 0 and
+                  'title "Through the Pi: next"' in out and "/site/cf/next" not in seen.split(),
+                  out + "seen: " + seen)
+            rc, out = through(cf + "click")
+            check("the Pi's browser: a check that wants a click, live view offered", rc == 0 and
+                  "Cloudflare's check" in out and
+                  re.search(r"^link \d+ http://webgate/live\?url=http%3A%2F%2Flocalhost", out, re.M) is not None, out)
     finally:
         stop.append(1)
         gate.terminate()

@@ -1188,25 +1188,7 @@ static void home(void)
 static void live_view(void)
 {
 	char u[4200];
-	const char *s = br.url;
-	long n = 0;
-	n = snprintf(u, sizeof u, "http://webgate/live");
-	if (br.cur >= 0 && (strncmp(s, "http:", 5) == 0 || strncmp(s, "https:", 6) == 0)) {
-		static const char hex[] = "0123456789ABCDEF";
-		n += snprintf(u + n, sizeof u - n, "?url=");
-		for (; *s && *s != '#' && n < (long) sizeof u - 4; s++) {
-			unsigned char c = (unsigned char) *s;
-			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-			    c == '-' || c == '.' || c == '_' || c == '~') {
-				u[n++] = (char) c;
-			} else {
-				u[n++] = '%';
-				u[n++] = hex[c >> 4];
-				u[n++] = hex[c & 15];
-			}
-		}
-		u[n] = 0;
-	}
+	br_live_url(br.cur >= 0 ? br.url : NULL, u, sizeof u);
 	go(u);
 }
 

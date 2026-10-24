@@ -3517,6 +3517,16 @@ doesn't rely on tricking anything.
 | Press-and-hold, sliders, puzzle pieces | Hold or drag with the Falcon mouse |
 | Invisible checks (reCAPTCHA v3) | Nothing; your real mouse movement is passed on |
 
+**Built for Cloudflare's check (24 Oct 2026),** after Erez met it on Atari-Forum: EWeb knows the
+check (`cf-mitigated: challenge`, or its options on a 403 or 503) and shows its own page in its place,
+which goes nowhere and runs no script, with the Internet Archive's copy. Through the gateway with its
+browser, webgate (AERA-Gateway) opens such a page in the browser, whose extension waits through the
+check (its snapshot had been the check itself), and sends EWeb the page; the site's next pages go
+straight to the browser for the visit (25 minutes after the last), and nothing of the pass leaves the
+browser, so a picture the check refuses stays out. A check that wants a click comes back with
+`X-Gateway-Check: click`, and EWeb's page links to live view (`br_live_url`). `make itest` runs it
+with a stand-in for the browser when its webgate has it.
+
 **In direct mode,** when EWeb hits a check it says so and offers to open that site through the gateway
 with one key. Without a gateway, sites behind a CAPTCHA can't work, because no browser on a 68030 can
 pass them.

@@ -703,6 +703,8 @@ typedef struct {
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
 	char refresh[2048];	/* a page's Refresh header, "" none */
 	int challenge;		/* Cloudflare's check, as its cf-mitigated header says */
+	int check;		/* and the Pi's browser met it too (X-Gateway-Check): 1 it
+				   didn't get through in time, 2 it wants a click */
 	/* a page's Content-Disposition (RFC 6266): the caches would lose
 	   what it says (so it isn't kept: they keep no headers), it says
 	   attachment (to save, not to show), and the file name it gives
@@ -924,6 +926,27 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 	sb_adds(s, "</body></html>");
 }
 
+void br_live_url(const char *url, char *out, int size)
+{
+	static const char hex[] = "0123456789ABCDEF";
+	int n = snprintf(out, size, "http://webgate/live");
+	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 >= size)
+		return;
+	n += snprintf(out + n, size - n, "?url=");
+	for (; *url && *url != '#' && n < size - 4; url++) {
+		unsigned char c = (unsigned char) *url;
+		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+		    c == '-' || c == '.' || c == '_' || c == '~') {
+			out[n++] = (char) c;
+		} else {
+			out[n++] = '%';
+			out[n++] = hex[c >> 4];
+			out[n++] = hex[c & 15];
+		}
+	}
+	out[n] = 0;
+}
+
 /* Cloudflare's check ("Just a moment...", its managed challenge): a page
    whose script, written for the big browsers, must pass before the site
    gives the cookie that lets a browser in. EWeb's little JavaScript
@@ -938,7 +961,7 @@ static int cf_wall(const FETCH *f)
 	return f->challenge || ((f->status == 403 || f->status == 503) && has_text(f->data, f->len, "_cf_chl_opt"));
 }
 
-static void cf_page(SBUF *s, const char *url)
+static void cf_page(SBUF *s, const char *url, int check)
 {
 	static const char what[] = "This site lets in only browsers that pass Cloudflare's check";
 	char host[128];
@@ -963,9 +986,21 @@ static void cf_page(SBUF *s, const char *url)
 		sb_adds(s, "\">The Internet Archive's copy of this page</a>, if it has one, needs no check; "
 			   "it may be older.</p>");
 	}
-	if (http_gateway[0])
+	if (check) {
+		/* (webgate gave it to the Pi's browser, which didn't pass it:
+		   its screen, the address opened, to tick the box) */
+		char live[4200];
+		br_live_url(url, live, sizeof live);
+		sb_adds(s, check == 2 ? "<p>The Pi's browser met the check too, and it wants a click: <a href=\"" :
+			   "<p>The Pi's browser didn't get through the check in time: <a href=\"");
+		esc(s, live);
+		sb_adds(s, check == 2 ? "\">Live view</a> shows the Pi's screen to tick it; then load this page "
+					"again (^R).</p>" :
+			   "\">Live view</a> shows what it shows; then load this page again (^R).</p>");
+	} else if (http_gateway[0]) {
 		sb_adds(s, "<p class=small>The Pi's browser may pass the check: View &gt; Through the "
 			   "Pi's browser.</p>");
+	}
 	sb_adds(s, "</body></html>");
 }
 
@@ -1281,6 +1316,8 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 				char cf[16];
 				f->challenge = http_header(rs, "cf-mitigated", cf, sizeof cf) != NULL &&
 					       strcmp(cf, "challenge") == 0;
+				if (http_gateway[0] && http_header(rs, "X-Gateway-Check", cf, sizeof cf) != NULL)
+					f->check = strcmp(cf, "click") == 0 ? 2 : 1;
 			}
 			/* an answer whose Content-Disposition says attachment, or
 			   names a file to save, isn't kept, here or on the disk:
@@ -2535,7 +2572,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			if (google)
 				wall_page(b, &src, f->url, q);
 			else
-				cf_page(&src, f->url);
+				cf_page(&src, f->url, f->check);
 			f->refresh[0] = 0;
 			r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 		} else {

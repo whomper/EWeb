@@ -305,7 +305,9 @@ GOOGLE_SORRY = b"<!DOCTYPE html><title>Sorry</title><p>Our systems have detected
 # managed challenge, 2025): a 403 with cf-mitigated: challenge, a <noscript>
 # that asks for JavaScript and cookies and a <meta> refresh that brings it
 # back; /site/cf/plain the same without the header (through a proxy that
-# drops it), /site/cf/about a page that only mentions the check's options
+# drops it), /site/cf/about a page that only mentions the check's options.
+# Through the Pi (itest's stand-in for its browser), /site/cf/ and
+# /site/cf/next are passed in the browser, /site/cf/click wants a click
 CF_CHECK = (b'<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>'
             b'<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">'
             b'<meta name="robots" content="noindex,nofollow"><meta http-equiv="refresh" content="360"></head>'
@@ -315,6 +317,7 @@ CF_CHECK = (b'<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</t
             b'cType: \'managed\'};var cpo = document.createElement(\'script\');'
             b'cpo.src = \'/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=1\';'
             b'location.reload();}());</script></body></html>')
+CF_SEEN = []        # the check's pages asked for, in order (/site/cf/seen)
 CF_ABOUT = (b"<!DOCTYPE html><title>About the check</title><p>Cloudflare's page sets "
             b"<code>window._cf_chl_opt</code>.</p>")
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
@@ -793,8 +796,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
         elif p.startswith("/site/hits/"):
             self.send(200, b"%d" % HITS.get(p[11:], 0), "text/plain")
-        elif p == "/site/cf/":
+        elif p in ("/site/cf/", "/site/cf/next", "/site/cf/click"):
+            CF_SEEN.append(p)
             self.send(403, CF_CHECK, extra=[("cf-mitigated", "challenge"), ("Cache-Control", "no-store")])
+        elif p == "/site/cf/seen":
+            self.send(200, " ".join(CF_SEEN).encode(), "text/plain")
         elif p == "/site/cf/plain":
             self.send(503, CF_CHECK)
         elif p == "/site/cf/about":
