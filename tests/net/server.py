@@ -301,6 +301,22 @@ GOOGLE_WALL = (b'<!DOCTYPE html><html lang="en"><head><title>Google Search</titl
 GOOGLE_RESULTS = b"<!DOCTYPE html><title>Results</title><p>Atari Falcon030, 1992</p>"
 GOOGLE_ENABLEJS = b"<!DOCTYPE html><title>Google Search</title><p>Turn on JavaScript to keep searching</p>"
 GOOGLE_SORRY = b"<!DOCTYPE html><title>Sorry</title><p>Our systems have detected unusual traffic</p>"
+# Cloudflare's check as a browser without its JavaScript meets it (a
+# managed challenge, 2025): a 403 with cf-mitigated: challenge, a <noscript>
+# that asks for JavaScript and cookies and a <meta> refresh that brings it
+# back; /site/cf/plain the same without the header (through a proxy that
+# drops it), /site/cf/about a page that only mentions the check's options
+CF_CHECK = (b'<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>'
+            b'<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">'
+            b'<meta name="robots" content="noindex,nofollow"><meta http-equiv="refresh" content="360"></head>'
+            b'<body><div class="main-wrapper" role="main"><div class="main-content"><noscript><div class="h2">'
+            b'<span id="challenge-error-text">Enable JavaScript and cookies to continue</span></div></noscript>'
+            b'</div></div><script>(function(){window._cf_chl_opt={cvId: \'3\',cZone: "localhost",'
+            b'cType: \'managed\'};var cpo = document.createElement(\'script\');'
+            b'cpo.src = \'/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=1\';'
+            b'location.reload();}());</script></body></html>')
+CF_ABOUT = (b"<!DOCTYPE html><title>About the check</title><p>Cloudflare's page sets "
+            b"<code>window._cf_chl_opt</code>.</p>")
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
@@ -777,6 +793,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS[p[6:]][0], PICS[p[6:]][1])
         elif p.startswith("/site/hits/"):
             self.send(200, b"%d" % HITS.get(p[11:], 0), "text/plain")
+        elif p == "/site/cf/":
+            self.send(403, CF_CHECK, extra=[("cf-mitigated", "challenge"), ("Cache-Control", "no-store")])
+        elif p == "/site/cf/plain":
+            self.send(503, CF_CHECK)
+        elif p == "/site/cf/about":
+            self.send(200, CF_ABOUT)
         elif p.startswith("/search?"):
             self.send(200, GOOGLE_RESULTS if "pass=1" in p else GOOGLE_WALL)
         elif p.startswith("/httpservice/retry/enablejs"):

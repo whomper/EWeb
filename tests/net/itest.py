@@ -477,6 +477,22 @@ try:
         rc, out = google("-q", "", goo + "search?q=atari+falcon")
         check("the browser: Google's JavaScript wall with no search engine set", rc == 0 and wall in out
               and "A search engine set in Settings" in out, out)
+        # Cloudflare's check: EWeb's own page in its place, which neither
+        # loads again nor runs the check's script, with the Internet
+        # Archive's copy; a page that only mentions the check is shown
+        cf = 'title "This site lets in only browsers that pass Cloudflare\'s check"'
+        arch = "link 1 https://web.archive.org/web/http://localhost:%d/site/cf/" % HTTP
+        rc, out = browse(site + "cf/")
+        check("the browser: Cloudflare's check, EWeb's own page", rc == 0 and cf in out and arch in out
+              and "refresh" not in out and "Just a moment" not in out, out)
+        p = subprocess.run([ewrender, "-f", font, "-J", "-d", site + "cf/"], cwd=work, capture_output=True,
+                           text=True, timeout=120)
+        rc, out = p.returncode, p.stdout + p.stderr
+        check("the browser: Cloudflare's check, with scripts", rc == 0 and cf in out and "refresh" not in out, out)
+        rc, out = browse(site + "cf/plain")
+        check("the browser: Cloudflare's check without its header", rc == 0 and cf in out, out)
+        rc, out = browse(site + "cf/about")
+        check("the browser: a page about the check is shown", rc == 0 and 'title "About the check"' in out, out)
         # saving: a file EWeb doesn't show (kept in memory, saved in one
         # go), a link's file (streamed to the disk), the page shown
         def save(*args):

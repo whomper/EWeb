@@ -702,6 +702,7 @@ typedef struct {
 	int nomem;		/* and that for want of memory */
 	int stale;		/* from the cache, out of date: the server couldn't be reached */
 	char refresh[2048];	/* a page's Refresh header, "" none */
+	int challenge;		/* Cloudflare's check, as its cf-mitigated header says */
 	/* a page's Content-Disposition (RFC 6266): the caches would lose
 	   what it says (so it isn't kept: they keep no headers), it says
 	   attachment (to save, not to show), and the file name it gives
@@ -920,6 +921,51 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 	if (http_gateway[0])
 		sb_adds(s, "<p class=small>Google's own page can be shown through the Pi's browser "
 			   "(View &gt; Through the Pi's browser).</p>");
+	sb_adds(s, "</body></html>");
+}
+
+/* Cloudflare's check ("Just a moment...", its managed challenge): a page
+   whose script, written for the big browsers, must pass before the site
+   gives the cookie that lets a browser in. EWeb's little JavaScript
+   doesn't pass it, and without it the page's <noscript> says "Enable
+   JavaScript and cookies to continue" and its <meta> refresh brings the
+   check back every few minutes, for ever. Cloudflare says so in a
+   cf-mitigated: challenge header; one that comes without it (through a
+   proxy that drops it) by the check's options, _cf_chl_opt, on a 403 or a
+   503. On it EWeb shows a page of its own, which goes nowhere */
+static int cf_wall(const FETCH *f)
+{
+	return f->challenge || ((f->status == 403 || f->status == 503) && has_text(f->data, f->len, "_cf_chl_opt"));
+}
+
+static void cf_page(SBUF *s, const char *url)
+{
+	static const char what[] = "This site lets in only browsers that pass Cloudflare's check";
+	char host[128];
+	host_of(url, host, sizeof host);
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
+	sb_adds(s, what);
+	sb_adds(s, "</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "</head><body><h1>");
+	sb_adds(s, what);
+	sb_adds(s, "</h1><p class=addr>");
+	esc(s, url);
+	sb_adds(s, "</p><p>Cloudflare, the service in front of ");
+	esc(s, host);
+	sb_adds(s, ", asks each browser to pass a check first: a script written for today's big "
+		   "browsers, after which the site lets it in. EWeb runs a little JavaScript, and not "
+		   "that one, so the site would only send the check again and again.</p>");
+	if (strcmp(host, "web.archive.org") != 0) {
+		/* (the Wayback Machine's newest copy of the address, if any) */
+		sb_adds(s, "<p><a href=\"https://web.archive.org/web/");
+		esc(s, url);
+		sb_adds(s, "\">The Internet Archive's copy of this page</a>, if it has one, needs no check; "
+			   "it may be older.</p>");
+	}
+	if (http_gateway[0])
+		sb_adds(s, "<p class=small>The Pi's browser may pass the check: View &gt; Through the "
+			   "Pi's browser.</p>");
 	sb_adds(s, "</body></html>");
 }
 
@@ -1231,6 +1277,11 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			if (accept == NULL && http_header(rs, "Refresh", f->refresh, sizeof f->refresh) != NULL &&
 			    strlen(f->refresh) == sizeof f->refresh - 1)
 				f->refresh[0] = 0;
+			{
+				char cf[16];
+				f->challenge = http_header(rs, "cf-mitigated", cf, sizeof cf) != NULL &&
+					       strcmp(cf, "challenge") == 0;
+			}
 			/* an answer whose Content-Disposition says attachment, or
 			   names a file to save, isn't kept, here or on the disk:
 			   from the cache it would have neither its name nor
@@ -2470,9 +2521,14 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		return download(b, f);
 	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
 		char q[512];
-		if (google_wall(b, f, q, sizeof q)) {
-			/* EWeb's own page in its place, which goes nowhere */
-			wall_page(b, &src, f->url, q);
+		int google = google_wall(b, f, q, sizeof q);
+		if (google || cf_wall(f)) {
+			/* EWeb's own page in its place, which goes nowhere (and
+			   runs no script) */
+			if (google)
+				wall_page(b, &src, f->url, q);
+			else
+				cf_page(&src, f->url);
 			f->refresh[0] = 0;
 			r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 		} else {
