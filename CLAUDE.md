@@ -95,7 +95,7 @@ hub stay complete, with the evidence.
 - **Measuring** (tests/bench): `tests/bench/pages.sh` fetches the page set into `build/pages`;
   `make bench68k` and `tools/count68k.sh` (QEMU with plugins, from `tools/build-qemu.sh`) count
   68030 instructions, `tools/prof68k.py` shows where they go function by function, and
-  `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `tests/bench/hatari.py` times
+  `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `drawbench -m` prints the heap (the Atari's allocator) after parsing, styling and layout, and its peak; `tests/bench/hatari.py` times
   `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times a picture decoded
   and dithered as EWeb does it: `PICBENCH.TTP` (as `EWEB.PRG`, on the 68030 and with the DSP) on
   the Falcon, `PICBST.TTP` (as `EWEBST.PRG`) on the cycle-exact 8 MHz ST.

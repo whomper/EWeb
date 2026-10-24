@@ -139,9 +139,10 @@ struct box {
 /* IT_FLOAT: a float in the text (its box in atom), placed by the line
    it is met on; it takes no room on the line itself */
 enum { IT_WORD, IT_SPACE, IT_BREAK, IT_ATOM, IT_GAP, IT_FLOAT };
-/* bidi controls (ITEM.bidi): UAX #9's LRM, RLM, LRE, RLE, LRO, RLO, PDF,
+/* bidi controls (an IT_GAP's dir): UAX #9's LRM, RLM, LRE, RLE, LRO, RLO, PDF,
    LRI, RLI, FSI and PDI */
 enum { BD_NONE, BD_LRM, BD_RLM, BD_LRE, BD_RLE, BD_LRO, BD_RLO, BD_PDF, BD_LRI, BD_RLI, BD_FSI, BD_PDI };
+#define IT_BD(it) ((it)->kind == IT_GAP ? (it)->dir : BD_NONE)
 
 typedef struct {
 	uint8_t kind;
@@ -156,10 +157,9 @@ typedef struct {
 	uint8_t hidden;			/* visibility: hidden */
 	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left, 3 a
 					   number (word_dir); drawn right to left (its level odd):
-					   DLF_RTL in flags (visual_order) */
-	uint8_t bidi;			/* IT_GAP: a bidi control (BD_*), no width: an inline
-					   element's unicode-bidi, or one in the text */
-	uint8_t lvl, plvl;		/* its bidi level and its paragraph's (bidi_levels) */
+					   DLF_RTL in flags (visual_order). IT_GAP: a bidi control
+					   (BD_*, IT_BD), no width: an inline element's
+					   unicode-bidi, or one in the text */
 	uint16_t link;
 	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
@@ -226,6 +226,10 @@ typedef struct {
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
 	int line0;			/* the next text run starts a line box (DLF_LINE0) */
+	uint8_t *lv;			/* each item's bidi level, its paragraph's right to left in
+					   bit 7 (bidi_levels; NULL: all left to right). A byte
+					   array of the block's, not in the items: a big page has
+					   tens of thousands */
 	int floats;			/* the items have a float in the text (IT_FLOAT) */
 	int sums;			/* the items have an inline summary's (ITEM.det) */
 	int ibs;			/* the items have an inline-block (ITEM.ib) */
@@ -648,7 +652,9 @@ static dl_item *dl_add(L *l)
 {
 	page *p = l->p;
 	if (p->nitems == p->cap) {
-		long cap = p->cap ? p->cap * 2 : DL_FIRST;
+		/* (half again, not twice: a big page's list has less room
+		   left over, and the stock 4 MB Falcon has none to waste) */
+		long cap = p->cap ? p->cap + p->cap / 2 : DL_FIRST;
 		dl_item *n = realloc(p->items, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
@@ -2173,7 +2179,7 @@ static void bidi_mark(L *l, const RUNSTATE *r, int code)
 	put_item(l, r, IT_GAP, NULL, 0, 0, 0);
 	if (!l->fail) {
 		ITEM *it = &l->it[l->nit - 1];
-		it->bidi = (uint8_t) code;
+		it->dir = (uint8_t) code;
 		it->canbreak = 2;
 		it->bg = 0;
 		it->asc = it->desc = 0;
@@ -3056,8 +3062,8 @@ static int bidi_class(const ITEM *it)
 	case IT_SPACE:
 		return BC_WS;
 	case IT_GAP:
-		return it->bidi == BD_LRM ? BC_L : it->bidi == BD_RLM ? BC_R :
-		       it->bidi >= BD_LRI && it->bidi <= BD_FSI ? BC_ISO : it->bidi == BD_PDI ? BC_PDI : BC_BN;
+		return it->dir == BD_LRM ? BC_L : it->dir == BD_RLM ? BC_R :
+		       it->dir >= BD_LRI && it->dir <= BD_FSI ? BC_ISO : it->dir == BD_PDI ? BC_PDI : BC_BN;
 	}
 	return BC_BN;			/* (floats, line breaks: not in it) */
 }
@@ -3099,10 +3105,8 @@ static void bidi_levels(L *l, long p0, long p1, int base)
 	if (n <= 0)
 		return;
 	para = base >= 0 ? base : bidi_first_strong(l, p0, p1, 0) == 2;
-	for (k = p0; k < p1; k++) {
-		l->it[k].plvl = (uint8_t) para;
-		l->it[k].lvl = (uint8_t) para;
-	}
+	for (k = p0; k < p1; k++)
+		l->lv[k] = (uint8_t) (para << 7 | para);
 	cls = malloc((size_t) n * 3);
 	match = malloc((size_t) n * 6 * sizeof *match);
 	if (cls == NULL || match == NULL) {
@@ -3126,7 +3130,7 @@ static void bidi_levels(L *l, long p0, long p1, int base)
 	sti[0] = 0;
 	for (k = 0; k < n; k++) {
 		const ITEM *it = &l->it[p0 + k];
-		int c = bidi_class(it), b = it->kind == IT_GAP ? it->bidi : BD_NONE;
+		int c = bidi_class(it), b = IT_BD(it);
 		match[k] = -1;
 		lv[k] = stl[sp];
 		if (b == BD_RLE || b == BD_LRE || b == BD_RLO || b == BD_LRO) {
@@ -3283,20 +3287,23 @@ static void bidi_levels(L *l, long p0, long p1, int base)
 		}
 	}
 	for (k = 0; k < n; k++)
-		l->it[p0 + k].lvl = cls[k] == BC_BN ? (k > 0 ? l->it[p0 + k - 1].lvl : (uint8_t) para) : lv[k];
+		l->lv[p0 + k] = (uint8_t) (para << 7 | (cls[k] == BC_BN ? (k > 0 ? l->lv[p0 + k - 1] & 0x7F : para) : lv[k]));
 	free(cls);
 	free(match);
 }
 
-/* the levels of every paragraph of the items (a line break ends one) */
+/* the levels of every paragraph of the items (a line break ends one),
+   into l->lv (left NULL when out of memory: left to right) */
 static void bidi_paragraphs(L *l, int base)
 {
 	long k, p0 = 0;
+	if ((l->lv = malloc((size_t) (l->nit > 0 ? l->nit : 1))) == NULL)
+		return;
 	for (k = 0; k <= l->nit; k++)
 		if (k == l->nit || l->it[k].kind == IT_BREAK) {
 			bidi_levels(l, p0, k, base);
 			if (k < l->nit)
-				l->it[k].lvl = l->it[k].plvl = (uint8_t) (base >= 0 ? base : 0);
+				l->lv[k] = (uint8_t) (base > 0 ? 0x81 : 0);
 			p0 = k + 1;
 		}
 }
@@ -3314,15 +3321,15 @@ static void visual_order(L *l, long i, long j, int bidi, long *ord)
 		ord[k] = i + k;
 		l->it[i + k].flags &= (uint8_t) ~DLF_RTL;
 	}
-	if (!bidi || l->visual || n <= 0 || (lv = malloc((size_t) n)) == NULL)
+	if (!bidi || l->visual || l->lv == NULL || n <= 0 || (lv = malloc((size_t) n)) == NULL)
 		return;
 	for (k = 0; k < n; k++)
-		lv[k] = l->it[i + k].lvl;
+		lv[k] = l->lv[i + k] & 0x7F;
 	for (k = n - 1; k >= 0; k--) {
 		const ITEM *it = &l->it[i + k];
-		if (it->kind != IT_SPACE && !(it->kind == IT_GAP && it->bidi) && it->kind != IT_FLOAT)
+		if (it->kind != IT_SPACE && !IT_BD(it) && it->kind != IT_FLOAT)
 			break;
-		lv[k] = it->plvl;
+		lv[k] = l->lv[i + k] >> 7;
 	}
 	for (k = 0; k < n; k++) {
 		if ((lv[k] & 1) && l->it[i + k].kind == IT_WORD)
@@ -3924,6 +3931,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	int32_t strut_a = sf->ascent + lead / 2, strut_d = sf->descent + (lead - lead / 2);
 	int ta = kw(st, EP_TEXT_ALIGN), rtl = kw(st, EP_DIRECTION) == KW_RTL, lrtl;
 	int plain = kw(st, EP_UNICODE_BIDI) == KW_PLAINTEXT, bidi = rtl || plain;
+	uint8_t *outer_lv;
 	int32_t indent = len0(l, st, EP_TEXT_INDENT, w), cy = y;
 	long i = 0, n = l->nit, *ord;
 	int firstline = 1;
@@ -3936,7 +3944,9 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	/* the bidi levels, when there is right-to-left text or a control
 	   (bidi_levels; none for the many pages of left-to-right text alone) */
 	for (i = 0; !bidi && i < l->nit; i++)
-		bidi = l->it[i].dir == 2 || (l->it[i].kind == IT_GAP && l->it[i].bidi);
+		bidi = l->it[i].dir == 2 || IT_BD(&l->it[i]);
+	outer_lv = l->lv;	/* (an inline-block's lines are laid out inside these) */
+	l->lv = NULL;
 	if (bidi && !l->visual)
 		bidi_paragraphs(l, plain ? -1 : rtl);
 
@@ -3948,6 +3958,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	ord = malloc((n ? n : 1) * sizeof *ord);
 	if (ord == NULL) {
 		l->fail = 1;
+		free(l->lv);
+		l->lv = outer_lv;
 		return 0;
 	}
 	while (i < l->nit) {
@@ -4031,12 +4043,21 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 				split_word(l, j, avail);
 				if (l->nit > n) {
 					long *o2 = realloc(ord, l->nit * sizeof *ord);
-					if (o2 == NULL) {
+					uint8_t *v2 = l->lv != NULL ? realloc(l->lv, (size_t) l->nit) : NULL;
+					if (o2 == NULL || (l->lv != NULL && v2 == NULL)) {
 						l->fail = 1;
-						free(ord);
+						free(o2 != NULL ? o2 : ord);
+						free(v2 != NULL ? v2 : l->lv);
+						l->lv = outer_lv;
 						return 0;
 					}
 					ord = o2;
+					if (v2 != NULL) {
+						/* (the piece split off at j + 1: its level the word's) */
+						memmove(v2 + j + 2, v2 + j + 1, (size_t) (l->nit - j - 2));
+						v2[j + 1] = v2[j];
+						l->lv = v2;
+					}
 					n = l->nit;
 				}
 				it = &l->it[j];
@@ -4063,7 +4084,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 		}
 		/* the line's direction: its paragraph's (unicode-bidi: plaintext:
 		   each its first strong one), else the block's */
-		lrtl = plain && !l->visual && i < l->nit ? l->it[i].plvl & 1 : rtl;
+		lrtl = plain && l->lv != NULL && i < l->nit ? l->lv[i] >> 7 : rtl;
 		/* ended at a soft hyphen: its hyphen drawn (not on a right-to-left
 		   line) */
 		if (!broke && !lrtl && end == j && j > i && j < l->nit && l->it[j].kind == IT_WORD &&
@@ -4196,6 +4217,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 		i = broke ? j + 1 : j;
 	}
 	free(ord);
+	free(l->lv);
+	l->lv = outer_lv;
 	return cy - y;
 }
 
@@ -7421,6 +7444,15 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->height = 0;
 		return p;
 	}
+	/* the display list as big as the page will want, about an item an
+	   element: grown later, the old list and the new are both there
+	   while it is copied, a big page's highest use of memory (100 KB
+	   on the stock 4 MB Falcon's 130 KB test page) */
+	if ((long) d->elements > DL_FIRST) {
+		p->cap = (long) d->elements + (long) d->elements / 8;
+		if ((p->items = malloc((size_t) p->cap * sizeof *p->items)) == NULL)
+			p->cap = 0;
+	}
 	/* the canvas: the root's background, else the body's; one less than
 	   solid on white, as browsers show what is under a canvas (CSS
 	   Backgrounds 3, The Canvas Background, leaves it to them) */
@@ -7467,6 +7499,14 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	if (l.fail) {
 		page_free(p);
 		return NULL;
+	}
+	if (p->cap > p->nitems + 64) {
+		/* (the room left over given back: kept as long as the page is) */
+		dl_item *n = realloc(p->items, (size_t) (p->nitems > 0 ? p->nitems : 1) * sizeof *n);
+		if (n != NULL) {
+			p->items = n;
+			p->cap = p->nitems;
+		}
 	}
 	scrollers_place(p);
 	index_items(p, !hides_x(html) && !hides_x(d->body), cbg);

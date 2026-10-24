@@ -95,11 +95,13 @@ static uint8_t pen(void *ud, uint32_t rgb)
 	return (uint8_t) pick;
 }
 
+extern long heap_use, heap_peak;	/* (atheap's: the Atari's heap, as EWEB.PRG's) */
+
 int main(int argc, char **argv)
 {
 	ec_media m = { W, ROWS, 16 };
 	const char *fnt = "binary/EWEB.FNT";
-	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0;
+	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0, mem = 0;
 	const char *find = NULL;
 	long drags = 0;
 	size_t n;
@@ -123,9 +125,11 @@ int main(int argc, char **argv)
 			find = argv[++i];
 		else if (!strcmp(argv[i], "-X") && i + 1 < argc)
 			drags = atol(argv[++i]);
+		else if (!strcmp(argv[i], "-m"))
+			mem = 1;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
@@ -137,6 +141,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "drawbench: can't read %s\n", argv[i]);
 		return 1;
 	}
+	if (mem)
+		printf("heap parsed %ld peak %ld\n", heap_use, heap_peak);
 	doc_add_ua(d);
 	doc_sheets(d, sheet, d);
 	for (i++; i < argc; i++) {
@@ -159,6 +165,8 @@ int main(int argc, char **argv)
 			printf("%ld links visited\n", vis_mark(d, "https://example.com/news/index.html", NULL, NULL, 0));
 	}
 	doc_select(d);
+	if (mem)
+		printf("heap styled %ld peak %ld\n", heap_use, heap_peak);
 	if (phase < 2) {
 		printf("%lu elements\n", (unsigned long) d->elements);
 		return 0;
@@ -170,6 +178,8 @@ int main(int argc, char **argv)
 	if (p == NULL)
 		return 1;
 	printf("page %d x %d, %ld items\n", (int) p->width, (int) p->height, p->nitems);
+	if (mem)
+		printf("heap laid out %ld peak %ld\n", heap_use, heap_peak);
 	if (find != NULL) {
 		pg_pos a, b;
 		long nth;

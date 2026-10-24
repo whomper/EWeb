@@ -3378,6 +3378,21 @@ more than before. The embeddings came after (below). Tested by `tests/layout/bid
 results checked against the algorithm by hand), and the random pages above on lines of both
 directions.
 
+## Room on the stock 4 MB Falcon (24 Oct 2026)
+
+`make hatarigui`'s `falcon4` group shows a page as big as most of the page set's (130 KB, 2,406
+elements) on the stock 4 MB Falcon. 0.34 showed it with 5,872 bytes left; the embeddings' code (6 KB
+more of `EWEB.PRG`) took that, and the page came out as "EWeb can't show this page". Measured with
+`drawbench -m` (the heap after each stage, the Atari's allocator): parsed 974 KB, styled 1,176 KB,
+laid out 1,941 KB with a peak of 2,016 KB. The peak was the display list growing: at 2,048 items it
+was copied into one of 4,096, both there while it was, and 1,546 places were left empty after.
+Now the list starts about as big as the page will want (an item an element and an eighth more:
+`layout_page`), and what is left over is given back once the page is laid out: laid out 1,864 KB,
+peak 1,880 KB (135 KB less), and the page shows with 130 KB left. A line item stays 64 bytes on
+the 68030 (the embeddings' levels a byte array of the block's, `L.lv`, its controls in a gap item's
+`dir`), as a block of tens of thousands of words has as many. Where the rest of a page's memory goes
+(about 400 bytes an element before it is laid out) is the page memory diet still to come.
+
 ## Bidirectional embeddings (24 Oct 2026)
 
 Stage 4's last part: what a page says of a part's direction. Before, a line was one level of text,
@@ -3389,11 +3404,13 @@ drawn as it was stored.
 - **The controls:** an inline element's `unicode-bidi` puts a control of no width on the line before
   and after it (CSS Writing Modes 3, 2.4.2: `embed` RLE or LRE, `isolate` RLI or LRI,
   `bidi-override` RLO or LRO, `isolate-override` both, `plaintext` FSI; then PDF or PDI): a gap item
-  (`ITEM.bidi`, `bidi_mark`) that draws nothing and no line ends before. The same controls in the
+  (its `dir` the control, `bidi_mark`) that draws nothing and no line ends before. The same controls in the
   text, and LRM and RLM, are cut out of their word as such marks (`word_pieces`, `bidi_char`); they
   are bytes from U+2000, which already go there.
 - **The levels** are UAX #9's, worked out once a paragraph (a `<br>` or a newline kept ends one:
-  B) rather than a line at a time (`bidi_levels`): X1-X8 (the embedding stack, its overrides and
+  B) rather than a line at a time (`bidi_levels`), into a byte an item kept beside the items
+  while the block is laid out (`L.lv`; the items stay 64 bytes, as a big page has tens of
+  thousands, and a stock 4 MB Falcon has room for no more): X1-X8 (the embedding stack, its overrides and
   isolates, the overflow counts), X9 (the embeddings' controls go), X10 (the level runs, joined at a
   valid isolate and its PDI into isolating run sequences, each with its sos and eos), then on each
   sequence W7, N1, N2, I1 and I2, a word for a character as before (W1-W6 are a word's own: "$5",
