@@ -1382,7 +1382,9 @@ page's memory; a font face is unpacked into its exact size (in every edition: be
 doubled as it grew). A page that doesn't fit gives back the pages kept for Back, the one shown with
 its source (since 24 Oct 2026: before, a page loaded again had its source twice, 130 KB more for
 the stock Falcon's big page), the pictures not in use and the fonts' glyphs (read again when used),
-and is built once more; if it
+and is built once more (and the document's and the CSS engine's arenas take a smaller piece, down
+to what is asked, when their 64 KB one can't be had: since 24 Oct 2026, when the stock Falcon's big
+page failed on the last free pieces of its heap, with 70 KB free in it but no 64 KB together); if it
 still doesn't fit, EWeb says so on a page of its own, which is small. Running out while styling it
 counts too (since 22 Oct 2026, `ec_select()` says so): before, the elements left without a style
 made a page that laid out to nothing, which translucency's 3 KB more code brought about on the

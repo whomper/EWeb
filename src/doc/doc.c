@@ -46,6 +46,12 @@ void *doc_alloc(doc *d, size_t n)
 		if (alone)
 			size = n;
 		b = malloc(DHEAD + size);
+		while (b == NULL && !alone && size > 4096 && size / 2 >= n) {
+			/* short of memory (a small machine's last free pieces):
+			   a smaller piece rather than none, as long as it holds n */
+			size /= 2;
+			b = malloc(DHEAD + size);
+		}
 		if (b == NULL)
 			return NULL;
 		b->size = size;

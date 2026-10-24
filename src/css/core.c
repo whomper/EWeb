@@ -34,6 +34,12 @@ void *ec_alloc_slow(ec_arena *a, size_t n)
 	if (n + sizeof(ec_chunk) + EC_ALIGN > size)
 		size = n + sizeof(ec_chunk) + EC_ALIGN;
 	ch = malloc(size);
+	while (ch == NULL && size > 4096 && size / 2 >= n + sizeof(ec_chunk) + EC_ALIGN) {
+		/* short of memory (a small machine's last free pieces): a
+		   smaller piece rather than none, as long as it holds n */
+		size /= 2;
+		ch = malloc(size);
+	}
 	if (ch == NULL) {
 		a->nomem = 1;
 		return NULL;
