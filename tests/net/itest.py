@@ -35,6 +35,8 @@ ewget = os.path.abspath(sys.argv[1])
 work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
 ewrender = os.path.abspath(sys.argv[3]) if len(sys.argv) > 4 else None
 font = os.path.abspath(sys.argv[4]) if len(sys.argv) > 4 else None
+# the ST edition's ewrender (make itest builds it beside the other)
+ewrender_st = os.path.join(os.path.dirname(ewrender), "..", "asanst", "ewrender") if ewrender else ""
 os.makedirs(work, exist_ok=True)
 # ITEST_PORTS=N moves every port up by N, so two trees can run at once
 OFF = int(os.environ.get("ITEST_PORTS", "0"))
@@ -760,15 +762,27 @@ try:
               and re.search(r"^background \S+ \S+ tile \S+ 6x6 across %scss/tile\.png$" % re.escape(site), out, re.M)
               and re.search(r"^image \S+ 120x48 link \d+ \"chosen\" %slogo\.png$" % re.escape(site), out, re.M)
               and "no.webp" not in out and "big.png" not in out and "gone.png" not in out, out)
-        # a picture EWeb can't read, by its name: not fetched at all
+        # WebP (EWEB.PRG: libwebp): decoded, the GIF beside it too; one of
+        # more than a megapixel left out (40 s on a DFB1: the Pi's)
+        def hits(name):
+            return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                "http://localhost:%d/site/hits/%s" % (HTTP, name), timeout=10).read()
         p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/webp.html" % HTTP],
                            cwd=work, capture_output=True, text=True, timeout=120)
         out = p.stdout + p.stderr
-        hits = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
-            "http://localhost:%d/site/hits/pic.webp" % HTTP, timeout=10).read()
-        check("the browser: a WebP not fetched, the GIF beside it shown", p.returncode == 0
-              and "pic.webp decoded" not in out and re.search(r"^picture \S+anim\.gif decoded", out, re.M)
-              and hits == b"0", out + "\nhits: %r" % hits)
+        check("the browser: a WebP decoded, the GIF beside it, a big one left out", p.returncode == 0
+              and re.search(r"^picture \S+pic\.webp decoded at 256x160", out, re.M)
+              and re.search(r"^picture \S+anim\.gif decoded", out, re.M)
+              and "big.webp decoded" not in out and re.search(r"^picture \S+big\.webp too big", out, re.M)
+              and hits("pic.webp") == b"1", out + "\nhits: %r" % hits("pic.webp"))
+        # the ST edition has no libwebp: a WebP isn't fetched at all
+        if os.path.exists(ewrender_st):
+            p = subprocess.run([ewrender_st, "-f", font, "-v", "-d", "http://localhost:%d/site/webp.html" % HTTP],
+                               cwd=work, capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            check("the ST edition: a WebP not fetched, the GIF beside it shown", p.returncode == 0
+                  and "pic.webp decoded" not in out and re.search(r"^picture \S+anim\.gif decoded", out, re.M)
+                  and hits("pic.webp") == b"1", out + "\nhits: %r" % hits("pic.webp"))
         rc, out = browse("http://localhost:%d/site/photo.jpg" % HTTP)
         check("the browser: a picture on its own", rc == 0 and 'title "photo.jpg (JPEG, 480 x 320)"' in out
               and re.search(r"^image \S+ 384x256 ", out, re.M) is not None, out)

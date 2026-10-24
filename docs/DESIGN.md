@@ -1041,9 +1041,20 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 - **What isn't fetched, and the Pi's pictures** (21 Oct 2026; your yaary.music in Falcon mode took
   minutes for its pictures: 13 MB of them, 2560-pixel JPEGs, PNGs of up to 1.9 MB, and 1.4 MB of
   WebP that EWeb fetched only to find it couldn't read). In Falcon mode a picture whose address
-  ends in `.webp`, `.avif`, `.svg`, `.jxl`, `.heic` or `.tif` isn't fetched at all, and any
-  picture's answer whose type is one of those (or text: a site's "not found") is left unread
-  after its headers (`HTTPREQ.refuse`, its connection closed). Through the Pi gateway each picture
+  ends in `.avif`, `.svg`, `.jxl`, `.heic` or `.tif` (and `.webp` in the ST edition) isn't
+  fetched at all, and any picture's answer whose type is one of those (or text: a site's "not
+  found") is left unread after its headers (`HTTPREQ.refuse`, its connection closed).
+  **WebP in `EWEB.PRG`** (Erez's option C, 24 Oct 2026): it decodes a WebP itself, with Google's
+  libwebp 1.6.0 (its decoder only, in AERA-Atari's `common/`, `-DPIC_LIBWEBP`; `common/README.md`),
+  lossy or lossless, with alpha, of up to 1,048,576 pixels (`WEBP_MAX_PX` in `img.c`: a bigger one
+  is left out, its place framed; an animated one too). A lossy WebP takes about 193 68030
+  instructions a pixel at any size it is shown (a JPEG 96, or 32 shown at a third, as libjpeg
+  unpacks it smaller), so a megapixel is about 40 s on the DFB1 and a 400 x 300 picture 5 s; it
+  comes to the scaler a band of rows at a time, never whole; a lossless one is whole while it is
+  decoded (8 bytes a pixel). It adds 93 KB to `EWEB.PRG` (1,036,033 bytes to 1,129,192), and no FPU
+  instruction. EWeb still asks for JPEG, PNG and GIF, and a `<picture>`'s WebP source is still
+  passed over for its JPEG one, which the DSP decodes quicker; through the Pi a WebP still comes
+  as JPEG. The ST edition has none of it (TJpgDec only). Through the Pi gateway each picture
   is asked for with `X-Gateway-Picture: fit=WIDTH` (the page's width, device pixels): webgate
   decodes one wider than that, or of a kind the Atari can't read, with Pillow, upright as its EXIF
   says, and sends a baseline JPEG no wider (quality 80; a PNG of 256 colours when it has
@@ -3401,9 +3412,9 @@ AERA guidelines.
   selectors, media queries, CSS variables and flexbox.
 - **A narrow screen:** EWeb tells sites its screen is about 640 px wide, so responsive sites send their
   simpler mobile layout, which also fits the Falcon's screen.
-- **Images:** GIF, PNG and JPEG. JPEGs decode at n/8 of their size when shown smaller, which is much
-  faster. EWeb asks servers for JPEG, PNG and GIF only, so image servers don't send AVIF or WebP
-  (done: above, 19 Oct 2026).
+- **Images:** GIF, PNG and JPEG, and WebP in `EWEB.PRG` (24 Oct 2026: What isn't fetched, above).
+  JPEGs decode at n/8 of their size when shown smaller, which is much faster. EWeb asks servers for
+  JPEG, PNG and GIF only, so image servers don't send AVIF or WebP (done: above, 19 Oct 2026).
 - **First-party content only by default:** no third-party scripts, ads, trackers or web fonts. This also
   saves a slow TLS handshake for each extra domain.
 - **The rest:** forms, bookmarks, history, Hebrew (below), and a GEM interface that follows the AERA

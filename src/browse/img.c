@@ -81,6 +81,10 @@ long img_used;
    a GIF or an interlaced PNG while it is; a JPEG streams, and may have
    twelve times as many) */
 long img_max_px = 4L << 20;
+/* a WebP of more pixels than this isn't decoded either: about 40 s on a
+   DFB1 (Erez, 24 Oct 2026: bigger ones through the Pi, which makes them
+   JPEGs) */
+#define WEBP_MAX_PX (1L << 20)
 
 static long var_bytes(const var *v)
 {
@@ -446,7 +450,7 @@ int img_set_file(ew_img *im, char *data, long len)
 		return 1;
 	}
 	im->kind = pic_kind((const unsigned char *) data, len);
-	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF) ||
+	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF && im->kind != PIC_WEBP) ||
 	    !pic_size((const unsigned char *) data, len, &w, &h) || w > 0x7fff || h > 0x7fff) {
 		free(data);
 		im->state = IMG_FAILED;
@@ -575,7 +579,7 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		img_used += var_bytes(v);
 		return 1;
 	}
-	max = im->kind == PIC_JPEG ? img_max_px * 12 : img_max_px;
+	max = im->kind == PIC_JPEG ? img_max_px * 12 : im->kind == PIC_WEBP ? WEBP_MAX_PX : img_max_px;
 	v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
 	if (v->pic == NULL && im->why == PIC_STOPPED) {
 		free(v);	/* stopped: tried again later */

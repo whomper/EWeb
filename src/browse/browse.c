@@ -2185,6 +2185,14 @@ static int own_page(browser *b, const char *url, SBUF *src, int mode)
 	return BR_SHOWN;
 }
 
+/* WebP: EWEB.PRG decodes it (common's pic.c with libwebp), the ST edition
+   doesn't */
+#ifdef EW_ST
+#define WEBP_SHOWN 0
+#else
+#define WEBP_SHOWN 1
+#endif
+
 /* a picture opened on its own: kept as the page's picture, and a page
    that shows it, its name and size the title. anew: the page fetched
    anew for its refresh (a camera's picture with a Refresh header), so
@@ -2591,7 +2599,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		encodable = 1;
 	} else if (b->pictures && (pic_kind((const unsigned char *) f->data, f->len) == PIC_JPEG ||
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_PNG ||
-				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF) &&
+				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF ||
+				   (WEBP_SHOWN && pic_kind((const unsigned char *) f->data, f->len) == PIC_WEBP)) &&
 		   picture_page(&src, f, mode == NAV_REFRESH)) {
 		/* a picture on its own: a page that shows it */
 		as_seen(f->url, url);
@@ -2603,7 +2612,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	} else {
 		char why[200];
 		snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and "
-			 "JPEG, PNG and GIF pictures; other files it saves.", f->mime, f->len);
+			 "%s pictures; other files it saves.", f->mime, f->len,
+			 WEBP_SHOWN ? "JPEG, PNG, GIF and WebP" : "JPEG, PNG and GIF");
 		error_page(&src, f->url, "EWeb can't show this", why, NULL);
 		f->refresh[0] = 0;	/* EWeb's own page in its place goes nowhere */
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
@@ -3778,13 +3788,16 @@ static int waiting(const browser *b)
 	return n;
 }
 
-/* a picture of a kind EWeb can't show, by its address's ending (WebP,
-   AVIF, SVG...): not fetched on its own (the Pi's gateway makes them
-   JPEG or PNG) */
+/* a picture of a kind EWeb can't show, by its address's ending (AVIF,
+   SVG...; WebP in the ST edition: EWEB.PRG decodes it, libwebp): not
+   fetched on its own (the Pi's gateway makes them JPEG or PNG) */
 static int unshowable(const char *url)
 {
-	static const char *const ends[] = { ".webp", ".avif", ".svg", ".svgz", ".jxl", ".heic", ".heif", ".tif",
-					    ".tiff" };
+	static const char *const ends[] = {
+#ifdef EW_ST
+		".webp",
+#endif
+		".avif", ".svg", ".svgz", ".jxl", ".heic", ".heif", ".tif", ".tiff" };
 	size_t n = strcspn(url, "?#"), i;
 	for (i = 0; i < sizeof ends / sizeof ends[0]; i++) {
 		size_t k = strlen(ends[i]);
@@ -3796,8 +3809,11 @@ static int unshowable(const char *url)
 
 /* the kinds of answer a picture's request leaves unread: those EWeb
    can't show (a page of HTML too, a site's "not found") */
-static const char picture_refuse[] = "image/webp image/avif image/svg+xml image/jxl image/heic image/heif "
-				     "image/tiff text/";
+static const char picture_refuse[] =
+#ifdef EW_ST
+	"image/webp "
+#endif
+	"image/avif image/svg+xml image/jxl image/heic image/heif image/tiff text/";
 
 /* pictures through the Pi's gateway as the screen's pens (webgate's
    aerapens: the Atari's own decoder and dither, on the Pi)? The ST

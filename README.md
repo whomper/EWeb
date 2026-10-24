@@ -408,7 +408,8 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   `/site/pics.html`): each decoded at the size shown, the page laid out
   again for the one whose size it didn't give, the missing one failed; a
   background from the sheet's folder and a `srcset`'s choice
-  (`/site/bg.html`), a WebP not fetched, and a picture on its own; the disk
+  (`/site/bg.html`), a WebP decoded (a big one left out; the ST edition
+  fetches none), and a picture on its own; the disk
   cache (`/site/cache/`: a fresh page shown with no request, the next run
   too; a 304; a POST forgetting the page it went to; a kept page shown when
   its server can't be reached, but not a must-revalidate one; decoded

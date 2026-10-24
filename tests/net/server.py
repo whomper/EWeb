@@ -43,8 +43,10 @@ Pages:
                  /site/css/ whose url(tile.png) is its folder's, and a
                  <picture> whose WebP source is passed over and whose img's
                  srcset gives logo.png for its 150px
-  /site/webp.html  a WebP picture (pic.webp) and a GIF: EWeb on its own
-                 doesn't fetch the WebP; through webgate it comes as JPEG;
+  /site/webp.html  a WebP picture (pic.webp), one of more than a megapixel
+                 (big.webp) and a GIF: EWEB.PRG on its own decodes the
+                 first and leaves the big one out, the ST edition fetches
+                 neither; through webgate they come as JPEG;
                  /site/hits/NAME: how many times a picture was asked for
   /site/wiki.html  a page as a Wikipedia article's: an infobox photo from a
                  srcset, icons, an SVG, a 1x1 counter, a floated thumbnail
@@ -444,7 +446,8 @@ BG_PAGE = (b"<!DOCTYPE html><html><head><title>Backgrounds</title><link rel=styl
            b"srcset='logo.png 150w, big.png 800w' sizes='(max-width: 10px) 800px, 150px' alt=chosen>"
            b"</picture></p></body></html>\n")
 WEBP_PAGE = (b"<!DOCTYPE html><html><head><title>WebP</title></head><body>"
-             b"<p><img src=pic.webp alt=webp> and <img src=anim.gif alt=gif></p></body></html>\n")
+             b"<p><img src=pic.webp alt=webp> and <img src=anim.gif alt=gif></p>"
+             b"<p><img src=big.webp alt=bigwebp></p></body></html>\n")
 FRESH_PAGE = (b"<!DOCTYPE html><html><head><title>Fresh</title></head><body>"
               b"<p><img src=fresh/photo.jpg width=240 height=160 alt=photo></p></body></html>\n")
 BG_CSS = b".box { background: #eee url(tile.png) repeat-x 0 100%; height: 40px }\n"
@@ -499,6 +502,7 @@ def make_pics():
         "big.png": (save(photo(800, 600), "PNG"), "image/png"),
         "css/tile.png": (save(Image.new("RGB", (8, 8), (90, 90, 200)), "PNG"), "image/png"),
         "pic.webp": (save(photo(320, 200), "WEBP"), "image/webp"),
+        "big.webp": (save(photo(1400, 800), "WEBP"), "image/webp"),
         "wiki.svg": (b'<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12">'
                      b'<circle cx="6" cy="6" r="5" fill="#36c"/></svg>', "image/svg+xml"),
         "counter.png": (save(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "PNG"), "image/png"),

@@ -187,7 +187,8 @@ hub stay complete, with the evidence.
   page shows it, fetched after the page by `br_pictures_step`; which one an `<img>` shows, from
   `srcset`, `sizes` and `<picture>`, and background pictures as tiled items, are `src/layout`'s,
   drawn by `src/gfx/canvas.c`; `tests/layout/pictures.html`) on AERA-Atari's `common/src/pic.c`
-  (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif): change the decoders there
+  (JPEG with libjpeg-turbo, `-DPIC_LIBJPEG`; PNG; GIF with libnsgif; WebP with libwebp,
+  `-DPIC_LIBWEBP`, `EWEB.PRG` only, up to `WEBP_MAX_PX` in `img.c`): change the decoders there
   and run its `common/tests/pic` (`fetch.sh`, `make test`, `make test68k`). On a Falcon a baseline
   JPEG is the DSP's, Huffman codes to pixels, and a progressive one's from libjpeg's coefficients
   (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;

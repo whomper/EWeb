@@ -391,8 +391,17 @@ LJ       := common/third_party/libjpeg-turbo
 LJ_C     := jaricom jcomapi jdapimin jdapistd jdarith jdcoefct jdcolor jddctmgr jdhuff jdinput jdmainct \
             jdmarker jdmaster jdmerge jdphuff jdpostct jdsample jdtrans jidctfst jidctint jidctred jmemmgr \
             jmemnobs jquant1 jquant2 jutils
-PIC_INC  := -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -I$(LJ)/src -I$(LJ)/config -Icommon/third_party/nsgif/include
-TOSPIC_OBJ := $(addprefix build/tos/pic/,$(addsuffix .o,$(PIC_C) $(LJ_C) gif lzw))
+# WebP with libwebp's decoder (-DPIC_LIBWEBP; common/third_party/libwebp/AERA.md)
+WP       := common/third_party/libwebp
+WP_C     := dec/alpha_dec dec/buffer_dec dec/frame_dec dec/io_dec dec/quant_dec dec/tree_dec dec/vp8_dec \
+            dec/vp8l_dec dec/webp_dec dsp/alpha_processing dsp/cpu dsp/dec dsp/dec_clip_tables dsp/filters \
+            dsp/lossless dsp/rescaler dsp/upsampling dsp/yuv utils/bit_reader_utils utils/color_cache_utils \
+            utils/filters_utils utils/huffman_utils utils/palette utils/quant_levels_dec_utils utils/rescaler_utils \
+            utils/thread_utils utils/utils aera/random_utils
+PIC_INC  := -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -I$(LJ)/src -I$(LJ)/config -Icommon/third_party/nsgif/include \
+            -DPIC_LIBWEBP -DHAVE_CONFIG_H -I$(WP)
+TOSPIC_OBJ := $(addprefix build/tos/pic/,$(addsuffix .o,$(PIC_C) $(LJ_C) gif lzw)) \
+              $(addprefix build/tos/pic/wp/,$(addsuffix .o,$(WP_C)))
 build/tos/pic/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) $(COMMON_WARN) -c $< -o $@
@@ -402,11 +411,18 @@ build/tos/pic/%.o: $(LJ)/src/%.c $(wildcard $(LJ)/src/*.h $(LJ)/config/*.h)
 build/tos/pic/%.o: common/third_party/nsgif/src/%.c common/third_party/nsgif/include/nsgif.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
+build/tos/pic/wp/%.o: $(WP)/src/%.c $(wildcard $(WP)/src/*/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
+build/tos/pic/wp/aera/%.o: $(WP)/aera/%.c $(wildcard $(WP)/src/*/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNDEBUG -w -c $< -o $@
 HOSTPIC_SRC := $(addprefix common/src/,$(addsuffix .c,$(PIC_C)))
 HOSTPIC_3P  := $(addprefix $(LJ)/src/,$(addsuffix .c,$(LJ_C))) common/third_party/nsgif/src/gif.c \
-               common/third_party/nsgif/src/lzw.c
+               common/third_party/nsgif/src/lzw.c $(addprefix $(WP)/src/,$(addsuffix .c,$(filter-out aera/%,$(WP_C)))) \
+               $(WP)/aera/random_utils.c
 HOSTPIC_INC  = -DPIC_LIBJPEG -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT $(addprefix -I$(CURDIR)/,common/src $(LJ)/src $(LJ)/config \
-               common/third_party/nsgif/include)
+               common/third_party/nsgif/include) -DPIC_LIBWEBP -DHAVE_CONFIG_H -I$(CURDIR)/$(WP)
 build/host/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
 	@rm -rf build/host/pic && mkdir -p build/host/pic
 	cd build/host/pic && $(HOSTCC) -O2 -g -std=gnu99 -Wall -Wno-sign-compare $(HOSTPIC_INC) \
@@ -814,7 +830,7 @@ hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
 .PHONY: hatarifiles
 
 # against servers on this computer: plain, TLS, redirects, refused certificates
-itest: build/asan/ewget build/asan/ewrender binary/EWEB.FNT
+itest: build/asan/ewget build/asan/ewrender build/asanst/ewrender binary/EWEB.FNT
 	$(MAKE) -s -C common/tools/pens
 	python3 tests/net/itest.py build/asan/ewget build/itest build/asan/ewrender binary/EWEB.FNT
 .PHONY: itest
