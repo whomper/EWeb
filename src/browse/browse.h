@@ -86,7 +86,7 @@ typedef struct browser {
 	int32_t width;		/* device px */
 	int32_t zoom;		/* device px per CSS px, x1024 */
 	int32_t text;		/* the text's size, x1024 (LAYOUT_OPT.text) */
-	int32_t sbar;		/* a box's scroll bar's width (LAYOUT_OPT.sbar) */
+	int32_t sbar, sbar_h;	/* a box's scroll bars' width down, height across (LAYOUT_OPT) */
 
 	BR_ENTRY hist[BR_HISTORY];
 	int nhist, cur;		/* cur: the entry shown, -1 none */

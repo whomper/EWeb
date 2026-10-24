@@ -1517,7 +1517,7 @@ def deep():
             r.end()
 
 
-def bar_of(url, area, top, n, extra=()):
+def bar_of(url, area, top, n, extra=(), axis="y"):
     """box n's scroll bar (from 1) on the screen, from ewrender's display
     list: its x, y, w, h and its thumb's ends along it, else None (extra:
     "-a", the AES's bar width, as EWEB.PRG lays it out)"""
@@ -1525,9 +1525,9 @@ def bar_of(url, area, top, n, extra=()):
     p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
                         "-w", str(w), "-d"] + list(extra) + [url], capture_output=True, text=True, timeout=60)
     for line in p.stdout.splitlines():
-        m = re.match(r"bar y (\d+),(\d+) (\d+)x(\d+) box (\d+) reach \d+,(\d+) .* thumb (\d+)-(\d+)$", line)
+        m = re.match(r"bar %s (\d+),(\d+) (\d+)x(\d+) box (\d+) reach (\d+),(\d+) .* thumb (\d+)-(\d+)$" % axis, line)
         if m and int(m.group(5)) == n:
-            bx, by, bw, bh, reach, t0, t1 = (int(m.group(i)) for i in (1, 2, 3, 4, 6, 7, 8))
+            bx, by, bw, bh, reach, t0, t1 = (int(m.group(i)) for i in (1, 2, 3, 4, 7 if axis == "y" else 6, 8, 9))
             return x0 + bx, y0 + by - top, bw, bh, t0, t1, reach
     return None
 
@@ -1549,12 +1549,15 @@ def boxes():
     guidelines' 5.1): a click on its track below the slider scrolls it a
     boxful on (the log's "box N scrolled to X,Y"); its down arrow a line;
     the link brought into view in it, clicked where it now is, is followed;
-    Back, and its slider dragged to the top scrolls it back"""
+    Back, and its slider dragged to the top scrolls it back; a second box,
+    scrolling both ways, its bar across: its right arrow, its track"""
     xvfb = machines.xvfb(DISPLAY)
     page = ("<!DOCTYPE html><title>Boxes</title><style>div{height:96px;overflow:auto;width:300px;"
             "border:1px solid #000}</style><p>Above the box.</p><div>one<br>two<br>three<br>four<br>five<br>"
             "six<br>seven<br>eight<br>nine<br>ten<br>eleven<br>twelve<br>thirteen<br>"
-            "<a href=text.htm>Deep link</a></div><p>Below the box.</p>")
+            "<a href=text.htm>Deep link</a></div><p>Below the box.</p>"
+            "<div style=white-space:nowrap>A line much longer than the box is wide, which scrolls across "
+            "to its far end<br>2<br>3<br>4<br>5<br>6<br>7<br>8</div>")
     try:
         hd = hd_for("boxes", r"C:\BOXES.HTM")
         with open(os.path.join(hd, "BOXES.HTM"), "w") as f:
@@ -1564,15 +1567,16 @@ def boxes():
             f.write(page)
         r = Run("boxes", "Falcon:16", hd, windowed=True)
         try:
-            pb = re.match(r"box bars (\d+) wide, arrows (\d+)", r.wait(r"box bars ", 300) or "")
+            pb = re.match(r"box bars (\d+) wide, arrows (\d+), across (\d+) high", r.wait(r"box bars ", 300) or "")
             ev = r.wait(r"shown ", 300)
             m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
             if not check("boxes: the page shown, its bars %s" % (pb.group(0) if pb else "?"),
                          m is not None and pb is not None, str(r.events())):
                 return
-            aw, ah = int(pb.group(1)), int(pb.group(2))
+            aw, ah, ahh = int(pb.group(1)), int(pb.group(2)), int(pb.group(3))
+            sizes = ("-a", "%d,%d" % (aw, ahh))
             area, top = tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5))
-            bar = bar_of(path, area, top, 1, ("-a", str(aw)))
+            bar = bar_of(path, area, top, 1, sizes)
             if not check("boxes: the box has a bar as wide as the AES's", bar is not None and bar[2] == aw, str(bar)):
                 return
             bx, by, bw, bh, t0, t1, reach = bar
@@ -1600,7 +1604,7 @@ def boxes():
                   "%d of %d" % (sy, reach))
             time.sleep(2)
             r.shot(0)
-            pt = link_point(path, area, top, "Deep link", ("-a", str(aw), "-O", "1:0:%d" % sy))
+            pt = link_point(path, area, top, "Deep link", sizes + ("-O", "1:0:%d" % sy))
             if check("boxes: the deep link now in the box", pt is not None and by <= pt[1] < by + bh, str(pt)):
                 r.mouse.click(*pt)
                 ev = r.wait(r"shown ", 120)
@@ -1616,6 +1620,29 @@ def boxes():
                       str(r.events()[-5:]))
                 time.sleep(2)
                 r.shot(1)
+            # the second box scrolls both ways: its bar across, its right
+            # arrow a line on, its track beyond the slider to the end; the
+            # square where its bars meet (looked at in the screenshot)
+            across = bar_of(path, area, top, 2, sizes, axis="x")
+            if check("boxes: the second box has a bar across as high as the AES's",
+                     across is not None and across[3] == ahh, str(across)):
+                bx, by, bw, bh, t0, t1, reach = across
+                r.mouse.click(bx + bw - aw // 2, by + bh // 2)
+                m = re.match(r"box 2 scrolled to (\d+),0", r.wait(r"box 2 scrolled to ", 60) or "")
+                check("boxes: the right arrow scrolls the box across a line", m is not None and
+                      0 < int(m.group(1)) <= 32, str(r.events()[-5:]))
+                sx = int(m.group(1)) if m else 0
+                for _ in range(12):
+                    if sx >= reach:
+                        break
+                    r.mouse.click(bx + bw - aw - 3, by + bh // 2)
+                    m = re.match(r"box 2 scrolled to (\d+),", r.wait(r"box 2 scrolled to (?!%d,)" % sx, 60) or "")
+                    if m is None:
+                        break
+                    sx = int(m.group(1))
+                check("boxes: the track across takes the box to its far end", sx == reach, "%d of %d" % (sx, reach))
+                time.sleep(2)
+                r.shot(3)
             r.key(Q, (CTRL,))
             r.wait(r"quit$", 300)
         finally:

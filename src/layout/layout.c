@@ -849,7 +849,7 @@ static void scrollers_place(page *p)
 		int32_t mx = 0, my = 0;
 		for (i = 0; i < 2; i++) {
 			mx = reach(sc->ex, c->w - (my ? PAGE_SBAR(p) : 0));
-			my = reach(sc->ey, c->h - (mx ? PAGE_SBAR(p) : 0));
+			my = reach(sc->ey, c->h - (mx ? PAGE_SBAR_H(p) : 0));
 		}
 		sc->mx = mx;
 		sc->my = my;
@@ -866,12 +866,12 @@ static void scrollers_place(page *p)
 				d->x = c->x + c->w - PAGE_SBAR(p);
 				d->y = c->y;
 				d->w = PAGE_SBAR(p);
-				d->h = c->h - (mx ? PAGE_SBAR(p) : 0);
+				d->h = c->h - (mx ? PAGE_SBAR_H(p) : 0);
 			} else {
 				d->x = c->x;
-				d->y = c->y + c->h - PAGE_SBAR(p);
+				d->y = c->y + c->h - PAGE_SBAR_H(p);
 				d->w = c->w - (my ? PAGE_SBAR(p) : 0);
-				d->h = PAGE_SBAR(p);
+				d->h = PAGE_SBAR_H(p);
 			}
 		}
 	}
@@ -6651,7 +6651,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			ch = mx;
 		if (sc && scrolls(ox) && sx1 != INT32_MIN && sx1 - (x + ml + bl + pl + w) > 2 && hp == AUTO &&
 		    (mx == AUTO || ch < mx))
-			ch += PAGE_SBAR(l->p);	/* (a bar across its foot, its height its own: room for it below) */
+			ch += PAGE_SBAR_H(l->p);	/* (a bar across its foot, its height its own: room for it below) */
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
 		if (ck >= 0)

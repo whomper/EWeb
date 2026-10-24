@@ -2950,9 +2950,11 @@ it, as `hidden` does, and scrolls:
   (`scrollers_place`: a row, a flex line or a grid may stretch the box after it was laid out),
   that, less the padding box, is how far it scrolls (a pixel or two, a glyph's box below its
   line, doesn't count), each bar taking its room from the other way; and each way it scrolls
-  has a bar (`DL_SBAR`, 10 pixels, over the padding box's right edge or foot, made after what
-  is in the box so drawn over it, as see-through as the box), its thumb as long as the part
-  shown is of the whole. A box whose height is its own (`auto`) with a bar across its foot is
+  has a bar (`DL_SBAR`, over the padding box's right edge or foot, made after what is in the
+  box so drawn over it, as see-through as the box), its thumb as long as the part shown is of
+  the whole. It is as wide (down) and high (across) as the AES's own slider column and row
+  (`LAYOUT_OPT.sbar`, `sbar_h`: panebar's `pb_width` and `pb_height`, 23 pixels on TOS 4.04 in
+  VGA, 19 on TOS 1.04 in ST high; 10 where nothing says, as ewrender lays it out unless `-a`). A box whose height is its own (`auto`) with a bar across its foot is
   that much taller, as in browsers, so the bar covers none of its last line. A hidden box
   (`visibility: hidden`) has no bars.
 - **Scrolled** (`page_scroll`): every item with the box's clip in its chain moves by the change
@@ -2965,9 +2967,15 @@ it, as `hidden` does, and scrolls:
   `::before`'s or `::after`'s box, which has none). A link to a `#name` in a box, and a control
   given the keyboard in one, scroll the boxes it is in to it (`page_reveal`) before the window
   goes there.
-- **In the window:** a click on a box's bar above or below its thumb moves the box on a boxful
-  (less a line), and the thumb dragged follows the mouse; the box alone is drawn again (the
-  log's `box N scrolled to X,Y`).
+- **In the window:** a box's bars are the AES's (the guidelines' 5.1, your choice of 24 Oct
+  2026, "AES look for pane bars"): common's `panebar`, AES objects drawn by `objc_draw`, so
+  TOS's look, its 3D (5.6), or XaAES's and N.AES's themes. The canvas leaves them out
+  (`canvas.aes_bars`); `ui/win.c` draws them with `pb_draw` over the page's copy on the screen,
+  each within the boxes hiding what overflows that it is in and the page's area, and the square
+  where a box's two meet with `pb_corner`. A press is `pb_click`'s: an arrow a line at a time
+  (held, some 15 a second), the track a boxful (less a pixel), the slider dragged; the box alone
+  is drawn again (the log's `box N scrolled to X,Y`). Until 0.33 they were EWeb's own, 10 pixels,
+  a track and a thumb without arrows.
 - **White space:** a line of `white-space: pre` or `nowrap` longer than its box was broken at
   its words, so a code block never needed to scroll; now nothing in it (a word, a picture, an
   inline-block, an inline's padding) starts a new line, as in every browser (CSS Text 3, 3): in
@@ -2980,9 +2988,10 @@ it, as `hidden` does, and scrolls:
   from 27 to 45, most of the new ones 975 to 1050 pixels (rows of pictures and links in a
   table); no list of `tests/layout` changed.
 - **Left:** no keys for a box (Up and Down scroll the page); a script's `scrollTop` and
-  `scrollLeft` aren't the box's; the bars are EWeb's own drawing, in the page's pens; text that
+  `scrollLeft` aren't the box's; text that
   goes on under a vertical bar is reached by scrolling the box a bar's width sideways, as the
-  box's lines aren't laid out again a bar narrower.
+  box's lines aren't laid out again a bar narrower; the AES's bars are drawn over the page, so
+  one under a positioned box with a higher `z-index` shows over it.
 
 **Measured** (68030 instructions, drawbench, against the commit before): the page set's pages
 that name `overflow` most and the news page +0.09% to +0.12% (each box's `overflow` looked at
@@ -2997,9 +3006,11 @@ the box is scrolled to it, then followed; a box scrolled kept so when the page i
 again; a box in a box moved with the outer one; every box scrolled to its end and drawn, in
 bands too, in both editions under the sanitizers), `tests/layout/overflow.py` (the code block
 with a `max-height` scrolls in its box, the paragraph after it below), `make hatarigui`'s
-`boxes` group (the Falcon in 16 colours, TOS 4.04: clicks below the thumb take the box to its
-end, the link brought into view clicked and followed, Back, and the thumb dragged to the top
-scrolls it back), and the page set with and without Bootstrap's and Pico's sheets under
+`boxes` group (the Falcon in 16 colours, TOS 4.04, panebar's bars as wide as the log's `box
+bars` says: the down arrow a line, clicks on the track below the slider take the box to its
+end, the link brought into view clicked and followed, Back, the slider dragged to the top
+scrolls it back; a box scrolling both ways, its right arrow and its track across to the far
+end), and the page set with and without Bootstrap's and Pico's sheets under
 AddressSanitizer and UBSan. A review (same day) found thirteen faults, each fixed and checked on
 its page: bars and reach left as they were when a flex line or a row stretched the box, script
 clicks and places not moved, a nowrap run spilling out of a table cell, text under a bar out

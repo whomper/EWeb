@@ -507,6 +507,7 @@ static int box_panebar(const page *p, const dl_item *d, PANEBAR *b, GRECT *seen)
 	b->shown = shown;
 	b->total = shown + (d->base ? sc->mx : sc->my);
 	b->top = d->base ? sc->sx : sc->sy;
+	b->across = d->base;
 	if (!page_clip(p, d->clip, &x0, &y0, &x1, &y1))
 		return 0;
 	seen->x = (short) (r_page.x + x0 - left);
@@ -516,20 +517,38 @@ static int box_panebar(const page *p, const dl_item *d, PANEBAR *b, GRECT *seen)
 	return rect_and(seen, &r_page);
 }
 
-/* the boxes' bars over the page's copy, within clip */
+/* the boxes' bars over the page's copy, within clip, and the square
+   where a box's two meet */
 static void draw_box_bars(const page *p, const GRECT *clip)
 {
 	int k, a;
 	if (p == NULL)
 		return;
-	for (k = 0; k < p->nscr; k++)
-		for (a = 0; a < 1; a++) {	/* (down: panebar has no bar across) */
-			PANEBAR b;
-			GRECT s;
-			if (p->scr[k].bar[a] >= 0 && box_panebar(p, &p->items[p->scr[k].bar[a]], &b, &s) &&
-			    rect_and(&s, clip))
-				pb_draw(&b, &s);
+	for (k = 0; k < p->nscr; k++) {
+		const struct pg_scroll *sc = &p->scr[k];
+		PANEBAR b[2];
+		GRECT s;
+		for (a = 0; a < 2; a++)
+			if (sc->bar[a] >= 0 && box_panebar(p, &p->items[sc->bar[a]], &b[a], &s) && rect_and(&s, clip))
+				pb_draw(&b[a], &s);
+		if (sc->bar[0] >= 0 && sc->bar[1] >= 0) {
+			const dl_item *dn = &p->items[sc->bar[0]], *ac = &p->items[sc->bar[1]];
+			int32_t x0 = dn->x, y0 = ac->y, x1 = dn->x + dn->w, y1 = ac->y + ac->h;
+			GRECT r;
+			r.x = (short) (r_page.x + x0 - left);
+			r.y = (short) (r_page.y + y0 - top);
+			r.w = (short) (x1 - x0);
+			r.h = (short) (y1 - y0);
+			if (page_clip(p, dn->clip, &x0, &y0, &x1, &y1)) {
+				s.x = (short) (r_page.x + x0 - left);
+				s.y = (short) (r_page.y + y0 - top);
+				s.w = (short) (x1 - x0);
+				s.h = (short) (y1 - y0);
+				if (rect_and(&s, &r_page) && rect_and(&s, clip))
+					pb_corner(&r, &s);
+			}
 		}
+	}
 }
 
 static void draw_page(GRECT *clip)
@@ -1764,70 +1783,35 @@ static PANEBAR held;
 static int held_scroll(long n)
 {
 	const struct pg_scroll *sc = &br.p->scr[held_k];
-	int32_t was = sc->sy;
+	int32_t was = held.across ? sc->sx : sc->sy;
 	long step = held.shown > 1 ? held.shown - 1 : 1;
 	if (n != step && n != -step)
 		n *= gl_hchar;
-	box_to(held_k, 0, was + (int32_t) n);
-	held.top = sc->sy;
-	return sc->sy != was;
+	box_to(held_k, held.across, was + (int32_t) n);
+	held.top = held.across ? sc->sx : sc->sy;
+	return held.top != was;
 }
 
 static int held_goto(long t)
 {
-	box_to(held_k, 0, (int32_t) t);
-	held.top = br.p->scr[held_k].sy;
+	const struct pg_scroll *sc = &br.p->scr[held_k];
+	box_to(held_k, held.across, (int32_t) t);
+	held.top = held.across ? sc->sx : sc->sy;
 	return 1;
 }
 
-/* a click on a box's scroll bar (a box with overflow auto or scroll): one
-   down is panebar's (its arrows, track and slider: the guidelines' 5.1);
-   on one across, before or after its thumb, the box a boxful on, on it,
-   the thumb dragged */
+/* a click on a box's scroll bar (a box with overflow auto or scroll):
+   panebar's (its arrows, track and slider: the guidelines' 5.1) */
 static int box_bar(short mx, short my)
 {
 	const dl_item *bar;
-	const struct pg_scroll *sc;
-	int32_t px = mx - r_page.x + left, py = my - r_page.y + top, t0, t1, at, len, seen, cur, step;
-	int k, axis;
+	int32_t px = mx - r_page.x + left, py = my - r_page.y + top;
+	GRECT seen;
 	if (br.p == NULL || (bar = page_bar_at(br.p, px, py)) == NULL)
 		return 0;
-	k = (int) bar->len - 1;
-	axis = bar->base;
-	sc = &br.p->scr[k];
-	if (!axis) {
-		GRECT seen;
-		if (box_panebar(br.p, bar, &held, &seen)) {
-			held_k = k;
-			pb_click(&held, mx, my, held_scroll, held_goto);
-		}
-		return 1;
-	}
-	page_bar_thumb(br.p, bar, &t0, &t1);
-	at = axis ? px - bar->x : py - bar->y;
-	len = axis ? bar->w : bar->h;
-	seen = axis ? br.p->items[sc->clip].w : br.p->items[sc->clip].h;
-	cur = axis ? sc->sx : sc->sy;
-	if (at < t0 || at >= t1) {
-		step = seen - gl_hchar;	/* (a line of it still to be seen) */
-		if (step < gl_hchar)
-			step = gl_hchar;
-		box_to(k, axis, cur + (at < t0 ? -step : step));
-		return 1;
-	}
-	{
-		/* the thumb, where it was taken, follows the mouse */
-		short x, y, mb, ks;
-		int32_t grab = at - t0, room = len - (t1 - t0), reach = axis ? sc->mx : sc->my;
-		for (;;) {
-			graf_mkstate(&x, &y, &mb, &ks);
-			if (!(mb & 1))
-				break;
-			at = (axis ? x - r_page.x + left - bar->x : y - r_page.y + top - bar->y) - grab;
-			if (room > 0)
-				box_to(k, axis, (int32_t) ((int64_t) at * reach / room));
-			evnt_timer_(20);
-		}
+	if (box_panebar(br.p, bar, &held, &seen)) {
+		held_k = (int) bar->len - 1;
+		pb_click(&held, mx, my, held_scroll, held_goto);
 	}
 	return 1;
 }
