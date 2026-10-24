@@ -388,7 +388,11 @@ emoji, is shown as ?. A page in
 visual Hebrew (ISO-8859-8, its letters stored in the order they are
 shown) is shown as it is stored, left to right, as browsers show it;
 if its Hebrew comes out reversed, the page is logical Hebrew: choose
-Hebrew, logical (ISO-8859-8-I).
+Hebrew, logical (ISO-8859-8-I). Hebrew mixed with English and numbers
+is ordered as browsers order it (the Unicode bidirectional algorithm),
+with what a page says of each part's direction: `dir` on any element
+(`dir=auto` from its text), `<bdi>`, `<bdo>`, CSS `direction` and
+`unicode-bidi`, and the direction marks in the text.
 
 What you type into a page's forms, and the words in its links, go to
 the site in the page's encoding (or the one its form asks for), as

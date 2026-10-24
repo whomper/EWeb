@@ -139,6 +139,9 @@ struct box {
 /* IT_FLOAT: a float in the text (its box in atom), placed by the line
    it is met on; it takes no room on the line itself */
 enum { IT_WORD, IT_SPACE, IT_BREAK, IT_ATOM, IT_GAP, IT_FLOAT };
+/* bidi controls (ITEM.bidi): UAX #9's LRM, RLM, LRE, RLE, LRO, RLO, PDF,
+   LRI, RLI, FSI and PDI */
+enum { BD_NONE, BD_LRM, BD_RLM, BD_LRE, BD_RLE, BD_LRO, BD_RLO, BD_PDF, BD_LRI, BD_RLI, BD_FSI, BD_PDI };
 
 typedef struct {
 	uint8_t kind;
@@ -154,6 +157,9 @@ typedef struct {
 	uint8_t dir;			/* bidi: 0 neutral, 1 left to right, 2 right to left, 3 a
 					   number (word_dir); drawn right to left (its level odd):
 					   DLF_RTL in flags (visual_order) */
+	uint8_t bidi;			/* IT_GAP: a bidi control (BD_*), no width: an inline
+					   element's unicode-bidi, or one in the text */
+	uint8_t lvl, plvl;		/* its bidi level and its paragraph's (bidi_levels) */
 	uint16_t link;
 	uint16_t ctl;			/* a label's text: its control */
 	ew_font *font;
@@ -2156,6 +2162,28 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 		it->dir = (uint8_t) (dir >= 0 ? dir : word_dir_in(l, s, n));
 }
 
+/* a bidi control (BD_*) on the line: no width, no line ending before it */
+static void bidi_mark(L *l, const RUNSTATE *r, int code)
+{
+	put_item(l, r, IT_GAP, NULL, 0, 0, 0);
+	if (!l->fail) {
+		ITEM *it = &l->it[l->nit - 1];
+		it->bidi = (uint8_t) code;
+		it->canbreak = 2;
+		it->bg = 0;
+		it->asc = it->desc = 0;
+	}
+}
+
+/* a bidi control's code point's BD_*, else BD_NONE */
+static int bidi_char(uint32_t c)
+{
+	static const uint8_t emb[] = { BD_LRE, BD_RLE, BD_PDF, BD_LRO, BD_RLO };
+	static const uint8_t iso[] = { BD_LRI, BD_RLI, BD_FSI, BD_PDI };
+	return c == 0x200E ? BD_LRM : c == 0x200F ? BD_RLM : c >= 0x202A && c <= 0x202E ? emb[c - 0x202A] :
+	       c >= 0x2066 && c <= 0x2069 ? iso[c - 0x2066] : BD_NONE;
+}
+
 /* ---------------------------------------------------------------- places inside a word a line may end at
 
    UAX #14 (Unicode line breaking) for what a page's words have: after a
@@ -2319,6 +2347,21 @@ static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, c
 		const char *q = s + j;
 		uint32_t b = utf8_next(&q, s + e);
 		int was = slow, d = (b >= 0x590 && b < 0x900) ? 2 : (b < 0x80 ? (lb_class[b] & 48) != 0 : lb_letter(b));
+		int bc = b >= 0x200E ? bidi_char(b) : BD_NONE;
+		if (bc != BD_NONE) {
+			/* a bidi control (LRM, RLI, PDI...): not drawn, a mark of
+			   its own between the pieces either side, no line ending
+			   at it */
+			if (o > start) {
+				word_piece(l, r, t, start, o, wrap ? cb : 2);
+				cb = 2;
+				start = o;
+				pdir = 0;
+			}
+			bidi_mark(l, r, bc);
+			j = (uint32_t) (q - s);
+			continue;
+		}
 		if (b == 0xAD || b == 0x200B) {
 			/* a soft hyphen, a zero width space: not drawn, a place
 			   to end a line */
@@ -2753,6 +2796,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		}
 		case BX_INLINE: {
 			int32_t gl, gr;
+			int bopen = 0, bover = 0;
 			if (c->anon) {
 				/* a display: contents summary's run (build_summary):
 				   laid out as its parent's, its parts on the lines
@@ -2774,6 +2818,21 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 #endif
 			if (c->n != NULL && c->n->tag == T_LABEL && c->n->ns == DN_NS_HTML)
 				r.ctl = label_for(l, c->n);
+			/* its unicode-bidi: controls around it (CSS Writing Modes
+			   3, 2.4.2: embed RLE/LRE, isolate RLI/LRI, bidi-override
+			   RLO/LRO, isolate-override both, plaintext FSI; then PDF,
+			   PDI) */
+			if (!l->visual) {
+				int ub = kw(c->st, EP_UNICODE_BIDI), crtl = kw(c->st, EP_DIRECTION) == KW_RTL;
+				bopen = ub == KW_EMBED ? (crtl ? BD_RLE : BD_LRE) :
+					ub == KW_ISOLATE || ub == KW_ISOLATE_OVERRIDE ? (crtl ? BD_RLI : BD_LRI) :
+					ub == KW_BIDI_OVERRIDE ? (crtl ? BD_RLO : BD_LRO) : ub == KW_PLAINTEXT ? BD_FSI : 0;
+				bover = ub == KW_ISOLATE_OVERRIDE ? (crtl ? BD_RLO : BD_LRO) : 0;
+				if (bopen)
+					bidi_mark(l, &r, bopen);
+				if (bover)
+					bidi_mark(l, &r, bover);
+			}
 			if (c->list & LB_SUM) {
 				/* a summary laid out inline (inline-block too): its
 				   click areas are its parts on the lines */
@@ -2796,6 +2855,10 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				if (!l->fail && no_wrap(c->st))
 					l->it[l->nit - 1].canbreak = 2;
 			}
+			if (bover)
+				bidi_mark(l, &r, BD_PDF);
+			if (bopen)
+				bidi_mark(l, &r, bopen >= BD_LRI ? BD_PDI : BD_PDF);
 			break;
 		}
 		case BX_BLOCK: {
@@ -2953,55 +3016,302 @@ static void reverse(long *o, uint8_t *d, long a, long b)
 	}
 }
 
-/* the items i..j-1 of a line in the order they are drawn, and each one's
-   direction (DLF_RTL in its flags): UAX #9 with the items for its characters, each a
-   word left to right (Latin, 1), right to left (Hebrew, 2), a number (3)
-   or neutral (0: punctuation, spaces): a number after Latin is Latin
-   (W7); a neutral between two of the same direction takes it, a number
-   counting as right to left, else the line's (N1, N2); their levels (I1,
-   I2: a number in Hebrew, or Latin in a right-to-left line, one above),
-   and the runs at each level or above reversed, from the highest (L2).
-   That is all of it for one level of text (embeddings, dir on an inline
-   element, aren't yet). A page in visual Hebrew is already in its order:
-   as it is (the HTML Standard's rendering for ISO-8859-8, 15.3.5:
-   unicode-bidi: isolate-override; for the whole page, as browsers do it,
-   and whatever the line's direction) */
-static void visual_order(L *l, long i, long j, int rtl, long *ord)
+/* ---------------------------------------------------------------- bidirectional text
+
+   UAX #9 with the items for its characters: a word left to right (Latin,
+   L), right to left (Hebrew, R), a number (EN) or neutral (ON: punctuation,
+   a picture, an inline-block), a space (WS), a bidi control (an inline
+   element's unicode-bidi, CSS Writing Modes 3, 2.4.2, or one in the text:
+   a gap item of no width) and a line break (B: a <br>, a newline kept).
+   Its levels are worked out once a paragraph (bidi_levels), each line then
+   put in order by them (visual_order). A page in visual Hebrew is in its
+   order already: as it is (the HTML Standard's rendering for ISO-8859-8,
+   15.3.5: unicode-bidi: isolate-override, for the whole page, as browsers
+   do it) */
+
+enum { BC_ON, BC_L, BC_R, BC_EN, BC_WS, BC_BN, BC_ISO, BC_PDI };
+#define BD_MAX 125			/* UAX #9's max_depth */
+
+/* an item's class before the explicit levels: a word's or an atom's
+   direction, a control's own */
+static int bidi_class(const ITEM *it)
+{
+	switch (it->kind) {
+	case IT_WORD:
+	case IT_ATOM:
+		return it->dir == 1 ? BC_L : it->dir == 2 ? BC_R : it->dir == 3 ? BC_EN : BC_ON;
+	case IT_SPACE:
+		return BC_WS;
+	case IT_GAP:
+		return it->bidi == BD_LRM ? BC_L : it->bidi == BD_RLM ? BC_R :
+		       it->bidi >= BD_LRI && it->bidi <= BD_FSI ? BC_ISO : it->bidi == BD_PDI ? BC_PDI : BC_BN;
+	}
+	return BC_BN;			/* (floats, line breaks: not in it) */
+}
+
+/* the first strong direction from item k (P2: what is between an isolate
+   and its PDI passed over) to the end of the paragraph or, isolated (an
+   FSI's inside), its PDI: 1 left to right, 2 right to left, 0 none */
+static int bidi_first_strong(const L *l, long k, long e, int isolated)
+{
+	int depth = 0;
+	for (; k < e; k++) {
+		const ITEM *it = &l->it[k];
+		int c = bidi_class(it);
+		if (c == BC_ISO)
+			depth++;
+		else if (c == BC_PDI && depth > 0)
+			depth--;
+		else if (c == BC_PDI && isolated)
+			return 0;
+		else if (depth == 0 && (c == BC_L || c == BC_R))
+			return c == BC_L ? 1 : 2;
+	}
+	return 0;
+}
+
+/* the levels of the paragraph's items p0..p1-1 (lvl), the paragraph's
+   own (plvl) from base (0 left to right, 1 right to left; -1: its first
+   strong direction, unicode-bidi: plaintext): X1-X10 (the explicit
+   levels and the isolating run sequences), W7, N1, N2, I1 and I2. A word
+   is one character for it (word_pieces cut words where directions
+   meet); W1-W6 are the words' own (a number with its signs, "$5",
+   "24/10/2026"); N0, brackets, isn't done */
+static void bidi_levels(L *l, long p0, long p1, int base)
+{
+	long n = p1 - p0, k, m, r, nr;
+	uint8_t *cls, *lv, *joins, stl[BD_MAX + 2], sto[BD_MAX + 2], sti[BD_MAX + 2];
+	long *match, *run0, *run1, *runof, *seq, *prev;
+	int sp, oiso = 0, oemb = 0, viso = 0, para;
+	if (n <= 0)
+		return;
+	para = base >= 0 ? base : bidi_first_strong(l, p0, p1, 0) == 2;
+	for (k = p0; k < p1; k++) {
+		l->it[k].plvl = (uint8_t) para;
+		l->it[k].lvl = (uint8_t) para;
+	}
+	cls = malloc((size_t) n * 3);
+	match = malloc((size_t) n * 6 * sizeof *match);
+	if (cls == NULL || match == NULL) {
+		free(cls);
+		free(match);
+		return;
+	}
+	lv = cls + n;
+	joins = lv + n;		/* a PDI that ends a valid isolate: the run it starts goes on its initiator's sequence */
+	memset(joins, 0, (size_t) n);
+	run0 = match + n;
+	run1 = run0 + n;
+	runof = run1 + n;
+	seq = runof + n;
+	prev = seq + n;
+
+	/* X1-X8: the explicit levels; an embedding's controls go (X9: BN) */
+	sp = 0;
+	stl[0] = (uint8_t) para;
+	sto[0] = 0;
+	sti[0] = 0;
+	for (k = 0; k < n; k++) {
+		const ITEM *it = &l->it[p0 + k];
+		int c = bidi_class(it), b = it->kind == IT_GAP ? it->bidi : BD_NONE;
+		match[k] = -1;
+		lv[k] = stl[sp];
+		if (b == BD_RLE || b == BD_LRE || b == BD_RLO || b == BD_LRO) {
+			int nl = (b == BD_RLE || b == BD_RLO) ? (stl[sp] + 1) | 1 : (stl[sp] + 2) & ~1;
+			cls[k] = BC_BN;
+			if (nl <= BD_MAX && oiso == 0 && oemb == 0) {
+				sp++;
+				stl[sp] = (uint8_t) nl;
+				sto[sp] = (uint8_t) (b == BD_RLO ? BC_R : b == BD_LRO ? BC_L : 0);
+				sti[sp] = 0;
+			} else if (oiso == 0) {
+				oemb++;
+			}
+			continue;
+		}
+		if (b == BD_PDF) {
+			cls[k] = BC_BN;
+			if (oiso > 0)
+				;
+			else if (oemb > 0)
+				oemb--;
+			else if (!sti[sp] && sp > 0)
+				sp--;
+			continue;
+		}
+		if (c == BC_ISO) {
+			int rtl = b == BD_RLI || (b == BD_FSI && bidi_first_strong(l, p0 + k + 1, p1, 1) == 2);
+			int nl = rtl ? (stl[sp] + 1) | 1 : (stl[sp] + 2) & ~1;
+			cls[k] = sto[sp] ? sto[sp] : BC_ISO;
+			if (nl <= BD_MAX && oiso == 0 && oemb == 0) {
+				viso++;
+				sp++;
+				stl[sp] = (uint8_t) nl;
+				sto[sp] = 0;
+				sti[sp] = 1;
+				match[k] = -2;	/* (a valid one: its PDI's index when met) */
+			} else {
+				oiso++;
+			}
+			continue;
+		}
+		if (c == BC_PDI) {
+			if (oiso > 0) {
+				oiso--;
+			} else if (viso > 0) {
+				oemb = 0;
+				while (!sti[sp])
+					sp--;
+				sp--;
+				viso--;
+				for (m = k - 1; m >= 0; m--)	/* its initiator */
+					if (match[m] == -2) {
+						match[m] = k;
+						joins[k] = 1;
+						break;
+					}
+			}
+			lv[k] = stl[sp];
+			cls[k] = sto[sp] ? sto[sp] : BC_PDI;
+			continue;
+		}
+		cls[k] = (uint8_t) (sto[sp] && c != BC_BN ? sto[sp] : c);
+	}
+
+	/* X10: the level runs (the BN left out), joined at a valid isolate
+	   and its PDI into isolating run sequences */
+	nr = 0;
+	for (k = 0; k < n; k++) {
+		runof[k] = -1;
+		if (cls[k] == BC_BN)
+			continue;
+		if (nr > 0 && lv[run1[nr - 1]] == lv[k] && run1[nr - 1] < k) {
+			for (m = run1[nr - 1] + 1; m < k && cls[m] == BC_BN; m++)
+				;
+			if (m == k) {
+				run1[nr - 1] = k;
+				runof[k] = nr - 1;
+				continue;
+			}
+		}
+		run0[nr] = run1[nr] = k;
+		runof[k] = nr++;
+	}
+	for (k = 0, m = -1; k < n; k++)		/* each item's one before, BN passed over */
+		if (cls[k] != BC_BN) {
+			prev[k] = m;
+			m = k;
+		}
+	for (r = 0; r < nr; r++) {
+		long ns = 0, q, rr = r, last, before, after;
+		int lvl, sos, eos;
+		if (joins[run0[r]])
+			continue;	/* (in its initiator's sequence) */
+		for (;;) {
+			for (q = run0[rr]; q <= run1[rr]; q++)
+				if (cls[q] != BC_BN)
+					seq[ns++] = q;
+			last = run1[rr];
+			if (match[last] < 0 || runof[match[last]] < 0)
+				break;
+			rr = runof[match[last]];
+		}
+		lvl = lv[seq[0]];
+		before = prev[seq[0]];
+		after = -1;
+		for (q = last + 1; q < n; q++)
+			if (cls[q] != BC_BN) {
+				after = q;
+				break;
+			}
+		sos = ((before >= 0 && lv[before] > lvl ? lv[before] : lvl) & 1) ? BC_R : BC_L;
+		if (before < 0)
+			sos = ((para > lvl ? para : lvl) & 1) ? BC_R : BC_L;
+		if (after < 0 || match[last] != -1)
+			eos = ((para > lvl ? para : lvl) & 1) ? BC_R : BC_L;
+		else
+			eos = ((lv[after] > lvl ? lv[after] : lvl) & 1) ? BC_R : BC_L;
+		/* W7: a number after left-to-right letters (or the start's) is
+		   theirs */
+		{
+			int strong = sos;
+			for (q = 0; q < ns; q++) {
+				int c = cls[seq[q]];
+				if (c == BC_L || c == BC_R)
+					strong = c;
+				else if (c == BC_EN && strong == BC_L)
+					cls[seq[q]] = BC_L;
+			}
+		}
+		/* N1, N2: neutrals between two of one direction (a number as
+		   right to left) take it, else the embedding's */
+		for (q = 0; q < ns; q++) {
+			long e;
+			int a, b, c = cls[seq[q]];
+			if (c != BC_ON && c != BC_WS && c != BC_ISO && c != BC_PDI)
+				continue;
+			for (e = q; e < ns && (cls[seq[e]] == BC_ON || cls[seq[e]] == BC_WS || cls[seq[e]] == BC_ISO ||
+					       cls[seq[e]] == BC_PDI); e++)
+				;
+			a = q > 0 ? (cls[seq[q - 1]] == BC_L ? BC_L : BC_R) : sos;
+			b = e < ns ? (cls[seq[e]] == BC_L ? BC_L : BC_R) : eos;
+			for (; q < e; q++)
+				cls[seq[q]] = (uint8_t) (a == b ? a : (lvl & 1) ? BC_R : BC_L);
+			q--;
+		}
+		/* I1, I2 */
+		for (q = 0; q < ns; q++) {
+			int c = cls[seq[q]], v = lv[seq[q]];
+			if (!(v & 1))
+				v += c == BC_R ? 1 : c == BC_EN ? 2 : 0;
+			else
+				v += c == BC_L || c == BC_EN ? 1 : 0;
+			lv[seq[q]] = (uint8_t) (v > BD_MAX + 1 ? BD_MAX + 1 : v);
+		}
+	}
+	for (k = 0; k < n; k++)
+		l->it[p0 + k].lvl = cls[k] == BC_BN ? (k > 0 ? l->it[p0 + k - 1].lvl : (uint8_t) para) : lv[k];
+	free(cls);
+	free(match);
+}
+
+/* the levels of every paragraph of the items (a line break ends one) */
+static void bidi_paragraphs(L *l, int base)
+{
+	long k, p0 = 0;
+	for (k = 0; k <= l->nit; k++)
+		if (k == l->nit || l->it[k].kind == IT_BREAK) {
+			bidi_levels(l, p0, k, base);
+			if (k < l->nit)
+				l->it[k].lvl = l->it[k].plvl = (uint8_t) (base >= 0 ? base : 0);
+			p0 = k + 1;
+		}
+}
+
+/* the items i..j-1 of a line in the order they are drawn (bidi_levels'
+   levels): its spaces and controls at its end at the paragraph's level
+   (L1), the runs at each level or above reversed, from the highest (L2);
+   a word drawn right to left (its level odd) is DLF_RTL */
+static void visual_order(L *l, long i, long j, int bidi, long *ord)
 {
 	long k, n = j - i, s, e;
-	int last = rtl ? 2 : 1, top = 0, v;
-	uint8_t *lv, *c;
+	int top = 0, v;
+	uint8_t *lv;
 	for (k = 0; k < n; k++) {
 		ord[k] = i + k;
 		l->it[i + k].flags &= (uint8_t) ~DLF_RTL;
 	}
-	if (l->visual || n <= 0 || (lv = malloc((size_t) n * 2)) == NULL)
+	if (!bidi || l->visual || n <= 0 || (lv = malloc((size_t) n)) == NULL)
 		return;
-	c = lv + n;
-	for (k = 0; k < n; k++) {
+	for (k = 0; k < n; k++)
+		lv[k] = l->it[i + k].lvl;
+	for (k = n - 1; k >= 0; k--) {
 		const ITEM *it = &l->it[i + k];
-		int d = it->kind == IT_WORD || it->kind == IT_ATOM ? it->dir : 0;
-		if (d == 1 || d == 2)
-			last = d;
-		else if (d == 3 && last == 1)
-			d = 1;
-		c[k] = (uint8_t) d;
+		if (it->kind != IT_SPACE && !(it->kind == IT_GAP && it->bidi) && it->kind != IT_FLOAT)
+			break;
+		lv[k] = it->plvl;
 	}
 	for (k = 0; k < n; k++) {
-		int a, b;
-		lv[k] = c[k];
-		if (c[k] != 0)
-			continue;
-		for (s = k - 1; s >= 0 && c[s] == 0; s--)
-			;
-		for (e = k + 1; e < n && c[e] == 0; e++)
-			;
-		a = s >= 0 ? (c[s] == 1 ? 1 : 2) : (rtl ? 2 : 1);
-		b = e < n ? (c[e] == 1 ? 1 : 2) : (rtl ? 2 : 1);
-		lv[k] = (uint8_t) (a == b ? a : rtl ? 2 : 1);
-	}
-	for (k = 0; k < n; k++) {
-		lv[k] = (uint8_t) (rtl ? (lv[k] == 2 ? 1 : 2) : (lv[k] == 2 ? 1 : lv[k] == 3 ? 2 : 0));
 		if ((lv[k] & 1) && l->it[i + k].kind == IT_WORD)
 			l->it[i + k].flags |= DLF_RTL;	/* (a space is drawn the same either way) */
 		if (lv[k] > top)
@@ -3599,7 +3909,8 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	ew_font *sf = font_of(l, st);
 	int32_t lh = line_height(l, st, sf), lead = lh - (sf->ascent + sf->descent);
 	int32_t strut_a = sf->ascent + lead / 2, strut_d = sf->descent + (lead - lead / 2);
-	int ta = kw(st, EP_TEXT_ALIGN), rtl = kw(st, EP_DIRECTION) == KW_RTL;
+	int ta = kw(st, EP_TEXT_ALIGN), rtl = kw(st, EP_DIRECTION) == KW_RTL, lrtl;
+	int plain = kw(st, EP_UNICODE_BIDI) == KW_PLAINTEXT, bidi = rtl || plain;
 	int32_t indent = len0(l, st, EP_TEXT_INDENT, w), cy = y;
 	long i = 0, n = l->nit, *ord;
 	int firstline = 1;
@@ -3608,6 +3919,13 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	   blocks inside are layout_block's */
 	if (ta >= KW_WEBKIT_LEFT && ta <= KW_WEBKIT_CENTER)
 		ta = ta == KW_WEBKIT_LEFT ? KW_LEFT : ta == KW_WEBKIT_RIGHT ? KW_RIGHT : KW_CENTER;
+
+	/* the bidi levels, when there is right-to-left text or a control
+	   (bidi_levels; none for the many pages of left-to-right text alone) */
+	for (i = 0; !bidi && i < l->nit; i++)
+		bidi = l->it[i].dir == 2 || (l->it[i].kind == IT_GAP && l->it[i].bidi);
+	if (bidi && !l->visual)
+		bidi_paragraphs(l, plain ? -1 : rtl);
 
 	/* the inline-blocks first, now that the width is known */
 	for (i = 0; l->ibs && i < l->nit && !l->fail; i++)
@@ -3730,9 +4048,12 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			if (it->desc > desc)
 				desc = it->desc;
 		}
+		/* the line's direction: its paragraph's (unicode-bidi: plaintext:
+		   each its first strong one), else the block's */
+		lrtl = plain && !l->visual && i < l->nit ? l->it[i].plvl & 1 : rtl;
 		/* ended at a soft hyphen: its hyphen drawn (not on a right-to-left
 		   line) */
-		if (!broke && !rtl && end == j && j > i && j < l->nit && l->it[j].kind == IT_WORD &&
+		if (!broke && !lrtl && end == j && j > i && j < l->nit && l->it[j].kind == IT_WORD &&
 		    l->it[j].canbreak == 4 && l->it[j - 1].kind == IT_WORD && !l->it[j - 1].hidden &&
 		    l->it[j - 1].dir != 2) {
 			hy = font_advance(l->it[j - 1].font, '-');
@@ -3742,11 +4063,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			line_edges(l, i, end, &asc, &desc);
 		avail = lwid - (firstline ? indent : 0);
 		off = firstline ? indent : 0;
-		if (ta == KW_RIGHT || (ta == KW_END && !rtl) || ((ta == KW_START || ta == KW_JUSTIFY || ta == 0) && rtl))
+		if (ta == KW_RIGHT || (ta == KW_END && !lrtl) || ((ta == KW_START || ta == KW_JUSTIFY || ta == 0) && lrtl))
 			off += avail - lw;
 		else if (ta == KW_CENTER)
 			off += (avail - lw) / 2;
-		if (rtl && off < 0)
+		if (lrtl && off < 0)
 			off = 0;
 		/* justified: the room left goes to the spaces, but on a line
 		   that ends a paragraph or at a <br> */
@@ -3771,7 +4092,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			*first = base;
 		l->last_base = base;
 		l->last_k = l->p->nitems;
-		visual_order(l, i, end, rtl, ord);
+		visual_order(l, i, end, bidi, ord);
 		/* positions, backgrounds, then the text */
 		{
 			int32_t px = lx + off;

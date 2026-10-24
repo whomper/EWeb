@@ -3374,10 +3374,52 @@ number), and around punctuation beside letters of the other direction than the t
 around it. The words' bytes say which need that (`lb_class`, the same loop as the line breaks'),
 and also each word's direction, which `word_dir` worked out from each character before: the page
 set's 127 KB page lays out in 12.01 M 68030 instructions, from 12.12 M; the Hebrew test page 1.4%
-more than before. Still to come: embeddings (`dir` on an inline element, `<bdi>`, `<bdo>`), which
-the layout's lines don't carry yet. Tested by `tests/layout/bidi.html` in `make test` (the
+more than before. The embeddings came after (below). Tested by `tests/layout/bidi.html` in `make test` (the
 results checked against the algorithm by hand), and the random pages above on lines of both
 directions.
+
+## Bidirectional embeddings (24 Oct 2026)
+
+Stage 4's last part: what a page says of a part's direction. Before, a line was one level of text,
+its direction the block's: `dir` on an inline element, `<bdi>`, `<bdo>`, CSS `unicode-bidi` and the
+direction marks in the text (LRM, RLM, RLO...) did nothing, so a user name in Hebrew pulled the
+colon and the number after it ("User 3 : name" for "User name: 3 posts") and a `<bdo dir=rtl>` was
+drawn as it was stored.
+
+- **The controls:** an inline element's `unicode-bidi` puts a control of no width on the line before
+  and after it (CSS Writing Modes 3, 2.4.2: `embed` RLE or LRE, `isolate` RLI or LRI,
+  `bidi-override` RLO or LRO, `isolate-override` both, `plaintext` FSI; then PDF or PDI): a gap item
+  (`ITEM.bidi`, `bidi_mark`) that draws nothing and no line ends before. The same controls in the
+  text, and LRM and RLM, are cut out of their word as such marks (`word_pieces`, `bidi_char`); they
+  are bytes from U+2000, which already go there.
+- **The levels** are UAX #9's, worked out once a paragraph (a `<br>` or a newline kept ends one:
+  B) rather than a line at a time (`bidi_levels`): X1-X8 (the embedding stack, its overrides and
+  isolates, the overflow counts), X9 (the embeddings' controls go), X10 (the level runs, joined at a
+  valid isolate and its PDI into isolating run sequences, each with its sos and eos), then on each
+  sequence W7, N1, N2, I1 and I2, a word for a character as before (W1-W6 are a word's own: "$5",
+  "24/10/2026"; N0, brackets, isn't done). A line (`visual_order`) then has its spaces and controls
+  at its end at the paragraph's level (L1) and its runs reversed by level (L2); a word at an odd
+  level is drawn right to left (`DLF_RTL`), so a `<bdo dir=rtl>`'s English comes out mirrored as
+  in a browser. A paragraph of `unicode-bidi: plaintext` (a `<pre dir=auto>`) takes its first strong
+  letter's direction (P2, P3), and its lines are aligned by it.
+- **The UA sheet** has the HTML Standard's rules (15.3.5): `[dir=rtl i]` and `[dir=ltr i]` set
+  `direction`; `[dir]`, `<bdi>` and `<output>` isolate; `<bdo>` is `isolate-override`;
+  `textarea` and `pre` of `dir=auto` are `plaintext`. `dir=auto`, and a `<bdi>` without a `dir`, take
+  their direction from their first strong letter (3.2.6.4: passing over `<bdi>`, `<script>`,
+  `<style>`, `<textarea>` and elements with a `dir` of their own), as a presentational hint
+  (`auto_rtl` in `src/doc/doc.c`).
+- **Faster where there is no right-to-left text:** the levels are worked out only for a block with
+  Hebrew, a control, `direction: rtl` or `plaintext`, and a line of left-to-right text alone isn't
+  ordered at all; before, every line was, with a buffer allocated for it.
+
+**Measured** (68030 instructions, `drawbench`, against 0.34): laying out the page set's three
+biggest pages 1.1% to 1.3% fewer (395 KB: 14.65 M to 14.46 M), the Hebrew test page 1.8% more,
+`tests/layout/bidi.html` 5.6% more; styling 0.3% to 1.6% more (the UA sheet's new rules for `dir`).
+Tested by `tests/layout/embed.py` in `make test` (18 cases worked out from UAX #9 by hand: `<bdo>`
+both ways, bidi-override, RLO and LRO in the text, `dir` on a span both ways, a plain span against a
+`<bdi>` with the colon and the number after it, `dir=auto` both ways, RLM and LRM against neither, a
+`<pre dir=auto>`'s paragraphs and their alignment, an embedding open across lines); every
+`tests/layout` list unchanged, the Hebrew pages in every encoding.
 
 ## The design
 
@@ -3687,7 +3729,7 @@ out of both (their paths lead nowhere on the Atari).
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
-   (numbers, Latin and mirrored brackets in Hebrew done, above; embeddings to come), UAX #14's line
+   (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
    breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions

@@ -241,7 +241,7 @@ static const char *list_type(const char *v, int ol)
    being finished: compared as pointers, not as text */
 static struct {
 	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
-	const ec_atom *col, *font, *name, *open;
+	const ec_atom *col, *font, *name, *open, *dir, *bdi;
 } ha;
 
 static const char *attr_atom(const dnode *n, const ec_atom *a)
@@ -283,7 +283,56 @@ static void hint_atoms(doc *d)
 	A(font);
 	A(name);
 	A(open);
+	A(dir);
+	A(bdi);
 #undef A
+}
+
+/* a code point's strong direction: 2 right to left (Hebrew, Arabic), 1
+   left to right (a letter of another script), 0 none (digits,
+   punctuation, symbols, spaces) */
+static int strong_dir(uint32_t c)
+{
+	if ((c >= 0x590 && c < 0x900) || (c >= 0xFB1D && c < 0xFE00) || (c >= 0xFE70 && c < 0xFF00))
+		return 2;
+	if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= 0xC0 && c < 0x2B0 && c != 0xD7 && c != 0xF7) ||
+	    (c >= 0x370 && c < 0x590 && c != 0x37E && c != 0x387) || (c >= 0x900 && c < 0x2000) ||
+	    (c >= 0x3040 && c < 0xFB1D) || (c >= 0xFF21 && c < 0xFFE0))
+		return 1;
+	return 0;
+}
+
+/* auto directionality (the HTML Standard, 3.2.6.4): the first strong
+   letter of its text, passing over bdi, script, style and textarea and
+   the elements with a dir of their own: 1 right to left, 0 left to right
+   (and when there is none) */
+static int auto_rtl(const dnode *n, int depth)
+{
+	const dnode *c;
+	if (depth > 64)
+		return -1;
+	for (c = n->first; c != NULL; c = c->next) {
+		if (c->type == DN_TEXT) {
+			const unsigned char *p = (const unsigned char *) c->text, *e = p + c->len;
+			while (p < e) {
+				/* (UTF-8: a lead byte and its continuations; enough to
+				   tell a letter's script) */
+				uint32_t u = *p++;
+				int d, k = u >= 0xF0 ? 3 : u >= 0xE0 ? 2 : u >= 0xC0 ? 1 : 0;
+				u &= k == 3 ? 0x07 : k == 2 ? 0x0F : k == 1 ? 0x1F : 0x7F;
+				for (; k > 0 && p < e && (*p & 0xC0) == 0x80; k--)
+					u = u << 6 | (*p++ & 0x3F);
+				if ((d = strong_dir(u)) != 0)
+					return d == 2;
+			}
+		} else if (c->type == DN_ELEMENT && c->tag != T_SCRIPT && c->tag != T_STYLE && c->tag != T_TEXTAREA &&
+			   c->e.name != ha.bdi && attr_atom(c, ha.dir) == NULL) {
+			int r = auto_rtl(c, depth + 1);
+			if (r >= 0)
+				return r;
+		}
+	}
+	return depth == 0 ? 0 : -1;
 }
 
 static void hints(dnode *n)
@@ -293,10 +342,14 @@ static void hints(dnode *n)
 	const char *v;
 	int cell = n->tag == T_TD || n->tag == T_TH;
 
-	if (n->nattr == 0 && !cell)
+	if (n->nattr == 0 && !cell && n->e.name != ha.bdi)
 		return;
 	h.n = 0;
 	h.s[0] = 0;
+	/* dir=auto, and a bdi without a dir: its direction from its text */
+	v = HA(n, dir);
+	if (v != NULL ? is(v, "auto") : n->e.name == ha.bdi)
+		put(&h, "direction", auto_rtl(n, 0) == 1 ? "rtl" : "ltr");
 
 	if ((v = HA(n, align)) != NULL) {
 		const char *t = HA(n, type);

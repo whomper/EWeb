@@ -62,8 +62,10 @@ const char doc_ua_css[] =
 	"mark { background-color: yellow; color: black }\n"
 	"center { text-align: -webkit-center }\n"
 	"img, svg, video, canvas, iframe, object, embed { display: inline-block }\n"
-	"[dir=rtl] { direction: rtl } [dir=ltr] { direction: ltr }\n"
-	"bdi, bdo { unicode-bidi: isolate } bdo[dir] { unicode-bidi: isolate-override }\n"
+	"[dir=rtl i] { direction: rtl } [dir=ltr i] { direction: ltr }\n"
+	"[dir=ltr i], [dir=rtl i], [dir=auto i], bdi, output { unicode-bidi: isolate }\n"
+	"bdo, bdo[dir] { unicode-bidi: isolate-override }\n"
+	"textarea[dir=auto i], pre[dir=auto i] { unicode-bidi: plaintext }\n"
 	"q:before { content: open-quote } q:after { content: close-quote }\n";
 
 /* and in quirks mode (15.3.8): a table starts its text-align afresh, so
