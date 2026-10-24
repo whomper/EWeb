@@ -63,6 +63,22 @@ extension blocks every request into the home network that its address
 shows (addresses, single names, .local and the like), so that a link
 followed in live view can't lead there either.
 
+Cloudflare's check (--browser): a site behind Cloudflare may answer a
+browser it doesn't know with its check, "Just a moment...", a script
+for the big browsers that must pass before the site lets it in, which
+EWeb can't run (a 403 or 503 with "cf-mitigated: challenge"). webgate
+then opens the address (a page's: its Accept names text/html) in the
+Pi's browser, which passes the check by itself (webgate-ext waits for
+the page it goes on to), and sends EWeb that page as a snapshot. The
+site stays on the browser for the rest of the visit: its next pages go
+to the browser straight away, until none has been asked for in 25
+minutes. Nothing of the browser's pass leaves it (no cookie, no
+User-Agent: EWeb's design rules that out), so a picture the check
+refuses stays refused. A check that wants a click comes to EWeb as it
+was, with "X-Gateway-Check: click" (live view, below, ticks it); one
+the browser didn't get through in time, with "X-Gateway-Check:
+failed".
+
 Live view (--browser), for what a snapshot can't do (a CAPTCHA, a login
 made by scripts): EWeb opens http://webgate/live (webgate keeps the name
 for itself), a page with a picture of the browser's screen as a picture
@@ -115,6 +131,42 @@ PALETTES_KEPT = 16              # the Ataris' colours kept for pens, the oldest 
 PENS_TIME = 6                   # seconds aerapens may take (its unit stops it after 5)
 PENS_ANSWER_MAX = 6 << 20       # the most of its answer read: 4 megapixels of pens and a mask
 PENS_SEEN = [None]              # the aerapens last logged ("aerapens COMMON BUILD")
+CHECK_MAX = 512 << 10           # the most of a 403 or 503 from Cloudflare read to see if it is its check
+VISIT_KEEP = 25 * 60            # seconds a site behind the check stays on the browser after its last page
+VISITS = {}                     # host -> when its last page went through the browser
+VISITS_LOCK = threading.Lock()
+
+
+def visiting(host, keep=None):
+    """is host's visit on the browser (its check passed there)? keep:
+    True to start or go on with it, False to end it"""
+    host = host.lower()
+    with VISITS_LOCK:
+        if keep is True:
+            VISITS[host] = time.time()
+        elif keep is False:
+            VISITS.pop(host, None)
+        when = VISITS.get(host)
+        if when is not None and time.time() - when > VISIT_KEEP:
+            del VISITS[host]
+            when = None
+    return when is not None
+
+
+def cf_check(resp, body):
+    """is this answer Cloudflare's check (its managed challenge)? It says
+    so (cf-mitigated: challenge); an older one only by the check's
+    options in its page"""
+    if (resp.getheader("cf-mitigated") or "").strip().lower() == "challenge":
+        return True
+    if resp.status not in (403, 503):
+        return False
+    if (resp.getheader("Content-Encoding") or "").lower() == "gzip":
+        try:
+            body = gzip.decompress(body)
+        except (OSError, EOFError, zlib.error):
+            return False
+    return b"_cf_chl_opt" in body
 
 
 class Palettes:
@@ -497,6 +549,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_body(409, b"webgate: send the colours first\n", "text/plain", [("X-Gateway-Palette", "need")])
             self.note(409, 0, " (no colours %08x)" % want["pal"])
             return
+        page = self.command == "GET" and Config.browser and not self.for_browser and \
+            "text/html" in (self.headers.get("Accept") or "")
+        if page and visiting(u.hostname) and self.browser_may_open(self.path, quiet=True):
+            # a site whose check the browser passed: its pages stay there
+            # for the visit (the pass is the browser's, and stays in it)
+            snap = BRIDGE.ask(self.path, Config.snapshot_wait)
+            if snap is not None and not snap.get("challenge"):
+                visiting(u.hostname, True)
+                self.send_snap(snap, self.path, " (on the browser for the visit)")
+                return
+            visiting(u.hostname, False)     # (asked as usual: the check again, if it is that)
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
         headers["Host"] = u.netloc.rsplit("@", 1)[-1]
         # what the Atari unpacks itself, and nothing it can't
@@ -531,7 +594,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(504 if isinstance(e, socket.timeout) else 502,
                            "webgate: can't reach %s (%s)\n" % (u.hostname, e))
                 return
-        if want["fit"] and self.command == "GET" and resp.status == 200 and \
+        if page and resp.status in (403, 503) and \
+                ((resp.getheader("cf-mitigated") or "").strip().lower() == "challenge" or
+                 (resp.getheader("Server") or "").strip().lower() == "cloudflare"):
+            # (a page: a picture or a stylesheet the check refused isn't
+            # one for the browser's tab)
+            self.cf_answer(resp, conn, u, port)
+        elif want["fit"] and self.command == "GET" and resp.status == 200 and \
                 (resp.getheader("Content-Type") or "").lower().startswith("image/") and \
                 (resp.getheader("Content-Encoding") or "identity").lower() == "identity":
             self.picture(resp, conn, u, port, want)
@@ -693,23 +762,26 @@ class Handler(BaseHTTPRequestHandler):
         page = LIVE_PAGE % {"title": html.escape(title), "n": n, "w": Config.live_width}
         self.send_body(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
-    def browser_may_open(self, url):
+    def browser_may_open(self, url, quiet=False):
         """may the Pi's browser open url? The proxy's rules (7.3): http and
         https only, nowhere in the home network without --allow-local. When
-        not, the Atari has been answered."""
+        not, the Atari has been answered (quiet: not yet)."""
         u = urlsplit(url)
         if u.scheme not in ("http", "https") or not u.hostname:
-            self.reply(400, "webgate: expected a request like GET https://host/path\n")
+            if not quiet:
+                self.reply(400, "webgate: expected a request like GET https://host/path\n")
             return False
         if Config.allow_local:
             return True
         try:
             aeragate.lookup(u.hostname, u.port or (443 if u.scheme == "https" else 80), False)
         except aeragate.HomeNetwork:
-            self.reply(403, "webgate: won't connect to the local network (%s)\n" % u.hostname)
+            if not quiet:
+                self.reply(403, "webgate: won't connect to the local network (%s)\n" % u.hostname)
             return False
         except (socket.gaierror, UnicodeError, ValueError):
-            self.reply(502, "webgate: can't find %s\n" % u.hostname)
+            if not quiet:
+                self.reply(502, "webgate: can't find %s\n" % u.hostname)
             return False
         return True
 
@@ -726,14 +798,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_snap(snap, self.path)
 
-    def send_snap(self, snap, url):
+    def send_snap(self, snap, url, why=" (a snapshot)"):
         """a snapshot to the Atari, with the address it came from (its
         <base href> says the same for the page's own links)"""
         body = (snap.get("html") or "").encode("utf-8")
         packed = "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
         if packed:
             body = gzip.compress(body, 6)
-        self.note(200, len(body), " (a snapshot)")
+        self.note(200, len(body), why)
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         if packed:
@@ -744,8 +816,32 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def pass_on(self, resp, conn, u, port):
-        """the answer to the Atari as it comes, a piece at a time"""
+    def cf_answer(self, resp, conn, u, port):
+        """a 403 or 503 from Cloudflare: when it is its check, the page
+        through the Pi's browser, which passes it, and the site on the
+        browser for the visit; else, or when the browser can't, the answer
+        as it came"""
+        try:
+            first = resp.read(CHECK_MAX)
+        except (OSError, http.client.HTTPException):
+            UP.drop(u.scheme, u.hostname, port)
+            self.reply(502, "webgate: %s closed the connection\n" % u.hostname)
+            return
+        check = ()
+        if len(first) < CHECK_MAX and cf_check(resp, first) and self.browser_may_open(self.path, quiet=True):
+            snap = BRIDGE.ask(self.path, Config.snapshot_wait)
+            if snap is not None and not snap.get("challenge"):
+                visiting(u.hostname, True)
+                if resp.will_close:
+                    UP.drop(u.scheme, u.hostname, port)
+                self.send_snap(snap, self.path, " (Cloudflare's check, through the browser)")
+                return
+            check = (("X-Gateway-Check", "click" if snap is not None else "failed"),)
+        self.pass_on(resp, conn, u, port, first, check)
+
+    def pass_on(self, resp, conn, u, port, first=b"", extra=()):
+        """the answer to the Atari as it comes, a piece at a time (first:
+        the start of its body, read already; extra: more headers)"""
         clen = resp.getheader("Content-Length")
         known = clen is not None and clen.strip().isdigit() and resp.chunked is False
         empty = self.command == "HEAD" or resp.status in (204, 304) or 100 <= resp.status < 200
@@ -756,6 +852,8 @@ class Handler(BaseHTTPRequestHandler):
         tls = tls_of(conn)
         if tls:
             self.send_header("X-Gateway-TLS", tls)
+        for k, v in extra:
+            self.send_header(k, v)
         if empty:
             self.send_header("Content-Length", "0")
         elif known:
@@ -766,7 +864,7 @@ class Handler(BaseHTTPRequestHandler):
         sent = 0
         try:
             while not empty:
-                piece = resp.read(PIECE)
+                piece, first = first or resp.read(PIECE), b""
                 if not piece:
                     break
                 sent += len(piece)

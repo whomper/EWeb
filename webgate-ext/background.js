@@ -108,7 +108,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     fetch(WEBGATE + "/snapshot?id=" + encodeURIComponent(id), {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({url: msg.url, title: msg.title, html: msg.html}),
+      body: JSON.stringify({url: msg.url, title: msg.title, html: msg.html, challenge: !!msg.challenge}),
     }).catch(() => {});
   }
 });

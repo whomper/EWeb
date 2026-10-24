@@ -521,6 +521,8 @@ class DavFtpTest(Base):
         self.assertEqual(self.run_ag("remove", "web"), 0, self.err)
         self.assertIsNone(self.unit("webgate-browser"))
 
+    @unittest.skipUnless(os.path.isdir(os.path.join(ag.Web.PENS_SRC, "common")),
+                         "needs AERA-Gateway's pens/ (an app's copy of gateway/ has none)")
     def test_web_pens(self):
         self.pi.programs = {"make"}          # no cc yet
         self.assertEqual(self.run_ag("install", "web"), 0, self.err)
@@ -535,7 +537,7 @@ class DavFtpTest(Base):
             self.assertIn(want, sock)
         for want in ("ExecStart=/opt/aera-gateway-pens/aerapens", "StandardInput=socket", "DynamicUser=yes",
                      "LimitAS=64M", "LimitCPU=2", "RuntimeMaxSec=5", "PrivateNetwork=yes",
-                     "RestrictAddressFamilies=none"):
+                     "RestrictAddressFamilies=AF_UNIX"):
             self.assertIn(want, svc)
         # the socket before webgate, so that webgate's first look finds aerapens
         cmds = [c for c in self.pi.cmds if c[:2] == ("systemctl", "restart")]
@@ -582,6 +584,37 @@ class ClaudeTest(Base):
         with open(os.path.join(self.src, "pi", "claude-st.service"), "w") as fh:
             fh.write("[Service]\nExecStart=/opt/claude-st/venv/bin/python ...\n")
         self.conf = ag.Claude.CONF
+
+    def test_install_all(self):
+        rc = self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src,
+                         "--mail", "imap.mail.me.com", "smtp.mail.me.com:587")
+        self.assertEqual(rc, 0, self.err)
+        for name in ("emailgate", "ecalgate", "eftpgate", "webgate"):
+            self.assertIn("--allow 192.168.1.50", self.execstart(name), name)
+        self.assertIn("imap.mail.me.com smtp.mail.me.com:587", self.execstart("emailgate"))
+        self.assertIn("--tcp 0.0.0.0:2323 --allow 192.168.1.50", self.pi.read(self.conf))
+        self.assertIn("Installed: mail, dav, ftp, web, claude", self.out)
+        # again, without --mail or --allow: everything kept as it is
+        self.assertEqual(self.run_ag("install", "all", "--from", self.src), 0, self.err)
+        self.assertIn("--allow 192.168.1.50", self.execstart("ecalgate"))
+        self.assertIn("imap.mail.me.com", self.execstart("emailgate"))
+        self.assertIn("--allow 192.168.1.50", self.pi.read(self.conf))
+
+    def test_install_all_keeps_a_serial_cable(self):
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--serial", "/dev/ttyUSB0"), 0)
+        self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src), 0, self.err)
+        self.assertIn("--serial /dev/ttyUSB0", self.pi.read(self.conf))
+
+    def test_install_all_without_mail_and_a_failure(self):
+        self.pi.busy.add("2121")             # ftp's port is taken
+        rc = self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src)
+        self.assertEqual(rc, 1)
+        self.assertIn("Not installed: mail (name your provider's servers", self.out)
+        self.assertIn("Didn't install: ftp", self.err)
+        self.assertIsNone(self.unit("emailgate"))
+        self.assertIsNotNone(self.unit("webgate"))          # the others went on
+        self.assertIsNotNone(self.unit("claude-st"))
+        self.assertEqual(self.run_ag("install", "all", "--mail", "imap.example"), 2)
 
     def test_network(self):
         rc = self.run_ag("install", "claude", "--from", self.src, "--network", "--atari", "192.168.1.20",

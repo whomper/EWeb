@@ -35,38 +35,46 @@ ECal, EContact, EFTP, EWeb and ClaudeST carry a copy of it, as they carry
 
 ## Setting it up
 
-On the Pi, in your home folder:
+On a new Pi, everything for your Atari in one line (mail only with
+`--mail`; `--browser` for web's browser):
+
+```
+sudo apt install -y git && git clone https://github.com/whomper/AERA-Gateway ~/AERA-Gateway && ~/AERA-Gateway/update-pi.sh --allow ATARI_IP --mail imap.gmail.com smtp.gmail.com
+```
+
+Or step by step, only the ones you need:
 
 ```
 sudo apt install -y git                   Raspberry Pi OS Lite comes without it
-git clone https://github.com/whomper/AERA-Gateway
-cd AERA-Gateway
-./update-pi.sh                            the latest release of AERA-Gateway
-sudo gateway/aera-gateway install mail imap.gmail.com smtp.gmail.com pop.gmail.com
-sudo gateway/aera-gateway install dav
-sudo gateway/aera-gateway install ftp
-sudo gateway/aera-gateway install web
-sudo gateway/aera-gateway install claude --network --atari 192.168.1.20
+git clone https://github.com/whomper/AERA-Gateway ~/AERA-Gateway
+~/AERA-Gateway/update-pi.sh               the latest release; and aera-gateway a command
+sudo aera-gateway install mail imap.gmail.com smtp.gmail.com pop.gmail.com --allow ATARI_IP
+sudo aera-gateway install dav --allow ATARI_IP
+sudo aera-gateway install ftp --allow ATARI_IP
+sudo aera-gateway install web --allow ATARI_IP
+sudo aera-gateway install claude --network --atari ATARI_IP
 ```
 
-(only the ones you need). Set the Pi up from AERA-Gateway's own copy, as
-here: `./update-pi.sh` keeps it at the latest release; the copies of this
-folder inside the apps are for their tests. Each gateway runs as a
-service of its own (`emailgate`, `ecalgate`, `eftpgate`, `webgate`, `claude-st`)
-under a user of its own with no access to the rest of the Pi, starts now
-and at every boot, and `install` prints what to type into the Atari
-program.
+`install all --allow ATARI_IP --mail IMAP SMTP[:587] [POP3] [--browser]`
+does them all in turn: mail only with `--mail`, those already installed
+keep their settings, and one that fails doesn't stop the others. Set the
+Pi up from AERA-Gateway's own copy, as here: `update-pi.sh` keeps it at
+the latest release, and the copies of this folder inside the apps are
+for their tests. Each gateway runs as a service of its own (`emailgate`,
+`ecalgate`, `eftpgate`, `webgate`, `claude-st`) under a user of its own
+with no access to the rest of the Pi, starts now and at every boot, and
+`install` prints what to type into the Atari program.
 
 Afterwards:
 
 ```
-cd AERA-Gateway && ./update-pi.sh        the latest release, every gateway on the Pi updated, settings kept
-gateway/aera-gateway status               what runs, on which ports, with which settings
-sudo gateway/aera-gateway install dav --allow-local     change a setting; the others stay
-sudo gateway/aera-gateway remove ftp
+~/AERA-Gateway/update-pi.sh               the latest release, every gateway on the Pi updated, settings kept
+aera-gateway status                       what runs, on which ports, with which settings
+sudo aera-gateway install dav --allow-local     change a setting; the others stay
+sudo aera-gateway remove ftp
 ```
 
-`sudo gateway/aera-gateway install SERVICE --help` lists a service's
+`sudo aera-gateway install SERVICE --help` lists a service's
 settings. A new gateway is checked before it replaces the old one: if it
 doesn't start and answer on its ports within ten seconds, the one before
 comes back, and `aera-gateway` says so.
@@ -77,7 +85,7 @@ Name your provider's servers: the IMAP server, the SMTP server and, if
 you want POP3, the POP3 server.
 
 ```
-sudo gateway/aera-gateway install mail imap.gmail.com smtp.gmail.com pop.gmail.com
+sudo aera-gateway install mail imap.gmail.com smtp.gmail.com pop.gmail.com
 ```
 
 | Provider    | IMAP                  | SMTP                  | POP3                 |
@@ -111,7 +119,7 @@ When the usual ports are taken on the Pi, give others and type them into
 EMail instead: `--ports 2143,2587,2110` (IMAP, SMTP, POP3).
 
 **Coming from EMail 1.x?** Its gateway was an stunnel set-up.
-`sudo gateway/aera-gateway install mail` (no servers needed) takes its
+`sudo aera-gateway install mail` (no servers needed) takes its
 servers and ports from `/etc/stunnel/atari-mail.conf`, so nothing changes
 in EMail, and once emailgate answers it removes that file, stops stunnel
 unless something else uses it, and drops the `ufw deny` rules 1.x's
@@ -122,7 +130,7 @@ EMail's ports must change.
 ## dav: ECal's and EContact's gateway
 
 ```
-sudo gateway/aera-gateway install dav
+sudo aera-gateway install dav
 ```
 
 Calendar and contact servers live on many hosts (iCloud moves you from
@@ -158,7 +166,7 @@ ecalgate follows `HTTPS_PROXY`; put it in the service with
 ## ftp: EFTP's gateway
 
 ```
-sudo gateway/aera-gateway install ftp
+sudo aera-gateway install ftp
 ```
 
 It installs `python3-paramiko` too (for SSH) if it isn't there. The Atari
@@ -199,7 +207,7 @@ passwords).
 ## web: EWeb's gateway
 
 ```
-sudo gateway/aera-gateway install web
+sudo aera-gateway install web
 ```
 
 EWeb's ST edition can't make secure connections at a usable speed, and
@@ -212,8 +220,8 @@ cookies and error pages unchanged. When webgate can't help, EWeb's
 "can't open" page shows a line that starts with "webgate:".
 
 In EWeb, Settings > Secure: Pi gateway = the Pi's IP address, port 8280.
-Check it from any browser on your network: `http://PI_IP:8280/` answers "webgate X.Y
-is running".
+Check it from any browser on your network: `http://PI_IP:8280/` answers
+"webgate X.Y is running".
 
 Pictures come smaller: EWeb says how wide its page is, and webgate
 decodes a picture that is wider, or of a kind the Atari can't read
@@ -244,7 +252,7 @@ server, never the address's path). Like ecalgate, it follows
 Some sites are made by their scripts, and EWeb can't run those. With
 
 ```
-sudo gateway/aera-gateway install web --browser
+sudo aera-gateway install web --browser
 ```
 
 the Pi runs Chromium for EWeb, full screen in a screen of its own (Xvfb,
@@ -255,9 +263,19 @@ the Pi, typing types there, for the logins and CAPTCHAs a snapshot can't
 do. The browser's profile, with any logins, stays in
 `/var/lib/webgate/browser`.
 
+Sites behind Cloudflare's check ("Just a moment...") pass with it too:
+when a site answers EWeb with the check, a script for the big browsers,
+webgate opens the page in the Pi's browser, which passes the check, and
+EWeb gets the page it goes on to. The site's next pages go through the
+browser too, for the rest of the visit (until none has been asked for
+in 25 minutes). The pass stays in the browser: webgate never sends its
+cookies or passes itself off as the browser, so a picture the check
+refuses stays out. A check that wants a click is ticked in live view.
+
 It needs a Pi with 2 GB of memory or more (Chromium takes about 400 MB
-with one page) and installs Chromium, Xvfb and xdotool (about 600 MB). It runs as webgate's own user, as two more services,
-`webgate-screen` and `webgate-browser`, and the browser goes out only
+with one page) and installs Chromium, Xvfb and xdotool (about 600 MB).
+It runs as webgate's own user, as two more services, `webgate-screen`
+and `webgate-browser`, and the browser goes out only
 through webgate, so the home-network rule holds for it too: nothing at
 home without `--allow-local`, whatever a name's answer says, and no
 files from the Pi. `install web --no-browser` turns it off again.
@@ -269,10 +287,10 @@ The bridge is ClaudeST's own (it changes with `CLAUDEST.PRG`);
 copy you name with `--from`:
 
 ```
-sudo gateway/aera-gateway install claude --network --atari 192.168.1.20
-sudo gateway/aera-gateway install claude --serial /dev/ttyUSB0 --baud 9600
-sudo gateway/aera-gateway install claude --backend api
-sudo gateway/aera-gateway set-key        paste a new claude.ai session key
+sudo aera-gateway install claude --network --atari 192.168.1.20
+sudo aera-gateway install claude --serial /dev/ttyUSB0 --baud 9600
+sudo aera-gateway install claude --backend api
+sudo aera-gateway set-key        paste a new claude.ai session key
 ```
 
 Its settings stay in `/etc/claude-st/claude-st.env` and its chats in
@@ -288,7 +306,7 @@ latest release, never from that copy.
 Start with
 
 ```
-gateway/aera-gateway status
+aera-gateway status
 ```
 
 Each gateway should be `active`, with no `(not listening)` after its
@@ -317,14 +335,14 @@ sudo journalctl -u emailgate -n 30        or ecalgate, eftpgate, webgate, claude
 - **The provider refuses the login.** That is between EMail and your
   provider: most want an app password (see mail above).
 - **ECal or EContact can't reach a server at home** (a Radicale, a
-  Nextcloud): `sudo gateway/aera-gateway install dav --allow-local`. The
+  Nextcloud): `sudo aera-gateway install dav --allow-local`. The
   same for EFTP and a NAS (`install ftp --allow-local`), and for EWeb
   and your router's pages (`install web --allow-local`).
 - **EFTP: an SFTP server is refused because its key changed.** If the
   server was really reinstalled, remove its line from
   `/var/lib/eftpgate/known_hosts`.
 - **ClaudeST: claude.ai logs you out.** Paste a new session key:
-  `sudo gateway/aera-gateway set-key`.
+  `sudo aera-gateway set-key`.
 - **After an update, a gateway didn't start.** `aera-gateway` put the one
   before back and said so; the journal says why the new one failed.
   Report it in AERA-Gateway's
@@ -359,7 +377,7 @@ ports on your router.
 
 Until 2026 each app set up its own gateway with an `install.sh` of its
 own (in `EMail/gateway`, `ECal/gateway`, `EFTP/gateway` and
-`ClaudeST/pi`). `sudo gateway/aera-gateway update` takes those over: the
+`ClaudeST/pi`). `sudo aera-gateway update` takes those over: the
 same service names, users, ports and settings (`--allow`, `--allow-local`,
 `--cafile`, `-v`, the mail servers and ports, any `Environment=` line),
 with the old program removed only once the new one answers. The old
@@ -380,16 +398,20 @@ python3 -m unittest discover -s gateway -p 'test_*.py'
   the home-network rule, a log without paths.
 - `test_webgate.py`: the proxy against a local server (compression,
   chunked answers, redirects, cookies, the home-network rule), pictures
-  made smaller (with Pillow), the Pi's browser's way out with a stand-in
-  name server, and snapshots and live view with stand-ins for the
-  browser.
+  made smaller (with Pillow), pens with a stand-in aerapens on its
+  socket, the Pi's browser's way out with a stand-in name server, and
+  snapshots, live view and Cloudflare's check with stand-ins for the
+  browser and the site.
 - `test_eftpgate.py`: an SFTP and an FTPS server on this computer, and a
   plain FTP client (and EFTP's own FTP core, when built) talking to
   eftpgate as the Atari does.
 - `test_installer.py`: `aera-gateway` on a stand-in Pi: units, settings,
-  taking over the apps' set-ups, the way back when a new gateway fails.
+  taking over the apps' set-ups, the way back when a new gateway fails,
+  install all, the Pi's browser and aerapens' units.
 
 AERA-Gateway's `tests/systemd.sh` runs `aera-gateway` for real on a
 computer with systemd (CI does on every push): it sets the gateways up
-with the apps' old installers, takes them over, installs and removes, and
-checks the claude recipe against ClaudeST's own `pi/install.sh`.
+with the apps' old installers, takes them over, installs and removes,
+runs web with the Pi's browser (a stand-in Chromium) and with the real
+aerapens behind its socket, and checks the claude recipe against
+ClaudeST's own `pi/install.sh`.

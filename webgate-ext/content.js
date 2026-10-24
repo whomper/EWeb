@@ -5,10 +5,13 @@
 // scripts have been quiet for a moment, the page as it is now, made into
 // plain HTML for EWeb: no scripts, each canvas as a picture, form fields
 // as they are filled, and a <base> so that its stylesheets and pictures
-// come from where they are.
+// come from where they are. Cloudflare's check ("Just a moment...") is not
+// a page to send: the browser passes it and goes on to the page by itself,
+// whose own snapshot is sent; one that is still there after CHECK (it
+// wants a click) is sent marked so.
 
 (function () {
-  const QUIET = 800, MOST = 8000;
+  const QUIET = 800, MOST = 8000, CHECK = 25000;
   let last = Date.now(), sent = false;
   const started = Date.now();
   new MutationObserver(() => { last = Date.now(); }).observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
@@ -62,15 +65,23 @@
     return "<!DOCTYPE html>\n" + root.outerHTML;
   }
 
+  // Cloudflare's check: its options in an inline script (the page's own
+  // scripts can't be read from here, their text can)
+  function checking() {
+    return Array.from(document.scripts).some(s => !s.src && s.textContent.includes("_cf_chl_opt"));
+  }
+
   function settle() {
     if (sent)
       return;
-    if (Date.now() - last < QUIET && Date.now() - started < MOST) {
-      setTimeout(settle, 200);
+    const check = checking();
+    if (check ? Date.now() - started < CHECK : Date.now() - last < QUIET && Date.now() - started < MOST) {
+      setTimeout(settle, check ? 500 : 200);
       return;
     }
     sent = true;
-    chrome.runtime.sendMessage({snapshot: true, url: location.href, title: document.title, html: snapshot()});
+    chrome.runtime.sendMessage({snapshot: true, challenge: check, url: location.href, title: document.title,
+                                html: snapshot()});
   }
 
   // live view's "as a page": the snapshot of the page as it is now

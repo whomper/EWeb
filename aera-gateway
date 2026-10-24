@@ -11,6 +11,8 @@ says how they are.
   sudo ./aera-gateway install web                           EWeb's (webgate)
   sudo ./aera-gateway install claude --network --atari ATARI_IP
                                                             ClaudeST's bridge (claude-st)
+  sudo ./aera-gateway install all --allow ATARI_IP --mail IMAP SMTP[:587] [POP3] [--browser]
+                                                            all of them at once
   sudo ./aera-gateway update        every one installed, from this copy, settings kept
                                     (../update-pi.sh: this copy to the latest release first)
   aera-gateway status               what runs, on which ports, with which settings
@@ -46,7 +48,7 @@ import tempfile
 import time
 import urllib.request
 
-VERSION = "1.6"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
+VERSION = "1.9"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
 HERE = os.path.dirname(os.path.realpath(__file__))
 PROG = sys.argv[0] if sys.argv[0].endswith("aera-gateway") else "aera-gateway"   # as typed, for advice
 OPT = "/opt/aera-gateway"                   # the gateways' code on the Pi
@@ -841,7 +843,7 @@ class Web(Gateway):
             "PrivateNetwork=yes", "PrivateTmp=yes", "PrivateDevices=yes",
             "ProtectSystem=strict", "ProtectHome=yes", "ProtectKernelTunables=yes", "ProtectKernelModules=yes",
             "ProtectControlGroups=yes", "NoNewPrivileges=yes", "MemoryDenyWriteExecute=yes",
-            "LockPersonality=yes", "RestrictAddressFamilies=none", "RestrictNamespaces=yes",
+            "LockPersonality=yes", "RestrictAddressFamilies=AF_UNIX", "RestrictNamespaces=yes",
             "SystemCallArchitectures=native", "SystemCallFilter=@system-service",
             "SystemCallFilter=~@network-io @privileged @resources", ""])
         return socket_unit, service
@@ -902,7 +904,8 @@ class Web(Gateway):
             "Check it from any browser on your network: http://%s:%s/" % (ip, ns.port)])
 
 
-GATEWAYS = [Mail(), Dav(), Ftp(), Web()]
+MAIL = Mail()
+GATEWAYS = [MAIL, Dav(), Ftp(), Web()]
 
 
 def put_files(pi, src):
@@ -1309,6 +1312,43 @@ def update(pi, o, src=HERE):
         CLAUDE.install(pi, settings_for(CLAUDE, args))
 
 
+def install_all(pi, o, src=HERE):
+    """every service, one after the other, for the Atari at o.allow; one
+    that fails doesn't stop the others. Those already installed keep their
+    settings (--allow, if given, is the one change)."""
+    allow = ",".join(o.allow) if o.allow else None
+    done, failed, skipped = [], [], []
+    for svc in GATEWAYS + [CLAUDE]:
+        if svc is MAIL and not o.mail and not svc.installed(pi) and not pi.exists(Mail.STUNNEL):
+            skipped.append("mail (name your provider's servers: --mail IMAP SMTP[:587] [POP3])")
+            continue
+        if svc is CLAUDE:
+            argv = ["--from", o.source] if o.source else []
+            serial = svc.installed(pi) and "--serial" in CLAUDE.get_var(pi, "CLAUDE_ST_ARGS")
+            if not serial and (allow or not svc.installed(pi)):      # a serial cable stays as it is
+                argv += ["--network", "--atari", allow or "any"]
+        else:
+            argv = (o.mail or []) if svc is MAIL else []
+            argv += ["--allow", allow] if allow else []
+            argv += ["--browser"] if svc.key == "web" and o.browser else []
+        heading("%s (%s)" % (svc.key, svc.name))
+        try:
+            if svc is CLAUDE:
+                CLAUDE.install(pi, settings_for(svc, argv))
+            else:
+                install_gateway(pi, svc, settings_for(svc, argv), src)
+            done.append(svc.key)
+        except Failed as e:
+            print(e, file=sys.stderr)
+            failed.append(svc.key)
+    heading("All")
+    say("Installed: %s" % (", ".join(done) or "none"))
+    if skipped:
+        say("Not installed: " + "; ".join(skipped))
+    if failed:
+        raise Failed("Didn't install: %s (see above); the others run." % ", ".join(failed))
+
+
 def settings_for(svc, argv):
     ap = argparse.ArgumentParser(prog="aera-gateway install " + svc.key)
     svc.options(ap)
@@ -1328,6 +1368,22 @@ def main(argv=None, pi=None):
             return 0
         if cmd not in ("install", "update", "remove", "set-key"):
             raise Usage("%s: the commands are install, update, status, remove and set-key" % cmd)
+        if cmd == "install" and rest[:1] == ["all"]:
+            ap = argparse.ArgumentParser(prog="aera-gateway install all",
+                                         description="mail, dav, ftp, web and claude, for one Atari")
+            ap.add_argument("--allow", action="append", metavar="ATARI_IP",
+                            help="the Atari that may use them (more: IP1,IP2); claude's --atari too")
+            ap.add_argument("--mail", nargs="+", metavar="SERVER",
+                            help="IMAP_SERVER SMTP_SERVER[:587] [POP3_SERVER]: without them, mail is left out")
+            ap.add_argument("--browser", action="store_true", help="web with the Pi's browser (a Pi with 2 GB)")
+            ap.add_argument("--from", dest="source", metavar="DIR", help="ClaudeST's bridge from this copy")
+            o = ap.parse_args(rest[1:])
+            if o.mail and len(o.mail) not in (2, 3):
+                raise Usage("--mail IMAP_SERVER SMTP_SERVER[:587] [POP3_SERVER]")
+            if not pi.is_root():
+                raise Failed("Please run with sudo.")
+            install_all(pi, o)
+            return 0
         if cmd == "update":
             ap = argparse.ArgumentParser(prog="aera-gateway update")
             ap.add_argument("--from", dest="source", metavar="DIR", help="ClaudeST's bridge from this copy")
