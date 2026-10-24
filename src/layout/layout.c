@@ -206,6 +206,11 @@ typedef struct {
 	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
 	unsigned long polls;		/* boxes made and laid out (doc_poll) */
+	struct {
+		const ec_family *f;
+		int fam;
+	} fams[8];			/* font_of's family for a list of names, as found */
+	int nfams;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
@@ -533,10 +538,11 @@ static int32_t font_px(L *l, const ec_style *s)
 	return px < 6 ? 6 : px;
 }
 
-static ew_font *font_of(L *l, const ec_style *s)
+/* the face's family for a list of names: the first EWeb knows the kind
+   of, else the generic family */
+static int family_of(const ec_family *f)
 {
-	int fam = -1, sty = 0, i;
-	const ec_family *f = s->k[EP_FONT_FAMILY] == EK_PTR ? s->v[EP_FONT_FAMILY].p : NULL;
+	int fam = -1, i;
 
 	if (f != NULL) {
 		for (i = 0; i < f->n && fam < 0; i++) {
@@ -568,6 +574,26 @@ static ew_font *font_of(L *l, const ec_style *s)
 	}
 	if (fam < 0)
 		fam = f == NULL ? FF_SERIF : FF_SANS;
+	return fam;
+}
+
+static ew_font *font_of(L *l, const ec_style *s)
+{
+	int fam, sty = 0, i;
+	const ec_family *f = s->k[EP_FONT_FAMILY] == EK_PTR ? s->v[EP_FONT_FAMILY].p : NULL;
+
+	/* (a page has a few lists of names, each asked for at every run of
+	   text: each looked through once a layout) */
+	for (i = 0; i < l->nfams && i < 8 && l->fams[i].f != f; i++)
+		;
+	if (i < l->nfams && i < 8) {
+		fam = l->fams[i].fam;
+	} else {
+		fam = family_of(f);
+		l->fams[l->nfams % 8].f = f;
+		l->fams[l->nfams % 8].fam = fam;
+		l->nfams++;
+	}
 	if (s->k[EP_FONT_WEIGHT] == EK_INT && s->v[EP_FONT_WEIGHT].i >= 600)
 		sty |= FS_BOLD;
 	if (kw(s, EP_FONT_STYLE) == KW_ITALIC || kw(s, EP_FONT_STYLE) == KW_OBLIQUE)

@@ -121,7 +121,7 @@ done:
 
 static int load(ew_font *f)
 {
-	int i = (int) (f - faces);
+	int i = (int) (f - faces), k;
 	uint8_t *packed;
 	SBUF out;
 	if (f->data || f->failed)
@@ -145,8 +145,16 @@ static int load(ew_font *f)
 	if (f->data) {
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
+		for (k = 0; k < 96; k++)
+			f->adv[k] = f->data[4 + 10 * (ascii[k] >= 0 ? ascii[k] : qmark)];
 	}
 	return f->data != NULL;
+}
+
+/* the face's glyphs there to use (read again if font_drop gave them back) */
+static int ready(ew_font *f)
+{
+	return f != NULL && (f->data != NULL || (!f->failed && load(f)));
 }
 
 ew_font *font_get(int family, int style, int px)
@@ -206,21 +214,22 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 	const uint8_t *m;
 	uint32_t off;
 
-	memset(g, 0, sizeof *g);
-	if (f != NULL && f->data == NULL && !f->failed)
-		load(f);		/* given back by font_drop */
-	if (f == NULL || f->data == NULL)
+	if (!ready(f)) {
+		memset(g, 0, sizeof *g);
 		return;
+	}
 	i = index_of(cp);
 	if (i < 0) {
-		if (cp == 0xA0 || cp == 0x2007 || cp == 0x202F || (cp >= 0x2000 && cp <= 0x200A))
+		if (cp == 0xA0 || cp == 0x2007 || cp == 0x202F || (cp >= 0x2000 && cp <= 0x200A)) {
 			i = index_of(' ');
-		else if (cp == 0x200B || cp == 0x200C || cp == 0x200D || cp == 0xAD || cp == 0xFEFF ||
-			 (cp >= 0x200E && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) ||
-			 (cp >= 0x2066 && cp <= 0x2069) || (cp >= 0x591 && cp <= 0x5C7))
+		} else if (cp == 0x200B || cp == 0x200C || cp == 0x200D || cp == 0xAD || cp == 0xFEFF ||
+			   (cp >= 0x200E && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) ||
+			   (cp >= 0x2066 && cp <= 0x2069) || (cp >= 0x591 && cp <= 0x5C7)) {
+			memset(g, 0, sizeof *g);
 			return;		/* nothing to draw: format characters, Hebrew points */
-		else
+		} else {
 			i = qmark;
+		}
 	}
 	m = f->data + 4 + 10 * i;
 	g->adv = m[0];
@@ -235,6 +244,8 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 int font_advance(ew_font *f, uint32_t cp)
 {
 	GLYPH g;
+	if (cp - 0x20 < 96)
+		return ready(f) ? f->adv[cp - 0x20] : 0;
 	font_glyph(f, cp, &g);
 	return g.adv;
 }
@@ -271,7 +282,16 @@ long font_width(ew_font *f, const char *s, size_t n)
 {
 	const char *e = s + n;
 	long w = 0;
-	while (s < e)
-		w += font_advance(f, utf8_next(&s, e));
+	if (!ready(f))
+		return 0;
+	while (s < e) {
+		unsigned c = (unsigned char) *s - 0x20;
+		if (c < 96) {
+			w += f->adv[c];		/* ASCII: its advance at hand */
+			s++;
+		} else {
+			w += font_advance(f, utf8_next(&s, e));
+		}
+	}
 	return w;
 }

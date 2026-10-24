@@ -663,7 +663,11 @@ releases.
   40 ms to 365 ms on the emulated 32 MHz Falcon, the first time only; the home page uses four, those
   most pages use). `font_get` keeps the face it picked for each family, style and size (24 Oct
   2026): it went through all 144 for every run of text, a tenth of the home page's layout (1.99 M
-  68030 instructions to 1.80 M). Hebrew vowel points take no room and are not drawn yet.
+  68030 instructions to 1.80 M). Text is measured from each face's advances of ASCII, kept beside
+  it (`font_width` and `font_advance` went through `font_glyph` and a `memset` for every
+  character), and the layout looks a page's lists of font names through once (`font_of` matched up
+  to 26 names in each, at every run of text): a 127 KB page of the page set laid out in 12.0 M
+  instructions, from 13.9 M, half of it unpacking the eight faces it uses, the first time. Hebrew vowel points take no room and are not drawn yet.
 - **The document** (`src/doc`): the HTML parser's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
   CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
