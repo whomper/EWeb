@@ -204,13 +204,29 @@ try:
             print("NOTE  %s couldn't open its screen (v_opnvwk 0): the accessories hold the memory; "
                   "its own alert, see 0-desktop.png" % prg)
     if prg and prg.upper() == "EMAIL":
-        # a first start's welcome (EMail's "Let's set up your mail account")
-        # waits for OK, then the account dialog: Esc declines (only EMail's:
-        # in EFTP, Return opens the drive row A:, and TOS asks for a disk)
-        xdo("key", "Return")
-        time.sleep(3)
-        xdo("key", "Escape")
-        time.sleep(3)
+        # a first start's welcome (EMail's "Let's set up your mail account"),
+        # then the account dialog: Esc closes each (only EMail's: in EFTP,
+        # Return opens the drive row A:, and TOS asks for a disk). On a slow
+        # machine (a 4 MB Falcon with NVDI) each came later than the keys
+        # were sent, and a Return on the dialog would save an empty account:
+        # Esc once the screen is still, again until two Escs change nothing
+        def still(name, most=10):
+            prev = shot(name)
+            for _ in range(most):
+                time.sleep(2)
+                cur = shot(name + "-next")
+                if differs(prev, cur) == 0:
+                    return cur
+                prev = shutil.copy(cur, os.path.join(shots, name + ".png"))
+            return prev
+        idle = 0
+        for k in range(6):
+            before = still("0a-%d" % k)
+            xdo("key", "Escape")
+            time.sleep(3)
+            idle = idle + 1 if differs(before, still("0a-%d-esc" % k)) < 500 else 0
+            if idle == 2:
+                break
         desk = shot("0b-%s-ready" % prg.lower())
     click(30, 8)                                     # the Desk menu (the first title's middle:
     time.sleep(1)                                    # EWeb's "EWeb" starts past x 18)
