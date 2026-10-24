@@ -1,0 +1,97 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- home.html - EWeb's home page (about:home, the start page), in AERA's
+     look: black, AERA's text colour, light copper for the one accent of
+     each part (its // label), copper for structure. tools/mkhome.py puts
+     the pictures in (@NAME@) and EWeb fills in the parts in capitals
+     (src/browse/browse.c, home_page). It is laid out on every screen
+     EWeb runs on, 320 pixels wide upwards, and drawn in 16 colours and in
+     black and white too: no part of it needs a colour to be read. -->
+<!DOCTYPE html>
+<html lang=en-GB>
+<head>
+<meta charset=utf-8>
+<title>EWeb</title>
+<style>
+body{margin:0;background:#000;color:#e5e5e5;font:16px/1.35 sans-serif}
+a{color:#e5e5e5;text-decoration:none}
+a:visited{color:#d0d0d0}
+.page{max-width:620px;margin:0 auto;padding:22px 18px 14px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 16px}
+.kick,.lab,.who{font-family:monospace;font-size:13px;letter-spacing:2px;text-transform:uppercase}
+.kick{color:#e2a76f}
+.what{color:#a3a3a3;font-size:13px}
+.ruler{width:200px;height:5px;margin:12px auto 0;background:url(@RULER@) repeat-x}
+.hello{margin:14px 0 0;text-align:center}
+.hello span{color:#a3a3a3;font-size:13px}
+form{margin:10px 0 18px;display:flex;justify-content:center;gap:4px}
+form input{color:#000;font-size:13px}
+form input[type=text]{background:#fff}
+form input[type=submit]{background:#bbb}
+.row{display:flex;margin:0 0 7px}
+.lab{flex:0 0 118px;color:#e2a76f;padding-top:2px}
+.links{flex:1 1 0;min-width:0}
+.d{color:#777}
+.tip{margin:18px 0 0;color:#a3a3a3;font-size:13px;text-align:center}
+.tip b{color:#e5e5e5;font-weight:normal}
+.foot{margin:18px 0 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 14px;color:#a3a3a3;font-size:13px}
+.who{color:#a3a3a3}
+.foot a{color:#a3a3a3;text-decoration:underline}
+@media (max-width:420px){.page{padding:10px 8px}.globe{width:48px;height:48px}.row{display:block;margin-bottom:9px}
+.lab{display:block;padding:0}}
+</style>
+</head>
+<body>
+<div class=page>
+
+<div class=top>
+<img class=globe src="@GLOBE@" width=@GLOBE_W@ height=@GLOBE_H@ alt="">
+<div>
+<div class=kick>// AERA for Atari</div>
+<img src="@WORD@" width=@WORD_W@ height=@WORD_H@ alt="EWeb" style="display:block;margin:5px 0 3px">
+<div class=what>Web browser for the Atari Falcon &middot; <!--VERSION--></div>
+</div>
+</div>
+<div class=ruler></div>
+
+<!--HELLO-->
+<!--SEARCH-->
+<!--YOURS-->
+
+<div class=row><div class=lab>// Search</div><div class=links>
+<a href="http://frogfind.com/">FrogFind</a><span class=d> &middot; </span><a href="https://lite.duckduckgo.com/lite/">DuckDuckGo Lite</a><span class=d> &middot; </span><a href="https://wiby.me/">Wiby</a>
+</div></div>
+
+<div class=row><div class=lab>// News</div><div class=links>
+<a href="http://68k.news/">68k.news</a><span class=d> &middot; </span><a href="https://text.npr.org/">NPR Text</a><span class=d> &middot; </span><a href="https://lite.cnn.com/">CNN Lite</a><span class=d> &middot; </span><a href="https://news.ycombinator.com/">Hacker News</a>
+</div></div>
+
+<div class=row><div class=lab>// Read</div><div class=links>
+<a href="https://en.m.wikipedia.org/wiki/Main_Page">Wikipedia</a><span class=d> &middot; </span><a href="https://www.gutenberg.org/">Project Gutenberg</a><span class=d> &middot; </span><a href="https://xkcd.com/">xkcd</a><span class=d> &middot; </span><a href="http://textfiles.com/">textfiles.com</a>
+</div></div>
+
+<div class=row><div class=lab>// Atari</div><div class=links>
+<a href="https://www.atari-forum.com/">Atari-Forum</a><span class=d> &middot; </span><a href="https://dhs.nu/">DHS</a><span class=d> &middot; </span><a href="https://demozoo.org/">Demozoo</a><span class=d> &middot; </span><a href="https://www.pouet.net/">Pou&euml;t</a><span class=d> &middot; </span><a href="https://www.atarimania.com/">Atarimania</a>
+</div></div>
+
+<div class=row><div class=lab>// Early web</div><div class=links>
+<a href="http://info.cern.ch/hypertext/WWW/TheProject.html">The first web page</a><span class=d> &middot; </span><a href="https://www.spacejam.com/1996/">Space Jam, 1996</a><span class=d> &middot; </span><a href="https://wiby.me/surprise/">Surprise me</a>
+</div></div>
+
+<div class=row><div class=lab>// AERA</div><div class=links>
+<a href="https://yaary.music/">yaary.music</a><span class=d> &middot; </span><a href="https://yaary.music/software/">AERA for Atari</a>
+</div></div>
+
+<!--TIP-->
+
+<div class=foot>
+<img src="@AERA@" width=@AERA_W@ height=@AERA_H@ alt="AERA">
+<span class=who>// Erez Yaary</span>
+<span>EWeb <!--VERSION-->, free software (GPL)</span>
+<a href="about:bookmarks">Bookmarks</a>
+<a href="about:history">History</a>
+</div>
+
+</div>
+</body>
+</html>

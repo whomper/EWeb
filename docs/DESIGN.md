@@ -659,9 +659,11 @@ releases.
   without smoothing, with its hinted advances, so the spacing matches the pixels; letters a face
   lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb opens the file once at start and keeps it
   open: its directory is read then, and each face the first time a page uses it, unpacked by the
-  HTTP client's inflate (the start page's five faces: its layout 40 ms -> 365 ms on the emulated
-  32 MHz Falcon, the first time only). Hebrew vowel points take no room and are not
-  drawn yet.
+  HTTP client's inflate (the first page's faces: the old start page's five took its layout from
+  40 ms to 365 ms on the emulated 32 MHz Falcon, the first time only; the home page uses four, those
+  most pages use). `font_get` keeps the face it picked for each family, style and size (24 Oct
+  2026): it went through all 144 for every run of text, a tenth of the home page's layout (1.99 M
+  68030 instructions to 1.80 M). Hebrew vowel points take no room and are not drawn yet.
 - **The document** (`src/doc`): the HTML parser's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
   CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
@@ -736,16 +738,38 @@ releases.
 - **Browsing** (`src/browse`): what an address typed means (a URL, a file, or words to search for),
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
-  of history with where each was scrolled, a page's anchors, and EWeb's own pages (the start page;
-  "can't open", with the reason). The pages nearest in the history stay laid out (Erez's request,
+  of history with where each was scrolled, a page's anchors, and EWeb's own pages (the home page,
+  below; "can't open", with the reason). The pages nearest in the history stay laid out (Erez's request,
   19 Oct 2026): Back and Forward show them at once, laid out again only for another window width,
   within a quarter of the free TT RAM up to 24 MB (else an eighth of the free ST RAM up to 2 MB),
   a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
   about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
+- **The home page** (`about:start`, Erez's request of 24 Oct 2026: "nice visuals, the EWeb logo
+  and great links out of the box"; simpler the same day, a row a group, no boxes): AERA's look,
+  black with light copper labels, the EWeb globe (the family's drawing) and wordmark (Oxanium), the
+  AERA logo at the foot. `src/browse/home.html` is made into C strings at build time by
+  `tools/mkhome.py`, its pictures put in as `data:` addresses (2.4 KB of them), and EWeb fills in
+  the greeting and the date by the clock, a search box (`SEARCH=`: the words go through
+  `about:search`), the five pages opened last and the first six bookmarks, and a tip a day. Its
+  links: search (FrogFind, DuckDuckGo Lite, Wiby), news in text (68k.news, NPR, CNN Lite, Hacker
+  News), reading, Atari (Atari-Forum, DHS, Demozoo, Pouët, Atarimania), the early web, and AERA.
+  It reads HISTORY.TXT at start, which the first page from the network read before. On the
+  emulated Falcon in 256 colours it is shown in 2.0 s (the old start page 1.6 s), most of it the
+  first page's work that any page pays: the UA sheet, the fonts; 4.1 M 68030 instructions to style,
+  lay out and draw.
 - **The window** (`EWEB.PRG`, `ui/`, after EFTP's): a toolbar of one row (your layout, 21 Oct 2026,
-  a size larger the same day: the buttons as pictures alone at the left, 30 x 25 (`tools/mktbicons.py`
-  draws them in a 24 x 20 square), Back, Forward, Reload, Home, Search and Stop, each saying its
-  name on the status bar under the mouse; the address beside them, typed into in place; the
+  a size larger the same day: the buttons as pictures alone at the left, 30 x 25, Back, Forward,
+  Reload, Home, Search and Stop, each saying its name on the status bar under the mouse; in the
+  platinum look since 24 Oct 2026, your choice of three drawn: graphite shading, light at the top
+  with a dark edge, Stop alone red; under the mouse an icon wakes, lit in AERA's copper (your idea,
+  the same day), and one that can't be used is greyed. `tools/mktbicons.py` draws them 16 times
+  bigger and reduces them, in three editions: 256 colours and true colour, shaded (each colour the
+  screen's nearest when first drawn, so EWeb's palette and TOS's both show copper); the 16 system
+  colours, the shading dithered 2 x 2 and lit in gold; black and white, a white fill with a black
+  edge, greyed dotted and lit inverted, as GEM shows a chosen object. Each icon is a picture with
+  holes, made once into the screen's own form with its mask (ST RAM: 29 KB for the 18 in 256
+  colours, 58 KB in true colour, 14 KB in 16 colours, 4 KB in black and white) and drawn as two
+  blits, the mask clearing its pixels and the picture ORed in, the same in every mode; the address beside them, typed into in place; the
   throbber, below, at the right end), the page under it with the window's slider, a status bar at the
   foot (your choice of 21 Oct 2026, design C of four drawn: a link's address under the mouse, what a
   load is doing, how a secure page came; and along its foot a line two or three pixels high that

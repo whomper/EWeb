@@ -265,12 +265,13 @@ picture:
 
 - **Back** and **Forward**
 - **Reload** the page shown
-- **Home**, the start page
+- **Home**, the home page
 - **Search**, the search engine's own page (Settings > General)
 - **Stop** a page while it loads
 
-They lie flat until the mouse is over one, which then stands out in a
-frame and says its name on the status bar; held down, it sinks, and works
+They lie flat until the mouse is over one, which then wakes: it lights
+up, stands out in a frame and says its name on the status bar (one that
+can't be used is greyed); held down, it sinks, and works
 when you let go over it. Beside them is the address of the page shown,
 which you can type into.
 
@@ -319,8 +320,16 @@ The last few stay in memory as they were laid out (in TT RAM when there
 is some), so Back and Forward show them at once, without fetching or
 reading them again; **^R** fetches the page again.
 
-**Home** opens your home page: EWeb's own start page, or the page you
-chose with Options > Use this page as home.
+**Home** opens your home page: EWeb's own, or the page you chose with
+Options > Use this page as home.
+
+## The home page
+
+EWeb's own home page greets you with the date, and has a search box (its
+words go to your search engine, Settings > General), the pages you opened
+last and your first bookmarks, a row of sites for each kind (search,
+news, reading, Atari, the early web, AERA) that read well on an Atari,
+and a tip. Bookmarks and History at its foot list all of them.
 
 ## Text size
 

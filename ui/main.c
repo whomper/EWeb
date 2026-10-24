@@ -1480,6 +1480,7 @@ void command(int cmd)
 				/* the page drawn again in the colours now on the
 				   screen, its pictures dithered to them */
 				scr_palette();
+				win_colours();
 				win_redraw(NULL);
 			}
 			falcon_dsp_init();

@@ -124,68 +124,62 @@ static short paper(void)
 	return planes >= 4 ? grey_pen() : 0;
 }
 
-/* the pen a picture's layer takes on this screen; -1: not drawn */
-static short layer_pen(const TB_LAYER *l)
+/* the icons' edition for this screen, as the throbber's */
+static const TB_ED *tb_ed;
+static char *tb_dev;			/* its pictures with their masks in the screen's own form (ST RAM), each made when first shown */
+static unsigned tb_made;		/* which of them are made, a bit each */
+static int tb_nodev;			/* no memory for them: each made as it is drawn */
+
+static const TB_ED *icons(void)
 {
-	if (planes == 1)
-		return l->mono;
-	if (planes == 2 && l->pen > 3)		/* 4 colours: white, black, red, green */
-		return l->pen == 6 ? 0 : 1;
-	return l->pen;
+#ifndef EW_ST
+	if (planes >= 8)
+		return tall ? &tb_256_tall : &tb_256_short;
+	if (planes == 4)
+		return tall ? &tb_16_tall : &tb_16_short;
+#else
+	if (planes == 4 && !tall)
+		return &tb_16_short;
+#endif
+	return tall ? &tb_mono_tall : &tb_mono_short;
 }
 
-/* a button's picture at x, y, within clip: each layer a mask copied in its
-   pen (from ST RAM, where the blitter reaches); one that can't be used,
-   only its outline, grey (on a monochrome screen every other dot) */
-static void draw_icon(short x, short y, int i, int on, const GRECT *clip)
+/* a button's picture at x, y, within clip, over the button (its holes
+   show it): its icon as it is (TB_ON), greyed when it can't be used, or
+   lit under the mouse (it wakes) */
+enum { TB_ON, TB_GREYED, TB_LIT };
+static void draw_icon(short x, short y, int i, int how, const GRECT *clip)
 {
-	const TB_ICON *ic = tall ? &tb_tall[i] : &tb_short[i];
-	short rows = tall ? TB_TALL : TB_SHORT, k;
-	GRECT r;
-	r.x = x;
-	r.y = y;
-	r.w = TB_W;
-	r.h = rows;
+	const TB_ED *e = tb_ed != NULL ? tb_ed : (tb_ed = icons());
+	int k = how * NBUT + i;
+	long n = (long) TB_W * e->h, size = 2 * scr_dev_size(TB_W, e->h);
+	GRECT at, r;
+	SBUF b;
+	char *f;
+	at.x = x;
+	at.y = y;
+	at.w = TB_W;
+	at.h = e->h;
+	r = at;
 	if (!rect_and(&r, clip))
 		return;
-	for (k = 0; k < ic->n; k++) {
-		const TB_LAYER *l = &ic->layer[k];
-		unsigned short *buf = st_ram(2L * 2 * rows);
-		short pen = layer_pen(l), colours[2], pxy[8], j;
-		MFDB src, dst;
-		if (!on) {
-			if (l->pen != 1)
-				continue;	/* the outline alone */
-			pen = planes >= 4 ? 9 : 1;
-		}
-		if (pen < 0 || buf == NULL)
-			continue;
-		for (j = 0; j < 2 * rows; j++) {
-			unsigned short v = l->bits[j];
-			if (!on && planes < 4)
-				v &= (j >> 1) & 1 ? 0xAAAA : 0x5555;
-			buf[j] = v;
-		}
-		src.fd_addr = buf;
-		src.fd_w = 32;
-		src.fd_h = rows;
-		src.fd_wdwidth = 2;
-		src.fd_stand = 0;
-		src.fd_nplanes = 1;
-		src.fd_r1 = src.fd_r2 = src.fd_r3 = 0;
-		dst.fd_addr = NULL;
-		pxy[0] = r.x - x;
-		pxy[1] = r.y - y;
-		pxy[2] = pxy[0] + r.w - 1;
-		pxy[3] = pxy[1] + r.h - 1;
-		pxy[4] = r.x;
-		pxy[5] = r.y;
-		pxy[6] = r.x + r.w - 1;
-		pxy[7] = r.y + r.h - 1;
-		colours[0] = pen;
-		colours[1] = 0;
-		vrt_cpyfm(vdi_h, MD_TRANS, pxy, &src, &dst, colours);
+	if (tb_dev == NULL && !tb_nodev && (tb_dev = scr_dev_alloc(size * TB_PICS)) == NULL)
+		tb_nodev = 1;
+	f = tb_dev != NULL ? tb_dev + size * k : NULL;
+	if (f != NULL && (tb_made & (1u << k))) {
+		scr_blit_holes(f, TB_W, e->h, &at, &r);
+		return;
 	}
+	sb_init(&b);
+	if (inflate_raw(e->data + e->off[k], e->off[k + 1] - e->off[k], &b, n) == 1 && b.len == n) {
+		if (f != NULL && scr_holes_dev((const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h, f)) {
+			tb_made |= 1u << k;
+			scr_blit_holes(f, TB_W, e->h, &at, &r);
+		} else {
+			scr_holes((const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h, &at, &r);
+		}
+	}
+	sb_free(&b);
 }
 
 /* a button's frame: raised under the mouse, sunk while held down */
@@ -226,7 +220,7 @@ static void draw_button(int i, const GRECT *clip)
 	fill(&r, paper());
 	if (down || (i == hot && on))
 		button_frame(&r, down);
-	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, on, clip);
+	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, !on ? TB_GREYED : down || i == hot ? TB_LIT : TB_ON, clip);
 }
 
 static short addr_cols(void)
@@ -2152,6 +2146,16 @@ void win_close(void)
 	scr_dev_free(thr_dev);		/* the throbber's frames */
 	thr_dev = NULL;
 	thr_made = 0;
+	scr_dev_free(tb_dev);		/* the toolbar's pictures */
+	tb_dev = NULL;
+	tb_made = 0;
+}
+
+/* (the pictures were made in the screen's pens of the time) */
+void win_colours(void)
+{
+	thr_made = 0;
+	tb_made = 0;
 }
 
 void win_message(const short *msg)

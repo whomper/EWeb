@@ -21,6 +21,8 @@ static uint16_t *codes;
 static ew_font *faces;
 static uint32_t *foff, *fstored, *fsize;	/* where a face is, its packed and unpacked sizes */
 static int16_t ascii[96];		/* code index of 0x20..0x7f, -1 if none */
+static ew_font *picked[4][4][64];	/* font_get's face for a family, style and size (to 63
+					   px), kept as it is asked for: a page asks often */
 static int qmark;			/* the index of '?' */
 
 static unsigned be16(const uint8_t *p) { return (unsigned) p[0] << 8 | p[1]; }
@@ -42,6 +44,7 @@ void font_free(void)
 	faces = NULL;
 	codes = NULL;
 	foff = fstored = fsize = NULL;
+	memset(picked, 0, sizeof picked);
 	nfaces = ncodes = 0;
 	if (fh >= 0)
 		pf_close(fh);
@@ -148,22 +151,30 @@ static int load(ew_font *f)
 
 ew_font *font_get(int family, int style, int px)
 {
-	ew_font *best = NULL;
+	ew_font *best = NULL, **pk = NULL;
 	int i, bd = 1 << 30;
 
-	for (i = 0; i < nfaces; i++) {
-		int d;
-		if (faces[i].family != family || faces[i].style != style)
-			continue;
-		/* the nearest size; between two, the smaller (text fits) */
-		d = faces[i].px > px ? 2 * (faces[i].px - px) + 1 : 2 * (px - faces[i].px);
-		if (d < bd) {
-			bd = d;
-			best = &faces[i];
+	if (family >= 0 && family < 4 && style >= 0 && style < 4 && px >= 0 && px < 64)
+		pk = &picked[family][style][px];
+	if (pk != NULL && *pk != NULL) {
+		best = *pk;
+	} else {
+		for (i = 0; i < nfaces; i++) {
+			int d;
+			if (faces[i].family != family || faces[i].style != style)
+				continue;
+			/* the nearest size; between two, the smaller (text fits) */
+			d = faces[i].px > px ? 2 * (faces[i].px - px) + 1 : 2 * (px - faces[i].px);
+			if (d < bd) {
+				bd = d;
+				best = &faces[i];
+			}
 		}
+		if (best == NULL && nfaces > 0)
+			best = &faces[0];
+		if (pk != NULL)
+			*pk = best;
 	}
-	if (best == NULL && nfaces > 0)
-		best = &faces[0];
 	if (best != NULL && !best->data && !best->failed && load(best) == 0) {
 		/* a face it can't read: its metrics from its size, no glyphs */
 		best->ascent = (uint8_t) (best->px * 4 / 5 + 1);

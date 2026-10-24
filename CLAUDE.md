@@ -121,7 +121,8 @@ hub stay complete, with the evidence.
   `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
   Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
-  `win.c` with the throbber (`ui/throbber.h` from `tools/mkthrobber.py`), the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
+  `win.c` with the throbber (`ui/throbber.h` from `tools/mkthrobber.py`) and the icons (`ui/tbicons.h`
+  from `tools/mktbicons.py`: each as it is, greyed and lit under the mouse), the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
   (addresses, loading, history, EWeb's own pages), `src/doc` (EWeb's HTML parser `html.c`, the
   document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, floats, tables, flexbox, grid, a display list) and `src/gfx` (`EWEB.FNT`,
@@ -160,7 +161,12 @@ hub stay complete, with the evidence.
   `make hatarigui`. **Esc while a page is made**: the parser, the CSS engine and the layout ask
   `doc_poll` / `ec_poll` now and then, set by `src/browse`'s `build` to GEM's turn and Esc; after
   changing them, `make test` (`tests/layout/stop.py`, ewrender `-I STAGE:N`) and `make hatarigui`
-  (its deep group). **Saving** (File > Save page as, a link's file streamed to
+  (its deep group). **The home page** is `src/browse/home.html` (AERA's look; `tools/mkhome.py`
+  puts its pictures in and makes `build/gen/home.h`, and writes the page filled in for ewrender
+  and drawbench; the wordmark and the AERA logo in `src/browse/home/` are made once from AERA's
+  brand files with `--assets`), filled in by `home_page` in `src/browse/browse.c`: after changing
+  it, look at it with ewrender in 256 and 16 colours and 320 wide, and `make hatarigui` (browse:
+  home). **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages

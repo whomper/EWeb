@@ -104,6 +104,13 @@ void *scr_dev_alloc(long n);
 void scr_dev_free(void *p);
 int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, void *dev);
 void scr_blit_dev(void *dev, short w, short h, const GRECT *at, const GRECT *part);
+/* a picture with holes (its colour 0: what is under it shows), drawn the
+   same ways: scr_holes, or made once with its mask (dev: twice
+   scr_dev_size) and drawn from there */
+void scr_holes(const unsigned char *pix, const unsigned long *col, short n, short w, short h, const GRECT *at,
+	       const GRECT *part);
+int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, short w, short h, void *dev);
+void scr_blit_holes(void *dev, short w, short h, const GRECT *at, const GRECT *part);
 
 /* the window (win.c) */
 extern short win_h;			/* AES handle, -1 when closed */
@@ -129,6 +136,7 @@ void win_status_again(void);		/* what the page says, again if the bar says it (t
 void win_progress(int phase, int at);
 int win_progress_shown(void);		/* it is shown (and gone a moment after it filled) */
 void win_toolbar(void);			/* the buttons again (loading started or ended) */
+void win_colours(void);			/* the screen's colours changed: the toolbar's pictures made again */
 void win_throb(int busy);		/* the throbber's next frame while busy (each 110 ms), else at rest */
 int  win_throb_frames(void);		/* frames drawn since the last call, for the log */
 int  win_mouse(short mx, short my, short button, short clicks, short kstate);	/* 1: ours */

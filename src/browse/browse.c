@@ -338,6 +338,31 @@ static int same_but_fragment(const char *a, const char *b)
 	return na == nb && memcmp(a, b, na) == 0;
 }
 
+/* the search engine's address for these words */
+static void search_url(const browser *b, const char *words, char *out, int size)
+{
+	char q[1024];
+	const char *pc = strstr(b->search, "%s");
+	int o = 0, i;
+	for (i = 0; words[i] && o < (int) sizeof q - 4; i++) {
+		unsigned char c = (unsigned char) words[i];
+		if (c == ' ') {
+			q[o++] = '+';
+		} else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+			   c == '-' || c == '_' || c == '.' || c == '~') {
+			q[o++] = (char) c;
+		} else {
+			sprintf(q + o, "%%%02X", c);
+			o += 3;
+		}
+	}
+	q[o] = 0;
+	if (pc != NULL)
+		snprintf(out, size, "%.*s%s%s", (int) (pc - b->search), b->search, q, pc + 2);
+	else
+		snprintf(out, size, "%s%s", b->search, q);
+}
+
 /* what was typed, as an address */
 static void typed_url(const browser *b, const char *t, char *out, int size)
 {
@@ -371,26 +396,7 @@ static void typed_url(const browser *b, const char *t, char *out, int size)
 	if (b->search != NULL && b->search[0] &&
 	    (strchr(buf, ' ') != NULL || (strchr(buf, '.') == NULL && strncmp(buf, "localhost", 9) != 0 &&
 					   strchr(buf, ':') == NULL))) {
-		char q[1024];
-		const char *pc = strstr(b->search, "%s");
-		int o = 0;
-		for (i = 0; buf[i] && o < (int) sizeof q - 4; i++) {
-			unsigned char c = (unsigned char) buf[i];
-			if (c == ' ') {
-				q[o++] = '+';
-			} else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-				   c == '-' || c == '_' || c == '.' || c == '~') {
-				q[o++] = (char) c;
-			} else {
-				sprintf(q + o, "%%%02X", c);
-				o += 3;
-			}
-		}
-		q[o] = 0;
-		if (pc != NULL)
-			snprintf(out, size, "%.*s%s%s", (int) (pc - b->search), b->search, q, pc + 2);
-		else
-			snprintf(out, size, "%s%s", b->search, q);
+		search_url(b, buf, out, size);
 		return;
 	}
 	snprintf(out, size, "http://%s", buf);
@@ -415,25 +421,6 @@ static const char own_style[] =
 	"<style>body{font-family:sans-serif;margin:24px 32px;color:#222;background:#fff}"
 	"h1{font-size:22px;margin:0 0 12px}p{margin:8px 0}.addr{color:#555}"
 	"ul{margin:8px 0}li{margin:3px 0}.small{font-size:13px;color:#555}</style>";
-
-static void start_page(SBUF *s)
-{
-	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>Start</title>");
-	sb_adds(s, own_style);
-	sb_adds(s, "</head><body><h1>EWeb ");
-	sb_adds(s, EWEB_VERSION);
-	sb_adds(s, "</h1><p>Type an address above and press Return, or words to search for.</p>"
-		   "<p>Pages that read well on an Atari:</p><ul>"
-		   "<li><a href=\"http://frogfind.com/\">FrogFind</a>: a search engine for vintage computers</li>"
-		   "<li><a href=\"http://68k.news/\">68k.news</a>: the news, as plain pages</li>"
-		   "<li><a href=\"http://info.cern.ch/hypertext/WWW/TheProject.html\">The first web page</a>, "
-		   "CERN, 1991</li>"
-		   "<li><a href=\"https://en.wikipedia.org/wiki/Atari_Falcon\">Atari Falcon</a> on Wikipedia</li>"
-		   "</ul><p class=small>EWeb shows text, links, lists, tables, pictures (JPEG, PNG, GIF) "
-		   "and forms (Tab goes from field to field, Return sends). Esc stops a page that is loading, "
-		   "and its pictures; Undo goes back.</p>"
-		   "</body></html>");
-}
 
 static void host_of(const char *url, char *out, int size);
 
@@ -497,10 +484,11 @@ static void hg_day(long long t, int *y, int *m, int *d)
 	*y = (int) ((long long) yoe + era * 400 + (*m <= 2));
 }
 
+static const char *const mon[] = { "January", "February", "March", "April", "May", "June", "July",
+				   "August", "September", "October", "November", "December" };
+
 static void history_page(SBUF *s, int pg)
 {
-	static const char *const mon[] = { "January", "February", "March", "April", "May", "June", "July",
-					   "August", "September", "October", "November", "December" };
 	long long off = tls_tz_minutes * 60LL, today = (ck_now() + off) / 86400, day = -1;
 	int n = hg_count(), pages = (n + HG_PAGE - 1) / HG_PAGE, i, k;
 	char line[160];
@@ -563,6 +551,121 @@ static void history_page(SBUF *s, int pg)
 	}
 	sb_adds(s, "<p class=small>They are kept in HISTORY.TXT, next to EWEB.PRG, the newest 1000; "
 		   "Options &gt; Forget history forgets them.</p></body></html>");
+}
+
+/* ---------------------------------------------------------------- the home page */
+
+#include "home.h"		/* (build/gen, tools/mkhome.py from home.html) */
+
+/* the tip of the day */
+static const char *const tips[] = {
+	"<b>^F</b> finds words on the page, and <b>^G</b> the next of them.",
+	"<b>Esc</b> stops a page that is loading, even while it is being laid out.",
+	"Drag across text to choose it, and <b>^C</b> copies it. A double click chooses a word.",
+	"Words typed in the address are searched for.",
+	"<b>^D</b> adds the page shown to the bookmarks, and <b>^B</b> shows them.",
+	"<b>Undo</b> goes back a page, and <b>Shift-Undo</b> forward again.",
+	"<b>Alternate</b>-click a link to save its file on the disk.",
+	"<b>^+</b> and <b>^-</b> make the text larger and smaller, and <b>^0</b> puts it back.",
+	"<b>^Y</b> shows the pages you have opened, newest first.",
+	"<b>^S</b> saves the page shown, to read later without the network.",
+	"<b>Help</b> opens EWeb's guide.",
+};
+
+/* the greeting and the date by the clock (none when it isn't set) */
+static void home_hello(SBUF *s, long long t)
+{
+	static const char *const day[] = { "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday",
+					   "Wednesday" };	/* (1 January 1970 was a Thursday) */
+	char line[160];
+	int y, m, d, h = (int) ((t % 86400 + 86400) % 86400 / 3600);
+	hg_day(t, &y, &m, &d);
+	if (y < 2020)
+		return;
+	snprintf(line, sizeof line, "<p class=hello>%s <span>%s %d %s %d</span></p>",
+		 h < 5 ? "Hello." : h < 12 ? "Good morning." : h < 18 ? "Good afternoon." : "Good evening.",
+		 day[((t >= 0 ? t : t - 86399) / 86400 % 7 + 7) % 7], d, mon[m - 1], y);
+	sb_adds(s, line);
+}
+
+/* a page in a row of them: its title (else its host), cut at 32
+   characters; d: a dot before it */
+static void home_link(SBUF *s, const char *url, const char *title, int d)
+{
+	char host[128], cut[160];
+	const char *t;
+	int n = 0, i = 0;
+	host_of(url, host, sizeof host);
+	t = title[0] ? title : host[0] ? host : url;
+	/* (UTF-8: a character is its first byte and those that follow) */
+	while (t[i] && i < (int) sizeof cut - 4 && !(n == 32 && (t[i] & 0xC0) != 0x80)) {
+		if ((t[i] & 0xC0) != 0x80)
+			n++;
+		cut[i] = t[i];
+		i++;
+	}
+	cut[i] = 0;
+	if (t[i])
+		strcat(cut, "\xE2\x80\xA6");		/* ... */
+	sb_adds(s, d ? "<span class=d> &middot; </span><a href=\"" : "<a href=\"");
+	esc(s, url);
+	sb_adds(s, "\">");
+	esc(s, cut);
+	sb_adds(s, "</a>");
+}
+
+/* the pages opened last and the first bookmarks, where there are some */
+static void home_yours(SBUF *s)
+{
+	int n = hg_count(), i;
+	if (n > 0) {
+		sb_adds(s, "<div class=row><div class=lab>// Lately</div><div class=links>");
+		for (i = 0; i < n && i < 5; i++) {
+			const HG *e = hg_get(n - 1 - i);
+			home_link(s, e->url, e->title, i > 0);
+		}
+		sb_adds(s, "</div></div>");
+	}
+	if (bm_n > 0) {
+		sb_adds(s, "<div class=row><div class=lab>// Bookmarks</div><div class=links>");
+		for (i = 0; i < bm_n && i < 6; i++)
+			home_link(s, bm_list[i].url, bm_list[i].title, i > 0);
+		if (bm_n > 6)
+			sb_adds(s, "<span class=d> &middot; </span><a href=\"about:bookmarks\">All of them</a>");
+		sb_adds(s, "</div></div>");
+	}
+}
+
+/* EWeb's home page: home.html, with what EWeb knows put in */
+static void home_page(const browser *b, SBUF *s)
+{
+	long long t = ck_now() + tls_tz_minutes * 60LL;
+	size_t i;
+	for (i = 0; i < sizeof home_parts / sizeof home_parts[0]; i++) {
+		sb_adds(s, home_parts[i].text);
+		switch (home_parts[i].then) {
+		case HOME_VERSION:
+			sb_adds(s, EWEB_VERSION);
+			break;
+		case HOME_HELLO:
+			home_hello(s, t);
+			break;
+		case HOME_SEARCH:
+			/* (about:search: the words to the search engine, load_post) */
+			if (b->search != NULL && b->search[0])
+				sb_adds(s, "<form action=\"about:search\"><input type=text name=q size=32>"
+					   "<input type=submit value=Search></form>");
+			break;
+		case HOME_YOURS:
+			home_yours(s);
+			break;
+		case HOME_TIP:
+			sb_adds(s, "<p class=tip>Tip: ");
+			sb_adds(s, tips[(t >= 0 ? t / 86400 : 0) % (long long) (sizeof tips / sizeof tips[0])]);
+			sb_adds(s, "</p>");
+			break;
+		}
+	}
 }
 
 static void error_page(SBUF *s, const char *url, const char *what, const char *why, const char *todo)
@@ -2089,6 +2192,18 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		b->refresh_run = 0;
 	if (has_scheme(url, "javascript") || has_scheme(url, "data"))
 		return BR_STOPPED;	/* nothing EWeb can do with it */
+	if (strncmp(url, "about:search?", 13) == 0 && b->search != NULL && b->search[0]) {
+		/* the home page's search box: its words to the search engine */
+		char raw[1024], words[1024], to[4096];
+		const char *q = strstr(url, "q=");
+		str_copy(raw, q != NULL ? q + 2 : "", sizeof raw);
+		raw[strcspn(raw, "&#")] = 0;
+		unescape(raw, words, sizeof words, 1);
+		if (words[0] == 0)
+			return BR_STOPPED;
+		search_url(b, words, to, sizeof to);
+		return load_post(b, to, mode, post);
+	}
 	if (has_scheme(url, "mailto")) {
 		str_copy(b->elsewhere, url, sizeof b->elsewhere);
 		return BR_ELSEWHERE;
@@ -2141,7 +2256,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			const char *q = strstr(url, "?page=");
 			history_page(&src, q != NULL ? atoi(q + 6) : 0);
 		} else {
-			start_page(&src);
+			home_page(b, &src);
 		}
 		r = own_page(b, url, &src, mode);
 		sb_free(&src);

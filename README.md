@@ -126,7 +126,8 @@ and unpack it into a folder of its own. It contains:
 | `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
 
 1. With STinG running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST or
-   STE). Its start page has a few sites that read well on an Atari.
+   STE). Its home page has sites that read well on an Atari, a row for each
+   kind, with the pages you opened last and your bookmarks.
 2. Click in the address (or press ^L), type one such as `68k.news` and press
    Return. Click a link to follow it; Undo goes back.
 3. Pages on your disks open too: ^O, or drop one on `EWEB.PRG`.
@@ -256,7 +257,8 @@ gateway/              AERA-Gateway's Raspberry Pi gateways, webgate.py (EWeb's) 
 ui/                   EWEB.PRG's GEM side: the window, the toolbar (its pictures in
                       tbicons.h, made by tools/mktbicons.py), the page on the screen
                       in every mode, the menus, the Settings, the About box
-src/browse/           browsing: addresses, loading, Back and Forward, EWeb's own pages, saving, bookmarks (bookmark.c),
+src/browse/           browsing: addresses, loading, Back and Forward, EWeb's own pages (the home page:
+                      home.html and its pictures in home/), saving, bookmarks (bookmark.c),
                       the history (history.c) and visited links (visited.c), the disk cache (dcache.c),
                       the pages' pictures (img.c)
 src/doc/              the document: EWeb's HTML parser (html.c), the UA stylesheet, HTML's hints, forms (form.c)
@@ -301,7 +303,7 @@ third_party/quickjs/  QuickJS, the JavaScript engine (MIT)
 third_party/libm/     musl's maths functions, for QuickJS on the Atari (MIT)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py (EWEB.HYP), mkentities.py (the HTML parser's
                       named characters), mktbicons.py and mkthrobber.py (the toolbar's pictures and
-                      throbber), mkovl.py (EWEBJS.OVL), bump.py (a release), sync-common.sh and
+                      throbber), mkhome.py (the home page), mkovl.py (EWEBJS.OVL), bump.py (a release), sync-common.sh and
                       sync-gateway.sh, and QEMU with plugins for counting 68030 instructions
                       (build-qemu.sh, count68k.sh, prof68k.py)
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here

@@ -403,8 +403,9 @@ static void make(short h, long words)
 }
 
 /* h rows of words * 16 pixels in the screen's own form, at at, to the
-   screen at x, y: w pixels of them, from column sx */
-static void blit(void *at, short h, long words, short sx, short w, short x, short y)
+   screen at x, y: w pixels of them, from column sx, in vro_cpyfm's mode
+   (3 in their place, 4 the screen's cleared where theirs are set, 7 ORed) */
+static void blit(void *at, short h, long words, short sx, short w, short x, short y, short mode)
 {
 	MFDB src, scr;
 	short pxy[8];
@@ -423,14 +424,14 @@ static void blit(void *at, short h, long words, short sx, short w, short x, shor
 	pxy[5] = y;
 	pxy[6] = x + w - 1;
 	pxy[7] = y + h - 1;
-	vro_cpyfm(vdi_h, 3, pxy, &src, &scr);
+	vro_cpyfm(vdi_h, mode, pxy, &src, &scr);
 }
 
 /* dev_buf's h rows, made from chunky, to the screen */
 static void put(short h, long words, short sx, short w, short x, short y)
 {
 	make(h, words);
-	blit(dev_buf, h, words, sx, w, x, y);
+	blit(dev_buf, h, words, sx, w, x, y, 3);
 }
 
 /* each colour's pixel value (or 5-6-5 pixel) */
@@ -516,7 +517,70 @@ void scr_blit_dev(void *dev, short w, short h, const GRECT *at, const GRECT *par
 	long words = (w + 15) / 16, row = words * 2 * planes;
 	short sy = part->y - at->y;
 	if (part->w > 0 && part->h > 0)
-		blit((char *) dev + sy * row, part->h, words, part->x - at->x, part->w, part->x, part->y);
+		blit((char *) dev + sy * row, part->h, words, part->x - at->x, part->w, part->x, part->y, 3);
+}
+
+/* a picture with holes (its colour 0: what is under it shows), as
+   rgb_map: its pixel values (0 in a hole), or its mask (every bit of a
+   pixel set, but in a hole). Drawn as the mask clearing the screen's
+   pixels, then the picture ORed in: the same in every mode */
+static void hole_map(unsigned short *map, const unsigned long *col, short n, int mask)
+{
+	short i;
+	rgb_map(map, col, n);
+	if (mask)
+		for (i = 1; i < n; i++)
+			map[i] = truecolour ? 0xffff : (unsigned short) (ncol - 1);
+	map[0] = 0;
+}
+
+int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, short w, short h, void *dev)
+{
+	unsigned short map[256];
+	long words = (w + 15) / 16, row = words * 2 * planes;
+	short y0, k;
+	if (words * 16 > band_w)
+		return 0;
+	for (k = 0; k < 2; k++) {
+		hole_map(map, col, n, k);
+		for (y0 = 0; y0 < h; y0 += rows) {
+			short m = h - y0 > rows ? rows : h - y0;
+			rgb_rows(pix, map, w, words, y0, m);
+			make(m, words);
+			memcpy((char *) dev + (k * h + y0) * row, dev_buf, (size_t) (m * row));
+		}
+	}
+	return 1;
+}
+
+void scr_blit_holes(void *dev, short w, short h, const GRECT *at, const GRECT *part)
+{
+	long words = (w + 15) / 16, row = words * 2 * planes;
+	short sy = part->y - at->y, sx = part->x - at->x;
+	if (part->w <= 0 || part->h <= 0)
+		return;
+	blit((char *) dev + (h + sy) * row, part->h, words, sx, part->w, part->x, part->y, 4);
+	blit((char *) dev + sy * row, part->h, words, sx, part->w, part->x, part->y, 7);
+}
+
+void scr_holes(const unsigned char *pix, const unsigned long *col, short n, short w, short h, const GRECT *at,
+	       const GRECT *part)
+{
+	unsigned short map[256];
+	long words = (w + 15) / 16;
+	short y0, k, sx = part->x - at->x, sy = part->y - at->y;
+	(void) h;
+	if (part->w <= 0 || part->h <= 0 || words * 16 > band_w)
+		return;
+	for (k = 1; k >= 0; k--) {		/* the mask, then the picture */
+		hole_map(map, col, n, k);
+		for (y0 = 0; y0 < part->h; y0 += rows) {
+			short m = part->h - y0 > rows ? rows : part->h - y0;
+			rgb_rows(pix, map, w, words, sy + y0, m);
+			make(m, words);
+			blit(dev_buf, m, words, sx, part->w, part->x, part->y + y0, k ? 4 : 7);
+		}
+	}
 }
 
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)

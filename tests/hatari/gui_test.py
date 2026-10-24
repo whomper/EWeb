@@ -74,6 +74,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
+from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
@@ -338,7 +339,8 @@ def browse():
         return check("browse: the test server", False)
     xvfb = machines.xvfb(DISPLAY)    # once it answers (None: one was there)
     site = "http://127.0.0.1:%d/site/" % HTTP
-    hd = hd_for("browse", site)
+    # (the home page's search box: its words to the test site's echo)
+    hd = hd_for("browse", site, "SEARCH=%secho?q=%%s\r\n" % site)
     shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
     r = Run("browse", "Falcon:16", hd, windowed=True, network=True)
     try:
@@ -650,6 +652,38 @@ def browse():
         check("selecting: ^A all the page's text, ^C copies it", ev is not None and
               int(ev.split()[-1]) > 20 and cp is not None and "HISTORY.TXT" in clip,
               "%r %r %r" % (ev, cp, clip[:200]))
+        # EWeb's home page: its links, the pages opened lately among them;
+        # the words typed in its search box (Tab: the page's first field)
+        # go to SEARCH=
+        r.key(L, (CTRL,))
+        r.type("about:start")
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 60)
+        m = re.search(r" links (\d+) ", ev or "")
+        check("home: the home page, with the pages opened lately", ev is not None and
+              ev.startswith("shown about:start ") and m is not None and int(m.group(1)) >= 26, str(r.events()[-3:]))
+        r.shot(23)
+        # the toolbar wakes under the mouse: Home lit (yellow in 16
+        # colours), then as it was once the mouse has gone
+        home = (4 + 3 * 38 + 18, 60)
+        r.mouse.move(*home)
+        time.sleep(1)
+        lit = Image.open(r.shot(24)).convert("RGB").crop((home[0] - 15, home[1] - 12, home[0] + 15, home[1] + 12))
+        r.mouse.move(home[0], 200)
+        time.sleep(1)
+        dark = Image.open(r.shot(25)).convert("RGB").crop((home[0] - 15, home[1] - 12, home[0] + 15, home[1] + 12))
+        yellow = lambda im: sum(1 for p in im.getdata() if p == (255, 255, 0))
+        check("home: the toolbar's Home lit under the mouse, not when it has gone",
+              yellow(lit) > 20 and yellow(dark) == 0, "%d %d" % (yellow(lit), yellow(dark)))
+        r.key(TAB)
+        r.type("atari")
+        r.key(SPACE)
+        r.type("falcon")
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 60)
+        check("home: its search box sends the words to the search engine", ev is not None and
+              ev.startswith("shown %secho " % site) and ev.endswith("title GET||q=atari+falcon"),
+              str(r.events()[-3:]))
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))

@@ -126,6 +126,12 @@ $(GEN)/libparserutils/aliases.inc: $(NS)/libparserutils/build/make-aliases.pl $(
 	cd $(GEN)/pu-stage && $(PERL_FIXED) $(CURDIR)/$(NS)/libparserutils/build/make-aliases.pl >/dev/null
 	mv $(GEN)/pu-stage/src/charset/aliases.inc $@ && rm -rf $(GEN)/pu-stage
 
+# EWeb's home page (src/browse/browse.c): src/browse/home.html with its pictures
+$(GEN)/home.h: tools/mkhome.py src/browse/home.html src/browse/home/eweb.png src/browse/home/aera.png \
+		common/icons/EWEB.txt common/tools/appicon.py
+	@mkdir -p $(@D)
+	python3 tools/mkhome.py src/browse/home.html $@
+
 # the HTML parser's named character references (src/doc/html.c)
 $(GEN)/entities.h: tools/mkentities.py src/doc/entities.txt
 	@mkdir -p $(@D)
@@ -184,6 +190,7 @@ build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) -c $$< -o $$@
 build/$(1)/ewb/doc/html.o: $(GEN)/entities.h
+build/$(1)/ewb/browse/browse.o: $(GEN)/home.h
 build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $(if $(filter tos st,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
