@@ -94,7 +94,9 @@ Falcons, and a divide that costs 40 to 80 cycles.
 - **Properties:** the 103 EWeb draws or needs: box model, positioning, floats,
   borders, backgrounds (the first layer, the top one, in the `background`
   shorthand and, since 22 Oct 2026, in a `background-image` of several;
-  `background-size` since 21 Oct 2026,
+  since 24 Oct 2026 a last layer that covers the box with opaque colours,
+  a dark page's black under its glows, is its colours' average as the
+  `background-color`, which it hides; `background-size` since 21 Oct 2026,
   kept as two longhands of the engine's own, `-ec-background-size-w` and
   `-h`), fonts, text (including `direction`,
   `unicode-bidi`, `text-align: start | end`, and since 22 Oct 2026 HTML's

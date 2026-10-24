@@ -1995,10 +1995,43 @@ static int bg_size(ec_ctx *c, const ec_tok *t, int n, int *i, ec_decl *w, ec_dec
 	return 1;
 }
 
+/* a layer under the first that is a gradient of opaque colours, which
+   EWeb doesn't draw (it keeps the first layer only): what shows of the
+   box's background colour beneath it is none, and of the gradient its
+   average, so that colour is the background colour. A dark page's
+   black is often such a gradient, under soft glows (yaary.music:
+   radial-gradient(... rgba(98,37,158,.18), transparent 32rem), ...,
+   linear-gradient(180deg, #040404 0%, #000 42%, #070707 100%)).
+   0: it isn't one (a colour of alpha 0 or currentcolor, not a gradient) */
+static uint32_t under_colour(const ec_decl *d)
+{
+	const ec_grad *g;
+	uint32_t r = 0, gr = 0, b = 0, k = 0;
+	int i;
+	if (d->kind != EK_IMAGE || d->v.p == NULL)
+		return 0;
+	g = d->v.p;
+	for (i = 0; i < g->n; i++) {
+		uint32_t a = g->s[i].argb;
+		if (g->s[i].flags & EC_GS_HINT)
+			continue;
+		if ((g->s[i].flags & EC_GS_CUR) || a >> 24 != 255)
+			return 0;
+		r += a >> 16 & 255;
+		gr += a >> 8 & 255;
+		b += a & 255;
+		k++;
+	}
+	if (k == 0)
+		return 0;
+	return 0xff000000u | (r + k / 2) / k << 16 | (gr + k / 2) / k << 8 | (b + k / 2) / k;
+}
+
 static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 {
 	ec_decl col, img, rep, px, py, sw, sh, clip;
 	int i = 0, layer = 0;
+	uint32_t under = 0;	/* the last layer's colour beneath, if it covers */
 
 	put(&col, EP_BACKGROUND_COLOR, EK_COLOR, 0);
 	put(&img, EP_BACKGROUND_IMAGE, EK_KW, KW_NONE);
@@ -2060,6 +2093,10 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 			col = lcol;
 			col.prop = EP_BACKGROUND_COLOR;
 		}
+		/* (a layer that covers the box: repeated, as it is unless it
+		   says otherwise, so its size leaves no gap) */
+		under = himg && (!hrep || ((r1 == KW_REPEAT || r1 == KW_ROUND) &&
+					   (!r2 || r2 == KW_REPEAT || r2 == KW_ROUND))) ? under_colour(&limg) : 0;
 		if (layer == 0) {
 			if (himg) {
 				img = limg;
@@ -2094,6 +2131,8 @@ static int background(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 		if (i >= n)
 			return -1;
 	}
+	if (layer > 0 && under != 0 && !(c->opts & EC_COMPAT_LAYERS))
+		put(&col, EP_BACKGROUND_COLOR, EK_COLOR, (int32_t) under);
 	out[0] = col;
 	out[1] = img;
 	out[2] = rep;
@@ -3047,10 +3086,19 @@ int ec_parse_value(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *out, in
 		   kept, as the background shorthand keeps it; the others are
 		   read, each an image */
 		ec_decl more;
+		int layers = 0;
 		while (i < n && t[i].type == T_COMMA) {
 			i++;
 			if (i >= n || !image(c, t, n, &i, &more))
 				return -1;
+			layers++;
+		}
+		if (r && i == n && layers > 0 && under_colour(&more) != 0) {
+			/* (the last layer's colour beneath, as the shorthand's:
+			   background-repeat is the longhand's, repeated unless it
+			   says otherwise) */
+			put(&out[1], EP_BACKGROUND_COLOR, EK_COLOR, (int32_t) under_colour(&more));
+			return 2;
 		}
 	}
 	if (!r || i != n)

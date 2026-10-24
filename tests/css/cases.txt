@@ -1300,7 +1300,9 @@ div { background-image: url(ok.png) }
 <div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div>
 --- expect
 #a background-image url(x.png)
-#a background-color #112233
+# (the last layer, a gradient of opaque colours repeated, covers #123:
+# what shows of it, as EWeb doesn't draw it, is its average)
+#a background-color #800080
 #a background-position-x 50%
 #a -ec-background-size-w cover
 #b background-image linear-gradient(180deg, #ff0000, #0000ff)
@@ -1308,6 +1310,34 @@ div { background-image: url(ok.png) }
 # a layer that isn't an image makes the whole list invalid
 #d background-image url(ok.png)
 #e background-image url(ok.png)
+
+=== background layers: a last layer of opaque colours is the colour beneath
+--- css
+#a { background: radial-gradient(circle at 78% 6%, rgba(98,37,158,.18), transparent 32rem),
+     radial-gradient(circle at 10% 10%, rgba(184,115,51,.12), transparent 28rem),
+     linear-gradient(180deg, #040404 0%, #000 42%, #070707 100%) }
+#b { background-color: red; background-image: url(n.png), linear-gradient(#000, #222) }
+#c { background: url(n.png), linear-gradient(#000, #222) no-repeat #123 }
+#d { background: url(n.png), linear-gradient(#000, transparent) #123 }
+#e { background: linear-gradient(#000, #222) }
+#f { background: url(n.png), linear-gradient(currentcolor, #000) }
+#g { background: url(n.png), url(m.png) #123 }
+#h { background: url(n.png), linear-gradient(#000, #222) 0 0 / 10px 10px }
+--- html
+<div id=a></div><div id=b></div><div id=c></div><div id=d></div><div id=e></div><div id=f></div>
+<div id=g></div><div id=h></div>
+--- expect
+#a background-color #040404
+#b background-color #111111
+# no-repeat leaves the colour showing; a stop that isn't opaque lets it through
+#c background-color #112233
+#d background-color #112233
+# one layer: the gradient is drawn, the colour its own
+#e background-color #00000000
+#f background-color #00000000
+#g background-color #112233
+# repeated at a size, it still covers
+#h background-color #111111
 
 === escapes in selectors (CSS Syntax 3, 4.3.7)
 --- css
