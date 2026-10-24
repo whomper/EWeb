@@ -15,7 +15,9 @@ clicked (tests/layout/stacking.html's list has the order, "drawn:").
   the box of z-index 100 in it; a box of z-index below 0 under the
   block that follows;
 - a click where a link drawn over another covers it follows the one
-  drawn over (-J -K).
+  drawn over (-J -K);
+- a click on a link laid out as a block, beside its words, follows it
+  (its box is the link's, as in a browser), and on its padding too.
 
     tests/layout/stacking.py EWRENDER EWEB.FNT [ST-EWRENDER]"""
 import os
@@ -141,6 +143,17 @@ with tempfile.TemporaryDirectory() as tmp:
     if "#top" not in got:
         fail("a click on a link covered by one of a higher z-index didn't follow that one:\n" +
              p.stdout[-800:])
+
+    # a link as a block: a click in its box, beside its word
+    card = os.path.join(tmp, "card.html")
+    with open(card, "w") as f:
+        f.write("<!DOCTYPE html><html><body style='margin:0'><a id=card href='#card' style='display:block;"
+                "padding:20px;width:300px;background:#eef'>Card</a></body></html>")
+    p = subprocess.run([os.path.abspath(sys.argv[1]), "-f", font, "-J", "-K", "card", "-d", card],
+                       capture_output=True, text=True, timeout=60)
+    got = p.stdout.split("followed:", 1)[1].split("\n", 1)[0] if "followed:" in p.stdout else ""
+    if "#card" not in got:
+        fail("a click in a block link's box, beside its word, didn't follow it:\n" + p.stdout[-800:])
 
 if fails:
     sys.exit(1)

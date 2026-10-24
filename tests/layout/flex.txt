@@ -1,4 +1,4 @@
-page 608 x 907, background ffffff, 415 items, 4 links, title "Flexbox"
+page 608 x 907, background ffffff, 419 items, 4 links, title "Flexbox"
 text 6,25 122x14 #000000 sans11 bold link 0 "Grow, shrink, basis"
 fill 6,33 596x14 #dddddd
 fill 6,33 149x14 #88ccff
@@ -394,6 +394,7 @@ fill 116,863 26x1 #003366
 fill 116,876 26x1 #003366
 fill 116,864 1x12 #003366
 fill 141,864 1x12 #003366
+fill 116,863 26x14 #00000000 link 1
 text 142,874 49x13 #000000 sans10 link 0 "more text"
 fill 6,882 596x14 #333355
 fill 6,882 32x14 #88ccff
@@ -402,18 +403,21 @@ fill 6,882 32x1 #003366
 fill 6,895 32x1 #003366
 fill 6,883 1x12 #003366
 fill 37,883 1x12 #003366
+fill 6,882 32x14 #00000000 link 2
 fill 290,882 29x14 #ffcc88
 text 291,893 27x13 #ffffff sans10 link 3 "News"
 fill 290,882 29x1 #003366
 fill 290,895 29x1 #003366
 fill 290,883 1x12 #003366
 fill 318,883 1x12 #003366
+fill 290,882 29x14 #00000000 link 3
 fill 571,882 31x14 #88ff88
 text 572,893 29x13 #ffffff sans10 link 4 "About"
 fill 571,882 31x1 #003366
 fill 571,895 31x1 #003366
 fill 571,883 1x12 #003366
 fill 601,883 1x12 #003366
+fill 571,882 31x14 #00000000 link 4
 link 1 file://./tests/layout/flex.html#x
 link 2 file://./tests/layout/flex.html#a
 link 3 file://./tests/layout/flex.html#b

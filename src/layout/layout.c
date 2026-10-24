@@ -1038,6 +1038,26 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
 	return l->p->nitems - 1;
 }
 
+/* a link laid out as a block (a card, a menu's button: display block,
+   inline-block, flex...): its border box, where a click anywhere is one
+   on the link, as in a browser, not only on its words and pictures; an
+   item not drawn (rgb's AA 0) */
+static void link_area(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	dl_item *d;
+	if (w <= 0 || h <= 0 || (d = dl_add(l)) == NULL)
+		return;
+	d->type = DL_FILL;
+	d->x = x;
+	d->y = y;
+	d->w = w;
+	d->h = h;
+	d->link = b->link;
+#ifndef EW_ST
+	d->node = b->n;
+#endif
+}
+
 /* where a click opens and closes the details det: its summary's box,
    or a part of a line of a summary laid out inline */
 static void sum_rect(L *l, dnode *det, int32_t x, int32_t y, int32_t w, int32_t h)
@@ -6664,6 +6684,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			if (b->n != NULL && !b->anon)
 				block_rect(l, b->n, bx, by, bw, bh);
 #endif
+			if (b->link && !b->anon && vis && !no_hit(s) && (b->parent == NULL || b->parent->link != b->link))
+				link_area(l, b, bx, by, bw, bh);
 		}
 	}
 	if (b->list & LB_SUM)

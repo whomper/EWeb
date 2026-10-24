@@ -1,4 +1,4 @@
-page 608 x 557, background ffffff, 132 items, 6 links, title "Inline blocks"
+page 608 x 557, background ffffff, 137 items, 6 links, title "Inline blocks"
 fill 6,6 19x96 #dddddd
 text 25,47 168x29 #000000 sans24 bold link 0 "Inline blocks"
 text 63,96 35x17 #000000 sans13 link 0 "a box"
@@ -29,17 +29,22 @@ fill 147,125 72x22 #3366cc
 text 155,141 56x17 #ffffff sans13 link 1 "Go there"
 fill 364,125 46x22 #3366cc
 text 372,141 30x17 #ffffff sans13 link 2 "Next"
+fill 364,125 46x22 #00000000 link 2
 text 6,141 141x17 #000000 sans13 link 0 "A link round a button: "
 text 223,141 141x17 #000000 sans13 link 0 "and a link that is one: "
 text 410,141 4x17 #000000 sans13 link 0 "."
 text 12,175 39x17 #0000ee sans13 link 3 "Home"
 fill 57,160 1x20 #cccccc
+fill 6,160 52x20 #00000000 link 3
 text 64,175 34x17 #0000ee sans13 link 4 "News"
 fill 104,160 1x20 #cccccc
+fill 58,160 47x20 #00000000 link 4
 text 111,175 35x17 #0000ee sans13 link 5 "Sport"
 fill 152,160 1x20 #cccccc
+fill 105,160 48x20 #00000000 link 5
 text 159,175 57x17 #0000ee sans13 link 6 "About us"
 fill 222,160 1x20 #cccccc
+fill 153,160 70x20 #00000000 link 6
 text 10,197 29x17 #000000 sans13 bold link 0 "One"
 text 10,216 96x17 #000000 sans13 link 0 "A card with two"
 text 10,232 153x17 #000000 sans13 link 0 "paragraphs, its baseline"

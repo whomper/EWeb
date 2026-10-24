@@ -717,7 +717,10 @@ releases.
     without its script) ran into the column below it, both its words and the column's showing.
     The list itself stays in the document's order, for find, selecting and copying; the order
     drawn in is the page's ranges of it (`page.seg`, ewrender `-d`'s "drawn:"), and the strips'
-    index (`sidx`) is in that order;
+    index (`sidx`) is in that order. And a link laid out as a block (a card, a menu's button:
+    `display: block`, `inline-block`, a flex item) is the link all over its box, as in a browser,
+    not only on its words and pictures: an item not drawn, its border box (`link_area`, ewrender
+    `-d`'s "fill ... #00000000 link N"), as a box with `pointer-events: none` has none;
   - **tables**: `rowspan` (a cell takes its columns in the rows below; the last of them grows to
     it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
     default, top, bottom) in cells, and columns too wide for the room keep their longest word,

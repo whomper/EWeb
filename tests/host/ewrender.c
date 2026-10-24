@@ -1245,7 +1245,10 @@ int main(int argc, char **argv)
 			else
 				snprintf(col, sizeof col, "#%06lx%02lx", (unsigned long) (rgb & 0xffffff),
 					 (unsigned long) (rgb >> 24));
-			if (it->type == DL_FILL)
+			if (it->type == DL_FILL && it->link)	/* (a block link's box, for clicks) */
+				printf("fill %d,%d %dx%d %s link %d\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h,
+				       col, it->link);
+			else if (it->type == DL_FILL)
 				printf("fill %d,%d %dx%d %s\n", (int) it->x, (int) it->y, (int) it->w, (int) it->h, col);
 			else if (it->type == DL_IMAGE && (it->flags & DLF_TILE))
 				printf("background %d,%d %dx%d%s%s tile %d,%d %dx%d%s%s %s%s\n", (int) it->x, (int) it->y,
