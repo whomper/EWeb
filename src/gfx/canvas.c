@@ -2869,6 +2869,36 @@ static void sbar(canvas *c, const page *p, const dl_item *d)
 	}
 }
 
+/* the marked part of a text run, filled behind it: from the byte the
+   mark starts at (its first run) to the one it ends at (its last), the
+   letters of a right-to-left run from its right */
+static void marked(canvas *c, const page *p, const dl_item *d)
+{
+	long i = (long) (d - p->items);
+	uint32_t s, e;
+	int32_t x0, x1;
+	/* (from one run to another either way: right-to-left runs come
+	   left to right in the list, read the other way) */
+	if (i < c->mark[0].item && i < c->mark[1].item)
+		return;
+	if ((i > c->mark[0].item && i > c->mark[1].item) || i < 0 || i >= p->nitems)
+		return;
+	s = i == c->mark[0].item ? c->mark[0].off : 0;
+	e = i == c->mark[1].item ? c->mark[1].off : d->len;
+	if (e > d->len)
+		e = d->len;
+	if (s >= e)
+		return;
+	x0 = (int32_t) font_width(d->font, d->text, s);
+	x1 = e == d->len ? d->w : (int32_t) font_width(d->font, d->text, e);
+	if (d->flags & DLF_RTL) {
+		int32_t t = d->w - x1;
+		x1 = d->w - x0;
+		x0 = t;
+	}
+	cv_fill(c, d->x + x0, d->y, x1 - x0, d->h, c->mark_rgb);
+}
+
 static void draw_item(canvas *c, const page *p, const dl_item *d)
 {
 	uint32_t rgb = d->rgb & 0xffffff;
@@ -2896,6 +2926,8 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 	} else if (d->type == DL_SBAR) {
 		sbar(c, p, d);
 	} else {
+		if (c->marked)
+			marked(c, p, d);
 		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, rgb, d->flags);
 	}
 }

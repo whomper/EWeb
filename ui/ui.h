@@ -145,6 +145,8 @@ void win_address_focus(int all);	/* ^L: the keyboard to the address, all of it c
 int  win_address_has_focus(void);
 int  win_stop_hit(short mx, short my);	/* on Stop, while loading */
 void win_clip(int what);		/* CLIP_COPY...: the address field, or the page's text */
+void win_find(int how);			/* Edit > Find (0), Find next (1), Find previous (-1) */
+int  win_mark(pg_pos m[2]);		/* the words found, to mark (screen.c): 1 and where */
 
 /* main.c */
 enum {
@@ -155,7 +157,7 @@ enum {
 	C_PICTURES,
 	C_SETTINGS, C_FALCON, C_SCRIPTS, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
 	C_HELP, C_KEYS,
-	C_BMADD, C_BMSHOW,
+	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
 };
 void command(int cmd);
@@ -166,6 +168,8 @@ int  dlg_settings(void);		/* 1: changed (in opt) */
 /* a page's prompt(): its question (UTF-8), the answer in answer (UTF-8,
    the page's suggestion first); 1 OK, 0 Cancel */
 int  dlg_prompt(const char *text, char *answer, int size);
+/* Edit > Find: the words to find (UTF-8, the last ones first); 1 OK */
+int  dlg_find(char *words, int size);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
 void save_link(int link);		/* its file saved (Alternate-click, the link's menu) */

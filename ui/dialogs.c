@@ -464,13 +464,14 @@ int dlg_settings(void)
 	return 1;
 }
 
-#ifndef EW_ST	/* the ST edition runs no scripts */
-/* ---------------------------------------------------------------- a page's prompt */
+/* ---------------------------------------------------------------- a question and its answer */
 
 static char p_lines[3][44], p_answer[256];
 static LFIELD f_answer;
 
-int dlg_prompt(const char *text, char *answer, int size)
+/* a question (UTF-8) under a title, its answer typed in a field (UTF-8,
+   what it was first); 1 OK, 0 Cancel: a page's prompt(), Edit > Find */
+static int ask(const char *title, const char *text, char *answer, int size)
 {
 	char a[200];
 	const char *s;
@@ -495,7 +496,7 @@ int dlg_prompt(const char *text, char *answer, int size)
 	d_begin(44, 9);
 	nticks = 0;
 	memset(page_of, 0, sizeof page_of);
-	d_band(44, " The page asks");
+	d_band(44, title);
 	for (k = 0; k < 3; k++)
 		if (p_lines[k][0])
 			d_text(2, (short) (2 + k), p_lines[k]);
@@ -523,4 +524,16 @@ int dlg_prompt(const char *text, char *answer, int size)
 	}
 	return 1;
 }
+
+#ifndef EW_ST	/* the ST edition runs no scripts */
+int dlg_prompt(const char *text, char *answer, int size)
+{
+	return ask(" The page asks", text, answer, size);
+}
 #endif
+
+int dlg_find(char *words, int size)
+{
+	return ask(" Find on this page", "Words to find (Return; then ^G finds the next, Shift-^G the one before):",
+		   words, size);
+}

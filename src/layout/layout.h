@@ -153,6 +153,7 @@ typedef struct page {
 	struct arena *mem;
 	LAYOUT_OPT opt;
 	int deep;			/* nested deeper than the stack holds: the rest left out */
+	unsigned long serial;		/* each layout's own (a place in one is another's no more) */
 } page;
 
 #define PAGE_STRIP 256
@@ -184,6 +185,26 @@ int page_scroll(page *p, int k, int32_t sx, int32_t sy, int32_t *x, int32_t *y, 
    that y to y + h (where it is on the page now) shows in each: at its top
    (top), else as little as will do. Returns 1 if one moved */
 int page_reveal(page *p, const dnode *n, int32_t y, int32_t h, int top);
+
+/* a place in a page's text: a text item (DL_TEXT, its index) and a byte
+   of it */
+typedef struct pg_pos {
+	long item;
+	uint32_t off;
+} pg_pos;
+
+/* words on the page (Edit > Find, find.c), case aside (ASCII, Latin-1)
+   and a space for any white space, a line's end or the gap between two
+   runs: the first match starting at or after from (NULL: the top), back:
+   the last before it, going round; or, want > 0, the want'th (the last
+   if there are fewer). Its start in *a, its end in *b, which it is in
+   *nth (from 1); how many there are in all, 0 none, -1 out of memory */
+long page_find(const page *p, const char *what, const pg_pos *from, int back, long want, pg_pos *a, pg_pos *b,
+	       long *nth);
+
+/* page_reveal for item i (by the boxes hiding what overflows them that
+   it is in: any edition) */
+int page_reveal_item(page *p, long i, int top);
 
 /* the scroll bar at (x, y): its item, else NULL */
 const dl_item *page_bar_at(const page *p, int32_t x, int32_t y);

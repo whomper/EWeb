@@ -55,6 +55,11 @@
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
  * -V FILE keeps the history in FILE (as HISTORY.TXT: read when needed,
  * written at the end); the links to the pages in it are visited.
+ * -G WORDS finds them on the page (Edit > Find; again for more: the next
+ * after the last found, as ^G), -U WORDS the one before (Shift-^G),
+ * "found:" printed with which of how many, its runs and bytes, and its
+ * run's place (a box that scrolls brought to it); what is drawn has it
+ * marked, as EWEB.PRG marks it.
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
  * Through the Pi's browser: webgate's snapshots).
@@ -670,6 +675,9 @@ int main(int argc, char **argv)
 	unsigned long shows;
 	int rc = 0;
 	int nfill = 0, back_after = 0, save_link = -1, bookmark = 0, nclick = 0, timers = 0, refreshes = 0;
+	const char *finds[16];
+	int nfind = 0, find_back[16];
+	pg_pos found[2] = { { -1, 0 }, { -1, 0 } };
 	int32_t resize[8];
 	int nresize = 0;
 	const char *clicks[16];
@@ -756,6 +764,10 @@ int main(int argc, char **argv)
 			scripts_on = 1;
 		else if (!strcmp(argv[i], "-K") && i + 1 < argc && nclick < 16)
 			clicks[nclick++] = argv[++i];
+		else if ((!strcmp(argv[i], "-G") || !strcmp(argv[i], "-U")) && i + 1 < argc && nfind < 16) {
+			find_back[nfind] = argv[i][1] == 'U';
+			finds[nfind++] = argv[++i];
+		}
 		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
 			timers = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-r") && i + 1 < argc)
@@ -994,6 +1006,26 @@ int main(int argc, char **argv)
 		click(&b, clicks[i]);
 		pictures(&b);
 	}
+	for (i = 0; i < nfind; i++) {
+		/* Edit > Find: from the top, then on from (back: before) the
+		   words found last, as EWEB.PRG's ^G and Shift-^G */
+		pg_pos from = found[0], a, e;
+		long nth, n;
+		if (found[0].item >= 0 && !find_back[i])
+			from.off++;
+		n = page_find(b.p, finds[i], found[0].item >= 0 ? &from : NULL, find_back[i], 0, &a, &e, &nth);
+		if (n > 0) {
+			int moved = page_reveal_item(b.p, a.item, 0);
+			found[0] = a;
+			found[1] = e;
+			const dl_item *d = &b.p->items[a.item];
+			printf("found: %ld of %ld item %ld %u to item %ld %u at %d,%d %dx%d%s\n", nth, n, a.item, a.off,
+			       e.item, e.off, (int) d->x, (int) d->y, (int) d->w, (int) d->h,
+			       moved ? " (a box scrolled)" : "");
+		} else {
+			printf("found: none (%ld)\n", n);
+		}
+	}
 	if (refreshes > 0) {
 		/* the page's refresh (<meta http-equiv=refresh>, the Refresh
 		   header), waited for and followed, as EWEB.PRG's idle loop does;
@@ -1180,6 +1212,12 @@ int main(int argc, char **argv)
 		c.pix = malloc(c.stride * c.h);
 		if (c.pix == NULL)
 			return 1;
+		if (found[0].item >= 0) {
+			c.marked = 1;
+			c.mark[0] = found[0];
+			c.mark[1] = found[1];
+			c.mark_rgb = 0xffff00;
+		}
 		cv_page(&c, p);
 		if (!write_png(out, &c)) {
 			perror(out);

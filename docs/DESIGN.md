@@ -3100,6 +3100,30 @@ HISTORY.TXT written at quit). A review found `:link`'s leak, the page's links to
 links on a `file:` page, control characters and passwords in addresses, a kept `about:history`,
 and the history's size: all fixed before it went in.
 
+## Find in page (24 Oct 2026)
+
+Stage 3's second part. Edit > Find... (^F, the family's) asks for words, then marks the first from
+the window's top down in yellow and brings it into view, a box that scrolls too
+(`page_reveal_item`, by the boxes hiding what overflows that the run is in, so the ST edition has
+it); ^G finds the next and Shift-^G the one before (Safari's keys, as the family takes a Mac
+app's), going round; the status bar says "2 of 5". `src/layout/find.c` folds the page's text runs,
+in the order they are drawn, into one string: ASCII's and Latin-1's capitals small, white space a
+space, a space between two runs with a gap between them (a word space, a line's end) and none
+between two parts of a word (a bold "Ata" and "ri"). A space in the words matches any white space,
+a line's end among it. A line's right-to-left runs come left to right in the display list, so they
+go in last to first, as they are read (full bidirectional text is stage 4). A place on the page
+is a run and a byte, kept with the page's layout serial: when the page is laid out again (a
+picture came, the window was sized) the same match, by its number, is found again; on another page
+none is marked. Text no one sees (opacity 0) isn't found. The canvas draws the mark under the
+run's part (`canvas.mark`), from the run's right in a right-to-left one.
+
+What a search costs (68030 instructions, `drawbench -F`): 0.24 to 1.3 million on the page set's
+three biggest pages, 1.3% to 2.9% of laying each out, about 12 instructions a byte of text (the
+folding by a table, the first byte tested before a match is tried); a search is made at each ^G,
+the text not kept. Tested by `tests/layout/find.py` in both editions (order and round, back, case,
+across runs and lines, Hebrew as it is read, hidden text, a box that scrolls, the mark drawn where
+the words are) and `make hatarigui` (^F, ^G, Shift-^G on `about:history`).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3395,8 +3419,8 @@ out of both (their paths lead nowhere on the Atari).
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
-   page, selecting and copying, history with visited links (done, above), a page drawn while it
-   loads, Esc during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
+   page (done, above), selecting and copying, history with visited links (done, above), a page
+   drawn while it loads, Esc during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions

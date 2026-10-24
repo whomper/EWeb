@@ -150,7 +150,10 @@ hub stay complete, with the evidence.
   by `url_join_quick` where it can, else parsed; colours only, `src/css`; none on a page whose
   scripts run). After changing them: `make test` (`tests/browse/hgtest.c`, `tests/layout/visited.py`,
   the CSS cases), `make fuzz` for a while (`fuzz_history`, and `fuzz_url`, which checks the quick
-  join against the parse), `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
+  join against the parse), `make hatarigui`, `make hatarifiles`. **Find in page** is
+  `src/layout/find.c` (the page's runs as one folded string, a place a run and a byte), marked by
+  the canvas (`canvas.mark`) and driven by `ui/win.c` (`win_find`, `win_mark`): after changing it,
+  `make test` (`tests/layout/find.py`, ewrender `-G`/`-U`) and `make hatarigui`. **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages

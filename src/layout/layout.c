@@ -6426,6 +6426,8 @@ static int hides_x(const dnode *n)
 	return o == KW_HIDDEN || o == KW_CLIP;
 }
 
+static unsigned long page_serial;
+
 page *layout_page(doc *d, const LAYOUT_OPT *o)
 {
 	L l;
@@ -6445,6 +6447,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	l.p = p;
 	l.a = a;
 	p->d = d;
+	p->serial = ++page_serial;
 	p->mem = a;
 	p->opt = *o;
 	p->width = o->width;

@@ -6,7 +6,7 @@
  * ui/screen.c draws them), for counting the 68030 instructions that takes
  * (tools/count68k.sh, tools/prof68k.py):
  *
- *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] PAGE.HTM [SHEET.CSS...]
+ *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] PAGE.HTM [SHEET.CSS...]
  *
  * -P stops after a phase: 1 the document styled (its <style>s and the
  * sheets named), 2 laid out (608 px wide, a CSS px 0.8 of the screen's),
@@ -16,6 +16,8 @@
  * -V N: a history of N pages (src/browse/history.c, read as HISTORY.TXT
  * is), and -M the page's links marked visited from it before it is
  * styled, as at https://example.com/news/index.html (visited.c).
+ * -F WORDS: once laid out, the words looked for on it (Edit > Find,
+ * find.c), how many printed.
  * Prints the page's height and items.
  */
 #include <stdio.h>
@@ -93,6 +95,7 @@ int main(int argc, char **argv)
 	ec_media m = { W, ROWS, 16 };
 	const char *fnt = "binary/EWEB.FNT";
 	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0;
+	const char *find = NULL;
 	size_t n;
 	char *data;
 	doc *d;
@@ -110,9 +113,11 @@ int main(int argc, char **argv)
 			hist = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-M"))
 			mark = 1;
+		else if (!strcmp(argv[i], "-F") && i + 1 < argc)
+			find = argv[++i];
 	}
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
@@ -157,6 +162,11 @@ int main(int argc, char **argv)
 	if (p == NULL)
 		return 1;
 	printf("page %d x %d, %ld items\n", (int) p->width, (int) p->height, p->nitems);
+	if (find != NULL) {
+		pg_pos a, b;
+		long nth;
+		printf("%ld found\n", page_find(p, find, NULL, 0, 0, &a, &b, &nth));
+	}
 	if (phase >= 3) {
 		canvas c;
 		int32_t y;

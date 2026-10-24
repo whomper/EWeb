@@ -1441,6 +1441,91 @@ void win_clip(int what)
 	}
 }
 
+/* ---------------------------------------------------------------- find in page */
+
+static char f_words[256];		/* Edit > Find's words (UTF-8) */
+static long f_nth;			/* which of them is marked (from 1), 0: none */
+static unsigned long f_shows, f_serial;	/* on which page shown, in which layout of it */
+static pg_pos f_at[2];
+
+/* the words found, marked on the screen (screen.c): found again, the
+   same one of them, when the page has been laid out again (a picture
+   came, the window was sized); none on another page. 1 and where */
+int win_mark(pg_pos m[2])
+{
+	if (f_nth == 0 || br.p == NULL || br.shows != f_shows)
+		return 0;
+	if (br.p->serial != f_serial) {
+		long nth;
+		if (page_find(br.p, f_words, NULL, 0, f_nth, &f_at[0], &f_at[1], &nth) <= 0) {
+			f_nth = 0;
+			return 0;
+		}
+		f_nth = nth;
+		f_serial = br.p->serial;
+	}
+	m[0] = f_at[0];
+	m[1] = f_at[1];
+	return 1;
+}
+
+/* Edit > Find (how 0: the words asked for, then the first from the
+   window's top), Find next (1), Find previous (-1): marked, and the
+   window (and a box that scrolls, if it is in one) brought to them */
+void win_find(int how)
+{
+	pg_pos from, a, b;
+	long n, nth, i;
+	const dl_item *it;
+	char line[80];
+	int had = f_nth != 0;
+	if (br.p == NULL)
+		return;
+	if (how == 0 || f_words[0] == 0) {
+		if (!dlg_find(f_words, sizeof f_words) || f_words[0] == 0)
+			return;
+		f_nth = 0;
+	}
+	if (f_nth != 0 && br.shows == f_shows && br.p->serial == f_serial) {
+		from = f_at[0];
+		if (how >= 0)
+			from.off++;	/* (the next: after the one marked) */
+	} else {
+		/* the first run at or below the window's top */
+		from.item = br.p->nitems;
+		from.off = 0;
+		for (i = 0; i < br.p->nitems; i++)
+			if (br.p->items[i].type == DL_TEXT && br.p->items[i].y >= top) {
+				from.item = i;
+				break;
+			}
+	}
+	n = page_find(br.p, f_words, &from, how < 0, 0, &a, &b, &nth);
+	if (n <= 0) {
+		f_nth = 0;
+		if (had)
+			win_redraw_page();
+		log_event("found none");
+		status(n < 0 ? "No memory to look through the page." : "Not on this page.");
+		return;
+	}
+	f_at[0] = a;
+	f_at[1] = b;
+	f_nth = nth;
+	f_shows = br.shows;
+	f_serial = br.p->serial;
+	page_reveal_item(br.p, a.item, 0);	/* (a box that scrolls brought to it: drawn below) */
+	it = &br.p->items[a.item];
+	if (it->y < top || it->y + it->h > top + r_page.h)
+		win_scroll_to(it->y - r_page.h / 3);
+	if (it->x < left || it->x + it->w > left + r_page.w)
+		scroll_x_to(it->x - 8);
+	win_redraw_page();
+	snprintf(line, sizeof line, "%ld of %ld on this page.", nth, n);
+	log_event("found %ld of %ld", nth, n);
+	status(line);
+}
+
 /* ---------------------------------------------------------------- the mouse */
 
 static int link_at(short mx, short my)

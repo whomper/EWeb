@@ -365,6 +365,16 @@ What you type into a page's forms, and the words in its links, go to
 the site in the page's encoding (or the one its form asks for), as
 sites made for those pages expect.
 
+## Finding words
+
+**Edit > Find...** (**^F**) asks for words and marks the first of them
+in yellow from the top of the window down, bringing it into view (into
+a box that scrolls, too); the status bar says which it is, "2 of 5".
+**^G** finds the next, **Shift-^G** the one before, going round at the
+page's end. Capitals and small letters are the same (é and É too), a
+space finds any space or the end of a line, and Hebrew is found as it
+is read. Text the page hides isn't found.
+
 ## Copying
 
 **^C** copies the page's text to the GEM clipboard (to paste into
@@ -382,6 +392,8 @@ choose all of it.
 | ^D | add the page shown to the bookmarks |
 | ^B | show the bookmarks |
 | ^Y | show the history |
+| ^F | find words on the page |
+| ^G, Shift-^G | find the next, the one before |
 | Alternate-click | save a link's file |
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |

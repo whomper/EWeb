@@ -905,8 +905,8 @@ build/m68k/docparse: build/m68k/bench/docparse.o build/m68k/bench/atheap.o build
 # build/m68k/drawbench [-P 2] [-b 16] PAGE.HTM [SHEET.CSS...])
 build/m68k/drawbench: tests/bench/drawbench.c build/m68k/bench/atheap.o build/m68k/atheap/libc.o \
 		build/m68k/ewb/doc/doc.o build/m68k/ewb/doc/form.o build/m68k/ewb/doc/html.o build/m68k/ewb/doc/ua.o \
-		build/m68k/ewb/layout/layout.o build/m68k/ewb/gfx/canvas.o build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) \
-		$(EWB_HDRS)
+		build/m68k/ewb/layout/layout.o build/m68k/ewb/layout/find.o build/m68k/ewb/gfx/canvas.o \
+		build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) $(EWB_HDRS)
 	$(M68KCC) -m68030 -O2 -std=gnu99 -DNDEBUG $(EWB_FLAGS) $(NSINC) -static -o $@ tests/bench/drawbench.c \
 		src/browse/history.c src/browse/visited.c src/net/url.c \
 		tests/host/plat_posix.c common/src/util.c common/src/futil.c common/src/inflate.c $(filter %.o,$^)
@@ -984,6 +984,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/layout/find.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

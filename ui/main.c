@@ -89,6 +89,10 @@ static const MBAR_ITEM m_edit[] = {
 	{ "Paste", "^V", C_PASTE },
 	{ "-", 0, 0 },
 	{ "Select all", "^A", C_SELALL },
+	{ "-", 0, 0 },
+	{ "Find...", "^F", C_FIND },
+	{ "Find next", "^G", C_FINDNEXT },
+	{ "Find previous", "\x01^G", C_FINDPREV },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_view[] = {
@@ -280,6 +284,9 @@ void menu_update(void)
 	enable(C_PASTE, addr);
 	enable(C_COPY, addr || br.p != NULL);
 	enable(C_SELALL, 1);
+	enable(C_FIND, !loading && br.p != NULL);
+	enable(C_FINDNEXT, !loading && br.p != NULL);
+	enable(C_FINDPREV, !loading && br.p != NULL);
 	enable(C_LARGER, !loading && opt.zoom < 200);
 	enable(C_SMALLER, !loading && opt.zoom > 50);
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
@@ -1396,6 +1403,9 @@ void command(int cmd)
 	case C_COPY: win_clip(CLIP_COPY); break;
 	case C_PASTE: win_clip(CLIP_PASTE); break;
 	case C_SELALL: win_address_focus(1); break;
+	case C_FIND: win_find(0); break;
+	case C_FINDNEXT: win_find(1); break;
+	case C_FINDPREV: win_find(-1); break;
 	case C_BACK:
 		if (br_can_back(&br)) {
 			loading_on();
@@ -1582,6 +1592,8 @@ static int shortcut(short kstate, short key)
 		case 0x1f: cmd = C_SAVE; break;			/* S */
 		case 0x20: cmd = C_BMADD; break;		/* D */
 		case 0x30: cmd = C_BMSHOW; break;		/* B */
+		case 0x21: cmd = C_FIND; break;			/* F */
+		case 0x22: cmd = shift ? C_FINDPREV : C_FINDNEXT; break;	/* G */
 		case 0x15: cmd = C_HISTORY; break;		/* Y */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */

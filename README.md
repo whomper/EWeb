@@ -67,6 +67,8 @@ own fonts.
 - **Bookmarks**: a Bookmarks menu (^D adds the page shown, ^B shows them all
   as a page), kept in `BOOKMARK.HTM` in the bookmark file other browsers
   import and export.
+- **Find in page**: Edit > Find (^F), ^G and Shift-^G: the words marked
+  and brought into view, case aside, Hebrew as it is read.
 - **History and visited links**: View > History (^Y) lists the pages opened,
   newest first; links to them are drawn in their visited colour (colours
   only, and never on a page whose scripts run); the newest 1000 kept in

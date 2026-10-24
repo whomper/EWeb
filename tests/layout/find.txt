@@ -1,0 +1,24 @@
+page 608 x 265, background ffffff, 24 items, 0 links, title "Find in page"
+text 6,32 222x17 #000000 sans13 link 0 "The Atari Falcon came in 1992. An "
+text 228,32 25x17 #000000 sans13 bold link 0 "Ata"
+text 253,32 85x17 #000000 sans13 link 0 "ri in two runs."
+text 6,61 586x17 #000000 sans13 link 0 "A line that wraps, so that a phrase goes on to the next one: lorem ipsum dolor sit amet, the"
+text 6,77 536x17 #000000 sans13 link 0 "end of the line and the start of the next one, Atari on the next line, ATARI in capitals,"
+text 6,93 173x17 #000000 sans13 link 0 "Ångström and ÅNGSTRÖM."
+text 474,122 32x17 #000000 sans13 rtl link 0 "לכולם"
+text 510,122 27x17 #000000 sans13 rtl link 0 "שלום"
+text 541,122 30x17 #000000 sans13 rtl link 0 "עולם,"
+text 575,122 27x17 #000000 sans13 rtl link 0 "שלום"
+text 6,151 77x17 #00000000 sans13 link 0 "Atari hidden"
+clip x 7+240 y 168+48 in 0
+text 7,194 24x17 #000000 sans13 link 0 "one"
+text 7,223 22x17 #000000 sans13 link 0 "two"
+text 7,252 34x17 #000000 sans13 link 0 "three"
+text 7,281 25x17 #000000 sans13 link 0 "four"
+text 7,310 84x17 #000000 sans13 link 0 "Atari in a box"
+bar y 237,168 10x48 box 1 reach 0,98 at 0,0 thumb 0-15
+fill 6,167 242x1 #888888
+fill 6,216 242x1 #888888
+fill 6,168 1x48 #888888
+fill 247,168 1x48 #888888
+text 6,243 88x17 #000000 sans13 link 0 "The last Atari."

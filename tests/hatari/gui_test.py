@@ -18,7 +18,8 @@
   saved under its name), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
   clicked), the history (^Y shows it; HISTORY.TXT written at quit, the
-  pages in it), a page that names no encoding read again in Windows-1255
+  pages in it), Edit > Find on it (^F, ^G, Shift-^G), a page that names
+  no encoding read again in Windows-1255
   (View > Encoding..., its popup by the keyboard), ^Q;
 - scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
   a page whose script makes tabs, one clicked (the page laid out again),
@@ -82,7 +83,7 @@ HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
-Y = 0x15
+Y, F, G = 0x15, 0x21, 0x22
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -590,6 +591,20 @@ def browse():
         check("history: ^Y shows it", ev is not None and ev.startswith("shown about:history ") and
               ev.endswith("title History"), str(r.events()))
         r.shot(19)
+        # Edit > Find: ^F, the words, Return: the first marked; ^G the
+        # next, Shift-^G the one before ("History", "HISTORY.TXT",
+        # "Forget history")
+        r.key(F, (CTRL,))
+        time.sleep(2)		# the dialog
+        r.type("history")
+        r.key(RETURN)
+        ev = r.wait(r"found ", 60)
+        check("find: ^F and the words", ev == "found 1 of 3", str(r.events()))
+        r.shot(20)
+        r.key(G, (CTRL,))
+        check("find: ^G the next", r.wait(r"found ", 60) == "found 2 of 3", str(r.events()))
+        r.key(G, (CTRL, SHIFT))
+        check("find: Shift-^G the one before", r.wait(r"found ", 60) == "found 1 of 3", str(r.events()))
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))
