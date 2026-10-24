@@ -7,7 +7,8 @@ what the server says; for fuzz_url, an href, a newline and a base; for
 fuzz_cookie, Set-Cookie values a line each, the first byte picking the
 address it came from (see fuzz_cookie.c); for fuzz_html, a page, the first
 byte picking its charset, scripting and a fragment's context (see
-fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them;
+fuzz_html.c); for fuzz_bookmark, a bookmark file as browsers export them; for
+fuzz_history, a HISTORY.TXT as EWeb writes it and as one might by hand;
 for fuzz_disposition, a Content-Disposition value, the first byte picking
 the room for its name (see fuzz_disposition.c).
 
@@ -73,6 +74,14 @@ for name, href, base in [
     ("backslash", "\\\\cdn.example.org\\x\\..\\y.css", "http://www.example.org/a/"),
     ("opaque", "javascript:alert(1)", "http://example.org/"),
     ("query", "?a=é&b='c'", "http://example.org/p"),
+    # the kinds url_join_quick joins without a parse
+    ("quick-path", "/wiki/Atari_Falcon?action=history#top", "https://en.wikipedia.org/wiki/Atari"),
+    ("quick-beside", "story2.html?from=1#c", "http://68k.news/news/story1.html?x=2#y"),
+    ("quick-fragment", "#Hardware", "https://en.wikipedia.org/wiki/Atari?a=b#c"),
+    ("quick-query", "?page=2&sort=new", "http://example.org/list/"),
+    ("quick-absolute", "HTTPS://Example.ORG_x-y.com?q#f", "http://example.org/"),
+    ("quick-number", "http://example.0x1f/", "http://example.org/"),
+    ("quick-dots", "a/%2E%2e/b", "http://example.org/x/y"),
 ]:
     put("url", name, href + ("\n" + base if base else ""))
 
@@ -152,3 +161,12 @@ for name, data in [
      "<a\thref=\"t\">&#0;&#xffffff;&#55296;&quot</a><a href=\"z"),
 ]:
     put("bookmark", name, data)
+
+# HISTORY.TXT: as EWeb writes it, and by hand
+for name, data in [
+    ("eweb", "# EWeb's history, oldest first: when (UTC seconds since 1970), address, title\n"
+     "1792000000\thttp://68k.news/\t68k.news\n1792000100\thttps://en.wikipedia.org/wiki/Atari#History\t"
+     "Atari \u05e9\u05dc\u05d5\u05dd\n"),
+    ("hand", "1\thttp://a/\tA\r\r\nno tabs\n2\t\tempty\n99999999999999999999\thttp://a/\t\t\tB\n#x\ty\tz\n3\tu"),
+]:
+    put("history", name, data)

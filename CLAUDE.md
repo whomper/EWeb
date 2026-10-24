@@ -144,7 +144,13 @@ hub stay complete, with the evidence.
 - **Bookmarks** are `src/browse/bookmark.c` (`BOOKMARK.HTM` next to `EWEB.PRG`, Netscape's bookmark
   file; read once a start for the Bookmarks menu, one safe save at each change), listed on
   `about:bookmarks` (`src/browse`). After changing them: `make test` (`tests/browse/bmtest.c`),
-  `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
+  `make hatarigui`, `make hatarifiles`. **The history** is `src/browse/history.c` (`HISTORY.TXT`
+  next to `EWEB.PRG`: read when a page's links are first marked, written once at quit; the newest
+  1000), listed on `about:history`; **visited links** are `src/browse/visited.c` (each link joined
+  by `url_join_quick` where it can, else parsed; colours only, `src/css`; none on a page whose
+  scripts run). After changing them: `make test` (`tests/browse/hgtest.c`, `tests/layout/visited.py`,
+  the CSS cases), `make fuzz` for a while (`fuzz_history`, and `fuzz_url`, which checks the quick
+  join against the parse), `make hatarigui`, `make hatarifiles`. **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages

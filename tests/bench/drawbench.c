@@ -6,13 +6,16 @@
  * ui/screen.c draws them), for counting the 68030 instructions that takes
  * (tools/count68k.sh, tools/prof68k.py):
  *
- *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] PAGE.HTM [SHEET.CSS...]
+ *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] PAGE.HTM [SHEET.CSS...]
  *
  * -P stops after a phase: 1 the document styled (its <style>s and the
  * sheets named), 2 laid out (608 px wide, a CSS px 0.8 of the screen's),
  * 3 (the default) drawn, the whole page (at most 8000 rows), at 8 bits
  * in the 16 standard colours (each colour's pen found as ui/screen.c
  * finds it) or at 16 bits, true colour (-b 16). Pictures aren't fetched.
+ * -V N: a history of N pages (src/browse/history.c, read as HISTORY.TXT
+ * is), and -M the page's links marked visited from it before it is
+ * styled, as at https://example.com/news/index.html (visited.c).
  * Prints the page's height and items.
  */
 #include <stdio.h>
@@ -22,6 +25,8 @@
 #include "canvas.h"
 #include "doc.h"
 #include "font.h"
+#include "history.h"
+#include "visited.h"
 
 #define W 608
 #define ROWS 400
@@ -87,7 +92,7 @@ int main(int argc, char **argv)
 {
 	ec_media m = { W, ROWS, 16 };
 	const char *fnt = "binary/EWEB.FNT";
-	int i = 1, phase = 3, bpp = 8;
+	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0;
 	size_t n;
 	char *data;
 	doc *d;
@@ -101,9 +106,13 @@ int main(int argc, char **argv)
 			bpp = atoi(argv[++i]) == 16 ? 16 : 8;
 		else if (!strcmp(argv[i], "-f") && i + 1 < argc)
 			fnt = argv[++i];
+		else if (!strcmp(argv[i], "-V") && i + 1 < argc)
+			hist = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-M"))
+			mark = 1;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
@@ -123,6 +132,18 @@ int main(int argc, char **argv)
 		if (s != NULL)
 			ec_sheet(d->css, s, sn, EC_ORIGIN_AUTHOR);
 		free(s);
+	}
+	if (hist > 0) {
+		/* as HISTORY.TXT is read: a line a page */
+		char *t = malloc((size_t) hist * 64 + 1), *q = t;
+		long k;
+		for (k = 0; t != NULL && k < hist; k++)
+			q += sprintf(q, "1792000000\thttps://example.com/news/story%ld.html\tA story\n", k);
+		if (t == NULL || !hg_parse(t, q - t))
+			return 1;
+		free(t);
+		if (mark)
+			printf("%ld links visited\n", vis_mark(d, "https://example.com/news/index.html", NULL, NULL, 0));
 	}
 	doc_select(d);
 	if (phase < 2) {

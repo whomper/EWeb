@@ -17,7 +17,8 @@
   under its filename's name; a link with a download attribute, clicked:
   saved under its name), bookmarks (^D adds the page,
   BOOKMARK.HTM written; ^B shows them, the Bookmarks menu has it; Remove
-  clicked), a page that names no encoding read again in Windows-1255
+  clicked), the history (^Y shows it; HISTORY.TXT written at quit, the
+  pages in it), a page that names no encoding read again in Windows-1255
   (View > Encoding..., its popup by the keyboard), ^Q;
 - scripts (the Falcon with its 68882, SCRIPTS= naming the test server):
   a page whose script makes tabs, one clicked (the page laid out again),
@@ -81,6 +82,7 @@ HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
+Y = 0x15
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -582,6 +584,12 @@ def browse():
                           "HREF" not in (saved("BOOKMARK.HTM") or b"HREF").decode("utf-8", "replace"),
                           str(r.events()))
                     r.shot(14)
+        # the history: ^Y shows it (written at quit: below)
+        r.key(Y, (CTRL,))
+        ev = r.wait(r"shown ", 60)
+        check("history: ^Y shows it", ev is not None and ev.startswith("shown about:history ") and
+              ev.endswith("title History"), str(r.events()))
+        r.shot(19)
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))
@@ -593,7 +601,7 @@ def browse():
                                                                           "\u00f2\u00e5\u00ec\u00ed"),
               str(r.events()))
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
-        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 7 * 16 + 8)	# Encoding...
+        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 8 * 16 + 8)	# Encoding...
         time.sleep(1)
         for _ in range(5):		# Auto, UTF-8, Western twice, Hebrew (Windows-1255)
             r.key(DOWN)
@@ -607,6 +615,15 @@ def browse():
         r.shot(16)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
+        hist = ""
+        for _ in range(40):		# (written after the log's "quit")
+            hist = (saved("HISTORY.TXT") or b"").decode("utf-8", "replace")
+            if "enc/w1255.html" in hist:
+                break
+            time.sleep(0.5)
+        check("history: HISTORY.TXT written at quit, the pages in it",
+              "\t%sfiles.html\tFiles\n" % site in hist and "\t%senc/w1255.html\t" % site in hist and
+              "about:" not in hist, hist[-600:])
     finally:
         r.end()
         if xvfb is not None:

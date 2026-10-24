@@ -13,6 +13,7 @@
 #include "ecstyle.h"
 
 unsigned ecs_opts;
+int ecs_visited;
 void (*ecs_setup)(ec_ctx *c);
 
 /* lwc_string to atom: the same string is the same pointer, so a small
@@ -140,8 +141,11 @@ static ec_node *build(ec_ctx *c, node *n, ec_node *parent)
 	}
 	e->nattr = n->nattr;
 	if (href != NULL && (n->name == s_a || (lwc_string_length(n->name) == 4 &&
-			memcmp(lwc_string_data(n->name), "area", 4) == 0)))
+			memcmp(lwc_string_data(n->name), "area", 4) == 0))) {
 		e->flags |= EC_NODE_LINK;
+		if (ecs_visited && lwc_string_length(href) >= 8 && memcmp(lwc_string_data(href), "visited:", 8) == 0)
+			e->flags |= EC_NODE_VISITED;
+	}
 	for (ch = n->first; ch != NULL; ch = ch->next) {
 		if (ch->type == N_TEXT && ch->len > 0)
 			empty = 0;

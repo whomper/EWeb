@@ -140,7 +140,7 @@ typedef struct sbuild {
 	ec_compound comp[32];
 	int ns, ncomp;
 	uint32_t a, b, cc;		/* specificity */
-	int pseudo, never;
+	int pseudo, never, visited;
 } sbuild;
 
 static const ec_sellist *sellist(ec_ctx *c, const ec_tok *t, int i, int n, int forgiving,
@@ -244,7 +244,7 @@ static int anb(const ec_tok *t, int i, int n, int16_t *a, int16_t *b)
 }
 
 static const char *const never_pc[] = {
-	"hover", "active", "focus", "focus-visible", "focus-within", "visited", "target",
+	"hover", "active", "focus", "focus-visible", "focus-within", "target",
 	"target-within", "current", "past", "future", "playing", "paused", "autofill",
 	"user-invalid", "user-valid", "modal", "fullscreen", "popover-open",
 	"picture-in-picture", "valid", "invalid", "in-range", "out-of-range", "default",
@@ -256,7 +256,7 @@ static const struct { const char *s; int op; } simple_pc[] = {
 	{ "first-child", S_FIRST_CHILD }, { "last-child", S_LAST_CHILD },
 	{ "only-child", S_ONLY_CHILD }, { "first-of-type", S_FIRST_OF_TYPE },
 	{ "last-of-type", S_LAST_OF_TYPE }, { "only-of-type", S_ONLY_OF_TYPE },
-	{ "link", S_LINK }, { "any-link", S_LINK }, { "enabled", S_ENABLED },
+	{ "link", S_LINK }, { "any-link", S_ANY_LINK }, { "visited", S_VISITED }, { "enabled", S_ENABLED },
 	{ "disabled", S_DISABLED }, { "checked", S_CHECKED }, { "required", S_REQUIRED },
 	{ "optional", S_OPTIONAL }, { "read-write", S_READ_WRITE }, { "read-only", S_READ_ONLY },
 	{ "placeholder-shown", S_PLACEHOLDER_SHOWN }, { "open", S_OPEN }, { "defined", -1 }, { NULL, 0 }
@@ -280,7 +280,7 @@ static int str_in(const char *s, const char *const *list)
 static void pc_attrs(ec_ctx *c, int op)
 {
 	switch (op) {
-	case S_LINK: refattr(c, c->a_href); break;
+	case S_LINK: case S_VISITED: case S_ANY_LINK: refattr(c, c->a_href); break;
 	case S_ENABLED: case S_DISABLED: refattr(c, c->a_disabled); break;
 	case S_CHECKED: refattr(c, c->a_checked); refattr(c, c->a_selected); refattr(c, c->a_type); break;
 	case S_REQUIRED: case S_OPTIONAL: refattr(c, c->a_required); break;
@@ -291,6 +291,8 @@ static void pc_attrs(ec_ctx *c, int op)
 	case S_DIR: refattr(c, c->a_dir); break;
 	}
 }
+
+static int builder_depth;		/* the levels of :not() and :is() being built (complex) */
 
 /* one pseudo-class or pseudo-element at t[*i] (the colon); 0 if invalid */
 static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
@@ -363,6 +365,21 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		if (simple_pc[op].op < 0)
 			return 1;		/* always true */
 		pc_attrs(c, simple_pc[op].op);
+		if (simple_pc[op].op == S_VISITED || simple_pc[op].op == S_LINK) {
+			/* :link matches every link, as if none were visited;
+			   in :is(), :not() and the like :visited matches none
+			   (:not(:visited) would show the history in any
+			   property); else what of their declarations counts on
+			   a visited link is select.c's: :visited's colours,
+			   :link's all but colours */
+			if (builder_depth > 1)
+				return add_simple(b, simple_pc[op].op == S_LINK ? S_ANY_LINK : S_NEVER) != NULL;
+			if (simple_pc[op].op == S_LINK) {
+				b->visited |= SV_LINK;
+				return add_simple(b, S_ANY_LINK) != NULL;
+			}
+			b->visited |= SV_VISITED;
+		}
 		return add_simple(b, simple_pc[op].op) != NULL;
 	}
 	/* functional */
@@ -582,7 +599,6 @@ static int compound(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 
 /* a complex selector from t[i] to n into an ec_sel (no block yet) */
 static sbuild builders[MAX_NEST];	/* one per level of :not() and :is() */
-static int builder_depth;
 
 static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 {
@@ -597,7 +613,7 @@ static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 	b = &builders[builder_depth++];
 	b->ns = b->ncomp = 0;
 	b->a = b->b = b->cc = 0;
-	b->pseudo = b->never = 0;
+	b->pseudo = b->never = b->visited = 0;
 	i = skip_ws(t, i, n);
 	for (;;) {
 		int comb = C_NONE, ws;
@@ -643,6 +659,7 @@ static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 	sel->pseudo = b->pseudo;
 	sel->ncomp = b->ncomp;
 	sel->never = b->never;
+	sel->visited = (uint8_t) b->visited;
 	sel->comp = comp;
 	sel->simple = simple;
 	for (k = 0; k < b->ncomp; k++)

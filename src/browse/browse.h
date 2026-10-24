@@ -117,6 +117,7 @@ typedef struct browser {
 	/* the page shown's pictures, fetched after it is shown */
 	int pic_stopped;	/* Esc stopped them: no more for this page */
 	int pic_relayout;	/* one came whose size the layout didn't know */
+	int relink;		/* and styled again first: a link on it visited since */
 	unsigned long pic_laid;	/* when the page was last laid out again for them (ms) */
 	int pic_n, pic_done;	/* how many to fetch, and fetched, for the status line */
 

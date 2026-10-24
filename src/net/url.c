@@ -30,37 +30,41 @@ static void put_n(OUT *o, const char *s, int n)
 
 static const char hexd[] = "0123456789ABCDEF";
 
-/* the percent-encode sets: each is the one before it and more */
+/* the percent-encode sets: each is the one before it and more (but
+   the special-query set's ', which the path and userinfo sets lack) */
 enum { SET_FRAG, SET_QUERY, SET_SQUERY, SET_PATH, SET_USER };
+
+#define E_ALL 0x1f
+#define E_PATH (1 << SET_PATH | 1 << SET_USER)
+/* for each ASCII character, the sets that encode it (a bit a set): a
+   table rather than a search of each set a character */
+static const unsigned char enc_sets[128] = {
+	[0 ... 0x1f] = E_ALL, [0x7f] = E_ALL,
+	[' '] = E_ALL, ['"'] = E_ALL, ['<'] = E_ALL, ['>'] = E_ALL,
+	['`'] = 1 << SET_FRAG | E_PATH,
+	['#'] = E_ALL & ~(1 << SET_FRAG),
+	['\''] = 1 << SET_SQUERY,
+	['?'] = E_PATH, ['^'] = E_PATH, ['{'] = E_PATH, ['}'] = E_PATH,
+	['/'] = 1 << SET_USER, [':'] = 1 << SET_USER, [';'] = 1 << SET_USER, ['='] = 1 << SET_USER,
+	['@'] = 1 << SET_USER, ['['] = 1 << SET_USER, ['\\'] = 1 << SET_USER, [']'] = 1 << SET_USER,
+	['|'] = 1 << SET_USER
+};
 
 static int encodes(int set, unsigned char c)
 {
-	if (c < 0x20 || c > 0x7e)
-		return 1;		/* C0 controls, DEL and beyond ASCII */
-	switch (set) {
-	case SET_USER:
-		if (strchr("/:;=@[\\]^|", c))
-			return 1;
-		/* fall through */
-	case SET_PATH:
-		if (strchr("?^`{}", c))
-			return 1;
-		/* fall through */
-	case SET_SQUERY:
-		if (set != SET_PATH && set != SET_USER && c == '\'')
-			return 1;
-		/* fall through */
-	case SET_QUERY:
-		if (c == '#')
-			return 1;
-		return strchr(" \"<>", c) != 0;
-	default:	/* SET_FRAG */
-		return strchr(" \"<>`", c) != 0;
-	}
+	return c > 0x7e || (enc_sets[c] >> set & 1);	/* (beyond ASCII: always) */
 }
 
 static void put_enc(OUT *o, const char *s, int n, int set)
 {
+	if (o->n + n < o->max - 1) {
+		/* room for it as it is: what needs no encoding copied without
+		   put()'s check a character */
+		while (n > 0 && !encodes(set, (unsigned char)*s)) {
+			o->s[o->n++] = *s++;
+			n--;
+		}
+	}
 	while (n-- > 0) {
 		unsigned char c = (unsigned char)*s++;
 		if (encodes(set, c)) {
@@ -512,12 +516,20 @@ static int idna(const unsigned char *s, int n, char *d, int size)
 	return o.n;
 }
 
+/* the forbidden domain code points among ASCII's printing characters */
+static const unsigned char forbidden[128] = {
+	['#'] = 1, ['%'] = 1, ['/'] = 1, [':'] = 1, ['<'] = 1, ['>'] = 1, ['?'] = 1, ['@'] = 1,
+	['['] = 1, ['\\'] = 1, [']'] = 1, ['^'] = 1, ['|'] = 1
+};
+
 /* a host of http or https: percent-decoded, lower case, checked; an
-   address in its usual form */
+   address in its usual form. HOST_MAX: longer ones are refused */
+#define HOST_MAX 256
+
 static int host(OUT *o, const char *h, int n)
 {
-	unsigned char raw[256];
-	char d[256];
+	unsigned char raw[HOST_MAX];
+	char d[HOST_MAX];
 	int m = 0, i, wide = 0;
 	if (n && h[0] == '[') {
 		if (h[n - 1] != ']')
@@ -526,6 +538,7 @@ static int host(OUT *o, const char *h, int n)
 	}
 	if (!n || n >= (int)sizeof(raw))
 		return 0;
+	d[0] = 0;		/* (m is at least 1 below, which GCC can't see) */
 	for (i = 0; i < n; i++) {
 		unsigned char c = (unsigned char)h[i];
 		if (c == '%' && i + 2 < n && is_hex(h[i + 1]) && is_hex(h[i + 2])) {
@@ -545,7 +558,7 @@ static int host(OUT *o, const char *h, int n)
 	}
 	for (i = 0; i < m; i++) {
 		unsigned char c = (unsigned char)d[i];
-		if (c <= 0x20 || c == 0x7f || strchr("#%/:<>?@[\\]^|", c))
+		if (c <= 0x20 || c == 0x7f || (c < 0x80 && forbidden[c]))
 			return 0;		/* the forbidden domain code points */
 	}
 	if (ends_in_number(d, m))
@@ -810,6 +823,148 @@ done:
 		return 0;
 	o.s[o.n] = 0;
 	return 1;
+}
+
+/* ---------------- the common links, joined without a parse ---------------- */
+
+/* a character url_join_quick takes: printing ASCII that the path's, the
+   query's and the fragment's percent-encode sets leave as it is, and the
+   ? and # that start the query and the fragment (not \\, a slash) */
+static int plain(unsigned char c)
+{
+	return c > 0x20 && c < 0x7f && c != '\\' &&
+	       (c == '#' || c == '?' || !(enc_sets[c] & (1 << SET_FRAG | 1 << SET_SQUERY | 1 << SET_PATH)));
+}
+
+/* the path at p (to '?', '#' or the end) has no "." or ".." segment */
+static int no_dots(const char *p)
+{
+	for (;;) {
+		const char *e = p;
+		while (*e && *e != '/' && *e != '?' && *e != '#')
+			e++;
+		if (single_dot(p, (int)(e - p)) || double_dot(p, (int)(e - p)))
+			return 0;
+		if (*e != '/')
+			return 1;
+		p = e + 1;
+	}
+}
+
+/* a then b (bn long) into out: its length, 0 if too long */
+static int join(char *out, int size, const char *a, int an, const char *b, int bn)
+{
+	if (an + bn > URL_MAX - 2 || an + bn >= size)
+		return 0;
+	memcpy(out, a, an);
+	memcpy(out + an, b, bn + 1);
+	return an + bn;
+}
+
+static const char *plain_host(const char *s, const char *p);
+
+int url_join_quick(const URL *base, const char *s, char *out, int size)
+{
+	/* plain() of each byte, a table made at the first call: 2 for a '.'
+	   or '%', which may make a dot segment */
+	static unsigned char take[256];
+	const char *p;
+	int n, len, dots = 0;
+	if (!take['a']) {
+		for (n = 0; n < 256; n++)
+			take[n] = (unsigned char)(plain((unsigned char)n) ? 1 + (n == '.' || n == '%') : 0);
+	}
+	/* one pass: every character taken, the length, and whether a dot
+	   segment may be there (a '.' starting a segment, or a '%') */
+	for (p = s; take[(unsigned char)*p]; p++)
+		if (take[(unsigned char)*p] == 2 && (*p == '%' || p == s || p[-1] == '/'))
+			dots = 1;
+	if (*p)
+		return 0;
+	len = (int)(p - s);
+	if (len >= URL_MAX - 1)
+		return 0;
+	/* a scheme: http or https, then // and a host of letters, digits,
+	   '-', '.' and '_' that isn't an IPv4 address */
+	for (p = s; is_alpha(*p) || (p > s && (is_digit(*p) || *p == '+' || *p == '-' || *p == '.')); p++)
+		;
+	if (*p == ':' && p > s) {
+		const char *h = p + 3, *e = plain_host(s, p);
+		int tls = (int)(p - s) == 5, i;
+		if (!e || (dots && *e == '/' && !no_dots(e + 1)))
+			return 0;
+		n = len + (*e != '/');	/* (a path, "/", when it has none) */
+		if (n > URL_MAX - 2 || n >= size)
+			return 0;
+		n = tls ? 8 : 7;
+		memcpy(out, tls ? "https://" : "http://", n);
+		for (i = 0; h + i < e; i++)
+			out[n++] = (char)lower(h[i]);
+		if (*e != '/')
+			out[n++] = '/';
+		memcpy(out + n, e, len - (e - s) + 1);
+		return n + len - (int)(e - s);
+	}
+	if (base == 0 || !base->special || !len || (s[0] == '/' && s[1] == '/'))
+		return 0;
+	if (s[0] == '#')
+		return join(out, size, base->href, base->frag, s, len);
+	if (s[0] == '?')
+		return join(out, size, base->href, base->query, s, len);
+	if (dots && !no_dots(s[0] == '/' ? s + 1 : s))
+		return 0;
+	if (s[0] == '/')
+		return join(out, size, base->href, base->path, s, len);
+	/* beside the base's last segment */
+	for (n = base->query; n > base->path && base->href[n - 1] != '/'; n--)
+		;
+	return join(out, size, base->href, n, s, len);
+}
+
+/* the host of an http or https address at s (after "http:" or "https:",
+   p at the ':'), plain as url_join_quick takes it: where it ends, or 0 */
+static const char *plain_host(const char *s, const char *p)
+{
+	const char *h = p + 3, *e;
+	int tls = (int)(p - s) == 5;
+	if ((p - s != 4 && p - s != 5) || (s[0] | 0x20) != 'h' || (s[1] | 0x20) != 't' ||
+			(s[2] | 0x20) != 't' || (s[3] | 0x20) != 'p' || (tls && (s[4] | 0x20) != 's') ||
+			p[1] != '/' || p[2] != '/')
+		return 0;
+	for (e = h; is_alpha(*e) || is_digit(*e) || *e == '-' || *e == '.' || *e == '_'; e++)
+		;
+	if (e == h || e - h >= HOST_MAX || (*e && *e != '/' && *e != '?' && *e != '#') ||
+			ends_in_number(h, (int)(e - h)))
+		return 0;
+	return e;
+}
+
+int url_origin_quick(const URL *base, const char *s, char *out, int size)
+{
+	const char *p, *e;
+	int n;
+	if ((unsigned char)*s <= 0x20 && *s)
+		return 0;
+	/* "//" (or a backslash, or a tab between) is another host: not this */
+	if (is_slash(s[0]))
+		return is_slash(s[1]) || s[1] == '\t' || s[1] == '\n' || s[1] == '\r' || !base || !base->special ? 0 : -1;
+	/* a scheme comes before any '/', '?' or '#' (a tab or newline in it
+	   is taken out by the parse: not this either) */
+	for (p = s; *p && !is_slash(*p) && *p != '?' && *p != '#' && *p != ':'; p++)
+		if (*p == '\t' || *p == '\n' || *p == '\r')
+			return 0;
+	if (*p != ':')
+		return base && base->special ? -1 : 0;
+	if (p == s || !(e = plain_host(s, p)))
+		return 0;
+	n = p - s == 5 ? 8 : 7;
+	if (n + (int)(e - p - 3) >= size)
+		return 0;
+	memcpy(out, n == 8 ? "https://" : "http://", n);
+	for (p += 3; p < e; p++)
+		out[n++] = (char)lower(*p);
+	out[n] = 0;
+	return n;
 }
 
 int url_parse(URL *u, const char *s, const URL *base)

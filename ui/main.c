@@ -15,6 +15,7 @@
 #include "aboutbox.h"
 #include "av.h"
 #include "bookmark.h"
+#include "history.h"
 #include "clip.h"
 #include "conn.h"
 #include "cookie.h"
@@ -94,6 +95,7 @@ static const MBAR_ITEM m_view[] = {
 	{ "Back", "Undo", C_BACK },
 	{ "Forward", "\x01^Z", C_FORWARD },
 	{ "Home", 0, C_HOME },
+	{ "History", "^Y", C_HISTORY },
 	{ "-", 0, 0 },
 	{ "Larger text", "^+", C_LARGER },
 	{ "Smaller text", "^-", C_SMALLER },
@@ -122,6 +124,7 @@ static const MBAR_ITEM m_opts[] = {
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
 	{ "Forget cookies...", 0, C_COOKIES },
+	{ "Forget history...", 0, C_FORGETHG },
 	{ "Empty the cache...", 0, C_CACHE },
 	{ 0, 0, 0 }
 };
@@ -269,6 +272,7 @@ void menu_update(void)
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
+	enable(C_HISTORY, !loading);
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
 	enable(C_SAVE, !loading && br.src != NULL);
@@ -1501,6 +1505,17 @@ void command(int cmd)
 			status("EWeb has forgotten every site's cookies.");
 		}
 		break;
+	case C_FORGETHG:
+		/* the pages shown: gone from memory at once, and from the disk at
+		   quit (their links not visited from the next page on) */
+		if (alert(2, "[2][Forget the history?|The pages you have opened|are no longer listed, and|their links not marked.][Forget|Cancel]") == 1) {
+			hg_clear();
+			status("EWeb has forgotten the pages you opened.");
+			if (strncmp(br.url, "about:history", 13) == 0)
+				command(C_RELOAD);	/* (the list shown, empty) */
+		}
+		break;
+	case C_HISTORY: go("about:history"); break;
 	case C_CACHE: {
 		/* the pages and pictures kept on the disk: gone at once */
 		long bytes, n = dc_count(&bytes);
@@ -1567,6 +1582,7 @@ static int shortcut(short kstate, short key)
 		case 0x1f: cmd = C_SAVE; break;			/* S */
 		case 0x20: cmd = C_BMADD; break;		/* D */
 		case 0x30: cmd = C_BMSHOW; break;		/* B */
+		case 0x15: cmd = C_HISTORY; break;		/* Y */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */
 		case 0x11: cmd = C_QUIT; break;			/* W: the one window */
@@ -1869,6 +1885,9 @@ int main(void)
 		path_join(bm, sizeof bm, opt.workdir, "BOOKMARK.HTM");
 		bm_file(bm);
 		bm_items();
+		/* the pages shown: read when a page's links are first marked */
+		path_join(bm, sizeof bm, opt.workdir, "HISTORY.TXT");
+		hg_file(bm);
 	}
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EWeb: not enough memory.][ Quit ]");
@@ -1985,6 +2004,7 @@ int main(void)
 	win_close();
 	settings_save();
 	ck_save();		/* the cookies that last, once, if they changed */
+	hg_save();		/* the pages shown, once, if they changed */
 	dc_close();		/* the cache's index, once (and its pack written again if it must be) */
 	menu_bar(mb.tree, 0);
 	av_exit();

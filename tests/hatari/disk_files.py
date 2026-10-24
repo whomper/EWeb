@@ -15,8 +15,9 @@ Each case's Fopen, Fcreate and Fsfirst are counted between the events
 EWEB.PRG gives through NatFeats, those the program makes itself (at a PC
 in its TPA, not the desktop's), and must stay within the case's budget:
 about one open per file the job touches, plus a safe save's. A quit
-writes only COOKIES.TXT, once, as the last of the five pages set a
-cookie that lasts; pages, history and idle touch nothing.
+writes COOKIES.TXT, once, as the last of the five pages set a cookie
+that lasts, and HISTORY.TXT, once, as pages were shown; pages, Back and
+Forward and idle touch nothing.
 
     tests/hatari/disk_files.py OUT      (IDLE=seconds, 300 by default)"""
 import collections
@@ -48,10 +49,11 @@ BUDGET = {
     # EWEB.INF, EWEB.FNT, BOOKMARK.HTM for the menu (a user's; with none
     # there, pf_load also looks for an unfinished safe save's file once)
     "start": (3, 0, 0),
-    # the first page over the network: COOKIES.TXT read (not there: its
-    # safe save's new file looked for too), the cache's index read (none
-    # yet); what the pages bring is kept in memory until quit
-    "pictures": (2, 0, 1),
+    # the first page over the network: COOKIES.TXT and HISTORY.TXT read
+    # (not there: their safe saves' new files looked for too), the cache's
+    # index read (none yet); what the pages bring is kept in memory until
+    # quit
+    "pictures": (3, 0, 2),
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
@@ -61,14 +63,15 @@ BUDGET = {
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
-    # looked for, then made; EWEB.INF unchanged; the cache's pack made with
-    # what the session brought, in one write, and its index saved
-    "quit": (1, 4, 0),
+    # looked for, then made; HISTORY.TXT, once; EWEB.INF unchanged; the
+    # cache's pack made with what the session brought, in one write, and
+    # its index saved
+    "quit": (1, 5, 0),
     "start again": (3, 0, 0),
-    # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
-    # then written over; the cache's index
-    "secure page again": (6, 0, 1),
-    "quit again": (0, 0, 0),        # the cookies as they were
+    # COOKIES.TXT and EWEB.KEY; HISTORY.TXT; CACERT.PEM's date; ROOTS.DAT;
+    # SEED.DAT read, then written over; the cache's index
+    "secure page again": (7, 0, 1),
+    "quit again": (0, 1, 0),        # the cookies as they were; HISTORY.TXT (a page shown)
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
 

@@ -76,6 +76,8 @@ typedef struct doc {
 	/* its scripts' state (src/js), let go first by doc_free */
 	void *js;
 	void (*js_free)(void *js);
+	unsigned long marked;		/* the history's changes its links were marked at, + 1
+					   (0: never); browse's */
 	uint8_t scripting;		/* parsed for scripts run (its <noscript>s text) */
 	/* its sheets as they were added (src/browse): the widths, CSS px,
 	   their media queries hold at as they did then (ec_media_span), and
@@ -179,6 +181,10 @@ int doc_has_scripts(const doc *d);
    0, or -1 when out of memory (some elements have no style) */
 void doc_add_ua(doc *d);
 int doc_select(doc *d);
+/* each link's EC_NODE_VISITED from visited(ud, href) (its href as the
+   page has it; visited NULL: none is), before doc_select; how many
+   changed. dry: only counted */
+long doc_mark_links(doc *d, int (*visited)(void *ud, const char *href), void *ud, int dry);
 
 /* EWeb's UA stylesheet, and what it adds in quirks mode */
 extern const char doc_ua_css[];

@@ -240,7 +240,12 @@ static int match_compound(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, 
 				return 0;
 			break;
 		}
-		case S_LINK:
+		case S_VISITED:
+			if ((e->flags & (EC_NODE_LINK | EC_NODE_VISITED)) != (EC_NODE_LINK | EC_NODE_VISITED))
+				return 0;
+			break;
+		case S_LINK:		/* (:link is :any-link once parsed: sheet.c) */
+		case S_ANY_LINK:
 			if (!(e->flags & EC_NODE_LINK))
 				return 0;
 			break;
@@ -405,14 +410,31 @@ static void bloom_pop(ec_ctx *c, const ec_node *e)
 
 /* ------------------------------------------------------------ collecting */
 
+/* the properties a :visited rule may set (CSS Selectors 4, 8.2) */
+static int colour_prop(int p)
+{
+	return p == EP_COLOR || p == EP_BACKGROUND_COLOR || p == EP_BORDER_TOP_COLOR || p == EP_BORDER_RIGHT_COLOR ||
+	       p == EP_BORDER_BOTTOM_COLOR || p == EP_BORDER_LEFT_COLOR || p == EP_TEXT_STROKE_COLOR;
+}
+
 typedef struct hit {
 	uint32_t prio, order;
 	const ec_block *b;
 	uint8_t pseudo;
+	uint8_t only;			/* its selector's SV_*, then (style_element) what of it
+					   counts: SV_VISITED colours, SV_LINK all but colours,
+					   both nothing, 0 all */
 } hit;
+
+/* a declaration of a hit whose selector has :visited or :link counts */
+static int counts(int only, int p)
+{
+	return only == SV_VISITED ? colour_prop(p) : only == SV_LINK ? !colour_prop(p) : 0;
+}
 
 static hit hits[MAX_HITS];
 static int nhits;
+static int link_hits;			/* the hits' SV_* together */
 
 static void collect(ec_ctx *c, const ec_vec *v, const ec_node *e, int *mf)
 {
@@ -440,6 +462,8 @@ static void collect(ec_ctx *c, const ec_vec *v, const ec_node *e, int *mf)
 		hits[nhits].order = r->order;
 		hits[nhits].b = r->sel->block;
 		hits[nhits].pseudo = r->sel->pseudo;
+		hits[nhits].only = r->sel->visited;
+		link_hits |= r->sel->visited;
 		nhits++;
 	}
 }
@@ -1148,7 +1172,7 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo)
 			if (hits[i].pseudo != pseudo || (hits[i].prio >> 28) != (uint32_t) o || !b->imp)
 				continue;
 			for (j = b->n - 1; j >= 0; j--)
-				if (b->d[j].imp)
+				if (b->d[j].imp && (!hits[i].only || counts(hits[i].only, b->d[j].prop)))
 					take(&k, &b->d[j]);
 		}
 	/* then the rest, most specific first */
@@ -1158,7 +1182,7 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo)
 		if (hits[i].pseudo != pseudo)
 			continue;
 		for (j = b->n - 1; j >= 0; j--)
-			if (!b->d[j].imp)
+			if (!b->d[j].imp && (!hits[i].only || counts(hits[i].only, b->d[j].prop)))
 				take(&k, &b->d[j]);
 	}
 	/* custom properties: this element's over its parent's */
@@ -1198,15 +1222,18 @@ typedef struct centry {
 } centry;
 
 static centry cache[CACHE_SIZE];
-static uintptr_t keybuf[MAX_HITS];
+static uintptr_t keybuf[2 * MAX_HITS];
 
 static int build_key(void)
 {
-	int i;
+	int i, n = 0;
 
-	for (i = 0; i < nhits; i++)
-		keybuf[i] = (uintptr_t) hits[i].b | hits[i].pseudo;
-	return nhits;
+	for (i = 0; i < nhits; i++) {
+		keybuf[n++] = (uintptr_t) hits[i].b | hits[i].pseudo;
+		if (hits[i].only)
+			keybuf[n++] = hits[i].only;	/* (what of it counts: no block is at 1, 2 or 3) */
+	}
+	return n;
 }
 
 static uint32_t key_hash(const ec_style *parent, int n)
@@ -1356,7 +1383,7 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	ec_style *st;
 	const ec_attr *sa;
 
-	nhits = 0;
+	nhits = link_hits = 0;
 	*mf = 0;
 	if (e->id)
 		collect_atom(c, e->id, EC_B_ID, e, mf);
@@ -1376,6 +1403,7 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 			hits[nhits].order = 0xffffffff;
 			hits[nhits].b = b;
 			hits[nhits].pseudo = PE_NONE;
+			hits[nhits].only = 0;
 			nhits++;
 		}
 	}
@@ -1387,10 +1415,25 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 			hits[nhits].order = 0;
 			hits[nhits].b = b;
 			hits[nhits].pseudo = PE_NONE;
+			hits[nhits].only = 0;
 			nhits++;
 		}
 	}
 	c->st.matched += nhits;
+	for (i = 0; (link_hits & SV_LINK) && i < nhits; i++)
+		if (hits[i].only & SV_LINK) {
+			/* :link on the link this element is or is in (the
+			   nearest): on a visited one, as if it weren't, but for
+			   colours, which are :visited's (CSS Selectors 4, 8.2) */
+			const ec_node *l = e;
+			int k;
+			while (l != NULL && !(l->flags & EC_NODE_LINK))
+				l = l->parent;
+			if (l == NULL || !(l->flags & EC_NODE_VISITED))
+				for (k = i; k < nhits; k++)
+					hits[k].only &= (uint8_t) ~SV_LINK;
+			break;
+		}
 	for (i = 0; i < nhits; i++) {
 		ec_block *b = (ec_block *) hits[i].b;
 		if (!b->parsed)

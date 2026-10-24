@@ -67,6 +67,10 @@ own fonts.
 - **Bookmarks**: a Bookmarks menu (^D adds the page shown, ^B shows them all
   as a page), kept in `BOOKMARK.HTM` in the bookmark file other browsers
   import and export.
+- **History and visited links**: View > History (^Y) lists the pages opened,
+  newest first; links to them are drawn in their visited colour (colours
+  only, and never on a page whose scripts run); the newest 1000 kept in
+  `HISTORY.TXT` (written once, at quit); Options > Forget history.
 - **A disk cache**, as HTTP has browsers keep one: pages, stylesheets and
   pictures kept in one pack (`CACHE\EWEB.PAK`) from one run to the next,
   asked again with their ETag or date when they say so, and pictures kept
@@ -214,13 +218,13 @@ make            # binary/EWEB.PRG, EWEBST.PRG (the ST edition), EWEB.FNT, NSBENC
 make help HCP=/path/to/hcp   # binary/EWEB.HYP (common/tools/build-hcp.sh builds hcp)
 make bench      # build/host/nsbench and build/host/ewget, for this computer
 make bench68k   # build/m68k/nsbench, a 68030 Linux program for tools/count68k.sh
-make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, the HTTP client, cookies, bookmarks, the disk cache, the fuzz finds, forms, the layout and the scripts, with ASan and UBSan
+make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, the HTTP client, cookies, bookmarks, the history, the disk cache, the fuzz finds, forms, the layout and the scripts, with ASan and UBSan
 make itest      # ewget and the browser against servers on this computer, over TCP and TLS, and through the Pi gateway's webgate (gateway/)
 make hatarinet  # EWGET.TTP on an emulated Falcon, through FAKESTNG, against those servers
 make hatarigui  # EWEB.PRG on emulated Falcons and TTs, EWEBST.PRG on STs: browsing over the network, scripts, every screen mode, the Pi gateway
 make hatarifiles  # what EWEB.PRG and EWGET.TTP do on the disk, against each case's budget
 make urltest    # the URL parser against the URL Standard's tests (tests/url/fetch.sh first)
-make fuzz       # the HTTP client, the URL and HTML parsers, cookies and the bookmark file under libFuzzer (clang)
+make fuzz       # the HTTP client, the URL and HTML parsers, cookies, the bookmark file and HISTORY.TXT under libFuzzer (clang)
 make h5test     # EWeb's HTML parser and Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
 make csscmp     # EWeb's CSS engine against LibCSS on the page set (tests/bench/pages.sh first)
 make dist       # dist/EWEB-x.y.zip, as on the Releases page
@@ -247,8 +251,9 @@ gateway/              AERA-Gateway's Raspberry Pi gateways, webgate.py (EWeb's) 
 ui/                   EWEB.PRG's GEM side: the window, the toolbar (its pictures in
                       tbicons.h, made by tools/mktbicons.py), the page on the screen
                       in every mode, the menus, the Settings, the About box
-src/browse/           browsing: addresses, loading, history, EWeb's own pages, saving, bookmarks (bookmark.c),
-                      the disk cache (dcache.c), the pages' pictures (img.c)
+src/browse/           browsing: addresses, loading, Back and Forward, EWeb's own pages, saving, bookmarks (bookmark.c),
+                      the history (history.c) and visited links (visited.c), the disk cache (dcache.c),
+                      the pages' pictures (img.c)
 src/doc/              the document: EWeb's HTML parser (html.c), the UA stylesheet, HTML's hints, forms (form.c)
 src/layout/           the layout: boxes, lines, floats, inline blocks, tables, flexbox and grid, a display list
 src/gfx/              the fonts (EWEB.FNT) and drawing into memory
@@ -269,13 +274,13 @@ tests/html5lib/       EWeb's parser (ewh5test.c) and Hubbub against the Web Plat
 tests/hebrew/         a Hebrew page in every Hebrew encoding, with no label (unlabelled/), and visual (visual/)
 tests/net/            ewget, the HTTP client's tests (nettest, and itest with server.py), cookies.txt
 tests/url/            the URL parser against the URL Standard's tests
-tests/fuzz/           fuzz targets for the HTTP client, the URL and HTML parsers, cookies and the bookmark file,
+tests/fuzz/           fuzz targets for the HTTP client, the URL and HTML parsers, cookies, the bookmark file and HISTORY.TXT,
                       their seeds and past finds (found/)
 tests/hatari/         EWGET.TTP, EWEB.PRG and EWEBST.PRG in Hatari (through common/tools/fakesting),
                       and what they do on the disk (disk_files.py)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
-tests/browse/         the bookmarks, the disk cache, the Pi's pens, a refresh, and a page's
+tests/browse/         the bookmarks, the history, the disk cache, the Pi's pens, a refresh, and a page's
                       encoding (enctest.c: the sniffing, the default by address, queries)
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
@@ -316,7 +321,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   gzip and deflate, redirects, kept connections, and what a hostile server
   might send), the cookies (`tests/net/cookies.txt`, from RFC 6265bis), the
   bookmarks (`tests/browse/bmtest.c`: other browsers' files read, adding,
-  removing, the file written at each change), the disk cache on a clock of
+  removing, the file written at each change), the history
+  (`tests/browse/hgtest.c`: the newest 1000, a place on a page another
+  address, the file written at quit and read again), the disk cache on a clock of
   its own (`tests/browse/dctest.c`: how long an answer stays fresh, what may
   not be kept, asking again and a 304, the pack a ring of the cache's size),
   pictures that come as the Pi's pens (`tests/browse/pentest.c`), the fuzz

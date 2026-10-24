@@ -304,6 +304,12 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
 		-Icommon/src -o $@ $(filter %.c,$^)
+# the history (src/browse/history.c)
+build/asan/hgtest: tests/browse/hgtest.c src/browse/history.c src/browse/history.h common/src/util.c \
+		common/src/futil.c tests/host/plat_posix.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
+		-Icommon/src -o $@ $(filter %.c,$^)
 # the disk cache (src/browse/dcache.c)
 build/asan/dctest: tests/browse/dctest.c src/browse/dcache.c src/browse/dcache.h $(HOSTNET_SRC) $(NET_HDRS) \
 		build/host/libbearssl.a
@@ -735,6 +741,18 @@ build/asan/replay_bookmark: tests/fuzz/fuzz_bookmark.c common/tests/fuzz/replay.
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Isrc -Isrc/browse -Icommon/src \
 		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_BM_SRC)
 FUZZERS += bookmark
+# HISTORY.TXT (src/browse/history.c)
+FUZZ_HG_SRC = src/browse/history.c common/src/util.c common/src/futil.c tests/host/plat_posix.c
+build/fuzz/fuzz_history: tests/fuzz/fuzz_history.c $(FUZZ_HG_SRC) src/browse/history.h
+	@mkdir -p $(@D)
+	$(FUZZCC) -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -Isrc -Isrc/browse \
+		-Icommon/src -o $@ $< $(FUZZ_HG_SRC)
+build/asan/replay_history: tests/fuzz/fuzz_history.c common/tests/fuzz/replay.c $(FUZZ_HG_SRC) \
+		src/browse/history.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Isrc -Isrc/browse -Icommon/src \
+		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_HG_SRC)
+FUZZERS += history
 
 fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 	@for f in $(FUZZERS); do \
@@ -890,7 +908,8 @@ build/m68k/drawbench: tests/bench/drawbench.c build/m68k/bench/atheap.o build/m6
 		build/m68k/ewb/layout/layout.o build/m68k/ewb/gfx/canvas.o build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) \
 		$(EWB_HDRS)
 	$(M68KCC) -m68030 -O2 -std=gnu99 -DNDEBUG $(EWB_FLAGS) $(NSINC) -static -o $@ tests/bench/drawbench.c \
-		tests/host/plat_posix.c common/src/util.c common/src/inflate.c $(filter %.o,$^)
+		src/browse/history.c src/browse/visited.c src/net/url.c \
+		tests/host/plat_posix.c common/src/util.c common/src/futil.c common/src/inflate.c $(filter %.o,$^)
 # a page's scripts as EWEB.PRG runs them (src/js), as 68030 code with the
 # FPU, for counting (tools/count68k.sh build/m68k/jsbench PAGE.HTM)
 m68k_JS := build/m68k/js/js.o $(addprefix build/m68k/qjs/,$(addsuffix .o,$(QJS_C)))
@@ -938,11 +957,12 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/dltest binary/EWEB.FNT
+		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/dltest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
 	build/asan/bmtest build/asan
+	build/asan/hgtest build/asan
 	build/asan/dctest build/asan
 	build/asan/pentest
 	build/asan/rftest
@@ -963,6 +983,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 

@@ -198,7 +198,7 @@ enum {
 	S_ATTR, S_ATTR_EQ, S_ATTR_INCL, S_ATTR_DASH, S_ATTR_PREFIX, S_ATTR_SUFFIX, S_ATTR_SUBSTR,
 	S_ROOT, S_EMPTY, S_FIRST_CHILD, S_LAST_CHILD, S_ONLY_CHILD, S_NTH_CHILD, S_NTH_LAST_CHILD,
 	S_FIRST_OF_TYPE, S_LAST_OF_TYPE, S_ONLY_OF_TYPE, S_NTH_OF_TYPE, S_NTH_LAST_OF_TYPE,
-	S_LINK, S_NEVER, S_NOT, S_IS, S_LANG, S_DIR,
+	S_LINK, S_VISITED, S_ANY_LINK, S_NEVER, S_NOT, S_IS, S_LANG, S_DIR,
 	S_ENABLED, S_DISABLED, S_CHECKED, S_REQUIRED, S_OPTIONAL, S_READ_WRITE, S_READ_ONLY,
 	S_PLACEHOLDER_SHOWN, S_OPEN
 };
@@ -222,12 +222,20 @@ typedef struct ec_compound {
 
 enum { PE_NONE, PE_BEFORE, PE_AFTER, PE_OTHER };
 
+#define SV_VISITED 1
+#define SV_LINK 2
+
 typedef struct ec_sel {
 	const ec_block *block;
 	uint32_t spec;
 	uint8_t pseudo;			/* PE_* */
 	uint8_t ncomp;
 	uint8_t never;			/* :hover and the like: no match in a static page */
+	uint8_t visited;		/* SV_*: it has :visited (its declarations count
+					   only for colours) or :link (it matches every link,
+					   and on a visited one only its declarations that
+					   aren't colours count): CSS Selectors 4, 8.2, a page
+					   can't learn the history from its layout */
 	const ec_compound *comp;	/* comp[0] is the subject's */
 	const ec_simple *simple;
 } ec_sel;

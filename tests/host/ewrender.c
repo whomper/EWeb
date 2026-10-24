@@ -53,6 +53,8 @@
  * selector puts it, once its answer has begun, and the selector takes
  * MS ms (the answer waits unread meanwhile). -m FILE keeps the bookmarks in
  * FILE (as BOOKMARK.HTM); -A adds the page shown at the end to them.
+ * -V FILE keeps the history in FILE (as HISTORY.TXT: read when needed,
+ * written at the end); the links to the pages in it are visited.
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
  * Through the Pi's browser: webgate's snapshots).
@@ -100,6 +102,7 @@
 #include <sys/resource.h>
 
 #include "bookmark.h"
+#include "history.h"
 #include "browse.h"
 #include "canvas.h"
 #include "conn.h"
@@ -731,6 +734,8 @@ int main(int argc, char **argv)
 			back_after = 1;
 		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
 			bm_file(argv[++i]);
+		else if (!strcmp(argv[i], "-V") && i + 1 < argc)
+			hg_file(argv[++i]);
 		else if (!strcmp(argv[i], "-Q") && i + 1 < argc)
 			pens = atoi(argv[++i]);	/* pictures as the Pi's pens: 1 always, 0 never */
 		else if (!strcmp(argv[i], "-S") && i + 1 < argc)
@@ -1188,6 +1193,8 @@ int main(int argc, char **argv)
 	sb_free(&extra);
 	font_free();
 	ck_save();
+	hg_save();
+	hg_free();
 	ck_file(NULL, NULL);
 	ck_clear();
 	dc_close();

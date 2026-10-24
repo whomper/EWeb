@@ -188,6 +188,22 @@ bookmark file other browsers import and export: put one exported from
 Firefox, Chrome or another browser there (its folders are left out) and
 EWeb lists its links, or open EWeb's in another browser.
 
+## History
+
+**View > History** (**^Y**) shows the pages you have opened, the
+newest first, under the day you last opened each, a hundred to a page.
+A link to a page you have opened is drawn in its visited colour (purple,
+unless the page chooses another; in 16 colours, dark blue beside the
+bright blue of the others), so you can see where you have been; a link
+to a place on a page counts once you have followed it.
+
+The newest 1000 (fewer when their addresses are long) are kept in
+`HISTORY.TXT` next to `EWEB.PRG`, written when you quit EWeb; an
+address with a password in it is never kept. **Options > Forget history** forgets them, the file
+too. A page whose scripts run never shows which of its links you have
+visited: a script could read it, so they stay in the colour of a link
+not yet followed.
+
 ## Saving pages and files
 
 - **File > Save page as** (**^S**) saves the page shown as it came, in
@@ -365,6 +381,7 @@ choose all of it.
 | ^S | save the page shown |
 | ^D | add the page shown to the bookmarks |
 | ^B | show the bookmarks |
+| ^Y | show the history |
 | Alternate-click | save a link's file |
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |

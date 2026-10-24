@@ -11,6 +11,8 @@
 
 #include "browse.h"
 #include "bookmark.h"
+#include "history.h"
+#include "visited.h"
 #include "form.h"
 #include "html.h"
 #include "img.h"
@@ -21,6 +23,7 @@
 #include "conn.h"
 #include "cookie.h"
 #include "dcache.h"
+#include "tls.h"
 #include "plat.h"
 #include "util.h"
 
@@ -474,6 +477,92 @@ static void bookmarks_page(SBUF *s)
 		sb_adds(s, "</ul>");
 	sb_adds(s, "<p class=small>They are kept in BOOKMARK.HTM, next to EWEB.PRG: a file other browsers "
 		   "import and export.</p></body></html>");
+}
+
+/* about:history: the pages shown, newest first, under the day each was
+   last shown (the clock's), HG_PAGE a page (about:history?page=N), so
+   that a long history fits a small machine */
+#define HG_PAGE 100
+
+static void hg_day(long long t, int *y, int *m, int *d)
+{
+	/* the days since 1970 as a date (H. Hinnant's civil_from_days) */
+	long long z = (t >= 0 ? t : t - 86399) / 86400 + 719468;
+	long long era = (z >= 0 ? z : z - 146096) / 146097;
+	unsigned long doe = (unsigned long) (z - (long long) era * 146097);
+	unsigned long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	unsigned long doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+	*d = (int) (doy - (153 * mp + 2) / 5 + 1);
+	*m = (int) (mp < 10 ? mp + 3 : mp - 9);
+	*y = (int) ((long long) yoe + era * 400 + (*m <= 2));
+}
+
+static void history_page(SBUF *s, int pg)
+{
+	static const char *const mon[] = { "January", "February", "March", "April", "May", "June", "July",
+					   "August", "September", "October", "November", "December" };
+	long long off = tls_tz_minutes * 60LL, today = (ck_now() + off) / 86400, day = -1;
+	int n = hg_count(), pages = (n + HG_PAGE - 1) / HG_PAGE, i, k;
+	char line[160];
+	if (pg >= pages)
+		pg = pages - 1;
+	if (pg < 0)
+		pg = 0;
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>History</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "<style>h2{font-size:16px;margin:16px 0 4px}.t{font-size:13px;color:#555}"
+		   "ul{list-style:none;padding-left:8px}</style></head><body><h1>History</h1>");
+	if (n == 0)
+		sb_adds(s, "<p>None yet: the pages you open are listed here, newest first.</p>");
+	/* newest first: the list is oldest first */
+	for (k = pg * HG_PAGE; k < n && k < (pg + 1) * HG_PAGE; k++) {
+		const HG *e = hg_get(n - 1 - k);
+		long long t = e->when + off;
+		char host[128];
+		if (t / 86400 != day) {
+			int y, m, d;
+			if (day != -1)
+				sb_adds(s, "</ul>");
+			day = t / 86400;
+			hg_day(t, &y, &m, &d);
+			if (day == today)
+				snprintf(line, sizeof line, "<h2>Today</h2>");
+			else if (day == today - 1)
+				snprintf(line, sizeof line, "<h2>Yesterday</h2>");
+			else
+				snprintf(line, sizeof line, "<h2>%d %s %d</h2>", d, mon[m - 1], y);
+			sb_adds(s, line);
+			sb_adds(s, "<ul>");
+		}
+		i = (int) (t % 86400 >= 0 ? t % 86400 : t % 86400 + 86400);
+		snprintf(line, sizeof line, "<li><span class=t>%02d:%02d</span> <a href=\"", i / 3600, i / 60 % 60);
+		sb_adds(s, line);
+		esc(s, e->url);
+		sb_adds(s, "\">");
+		esc(s, e->title[0] ? e->title : e->url);
+		host_of(e->url, host, sizeof host);
+		sb_adds(s, "</a> <span class=small>");
+		esc(s, host);
+		sb_adds(s, "</span></li>");
+	}
+	if (day != -1)
+		sb_adds(s, "</ul>");
+	if (pages > 1) {
+		sb_adds(s, "<p>");
+		if (pg > 0) {
+			snprintf(line, sizeof line, "<a href=\"about:history?page=%d\">Newer</a> ", pg - 1);
+			sb_adds(s, line);
+		}
+		snprintf(line, sizeof line, "<span class=small>Page %d of %d</span>", pg + 1, pages);
+		sb_adds(s, line);
+		if (pg + 1 < pages) {
+			snprintf(line, sizeof line, " <a href=\"about:history?page=%d\">Older</a>", pg + 1);
+			sb_adds(s, line);
+		}
+		sb_adds(s, "</p>");
+	}
+	sb_adds(s, "<p class=small>They are kept in HISTORY.TXT, next to EWEB.PRG, the newest 1000; "
+		   "Options &gt; Forget history forgets them.</p></body></html>");
 }
 
 static void error_page(SBUF *s, const char *url, const char *what, const char *why, const char *todo)
@@ -1347,6 +1436,33 @@ static int make_room(browser *b)
 	return shed(b) || freed;
 }
 
+/* ---------------------------------------------------------------- visited links */
+
+/* d's links marked visited or not (visited.c) before it is styled, when
+   the history has changed since: how many changed (dry: only counted).
+   Not on a page whose scripts run, which could read it (CSS Selectors 4,
+   8.2): its links stay as if not visited; nor on EWeb's own (the start
+   page: HISTORY.TXT is read with the first page fetched, not at start) */
+static long mark_links(doc *d, const char *base, int dry)
+{
+	long k;
+	if (has_scheme(base, "about") || d->marked == hg_changes + 1 ||
+	    (d->marked == 0 && (d->js != NULL || hg_count() == 0)))
+		return 0;
+	k = d->js != NULL ? doc_mark_links(d, NULL, NULL, dry) : vis_mark(d, base, doc_enc(d), file_resolve, dry);
+	if (k < 0)
+		return 0;	/* (out of memory: as they were) */
+	if (!dry)
+		d->marked = hg_changes + 1;
+	return k;
+}
+
+static int select_doc(doc *d, const char *base)
+{
+	mark_links(d, base, 0);
+	return doc_select(d);
+}
+
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout);
 
@@ -1461,7 +1577,7 @@ parse:
 #endif
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
-	if (doc_select(d) < 0) {
+	if (select_doc(d, base) < 0) {
 		/* out of memory styling it (a small machine): as when laying it out,
 		   not a page with no styles, which lays out to nothing */
 		doc_free(d);
@@ -1535,7 +1651,10 @@ static void keep_trim(browser *b)
 static void keep_shown(browser *b)
 {
 	BR_ENTRY *e;
-	if (b->p == NULL || b->at < 0 || b->at >= b->nhist || cost(b->src_len) > br_keep_max) {
+	/* (EWeb's own pages are made again, as they are then: the history
+	   or the bookmarks may have changed) */
+	if (b->p == NULL || b->at < 0 || b->at >= b->nhist || cost(b->src_len) > br_keep_max ||
+	    has_scheme(b->url, "about")) {
 		if (b->p != NULL)
 			pg_free(b->p);
 		if (b->d != NULL)
@@ -1578,7 +1697,7 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 	b->shows++;
 	js_set_page(d, p);
 	b->pic_stopped = 0;
-	b->pic_relayout = 0;
+	b->pic_relayout = b->relink = 0;
 	b->pic_n = b->pic_done = 0;
 	shown_imgs(b);
 	img_trim();
@@ -1914,6 +2033,27 @@ static int download(browser *b, FETCH *f)
 }
 
 /* post: a form sent with POST to url, else NULL */
+/* the address a page is shown at: where it came from (furl, after
+   redirects), with the #fragment asked for (url's) */
+static void shown_at(const char *furl, const char *url, char *shown, int size)
+{
+	const char *fr = fragment(url);
+	str_copy(shown, furl, size);
+	if (*fr && strchr(shown, '#') == NULL && (long) (strlen(shown) + strlen(fr) + 2) < (long) size) {
+		strcat(shown, "#");
+		strcat(shown, fr);
+	}
+}
+
+/* a page about to be built put in the history first, so that its links
+   to itself are visited as it is styled (its title once it is shown) */
+static void as_seen(const char *furl, const char *url)
+{
+	char shown[4096];
+	shown_at(furl, url, shown, sizeof shown);
+	hg_add(shown, "", ck_now());
+}
+
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
 	FETCH *f;
@@ -1949,6 +2089,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		b->relaid = 0;
 		b->note[0] = 0;
 		b->scroll_to = anchor_y(b, url);
+		if (!has_scheme(url, "about")) {
+			/* in the history too, and the link to it visited: the
+			   page styled again for it when idle, as after Back */
+			char base[4096];
+			hg_add(url, b->title, ck_now());
+			base_of(b, b->d, url, base, sizeof base);
+			if (mark_links(b->d, base, 1) > 0)
+				b->relink = b->pic_relayout = 1;
+		}
 		return BR_SAME;
 	}
 	sb_init(&src);
@@ -1969,6 +2118,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			}
 			url = "about:bookmarks";
 			bookmarks_page(&src);
+		} else if (strncmp(url + 6, "history", 7) == 0 && (url[13] == 0 || url[13] == '?')) {
+			const char *q = strstr(url, "?page=");
+			history_page(&src, q != NULL ? atoi(q + 6) : 0);
 		} else {
 			start_page(&src);
 		}
@@ -2031,6 +2183,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 		} else {
 			lay_recheck = mode == NAV_REFRESH;
+			as_seen(f->url, url);
 			r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
 			lay_recheck = 0;
 			encodable = 1;
@@ -2038,6 +2191,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	} else if (strncmp(f->mime, "text/", 5) == 0) {
 		/* a text file: sniffed as a page is, but for a <meta> */
 		build_plain = 1;
+		as_seen(f->url, url);
 		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, 0, &d, &p);
 		build_plain = 0;
 		encodable = 1;
@@ -2046,6 +2200,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 				   pic_kind((const unsigned char *) f->data, f->len) == PIC_GIF) &&
 		   picture_page(&src, f, mode == NAV_REFRESH)) {
 		/* a picture on its own: a page that shows it */
+		as_seen(f->url, url);
 		r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 	} else if (!has_scheme(f->url, "file") && f->status >= 200 && f->status < 300) {
 		/* a file to save: the page shown stays */
@@ -2082,14 +2237,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		return BR_STOPPED;
 	}
 	{
-		/* the address after redirects, with the fragment asked for */
 		char shown[4096];
-		const char *fr = fragment(url);
-		str_copy(shown, f->url, sizeof shown);
-		if (*fr && strchr(shown, '#') == NULL && (long) (strlen(shown) + strlen(fr) + 2) < (long) sizeof shown) {
-			strcat(shown, "#");
-			strcat(shown, fr);
-		}
+		shown_at(f->url, url, shown, sizeof shown);
 		show(b, d, p, shown, f->security, f->status, mode == NAV_NEW || mode == NAV_HISTORY);
 		if (f->stale && b->note[0] == 0)
 			snprintf(b->note, sizeof b->note, "%s",
@@ -2102,6 +2251,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			hist_push(b, shown);
 		else
 			hist_set_url(b, shown);
+		hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
 		b->at = b->cur;
 		enc_set(b, f->charset, enc, encodable);
 		keep_trim(b);
@@ -2599,7 +2749,7 @@ static int restyle(browser *b)
 		readd_sheets(b, d, base, 0, 1, 1);	/* it changed the page's sheets */
 	else
 		ec_unstyle(d->css);
-	if (doc_select(d) < 0)
+	if (select_doc(d, base) < 0)
 		return 0;		/* (out of memory: as laying it out) */
 	p = lay(b, d, base);
 	if (p == NULL)
@@ -2826,6 +2976,15 @@ static int go_to(browser *b, int i)
 			br_relayout(b, b->width);
 			b->ms_layout = pf_ms() - t;
 		}
+		{
+			/* a link on it visited since (the one followed from it):
+			   styled again for its colour when the window is idle, as
+			   for a picture's size, so Back stays at once */
+			char base[4096];
+			base_of(b, d, b->url, base, sizeof base);
+			if (mark_links(d, base, 1) > 0)
+				b->relink = b->pic_relayout = 1;
+		}
 		keep_trim(b);
 		b->scroll_to = e->y;
 		return BR_SHOWN;
@@ -2908,7 +3067,7 @@ int br_relayout(browser *b, int32_t width)
 			int stop = conn_stop;
 			conn_stop = 0;
 			readd_sheets(b, b->d, base, 0, 1, 0);
-			doc_select(b->d);
+			select_doc(b->d, base);
 			conn_stop = stop;
 		}
 	} while (b->width != w);
@@ -2952,7 +3111,7 @@ static int relay(browser *b)
 			b->p = NULL;
 		}
 		ec_unstyle(d->css);
-		if (doc_select(d) >= 0)
+		if (select_doc(d, base) >= 0)
 			p = lay(b, d, base);
 	}
 	if (p == NULL)
@@ -3414,7 +3573,11 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 relayout:
 	b->pic_relayout = 0;
 	b->pic_laid = pf_ms();
-	if (!br_relayout(b, b->width))
+	if (b->relink) {
+		b->relink = 0;
+		if (!relay(b))
+			return BRP_STOPPED;
+	} else if (!br_relayout(b, b->width))
 		return BRP_STOPPED;
 	return BRP_LAYOUT;
 }

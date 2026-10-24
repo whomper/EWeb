@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Visited links</title>
+<style>
+/* a visited link: its colours only (the padding is not taken); :link
+   as if it weren't visited, but for its colour (the margin is taken) */
+a:visited { color: #800000; padding-left: 40px; background-color: #ffff00 }
+a:link { margin-right: 10px; color: #000080 }
+.n a:visited { color: #008000 }
+</style></head><body>
+<p>To <a id=b href="visited/b.html">page B</a>, to <a id=never href="visited/never.html">a page never seen</a>,
+to <a id=part href="#part">a place on this page</a>.</p>
+<p class=n>Nested: <a id=bn href="visited/b.html"><span>B again</span></a></p>
+<p>And <a id=self href="visited.html">this page</a>, shown.</p>
+<div style="height: 600px"></div>
+<p id=part>The place.</p>
+</body></html>

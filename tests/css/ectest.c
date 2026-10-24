@@ -337,6 +337,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 	}
 	memset(&ss, 0, sizeof ss);
 	ecs_opts = opts;
+	ecs_visited = 1;
 	c = ecs_sheets(doc, &css, &csslen, 1, &ss);
 	ecs_select(c, doc, &ss);
 	for (line = strtok_r(expect, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save)) {

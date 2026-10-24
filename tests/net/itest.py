@@ -302,6 +302,32 @@ try:
               [(s[0], s[1]) for s in steps] == want and
               all(s[3] == "0" and s[4] == "0" for s in steps if s[0] in ("back", "forward")) and
               steps[5][2] == "508", p.stdout + p.stderr)
+        # visited links (src/browse/history.c, visited.c): to two.html and
+        # Back, the link to it in its visited colour (the UA sheet's) and
+        # the one to its #end not; the history file written, and read at
+        # the next start; a page from another origin's links not visited
+        hist = os.path.join(work, "HISTORY.TXT")
+        if os.path.exists(hist):
+            os.remove(hist)
+
+        def link_colours(*args):
+            p = subprocess.run([ewrender, "-f", font, "-d", "-V", hist] + list(args), cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            return p.returncode, {k: c for c, k in re.findall(r'^text \S+ \S+ (#[0-9a-f]+) .* link (\d+) "',
+                                                             p.stdout, re.M)}, p.stdout + p.stderr
+
+        site = "http://localhost:%d/site/" % HTTP
+        rc, col, out = link_colours("-N", site + "two.html", site)
+        check("visited links: to a page and Back", rc == 0 and col.get("1") == "#551a8b" and
+              col.get("2") == "#0000ee", out)
+        with open(hist, encoding="utf-8") as f:
+            shown = [line.split("\t")[1] for line in f if not line.startswith("#")]
+        rc, col2, out = link_colours(site)
+        check("visited links: the history kept, and read at the next start",
+              shown == [site, site + "two.html"] and rc == 0 and col2.get("1") == "#551a8b" and
+              col2.get("2") == "#0000ee", "%s\n%s" % (shown, out))
+        rc, col3, out = link_colours("http://127.0.0.1:%d/site/" % HTTP)
+        check("visited links: another origin's not", rc == 0 and col3.get("1") == "#0000ee", out)
         # a stylesheet's media (the HTML Standard's 4.2.4), at two widths
         # (760 and 500 CSS px): only the sheets that hold for the screen
         # asked for and applied, none alternate, disabled, of another type

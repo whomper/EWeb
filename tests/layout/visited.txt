@@ -1,0 +1,20 @@
+page 608 x 634, background ffffff, 14 items, 5 links, title "Visited links"
+text 6,32 19x17 #000000 sans13 link 0 "To "
+text 25,32 45x17 #000080 sans13 link 1 "page B"
+text 78,32 25x17 #000000 sans13 link 0 ", to "
+text 103,32 119x17 #000080 sans13 link 2 "a page never seen"
+text 230,32 25x17 #000000 sans13 link 0 ", to "
+text 255,32 129x17 #000080 sans13 link 3 "a place on this page"
+text 392,32 4x17 #000000 sans13 link 0 "."
+text 6,61 54x17 #000000 sans13 link 0 "Nested: "
+text 60,61 48x17 #000080 sans13 link 4 "B again"
+fill 35,77 67x16 #ffff00
+text 6,90 29x17 #000000 sans13 link 0 "And "
+text 35,90 59x17 #800000 sans13 link 5 "this page"
+text 102,90 52x17 #000000 sans13 link 0 ", shown."
+text 6,612 65x17 #000000 sans13 link 0 "The place."
+link 1 file://./tests/layout/visited/b.html
+link 2 file://./tests/layout/visited/never.html
+link 3 file://./tests/layout/visited.html#part
+link 4 file://./tests/layout/visited/b.html
+link 5 file://./tests/layout/visited.html

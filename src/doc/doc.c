@@ -1320,6 +1320,33 @@ void doc_add_ua(doc *d)
 		ec_sheet(d->css, doc_quirks_css, strlen(doc_quirks_css), EC_ORIGIN_UA);
 }
 
+long doc_mark_links(doc *d, int (*visited)(void *ud, const char *href), void *ud, int dry)
+{
+	dnode *n = d->root;
+	long changed = 0;
+	/* the tree in document order, without recursion (it may be deep) */
+	while (n != NULL) {
+		if (n->e.flags & EC_NODE_LINK) {
+			const char *h = HA(n, href);
+			uint16_t v = visited != NULL && h != NULL && visited(ud, h) ? EC_NODE_VISITED : 0;
+			if ((n->e.flags & EC_NODE_VISITED) != v) {
+				changed++;
+				if (!dry)
+					n->e.flags = (uint16_t) ((n->e.flags & ~EC_NODE_VISITED) | v);
+			}
+		}
+		if (n->first != NULL) {
+			n = n->first;
+			continue;
+		}
+		while (n != NULL && n->next == NULL)
+			n = n->parent;
+		if (n != NULL)
+			n = n->next;
+	}
+	return changed;
+}
+
 int doc_select(doc *d)
 {
 	dnode *c;

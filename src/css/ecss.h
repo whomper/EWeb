@@ -206,6 +206,7 @@ typedef struct ec_node {
 
 #define EC_NODE_LINK	1		/* an a or area with an href */
 #define EC_NODE_EMPTY	2		/* no element children and no text */
+#define EC_NODE_VISITED	4		/* a link (EC_NODE_LINK) whose address has been visited */
 
 /* ------------------------------------------------------------ the engine */
 

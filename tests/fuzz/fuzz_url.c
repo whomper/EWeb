@@ -6,7 +6,10 @@
  * after the first newline the base (none, if there is no newline); each
  * result is parsed again, and must come out the same (the standard's
  * serialisation is idempotent); so must the href parsed in a page of a
- * byte a character (url_parse_enc: its query in that encoding).
+ * byte a character (url_parse_enc: its query in that encoding). Where
+ * url_join_quick joins the href without a parse, the parse must give
+ * the same address, in either encoding; and where url_origin_quick
+ * tells its origin, the parse's must be that.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,6 +33,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		*nl = 0;
 		have_base = url_parse(&base, nl + 1, 0);
 	}
+	{
+		static char q[URL_MAX];
+		if (url_join_quick(have_base ? &base : 0, s, q, sizeof(q)) &&
+		    (!url_parse(&u, s, have_base ? &base : 0) || strcmp(u.href, q)))
+			abort();
+	}
+	{
+		static char o[URL_MAX];
+		int k = url_origin_quick(have_base ? &base : 0, s, o, sizeof(o));
+		if (k != 0 && url_parse(&u, s, have_base ? &base : 0) &&
+		    (!u.special || (k < 0 ? u.path != base.path || memcmp(u.href, base.href, base.path) :
+				    u.path != k || memcmp(u.href, o, k))))
+			abort();
+	}
 	if (!url_parse(&u, s, have_base ? &base : 0))
 		return 0;
 	url_target(&u, t, sizeof(t));
@@ -46,6 +63,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		if (url_parse_enc(&u, s, have_base ? &base : 0, &e) &&
 		    (!url_parse(&again, u.href, 0) || strcmp(again.href, u.href)))
 			abort();
+		{
+			static char q[URL_MAX];
+			if (url_join_quick(have_base ? &base : 0, s, q, sizeof(q)) && strcmp(u.href, q))
+				abort();
+		}
 	}
 	return 0;
 }

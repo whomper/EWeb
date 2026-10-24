@@ -43,6 +43,20 @@ typedef struct {
    (http and https: the standard's other schemes keep UTF-8) */
 int url_parse_enc(URL *u, const char *s, const URL *base, const URL_ENC *enc);
 
+/* s, a link of the common kinds (printing ASCII that needs no encoding,
+   no "." or ".." segment; relative to base, or http or https with a
+   plain host and no port), joined to base as url_parse_enc would in any
+   page's encoding, into out (size at least URL_MAX): its length, or 0
+   for another kind (url_parse_enc it). Without a parse: a page's links
+   are looked up by it (its visited ones) */
+int url_join_quick(const URL *base, const char *s, char *out, int size);
+
+/* the origin of s, a link, where it is quick to tell: -1 base's (a
+   relative link), else its length in out ("https://host", lower case;
+   http or https with a plain host and no port), or 0 when it isn't (the
+   link may still be resolved) */
+int url_origin_quick(const URL *base, const char *s, char *out, int size);
+
 /* what goes in a request: the path and the query ("/a/b?c") */
 void url_target(const URL *u, char *out, int size);
 /* the host as the Host header has it: with ":port" when it isn't the

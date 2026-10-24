@@ -10,6 +10,7 @@
 struct ec_ctx;
 
 extern unsigned ecs_opts;	/* ec_create()'s options */
+extern int ecs_visited;		/* ectest's: a link to "visited:..." has been visited */
 extern void (*ecs_setup)(struct ec_ctx *c);	/* if set, called on each context made */
 
 /* the UA sheet, the author sheets and the page's <style> elements */

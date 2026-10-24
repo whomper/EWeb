@@ -162,6 +162,90 @@ a:visited { margin-right: 9px }
 #f color #008000
 #l color #0000ee
 
+=== :visited: colours only; :link on a visited link as if not visited, but for colours (Selectors 4, 8.2; CSS's privacy rules)
+--- css
+a:link { color: #0000ee; margin-right: 3px }
+a:visited { color: #551a8b; margin-left: 9px; background-color: yellow; border-top-color: red; text-decoration-line: none }
+a:any-link { padding-left: 2px; text-decoration-line: underline }
+a:visited span { margin-top: 4px }
+--- html
+<a id=l href=x>l</a><a id=v href="visited:x"><span id=s>v</span></a><a id=n>n</a>
+--- expect
+#l color #0000ee
+#l margin-right 3px
+#l padding-left 2px
+#v color #551a8b
+#v margin-right 3px
+#v margin-left 0px
+#v background-color #ffff00
+#v border-top-color #ff0000
+#v text-decoration-line 1
+#v padding-left 2px
+#s color #551a8b
+#s margin-top 0px
+#n padding-left 0px
+#n color #000000
+
+=== :visited inside :is() and :not() is never (else :not(:visited) would show the history), :link is :any-link
+--- css
+:not(:visited) { margin-left: 1px }
+a:is(:visited) { color: red }
+a:is(:link) { color: green }
+a:not(:link) { margin-right: 5px }
+--- html
+<a id=l href=x>l</a><a id=v href="visited:x">v</a><a id=n>n</a>
+--- expect
+#l margin-left 1px
+#v margin-left 1px
+#l color #008000
+#v color #008000
+#n color #000000
+#l margin-right 0px
+#v margin-right 0px
+#n margin-right 5px
+
+=== :link after :visited doesn't take a visited link's colour; what is in a link (Selectors 4, 8.2)
+--- css
+a:visited { color: purple }
+a:link { color: blue; padding-left: 4px }
+a:link span { color: green; margin-left: 6px }
+a:visited span { color: red }
+p:link { margin-top: 9px }
+--- html
+<p id=p><a id=v href="visited:x"><span id=vs>v</span></a><a id=l href=y><span id=ls>l</span></a></p>
+--- expect
+#v color #800080
+#v padding-left 4px
+#l color #0000ff
+#l padding-left 4px
+#vs color #ff0000
+#vs margin-left 6px
+#ls color #008000
+#ls margin-left 6px
+#p margin-top 16px
+
+=== after a visited link, a style attribute counts in full
+--- css
+a:visited { color: purple; margin-left: 3px }
+--- html
+<p><a id=v href="visited:x">v</a></p><div id=d style="height: 60px; color: red">d</div>
+--- expect
+#v color #800080
+#d height 60px
+#d color #ff0000
+
+=== a visited link and one not, otherwise the same: styled each its own (the style cache's key)
+--- css
+a.k { color: blue }
+a.k:visited { color: purple }
+--- html
+<p><a id=a1 class=k href=x>1</a><a id=a2 class=k href="visited:y">2</a><a id=a3 class=k href=z>3</a><a id=a4 class=k href="visited:w">4</a></p>
+--- expect
+#a1 color #0000ff
+#a2 color #800080
+#a3 color #0000ff
+#a4 color #800080
+
 === :lang() and :dir() for Hebrew (Selectors 4, 7)
 --- css
 :lang(he) { direction: rtl }

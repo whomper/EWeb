@@ -3017,6 +3017,79 @@ through `EW_HOSTS`, as Google sends them to a browser without its check: the pag
 its link, with scripts on and off, from the CAPTCHA's address and from the page before, with no
 search engine set, and a `/search` with results left as it is).
 
+## History and visited links (24 Oct 2026)
+
+Stage 3's first part. **The history** is `src/browse/history.c`: each page shown (fetched, not
+EWeb's own) with its title and when, the newest 1000 kept in `HISTORY.TXT` next to `EWEB.PRG` (a
+line each, "when, address, title" between tabs, oldest first), read when first needed (the first
+page fetched: EWeb's own pages, the start page among them, aren't marked) and written once at quit
+when it changed (the guidelines' 6.5; `make hatarifiles`' budgets have the read and the write). `about:history`
+lists them newest first under the day each was last shown, a hundred to a page, so a long history
+fits a small machine. View > History is ^Y, Safari's key (the family takes a Mac app's; ^H is
+Backspace's code), and Options > Forget history forgets them, the file at quit.
+
+**Visited links** (Selectors 4, 8.2): before a page is styled, each of its links is looked for in
+the history (`src/browse/visited.c`, `EC_NODE_VISITED`, part of the style cache's key), and `:visited`
+and `:link` match as they say. As in the other browsers, what a page can learn from it is held back:
+
+- a `:visited` rule sets colours only (`color`, `background-color`, the borders' colours,
+  `-webkit-text-stroke-color`); its other declarations aren't taken;
+- `:link` matches every link, as if none were visited; on a visited link (the element's own, or
+  the one it is in) its colours aren't taken, which are `:visited`'s. So `a:link` with a background
+  picture or `display: none` does the same to every link, and no request or layout tells;
+- inside `:is()`, `:not()` and the like, `:visited` matches nothing and `:link` is `:any-link`, so
+  `:not(:visited)` can't tell either;
+- on a page whose scripts run, no link is visited at all: the lean DOM's `getComputedStyle` gives
+  the style as it is (the big browsers' answers as if no link were visited), and such pages are
+  few on a Falcon.
+
+An address is kept with its `#fragment`, as the other browsers key theirs, so a page's table of
+contents stays unvisited until a link in it is followed (and that jump is kept too). A page goes
+into the history before it is styled, so its links to itself are visited at once. When the history
+changes, a page kept for Back is styled again when it comes back, once the window is idle, so Back
+stays immediate; only colours change, so nothing on it moves. EWeb's own pages aren't kept for
+Back but made again, so `about:history` is as the history is. An address with a control character
+in it (a tab or a line's end would forge lines of the file) or a user's name and password isn't
+kept, and the history keeps to 256 KB of addresses and titles on the Falcon, 96 KB on the ST,
+the oldest going first.
+
+**What it costs** (68030 instructions, the page set, `drawbench -V 1000 -M`: a history of 1000
+pages, the links marked before the page is styled, against the page laid out and drawn). Resolving
+each link as following it does (`url_parse_enc`, two 4 KB URLs allocated each time) took **7.27%**,
+9,240 instructions a link. Now:
+
+- `url.c`'s percent-encode sets and forbidden host characters are tables, not a `strchr` a
+  character (every address EWeb parses gains);
+- `url_join_quick` joins the common links (printing ASCII that needs no encoding, no `.` or `..`
+  segment, a plain host and no port) without a parse, and `url_origin_quick` tells their origin.
+  `make fuzz`'s `fuzz_url` checks both against the parse on every input, and the page set's
+  26,713 links agree;
+- the history's hash is djb2 (a 68030's multiply takes 44 cycles);
+- a link whose origin has no page in the history is answered without being joined.
+
+That leaves **0.97%** (1,229 a link), 0.67% on the median page by links and 2.05% at the most, with
+the page's own site in the history and other sites not; 1.50% (1,904 a link) when every link's
+site is in it, the most it costs. A page without links, or with an empty history, costs nothing.
+`:visited` rules are real rules now (they were dropped as never matching), so `a:visited`, the UA
+sheet's and a page's, is tried on every link: styling takes 0.71% more on the page set with no
+history at all, 0.19% of the page drawn.
+
+In 16 colours a visited link's `#551a8b` is as near the dark blue pen as the dark magenta one and
+takes the first, dark blue, beside the bright blue of a link not visited; in 256 colours and more
+it is the standard's purple.
+
+Tests: `tests/browse/hgtest.c` (the history: the newest 1000, a place on a page another address,
+origins, the file written and read again, one written by hand), `fuzz_history` (HISTORY.TXT read,
+written and read back the same), the CSS cases (`:visited` colours only, `:is()` and `:not()`, the
+style cache, a style attribute after a visited link, `:link` on a visited link and what is in
+it), `tests/layout/visited.py` (in both editions: to a page and Back with `:link` and `:visited`
+rules that would move things, laid out word for word the same; a link to the page itself, the
+history read at the next start, a place followed, a page whose scripts run, `about:history`),
+`make itest` (the same over HTTP, and another origin's links), and `make hatarigui` (^Y, and
+HISTORY.TXT written at quit). A review found `:link`'s leak, the page's links to itself, absolute
+links on a `file:` page, control characters and passwords in addresses, a kept `about:history`,
+and the history's size: all fixed before it went in.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3312,8 +3385,8 @@ out of both (their paths lead nowhere on the Atari).
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
-   page, selecting and copying, history with visited links, a page drawn while it loads, Esc
-   during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
+   page, selecting and copying, history with visited links (done, above), a page drawn while it
+   loads, Esc during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions
