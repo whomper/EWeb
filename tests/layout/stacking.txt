@@ -1,0 +1,47 @@
+page 608 x 277, background ffffff, 45 items, 2 links, title "Stacking: positioned over the rest"
+drawn: 0-4 21-26 33-34 41-44 31-32 29-30 35-38 27-28 39-40 5-20
+fill 6,6 596x19 #ffffff
+fill 6,6 74x18 #cc0033
+text 16,19 54x13 #ffffff sans10 link 0 "DEMOZOO"
+fill 448,6 135x19 #e8e8e8
+text 461,19 65x13 #9d9d9d sans10 italic link 0 "Not logged in"
+fill 448,25 135x64 #e8e8e8
+text 454,42 57x13 #000000 sans10 link 0 "Username: "
+fill 511,29 62x18 #ffffff
+fill 511,29 62x1 #808080
+fill 511,46 62x1 #808080
+fill 511,29 1x18 #808080
+fill 572,29 1x18 #808080
+fill 454,50 46x18 #e0e0e0
+fill 454,50 46x1 #808080
+fill 454,67 46x1 #808080
+fill 454,50 1x18 #808080
+fill 499,50 1x18 #808080
+text 454,84 104x13 #0000ee sans10 link 1 "Register new account"
+fill 448,25 135x1 #5d5f5f
+fill 442,28 160x16 #cc0033
+text 447,40 73x13 #ffffff sans10 bold link 0 "DISCUSSIONS"
+text 442,64 150x13 #0000ee sans10 link 2 "the Diskmag #1, official thread"
+text 442,76 96x13 #000000 sans10 link 0 "posted by someone"
+fill 6,25 428x96 #eeeeff
+text 6,35 90x13 #000000 sans10 link 0 "The page's middle."
+fill 6,127 96x32 #ff8800
+text 6,137 21x13 #000000 sans10 link 0 "A z2"
+fill 54,127 96x32 #0088ff
+text 54,137 21x13 #000000 sans10 link 0 "B z1"
+fill 6,167 596x24 #88cc88
+text 6,177 36x13 #000000 sans10 link 0 "relative"
+fill 6,178 160x24 #cc88cc
+text 6,188 43x13 #000000 sans10 link 0 "pulled up"
+fill 6,208 596x32 #dddddd
+text 6,218 51x13 #000000 sans10 link 0 "context z1"
+fill 14,212 64x24 #ff0000
+text 14,222 23x13 #000000 sans10 link 0 "z100"
+fill 40,211 64x24 #0000ff
+text 40,221 11x13 #000000 sans10 link 0 "z2"
+fill 6,248 596x16 #ffff00
+text 6,258 37x13 #000000 sans10 link 0 "below 0"
+fill 6,255 120x16 #00cccc
+text 6,265 33x13 #000000 sans10 link 0 "after it"
+link 1 file:///signup
+link 2 file:///thread

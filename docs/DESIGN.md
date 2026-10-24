@@ -707,7 +707,17 @@ releases.
     flow, at `left`, `right` and `top` in its nearest positioned ancestor (the page for `fixed`:
     EWeb has no viewport of its own), else where it would have been; text meant for screen readers
     only (a box of a pixel hiding its overflow, or put far off the page) isn't drawn (and since
-    23 Oct 2026 a box hiding what overflows it clips it: below);
+    23 Oct 2026 a box hiding what overflows it clips it: below). Since 24 Oct 2026 positioned
+    boxes are drawn over what isn't, by `z-index` (CSS 2.1, Appendix E, `draw_order` in the
+    layout): a stacking context's own items in the document's order, then its positioned boxes,
+    `auto` and 0 in the document's order, then those above by `z-index`; one with a `z-index` is
+    a context of its own, drawn whole in its turn; one below 0 stays where it is, under what
+    follows it (as before). A click goes to what is drawn on top. Before, everything was drawn in
+    the document's order, and demozoo.org's login menu (`position: absolute; z-index: 10`, open
+    without its script) ran into the column below it, both its words and the column's showing.
+    The list itself stays in the document's order, for find, selecting and copying; the order
+    drawn in is the page's ranges of it (`page.seg`, ewrender `-d`'s "drawn:"), and the strips'
+    index (`sidx`) is in that order;
   - **tables**: `rowspan` (a cell takes its columns in the rows below; the last of them grows to
     it), every cell as tall as its row with its background and borders, `vertical-align` (middle by
     default, top, bottom) in cells, and columns too wide for the room keep their longest word,
@@ -2029,7 +2039,8 @@ showed. Now, after CSS Color 4:
   and modals nearly always do (Tailwind's `opacity-0 pointer-events-none`): then a click goes through
   its items to what is under them. The CSS engine computes `pointer-events`; the layout marks such
   items (`DLF_NOHIT`, ewrender `-d`'s "nohit") and the hit tests (a link, a control, a script's
-  click) pass them by. Opacity makes no stacking context: EWeb has no z-order yet.
+  click) pass them by. Opacity makes no stacking context (CSS draws an element of opacity below 1
+  as if it were positioned with `z-index: 0`; EWeb draws it where it is).
 - **What lifts an opacity of 0** that EWeb doesn't run or draw (`own_opacity()` in the layout).
   Pages ship content at opacity 0 and have something reveal it; drawn as CSS has it, that content
   would be missing for good. EWeb draws such an element whole:

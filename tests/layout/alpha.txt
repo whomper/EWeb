@@ -1,4 +1,5 @@
 page 608 x 957, background fff2bf, 128 items, 4 links, title "Translucent colours and opacity"
+drawn: 0-66 70-104 112-118 122-127 67-69 105-111 119-121
 text 6,32 581x17 #000000 sans13 link 0 "Translucent backgrounds, borders and text: rgba, hsla, #rrggbbaa, #rgba and transparent."
 fill 6,48 202x42 #ff000080
 text 11,66 160x17 #000000 sans13 link 0 "rgba(255, 0, 0, .5) on the"

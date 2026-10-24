@@ -3008,13 +3008,15 @@ void cv_page(canvas *c, const page *p)
 	if (cbg >= 0)
 		canvas_bg(c, p);	/* (the first of the items) */
 	if (p->strip == NULL || c->h > 60 * PAGE_STRIP) {	/* (a whole long page: all of them) */
-		for (i = 0; i < p->nitems; i++)
-			if (i != cbg)
-				item(c, p, &p->items[i]);
+		for (i = 0; i < p->nitems; i++) {
+			long k = p->seg != NULL ? page_drawn(p, i) : i;
+			if (k != cbg)
+				item(c, p, &p->items[k]);
+		}
 		return;
 	}
 	/* only the strips the canvas falls on: their lists merged in the
-	   items' order, each item once */
+	   order the items are drawn in, each item once */
 	s0 = c->oy < 0 ? 0 : c->oy / PAGE_STRIP;
 	s1 = (c->oy + c->h - 1) / PAGE_STRIP;
 	if (s1 >= p->nstrips)
@@ -3038,8 +3040,11 @@ void cv_page(canvas *c, const page *p)
 			if (bk < 0)
 				break;
 			at[bk]++;
-			if (best != last && best != cbg)
-				item(c, p, &p->items[best]);
+			if (best != last) {
+				long k = p->seg != NULL ? page_drawn(p, best) : best;
+				if (k != cbg)
+					item(c, p, &p->items[k]);
+			}
 			last = best;
 		}
 	}

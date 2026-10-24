@@ -1,4 +1,5 @@
 page 608 x 701, background ffffff, 70 items, 0 links, title "Inline blocks: cases"
+drawn: 0-26 28-45 49-53 57-66 68-69 27-27 46-48 54-56 67-67
 fill 6,6 16x18 #ffffff
 fill 6,6 16x1 #808080
 fill 6,23 16x1 #808080

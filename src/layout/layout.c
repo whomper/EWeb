@@ -286,7 +286,17 @@ typedef struct {
 		uint16_t ctl;
 	} *later;
 	long nlater, latercap;
+	/* the positioned boxes laid out, in the document's order: each its
+	   items (k0 to k1) and z-index, for the order they are drawn in
+	   (draw_order) */
+	struct lay {
+		long k0, k1;
+		int32_t z;		/* LAY_AUTO: auto */
+	} *lay;
+	long nlay, laycap;
 } L;
+
+#define LAY_AUTO INT32_MIN
 
 static int32_t dev(L *l, ec_fx v)
 {
@@ -673,6 +683,27 @@ static long clip_open(L *l)
 	p->clips[p->nclips++] = p->nitems - 1;
 	l->ovf = (uint16_t) p->nclips;
 	return p->nitems - 1;
+}
+
+/* a positioned box (position not static) about to be laid out: its
+   items from now on (k0; k1 set when it is done) and its z-index, for
+   draw_order. -1 when there is no room (it is drawn where it is) */
+static long lay_open(L *l, const ec_style *s)
+{
+	struct lay *y;
+	if (l->nlay == l->laycap) {
+		long cap = l->laycap ? l->laycap * 2 : 16;
+		struct lay *n = realloc(l->lay, cap * sizeof *n);
+		if (n == NULL)
+			return -1;
+		l->lay = n;
+		l->laycap = cap;
+	}
+	y = &l->lay[l->nlay];
+	y->k0 = l->p->nitems;
+	y->k1 = -1;
+	y->z = s->k[EP_Z_INDEX] == EK_INT ? s->v[EP_Z_INDEX].i : LAY_AUTO;
+	return l->nlay++;
 }
 
 #define CLIP_FAR (1L << 28)	/* an axis not clipped: as far as can be */
@@ -4944,7 +4975,7 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	int fixed = kw(c->st, EP_POSITION) == KW_FIXED;
 	int32_t cbx = fixed ? 0 : l->cbx, cby = fixed ? 0 : l->cby, cbw = fixed ? l->p->width : l->cbw;
 	int32_t left, right, top, wf, mb, f = AUTO, ax, ay, lb = l->last_base;
-	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k, c0 = l->p->nclips;
+	long k0 = l->p->nitems, b0 = nblocks(l), f0, f1, lk = l->last_k, c0 = l->p->nclips, y0 = l->nlay;
 	int s0 = l->p->nscr;
 	uint16_t ovf;
 	if ((fixed ? 0 : l->cbmov) < l->mov) {
@@ -5004,6 +5035,7 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 			l->p->nitems = k0;
 			l->p->nclips = c0;
 			l->p->nscr = s0;
+			l->nlay = y0;
 #ifndef EW_ST
 			l->p->nblocks = b0;
 #endif
@@ -6220,6 +6252,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int32_t bg_top = 0, bg_bottom = 0;	/* the background colour's fill short of the border box */
 	int32_t in_l = 0, in_r = 0;
 	int ctlbox = 0;
+	long lay = -1;			/* positioned: its l->lay */
 
 	if (stopped(l))
 		return 0;
@@ -6229,6 +6262,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		*first = AUTO;
 		return 0;
 	}
+	if (pos != KW_STATIC)
+		lay = lay_open(l, s);
 	if (own) {
 		/* a context of its own: the floats from here on are its */
 		l->fl0 = l->nfl;
@@ -6673,6 +6708,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	memcpy(l->last_bd, bd, sizeof bd);
 	l->alpha = saved_alpha;
 	l->clip = saved_clip;
+	if (lay >= 0 && lay < l->nlay)
+		l->lay[lay].k1 = l->p->nitems;
 	*mb_out = mb;
 	*first = fb;
 	return mt + bt + pt + ch + pb + bb + mb;
@@ -6682,6 +6719,205 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 
 #define RIGHT_MAX 16384		/* the widest a page scrolls to (device px) */
 #define RIGHT_SLACK 8		/* past the window by no more: not scrolled to */
+
+/* ---------------------------------------------------------------- the order drawn in */
+
+#define CTX_DEEP 32		/* stacking contexts in each other: deeper, each drawn whole */
+
+typedef struct {
+	const struct lay *y;	/* the boxes (n), and the page as one more (n: a context) */
+	long *kid, *sib, *up;	/* each one's first box in it, the next beside it, the one it is in */
+	long *list;		/* the boxes drawn after a context's own items (2n: room to sort) */
+	struct pg_seg *seg;
+	long nseg, cap, n;
+	int fail;
+} DO;
+
+/* a box drawn after its context's own items (all but z-index below 0:
+   those stay where they are, with all that is in them, as before) */
+#define LIFTED(o, i) ((o)->y[i].z == LAY_AUTO || (o)->y[i].z >= 0)
+
+static void do_emit(DO *o, long k0, long k1)
+{
+	if (k0 >= k1 || o->fail)
+		return;
+	if (o->nseg > 0 && o->seg[o->nseg - 1].k1 == k0) {
+		o->seg[o->nseg - 1].k1 = k1;
+		return;
+	}
+	if (o->nseg == o->cap) {
+		long cap = o->cap ? o->cap * 2 : 16;
+		struct pg_seg *n = realloc(o->seg, cap * sizeof *n);
+		if (n == NULL) {
+			o->fail = 1;
+			return;
+		}
+		o->seg = n;
+		o->cap = cap;
+	}
+	o->seg[o->nseg].k0 = k0;
+	o->seg[o->nseg++].k1 = k1;
+}
+
+/* box m's own items: those of the boxes in it drawn later left out */
+static void do_own(DO *o, long m)
+{
+	long k = o->y[m].k0, c;
+	for (c = o->kid[m]; c >= 0; c = o->sib[c])
+		if (LIFTED(o, c)) {
+			do_emit(o, k, o->y[c].k0);
+			k = o->y[c].k1;
+		}
+	do_emit(o, k, o->y[m].k1);
+}
+
+/* context m: its own items, then its positioned boxes (those in it, and
+   in those with z-index auto, not those in another context): z-index
+   auto or 0 in the document's order, then those above by z-index (of the
+   same, in the document's order); a context's in turn */
+static void do_context(DO *o, long m, long top, int depth)
+{
+	long c = o->kid[m], n = 0, i, j, pos = 0;
+	do_own(o, m);
+	while (c >= 0) {
+		if (LIFTED(o, c)) {
+			o->list[top + n++] = c;
+			if (o->y[c].z == LAY_AUTO && o->kid[c] >= 0) {
+				c = o->kid[c];
+				continue;
+			}
+		}
+		/* on to the next beside it, or beside the one it is in */
+		while (c >= 0 && o->sib[c] < 0)
+			c = o->up[c] == m ? -1 : o->up[c];
+		if (c >= 0)
+			c = o->sib[c];
+	}
+	/* those above 0 after the others, in their order (put aside past
+	   the list, then back, sorted) */
+	for (i = 0; i < n; i++)
+		if (o->y[o->list[top + i]].z > 0)
+			o->list[top + n + pos++] = o->list[top + i];
+		else
+			o->list[top + i - pos] = o->list[top + i];
+	for (i = 1; i < pos; i++) {
+		long v = o->list[top + n + i];
+		for (j = i; j > 0 && o->y[o->list[top + n + j - 1]].z > o->y[v].z; j--)
+			o->list[top + n + j] = o->list[top + n + j - 1];
+		o->list[top + n + j] = v;
+	}
+	for (i = 0; i < pos; i++)
+		o->list[top + n - pos + i] = o->list[top + n + i];
+	for (i = 0; i < n; i++) {
+		long x = o->list[top + i];
+		if (o->y[x].z == LAY_AUTO)
+			do_own(o, x);
+		else if (depth < CTX_DEEP)
+			do_context(o, x, top + n, depth + 1);
+		else
+			do_emit(o, o->y[x].k0, o->y[x].k1);
+	}
+}
+
+/* the order the items are drawn in (CSS 2.1, Appendix E, as far as EWeb
+   goes): positioned boxes over what isn't, by z-index (page.seg); NULL
+   when that is the document's order, or there is no room for it (then
+   they are drawn in it, as before) */
+static void draw_order(L *l)
+{
+	page *p = l->p;
+	long n = l->nlay, i, sp = 0, *st, *tail;
+	struct lay *y;
+	DO o;
+	if (n == 0)
+		return;
+	memset(&o, 0, sizeof o);
+	o.n = n;
+	/* (one more: the page) */
+	y = realloc(l->lay, (size_t) (n + 1) * sizeof *y);
+	if (y == NULL)
+		return;
+	l->lay = y;
+	l->laycap = n + 1;
+	y[n].k0 = 0;
+	y[n].k1 = p->nitems;
+	y[n].z = 0;
+	o.y = y;
+	o.kid = malloc((size_t) (n + 1) * 5 * sizeof *o.kid);
+	o.list = malloc((size_t) (2 * n + 1) * sizeof *o.list);
+	if (o.kid == NULL || o.list == NULL)
+		goto out;
+	o.sib = o.kid + n + 1;
+	o.up = o.sib + n + 1;
+	st = o.up + n + 1;
+	tail = st + n + 1;
+	for (i = 0; i <= n; i++)
+		o.kid[i] = o.sib[i] = tail[i] = -1;
+	/* each in the one round it: they come in the document's order, one
+	   in another after it; one not done (a page stopped) to the end */
+	st[sp++] = n;
+	for (i = 0; i < n; i++) {
+		long k0 = y[i].k0, k1 = y[i].k1 < 0 || y[i].k1 > p->nitems ? p->nitems : y[i].k1;
+		y[i].k1 = k1;
+		if (k0 >= k1) {
+			y[i].z = -1;	/* (no items: as if it weren't) */
+			continue;
+		}
+		while (sp > 1 && k0 >= y[st[sp - 1]].k1)
+			sp--;
+		if (k1 > y[st[sp - 1]].k1)
+			goto out;	/* (not one in another: never so; drawn in order) */
+		o.up[i] = st[sp - 1];
+		if (tail[o.up[i]] < 0)	/* (after the last in the one round it) */
+			o.kid[o.up[i]] = i;
+		else
+			o.sib[tail[o.up[i]]] = i;
+		tail[o.up[i]] = i;
+		st[sp++] = i;
+	}
+	do_context(&o, n, 0, 0);
+	if (!o.fail && (o.nseg > 1 || (o.nseg == 1 && (o.seg[0].k0 != 0 || o.seg[0].k1 != p->nitems)))) {
+		long r = 0;
+		for (i = 0; i < o.nseg; i++) {
+			o.seg[i].r0 = r;
+			r += o.seg[i].k1 - o.seg[i].k0;
+		}
+		if (r == p->nitems) {
+			p->seg = o.seg;
+			p->nseg = o.nseg;
+			o.seg = NULL;
+		}
+	}
+out:
+	free(o.kid);
+	free(o.list);
+	free(o.seg);
+}
+
+long page_drawn(const page *p, long r)
+{
+	long a = 0, b;
+	if (p->seg == NULL)
+		return r;
+	b = p->nseg - 1;
+	while (a < b) {
+		long m = (a + b + 1) / 2;
+		if (p->seg[m].r0 <= r)
+			a = m;
+		else
+			b = m - 1;
+	}
+	return p->seg[a].k0 + r - p->seg[a].r0;
+}
+
+/* the items drawn: range s of them (the order they are drawn in) */
+static long nsegs(const page *p)
+{
+	return p->seg != NULL ? p->nseg : 1;
+}
+
+#define SEG_K0(p, s) ((p)->seg != NULL ? (p)->seg[s].k0 : 0)
+#define SEG_K1(p, s) ((p)->seg != NULL ? (p)->seg[s].k1 : (p)->nitems)
 
 /* the items by strips of the page, so that drawing a part of it looks
    only at the items there; and how far right they go (page.right: wide,
@@ -6743,15 +6979,18 @@ static void index_items(page *p, int wide, long cbg)
 			p->strip = p->sidx = NULL;
 			return;
 		}
+		long s, r = 0;
 		memcpy(at, p->strip, (size_t) p->nstrips * sizeof *at);
-		for (i = 0; i < p->nitems; i++) {
-			const dl_item *d = &p->items[i];
-			long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP, s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
-			if (d->type == DL_CLIP)
-				continue;
-			for (k = s0; k <= s1; k++)
-				p->sidx[at[k]++] = i;
-		}
+		for (s = 0; s < nsegs(p); s++)
+			for (i = SEG_K0(p, s); i < SEG_K1(p, s); i++, r++) {
+				const dl_item *d = &p->items[i];
+				long s0 = d->y < 0 ? 0 : d->y / PAGE_STRIP;
+				long s1 = d->y + d->h <= 0 ? 0 : (d->y + d->h - 1) / PAGE_STRIP;
+				if (d->type == DL_CLIP)
+					continue;
+				for (k = s0; k <= s1; k++)
+					p->sidx[at[k]++] = r;
+			}
 		free(at);
 	}
 }
@@ -6841,10 +7080,13 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 			 p->height, 0, 0, 0, 0, NULL);
 		p->cbg = cbg;
 	}
+	if (!l.fail)
+		draw_order(&l);
 	free(l.it);
 	free(l.ibx);
 	free(l.later);
 	free(l.fl);
+	free(l.lay);
 	if (l.fail) {
 		page_free(p);
 		return NULL;
@@ -6884,6 +7126,7 @@ void page_free(page *p)
 #endif
 	free(p->strip);
 	free(p->sidx);
+	free(p->seg);
 	if (p->mem != NULL) {
 		afree(p->mem);
 		free(p->mem);
@@ -6903,13 +7146,14 @@ static int holds(const dnode *a, const dnode *n)
 
 dnode *page_node_at(const page *p, int32_t x, int32_t y)
 {
-	long i, best = -1;
-	for (i = p->nitems - 1; i >= 0; i--) {
-		const dl_item *d = &p->items[i];
-		if (d->node != NULL && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h && in_clips(p, d, x, y))
-			return d->node;
-	}
+	long i, s, best = -1;
+	for (s = nsegs(p) - 1; s >= 0; s--)
+		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
+			const dl_item *d = &p->items[i];
+			if (d->node != NULL && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w &&
+			    y >= d->y && y < d->y + d->h && in_clips(p, d, x, y))
+				return d->node;
+		}
 	/* the innermost block there: the smallest of those holding it; of
 	   the same size a child rather than its parent (a closed details
 	   as big as its summary: the summary), else the last laid out (a
@@ -6984,28 +7228,30 @@ const char *page_link_download(const page *p, int link)
 /* (the last item drawn there first; not one a click goes through) */
 int page_link_at(const page *p, int32_t x, int32_t y)
 {
-	long i;
-	for (i = p->nitems - 1; i >= 0; i--) {
-		const dl_item *d = &p->items[i];
-		if (d->link && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h && in_clips(p, d, x, y))
-			return d->link - 1;
-	}
+	long i, s;
+	for (s = nsegs(p) - 1; s >= 0; s--)
+		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
+			const dl_item *d = &p->items[i];
+			if (d->link && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+			    y < d->y + d->h && in_clips(p, d, x, y))
+				return d->link - 1;
+		}
 	return -1;
 }
 
 fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 {
-	long i;
-	for (i = p->nitems - 1; i >= 0; i--) {
-		const dl_item *d = &p->items[i];
-		if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
-		    y < d->y + d->h && in_clips(p, d, x, y)) {
-			if (it != NULL)
-				*it = d;
-			return p->ctls[d->ctl - 1];
+	long i, s;
+	for (s = nsegs(p) - 1; s >= 0; s--)
+		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
+			const dl_item *d = &p->items[i];
+			if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
+			    y < d->y + d->h && in_clips(p, d, x, y)) {
+				if (it != NULL)
+					*it = d;
+				return p->ctls[d->ctl - 1];
+			}
 		}
-	}
 	return NULL;
 }
 
@@ -7014,14 +7260,15 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
    the same size the last laid out) */
 dnode *page_summary_at(const page *p, int32_t x, int32_t y)
 {
-	long i, best = -1;
-	for (i = p->nitems - 1; i >= 0; i--) {
-		const dl_item *d = &p->items[i];
-		if (d->type == DL_SUM && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
-		    in_clips(p, d, x, y) &&
-		    (best < 0 || (int64_t) d->w * d->h < (int64_t) p->items[best].w * p->items[best].h))
-			best = i;
-	}
+	long i, s, best = -1;
+	for (s = nsegs(p) - 1; s >= 0; s--)
+		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
+			const dl_item *d = &p->items[i];
+			if (d->type == DL_SUM && x >= d->x && x < d->x + d->w && y >= d->y && y < d->y + d->h &&
+			    in_clips(p, d, x, y) &&
+			    (best < 0 || (int64_t) d->w * d->h < (int64_t) p->items[best].w * p->items[best].h))
+				best = i;
+		}
 	return best >= 0 ? p->items[best].det : NULL;
 }
 

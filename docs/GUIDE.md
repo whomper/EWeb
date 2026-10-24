@@ -459,7 +459,7 @@ EWeb shows pages as their stylesheets lay them out: headings,
 paragraphs, lists, tables, links, bold and italic, colours and
 backgrounds, borders, pictures, boxes and pictures floated beside the
 text, pictures in the background of a page or a box, positioned
-boxes, tables (cells over several rows and columns, borders that
+boxes (one over another as the page asks), tables (cells over several rows and columns, borders that
 collapse into single lines), boxes in a line of text
 (buttons, menus and cards: CSS's inline-block), flexible boxes and
 grids (CSS flexbox and grid), forms, Hebrew right to left (with its

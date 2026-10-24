@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Stacking: positioned over the rest</title><style>
+body { margin: 8px; font-size: 13px }
+/* demozoo.org's header (24 Oct 2026): its login menu, absolutely
+   positioned with z-index 10, over the right column that follows */
+.site__header { background: #fff }
+.logo { float: left; background: #c03; color: #fff; padding: 4px 12px }
+.user_menu { background: #e8e8e8; float: right; margin-right: 24px; width: 169px }
+.user_menu__login_status { line-height: 24px; color: #9d9d9d; font-style: italic; text-indent: 16px }
+.user_menu__body { background: #e8e8e8; border-top: 1px solid #5d5f5f; position: absolute; width: 169px; z-index: 10 }
+.user_menu__body p { margin: 4px 8px }
+.side { float: right; width: 200px; margin-top: 4px }
+.side h2 { background: #c03; color: #fff; font-size: 13px; margin: 0; padding: 2px 6px }
+.main { margin-right: 210px; height: 120px; background: #eef }
+/* z-index: the higher over the lower, whatever their order */
+.pair { position: relative; height: 50px; margin-top: 8px }
+.a, .b { position: absolute; top: 0; width: 120px; height: 40px }
+.a { left: 0; z-index: 2; background: #f80 }
+.b { left: 60px; z-index: 1; background: #08f }
+/* position: relative alone: over a block pulled up over it */
+.rel { position: relative; background: #8c8; height: 30px }
+.pulled { margin-top: -15px; background: #c8c; height: 30px; width: 200px }
+/* a context (z-index 1): all in it under a sibling at z-index 2, its
+   own z-index 100 one too */
+.ctx { position: relative; z-index: 1; height: 40px; background: #ddd; margin-top: 8px }
+.ctx .hi { position: absolute; left: 10px; top: 5px; z-index: 100; background: #f00; width: 80px; height: 30px }
+.over { position: absolute; left: 50px; margin-top: -35px; z-index: 2; background: #00f; width: 80px; height: 30px }
+/* z-index below 0: where it is, under what follows */
+.under { position: relative; z-index: -1; background: #ff0; height: 20px }
+.next { margin-top: -10px; background: #0cc; height: 20px; width: 150px }
+</style></head><body>
+<header><div class=site__header>
+<div class=logo>DEMOZOO</div>
+<div class=user_menu>
+<div class=user_menu__login_status>Not logged in</div>
+<div class=user_menu__body><form><p>Username: <input name=u size=8></p><p><input type=submit value="Log in"></p></form>
+<p><a href="/signup">Register new account</a></p></div>
+</div>
+<div style="clear: both"></div>
+</div></header>
+<div class=side><h2>DISCUSSIONS</h2><p><a href="/thread">the Diskmag #1, official thread</a> posted by someone</p></div>
+<div class=main>The page's middle.</div>
+<div class=pair><div class=a>A z2</div><div class=b>B z1</div></div>
+<div class=rel>relative</div>
+<div class=pulled>pulled up</div>
+<div class=ctx>context z1<div class=hi>z100</div></div>
+<div class=over>z2</div>
+<div style="height: 10px"></div>
+<div class=under>below 0</div>
+<div class=next>after it</div>
+</body></html>

@@ -112,9 +112,18 @@ typedef struct page {
 	int nlinks, linkcap;
 	struct fctl **ctls;		/* the form controls shown (their state is the document's) */
 	int nctls, ctlcap;
+	/* the order the items are drawn in (CSS 2.1, Appendix E: positioned
+	   boxes over what isn't, by z-index), when it isn't theirs: ranges of
+	   them (k0 to k1) one after the other, each's first the r0th drawn;
+	   NULL: in their order. Their order stays the document's (find, copy) */
+	struct pg_seg {
+		long k0, k1, r0;
+	} *seg;
+	long nseg;
 	/* the items by where they are: the page in strips of PAGE_STRIP rows,
-	   each strip's items (indexes into items, in order) from sidx[strip[k]]
-	   to sidx[strip[k + 1]]; NULL when out of memory (then all are looked at) */
+	   each strip's items (their places in the order drawn, page_drawn, in
+	   that order) from sidx[strip[k]] to sidx[strip[k + 1]]; NULL when out
+	   of memory (then all are looked at) */
 	long *strip, *sidx;
 	long nstrips;
 	int32_t width, height;		/* device px */
@@ -169,6 +178,9 @@ uint32_t grad_average(const ec_grad *g, uint32_t cur);
 /* the rectangle x0, y0 to x1, y1 cut to the boxes hiding what overflows
    them that clip (a dl_item's) names: 0 if none of it is left */
 int page_clip(const page *p, unsigned clip, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1);
+
+/* the item drawn rth (page.seg) */
+long page_drawn(const page *p, long r);
 
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);

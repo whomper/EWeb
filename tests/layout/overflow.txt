@@ -1,4 +1,5 @@
 page 608 x 618, background ffffff, 96 items, 1 links, title "Overflow"
+drawn: 0-28 38-38 48-95 29-31 34-37 32-33 39-41 44-47 42-43
 text 6,28 491x14 #000000 sans11 link 0 "A box two lines high hiding what overflows it (the red text below its foot is not drawn):"
 fill 6,41 212x30 #ffffdd
 clip x 8+208 y 43+26 in 0

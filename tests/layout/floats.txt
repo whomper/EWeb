@@ -1,4 +1,5 @@
 page 608 x 787, background ffffff, 151 items, 1 links, title "Floats, positions, rows"
+drawn: 3-28 30-150 0-2 29-29
 fill 6,6 596x24 #003366
 text 11,24 24x17 #ffffff sans13 link 0 "Left"
 text 565,24 32x17 #ffffff sans13 link 0 "Right"

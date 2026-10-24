@@ -1223,6 +1223,14 @@ int main(int argc, char **argv)
 				if (p->items[k].clip)
 					printf("item %ld type %d at %d,%d in clip %d\n", k, p->items[k].type,
 					       (int) p->items[k].x, (int) p->items[k].y, p->items[k].clip);
+		if (p->seg != NULL) {
+			/* (the order drawn in, when it isn't the list's: its
+			   ranges, first to last item) */
+			printf("drawn:");
+			for (k = 0; k < p->nseg; k++)
+				printf(" %ld-%ld", p->seg[k].k0, p->seg[k].k1 - 1);
+			printf("\n");
+		}
 		if (verbose)
 			printf("address %s, security \"%s\"\n", b.url, b.security);
 		for (k = 0; k < p->nitems; k++) {
