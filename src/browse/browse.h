@@ -140,11 +140,14 @@ typedef struct browser {
 				   after their scripts ran (with the gateway only) */
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
-	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), and
-	   the sites whose scripts run: host names with spaces between ("*"
-	   all, "file" pages on the disk); off by default (the design) */
+	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), on
+	   which sites (script_mode: 0 none, 1 those in script_sites, 2 every
+	   site but those in noscript_sites; Erez, 24 Oct 2026: a setting, the
+	   sites chosen by default), the lists host names with spaces between
+	   ("*" all, "file" pages on the disk) */
 	int scripts;
-	const char *script_sites;
+	int script_mode;
+	const char *script_sites, *noscript_sites;
 	char note[96];		/* about the page shown, for the status line ("" none): its
 				   scripts were too much, it came from the cache out of date,
 				   it goes on to another page in a while, it didn't fit when
@@ -301,8 +304,16 @@ int br_refresh_note(const browser *b, char *out, int size);
 
 /* ---- the page shown's scripts (js.h) */
 
-/* are url's scripts run (its site is one of script_sites) */
+/* are url's scripts run (script_mode, the lists, and on every site not
+   a site whose scripts were too much since EWeb started) */
 int br_scripts_for(const browser *b, const char *url);
+/* the same but for an FPU and EWEBJS.OVL: the setting and the lists */
+int br_scripts_site(const browser *b, const char *url);
+/* url's scripts were too much: on every site, its site left out until
+   EWeb quits (the oldest of 16 forgotten) */
+void br_scripts_too_much(const browser *b, const char *url);
+/* url's site tried again though its scripts were too much */
+void br_scripts_retry(browser *b, const char *url);
 /* ms until its next timer, -1 for none */
 long br_js_due(const browser *b);
 /* what a script did (after br_js_step, br_js_event, br_js_click) */

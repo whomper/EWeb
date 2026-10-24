@@ -1500,7 +1500,14 @@ the DOM grows past "lean".
   of the 128 KB stack. A page over its budget is parsed again and shown without scripts, with its
   `<noscript>` parts. An event or timer over its 2 seconds is stopped; the page stays.
 - **Off by default, on per site** (the design): Options > Run this site's scripts, kept in
-  `EWEB.INF` as `SCRIPTS=`, the host names. A page whose site isn't chosen is parsed as before; one
+  `EWEB.INF` as `SCRIPTS=`, the host names. Since 24 Oct 2026 a setting too (Erez, who found
+  choosing each site a chore; his choice of the default): Settings > Scripts, `RUNSCRIPTS=`,
+  on no site (0), on the sites chosen (1, as it starts), on every site but those left out (2,
+  `NOSCRIPTS=`, the same menu item unticked). On every site, a site whose scripts were too much
+  (`JS_TOO_MUCH`) is left out until EWeb quits (the newest 16, `br_scripts_too_much`), so its
+  pages aren't made twice; the menu item tries it again. A page with scripts pays for them even
+  when it needs none: it shows once they have come and run, without a preview, and QuickJS's
+  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default. A page whose site isn't chosen is parsed as before; one
   with no script and no `on...` attribute gets no runtime either (QuickJS's start costs 1.14
   million 68030 instructions).
 - **`<noscript>`** is shown when scripts don't run: the HTML Standard hides it only with scripting.

@@ -52,7 +52,8 @@
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1 };
+EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
+	       1, "" };
 browser br;
 int loading;
 static short quit;
@@ -229,16 +230,13 @@ static int site_of(const char *url, char *out, int size)
 	return 1;
 }
 
-/* a site's scripts on (its name added to SCRIPTS=) or off (taken out) */
-static void scripts_toggle(void)
+/* a list of sites (SCRIPTS=, NOSCRIPTS=) with site in it (on) or not */
+static void site_list_set(char *list, int size, const char *site, int on)
 {
-	char site[128], list[sizeof opt.scripts];
-	const char *s = opt.scripts;
-	int on = !br_scripts_for(&br, br.url);
+	char out[sizeof opt.scripts];
+	const char *s = list;
 	size_t n = 0;
-	if (!site_of(br.url, site, sizeof site))
-		return;
-	list[0] = 0;
+	out[0] = 0;
 	while (*s) {
 		const char *w;
 		while (*s == ' ' || *s == ',')
@@ -248,20 +246,46 @@ static void scripts_toggle(void)
 			s++;
 		if (s == w || ((size_t) (s - w) == strlen(site) && strncmp(w, site, (size_t) (s - w)) == 0))
 			continue;
-		if (n + (size_t) (s - w) + 2 >= sizeof list)
+		if (n + (size_t) (s - w) + 2 >= sizeof out)
 			break;
 		if (n)
-			list[n++] = ' ';
-		memcpy(list + n, w, (size_t) (s - w));
+			out[n++] = ' ';
+		memcpy(out + n, w, (size_t) (s - w));
 		n += (size_t) (s - w);
-		list[n] = 0;
+		out[n] = 0;
 	}
-	if (on && n + strlen(site) + 2 < sizeof list) {
+	if (on && n + strlen(site) + 2 < sizeof out) {
 		if (n)
-			list[n++] = ' ';
-		strcpy(list + n, site);
+			out[n++] = ' ';
+		strcpy(out + n, site);
 	}
-	str_copy(opt.scripts, list, sizeof opt.scripts);
+	str_copy(list, out, size);
+}
+
+/* the settings for scripts given to the browser (at start, after Settings) */
+static void scripts_apply(void)
+{
+	br.script_sites = opt.scripts;
+	br.noscript_sites = opt.noscripts;
+	br.script_mode = opt.runscripts;
+}
+
+/* this site's scripts on or off: on the sites chosen, its name added to
+   SCRIPTS= or taken out; on every site, taken out of NOSCRIPTS= or added
+   (and tried again if they were too much before) */
+static void scripts_toggle(void)
+{
+	char site[128];
+	int on = !br_scripts_for(&br, br.url);
+	if (!site_of(br.url, site, sizeof site))
+		return;
+	if (opt.runscripts == 2) {
+		site_list_set(opt.noscripts, sizeof opt.noscripts, site, !on);
+		if (on)
+			br_scripts_retry(&br, br.url);
+	} else {
+		site_list_set(opt.scripts, sizeof opt.scripts, site, on);
+	}
 	settings_save();
 	log_event("scripts %s %s", on ? "on" : "off", site);
 }
@@ -391,6 +415,10 @@ static void settings_load(void)
 			opt.snapshot = atoi(eq) != 0;
 		else if (!strcmp(line, "SCRIPTS"))
 			str_copy(opt.scripts, eq, sizeof opt.scripts);
+		else if (!strcmp(line, "RUNSCRIPTS"))
+			opt.runscripts = (short) (atoi(eq) < 0 ? 0 : atoi(eq) > 2 ? 2 : atoi(eq));
+		else if (!strcmp(line, "NOSCRIPTS"))
+			str_copy(opt.noscripts, eq, sizeof opt.noscripts);
 		else if (!strcmp(line, "CACHE"))
 			opt.cache = (short) atoi(eq);
 		else if (!strcmp(line, "WINDOW")) {
@@ -535,8 +563,13 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.snapshot);
 	put(&s, "SNAPSHOT", v, "1: pages through the Pi's browser, after their scripts ran (the gateway's "
 	    "snapshots; View menu), 0: as the servers send them");
+	snprintf(v, sizeof v, "%d", opt.runscripts);
+	put(&s, "RUNSCRIPTS", v, "pages' scripts (EWEB.PRG with an FPU; Settings > Scripts): 0 = on no site, "
+	    "1 = on the sites in SCRIPTS=, 2 = on every site but those in NOSCRIPTS=");
 	put(&s, "SCRIPTS", opt.scripts, "the sites whose scripts run, their names with spaces between "
-	    "(Options > Run this site's scripts; \"file\": pages on the disk); EWEB.PRG with an FPU");
+	    "(Options > Run this site's scripts; \"file\": pages on the disk)");
+	put(&s, "NOSCRIPTS", opt.noscripts, "with RUNSCRIPTS=2, the sites whose scripts don't run (Options > "
+	    "Run this site's scripts, unticked)");
 	if (opt.cache >= 0) {
 		snprintf(v, sizeof v, "%d", opt.cache);
 		put(&s, "CACHE", v, "the disk cache (CACHE next to EWEB.PRG), MB: pages, pictures as the screen "
@@ -1488,6 +1521,10 @@ void command(int cmd)
 			alert(1, "[1][JavaScript needs an FPU|(a 68881 or 68882): on|this Atari pages are|shown without their|scripts.][ OK ]");
 			break;
 		}
+		if (opt.runscripts == 0) {
+			alert(1, "[1][Pages' scripts are off|on every site: Settings >|Scripts turns them on.][ OK ]");
+			break;
+		}
 		scripts_toggle();
 		if (br.cur >= 0)
 			command(C_RELOAD);
@@ -1495,6 +1532,9 @@ void command(int cmd)
 #endif
 	case C_SETTINGS: {
 		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed;
+#ifndef EW_ST
+		int scripted = br_scripts_for(&br, br.url);
+#endif
 		log_event("settings shown");
 		changed = dlg_settings();
 		log_event("settings %s", changed ? "changed" : "kept");
@@ -1517,6 +1557,14 @@ void command(int cmd)
 			}
 			br.pictures = opt.pictures;
 			br.text = (int32_t) (1024L * opt.zoom / 100);
+#ifndef EW_ST
+			scripts_apply();
+			if (br.cur >= 0 && br_scripts_for(&br, br.url) != scripted) {
+				/* the page again, with its scripts or without */
+				command(C_RELOAD);
+				break;
+			}
+#endif
 			if (br.d != NULL && (pics != opt.pictures || zoom != opt.zoom)) {
 				graf_mouse(BUSYBEE, 0);
 				br_relayout(&br, win_page_w());
@@ -1984,7 +2032,7 @@ int main(void)
 	path_join(path, sizeof path, opt.workdir, "EWEBJS.OVL");
 	js_ovl_at(path);
 	br.scripts = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
-	br.script_sites = opt.scripts;
+	scripts_apply();
 	br.ask = js_ask;
 #endif
 	win_open();

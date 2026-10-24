@@ -236,8 +236,9 @@ hub stay complete, with the evidence.
 - `tests/html5lib/h5test.c` is Hubbub's test runner with a new `main()`, and stays MIT.
 - **Scripts** are `src/js/js.c` (QuickJS from `third_party/quickjs`, kept as `third_party/netsurf`
   is: patches in its `patches/` with the README; a runtime per document, `doc.js`; the lean DOM on
-  EWeb's own nodes; the budget), run by `src/browse` for the sites in `SCRIPTS=` (Options > Run this
-  site's scripts). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
+  EWeb's own nodes; the budget), run by `src/browse` where Settings > Scripts says (`RUNSCRIPTS=`: on no
+  site, the sites in `SCRIPTS=`, every site but those in `NOSCRIPTS=`; Options > Run this site's
+  scripts; `br_scripts_site`, `tests/browse/sitetest.c`). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
   `-m68881` and run only with an FPU (the `_FPU` cookie); with `js.c` they are `EWEBJS.OVL`, a file
   of their own that `EWEB.PRG` loads when a site's scripts first run (`atari/js_ovl.c`, made by
   `atari/ovl.ld` and `tools/mkovl.py`; DESIGN.md, One EWEB.PRG for every Falcon), so `EWEB.PRG`

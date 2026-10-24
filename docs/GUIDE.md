@@ -512,11 +512,25 @@ its fields stays.
 ## Pages made by scripts
 
 **On the Falcon itself:** `EWEB.PRG` runs a little JavaScript, on a
-Falcon or TT with an FPU (a 68881 or 68882, as on the DFB1). It is off
-until you choose a site: open one of its pages and pick Options > Run
-this site's scripts (ticked while they run); the page comes again with
-its scripts. EWeb remembers the sites in `EWEB.INF`. Pick it again to
-turn them off.
+Falcon or TT with an FPU (a 68881 or 68882, as on the DFB1). Settings >
+Scripts says where:
+
+- **On the sites you choose** (as it starts): open one of a site's
+  pages and pick Options > Run this site's scripts (ticked while they
+  run); the page comes again with its scripts. Pick it again to turn
+  them off.
+- **On every site** (tick "On every site, not only those chosen"):
+  Options > Run this site's scripts, unticked, leaves a site out. A site
+  whose scripts are too much for EWeb (below) is left out until you quit
+  EWeb, so its pages aren't made twice; picking the menu item tries it
+  again.
+- **On no site** (untick "Run pages' scripts").
+
+Scripts cost a Falcon time: a page with scripts shows once they have
+come and run, and EWeb starts its JavaScript for each such page (about
+a second on a 50 MHz 68030). On every site, pages that need no scripts
+but bring them anyway are slower than with scripts off. EWeb remembers
+the setting and the sites in `EWEB.INF`.
 
 It is made for the small scripts pages use for menus, tabs, form checks,
 a message or a question (`alert` and `confirm` are EWeb's alerts,
@@ -615,16 +629,18 @@ or pages still come straight from their servers.
 
 ## Settings
 
-Options > Settings (^,) has two pages:
+Options > Settings (^,) has three pages (two in the ST edition):
 
 - **General:** whether pages' pictures are shown, the text size (per
   cent, 50 to 200), where words typed in the address go, the disk
   cache's size (MB, 0 for none), in `EWEB.PRG` whether a Falcon's DSP
   does the pictures, and whether EWeb uses its own colours in 256
-  colours. (Which sites' scripts run is Options > Run this site's
-  scripts.)
+  colours.
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
+- **Scripts** (`EWEB.PRG`): whether pages' scripts run, and on every site
+  or only on those you choose (see
+  [Pages made by scripts](#pages-made-by-scripts)).
 
 The search address, the gateway's address and the answer to a page's
 question (a script's `prompt`) can be longer than their fields (255, 63
@@ -661,8 +677,12 @@ there at once; where the window was, when you quit:
 - `GATEPORT=` its port (8280)
 - `SNAPSHOT=` 1 for pages through the Pi's browser (View > Through the
   Pi's browser), 0 for pages as their servers send them
+- `RUNSCRIPTS=` pages' scripts: 0 on no site, 1 on the sites in
+  `SCRIPTS=`, 2 on every site but those in `NOSCRIPTS=` (Settings >
+  Scripts)
 - `SCRIPTS=` the sites whose scripts run, their names with spaces
   between (`file` for pages on your disks)
+- `NOSCRIPTS=` on every site, the sites whose scripts don't run
 - `CACHE=` the disk cache's size, MB, 0 for none (Settings > General);
   not in the file until you change it, and till then 32 with TT RAM,
   else 2

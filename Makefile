@@ -678,6 +678,14 @@ build/asan/enctest: $(ENC_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) bui
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(ENC_SRC) \
 		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
 
+# which sites' scripts run: the setting, the lists, those too much
+# (tests/browse/sitetest.c: br_scripts_site, whatever the FPU)
+SITE_SRC := tests/browse/sitetest.c tests/host/dsp_none.c $(HOSTNET_SRC)
+build/asan/sitetest: $(SITE_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
+		build/asan/pic.a build/asan/js/js_none.o
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(SITE_SRC) \
+		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
+
 # downloads' names: Content-Disposition (RFC 6266's examples, tc2231's
 # cases) and the TOS names offered (tests/browse/dltest.c)
 DL_SRC := tests/browse/dltest.c tests/host/dsp_none.c $(HOSTNET_SRC)
@@ -964,7 +972,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/dltest binary/EWEB.FNT
+		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
@@ -974,6 +982,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	build/asan/pentest
 	build/asan/rftest
 	build/asan/enctest
+	build/asan/sitetest
 	build/asan/dltest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null

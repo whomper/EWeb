@@ -1755,10 +1755,17 @@ parse:
 		js_doc = NULL;
 		js_stats(d, &ms, &bytes);
 		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
-			/* over the budget: the page as it is without them */
-			snprintf(b->note, sizeof b->note, "%s",
-				 r == JS_TOO_MUCH ? "Its scripts were too much for EWeb: shown without them." :
-				 "No memory for its scripts: shown without them.");
+			/* over the budget: the page as it is without them (and,
+			   on every site, the site's next pages without them) */
+			if (r == JS_TOO_MUCH && b->script_mode == 2) {
+				br_scripts_too_much(b, url);
+				snprintf(b->note, sizeof b->note, "%s",
+					 "Its scripts were too much for EWeb: this site is shown without them.");
+			} else {
+				snprintf(b->note, sizeof b->note, "%s",
+					 r == JS_TOO_MUCH ? "Its scripts were too much for EWeb: shown without them." :
+					 "No memory for its scripts: shown without them.");
+			}
 			if (b->log != NULL) {
 				char line[120];
 				snprintf(line, sizeof line, "scripts too much ms %lu bytes %ld", ms, bytes);
@@ -2815,6 +2822,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	b->search = "";
 	b->pictures = 1;
 	b->pens = -1;
+	b->script_mode = 1;	/* the sites chosen */
 }
 
 void br_free(browser *b)
@@ -2977,22 +2985,25 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 #ifndef EW_ST
 /* ---------------------------------------------------------------- scripts */
 
-int br_scripts_for(const browser *b, const char *url)
+/* the site a url is of, as the lists name it ("file" for the disk): 0 none */
+static int script_site(const char *url, char *host, int size)
 {
-	char host[128];
-	const char *s;
-	size_t hl;
-	if (!b->scripts || !js_built || b->script_sites == NULL)
-		return 0;
 	if (has_scheme(url, "file"))
-		str_copy(host, "file", sizeof host);
+		str_copy(host, "file", size);
 	else if (has_scheme(url, "http") || has_scheme(url, "https"))
-		host_of(url, host, sizeof host);
+		host_of(url, host, size);
 	else
 		return 0;
 	host[strcspn(host, ":")] = 0;
-	hl = strlen(host);
-	for (s = b->script_sites; *s;) {
+	return host[0] != 0;
+}
+
+/* host in a list of sites ("*": all of them) */
+static int site_listed(const char *list, const char *host)
+{
+	const char *s;
+	size_t hl = strlen(host);
+	for (s = list != NULL ? list : ""; *s;) {
 		const char *w;
 		size_t i;
 		while (*s == ' ' || *s == ',')
@@ -3012,6 +3023,55 @@ int br_scripts_for(const browser *b, const char *url)
 			return 1;
 	}
 	return 0;
+}
+
+/* on every site: the sites whose scripts were too much for EWeb (over
+   the budget) since it started, left out until it quits, so that their
+   pages aren't made twice each time; the oldest dropped */
+#define TOO_MUCH_N 16
+static char too_much[TOO_MUCH_N][64];
+static int too_much_next;
+
+static int too_much_at(const char *host)
+{
+	int i;
+	for (i = 0; i < TOO_MUCH_N; i++)
+		if (too_much[i][0] && strcasecmp(too_much[i], host) == 0)
+			return i;
+	return -1;
+}
+
+int br_scripts_site(const browser *b, const char *url)
+{
+	char host[128];
+	if (!script_site(url, host, sizeof host))
+		return 0;
+	if (b->script_mode == 2)
+		return !site_listed(b->noscript_sites, host) && too_much_at(host) < 0;
+	return b->script_mode == 1 && site_listed(b->script_sites, host);
+}
+
+int br_scripts_for(const browser *b, const char *url)
+{
+	return b->scripts && js_built && br_scripts_site(b, url);
+}
+
+void br_scripts_retry(browser *b, const char *url)
+{
+	char host[128];
+	int i;
+	(void) b;
+	if (script_site(url, host, sizeof host) && (i = too_much_at(host)) >= 0)
+		too_much[i][0] = 0;
+}
+
+void br_scripts_too_much(const browser *b, const char *url)
+{
+	char host[128];
+	if (b->script_mode != 2 || !script_site(url, host, sizeof host) || too_much_at(host) >= 0)
+		return;
+	str_copy(too_much[too_much_next], host, sizeof too_much[0]);
+	too_much_next = (too_much_next + 1) % TOO_MUCH_N;
 }
 
 static int jh_fetch(void *ud, const char *site, const char *url, const char *method, const char *body, long blen,
@@ -3270,6 +3330,11 @@ int br_scripts_for(const browser *b, const char *url)
 {
 	(void) b, (void) url;
 	return 0;
+}
+
+void br_scripts_retry(browser *b, const char *url)
+{
+	(void) b, (void) url;
 }
 
 long br_js_due(const browser *b)

@@ -28,6 +28,9 @@ typedef struct {
 	short picdsp;			/* PICDSP=: JPEGs and the dither on the DSP (EWEB.PRG) */
 	short pens;			/* PENS=: pictures as the Pi's pens: 1 always (as it starts), -1 when quicker, 0 never */
 	short palette;			/* PALETTE=: in 256 colours, EWeb's own (1) or the system's (0) */
+	short runscripts;		/* RUNSCRIPTS=: pages' scripts run on no site (0), the sites in
+					   SCRIPTS= (1), every site but those in NOSCRIPTS= (2) */
+	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	64	/* the most CACHE= may ask for */

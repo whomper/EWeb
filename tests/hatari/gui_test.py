@@ -28,7 +28,8 @@
   a page whose script makes tabs, one clicked (the page laid out again),
   a button whose onclick says hello in an alert, answered with Return; a
   page whose script clicks its <a download> as it loads: drawn, then its
-  file saved;
+  file saved; on every site (RUNSCRIPTS=2) a site not chosen runs its
+  scripts, on no site (0) a chosen one doesn't;
 - screens: a page from the disk drawn on the Falcon in 256 colours and in
   true colour (640x200 on an RGB monitor), on the TT in its medium mode
   and on its monochrome monitor; each must say it showed the page; then
@@ -751,6 +752,7 @@ def scripts():
     try:
         scripts_run(site)
         scripts_without(site)
+        scripts_modes(site)
     finally:
         if xvfb is not None:
             xvfb.terminate()
@@ -828,6 +830,52 @@ def scripts_without(site):
         r.shot(0)
         r.key(Q, (CTRL,))
         check("scripts: without EWEBJS.OVL, ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()[-5:]))
+    finally:
+        r.end()
+
+
+def scripts_modes(site):
+    """Settings > Scripts: on every site (RUNSCRIPTS=2), a site not in
+    SCRIPTS= runs its scripts; on no site (0), one in it doesn't"""
+    hd = hd_for("scriptsall", site + "tabs.html", "RUNSCRIPTS=2\r\n")
+    r = Run("scriptsall", "Falcon:16", hd, windowed=True, network=True)
+    try:
+        ran = r.wait(r"scripts ran ", 300)
+        ev = r.wait(r"shown ", 120)
+        check("scripts: on every site, a site not chosen runs them", ran is not None and ev is not None and
+              ev.endswith("title Tabs ready"), str(r.events()[-8:]))
+        # Settings > Scripts (looked at in its screenshot): the third page
+        # in the list (640x480's 8x16 characters: rows 2, 4 and 6, half a
+        # character between them); Esc keeps them
+        r.key(COMMA, (CTRL,))
+        at = r.wait(r"dialog at ", 60)
+        if at is not None:
+            dx, dy = (int(v) for v in at.split()[2:4])
+            time.sleep(2)
+            r.mouse.click(dx + 5 * 8, dy + 6 * 16 + 2 * 8 + 8)
+            time.sleep(2)
+            r.shot(0)
+        r.key(ESC)
+        check("scripts: Settings > Scripts shown, Esc keeps them", at is not None and
+              r.wait(r"settings ", 60) == "settings kept" and "dialog too big" not in r.events(),
+              str(r.events()[-5:]))
+        r.key(Q, (CTRL,))
+        r.wait(r"quit$", 60)
+    finally:
+        r.end()
+    inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+    check("scripts: RUNSCRIPTS= kept in EWEB.INF", "\r\nRUNSCRIPTS=2\r\n" in inf, repr(inf[:300]))
+    hd = hd_for("scriptsnone", site + "tabs.html", "RUNSCRIPTS=0\r\nSCRIPTS=127.0.0.1\r\n")
+    r = Run("scriptsnone", "Falcon:16", hd, windowed=True, network=True)
+    try:
+        ev = r.wait(r"shown ", 300)
+        time.sleep(3)
+        check("scripts: on no site, a chosen site's don't run", ev is not None and
+              ev.startswith("shown %stabs.html " % site) and
+              not any(e.startswith("scripts ran") or e.startswith("js: ") for e in r.events()),
+              str(r.events()[-8:]))
+        r.key(Q, (CTRL,))
+        check("scripts: on no site, ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()[-5:]))
     finally:
         r.end()
 

@@ -20,8 +20,8 @@
 #include "tls.h"
 #include "util.h"
 
-#define DMAX 48
-#define TMAX 12
+#define DMAX 96		/* objects: Settings' three pages take about 60 */
+#define TMAX 16
 
 static OBJECT tree[DMAX];
 static TEDINFO ted[TMAX];
@@ -53,8 +53,16 @@ static void d_begin(short w, short h)
 
 static short d_add(short type, short flags, short state, long spec, short x, short y, short w, short h)
 {
-	short i = nobj++;
-	OBJECT *o = &tree[i];
+	short i;
+	OBJECT *o;
+	if (nobj >= DMAX) {
+		/* (a dialog that has grown past the table: what is left out is
+		   missing, nothing else spoilt; the rigs see the log) */
+		log_event("dialog too big");
+		return 0;
+	}
+	i = nobj++;
+	o = &tree[i];
 	o->ob_next = 0;
 	o->ob_head = o->ob_tail = -1;
 	o->ob_type = type;
@@ -81,7 +89,7 @@ static short d_text(short x, short y, const char *s)
 
 static TEDINFO *d_ted(const char *text, short just, short color)
 {
-	TEDINFO *t = &ted[nted++];
+	TEDINFO *t = &ted[nted < TMAX ? nted++ : TMAX - 1];
 	t->te_ptext = (char *) text;
 	t->te_ptmplt = "";
 	t->te_pvalid = "";
@@ -100,6 +108,10 @@ static short d_field(short x, short y, char *buf, short len, char kind)
 {
 	TEDINFO *t = &ted[nted];
 	short i;
+	if (nted >= TMAX) {
+		log_event("dialog too big");
+		return 0;
+	}
 	if (len > 60)
 		len = 60;
 	for (i = 0; i < len; i++) {
@@ -201,10 +213,10 @@ static void make_ticks(void)
 	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
 }
 
-#define NTICK 5
+#define NTICK 7
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -337,13 +349,34 @@ static void part_secure(short x, short y)
 	d_text(x + 3, ROW(6), "On the Pi: aera-gateway install web");
 }
 
+#ifndef EW_ST
+/* EWeb's Scripts page (EWEB.PRG): on no site, the sites chosen, every site */
+static void part_scripts(short x, short y)
+{
+	rows_at(y);
+	d_tick(x, ROW(0), "Run pages' scripts (JavaScript)", T_SCRIPTS);
+	d_tick(x + 3, ROW(1), "On every site, not only those chosen", T_SCRIPTSALL);
+	d_text(x + 3, ROW(2), "Options > Run this site's scripts");
+	d_text(x + 3, ROW(3), "chooses a site, or leaves one out.");
+	d_text(x + 3, ROW(4), "On every site, one whose scripts are");
+	d_text(x + 3, ROW(5), "too much is left out until EWeb quits.");
+	if (!br.scripts) {
+		d_text(x, ROW(7), "This Atari has no FPU (68881, 68882):");
+		d_text(x, ROW(8), "its pages are shown without scripts.");
+	}
+}
+#define NPAGES 3
+#else
+#define NPAGES 2
+#endif
+
 #define SW 12			/* the list's width */
 #define SX (SW + 2)		/* where the settings start */
 #define PW 44			/* their width */
 
 static short settings_tree(short *ok)
 {
-	static const char *const names[] = { "  General", "  Secure" };
+	static const char *const names[] = { "  General", "  Secure", "  Scripts" };
 	short k, box, from, gap = (short) (gl_hchar / 2);
 	d_begin(SX + PW, 19);
 	nticks = 0;
@@ -354,22 +387,26 @@ static short settings_tree(short *ok)
 	/* the list: plain words on white, the chosen one in a black bar, a
 	   line between it and the settings */
 	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 18);
-	for (k = 0; k < 2; k++) {
+	for (k = 0; k < NPAGES; k++) {
 		npages++;
 		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(names[k], 0, 0x1180),
 					 (short) (0 | (2 << 8)), (short) ((2 + k * 2) | ((k * gap) << 8)),
 					 (short) ((SW - 1) | (6 << 8)), 1);
 	}
 	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 15);
-	for (k = 1; k <= 2; k++) {
+	for (k = 1; k <= NPAGES; k++) {
 		from = nobj;
 		adding_page = k;
 		d_add(G_STRING, 0, 0, (long) (names[k - 1] + 2), SX, 2, (short) strlen(names[k - 1] + 2), 1);
 		d_add(G_BOX, 0, 0, 0x00001171L, SX, (short) (3 | (2 << 8)), PW - 2, (short) (0 | (1 << 8)));
 		if (k == 1)
 			part_general(SX, 4);
-		else
+		else if (k == 2)
 			part_secure(SX, 4);
+#ifndef EW_ST
+		else
+			part_scripts(SX, 4);
+#endif
 		page_mark(from);
 	}
 	adding_page = 0;
@@ -385,6 +422,7 @@ static short settings_run(short pages_box, short ok)
 {
 	short x, y, w, h, r, k;
 	form_center(tree, &x, &y, &w, &h);
+	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
 	wind_update(BEG_UPDATE);
 	wind_update(3);		/* BEG_MCTRL */
 	form_dial(FMD_START, x, y, w, h);
@@ -434,6 +472,8 @@ int dlg_settings(void)
 	s_on[T_DSP] = (short) opt.dsp;
 	s_on[T_PICDSP] = opt.picdsp;
 	s_on[T_PALETTE] = opt.palette;
+	s_on[T_SCRIPTS] = opt.runscripts != 0;
+	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
 	str_copy(s_search, opt.search, sizeof s_search);
 	str_copy(s_gate, opt.gate, sizeof s_gate);
@@ -459,6 +499,9 @@ int dlg_settings(void)
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];
+#ifndef EW_ST
+	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
+#endif
 	if (s_on[T_FALCON] != opt.falcon)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */
 	return 1;
