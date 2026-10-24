@@ -97,8 +97,9 @@ typedef struct {
 
 /* the program's side (src/tls_ovl.c) */
 
-/* where TLS.OVL is: next to the program (the app sets it as it does
-   CACERT.PEM's); "TLS.OVL" (the current folder) until then */
+/* where TLS.OVL is: beside CACERT.PEM, in the program's folder (an
+   accessory's, not the root), set where CACERT.PEM's path is; "TLS.OVL"
+   (the current folder) until then */
 extern char tls_ovl_path[200];
 /* load TLS.OVL now if it isn't yet: 1, or 0 with err filled in (missing,
    another major, this Atari has no 68020). tls_start and
