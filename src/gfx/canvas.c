@@ -2880,7 +2880,7 @@ static void grad(canvas *c, const dl_item *d)
 static void sbar(canvas *c, const page *p, const dl_item *d)
 {
 	int32_t t0, t1;
-	if (d->len == 0 || d->len > (uint32_t) p->nscr)
+	if (d->len == 0 || d->len > (uint32_t) p->nscr || (c->aes_bars && !d->base))
 		return;
 	page_bar_thumb(p, d, &t0, &t1);
 	cv_fill(c, d->x, d->y, d->w, d->h, 0xe8e8e8);

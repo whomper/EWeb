@@ -33,6 +33,9 @@ typedef struct {
 	/* the page laid out before of the same document (NULL: none): its
 	   boxes' scrolling kept (an element's box scrolled as far again) */
 	const struct page *was;
+	/* a box's scroll bar's width, device px (EWEB.PRG: the AES's slider
+	   column, panebar's pb_width; the guidelines' 5.1); 0: SBAR_W */
+	int32_t sbar;
 } LAYOUT_OPT;
 
 /* DL_SUM: a details element's summary (the HTML Standard, 4.11): its
@@ -186,7 +189,9 @@ long page_drawn(const page *p, long r);
 page *layout_page(doc *d, const LAYOUT_OPT *o);
 void page_free(page *p);
 
-#define SBAR_W 10			/* a box's scroll bar's width (device px) */
+#define SBAR_W 10			/* a box's scroll bar's width (device px) where
+					   LAYOUT_OPT.sbar doesn't say */
+#define PAGE_SBAR(p) ((p)->opt.sbar > 0 ? (p)->opt.sbar : SBAR_W)
 
 /* scrolls box k of page.scr to (sx, sy), within its reach: the items in it
    moved, the strips made again. Returns 1 if it moved, with the box's

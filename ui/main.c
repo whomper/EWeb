@@ -23,6 +23,7 @@
 #include "dcache.h"
 #include "dd.h"
 #include "dialog.h"
+#include "panebar.h"
 #include "font.h"
 #include "help.h"
 #include "http.h"
@@ -1980,6 +1981,7 @@ int main(void)
 	graf_mouse(ARROW, 0);
 
 	br_init(&br, 600, 819);		/* a CSS pixel is 0.8 of the screen's */
+	br.sbar = pb_width();		/* a box's bar as wide as the AES's (5.1) */
 	br.text = (int32_t) (1024L * opt.zoom / 100);
 	{
 		/* pages kept for Back and Forward (the heap takes TT RAM first):
@@ -2032,6 +2034,7 @@ int main(void)
 
 	log_event("ready %s %dx%d buf %d heap %ld free %ld", scr_mode(), scr_w, scr_h, scr_rows(), heap_use,
 		  ram_free());
+	log_event("box bars %d wide, arrows %d", pb_width(), pb_arrow_h());	/* (for the rigs) */
 	command_line(first, sizeof first);
 	if (first[0])
 		go(first);

@@ -848,8 +848,8 @@ static void scrollers_place(page *p)
 		const dl_item *c = &p->items[sc->clip];
 		int32_t mx = 0, my = 0;
 		for (i = 0; i < 2; i++) {
-			mx = reach(sc->ex, c->w - (my ? SBAR_W : 0));
-			my = reach(sc->ey, c->h - (mx ? SBAR_W : 0));
+			mx = reach(sc->ex, c->w - (my ? PAGE_SBAR(p) : 0));
+			my = reach(sc->ey, c->h - (mx ? PAGE_SBAR(p) : 0));
 		}
 		sc->mx = mx;
 		sc->my = my;
@@ -863,15 +863,15 @@ static void scrollers_place(page *p)
 				d->w = d->h = 0;
 				sc->bar[axis] = -1;
 			} else if (axis == 0) {
-				d->x = c->x + c->w - SBAR_W;
+				d->x = c->x + c->w - PAGE_SBAR(p);
 				d->y = c->y;
-				d->w = SBAR_W;
-				d->h = c->h - (mx ? SBAR_W : 0);
+				d->w = PAGE_SBAR(p);
+				d->h = c->h - (mx ? PAGE_SBAR(p) : 0);
 			} else {
 				d->x = c->x;
-				d->y = c->y + c->h - SBAR_W;
-				d->w = c->w - (my ? SBAR_W : 0);
-				d->h = SBAR_W;
+				d->y = c->y + c->h - PAGE_SBAR(p);
+				d->w = c->w - (my ? PAGE_SBAR(p) : 0);
+				d->h = PAGE_SBAR(p);
 			}
 		}
 	}
@@ -991,8 +991,8 @@ void page_bar_thumb(const page *p, const dl_item *bar, int32_t *t0, int32_t *t1)
 	int32_t len = bar->base ? bar->w : bar->h, seen = bar->base ? p->items[sc->clip].w : p->items[sc->clip].h;
 	int32_t reach = bar->base ? sc->mx : sc->my, at = bar->base ? sc->sx : sc->sy, t;
 	t = seen + reach > 0 ? (int32_t) ((int64_t) len * seen / (seen + reach)) : len;
-	if (t < SBAR_W)
-		t = SBAR_W < len ? SBAR_W : len;
+	if (t < PAGE_SBAR(p))
+		t = PAGE_SBAR(p) < len ? PAGE_SBAR(p) : len;
 	*t0 = reach > 0 ? (int32_t) ((int64_t) (len - t) * at / reach) : 0;
 	*t1 = *t0 + t;
 }
@@ -6651,7 +6651,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			ch = mx;
 		if (sc && scrolls(ox) && sx1 != INT32_MIN && sx1 - (x + ml + bl + pl + w) > 2 && hp == AUTO &&
 		    (mx == AUTO || ch < mx))
-			ch += SBAR_W;	/* (a bar across its foot, its height its own: room for it below) */
+			ch += PAGE_SBAR(l->p);	/* (a bar across its foot, its height its own: room for it below) */
 		if (bgi >= 0)
 			l->p->items[bgi].h = bt + pt + ch + pb + bb - bg_top - bg_bottom;
 		if (ck >= 0)

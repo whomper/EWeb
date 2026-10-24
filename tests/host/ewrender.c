@@ -10,7 +10,8 @@
  *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH] [-e ENC]
  *            [-p COLOURS] PAGE.HTM|URL [SHEET.CSS...]
  *
- * -w the page's width in pixels (608), -z device pixels per CSS pixel
+ * -w the page's width in pixels (608), -a a box's scroll bar's width
+ * (10; EWEB.PRG takes the AES's, 19 to 23), -z device pixels per CSS pixel
  * in 1024ths (819), -X the text's size in per cent (100: Larger text and
  * Smaller text, fonts only), -d the display list as text instead of a picture,
  * -t the document tree with each element's display first, -v what
@@ -709,7 +710,7 @@ static void pictures(browser *b)
 int main(int argc, char **argv)
 {
 	const char *out = "out.png", *fnt = "build/EWEB.FNT", *page_arg, *cacert = "binary/CACERT.PEM";
-	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100;
+	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100, sbar = 0;
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
@@ -824,6 +825,8 @@ int main(int argc, char **argv)
 		}
 		else if (!strcmp(argv[i], "-x") && i + 1 < argc)
 			select = argv[++i];
+		else if (!strcmp(argv[i], "-a") && i + 1 < argc)
+			sbar = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-I") && i + 1 < argc) {
 			const char *z = argv[++i], *c = strchr(z, ':');
 			z_stage = !strncmp(z, "parse", 5) ? BRB_PARSE : !strncmp(z, "style", 5) ? BRB_STYLE :
@@ -894,6 +897,7 @@ int main(int argc, char **argv)
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
 	b.text = (int32_t) (1024L * text / 100);
+	b.sbar = sbar;
 	b.say = said;
 	b.log = logged;
 	b.ud = &verbose;

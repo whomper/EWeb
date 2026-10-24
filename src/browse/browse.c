@@ -1599,6 +1599,7 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.width = b->width;
 	o.zoom = b->zoom;
 	o.text = b->text;
+	o.sbar = b->sbar;
 	o.image = image_cb;
 	o.ud = b;
 	o.was = b->p;		/* (the page shown: its boxes scrolled, when it is d's) */

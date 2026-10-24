@@ -42,6 +42,9 @@ typedef struct canvas {
 	int marked;
 	pg_range mark;
 	uint32_t mark_rgb;
+	/* 1: a box's scroll bars are the screen's to draw (EWEB.PRG: the
+	   AES's, panebar, over the copy; the guidelines' 5.1), not drawn here */
+	int aes_bars;
 } canvas;
 
 /* the Falcon's true colour pixel: RRRRRGGG GGGBBBBB */

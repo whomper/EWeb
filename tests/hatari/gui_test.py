@@ -1519,7 +1519,8 @@ def deep():
 
 def bar_of(url, area, top, n, extra=()):
     """box n's scroll bar (from 1) on the screen, from ewrender's display
-    list: its x, y, w, h and its thumb's ends along it, else None"""
+    list: its x, y, w, h and its thumb's ends along it, else None (extra:
+    "-a", the AES's bar width, as EWEB.PRG lays it out)"""
     x0, y0, w, _ = area
     p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
                         "-w", str(w), "-d"] + list(extra) + [url], capture_output=True, text=True, timeout=60)
@@ -1531,16 +1532,29 @@ def bar_of(url, area, top, n, extra=()):
     return None
 
 
+def pb_slider(bar, ah, sy):
+    """panebar's slider on a box's bar (pb_slider; the guidelines' 5.1): its
+    top and bottom on the screen, the box scrolled to sy"""
+    bx, by, bw, bh, t0, t1, reach = bar
+    ty, th = by + ah, bh - 2 * ah
+    shown, total = bh, bh + reach
+    sh = min(th, max(ah // 2 if ah // 2 > 4 else 4, th * shown // total))
+    top = ty + (th - sh) * sy // reach if reach else ty
+    return top, top + sh
+
+
 def boxes():
-    """a box that scrolls (overflow auto, 64 px high, more lines than that)
-    on the Falcon in 16 colours: a click on its bar below the thumb scrolls
-    it a boxful on (the log's "box N scrolled to X,Y"); the link brought into
-    view in it, clicked where it now is, is followed; Back, and its thumb
-    dragged to the top scrolls it back"""
+    """a box that scrolls (overflow auto, 96 px high, more lines than that)
+    on the Falcon in 16 colours, its bar panebar's (the AES's objects: the
+    guidelines' 5.1): a click on its track below the slider scrolls it a
+    boxful on (the log's "box N scrolled to X,Y"); its down arrow a line;
+    the link brought into view in it, clicked where it now is, is followed;
+    Back, and its slider dragged to the top scrolls it back"""
     xvfb = machines.xvfb(DISPLAY)
-    page = ("<!DOCTYPE html><title>Boxes</title><style>div{height:64px;overflow:auto;width:300px;"
+    page = ("<!DOCTYPE html><title>Boxes</title><style>div{height:96px;overflow:auto;width:300px;"
             "border:1px solid #000}</style><p>Above the box.</p><div>one<br>two<br>three<br>four<br>five<br>"
-            "six<br>seven<br>eight<br>nine<br><a href=text.htm>Deep link</a></div><p>Below the box.</p>")
+            "six<br>seven<br>eight<br>nine<br>ten<br>eleven<br>twelve<br>thirteen<br>"
+            "<a href=text.htm>Deep link</a></div><p>Below the box.</p>")
     try:
         hd = hd_for("boxes", r"C:\BOXES.HTM")
         with open(os.path.join(hd, "BOXES.HTM"), "w") as f:
@@ -1550,36 +1564,43 @@ def boxes():
             f.write(page)
         r = Run("boxes", "Falcon:16", hd, windowed=True)
         try:
+            pb = re.match(r"box bars (\d+) wide, arrows (\d+)", r.wait(r"box bars ", 300) or "")
             ev = r.wait(r"shown ", 300)
             m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
-            if not check("boxes: the page shown", m is not None, str(r.events())):
+            if not check("boxes: the page shown, its bars %s" % (pb.group(0) if pb else "?"),
+                         m is not None and pb is not None, str(r.events())):
                 return
+            aw, ah = int(pb.group(1)), int(pb.group(2))
             area, top = tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5))
-            bar = bar_of(path, area, top, 1)
-            if not check("boxes: the box has a bar", bar is not None, str(bar)):
+            bar = bar_of(path, area, top, 1, ("-a", str(aw)))
+            if not check("boxes: the box has a bar as wide as the AES's", bar is not None and bar[2] == aw, str(bar)):
                 return
             bx, by, bw, bh, t0, t1, reach = bar
-            r.mouse.click(bx + bw // 2, by + (t1 + bh) // 2)	# below the thumb
+            time.sleep(2)
+            r.shot(2)
+            # the AES's down arrow: a line on
+            r.mouse.click(bx + bw // 2, by + bh - ah // 2)
             ev = r.wait(r"box 1 scrolled to ", 60)
             m = re.match(r"box 1 scrolled to 0,(\d+)", ev or "")
-            check("boxes: a click below the thumb scrolls the box on", m is not None and int(m.group(1)) > 0,
+            check("boxes: its down arrow scrolls the box a line", m is not None and 0 < int(m.group(1)) <= 32,
                   str(r.events()[-5:]))
             if m is None:
                 return
             sy = int(m.group(1))
-            for _ in range(8):		# on to its end
+            for _ in range(8):		# the track below the slider: a boxful on, to its end
                 if sy >= reach:
                     break
-                bx, by, bw, bh, t0, t1, reach = bar_of(path, area, top, 1, ("-O", "1:0:%d" % sy))
-                r.mouse.click(bx + bw // 2, by + (t1 + bh) // 2)
+                s0, s1 = pb_slider(bar, ah, sy)
+                r.mouse.click(bx + bw // 2, (s1 + by + bh - ah) // 2)
                 m = re.match(r"box 1 scrolled to 0,(\d+)", r.wait(r"box 1 scrolled to 0,(?!%d$)" % sy, 60) or "")
                 if m is None:
                     break
                 sy = int(m.group(1))
-            check("boxes: clicks below the thumb take the box to its end", sy == reach, "%d of %d" % (sy, reach))
+            check("boxes: clicks on the track below the slider take the box to its end", sy == reach,
+                  "%d of %d" % (sy, reach))
             time.sleep(2)
             r.shot(0)
-            pt = link_point(path, area, top, "Deep link", ("-O", "1:0:%d" % sy))
+            pt = link_point(path, area, top, "Deep link", ("-a", str(aw), "-O", "1:0:%d" % sy))
             if check("boxes: the deep link now in the box", pt is not None and by <= pt[1] < by + bh, str(pt)):
                 r.mouse.click(*pt)
                 ev = r.wait(r"shown ", 120)
@@ -1588,15 +1609,13 @@ def boxes():
                 r.key(UNDO)
                 r.wait(r"shown ", 120)
                 time.sleep(2)
-                bar = bar_of(path, area, top, 1, ("-O", "1:0:%d" % sy))
-                if bar is not None:
-                    bx, by, bw, bh, t0, t1, reach = bar
-                    r.mouse.drag(bx + bw // 2, by + (t0 + t1) // 2, bx + bw // 2, by - 20)
-                    ev = r.wait(r"box 1 scrolled to 0,0$", 60)
-                    check("boxes: its thumb dragged to the top scrolls it back", ev is not None,
-                          str(r.events()[-5:]))
-                    time.sleep(2)
-                    r.shot(1)
+                s0, s1 = pb_slider(bar, ah, sy)
+                r.mouse.drag(bx + bw // 2, (s0 + s1) // 2, bx + bw // 2, by - 20)
+                ev = r.wait(r"box 1 scrolled to 0,0$", 60)
+                check("boxes: its slider dragged to the top scrolls it back", ev is not None,
+                      str(r.events()[-5:]))
+                time.sleep(2)
+                r.shot(1)
             r.key(Q, (CTRL,))
             r.wait(r"quit$", 300)
         finally:

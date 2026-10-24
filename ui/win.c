@@ -25,6 +25,7 @@
 #include "clip.h"
 #include "form.h"
 #include "iconify.h"
+#include "panebar.h"
 #include "util.h"
 #include "inflate.h"
 #include "plat.h"
@@ -490,12 +491,54 @@ static const page *shown(void)
 	return br.pv_p != NULL ? br.pv_p : br.p;
 }
 
+/* a box's scroll bar (overflow auto or scroll) as panebar's (the AES's
+   objects: the guidelines' 5.1), in pixels, and where it is seen on the
+   screen (the boxes hiding what overflows them that it is in, the page's
+   area): 0 if nowhere */
+static int box_panebar(const page *p, const dl_item *d, PANEBAR *b, GRECT *seen)
+{
+	const struct pg_scroll *sc = &p->scr[d->len - 1];
+	int32_t x0 = d->x, y0 = d->y, x1 = d->x + d->w, y1 = d->y + d->h;
+	int32_t shown = d->base ? p->items[sc->clip].w : p->items[sc->clip].h;
+	b->r.x = (short) (r_page.x + d->x - left);
+	b->r.y = (short) (r_page.y + d->y - top);
+	b->r.w = (short) d->w;
+	b->r.h = (short) d->h;
+	b->shown = shown;
+	b->total = shown + (d->base ? sc->mx : sc->my);
+	b->top = d->base ? sc->sx : sc->sy;
+	if (!page_clip(p, d->clip, &x0, &y0, &x1, &y1))
+		return 0;
+	seen->x = (short) (r_page.x + x0 - left);
+	seen->y = (short) (r_page.y + y0 - top);
+	seen->w = (short) (x1 - x0);
+	seen->h = (short) (y1 - y0);
+	return rect_and(seen, &r_page);
+}
+
+/* the boxes' bars over the page's copy, within clip */
+static void draw_box_bars(const page *p, const GRECT *clip)
+{
+	int k, a;
+	if (p == NULL)
+		return;
+	for (k = 0; k < p->nscr; k++)
+		for (a = 0; a < 1; a++) {	/* (down: panebar has no bar across) */
+			PANEBAR b;
+			GRECT s;
+			if (p->scr[k].bar[a] >= 0 && box_panebar(p, &p->items[p->scr[k].bar[a]], &b, &s) &&
+			    rect_and(&s, clip))
+				pb_draw(&b, &s);
+		}
+}
+
 static void draw_page(GRECT *clip)
 {
 	GRECT r = r_page;
 	if (!rect_and(&r, clip))
 		return;
 	scr_page(shown(), &r, left + (r.x - r_page.x), top + (r.y - r_page.y));
+	draw_box_bars(shown(), &r);
 }
 
 /* area of the window, through its rectangle list */
@@ -1712,8 +1755,35 @@ static void box_to(int k, int axis, int32_t v)
 	redraw(&r, 2);
 }
 
-/* a click on a box's scroll bar (a box with overflow auto or scroll): before
-   or after its thumb, the box a boxful on; on it, the thumb dragged */
+/* the box whose bar (down) is held, for panebar's pb_click */
+static int held_k;
+static PANEBAR held;
+
+/* n rows: an arrow's are lines (gl_hchar), a press on the track's a
+   boxful less a pixel (panebar's page) */
+static int held_scroll(long n)
+{
+	const struct pg_scroll *sc = &br.p->scr[held_k];
+	int32_t was = sc->sy;
+	long step = held.shown > 1 ? held.shown - 1 : 1;
+	if (n != step && n != -step)
+		n *= gl_hchar;
+	box_to(held_k, 0, was + (int32_t) n);
+	held.top = sc->sy;
+	return sc->sy != was;
+}
+
+static int held_goto(long t)
+{
+	box_to(held_k, 0, (int32_t) t);
+	held.top = br.p->scr[held_k].sy;
+	return 1;
+}
+
+/* a click on a box's scroll bar (a box with overflow auto or scroll): one
+   down is panebar's (its arrows, track and slider: the guidelines' 5.1);
+   on one across, before or after its thumb, the box a boxful on, on it,
+   the thumb dragged */
 static int box_bar(short mx, short my)
 {
 	const dl_item *bar;
@@ -1725,6 +1795,14 @@ static int box_bar(short mx, short my)
 	k = (int) bar->len - 1;
 	axis = bar->base;
 	sc = &br.p->scr[k];
+	if (!axis) {
+		GRECT seen;
+		if (box_panebar(br.p, bar, &held, &seen)) {
+			held_k = k;
+			pb_click(&held, mx, my, held_scroll, held_goto);
+		}
+		return 1;
+	}
 	page_bar_thumb(br.p, bar, &t0, &t1);
 	at = axis ? px - bar->x : py - bar->y;
 	len = axis ? bar->w : bar->h;
