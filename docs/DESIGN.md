@@ -3017,6 +3017,16 @@ through `EW_HOSTS`, as Google sends them to a browser without its check: the pag
 its link, with scripts on and off, from the CAPTCHA's address and from the page before, with no
 search engine set, and a `/search` with results left as it is).
 
+## Direct connection (24 Oct 2026)
+
+Erez's decision for the family (the guidelines' 7.4): what was "Falcon mode", TLS on the Atari
+itself, is called **Direct connection** everywhere the user sees it (the Options menu, Settings'
+Secure page, alerts, the guide, the README), since a TT, or any Atari with a 68020 or better, does it
+too. `EWEB.INF` keeps `FALCON=`, its note naming the Direct connection, so settings carry over. The
+other apps move their TLS into the family's `TLS.OVL` and drop their ST editions; EWeb keeps its TLS
+built into `EWEB.PRG` and keeps `EWEBST.PRG`, the whole browser built for the 68000, so for EWeb
+only the name changes. (The notes below from before 24 Oct say Falcon mode.)
+
 ## History and visited links (24 Oct 2026)
 
 Stage 3's first part. **The history** is `src/browse/history.c`: each page shown (fetched, not

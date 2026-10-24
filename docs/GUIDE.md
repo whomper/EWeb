@@ -480,7 +480,7 @@ with scripts off.
 
 With the Pi gateway set up for it (`aera-gateway` with its browser, on
 the Pi) and in use (its address in Settings > Secure, and on a Falcon or
-TT Falcon mode off), two things in the View menu use the Pi's own web
+TT the Direct connection off), two things in the View menu use the Pi's own web
 browser:
 
 - **Through the Pi's browser:** each page is opened by the browser on
@@ -497,14 +497,14 @@ browser:
 
 ## Secure sites
 
-In Falcon mode (Options > Falcon mode, on unless you turn it off) EWeb
-opens `https://` pages itself: the Falcon's 68030 and DSP do the TLS
-handshake, checked against the root certificates in `CACERT.PEM` (and
+With a Direct connection (Options > Direct connection, on unless you
+turn it off) EWeb opens `https://` pages itself, on a Falcon, a TT or any Atari with a 68020 or better: the
+68030 (and a Falcon's DSP) do the TLS handshake, checked against the root certificates in `CACERT.PEM` (and
 `ROOTS.DAT`, the same read ahead of time). The first visit to a site
 takes a few seconds; later ones are quicker, as EWeb remembers what it
 checked (`SIGS.DAT`).
 
-Without Falcon mode, and always in the ST edition, pages come through
+Without a Direct connection, and always in the ST edition, pages come through
 the Pi gateway: AERA-Gateway's web service on a Raspberry Pi in your
 home (set up as below), whose address you type in Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
 hands the page over your home network. It also makes each picture as the
@@ -552,11 +552,11 @@ sudo apt install -y git &&
   it if they're missing.
 - To update the Pi later: `cd ~/AERA-Gateway && ./update-pi.sh`.
 - To check it: `sudo aera-gateway status` on the Pi; or, before EWeb
-  goes through it (or in Falcon mode), open `http://PI_IP:8280/` (the
+  goes through it (or with a Direct connection), open `http://PI_IP:8280/` (the
   Pi's address) in EWeb: it says webgate is running.
 
 Then in EWeb: **Settings > Secure**, the Pi gateway `PI_IP` (the Pi's
-address), port `8280`; on a Falcon or TT, untick Falcon mode there too,
+address), port `8280`; on a Falcon or TT, untick Direct connection there too,
 or pages still come straight from their servers.
 
 ## Settings
@@ -569,7 +569,7 @@ Options > Settings (^,) has two pages:
   does the pictures, and whether EWeb uses its own colours in 256
   colours. (Which sites' scripts run is Options > Run this site's
   scripts.)
-- **Secure:** Falcon mode (secure pages on this Atari), whether the DSP
+- **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 
 The search address, the gateway's address and the answer to a page's
@@ -586,7 +586,7 @@ there at once; where the window was, when you quit:
 - `SEARCH=` where words typed in the address go, `%s` for the words
   (FrogFind: `http://frogfind.com/?q=%s`)
 - `ZOOM=` the size of the text, per cent (50 to 200)
-- `FALCON=` 1 for Falcon mode (secure pages on this Atari), 0 for the
+- `FALCON=` 1 for a Direct connection (secure pages on this Atari), 0 for the
   Pi gateway
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
@@ -602,7 +602,7 @@ there at once; where the window was, when you quit:
 - `PENS=` through the Pi gateway, pictures made ready for your screen on
   the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)
-- `GATE=` the Pi gateway's address: without Falcon mode every page comes
+- `GATE=` the Pi gateway's address: without a Direct connection every page comes
   through the Pi, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)
 - `SNAPSHOT=` 1 for pages through the Pi's browser (View > Through the

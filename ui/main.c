@@ -116,7 +116,7 @@ static char bm_text[BM_MENU][40];
 static unsigned bm_seen;
 static const MBAR_ITEM m_opts[] = {
 	{ "Settings...", "^,", C_SETTINGS },
-	{ "Falcon mode (TLS)", 0, C_FALCON },
+	{ "Direct connection", 0, C_FALCON },
 #ifndef EW_ST
 	{ "Run this site's scripts", 0, C_SCRIPTS },
 #endif
@@ -506,10 +506,10 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.zoom);
 	put(&s, "ZOOM", v, "the size of the text, per cent (Larger text, Smaller text)");
 	snprintf(v, sizeof v, "%d", opt.falcon);
-	put(&s, "FALCON", v, "1 = Falcon mode: secure pages with TLS on this Atari (Falcon, TT; EWEB.PRG); "
-	    "0 = through the Pi gateway");
+	put(&s, "FALCON", v, "1 = Direct connection: secure pages with TLS on this Atari (68020 or better: "
+	    "Falcon, TT; EWEB.PRG); 0 = through the Pi gateway");
 	snprintf(v, sizeof v, "%d", opt.dsp);
-	put(&s, "DSP", v, "Falcon mode: 1 = the DSP does the secure connections' arithmetic, 0 = the 68030 does");
+	put(&s, "DSP", v, "Direct connection: 1 = the DSP does the secure connections' arithmetic, 0 = the 68030 does");
 	snprintf(v, sizeof v, "%d", opt.pictures);
 	put(&s, "PICTURES", v, "1: pages' pictures are shown, 0: only what they say instead (a slow line)");
 	snprintf(v, sizeof v, "%d", opt.picdsp);
@@ -521,7 +521,7 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
-	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without Falcon mode "
+	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without a Direct connection "
 	    "(aera-gateway install web on the Pi)");
 	snprintf(v, sizeof v, "%u", opt.gateport);
 	put(&s, "GATEPORT", v, "the gateway's port");
@@ -1186,15 +1186,15 @@ int falcon_mode_set(int on)
 {
 	if (on) {
 		if (!tls_available) {
-			alert(1, "[3][This is the ST edition: Falcon|mode is in EWEB.PRG.][ OK ]");
+			alert(1, "[3][This is the ST edition: a|Direct connection is in|EWEB.PRG.][ OK ]");
 			return 0;
 		}
 		if (get_cookie(0x5F435055L) < 20) {	/* _CPU */
-			alert(1, "[3][Falcon mode needs a 68020 or|better (Falcon, TT): this Atari|is too slow for TLS.][ OK ]");
+			alert(1, "[3][A Direct connection needs|a 68020 or better (Falcon,|TT): this Atari is too slow|for TLS.][ OK ]");
 			return 0;
 		}
 		if (!pf_exists(conn_cacert)) {
-			alert(1, "[3][Falcon mode needs the root|certificates: put CACERT.PEM and|ROOTS.DAT next to EWEB.PRG.][ OK ]");
+			alert(1, "[3][A Direct connection needs the|root certificates: put|CACERT.PEM and ROOTS.DAT|next to EWEB.PRG.][ OK ]");
 			return 0;
 		}
 	}
@@ -1205,7 +1205,7 @@ int falcon_mode_set(int on)
 	return 1;
 }
 
-/* a secure address with neither Falcon mode nor the Pi gateway: said
+/* a secure address with neither a Direct connection nor the Pi gateway: said
    plainly, and the page stays (EFTP's words) */
 static int can_open(void *ud, const char *url)
 {
@@ -1216,7 +1216,7 @@ static int can_open(void *ud, const char *url)
 	if (!tls_available)
 		alert(1, "[1][Secure pages need the|Raspberry Pi gateway: on the|Pi, aera-gateway install web,|then its address in|Settings > Secure.][ OK ]");
 	else
-		alert(1, "[1][Secure pages need Falcon|mode (Options menu) or the|Raspberry Pi gateway|(Settings > Secure).][ OK ]");
+		alert(1, "[1][Secure pages need a Direct|connection (Options menu) or|the Raspberry Pi gateway|(Settings > Secure).][ OK ]");
 	return 0;
 }
 

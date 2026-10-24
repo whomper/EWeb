@@ -1103,7 +1103,7 @@ def st():
 
 def gateway():
     """EWEB.PRG on Erez's Falcon in 256 colours, through AERA-Gateway's
-    webgate (Falcon mode off) on a page as superbooth.com's, its big
+    webgate (the Direct connection off) on a page as superbooth.com's, its big
     pictures made smaller by the Pi (PENS=0: JPEG and PNG, decoded on the
     DSP) and as the screen's pens (PENS=1, aerapens behind its socket):
     every picture shown, and EWeb quits, CACHE written"""
@@ -1181,7 +1181,7 @@ def gateway():
 
 
 def falcon():
-    """EWEB.PRG on Erez's Falcon in 256 colours in Falcon mode (TLS on the
+    """EWEB.PRG on Erez's Falcon in 256 colours with a Direct connection (TLS on the
     68030 and the DSP, no gateway), a secure page as a Wikipedia
     article's with its pictures from another secure host: the DSP turns
     from the handshakes' arithmetic to the JPEGs and the dither and back;

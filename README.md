@@ -90,7 +90,7 @@ own fonts.
   own palette, with the pale tints pages need (a setting keeps the
   system's).
 - **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP
-  (Falcon mode); or through the Pi gateway, AERA-Gateway's web service on a
+  (a Direct connection); or through the Pi gateway, AERA-Gateway's web service on a
   Raspberry Pi (TLS 1.3 sites too).
 - **The family's ways**: the About box, menus, shortcuts, right-click menus,
   VA_START and drag and drop, the help file, iconify, the crash report; a
@@ -202,8 +202,8 @@ sudo apt install -y git &&
   `sudo aera-gateway status`, or `http://PI_IP:8280/` from a browser that
   doesn't go through the gateway.
 - In EWeb: Settings > Secure, the Pi gateway `PI_IP`, port `8280`; in
-  `EWEB.PRG` turn Falcon mode off too (Options > Falcon mode (TLS), or its
-  tick in Settings > Secure): while it is on, pages don't go through the Pi.
+  `EWEB.PRG` turn the Direct connection off too (Options > Direct connection,
+  or its tick in Settings > Secure): while it is on, pages don't go through the Pi.
 
 The gateway's own README, with its options and what to do when something
 doesn't work: [gateway/README.md](gateway/README.md#web-ewebs-gateway).

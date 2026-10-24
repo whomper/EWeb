@@ -4,8 +4,9 @@
  * dialogs.c - EWeb's Settings dialog (^,), built in code with EMail's and
  * EFTP's builder: a black title band, the pages in a list on the left (the
  * chosen one in a black bar), that page's settings on the right: ticks,
- * framed fields. The Secure page is the family's: Falcon mode (TLS on this
- * Atari) or the Pi gateway's address and port (the guidelines, 6.1).
+ * framed fields. The Secure page is the family's: a Direct connection (TLS
+ * on this Atari) or the Pi gateway's address and port (the guidelines, 6.1
+ * and 7.4).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -324,15 +325,15 @@ static void part_secure(short x, short y)
 			   !tls_available ? "Not in the ST edition: EWEB.PRG has it" :
 			   "Needs a 68020 or better (TT, Falcon)";
 	rows_at(y);
-	d_tick(x, ROW(0), "Falcon mode: secure pages on this Atari", T_FALCON);
+	d_tick(x, ROW(0), "Direct connection: TLS on this Atari", T_FALCON);
 	d_tick(x + 3, ROW(1), "Check certificates on the DSP", T_DSP);
 	d_text(x + 3, ROW(2), note);
 	d_text(x, ROW(3), "Pi gateway");
 	d_lfield(x + 11, ROW(3), &f_gate, s_gate, 18, sizeof s_gate - 1);
 	d_text(x + 31, ROW(3), "Port");
 	d_field(x + 36, ROW(3), s_gport, 5, '9');
-	d_text(x + 3, ROW(4), "Pages go through the Pi gateway when");
-	d_text(x + 3, ROW(5), "Falcon mode is off (on the ST, always).");
+	d_text(x + 3, ROW(4), "Pages go through the Pi gateway without");
+	d_text(x + 3, ROW(5), "a Direct connection (the ST: always).");
 	d_text(x + 3, ROW(6), "On the Pi: aera-gateway install web");
 }
 

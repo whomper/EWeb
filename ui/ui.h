@@ -11,7 +11,7 @@
 #define UI_H
 
 typedef struct {
-	int falcon;			/* FALCON=: Falcon mode, TLS on this Atari (never in the ST edition) */
+	int falcon;			/* FALCON=: a Direct connection, TLS on this Atari (never in the ST edition) */
 	int dsp;			/* RSA and elliptic curves on the DSP when there is one */
 	/* EWEB.INF (the program's): */
 	char home[512];			/* HOME=: the start page; "" EWeb's own */
