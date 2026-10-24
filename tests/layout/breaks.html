@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset="utf-8"><title>Line breaks inside words</title>
+<!-- where a line may end inside a word (UAX #14, layout.c's lb_inword):
+     after a hyphen or a slash before a letter, not before a digit or at a
+     word's start; after an en dash; either side of an em dash; between
+     ideographs, not before closing punctuation or small kana nor after
+     opening; at a zero width space; at a soft hyphen, with a hyphen drawn
+     at the line's end (not when it wouldn't fit, nor mid-line); none in
+     white-space nowrap -->
+<style>
+body { font: 16px sans-serif; margin: 8px; }
+p { width: 140px; border: 1px solid #888; margin: 0 0 8px; }
+.w { width: 90px; }
+</style></head><body>
+<p>A well-known state-of-the-art thing</p>
+<p>http://www.example.com/a/long/path/to/somewhere</p>
+<p class="w">and/or either/or 1/2 2020-2021 -5 -word</p>
+<p>The inter&shy;nation&shy;al&shy;isation of every&shy;thing hap&shy;pens</p>
+<p style="text-align:right">The inter&shy;nation&shy;al&shy;isation of every&shy;thing</p>
+<p style="text-align:center">Elec&shy;tro&shy;mag&shy;net&shy;ism</p>
+<p>See <a href="#x">inter&shy;nation&shy;al&shy;isation</a> here</p>
+<p>Supercalifragilistic&shy;expialidocious&shy;ness</p>
+<p>word&#8203;word&#8203;word&#8203;word&#8203;word&#8203;word</p>
+<p class="w">pages 10–20 and 30–40 in all</p>
+<p>long—dash—between—words——two</p>
+<p class="w">日本語の文章は、空白がない。「括弧」もある。</p>
+<p style="white-space:nowrap">no-wrap-here/please&shy;not</p>
+<p style="text-align:justify">Justified hyphen&shy;ation text with some more hyphen&shy;ated words in it</p>
+</body></html>

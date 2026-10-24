@@ -3257,6 +3257,36 @@ until then), and a page that doesn't fit gives it back first (make_room). Tested
 hatarigui`'s browse group: the test server's `/site/slow.html` (66 KB, gzip, two parts 2.5 s apart)
 logs a preview before it is shown; and its falcon4 group's big page, loaded and loaded again.
 
+## Line breaks inside words (24 Oct 2026)
+
+Stage 4's first part. A line ended only at a space (or, when a word was wider than the line, inside
+it wherever it ran out); a soft hyphen (`&shy;`) was drawn as a hyphen wherever it was, a zero width
+space as a missing character, and Chinese or Japanese, which has no spaces, broke only where it ran
+out. Now a line may also end inside a word where UAX #14 (Unicode's line breaking) lets it, for what
+pages have (`lb_inword` in `src/layout/layout.c`):
+
+- after a hyphen or a slash between a letter or digit and a letter ("well-" "known", "and/" "or", a
+  long address after each `/`), not before a digit ("2020-2021", "1/2") nor at a word's start;
+- after an en dash ("10–" "20"), on either side of an em dash, not between two;
+- on either side of an ideograph (Chinese, Japanese, Korean), but not before closing punctuation,
+  small kana or the prolonged sound mark, nor after opening punctuation (the classes CL, CP, NS, EX,
+  IS and OP: Japanese kinsoku), nor by a quotation mark (QU);
+- at a zero width space, and at a soft hyphen: neither is drawn, and a line that ends at a soft
+  hyphen shows a hyphen at its end (when it fits there; not on a right-to-left line).
+
+None in `white-space: nowrap` or `pre`, where the soft hyphens still aren't drawn. A word with such
+a place is made of pieces, each an item of the line marked with the place before it (`canbreak` 3,
+or 4 at a soft hyphen), so the line breaker and the narrowest width (a table's or a grid's column)
+take them as they take spaces: the grid test's `fit-content(80px)` column now breaks "fit-"
+"content(80px)" and is the 80 px it asks for. The text's bytes go through a table (`lb_class`), in
+the loop that copies a word, which sends only a word with a hyphen, a slash or a character that may
+matter (U+0080 to U+00BF, from U+2000) to `word_pieces`; Latin, Greek, Cyrillic and Hebrew letters
+are copied as they were. Measured (`drawbench`, the page set's 127 KB page): its layout 12.07 M
+68030 instructions before, 12.12 M now (`word_pieces` 48 K of them, its 150 such words). Copying a
+selection or finding words across a line ended at a soft hyphen has its hyphen in the text. Tested
+by `tests/layout/breaks.html` in `make test`, and 150 pages of random bytes of those kinds under
+AddressSanitizer.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3554,7 +3584,7 @@ out of both (their paths lead nowhere on the Atari).
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
-   UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
+   UAX #14's line breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions
 

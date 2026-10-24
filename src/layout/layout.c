@@ -144,7 +144,10 @@ typedef struct {
 	uint8_t kind;
 	uint8_t flags;			/* DLF_* */
 	uint8_t canbreak;		/* a space a line may end at; 2: a word of white-space
-					   pre or nowrap, no line ending before it or in it */
+					   pre or nowrap, no line ending before it or in it; 3: a
+					   word a line may end before (a place inside a word, UAX
+					   #14: inword); 4: so, at a soft hyphen (a hyphen drawn
+					   at the line's end) */
 	uint8_t collapse;		/* a space dropped at the start or end of a line;
 					   IT_FLOAT: placed */
 	uint8_t hidden;			/* visibility: hidden */
@@ -2095,11 +2098,172 @@ static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t 
 		it->dir = (uint8_t) word_dir_in(l, s, n);
 }
 
+/* ---------------------------------------------------------------- places inside a word a line may end at
+
+   UAX #14 (Unicode line breaking) for what a page's words have: after a
+   hyphen or a slash between a letter or digit and a letter ("well-known",
+   "and/or", a long address), after an en dash, either side of an em dash,
+   either side of an ideograph (Chinese, Japanese, Korean, which have no
+   spaces), at a zero width space or a soft hyphen (neither drawn; a line
+   ending at a soft hyphen shows a hyphen); never before closing
+   punctuation or after opening (the classes CL, CP, NS, EX, IS and OP:
+   Japanese kinsoku), nor by a quotation mark (QU). Spaces are the
+   breaks text_items makes already */
+
+static int lb_letter(uint32_t c)
+{
+	return ((c | 32) >= 'a' && (c | 32) <= 'z') ||
+	       (c >= 0xC0 && c != 0xD7 && c != 0xF7 && !(c >= 0x2000 && c < 0x2C00) && !(c >= 0x3000 && c < 0x3040));
+}
+
+static int lb_cjk(uint32_t c)
+{
+	return (c >= 0x2E80 && c < 0xA000) || (c >= 0xAC00 && c < 0xD7B0) || (c >= 0xF900 && c < 0xFB00) ||
+	       (c >= 0xFE30 && c < 0xFE50) || (c >= 0xFF00 && c < 0xFF61) || (c >= 0x20000 && c < 0x40000);
+}
+
+/* no line ends before c: closing punctuation, small kana, quotation marks */
+static int lb_no_before(uint32_t c)
+{
+	switch (c) {
+	case ')': case ']': case '}': case ',': case '.': case ':': case ';': case '!': case '?':
+	case '"': case '\'': case 0x2018: case 0x2019: case 0x201C: case 0x201D: case 0x2026:
+	case 0x3001: case 0x3002: case 0x3005: case 0x3009: case 0x300B: case 0x300D: case 0x300F:
+	case 0x3011: case 0x3015: case 0x3017: case 0x3019: case 0x301B: case 0x301E: case 0x301F:
+	case 0x303B: case 0x309B: case 0x309C: case 0x309D: case 0x309E: case 0x30A0: case 0x30FB:
+	case 0x30FC: case 0x30FD: case 0x30FE:
+	case 0x3041: case 0x3043: case 0x3045: case 0x3047: case 0x3049: case 0x3063: case 0x3083:
+	case 0x3085: case 0x3087: case 0x308E: case 0x3095: case 0x3096:
+	case 0x30A1: case 0x30A3: case 0x30A5: case 0x30A7: case 0x30A9: case 0x30C3: case 0x30E3:
+	case 0x30E5: case 0x30E7: case 0x30EE: case 0x30F5: case 0x30F6:
+	case 0xFF01: case 0xFF09: case 0xFF0C: case 0xFF0E: case 0xFF1A: case 0xFF1B: case 0xFF1F:
+	case 0xFF3D: case 0xFF5D: case 0xFF60: case 0xFF61: case 0xFF63: case 0xFF64: case 0xFF9E:
+	case 0xFF9F:
+		return 1;
+	}
+	return c >= 0x31F0 && c < 0x3200;		/* (small katakana for Ainu) */
+}
+
+/* no line ends after c: opening punctuation, quotation marks */
+static int lb_no_after(uint32_t c)
+{
+	switch (c) {
+	case '(': case '[': case '{': case '"': case '\'': case 0x2018: case 0x2019: case 0x201C:
+	case 0x201D: case 0x3008: case 0x300A: case 0x300C: case 0x300E: case 0x3010: case 0x3014:
+	case 0x3016: case 0x3018: case 0x301A: case 0x301D: case 0xFF08: case 0xFF3B: case 0xFF5B:
+	case 0xFF5F: case 0xFF62:
+		return 1;
+	}
+	return 0;
+}
+
+/* text_items' bytes: 0 most, 1 white space (a word's end), 2 a hyphen or
+   a slash, 3 the first of a character from U+0080 to U+00BF (the soft
+   hyphen) or from U+2000 (the dashes, the zero width space, ideographs),
+   which word_pieces looks at (a letter of Latin, Greek, Cyrillic or
+   Hebrew is copied as it is) */
+static const uint8_t lb_class[256] = {
+	[' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1, ['\f'] = 1, ['-'] = 2, ['/'] = 2,
+	[0xc2] = 3, [0xe2 ... 0xff] = 3
+};
+
+/* the code point of s that ends before *j, in the word from w; 0 at its
+   start. *j: where it begins */
+static uint32_t lb_before(const char *s, uint32_t w, uint32_t *j)
+{
+	uint32_t k = *j;
+	const char *p;
+	if (k <= w)
+		return 0;
+	while (--k > w && ((unsigned char) s[k] & 0xC0) == 0x80)
+		;
+	p = s + k;
+	k = *j;
+	*j = (uint32_t) (p - s);
+	return utf8_next(&p, s + k);
+}
+
+/* a line may end between a and b, the code points either side (a2 the
+   one before a, 0 for none) */
+static int lb_inword(uint32_t a2, uint32_t a, uint32_t b)
+{
+	if (a == '-' || a == '/')
+		return (lb_letter(a2) || (a2 >= '0' && a2 <= '9')) && lb_letter(b);
+	if (a == 0x2013)		/* en dash: after it */
+		return b != 0x2013 && !lb_no_before(b);
+	if (a == 0x2014 || b == 0x2014)	/* em dash: either side, not between two */
+		return a != b && !lb_no_before(b) && !lb_no_after(a);
+	if (lb_cjk(a) || lb_cjk(b))
+		return !lb_no_before(b) && !lb_no_after(a);
+	return 0;
+}
+
 /* white-space pre or nowrap: no line ends in it */
 static int no_wrap(const ec_style *s)
 {
 	int w = s != NULL ? kw(s, EP_WHITE_SPACE) : 0;
 	return w == KW_PRE || w == KW_NOWRAP;
+}
+
+/* a word with a hyphen, a slash or a character looked at, s[i..e), into t
+   from o: in pieces where a line may end inside it, each piece's canbreak
+   the place before it (3, 4: at a soft hyphen), its soft hyphens and zero
+   width spaces left out. Where t ends */
+static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, const char *s, uint32_t i, uint32_t e,
+						       char *t, uint32_t o,
+			    int tt, int wrap, int *line_start)
+{
+	uint32_t j = i, start = o;
+	int cb = 0, brk = 0, slow = 0;
+	while (j < e) {
+		const char *q = s + j;
+		uint32_t b = utf8_next(&q, s + e);
+		int was = slow;
+		if (b == 0xAD || b == 0x200B) {
+			/* a soft hyphen, a zero width space: not drawn, a place
+			   to end a line */
+			if (o > start && brk == 0)
+				brk = b == 0xAD ? 4 : 3;
+			j = (uint32_t) (q - s);
+			slow = 1;
+			continue;
+		}
+		/* after a hyphen, a slash, a dash or an ideograph, or before
+		   one: where a line may end */
+		slow = b == '-' || b == '/' || b == 0x2013 || b == 0x2014 || lb_cjk(b);
+		if (brk == 0 && o > start && (was || slow)) {
+			uint32_t p = j, a = lb_before(s, i, &p), a2 = lb_before(s, i, &p);
+			if (lb_inword(a2, a, b))
+				brk = 3;
+		}
+		if (brk != 0 && wrap) {
+			put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
+			if (!l->fail)
+				l->it[l->nit - 1].canbreak = (uint8_t) cb;
+			cb = brk;
+			start = o;
+		}
+		brk = 0;
+		if (b < 0x80) {
+			char ch = (char) b;
+			if (tt == KW_UPPERCASE && ch >= 'a' && ch <= 'z')
+				ch -= 32;
+			else if (tt == KW_LOWERCASE && ch >= 'A' && ch <= 'Z')
+				ch += 32;
+			t[o++] = ch;
+			j++;
+		} else {
+			while (s + j < q)
+				t[o++] = s[j++];
+		}
+	}
+	if (o == start && cb == 0)
+		return o;	/* (only soft hyphens: nothing) */
+	put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
+	if (!l->fail)
+		l->it[l->nit - 1].canbreak = (uint8_t) (wrap ? cb : 2);	/* (2: no line ends before it, or in it) */
+	*line_start = 0;
+	return o;
 }
 
 /* text into words and spaces, collapsed as its white-space says, copied
@@ -2159,19 +2323,37 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 			continue;
 		}
 		{
+			/* a word: copied as it is, unless it has a hyphen, a
+			   slash or a character looked at (lb_class), when it is
+			   made again in pieces where a line may end inside it */
 			uint32_t j = i, start = o;
-			while (j < n && !is_space((unsigned char) s[j])) {
-				char ch = s[j++];
-				if (tt == KW_UPPERCASE && ch >= 'a' && ch <= 'z')
-					ch -= 32;
-				else if (tt == KW_LOWERCASE && ch >= 'A' && ch <= 'Z')
-					ch += 32;
-				t[o++] = ch;
+			int seen = 0, k;
+			if (tt != KW_UPPERCASE && tt != KW_LOWERCASE) {
+				/* (most text: a loop without text-transform's tests) */
+				while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
+					seen |= k;
+					t[o++] = s[j++];
+				}
+			} else {
+				while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
+					char ch = s[j++];
+					seen |= k;
+					if (tt == KW_UPPERCASE && ch >= 'a' && ch <= 'z')
+						ch -= 32;
+					else if (tt == KW_LOWERCASE && ch >= 'A' && ch <= 'Z')
+						ch += 32;
+					t[o++] = ch;
+				}
 			}
-			put_item(l, r, IT_WORD, t + start, o - start, (int32_t) font_width(r->font, t + start, o - start));
-			if (!wrap && !l->fail)
-				l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
-			*line_start = 0;
+			if (seen > 1) {
+				o = word_pieces(l, r, s, i, j, t, start, tt, wrap, line_start);
+			} else {
+				put_item(l, r, IT_WORD, t + start, o - start,
+					 (int32_t) font_width(r->font, t + start, o - start));
+				if (!wrap && !l->fail)
+					l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
+				*line_start = 0;
+			}
 			i = j;
 		}
 	}
@@ -3009,6 +3191,7 @@ static void split_word(L *l, long k, int32_t w)
 	l->it[k + 1].text = last;
 	l->it[k + 1].len = (uint32_t) (e - last);
 	l->it[k + 1].w = (int32_t) font_width(copy.font, last, e - last);
+	l->it[k + 1].canbreak = 0;	/* (no soft hyphen before the rest) */
 }
 
 /* the pictures of items[i..end) placed by their line's top or bottom
@@ -3283,7 +3466,7 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	}
 	while (i < l->nit) {
 		long j, k, last_break = -1, end;
-		int32_t lw = 0, avail, asc = strut_a, desc = strut_d, off, base, lx = x, lwid = w, rx;
+		int32_t lw = 0, avail, asc = strut_a, desc = strut_d, off, base, lx = x, lwid = w, rx, hy = 0;
 		int any = 0, broke = 0, justify, pend = 0;
 
 		/* the line's start: collapsible spaces go; a float there is
@@ -3347,6 +3530,9 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					last_break = j;
 				continue;
 			}
+			if (it->canbreak >= 3 && j > i &&
+			    (it->canbreak == 3 || lw + font_advance(l->it[j - 1].font, '-') <= avail))
+				last_break = j - 1;	/* inside a word (at a soft hyphen, if its hyphen fits) */
 			if (lw + it->w > avail && any && (last_break >= i || it->canbreak != 2)) {
 				/* at the last space; with none, before this word (not
 				   one of white-space pre or nowrap: it goes on the
@@ -3388,6 +3574,14 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 				asc = it->asc;
 			if (it->desc > desc)
 				desc = it->desc;
+		}
+		/* ended at a soft hyphen: its hyphen drawn (not on a right-to-left
+		   line) */
+		if (!broke && !rtl && end == j && j > i && j < l->nit && l->it[j].kind == IT_WORD &&
+		    l->it[j].canbreak == 4 && l->it[j - 1].kind == IT_WORD && !l->it[j - 1].hidden &&
+		    l->it[j - 1].dir != 2) {
+			hy = font_advance(l->it[j - 1].font, '-');
+			lw += hy;
 		}
 		if (l->lined)
 			line_edges(l, i, end, &asc, &desc);
@@ -3501,6 +3695,9 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 					text(l, it->x, base + it->shift, it, s, len, ww);
 				}
 			}
+			if (hy > 0)
+				text(l, l->it[end - 1].x + l->it[end - 1].w, base + l->it[end - 1].shift, &l->it[end - 1], "-",
+				     1, hy);
 		}
 		cy += asc + desc;
 		/* the line's floats that didn't fit on it: below it */
