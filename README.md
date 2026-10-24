@@ -100,10 +100,10 @@ own fonts.
 - **The family's ways**: the About box, menus, shortcuts, right-click menus,
   VA_START and drag and drop, the help file, iconify, the crash report; a
   mail address (`mailto:`) goes to EMail.
-- And the first milestone's tools: `NSBENCH.TTP` times NetSurf's HTML parser
-  (Hubbub) and both CSS engines (LibCSS and EWeb's) on the Atari,
-  `PICBENCH.TTP` a JPEG decoded and dithered on the 68030 and with the DSP,
-  `EWGET.TTP` fetches a page and times it.
+- And measuring tools, made from the source (Building) for the tests and
+  not in the release: `NSBENCH.TTP` times the HTML parsers and both CSS
+  engines on the Atari, `PICBENCH.TTP` a JPEG decoded and dithered on the
+  68030 and with the DSP, `EWGET.TTP` fetches a page and times it.
   [`docs/DESIGN.md`](docs/DESIGN.md) has what was measured, the decisions
   and the plan.
 
@@ -121,9 +121,10 @@ and unpack it into a folder of its own. It contains:
 | `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
 | `CACERT.PEM`, `ROOTS.DAT` | the authorities that vouch for secure sites (Mozilla's list) |
 | `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor) for TOS, EmuTOS, and NVDI with TOS's colours loaded (COLORVDI.CPX); `EWEBNV.RSC`, the same for NVDI with its own 256 colours; `EWEB.ICN` and its mask `EWEBMK.ICN` |
-| `NSBENCH.TTP`, `NSBENCH.TXT`, `SAMPLE.HTM`, `NEWS.HTM`, `NEWS.CSS` | the measuring tool, its guide and two pages to try it on |
-| `PICBENCH.TTP`, `PICBENCH.TXT`, `PHOTO.JPG` | times a JPEG on the 68030 and with the DSP, its guide and a photo to try it on |
-| `EWGET.TTP`, `EWGET.TXT` | fetches a page and times it, and its guide |
+
+`EWEBJS.OVL` is needed only for the scripts of sites you turn them on for;
+`CACERT.PEM` and `ROOTS.DAT` only for a Direct connection (through the Pi
+gateway they aren't used); `EWEBST.PRG` only on an ST.
 
 1. With STinG running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST or
    STE). Its home page has sites that read well on an Atari, a row for each

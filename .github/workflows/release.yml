@@ -1,7 +1,7 @@
 name: Release
 
-# Builds NSBENCH.TTP and publishes it as a GitHub Release: each file on its
-# own, and all of them in EWEB-x.y.zip. Two ways to start it:
+# Builds EWeb (make dist: what it needs, nothing else) and publishes it as a
+# GitHub Release: each file on its own, and all of them in EWEB-x.y.zip. Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;
 # - push a tag vX.Y that matches VERSION: the tag's message

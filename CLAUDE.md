@@ -215,13 +215,14 @@ hub stay complete, with the evidence.
   keeps the arenas' pieces small, and a page that doesn't fit gives back the kept pages and the
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
   through the gateway.
-- **A release** carries `EWEB.PRG`, `EWEBJS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`),
-  `NSBENCH.TTP` (no FPU instructions, so any Falcon runs it), `NSBENCH.TXT`
-  (`docs/NSBENCH.TXT`, CR/LF in the zip), `SAMPLE.HTM`, and `NEWS.HTM` with `NEWS.CSS`, and
-  `EWGET.TTP` with `EWGET.TXT`, `CACERT.PEM` and `ROOTS.DAT`, and `PICBENCH.TTP` with `PICBENCH.TXT`
-  and `PHOTO.JPG`, from `make dist`. `tests/bench/mkpage.py` makes the news page and
-  `tests/bench/mkphoto.py` the photo, the same bytes every time; when they change, measure the
-  shipped files again and change their figures in DESIGN.md.
+- **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
+  `EWEBJS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
+  the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
+  dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
+  by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his
+  Atari, it goes in that release, and its notes say so). `tests/bench/mkpage.py` makes the
+  news page and `tests/bench/mkphoto.py` the photo, the same bytes every time; when they change,
+  measure them again and change their figures in DESIGN.md.
 - **EWeb's HTML parser** is `src/doc/html.c` (fresh, after the HTML Standard's 13.2; DESIGN.md): it
   replaced Hubbub on speed and standards, and Hubbub stays only in nsbench and `make h5test` as the
   yardstick. Its named character references are `src/doc/entities.txt` (`tools/mkentities.py`

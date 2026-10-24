@@ -1023,23 +1023,18 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 # certificates, the desktop icon) and the measuring tools
 build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 	python3 tests/bench/mkphoto.py build/photo
-dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP binary/EWGET.TTP binary/CACERT.PEM \
-		binary/ROOTS.DAT docs/NSBENCH.TXT docs/EWGET.TXT tests/bench/sample.html build/news/NEWS.HTM \
-		binary/PICBENCH.TTP docs/PICBENCH.TXT build/photo/PHOTO.JPG
+# the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
+# measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
+# are made by make and used by the tests, not shipped
+dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/CACERT.PEM \
+		binary/ROOTS.DAT
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/NSBENCH.TTP \
-		binary/EWGET.TTP binary/CACERT.PEM binary/ROOTS.DAT binary/PICBENCH.TTP build/photo/PHOTO.JPG dist/
+	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/CACERT.PEM \
+		binary/ROOTS.DAT dist/
 	cp icons/EWEB.RSC icons/EWEBNV.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
-	sed 's/$$/\r/' docs/NSBENCH.TXT > dist/NSBENCH.TXT
-	sed 's/$$/\r/' docs/EWGET.TXT > dist/EWGET.TXT
-	sed 's/$$/\r/' docs/PICBENCH.TXT > dist/PICBENCH.TXT
-	sed 's/$$/\r/' tests/bench/sample.html > dist/SAMPLE.HTM
-	sed 's/$$/\r/' build/news/NEWS.HTM > dist/NEWS.HTM
-	sed 's/$$/\r/' build/news/NEWS.CSS > dist/NEWS.CSS
-	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/NSBENCH.TTP dist/NSBENCH.TXT dist/EWGET.TTP \
-		dist/EWGET.TXT dist/CACERT.PEM dist/ROOTS.DAT dist/SAMPLE.HTM dist/NEWS.HTM dist/NEWS.CSS \
-		dist/PICBENCH.TTP dist/PICBENCH.TXT dist/PHOTO.JPG dist/zip/
+	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/CACERT.PEM dist/ROOTS.DAT \
+		dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist
