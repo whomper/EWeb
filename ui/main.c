@@ -1259,8 +1259,8 @@ static int can_open(void *ud, const char *url)
    (br_encoding) */
 static void encoding_menu(void)
 {
-	char lab[1 + 16][44];	/* (on the stack while the popup is up: not kept) */
-	const char *items[2 + 16];
+	char lab[1 + 20][44];	/* (on the stack while the popup is up: not kept) */
+	const char *items[2 + 20];
 	short mx, my, mb, ks, r, n = 0;
 	int i;
 	if (br.d == NULL)
@@ -1271,7 +1271,7 @@ static void encoding_menu(void)
 		snprintf(lab[0], sizeof lab[0], "\x08 Auto: %.35s", br_encoding_label(br.d->charset));
 	items[n++] = lab[0];
 	items[n++] = "-";
-	for (i = 0; i < br_nencodings && i < 16; i++) {
+	for (i = 0; i < br_nencodings && i < 20; i++) {
 		snprintf(lab[1 + i], sizeof lab[1 + i], "%s%s", strcmp(br.enc, br_encodings[i].name) == 0 ? "\x08 " : "  ",
 			 br_encodings[i].label);
 		items[n++] = lab[1 + i];

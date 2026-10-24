@@ -653,9 +653,21 @@ and **a text browser first**: text, links, lists and tables, with pictures and f
 releases.
 
 - **Fonts** (`tools/mkfont.py`, `src/gfx/font.c`): `EWEB.FNT` holds DejaVu Sans, Serif and Sans
-  Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 395
+  Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 398
   characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB unpacked; each face
-  is DEFLATE'd in the file, 705 KB in all (Erez's decision, 19 Oct 2026: packed, every size kept). FreeType draws them
+  is DEFLATE'd in the file, 705 KB in all (Erez's decision, 19 Oct 2026: packed, every size kept).
+  Since 24 Oct 2026 (Erez's choice, A: not Armenian, Georgian or the rarer symbols) each face has
+  four more blocks of characters, `EWFNT3`: more Latin (Latin Extended-B, Vietnamese, Welsh, the
+  combining accents, which take no room and are drawn over the letter before), 398 characters;
+  Greek, 135; Cyrillic, 120; the common symbols (arrows, mathematics, currencies, fractions,
+  circled numbers, shapes, check marks, card suits), 270. A block is read and unpacked the first
+  time a page shows one of its characters, its place in the file read then (one more seek and
+  read), so a page without them costs what it did; a face's blocks average 13.4, 4.5, 4.1 and
+  8.2 KB unpacked, given back with the face (`font_drop`). At start the other blocks' codes
+  (4.6 KB) and each face's pointers to its blocks (2.9 KB) take 7.5 KB more. The file is 2.7 MB
+  (the blocks 769, 317, 270 and 644 KB packed); the encodings these letters need (Windows-1251, ISO-8859-5, Windows-1253,
+  ISO-8859-7) are in View > Encoding, and the default for Cyrillic's and Greek's top-level
+  domains is Firefox's (`br_fallback`). FreeType draws them
   without smoothing, with its hinted advances, so the spacing matches the pixels; letters a face
   lacks (DejaVu Serif has no Hebrew) are Sans's. EWeb opens the file once at start and keeps it
   open: its directory is read then, and each face the first time a page uses it, unpacked by the
@@ -1765,8 +1777,9 @@ Now EWeb does as the HTML Standard and the URL Standard say:
 - **The default** (`br_fallback`, `src/browse`): the standard lets it come from the address, as
   Firefox does from the top-level domain: Windows-1255 for Israel's `.il` (the owner's sites and
   the older Israeli ones that send no charset), Windows-1252 for the rest and for files (a file has
-  no address to tell by). Other domains' encodings (Cyrillic, Greek, Arabic) would show letters
-  `EWEB.FNT` hasn't got, so only Hebrew's is there; the table can take more.
+  no address to tell by). Since 24 Oct 2026, with `EWEB.FNT`'s Greek and Cyrillic, Firefox's for
+  those domains too: Windows-1251 for .ru, .ua, .by, .bg, .rs, .mk and the like, ISO-8859-7 for
+  .gr and .cy; Arabic's would show letters `EWEB.FNT` hasn't got.
 - **Text files** (`text/plain`, and `.TXT` on the disk, which was read as a page) follow the same
   steps but the prescan, and are made as the standard's page load processing model for text files
   says: a `<pre>` and a line feed it drops (so the file's own first stays), then the PLAINTEXT
@@ -3612,7 +3625,7 @@ out of both (their paths lead nowhere on the Atari).
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
-   drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full
+   drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
    (numbers, Latin and mirrored brackets in Hebrew done, above; embeddings to come), UAX #14's line
    breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 

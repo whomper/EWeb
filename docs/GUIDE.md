@@ -351,8 +351,11 @@ made for wider screens fit the Falcon's 640).
 Most pages say which encoding their text is in (UTF-8, Windows-1255
 for Hebrew, Windows-1252 for Western European languages, and so on),
 and EWeb reads them so. A page that doesn't say is read as UTF-8 when
-its text is UTF-8; otherwise as Windows-1255 when its address ends in
-.il (an Israeli site), else as Windows-1252, as browsers do. Text files
+its text is UTF-8; otherwise by its address, as browsers do: Windows-1255
+when it ends in .il (an Israeli site), Windows-1251 for a Russian,
+Ukrainian, Belarusian, Bulgarian, Serbian or Macedonian site (.ru, .ua,
+.by, .bg, .rs, .mk and the like), ISO-8859-7 for a Greek or Cypriot one
+(.gr, .cy), else Windows-1252. Text files
 (.TXT on your disks, or text from a server) are read the same way, and
 shown as their lines.
 
@@ -369,11 +372,17 @@ open another; **Auto** goes back to what the page says. The list:
 - Hebrew (Windows-1255), Hebrew, logical (ISO-8859-8-I) and Hebrew,
   visual (ISO-8859-8)
 - Central European (Windows-1250, ISO-8859-2), Turkish (Windows-1254,
-  ISO-8859-9), Baltic (Windows-1257, ISO-8859-13, ISO-8859-4), Nordic
-  (ISO-8859-10) and South European (ISO-8859-3)
+  ISO-8859-9)
+- Cyrillic (Windows-1251, ISO-8859-5) and Greek (Windows-1253,
+  ISO-8859-7)
+- Baltic (Windows-1257, ISO-8859-13, ISO-8859-4), Nordic (ISO-8859-10)
+  and South European (ISO-8859-3)
 
-EWeb's fonts have the Latin and Hebrew letters, so pages in Greek,
-Cyrillic or Arabic can't be shown yet, whatever the encoding. A page in
+EWeb's fonts have the Latin letters (with Vietnamese, Romanian and the
+accents written over a letter), Hebrew, Greek, Cyrillic and the common
+symbols (arrows, mathematics, currencies, check marks, card suits); a
+character they haven't got, such as Arabic, Armenian, Georgian or an
+emoji, is shown as ?. A page in
 visual Hebrew (ISO-8859-8, its letters stored in the order they are
 shown) is shown as it is stored, left to right, as browsers show it;
 if its Hebrew comes out reversed, the page is logical Hebrew: choose

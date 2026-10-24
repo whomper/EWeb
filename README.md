@@ -89,7 +89,9 @@ own fonts.
   under the name the site gives it (RFC 6266), made to fit a TOS disk,
   archives as they came.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
-  styles and twelve sizes, the same on every Atari, with or without GDOS.
+  styles and twelve sizes, the same on every Atari, with or without GDOS:
+  Latin (Vietnamese and Romanian too), Hebrew, Greek, Cyrillic and the
+  common symbols, each alphabet read only when a page shows it.
 - **Every screen**: monochrome, 4, 16 and 256 colours and the Falcon's true
   colour, through ST-RAM so that it runs from TT-RAM; in 256 colours EWeb's
   own palette, with the pale tints pages need (a setting keeps the

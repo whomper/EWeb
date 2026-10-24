@@ -2647,6 +2647,10 @@ const BR_ENC br_encodings[] = {
 	{ "Central European (Windows-1250)", "windows-1250" },
 	{ "Central European (ISO-8859-2)", "ISO-8859-2" },
 	{ "Turkish (Windows-1254, ISO-8859-9)", "windows-1254" },
+	{ "Cyrillic (Windows-1251)", "windows-1251" },
+	{ "Cyrillic (ISO-8859-5)", "ISO-8859-5" },
+	{ "Greek (Windows-1253)", "windows-1253" },
+	{ "Greek (ISO-8859-7)", "ISO-8859-7" },
 	{ "Baltic (Windows-1257)", "windows-1257" },
 	{ "Baltic (ISO-8859-13)", "ISO-8859-13" },
 	{ "Baltic (ISO-8859-4)", "ISO-8859-4" },
@@ -2678,10 +2682,27 @@ const char *br_fallback(const char *url)
 	n = strlen(h);
 	if (n > 0 && h[n - 1] == '.')	/* "example.co.il." is example.co.il */
 		h[--n] = 0;
-	/* Hebrew's only, for now: the other locales' (Cyrillic, Greek,
-	   Arabic...) have letters EWEB.FNT hasn't got */
-	if (n > 3 && h[n - 3] == '.' && (h[n - 2] | 32) == 'i' && (h[n - 1] | 32) == 'l')
-		return "windows-1255";
+	/* Firefox's for the top-level domains whose letters EWEB.FNT has
+	   (domainsfallbacks.properties): Hebrew, Cyrillic, Greek (not
+	   Arabic's, which it hasn't got) */
+	{
+		static const char *const tld[][2] = {
+			{ "il", "windows-1255" }, { "ru", "windows-1251" }, { "ua", "windows-1251" },
+			{ "by", "windows-1251" }, { "bg", "windows-1251" }, { "kz", "windows-1251" },
+			{ "kg", "windows-1251" }, { "mk", "windows-1251" }, { "rs", "windows-1251" },
+			{ "su", "windows-1251" }, { "tj", "windows-1251" }, { "mn", "windows-1251" },
+			{ "xn--p1ai", "windows-1251" }, { "xn--j1amh", "windows-1251" },
+			{ "xn--90ais", "windows-1251" }, { "xn--90a3ac", "windows-1251" },
+			{ "xn--d1alf", "windows-1251" }, { "xn--80ao21a", "windows-1251" },
+			{ "gr", "ISO-8859-7" }, { "cy", "ISO-8859-7" }, { "xn--qxam", "ISO-8859-7" }
+		};
+		const char *dot = strrchr(h, '.');
+		size_t i;
+		if (dot != NULL && dot > h && dot[1])
+			for (i = 0; i < sizeof tld / sizeof tld[0]; i++)
+				if (strcasecmp(dot + 1, tld[i][0]) == 0)
+					return tld[i][1];
+	}
 	return "windows-1252";
 }
 

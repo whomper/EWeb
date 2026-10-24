@@ -3,8 +3,9 @@
 /*
  * font.h - EWeb's own bitmap fonts (EWEB.FNT, made by tools/mkfont.py
  * from DejaVu): Sans, Serif and Mono, regular, bold, italic and bold
- * italic, at a set of pixel sizes, for Latin, Hebrew and the common
- * signs. A face is read from the file the first time it is wanted.
+ * italic, at a set of pixel sizes, for Latin, Hebrew, Greek, Cyrillic
+ * and the common signs. A face is read from the file the first time it is
+ * wanted, its blocks of characters past the first when a page shows one.
  */
 #ifndef EW_FONT_H
 #define EW_FONT_H
@@ -23,10 +24,15 @@ typedef struct {
 	const uint8_t *bits;		/* h rows of (w + 7) / 8 bytes, left pixel in bit 7; NULL: blank */
 } GLYPH;
 
+#define FONT_BLOCKS	6	/* blocks of characters a face may have */
+
 typedef struct ew_font {
 	uint8_t family, style, px;
 	uint8_t ascent, descent;	/* above and below the baseline */
-	uint8_t *data;			/* the face's block, read on first use */
+	uint8_t bad;			/* its blocks that can't be read, a bit each */
+	uint8_t *data;			/* the face's first block of characters, read on first use */
+	uint8_t *more[FONT_BLOCKS - 1];	/* its other blocks, each read when a page first needs one
+					   of their characters (Greek, Cyrillic...) */
 	int failed;
 } ew_font;
 

@@ -2,11 +2,14 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * font.c - EWEB.FNT: the table of faces is read at start, a face's
- * glyphs when it is first used (1.8 MB unpacked, all of them; a page uses a
- * handful of faces). The file stays open from font_init to font_free, so
- * a face is a seek and a read, not a search of the folder (the
- * guidelines' 6.5). Each face is DEFLATE'd in the file (0.7 MB for all
- * of them): read whole, then unpacked by the HTTP client's inflate.
+ * glyphs when it is first used (a page uses a handful of faces). A face's
+ * characters come in blocks (tools/mkfont.py): the first, which nearly
+ * every page shows, read with the face; each of the others (more Latin
+ * letters, Greek, Cyrillic, symbols) when a page first shows one of its
+ * characters. The file stays open from font_init to font_free, so a block
+ * is a seek and a read, not a search of the folder (the guidelines' 6.5).
+ * Each block is DEFLATE'd in the file: read whole, then unpacked by the
+ * HTTP client's inflate. EWFNT2, the file before, had one block.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -16,10 +19,17 @@
 #include "inflate.h"
 
 static int fh = -1;			/* EWEB.FNT, open while the fonts are */
-static uint16_t ncodes, nfaces;
-static uint16_t *codes;
+static uint16_t ncodes, nfaces, nblocks;
+static uint16_t *codes;			/* the first block's, sorted */
+static uint16_t nx, *xcodes, *xidx;	/* the other blocks' codes, sorted together, and each
+					   one's place in its block */
+static uint8_t *xblk;			/* and its block */
+static uint16_t bcount[FONT_BLOCKS];	/* each block's codes */
 static ew_font *faces;
-static uint32_t *foff, *fstored, *fsize;	/* where a face is, its packed and unpacked sizes */
+static uint32_t *foff, *fstored, *fsize;	/* each face's first block: where, its packed and
+						   unpacked sizes (the others' are read from the
+						   file when first needed: few pages want one) */
+static long fdir, fper;			/* where the faces' table is in the file, and an entry's size */
 static int16_t ascii[96];		/* code index of 0x20..0x7f, -1 if none */
 static uint8_t picked[4][4][64];	/* font_get's face (+ 1) for a family, style and size
 					   (to 63 px), kept as it is asked for: a page asks often */
@@ -35,11 +45,15 @@ static uint32_t be32(const uint8_t *p)
 
 void font_free(void)
 {
-	int i;
-	for (i = 0; i < nfaces; i++)
-		free(faces[i].data);
+	font_drop();
 	free(faces);
 	free(codes);
+	free(xcodes);
+	free(xidx);
+	free(xblk);
+	xcodes = xidx = NULL;
+	xblk = NULL;
+	nx = 0;
 	free(foff);
 	free(fstored);
 	free(fsize);
@@ -57,10 +71,14 @@ void font_free(void)
    each is read again when next used */
 void font_drop(void)
 {
-	int i;
-	for (i = 0; i < nfaces; i++) {
+	int i, b;
+	for (i = 0; faces != NULL && i < nfaces; i++) {
 		free(faces[i].data);
 		faces[i].data = NULL;
+		for (b = 0; b < FONT_BLOCKS - 1; b++) {
+			free(faces[i].more[b]);
+			faces[i].more[b] = NULL;
+		}
 	}
 }
 
@@ -69,33 +87,82 @@ static int read_at(int h, long off, void *buf, long n)
 	return pf_seek(h, off) == off && pf_read(h, buf, n) == n;
 }
 
+/* the other blocks' codes in one sorted list (each block's is sorted) */
+static int by_code(const void *a, const void *b)
+{
+	uint32_t x = *(const uint32_t *) a, y = *(const uint32_t *) b;
+	return x < y ? -1 : x > y;
+}
+
 int font_init(const char *path)
 {
 	uint8_t head[12], *dir = NULL;
-	int h, i, ok = 0;
+	uint32_t *all = NULL;
+	long dsize, per;
+	int h, i, b, v3, ok = 0;
 
 	font_free();
 	h = pf_open(path, PF_READ);
 	if (h < 0)
 		return 0;
-	if (!read_at(h, 0, head, 12) || memcmp(head, "EWFNT2", 6) != 0)
+	if (!read_at(h, 0, head, 12) || memcmp(head, "EWFNT", 5) != 0 || (head[5] != '2' && head[5] != '3'))
 		goto done;
+	v3 = head[5] == '3';
 	nfaces = be16(head + 8);
-	ncodes = be16(head + 10);
+	nblocks = v3 ? be16(head + 10) : 1;
+	if (nblocks < 1 || nblocks > FONT_BLOCKS)
+		goto done;
+	if (v3) {
+		uint8_t c[2 * FONT_BLOCKS];
+		if (!read_at(h, 12, c, 2L * nblocks))
+			goto done;
+		for (b = 0; b < nblocks; b++)
+			bcount[b] = (uint16_t) be16(c + 2 * b);
+	} else {
+		bcount[0] = (uint16_t) be16(head + 10);
+	}
+	ncodes = bcount[0];
+	for (nx = 0, b = 1; b < nblocks; b++)
+		nx = (uint16_t) (nx + bcount[b]);
+	per = v3 ? 4 + 12L * nblocks : 16;
+	dsize = 2L * (ncodes + nx) + per * nfaces;
+	fdir = (v3 ? 12 + 2L * nblocks : 12) + 2L * (ncodes + nx);
+	fper = per;
 	codes = malloc(ncodes * sizeof *codes);
-	dir = malloc((long) ncodes * 2 + (long) nfaces * 16);
+	dir = malloc(dsize);
 	faces = calloc(nfaces, sizeof *faces);
 	foff = malloc(nfaces * sizeof *foff);
 	fstored = malloc(nfaces * sizeof *fstored);
 	fsize = malloc(nfaces * sizeof *fsize);
-	if (!codes || !dir || !faces || !foff || !fstored || !fsize || nfaces == 0 || ncodes == 0)
+	if (nx) {
+		xcodes = malloc(nx * sizeof *xcodes);
+		xidx = malloc(nx * sizeof *xidx);
+		xblk = malloc(nx);
+		all = malloc(nx * sizeof *all);
+	}
+	if (!codes || !dir || !faces || !foff || !fstored || !fsize || nfaces == 0 || ncodes == 0 ||
+	    (nx && (!xcodes || !xidx || !xblk || !all)))
 		goto done;
-	if (!read_at(h, 12, dir, (long) ncodes * 2 + (long) nfaces * 16))
+	if (!read_at(h, v3 ? 12 + 2L * nblocks : 12, dir, dsize))
 		goto done;
 	for (i = 0; i < ncodes; i++)
 		codes[i] = be16(dir + 2 * i);
+	{
+		/* each: code << 16 | block << 12 | place (a block holds fewer than 4096) */
+		long k = 0, at = ncodes;
+		for (b = 1; b < nblocks; b++)
+			for (i = 0; i < bcount[b]; i++, at++)
+				all[k++] = (uint32_t) be16(dir + 2 * at) << 16 | (uint32_t) b << 12 | (uint32_t) i;
+		if (nx)
+			qsort(all, nx, sizeof *all, by_code);
+		for (k = 0; k < nx; k++) {
+			xcodes[k] = (uint16_t) (all[k] >> 16);
+			xblk[k] = (uint8_t) (all[k] >> 12 & 15);
+			xidx[k] = (uint16_t) (all[k] & 4095);
+		}
+	}
 	for (i = 0; i < nfaces; i++) {
-		const uint8_t *d = dir + 2 * ncodes + 16 * i;
+		const uint8_t *d = dir + 2L * (ncodes + nx) + per * i;
 		faces[i].family = d[0];
 		faces[i].style = d[1];
 		faces[i].px = d[2];
@@ -117,35 +184,56 @@ int font_init(const char *path)
 	ok = 1;
 done:
 	free(dir);
+	free(all);
 	fh = h;
 	if (!ok)
 		font_free();
 	return ok;
 }
 
-static int load(ew_font *f)
+/* a face's block b read and unpacked (NULL: it can't be) */
+static uint8_t *read_block(int face, int b)
 {
-	int i = (int) (f - faces);
+	uint32_t off, stored, size;
 	uint8_t *packed;
 	SBUF out;
-	if (f->data || f->failed)
-		return f->data != NULL;
+	if (b == 0) {
+		off = foff[face];
+		stored = fstored[face];
+		size = fsize[face];
+	} else {
+		uint8_t e[12];
+		if (fh < 0 || !read_at(fh, fdir + fper * face + 4 + 12 * b, e, 12))
+			return NULL;
+		off = be32(e);
+		stored = be32(e + 4);
+		size = be32(e + 8);
+	}
 	sb_init(&out);
-	packed = malloc(fstored[i] ? fstored[i] : 1);
-	/* the face's room at its exact size: no doubling while it unpacks */
-	if (packed && !sb_reserve(&out, (long) fsize[i])) {
+	packed = malloc(stored ? stored : 1);
+	/* the block's room at its exact size: no doubling while it unpacks */
+	if (packed && !sb_reserve(&out, (long) size)) {
 		free(packed);
 		packed = NULL;
 	}
-	if (packed && fh >= 0 && read_at(fh, foff[i], packed, fstored[i]) &&
-	    inflate_raw(packed, (long) fstored[i], &out, (long) fsize[i]) == 1 && out.len == (long) fsize[i] &&
-	    out.len >= 4 + 10L * ncodes) {
-		f->data = (uint8_t *) out.s;
-	} else {
-		sb_free(&out);
-		f->failed = 1;
+	if (packed && fh >= 0 && read_at(fh, off, packed, stored) &&
+	    inflate_raw(packed, (long) stored, &out, (long) size) == 1 && out.len == (long) size &&
+	    out.len >= 4 + 10L * bcount[b]) {
+		free(packed);
+		return (uint8_t *) out.s;
 	}
+	sb_free(&out);
 	free(packed);
+	return NULL;
+}
+
+static int load(ew_font *f)
+{
+	if (f->data || f->failed)
+		return f->data != NULL;
+	f->data = read_block((int) (f - faces), 0);
+	if (f->data == NULL)
+		f->failed = 1;
 	if (f->data) {
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
@@ -211,17 +299,63 @@ static int index_of(uint32_t cp)
 	return -1;
 }
 
+/* where cp is among the other blocks' codes, -1 if it isn't */
+static int xindex_of(uint32_t cp)
+{
+	int lo = 0, hi = nx - 1;
+	while (lo <= hi) {
+		int mid = (lo + hi) >> 1;
+		if (xcodes[mid] == cp)
+			return mid;
+		if (xcodes[mid] < cp)
+			lo = mid + 1;
+		else
+			hi = mid - 1;
+	}
+	return -1;
+}
+
+/* a face's block b (1 on), read when first needed; NULL if it can't be */
+static const uint8_t *block_of(ew_font *f, int b)
+{
+	if (f->more[b - 1] == NULL && !(f->bad & 1 << b)) {
+		f->more[b - 1] = read_block((int) (f - faces), b);
+		if (f->more[b - 1] == NULL)
+			f->bad |= (uint8_t) (1 << b);
+	}
+	return f->more[b - 1];
+}
+
+/* the glyph at place i in a block (data) */
+static void glyph_at(const uint8_t *data, int i, GLYPH *g)
+{
+	const uint8_t *m = data + 4 + 10 * i;
+	uint32_t off = be32(m + 6);
+	g->adv = m[0];
+	g->x = (int8_t) m[1];
+	g->y = (int8_t) m[2];
+	g->w = m[3];
+	g->h = m[4];
+	g->bits = off ? data + off : NULL;
+}
+
 void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 {
 	int i;
-	const uint8_t *m;
-	uint32_t off;
 
 	if (!ready(f)) {
 		memset(g, 0, sizeof *g);
 		return;
 	}
 	i = index_of(cp);
+	if (i < 0 && nx > 0 && cp >= 0x80 && (i = xindex_of(cp)) >= 0) {
+		const uint8_t *data = block_of(f, xblk[i]);
+		if (data != NULL) {
+			glyph_at(data, xidx[i], g);
+			return;
+		}
+		i = -1;		/* (its block can't be read: as a character the fonts haven't got) */
+	}
 	if (i < 0) {
 		if (cp == 0xA0 || cp == 0x2007 || cp == 0x202F || (cp >= 0x2000 && cp <= 0x200A)) {
 			i = index_of(' ');
@@ -234,14 +368,7 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 			i = qmark;
 		}
 	}
-	m = f->data + 4 + 10 * i;
-	g->adv = m[0];
-	g->x = (int8_t) m[1];
-	g->y = (int8_t) m[2];
-	g->w = m[3];
-	g->h = m[4];
-	off = be32(m + 6);
-	g->bits = off ? f->data + off : NULL;
+	glyph_at(f->data, i, g);
 }
 
 int font_advance(ew_font *f, uint32_t cp)

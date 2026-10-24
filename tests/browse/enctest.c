@@ -5,7 +5,8 @@
  * HTML Standard's encoding sniffing (13.2.3.2) for pages that name none
  * (a BOM, the HTTP answer's or the user's choice, the prescan, then UTF-8
  * found by its bytes, then the locale's default) and for text files;
- * the default by the address (br_fallback: Israel's .il); the labels
+ * the default by the address (br_fallback: Israel's .il, Cyrillic's and
+ * Greek's domains); the labels
  * EWeb knows and View > Encoding's list; and a URL's query in its page's
  * encoding (the URL Standard's percent-encode after encoding: the Web
  * Platform Tests' url/resources/percent-encoding.json for the encodings
@@ -173,6 +174,13 @@ static void fallbacks(void)
 		{ "http://.il/", "windows-1252" },
 		{ "http://[::1]/", "windows-1252" },
 		{ "file:///C:/PAGES/X.IL", "windows-1252" },
+		{ "http://www.example.ru/", "windows-1251" },
+		{ "https://KYIV.example.UA/x", "windows-1251" },
+		{ "http://xn--80aswg.xn--p1ai/", "windows-1251" },
+		{ "http://www.example.gr/", "ISO-8859-7" },
+		{ "http://example.com.cy./", "ISO-8859-7" },
+		{ "http://ru.example.com/", "windows-1252" },
+		{ "http://example.de/", "windows-1252" },
 		{ "about:blank", "windows-1252" }
 	};
 	size_t i;
