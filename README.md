@@ -33,10 +33,10 @@ These files were the same code in ECal, EContact, EMail and EFTP when they moved
 | `atari/` | `link.ld`, `nf.S`, `sting.S`, `dsprsa.c/.h` | linker script; NatFeats; STinG's calling glue; RSA on the Falcon's DSP |
 | `atari/include/` | `ctype.h` `limits.h` `stdio.h` `string.h` `strings.h` | the parts of the freestanding C library headers every app shares |
 | `src/` | `bidi.c/.h`, `ctime.c/.h`, `futil.c`, `secret.c/.h` | Hebrew right-to-left layout; dates and times; safe file writes (`pf_save` writes `NAME.IN$` and renames it over `NAME.INF`; `tests/futil`); password encryption |
-| `ui/` | `dsp.c` | checks the DSP and turns Falcon mode on |
+| `ui/` | `dsp.c` | checks the DSP and turns it on for a Direct connection |
 | `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026, `jpeg.a56` since 20 Oct 2026, `dither.a56` since 21 Oct 2026 (below) |
 | `tools/` | `elf2tos.py`, `mkroots.c`, `build-hcp.sh` | ELF to TOS program header; root certificates to `ROOTS.DAT`; `build-hcp.sh DIR` builds the `hcp` help compiler (th-otto/hypview at a fixed commit) for `make help` and the Release workflow |
-| `third_party/bearssl/` | BearSSL 0.6 | TLS for Falcon mode (MIT licence) |
+| `third_party/bearssl/` | BearSSL 0.6 | TLS for a Direct connection (MIT licence) |
 | `certs/` | `CACERT.PEM` | Mozilla's root certificates (MPL 2.0) |
 
 ### What the app provides
@@ -79,7 +79,7 @@ These had drifted between the apps; each is now the most complete copy, with eve
 | Files | Taken from | What the others gain |
 |---|---|---|
 | `src/tls.c/.h` | EFTP (itself ECal + EMail) | ECal's TLS session resumption for EMail; EMail's ChaCha20-first handshake (twice as fast as AES-GCM on a 68030) for ECal and EContact |
-| `src/tls_none.c` | EFTP | the ST editions' stand-in; names the Falcon edition from `TLS_FULL_EDITION` |
+| `src/tls_none.c` | EFTP | the ST editions' stand-in, until TLS.OVL (below); names the Falcon edition from `TLS_FULL_EDITION` |
 | `src/conn.c/.h` | EFTP + EMail | one API: `conn_open(name, host, port, bufsize, sec, err, errlen)` with `bufsize` 0 for `conn_bufsize` (16 KB; EMail lowers it on a small Atari); `SEC_STARTTLS`; EFTP's Stop (`conn_stop`), raw reads (`conn_read`: 0 = closed, -1 = timeout/stopped), `conn_pending`, `conn_close_flush`; ECal's handshake timing; a block-buffered log flushed at each milestone |
 
 An app provides `net_close_wait()` in its `plat.h` (declared; the code is in `atari/net_tos.c`).
@@ -392,6 +392,31 @@ memory the five longs of a picture with alpha take: a third less time shrinking 
 A `PIC_PAL`'s nearest-pen table (32 KB) is made only for more than 4 pens, by `pic_pal_init`
 (`pic_pal_free` gives it back; a `PIC_PAL` starts zeroed): monochrome and 4-colour screens work each
 pen out, and EWeb's 1 MB ST got its 32 KB back.
+
+## TLS.OVL: one program for every Atari (24 Oct 2026)
+
+Erez's design: the TLS (`src/tls.c`, BearSSL, the DSP's `ui/dsp.c`, `ui/dsp_ec.c`, `src/ecdsp.c`,
+`atari/dsprsa.c`, `atari/dspec.c`, as 68030 code) in a file of the family's own, `TLS.OVL`, which
+every program carries next to it; no ST editions. The guidelines, 7.4.
+
+| Files | What |
+|---|---|
+| `src/tlsovl.h` | the program and TLS.OVL meet here: `TLS_HOST` (what the program lends: memory, files, network, clock, log) and `TLS_OVL` (tls.h's calls and the DSP's), both only ever growing at the end; `TLSOVL_MAJOR` for a change that can't; the program's calls (`tls_ovl_path`, `tls_ovl_load`, `tls_ovl_version`, `tls_ovl_unload`) |
+| `src/ovl.c/.h` | loads a file in TOS's program format into malloc'd memory and applies its fixups, in one go and closed before `pf_idle`: no Pexec, no memory of TOS's own, no file open across an event call, so an accessory loads it into its heap |
+| `atari/tls_ovl.c` | the program's side: tls.h's calls handed on, TLS.OVL loaded at the first need (a 68020 or better: the `_CPU` cookie; the CPU's caches cleared after), the settings copied over before each call; "TLS.OVL 1.0 loaded, 139 KB, 50 ms" in the log |
+| `ui/dsp_ovl.c` | `falcon_dsp_init()` and the rest, for a program with TLS.OVL |
+| `tlsovl/` | TLS.OVL itself: `head.c` (its table, the program's calls through `TLS_HOST`), `ovl.ld`, `src/plat.h`, `VERSION`; `make`, `make check` (the committed `TLS.OVL` is its sources' build: the build is reproducible), `make release` |
+| `tests/tlsovl/` | the loader on the build machine with the real TLS.OVL and hand-made fixup tables, good and damaged |
+
+`src/tls.c` answers `tls_ovl_*` too, as a program with the TLS built in (EWeb, the build machine's
+tests). `atari/libc.c` builds its strings and `vsnprintf` without the heap for TLS.OVL
+(`LIBC_NO_HEAP`); `ui/dsp.c` and `ui/dsp_ec.c` build without the app's `opt` (`TLSOVL_BUILD`).
+
+Tried with EFTP 1.48's code, EFTP.PRG linked with TLS.OVL: 201,199 bytes (1.48: 313,927; EFTPST.PRG
+200,977). FTPS in Hatari on the Falcon with Erez's TOS 4.04, RSA on the DSP and the data connections
+resuming the session (`secure_test.py ftps`, all passed: a 4,150 ms handshake against 4,125 ms with
+the TLS built in); the same program on the 1 MB ST through the gateway (`secure_test.py sftp`,
+`net_test.py`, all passed); without TLS.OVL, "TLS.OVL is missing" and no crash.
 
 ## Coming next
 
