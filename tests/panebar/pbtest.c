@@ -3,8 +3,9 @@
 /*
  * PBTEST.PRG: a window with two panes, each with its own scroll bar
  * (ui/panebar.c), for looking at them as each AES draws them: the left
- * pane's slider a tenth of the track, a third of the way down, the right
- * pane with nothing to scroll (no slider). A file FLAT beside it draws them
+ * pane's slider a tenth of the track, a third of the way down, and a bar
+ * across its foot (a fifth, a fifth of the way along) with the corner
+ * between them, the right pane with nothing to scroll (no slider). A file FLAT beside it draws them
  * as DIALOGS3D=0 would. A click on a bar scrolls it (pb_click). It says
  * "PBT ready" on the console (NatFeats) once the window is drawn, and
  * "PBT top N" after each click.
@@ -16,7 +17,8 @@
 #include "panebar.h"
 
 static short win, wx, wy, ww, wh, said;
-static PANEBAR bar[2];
+static PANEBAR bar[3];
+static GRECT corner;
 
 static void place(void)
 {
@@ -27,7 +29,16 @@ static void place(void)
 	bar[1].r.x = wx + ww - pb_width();
 	bar[0].r.y = bar[1].r.y = wy;
 	bar[0].r.w = bar[1].r.w = pb_width();
-	bar[0].r.h = bar[1].r.h = wh;
+	bar[0].r.h = wh - pb_height();
+	bar[1].r.h = wh;
+	bar[2].r.x = wx;
+	bar[2].r.y = wy + wh - pb_height();
+	bar[2].r.w = pw - pb_width();
+	bar[2].r.h = pb_height();
+	corner.x = bar[0].r.x;
+	corner.y = bar[2].r.y;
+	corner.w = pb_width();
+	corner.h = pb_height();
 }
 
 /* the panes white, the bars at their right */
@@ -57,6 +68,8 @@ static void draw(const GRECT *c)
 	objc_draw(t, 0, 2, c->x, c->y, c->w, c->h);
 	pb_draw(&bar[0], c);
 	pb_draw(&bar[1], c);
+	pb_draw(&bar[2], c);
+	pb_corner(&corner, c);
 }
 
 static int inter(GRECT *a, const GRECT *b)
@@ -135,6 +148,10 @@ int main(void)
 	bar[0].top = 30;
 	bar[1].total = 5;
 	bar[1].shown = 10;
+	bar[2].total = 200;
+	bar[2].shown = 40;
+	bar[2].top = 40;
+	bar[2].across = 1;
 	win = wind_create(NAME | CLOSER | MOVER | FULLER | SIZER, 0, 20, 640, 460);
 	wind_set_str(win, WF_NAME, " Pane bars ");
 	wind_open(win, 60, 60, 400, 300);
@@ -146,7 +163,7 @@ int main(void)
 			said = 1;
 		}
 		if (w & MU_BUTTON) {
-			for (i = 0; i < 2; i++)
+			for (i = 0; i < 3; i++)
 				if (pb_part(&bar[i], ev.mx, ev.my) != PB_NONE) {
 					clicked = &bar[i];
 					pb_click(clicked, ev.mx, ev.my, scroll, goto_top);
