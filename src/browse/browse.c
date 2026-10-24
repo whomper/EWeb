@@ -1469,18 +1469,29 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 /* the next build is a text file's (text/plain): its bytes are the text */
 static int build_plain;
 
+int br_building;
+
 /* the source made into a page (doc styled and laid out): 1, or 0 when
    out of memory or stopped while fetching its sheets. Out of memory, the
    pages kept go and it is tried once more. charset: the encoding chosen
    by hand, else the HTTP answer's, else NULL (the page's own) */
+static int gem_turn(void);
+static int build_turn(int what);
+
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
 {
-	if (build1(b, data, len, charset, url, fresh, dout, pout))
-		return 1;
-	if (conn_stop || !make_room(b))
-		return 0;
-	return build1(b, data, len, charset, url, fresh, dout, pout);
+	int r;
+	/* (a long page: the window kept alive meanwhile, and Esc stops it) */
+	doc_poll = build_turn;
+	ec_poll = gem_turn;
+	r = build1(b, data, len, charset, url, fresh, dout, pout);
+	if (!r && !conn_stop && make_room(b))
+		r = build1(b, data, len, charset, url, fresh, dout, pout);
+	doc_poll = NULL;
+	ec_poll = NULL;
+	br_building = 0;
+	return r;
 }
 
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
@@ -1501,6 +1512,7 @@ parse:
 #endif
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Reading the page...");
+	br_building = BRB_PARSE;
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
 	o.fallback = br_fallback(url);
@@ -1577,6 +1589,7 @@ parse:
 #endif
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
+	br_building = BRB_STYLE;
 	if (select_doc(d, base) < 0) {
 		/* out of memory styling it (a small machine): as when laying it out,
 		   not a page with no styles, which lays out to nothing */
@@ -1585,7 +1598,13 @@ parse:
 	}
 	b->ms_style = pf_ms() - t;
 	t = pf_ms();
+	br_building = BRB_LAYOUT;
 	p = lay(b, d, base);
+	while (p != NULL && p->opt.width != b->width && !conn_stop) {
+		/* (the window sized meanwhile: br_relayout left it for this) */
+		pg_free(p);
+		p = lay(b, d, base);
+	}
 	b->ms_layout = pf_ms() - t;
 	if (p == NULL) {
 		doc_free(d);
@@ -2406,12 +2425,15 @@ int br_encoding(browser *b, const char *name)
 /* a long decode keeps the window alive, and Esc stops it: GEM's turn
    ten times a second, and then without waiting for its timer (each
    turn waited a clock tick, 20 ms; a progressive JPEG on the ST polled
-   hundreds of times, most of its 13.7 s) */
-static int picture_poll(void)
+   hundreds of times, most of its 13.7 s); so does a long page being
+   made (build: doc_poll, ec_poll) */
+unsigned long br_poll_ms = 100;
+
+static int gem_turn(void)
 {
 	static unsigned long last;
 	unsigned long now = pf_ms();
-	if (pf_idle && now - last >= 100) {
+	if (pf_idle && now - last >= br_poll_ms) {
 		last = now;
 		pf_idle_quick = 1;
 		pf_idle();
@@ -2420,9 +2442,15 @@ static int picture_poll(void)
 	return !conn_stop;
 }
 
+static int build_turn(int what)
+{
+	(void) what;
+	return gem_turn();
+}
+
 void br_init(browser *b, int32_t width, int32_t zoom)
 {
-	pic_poll = picture_poll;
+	pic_poll = gem_turn;
 	http_cookie_in = cookie_in;
 	http_cookie_out = cookie_out;
 	memset(b, 0, sizeof *b);
@@ -3036,8 +3064,8 @@ int br_relayout(browser *b, int32_t width)
 	page *p;
 	int32_t w;
 	b->width = width;
-	if (b->d == NULL)
-		return 1;
+	if (b->d == NULL || br_building)
+		return 1;	/* (a page being made: laid out at this width when it is) */
 	if (resheeting) {
 		/* sized as the page's sheets are added again (a sheet coming):
 		   laid out at this width after them, as for a picture's size;

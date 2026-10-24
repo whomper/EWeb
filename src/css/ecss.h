@@ -323,8 +323,12 @@ extern char *ec_stack_floor;
 
 /* Styles root and every element under it: sets each node's style. The
  * styles last until ec_unstyle() or ec_destroy(). Returns 0, or -1 when
- * out of memory: some elements have no style (NULL). */
+ * out of memory, or stopped (ec_poll): some elements have no style (NULL). */
 int ec_select(ec_ctx *c, ec_node *root);
+/* asked every 256 elements ec_select styles, when set: 0 stops it (Esc
+ * while a long page is styled; the program's turn to keep its window
+ * alive meanwhile) */
+extern int (*ec_poll)(void);
 void ec_unstyle(ec_ctx *c);
 
 const ec_stats *ec_get_stats(const ec_ctx *c);

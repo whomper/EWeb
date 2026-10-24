@@ -83,7 +83,9 @@ fills from left to right, in a colour for each step (in 16 colours or
 more; black in monochrome and 4 colours): blue while EWeb connects, cyan
 as the page comes, magenta for its stylesheets, yellow while the page is
 laid out, green as its pictures come. **Esc**,
-**Undo** or the Stop button stop it, and the page you were on stays.
+**Undo** or the Stop button stop it, and the page you were on stays:
+while it comes, and while a long page is read and laid out too (the
+window keeps redrawing meanwhile).
 
 ## Pages that go on by themselves
 

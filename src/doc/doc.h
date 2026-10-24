@@ -88,12 +88,20 @@ typedef struct doc {
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or
    NULL to find it from the page; media: the screen, for @media.
-   Returns NULL only if out of memory. */
+   Returns NULL only if out of memory, or stopped (doc_poll). */
 doc *doc_parse(const char *data, size_t len, const char *charset, const ec_media *media);
 /* the same with the parser's options (html.h): scripting, a fragment */
 struct html_opts;
 doc *doc_parse_opts(const char *data, size_t len, const struct html_opts *o, const ec_media *media);
 void doc_free(doc *d);
+
+/* asked now and then while a page is made, when set: every 256 tags the
+   parser reads (DOC_POLL_PARSE) and every 256 boxes the layout makes or
+   lays out (DOC_POLL_LAYOUT; ecss.h's ec_poll while it is styled). 0
+   stops it, given up as when out of memory (Esc, while the program's
+   window is kept alive meanwhile) */
+enum { DOC_POLL_PARSE, DOC_POLL_LAYOUT };
+extern int (*doc_poll)(int what);
 
 /* n bytes of the document's memory, aligned for any node or pointer;
    NULL if out of memory. doc_grow makes a block of old bytes new bytes

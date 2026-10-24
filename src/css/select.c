@@ -1503,8 +1503,12 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 	int ncand = 0;
 
 	for (; e != NULL; e = one ? NULL : e->next) {
-		uint32_t sig = e->id == NULL ? ref_sig(e) : 0;
-		const ec_style *st = e->id == NULL ? shared_from(c, e, sig, cd, ncand) : NULL;
+		uint32_t sig;
+		const ec_style *st;
+		if (c->stopped || ((c->st.elements & 255) == 0 && ec_poll != NULL && !ec_poll() && (c->stopped = 1)))
+			return;
+		sig = e->id == NULL ? ref_sig(e) : 0;
+		st = e->id == NULL ? shared_from(c, e, sig, cd, ncand) : NULL;
 		c->st.elements++;
 		if (st != NULL) {
 			c->st.shared++;
@@ -1533,10 +1537,13 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 	}
 }
 
+int (*ec_poll)(void);
+
 int ec_select(ec_ctx *c, ec_node *root)
 {
 	ec_arena *pm = c->pmem;
 	c->smem.nomem = 0;
+	c->stopped = 0;
 	memset(cache, 0, sizeof cache);
 	memset(icache, 0, sizeof icache);
 	memset(c->bloom, 0, sizeof c->bloom);
@@ -1556,5 +1563,5 @@ int ec_select(ec_ctx *c, ec_node *root)
 		style_list(c, root, NULL, 1);
 	}
 	c->pmem = pm;
-	return c->smem.nomem ? -1 : 0;
+	return c->smem.nomem || c->stopped ? -1 : 0;
 }

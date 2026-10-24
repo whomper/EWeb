@@ -205,6 +205,7 @@ typedef struct {
 	dnode *bg_taken;		/* the element whose background colour the canvas took */
 	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
+	unsigned long polls;		/* boxes made and laid out (doc_poll) */
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
@@ -1087,9 +1088,21 @@ static uint16_t add_ctl(L *l, fctl *c)
 
 /* ---------------------------------------------------------------- building */
 
+/* doc_poll's turn, every 256 boxes made or laid out: stopped, the layout
+   fails as when out of memory */
+static int stopped(L *l)
+{
+	if ((++l->polls & 255) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_LAYOUT))
+		l->fail = 1;
+	return l->fail;
+}
+
 static box *new_box(L *l, int kind, dnode *n, const ec_style *st, box *parent)
 {
-	box *b = amalloc(l->a, sizeof *b);
+	box *b;
+	if (stopped(l))
+		return NULL;
+	b = amalloc(l->a, sizeof *b);
 	if (b == NULL) {
 		l->fail = 1;
 		return NULL;
@@ -5883,7 +5896,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int32_t in_l = 0, in_r = 0;
 	int ctlbox = 0;
 
-	if (l->fail)
+	if (stopped(l))
 		return 0;
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: this box and what is in it left out */

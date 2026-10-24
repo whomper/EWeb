@@ -359,6 +359,7 @@ typedef struct P {
 	dnode *head, *form, *ctx;
 	int mode, orig;
 	uint8_t frameset_ok, foster, scripting, skip_lf, quirks, tentative, stop;
+	uint32_t tags;			/* start and end tags read (doc_poll) */
 	uint8_t *ptc;			/* pending table character tokens */
 	size_t nptc, captc;
 	int ptc_text;			/* ... some not white space */
@@ -533,6 +534,9 @@ static int emit_tag(P *p)
 {
 	TOKEN *t = &p->t;
 	uint32_t i, k = 0;
+
+	if ((++p->tags & 255) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_PARSE))
+		oom(p);		/* (stopped: given up as when out of memory) */
 
 	t->type = p->is_end ? TK_END : TK_START;
 	t->s = p->sb;

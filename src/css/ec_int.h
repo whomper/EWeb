@@ -285,6 +285,7 @@ struct ec_ctx {
 	uint32_t order;
 	uint8_t layer;			/* inside @layer: below unlayered rules */
 	ec_stats st;
+	int stopped;			/* ec_poll said stop (ec_select) */
 	/* the widths (px) every media query evaluated holds at as it did
 	   (ec_media_span) */
 	int32_t span_lo, span_hi;

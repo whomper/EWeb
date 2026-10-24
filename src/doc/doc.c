@@ -25,6 +25,8 @@ struct dblk {
 #define DALIGN 8
 #define DHEAD ((sizeof(struct dblk) + DALIGN - 1) & ~(size_t) (DALIGN - 1))
 
+int (*doc_poll)(int what);
+
 void *doc_alloc(doc *d, size_t n)
 {
 	struct dblk *b = d->mem;

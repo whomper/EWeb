@@ -3164,6 +3164,30 @@ drawn; `select.html`'s right-to-left lines with a number and Latin, super- and s
 and a point with their letters, no word far from text) and `make hatarigui` (a drag over the files page's links: none followed, ^C's
 `SCRAP.TXT` as ewrender's `-x` selects it; ^A and ^C on `about:history`).
 
+## Esc while a page is made (24 Oct 2026)
+
+Stage 3's fifth part. A long page took its parse, styling and layout without a turn for GEM: on
+the page set's biggest pages 45 million 68030 instructions, about 4 s on the DFB1 and over 10 s
+on a stock Falcon, with the window not redrawn and Esc heard only after. Now each stage asks
+now and then: the parser every 256 tags (`doc_poll`, `src/doc/html.c`), the CSS engine every
+256 elements (`ec_poll`, `src/css/select.c`, a hook of its own as the engine is built on its
+headers only), the layout every 256 boxes made or laid out (`doc_poll`, `src/layout`). The hooks
+are set only while `src/browse` builds a page (`build`); they are the pictures' poll
+(`gem_turn`): GEM's turn ten times a second (the window redrawn, moved, topped; Esc, Undo, Stop),
+and 0 once Esc has set `conn_stop`. Then the stage gives up as when out of memory (the parser's
+longjmp, the engine's stop flag, the layout's `fail`), the new document goes, and the page shown
+before stays, as when Esc stops a page coming: it was never let go, as a page is made beside the
+one shown. A window sized meanwhile (it can't be while a page loads, but uniconified it might)
+only notes the width, and the page is laid out at it when made (`br_building`).
+
+What it costs: the counters, 0.10% to 0.15% of the three biggest pages' instructions with no hook
+set (drawbench); the biggest asks 27 times while parsed, 16 styled, 35 laid out. Tested by
+`tests/layout/stop.py` in both editions under the sanitizers (a page of 9,000 tags made here:
+each stage asks, asking changes nothing, stopped at each stage's first turn and halfway the page
+before stays, nothing left behind; ewrender `-I STAGE:N`), and `make hatarigui`'s deep group
+(the Falcon: a page of 45,000 tags, Esc once the status says it is laid out: "stopped", the page
+before shown, the heap back to what it was).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3460,7 +3484,7 @@ out of both (their paths lead nowhere on the Atari).
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll
    (`overflow`, done, above), `@import` (done, above), scrolling sideways (done, above), `border-collapse` (done, above); **3.** reading: find in the
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
-   drawn while it loads, Esc during a layout; **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
+   drawn while it loads, Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT`, bidirectional text in full,
    UAX #14's line breaks; **5.** SVG, frames and iframes, more windows, pictures fetched at once.
 
 ## Open questions

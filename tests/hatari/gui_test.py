@@ -1287,12 +1287,18 @@ def deep():
     """a page nested 1000 deep, from the disk, on the Falcon and the 1040 ST
     (256 KB of stack each): shown cut at the stack's floor (the
     log's "deep"), not crashed, and the next page shown after it (DESIGN.md,
-    The stack: such a page ran off the stack's end and bombed)"""
+    The stack: such a page ran off the stack's end and bombed); on the
+    Falcon then a long page (45,000 tags), Esc pressed while it is laid
+    out: stopped, the page before staying"""
     page = "<!DOCTYPE html><title>Deep</title>" + "<div>level" * 1000 + "</div>" * 1000
+    long_page = "<!DOCTYPE html><title>Long</title>" + "".join(
+        "<p>Paragraph %d with <b>bold</b> and <a href=#x>a link</a>.</p>" % i for i in range(15000))
     for name, spec, prg in (("deepfalcon", "Falcon:256", "EWEB.PRG"), ("deepst", "ST:mono", "EWEBST.PRG")):
         hd = hd_for(name, r"C:\DEEP.HTM")
         with open(os.path.join(hd, "DEEP.HTM"), "w") as f:
             f.write(page)
+        with open(os.path.join(hd, "LONG.HTM"), "w") as f:
+            f.write(long_page)
         r = Run(name, spec, hd, prg=prg)
         try:
             ev = r.wait(r"(shown|stopped) ", 600)
@@ -1302,6 +1308,18 @@ def deep():
             r.type("file:///C:/TEXT.HTM")
             r.key(RETURN)
             after = r.wait(r"shown file:///C:/TEXT.HTM ", 600)
+            if name == "deepfalcon" and after is not None:
+                # Esc while a long page is laid out: stopped, the page
+                # before stays (the window's turn comes meanwhile)
+                r.key(L, (CTRL,))
+                r.type("file:///C:/LONG.HTM")
+                r.key(RETURN)
+                laying = r.wait(r"status Laying the page out", 600)
+                r.key(ESC)
+                stop = r.wait(r"(stopped|shown) ", 600)
+                r.shot(1)
+                check("deep: %s, Esc while a long page is laid out stops it" % name, laying is not None and
+                      stop is not None and stop.startswith("stopped "), "\n".join(r.events()[-8:]))
             r.key(Q, (CTRL,))
             quit = r.wait(r"quit$", 300)
             ok = after is not None and quit is not None and not os.path.exists(os.path.join(hd, "CRASH.LOG"))

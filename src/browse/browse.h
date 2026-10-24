@@ -198,6 +198,13 @@ int br_can_forward(const browser *b);
 void br_scrolled(browser *b, int32_t y);
 /* the window's width changed: lay out again (returns 0 if out of memory) */
 int br_relayout(browser *b, int32_t width);
+/* what a page being made is at (doc_poll, ec_poll: GEM's turn and Esc
+   meanwhile): 0 none, else parsing, styling, laying out; while one is
+   made, br_relayout only notes the width (it is laid out at it). The
+   window's turn comes every br_poll_ms ms (100) */
+enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT };
+extern int br_building;
+extern unsigned long br_poll_ms;
 /* a details element's summary clicked (page_summary_at): the details
    opened or closed (the HTML Standard, 4.11.2), the page styled and laid
    out again (1; 0 if out of memory, after giving back the pages kept and

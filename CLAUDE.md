@@ -157,7 +157,10 @@ hub stay complete, with the evidence.
   copying** are `find.c` too (`page_pos_at`, `page_range`, `page_copy_text`; a selection kept by
   `page_text_index` through a relayout), dragged in `ui/win.c` (`select_text`; Find's words are the
   selection): after changing them, `make test` (`tests/layout/select.py`, ewrender `-x`/`-j`) and
-  `make hatarigui`. **Saving** (File > Save page as, a link's file streamed to
+  `make hatarigui`. **Esc while a page is made**: the parser, the CSS engine and the layout ask
+  `doc_poll` / `ec_poll` now and then, set by `src/browse`'s `build` to GEM's turn and Esc; after
+  changing them, `make test` (`tests/layout/stop.py`, ewrender `-I STAGE:N`) and `make hatarigui`
+  (its deep group). **Saving** (File > Save page as, a link's file streamed to
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages

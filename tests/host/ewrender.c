@@ -67,6 +67,11 @@
  * page prints the page's text as ^C copies it with nothing selected
  * ("copied:"). -j WIDTH (again for more): then the window made WIDTH px
  * wide, the selection placed again by its text ("selected again:").
+ * -I STAGE:N: the page's build (parse, style or layout) stopped as by Esc
+ * at its Nth poll in that stage (doc_poll, ec_poll: EWEB.PRG's window
+ * gets its turn at each, ten times a second; here at every one), "polls:"
+ * printed with how many each stage made, and "stopped:" with the page
+ * that stays (-P's); -I count:0 only counts them.
  * -W HOST:PORT goes through AERA-Gateway's webgate (as Settings > Secure's
  * Pi gateway); -R then asks for pages through the Pi's browser (View >
  * Through the Pi's browser: webgate's snapshots).
@@ -641,6 +646,18 @@ static int click(browser *b, const char *id)
 	return 1;
 }
 
+/* -I: a page's build polled (doc_poll, ec_poll: the window's turn, in
+   pf_idle, at every poll), and stopped as by Esc at the Nth while it is at
+   one stage */
+static int z_stage = -1, z_at;
+static long z_polls[4];
+
+static void build_idle(void)
+{
+	if (br_building > 0 && br_building < 4 && ++z_polls[br_building] == z_at && br_building == z_stage)
+		conn_stop = 1;
+}
+
 /* -Y: the window sized inside a request (pf_idle), once */
 static browser *in_req_b;
 static int32_t in_req_w;
@@ -807,6 +824,12 @@ int main(int argc, char **argv)
 		}
 		else if (!strcmp(argv[i], "-x") && i + 1 < argc)
 			select = argv[++i];
+		else if (!strcmp(argv[i], "-I") && i + 1 < argc) {
+			const char *z = argv[++i], *c = strchr(z, ':');
+			z_stage = !strncmp(z, "parse", 5) ? BRB_PARSE : !strncmp(z, "style", 5) ? BRB_STYLE :
+				  !strncmp(z, "layout", 6) ? BRB_LAYOUT : 0;
+			z_at = c != NULL ? atoi(c + 1) : 0;
+		}
 		else if (!strcmp(argv[i], "-j") && i + 1 < argc && nsel_w < 8)
 			sel_w[nsel_w++] = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-T") && i + 1 < argc)
@@ -899,7 +922,21 @@ int main(int argc, char **argv)
 		pictures(&b);
 	}
 	shows = b.shows;
+	if (z_stage >= 0) {
+		pf_idle = build_idle;
+		br_poll_ms = 0;
+	}
 	r = br_go(&b, where);
+	if (z_stage >= 0) {
+		pf_idle = NULL;
+		br_poll_ms = 100;
+		printf("polls: parse %ld style %ld layout %ld\n", z_polls[BRB_PARSE], z_polls[BRB_STYLE],
+		       z_polls[BRB_LAYOUT]);
+		if (r == BR_STOPPED && b.p != NULL) {
+			printf("stopped: \"%s\" %s\n", b.title, b.url);	/* (the page before stays) */
+			r = BR_SHOWN;
+		}
+	}
 	if ((r == BR_SAVE || r == BR_DOWNLOAD) && b.shows != shows && b.p != NULL) {
 		/* a page shown on the way, whose script then clicked a download
 		   link as it loaded: its file saved, then the page drawn, as
