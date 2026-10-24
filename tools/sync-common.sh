@@ -5,5 +5,8 @@
 # there, never here: a change made only in this copy drifts again.
 set -e
 cd "$(dirname "$0")/.."
+before=$(git rev-parse HEAD)
 git subtree pull --prefix=common https://github.com/whomper/AERA-Atari common --squash \
     -m "Update common/ from AERA-Atari"
+# (its squash commit signed too, as tools/sync-gateway.sh does)
+[ ! -f common/tools/sign-subtree.sh ] || sh common/tools/sign-subtree.sh "$before"
