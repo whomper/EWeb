@@ -121,9 +121,12 @@ int pb_part(const PANEBAR *b, short x, short y)
    the slider in it; the frames lie on each other, so the lines are single */
 enum { O_BAR, O_UP, O_TRACK, O_SLIDER, O_DOWN, O_N };
 
-/* an object at a along the bar and c across it, al long and cl wide */
-static void put(OBJECT *o, int across, short a, short c, short al, short cl)
+/* an object at a along the bar and c across it, al long and cl wide, from
+   a pixel in from the bar's edge (in 3D the box is the bar itself: d3) */
+static void put(OBJECT *o, int across, int d3, short a, short c, short al, short cl)
 {
+	a += d3;
+	c += d3;
 	o->ob_x = across ? a : c;
 	o->ob_y = across ? c : a;
 	o->ob_width = across ? al : cl;
@@ -146,10 +149,11 @@ static int within(GRECT *c, const GRECT *r)
 
 /* the box: the bar's ground. Flat, every frame is outside its box
    (thickness -1, 0xFF: GEM's positive thickness is inside, and TOS fills
-   an opaque box over a frame inside it); in 3D inside (the AES draws a 3D
-   object's edges in its box, and an outside frame came out a plain black
-   line). The box is a pixel in from r's edge, so a frame outside it is
-   r's edge */
+   an opaque box over a frame inside it), and the box is a pixel in from
+   r's edge, so its frame is r's edge. In 3D the frames are inside (the AES
+   draws a 3D object's edges in its box, and an outside frame came out a
+   plain black line) and the box is r itself: nothing else would draw r's
+   edge (EmuTOS showed the desktop there, EUpdate found) */
 static void ground(OBJECT *o, const GRECT *r, int d3)
 {
 	o->ob_next = o->ob_head = o->ob_tail = -1;
@@ -158,10 +162,10 @@ static void ground(OBJECT *o, const GRECT *r, int d3)
 	o->ob_type = G_BOX;
 	o->ob_spec = d3 ? 0x00011100L : 0x00FF1180L;	/* 3D: the AES's ground (it greys only
 							   a transparent box); flat: white */
-	o->ob_x = r->x + 1;
-	o->ob_y = r->y + 1;
-	o->ob_width = r->w - 2;
-	o->ob_height = r->h - 2;
+	o->ob_x = r->x + !d3;
+	o->ob_y = r->y + !d3;
+	o->ob_width = r->w - 2 * !d3;
+	o->ob_height = r->h - 2 * !d3;
 }
 
 void pb_draw(const PANEBAR *b, const GRECT *clip)
@@ -198,21 +202,21 @@ void pb_draw(const PANEBAR *b, const GRECT *clip)
 	t[O_DOWN].ob_spec = across ? 0x03FF1100L : 0x02FF1100L;
 	t[O_UP].ob_flags |= TOUCHEXIT;
 	t[O_DOWN].ob_flags |= TOUCHEXIT;
-	put(&t[O_UP], across, -d3, -d3, ah - 2 + 2 * d3, wide - 2 + 2 * d3);
-	put(&t[O_DOWN], across, len - ah - d3, -d3, ah - 2 + 2 * d3, wide - 2 + 2 * d3);
+	put(&t[O_UP], across, d3, -d3, -d3, ah - 2 + 2 * d3, wide - 2 + 2 * d3);
+	put(&t[O_DOWN], across, d3, len - ah - d3, -d3, ah - 2 + 2 * d3, wide - 2 + 2 * d3);
 
 	/* the track between them, its end frames on theirs: TOS's dotted grey
 	   flat, the AES's ground in 3D */
 	t[O_TRACK].ob_type = G_BOX;
 	t[O_TRACK].ob_spec = d3 ? 0x00011100L : 0x00FF1191L;
-	put(&t[O_TRACK], across, ah - 1, 0, th, wide - 2);
+	put(&t[O_TRACK], across, d3, ah - 1, 0, th, wide - 2);
 
 	/* the slider over the track's sy .. sy+sh-1 (flat, its frames one
 	   over and under them, on the track's at either end) */
 	t[O_SLIDER].ob_type = G_BOX;
 	t[O_SLIDER].ob_spec = d3 ? 0x00011100L : 0x00FF1180L;	/* flat: white over the dots */
 	t[O_SLIDER].ob_flags |= TOUCHEXIT;
-	put(&t[O_SLIDER], across, sh ? sy - ty : 0, 0, sh, wide - 2);
+	put(&t[O_SLIDER], across, 0, sh ? sy - ty : 0, 0, sh, wide - 2);	/* in the track */
 	if (!sh)
 		t[O_SLIDER].ob_flags |= HIDETREE;
 

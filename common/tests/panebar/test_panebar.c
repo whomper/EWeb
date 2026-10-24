@@ -225,9 +225,11 @@ int main(void)
 	check((drawn[0].ob_flags & 0x0600) == 0x0400 && (drawn[2].ob_flags & 0x0600) == 0x0400 &&
 	      (drawn[1].ob_flags & 0x0600) == 0x0600 && (drawn[4].ob_flags & 0x0600) == 0x0600 &&
 	      (drawn[3].ob_flags & 0x0600) == 0x0600, "... the box and the track the ground, the arrows and the slider raised");
-	check(((drawn[0].ob_spec >> 16) & 0xff) == 1 && drawn[1].ob_x == -1 && drawn[1].ob_y == -1 &&
-	      drawn[1].ob_width == 16 && drawn[1].ob_height == 19 && drawn[4].ob_y == 300 - 19 - 1,
-	      "... frames inside (the AES draws 3D edges in the box), the arrows the bar's ends themselves");
+	check(((drawn[0].ob_spec >> 16) & 0xff) == 1 && drawn[0].ob_x == 100 && drawn[0].ob_y == 50 &&
+	      drawn[0].ob_width == 16 && drawn[0].ob_height == 300 && drawn[1].ob_x == 0 && drawn[1].ob_y == 0 &&
+	      drawn[1].ob_width == 16 && drawn[1].ob_height == 19 && drawn[4].ob_y == 300 - 19 &&
+	      drawn[2].ob_x == 1 && drawn[2].ob_y == 19 && drawn[3].ob_y == 0,
+	      "... frames inside (the AES draws 3D edges in the box), the box the whole bar (nothing left undrawn)");
 	dlg_3d_on = 0;
 	pb_draw(&bar, &clip);
 	check((drawn[2].ob_spec & 0xff) == 0x91, "DIALOGS3D=0: flat again");
@@ -332,9 +334,9 @@ int main(void)
 		GRECT r = { 600, 380, 16, 21 };
 		int before = draws;
 		pb_corner(&r, &clip);
-		check(draws == before + 1 && drawn_start == 0 && drawn[0].ob_type == G_BOX && drawn[0].ob_x == 601 &&
-		      drawn[0].ob_width == 14 && (drawn[0].ob_flags & LASTOB) && (drawn[0].ob_flags & 0x0600) == 0x0400,
-		      "pb_corner: the bars' ground, in 3D the AES's");
+		check(draws == before + 1 && drawn_start == 0 && drawn[0].ob_type == G_BOX && drawn[0].ob_x == 600 &&
+		      drawn[0].ob_width == 16 && (drawn[0].ob_flags & LASTOB) && (drawn[0].ob_flags & 0x0600) == 0x0400,
+		      "pb_corner: the bars' ground, in 3D the AES's, all of the square");
 	}
 
 	printf("%d checks, %d failed\n", checks, failed);
