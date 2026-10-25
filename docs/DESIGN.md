@@ -3688,7 +3688,8 @@ the Pi's: its round trip to a server on the internet and its own decoding.
   the request itself); what isn't asked for in three minutes goes. A webgate that doesn't know
   `/prefetch` answers otherwise: EWeb doesn't ask again that run, and its pictures come as before.
   The protocol is EWeb's (AERA-Gateway's owner session commits webgate's side: `Prefetch` in
-  `webgate.py`, its tests in `test_webgate.py`).
+  `webgate.py`, its tests in `test_webgate.py`), released in AERA-Gateway 1.10 (25 Oct 2026, with
+  Erez's yes); EWeb's `gateway/` copy is 1.10's.
 - **Measured**, ewrender through webgate on this machine: a page of 8 pictures each half a second
   in coming (`/site/lazy.html`, as a far server's) took 4.5 s, now 1.3 s; yaary.music's 17
   pictures through the internet 4.8 s, now 2.9 s. On the Pi, whose pens take longer than this
