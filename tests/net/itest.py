@@ -245,9 +245,10 @@ try:
     rc, out = run("-l", "hs.log", "https://localhost:%d/page" % HTTPS)
     log = saved("hs.log").decode("latin-1") if rc == 0 else ""
     # (the chain kept during the handshake and checked after it: common's
-    # tls.c since TLS.OVL 1.1)
+    # tls.c since TLS.OVL 1.1; where the work went since 1.3)
     steps = ["root certificates read", "random seed ready in", "the server's first answer, ",
              "kept, to be checked after the handshake", "the handshake: ",
+             "the key exchange: x25519, ", "the server's key: RSA 2048 bits, its signature ",
              "certificate checked after the handshake: ", "secure: TLS 1.2"]
     at = [log.find(w) for w in steps]
     check("the handshake's log lines", rc == 0 and -1 not in at and at == sorted(at), out + log)
