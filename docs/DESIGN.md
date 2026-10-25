@@ -564,7 +564,10 @@ few dozen characters.
 Since EWeb 0.40 (common's `tls.c` of TLS.OVL 1.1, 25 Oct 2026) the server's certificates are kept
 while the handshake runs and checked after it, before any data, with the same checks and the same
 words on failure: a TT without the DSP took 17 s on Gmail's chain inside the handshake, and Google
-dropped it. The log says "kept, to be checked after the handshake", then the check's time.
+dropped it. The log says "kept, to be checked after the handshake", then the check's time. And
+(TLS.OVL 1.2) the retry with every cipher follows only a real refusal, an alert before any
+certificate or a close with no answer: a close after the server's certificates no longer brings a
+second full handshake (Gmail on EMail's TT).
 
 **On your DFB1 with 0.7** and the caches on, the same fetch took 12.8 s (the handshake 7.6 s; with
 the log, 14.4 s and 8.5 s). The download went from 29 to 163 KB/s and unpacking from 930 to 675 ms with
