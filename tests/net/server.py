@@ -54,6 +54,7 @@ Pages:
                  server (the ECDSA one), as Wikipedia's from upload.wikimedia.org
   /site/fs.html  a frameset: fsmenu.html, whose link names the main
                  frame (fsone.html, with a picture), and fsmain.html
+  /site/blank.html  links whose targets are other windows (_blank, a name)
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
@@ -433,6 +434,9 @@ FS_MENU = (b"<!DOCTYPE html><title>Menu</title><body style='background:#dde'><p>
 FS_MAIN = b"<!DOCTYPE html><title>Main</title><p>The main frame's first page.\n"
 FS_ONE = (b"<!DOCTYPE html><title>One</title><body style='background:#efe'><p>Page one in the main frame."
           b"<p><img src=logo.png alt=logo>\n")
+# links for other windows (/site/blank.html): _blank, and a window's name
+BLANK_PAGE = (b"<!DOCTYPE html><title>Windows</title><p><a href=fsone.html target=_blank>One in a new window</a>"
+              b"<p><a href=fsmain.html target=side>Main in the side window</a>\n")
 
 # the same as a secure page whose pictures come from another secure host
 # (Wikipedia's from upload.wikimedia.org): https://127.0.0.1/site/wikitls.html,
@@ -644,6 +648,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, GW_PAGE)
         elif p == "/site/wiki.html":
             self.send(200, WIKI_PAGE)
+        elif p == "/site/blank.html":
+            self.send(200, BLANK_PAGE)
         elif p in ("/site/fs.html", "/site/fsmenu.html", "/site/fsmain.html", "/site/fsone.html"):
             self.send(200, {"fs": FS_PAGE, "fsmenu": FS_MENU, "fsmain": FS_MAIN, "fsone": FS_ONE}[p[6:-5]])
         elif p == "/site/wikitls.html":

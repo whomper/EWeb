@@ -32,29 +32,22 @@
 #include "tbicons.h"
 #include "throbber.h"
 
-short win_h = -1;
-short win_iconified;
+ewin *wins;			/* every window, the newest first */
+ewin *cur;			/* the one worked on */
+int win_max = 2;
 
 #define KIND (NAME | CLOSER | FULLER | MOVER | SIZER | UPARROW | DNARROW | VSLIDE | LFARROW | RTARROW | HSLIDE)
 #define POINT_HAND 3
 #define TEXT_CRSR  1
 
-static GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
-static int32_t top;			/* the page's row at r_page's top */
-static int32_t left;			/* its column at r_page's left (a page wider than
-					   the window: page.right) */
 static void redraw(const GRECT *area, int parts);
-static char info[160];			/* the status bar's text as set (Atari text) */
-static char title[160];
 
 /* ---------------------------------------------------------------- the toolbar */
 
 /* the buttons, in the order of tbicons.h's pictures */
 enum { B_BACK, B_FORWARD, B_RELOAD, B_HOME, B_SEARCH, B_STOP, NBUT };
+typedef char nbut_is_win_buttons[NBUT == WIN_BUTTONS ? 1 : -1];
 static const char *const names[NBUT] = { "Back", "Forward", "Reload", "Home", "Search", "Stop" };
-static GRECT but[NBUT];
-static int hot = -1;			/* the button under the mouse: framed */
-static int sunk = -1;			/* the one held down: framed, sunk */
 static short tall;			/* the 20-row pictures (else the 10-row ones) */
 
 static int enabled(int i)
@@ -70,10 +63,6 @@ static int enabled(int i)
 	return 0;
 }
 
-/* the address field: Atari text (a URL is ASCII), the cursor, the first
-   character shown, and whether it is all chosen (typing replaces it) */
-static char addr[1024];
-static int a_focus, a_cur, a_first, a_all;
 
 /* one row: the buttons at the left, the address beside them, the
    throbber at the right (where the window is wide enough for it and
@@ -85,39 +74,39 @@ static void layout(void)
 	ih = tall ? TB_TALL : TB_SHORT;
 	bh = 3 + ih + 3;		/* a button: its picture in its frame */
 	th = 2 + bh + 3;		/* and the line under the toolbar */
-	r_tool = work;
-	r_tool.h = th;
-	x = work.x + 4;
+	cur->r_tool = cur->work;
+	cur->r_tool.h = th;
+	x = cur->work.x + 4;
 	for (i = 0; i < NBUT; i++) {
-		but[i].x = x;
-		but[i].y = work.y + 2;
-		but[i].w = TB_W + 6;
-		but[i].h = bh;
-		x += but[i].w + 2;
+		cur->but[i].x = x;
+		cur->but[i].y = cur->work.y + 2;
+		cur->but[i].w = TB_W + 6;
+		cur->but[i].h = bh;
+		x += cur->but[i].w + 2;
 	}
-	r_addr.x = x + 6;
-	r_addr.h = gl_hchar + 4;
-	r_addr.y = work.y + (th - 1 - r_addr.h) / 2;
-	r_addr.w = work.x + work.w - 4 - r_addr.x;
-	r_thr.w = THR_W;
-	r_thr.h = tall ? THR_TALL : THR_SHORT;
-	r_thr.x = work.x + work.w - 4 - THR_W;
-	r_thr.y = work.y + (th - 1 - r_thr.h) / 2;
-	if (r_thr.x - 8 < r_addr.x + 8 * gl_wchar)
-		r_thr.w = 0;
+	cur->r_addr.x = x + 6;
+	cur->r_addr.h = gl_hchar + 4;
+	cur->r_addr.y = cur->work.y + (th - 1 - cur->r_addr.h) / 2;
+	cur->r_addr.w = cur->work.x + cur->work.w - 4 - cur->r_addr.x;
+	cur->r_thr.w = THR_W;
+	cur->r_thr.h = tall ? THR_TALL : THR_SHORT;
+	cur->r_thr.x = cur->work.x + cur->work.w - 4 - THR_W;
+	cur->r_thr.y = cur->work.y + (th - 1 - cur->r_thr.h) / 2;
+	if (cur->r_thr.x - 8 < cur->r_addr.x + 8 * gl_wchar)
+		cur->r_thr.w = 0;
 	else
-		r_addr.w = r_thr.x - 8 - r_addr.x;
-	if (r_addr.w < 4 * gl_wchar)
-		r_addr.w = 0;		/* no room for it */
+		cur->r_addr.w = cur->r_thr.x - 8 - cur->r_addr.x;
+	if (cur->r_addr.w < 4 * gl_wchar)
+		cur->r_addr.w = 0;		/* no room for it */
 	/* the status bar: its text, the ribbon along its foot */
-	r_stat = work;
-	r_stat.h = gl_hchar + (tall ? 7 : 5);
-	r_stat.y = work.y + work.h - r_stat.h;
-	r_page = work;
-	r_page.y += th;
-	r_page.h -= th + r_stat.h;
-	if (r_page.h < 0)
-		r_page.h = 0;
+	cur->r_stat = cur->work;
+	cur->r_stat.h = gl_hchar + (tall ? 7 : 5);
+	cur->r_stat.y = cur->work.y + cur->work.h - cur->r_stat.h;
+	cur->r_page = cur->work;
+	cur->r_page.y += th;
+	cur->r_page.h -= th + cur->r_stat.h;
+	if (cur->r_page.h < 0)
+		cur->r_page.h = 0;
 }
 
 static short paper(void)
@@ -219,41 +208,41 @@ static void button_frame(const GRECT *r, int down)
 
 static void draw_button(int i, const GRECT *clip)
 {
-	GRECT r = but[i];
-	short on = enabled(i), down = i == sunk, d = down ? 1 : 0;
+	GRECT r = cur->but[i];
+	short on = enabled(i), down = i == cur->sunk, d = down ? 1 : 0;
 	fill(&r, paper());
-	if (down || (i == hot && on))
+	if (down || (i == cur->hot && on))
 		button_frame(&r, down);
-	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, !on ? TB_GREYED : down || i == hot ? TB_LIT : TB_ON, clip);
+	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, !on ? TB_GREYED : down || i == cur->hot ? TB_LIT : TB_ON, clip);
 }
 
 static short addr_cols(void)
 {
-	return (r_addr.w - gl_wchar) / gl_wchar;
+	return (cur->r_addr.w - gl_wchar) / gl_wchar;
 }
 
 static void draw_addr(void)
 {
-	GRECT r = r_addr, in;
-	short cols = addr_cols(), n = (short) strlen(addr) - a_first;
+	GRECT r = cur->r_addr, in;
+	short cols = addr_cols(), n = (short) strlen(cur->addr) - cur->a_first;
 	if (r.w <= 0)
 		return;
 	fill(&r, 0);
-	frame(&r, a_focus ? 1 : (planes >= 4 ? 9 : 1));
+	frame(&r, cur->a_focus ? 1 : (planes >= 4 ? 9 : 1));
 	if (n > cols)
 		n = cols;
-	if (a_focus && a_all && addr[0]) {
+	if (cur->a_focus && cur->a_all && cur->addr[0]) {
 		in.x = r.x + gl_wchar / 2;
 		in.y = r.y + 2;
 		in.w = n * gl_wchar;
 		in.h = gl_hchar;
 		fill(&in, 1);
-		text_at(in.x, in.y, addr + a_first, n, cols, TX_LTR | TX_INVERSE);
+		text_at(in.x, in.y, cur->addr + cur->a_first, n, cols, TX_LTR | TX_INVERSE);
 	} else if (n > 0) {
-		text_at(r.x + gl_wchar / 2, r.y + 2, addr + a_first, n, cols, TX_LTR);
+		text_at(r.x + gl_wchar / 2, r.y + 2, cur->addr + cur->a_first, n, cols, TX_LTR);
 	}
-	if (a_focus && !a_all) {
-		short cx = r.x + gl_wchar / 2 + (a_cur - a_first) * gl_wchar;
+	if (cur->a_focus && !cur->a_all) {
+		short cx = r.x + gl_wchar / 2 + (cur->a_cur - cur->a_first) * gl_wchar;
 		line_col(cx, r.y + 2, cx, r.y + 1 + gl_hchar, 1);
 	}
 }
@@ -264,7 +253,6 @@ static const THR_ED *thr_ed;		/* the edition for this screen, NULL: none */
 static char *thr_dev;			/* its frames in the screen's own form (ST RAM), each made when first shown */
 static unsigned thr_made;		/* which of them are made, a bit each */
 static int thr_nodev;			/* no memory for them: each drawn as it comes */
-static int thr_frame;			/* the frame shown: 0 at rest */
 static int thr_drawn;			/* frames drawn, for the log */
 static unsigned long thr_at;		/* when the frame was last moved on (ms) */
 
@@ -288,29 +276,29 @@ static const THR_ED *edition(void)
    monochrome, 30 KB in 256 colours), and copied from there after */
 static void draw_throbber(const GRECT *clip)
 {
-	GRECT r = r_thr;
+	GRECT r = cur->r_thr;
 	SBUF b;
 	const THR_ED *e = thr_ed != NULL ? thr_ed : (thr_ed = edition());
 	long n = (long) THR_W * e->h, size = scr_dev_size(THR_W, e->h);
 	char *f;
 	if (r.w <= 0 || !rect_and(&r, clip))
 		return;
-	r_thr.h = e->h;
+	cur->r_thr.h = e->h;
 	if (thr_dev == NULL && !thr_nodev && (thr_dev = scr_dev_alloc(size * THR_FRAMES)) == NULL)
 		thr_nodev = 1;
-	f = thr_dev != NULL ? thr_dev + size * thr_frame : NULL;
-	if (f != NULL && (thr_made & (1u << thr_frame))) {
-		scr_blit_dev(f, THR_W, e->h, &r_thr, &r);
+	f = thr_dev != NULL ? thr_dev + size * cur->thr_frame : NULL;
+	if (f != NULL && (thr_made & (1u << cur->thr_frame))) {
+		scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
 		return;
 	}
 	sb_init(&b);
-	if (inflate_raw(e->data + e->off[thr_frame], e->off[thr_frame + 1] - e->off[thr_frame], &b, n) == 1 &&
+	if (inflate_raw(e->data + e->off[cur->thr_frame], e->off[cur->thr_frame + 1] - e->off[cur->thr_frame], &b, n) == 1 &&
 	    b.len == n) {
 		if (f != NULL && scr_rgb_dev((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, f)) {
-			thr_made |= 1u << thr_frame;
-			scr_blit_dev(f, THR_W, e->h, &r_thr, &r);
+			thr_made |= 1u << cur->thr_frame;
+			scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
 		} else {
-			scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &r_thr, &r);
+			scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &cur->r_thr, &r);
 		}
 	}
 	sb_free(&b);
@@ -321,28 +309,28 @@ void win_throb(int busy)
 	GRECT r, a;
 	short mx, my, d, hide;
 	unsigned long now = pf_ms();
-	if (win_h <= 0 || win_iconified || r_thr.w <= 0)
+	if (cur->h <= 0 || cur->iconified || cur->r_thr.w <= 0)
 		return;
-	if (busy ? now - thr_at < 110 : thr_frame == 0)
+	if (busy ? now - thr_at < 110 : cur->thr_frame == 0)
 		return;
-	thr_frame = busy ? (thr_frame + 1) % THR_FRAMES : 0;
+	cur->thr_frame = busy ? (cur->thr_frame + 1) % THR_FRAMES : 0;
 	thr_at = now;
 	thr_drawn++;
 	/* the mouse off only when it is near: the pointer doesn't flicker
 	   eight times a second */
 	graf_mkstate(&mx, &my, &d, &d);
-	hide = mx > r_thr.x - 20 && mx < r_thr.x + r_thr.w + 4 && my > r_thr.y - 20 && my < r_thr.y + r_thr.h + 4;
+	hide = mx > cur->r_thr.x - 20 && mx < cur->r_thr.x + cur->r_thr.w + 4 && my > cur->r_thr.y - 20 && my < cur->r_thr.y + cur->r_thr.h + 4;
 	wind_update(BEG_UPDATE);
 	if (hide)
 		graf_mouse(M_OFF, 0);
-	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w > 0 && r.h > 0) {
-		a = r_thr;
+		a = cur->r_thr;
 		if (rect_and(&a, &r)) {
 			clip_on(&a);
 			draw_throbber(&a);
 		}
-		wind_get(win_h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
 	clip_off();
 	if (hide)
@@ -361,13 +349,6 @@ int win_throb_frames(void)
 
 /* the ribbon: how far a load has come, 0..1024 of the bar's width, in
    parts each the colour of the phase it came in */
-#define RIB_PARTS 16
-static struct {
-	short end, pen;
-} rib[RIB_PARTS];
-static int nrib;
-static short rib_at;			/* how far it has come */
-static unsigned long rib_full;		/* when it filled (ms), 0: not full */
 
 /* each phase's pen (connecting, the page, its stylesheets, building it,
    its pictures): the darker colours of the system 16, which read on the
@@ -388,16 +369,16 @@ static short rib_rows(void)
 static void draw_ribbon(void)
 {
 	GRECT r;
-	short x0 = r_stat.x + 1, w = r_stat.w - 2, from = 0;
+	short x0 = cur->r_stat.x + 1, w = cur->r_stat.w - 2, from = 0;
 	int i;
-	r.y = r_stat.y + r_stat.h - rib_rows();
+	r.y = cur->r_stat.y + cur->r_stat.h - rib_rows();
 	r.h = rib_rows();
-	for (i = 0; i < nrib; i++) {
+	for (i = 0; i < cur->nrib; i++) {
 		r.x = x0 + (short) ((long) w * from / 1024);
-		r.w = (short) ((long) w * rib[i].end / 1024) - (r.x - x0);
+		r.w = (short) ((long) w * cur->rib[i].end / 1024) - (r.x - x0);
 		if (r.w > 0)
-			fill(&r, rib[i].pen);
-		from = rib[i].end;
+			fill(&r, cur->rib[i].pen);
+		from = cur->rib[i].end;
 	}
 	r.x = x0 + (short) ((long) w * from / 1024);
 	r.w = x0 + w - r.x;
@@ -407,21 +388,21 @@ static void draw_ribbon(void)
 
 static void draw_status(GRECT *clip)
 {
-	GRECT r = r_stat;
-	short cols = (r_stat.w - gl_wchar) / gl_wchar;
+	GRECT r = cur->r_stat;
+	short cols = (cur->r_stat.w - gl_wchar) / gl_wchar;
 	if (!rect_and(&r, clip))
 		return;
-	fill(&r_stat, paper());
-	hline(r_stat.x, r_stat.x + r_stat.w - 1, r_stat.y);
-	if (info[0] && cols > 0)
-		text_at(r_stat.x + gl_wchar / 2, r_stat.y + 2, info, (long) strlen(info), cols, 0);
+	fill(&cur->r_stat, paper());
+	hline(cur->r_stat.x, cur->r_stat.x + cur->r_stat.w - 1, cur->r_stat.y);
+	if (cur->info[0] && cols > 0)
+		text_at(cur->r_stat.x + gl_wchar / 2, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols, 0);
 	draw_ribbon();
 }
 
 static void redraw_ribbon(void)
 {
-	GRECT r = r_stat;
-	r.y = r_stat.y + r_stat.h - rib_rows();
+	GRECT r = cur->r_stat;
+	r.y = cur->r_stat.y + cur->r_stat.h - rib_rows();
 	r.h = rib_rows();
 	redraw(&r, 1);
 }
@@ -429,51 +410,57 @@ static void redraw_ribbon(void)
 void win_progress(int phase, int at)
 {
 	if (phase < 0) {
-		if (nrib == 0)
+		if (cur->nrib == 0)
 			return;
-		nrib = 0;
-		rib_at = 0;
-		rib_full = 0;
+		cur->nrib = 0;
+		cur->rib_at = 0;
+		cur->rib_full = 0;
 	} else {
 		if (at > 1024)
 			at = 1024;
-		if (at <= rib_at && nrib > 0)
+		if (at <= cur->rib_at && cur->nrib > 0)
 			return;		/* it only goes on */
-		if (nrib > 0 && rib[nrib - 1].pen == rib_pen(phase))
-			rib[nrib - 1].end = (short) at;
-		else if (nrib < RIB_PARTS) {
-			rib[nrib].pen = rib_pen(phase);
-			rib[nrib++].end = (short) at;
+		if (cur->nrib > 0 && cur->rib[cur->nrib - 1].pen == rib_pen(phase))
+			cur->rib[cur->nrib - 1].end = (short) at;
+		else if (cur->nrib < RIB_PARTS) {
+			cur->rib[cur->nrib].pen = rib_pen(phase);
+			cur->rib[cur->nrib++].end = (short) at;
 		} else {
-			rib[nrib - 1].end = (short) at;
+			cur->rib[cur->nrib - 1].end = (short) at;
 		}
-		rib_at = (short) at;
-		rib_full = at == 1024 ? pf_ms() | 1 : 0;
+		cur->rib_at = (short) at;
+		cur->rib_full = at == 1024 ? pf_ms() | 1 : 0;
 	}
-	if (win_h > 0 && !win_iconified)
+	if (cur->h > 0 && !cur->iconified)
 		redraw_ribbon();
 }
 
 int win_progress_shown(void)
 {
+	ewin *was = cur;
+	int shown = 0;
 	/* full for a moment, then gone */
-	if (rib_full && pf_ms() - rib_full >= 800)
-		win_progress(-1, 0);
-	return nrib > 0;
+	for (cur = wins; cur != NULL; cur = cur->next) {
+		if (cur->rib_full && pf_ms() - cur->rib_full >= 800)
+			win_progress(-1, 0);
+		shown |= cur->nrib > 0;
+	}
+	cur = was;
+	return shown;
 }
 
 static void draw_toolbar(GRECT *clip)
 {
-	GRECT r = r_tool;
+	GRECT r = cur->r_tool;
 	int i;
 	if (!rect_and(&r, clip))
 		return;
-	fill(&r_tool, paper());
+	fill(&cur->r_tool, paper());
 	for (i = 0; i < NBUT; i++)
 		draw_button(i, &r);
 	draw_addr();
 	draw_throbber(&r);
-	hline(r_tool.x, r_tool.x + r_tool.w - 1, r_tool.y + r_tool.h - 1);
+	hline(cur->r_tool.x, cur->r_tool.x + cur->r_tool.w - 1, cur->r_tool.y + cur->r_tool.h - 1);
 }
 
 static void draw_bars(GRECT *clip)
@@ -500,8 +487,8 @@ static int box_panebar(const page *p, const dl_item *d, PANEBAR *b, GRECT *seen)
 	const struct pg_scroll *sc = &p->scr[d->len - 1];
 	int32_t x0 = d->x, y0 = d->y, x1 = d->x + d->w, y1 = d->y + d->h;
 	int32_t shown = d->base ? p->items[sc->clip].w : p->items[sc->clip].h;
-	b->r.x = (short) (r_page.x + d->x - left);
-	b->r.y = (short) (r_page.y + d->y - top);
+	b->r.x = (short) (cur->r_page.x + d->x - cur->left);
+	b->r.y = (short) (cur->r_page.y + d->y - cur->top);
 	b->r.w = (short) d->w;
 	b->r.h = (short) d->h;
 	b->shown = shown;
@@ -510,11 +497,11 @@ static int box_panebar(const page *p, const dl_item *d, PANEBAR *b, GRECT *seen)
 	b->across = d->base;
 	if (!page_clip(p, d->clip, &x0, &y0, &x1, &y1))
 		return 0;
-	seen->x = (short) (r_page.x + x0 - left);
-	seen->y = (short) (r_page.y + y0 - top);
+	seen->x = (short) (cur->r_page.x + x0 - cur->left);
+	seen->y = (short) (cur->r_page.y + y0 - cur->top);
 	seen->w = (short) (x1 - x0);
 	seen->h = (short) (y1 - y0);
-	return rect_and(seen, &r_page);
+	return rect_and(seen, &cur->r_page);
 }
 
 /* the boxes' bars over the page's copy, within clip, and the square
@@ -535,16 +522,16 @@ static void draw_box_bars(const page *p, const GRECT *clip)
 			const dl_item *dn = &p->items[sc->bar[0]], *ac = &p->items[sc->bar[1]];
 			int32_t x0 = dn->x, y0 = ac->y, x1 = dn->x + dn->w, y1 = ac->y + ac->h;
 			GRECT r;
-			r.x = (short) (r_page.x + x0 - left);
-			r.y = (short) (r_page.y + y0 - top);
+			r.x = (short) (cur->r_page.x + x0 - cur->left);
+			r.y = (short) (cur->r_page.y + y0 - cur->top);
 			r.w = (short) (x1 - x0);
 			r.h = (short) (y1 - y0);
 			if (page_clip(p, dn->clip, &x0, &y0, &x1, &y1)) {
-				s.x = (short) (r_page.x + x0 - left);
-				s.y = (short) (r_page.y + y0 - top);
+				s.x = (short) (cur->r_page.x + x0 - cur->left);
+				s.y = (short) (cur->r_page.y + y0 - cur->top);
 				s.w = (short) (x1 - x0);
 				s.h = (short) (y1 - y0);
-				if (rect_and(&s, &r_page) && rect_and(&s, clip))
+				if (rect_and(&s, &cur->r_page) && rect_and(&s, clip))
 					pb_corner(&r, &s);
 			}
 		}
@@ -553,10 +540,10 @@ static void draw_box_bars(const page *p, const GRECT *clip)
 
 static void draw_page(GRECT *clip)
 {
-	GRECT r = r_page;
+	GRECT r = cur->r_page;
 	if (!rect_and(&r, clip))
 		return;
-	scr_page(shown(), &r, left + (r.x - r_page.x), top + (r.y - r_page.y));
+	scr_page(shown(), &r, cur->left + (r.x - cur->r_page.x), cur->top + (r.y - cur->r_page.y));
 	draw_box_bars(shown(), &r);
 }
 
@@ -564,18 +551,18 @@ static void draw_page(GRECT *clip)
 static void redraw(const GRECT *area, int parts)
 {
 	GRECT r, a;
-	if (win_h <= 0)
+	if (cur->h <= 0)
 		return;
-	if (win_iconified) {
+	if (cur->iconified) {
 		icon_window(area);
 		return;
 	}
-	a = area ? *area : work;
-	if (!rect_and(&a, &work))
+	a = area ? *area : cur->work;
+	if (!rect_and(&a, &cur->work))
 		return;
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, 0);
-	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w > 0 && r.h > 0) {
 		GRECT c = r;
 		if (rect_and(&c, &a)) {
@@ -585,7 +572,7 @@ static void redraw(const GRECT *area, int parts)
 			if (parts & 2)
 				draw_page(&c);
 		}
-		wind_get(win_h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
 	clip_off();
 	graf_mouse(M_ON, 0);
@@ -599,56 +586,56 @@ void win_redraw(const GRECT *area)
 
 void win_redraw_page(void)
 {
-	redraw(&r_page, 2);
+	redraw(&cur->r_page, 2);
 }
 
 void win_toolbar(void)
 {
-	redraw(&r_tool, 1);
+	redraw(&cur->r_tool, 1);
 }
 
 static void redraw_addr(void)
 {
-	redraw(&r_addr, 1);
+	redraw(&cur->r_addr, 1);
 }
 
 /* ---------------------------------------------------------------- scrolling */
 
 int32_t win_page_w(void)
 {
-	return r_page.w > 0 ? r_page.w : 1;
+	return cur->r_page.w > 0 ? cur->r_page.w : 1;
 }
 
 int32_t win_page_h(void)
 {
-	return r_page.h;
+	return cur->r_page.h;
 }
 
 int32_t win_top(void)
 {
-	return top;
+	return cur->top;
 }
 
 void win_page_area(short *x, short *y, short *w, short *h)
 {
-	*x = r_page.x;
-	*y = r_page.y;
-	*w = r_page.w;
-	*h = r_page.h;
+	*x = cur->r_page.x;
+	*y = cur->r_page.y;
+	*w = cur->r_page.w;
+	*h = cur->r_page.h;
 }
 
 static const page *shown(void);
 
 static int32_t max_top(void)
 {
-	int32_t h = shown() ? shown()->height : 0, m = h - r_page.h;
+	int32_t h = shown() ? shown()->height : 0, m = h - cur->r_page.h;
 	return m > 0 ? m : 0;
 }
 
 /* how far it scrolls sideways */
 static int32_t max_left(void)
 {
-	int32_t w = shown() ? shown()->right : 0, m = w - r_page.w;
+	int32_t w = shown() ? shown()->right : 0, m = w - cur->r_page.w;
 	return m > 0 ? m : 0;
 }
 
@@ -656,14 +643,14 @@ static void sliders(void)
 {
 	const page *p = shown();
 	int32_t h = p ? p->height : 0, m = max_top(), w = p ? p->right : 0, mw = max_left();
-	short size = (short) (h > r_page.h ? (int32_t) ((int64_t) 1000 * r_page.h / h) : 1000);
-	short wsize = (short) (w > r_page.w ? (int32_t) ((int64_t) 1000 * r_page.w / w) : 1000);
-	if (win_h <= 0 || win_iconified)
+	short size = (short) (h > cur->r_page.h ? (int32_t) ((int64_t) 1000 * cur->r_page.h / h) : 1000);
+	short wsize = (short) (w > cur->r_page.w ? (int32_t) ((int64_t) 1000 * cur->r_page.w / w) : 1000);
+	if (cur->h <= 0 || cur->iconified)
 		return;
-	wind_set(win_h, WF_VSLSIZE, size < 30 ? 30 : size, 0, 0, 0);
-	wind_set(win_h, WF_VSLIDE, (short) (m > 0 ? (int32_t) ((int64_t) 1000 * top / m) : 0), 0, 0, 0);
-	wind_set(win_h, WF_HSLSIZE, wsize < 30 ? 30 : wsize, 0, 0, 0);
-	wind_set(win_h, WF_HSLIDE, (short) (mw > 0 ? (int32_t) ((int64_t) 1000 * left / mw) : 0), 0, 0, 0);
+	wind_set(cur->h, WF_VSLSIZE, size < 30 ? 30 : size, 0, 0, 0);
+	wind_set(cur->h, WF_VSLIDE, (short) (m > 0 ? (int32_t) ((int64_t) 1000 * cur->top / m) : 0), 0, 0, 0);
+	wind_set(cur->h, WF_HSLSIZE, wsize < 30 ? 30 : wsize, 0, 0, 0);
+	wind_set(cur->h, WF_HSLIDE, (short) (mw > 0 ? (int32_t) ((int64_t) 1000 * cur->left / mw) : 0), 0, 0, 0);
 }
 
 /* the window is in front and nothing covers it: one rectangle */
@@ -672,10 +659,10 @@ static int all_visible(void)
 	GRECT r;
 	short t, d;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
-	if (t != win_h)
+	if (t != cur->h)
 		return 0;
-	wind_get(win_h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
-	return r.x == work.x && r.y == work.y && r.w == work.w && r.h == work.h;
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	return r.x == cur->work.x && r.y == cur->work.y && r.w == cur->work.w && r.h == cur->work.h;
 }
 
 void win_scroll_to(int32_t y)
@@ -685,38 +672,38 @@ void win_scroll_to(int32_t y)
 		y = m;
 	if (y < 0)
 		y = 0;
-	dy = y - top;
+	dy = y - cur->top;
 	if (dy == 0)
 		return;
-	top = y;
+	cur->top = y;
 	if (br.pv_p == NULL)
-		br_scrolled(&br, top);	/* (a preview's place isn't the page's) */
+		br_scrolled(&br, cur->top);	/* (a preview's place isn't the page's) */
 	sliders();
-	if (win_iconified || win_h <= 0)
+	if (cur->iconified || cur->h <= 0)
 		return;
-	if ((dy < 0 ? -dy : dy) < r_page.h && all_visible() &&
-	    r_page.y + r_page.h <= scr_h && r_page.x + r_page.w <= scr_w) {
+	if ((dy < 0 ? -dy : dy) < cur->r_page.h && all_visible() &&
+	    cur->r_page.y + cur->r_page.h <= scr_h && cur->r_page.x + cur->r_page.w <= scr_w) {
 		/* what stays on the screen moves; only the new rows are drawn */
 		MFDB s;
 		short pxy[8], d = (short) (dy < 0 ? -dy : dy);
-		GRECT fresh = r_page;
+		GRECT fresh = cur->r_page;
 		memset(&s, 0, sizeof s);
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
-		clip_on(&r_page);
-		pxy[0] = pxy[4] = r_page.x;
-		pxy[2] = pxy[6] = r_page.x + r_page.w - 1;
+		clip_on(&cur->r_page);
+		pxy[0] = pxy[4] = cur->r_page.x;
+		pxy[2] = pxy[6] = cur->r_page.x + cur->r_page.w - 1;
 		if (dy > 0) {
-			pxy[1] = r_page.y + d;
-			pxy[3] = r_page.y + r_page.h - 1;
-			pxy[5] = r_page.y;
-			pxy[7] = r_page.y + r_page.h - 1 - d;
-			fresh.y = r_page.y + r_page.h - d;
+			pxy[1] = cur->r_page.y + d;
+			pxy[3] = cur->r_page.y + cur->r_page.h - 1;
+			pxy[5] = cur->r_page.y;
+			pxy[7] = cur->r_page.y + cur->r_page.h - 1 - d;
+			fresh.y = cur->r_page.y + cur->r_page.h - d;
 		} else {
-			pxy[1] = r_page.y;
-			pxy[3] = r_page.y + r_page.h - 1 - d;
-			pxy[5] = r_page.y + d;
-			pxy[7] = r_page.y + r_page.h - 1;
+			pxy[1] = cur->r_page.y;
+			pxy[3] = cur->r_page.y + cur->r_page.h - 1 - d;
+			pxy[5] = cur->r_page.y + d;
+			pxy[7] = cur->r_page.y + cur->r_page.h - 1;
 		}
 		fresh.h = d;
 		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
@@ -731,7 +718,7 @@ void win_scroll_to(int32_t y)
 
 void win_scroll_by(int32_t dy)
 {
-	win_scroll_to(top + dy);
+	win_scroll_to(cur->top + dy);
 }
 
 /* sideways, to column x: what stays on the screen moves, as up and down */
@@ -742,36 +729,36 @@ static void scroll_x_to(int32_t x)
 		x = m;
 	if (x < 0)
 		x = 0;
-	dx = x - left;
+	dx = x - cur->left;
 	if (dx == 0)
 		return;
-	left = x;
+	cur->left = x;
 	sliders();
-	log_event("sideways %ld of %ld", (long) left, (long) m);
-	if (win_iconified || win_h <= 0)
+	log_event("sideways %ld of %ld", (long) cur->left, (long) m);
+	if (cur->iconified || cur->h <= 0)
 		return;
-	if ((dx < 0 ? -dx : dx) < r_page.w && all_visible() &&
-	    r_page.y + r_page.h <= scr_h && r_page.x + r_page.w <= scr_w) {
+	if ((dx < 0 ? -dx : dx) < cur->r_page.w && all_visible() &&
+	    cur->r_page.y + cur->r_page.h <= scr_h && cur->r_page.x + cur->r_page.w <= scr_w) {
 		MFDB s;
 		short pxy[8], d = (short) (dx < 0 ? -dx : dx);
-		GRECT fresh = r_page;
+		GRECT fresh = cur->r_page;
 		memset(&s, 0, sizeof s);
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
-		clip_on(&r_page);
-		pxy[1] = pxy[5] = r_page.y;
-		pxy[3] = pxy[7] = r_page.y + r_page.h - 1;
+		clip_on(&cur->r_page);
+		pxy[1] = pxy[5] = cur->r_page.y;
+		pxy[3] = pxy[7] = cur->r_page.y + cur->r_page.h - 1;
 		if (dx > 0) {
-			pxy[0] = r_page.x + d;
-			pxy[2] = r_page.x + r_page.w - 1;
-			pxy[4] = r_page.x;
-			pxy[6] = r_page.x + r_page.w - 1 - d;
-			fresh.x = r_page.x + r_page.w - d;
+			pxy[0] = cur->r_page.x + d;
+			pxy[2] = cur->r_page.x + cur->r_page.w - 1;
+			pxy[4] = cur->r_page.x;
+			pxy[6] = cur->r_page.x + cur->r_page.w - 1 - d;
+			fresh.x = cur->r_page.x + cur->r_page.w - d;
 		} else {
-			pxy[0] = r_page.x;
-			pxy[2] = r_page.x + r_page.w - 1 - d;
-			pxy[4] = r_page.x + d;
-			pxy[6] = r_page.x + r_page.w - 1;
+			pxy[0] = cur->r_page.x;
+			pxy[2] = cur->r_page.x + cur->r_page.w - 1 - d;
+			pxy[4] = cur->r_page.x + d;
+			pxy[6] = cur->r_page.x + cur->r_page.w - 1;
 		}
 		fresh.w = d;
 		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
@@ -793,15 +780,15 @@ static int32_t col_step(void)
    it is in the window */
 void win_page_drawn(int32_t y0, int32_t y1)
 {
-	GRECT r = r_page;
-	int32_t a = y0 - top, b = y1 - top;
-	if (win_h <= 0 || win_iconified || b <= 0 || a >= r_page.h)
+	GRECT r = cur->r_page;
+	int32_t a = y0 - cur->top, b = y1 - cur->top;
+	if (cur->h <= 0 || cur->iconified || b <= 0 || a >= cur->r_page.h)
 		return;
 	if (a < 0)
 		a = 0;
-	if (b > r_page.h)
-		b = r_page.h;
-	r.y = (short) (r_page.y + a);
+	if (b > cur->r_page.h)
+		b = cur->r_page.h;
+	r.y = (short) (cur->r_page.y + a);
 	r.h = (short) (b - a);
 	redraw(&r, 2);
 }
@@ -810,31 +797,31 @@ void win_page_drawn(int32_t y0, int32_t y1)
    it, all drawn */
 void win_page_relaid(void)
 {
-	win_page_relaid_at(top);
+	win_page_relaid_at(cur->top);
 }
 
 /* the page laid out again where it is (another text size): its place
    kept, within its new height and width; drawn by the caller */
 void win_page_clamp(void)
 {
-	if (top > max_top())
-		top = max_top();
-	if (left > max_left())
-		left = max_left();
-	br_scrolled(&br, top);
+	if (cur->top > max_top())
+		cur->top = max_top();
+	if (cur->left > max_left())
+		cur->left = max_left();
+	br_scrolled(&br, cur->top);
 	sliders();
 }
 
 void win_page_relaid_at(int32_t y)
 {
-	top = y;
-	if (top > max_top())
-		top = max_top();
-	if (top < 0)
-		top = 0;
-	if (left > max_left())
-		left = max_left();
-	br_scrolled(&br, top);
+	cur->top = y;
+	if (cur->top > max_top())
+		cur->top = max_top();
+	if (cur->top < 0)
+		cur->top = 0;
+	if (cur->left > max_left())
+		cur->left = max_left();
+	br_scrolled(&br, cur->top);
 	sliders();
 	win_redraw_page();
 }
@@ -848,26 +835,25 @@ static int32_t line_step(void)
 
 void win_title(void)
 {
-	char t[sizeof title], a[140];
+	char t[sizeof cur->title], a[140];
 	if (br.title[0]) {
 		atari_text(br.title, a, sizeof a);
 		snprintf(t, sizeof t, " EWeb - %s ", a);
 	} else {
 		snprintf(t, sizeof t, " EWeb ");
 	}
-	if (strcmp(t, title) == 0)
+	if (strcmp(t, cur->title) == 0)
 		return;
-	str_copy(title, t, sizeof title);
-	if (win_h > 0)
-		wind_set_str(win_h, WF_NAME, title);
+	str_copy(cur->title, t, sizeof cur->title);
+	if (cur->h > 0)
+		wind_set_str(cur->h, WF_NAME, cur->title);
 }
 
-static int at_rest;	/* the status bar says what the page says (win_status("")) */
 
 void win_status(const char *s)
 {
-	char t[sizeof info];
-	at_rest = !*s;
+	char t[sizeof cur->info];
+	cur->at_rest = !*s;
 	if (*s)
 		snprintf(t, sizeof t, " %s", s);
 	else if (br_refresh_note(&br, t + 1, (int) sizeof t - 1))
@@ -876,14 +862,14 @@ void win_status(const char *s)
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else
 		t[0] = 0;
-	if (strcmp(t, info) == 0)
+	if (strcmp(t, cur->info) == 0)
 		return;
-	str_copy(info, t, sizeof info);
+	str_copy(cur->info, t, sizeof cur->info);
 	/* what the bar says now, for the rigs (a link's address without its
 	   query, 7.3) */
 	log_event("status %.*s", (int) strcspn(t + (t[0] == ' '), "?"), t + (t[0] == ' '));
-	if (win_h > 0 && !win_iconified) {
-		GRECT r = r_stat;
+	if (cur->h > 0 && !cur->iconified) {
+		GRECT r = cur->r_stat;
 		r.h -= rib_rows();
 		redraw(&r, 1);
 	}
@@ -891,7 +877,7 @@ void win_status(const char *s)
 
 void win_status_again(void)
 {
-	if (at_rest)
+	if (cur->at_rest)
 		win_status("");
 }
 
@@ -899,27 +885,27 @@ void win_status_again(void)
 
 static void addr_show_cursor(void)
 {
-	short cols = addr_cols(), n = (short) strlen(addr);
-	if (a_cur > n)
-		a_cur = n;
-	if (a_cur < a_first)
-		a_first = a_cur;
-	if (a_cur > a_first + cols - 1)
-		a_first = a_cur - cols + 1;
-	if (a_first < 0)
-		a_first = 0;
+	short cols = addr_cols(), n = (short) strlen(cur->addr);
+	if (cur->a_cur > n)
+		cur->a_cur = n;
+	if (cur->a_cur < cur->a_first)
+		cur->a_first = cur->a_cur;
+	if (cur->a_cur > cur->a_first + cols - 1)
+		cur->a_first = cur->a_cur - cols + 1;
+	if (cur->a_first < 0)
+		cur->a_first = 0;
 }
 
 void win_address(const char *url)
 {
-	char a[sizeof addr];
+	char a[sizeof cur->addr];
 	atari_text(url, a, sizeof a);
-	str_copy(addr, a, sizeof addr);
-	a_cur = (int) strlen(addr);
-	a_first = 0;
-	a_all = 0;
-	a_focus = 0;
-	if (win_h > 0)
+	str_copy(cur->addr, a, sizeof cur->addr);
+	cur->a_cur = (int) strlen(cur->addr);
+	cur->a_first = 0;
+	cur->a_all = 0;
+	cur->a_focus = 0;
+	if (cur->h > 0)
 		redraw_addr();
 }
 
@@ -928,46 +914,46 @@ static void ctl_blur(void);
 void win_address_focus(int all)
 {
 	ctl_blur();
-	a_focus = 1;
-	a_all = all;
-	a_cur = (int) strlen(addr);
+	cur->a_focus = 1;
+	cur->a_all = all;
+	cur->a_cur = (int) strlen(cur->addr);
 	addr_show_cursor();
 	if (all)
-		a_first = 0;
+		cur->a_first = 0;
 	redraw_addr();
 }
 
 int win_address_has_focus(void)
 {
-	return a_focus;
+	return cur->a_focus;
 }
 
 static void addr_blur(void)
 {
-	if (!a_focus)
+	if (!cur->a_focus)
 		return;
-	a_focus = 0;
-	a_all = 0;
-	a_first = 0;
+	cur->a_focus = 0;
+	cur->a_all = 0;
+	cur->a_first = 0;
 	redraw_addr();
 }
 
 static void addr_insert(const char *s, long n)
 {
-	long len = (long) strlen(addr);
-	if (a_all) {
-		addr[0] = 0;
+	long len = (long) strlen(cur->addr);
+	if (cur->a_all) {
+		cur->addr[0] = 0;
 		len = 0;
-		a_cur = 0;
-		a_all = 0;
+		cur->a_cur = 0;
+		cur->a_all = 0;
 	}
-	if (len + n >= (long) sizeof addr)
-		n = (long) sizeof addr - 1 - len;
+	if (len + n >= (long) sizeof cur->addr)
+		n = (long) sizeof cur->addr - 1 - len;
 	if (n <= 0)
 		return;
-	memmove(addr + a_cur + n, addr + a_cur, len - a_cur + 1);
-	memcpy(addr + a_cur, s, n);
-	a_cur += (int) n;
+	memmove(cur->addr + cur->a_cur + n, cur->addr + cur->a_cur, len - cur->a_cur + 1);
+	memcpy(cur->addr + cur->a_cur, s, n);
+	cur->a_cur += (int) n;
 }
 
 /* a key for the address field: 1 when taken */
@@ -975,11 +961,11 @@ static int addr_key(short kstate, short key)
 {
 	short scan = KEY_SCAN(key);
 	unsigned char c = KEY_ASCII(key);
-	int len = (int) strlen(addr), shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
+	int len = (int) strlen(cur->addr), shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
 	if (key_ctrl(kstate, key)) {
 		switch (scan) {
 		case 0x1e:		/* ^A: all of it */
-			a_all = 1;
+			cur->a_all = 1;
 			break;
 		case 0x2e:		/* ^C */
 			win_clip(CLIP_COPY);
@@ -994,10 +980,10 @@ static int addr_key(short kstate, short key)
 			return 0;
 		}
 	} else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
-		char t[sizeof addr];
+		char t[sizeof cur->addr];
 		long n;
-		char *u = atari_to_utf8(addr, (long) strlen(addr), &n);
-		str_copy(t, u ? u : addr, sizeof t);
+		char *u = atari_to_utf8(cur->addr, (long) strlen(cur->addr), &n);
+		str_copy(t, u ? u : cur->addr, sizeof t);
 		free(u);
 		addr_blur();
 		go(t);
@@ -1008,36 +994,36 @@ static int addr_key(short kstate, short key)
 	} else if (scan == 0x01) {			/* Esc: nothing (it never clears text) */
 		return 1;
 	} else if (scan == 0x4b) {			/* Left */
-		if (a_all)
-			a_cur = 0;
-		else if (a_cur > 0)
-			a_cur--;
-		a_all = 0;
+		if (cur->a_all)
+			cur->a_cur = 0;
+		else if (cur->a_cur > 0)
+			cur->a_cur--;
+		cur->a_all = 0;
 	} else if (scan == 0x4d) {			/* Right */
-		if (a_all)
-			a_cur = len;
-		else if (a_cur < len)
-			a_cur++;
-		a_all = 0;
+		if (cur->a_all)
+			cur->a_cur = len;
+		else if (cur->a_cur < len)
+			cur->a_cur++;
+		cur->a_all = 0;
 	} else if (scan == 0x47) {			/* ClrHome: the start, with Shift the end */
-		a_cur = shift ? len : 0;
-		a_all = 0;
+		cur->a_cur = shift ? len : 0;
+		cur->a_all = 0;
 	} else if (scan == 0x0e) {			/* Backspace */
-		if (a_all) {
-			addr[0] = 0;
-			a_cur = 0;
-			a_all = 0;
-		} else if (a_cur > 0) {
-			memmove(addr + a_cur - 1, addr + a_cur, len - a_cur + 1);
-			a_cur--;
+		if (cur->a_all) {
+			cur->addr[0] = 0;
+			cur->a_cur = 0;
+			cur->a_all = 0;
+		} else if (cur->a_cur > 0) {
+			memmove(cur->addr + cur->a_cur - 1, cur->addr + cur->a_cur, len - cur->a_cur + 1);
+			cur->a_cur--;
 		}
 	} else if (scan == 0x53) {			/* Delete */
-		if (a_all) {
-			addr[0] = 0;
-			a_cur = 0;
-			a_all = 0;
-		} else if (a_cur < len) {
-			memmove(addr + a_cur, addr + a_cur + 1, len - a_cur);
+		if (cur->a_all) {
+			cur->addr[0] = 0;
+			cur->a_cur = 0;
+			cur->a_all = 0;
+		} else if (cur->a_cur < len) {
+			memmove(cur->addr + cur->a_cur, cur->addr + cur->a_cur + 1, len - cur->a_cur);
 		}
 	} else if (c >= 0x20 && c != 0x7f) {
 		char s = (char) c;
@@ -1052,9 +1038,6 @@ static int addr_key(short kstate, short key)
 
 /* ---------------------------------------------------------------- the page's forms */
 
-/* the control the keyboard is in (form.h; its state is the page's
-   document), NULL: none */
-static fctl *f_focus;
 
 /* a control's place on the screen, its frame too */
 static int ctl_rect(const fctl *c, GRECT *r)
@@ -1062,8 +1045,8 @@ static int ctl_rect(const fctl *c, GRECT *r)
 	const dl_item *it;
 	if (br.p == NULL || (it = page_ctl_item(br.p, c)) == NULL)
 		return 0;
-	r->x = (short) (r_page.x + it->x - left - 1);
-	r->y = (short) (r_page.y + it->y - top - 1);
+	r->x = (short) (cur->r_page.x + it->x - cur->left - 1);
+	r->y = (short) (cur->r_page.y + it->y - cur->top - 1);
 	r->w = (short) (it->w + 2);
 	r->h = (short) (it->h + 2);
 	return 1;
@@ -1072,7 +1055,7 @@ static int ctl_rect(const fctl *c, GRECT *r)
 static void ctl_redraw(const fctl *c)
 {
 	GRECT r;
-	if (ctl_rect(c, &r) && rect_and(&r, &r_page))
+	if (ctl_rect(c, &r) && rect_and(&r, &cur->r_page))
 		redraw(&r, 2);
 }
 
@@ -1084,17 +1067,16 @@ static void ctl_show(const fctl *c)
 		return;
 	if (page_reveal(br.p, c->n, it->y, it->h, 0))
 		win_redraw_page();	/* (a box that scrolls it is in brought it into view) */
-	if (it->y < top)
+	if (it->y < cur->top)
 		win_scroll_to(it->y - 8);
-	else if (it->y + it->h > top + r_page.h)
-		win_scroll_to(it->y + it->h - r_page.h + 8);
-	if (it->x < left)
+	else if (it->y + it->h > cur->top + cur->r_page.h)
+		win_scroll_to(it->y + it->h - cur->r_page.h + 8);
+	if (it->x < cur->left)
 		scroll_x_to(it->x - 8);
-	else if (it->x + it->w > left + r_page.w)
-		scroll_x_to(it->x + it->w - r_page.w + 8);
+	else if (it->x + it->w > cur->left + cur->r_page.w)
+		scroll_x_to(it->x + it->w - cur->r_page.w + 8);
 }
 
-static int typed;		/* the field with the keyboard was typed in: change when it goes */
 
 /* is c still one of the page's controls (a script may have taken it away) */
 static int ctl_alive(const fctl *c)
@@ -1111,9 +1093,9 @@ static int ctl_alive(const fctl *c)
 
 void win_ctl_check(void)
 {
-	if (f_focus != NULL && !ctl_alive(f_focus)) {
-		f_focus = NULL;
-		typed = 0;
+	if (cur->f_focus != NULL && !ctl_alive(cur->f_focus)) {
+		cur->f_focus = NULL;
+		cur->typed = 0;
 	}
 }
 
@@ -1127,14 +1109,14 @@ static void ctl_events(fctl *c)
 
 static void ctl_blur(void)
 {
-	fctl *c = f_focus;
+	fctl *c = cur->f_focus;
 	if (c == NULL)
 		return;
 	c->focus = 0;
-	f_focus = NULL;
+	cur->f_focus = NULL;
 	ctl_redraw(c);
-	if (typed) {
-		typed = 0;
+	if (cur->typed) {
+		cur->typed = 0;
 		ctl_event(c, "change");
 	}
 }
@@ -1143,12 +1125,12 @@ static void addr_blur(void);
 
 static void ctl_focus(fctl *c)
 {
-	if (f_focus == c)
+	if (cur->f_focus == c)
 		return;
 	ctl_blur();
 	addr_blur();
-	f_focus = c;
-	typed = 0;
+	cur->f_focus = c;
+	cur->typed = 0;
 	c->focus = 1;
 	ctl_show(c);
 	ctl_redraw(c);
@@ -1161,7 +1143,7 @@ static void ctl_forget(void)
 	fctl *c;
 	const doc *d;
 	int i;
-	f_focus = NULL;
+	cur->f_focus = NULL;
 	for (i = 0; (d = br_doc(&br, i)) != NULL; i++)
 		for (c = d->ctls; c != NULL; c = c->next)
 			c->focus = 0;
@@ -1170,9 +1152,9 @@ static void ctl_forget(void)
 /* a form sent: the page it goes to replaces this one */
 static void ctl_submit(fctl *from, fctl *by, int32_t x, int32_t y)
 {
-	if (f_focus != NULL)
-		f_focus->focus = 0;
-	f_focus = NULL;
+	if (cur->f_focus != NULL)
+		cur->f_focus->focus = 0;
+	cur->f_focus = NULL;
 	submit(from, by, x, y);
 }
 
@@ -1258,8 +1240,8 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 		/* where on a picture, in its own pixels */
 		int32_t x = 0, y = 0;
 		if (c->kind == FC_IMAGE && it != NULL && br.zoom > 0) {
-			x = (int32_t) (mx - r_page.x + left - it->x) * 1024 / br.zoom;
-			y = (int32_t) (my - r_page.y - (it->y - top)) * 1024 / br.zoom;
+			x = (int32_t) (mx - cur->r_page.x + cur->left - it->x) * 1024 / br.zoom;
+			y = (int32_t) (my - cur->r_page.y - (it->y - cur->top)) * 1024 / br.zoom;
 			if (x < 0)
 				x = 0;
 			if (y < 0)
@@ -1301,11 +1283,11 @@ static void ctl_paste(fctl *c)
 /* a key for the control with the keyboard: 1 when taken */
 static int ctl_key(short kstate, short key)
 {
-	fctl *c = f_focus;
+	fctl *c = cur->f_focus;
 	const dl_item *it = br.p ? page_ctl_item(br.p, c) : NULL;
 	short scan = KEY_SCAN(key);
 	unsigned char ch = KEY_ASCII(key);
-	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0, typed = form_typed(c), changed = 0;
+	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0, typing = form_typed(c), changed = 0;
 
 	if (it == NULL) {		/* no longer shown */
 		ctl_blur();
@@ -1343,7 +1325,7 @@ static int ctl_key(short kstate, short key)
 			changed = form_insert(c, "\n", 1);
 			break;
 		}
-		if (typed || c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
+		if (typing || c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
 			/* the form sent, as by its first button */
 			int send;
 			fctl *by = form_default(br_ctl_doc(&br, c), c, &send);
@@ -1351,16 +1333,16 @@ static int ctl_key(short kstate, short key)
 				ctl_submit(c, by, 0, 0);
 			return 1;
 		}
-		ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
+		ctl_press(c, it, (short) (cur->r_page.x + it->x - cur->left + 4), (short) (cur->r_page.y + it->y - cur->top + it->h));
 		return 1;
 	case 0x39:		/* Space: a button pressed, a box ticked */
-		if (!typed) {
-			ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
+		if (!typing) {
+			ctl_press(c, it, (short) (cur->r_page.x + it->x - cur->left + 4), (short) (cur->r_page.y + it->y - cur->top + it->h));
 			return 1;
 		}
 		break;
 	}
-	if (!typed)
+	if (!typing)
 		return 0;
 	switch (scan) {
 	case 0x4b:		/* Left */
@@ -1422,7 +1404,7 @@ static int ctl_key(short kstate, short key)
 	}
 	if (changed) {
 		ctl_redraw(c);
-		typed = 1;
+		cur->typed = 1;
 		ctl_event(c, "input");
 	}
 	return 1;
@@ -1452,8 +1434,8 @@ static char *page_text(long *n)
 
 void win_clip(int what)
 {
-	if (f_focus != NULL && form_typed(f_focus)) {
-		fctl *c = f_focus;
+	if (cur->f_focus != NULL && form_typed(cur->f_focus)) {
+		fctl *c = cur->f_focus;
 		if (what == CLIP_COPY || what == CLIP_CUT) {
 			long n;
 			char *a;
@@ -1472,18 +1454,18 @@ void win_clip(int what)
 		ctl_redraw(c);
 		return;
 	}
-	if (a_focus) {
-		long len = (long) strlen(addr);
+	if (cur->a_focus) {
+		long len = (long) strlen(cur->addr);
 		if (what == CLIP_COPY || what == CLIP_CUT) {
-			clip_put(addr, len);
+			clip_put(cur->addr, len);
 			if (what == CLIP_CUT) {
-				addr[0] = 0;
-				a_cur = 0;
-				a_all = 0;
+				cur->addr[0] = 0;
+				cur->a_cur = 0;
+				cur->a_all = 0;
 				redraw_addr();
 			}
 		} else if (what == CLIP_PASTE) {
-			char buf[sizeof addr];
+			char buf[sizeof cur->addr];
 			long n = clip_get(buf, sizeof buf);
 			if (n > 0) {
 				clip_line(buf);	/* the first line */
@@ -1514,51 +1496,44 @@ void win_clip(int what)
    (page_text_index), so that it is the same text when the page has been
    laid out again (a picture came, the window was sized); on the page
    shown when it was made only */
-static struct {
-	int on, found;			/* found: Edit > Find's words (marked yellow) */
-	long ix[2];			/* -1: not known yet (while the mouse drags it) */
-	unsigned long shows, serial;	/* on which page shown, in which layout of it */
-	pg_pos at[2];			/* in that layout */
-	pg_range r;
-} sel;
 
 #define SEL_RGB 0x99ccff		/* the selection's colour (Edit > Find's: yellow) */
 
 static void sel_set(const pg_pos *from, const pg_pos *to, int found)
 {
-	sel.at[0] = *from;
-	sel.at[1] = *to;
-	sel.on = from->item != to->item || from->off != to->off;
-	sel.found = found;
-	sel.ix[0] = sel.ix[1] = -1;
-	sel.shows = br.shows;
-	sel.serial = br.p->serial;
-	page_range(br.p, from, to, &sel.r);
+	cur->sel.at[0] = *from;
+	cur->sel.at[1] = *to;
+	cur->sel.on = from->item != to->item || from->off != to->off;
+	cur->sel.found = found;
+	cur->sel.ix[0] = cur->sel.ix[1] = -1;
+	cur->sel.shows = br.shows;
+	cur->sel.serial = br.p->serial;
+	page_range(br.p, from, to, &cur->sel.r);
 }
 
 /* its ends as places in the text, once it is made */
 static void sel_keep(void)
 {
-	if (sel.on && sel.ix[0] < 0) {
-		sel.ix[0] = page_text_index(br.p, &sel.at[0]);
-		sel.ix[1] = page_text_index(br.p, &sel.at[1]);
+	if (cur->sel.on && cur->sel.ix[0] < 0) {
+		cur->sel.ix[0] = page_text_index(br.p, &cur->sel.at[0]);
+		cur->sel.ix[1] = page_text_index(br.p, &cur->sel.at[1]);
 	}
 }
 
 /* the selection on the page shown, in its layout now: 0 none */
 static int sel_now(void)
 {
-	if (!sel.on || br.p == NULL || br.shows != sel.shows)
+	if (!cur->sel.on || br.p == NULL || br.shows != cur->sel.shows)
 		return 0;
-	if (br.p->serial != sel.serial) {
-		int back = sel.ix[0] > sel.ix[1];
-		if (sel.ix[0] < 0 || !page_text_place(br.p, sel.ix[0], back, &sel.at[0]) ||
-		    !page_text_place(br.p, sel.ix[1], !back, &sel.at[1])) {
-			sel.on = 0;
+	if (br.p->serial != cur->sel.serial) {
+		int back = cur->sel.ix[0] > cur->sel.ix[1];
+		if (cur->sel.ix[0] < 0 || !page_text_place(br.p, cur->sel.ix[0], back, &cur->sel.at[0]) ||
+		    !page_text_place(br.p, cur->sel.ix[1], !back, &cur->sel.at[1])) {
+			cur->sel.on = 0;
 			return 0;
 		}
-		sel.serial = br.p->serial;
-		page_range(br.p, &sel.at[0], &sel.at[1], &sel.r);
+		cur->sel.serial = br.p->serial;
+		page_range(br.p, &cur->sel.at[0], &cur->sel.at[1], &cur->sel.r);
 	}
 	return 1;
 }
@@ -1567,10 +1542,10 @@ static int sel_now(void)
 static void sel_clear(void)
 {
 	if (sel_now()) {
-		sel.on = 0;
+		cur->sel.on = 0;
 		win_redraw_page();
 	}
-	sel.on = 0;
+	cur->sel.on = 0;
 }
 
 /* the selection marked on the screen (screen.c): 1, the stretch and its
@@ -1579,8 +1554,8 @@ int win_mark(pg_range *r, uint32_t *rgb)
 {
 	if (br.pv_p != NULL || !sel_now())	/* (a preview: the selection is the page's) */
 		return 0;
-	*r = sel.r;
-	*rgb = sel.found ? 0xffff00 : SEL_RGB;
+	*r = cur->sel.r;
+	*rgb = cur->sel.found ? 0xffff00 : SEL_RGB;
 	return 1;
 }
 
@@ -1597,7 +1572,7 @@ void win_select_all(void)
 		return;
 	sel_set(&a, &b, 0);
 	sel_keep();
-	n = sel.ix[1] - sel.ix[0];
+	n = cur->sel.ix[1] - cur->sel.ix[0];
 	log_event("selected all: %ld", n);
 	win_redraw_page();
 }
@@ -1620,7 +1595,7 @@ void win_find(int how)
 	if (how != 0 && sel_now()) {
 		/* on from the selection (the words found last): the next after
 		   its start, or the one before it */
-		from = sel.r.a;
+		from = cur->sel.r.a;
 		if (how > 0)
 			from.off++;
 	} else {
@@ -1628,7 +1603,7 @@ void win_find(int how)
 		from.item = br.p->nitems;
 		from.off = 0;
 		for (i = 0; i < br.p->nitems; i++)
-			if (br.p->items[i].type == DL_TEXT && br.p->items[i].y >= top) {
+			if (br.p->items[i].type == DL_TEXT && br.p->items[i].y >= cur->top) {
 				from.item = i;
 				break;
 			}
@@ -1643,9 +1618,9 @@ void win_find(int how)
 	sel_keep();
 	page_reveal_item(br.p, a.item, 0);	/* (a box that scrolls brought to it: drawn below) */
 	it = &br.p->items[a.item];
-	if (it->y < top || it->y + it->h > top + r_page.h)
-		win_scroll_to(it->y - r_page.h / 3);
-	if (it->x < left || it->x + it->w > left + r_page.w)
+	if (it->y < cur->top || it->y + it->h > cur->top + cur->r_page.h)
+		win_scroll_to(it->y - cur->r_page.h / 3);
+	if (it->x < cur->left || it->x + it->w > cur->left + cur->r_page.w)
 		scroll_x_to(it->x - 8);
 	win_redraw_page();
 	snprintf(line, sizeof line, "%ld of %ld on this page.", nth, n);
@@ -1657,14 +1632,14 @@ void win_find(int how)
 
 static int link_at(short mx, short my)
 {
-	if (br.p == NULL || !rect_hit(&r_page, mx, my))
+	if (br.p == NULL || !rect_hit(&cur->r_page, mx, my))
 		return -1;
-	return page_link_at(br.p, mx - r_page.x + left, my - r_page.y + top);
+	return page_link_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);
 }
 
 int win_stop_hit(short mx, short my)
 {
-	return loading && !win_iconified && rect_hit(&but[B_STOP], mx, my);
+	return loading && !cur->iconified && rect_hit(&cur->but[B_STOP], mx, my) && wind_find(mx, my) == cur->h;
 }
 
 static short pointer = ARROW;
@@ -1673,16 +1648,16 @@ static short pointer = ARROW;
    info line (while nothing loads: then the line is the load's) */
 static void hot_button(int b)
 {
-	int old = hot;
-	if (b == hot)
+	int old = cur->hot;
+	if (b == cur->hot)
 		return;
-	hot = b;
+	cur->hot = b;
 	if (!loading)
 		win_status(b >= 0 ? names[b] : "");
 	if (old >= 0)
-		redraw(&but[old], 1);
+		redraw(&cur->but[old], 1);
 	if (b >= 0)
-		redraw(&but[b], 1);
+		redraw(&cur->but[b], 1);
 }
 
 void win_hover(short mx, short my)
@@ -1690,18 +1665,18 @@ void win_hover(short mx, short my)
 	short h = wind_find(mx, my), t, d, want = ARROW;
 	int l = -1, b = -1, i;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
-	if (h == win_h && t == win_h && !win_iconified)
+	if (h == cur->h && t == cur->h && !cur->iconified)
 		for (i = 0; i < NBUT; i++)
-			if (rect_hit(&but[i], mx, my) && enabled(i))
+			if (rect_hit(&cur->but[i], mx, my) && enabled(i))
 				b = i;
 	hot_button(b);
-	if (h == win_h && t == win_h && !win_iconified && !loading) {
-		fctl *c = br.p && rect_hit(&r_page, mx, my) ? page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, NULL)
+	if (h == cur->h && t == cur->h && !cur->iconified && !loading) {
+		fctl *c = br.p && rect_hit(&cur->r_page, mx, my) ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, NULL)
 							     : NULL;
 		l = c == NULL ? link_at(mx, my) : -1;
 		if (l >= 0)
 			want = POINT_HAND;
-		else if (rect_hit(&r_addr, mx, my) || (c != NULL && form_typed(c) && !c->disabled))
+		else if (rect_hit(&cur->r_addr, mx, my) || (c != NULL && form_typed(c) && !c->disabled))
 			want = TEXT_CRSR;
 	}
 	if (want != pointer) {
@@ -1709,10 +1684,9 @@ void win_hover(short mx, short my)
 		pointer = want;
 	}
 	if (!loading) {
-		static int shown = -2;
-		if (l != shown) {
+		if (l != cur->link_shown) {
 			char u[512], a[160];
-			shown = l;
+			cur->link_shown = l;
 			if (l >= 0) {
 				br_link_url(&br, l, u, sizeof u);
 				atari_text(u, a, sizeof a);
@@ -1730,23 +1704,23 @@ void win_hover(short mx, short my)
 static int press(int i)
 {
 	short mx, my, mb, ks, in = 1;
-	sunk = i;
-	redraw(&but[i], 1);
+	cur->sunk = i;
+	redraw(&cur->but[i], 1);
 	for (;;) {
 		graf_mkstate(&mx, &my, &mb, &ks);
 		if (!(mb & 1))
 			break;
-		if (rect_hit(&but[i], mx, my) != in) {
+		if (rect_hit(&cur->but[i], mx, my) != in) {
 			in = !in;
-			sunk = in ? i : -1;
-			hot = in ? -1 : i;
-			redraw(&but[i], 1);
+			cur->sunk = in ? i : -1;
+			cur->hot = in ? -1 : i;
+			redraw(&cur->but[i], 1);
 		}
 		evnt_timer_(20);
 	}
-	sunk = -1;
-	hot = rect_hit(&but[i], mx, my) ? i : -1;
-	redraw(&but[i], 1);
+	cur->sunk = -1;
+	cur->hot = rect_hit(&cur->but[i], mx, my) ? i : -1;
+	redraw(&cur->but[i], 1);
 	if (!in)
 		hot_button(-1);
 	return in;
@@ -1762,14 +1736,14 @@ static void box_to(int k, int axis, int32_t v)
 	if (!page_scroll(br.p, k, axis ? v : sc->sx, axis ? sc->sy : v, &x, &y, &w, &h))
 		return;
 	log_event("box %d scrolled to %ld,%ld", k + 1, (long) sc->sx, (long) sc->sy);
-	x0 = r_page.x + x - left;
-	y0 = r_page.y + y - top;
+	x0 = cur->r_page.x + x - cur->left;
+	y0 = cur->r_page.y + y - cur->top;
 	x1 = x0 + w;
 	y1 = y0 + h;
-	x0 = x0 < r_page.x ? r_page.x : x0;
-	y0 = y0 < r_page.y ? r_page.y : y0;
-	x1 = x1 > r_page.x + r_page.w ? r_page.x + r_page.w : x1;
-	y1 = y1 > r_page.y + r_page.h ? r_page.y + r_page.h : y1;
+	x0 = x0 < cur->r_page.x ? cur->r_page.x : x0;
+	y0 = y0 < cur->r_page.y ? cur->r_page.y : y0;
+	x1 = x1 > cur->r_page.x + cur->r_page.w ? cur->r_page.x + cur->r_page.w : x1;
+	y1 = y1 > cur->r_page.y + cur->r_page.h ? cur->r_page.y + cur->r_page.h : y1;
 	if (x0 >= x1 || y0 >= y1)
 		return;
 	r.x = (short) x0;
@@ -1810,7 +1784,7 @@ static int held_goto(long t)
 static int box_bar(short mx, short my)
 {
 	const dl_item *bar;
-	int32_t px = mx - r_page.x + left, py = my - r_page.y + top;
+	int32_t px = mx - cur->r_page.x + cur->left, py = my - cur->r_page.y + cur->top;
 	GRECT seen;
 	if (br.p == NULL || (bar = page_bar_at(br.p, px, py)) == NULL)
 		return 0;
@@ -1827,20 +1801,22 @@ static void context_menu(short mx, short my)
 {
 	int l = link_at(mx, my);
 	if (l >= 0) {
-		static const char *const items[] = { "Open the link", "Save the link's file...  Alt-click",
-						     "Copy the link's address" };
-		short r = popup(mx, my, items, 3);
+		static const char *const items[] = { "Open the link", "Open it in a new window  Ctrl-click",
+						     "Save the link's file...  Alt-click", "Copy the link's address" };
+		short r = popup(mx, my, items, 4);
 		if (r == 0) {
 			follow(l);
 		} else if (r == 1) {
-			save_link(l);
+			follow_window(l);
 		} else if (r == 2) {
+			save_link(l);
+		} else if (r == 3) {
 			char u[2048], a[2048];
 			br_link_url(&br, l, u, sizeof u);
 			atari_text(u, a, sizeof a);
 			clip_put(a, (long) strlen(a));
 		}
-	} else if (rect_hit(&r_page, mx, my)) {
+	} else if (rect_hit(&cur->r_page, mx, my)) {
 		const char *items[6];
 		static char back[40], fwd[40];
 		short r;
@@ -1881,17 +1857,17 @@ static void sel_redraw(const pg_pos *was, const pg_pos *now)
 		if (d->y + d->h > y1)
 			y1 = d->y + d->h;
 	}
-	y0 -= top;
-	y1 -= top;
+	y0 -= cur->top;
+	y1 -= cur->top;
 	if (y0 < 0)
 		y0 = 0;
-	if (y1 > r_page.h)
-		y1 = r_page.h;
+	if (y1 > cur->r_page.h)
+		y1 = cur->r_page.h;
 	if (y1 <= y0)
 		return;
-	g.x = r_page.x;
-	g.w = r_page.w;
-	g.y = (short) (r_page.y + y0);
+	g.x = cur->r_page.x;
+	g.w = cur->r_page.w;
+	g.y = (short) (cur->r_page.y + y0);
 	g.h = (short) (y1 - y0);
 	redraw(&g, 2);
 }
@@ -1907,7 +1883,7 @@ static int select_text(short mx, short my, short clicks, short kstate)
 {
 	pg_pos at, from, to;
 	short x = mx, y = my, mb = 1, ks, lx = -1, ly = -1;
-	int32_t px = mx - r_page.x + left, py = my - r_page.y + top;
+	int32_t px = mx - cur->r_page.x + cur->left, py = my - cur->r_page.y + cur->top;
 	int whole;
 	if (br.p == NULL || !page_pos_at(br.p, px, py, &at))
 		return 0;
@@ -1921,15 +1897,15 @@ static int select_text(short mx, short my, short clicks, short kstate)
 		page_word(br.p, &at, &a, &b);
 		sel_set(&a, &b, 0);
 		sel_keep();
-		log_event("selected a word: %ld", sel.ix[1] - sel.ix[0]);
+		log_event("selected a word: %ld", cur->sel.ix[1] - cur->sel.ix[0]);
 		win_redraw_page();
 		return 1;
 	}
 	whole = sel_now();	/* (an old selection shown: the page drawn again at the first move) */
 	if ((kstate & (K_LSHIFT | K_RSHIFT)) && whole) {
-		from = sel.at[0];
-		to = sel.at[1];
-		whole = sel.found;	/* (Find's yellow becomes the selection's colour) */
+		from = cur->sel.at[0];
+		to = cur->sel.at[1];
+		whole = cur->sel.found;	/* (Find's yellow becomes the selection's colour) */
 	} else {
 		for (;;) {
 			graf_mkstate(&x, &y, &mb, &ks);
@@ -1941,23 +1917,23 @@ static int select_text(short mx, short my, short clicks, short kstate)
 				break;
 			evnt_timer_(10);
 		}
-		sel.on = 0;
+		cur->sel.on = 0;
 		from = to = at;
 	}
 	ctl_blur();		/* (^C then copies the selection, not a field's text) */
 	for (;;) {
 		int32_t step = 0;
-		if (y < r_page.y)
+		if (y < cur->r_page.y)
 			step = -line_step();
-		else if (y >= r_page.y + r_page.h)
+		else if (y >= cur->r_page.y + cur->r_page.h)
 			step = line_step();
 		if (step != 0)
-			win_scroll_to(top + step);	/* (drawn again, the selection too) */
+			win_scroll_to(cur->top + step);	/* (drawn again, the selection too) */
 		if (x != lx || y != ly || step != 0) {
 			lx = x;
 			ly = y;
-			px = (x < r_page.x ? r_page.x : x >= r_page.x + r_page.w ? r_page.x + r_page.w - 1 : x) - r_page.x + left;
-			py = (y < r_page.y ? r_page.y : y >= r_page.y + r_page.h ? r_page.y + r_page.h - 1 : y) - r_page.y + top;
+			px = (x < cur->r_page.x ? cur->r_page.x : x >= cur->r_page.x + cur->r_page.w ? cur->r_page.x + cur->r_page.w - 1 : x) - cur->r_page.x + cur->left;
+			py = (y < cur->r_page.y ? cur->r_page.y : y >= cur->r_page.y + cur->r_page.h ? cur->r_page.y + cur->r_page.h - 1 : y) - cur->r_page.y + cur->top;
 			if (page_pos_at(br.p, px, py, &at) && (whole || at.item != to.item || at.off != to.off)) {
 				sel_set(&from, &at, 0);
 				if (whole)
@@ -1974,18 +1950,18 @@ static int select_text(short mx, short my, short clicks, short kstate)
 		graf_mkstate(&x, &y, &mb, &ks);
 	}
 	sel_keep();
-	if (sel.on)
-		log_event("selected: %ld", sel.ix[1] > sel.ix[0] ? sel.ix[1] - sel.ix[0] : sel.ix[0] - sel.ix[1]);
+	if (cur->sel.on)
+		log_event("selected: %ld", cur->sel.ix[1] > cur->sel.ix[0] ? cur->sel.ix[1] - cur->sel.ix[0] : cur->sel.ix[0] - cur->sel.ix[1]);
 	return 1;
 }
 
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
 {
 	int i, l;
-	if (win_h <= 0 || wind_find(mx, my) != win_h || win_iconified)
+	if (cur->h <= 0 || wind_find(mx, my) != cur->h || cur->iconified)
 		return 0;
 	for (i = 0; i < NBUT; i++) {
-		if (!rect_hit(&but[i], mx, my))
+		if (!rect_hit(&cur->but[i], mx, my))
 			continue;
 		if (!enabled(i) || !press(i))
 			return 1;
@@ -1999,12 +1975,12 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		return 1;
 	}
-	if (rect_hit(&r_addr, mx, my)) {
+	if (rect_hit(&cur->r_addr, mx, my)) {
 		if (button & 2) {
 			static const char *const items[] = { "Copy        ^C", "Cut         ^X", "Paste       ^V",
 							     "-", "Select all  ^A" };
 			short r;
-			if (!a_focus)
+			if (!cur->a_focus)
 				win_address_focus(1);
 			r = popup(mx, my, items, 5);
 			if (r >= 0 && r <= 2)
@@ -2013,17 +1989,17 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 				win_address_focus(1);
 			return 1;
 		}
-		if (!a_focus || clicks >= 2) {
+		if (!cur->a_focus || clicks >= 2) {
 			win_address_focus(1);
 		} else {
-			a_all = 0;
-			a_cur = a_first + (mx - r_addr.x - gl_wchar / 2 + gl_wchar / 2) / gl_wchar;
+			cur->a_all = 0;
+			cur->a_cur = cur->a_first + (mx - cur->r_addr.x - gl_wchar / 2 + gl_wchar / 2) / gl_wchar;
 			addr_show_cursor();
 			redraw_addr();
 		}
 		return 1;
 	}
-	if (rect_hit(&r_page, mx, my)) {
+	if (rect_hit(&cur->r_page, mx, my)) {
 		const dl_item *it = NULL;
 		fctl *c;
 		dnode *det;
@@ -2034,14 +2010,14 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		if (box_bar(mx, my))
 			return 1;	/* a box's scroll bar */
-		if (br.p != NULL && page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, &it) == NULL &&
+		if (br.p != NULL && page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) == NULL &&
 		    select_text(mx, my, clicks, kstate))
 			return 1;	/* text selected */
 		/* the page's scripts first: a click event, which may say no to
 		   what the click does, or change the page */
-		if (!(kstate & 0x08) && page_click(mx - r_page.x + left, my - r_page.y + top))
+		if (!(kstate & 0x08) && page_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top))
 			return 1;
-		c = br.p ? page_ctl_at(br.p, mx - r_page.x + left, my - r_page.y + top, &it) : NULL;
+		c = br.p ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) : NULL;
 		if (c != NULL && !loading) {
 			/* a label's text stands for its control */
 			int label = it->type == DL_TEXT;
@@ -2049,14 +2025,14 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 				return 1;
 			if (form_typed(c)) {
 				ctl_focus(c);
-				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - r_page.x + left, my - r_page.y + top);
+				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);
 				ctl_redraw(c);
 			} else {
 				ctl_focus(c);
 				if (label && c->kind == FC_SELECT)
-					ctl_press(c, it, (short) (r_page.x + it->x - left + 4), (short) (r_page.y + it->y - top + it->h));
+					ctl_press(c, it, (short) (cur->r_page.x + it->x - cur->left + 4), (short) (cur->r_page.y + it->y - cur->top + it->h));
 				else
-					ctl_press(c, it, label ? (short) (r_page.x + it->x - left) : mx, label ? (short) (r_page.y + it->y - top) : my);
+					ctl_press(c, it, label ? (short) (cur->r_page.x + it->x - cur->left) : mx, label ? (short) (cur->r_page.y + it->y - cur->top) : my);
 			}
 			return 1;
 		}
@@ -2064,9 +2040,11 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		l = link_at(mx, my);
 		if (l >= 0 && (kstate & 0x08))
 			save_link(l);	/* Alternate-click (0x08): its file saved, as Safari's Option-click */
+		else if (l >= 0 && (kstate & 0x04))
+			follow_window(l);	/* Control-click: in a new window, as Safari's Command-click */
 		else if (l >= 0)
 			follow(l);
-		else if (br.p != NULL && (det = page_summary_at(br.p, mx - r_page.x + left, my - r_page.y + top)) != NULL)
+		else if (br.p != NULL && (det = page_summary_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top)) != NULL)
 			details(det);	/* a details' summary: it opens or closes */
 		return 1;
 	}
@@ -2086,8 +2064,8 @@ static int box_under_mouse(void)
 	if (br.p == NULL || br.p->nscr == 0)
 		return -1;
 	graf_mkstate(&mx, &my, &mb, &ks);
-	px = mx - r_page.x + left;
-	py = my - r_page.y + top;
+	px = mx - cur->r_page.x + cur->left;
+	py = my - cur->r_page.y + cur->top;
 	for (k = 0; k < br.p->nscr; k++) {
 		const struct pg_scroll *sc = &br.p->scr[k];
 		const dl_item *c = &br.p->items[sc->clip];
@@ -2129,12 +2107,12 @@ int win_key(short kstate, short key)
 {
 	short scan = KEY_SCAN(key);
 	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
-	int32_t page = r_page.h - line_step();
-	if (win_h <= 0 || win_iconified)
+	int32_t page = cur->r_page.h - line_step();
+	if (cur->h <= 0 || cur->iconified)
 		return 0;
-	if (f_focus != NULL && f_focus->kind == FC_TEXTAREA && (scan == 0x48 || scan == 0x50) && !shift)
+	if (cur->f_focus != NULL && cur->f_focus->kind == FC_TEXTAREA && (scan == 0x48 || scan == 0x50) && !shift)
 		return ctl_key(kstate, key);	/* a textarea's lines */
-	if ((scan == 0x48 || scan == 0x50 || ((scan == 0x39 || scan == 0x47) && !a_focus && f_focus == NULL &&
+	if ((scan == 0x48 || scan == 0x50 || ((scan == 0x39 || scan == 0x47) && !cur->a_focus && cur->f_focus == NULL &&
 	     !key_ctrl(kstate, key))) && box_key(scan, shift))
 		return 1;
 	/* up and down scroll the page wherever the keyboard is */
@@ -2146,14 +2124,14 @@ int win_key(short kstate, short key)
 		win_scroll_by(shift ? page : line_step());
 		return 1;
 	}
-	if (a_focus)
+	if (cur->a_focus)
 		return addr_key(kstate, key);
-	if (f_focus != NULL)
+	if (cur->f_focus != NULL)
 		return ctl_key(kstate, key);
 	switch (scan) {
 	case 0x4b:		/* Left, Right: a page wider than the window sideways */
 	case 0x4d:
-		scroll_x_to(left + (scan == 0x4b ? -1 : 1) * (shift ? r_page.w - col_step() : col_step()));
+		scroll_x_to(cur->left + (scan == 0x4b ? -1 : 1) * (shift ? cur->r_page.w - col_step() : col_step()));
 		return 1;
 	case 0x39:		/* Space: a page down, with Shift up */
 		if (key_ctrl(kstate, key))
@@ -2184,26 +2162,25 @@ int win_key(short kstate, short key)
 
 /* the page loading's preview: drawn from its top in place of the page,
    whose place is kept for when the load is stopped */
-static int32_t pv_top, pv_left;
 
 void win_preview(void)
 {
-	pv_top = top;
-	pv_left = left;
-	top = 0;
-	left = 0;
+	cur->pv_top = cur->top;
+	cur->pv_left = cur->left;
+	cur->top = 0;
+	cur->left = 0;
 	sliders();
 	win_redraw_page();
 }
 
 void win_preview_gone(void)
 {
-	top = pv_top;
-	left = pv_left;
-	if (top > max_top())
-		top = max_top();
-	if (left > max_left())
-		left = max_left();
+	cur->top = cur->pv_top;
+	cur->left = cur->pv_left;
+	if (cur->top > max_top())
+		cur->top = max_top();
+	if (cur->left > max_left())
+		cur->left = max_left();
 	sliders();
 	win_redraw_page();
 }
@@ -2215,12 +2192,12 @@ void win_page_changed(void)
 	win_title();
 	win_address(br.url);
 	win_status("");
-	top = 0;
-	left = 0;
+	cur->top = 0;
+	cur->left = 0;
 	if (y > max_top())
 		y = max_top();
-	top = y;
-	br_scrolled(&br, top);
+	cur->top = y;
+	br_scrolled(&br, cur->top);
 	sliders();
 	win_redraw(NULL);
 }
@@ -2229,13 +2206,13 @@ void win_page_changed(void)
 
 static void get_work(void)
 {
-	wind_get(win_h, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
+	wind_get(cur->h, WF_WORKXYWH, &cur->work.x, &cur->work.y, &cur->work.w, &cur->work.h);
 	layout();
 }
 
 static void save_place(void)
 {
-	wind_get(win_h, WF_CURRXYWH, &opt.win_x, &opt.win_y, &opt.win_w, &opt.win_h);
+	wind_get(cur->h, WF_CURRXYWH, &opt.win_x, &opt.win_y, &opt.win_w, &opt.win_h);
 }
 
 /* the window's size changed: the page laid out for its width again */
@@ -2256,22 +2233,40 @@ static void resized(void)
 		if (!loading)
 			graf_mouse(ARROW, 0);
 		if (h0 > 0)
-			top = (int32_t) ((int64_t) top * br.p->height / h0);
+			cur->top = (int32_t) ((int64_t) cur->top * br.p->height / h0);
 	}
 	br.width = win_page_w();
-	if (top > max_top())
-		top = max_top();
-	if (left > max_left())
-		left = max_left();
+	if (cur->top > max_top())
+		cur->top = max_top();
+	if (cur->left > max_left())
+		cur->left = max_left();
 	sliders();
 }
 
-void win_open(void)
+int win_open(void)
 {
 	short x = opt.win_x, y = opt.win_y, w = opt.win_w, h = opt.win_h;
-	if (win_h > 0) {
-		wind_set(win_h, WF_TOP, 0, 0, 0, 0);
-		return;
+	const ewin *o;
+	if (cur->h > 0) {
+		wind_set(cur->h, WF_TOP, 0, 0, 0, 0);
+		return 1;
+	}
+	/* another window's place, a little down and to the right */
+	for (o = wins; o != NULL && (o == cur || o->h <= 0 || o->iconified); o = o->next)
+		;
+	if (o != NULL) {
+		short dx = 2 * gl_wchar, dy = gl_hchar + 3;
+		wind_get(o->h, WF_CURRXYWH, &x, &y, &w, &h);
+		x += dx;
+		y += dy;
+		if (x + w > desk_x + desk_w && w - dx >= 40 * gl_wchar)
+			w -= dx;	/* (smaller, where it would run off the desk) */
+		if (y + h > desk_y + desk_h && h - dy >= 12 * gl_hchar)
+			h -= dy;
+		if (x + w > desk_x + desk_w || y + h > desk_y + desk_h) {
+			x = desk_x;
+			y = desk_y;
+		}
 	}
 	if (w < 40 * gl_wchar || h < 12 * gl_hchar || x < 0 || y < desk_y ||
 	    x + w > desk_x + desk_w + 4 || y + h > desk_y + desk_h + 4) {
@@ -2280,38 +2275,112 @@ void win_open(void)
 		w = desk_w;
 		h = desk_h;
 	}
-	win_h = wind_create(icon_kind(KIND), desk_x, desk_y, desk_w, desk_h);
-	win_iconified = 0;
-	if (win_h < 0) {
-		alert(1, "[3][No more windows available.][ OK ]");
-		return;
-	}
-	if (!title[0])
-		str_copy(title, " EWeb ", sizeof title);
-	wind_set_str(win_h, WF_NAME, title);
-	wind_open(win_h, x, y, w, h);
+	cur->h = wind_create(icon_kind(KIND), desk_x, desk_y, desk_w, desk_h);
+	cur->iconified = 0;
+	if (cur->h < 0)
+		return 0;
+	if (!cur->title[0])
+		str_copy(cur->title, " EWeb ", sizeof cur->title);
+	wind_set_str(cur->h, WF_NAME, cur->title);
+	wind_open(cur->h, x, y, w, h);
 	get_work();
 	save_place();
 	br.width = win_page_w();
 	br.height = win_page_h();
 	sliders();
+	return 1;
 }
 
 void win_close(void)
 {
-	if (win_h <= 0)
+	const ewin *o;
+	if (cur->h <= 0)
 		return;
-	if (!win_iconified)
+	if (!cur->iconified)
 		save_place();
-	wind_close(win_h);
-	wind_delete(win_h);
-	win_h = -1;
+	wind_close(cur->h);
+	wind_delete(cur->h);
+	cur->h = -1;
+	for (o = wins; o != NULL && o->h <= 0; o = o->next)
+		;
+	if (o != NULL)
+		return;		/* (the pictures below are every window's) */
 	scr_dev_free(thr_dev);		/* the throbber's frames */
 	thr_dev = NULL;
 	thr_made = 0;
 	scr_dev_free(tb_dev);		/* the toolbar's pictures */
 	tb_dev = NULL;
 	tb_made = 0;
+}
+
+ewin *win_new(void)
+{
+	ewin *w = malloc(sizeof *w);
+	if (w == NULL)
+		return NULL;
+	memset(w, 0, sizeof *w);
+	w->h = -1;
+	w->hot = w->sunk = -1;
+	w->link_shown = -2;
+	w->next = wins;
+	wins = w;
+	cur = w;
+	return w;
+}
+
+void win_free(ewin *w)
+{
+	ewin **pp;
+	ewin *was = cur;
+	cur = w;
+	win_close();
+	br_free(&w->b);
+	for (pp = &wins; *pp != NULL && *pp != w; pp = &(*pp)->next)
+		;
+	if (*pp != NULL)
+		*pp = w->next;
+	free(w);
+	cur = was != w ? was : wins;
+}
+
+void win_use(ewin *w)
+{
+	if (w != NULL)
+		cur = w;
+}
+
+ewin *win_of(short h)
+{
+	ewin *w;
+	for (w = wins; w != NULL && (h <= 0 || w->h != h); w = w->next)
+		;
+	return w;
+}
+
+int win_front(void)
+{
+	short t, d;
+	ewin *w;
+	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	w = win_of(t);
+	if (w == NULL || w == cur)
+		return 0;
+	if (cur != NULL && cur->hot >= 0 && cur->h > 0) {
+		int b = cur->hot;	/* (the button the mouse was over, flat again) */
+		cur->hot = -1;
+		redraw(&cur->but[b], 1);
+	}
+	cur = w;
+	return 1;
+}
+
+int win_count(void)
+{
+	const ewin *w;
+	int n = 0;
+	for (w = wins; w != NULL; w = w->next)
+		n++;
+	return n;
 }
 
 /* (the pictures were made in the screen's pens of the time) */
@@ -2321,11 +2390,26 @@ void win_colours(void)
 	tb_made = 0;
 }
 
+static void message(const short *msg);
+
+/* to the window it names, cur while it is done (the one in front is cur
+   again at the next event, main.c's win_front) */
 void win_message(const short *msg)
 {
-	GRECT r;
-	if (win_h <= 0 || msg[3] != win_h)
+	ewin *was = cur, *w = win_of(msg[3]), *k;
+	if (w == NULL)
 		return;
+	cur = w;
+	message(msg);
+	for (k = wins; k != NULL && k != was; k = k->next)
+		;
+	if (k != NULL)
+		cur = was;	/* (unless it was closed) */
+}
+
+static void message(const short *msg)
+{
+	GRECT r;
 	switch (msg[0]) {
 	case WM_REDRAW:
 		r.x = msg[4];
@@ -2336,42 +2420,42 @@ void win_message(const short *msg)
 		break;
 	case WM_TOPPED:
 	case WM_NEWTOP:
-		wind_set(win_h, WF_TOP, 0, 0, 0, 0);
+		wind_set(cur->h, WF_TOP, 0, 0, 0, 0);
 		break;
 	case WM_BOTTOMED:
-		wind_set(win_h, WF_BOTTOM, 0, 0, 0, 0);
+		wind_set(cur->h, WF_BOTTOM, 0, 0, 0, 0);
 		break;
 	case WM_CLOSED:
 		if (!loading)
-			command(C_QUIT);
+			command(C_CLOSE);
 		break;
 	case WM_ICONIFY:
 	case WM_ALLICONIFY:
-		if (win_iconified)
+		if (cur->iconified)
 			break;
 		save_place();
-		win_iconified = 1;
-		wind_set(win_h, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		cur->iconified = 1;
+		wind_set(cur->h, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
 		break;
 	case WM_UNICONIFY:
-		if (!win_iconified)
+		if (!cur->iconified)
 			break;
-		wind_set(win_h, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
-		win_iconified = 0;
+		wind_set(cur->h, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		cur->iconified = 0;
 		resized();
 		win_redraw(NULL);
 		break;
 	case WM_FULLED: {
 		GRECT c, f, p;
-		if (win_iconified || loading)
+		if (cur->iconified || loading)
 			break;
-		wind_get(win_h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
-		wind_get(win_h, WF_FULLXYWH, &f.x, &f.y, &f.w, &f.h);
+		wind_get(cur->h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
+		wind_get(cur->h, WF_FULLXYWH, &f.x, &f.y, &f.w, &f.h);
 		if (c.x == f.x && c.y == f.y && c.w == f.w && c.h == f.h) {
-			wind_get(win_h, WF_PREVXYWH, &p.x, &p.y, &p.w, &p.h);
-			wind_set(win_h, WF_CURRXYWH, p.x, p.y, p.w, p.h);
+			wind_get(cur->h, WF_PREVXYWH, &p.x, &p.y, &p.w, &p.h);
+			wind_set(cur->h, WF_CURRXYWH, p.x, p.y, p.w, p.h);
 		} else {
-			wind_set(win_h, WF_CURRXYWH, f.x, f.y, f.w, f.h);
+			wind_set(cur->h, WF_CURRXYWH, f.x, f.y, f.w, f.h);
 		}
 		resized();
 		win_redraw(NULL);
@@ -2380,8 +2464,8 @@ void win_message(const short *msg)
 	case WM_SIZED:
 	case WM_MOVED: {
 		short w = msg[6], h = msg[7];
-		if (win_iconified) {
-			wind_set(win_h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+		if (cur->iconified) {
+			wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 			break;
 		}
 		if (loading && msg[0] == WM_SIZED)
@@ -2390,7 +2474,7 @@ void win_message(const short *msg)
 			w = 40 * gl_wchar;
 		if (h < 12 * gl_hchar)
 			h = 12 * gl_hchar;
-		wind_set(win_h, WF_CURRXYWH, msg[4], msg[5], w, h);
+		wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], w, h);
 		resized();
 		if (msg[0] == WM_SIZED)
 			win_redraw(NULL);
@@ -2400,14 +2484,14 @@ void win_message(const short *msg)
 		if (loading)
 			break;
 		switch (msg[4]) {
-		case WA_UPPAGE: win_scroll_by(-(r_page.h - line_step())); break;
-		case WA_DNPAGE: win_scroll_by(r_page.h - line_step()); break;
+		case WA_UPPAGE: win_scroll_by(-(cur->r_page.h - line_step())); break;
+		case WA_DNPAGE: win_scroll_by(cur->r_page.h - line_step()); break;
 		case WA_UPLINE: win_scroll_by(-line_step()); break;
 		case WA_DNLINE: win_scroll_by(line_step()); break;
-		case WA_LFPAGE: scroll_x_to(left - (r_page.w - col_step())); break;
-		case WA_RTPAGE: scroll_x_to(left + (r_page.w - col_step())); break;
-		case WA_LFLINE: scroll_x_to(left - col_step()); break;
-		case WA_RTLINE: scroll_x_to(left + col_step()); break;
+		case WA_LFPAGE: scroll_x_to(cur->left - (cur->r_page.w - col_step())); break;
+		case WA_RTPAGE: scroll_x_to(cur->left + (cur->r_page.w - col_step())); break;
+		case WA_LFLINE: scroll_x_to(cur->left - col_step()); break;
+		case WA_RTLINE: scroll_x_to(cur->left + col_step()); break;
 		}
 		break;
 	case WM_VSLID:

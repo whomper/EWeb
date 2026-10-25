@@ -3592,7 +3592,7 @@ its layout's boxes that scroll:
   (`page_set_link`) and know their frame (`page.lfr`). A link's `target` (else its document's
   `<base target>`; a form's `target`, a button's `formtarget`) picks the frame: none or `_self`
   its own, `_parent`, `_top` the window, a name that frame. `_blank`, and a name no frame has,
-  go to the window until EWeb opens windows of its own (stage 5's next part). A frame's load is an
+  open another window (More windows, below). A frame's load is an
   entry in the history with the page's address and every frame's address then
   (`BR_ENTRY.frames`, "PATH URL" lines, a frame's path its place among its document's frames):
   Back to it loads only the frames that differ, and a page loaded again from the history (not
@@ -3607,6 +3607,42 @@ and `frames.html` (their lists); `tests/layout/frames.py` (ewrender `-M X,Y` cli
 links into frames and to the window, Back, a form, a details and Find in a frame, a frame whose
 file isn't there; both editions); `make itest` (`/site/fs.html` over HTTP); `make hatarigui`
 (browse: the frameset, its menu's link into the main frame, Undo).
+
+## More windows (25 Oct 2026)
+
+Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
+
+- **A window is a browser and its GEM state** (`ewin`, `ui/ui.h`): its page, history and address
+  (`browser`, `src/browse`), and what `win.c` kept of its one window (its parts, where it is
+  scrolled to, the address being typed, the control with the keyboard, the selection, its
+  throbber's frame and status bar). `cur` is the window worked on and `br` its browser, so the
+  code that worked on the one window works on whichever `cur` is: the one in front, made `cur` at
+  each event (`win_front`), or the one an AES message names (`win_message`, for that message).
+  What all the windows share stays shared: the settings, bookmarks, history, cookies, the disk
+  cache, the pictures decoded (each address once, `img.c`), the throbber's and the toolbar's
+  pictures in the screen's form.
+- **One load at a time**, as before: it holds its window's browser, and while it runs other
+  windows are redrawn, moved and topped but take no commands (the menus wait). Pictures come for
+  the window in front first, then for the others (not an icon's); a page's timers and its
+  refresh wait while its window is behind. A window closed while pictures come for it is closed
+  after the picture (`put_off`).
+- **New windows:** ^N (File > New window) with the home page, a little below and to the right of
+  the one in front; Control-click on a link, or its menu's Open it in a new window; and a link's
+  or a form's target (`frame_target`): `_blank`, or a name no frame has, is `BR_WINDOW`, the
+  address in `br.elsewhere` and the name in `br.window`. The front end loads it in the window of
+  that name if it opened one (`ewin.name`), else in a new one named so (`to_window`), else, with
+  no more to be had, in the window itself. A form that posts to another window is answered in
+  its own. ^W (File > Close window) closes the window in front; the last one quits (the
+  guidelines' ^W). The window in front is the one whose place `WINDOW=` keeps.
+- **Memory:** a window costs its state (14 KB, most of it its history and addresses) and its
+  page. There may be eight beside TT RAM, four with 6 MB of ST RAM free at the start, else two
+  (`win_max`: a 4 MB Falcon, a 1040 ST). The pages kept for Back share `br_keep_max` (each window's history its share), and
+  the pictures trimmed keep what every window shows (`br_register`, `shown_imgs`).
+
+`EWEB.PRG` grew 4 KB (1,216,098 bytes) and `EWEBST.PRG` 4 KB (642,384). Tests:
+`tests/layout/frames.py` (`frames/targets.html`: `_blank`, a name, `_top`, a form's target;
+ewrender shows another window's page in its stead, a `window` line), `make hatarigui` (browse:
+^N, ^W, `/site/blank.html`'s `_blank` link and a named window).
 
 ## The design
 
@@ -3917,7 +3953,7 @@ out of both (their paths lead nowhere on the Atari).
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
    (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
-   breaks (done, above); **5.** SVG (done, below), frames and iframes (done, below), more windows, pictures
+   breaks (done, above); **5.** SVG (done, below), frames and iframes (done, below), more windows (done, below), pictures
    fetched at once.
 
 ## Open questions

@@ -60,11 +60,12 @@ void dlg_keys(void)
 		 "^C       copy the page's text (or the address)\n"
 		 "Tab      between the page and the address\n"
 		 "Right click: a link's or the page's commands\n"
+		 "^N       a new window; ^W closes one\n"
 		 "^,       the Settings\n"
 		 "^Q       quit");
 }
 
 void icon_window(const GRECT *area)
 {
-	icon_redraw(win_h, area, icon_bits, icon16_px, loading ? "loading" : "");
+	icon_redraw(cur->h, area, icon_bits, icon16_px, loading ? "loading" : "");
 }

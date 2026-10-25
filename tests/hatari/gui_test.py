@@ -88,7 +88,7 @@ HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
-Y, F, G, A = 0x15, 0x21, 0x22, 0x1E
+Y, F, G, A, N, W = 0x15, 0x21, 0x22, 0x1E, 0x31, 0x11
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -479,6 +479,48 @@ def browse():
                   back.startswith("frame %sfsmain.html shown" % site), "\n".join(r.events()[-10:]))
         else:
             check("frames: the menu's link found", False, str(ev))
+        # windows: ^N opens another, with the home page; a link whose
+        # target is _blank opens one too, and one naming a window opens
+        # it once, then loads there; ^W closes the window in front
+        r.key(N, (CTRL,))
+        nw = r.wait(r"window \d+ of ", 60)
+        ev = r.wait(r"shown ", 120)
+        time.sleep(3)
+        r.shot(29)
+        check("windows: ^N opens another with the home page", nw is not None and nw.startswith("window 2 of ") and
+              ev is not None, "\n".join(r.events()[-8:]))
+        r.key(W, (CTRL,))
+        cl = r.wait(r"window closed", 30)
+        check("windows: ^W closes the window in front", cl is not None, "\n".join(r.events()[-6:]))
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/blank.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            pt = link_point(site + "blank.html", area, int(m.group(5)), "One in a new window")
+            r.mouse.click(*pt)
+            nw = r.wait(r"window \d+ of ", 60)
+            ev2 = r.wait(r"shown ", 120)
+            r.wait(r"pictures ", 300)
+            time.sleep(2)
+            r.shot(30)
+            check("windows: a _blank link opens a window", nw is not None and nw.startswith("window 2 of ") and
+                  ev2 is not None and ev2.startswith("shown %sfsone.html " % site), "\n".join(r.events()[-8:]))
+            r.key(W, (CTRL,))
+            cl = r.wait(r"window closed", 30)
+            time.sleep(1)
+            pt = link_point(site + "blank.html", area, int(m.group(5)), "Main in the side window")
+            r.mouse.click(*pt)
+            nw = r.wait(r"window \d+ of ", 60)
+            ev2 = r.wait(r"shown ", 120)
+            check("windows: a link naming a window opens it", cl is not None and nw is not None and
+                  ev2 is not None and ev2.startswith("shown %sfsmain.html " % site), "\n".join(r.events()[-8:]))
+            r.key(W, (CTRL,))
+            r.wait(r"window closed", 30)
+        else:
+            check("windows: the page of links shown", False, str(ev))
         # forms: the search field clicked at its end, typed into, Return
         # sends it with GET; Back shows it as it was left
         r.key(L, (CTRL,))

@@ -57,7 +57,52 @@ typedef struct { short x, y, w, h; } GRECT;
 extern short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 extern short gl_wchar, gl_hchar;
 extern short ap_id;
-extern browser br;		/* the page shown, its history */
+/* a window: its page and history (the browser), and what win.c keeps of
+   it (its parts, where it is scrolled to, the address typed, the control
+   with the keyboard, the selection); one loads at a time */
+#define WIN_BUTTONS 6		/* win.c's: Back, Forward, Reload, Home, Search, Stop */
+#define RIB_PARTS 16		/* the ribbon's parts, a phase's colour each */
+typedef struct ewin {
+	browser b;
+	struct ewin *next;
+	short h;			/* the AES's handle, -1 when closed */
+	short iconified;
+	char name[64];			/* the name a page opened it by (a link's target), "" none */
+	unsigned long drawn;		/* b.shows when it last drew a new page (main.c) */
+	GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
+	int32_t top;			/* the page's row at r_page's top */
+	int32_t left;			/* its column at r_page's left (a page wider than the window) */
+	char info[160];			/* the status bar's text as set (Atari text) */
+	char title[160];
+	GRECT but[WIN_BUTTONS];
+	int hot, sunk;			/* the button under the mouse, the one held down; -1 none */
+	/* the address field: Atari text (a URL is ASCII), the cursor, the
+	   first character shown, and whether it is all chosen */
+	char addr[1024];
+	int a_focus, a_cur, a_first, a_all;
+	int thr_frame;			/* the throbber's frame shown: 0 at rest */
+	struct {
+		short end, pen;
+	} rib[RIB_PARTS];
+	int nrib;
+	short rib_at;			/* how far it has come */
+	unsigned long rib_full;		/* when it filled (ms), 0: not full */
+	int at_rest;			/* the status bar says what the page says */
+	struct fctl *f_focus;		/* the control the keyboard is in, NULL none */
+	int typed;			/* it was typed in: change when it goes */
+	/* the text selected (win.c's sel_*) */
+	struct {
+		int on, found;
+		long ix[2];
+		unsigned long shows, serial;
+		pg_pos at[2];
+		pg_range r;
+	} sel;
+	int32_t pv_top, pv_left;	/* the page's place while its next one's preview shows */
+	int link_shown;			/* the link whose address the status bar shows, -1 none */
+} ewin;
+extern ewin *cur;		/* the window worked on: the one in front, or the one a page loads in */
+#define br (cur->b)		/* its page shown, its history */
 extern int loading;		/* a page is on its way: Esc and Stop stop it */
 /* what happened, for the Hatari rigs (main.c): an "EWEB ..." line through NatFeats */
 void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
@@ -116,12 +161,18 @@ void scr_holes(const unsigned char *pix, const unsigned long *col, short n, shor
 int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, short w, short h, void *dev);
 void scr_blit_holes(void *dev, short w, short h, const GRECT *at, const GRECT *part);
 
-/* the window (win.c) */
-extern short win_h;			/* AES handle, -1 when closed */
-extern short win_iconified;
-void win_open(void);
+/* the windows (win.c): each function works on cur */
+extern ewin *wins;			/* all of them, the newest first */
+extern int win_max;			/* how many there may be (main.c, by the memory) */
+ewin *win_new(void);			/* a window's state, made cur (not opened yet); NULL no memory */
+void win_free(ewin *w);			/* closed, its browser freed, gone (cur another, or NULL) */
+void win_use(ewin *w);			/* cur = w */
+ewin *win_of(short h);			/* EWeb's window of that handle, NULL none */
+int win_front(void);			/* cur = the one in front, if it is EWeb's: 1 if cur changed */
+int win_count(void);
+int  win_open(void);			/* cur's, in front; 0 the AES has no more */
 void win_close(void);
-void win_message(const short *msg);	/* WM_* */
+void win_message(const short *msg);	/* WM_*: to the window it names */
 void win_redraw(const GRECT *area);	/* NULL: all of it */
 void win_redraw_page(void);
 void win_preview(void);			/* the page loading's preview (br.pv_p): drawn from its top */
@@ -140,7 +191,7 @@ void win_status_again(void);		/* what the page says, again if the bar says it (t
 /* the status bar's ribbon: a load has come so far (0..1024) in a phase
    (BRPH_*: its colour); phase -1 clears it */
 void win_progress(int phase, int at);
-int win_progress_shown(void);		/* it is shown (and gone a moment after it filled) */
+int win_progress_shown(void);		/* a window's is shown (each gone a moment after it filled) */
 void win_toolbar(void);			/* the buttons again (loading started or ended) */
 void win_colours(void);			/* the screen's colours changed: the toolbar's pictures made again */
 void win_throb(int busy);		/* the throbber's next frame while busy (each 110 ms), else at rest */
@@ -166,7 +217,7 @@ void win_select_all(void);		/* Edit > Select all, on the page */
 /* main.c */
 enum {
 	C_NONE, C_ABOUT,
-	C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
+	C_NEWWIN, C_CLOSE, C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_ENCODING,
 	C_PICTURES,
@@ -187,6 +238,7 @@ int  dlg_prompt(const char *text, char *answer, int size);
 int  dlg_find(char *words, int size);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
+void follow_window(int link);		/* its page in a new window (Control-click, the link's menu) */
 void save_link(int link);		/* its file saved (Alternate-click, the link's menu) */
 struct fctl;
 /* a form sent (form.h): by the button by, or from the field from with

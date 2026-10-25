@@ -220,6 +220,13 @@ hub stay complete, with the evidence.
   `splice`, `frameset_layout` in `src/layout/layout.c`; `page.kids`, `page.lfr`). After changing
   them: `make test` (`tests/layout/frameset.html`, `frames.html`, `tests/layout/frames.py`, ewrender
   `-M X,Y` clicks and `-M back`), `make itest` (`/site/fs.html`), `make hatarigui` (browse).
+- **More windows** (DESIGN.md, More windows): each a browser of its own with win.c's state
+  (`ewin` in `ui/ui.h`; `cur` the window worked on, `br` its browser; `wins`, `win_new`,
+  `win_free`, `win_front`, messages to the window they name in `win_message`), made by `main.c`'s
+  `new_window` (^N, `to_window` for `BR_WINDOW`: a link's or a form's target `_blank` or a name no
+  frame has, `frame_target`), as many as `win_max`; `src/browse` keeps every browser's pictures
+  (`br_register`, `shown_imgs`) and shares the kept pages. After changing them: `make test`
+  (`tests/layout/frames.py`: `frames/targets.html`), `make hatarigui` (browse: ^N, ^W, `/site/blank.html`).
 - **SVG** is `src/svg` (fresh, in whole numbers; DESIGN.md, SVG): `svgread.c` reads an `<svg>` from
   EWeb's document (a file parsed by EWeb's HTML parser), `raster.c` fills and strokes its paths,
   anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a

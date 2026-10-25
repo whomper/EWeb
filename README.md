@@ -13,7 +13,8 @@ own fonts.
 
 ## Highlights
 
-- **`EWEB.PRG`**: one GEM window, as a browser has it: Back, Forward,
+- **`EWEB.PRG`**: GEM windows, as a browser has them (^N for another; a
+  link meant for a new window opens one): Back, Forward,
   Reload, Home, Search and Stop, the address, the AERA throbber turning
   while a page comes, and a status bar whose line fills as it loads; links
   followed with a click, scrolling with the sliders and the keys (a page

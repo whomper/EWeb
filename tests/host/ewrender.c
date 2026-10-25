@@ -564,6 +564,14 @@ static void click_file(browser *b, int r)
 			save_url(b, url, given);
 			click_saved = 1;
 		}
+	} else if (r == BR_WINDOW) {
+		/* for another window (_blank, a name): shown here, in its
+		   stead, as EWEB.PRG shows it in that window */
+		char url[1024], name[64];
+		str_copy(url, b->elsewhere, sizeof url);
+		str_copy(name, b->window, sizeof name);
+		r = br_go(b, url);
+		printf("window \"%s\": %s, %d \"%s\"\n", name, url, r, b->title);
 	}
 }
 
@@ -641,6 +649,7 @@ at:
 		if (c != NULL && (c->kind == FC_SUBMIT || c->kind == FC_IMAGE)) {
 			r = br_submit(b, NULL, c, 0, 0);
 			printf("sent: %d \"%s\" %s\n", r, b->title, b->url);
+			click_file(b, r);
 		} else if (c != NULL && (c->kind == FC_CHECKBOX || c->kind == FC_RADIO)) {
 			form_check(br_ctl_doc(b, c), c);
 			br_js_event(b, c, "change", &cancelled, &load);

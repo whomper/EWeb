@@ -15,6 +15,8 @@ and -M back.
 - Find reaches a frame's words, the frame scrolled to them;
 - a frame whose file isn't there says so in its box;
 - an iframe page: a link whose target is a named iframe loads it there;
+- a link or a form whose target is _blank, or a name no frame has, goes
+  to another window (ewrender shows it in its stead);
 - the ST edition (EWRENDERST) the same as EWEB.PRG's.
 
     tests/layout/frames.py EWRENDER EWEB.FNT [EWRENDERST]"""
@@ -128,6 +130,23 @@ def edition(ewr, fnt, name):
     o2 = run(ewr, fnt, ip, [at(o, "One into the box")])
     check("%s: a link into a named iframe" % name, has(o, "Page two starts here") and has(o2, "Page one, in green.") and
           any(l.startswith("followed: 0 \"Iframes\"") for l in o2) and has(o2, "Nested, with"), "\n".join(o2[:16]))
+    # links and forms for another window: _blank, a name no frame has
+    tp = os.path.join(HERE, "frames", "targets.html")
+    o = run(ewr, fnt, tp)
+    o2 = run(ewr, fnt, tp, [at(o, "One in a new window")])
+    check("%s: _blank opens another window" % name,
+          any(re.match(r'window "": .*one\.html, 0 "One"', l) for l in o2), "\n".join(o2[:6]))
+    o2 = run(ewr, fnt, tp, [at(o, "Two in the side window")])
+    check("%s: a name no frame has opens a window of that name" % name,
+          any(re.match(r'window "side": .*two\.html, 0 "Two"', l) for l in o2), "\n".join(o2[:6]))
+    o2 = run(ewr, fnt, tp, [at(o, "One here, at the top")])
+    o3 = run(ewr, fnt, tp, [at(o, "Two here")])
+    check("%s: _top and no target stay in the window" % name,
+          not any(l.startswith("window") for l in o2 + o3) and has(o2, "Page one, in green.") and
+          any(l.startswith('followed: 0 "Two"') for l in o3), "\n".join(o2[:6] + o3[:6]))
+    o2 = run(ewr, fnt, tp, [button(o, "Get it")])
+    check("%s: a form sent to _blank: its address in another window" % name,
+          any(re.match(r'window "": .*one\.html\?q=w, 0 "One"', l) for l in o2), "\n".join(o2[:6]))
     # a frame whose file isn't there
     tmp = tempfile.mkdtemp()
     try:
@@ -147,4 +166,4 @@ if len(sys.argv) > 3:
 if fails:
     sys.exit("frames: %d failed" % fails)
 print("frames: a frameset's frames, links into frames and to the window, Back, a form, details and Find in a frame, "
-      "iframes, in %d edition%s" % (2 if len(sys.argv) > 3 else 1, "s" if len(sys.argv) > 3 else ""))
+      "iframes, targets in other windows, in %d edition%s" % (2 if len(sys.argv) > 3 else 1, "s" if len(sys.argv) > 3 else ""))

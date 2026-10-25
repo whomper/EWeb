@@ -56,7 +56,6 @@ short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 1 };
-browser br;
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -76,6 +75,7 @@ static const MBAR_ITEM m_desk[] = {
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_file[] = {
+	{ "New window", "^N", C_NEWWIN },
 	{ "Open address...", "^L", C_OPENURL },
 	{ "Open file...", "^O", C_OPENFILE },
 	{ "Save page as...", "^S", C_SAVE },
@@ -83,6 +83,7 @@ static const MBAR_ITEM m_file[] = {
 	{ "Reload", "^R", C_RELOAD },
 	{ "Stop", "Esc", C_STOP },
 	{ "-", 0, 0 },
+	{ "Close window", "^W", C_CLOSE },
 	{ "Quit", "^Q", C_QUIT },
 	{ 0, 0, 0 }
 };
@@ -264,12 +265,13 @@ static void site_list_set(char *list, int size, const char *site, int on)
 	str_copy(list, out, size);
 }
 
-/* the settings for scripts given to the browser (at start, after Settings) */
-static void scripts_apply(void)
+/* the settings for scripts given to a window's browser (as it is made,
+   after Settings) */
+static void scripts_apply(browser *b)
 {
-	br.script_sites = opt.scripts;
-	br.noscript_sites = opt.noscripts;
-	br.script_mode = opt.runscripts;
+	b->script_sites = opt.scripts;
+	b->noscript_sites = opt.noscripts;
+	b->script_mode = opt.runscripts;
 }
 
 /* this site's scripts on or off: on the sites chosen, its name added to
@@ -302,6 +304,8 @@ void menu_update(void)
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
+	enable(C_NEWWIN, !loading && win_count() < win_max);
+	enable(C_CLOSE, !loading);
 	enable(C_HISTORY, !loading);
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
@@ -730,7 +734,7 @@ static void keys_flush(void)
    the address field has the keyboard, so that what is typed there stays */
 static long refresh_due(void)
 {
-	return loading || win_iconified || win_address_has_focus() ? -1 : br_refresh_due(&br);
+	return loading || cur->iconified || win_address_has_focus() ? -1 : br_refresh_due(&br);
 }
 
 /* Esc or Stop while the page's refresh waits: the page stays (said on
@@ -783,25 +787,30 @@ static void idle(void)
 				} else {
 					put_off(MU_MESAG, msg, &ev);
 				}
-			} else if (msg[0] == AP_TERM) {
-				put_off(MU_MESAG, msg, &ev);
+			} else if (msg[0] == AP_TERM || msg[0] == WM_CLOSED) {
+				put_off(MU_MESAG, msg, &ev);	/* (the window may be the pictures') */
 			} else {
 				win_message(msg);
 			}
 		}
 		if (which & MU_KEYBD) {
 			short scan = KEY_SCAN(ev.kreturn);
-			if (scan == 0x01) {
+			ewin *was = cur;
+			int front;
+			win_front();		/* (the keys are the window in front's) */
+			front = cur == was;
+			if (scan == 0x01 && front) {
 				conn_stop = 1;
 				br_pictures_stop(&br);
 				refresh_stop(0);
-			} else if (scan == 0x48 || scan == 0x50 ||
+			} else if (scan != 0x01 && (scan == 0x48 || scan == 0x50 ||
 				   (!win_address_has_focus() && (scan == 0x39 || scan == 0x47) &&
-				    !key_ctrl(ev.kstate, ev.kreturn))) {
+				    !key_ctrl(ev.kstate, ev.kreturn)))) {
 				win_key(ev.kstate, ev.kreturn);	/* scrolling: the page stays */
 			} else {
 				put_off(MU_KEYBD, msg, &ev);
 			}
+			win_use(was);
 		}
 		if (which & MU_BUTTON)
 			put_off(MU_BUTTON, msg, &ev);
@@ -909,8 +918,7 @@ static void saved(const char *path, long len)
 }
 
 static void save_file(const char *url, const char *given);
-
-static unsigned long drawn;		/* br.shows when the window last drew a new page */
+static void to_window(const char *url, const char *name);
 
 /* what a load came to, on the screen */
 /* the page loading's preview is ready: drawn in place of the page shown */
@@ -932,7 +940,7 @@ static void loaded(int r)
 	   what it came to (its script, as it loaded, clicked a download link
 	   or sent the browser on): drawn first, then what the load came to
 	   (the file selector for a file, EMail for a mail address) */
-	int fresh = r == BR_SHOWN || br.shows != drawn, pv = br.pv_p != NULL;
+	int fresh = r == BR_SHOWN || br.shows != cur->drawn, pv = br.pv_p != NULL;
 	int32_t pv_top = win_top();
 	/* the load's preview goes: the page in its place, where it was
 	   scrolled to (unless the page goes to an anchor), or the page shown
@@ -950,7 +958,7 @@ static void loaded(int r)
 	if (fresh) {
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
-		drawn = br.shows;
+		cur->drawn = br.shows;
 		win_page_changed();
 		if (pv && br.scroll_to <= 0 && pv_top > 0)
 			win_scroll_to(pv_top);
@@ -1031,6 +1039,12 @@ static void loaded(int r)
 		save_file(url, given);
 		break;
 	}
+	case BR_WINDOW:
+		/* a link or a form for another window: opened below */
+		win_address(br.url);
+		win_status("");
+		win_toolbar();
+		break;
 	case BR_ELSEWHERE:
 		/* mailto: to EMail, as the family hands each other work */
 		if (!av_send("EMAIL", br.elsewhere))
@@ -1050,6 +1064,8 @@ static void loaded(int r)
 	conn_stop = 0;
 	bm_menu();		/* a bookmark removed on about:bookmarks */
 	menu_update();
+	if (r == BR_WINDOW)
+		to_window(br.elsewhere, br.window);
 }
 
 #ifndef EW_ST
@@ -1147,6 +1163,124 @@ void follow(int link)
 		return;
 	loading_on();
 	loaded(br_follow(&br, link));
+}
+
+/* ---------------------------------------------------------------- windows */
+
+#ifndef EW_ST
+static int scripts_ok;		/* scripts may run here at all (an FPU, EWEBJS.OVL) */
+#endif
+static int can_open(void *ud, const char *url);
+
+/* a window's browser: EWeb's settings and the front end's hooks */
+static void br_setup(browser *b)
+{
+	b->sbar = pb_width();		/* a box's bars as wide and high as the AES's (5.1) */
+	b->sbar_h = pb_height();
+	b->text = (int32_t) (1024L * opt.zoom / 100);
+	b->search = opt.search;
+	b->pictures = opt.pictures;
+	b->pens = opt.pens;
+	b->say = say;
+	b->phase = on_phase;
+	b->previewed = previewed;
+	b->log = log_line;
+	b->can_open = can_open;
+	b->save_as = save_where;
+	b->snapshot = opt.snapshot;
+#ifndef EW_ST
+	b->scripts = scripts_ok;
+	scripts_apply(b);
+	b->ask = js_ask;
+#endif
+}
+
+/* a new window, opened in front and made cur; NULL when there may be no
+   more (win_max, by the memory), or the AES has none (cur as it was) */
+static ewin *new_window(void)
+{
+	ewin *was = cur, *w;
+	if (win_count() >= win_max || (w = win_new()) == NULL)
+		return NULL;
+	br_init(&w->b, 600, 819);	/* a CSS pixel is 0.8 of the screen's */
+	br_setup(&w->b);
+	if (!win_open()) {
+		win_free(w);
+		win_use(was);
+		return NULL;
+	}
+	log_event("window %d of %d", win_count(), win_max);
+	return w;
+}
+
+/* a link's or a form's page for another window (its target): the window
+   of that name if there is one, else a new one (named so), else, with no
+   more to be had, this one */
+static void to_window(const char *url, const char *name)
+{
+	char u[1024], n[64];
+	ewin *w = NULL;
+	str_copy(u, url, sizeof u);	/* (they are the browser's, which the load changes) */
+	str_copy(n, name, sizeof n);
+	if (n[0])
+		for (w = wins; w != NULL && strcmp(w->name, n) != 0; w = w->next)
+			;
+	if (w == NULL && (w = new_window()) == NULL) {
+		log_event("no window for it: here");
+		go(u);
+		return;
+	}
+	str_copy(w->name, n, sizeof w->name);
+	win_use(w);
+	if (w->iconified) {
+		short m[8] = { WM_UNICONIFY, 0, 0, 0, 0, 0, 0, 0 };
+		m[3] = w->h;
+		wind_get(w->h, WF_PREVXYWH, &m[4], &m[5], &m[6], &m[7]);
+		win_message(m);
+	}
+	win_open();		/* (in front) */
+	menu_update();
+	go(u);
+}
+
+void follow_window(int link)
+{
+	char u[1024];
+	if (loading)
+		return;
+	br_link_url(&br, link, u, sizeof u);
+	if (strncmp(u, "javascript:", 11) == 0 || strncmp(u, "mailto:", 7) == 0)
+		follow(link);	/* (the page's own, or EMail's) */
+	else if (u[0])
+		to_window(u, "");
+}
+
+/* a setting changed: each window's browser told, its page laid out
+   again (relayout) or drawn again (redraw) */
+static void each_window(int relayout, int redraw)
+{
+	ewin *was = cur, *w;
+	for (w = wins; w != NULL; w = w->next) {
+		win_use(w);
+		br.pictures = opt.pictures;
+		br.text = (int32_t) (1024L * opt.zoom / 100);
+		br.snapshot = opt.snapshot;
+#ifndef EW_ST
+		scripts_apply(&br);
+#endif
+		if (relayout && br.d != NULL) {
+			graf_mouse(BUSYBEE, 0);
+			br_relayout(&br, win_page_w());
+			graf_mouse(ARROW, 0);
+			if (!redraw)
+				win_page_relaid();
+			else
+				win_page_clamp();
+		}
+		if (redraw)
+			win_redraw(NULL);
+	}
+	win_use(was);
 }
 
 void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y)
@@ -1321,14 +1455,7 @@ static void set_zoom(int z)
 		return;
 	opt.zoom = (short) z;
 	settings_save();	/* a setting: on the disk at once (6.5) */
-	br.text = (int32_t) (1024L * opt.zoom / 100);
-	if (br.d != NULL) {
-		graf_mouse(BUSYBEE, 0);
-		br_relayout(&br, win_page_w());
-		graf_mouse(ARROW, 0);
-	}
-	win_page_clamp();
-	win_redraw(NULL);
+	each_window(1, 0);	/* (each window's) */
 }
 
 /* ---------------------------------------------------------------- commands */
@@ -1424,6 +1551,27 @@ void command(int cmd)
 		return;
 	switch (cmd) {
 	case C_ABOUT: dlg_about(); break;
+	case C_NEWWIN:
+		/* the home page in a new window */
+		if (new_window() != NULL) {
+			menu_update();
+			home();
+		} else if (win_count() >= win_max) {
+			alert(1, "[1][EWeb has as many windows|as this Atari's memory|takes (%d): close one|first.][ OK ]", win_max);
+		} else {
+			alert(1, "[3][No more windows available.][ OK ]");
+		}
+		break;
+	case C_CLOSE:
+		/* the window in front; the last: EWeb quits (the guidelines' ^W) */
+		if (win_count() <= 1) {
+			quit = 1;
+			break;
+		}
+		log_event("window closed");
+		win_free(cur);
+		win_front();
+		break;
 	case C_OPENURL: win_address_focus(1); break;
 	case C_OPENFILE: open_file(); break;
 	case C_SAVE: save_page(); break;
@@ -1481,19 +1629,13 @@ void command(int cmd)
 		   with its pictures or without */
 		opt.pictures = (short) !opt.pictures;
 		settings_save();
-		br.pictures = opt.pictures;
-		if (br.d != NULL) {
-			graf_mouse(BUSYBEE, 0);
-			br_relayout(&br, win_page_w());
-			graf_mouse(ARROW, 0);
-			win_page_relaid();
-		}
+		each_window(1, 0);
 		break;
 	case C_SNAPSHOT:
 		/* a setting: on the disk at once (6.5); the page shown comes again
 		   the other way */
 		opt.snapshot = (short) !opt.snapshot;
-		br.snapshot = opt.snapshot;
+		each_window(0, 0);
 		settings_save();
 		log_event("snapshots %s", opt.snapshot ? "on" : "off");
 		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0 && strncmp(br.url, "file:", 5) != 0)
@@ -1530,11 +1672,10 @@ void command(int cmd)
 		if (changed) {
 			gate_apply();
 			if (palette != opt.palette) {
-				/* the page drawn again in the colours now on the
-				   screen, its pictures dithered to them */
+				/* the pages drawn again in the colours now on the
+				   screen, their pictures dithered to them */
 				scr_palette();
 				win_colours();
-				win_redraw(NULL);
 			}
 			falcon_dsp_init();
 			falcon_dsp_ec_init();
@@ -1544,22 +1685,15 @@ void command(int cmd)
 				dc_close();	/* what it holds kept; made smaller at the next quit */
 				cache_open();
 			}
-			br.pictures = opt.pictures;
-			br.text = (int32_t) (1024L * opt.zoom / 100);
+			/* each window's page laid out again or drawn again */
+			each_window(pics != opt.pictures || zoom != opt.zoom, palette != opt.palette);
 #ifndef EW_ST
-			scripts_apply();
 			if (br.cur >= 0 && br_scripts_for(&br, br.url) != scripted) {
 				/* the page again, with its scripts or without */
 				command(C_RELOAD);
 				break;
 			}
 #endif
-			if (br.d != NULL && (pics != opt.pictures || zoom != opt.zoom)) {
-				graf_mouse(BUSYBEE, 0);
-				br_relayout(&br, win_page_w());
-				graf_mouse(ARROW, 0);
-				win_page_relaid();
-			}
 		}
 		break;
 	}
@@ -1665,7 +1799,8 @@ static int shortcut(short kstate, short key)
 		case 0x15: cmd = C_HISTORY; break;		/* Y */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */
-		case 0x11: cmd = C_QUIT; break;			/* W: the one window */
+		case 0x11: cmd = C_CLOSE; break;		/* W: the window, the last one quits */
+		case 0x31: cmd = C_NEWWIN; break;		/* N */
 		case 0x2c: cmd = shift ? C_FORWARD : C_BACK; break;	/* Z */
 		case 0x0b: cmd = C_ACTUAL; break;		/* 0 */
 		case 0x70: cmd = C_ACTUAL; break;		/* 0 on the keypad */
@@ -1700,6 +1835,8 @@ static void av_start(const char *s);
 static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *hover_y)
 {
 	AEVENT ev = *pev;
+	if (win_front())
+		menu_update();	/* (another window in front: its page's commands) */
 	if (which & MU_M1) {
 		short k;
 		graf_mkstate(hover_x, hover_y, &k, &k);
@@ -1729,8 +1866,12 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 			dd_done(&dr);
 		}
 		}
+		if (!quit && win_front())
+			menu_update();
 	}
-	if (win_iconified)	/* an icon takes no keys or clicks */
+	if (quit)
+		return;
+	if (cur->iconified)	/* an icon takes no keys or clicks */
 		which &= ~(MU_KEYBD | MU_BUTTON);
 	if (which & MU_KEYBD) {
 		if (KEY_SCAN(ev.kreturn) == 0x01 && br_refresh_due(&br) >= 0)
@@ -1742,8 +1883,13 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 	if (which & MU_BUTTON) {
 		short h = wind_find(ev.mx, ev.my), t, dd, mx, my, mbt, ks;
 		wind_get(0, WF_TOP, &t, &dd, &dd, &dd);
-		if (h > 0 && h != t)	/* a click in a window behind: bring it up too */
+		if (h > 0 && h != t) {	/* a click in a window behind: bring it up too */
 			wind_set(h, WF_TOP, 0, 0, 0, 0);
+			if (win_of(h) != NULL) {
+				win_use(win_of(h));
+				menu_update();
+			}
+		}
 		if (win_mouse(ev.mx, ev.my, ev.mbutton, ev.breturn >= 2 ? 2 : 1, ev.kstate))
 			menu_update();
 		do {			/* the button let go */
@@ -1769,6 +1915,11 @@ static void pictures(void)
 	int32_t y0, y1;
 	int r;
 	unsigned long t = pf_ms();
+	static const ewin *ph_of;	/* the window the ribbon's phase is of */
+	if (ph_of != cur) {
+		ph_of = cur;
+		ph = -1;
+	}
 	pics = 1;
 	conn_stop = 0;
 	conn_bytes = 0;
@@ -1798,6 +1949,31 @@ static void pictures(void)
 	}
 }
 
+/* the window whose pictures come next: the one in front's first, then
+   the others' (not an icon's); NULL none */
+static ewin *pictures_window(void)
+{
+	ewin *w;
+	if (!cur->iconified && br_pictures_pending(&br))
+		return cur;
+	for (w = wins; w != NULL; w = w->next)
+		if (!w->iconified && w->h > 0 && br_pictures_pending(&w->b))
+			return w;
+	return NULL;
+}
+
+/* each window's throbber: moving on while its pictures come, at rest
+   once they have */
+static void throb_all(void)
+{
+	ewin *was = cur, *w;
+	for (w = wins; w != NULL; w = w->next) {
+		win_use(w);
+		win_throb(!quit && br_pictures_pending(&br));
+	}
+	win_use(was);
+}
+
 /* ---------------------------------------------------------------- start and end */
 
 static void work_dir(char *out, int size)
@@ -1817,13 +1993,15 @@ static void work_dir(char *out, int size)
 static void crash_quit(const char *what)
 {
 	char a[200];
+	const ewin *w;
 	graf_mouse(ARROW, 0);
 	snprintf(a, sizeof a, "[3][EWeb has crashed|(%s).|What happened is in|CRASH.LOG, in EWeb's folder.][ Quit ]", what);
 	form_alert(1, a);
-	if (win_h > 0) {
-		wind_close(win_h);
-		wind_delete(win_h);
-	}
+	for (w = wins; w != NULL; w = w->next)
+		if (w->h > 0) {
+			wind_close(w->h);
+			wind_delete(w->h);
+		}
 	menu_bar(mb.tree, 0);
 	scr_exit();
 	v_clsvwk(vdi_h);
@@ -1850,10 +2028,10 @@ static void command_line(char *out, int size)
 static void av_start(const char *s)
 {
 	char what[512];
-	if (win_h > 0 && win_iconified) {
+	if (cur->h > 0 && cur->iconified) {
 		short m[8] = { WM_UNICONIFY, 0, 0, 0, 0, 0, 0, 0 };
-		m[3] = win_h;
-		wind_get(win_h, WF_PREVXYWH, &m[4], &m[5], &m[6], &m[7]);
+		m[3] = cur->h;
+		wind_get(cur->h, WF_PREVXYWH, &m[4], &m[5], &m[6], &m[7]);
 		win_message(m);
 	}
 	win_open();
@@ -1980,14 +2158,10 @@ int main(void)
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 
-	br_init(&br, 600, 819);		/* a CSS pixel is 0.8 of the screen's */
-	br.sbar = pb_width();		/* a box's bars as wide and high as the AES's (5.1) */
-	br.sbar_h = pb_height();
-	br.text = (int32_t) (1024L * opt.zoom / 100);
 	{
 		/* pages kept for Back and Forward (the heap takes TT RAM first):
 		   a quarter of the free TT RAM up to 24 MB, else an eighth of
-		   the free ST RAM up to 2 MB */
+		   the free ST RAM up to 2 MB, shared by the windows */
 		long tt = (long) Mxalloc(-1L, 1), st = (long) Mxalloc(-1L, 0);
 		if (st < 0) {		/* TOS 1.x has no Mxalloc: all is ST RAM */
 			tt = 0;
@@ -2007,27 +2181,26 @@ int main(void)
 			img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
 			img_max_px = 1L << 20;
 		}
+		/* windows, each with a page laid out: eight beside TT RAM, four
+		   in 6 MB of ST RAM, else two (a 4 MB Falcon, a 1040 ST) */
+		win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;
 	}
-	br.search = opt.search;
-	br.pictures = opt.pictures;
-	br.pens = opt.pens;
-	br.say = say;
-	br.phase = on_phase;
-	br.previewed = previewed;
-	br.log = log_line;
-	br.can_open = can_open;
-	br.save_as = save_where;
-	br.snapshot = opt.snapshot;
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
 	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
 #ifndef EW_ST
 	path_join(path, sizeof path, opt.workdir, "EWEBJS.OVL");
 	js_ovl_at(path);
-	br.scripts = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
-	scripts_apply();
-	br.ask = js_ask;
+	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
 #endif
-	win_open();
+	if (new_window() == NULL) {
+		graf_mouse(ARROW, 0);
+		alert(1, "[3][EWeb can't open its window:|the AES has no more, or|memory is short.][ Quit ]");
+		menu_bar(mb.tree, 0);
+		scr_exit();
+		v_clsvwk(vdi_h);
+		appl_exit();
+		return 1;
+	}
 	menu_update();
 	crash_offer("EWeb", "in EWeb's folder");
 	if (strcmp(net_stack(), "none") == 0)
@@ -2045,8 +2218,8 @@ int main(void)
 
 	while (!quit) {
 		short which;
-		int more = !loading && !win_iconified && br_pictures_pending(&br);
-		long due = loading || win_iconified ? -1 : br_js_due(&br);
+		int more = !loading && pictures_window() != NULL;
+		long due = loading || cur->iconified ? -1 : br_js_due(&br);
 		long rdue = refresh_due();
 		int rib;
 		short wait;
@@ -2071,8 +2244,11 @@ int main(void)
 		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)
 			js_timers();
 #endif
-		if ((which & MU_TIMER) && !quit && more) {
+		if ((which & MU_TIMER) && !quit && more && pictures_window() != NULL) {
+			ewin *was = cur;
+			win_use(pictures_window());
 			pictures();
+			win_use(was);
 			if (later.which) {
 				short w = later.which;
 				later.which = 0;
@@ -2080,13 +2256,23 @@ int main(void)
 			}
 		}
 		/* moving on while the pictures come; at rest once they have */
-		win_throb(!quit && (loading || br_pictures_pending(&br)));
+		throb_all();
 	}
 
 	log_event("quit");
 	graf_mouse(BUSYBEE, 0);
 	http_close_all();
-	win_close();
+	{
+		/* the window in front last: its place is kept (WINDOW=) */
+		ewin *front = cur, *w;
+		for (w = wins; w != NULL; w = w->next)
+			if (w != front) {
+				win_use(w);
+				win_close();
+			}
+		win_use(front);
+		win_close();
+	}
 	settings_save();
 	ck_save();		/* the cookies that last, once, if they changed */
 	hg_save();		/* the pages shown, once, if they changed */

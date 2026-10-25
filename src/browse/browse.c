@@ -1609,16 +1609,42 @@ static void pg_free(page *p)
 	page_free(p);
 }
 
-/* the page shown's pictures are those the trimming keeps */
-static void shown_imgs(const browser *b)
+/* the browsers there are (EWEB.PRG's windows): what each shows is kept */
+#define BR_ALL 16
+static browser *br_all[BR_ALL];
+static int br_n;
+
+static void br_register(browser *b, int on)
+{
+	int i;
+	for (i = 0; i < br_n && br_all[i] != b; i++)
+		;
+	if (on && i == br_n && br_n < BR_ALL)
+		br_all[br_n++] = b;
+	else if (!on && i < br_n)
+		br_all[i] = br_all[--br_n];
+}
+
+static void page_shown_imgs(const page *p)
 {
 	long i;
-	img_current(NULL);
-	if (b->p == NULL)
+	if (p == NULL)
 		return;
-	for (i = 0; i < b->p->nitems; i++)
-		if (b->p->items[i].type == DL_IMAGE)
-			img_current(b->p->items[i].img);
+	for (i = 0; i < p->nitems; i++)
+		if (p->items[i].type == DL_IMAGE)
+			img_current(p->items[i].img);
+}
+
+/* the pages shown's pictures (b's, and every window's) are those the
+   trimming keeps */
+static void shown_imgs(const browser *b)
+{
+	int i;
+	img_current(NULL);
+	page_shown_imgs(b->p);
+	for (i = 0; i < br_n; i++)
+		if (br_all[i] != b)
+			page_shown_imgs(br_all[i]->p);
 }
 
 /* ---------------------------------------------------------------- frames */
@@ -2335,8 +2361,8 @@ static void keep_trim(browser *b)
 				far = i;
 			}
 		}
-		if (total <= br_keep_max || far < 0)
-			return;
+		if (total <= br_keep_max / (br_n > 1 ? br_n : 1) || far < 0)
+			return;		/* (each window's history its share) */
 		unkeep(&b->hist[far]);
 	}
 }
@@ -3307,6 +3333,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	b->pictures = 1;
 	b->pens = -1;
 	b->script_mode = 1;	/* the sites chosen */
+	br_register(b, 1);
 }
 
 void br_free(browser *b)
@@ -3331,6 +3358,7 @@ void br_free(browser *b)
 	b->nhist = 0;
 	b->cur = -1;
 	b->at = -1;
+	br_register(b, 0);
 }
 
 int br_go(browser *b, const char *typed)
@@ -3393,9 +3421,10 @@ static int link_to_save(browser *b, const char *url, const char *dl)
 
 /* where a link or a form in frame fr (0: the page's own) whose target is
    t (NULL or "": its document's <base target>) goes: a frame (its index
-   among the page's frames), or -1 the window. _blank, and a name no frame
-   has, go to the window too until EWeb opens windows of its own */
-static int frame_target(const browser *b, int fr, const char *t)
+   among the page's frames), -1 the window, or -2 another window: _blank
+   (win "") or the one of a name no frame has (win that name, which the
+   front end looks for among its windows) */
+static int frame_target(const browser *b, int fr, const char *t, char *win, int size)
 {
 	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
 	int i;
@@ -3409,12 +3438,13 @@ static int frame_target(const browser *b, int fr, const char *t)
 		return fr - 1;
 	if (strcasecmp(t, "_parent") == 0)
 		return fr > 0 ? fs->f[fr - 1].parent : -1;
-	if (strcasecmp(t, "_top") == 0 || strcasecmp(t, "_blank") == 0 || fs == NULL)
+	if (strcasecmp(t, "_top") == 0)
 		return -1;
-	for (i = 0; i < fs->n; i++)
+	for (i = 0; fs != NULL && i < fs->n; i++)
 		if (fs->f[i].el != NULL && strcmp(fs->f[i].name, t) == 0)
 			return i;
-	return -1;
+	str_copy(win, strcasecmp(t, "_blank") == 0 ? "" : t, size);
+	return -2;
 }
 
 /* the frame (1 + its index) whose document n is in, 0 the page's own */
@@ -3535,9 +3565,13 @@ int br_follow(browser *b, int link)
 	fr = page_link_frame(b->p, link);
 	if (has_scheme(url, "javascript") && fr > 0)
 		return BR_STOPPED;	/* (a frame's scripts don't run) */
-	k = frame_target(b, fr, page_link_target(b->p, link));
+	k = frame_target(b, fr, page_link_target(b->p, link), b->window, sizeof b->window);
 	if (k >= 0 && !has_scheme(url, "mailto") && !has_scheme(url, "javascript"))
 		return frame_go(b, k, url, NULL);
+	if (k == -2 && !has_scheme(url, "mailto") && !has_scheme(url, "javascript") && strlen(url) < sizeof b->elsewhere) {
+		str_copy(b->elsewhere, url, sizeof b->elsewhere);
+		return BR_WINDOW;
+	}
 	if (has_scheme(url, "javascript")) {
 		int lr, r = br_js_url(b, url, &lr);
 		if (r == BRJ_LOAD)
@@ -3593,7 +3627,7 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 		const char *t = by != NULL ? dn_attr(by, "formtarget") : NULL;
 		if (t == NULL && form != NULL)
 			t = dn_attr(form, "target");
-		k = frame_target(b, fr, t);
+		k = frame_target(b, fr, t, b->window, sizeof b->window);
 	}
 	if (!s.post || !(has_scheme(url, "http") || has_scheme(url, "https"))) {
 		/* the entries as the address's query, its fragment kept */
@@ -3613,7 +3647,14 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 		url[q] = '?';
 		memcpy(url + q + 1, s.body, (size_t) s.len);
 		strcpy(url + q + 1 + s.len, frag);
-		r = k >= 0 ? frame_go(b, k, url, NULL) : load(b, url, NAV_NEW);
+		if (k == -2 && strlen(url) < sizeof b->elsewhere) {
+			/* (a form sent to another window: its address there; one
+			   that posts is answered in this one) */
+			str_copy(b->elsewhere, url, sizeof b->elsewhere);
+			r = BR_WINDOW;
+		} else {
+			r = k >= 0 ? frame_go(b, k, url, NULL) : load(b, url, NAV_NEW);
+		}
 	} else if (k >= 0) {
 		r = frame_go(b, k, url, &s);
 	} else {

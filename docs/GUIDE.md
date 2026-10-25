@@ -297,12 +297,33 @@ the mouse, a button's name, what a load is doing, or, for a secure page,
 how it is secured. The window's title is the page's.
 
 Click a link to follow it (the pointer turns into a hand over one).
-Right-click a link for its commands (open it, save its file, copy its
-address), the page for Back, Forward, Reload, Copy and Select all, or
-the address for Copy, Cut, Paste and Select all.
+Right-click a link for its commands (open it, open it in a new window,
+save its file, copy its address), the page for Back, Forward, Reload,
+Copy and Select all, or the address for Copy, Cut, Paste and Select all.
 
 The window can be moved, sized, fulled and iconified as any other; EWeb
 lays the page out again for the new width.
+
+## More windows
+
+**^N** (File > New window) opens another window with the home page, a
+little below and to the right of the one in front; **Control-click** a
+link, or choose Open it in a new window from its menu, to read it in one.
+A link the page means for a new window (its target) opens one too, and
+a link naming a window EWeb opened for it earlier loads in that window.
+Each window has its own page, Back and Forward, and address; the
+settings, bookmarks, history, cookies and cache are the same in all of
+them.
+
+The keys and the menus work on the window in front. One page loads at a
+time: while it does, the other windows can be moved, topped and
+redrawn but wait for it. Pictures come for the window in front first,
+then for the others; a page's timers and its refresh wait while its
+window is behind. **^W** (File > Close window) closes the window in
+front, and closing the last one quits EWeb.
+
+How many windows there may be depends on the memory: eight beside TT
+RAM, four with 6 MB of ST RAM free, else two (a 4 MB Falcon, a 1040 ST).
 
 ## Moving around a page
 
@@ -350,8 +371,7 @@ A link in a frame opens where the page says: in its own frame, in the
 frame it names (a menu's links in the text beside it), or in the whole
 window. **Undo** goes back a step in a frame as well as from page to
 page, and the address shown stays the page's. Scripts in frames don't
-run, so a player or an advert in a box may stay empty, and a link meant
-to open a new window opens in this one.
+run, so a player or an advert in a box may stay empty.
 
 ## The home page
 
@@ -460,6 +480,8 @@ of it.
 | ^F | find words on the page |
 | ^G, Shift-^G | find the next, the one before |
 | Alternate-click | save a link's file |
+| Control-click | open a link in a new window |
+| ^N | a new window, with the home page |
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |
@@ -476,7 +498,8 @@ of it.
 | Return | in a field: send its form |
 | ^, | the Settings |
 | Help | this guide |
-| ^Q, ^W | quit |
+| ^W | close the window in front (the last one: quit) |
+| ^Q | quit |
 
 Help > Keys shows the main keys in a box of their own.
 

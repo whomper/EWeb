@@ -57,9 +57,12 @@ enum {
 	BR_DOWNLOAD,		/* a file EWeb doesn't show, or one its server says to
 				   save (Content-Disposition: attachment): br.dl holds it, to
 				   be saved (br_dl_save) or let go (br_dl_free) */
-	BR_SAVE			/* a link to save, not to follow (<a download> to the page's
+	BR_SAVE,		/* a link to save, not to follow (<a download> to the page's
 				   own site): br.dl's url and name say which, for br_save_url
 				   to fetch */
+	BR_WINDOW		/* a link or a form for another window (its target _blank,
+				   or a name no frame has): br.elsewhere its address,
+				   br.window the window's name ("" a new one) */
 };
 /* Each but BR_SHOWN leaves the page shown as it was, unless the load
    showed a new one on the way: a page whose script, as it loaded, clicked
@@ -81,7 +84,8 @@ typedef struct browser {
 	int relaid;		/* BR_SAME: the page laid out again first (a closed
 				   details opened to show the place), or gone when
 				   that didn't fit even alone (p NULL, and a note) */
-	char elsewhere[1024];	/* BR_ELSEWHERE: the address */
+	char elsewhere[1024];	/* BR_ELSEWHERE, BR_WINDOW: the address */
+	char window[64];	/* BR_WINDOW: the window's name, "" a new one */
 	/* how long the last page took, ms: fetching it (its stylesheets
 	   too), parsing, styling, laying out */
 	unsigned long ms_fetch, ms_parse, ms_style, ms_layout;
