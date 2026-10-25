@@ -927,6 +927,13 @@ static void span_of(ec_ctx *c, int dep, int op, int64_t x)
 }
 
 /* a length in a media query: px, with em and rem the default font size */
+/* a length too long for an ec_fx: as long as one goes (a fuzzer's
+   @media (min-width: 2147482624em)) */
+static int32_t mq_clamp(int64_t v)
+{
+	return v > INT32_MAX ? INT32_MAX : v < -INT32_MAX ? -INT32_MAX : (int32_t) v;
+}
+
 static int mq_length(ec_ctx *c, const ec_tok *t, int32_t *px)
 {
 	int32_t u;
@@ -940,14 +947,14 @@ static int mq_length(ec_ctx *c, const ec_tok *t, int32_t *px)
 	if (u > 0)
 		*px = fx_mul(t->num, u);
 	else if (u == EC_UNIT_REL(CU_EM) || u == EC_UNIT_REL(CU_REM))
-		*px = t->num * c->media.font_size;
+		*px = mq_clamp((int64_t) t->num * c->media.font_size);
 	else if (u == EC_UNIT_REL(CU_EX) || u == EC_UNIT_REL(CU_CH))
-		*px = t->num * c->media.font_size / 2;
+		*px = mq_clamp((int64_t) t->num * c->media.font_size / 2);
 	else if (u == EC_UNIT_REL(CU_VW)) {
-		*px = t->num * c->media.width / 100;
+		*px = mq_clamp((int64_t) t->num * c->media.width / 100);
 		span_pin(c);		/* a length that goes with the width */
 	} else if (u == EC_UNIT_REL(CU_VH))
-		*px = t->num * c->media.height / 100;
+		*px = mq_clamp((int64_t) t->num * c->media.height / 100);
 	else
 		return 0;
 	return 1;
