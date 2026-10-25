@@ -2015,19 +2015,20 @@ static void crash_quit(const char *what)
 	appl_exit();
 }
 
-/* the command line: an address or a file to open first */
+/* the command line: an address or a file to open first, the basepage's
+   or the ARGV way's (MiNT, MagiC: common's cmd_line, the guidelines' 4.3),
+   without the quotes cmd_line puts round a name with a space */
 static void command_line(char *out, int size)
 {
-	unsigned char *bp = _BasePage;
-	int len = bp[0x80];
-	out[0] = 0;
-	if (len <= 0 || len >= 127)
-		return;
-	if (len >= size)
-		len = size - 1;
-	memcpy(out, bp + 0x81, len);
-	out[len] = 0;
+	const char *s = cmd_line();
+	int len;
+	snprintf(out, size, "%s", s);
 	str_trim(out);
+	len = (int) strlen(out);
+	if (len >= 2 && out[0] == '"' && out[len - 1] == '"') {
+		memmove(out, out + 1, len - 2);
+		out[len - 2] = 0;
+	}
 }
 
 /* VA_START (common/ui/av.c) from the desktop or another program: an
