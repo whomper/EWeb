@@ -3679,6 +3679,10 @@ the Pi's: its round trip to a server on the internet and its own decoding.
 While doing this, a picture shown at two sizes that didn't fit the pictures' memory together was
 found to be decoded at each in turn for ever (Pictures, above; fixed: `img_size_shown`).
 
+With the guidelines' 3.5 (dialogs in the AES's windows on MiNT and MagiC) and `common/`'s update
+beside it, `EWEB.PRG` grew 9 KB from 0.38's (1,225,347 bytes) and `EWEBST.PRG` 6 KB (648,905). A webgate that knows `/prefetch` says each picture it fetches ahead
+in its log, the Atari and the host only (7.3).
+
 Tests: `make itest` (`/site/lazy.html`: with a webgate that makes pictures ahead, its 8 pictures
 in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate's
 `test_webgate.py` (`PrefetchTest`).
