@@ -642,6 +642,14 @@ void dc_put_own(const char *key, const char *what, const char *data, long len)
 		flush();
 }
 
+int dc_has(const char *key)
+{
+	if (dir[0] == 0)
+		return 0;
+	load();
+	return find(key) != NULL;
+}
+
 int dc_get(const char *key, DC_GOT *g)
 {
 	DCE *e;

@@ -4573,6 +4573,170 @@ static int shown_size(const browser *b, const ew_img *im, int32_t *w, int32_t *h
 	return 0;
 }
 
+/* how a picture is asked for through the Pi's gateway (rw x rh: at
+   that size, else at the size it is shown, else as wide as the page):
+   its header line ("X-Gateway-Picture: ...\r\n", fit), and with pens
+   the disk cache's variant for them (variant); 1 if pens are asked for */
+static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t rw, int32_t rh, char *fit, int fsize,
+		   char *variant, int vsize)
+{
+	int pens = !has_scheme(url, "file") && pens_wanted(b);
+	if (pens) {
+		int32_t w = rw, h = rh;
+		char size[32] = "";
+		if ((w > 0 && h > 0) || shown_size(b, im, &w, &h))
+			snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
+			 (long) (b->width > 0 ? b->width : 640), size, img_pal->n, img_pal_crc(),
+#ifdef EW_ST
+			 "tj"
+#else
+			 "lj"
+#endif
+			 );
+		if (size[0])
+			snprintf(variant, vsize, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
+		else
+			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(),
+				 (long) (b->width > 0 ? b->width : 640));
+		variant[strcspn(variant, ";")] = 0;
+	} else {
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
+		variant[0] = 0;
+	}
+	return pens;
+}
+
+/* ---------------------------------------------------------------- pictures made ahead */
+
+/* Through the Pi's gateway, a page's pictures are named to webgate when
+   they begin (POST http://webgate/prefetch, a line each: the address as
+   the request will have it, its X-Gateway-Picture, its cookies), the
+   window's first: webgate fetches and makes them a few at a time, so
+   that each request after is answered at once, without the server's
+   time for each in turn. Those the disk cache has (fresh, or to be asked
+   about) aren't named. A webgate that doesn't make them ahead answers
+   otherwise: not asked again this run */
+#define PF_MAX 64
+static int pf_none;
+
+static void prefetch(browser *b, int32_t top, int32_t height)
+{
+	SBUF body;
+	long i, k, n = 0;
+	struct { long item; unsigned long dist; } *list;
+	if (pf_none || !http_gateway[0] || b->p == NULL || (list = malloc(PF_MAX * sizeof *list)) == NULL)
+		return;
+	/* each picture to fetch once, by how far it is from the window (as
+	   next_item takes them) */
+	for (i = 0; i < b->p->nitems; i++) {
+		const dl_item *d = &b->p->items[i];
+		unsigned long dist;
+		long j;
+		if (d->type != DL_IMAGE || !to_fetch(b, d->img) || img_stale(d->img))
+			continue;
+		for (k = 0; k < n && b->p->items[list[k].item].img != d->img; k++)
+			;
+		if (k < n)
+			continue;
+		dist = d->y + d->h > top && d->y < top + height ? 0 :
+		       d->y >= top + height ? 1 + (unsigned long) (d->y - (top + height)) :
+		       0x40000000UL + (unsigned long) (top - (d->y + d->h));
+		if (n == PF_MAX && dist >= list[n - 1].dist)
+			continue;
+		j = n < PF_MAX ? n++ : n - 1;
+		while (j > 0 && list[j - 1].dist > dist) {
+			list[j] = list[j - 1];
+			j--;
+		}
+		list[j].item = i;
+		list[j].dist = dist;
+	}
+	sb_init(&body);
+	sb_adds(&body, "Referer: ");
+	sb_adds(&body, b->url);
+	sb_adds(&body, "\n");
+	sb_adds(&body, "Accept: image/jpeg,image/png,image/svg+xml,image/gif;q=0.9\n");
+	for (k = 0, i = 0; k < n; k++) {
+		const ew_img *im = b->p->items[list[k].item].img;
+		const char *url = img_url(im);
+		char fit[200], variant[64], key[4096], target[URL_MAX], hp[300];
+		URL *u = malloc(sizeof *u);
+		CKCTX x;
+		SBUF ck;
+		if (u == NULL)
+			break;
+		if (!url_parse(u, url, NULL) || !u->special) {
+			free(u);
+			continue;
+		}
+		pic_ask(b, im, url, 0, 0, fit, sizeof fit, variant, sizeof variant);
+		/* (what the disk cache has, fresh or to be asked about: not made) */
+		str_copy(key, url, sizeof key);
+		key[strcspn(key, "#")] = 0;
+		if (variant[0] && strlen(key) + strlen(variant) + 2 < sizeof key) {
+			strcat(key, "#");
+			strcat(key, variant);
+		}
+		if (dc_has(key)) {
+			free(u);
+			continue;
+		}
+		url_target(u, target, sizeof target);
+		url_hostport(u, hp, sizeof hp);
+		fit[strcspn(fit, "\r")] = 0;
+		/* (sb_adds: an address may be longer than sb_printf's line) */
+		sb_adds(&body, u->tls ? "https://" : "http://");
+		sb_adds(&body, hp);
+		sb_adds(&body, target);
+		sb_adds(&body, "\t");
+		sb_adds(&body, strchr(fit, ':') + 2);
+		x.top = 0;
+		x.safe = 1;
+		x.site = has_scheme(b->url, "http") || has_scheme(b->url, "https") ? b->url : NULL;
+		x.script = 0;
+		sb_init(&ck);
+		if (ck_get(u, &x, &ck) && ck.s != NULL) {
+			sb_adds(&body, "\t");
+			sb_adds(&body, ck.s);
+		}
+		sb_free(&ck);
+		sb_adds(&body, "\n");
+		free(u);
+		i++;
+	}
+	free(list);
+	if (i > 0 && body.s != NULL) {
+		FSUBMIT post;
+		FETCH *f = malloc(sizeof *f);
+		int r;
+		memset(&post, 0, sizeof post);
+		post.post = 1;
+		post.body = body.s;
+		post.len = body.len;
+		str_copy(post.ctype, "text/plain; charset=utf-8", sizeof post.ctype);
+		if (f != NULL) {
+			r = fetch(b, "http://webgate/prefetch", NULL, 1, "*/*", 4096, 0, &post, f) ? f->status : 0;
+			if (r == 409) {
+				/* the Pi hasn't the screen's colours: sent, then the list again */
+				free(f->data);
+				r = send_colours(b) && fetch(b, "http://webgate/prefetch", NULL, 1, "*/*", 4096, 0, &post, f) ?
+				    f->status : 0;
+			}
+			if (r != 204 && !conn_stop)
+				pf_none = 1;	/* (an older webgate) */
+			free(f->data);
+			free(f);
+			if (b->log != NULL) {
+				char line[80];
+				snprintf(line, sizeof line, "prefetch %ld: %s", i, r == 204 ? "made ahead" : "not made ahead");
+				b->log(b->ud, line);
+			}
+		}
+	}
+	sb_free(&body);
+}
+
 /* the file of a picture: from the network, a file or a data: address.
    Through the Pi's gateway, the picture is asked for as the page can
    show it: no wider than the page (webgate makes a bigger one smaller,
@@ -4604,29 +4768,7 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 		snprintf(msg, sizeof msg, "Pictures: %d of %d from %s...", b->pic_done + 1,
 			 b->pic_n > b->pic_done ? b->pic_n : b->pic_done + 1, has_scheme(url, "file") ? "the disk" : host);
 		say(b, "%s", msg);
-		pens = !has_scheme(url, "file") && pens_wanted(b);
-		if (pens) {
-			int32_t w = rw, h = rh;
-			char size[32] = "";
-			if ((w > 0 && h > 0) || shown_size(b, im, &w, &h))
-				snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
-			snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
-				 (long) (b->width > 0 ? b->width : 640), size, img_pal->n, img_pal_crc(),
-#ifdef EW_ST
-				 "tj"
-#else
-				 "lj"
-#endif
-				 );
-			if (size[0])
-				snprintf(variant, sizeof variant, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
-			else
-				snprintf(variant, sizeof variant, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(),
-					 (long) (b->width > 0 ? b->width : 640));
-			variant[strcspn(variant, ";")] = 0;
-		} else {
-			snprintf(fit, sizeof fit, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
-		}
+		pens = pic_ask(b, im, url, rw, rh, fit, sizeof fit, variant, sizeof variant);
 		fetch_more = http_gateway[0] ? fit : NULL;
 		fetch_variant = pens ? variant : NULL;
 		fetch_refuse = picture_refuse;
@@ -4677,6 +4819,13 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 	if (b->p == NULL)
 		return BRP_NONE;
 	conn_stop = 0;
+	if (b->pf_shows != b->shows) {
+		/* (a page's pictures begin: through the Pi, made ahead) */
+		b->pf_shows = b->shows;
+		prefetch(b, top, height);
+		if (conn_stop)
+			return BRP_STOPPED;
+	}
 	/* a frameset's frames first (they are the page), its pictures (and
 	   those of the frames come), then its iframes (an embedded player, a
 	   map: less than the page's own pictures) */

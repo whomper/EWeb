@@ -128,7 +128,10 @@ writing, clipping, masks and filters aren't drawn. Pictures EWeb can't
 show (a bigger WebP, AVIF) aren't fetched at all; through the Raspberry Pi gateway they
 come as JPEG or PNG, and big ones come made smaller on the Pi, a few dozen
 kilobytes instead of a megabyte, or ready for your screen (see
-[Secure sites](#secure-sites)). A picture whose size the page doesn't give
+[Secure sites](#secure-sites)). The Pi also fetches a page's pictures a
+few at a time as soon as the page is shown, so that each is ready when
+EWeb asks for it, once the Pi has a gateway that does (`update-pi.sh`
+brings the latest). A picture whose size the page doesn't give
 shows its description first, and the page is laid out again when its
 size is known (at most every two seconds, so that it doesn't jump about
 while you read).

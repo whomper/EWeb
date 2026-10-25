@@ -55,6 +55,7 @@ Pages:
   /site/fs.html  a frameset: fsmenu.html, whose link names the main
                  frame (fsone.html, with a picture), and fsmain.html
   /site/blank.html  links whose targets are other windows (_blank, a name)
+  /site/lazy.html  8 pictures, each LAZY seconds in coming (lazy/N.png)
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
@@ -434,6 +435,12 @@ FS_MENU = (b"<!DOCTYPE html><title>Menu</title><body style='background:#dde'><p>
 FS_MAIN = b"<!DOCTYPE html><title>Main</title><p>The main frame's first page.\n"
 FS_ONE = (b"<!DOCTYPE html><title>One</title><body style='background:#efe'><p>Page one in the main frame."
           b"<p><img src=logo.png alt=logo>\n")
+# a page whose 8 pictures each take LAZY seconds to come, as a far
+# site's do (/site/lazy.html, /site/lazy/N.png): made ahead by webgate
+# they come in about a quarter of the time (make itest)
+LAZY = 0.5
+LAZY_PAGE = (b"<!DOCTYPE html><title>Lazy</title><p>Pictures from far away:<p>" +
+             b"".join(b"<img src=lazy/%d.png alt=%d> " % (i, i) for i in range(8)) + b"\n")
 # links for other windows (/site/blank.html): _blank, and a window's name
 BLANK_PAGE = (b"<!DOCTYPE html><title>Windows</title><p><a href=fsone.html target=_blank>One in a new window</a>"
               b"<p><a href=fsmain.html target=side>Main in the side window</a>\n")
@@ -648,6 +655,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, GW_PAGE)
         elif p == "/site/wiki.html":
             self.send(200, WIKI_PAGE)
+        elif p == "/site/lazy.html":
+            self.send(200, LAZY_PAGE)
+        elif p.startswith("/site/lazy/") and p.endswith(".png"):
+            time.sleep(LAZY)
+            self.send(200, PICS["logo.png"][0], "image/png")
         elif p == "/site/blank.html":
             self.send(200, BLANK_PAGE)
         elif p in ("/site/fs.html", "/site/fsmenu.html", "/site/fsmain.html", "/site/fsone.html"):

@@ -1043,6 +1043,21 @@ try:
                 out = p.stdout + p.stderr
                 check("the gateway: a page and its pictures", p.returncode == 0 and 'title "Pictures"' in out
                       and len(re.findall(r"^picture \S+ decoded", out, re.M)) == 5, out)
+                # a page's pictures, each half a second in coming: a webgate
+                # that makes them ahead (/prefetch) has them four at a time
+                t0 = time.time()
+                lp = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", "http://localhost:%d/site/lazy.html"
+                                    % HTTP], cwd=work, capture_output=True, text=True, timeout=120)
+                lazy_s = time.time() - t0
+                lout = lp.stdout + lp.stderr
+                shown = len(re.findall(r"^picture \S+ decoded", lout, re.M))
+                if "/prefetch" in open(WEBGATE).read():
+                    check("the gateway: a page's pictures made ahead, four at a time",
+                          lp.returncode == 0 and shown == 8 and "prefetch 8: made ahead" in lout and lazy_s < 3.0,
+                          "%.1f s\n%s" % (lazy_s, lout))
+                else:
+                    check("the gateway: a webgate that doesn't make pictures ahead, the pictures as before",
+                          lp.returncode == 0 and shown == 8 and "prefetch 8: not made ahead" in lout, lout)
                 if "X-Gateway-Picture" in open(WEBGATE).read():
                     # the Pi makes pictures as the page shows them: big.png
                     # (800 x 600) comes 608 wide, laid out at its own size

@@ -3646,6 +3646,43 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
 ewrender shows another window's page in its stead, a `window` line), `make hatarigui` (browse:
 ^N, ^W, `/site/blank.html`'s `_blank` link and a named window).
 
+## Pictures fetched at once (25 Oct 2026)
+
+Stage 5's last part. A page's pictures came one after another: EWeb asked for one, the Pi's
+gateway fetched it from its server and made it smaller or the screen's pens, EWeb drew it, then
+asked for the next. With pens the Atari hardly decodes at all, so most of each picture's time was
+the Pi's: its round trip to a server on the internet and its own decoding.
+
+- **Where the time goes decides where the work is done.** On the Atari, fetching several at once
+  would need a connection each and a client that reads them in turn (EWeb's is one request at a
+  time, on its kept connection), and in Direct mode each new connection is a TLS handshake on the
+  Falcon, dearer than what it would save; the Atari's line to the Pi is what it is either way. So
+  the pictures are fetched at once on the Pi, where the waiting was, and EWeb's side stays one
+  request at a time.
+- **EWeb names a page's pictures to webgate when they begin** (`prefetch` in `src/browse`, from
+  `br_pictures_step`, once a page shown): a POST to `http://webgate/prefetch`, a line each, the
+  address as the request will have it (proxy form), its `X-Gateway-Picture` (`pic_ask`, the same
+  function the request uses: pens at the size shown, or as wide as the page) and its cookies, after
+  the page's address for the Referer; those in the window first, as `next_item` takes them, 64 at
+  most. A picture the disk cache has, fresh or to be asked about (`dc_has`), isn't named, nor one
+  to be asked for again. webgate fetches and makes them four at a time and answers EWeb's request
+  for each with what it made, waiting for it if it is being made (one not begun yet is made by
+  the request itself); what isn't asked for in three minutes goes. A webgate that doesn't know
+  `/prefetch` answers otherwise: EWeb doesn't ask again that run, and its pictures come as before.
+  The protocol is EWeb's (AERA-Gateway's owner session commits webgate's side: `Prefetch` in
+  `webgate.py`, its tests in `test_webgate.py`).
+- **Measured**, ewrender through webgate on this machine: a page of 8 pictures each half a second
+  in coming (`/site/lazy.html`, as a far server's) took 4.5 s, now 1.3 s; yaary.music's 17
+  pictures through the internet 4.8 s, now 2.9 s. On the Pi, whose pens take longer than this
+  machine's, the share saved is the larger.
+
+While doing this, a picture shown at two sizes that didn't fit the pictures' memory together was
+found to be decoded at each in turn for ever (Pictures, above; fixed: `img_size_shown`).
+
+Tests: `make itest` (`/site/lazy.html`: with a webgate that makes pictures ahead, its 8 pictures
+in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate's
+`test_webgate.py` (`PrefetchTest`).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3956,7 +3993,7 @@ out of both (their paths lead nowhere on the Atari).
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
    (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
    breaks (done, above); **5.** SVG (done, below), frames and iframes (done, below), more windows (done, below), pictures
-   fetched at once.
+   fetched at once (done, below: with the Pi's gateway).
 
 ## Open questions
 

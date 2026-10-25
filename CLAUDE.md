@@ -213,7 +213,10 @@ hub stay complete, with the evidence.
   AERA-Atari's `common/tools/pens` (`aerapens`, pic.c itself; its parity test `common/tests/pic/pens.py`,
   `make pens` there), EWeb asks in `fetch_picture` and unpacks in `img.c` (`tests/browse/pentest.c`);
   `make itest` checks them against pictures decoded here (ewrender `-E` sums each picture's pens, `-Q`
-  asks for pens or not) when its webgate has them.
+  asks for pens or not) when its webgate has them. **Pictures fetched at once** (DESIGN.md): through the
+  Pi, `prefetch` in `src/browse` names a page's pictures to webgate (`POST http://webgate/prefetch`,
+  `pic_ask` for each one's `X-Gateway-Picture`), which makes them four at a time; after changing it,
+  `make itest` (`/site/lazy.html`) with `WEBGATE=` a webgate that has `/prefetch`, and without.
 - **Frames and iframes** (DESIGN.md, Frames and iframes): each frame a document of its own on the
   page's (`br_frames` on `doc.frames` in `src/browse`: `frame_cb`, `frame_page_cb`, `frame_load`,
   fetched by `br_pictures_step`; `frame_target`, `frame_go`, the history's `BR_ENTRY.frames`), its

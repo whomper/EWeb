@@ -138,6 +138,7 @@ typedef struct browser {
 	int relink;		/* and styled again first: a link on it visited since */
 	unsigned long pic_laid;	/* when the page was last laid out again for them (ms) */
 	int pic_n, pic_done;	/* how many to fetch, and fetched, for the status line */
+	unsigned long pf_shows;	/* the page shown (shows) whose pictures webgate was told of */
 
 	/* settings */
 	int pictures;		/* pictures are shown (1, the default) */

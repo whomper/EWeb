@@ -45,6 +45,8 @@ void dc_dir(const char *dir, long max);
 /* the answer kept for key (an address, no fragment): 1 and *g filled,
    or 0 */
 int dc_get(const char *key, DC_GOT *g);
+/* is anything kept for key (fresh or not): 1, without reading it */
+int dc_has(const char *key);
 
 /* an answer that came (status 200): kept if HTTP lets it be, under key
    (the address asked for), from url (after redirects); its header lines
