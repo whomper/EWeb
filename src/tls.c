@@ -69,13 +69,29 @@ int tls_ec_fast(void)
 	return ec_vrfy != 0;
 }
 
-/* br_x509_minimal_context with the time it takes and the bytes it sees,
-   for the log */
+/* the server's certificates, checked after the handshake rather than
+   during it (EMail's TT, 25 Oct 2026: without the DSP the check took 17 s
+   of a 22 s handshake on a TT, and Gmail closed the connection first).
+   During the handshake the chain is only kept, and the first
+   certificate's key decoded and given to BearSSL, which checks the
+   server's handshake signature with it; once the handshake is over, and
+   before any data is sent or read, br_x509_minimal checks the whole chain
+   as it would have (the roots, the name, the dates), and its key must be
+   the one used. A chain that fails ends the connection then, as it ended
+   the handshake before: nothing of the user's has gone out. Also the time
+   it takes and the bytes it sees, for the log */
+#define XT_MAX 8			/* certificates kept */
+#define XT_BYTES 24576			/* their bytes, at most */
 typedef struct {
 	const br_x509_class *vtable;
 	br_x509_minimal_context *in;
 	unsigned long t0, busy, bytes;
 	int certs;
+	const char *name;		/* the server's name */
+	unsigned char *der;		/* the chain, its certificates one after another */
+	size_t len, cap, at[XT_MAX + 1];
+	int err;			/* while it was kept: too long, the leaf undecodable */
+	br_x509_decoder_context dc;	/* the first certificate's key */
 } XTIME;
 
 struct TLS {
@@ -1015,57 +1031,140 @@ static void step(const char *fmt, ...)
 
 static void xt_start_chain(const br_x509_class **ctx, const char *server_name)
 {
-	XBEGIN(ctx);
-	XT(ctx)->t0 = xt_t;
-	(*XIN(ctx))->start_chain(XIN(ctx), server_name);
-	XEND(ctx);
+	XTIME *x = XT(ctx);
+	x->t0 = pf_ms();
+	x->name = server_name;
+	x->len = 0;
+	x->err = 0;
+	x->certs = 0;
+	x->bytes = 0;
+	x->busy = 0;
 }
 
 static void xt_start_cert(const br_x509_class **ctx, uint32_t length)
 {
+	XTIME *x = XT(ctx);
 	XBEGIN(ctx);
-	XT(ctx)->certs++;
-	XT(ctx)->bytes += length;
-	(*XIN(ctx))->start_cert(XIN(ctx), length);
+	if (x->certs < XT_MAX && x->len + length <= XT_BYTES) {
+		if (x->len + length > x->cap) {
+			size_t want = x->len + length + 1024;
+			unsigned char *n = realloc(x->der, want);
+			if (n) {
+				x->der = n;
+				x->cap = want;
+			}
+		}
+		if (x->len + length <= x->cap)
+			x->at[x->certs] = x->len;
+		else
+			x->err = BR_ERR_X509_LIMIT_EXCEEDED;
+	} else if (!x->err) {
+		x->err = BR_ERR_X509_LIMIT_EXCEEDED;
+	}
+	if (x->certs == 0)
+		br_x509_decoder_init(&x->dc, 0, 0);
+	x->certs++;
+	x->bytes += length;
 	XEND(ctx);
 }
 
 static void xt_append(const br_x509_class **ctx, const unsigned char *buf, size_t len)
 {
+	XTIME *x = XT(ctx);
 	XBEGIN(ctx);
-	(*XIN(ctx))->append(XIN(ctx), buf, len);
+	if (!x->err && x->len + len <= x->cap) {
+		memcpy(x->der + x->len, buf, len);
+		x->len += len;
+	}
+	if (x->certs == 1)
+		br_x509_decoder_push(&x->dc, buf, len);
 	XEND(ctx);
 }
 
 static void xt_end_cert(const br_x509_class **ctx)
 {
-	XBEGIN(ctx);
-	(*XIN(ctx))->end_cert(XIN(ctx));
-	XEND(ctx);
+	XTIME *x = XT(ctx);
+	if (!x->err && x->certs <= XT_MAX)
+		x->at[x->certs] = x->len;
 }
 
 static unsigned xt_end_chain(const br_x509_class **ctx)
 {
-	char known[60];
-	unsigned r;
-	XBEGIN(ctx);
-	r = (*XIN(ctx))->end_chain(XIN(ctx));
-	XEND(ctx);
-	if (sigs_checked)
-		snprintf(known, sizeof(known), "; %d of %d ECDSA signatures checked before", sigs_known,
-			 sigs_checked);
-	else
-		known[0] = 0;
-	step("the server's %d certificate%s, %lu bytes: %lu ms decoding and checking them, over %lu ms%s",
-	     XT(ctx)->certs, XT(ctx)->certs == 1 ? "" : "s", XT(ctx)->bytes, XT(ctx)->busy,
-	     pf_ms() - XT(ctx)->t0, known);
-	return r;
+	XTIME *x = XT(ctx);
+	if (!x->certs)
+		return BR_ERR_X509_EMPTY_CHAIN;
+	if (!x->err)
+		x->err = br_x509_decoder_last_error(&x->dc);
+	step("the server's %d certificate%s, %lu bytes: kept, to be checked after the handshake",
+	     x->certs, x->certs == 1 ? "" : "s", x->bytes);
+	return (unsigned)x->err;
 }
 
 static const br_x509_pkey *xt_get_pkey(const br_x509_class *const *ctx, unsigned *usages)
 {
-	const XTIME *x = (const XTIME *)(const void *)ctx;
-	return x->in->vtable->get_pkey(&x->in->vtable, usages);
+	XTIME *x = (XTIME *)(void *)ctx;
+	if (usages)
+		*usages = BR_KEYTYPE_KEYX | BR_KEYTYPE_SIGN;	/* checked after (xt_check) */
+	return br_x509_decoder_get_pkey(&x->dc);
+}
+
+/* the same keys: the one the handshake used and the one the check gives */
+static int same_key(const br_x509_pkey *a, const br_x509_pkey *b)
+{
+	if (!a || !b || a->key_type != b->key_type)
+		return 0;
+	if (a->key_type == BR_KEYTYPE_RSA)
+		return a->key.rsa.nlen == b->key.rsa.nlen && a->key.rsa.elen == b->key.rsa.elen &&
+		       !memcmp(a->key.rsa.n, b->key.rsa.n, a->key.rsa.nlen) &&
+		       !memcmp(a->key.rsa.e, b->key.rsa.e, a->key.rsa.elen);
+	return a->key.ec.curve == b->key.ec.curve && a->key.ec.qlen == b->key.ec.qlen &&
+	       !memcmp(a->key.ec.q, b->key.ec.q, a->key.ec.qlen);
+}
+
+/* after the handshake, before any data: the chain kept, through
+   br_x509_minimal as the handshake would have given it; need is the use
+   of the key the cipher suite took (BR_KEYTYPE_SIGN or _KEYX). 0, or
+   BearSSL's error */
+static int xt_check(XTIME *x, unsigned need)
+{
+	const br_x509_class **in = &x->in->vtable;
+	const br_x509_pkey *pk;
+	unsigned usages = 0, r;
+	int i;
+	unsigned long t0 = pf_ms();
+	if (x->err)
+		return x->err;
+	(*in)->start_chain(in, x->name);
+	for (i = 0; i < x->certs; i++) {
+		size_t n = x->at[i + 1] - x->at[i];
+		(*in)->start_cert(in, (uint32_t)n);
+		(*in)->append(in, x->der + x->at[i], n);
+		(*in)->end_cert(in);
+	}
+	r = (*in)->end_chain(in);
+	pk = r ? 0 : (*in)->get_pkey(in, &usages);
+	if (!r && !same_key(pk, br_x509_decoder_get_pkey(&x->dc)))
+		r = BR_ERR_X509_NOT_TRUSTED;	/* can't be: the same bytes */
+	if (!r && (usages & need) != need)
+		r = BR_ERR_X509_FORBIDDEN_KEY_USAGE;
+	{
+		char known[60];
+		if (sigs_checked)
+			snprintf(known, sizeof(known), "; %d of %d ECDSA signatures checked before", sigs_known,
+				 sigs_checked);
+		else
+			known[0] = 0;
+		step("the server's %d certificate%s checked after the handshake: %lu ms%s%s",
+		     x->certs, x->certs == 1 ? "" : "s", pf_ms() - t0, known, r ? " (refused)" : "");
+	}
+	return (int)r;
+}
+
+static void xt_free(XTIME *x)
+{
+	free(x->der);
+	x->der = 0;
+	x->cap = x->len = 0;
 }
 
 static const br_x509_class xt_vtable = {
@@ -1215,6 +1314,27 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	t->hs = 0;
 	t0 = pf_ms() - t0;
 	step("the handshake: %lu ms waiting for the network, %lu ms working", t->waited, t0 - t->waited);
+	if (r > 0 && t->xt.certs) {
+		/* the chain kept during the handshake, checked now, before any
+		   data goes either way (a resumed session sends none: it was
+		   checked when it was made) */
+		br_ssl_session_parameters sp;
+		unsigned s, need;
+		int e;
+		br_ssl_engine_get_session_parameters(&t->cc.eng, &sp);
+		s = sp.cipher_suite;
+		need = (s == BR_TLS_RSA_WITH_AES_128_GCM_SHA256 || s == BR_TLS_RSA_WITH_AES_128_CBC_SHA256 ||
+			s == BR_TLS_RSA_WITH_AES_128_CBC_SHA) ? BR_KEYTYPE_KEYX : BR_KEYTYPE_SIGN;
+		e = xt_check(&t->xt, need);
+		if (e) {
+			xt_free(&t->xt);
+			br_ssl_engine_close(&t->cc.eng);
+			explain(e, host, err, errlen);
+			free(t);
+			return 0;
+		}
+	}
+	xt_free(&t->xt);
 	if (r > 0)
 		sigs_save();
 	if (r <= 0) {
@@ -1232,6 +1352,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 			 (e == BR_ERR_RECV_FATAL_ALERT + 40 || e == BR_ERR_RECV_FATAL_ALERT + 71))
 			*retry = TLS_RETRY_ECDSA;
 		explain(e, host, err, errlen);
+		xt_free(&t->xt);
 		free(t);
 		return 0;
 	}
