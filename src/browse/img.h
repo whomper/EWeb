@@ -72,6 +72,12 @@ const char *img_why(const ew_img *im);
 /* its last decode was read from the disk cache, not decoded */
 int img_from_cache(const ew_img *im);
 
+/* SVG pictures (src/svg's svg_size, svg_late and svg_decode, set by
+   browse.c; NULL: an SVG file isn't shown) */
+extern int (*img_svg_size)(const char *data, long len, long *w, long *h);
+extern int (*img_svg_late)(const char *data, long len);
+extern PIC *(*img_svg_decode)(const char *data, long len, int w, int h, int *why);
+
 /* the screen's pens (the front end's, before drawing); NULL: true colour */
 extern PIC_PAL *img_pal;
 /* the screen's colours changed: every picture's pens made again */

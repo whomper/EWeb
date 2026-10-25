@@ -1033,8 +1033,8 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 
   Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
   tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
-- **EWeb asks for** `image/jpeg,image/png,image/gif`, so servers that would send WebP or AVIF send
-  those. Not yet: SVG, animation. CSS gradients are drawn since 22 Oct 2026 (CSS gradients,
+- **EWeb asks for** `image/jpeg,image/png,image/svg+xml,image/gif`, so servers that would send WebP
+  or AVIF send those. SVG is EWeb's own since 25 Oct 2026 (SVG, below). Not yet: animation. CSS gradients are drawn since 22 Oct 2026 (CSS gradients,
   below). `<input type=image>` shows its picture (forms, below).
 - **Which picture** (21 Oct 2026, the HTML Standard's 4.8.4.3): a `<picture>`'s first `<source>`
   whose `type` EWeb reads (none, JPEG, PNG or GIF: a WebP or AVIF one is passed over) and whose
@@ -1049,7 +1049,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 - **What isn't fetched, and the Pi's pictures** (21 Oct 2026; your yaary.music in Falcon mode took
   minutes for its pictures: 13 MB of them, 2560-pixel JPEGs, PNGs of up to 1.9 MB, and 1.4 MB of
   WebP that EWeb fetched only to find it couldn't read). In Falcon mode a picture whose address
-  ends in `.avif`, `.svg`, `.jxl`, `.heic` or `.tif` (and `.webp` in the ST edition) isn't
+  ends in `.avif`, `.svgz`, `.jxl`, `.heic` or `.tif` (and `.webp` in the ST edition) isn't
   fetched at all, and any picture's answer whose type is one of those (or text: a site's "not
   found") is left unread after its headers (`HTTPREQ.refuse`, its connection closed).
   **WebP in `EWEB.PRG`** (Erez's option C, 24 Oct 2026): it decodes a WebP itself, with Google's
@@ -3493,6 +3493,68 @@ table with and without collapsed borders, flex row, `row-reverse` and grid) and
 `tests/layout/select.py` (touching flex items and cells copied apart, a word's two runs together); every
 `tests/layout` list unchanged, the Hebrew pages in every encoding.
 
+## SVG (25 Oct 2026)
+
+Stage 5's first part. NetSurf's part first, as the owner's rule says: **libsvgtiny**
+(`third_party/netsurf/libsvgtiny`, 23 Oct 2026) reads an SVG into paths of lines and curves with
+their fill and stroke, on NetSurf's libdom; ported onto EWeb's own document with a small libdom of
+EWeb's (`tests/svg/dom.c`: a node a dnode, a file parsed by EWeb's HTML parser), its paths drawn by
+the rasteriser below. Measured against librsvg (`rsvg-convert`) on 3,467 icons and logos (the
+simple-icons set, CC0, commit `90646e4b`, not kept here), each at 48 x 48:
+
+- **It drew 3,038 of them**: 429 failed on arcs whose flags are written without a space
+  (`a2 2 0 11-.002 4.686`, which SVG allows and icon optimisers write), and a smooth curve
+  repeated without its letter (`s1 2 3 4 5 6 7 8`) took the wrong control point, so a few hundred
+  more came out garbled. It has no fill rule (even-odd), no opacity, no rounded rectangles, no
+  `<style>`, no radial gradients; floats throughout, which `EWEB.PRG` has in software only.
+- **EWeb's own reader** (`src/svg/svgread.c`, fresh, in whole numbers: `fixmath.c`) drew all
+  3,467, on average 0.41 of 255 from librsvg's grey over white (libsvgtiny's: 1.29 on those it
+  drew); 23 more than 2 apart, the worst 16.7 (fine lines' anti-aliasing). On the 68030 in soft
+  float, as `EWEB.PRG` runs, on the icons both drew (`build/m68k/svgrender`, less an empty
+  picture): **0.40 of libsvgtiny's instructions** at 48 x 48 (median 188 K against 435 K, 291
+  icons of every fourth: the 68030 build of libsvgtiny stops with a bus error in its path parser
+  on many that its host build draws; not looked into, it being the yardstick), 0.49 at
+  192 x 192 (1.33 M against 2.97 M). So the fresh reader is `EWEB.PRG`'s, and libsvgtiny stays as
+  the yardstick (`svgrender -T`).
+
+What it reads: the shapes (path, rect with rounded corners, circle, ellipse, line, polyline,
+polygon), every path command (arcs by their centre, a flat one, its radius over 32 times its
+chord's half, from its chord and how far it bows, since 16.16 can't place a far centre), groups,
+nested `<svg>`, `<use>` of an element or a `<symbol>`, the viewBox with preserveAspectRatio, the
+transform attribute; fill and stroke as colours (CSS's: `ec_color_text`), `currentColor`, linear
+and radial gradients (objectBoundingBox and user units, their `href` chain, spread, transform),
+the opacities, the fill rule, stroke widths, caps, joins and the miter limit; presentation
+attributes, the style attribute and the picture's own `<style>` (simple selectors). Not: text,
+clipping paths, masks, filters, patterns, markers, dashes, animation. User units go to 8192 either
+way (16.16 with room to add a few).
+
+**The rasteriser** (`src/svg/raster.c`, fresh: NetSurf's front ends draw paths with the system's
+calls) is FreeType's way in whole numbers: a point in 256ths of a pixel, each cell an edge passes
+through keeping its cover and area, a row read from the left giving each pixel the exact area the
+path covers in it (nonzero and even-odd), a band of 16 rows at a time so a big picture needs
+little beyond its own pixels; curves halved with shifts alone until a piece strays under a fifth
+of a pixel; strokes as each segment's quadrilateral with round, miter or bevel joins and butt,
+round or square ends, the pieces wound alike so they join. Out comes a picture of the family's kind
+(`PIC`: RGB 5-6-5 and an alpha), dithered as any other.
+
+**In EWeb** an SVG file (an `<img>`, a CSS background, `pic_kind` or `svg_late` for one whose
+`<svg>` comes after a long XML prolog) is an `img.c` picture like any other, drawn at each size a
+page shows it (`svg_decode`, at most `img_max_px` pixels); EWeb asks for `image/svg+xml` and no
+longer refuses `.svg` addresses. A page's inline `<svg>` is laid out as an `<img>`
+(`LAYOUT_OPT.svg`): `browse.c` writes it out as an SVG file (`svg_markup`: its `color` its
+currentColor, the CSS `color` it has; the elements elsewhere in the page that it names, a sprite
+sheet's `<symbol>`, a gradient, in a `<defs>`) and keeps it as a picture under an address made from
+it, so it is sized, drawn, kept and dithered as an `<img>`'s, and an icon a page shows twenty times
+is one picture. Its size: its width and height, else its viewBox's proportions on 300 wide, else
+300 x 150, CSS's as for any picture. A page's CSS doesn't reach into an inline SVG (EWeb's CSS
+engine has no fill or stroke); its attributes and its own `<style>` do.
+
+`EWEB.PRG` grew 55 KB, `EWEBST.PRG` 36 KB (both editions draw SVG). `make test` runs
+`tests/svg/run.py` (18 cases, one a feature, against librsvg's pictures kept as greys in
+`tests/svg/expect.txt`, at most 3 of 255 apart on average; the cases are 0.06 to 1.79 apart),
+`tests/layout/svg.html`'s display list, and `fuzz_svg`'s seeds and finds (four, each fixed: a
+`<style>` read past its end, and sums of numbers near 32 bits).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3802,7 +3864,8 @@ out of both (their paths lead nowhere on the Atari).
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
    (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
-   breaks (done, above); **5.** SVG, frames and iframes, more windows, pictures fetched at once.
+   breaks (done, above); **5.** SVG (done, below), frames and iframes, more windows, pictures
+   fetched at once.
 
 ## Open questions
 

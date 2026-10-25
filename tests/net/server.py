@@ -406,7 +406,7 @@ GW_PAGE = (b"<!DOCTYPE html><html><head><title>Gateway pictures</title><style>"
            b"</div></body></html>\n")
 
 # a page as a Wikipedia article's: an infobox photo from a srcset, small
-# icons, an SVG (the Pi can't make it: refused), a 1x1 counter, a
+# icons, an SVG (the Pi passes it on as it came: drawn by EWeb), a 1x1 counter, a
 # thumbnail floated beside the text, a PNG with alpha, an animated GIF
 WIKI_PAGE = (b"<!DOCTYPE html><html><head><title>Atari Falcon - Wiki</title><style>"
              b".infobox{float:right;width:22em;border:1px solid #aaa;margin:0 0 1em 1em}"

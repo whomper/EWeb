@@ -696,6 +696,29 @@ int ec_parse_color(const ec_tok *t, int n, int *used, uint32_t *argb, int *cur)
 	}
 }
 
+int ec_color_text(const char *s, size_t len, uint32_t *argb, int *cur)
+{
+	ec_tok t[24];
+	ec_lex lx;
+	int n = 0, used, ws = 0;
+	ec_lex_init(&lx, s, len);
+	for (;;) {
+		int ty = ec_next(&lx, &t[n]);
+		if (ty == T_EOF)
+			break;
+		if (ty == T_WS) {
+			ws = 1;
+			continue;
+		}
+		if (ws)
+			t[n].flags |= TF_WS;
+		ws = 0;
+		if (++n == (int) (sizeof t / sizeof t[0]))
+			return 0;
+	}
+	return ec_parse_color(t, n, &used, argb, cur) && used == n;
+}
+
 static int color(const ec_tok *t, int n, int *i, ec_decl *d)
 {
 	uint32_t argb;

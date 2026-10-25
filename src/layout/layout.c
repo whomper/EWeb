@@ -1629,6 +1629,30 @@ static void build_element(L *l, box *parent, dnode *c)
 		build(l, parent, c);
 		return;
 	}
+	if (c->tag == T_SVG && c->ns == DN_NS_SVG) {
+		/* an inline SVG: a picture made of it, laid out as an <img> */
+		int32_t iw = 0, ih = 0;
+		void *h = l->p->opt.svg != NULL ? l->p->opt.svg(l->p->opt.ud, c, color(st, EP_COLOR) & 0xffffff, &iw, &ih)
+						 : NULL;
+		box *in = parent;
+		if (h == NULL)
+			return;
+		if (block_level(d)) {
+			in = new_box(l, BX_BLOCK, c, st, parent);
+			if (in == NULL)
+				return;
+			in->repl = 1;
+			if (parent->link)
+				in->link = parent->link;
+		}
+		atom(l, in, c, st, AT_IMAGE, NULL, AUTO, AUTO);
+		if (in->last != NULL && in->last->n == c) {
+			in->last->img = h;
+			in->last->iw = iw;
+			in->last->ih = ih;
+		}
+		return;
+	}
 	switch (c->tag) {
 	case T_SVG: case T_CANVAS: case T_VIDEO: case T_AUDIO: case T_IFRAME: case T_OBJECT:
 	case T_EMBED: case T_TEMPLATE: case T_SCRIPT: case T_STYLE: case T_WBR:

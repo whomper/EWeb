@@ -109,8 +109,13 @@ def hd_for(name, home, inf=""):
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/alpha.html"), os.path.join(hd, "ALPHA.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/gradients.html"), os.path.join(hd, "GRAD.HTM"))
+    with open(os.path.join(ROOT, "tests/layout/svg.html"), "rb") as f:
+        page = f.read().replace(b"img/star.svg", b"IMG/STAR.SVG").replace(b"img/missing.svg", b"IMG/MISSING.SVG")
+    with open(os.path.join(hd, "SVG.HTM"), "wb") as f:
+        f.write(page)
     os.makedirs(os.path.join(hd, "IMG"), exist_ok=True)
     shutil.copy(os.path.join(ROOT, "tests/layout/img/one.png"), os.path.join(hd, "IMG", "ONE.PNG"))
+    shutil.copy(os.path.join(ROOT, "tests/layout/img/star.svg"), os.path.join(hd, "IMG", "STAR.SVG"))
     import server
     with open(os.path.join(hd, "PICS.HTM"), "wb") as f:
         f.write(server.PICS_PAGE)
@@ -1044,6 +1049,24 @@ def dialogs():
             os.environ["AERA_TOS"] = saved
 
 
+def svg_page(r, group, name, shot):
+    """the page of SVG drawings (tests/layout/svg.html), from the disk: a
+    file at two sizes and as a background, inline ones (one in a link's
+    colour, two from a sprite), a broken one drawn as far as it goes, the
+    missing one said (looked at in its screenshot)"""
+    r.key(L, (CTRL,))
+    r.type("file:///C:/SVG.HTM")
+    r.key(RETURN)
+    ev = r.wait(r"pictures ", 600)
+    evs = r.events()
+    dec = [e for e in evs if re.search(r"^picture (file:///C:/IMG/STAR\.SVG|data:) decoded at ", e)]
+    check("%s: %s SVG drawings" % (group, name), ev is not None and len(dec) >= 7 and
+          any(e.startswith("picture file:///C:/IMG/MISSING.SVG failed") for e in evs) and
+          not os.path.exists(os.path.join(OUT, name, "CRASH.LOG")), "\n".join(evs[-14:]))
+    time.sleep(2)
+    r.shot(shot)
+
+
 def screens():
     for name, spec, tc in (("falcon256", "Falcon:256", False), ("truecolour", "Falcon:16", True),
                            ("ttmed", "TT:ttmed", False), ("ttmono", "TT:mono", False)):
@@ -1098,6 +1121,7 @@ def screens():
                   ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
             time.sleep(2)
             r.shot(5)
+            svg_page(r, "screens", name, 7)
             if name == "falcon256":
                 # ^, the Settings dialog (looked at in its screenshot); Esc
                 # leaves it as it was
@@ -1241,6 +1265,7 @@ def st():
                   ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
             time.sleep(3)
             r.shot(5)
+            svg_page(r, "st", name, 6)
             if name == "stmono":
                 # a secure page with no gateway set: said plainly, the page
                 # stays (the hub, 20 Oct 2026)
@@ -1431,7 +1456,8 @@ def gateway():
 def falcon():
     """EWEB.PRG on Erez's Falcon in 256 colours with a Direct connection (TLS on the
     68030 and the DSP, no gateway), a secure page as a Wikipedia
-    article's with its pictures from another secure host: the DSP turns
+    article's with its pictures from another secure host (its SVG drawn
+    here): the DSP turns
     from the handshakes' arithmetic to the JPEGs and the dither and back;
     scrolled while the pictures come, then the page loaded again"""
     work = os.path.join(OUT, "server")
@@ -1464,6 +1490,7 @@ def falcon():
         quit = r.wait(r"quit$", 300)
         check("falcon: a secure page's pictures from another secure host on the DSP, scrolled, again",
               ev is not None and pv is not None and len(dec) >= 7 and again is not None and quit is not None and
+              any(re.search(r"/site/wiki\.svg decoded at \d+x\d+ 12x12 ", e) for e in dec) and
               not os.path.exists(os.path.join(hd, "CRASH.LOG")), "\n".join(r.events()[-30:]))
     finally:
         r.end()

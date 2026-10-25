@@ -256,6 +256,10 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base);
 /* an atom: the same pointer for the same bytes, until ec_destroy() */
 const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len);
 const char *ec_atom_text(const ec_atom *a, size_t *len);
+/* a CSS colour written out (#f80, rgb(), a name, transparent): 1 and it
+   in *argb (0xAARRGGBB), or *cur set for currentcolor; 0 if it isn't one
+   (SVG's fill and stroke, src/svg) */
+int ec_color_text(const char *s, size_t len, uint32_t *argb, int *cur);
 
 /* Adds a stylesheet (the text is copied). Sheets cascade in the order
  * they are added, within their origin. Returns 0, or -1 if out of memory. */

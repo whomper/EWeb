@@ -13,9 +13,14 @@ yardsticks of nsbench and `make h5test`.
 | `libwapcaplet` | interned strings | `c7c128d3eb3223b216c974471f82e9337fbcf4ba` (19 Feb 2026) |
 | `libhubbub` | the HTML5 parser | `6651b8cf87a4aa87bcdb2ff024a02659cd3f9402` (3 Jan 2026) |
 | `libcss` | the CSS parser and selection engine | `499f1c4601ad39942fd1b2204053a387bec9b989` (23 Aug 2026, release 0.9.2) |
+| `libsvgtiny` | SVG to paths (a yardstick only) | `aea93365ea0586f598974697fe8555a003bd2e41` (23 Oct 2026; from the GitHub mirror, github.com/netsurf-browser/libsvgtiny) |
 
 Only `include/`, `src/`, the generators in `build/` and the licence and README
-files were taken: no tests, documentation or upstream Makefiles. EWeb's
+files were taken: no tests, documentation or upstream Makefiles.
+`libsvgtiny` isn't in `EWEB.PRG`: EWeb's own SVG reader (`src/svg`) replaced it
+on speed and standards (docs/DESIGN.md, SVG), and it stays as the yardstick,
+`svgrender -T` (`tests/svg/tiny.c`, on EWeb's document as libdom:
+`tests/svg/dom.c`); its colour table is made by gperf in `build/gen/libsvgtiny`. EWeb's
 `Makefile` builds them, with the flags NetSurf's build system gives
 (`-D_ALIGNED=...`, `-D_BSD_SOURCE`, `-D_DEFAULT_SOURCE`) and
 `-DWITHOUT_ICONV_FILTER` (no iconv on the Atari). The generated sources

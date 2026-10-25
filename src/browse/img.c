@@ -81,6 +81,9 @@ long img_used;
    a GIF or an interlaced PNG while it is; a JPEG streams, and may have
    twelve times as many) */
 long img_max_px = 4L << 20;
+int (*img_svg_size)(const char *data, long len, long *w, long *h);
+int (*img_svg_late)(const char *data, long len);
+PIC *(*img_svg_decode)(const char *data, long len, int w, int h, int *why);
 /* a WebP of more pixels than this isn't decoded either: about 40 s on a
    DFB1 (Erez, 24 Oct 2026: bigger ones through the Pi, which makes them
    JPEGs) */
@@ -450,8 +453,12 @@ int img_set_file(ew_img *im, char *data, long len)
 		return 1;
 	}
 	im->kind = pic_kind((const unsigned char *) data, len);
-	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF && im->kind != PIC_WEBP) ||
-	    !pic_size((const unsigned char *) data, len, &w, &h) || w > 0x7fff || h > 0x7fff) {
+	if (im->kind == PIC_NONE && img_svg_late != NULL && img_svg_late((const char *) data, len))
+		im->kind = PIC_SVG;
+	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF && im->kind != PIC_WEBP &&
+	     (im->kind != PIC_SVG || img_svg_size == NULL)) ||
+	    !(im->kind == PIC_SVG ? img_svg_size((const char *) data, len, &w, &h) :
+	      pic_size((const unsigned char *) data, len, &w, &h)) || w > 0x7fff || h > 0x7fff) {
 		free(data);
 		im->state = IMG_FAILED;
 		im->why = im->kind == PIC_NONE ? PIC_DAMAGED : PIC_UNSUPPORTED;
@@ -580,7 +587,18 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		return 1;
 	}
 	max = im->kind == PIC_JPEG ? img_max_px * 12 : im->kind == PIC_WEBP ? WEBP_MAX_PX : img_max_px;
-	v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
+	if (im->kind == PIC_SVG) {
+		/* drawn at the size shown: its memory that size's (a canvas of
+		   four bytes a pixel while it is drawn) */
+		if ((long) w * h > img_max_px) {
+			v->pic = NULL;
+			im->why = PIC_TOO_BIG;
+		} else {
+			v->pic = img_svg_decode(im->data, im->len, (int) w, (int) h, &im->why);
+		}
+	} else {
+		v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
+	}
 	if (v->pic == NULL && im->why == PIC_STOPPED) {
 		free(v);	/* stopped: tried again later */
 		return 0;

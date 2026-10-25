@@ -83,7 +83,7 @@ hub stay complete, with the evidence.
 - **NetSurf's code or fresh code** (the owner's rule): each part uses NetSurf's version unless fresh
   code written for a fast 68030 is faster on the page set and at least as standards-compliant. Port
   NetSurf's part first, measure it, and only then write a replacement.
-- **`third_party/netsurf/`** holds four NetSurf libraries (MIT) at the commits its README lists. Don't
+- **`third_party/netsurf/`** holds five NetSurf libraries (MIT) at the commits its README lists. Don't
   edit them on their own: a change also goes in `third_party/netsurf/patches/` as a patch against
   upstream (git am applies it; the owner takes no part in NetSurf's development, so nothing is sent
   to NetSurf) and in its README with the reason, so an update can carry it.
@@ -213,6 +213,17 @@ hub stay complete, with the evidence.
   `make pens` there), EWeb asks in `fetch_picture` and unpacks in `img.c` (`tests/browse/pentest.c`);
   `make itest` checks them against pictures decoded here (ewrender `-E` sums each picture's pens, `-Q`
   asks for pens or not) when its webgate has them.
+- **SVG** is `src/svg` (fresh, in whole numbers; DESIGN.md, SVG): `svgread.c` reads an `<svg>` from
+  EWeb's document (a file parsed by EWeb's HTML parser), `raster.c` fills and strokes its paths,
+  anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a
+  page's inline `<svg>` out as a file (`svg_markup`) for `img.c`, which keeps it as a picture
+  (`svg_cb` in `src/browse`, `LAYOUT_OPT.svg`). NetSurf's libsvgtiny is the yardstick only
+  (`tests/svg/tiny.c`, `svgrender -T`). After changing it: `make test` (`tests/svg/run.py`: each
+  case in `tests/svg/cases` against librsvg's, kept in `tests/svg/expect.txt`; a new case's with
+  `--update`, rsvg-convert and Pillow; `tests/layout/svg.html`), `make fuzz` for a while
+  (`fuzz_svg`; keep what it finds in `tests/fuzz/found/svg`), and count it
+  (`build/m68k/svgrender -n`, `tools/count68k.sh`, soft float as `EWEB.PRG`) when the change is
+  meant for speed.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page

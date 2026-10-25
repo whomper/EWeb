@@ -1,0 +1,16 @@
+<!DOCTYPE html><meta charset=utf-8><title>SVG pictures</title>
+<style>
+body { color: #222 }
+a { color: #a00 }
+.icon { width: 16px; height: 16px; vertical-align: middle }
+.wide { width: 120px }
+.bg { width: 96px; height: 48px; background: url(img/star.svg) no-repeat; border: 1px solid #888 }
+</style>
+<p>A file: <img src="img/star.svg" alt="star"> at its own size, and at twice it <img src="img/star.svg" width=96 alt="star">.
+<p>Inline, sized by CSS and taking the link's colour: <a href="x.html"><svg class=icon viewBox="0 0 24 24"><path fill="currentColor" d="M2 12 22 2 12 22z"/></svg> a link</a>.
+<p>Inline with only a viewBox, sized across: <svg class=wide viewBox="0 0 4 1"><rect width="4" height="1" fill="#4a4"/><circle cx="2" cy=".5" r=".4" fill="#fff"/></svg>
+<p>From a sprite elsewhere in the page:
+<svg style="display:none"><symbol id="dot" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></symbol></svg>
+<svg width=20 height=20><use href="#dot"/></svg> <svg width=20 height=20 style="color:#06c" fill="currentColor"><use href="#dot"/></svg>
+<div class=bg>a background</div>
+<p>Broken: <img src="img/missing.svg" alt="(none)"> and <svg width=10 height=10><path d="M0 0 L"/></svg> after.

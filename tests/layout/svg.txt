@@ -1,0 +1,29 @@
+page 608 x 262, background ffffff, 27 items, 1 links, title "SVG pictures"
+text 6,57 39x17 #222222 sans13 link 0 "A file: "
+image 45,38 38x19 link 0 "star" file://./tests/layout/img/star.svg
+text 87,57 191x17 #222222 sans13 link 0 "at its own size, and at twice it "
+image 278,19 77x38 link 0 "star" file://./tests/layout/img/star.svg
+text 355,57 4x17 #222222 sans13 link 0 "."
+text 6,86 306x17 #222222 sans13 link 0 "Inline, sized by CSS and taking the link's colour: "
+image 312,76 13x13 link 1 "" data:image/svg+xml;eweb=fa583b03-115
+text 325,86 37x17 #aa0000 sans13 link 1 " a link"
+text 362,86 4x17 #222222 sans13 link 0 "."
+text 6,126 254x17 #222222 sans13 link 0 "Inline with only a viewBox, sized across: "
+image 260,102 96x24 link 0 "" data:image/svg+xml;eweb=f89a4adb-155
+text 6,158 237x17 #222222 sans13 link 0 "From a sprite elsewhere in the page: "
+image 243,142 16x16 link 0 "" data:image/svg+xml;eweb=22766a46-169
+image 263,142 16x16 link 0 "" data:image/svg+xml;eweb=5349dfcd-208
+background 7,175 38x19 tile 0,0 38x19 file://./tests/layout/img/star.svg
+text 7,188 8x17 #222222 sans13 link 0 "a"
+text 7,204 75x17 #222222 sans13 link 0 "background"
+fill 6,174 79x1 #888888
+fill 6,213 79x1 #888888
+fill 6,175 1x38 #888888
+fill 84,175 1x38 #888888
+text 6,240 53x17 #222222 sans13 link 0 "Broken: "
+image 59,227 42x16 guessed alt link 0 "(none)" file://./tests/layout/img/missing.svg
+text 59,240 42x17 #606060 sans13 link 0 "(none)"
+text 105,240 28x17 #222222 sans13 link 0 "and "
+image 133,232 8x8 link 0 "" data:image/svg+xml;eweb=b6df9baf-74
+text 145,240 34x17 #222222 sans13 link 0 "after."
+link 1 file://./tests/layout/x.html

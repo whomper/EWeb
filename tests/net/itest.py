@@ -740,6 +740,12 @@ try:
         check("the browser: pictures", p.returncode == 0 and all(got.get(k) == v for k, v in want.items())
               and sorted(decoded) == sorted(want.items())
               and re.search(r"^picture %sgone\.png failed" % re.escape(site), out, re.M) is not None, out)
+        # an SVG over HTTP (image/svg+xml), drawn (its own size 12x12)
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", site + "wiki.html"],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        check("the browser: an SVG picture", p.returncode == 0 and
+              re.search(r"^picture %swiki\.svg decoded at \d+x\d+ 12x12 " % re.escape(site), out, re.M) is not None, out)
         # decoded pictures kept in the disk cache as the screen draws them:
         # the next run reads them, but for the small one (decoded each time)
         pix = os.path.join(work, "PIXCACHE")

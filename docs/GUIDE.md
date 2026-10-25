@@ -121,8 +121,11 @@ once. **Esc** (or File > Stop) stops the pictures of the page shown.
 Until a picture has come its place is framed, with what it shows written
 in it where the page says. EWeb shows a WebP picture of up to about a
 megapixel itself (one that big takes about 40 seconds on a fast Falcon;
-the ST edition shows none); pictures EWeb can't show (a bigger WebP,
-AVIF, SVG) aren't fetched at all; through the Raspberry Pi gateway they
+the ST edition shows none). SVG drawings, as logos and icons often are,
+EWeb draws itself at the size the page shows them, in both editions,
+whether they come as a file or are written into the page; their
+writing, clipping, masks and filters aren't drawn. Pictures EWeb can't
+show (a bigger WebP, AVIF) aren't fetched at all; through the Raspberry Pi gateway they
 come as JPEG or PNG, and big ones come made smaller on the Pi, a few dozen
 kilobytes instead of a megabyte, or ready for your screen (see
 [Secure sites](#secure-sites)). A picture whose size the page doesn't give
@@ -499,8 +502,8 @@ It doesn't yet show:
 - AVIF pictures, and WebP ones of more than about a megapixel (EWeb
   asks servers for JPEG, PNG and GIF, which most send then; of a
   picture offered in several forms and sizes it takes a JPEG, PNG or
-  GIF one at the size the screen needs), animated WebP, and SVG
-  drawings
+  GIF one at the size the screen needs), animated WebP, and the
+  writing in an SVG drawing
 - what a page's JavaScript makes, unless you let that site's scripts
   run (see [Pages made by scripts](#pages-made-by-scripts)); without
   them EWeb shows the page's `<noscript>` parts, as browsers do with

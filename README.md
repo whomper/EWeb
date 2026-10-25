@@ -41,7 +41,9 @@ own fonts.
   reads one again in another. The parts a page folds away (`<details>`)
   open and close with a click.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
-  GIF, fetched after the page is shown (you read and scroll meanwhile),
+  GIF, and SVG drawings, files and those written into a page (EWeb's own
+  reader and anti-aliased rasteriser, `src/svg`, in whole numbers for the
+  68030), fetched after the page is shown (you read and scroll meanwhile),
   decoded straight at the size shown, dithered to the screen's colours in
   monochrome, 4, 16 and 256 colours (on a Falcon the DSP decodes the JPEGs
   and, in 4 colours or more, dithers them, about eight times as quick as the

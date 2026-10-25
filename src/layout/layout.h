@@ -29,6 +29,10 @@ typedef struct {
 	   file has come). css: a url() of the page's CSS, whose query is
 	   UTF-8 (CSS parses it without the page's encoding) */
 	void *(*image)(void *ud, const char *src, int css, int32_t *w, int32_t *h);
+	/* a page's inline <svg> (n) as a picture, color its currentColor
+	   (0xRRGGBB): its handle and its size in CSS px, as image's; NULL:
+	   none (not drawn) */
+	void *(*svg)(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h);
 	void *ud;
 	/* the page laid out before of the same document (NULL: none): its
 	   boxes' scrolling kept (an element's box scrolled as far again) */

@@ -16,6 +16,7 @@
 #include "form.h"
 #include "html.h"
 #include "img.h"
+#include "svg.h"
 #include "js.h"
 #include "font.h"
 #include "pic.h"
@@ -1544,6 +1545,37 @@ static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h
 	return im;
 }
 
+/* a page's inline <svg>: written out as an SVG file (svg_markup) and
+   kept as a picture under an address of its own made from it, so that
+   it is sized, drawn, kept and dithered as an <img>'s SVG is (and the
+   same icon a page shows many times is one picture) */
+static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
+{
+	browser *b = ud;
+	char key[64];
+	size_t len;
+	char *m;
+	ew_img *im;
+	if (!b->pictures || (m = svg_markup(n, color, &len)) == NULL)
+		return NULL;
+	/* (data:, so that the disk cache keeps none of it) */
+	snprintf(key, sizeof key, "data:image/svg+xml;eweb=%08lx-%lu", str_hash(m) & 0xffffffffUL, (unsigned long) len);
+	im = img_get(key);
+	if (im == NULL) {
+		free(m);
+		return NULL;
+	}
+	if (img_state(im) != IMG_WAITING) {
+		free(m);
+		if (img_state(im) == IMG_FAILED)
+			return NULL;
+	} else if (!img_set_file(im, m, (long) len)) {
+		return NULL;
+	}
+	img_size(im, w, h);
+	return im;
+}
+
 static unsigned long ref_serial;
 
 /* each picture a page shows, once: d +1 when it is laid out, -1 when it
@@ -1602,6 +1634,7 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.sbar = b->sbar;
 	o.sbar_h = b->sbar_h;
 	o.image = image_cb;
+	o.svg = svg_cb;
 	o.ud = b;
 	o.was = b->p;		/* (the page shown: its boxes scrolled, when it is d's) */
 	lay_base = base;
@@ -2861,6 +2894,9 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	pic_poll = gem_turn;
 	http_cookie_in = cookie_in;
 	http_cookie_out = cookie_out;
+	img_svg_size = svg_size;	/* SVG pictures: src/svg's */
+	img_svg_late = svg_late;
+	img_svg_decode = svg_decode;
 	memset(b, 0, sizeof *b);
 	b->width = width;
 	b->zoom = zoom > 0 ? zoom : 1024;
@@ -3791,15 +3827,16 @@ static int waiting(const browser *b)
 }
 
 /* a picture of a kind EWeb can't show, by its address's ending (AVIF,
-   SVG...; WebP in the ST edition: EWEB.PRG decodes it, libwebp): not
-   fetched on its own (the Pi's gateway makes them JPEG or PNG) */
+   a gzipped SVG...; WebP in the ST edition: EWEB.PRG decodes it,
+   libwebp): not fetched on its own (the Pi's gateway makes them JPEG or
+   PNG). An SVG is EWeb's own (src/svg) */
 static int unshowable(const char *url)
 {
 	static const char *const ends[] = {
 #ifdef EW_ST
 		".webp",
 #endif
-		".avif", ".svg", ".svgz", ".jxl", ".heic", ".heif", ".tif", ".tiff" };
+		".avif", ".svgz", ".jxl", ".heic", ".heif", ".tif", ".tiff" };
 	size_t n = strcspn(url, "?#"), i;
 	for (i = 0; i < sizeof ends / sizeof ends[0]; i++) {
 		size_t k = strlen(ends[i]);
@@ -3815,7 +3852,7 @@ static const char picture_refuse[] =
 #ifdef EW_ST
 	"image/webp "
 #endif
-	"image/avif image/svg+xml image/jxl image/heic image/heif image/tiff text/";
+	"image/avif image/jxl image/heic image/heif image/tiff text/";
 
 /* pictures through the Pi's gateway as the screen's pens (webgate's
    aerapens: the Atari's own decoder and dither, on the Pi)? The ST
@@ -3935,7 +3972,7 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 		fetch_more = http_gateway[0] ? fit : NULL;
 		fetch_variant = pens ? variant : NULL;
 		fetch_refuse = picture_refuse;
-		ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f);
+		ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/svg+xml,image/gif;q=0.9", max, 0, NULL, f);
 		if (ok && pens && f->status == 409 && !conn_stop) {
 			/* the Pi hasn't the screen's colours: sent, then asked again */
 			free(f->data);
@@ -3945,7 +3982,7 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 				fetch_more = fit;
 				fetch_variant = variant;
 				fetch_refuse = picture_refuse;
-				ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/gif;q=0.9", max, 0, NULL, f);
+				ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/svg+xml,image/gif;q=0.9", max, 0, NULL, f);
 			} else {
 				ok = 0;
 			}
