@@ -29,6 +29,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <time.h>
 #include "plat.h"
 #include "tls.h"
 
@@ -107,9 +108,17 @@ int pf_save(const char *path, const void *data, long len)
 	return w == len ? 0 : -1;
 }
 
+static int real_now;		/* retry: the build machine's clock, for openssl's certificates */
+
 void pf_now(PFTIME *t)
 {
 	t->year = 2026, t->mon = 10, t->day = 18, t->hour = 12, t->min = t->sec = 0;
+	if (real_now) {
+		time_t now = time(0);
+		struct tm *g = gmtime(&now);
+		t->year = g->tm_year + 1900, t->mon = g->tm_mon + 1, t->day = g->tm_mday;
+		t->hour = g->tm_hour, t->min = g->tm_min, t->sec = g->tm_sec;
+	}
 }
 
 unsigned long pf_ms(void) { return 0; }
@@ -335,9 +344,10 @@ static int retry_of(int mode, int sock, char *err, int errlen)
 
 static int retry_test(const char *dir)
 {
-	char key[300], crt[300], cmd[1000], port[16], err[200];
+	char key[300], crt[300], ca[300], cmd[1200], port[16], err[200];
+	TLS *t;
 	pid_t srv;
-	int s = -1, r;
+	int s = -1, r, i;
 	snprintf(tls_seed_path, sizeof(tls_seed_path), "%s/SEED.DAT", dir);
 	tls_load_anchors("../../certs/CACERT.PEM", err, sizeof(err));
 	printf("== retry\n");
@@ -346,10 +356,16 @@ static int retry_test(const char *dir)
 	r = retry_of(NET_ALERT, -1, err, sizeof(err));
 	check(r == TLS_RETRY_ANY_CIPHER, "a handshake_failure alert first: again with every cipher");
 
+	/* a test authority (RSA 3072) and the server's certificate it signed */
 	snprintf(key, sizeof(key), "%s/key.pem", dir);
 	snprintf(crt, sizeof(crt), "%s/crt.pem", dir);
-	snprintf(cmd, sizeof(cmd), "openssl req -x509 -newkey rsa:2048 -nodes -keyout %s -out %s -days 2 "
-		 "-subj /CN=localhost >/dev/null 2>&1", key, crt);
+	snprintf(ca, sizeof(ca), "%s/ca.pem", dir);
+	snprintf(cmd, sizeof(cmd),
+		 "cd %s && openssl req -x509 -newkey rsa:3072 -nodes -keyout cakey.pem -out ca.pem -days 2 "
+		 "-subj /CN=Test-CA >/dev/null 2>&1 && openssl req -newkey rsa:2048 -nodes -keyout key.pem "
+		 "-out req.pem -subj /CN=localhost >/dev/null 2>&1 && printf 'subjectAltName=DNS:localhost\\n' "
+		 "> ext.cnf && openssl x509 -req -in req.pem -CA ca.pem -CAkey cakey.pem -CAcreateserial "
+		 "-days 2 -sha256 -extfile ext.cnf -out crt.pem >/dev/null 2>&1", dir);
 	if (system(cmd) != 0)
 		return check(0, "openssl makes a certificate"), 0;
 	snprintf(port, sizeof(port), "%d", 20000 + (int)(getpid() % 20000));
@@ -361,7 +377,7 @@ static int retry_test(const char *dir)
 		if (!freopen("/dev/null", "w", stdout) || !freopen("/dev/null", "w", stderr))
 			_exit(127);
 		execlp("openssl", "openssl", "s_server", "-accept", acc, "-cert", crt, "-key", key, "-tls1_2",
-		       "-cipher", "ECDHE-RSA-CHACHA20-POLY1305", "-groups", "X25519", "-naccept", "2", "-quiet", (char *)0);
+		       "-cipher", "ECDHE-RSA-CHACHA20-POLY1305", "-groups", "X25519", "-naccept", "3", "-quiet", (char *)0);
 		_exit(127);
 	}
 	s = connect_to(port);
@@ -372,21 +388,47 @@ static int retry_test(const char *dir)
 		check(r == 0, "closed after the certificates: no new try");
 		close(s);
 	}
-	/* the whole handshake (the chain, self-signed, refused after it):
-	   the log names the curve and the server's key */
-	s = connect_to(port);
-	if (s >= 0) {
+	/* whole handshakes, the test authority a root: the log names the
+	   curve and the server's key; the authority's signature on the
+	   server's certificate is checked once, then known (SIGS.DAT) */
+	tls_free_anchors();
+	tls_load_anchors(ca, err, sizeof(err));
+	snprintf(tls_sigs_path, sizeof(tls_sigs_path), "%s/SIGS.DAT", dir);
+	unlink(tls_sigs_path);
+	real_now = 1;
+	for (i = 0; i < 2; i++) {
+		s = connect_to(port);
+		if (s < 0)
+			break;
+		logged[0] = 0;
+		tls_forget_sessions();	/* a whole handshake each time */
 		tls_log = log_line;
-		net_drop = 0;
-		retry_of(NET_SOCKET, s, err, sizeof(err));
+		net_mode = NET_SOCKET, net_writes = 0, net_drop = 0;
+		t = tls_start(s, "localhost", 0, 0, err, sizeof(err));
 		net_drop = 2;
 		tls_log = 0;
+		if (t)
+			tls_close(t);
+		net_mode = NET_REFUSE;
 		close(s);
-		check(strstr(logged, "the key exchange: x25519, ") &&
-		      strstr(logged, "; the server's key: RSA 2048 bits, its signature "),
-		      "the log: the key exchange's curve, the server's key and their times");
-		if (!strstr(logged, "the key exchange: x25519, "))
-			printf("%s", logged);
+		if (i == 0) {
+			check(t != 0, "a whole handshake, the chain up to the test authority");
+			check(strstr(logged, "the key exchange: x25519, ") &&
+			      strstr(logged, "; the server's key: RSA 2048 bits, its signature "),
+			      "the log: the key exchange's curve, the server's key and their times");
+			check(strstr(logged, "; 0 of 1 RSA signatures checked before") != 0,
+			      "the authority's RSA signature checked");
+		} else {
+			check(t != 0 && strstr(logged, "; 1 of 1 RSA signatures checked before") != 0,
+			      "the next time: known, not checked again");
+		}
+		if (!t || !strstr(logged, "RSA signatures checked before"))
+			printf("%s(%s)\n", logged, err);
+	}
+	real_now = 0;
+	{
+		struct stat st;
+		check(stat(tls_sigs_path, &st) == 0 && st.st_size == 8 + 64 * 32, "SIGS.DAT as long as before");
 	}
 	kill(srv, SIGTERM);
 	waitpid(srv, 0, 0);

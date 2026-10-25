@@ -36,7 +36,7 @@ These files were the same code in ECal, EContact, EMail and EFTP when they moved
 | `ui/` | `dsp.c` | checks the DSP and turns it on for a Direct connection |
 | `dsp/` | `rsa.a56`, `rsa_prog.h`, `mkh.py` | the DSP program (source, and as a C array); `ec.a56` since 18 Oct 2026, `jpeg.a56` since 20 Oct 2026, `dither.a56` since 21 Oct 2026 (below) |
 | `tools/` | `elf2tos.py`, `mkroots.c`, `build-hcp.sh` | ELF to TOS program header; root certificates to `ROOTS.DAT`; `build-hcp.sh DIR` builds the `hcp` help compiler (th-otto/hypview at a fixed commit) for `make help` and the Release workflow |
-| `third_party/bearssl/` | BearSSL 0.6 | TLS for a Direct connection (MIT licence) |
+| `third_party/bearssl/` | BearSSL 0.6 | TLS for a Direct connection (MIT licence); as upstream: TLS.OVL builds `tlsovl/i31_montmul_030.c` (its loop in 68030 assembly) in place of `src/int/i31_montmul.c` |
 | `certs/` | `CACERT.PEM` | Mozilla's root certificates (MPL 2.0) |
 
 ### What the app provides
