@@ -15,7 +15,8 @@
  *   retry DIR      when a ChaCha20-only hello is tried again with every
  *                  cipher: no answer at all, or an alert first, yes; a
  *                  close after the server's certificates (openssl
- *                  s_server, which took ChaCha20), no
+ *                  s_server, which took ChaCha20), no; and a whole
+ *                  handshake's log names the curve and the server's key
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -124,7 +125,7 @@ void pf_entropy(unsigned char *buf, int n)
    goes out and then nothing comes, or an alert, or (h >= 0) a real
    server until our second flight, after its certificates */
 enum { NET_REFUSE, NET_QUIET, NET_ALERT, NET_SOCKET };
-static int net_mode, net_writes;
+static int net_mode, net_writes, net_drop = 2;	/* hung up at that write */
 static long net_at;
 
 long net_write(int h, const void *buf, long n)
@@ -147,7 +148,7 @@ long net_read(int h, void *buf, long max)
 		net_at += r;
 		return r;
 	}
-	if (net_mode != NET_SOCKET || net_writes >= 2)
+	if (net_mode != NET_SOCKET || (net_drop && net_writes >= net_drop))
 		return -1;		/* hung up */
 	r = (long)read(h, buf, (size_t)max);
 	return r > 0 ? r : -1;
@@ -297,6 +298,32 @@ static int seed(const char *dir, int run)
 	return 0;
 }
 
+static char logged[2000];
+
+static void log_line(const char *msg)
+{
+	if (strlen(logged) + strlen(msg) + 2 < sizeof(logged))
+		strcat(strcat(logged, msg), "\n");
+}
+
+static int connect_to(const char *port)
+{
+	struct sockaddr_in a;
+	int s, i;
+	memset(&a, 0, sizeof(a));
+	a.sin_family = AF_INET;
+	a.sin_port = htons((unsigned short)atoi(port));
+	a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	for (i = 0; i < 100; i++) {
+		s = socket(AF_INET, SOCK_STREAM, 0);
+		if (connect(s, (struct sockaddr *)&a, sizeof(a)) == 0)
+			return s;
+		close(s);
+		usleep(50000);
+	}
+	return -1;
+}
+
 static int retry_of(int mode, int sock, char *err, int errlen)
 {
 	int retry = -1;
@@ -309,9 +336,8 @@ static int retry_of(int mode, int sock, char *err, int errlen)
 static int retry_test(const char *dir)
 {
 	char key[300], crt[300], cmd[1000], port[16], err[200];
-	struct sockaddr_in a;
 	pid_t srv;
-	int s = -1, i, r;
+	int s = -1, r;
 	snprintf(tls_seed_path, sizeof(tls_seed_path), "%s/SEED.DAT", dir);
 	tls_load_anchors("../../certs/CACERT.PEM", err, sizeof(err));
 	printf("== retry\n");
@@ -332,30 +358,35 @@ static int retry_test(const char *dir)
 	if (srv == 0) {
 		char acc[40];
 		snprintf(acc, sizeof(acc), "127.0.0.1:%s", port);
-		freopen("/dev/null", "w", stdout);
-		freopen("/dev/null", "w", stderr);
+		if (!freopen("/dev/null", "w", stdout) || !freopen("/dev/null", "w", stderr))
+			_exit(127);
 		execlp("openssl", "openssl", "s_server", "-accept", acc, "-cert", crt, "-key", key, "-tls1_2",
-		       "-cipher", "ECDHE-RSA-CHACHA20-POLY1305", "-naccept", "1", "-quiet", (char *)0);
+		       "-cipher", "ECDHE-RSA-CHACHA20-POLY1305", "-groups", "X25519", "-naccept", "2", "-quiet", (char *)0);
 		_exit(127);
 	}
-	memset(&a, 0, sizeof(a));
-	a.sin_family = AF_INET;
-	a.sin_port = htons((unsigned short)atoi(port));
-	a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	for (i = 0; i < 100; i++) {
-		s = socket(AF_INET, SOCK_STREAM, 0);
-		if (connect(s, (struct sockaddr *)&a, sizeof(a)) == 0)
-			break;
-		close(s);
-		s = -1;
-		usleep(50000);
-	}
+	s = connect_to(port);
 	check(s >= 0, "openssl s_server answers");
 	if (s >= 0) {
 		r = retry_of(NET_SOCKET, s, err, sizeof(err));
 		check(net_writes >= 2, "the server took ChaCha20 and sent its certificates");
 		check(r == 0, "closed after the certificates: no new try");
 		close(s);
+	}
+	/* the whole handshake (the chain, self-signed, refused after it):
+	   the log names the curve and the server's key */
+	s = connect_to(port);
+	if (s >= 0) {
+		tls_log = log_line;
+		net_drop = 0;
+		retry_of(NET_SOCKET, s, err, sizeof(err));
+		net_drop = 2;
+		tls_log = 0;
+		close(s);
+		check(strstr(logged, "the key exchange: x25519, ") &&
+		      strstr(logged, "; the server's key: RSA 2048 bits, its signature "),
+		      "the log: the key exchange's curve, the server's key and their times");
+		if (!strstr(logged, "the key exchange: x25519, "))
+			printf("%s", logged);
 	}
 	kill(srv, SIGTERM);
 	waitpid(srv, 0, 0);
