@@ -69,6 +69,59 @@ int tls_ec_fast(void)
 	return ec_vrfy != 0;
 }
 
+/* the handshake's sums, for the log: the curves' work (the key
+   exchange), the server's signature (RSA or ECDSA) and RSA otherwise */
+static unsigned long ms_ec, ms_ecdsa, ms_rsa;
+static const br_ec_impl *ec_real;
+
+static const unsigned char *ect_generator(int curve, size_t *len) { return ec_real->generator(curve, len); }
+static const unsigned char *ect_order(int curve, size_t *len) { return ec_real->order(curve, len); }
+static size_t ect_xoff(int curve, size_t *len) { return ec_real->xoff(curve, len); }
+
+static uint32_t ect_mul(unsigned char *G, size_t Glen, const unsigned char *x, size_t xlen, int curve)
+{
+	unsigned long t0 = pf_ms();
+	uint32_t r = ec_real->mul(G, Glen, x, xlen, curve);
+	ms_ec += pf_ms() - t0;
+	return r;
+}
+
+static size_t ect_mulgen(unsigned char *R, const unsigned char *x, size_t xlen, int curve)
+{
+	unsigned long t0 = pf_ms();
+	size_t r = ec_real->mulgen(R, x, xlen, curve);
+	ms_ec += pf_ms() - t0;
+	return r;
+}
+
+static uint32_t ect_muladd(unsigned char *A, const unsigned char *B, size_t len, const unsigned char *x,
+			   size_t xlen, const unsigned char *y, size_t ylen, int curve)
+{
+	unsigned long t0 = pf_ms();
+	uint32_t r = ec_real->muladd(A, B, len, x, xlen, y, ylen, curve);
+	ms_ec += pf_ms() - t0;
+	return r;
+}
+
+static br_ec_impl ec_timed = { 0, ect_generator, ect_order, ect_xoff, ect_mul, ect_mulgen, ect_muladd };
+static br_ecdsa_vrfy ecdsa_real;
+
+static uint32_t ecdsa_timed(const br_ec_impl *impl, const void *hash, size_t hash_len,
+			    const br_ec_public_key *pk, const void *sig, size_t sig_len)
+{
+	unsigned long t0 = pf_ms(), ec0 = ms_ec;
+	uint32_t r = ecdsa_real(impl, hash, hash_len, pk, sig, sig_len);
+	ms_ec = ec0;		/* its curve work is the signature's */
+	ms_ecdsa += pf_ms() - t0;
+	return r;
+}
+
+static const char *curve_name(int c)
+{
+	return c == BR_EC_secp256r1 ? "P-256" : c == BR_EC_secp384r1 ? "P-384" : c == BR_EC_secp521r1 ? "P-521" :
+	       c == BR_EC_curve25519 ? "x25519" : "?";
+}
+
 /* the server's certificates, checked after the handshake rather than
    during it (EMail's TT, 25 Oct 2026: without the DSP the check took 17 s
    of a 22 s handshake on a TT, and Gmail closed the connection first).
@@ -682,9 +735,12 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 
 static uint32_t rsa_public(unsigned char *x, size_t xlen, const br_rsa_public_key *pk)
 {
-	if (tls_rsa_accel && tls_rsa_accel(x, xlen, pk->n, pk->nlen, pk->e, pk->elen))
-		return 1;
-	return br_rsa_i31_public(x, xlen, pk);
+	unsigned long t0 = pf_ms();
+	uint32_t r = tls_rsa_accel && tls_rsa_accel(x, xlen, pk->n, pk->nlen, pk->e, pk->elen);
+	if (!r)
+		r = br_rsa_i31_public(x, xlen, pk);
+	ms_rsa += pf_ms() - t0;
+	return r;
 }
 
 static uint32_t rsa_vrfy(const unsigned char *x, size_t xlen, const unsigned char *hash_oid,
@@ -1263,13 +1319,14 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 		br_ssl_engine_set_suites(&t->cc.eng, suites_rsa, sizeof(suites_rsa) / sizeof(suites_rsa[0]));
 	else
 		br_ssl_engine_set_suites(&t->cc.eng, suites_all, sizeof(suites_all) / sizeof(suites_all[0]));
-	if (rsa_only)
-		br_ssl_engine_set_ecdsa(&t->cc.eng, 0);
-	else if (ec_vrfy)
-		br_ssl_engine_set_ecdsa(&t->cc.eng, ec_vrfy);
+	/* timed (ms_ec, ms_ecdsa) for the handshake's log line */
+	ecdsa_real = ec_vrfy ? ec_vrfy : br_ecdsa_vrfy_asn1_get_default();
+	br_ssl_engine_set_ecdsa(&t->cc.eng, rsa_only ? 0 : ecdsa_timed);
 	/* BearSSL's: the fastest code for a 32-bit CPU without fast 64-bit
 	   products */
-	br_ssl_engine_set_ec(&t->cc.eng, ec_impl);
+	ec_real = ec_impl;
+	ec_timed.supported_curves = ec_impl->supported_curves;
+	br_ssl_engine_set_ec(&t->cc.eng, &ec_timed);
 	/* AES with tables: half the instructions of the constant-time code
 	   on a 68030 (205 a byte for AES-256-GCM against 394), and nobody
 	   times an Atari's cache */
@@ -1310,11 +1367,37 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	sigs_known = sigs_checked = 0;
 	t->hs = 1;
 	t->sent = t0 = pf_ms();
+	ms_ec = ms_ecdsa = ms_rsa = 0;
 	r = pump(t, BR_SSL_SENDAPP, 1);
 	answered = t->hs == 2;
 	t->hs = 0;
 	t0 = pf_ms() - t0;
 	step("the handshake: %lu ms waiting for the network, %lu ms working", t->waited, t0 - t->waited);
+	if (r > 0 && t->xt.certs) {
+		/* where the work went: the key exchange and the server's
+		   signature over it (EMail: GMX's 9 s on a TT) */
+		const br_x509_pkey *k = br_x509_decoder_get_pkey(&t->xt.dc);
+		int c = br_ssl_engine_get_ecdhe_curve(&t->cc.eng);
+		char kx[24];
+		if (c)
+			snprintf(kx, sizeof(kx), "%s, %lu ms", curve_name(c), ms_ec);
+		else
+			snprintf(kx, sizeof(kx), "RSA, %lu ms", ms_rsa);
+		if (k && k->key_type == BR_KEYTYPE_RSA) {
+			size_t n = k->key.rsa.nlen, bits;
+			const unsigned char *p = k->key.rsa.n;
+			unsigned top;
+			while (n > 0 && !*p)
+				p++, n--;
+			bits = n * 8;
+			for (top = n ? *p : 0x80; !(top & 0x80); top <<= 1)
+				bits--;
+			step("the key exchange: %s; the server's key: RSA %u bits, its signature %lu ms", kx,
+			     (unsigned)bits, c ? ms_rsa : 0UL);
+		} else if (k)
+			step("the key exchange: %s; the server's key: %s, its signature %lu ms", kx,
+			     curve_name(k->key.ec.curve), ms_ecdsa);
+	}
 	if (r > 0 && t->xt.certs) {
 		/* the chain kept during the handshake, checked now, before any
 		   data goes either way (a resumed session sends none: it was
