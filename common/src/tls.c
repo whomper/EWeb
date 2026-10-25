@@ -24,6 +24,9 @@
 #include "plat.h"
 #include "util.h"
 #include "tls.h"
+#ifdef TLS_030
+#include "rsa030.h"
+#endif
 #include "tlsovl.h"
 
 /* from BearSSL's inner.h */
@@ -74,14 +77,15 @@ int tls_ec_fast(void)
 static unsigned long ms_ec, ms_ecdsa, ms_rsa;
 static const br_ec_impl *ec_real;
 
-static const unsigned char *ect_generator(int curve, size_t *len) { return ec_real->generator(curve, len); }
-static const unsigned char *ect_order(int curve, size_t *len) { return ec_real->order(curve, len); }
-static size_t ect_xoff(int curve, size_t *len) { return ec_real->xoff(curve, len); }
+static const br_ec_impl *ec_for(int curve);
+static const unsigned char *ect_generator(int curve, size_t *len) { return ec_for(curve)->generator(curve, len); }
+static const unsigned char *ect_order(int curve, size_t *len) { return ec_for(curve)->order(curve, len); }
+static size_t ect_xoff(int curve, size_t *len) { return ec_for(curve)->xoff(curve, len); }
 
 static uint32_t ect_mul(unsigned char *G, size_t Glen, const unsigned char *x, size_t xlen, int curve)
 {
 	unsigned long t0 = pf_ms();
-	uint32_t r = ec_real->mul(G, Glen, x, xlen, curve);
+	uint32_t r = ec_for(curve)->mul(G, Glen, x, xlen, curve);
 	ms_ec += pf_ms() - t0;
 	return r;
 }
@@ -89,7 +93,7 @@ static uint32_t ect_mul(unsigned char *G, size_t Glen, const unsigned char *x, s
 static size_t ect_mulgen(unsigned char *R, const unsigned char *x, size_t xlen, int curve)
 {
 	unsigned long t0 = pf_ms();
-	size_t r = ec_real->mulgen(R, x, xlen, curve);
+	size_t r = ec_for(curve)->mulgen(R, x, xlen, curve);
 	ms_ec += pf_ms() - t0;
 	return r;
 }
@@ -98,7 +102,7 @@ static uint32_t ect_muladd(unsigned char *A, const unsigned char *B, size_t len,
 			   size_t xlen, const unsigned char *y, size_t ylen, int curve)
 {
 	unsigned long t0 = pf_ms();
-	uint32_t r = ec_real->muladd(A, B, len, x, xlen, y, ylen, curve);
+	uint32_t r = ec_for(curve)->muladd(A, B, len, x, xlen, y, ylen, curve);
 	ms_ec += pf_ms() - t0;
 	return r;
 }
@@ -114,6 +118,20 @@ static uint32_t ecdsa_timed(const br_ec_impl *impl, const void *hash, size_t has
 	ms_ec = ec0;		/* its curve work is the signature's */
 	ms_ecdsa += pf_ms() - t0;
 	return r;
+}
+
+/* the curve's code: on the DSP when it is there (ec_real), else
+   BearSSL's, with TLS.OVL's br_i31_montymul in 68030 assembly the prime
+   curves are faster on i31 than P-256's own m31 code (EMail's figures on
+   a TT: a P-256 product 1.5 s against 2.0 s); X25519 stays m31's */
+static const br_ec_impl *ec_for(int curve)
+{
+#ifdef TLS_030
+	if (ec_real == &br_ec_all_m31)
+		return curve == BR_EC_curve25519 ? &br_ec_c25519_m31 : &br_ec_prime_i31;
+#endif
+	(void)curve;
+	return ec_real;
 }
 
 static const char *curve_name(int c)
@@ -733,12 +751,26 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 
 /* ---------------- RSA through the accelerator ---------------- */
 
+/* the DSP's (tls_rsa_accel), else TLS.OVL's 68030 code (rsa030.c: seven
+   to ten times BearSSL's C there, EMail's, 25 Oct 2026), else BearSSL's.
+   rsa_by: which, for the log */
+static const char *rsa_by = "";
+
 static uint32_t rsa_public(unsigned char *x, size_t xlen, const br_rsa_public_key *pk)
 {
 	unsigned long t0 = pf_ms();
 	uint32_t r = tls_rsa_accel && tls_rsa_accel(x, xlen, pk->n, pk->nlen, pk->e, pk->elen);
-	if (!r)
+	rsa_by = " on the DSP";
+#ifdef TLS_030
+	if (!r) {
+		r = rsa030_public(x, xlen, pk->n, pk->nlen, pk->e, pk->elen);
+		rsa_by = " on the 68030";
+	}
+#endif
+	if (!r) {
 		r = br_rsa_i31_public(x, xlen, pk);
+		rsa_by = "";
+	}
 	ms_rsa += pf_ms() - t0;
 	return r;
 }
@@ -887,12 +919,16 @@ static void get_seed(unsigned char out[48])
  * signature), and only after a check that succeeded; BearSSL still
  * decides everything else (names, dates, uses, the chain up to a root
  * certificate). The server's signature on its key exchange is new every
- * time, and isn't looked up. ECDSA only: RSA is 0.1 s on the DSP. Kept in
+ * time, and isn't looked up. RSA with SHA-256 too (an RSA-4096 check is
+ * 8 s on a TT in C, EUpdate's 25 Oct 2026): BearSSL compares the hash the
+ * signature gives with the signed data's, so an RSA entry is two slots,
+ * that hash and a SHA-256 of the check's inputs and the hash; one half
+ * written over by the ring leaves a pair that doesn't match. Kept in
  * tls_sigs_path (SIGS.DAT) between sessions, written over in place. */
 #define NSIGS 64
 #define SIGS_LEN (8 + NSIGS * 32)
 static unsigned char sig_file[SIGS_LEN];	/* "TLSG", next, 3 spare, the keys */
-static int sigs_read, sigs_changed, sigs_known, sigs_checked;
+static int sigs_read, sigs_changed, sigs_known, sigs_checked, rsa_known, rsa_checked;
 static br_ecdsa_vrfy sig_vrfy;			/* the check itself */
 
 static void sigs_load(void)
@@ -914,6 +950,59 @@ static void sigs_save(void)
 	if (sigs_changed && tls_sigs_path[0])
 		put_file(tls_sigs_path, sig_file, SIGS_LEN);
 	sigs_changed = 0;
+}
+
+/* a certificate's RSA signature (x509_minimal's): looked up, or checked
+   and kept */
+static uint32_t rsa_check(const unsigned char *x, size_t xlen, const unsigned char *hash_oid,
+			  size_t hash_len, const br_rsa_public_key *pk, unsigned char *hash_out)
+{
+	br_sha256_context sc, c;
+	unsigned char key[32], n[4], *slot;
+	int i;
+	uint32_t r;
+	if (hash_len != 32)
+		return rsa_vrfy(x, xlen, hash_oid, hash_len, pk, hash_out);
+	sigs_load();
+	rsa_checked++;
+	br_sha256_init(&sc);
+	br_sha256_update(&sc, "RSA", 3);
+	n[0] = (unsigned char)(pk->nlen >> 8);
+	n[1] = (unsigned char)pk->nlen;
+	n[2] = (unsigned char)pk->elen;
+	br_sha256_update(&sc, n, 3);
+	br_sha256_update(&sc, pk->n, pk->nlen);
+	br_sha256_update(&sc, pk->e, pk->elen);
+	n[0] = hash_oid ? hash_oid[0] : 0;
+	br_sha256_update(&sc, n, 1);
+	if (hash_oid)
+		br_sha256_update(&sc, hash_oid + 1, hash_oid[0]);
+	n[0] = (unsigned char)(xlen >> 8);
+	n[1] = (unsigned char)xlen;
+	br_sha256_update(&sc, n, 2);
+	br_sha256_update(&sc, x, xlen);
+	for (i = 0; i < NSIGS; i++) {
+		slot = sig_file + 8 + ((i + 1) % NSIGS) * 32;	/* the hash, after its key */
+		c = sc;
+		br_sha256_update(&c, slot, 32);
+		br_sha256_out(&c, key);
+		if (!memcmp(sig_file + 8 + i * 32, key, 32)) {
+			memcpy(hash_out, slot, 32);
+			rsa_known++;
+			return 1;
+		}
+	}
+	r = rsa_vrfy(x, xlen, hash_oid, hash_len, pk, hash_out);
+	if (r) {
+		i = sig_file[4];
+		slot = sig_file + 8 + ((i + 1) % NSIGS) * 32;
+		memcpy(slot, hash_out, 32);
+		br_sha256_update(&sc, slot, 32);
+		br_sha256_out(&sc, sig_file + 8 + i * 32);
+		sig_file[4] = (unsigned char)((i + 2) % NSIGS);
+		sigs_changed = 1;
+	}
+	return r;
 }
 
 static uint32_t sig_check(const br_ec_impl *impl, const void *hash, size_t hash_len,
@@ -1204,12 +1293,15 @@ static int xt_check(XTIME *x, unsigned need)
 	if (!r && (usages & need) != need)
 		r = BR_ERR_X509_FORBIDDEN_KEY_USAGE;
 	{
-		char known[60];
+		char known[100];
+		int k = 0;
+		known[0] = 0;
 		if (sigs_checked)
-			snprintf(known, sizeof(known), "; %d of %d ECDSA signatures checked before", sigs_known,
-				 sigs_checked);
-		else
-			known[0] = 0;
+			k = snprintf(known, sizeof(known), "; %d of %d ECDSA signatures checked before", sigs_known,
+				     sigs_checked);
+		if (rsa_checked)
+			snprintf(known + k, sizeof(known) - k, "; %d of %d RSA signatures checked before", rsa_known,
+				 rsa_checked);
 		step("the server's %d certificate%s checked after the handshake: %lu ms%s%s",
 		     x->certs, x->certs == 1 ? "" : "s", pf_ms() - t0, known, r ? " (refused)" : "");
 	}
@@ -1337,9 +1429,9 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	br_ssl_engine_set_ghash(&t->cc.eng, &br_ghash_ctmul);
 	br_ssl_engine_set_rsavrfy(&t->cc.eng, rsa_vrfy);
 	br_ssl_client_set_rsapub(&t->cc, rsa_public);
-	br_x509_minimal_set_rsa(&t->xc, rsa_vrfy);
+	br_x509_minimal_set_rsa(&t->xc, rsa_check);
 	sig_vrfy = ec_vrfy ? ec_vrfy : br_ecdsa_i31_vrfy_asn1;
-	br_x509_minimal_set_ecdsa(&t->xc, ec_impl, sig_check);
+	br_x509_minimal_set_ecdsa(&t->xc, &ec_timed, sig_check);
 	t->xc.dn_hash_impl = &dn_vtable;
 	set_time(&t->xc);
 	br_ssl_engine_set_buffer(&t->cc.eng, t->iobuf, sizeof(t->iobuf), 0);
@@ -1364,7 +1456,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 		free(t);
 		return 0;
 	}
-	sigs_known = sigs_checked = 0;
+	sigs_known = sigs_checked = rsa_known = rsa_checked = 0;
 	t->hs = 1;
 	t->sent = t0 = pf_ms();
 	ms_ec = ms_ecdsa = ms_rsa = 0;
@@ -1392,8 +1484,8 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 			bits = n * 8;
 			for (top = n ? *p : 0x80; !(top & 0x80); top <<= 1)
 				bits--;
-			step("the key exchange: %s; the server's key: RSA %u bits, its signature %lu ms", kx,
-			     (unsigned)bits, c ? ms_rsa : 0UL);
+			step("the key exchange: %s; the server's key: RSA %u bits, its signature %lu ms%s", kx,
+			     (unsigned)bits, c ? ms_rsa : 0UL, rsa_by);
 		} else if (k)
 			step("the key exchange: %s; the server's key: %s, its signature %lu ms", kx,
 			     curve_name(k->key.ec.curve), ms_ecdsa);
