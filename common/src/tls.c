@@ -1242,7 +1242,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	TLS *t;
 	unsigned char seed[48];
 	unsigned long t0;
-	int r, rsa_only = flags & TLS_RSA_ONLY, chacha_only = flags & TLS_CHACHA_ONLY;
+	int r, rsa_only = flags & TLS_RSA_ONLY, chacha_only = flags & TLS_CHACHA_ONLY, answered;
 	if (retry)
 		*retry = 0;
 	if (!nanchors) {
@@ -1311,6 +1311,7 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	t->hs = 1;
 	t->sent = t0 = pf_ms();
 	r = pump(t, BR_SSL_SENDAPP, 1);
+	answered = t->hs == 2;
 	t->hs = 0;
 	t0 = pf_ms() - t0;
 	step("the handshake: %lu ms waiting for the network, %lu ms working", t->waited, t0 - t->waited);
@@ -1341,12 +1342,16 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 		int e = br_ssl_engine_last_error(&t->cc.eng);
 		if (!e)
 			e = BR_ERR_IO;
-		/* refused with ChaCha20 only (an alert, or a closed connection
-		   from servers that don't bother): try again with every cipher.
+		/* refused with ChaCha20 only (an alert before any certificate,
+		   or the connection closed with no answer at all, from servers
+		   that don't bother): try again with every cipher. A server
+		   that sent its certificates took ChaCha20: a close after them
+		   is something else (Gmail hangs up on a slow 68030 then).
 		   40 handshake_failure, 71 insufficient_security with all of
 		   them: nothing in common with an RSA-only hello */
-		if (chacha_only && retry &&
-		    (e == BR_ERR_IO || (e > BR_ERR_RECV_FATAL_ALERT && e < BR_ERR_RECV_FATAL_ALERT + 256)))
+		if (chacha_only && retry && !t->xt.certs &&
+		    ((e == BR_ERR_IO && !answered) ||
+		     (e > BR_ERR_RECV_FATAL_ALERT && e < BR_ERR_RECV_FATAL_ALERT + 256)))
 			*retry = TLS_RETRY_ANY_CIPHER;
 		else if (rsa_only && retry &&
 			 (e == BR_ERR_RECV_FATAL_ALERT + 40 || e == BR_ERR_RECV_FATAL_ALERT + 71))
