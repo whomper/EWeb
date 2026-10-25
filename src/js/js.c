@@ -406,11 +406,12 @@ static void touch(ejs *j)
 
 static dnode *new_node(doc *d, int type)
 {
-	dnode *n = doc_alloc(d, sizeof *n);
+	dnode *n = doc_alloc(d, DN_ALLOC(type));
 	if (n != NULL) {
-		memset(n, 0, sizeof *n);
+		memset(n, 0, DN_SIZE(type));
 		n->type = (uint8_t) type;
 		n->y = -1;
+		DN_POISON(n);
 	}
 	return n;
 }
@@ -440,7 +441,8 @@ static void unlink_node(ejs *j, dnode *n)
 	else
 		p->last = n->prev;
 	n->parent = n->prev = n->next = NULL;
-	n->e.parent = n->e.prev = n->e.next = NULL;
+	if (n->type == DN_ELEMENT)
+		n->e.parent = n->e.prev = n->e.next = NULL;
 	touch(j);
 }
 
@@ -1053,14 +1055,16 @@ static dnode *clone(ejs *j, const dnode *n, int deep)
 	c->ns = n->ns;
 	c->tag = n->tag;
 	c->hid = n->hid;
-	c->e.name = n->e.name;
-	c->e.id = n->e.id;
 	if (n->type != DN_ELEMENT) {
 		if (n->text != NULL && (c->text = doc_alloc(j->d, n->len + 1)) != NULL) {
 			memcpy(c->text, n->text, n->len + 1);
 			c->len = c->cap = n->len;
 		}
-	} else if (n->nattr > 0) {
+	} else {
+		c->e.name = n->e.name;
+		c->e.id = n->e.id;
+	}
+	if (n->type == DN_ELEMENT && n->nattr > 0) {
 		if ((c->attrs = doc_alloc(j->d, n->nattr * sizeof *c->attrs)) == NULL)
 			return NULL;
 		memcpy(c->attrs, n->attrs, n->nattr * sizeof *c->attrs);

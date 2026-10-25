@@ -3391,7 +3391,47 @@ Now the list starts about as big as the page will want (an item an element and a
 peak 1,880 KB (135 KB less), and the page shows with 130 KB left. A line item stays 64 bytes on
 the 68030 (the embeddings' levels a byte array of the block's, `L.lv`, its controls in a gap item's
 `dir`), as a block of tens of thousands of words has as many. Where the rest of a page's memory goes
-(about 400 bytes an element before it is laid out) is the page memory diet still to come.
+(about 400 bytes an element before it is laid out) is the next section's.
+
+## A page's memory (25 Oct 2026)
+
+Before stage 5 (frames, iframes and more windows each keep a document of their own) the same
+test page's memory, piece by piece (`drawbench -m` with each piece of the Atari's heap put down to
+the code that asked for it), once it was laid out (1,864 KB):
+
+| What | KB | |
+|---|---|---|
+| The document: 3,761 nodes of 118 bytes, their text, attributes | 606 | 1,355 of the nodes text, each a whole element's size |
+| The layout's boxes (3,753 of 74 bytes) and the tables' column widths | 316 | kept with the page, though nothing used them once it was laid out |
+| The CSS engine: five 64 KB pieces | 320 | the page's sheets, names and styles used 12 KB of its three, the UA sheet 36 KB of its two |
+| The text runs, links, tiles | 140 | |
+| The page's source (kept for Save page) | 128 | |
+| The display list (2,550 items of 50 bytes) | 125 | |
+
+Three changes, none of them to what a page shows (`tests/layout`'s lists are the same):
+
+- **The boxes are let go once the page is laid out** (an arena of their own, `L.ba` in
+  `layout_page`); the text runs, links, tiles and gradients the display list points at stay in the
+  page's.
+- **The CSS engine's arenas grow from 2 KB** (`EC_FIRST` in `src/css/core.c`, each piece as big as
+  those before it together), as the ST edition's did from 512 bytes: a page's context now takes
+  about what it needs, not 64 KB an arena.
+- **A text node, a comment, a DOCTYPE or a processing instruction is 48 bytes**, not 118: an
+  element's own part (its `ec_node`, attributes, classes, form and control) is at the end of a
+  `dnode`, and `DN_SIZE` leaves it out of the others. `nattr` and `ncls` stay in every node, so
+  `dn_attr` may ask any. In the checks' builds (AddressSanitizer) a short node is given a whole
+  dnode with the rest poisoned (`DN_POISON`), so a read of an element's part in it is caught:
+  `make test` caught one at once (the visited links' marking read every node's flags), reading
+  the code another (a script's `cloneNode` copied a text node's name), and `fuzz_html` found
+  nothing more in ten minutes (it found a media query's `em` overflowing instead, kept in
+  `tests/fuzz/found/html`).
+
+The test page: parsed 974 KB to 778 KB, styled 1,176 KB to 802 KB, laid out **1,864 KB to
+1,162 KB**, and its peak (while it is laid out, the boxes there) 1,880 KB to 1,506 KB. On the page
+set the memory a page keeps went from a median of 1,084 KB to 750 KB (the 90th percentile 1,663 KB
+to 1,229 KB, the largest 4,116 KB to 3,138 KB), its peak from a median of 1,134 KB to 918 KB. The
+page set's 68030 instructions (`drawbench`: parse, style, layout and drawing) went 0.05% down, each
+page between 0.23% down and 0.35% up.
 
 ## Bidirectional embeddings (24 Oct 2026)
 

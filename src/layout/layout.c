@@ -208,7 +208,8 @@ typedef struct {
 
 typedef struct {
 	page *p;
-	struct arena *a;
+	struct arena *a;		/* what the page keeps: its text, links, tiles, gradients */
+	struct arena ba;		/* the boxes, and a table's columns: let go once it is laid out */
 	int32_t zoom;
 	int32_t text;			/* LAYOUT_OPT.text */
 	ITEM *it;
@@ -1201,7 +1202,7 @@ static box *new_box(L *l, int kind, dnode *n, const ec_style *st, box *parent)
 	box *b;
 	if (stopped(l))
 		return NULL;
-	b = amalloc(l->a, sizeof *b);
+	b = amalloc(&l->ba, sizeof *b);
 	if (b == NULL) {
 		l->fail = 1;
 		return NULL;
@@ -1773,7 +1774,7 @@ static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
 		}
 		for (end = b; end->next != NULL && end->next->kind != BX_BLOCK; end = end->next)
 			;
-		w = amalloc(l->a, sizeof *w);
+		w = amalloc(&l->ba, sizeof *w);
 		if (w == NULL) {
 			l->fail = 1;
 			return;
@@ -1982,7 +1983,7 @@ static void fixup(L *l, box *b)
 				b->last = prev;
 			continue;
 		}
-		a = amalloc(l->a, sizeof *a);
+		a = amalloc(&l->ba, sizeof *a);
 		if (a == NULL) {
 			l->fail = 1;
 			return;
@@ -6756,7 +6757,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	}
 	if (b->table) {
 		/* its columns at their widest; a table without a width shrinks to them */
-		int32_t *cols = amalloc(l->a, MAXCOLS * sizeof *cols), mins[MAXCOLS], total, sp;
+		int32_t *cols = amalloc(&l->ba, MAXCOLS * sizeof *cols), mins[MAXCOLS], total, sp;
 		int n, i, was = l->minw;
 		if (cols == NULL) {
 			l->fail = 1;
@@ -7496,6 +7497,9 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	free(l.later);
 	free(l.fl);
 	free(l.lay);
+	/* the boxes: nothing on the page points at them (a big page's
+	   278 KB of 3,753 on the stock 4 MB Falcon's test page) */
+	afree(&l.ba);
 	if (l.fail) {
 		page_free(p);
 		return NULL;

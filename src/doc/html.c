@@ -1653,10 +1653,11 @@ static __attribute__((noinline)) int tok(P *p)
 
 static dnode *new_node(P *p, int type)
 {
-	dnode *n = dalloc(p, sizeof *n);
-	memset(n, 0, sizeof *n);
+	dnode *n = dalloc(p, DN_ALLOC(type));
+	memset(n, 0, DN_SIZE(type));
 	n->type = (uint8_t) type;
 	n->y = -1;
+	DN_POISON(n);
 	return n;
 }
 

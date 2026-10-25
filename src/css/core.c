@@ -5,15 +5,15 @@
 
 /* ------------------------------------------------------------ memory */
 
-/* a context's memory comes in pieces of this: in the ST edition small
-   ones, and there an arena's first pieces smaller still (ec_alloc_slow),
-   so that a page takes about what it needs and the ST keeps more pages
-   for Back and more pictures (they cost +0.08% of the instructions) */
+/* a context's memory comes in pieces of this, an arena's first pieces
+   smaller (ec_alloc_slow); in the ST edition small ones throughout, so
+   that the ST keeps more pages for Back and more pictures */
 #ifdef EW_ST
 #define EC_CHUNK 4096
 #define EC_FIRST 512
 #else
 #define EC_CHUNK 65536
+#define EC_FIRST 2048
 #endif
 
 void *ec_alloc_slow(ec_arena *a, size_t n)
@@ -21,16 +21,14 @@ void *ec_alloc_slow(ec_arena *a, size_t n)
 	size_t size = a->chunk_size ? a->chunk_size : 32768;
 	ec_chunk *ch;
 
-#ifdef EC_FIRST
 	/* from EC_FIRST, each piece as big as those before it together: a
-	   small page's names, sheets and styles (a context has an arena for
-	   each) take about what they need, not a piece each. Only in the ST
-	   edition: on the Falcon the pieces more cost more time than the
-	   memory they save is worth (+0.08% of the page set's 68030
-	   instructions) */
+	   page's names, sheets and styles (a context has an arena for each)
+	   take about what they need, not a piece each. A page's context on
+	   the stock 4 MB Falcon's test page used 12 KB of its three 64 KB
+	   pieces, the UA sheet's 29 KB of two; the pieces more cost +0.08%
+	   of the page set's 68030 instructions */
 	if (a->size < size)
 		size = a->size > EC_FIRST ? a->size : EC_FIRST;
-#endif
 	if (n + sizeof(ec_chunk) + EC_ALIGN > size)
 		size = n + sizeof(ec_chunk) + EC_ALIGN;
 	ch = malloc(size);

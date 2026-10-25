@@ -2,8 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * doc.h - a web page's document: EWeb's HTML parser (html.c) makes these
- * nodes, whose elements are at the same time the ec_nodes EWeb's CSS
- * engine (src/css) styles, so there is one tree and no copying. All of a
+ * nodes, whose elements hold the ec_nodes EWeb's CSS engine (src/css)
+ * styles, so there is one tree and no copying. All of a
  * document's memory is taken in large blocks (doc_alloc) and given back
  * at once by doc_free.
  */
@@ -34,7 +34,6 @@ enum {
 
 typedef struct dnode dnode;
 struct dnode {
-	ec_node e;			/* an element as the CSS engine sees it (first: a cast away) */
 	uint8_t type;			/* DN_* */
 	uint8_t ns;			/* an element's namespace: DN_NS_HTML, ... */
 	uint16_t tag;			/* T_* */
@@ -43,13 +42,33 @@ struct dnode {
 	dnode *parent, *first, *last, *prev, *next;
 	char *text;			/* a text node's, UTF-8 */
 	uint32_t len, cap;
+	uint16_t nattr, ncls;		/* (0 but in an element: dn_attr asks any node) */
+	int32_t y;			/* where layout put it (for #fragment), -1: nowhere */
+	/* an element's (and the document node's) alone: the others are
+	   DN_SHORT bytes, a page having about as many text nodes as elements */
+	ec_node e;			/* an element as the CSS engine sees it */
 	ec_attr *attrs;
 	const ec_atom **cls;
-	uint16_t nattr, ncls;
-	int32_t y;			/* where layout put it (for #fragment), -1: nowhere */
 	dnode *owner;			/* a form control: the form the parser put it in */
 	struct fctl *ctl;		/* a form control: its state (form.h) */
 };
+
+/* the bytes of a node of that type (DN_*): a text node, a comment, a
+   DOCTYPE or a processing instruction has no e, attrs, cls, owner or ctl */
+#define DN_SHORT offsetof(dnode, e)
+#define DN_SIZE(type) ((type) == DN_ELEMENT || (type) == DN_DOCUMENT ? sizeof(dnode) : DN_SHORT)
+/* what a node of that type is given, and its part past DN_SIZE made
+   unreadable: in the checks' builds (AddressSanitizer) a short node is
+   given the whole of a dnode, the rest poisoned, so that a read of an
+   element's part in it is caught */
+#if defined(__SANITIZE_ADDRESS__)
+#include <sanitizer/asan_interface.h>
+#define DN_ALLOC(type) sizeof(dnode)
+#define DN_POISON(n) ASAN_POISON_MEMORY_REGION((char *) (n) + DN_SIZE((n)->type), sizeof(dnode) - DN_SIZE((n)->type))
+#else
+#define DN_ALLOC(type) DN_SIZE(type)
+#define DN_POISON(n) ((void) 0)
+#endif
 
 /* a <meta http-equiv=refresh> as the parser put it in (doc.refresh) */
 typedef struct drefresh {

@@ -1387,7 +1387,7 @@ long doc_mark_links(doc *d, int (*visited)(void *ud, const char *href), void *ud
 	long changed = 0;
 	/* the tree in document order, without recursion (it may be deep) */
 	while (n != NULL) {
-		if (n->e.flags & EC_NODE_LINK) {
+		if (n->type == DN_ELEMENT && (n->e.flags & EC_NODE_LINK)) {
 			const char *h = HA(n, href);
 			uint16_t v = visited != NULL && h != NULL && visited(ud, h) ? EC_NODE_VISITED : 0;
 			if ((n->e.flags & EC_NODE_VISITED) != v) {
