@@ -111,7 +111,10 @@ hub stay complete, with the evidence.
   (`tests/url/fetch.sh` first) after a change to `url.c`, and `make hatarinet` for the Atari side; run
   `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
   The handshake's RSA and elliptic curves run on the DSP through `common/` (`ui/dsp.c`, `ui/dsp_ec.c`,
-  `src/ecdsp.c`, `dsp/ec.a56`): change those in AERA-Atari and test them there (`common/tests/ec`).
+  `src/ecdsp.c`, `dsp/ec.a56`), and without one in 68030 assembly (`src/rsa030.c`, `atari/mont030.S`,
+  `tlsovl/i31_montmul_030.c` and `mont31_030.S`, which the Makefile puts in BearSSL's place): change
+  those in AERA-Atari and test them there (`common/tests/ec`, `common/tests/tls030`); `make
+  hatarinet`'s "on a TT" runs them here.
   The Pi gateway (Settings > Secure: `FALCON=0`, `GATE=`, `GATEPORT=`; EWGET `-g`, ewrender `-W`) is AERA-Gateway's `webgate.py`, whose
   protocol EWeb's session owns (AERA-Gateway's owner session commits it): `make itest` and `make
   hatarinet` run it from EWeb's read-only `gateway/` copy (`tools/sync-gateway.sh`; `WEBGATE=` for another).

@@ -49,10 +49,13 @@ RUNS = [
     # through AERA-Gateway's webgate on "the Pi" (this computer): no TLS on
     # the Atari, TLS 1.3 from the Pi to the server
     ("through the gateway", "-n 2 -g 127.0.0.1:%d -o GW.HTM https://127.0.0.1:%d/page" % (GATE, HTTPS)),
+    # a TT, no DSP: RSA's check on the 68030 in assembly (common's rsa030.c,
+    # TLS.OVL 1.4's), the key exchange with BearSSL's i31 in it too
+    ("on a TT", "-l TT.LOG -o TT.HTM https://127.0.0.1:%d/page" % HTTPS),
 ]
 
 
-def run_atari(hd, cmdline, log, dropped=None):
+def run_atari(hd, cmdline, log, dropped=None, machine="Falcon:16"):
     """dropped: the line goes in that .CMD file, and EWGET.CMD names it, as
     the desktop does when the file is dropped on EWGET.TTP"""
     if dropped:
@@ -61,7 +64,7 @@ def run_atari(hd, cmdline, log, dropped=None):
         cmdline = "C:\\" + dropped
     with open(os.path.join(hd, "EWGET.CMD"), "w") as f:
         f.write(cmdline)
-    m = machines.Machine("Falcon:16", hd)
+    m = machines.Machine(machine, hd)
     cmd = ["hatari"] + m.args() + m.network() + \
           ["--auto", "C:\\EWGET.TTP", "--fast-boot", "yes", "--natfeats", "yes", "--cpu-exact", "yes",
            "--fast-forward", "yes", "--statusbar", "no", "--log-level", "fatal"]
@@ -110,8 +113,12 @@ def main():
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
+            if name == "on a TT":	# the test authority again
+                shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)
+                os.remove(os.path.join(hd, "ROOTS.DAT"))
             text = run_atari(hd, cmdline, os.path.join(work, "hatari-%s.log" % name.replace(" ", "-")),
-                             "MOVED.CMD" if name == "http to https" else None)
+                             "MOVED.CMD" if name == "http to https" else None,
+                             "TT" if name == "on a TT" else "Falcon:16")
             print("---- %s: EWGET.TTP %s" % (name, cmdline))
             print("\n".join(l for l in text.splitlines() if l.strip()))
             ok = "done (0)" in text and "200 OK" in text
@@ -152,6 +159,14 @@ def main():
                 ok = ok and "TLS 1.3" in text and "through the gateway" in text \
                      and "the connection was kept open" in text \
                      and open(os.path.join(hd, "GW.HTM"), "rb").read() == server.PAGE
+            elif name == "on a TT":
+                net = open(os.path.join(hd, "TT.LOG"), errors="replace").read()
+                ok = ok and "TLS 1.2" in text and "RSA on the 68030" in text \
+                     and re.search(r"the server's key: RSA 2048 bits, its signature \d+ ms on the 68030", net) \
+                     and open(os.path.join(hd, "TT.HTM"), "rb").read() == server.PAGE
+                for l in net.splitlines():
+                    if "TLS --" in l:
+                        print("---- " + l.strip())
             elif name == "https":
                 ok = ok and "TLS 1.2" in text and "the connection was kept open" in text \
                      and "RSA on the DSP" in text and open(os.path.join(hd, "PAGE.HTM"), "rb").read() == server.PAGE

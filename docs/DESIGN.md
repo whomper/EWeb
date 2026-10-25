@@ -570,6 +570,15 @@ certificate or a close with no answer: a close after the server's certificates n
 second full handshake (Gmail on EMail's TT). Since 1.3 a line after the handshake says where its
 work went: "the key exchange: x25519, N ms; the server's key: RSA 2048 bits, its signature N ms".
 
+**Without a DSP** (a TT, or a Falcon whose DSP failed its self-test) RSA's check and BearSSL's i31
+multiplication (the key exchange, the prime curves) run in 68030 assembly since 0.40, as in TLS.OVL
+1.4: common's `rsa030.c` with `atari/mont030.S`, and `tlsovl/i31_montmul_030.c` with
+`mont31_030.S` in place of BearSSL's `i31_montmul.c`, in `EWEB.PRG` and `EWGET.TTP` (the ST
+edition has no TLS). On the emulated TT (32 MHz, `make hatarinet`'s "on a TT"), a handshake with
+the test server's RSA-2048 certificate: 5.0 s with 0.39, now 2.3 s (the key exchange 1,045 ms, the
+signature 250 ms "on the 68030", the chain 450 ms), and 2.0 s the next time (the chain's signature
+remembered in `SIGS.DAT`).
+
 **On your DFB1 with 0.7** and the caches on, the same fetch took 12.8 s (the handshake 7.6 s; with
 the log, 14.4 s and 8.5 s). The download went from 29 to 163 KB/s and unpacking from 930 to 675 ms with
 the caches. The handshake's steps, from the log:

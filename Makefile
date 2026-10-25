@@ -343,7 +343,14 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
 COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
               $(addprefix build/tos/net/,conn.o tls.o util.o futil.o inflate.o secret.o net_tos.o sting.o sting_s.o dsprsa.o \
-              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o bigbuf.o)
+              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o bigbuf.o rsa030.o mont030.o)
+# RSA's check and the prime curves in 68030 assembly, as TLS.OVL 1.4 has
+# them (common/src/rsa030.c, common/atari/mont030.S; BearSSL's
+# br_i31_montymul is common/tlsovl/i31_montmul_030.c with mont31_030.S)
+build/tos/net/tls.o: TOSNET_CFLAGS += -DTLS_030
+build/tos/net/mont030.o: common/atari/mont030.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
 build/tos/net/dspec.o: common/dsp/ec_prog.h
 build/tos/net/%.o: src/net/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
@@ -374,7 +381,16 @@ build/tos/bssl/%.o: $(BSSL)/src/%.c
 	$(M68KCC) -m68030 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
 		-fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -w -nostdinc -isystem $(GCCINC) \
 		-Iatari/include -Icommon/atari/include -I$(BSSL)/inc -I$(BSSL)/src $(BSSL_DEF) -c $< -o $@
-build/tos/libbearssl.a: $(patsubst $(BSSL)/src/%.c,build/tos/bssl/%.o,$(BSSL_SRC))
+build/tos/bssl/i31_montmul_030.o: common/tlsovl/i31_montmul_030.c
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+		-fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -w -nostdinc -isystem $(GCCINC) \
+		-Iatari/include -Icommon/atari/include -I$(BSSL)/inc -I$(BSSL)/src $(BSSL_DEF) -c $< -o $@
+build/tos/bssl/mont31_030.o: common/tlsovl/mont31_030.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
+build/tos/libbearssl.a: $(patsubst $(BSSL)/src/%.c,build/tos/bssl/%.o,$(filter-out $(BSSL)/src/int/i31_montmul.c,$(BSSL_SRC))) \
+		build/tos/bssl/i31_montmul_030.o build/tos/bssl/mont31_030.o
 	rm -f $@
 	$(CROSS)ar rcs $@ $^
 build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ) \
