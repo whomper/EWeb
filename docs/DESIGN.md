@@ -3639,7 +3639,7 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
   (`win_max`: a 4 MB Falcon, a 1040 ST). The pages kept for Back share `br_keep_max` (each window's history its share), and
   the pictures trimmed keep what every window shows (`br_register`, `shown_imgs`).
 
-`EWEB.PRG` grew 4 KB (1,216,098 bytes) and `EWEBST.PRG` 4 KB (642,384). Tests:
+`EWEB.PRG` grew 4 KB (1,216,504 bytes) and `EWEBST.PRG` 4 KB (642,548). Tests:
 `tests/layout/frames.py` (`frames/targets.html`: `_blank`, a name, `_top`, a form's target;
 ewrender shows another window's page in its stead, a `window` line), `make hatarigui` (browse:
 ^N, ^W, `/site/blank.html`'s `_blank` link and a named window).
