@@ -22,6 +22,24 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def palette_png(src, out):
+    """the capture as a palette PNG of its own colours, every pixel as
+    it was (a 256-colour screen has at most 256)"""
+    from PIL import Image
+    im = Image.open(src).convert("RGB")
+    px = list(im.get_flattened_data())
+    cols = sorted(set(px))
+    if len(cols) > 256:
+        shutil.copy(src, out)
+        return
+    idx = {c: i for i, c in enumerate(cols)}
+    p = Image.new("P", im.size)
+    pal = [v for c in cols for v in c]
+    p.putpalette(pal + [0] * (768 - len(pal)))
+    p.putdata([idx[c] for c in px])
+    p.save(out, optimize=True)
+
+
 def main():
     a = sys.argv[1:]
     if not a or a[0].startswith("-"):
@@ -71,7 +89,7 @@ def main():
         time.sleep(4)
         shot = r.shot(0)
         time.sleep(2)
-        shutil.copy(shot, out)
+        palette_png(shot, out)
         print("screenshot: %s" % out)
     finally:
         r.end()
