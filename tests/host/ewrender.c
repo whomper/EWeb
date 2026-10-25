@@ -111,6 +111,8 @@
  * request the page's pictures make (as GEM's messages come in pf_idle
  * while one is under way): "sized in a request:" printed, and the
  * page's sheets come after it.
+ * -D BYTES: the memory pictures may take (img_max; EWEB.PRG's comes
+ * from the machine's RAM), 8 MB by default.
  * -e NAME: once the page is shown, it is read again in that encoding
  * (View > Encoding; "auto": the page's own), "encoding:" printed with
  * what it was read in and its title.
@@ -803,6 +805,8 @@ int main(int argc, char **argv)
 			next = argv[++i];
 		else if (!strcmp(argv[i], "-L") && i + 1 < argc && nresize < 8)
 			resize[nresize++] = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-D") && i + 1 < argc)
+			img_max = atol(argv[++i]);
 		else if (!strcmp(argv[i], "-Y") && i + 1 < argc)
 			in_req_w = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
@@ -890,7 +894,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}

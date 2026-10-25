@@ -1635,6 +1635,22 @@ static void page_shown_imgs(const page *p)
 			img_current(p->items[i].img);
 }
 
+/* img_size_shown: a page shown (a window's) shows im at w x h */
+static int size_shown(const ew_img *im, int32_t w, int32_t h)
+{
+	int k;
+	long i;
+	for (k = 0; k < br_n; k++) {
+		const page *p = br_all[k]->p;
+		for (i = 0; p != NULL && i < p->nitems; i++) {
+			const dl_item *d = &p->items[i];
+			if (d->type == DL_IMAGE && d->img == im && DL_PIC_W(d) == w && DL_PIC_H(d) == h)
+				return 1;
+		}
+	}
+	return 0;
+}
+
 /* the pages shown's pictures (b's, and every window's) are those the
    trimming keeps */
 static void shown_imgs(const browser *b)
@@ -3322,6 +3338,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	img_svg_size = svg_size;	/* SVG pictures: src/svg's */
 	img_svg_late = svg_late;
 	img_svg_decode = svg_decode;
+	img_size_shown = size_shown;
 	memset(b, 0, sizeof *b);
 	b->width = width;
 	b->zoom = zoom > 0 ? zoom : 1024;

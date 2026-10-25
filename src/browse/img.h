@@ -92,6 +92,9 @@ extern long img_used;
 /* a file of more pixels than this is not decoded (a JPEG may have 12 times as many) */
 extern long img_max_px;
 void img_trim(void);
+/* does a page shown show im at w x h (the browser's: its decoded pixels
+   at that size are never trimmed); NULL: not known */
+extern int (*img_size_shown)(const ew_img *im, int32_t w, int32_t h);
 /* the page shown shows this picture (NULL: none, before they are named) */
 void img_current(ew_img *im);
 /* everything no page shows */

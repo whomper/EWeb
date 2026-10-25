@@ -206,7 +206,8 @@ hub stay complete, with the evidence.
   the 68030's: `make testdsp` there compares them), made fast for the stock Falcon (the owner's
   rule, 20 Oct 2026): after changing them,
   `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the emulated stock Falcon
-  (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make itest` loads
+  (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make test` has `tests/browse/trim.py` (a picture at two sizes
+  in little memory, ewrender `-D`); `make itest` loads
   `/site/pics.html` and `/site/bg.html`; `make hatarigui` shows it over the network and from the disk in every mode.
   Through the Pi a picture may come as the screen's pens (DESIGN.md, Pens from the Pi): webgate runs
   AERA-Atari's `common/tools/pens` (`aerapens`, pic.c itself; its parity test `common/tests/pic/pens.py`,

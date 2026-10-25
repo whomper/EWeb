@@ -76,6 +76,7 @@ static long pal_serial = 1;
 
 PIC_PAL *img_pal;
 long img_max = 8L << 20;
+int (*img_size_shown)(const ew_img *im, int32_t w, int32_t h);
 long img_used;
 /* a file of more pixels than this isn't decoded (four bytes a pixel for
    a GIF or an interlaced PNG while it is; a JPEG streams, and may have
@@ -695,13 +696,17 @@ void img_trim(void)
 		img_free(old);
 	}
 	/* then: decoded pixels of pictures the page shown doesn't show, or
-	   at a size it doesn't, oldest first */
+	   at a size it doesn't, oldest first. A size a page shows now stays
+	   (img_size_shown): a picture shown at two sizes that don't fit
+	   together would else have each decoded again in turn, for ever */
 	while (img_used > img_max) {
 		ew_img *im, *oi = NULL;
 		var *v, *ov = NULL;
 		for (im = all; im != NULL; im = im->next)
 			for (v = im->vars; v != NULL; v = v->next)
-				if (v->pic != NULL && (!im->cur || v->used < im->used) && (ov == NULL || v->used < ov->used)) {
+				if (v->pic != NULL && (!im->cur || (v->used < im->used &&
+				    (img_size_shown == NULL || !img_size_shown(im, v->w, v->h)))) &&
+				    (ov == NULL || v->used < ov->used)) {
 					ov = v;
 					oi = im;
 				}

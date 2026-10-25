@@ -890,7 +890,9 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   without fetching) and each size it is decoded at; their memory is counted (an eighth of the free
   TT RAM up to 16 MB, else a sixteenth of the free ST RAM up to 1 MB), and
   past it the pictures no page shows go first, then the decoded pixels of those only kept pages
-  show. A page kept for Back keeps its pictures.
+  show, never those at a size a page shows now (`img_size_shown`: a picture a page shows at two
+  sizes that don't fit together was decoded at each in turn, for ever, until 25 Oct 2026; a
+  yaary.music portrait on a host's 8 MB). A page kept for Back keeps its pictures.
 - **Their size on the page** (`src/layout`): CSS `width` and `height` (HTML's `width` and `height`
   attributes are hints for them), else the file's own size, one from the other by the
   proportions, within `max-width` and `max-height`; `vertical-align: middle` and `bottom` too.
