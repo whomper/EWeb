@@ -1029,6 +1029,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/layout/gradients.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/deep.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/layout/frames.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/find.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/select.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- A frameset: two columns, the second split in three rows (absolute,
+     relative and per cent), a border between them, a frame that doesn't
+     scroll, and a frame showing a page with an iframe of its own. -->
+<html><head><title>Frames</title></head>
+<frameset cols="25%,*" border=4>
+ <frame src="frames/menu.html" name="menu">
+ <frameset rows="80,*,30%">
+  <frame src="frames/one.html" name="top" scrolling=no>
+  <frame src="frames/two.html" name="main">
+  <frame src="frames/nested.html" name="foot">
+ </frameset>
+ <noframes><p>Not shown: EWeb shows frames.</noframes>
+</frameset></html>

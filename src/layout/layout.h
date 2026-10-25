@@ -16,8 +16,12 @@
 #include "doc.h"
 #include "font.h"
 
+struct page;
+
 typedef struct {
 	int32_t width;			/* the page's width: the window's work area, device px */
+	int32_t height;			/* the window's work area's height, device px (a
+					   frameset is as tall; 0: three quarters of width) */
 	int32_t zoom;			/* device px per CSS px, x1024 (819: 0.8) */
 	int32_t text;			/* the text's size, x1024: fonts and line heights only
 					   (Larger text: the pictures stay as they are); 0: 1024 */
@@ -33,6 +37,12 @@ typedef struct {
 	   (0xRRGGBB): its handle and its size in CSS px, as image's; NULL:
 	   none (not drawn) */
 	void *(*svg)(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h);
+	/* a frame or an iframe (n): its frame's number (1 or more), the same
+	   each time for the same element, or 0 (not shown); and that frame's
+	   document laid out w x h device px, a page the layout keeps with its
+	   own (page.kids) from then on, or NULL (nothing to show yet) */
+	int (*frame)(void *ud, dnode *n);
+	struct page *(*frame_page)(void *ud, int frame, int32_t w, int32_t h);
 	void *ud;
 	/* the page laid out before of the same document (NULL: none): its
 	   boxes' scrolling kept (an element's box scrolled as far again) */
@@ -170,6 +180,16 @@ typedef struct page {
 	} *blocks;
 	long nblocks, blockcap;
 #endif
+	/* the frames' pages its items are from (each frame's spliced in at
+	   its place, in a box that scrolls: its DL_CLIP item and page.scr's),
+	   and each link's frame (frame_page's number; 0 the page's own; NULL
+	   when all are its own) */
+	struct page **kids;
+	int nkids, kidcap;
+	uint16_t *lfr;
+	int fno;			/* a frame's page: its number in the page it is in */
+	uint8_t frameset;		/* a frameset's: as tall as the window */
+	uint8_t bg_set;			/* its canvas has a colour of its own (bg) */
 	struct arena *mem;
 	LAYOUT_OPT opt;
 	int deep;			/* nested deeper than the stack holds: the rest left out */
@@ -273,6 +293,13 @@ void page_bar_thumb(const page *p, const dl_item *bar, int32_t *t0, int32_t *t1)
 int page_link_at(const page *p, int32_t x, int32_t y);
 /* a link's download attribute (<a download>): its value, NULL for none */
 const char *page_link_download(const page *p, int link);
+/* a link's target attribute (<a target>, <area target>): "" for none */
+const char *page_link_target(const page *p, int link);
+/* the frame a link is in (LAYOUT_OPT.frame's number), 0 the page's own */
+int page_link_frame(const page *p, int link);
+/* a link's href made another (a frame's made absolute by the browser):
+   0 if out of memory */
+int page_set_link(page *p, int link, const char *href);
 /* the form control under (x, y), and its item; NULL: none */
 struct fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it);
 /* a control's item on the page (its content's place), or NULL when it

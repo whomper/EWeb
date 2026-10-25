@@ -144,7 +144,8 @@ static void names_init(void)
 		{ H_LEGEND, T_LEGEND }, { H_OPTGROUP, T_OPTGROUP }, { H_PICTURE, T_PICTURE },
 		{ H_SOURCE, T_SOURCE }, { H_DIV, T_DIV }, { H_P, T_P }, { H_CAPTION, T_CAPTION },
 		{ H_THEAD, T_THEAD }, { H_TBODY, T_TBODY }, { H_TFOOT, T_TFOOT },
-		{ H_DETAILS, T_DETAILS }, { H_SUMMARY, T_SUMMARY } };
+		{ H_DETAILS, T_DETAILS }, { H_SUMMARY, T_SUMMARY }, { H_FRAMESET, T_FRAMESET },
+		{ H_FRAME, T_FRAME } };
 	const uint8_t *l;
 	unsigned i;
 

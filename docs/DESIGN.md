@@ -2477,7 +2477,8 @@ and as Gecko and Blink do it:
   standard's, Blink's `-webkit-baseline-middle`; before CSS's `middle`, a few pixels higher),
   `texttop` hangs it from the text's top, `absmiddle` and `abscenter` are CSS's `middle`, and
   `bottom` and `baseline` sit on the baseline (HTML 3.2's meaning of bottom, and both engines').
-  `iframe`, `object` and `embed` take the same hints, but EWeb doesn't show them yet. A picture or
+  `iframe`, `object` and `embed` take the same hints (an iframe is shown since stage 5: Frames
+  and iframes, below). A picture or
   a form control in a `sup` or `sub` now grows its line by the shift, as a word there does (before,
   a raised picture went over the line above). `valign` on rows and cells is `vertical-align`, the
   cells inheriting their row's (as before); `baseline` now puts the first lines of a row's cells on
@@ -3555,6 +3556,58 @@ engine has no fill or stroke); its attributes and its own `<style>` do.
 `tests/layout/svg.html`'s display list, and `fuzz_svg`'s seeds and finds (four, each fixed: a
 `<style>` read past its end, and sums of numbers near 32 bits).
 
+## Frames and iframes (25 Oct 2026)
+
+Stage 5's second part. NetSurf's frames are its core's (its desktop's frames and its HTML
+content's iframes: GPL-2.0-only, the owner's call, Open questions), so EWeb's are its own, built on
+its layout's boxes that scroll:
+
+- **Each frame is a document of its own** (a frameset's `<frame>`, an `<iframe>`), fetched after
+  the page as its pictures are (`br_pictures_step`): a frameset's frames first (they are the
+  page), then the page's pictures (and the frames'), then its iframes (an embedded player or a
+  map is worth less than the page's pictures); one laid out smaller than 4 px (a counter's, a
+  tracker's) never. It is parsed by EWeb's parser without scripts: a frame's don't run, and what
+  most iframes hold now (players, adverts, comments) needs scripts the Falcon can't afford. Its
+  sheets are fetched as a page's and it is styled for the frame's width. The frames hang on the
+  page's document (`doc.frames`, `br_frames` in `src/browse`: at most 32, 12 in the ST edition,
+  four deep), so a page kept for Back keeps its frames.
+- **The layout splices a frame's page into the page's.** It asks for a frame's number when it
+  meets one (`LAYOUT_OPT.frame`) and for the frame's document laid out at the size it gives it
+  (`frame_page`). That page's items go into the page's display list in the order they are drawn,
+  inside a clip of the frame's box that scrolls as a box with `overflow: auto` does (the AES's
+  bars, panebar; laid out again beside its bar when it is taller than the frame, as a browser
+  does). Its clips, boxes that scroll, links and controls become the page's, and the frame's page
+  is kept with the page (`page.kids`: its text and tiles are in its arena). So drawing, clicks,
+  scrolling, Find, selecting and copying work in a frame as they do in the page, with nothing new
+  in the canvas or the window; on a frameset, which doesn't scroll, Up, Down, Space and ClrHome
+  scroll the frame under the mouse.
+- **An iframe** is a replaced box: 300 x 150 CSS px unless its width and height (attributes or
+  CSS) say otherwise, each its own; `2px inset #767676` (`frameborder=0`: none); `srcdoc`;
+  `scrolling=no`. **A frameset** fills the window (`LAYOUT_OPT.height`, laid out again when the
+  window's height changes). Its rows and cols follow the HTML Standard's rules for a list of
+  dimensions: the absolute first, then per cent, then the relative share what is left. Between
+  its frames is a grey 3D border of 4 CSS px unless `border`, `framespacing` or `frameborder` say
+  otherwise; framesets nest.
+- **Where a link goes:** a frame's links are made absolute by its own address
+  (`page_set_link`) and know their frame (`page.lfr`). A link's `target` (else its document's
+  `<base target>`; a form's `target`, a button's `formtarget`) picks the frame: none or `_self`
+  its own, `_parent`, `_top` the window, a name that frame. `_blank`, and a name no frame has,
+  go to the window until EWeb opens windows of its own (stage 5's next part). A frame's load is an
+  entry in the history with the page's address and every frame's address then
+  (`BR_ENTRY.frames`, "PATH URL" lines, a frame's path its place among its document's frames):
+  Back to it loads only the frames that differ, and a page loaded again from the history (not
+  kept) gets its frames as they were.
+- **Not yet:** scripts in frames (and the page's scripts don't reach into them: a click in a
+  frame is on its element), dragging a frameset's borders, `marginwidth` and `marginheight`, a
+  frame's own refresh, HTML in `<object>` and `<embed>`.
+
+`EWEB.PRG` grew 14 KB (1,212,238 bytes) and `EWEBST.PRG` 11 KB (638,818). A page without frames
+is laid out as before (`tests/layout`'s lists are the same). Tests: `tests/layout/frameset.html`
+and `frames.html` (their lists); `tests/layout/frames.py` (ewrender `-M X,Y` clicks and `-M back`:
+links into frames and to the window, Back, a form, a details and Find in a frame, a frame whose
+file isn't there; both editions); `make itest` (`/site/fs.html` over HTTP); `make hatarigui`
+(browse: the frameset, its menu's link into the main frame, Undo).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -3864,7 +3917,7 @@ out of both (their paths lead nowhere on the Atari).
    page (done, above), selecting and copying (done, above), history with visited links (done, above), a page
    drawn while it loads (done, above), Esc during a layout (done, above); **4.** text: more characters in `EWEB.FNT` (done, above), bidirectional text in full
    (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
-   breaks (done, above); **5.** SVG (done, below), frames and iframes, more windows, pictures
+   breaks (done, above); **5.** SVG (done, below), frames and iframes (done, below), more windows, pictures
    fetched at once.
 
 ## Open questions

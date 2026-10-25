@@ -335,6 +335,24 @@ reading them again; **^R** fetches the page again.
 **Home** opens your home page: EWeb's own, or the page you chose with
 Options > Use this page as home.
 
+## Frames
+
+Some pages are made of frames: the window split into parts, each a page
+of its own (a menu down the left and the text beside it), or a smaller
+page in a box of its own on a page (an iframe: a map, a player, a part
+of another site). EWeb shows each frame's page in its place, fetched
+just after the page itself: the frames of a split window first, the
+boxes after the page's pictures. A frame that holds more than it shows
+has a grey bar of its own, to click or drag; on a split window, point
+at a frame and **Up**, **Down**, **Space** and **ClrHome** move it.
+
+A link in a frame opens where the page says: in its own frame, in the
+frame it names (a menu's links in the text beside it), or in the whole
+window. **Undo** goes back a step in a frame as well as from page to
+page, and the address shown stays the page's. Scripts in frames don't
+run, so a player or an advert in a box may stay empty, and a link meant
+to open a new window opens in this one.
+
 ## The home page
 
 EWeb's own home page greets you with the date, and has a search box (its
@@ -471,7 +489,8 @@ text, pictures in the background of a page or a box, positioned
 boxes (one over another as the page asks), tables (cells over several rows and columns, borders that
 collapse into single lines), boxes in a line of text
 (buttons, menus and cards: CSS's inline-block), flexible boxes and
-grids (CSS flexbox and grid), forms, Hebrew right to left (with its
+grids (CSS flexbox and grid), forms, frames (see [Frames](#frames)),
+Hebrew right to left (with its
 numbers, English words and brackets the right way round). A line ends
 at a space, or inside a word where it may: after a hyphen or a slash, at
 a dash, between Chinese or Japanese characters, and at a soft hyphen,

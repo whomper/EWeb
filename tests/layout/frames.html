@@ -1,0 +1,10 @@
+<!DOCTYPE html><meta charset=utf-8><title>Iframes</title>
+<!-- Iframes: one sized by its attributes beside text, one by CSS, one
+     from srcdoc without a border or bars, one of the page itself (left
+     blank), and a link whose target is a named iframe. -->
+<style>body { color: #222 } .big { width: 90%; height: 120px }</style>
+<p>An iframe <iframe src="frames/two.html" width=200 height=80 name=box></iframe> beside text.
+<p><iframe class=big src="frames/nested.html"></iframe>
+<p><iframe srcdoc="<p style='margin:2px'>From srcdoc, <b>bold</b>" width=150 height=30 frameborder=0 scrolling=no></iframe>
+<iframe src="frames.html" width=80 height=30></iframe> (itself: blank)
+<p><a href="frames/one.html" target=box>One into the box</a>

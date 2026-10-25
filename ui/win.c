@@ -1100,9 +1100,12 @@ static int typed;		/* the field with the keyboard was typed in: change when it g
 static int ctl_alive(const fctl *c)
 {
 	const fctl *k;
-	for (k = br.d ? br.d->ctls : NULL; k != NULL; k = k->next)
-		if (k == c)
-			return 1;
+	const doc *d;
+	int i;
+	for (i = 0; (d = br_doc(&br, i)) != NULL; i++)	/* (the page's, its frames') */
+		for (k = d->ctls; k != NULL; k = k->next)
+			if (k == c)
+				return 1;
 	return 0;
 }
 
@@ -1156,9 +1159,11 @@ static void ctl_focus(fctl *c)
 static void ctl_forget(void)
 {
 	fctl *c;
+	const doc *d;
+	int i;
 	f_focus = NULL;
-	if (br.d != NULL)
-		for (c = br.d->ctls; c != NULL; c = c->next)
+	for (i = 0; (d = br_doc(&br, i)) != NULL; i++)
+		for (c = d->ctls; c != NULL; c = c->next)
 			c->focus = 0;
 }
 
@@ -1235,12 +1240,12 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 		return;
 	switch (c->kind) {
 	case FC_CHECKBOX:
-		form_check(br.d, c);
+		form_check(br_ctl_doc(&br, c), c);
 		ctl_redraw(c);
 		ctl_events(c);
 		break;
 	case FC_RADIO:
-		form_check(br.d, c);
+		form_check(br_ctl_doc(&br, c), c);
 		win_redraw_page();	/* the rest of its group */
 		ctl_events(c);
 		break;
@@ -1264,7 +1269,7 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 		break;
 	}
 	case FC_RESET:
-		form_reset(br.d, c->form);
+		form_reset(br_ctl_doc(&br, c), c->form);
 		win_redraw_page();
 		break;
 	case FC_FILE:
@@ -1319,7 +1324,7 @@ static int ctl_key(short kstate, short key)
 	case 0x0f: {		/* Tab: the next control, with Shift the one before */
 		fctl *n = c;
 		do
-			n = form_next(br.d, n, shift ? -1 : 1);
+			n = form_next(br_ctl_doc(&br, c), n, shift ? -1 : 1);	/* (in its own document) */
 		while (n != NULL && page_ctl_item(br.p, n) == NULL);
 		if (n != NULL) {
 			ctl_focus(n);
@@ -1341,7 +1346,7 @@ static int ctl_key(short kstate, short key)
 		if (typed || c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
 			/* the form sent, as by its first button */
 			int send;
-			fctl *by = form_default(br.d, c, &send);
+			fctl *by = form_default(br_ctl_doc(&br, c), c, &send);
 			if (send)
 				ctl_submit(c, by, 0, 0);
 			return 1;
@@ -2070,6 +2075,56 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 
 /* ---------------------------------------------------------------- keys */
 
+/* the box that scrolls down under the mouse (the smallest there: a frame,
+   a box in it), -1 none */
+static int box_under_mouse(void)
+{
+	short mx, my, mb, ks;
+	int32_t px, py;
+	long ba = 0;
+	int k, best = -1;
+	if (br.p == NULL || br.p->nscr == 0)
+		return -1;
+	graf_mkstate(&mx, &my, &mb, &ks);
+	px = mx - r_page.x + left;
+	py = my - r_page.y + top;
+	for (k = 0; k < br.p->nscr; k++) {
+		const struct pg_scroll *sc = &br.p->scr[k];
+		const dl_item *c = &br.p->items[sc->clip];
+		int32_t x0 = c->x, y0 = c->y, x1 = c->x + c->w, y1 = c->y + c->h;
+		if (sc->my == 0 || (c->clip && !page_clip(br.p, c->clip, &x0, &y0, &x1, &y1)))
+			continue;
+		if (px < x0 || px >= x1 || py < y0 || py >= y1)
+			continue;
+		if (best < 0 || (long) c->w * c->h < ba) {
+			best = k;
+			ba = (long) c->w * c->h;
+		}
+	}
+	return best;
+}
+
+/* Up, Down, Space, ClrHome on a page that doesn't scroll down itself (a
+   frameset): the box under the mouse scrolls (by a line, a boxful, to its
+   top or end). 1 if one did */
+static int box_key(short scan, int shift)
+{
+	int k;
+	const struct pg_scroll *sc;
+	int32_t boxful;
+	if (max_top() > 0 || (k = box_under_mouse()) < 0)
+		return 0;
+	sc = &br.p->scr[k];
+	boxful = br.p->items[sc->clip].h - line_step();
+	switch (scan) {
+	case 0x48: box_to(k, 1, sc->sy - (shift ? boxful : line_step())); return 1;
+	case 0x50: box_to(k, 1, sc->sy + (shift ? boxful : line_step())); return 1;
+	case 0x39: box_to(k, 1, sc->sy + (shift ? -boxful : boxful)); return 1;
+	case 0x47: box_to(k, 1, shift ? sc->my : 0); return 1;
+	}
+	return 0;
+}
+
 int win_key(short kstate, short key)
 {
 	short scan = KEY_SCAN(key);
@@ -2079,6 +2134,9 @@ int win_key(short kstate, short key)
 		return 0;
 	if (f_focus != NULL && f_focus->kind == FC_TEXTAREA && (scan == 0x48 || scan == 0x50) && !shift)
 		return ctl_key(kstate, key);	/* a textarea's lines */
+	if ((scan == 0x48 || scan == 0x50 || ((scan == 0x39 || scan == 0x47) && !a_focus && f_focus == NULL &&
+	     !key_ctrl(kstate, key))) && box_key(scan, shift))
+		return 1;
 	/* up and down scroll the page wherever the keyboard is */
 	switch (scan) {
 	case 0x48:		/* Up */
@@ -2183,10 +2241,12 @@ static void save_place(void)
 /* the window's size changed: the page laid out for its width again */
 static void resized(void)
 {
-	int32_t old_w = br.width;
+	int32_t old_w = br.width, old_h = br.height;
 	get_work();
 	save_place();
-	if (br.p != NULL && win_page_w() != old_w) {
+	br.height = win_page_h();
+	if (br.p != NULL && (win_page_w() != old_w || (br.p->frameset && win_page_h() != old_h))) {
+		/* (a frameset is as tall as the window: its frames laid out again) */
 		/* the same place in the text, as near as it can be; the busy
 		   bee, as the page's sheets may be fetched for the new width */
 		int32_t h0 = br.p->height;
@@ -2233,6 +2293,7 @@ void win_open(void)
 	get_work();
 	save_place();
 	br.width = win_page_w();
+	br.height = win_page_h();
 	sliders();
 }
 

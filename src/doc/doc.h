@@ -29,7 +29,7 @@ enum {
 	T_INPUT, T_BUTTON, T_SELECT, T_OPTION, T_TEXTAREA, T_PRE, T_IFRAME, T_SVG, T_CANVAS,
 	T_VIDEO, T_AUDIO, T_OBJECT, T_EMBED, T_TEMPLATE, T_LABEL, T_FORM, T_WBR,
 	T_FIELDSET, T_LEGEND, T_OPTGROUP, T_PICTURE, T_SOURCE, T_DIV, T_P, T_CAPTION,
-	T_THEAD, T_TBODY, T_TFOOT, T_DETAILS, T_SUMMARY, T_NTAGS
+	T_THEAD, T_TBODY, T_TFOOT, T_DETAILS, T_SUMMARY, T_FRAMESET, T_FRAME, T_NTAGS
 };
 
 typedef struct dnode dnode;
@@ -84,6 +84,7 @@ typedef struct doc {
 	const ec_ctx *ua;
 	char title[256];		/* UTF-8, white space collapsed */
 	char base[1024];		/* <base href>, "" if none */
+	char target[64];		/* <base target>, "" if none */
 	char charset[40];		/* what the page was read as */
 	uint8_t quirks;			/* 0, 1 quirks mode, 2 limited quirks */
 	struct dblk *mem;		/* the blocks of memory (doc_alloc) */
@@ -95,6 +96,10 @@ typedef struct doc {
 	/* its scripts' state (src/js), let go first by doc_free */
 	void *js;
 	void (*js_free)(void *js);
+	/* the frames it shows (src/browse: their documents), let go by
+	   doc_free after its scripts */
+	void *frames;
+	void (*frames_free)(void *frames);
 	unsigned long marked;		/* the history's changes its links were marked at, + 1
 					   (0: never); browse's */
 	uint8_t scripting;		/* parsed for scripts run (its <noscript>s text) */

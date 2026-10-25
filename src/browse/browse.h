@@ -38,6 +38,10 @@ typedef struct {
 	   and while it is kept the HTTP answer's charset (NULL none) */
 	uint8_t enc, encodable;
 	char *charset;
+	/* the addresses its frames showed (a frame's own link followed: an
+	   entry of its own, the page's address the same), "PATH URL" lines;
+	   NULL: as the page has them */
+	char *frames;
 } BR_ENTRY;
 
 /* the memory pages kept for Back and Forward may take, roughly (the
@@ -84,6 +88,8 @@ typedef struct browser {
 
 	/* the window */
 	int32_t width;		/* device px */
+	int32_t height;		/* its page's height, device px (a frameset is as tall; 0
+				   not known) */
 	int32_t zoom;		/* device px per CSS px, x1024 */
 	int32_t text;		/* the text's size, x1024 (LAYOUT_OPT.text) */
 	int32_t sbar, sbar_h;	/* a box's scroll bars' width down, height across (LAYOUT_OPT) */
@@ -230,6 +236,12 @@ extern unsigned long br_poll_ms;
    out again (1; 0 if out of memory, after giving back the pages kept and
    the fonts and trying once more), its scrolling left to the front end */
 int br_details(browser *b, dnode *det);
+/* the documents the page shown is made of: its own (i 0), then its
+   frames' (i 1 on, those that have come); NULL past the last */
+doc *br_doc(const browser *b, int i);
+/* the document a form control is in: the page's own or a frame's */
+struct fctl;
+doc *br_ctl_doc(const browser *b, const struct fctl *c);
 /* a link's address, absolute, as Back would load it (for the status line) */
 void br_link_url(const browser *b, int link, char *out, int size);
 /* a link's download attribute (<a download>): its value, "" when it

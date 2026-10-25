@@ -445,6 +445,40 @@ def browse():
         r.key(0x47)		# ClrHome: the top
         time.sleep(2)
         r.shot(7)
+        # a frameset: its frames fetched after it, as tall as the window;
+        # the menu's link naming the main frame loads there (the address
+        # the same), Back (Undo) shows the main frame's page before
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/fs.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        r.wait(r"pictures ", 300)
+        evs = r.events()
+        check("frames: a frameset's frames fetched after it", ev is not None and ev.startswith("shown %sfs.html " % site) and
+              any(e.startswith("frame %sfsmenu.html shown" % site) for e in evs) and
+              any(e.startswith("frame %sfsmain.html shown" % site) for e in evs), "\n".join(evs[-10:]))
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        pt = None
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            pt = link_point(site + "fs.html", area, int(m.group(5)), "One in main", ("-H", str(area[3])))
+        if pt is not None:
+            r.mouse.click(*pt)
+            one = r.wait(r"frame \S+ (shown|failed)", 300)
+            r.wait(r"pictures ", 300)
+            time.sleep(2)
+            r.shot(27)
+            check("frames: a link into the main frame", one is not None and
+                  one.startswith("frame %sfsone.html shown" % site), "\n".join(r.events()[-10:]))
+            r.key(UNDO)
+            back = r.wait(r"frame \S+ (shown|failed)", 300)
+            r.wait(r"shown ", 120)	# (the page shown again: not the next step's)
+            time.sleep(2)
+            r.shot(28)
+            check("frames: Back shows the main frame's page before", back is not None and
+                  back.startswith("frame %sfsmain.html shown" % site), "\n".join(r.events()[-10:]))
+        else:
+            check("frames: the menu's link found", False, str(ev))
         # forms: the search field clicked at its end, typed into, Return
         # sends it with GET; Back shows it as it was left
         r.key(L, (CTRL,))
@@ -2009,5 +2043,6 @@ if "dialogs" in WHICH:
         dialogs()
     else:
         print("skip  dialogs: needs Xvfb and xdotool")
-print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
-sys.exit(1 if fails else 0)
+if __name__ == "__main__":	# (tools/screenshot.py imports it for its Hatari)
+    print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
+    sys.exit(1 if fails else 0)

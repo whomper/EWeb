@@ -1621,6 +1621,232 @@ static void shown_imgs(const browser *b)
 			img_current(b->p->items[i].img);
 }
 
+/* ---------------------------------------------------------------- frames */
+
+/* the frames and iframes the page shown has, its own and those in them
+   (the top document's: doc.frames), each a document of its own fetched
+   after the page as its pictures are (br_pictures_step), not run (a
+   frame's scripts don't); laid out in its box by the layout (frame_cb,
+   frame_page_cb), which splices its page in (LAYOUT_OPT.frame) */
+#ifdef EW_ST
+#define FR_MAX 12		/* frames a page has at most */
+#else
+#define FR_MAX 32
+#endif
+#define FR_DEPTH 4		/* frames in frames, at most */
+
+enum { FR_NEW, FR_HERE, FR_FAILED };
+
+typedef struct {
+	dnode *el;		/* its frame or iframe element; NULL: gone (the frame
+				   it was in shows another document) */
+	int parent;		/* the frame it is in (an index), -1 the page */
+	doc *d;			/* its document, NULL until it has come (or about:blank) */
+	char *url;		/* what it shows (after redirects), and what the page */
+	char *src;		/* gave it */
+	char path[40];		/* which it is, the same each time the page is laid out:
+				   its place among its document's frames, in that of the
+				   frame it is in ("2", "2.1") */
+	char name[64];
+	uint8_t state;
+	int32_t w, h;		/* its size when last laid out (device px) */
+} br_frame;
+
+typedef struct {
+	int n;
+	br_frame f[FR_MAX];
+	doc *dead[FR_MAX];	/* the documents of frames gone, until the page that
+				   showed them goes (frames_bury) */
+	int ndead;
+} br_frames;
+
+static void frames_free(void *x)
+{
+	br_frames *fs = x;
+	int i;
+	if (fs == NULL)
+		return;
+	for (i = 0; i < fs->n; i++) {
+		doc_free(fs->f[i].d);
+		free(fs->f[i].url);
+		free(fs->f[i].src);
+	}
+	for (i = 0; i < fs->ndead; i++)
+		doc_free(fs->dead[i]);
+	free(fs);
+}
+
+static br_frames *frames_of(doc *d)
+{
+	if (d->frames == NULL && (d->frames = calloc(1, sizeof(br_frames))) != NULL)
+		d->frames_free = frames_free;
+	return d->frames;
+}
+
+/* while a page is laid out (lay): its frames, the frame whose document is
+   being laid out (-1 the page's own), the options, and the frames'
+   addresses wanted (a history entry's, BR_ENTRY.frames; NULL as the page
+   has them) */
+static br_frames *lay_fr;
+static doc *lay_top;		/* (whose frames: made when the first is met) */
+static int lay_in = -1;
+static const LAYOUT_OPT *lay_o;
+static const char *fr_want;
+
+static void base_of(const browser *b, const doc *d, const char *url, char *out, int size);
+
+/* the url line PATH has in a history entry's frames, into out: 0 none */
+static int frames_lookup(const char *state, const char *path, char *out, int size)
+{
+	size_t pl = strlen(path);
+	const char *s = state;
+	while (s != NULL && *s) {
+		const char *e = strchr(s, '\n');
+		size_t n = e != NULL ? (size_t) (e - s) : strlen(s);
+		if (n > pl && memcmp(s, path, pl) == 0 && s[pl] == ' ') {
+			size_t u = n - pl - 1;
+			if (u >= (size_t) size)
+				return 0;
+			memcpy(out, s + pl + 1, u);
+			out[u] = 0;
+			return 1;
+		}
+		s = e != NULL ? e + 1 : NULL;
+	}
+	return 0;
+}
+
+/* the frames' addresses now, for a history entry: NULL none (or out of memory) */
+static char *frames_state(const doc *d)
+{
+	const br_frames *fs = d != NULL ? d->frames : NULL;
+	SBUF s;
+	int i;
+	if (fs == NULL || fs->n == 0)
+		return NULL;
+	sb_init(&s);
+	for (i = 0; i < fs->n; i++)
+		if (fs->f[i].el != NULL && fs->f[i].url != NULL) {
+			sb_adds(&s, fs->f[i].path);
+			sb_adds(&s, " ");
+			sb_adds(&s, fs->f[i].url);
+			sb_adds(&s, "\n");
+		}
+	return s.len > 0 ? sb_steal(&s) : (sb_free(&s), (char *) NULL);
+}
+
+/* a frame or iframe of the document being laid out: its record (made the
+   first time: its address from src, srcdoc, or the history entry's) */
+static int frame_cb(void *ud, dnode *n)
+{
+	br_frames *fs = lay_fr;
+	br_frame *f;
+	const dnode *top = n;
+	dnode *k;
+	int i, depth = 0, ord = 0;
+	char url[4096];
+	const char *v;
+	if (fs == NULL && lay_top != NULL)
+		fs = lay_fr = frames_of(lay_top);
+	if (fs == NULL)
+		return 0;
+	for (i = 0; i < fs->n; i++)
+		if (fs->f[i].el == n)
+			return i + 1;
+	for (i = lay_in; i >= 0; i = fs->f[i].parent)
+		depth++;
+	if (depth >= FR_DEPTH || fs->n >= FR_MAX)
+		return 0;
+	/* its place among its document's frames, in tree order */
+	while (top->parent != NULL)
+		top = top->parent;
+	for (k = (dnode *) top; k != NULL && k != n;) {
+		if (k->type == DN_ELEMENT && (k->tag == T_FRAME || k->tag == T_IFRAME) && k->ns == DN_NS_HTML)
+			ord++;
+		if (k->first != NULL) {
+			k = k->first;
+		} else {
+			while (k != NULL && k->next == NULL)
+				k = k->parent;
+			if (k != NULL)
+				k = k->next;
+		}
+	}
+	f = &fs->f[fs->n];
+	memset(f, 0, sizeof *f);
+	f->el = n;
+	f->parent = lay_in;
+	if (lay_in >= 0) {
+		char up[sizeof f->path];
+		str_copy(up, fs->f[lay_in].path, sizeof up);
+		snprintf(f->path, sizeof f->path, "%.30s.%d", up, ord);
+	} else
+		snprintf(f->path, sizeof f->path, "%d", ord);
+	if ((v = dn_attr(n, "name")) != NULL)
+		str_copy(f->name, v, sizeof f->name);
+	if (n->tag == T_IFRAME && dn_attr(n, "srcdoc") != NULL)
+		str_copy(url, "about:srcdoc", sizeof url);
+	else if ((v = dn_attr(n, "src")) == NULL || *v == 0 || lay_base == NULL ||
+		 !resolve_enc(lay_base, v, url, sizeof url, doc_enc(lay_doc)))
+		str_copy(url, "about:blank", sizeof url);
+	f->src = str_ndup(url, (long) strlen(url));
+	if (fr_want != NULL)
+		frames_lookup(fr_want, f->path, url, sizeof url);
+	/* not the page itself again, nor a frame it is in (a page in a frame
+	   of itself, without end) */
+	for (i = lay_in; i >= 0; i = fs->f[i].parent)
+		if (fs->f[i].url != NULL && same_but_fragment(fs->f[i].url, url))
+			str_copy(url, "about:blank", sizeof url);
+	if (lay_in < 0 && lay_base != NULL && same_but_fragment(lay_base, url))
+		str_copy(url, "about:blank", sizeof url);
+	f->url = str_ndup(url, (long) strlen(url));
+	if (f->url == NULL || f->src == NULL) {
+		free(f->url);
+		free(f->src);
+		return 0;
+	}
+	f->state = strcmp(url, "about:blank") == 0 ? FR_HERE : FR_NEW;
+	return ++fs->n;
+}
+
+/* frame id's document laid out w x h (its links made absolute: the page's
+   are resolved against the page's address, a frame's against its own) */
+static page *frame_page_cb(void *ud, int id, int32_t w, int32_t h)
+{
+	browser *b = ud;
+	br_frames *fs = lay_fr;
+	br_frame *f;
+	LAYOUT_OPT o;
+	page *p;
+	char base[4096], url[4096];
+	const char *sb = lay_base;
+	const doc *sd = lay_doc;
+	int si = lay_in, i;
+	if (fs == NULL || id < 1 || id > fs->n || lay_o == NULL)
+		return NULL;
+	f = &fs->f[id - 1];
+	f->w = w;
+	f->h = h;
+	if (f->d == NULL)
+		return NULL;
+	base_of(b, f->d, f->url, base, sizeof base);
+	o = *lay_o;
+	o.width = w;
+	o.height = h;
+	o.was = NULL;		/* (its boxes' scrolling: the page's, which has them) */
+	lay_base = base;
+	lay_doc = f->d;
+	lay_in = id - 1;
+	p = layout_page(f->d, &o);
+	lay_base = sb;
+	lay_doc = sd;
+	lay_in = si;
+	for (i = 0; p != NULL && i < p->nlinks; i++)
+		if (resolve_enc(base, p->links[i], url, sizeof url, doc_enc(f->d)))
+			page_set_link(p, i, url);
+	return p;
+}
+
 /* the document laid out at the browser's width and zoom, its pictures
    resolved against base */
 static page *lay(browser *b, doc *d, const char *base)
@@ -1633,15 +1859,25 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.text = b->text;
 	o.sbar = b->sbar;
 	o.sbar_h = b->sbar_h;
+	o.height = b->height;
 	o.image = image_cb;
 	o.svg = svg_cb;
+	o.frame = frame_cb;
+	o.frame_page = frame_page_cb;
 	o.ud = b;
 	o.was = b->p;		/* (the page shown: its boxes scrolled, when it is d's) */
 	lay_base = base;
 	lay_doc = d;
+	lay_fr = d->frames;
+	lay_top = d;
+	lay_in = -1;
+	lay_o = &o;
 	p = layout_page(d, &o);
 	lay_base = NULL;
 	lay_doc = NULL;
+	lay_fr = NULL;
+	lay_top = NULL;
+	lay_o = NULL;
 	page_imgs(p, 1);
 	return p;
 }
@@ -1896,6 +2132,165 @@ parse:
 	return 1;
 }
 
+/* ---------------------------------------------------------------- a frame's document */
+
+static int picture_page(SBUF *s, FETCH *f, int anew);
+
+/* a frame's source made a document, styled for the frame's width: no
+   scripts (a frame's don't run), its sheets fetched as a page's are */
+static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len, const char *charset,
+		      const char *url, int plain)
+{
+	int32_t w = b->width;
+	html_opts o;
+	ec_media m;
+	doc *d;
+	char base[4096];
+	if (f->w > 0)
+		b->width = f->w;	/* (its media queries: the frame's width) */
+	m = media_of(b);
+	memset(&o, 0, sizeof o);
+	o.charset = charset && *charset ? charset : NULL;
+	o.fallback = br_fallback(url);
+	o.plaintext = plain;
+	br_building = BRB_PARSE;
+	doc_poll = build_turn;
+	ec_poll = gem_turn;
+	d = doc_parse_opts(data, (size_t) len, &o, &m);
+	if (d != NULL) {
+		ec_set_resolver(d->css, resolve);
+		if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
+			str_copy(base, url, sizeof base);
+		add_sheets(b, d, base, 0, 1);
+		br_building = BRB_STYLE;
+		if (conn_stop || select_doc(d, base) < 0) {
+			doc_free(d);
+			d = NULL;
+		}
+	}
+	doc_poll = NULL;
+	ec_poll = NULL;
+	br_building = 0;
+	b->width = w;
+	return d;
+}
+
+/* frame k of the page shown's frames given another document (NULL none):
+   the frames in it are gone, and its old document and theirs kept until
+   the page that shows them goes (frames_bury) */
+static void frame_set(br_frames *fs, int k, doc *d)
+{
+	int i, j;
+	if (fs->f[k].d != NULL && fs->ndead < FR_MAX)
+		fs->dead[fs->ndead++] = fs->f[k].d;
+	else
+		doc_free(fs->f[k].d);	/* (as many as can be: the page shown is laid out at once) */
+	fs->f[k].d = d;
+	for (i = 0; i < fs->n; i++) {
+		for (j = fs->f[i].parent; j >= 0 && j != k; j = fs->f[j].parent)
+			;
+		if (j == k && fs->f[i].el != NULL) {
+			fs->f[i].el = NULL;
+			if (fs->f[i].d != NULL && fs->ndead < FR_MAX)
+				fs->dead[fs->ndead++] = fs->f[i].d;
+			else
+				doc_free(fs->f[i].d);
+			fs->f[i].d = NULL;
+		}
+	}
+}
+
+/* the page shown laid out again without them: the old documents go */
+static void frames_bury(br_frames *fs)
+{
+	while (fs != NULL && fs->ndead > 0)
+		doc_free(fs->dead[--fs->ndead]);
+}
+
+/* frame k of the page shown (b->d's) fetched and made a document: what
+   its address brings (a page, a text file, a picture; else EWeb's own
+   page saying why), a form sent to it (post), fresh as fetch() takes it.
+   1 done (b->p is to be laid out again), 0 stopped (Esc): as it was */
+static int frame_load(browser *b, int k, const FSUBMIT *post, int fresh)
+{
+	br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	br_frame *f;
+	FETCH *fe;
+	SBUF src;
+	doc *d = NULL;
+	char host[128];
+	int r, own = 0;
+	unsigned long t0 = pf_ms();
+	if (fs == NULL || k < 0 || k >= fs->n || fs->f[k].el == NULL)
+		return 0;
+	f = &fs->f[k];
+	sb_init(&src);
+	if (strcmp(f->url, "about:srcdoc") == 0) {
+		const char *t = dn_attr(f->el, "srcdoc");
+		sb_adds(&src, t != NULL ? t : "");
+		d = frame_doc(b, f, src.s != NULL ? src.s : "", src.len, "utf-8", f->url, 0);
+	} else if (has_scheme(f->url, "about") || has_scheme(f->url, "javascript") || has_scheme(f->url, "data") ||
+		   has_scheme(f->url, "mailto")) {
+		/* (not can_open, whose alert is for a page: a secure frame
+		   without TLS or the gateway says so in its box) */
+		f->state = FR_HERE;	/* (nothing to show) */
+		frame_set(fs, k, NULL);
+		sb_free(&src);
+		return 1;
+	} else {
+		if ((fe = malloc(sizeof *fe)) == NULL)
+			return 0;
+		host_of(f->url, host, sizeof host);
+		say(b, "Opening %s...", host);
+		conn_stop = 0;
+		r = fetch(b, f->url, b->url, fresh, NULL, 0, 1, post, fe);
+		if (!r && conn_stop) {
+			free(fe);
+			return 0;
+		}
+		if (!r) {
+			error_page(&src, f->url, "EWeb can't open this frame", fe->err, NULL);
+			own = 1;
+		} else if (fe->mime[0] == 0 || strcmp(fe->mime, "text/html") == 0 ||
+			   strcmp(fe->mime, "application/xhtml+xml") == 0) {
+			char *u = str_ndup(fe->url, (long) strlen(fe->url));
+			if (u != NULL) {
+				free(f->url);
+				f->url = u;
+			}
+			d = frame_doc(b, f, fe->data, fe->len, fe->charset, f->url, 0);
+			hg_add(f->url, d != NULL ? d->title : "", ck_now());
+		} else if (strncmp(fe->mime, "text/", 5) == 0) {
+			d = frame_doc(b, f, fe->data, fe->len, fe->charset, fe->url, 1);
+		} else if (b->pictures && picture_page(&src, fe, 0)) {
+			own = 1;
+		} else {
+			char why[200];
+			snprintf(why, sizeof why, "This is %s (%ld bytes): EWeb shows web pages, text and pictures in a frame.",
+				 fe->mime, fe->len);
+			error_page(&src, fe->url, "EWeb can't show this in a frame", why, NULL);
+			own = 1;
+		}
+		if (own && !conn_stop)
+			d = frame_doc(b, f, src.s != NULL ? src.s : "", src.len, "utf-8", fe->url, 0);
+		free(fe->data);
+		free(fe);
+	}
+	sb_free(&src);
+	if (d == NULL && conn_stop)
+		return 0;
+	f->state = d != NULL ? FR_HERE : FR_FAILED;
+	frame_set(fs, k, d);
+	if (b->log != NULL) {
+		/* (its address without its query: the log has none, 7.3) */
+		char line[200];
+		snprintf(line, sizeof line, "frame %.*s %s ms %lu", (int) (strcspn(f->url, "?") < 150 ? strcspn(f->url, "?") : 150),
+			 f->url, d != NULL ? "shown" : "failed", pf_ms() - t0);
+		b->log(b->ud, line);
+	}
+	return 1;
+}
+
 /* ---------------------------------------------------------------- pages kept for Back */
 
 long br_keep_max = 16L << 20;
@@ -2015,11 +2410,13 @@ static void hist_push(browser *b, const char *url)
 	/* what was ahead goes */
 	for (i = b->cur + 1; i < b->nhist; i++) {
 		free(b->hist[i].url);
+		free(b->hist[i].frames);
 		unkeep(&b->hist[i]);
 	}
 	b->nhist = b->cur + 1;
 	if (b->nhist == BR_HISTORY) {
 		free(b->hist[0].url);
+		free(b->hist[0].frames);
 		unkeep(&b->hist[0]);
 		memmove(b->hist, b->hist + 1, (BR_HISTORY - 1) * sizeof b->hist[0]);
 		b->nhist--;
@@ -2818,7 +3215,9 @@ int br_encoding(browser *b, const char *name)
 	/* read again from what came, its stylesheets from the cache of any
 	   age (as Back takes them): nothing is fetched anew */
 	build_plain = strncmp(b->mime, "text/", 5) == 0 && strcmp(b->mime, "text/html") != 0;
+	fr_want = b->cur >= 0 ? b->hist[b->cur].frames : NULL;	/* (its frames as they are) */
 	r = build(b, src, len, canon[0] ? canon : b->charset, url, 2, &d, &p);
+	fr_want = NULL;
 	build_plain = 0;
 	if (r && conn_stop) {
 		pg_free(p);
@@ -2926,6 +3325,7 @@ void br_free(browser *b)
 	b->src = NULL;
 	for (i = 0; i < b->nhist; i++) {
 		free(b->hist[i].url);
+		free(b->hist[i].frames);
 		unkeep(&b->hist[i]);
 	}
 	b->nhist = 0;
@@ -2991,14 +3391,153 @@ static int link_to_save(browser *b, const char *url, const char *dl)
 	return 1;
 }
 
+/* where a link or a form in frame fr (0: the page's own) whose target is
+   t (NULL or "": its document's <base target>) goes: a frame (its index
+   among the page's frames), or -1 the window. _blank, and a name no frame
+   has, go to the window too until EWeb opens windows of its own */
+static int frame_target(const browser *b, int fr, const char *t)
+{
+	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	int i;
+	if (fs == NULL || fr < 0 || fr > fs->n)
+		fr = 0;
+	if ((t == NULL || *t == 0) && fr > 0 && fs->f[fr - 1].d != NULL)
+		t = fs->f[fr - 1].d->target;
+	else if ((t == NULL || *t == 0) && b->d != NULL)
+		t = b->d->target;
+	if (t == NULL || *t == 0 || strcasecmp(t, "_self") == 0)
+		return fr - 1;
+	if (strcasecmp(t, "_parent") == 0)
+		return fr > 0 ? fs->f[fr - 1].parent : -1;
+	if (strcasecmp(t, "_top") == 0 || strcasecmp(t, "_blank") == 0 || fs == NULL)
+		return -1;
+	for (i = 0; i < fs->n; i++)
+		if (fs->f[i].el != NULL && strcmp(fs->f[i].name, t) == 0)
+			return i;
+	return -1;
+}
+
+/* the frame (1 + its index) whose document n is in, 0 the page's own */
+static int frame_of(const browser *b, const dnode *n)
+{
+	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	int i;
+	if (n == NULL || fs == NULL)
+		return 0;
+	while (n->parent != NULL)
+		n = n->parent;
+	for (i = 0; i < fs->n; i++)
+		if (fs->f[i].d != NULL && fs->f[i].d->root == n)
+			return i + 1;
+	return 0;
+}
+
+doc *br_doc(const browser *b, int i)
+{
+	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	int k;
+	if (i == 0 || b->d == NULL)
+		return i == 0 ? b->d : NULL;
+	for (k = 0; fs != NULL && k < fs->n; k++)
+		if (fs->f[k].el != NULL && fs->f[k].d != NULL && --i == 0)
+			return fs->f[k].d;
+	return NULL;
+}
+
+doc *br_ctl_doc(const browser *b, const fctl *c)
+{
+	int fr = c != NULL ? frame_of(b, c->n) : 0;
+	return fr > 0 ? ((br_frames *) b->d->frames)->f[fr - 1].d : b->d;
+}
+
+/* the page shown laid out again for its frames (one came, or went):
+   their old documents go once it is. BR_SHOWN, its place kept */
+static int frames_relaid(browser *b)
+{
+	if (!br_relayout(b, b->width))
+		return BR_STOPPED;
+	frames_bury(b->d->frames);
+	b->scroll_to = b->cur >= 0 ? b->hist[b->cur].y : -1;
+	return BR_SHOWN;
+}
+
+/* frame k of the page shown goes to url (a form sent to it: post): an
+   entry of its own in the history, with the page's address and the
+   frames' addresses as they are then (Back shows them as they were) */
+static int frame_go(browser *b, int k, const char *url, const FSUBMIT *post)
+{
+	br_frames *fs = b->d->frames;
+	char *u = str_ndup(url, (long) strlen(url)), *old;
+	int32_t y = b->cur >= 0 ? b->hist[b->cur].y : 0;
+	if (u == NULL)
+		return BR_STOPPED;
+	old = fs->f[k].url;
+	fs->f[k].url = u;
+	if (!frame_load(b, k, post, 0)) {
+		free(fs->f[k].url);
+		fs->f[k].url = old;
+		conn_stop = 0;
+		return BR_STOPPED;
+	}
+	free(old);
+	dc_job_end();
+	hist_push(b, b->url);
+	b->at = b->cur;
+	b->hist[b->cur].y = y;
+	b->hist[b->cur].frames = frames_state(b->d);
+	enc_set(b, b->charset, b->enc, b->encodable);	/* (the page's, as it is) */
+	return frames_relaid(b);
+}
+
+/* the history entry i of the page shown (its address the page's): its
+   frames shown as they were then, each loaded again that shows another
+   (from the cache, as Back has them). 1 when one changed */
+static int frames_apply(browser *b, int i)
+{
+	br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	int k, changed = 0;
+	char want[4096];
+	if (fs == NULL)
+		return 0;
+	for (k = 0; k < fs->n; k++) {
+		br_frame *f = &fs->f[k];
+		char *u;
+		if (f->el == NULL || f->src == NULL)
+			continue;
+		if (!frames_lookup(b->hist[i].frames, f->path, want, sizeof want))
+			str_copy(want, f->src, sizeof want);
+		if (f->url != NULL && strcmp(f->url, want) == 0)
+			continue;
+		if ((u = str_ndup(want, (long) strlen(want))) == NULL)
+			continue;
+		free(f->url);
+		f->url = u;
+		if (!frame_load(b, k, NULL, 2)) {
+			conn_stop = 0;
+			f->state = FR_NEW;	/* (fetched with the pictures, then) */
+			frame_set(fs, k, NULL);
+		}
+		changed = 1;
+	}
+	dc_job_end();
+	return changed;
+}
+
 int br_follow(browser *b, int link)
 {
 	char url[4096];
+	int fr, k;
 	br_link_url(b, link, url, sizeof url);
 	if (url[0] == 0)
 		return BR_STOPPED;
 	if (link_to_save(b, url, br_link_download(b, link)))
 		return BR_SAVE;
+	fr = page_link_frame(b->p, link);
+	if (has_scheme(url, "javascript") && fr > 0)
+		return BR_STOPPED;	/* (a frame's scripts don't run) */
+	k = frame_target(b, fr, page_link_target(b->p, link));
+	if (k >= 0 && !has_scheme(url, "mailto") && !has_scheme(url, "javascript"))
+		return frame_go(b, k, url, NULL);
 	if (has_scheme(url, "javascript")) {
 		int lr, r = br_js_url(b, url, &lr);
 		if (r == BRJ_LOAD)
@@ -3016,29 +3555,45 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 {
 	FSUBMIT s;
 	char base[4096], url[4096];
-	int r;
+	int r, fr, k;
+	doc *d;
+	const char *in;
 	if (b->d == NULL)
 		return BR_STOPPED;
+	/* the document it is in: the page's, or a frame's (whose address it is
+	   sent from, to its target: the frame itself by default) */
+	fr = frame_of(b, (submitter ? submitter : from) != NULL ? (submitter ? submitter : from)->n : NULL);
+	d = fr > 0 ? ((br_frames *) b->d->frames)->f[fr - 1].d : b->d;
+	in = fr > 0 ? ((br_frames *) b->d->frames)->f[fr - 1].url : b->url;
 	{
 		/* the form's submit event: a script may send it itself, or not */
 		fctl *c = submitter ? submitter : from;
-		if (c != NULL && c->form != NULL && b->d->js != NULL && js_event(b->d, c->form, "submit")) {
+		if (fr == 0 && c != NULL && c->form != NULL && b->d->js != NULL && js_event(b->d, c->form, "submit")) {
 			int load;
 			if (js_after(b, &load) == BRJ_LOAD)
 				return load;
 			return BR_STOPPED;
 		}
 	}
-	if (!form_submit(b->d, from, submitter, x, y, &s))
+	if (!form_submit(d, from, submitter, x, y, &s))
 		return BR_STOPPED;
-	base_of(b, b->d, b->url, base, sizeof base);
+	base_of(b, d, in, base, sizeof base);
 	/* no action: the page's own address, without its fragment */
 	if (s.action[0] == 0) {
 		str_copy(url, base, sizeof url);
 		url[strcspn(url, "#")] = 0;
-	} else if (!resolve_enc(base, s.action, url, sizeof url, doc_enc(b->d))) {
+	} else if (!resolve_enc(base, s.action, url, sizeof url, doc_enc(d))) {
 		form_submit_free(&s);
 		return BR_STOPPED;
+	}
+	{
+		/* its target: the submitter's formtarget, else the form's target */
+		const dnode *by = submitter != NULL ? submitter->n : NULL;
+		const dnode *form = (submitter ? submitter : from) != NULL ? (submitter ? submitter : from)->form : NULL;
+		const char *t = by != NULL ? dn_attr(by, "formtarget") : NULL;
+		if (t == NULL && form != NULL)
+			t = dn_attr(form, "target");
+		k = frame_target(b, fr, t);
 	}
 	if (!s.post || !(has_scheme(url, "http") || has_scheme(url, "https"))) {
 		/* the entries as the address's query, its fragment kept */
@@ -3058,7 +3613,9 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 		url[q] = '?';
 		memcpy(url + q + 1, s.body, (size_t) s.len);
 		strcpy(url + q + 1 + s.len, frag);
-		r = load(b, url, NAV_NEW);
+		r = k >= 0 ? frame_go(b, k, url, NULL) : load(b, url, NAV_NEW);
+	} else if (k >= 0) {
+		r = frame_go(b, k, url, &s);
 	} else {
 		r = load_post(b, url, NAV_NEW, &s);
 		dc_job_end();
@@ -3375,8 +3932,8 @@ int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
 int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load_r)
 {
 	*cancelled = 0;
-	if (b->d == NULL || b->d->js == NULL || c == NULL)
-		return BRJ_NONE;
+	if (b->d == NULL || b->d->js == NULL || c == NULL || frame_of(b, c->n) > 0)
+		return BRJ_NONE;	/* (a frame's control: its scripts don't run) */
 	*cancelled = js_event(b->d, c->n, type);
 	return js_after(b, load_r);
 }
@@ -3476,6 +4033,13 @@ static int go_to(browser *b, int i)
 		b->scroll_to = b->hist[i].y;
 		b->relaid = 0;
 		b->note[0] = 0;
+		if (frames_apply(b, i)) {
+			/* its frames as they were then (a frame's link followed) */
+			b->at = i;
+			r = frames_relaid(b);
+			b->scroll_to = b->hist[i].y;
+			return r;
+		}
 		return BR_SAME;
 	}
 	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom && b->hist[i].p->opt.text == b->text) {
@@ -3522,7 +4086,9 @@ static int go_to(browser *b, int i)
 	}
 	b->cur = i;
 	shows = b->shows;
+	fr_want = b->hist[i].frames;	/* (its frames as they were) */
 	r = load(b, b->hist[i].url, NAV_HISTORY);
+	fr_want = NULL;
 	if ((r == BR_STOPPED || r == BR_DOWNLOAD) && b->shows == shows)
 		b->cur = old;	/* (not when its page was shown, and its script went on) */
 	return r;
@@ -3540,9 +4106,13 @@ int br_forward(browser *b)
 
 int br_reload(browser *b)
 {
+	int r;
 	if (b->cur < 0)
 		return BR_STOPPED;
-	return load(b, b->hist[b->cur].url, NAV_RELOAD);
+	fr_want = b->hist[b->cur].frames;	/* (its frames as they are) */
+	r = load(b, b->hist[b->cur].url, NAV_RELOAD);
+	fr_want = NULL;
+	return r;
 }
 
 int br_can_back(const browser *b)
@@ -3656,6 +4226,19 @@ static int relay(browser *b)
 
 int br_details(browser *b, dnode *det)
 {
+	int fr = frame_of(b, det);
+	if (fr > 0) {
+		/* a frame's: its document styled again, the page laid out again */
+		br_frame *f = &((br_frames *) b->d->frames)->f[fr - 1];
+		char base[4096];
+		if (!dn_details_toggle(f->d, det, NULL, NULL))
+			return 0;
+		base_of(b, f->d, f->url, base, sizeof base);
+		ec_unstyle(f->d->css);
+		if (select_doc(f->d, base) < 0)
+			return 0;
+		return br_relayout(b, b->width);
+	}
 	if (b->d == NULL || det == NULL || !dn_details_toggle(b->d, det, toggled, b))
 		return 0;
 	return relay(b);
@@ -3788,12 +4371,29 @@ static long next_item(const browser *b, int32_t top, int32_t height)
 	return best;
 }
 
+/* the page shown's next frame to fetch, -1 none (or Esc stopped them):
+   a frameset's (the page itself) when sets is 1, else an iframe too. One
+   not laid out yet, or laid out smaller than 4 px (a counter's, a
+   tracker's), isn't fetched */
+static int frame_waiting(const browser *b, int sets)
+{
+	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
+	int k;
+	if (fs == NULL || b->pic_stopped)
+		return -1;
+	for (k = 0; k < fs->n; k++)
+		if (fs->f[k].el != NULL && fs->f[k].state == FR_NEW && fs->f[k].w >= 4 && fs->f[k].h >= 4 &&
+		    (!sets || fs->f[k].el->tag == T_FRAME))
+			return k;
+	return -1;
+}
+
 int br_pictures_pending(browser *b)
 {
 	long i;
 	if (b->p == NULL)
 		return 0;
-	if (b->pic_relayout)
+	if (b->pic_relayout || frame_waiting(b, 0) >= 0)
 		return 1;
 	for (i = 0; i < b->p->nitems; i++)
 		if (to_do(b, &b->p->items[i]))
@@ -4009,6 +4609,7 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1)
 {
 	long k, i;
+	int fk;
 	ew_img *im;
 	int32_t iw, ih, lo = 0x7fffffff, hi = -1;
 	int fetched = 0;
@@ -4018,8 +4619,15 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 	if (b->p == NULL)
 		return BRP_NONE;
 	conn_stop = 0;
+	/* a frameset's frames first (they are the page), its pictures (and
+	   those of the frames come), then its iframes (an embedded player, a
+	   map: less than the page's own pictures) */
+	if ((fk = frame_waiting(b, 1)) >= 0)
+		goto frame;
 	k = next_item(b, top, height);
 	if (k < 0) {
+		if ((fk = frame_waiting(b, 0)) >= 0)
+			goto frame;
 		if (!b->pic_relayout)
 			return BRP_NONE;
 		goto relayout;
@@ -4108,6 +4716,13 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 		*y1 = hi;
 	}
 	return BRP_DRAWN;
+frame:
+	if (!frame_load(b, fk, NULL, 0))
+		return BRP_STOPPED;
+	if (!br_relayout(b, b->width))
+		return BRP_STOPPED;
+	frames_bury(b->d->frames);
+	return BRP_LAYOUT;
 relayout:
 	b->pic_relayout = 0;
 	b->pic_laid = pf_ms();

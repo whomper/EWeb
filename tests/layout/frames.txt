@@ -1,0 +1,53 @@
+page 608 x 298, background ffffff, 52 items, 2 links, title "Iframes"
+clip x 74+160 y 21+64 in 0
+text 80,53 136x17 #000000 sans13 link 0 "Page two starts here,"
+text 80,69 29x17 #000000 sans13 link 0 "with "
+text 109,69 78x17 #0000ee sans13 link 2 "a link to one"
+text 191,69 21x17 #000000 sans13 link 0 "(no"
+text 80,85 121x17 #000000 sans13 link 0 "target: this frame)."
+text 80,114 7x17 #000000 sans13 link 0 "▸"
+text 91,114 105x17 #000000 sans13 link 0 "More in a details"
+summary 80,101 138x16 closed -
+text 80,143 42x17 #000000 sans13 link 0 "Line 3."
+text 80,172 42x17 #000000 sans13 link 0 "Line 4."
+text 80,201 42x17 #000000 sans13 link 0 "Line 5."
+text 80,230 42x17 #000000 sans13 link 0 "Line 6."
+text 80,259 42x17 #000000 sans13 link 0 "Line 7."
+text 80,288 42x17 #000000 sans13 link 0 "Line 8."
+text 80,317 134x17 #000000 sans13 link 0 "Page two ends with a"
+text 80,333 88x17 #000000 sans13 link 0 "findable word:"
+text 80,349 50x17 #000000 sans13 link 0 "quokka."
+bar y 224,21 10x64 box 1 reach 0,286 at 0,0 thumb 0-11
+fill 72,19 164x2 #767676
+fill 72,85 164x2 #767676
+fill 72,21 2x64 #767676
+fill 234,21 2x64 #767676
+text 6,87 66x17 #222222 sans13 link 0 "An iframe "
+text 240,87 75x17 #222222 sans13 link 0 "beside text."
+clip x 8+482 y 105+96 in 0
+clip x 235+128 y 116+29 in 2
+fill 235,116 128x29 #eeffee
+text 241,148 79x17 #000000 sans13 link 0 "Page one, in"
+text 241,164 41x17 #000000 sans13 link 0 "green."
+bar y 353,116 10x29 box 2 reach 0,41 at 0,0 thumb 0-12
+fill 233,114 132x2 #767676
+fill 233,145 132x2 #767676
+fill 233,116 2x29 #767676
+fill 363,116 2x29 #767676
+text 17,147 216x17 #000000 sans13 link 0 "Nested, with an iframe of its own: "
+fill 6,103 540x2 #767676
+fill 6,201 540x2 #767676
+fill 6,105 2x96 #767676
+fill 544,105 2x96 #767676
+clip x 6+120 y 223+24 in 0
+text 14,244 83x17 #000000 sans13 link 0 "From srcdoc,"
+text 14,260 33x17 #000000 sans13 bold link 0 "bold"
+clip x 132+64 y 221+24 in 0
+fill 130,219 68x2 #767676
+fill 130,245 68x2 #767676
+fill 130,221 2x24 #767676
+fill 196,221 2x24 #767676
+text 202,247 82x17 #222222 sans13 link 0 "(itself: blank)"
+text 6,276 106x17 #0000ee sans13 link 1 "One into the box"
+link 1 file://./tests/layout/frames/one.html
+link 2 file://./tests/layout/frames/one.html

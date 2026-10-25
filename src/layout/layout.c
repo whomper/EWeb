@@ -114,6 +114,8 @@ struct box {
 	uint8_t repl;			/* a picture as a block (floated, display: block): its one child the atom */
 	uint8_t ib;			/* an inline-level block (inline-block, -flex, -grid, -table):
 					   an atom in its line, laid out as a block (ib_layout) */
+	uint8_t frame;			/* AT_IMAGE: an iframe's or a frame's, its img its frame's
+					   number (LAYOUT_OPT.frame) */
 	uint16_t link;			/* 1 + link index, or 0 */
 	uint16_t ctl;			/* 1 + index into page.ctls, or 0 */
 	dnode *n;			/* the element, or NULL */
@@ -1124,11 +1126,12 @@ static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_
 }
 
 /* a link: its href, and after its NUL its download attribute (1 and the
-   value, else 0: page_link_download) */
-static uint16_t add_link(L *l, const char *href, const char *download)
+   value, else 0: page_link_download), then its target ("" none) */
+static uint16_t add_link(L *l, const char *href, const char *download, const char *target)
 {
 	page *p = l->p;
 	size_t hn = strlen(href), dn = download != NULL ? strlen(download) : 0;
+	size_t tn = target != NULL ? strlen(target) : 0;
 	char *s;
 	if (p->nlinks == p->linkcap) {
 		int cap = p->linkcap ? p->linkcap * 2 : 64;
@@ -1137,27 +1140,36 @@ static uint16_t add_link(L *l, const char *href, const char *download)
 			return 0;
 		p->links = n;
 		p->linkcap = cap;
+		if (p->lfr != NULL) {
+			uint16_t *f = realloc(p->lfr, cap * sizeof *f);
+			if (f == NULL)
+				return 0;
+			p->lfr = f;
+		}
 	}
 	if (p->nlinks >= 65534)
 		return 0;
-	s = amalloc(l->a, hn + dn + 3);
+	s = amalloc(l->a, hn + dn + tn + 4);
 	if (s == NULL)
 		return 0;
 	memcpy(s, href, hn);
 	s[hn] = 0;
 	s[hn + 1] = download != NULL;
 	memcpy(s + hn + 2, download != NULL ? download : "", dn + 1);
+	memcpy(s + hn + dn + 3, target != NULL ? target : "", tn + 1);
 	p->links[p->nlinks] = s;
+	if (p->lfr != NULL)
+		p->lfr[p->nlinks] = 0;
 	return (uint16_t) (++p->nlinks);
 }
 
-/* an <a>'s href and download attribute, found in one pass (a look for
-   each went through its attributes twice more) */
-static const char *link_attrs(const dnode *n, const char **download)
+/* an <a>'s href, download and target attributes, found in one pass (a
+   look for each went through its attributes again) */
+static const char *link_attrs(const dnode *n, const char **download, const char **target)
 {
 	const char *href = NULL;
 	uint16_t i;
-	*download = NULL;
+	*download = *target = NULL;
 	for (i = 0; i < n->nattr; i++) {
 		size_t al;
 		const char *an = ec_atom_text(n->attrs[i].name, &al);
@@ -1165,6 +1177,8 @@ static const char *link_attrs(const dnode *n, const char **download)
 			href = n->attrs[i].val;
 		else if (al == 8 && *download == NULL && memcmp(an, "download", 8) == 0)
 			*download = n->attrs[i].val;
+		else if (al == 6 && *target == NULL && memcmp(an, "target", 6) == 0)
+			*target = n->attrs[i].val;
 	}
 	return href;
 }
@@ -1653,6 +1667,28 @@ static void build_element(L *l, box *parent, dnode *c)
 		}
 		return;
 	}
+	if (c->tag == T_IFRAME) {
+		/* an iframe: its document's page in its box (frame_items), laid
+		   out as a picture in a block of its own (its border, padding) */
+		int id = l->p->opt.frame != NULL ? l->p->opt.frame(l->p->opt.ud, c) : 0;
+		box *in;
+		if (id <= 0)
+			return;
+		in = new_box(l, BX_BLOCK, c, st, parent);
+		if (in == NULL)
+			return;
+		in->repl = 1;
+		in->ib = (uint8_t) (!block_level(d) && kw(st, EP_FLOAT) == KW_NONE &&
+				    kw(st, EP_POSITION) != KW_ABSOLUTE && kw(st, EP_POSITION) != KW_FIXED);
+		atom(l, in, c, st, AT_IMAGE, NULL, AUTO, AUTO);
+		if (in->last != NULL && in->last->n == c) {
+			in->last->img = (void *) (intptr_t) id;
+			in->last->frame = 1;
+			in->last->iw = 300;
+			in->last->ih = 150;
+		}
+		return;
+	}
 	switch (c->tag) {
 	case T_SVG: case T_CANVAS: case T_VIDEO: case T_AUDIO: case T_IFRAME: case T_OBJECT:
 	case T_EMBED: case T_TEMPLATE: case T_SCRIPT: case T_STYLE: case T_WBR:
@@ -1721,9 +1757,9 @@ static void build_element(L *l, box *parent, dnode *c)
 			b->link = parent->link;	/* a button in a link: the link's */
 	}
 	if (c->tag == T_A) {
-		const char *dl, *href = link_attrs(c, &dl);
+		const char *dl, *tg, *href = link_attrs(c, &dl, &tg);
 		if (href != NULL)
-			b->link = add_link(l, href, dl);
+			b->link = add_link(l, href, dl, tg);
 	}
 	b->list = d == KW_LIST_ITEM ? LB_ITEM : 0;
 	if (d == KW_LIST_ITEM && kw(st, EP_LIST_STYLE_POSITION) == KW_INSIDE && kw(st, EP_LIST_STYLE_TYPE) != KW_NONE)
@@ -2596,6 +2632,24 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	int guess;
 	*w = len(l, b->st, EP_WIDTH, l->cw);
 	*h = len(l, b->st, EP_HEIGHT, AUTO);
+	if (b->frame) {
+		/* an iframe: its width and height each its own (the
+		   attributes' hints, else 300 x 150 CSS px), not one from
+		   the other (the HTML Standard, 15.4.4) */
+		if (*w == AUTO)
+			*w = dev(l, (attr_px(b->n, "width") > 0 ? attr_px(b->n, "width") : iw) << 10);
+		if (*h == AUTO)
+			*h = dev(l, (attr_px(b->n, "height") > 0 ? attr_px(b->n, "height") : ih) << 10);
+		mw = len(l, b->st, EP_MAX_WIDTH, l->cw);
+		if (mw != AUTO && *w > mw && mw >= 0)
+			*w = mw;
+		mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
+		if (mh != AUTO && *h > mh && mh >= 0)
+			*h = mh;
+		*w = *w < 0 ? 0 : *w;
+		*h = *h < 0 ? 0 : *h;
+		return 0;
+	}
 	/* a guess when its file's size is needed and not known yet */
 	guess = (iw <= 0 || ih <= 0) && (*w == AUTO || *h == AUTO);
 	if (iw <= 0 || ih <= 0) {
@@ -3376,10 +3430,17 @@ static void visual_order(L *l, long i, long j, int bidi, long *ord)
 }
 
 /* a picture's item in the display list */
+static void frame_items(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h);
+
 static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
 		       int flags, unsigned alpha)
 {
-	dl_item *d = dl_add(l);
+	dl_item *d;
+	if (b->frame) {
+		frame_items(l, b, x, y, w, h);
+		return;
+	}
+	d = dl_add(l);
 	if (d == NULL)
 		return;
 	d->type = DL_IMAGE;
@@ -3398,6 +3459,344 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 #ifndef EW_ST
 	d->node = b->n;
 #endif
+}
+
+/* ---------------------------------------------------------------- frames */
+
+/* frame id's page w x h (LAYOUT_OPT.frame_page), kept with the page
+   (page.kids): the one made already when a block is laid out twice */
+static page *kid_page(L *l, int id, int32_t w, int32_t h, int *made)
+{
+	page *p = l->p, *k;
+	int i;
+	*made = 0;
+	for (i = 0; i < p->nkids; i++) {
+		k = p->kids[i];
+		if (k->fno == id && k->width == w && k->opt.height == h)
+			return k;
+	}
+	if (p->opt.frame_page == NULL)
+		return NULL;
+	if (p->nkids == p->kidcap) {
+		int cap = p->kidcap ? p->kidcap * 2 : 4;
+		page **n = realloc(p->kids, (size_t) cap * sizeof *n);
+		if (n == NULL)
+			return NULL;
+		p->kids = n;
+		p->kidcap = cap;
+	}
+	k = p->opt.frame_page(p->opt.ud, id, w, h);
+	if (k == NULL)
+		return NULL;
+	k->fno = id;
+	p->kids[p->nkids++] = k;
+	*made = 1;
+	return k;
+}
+
+/* a frame's page's link j the page's own: its number (dl_item.link), the
+   frame it is in (page.lfr: its own frame's, else id) */
+static uint16_t kid_link(L *l, const page *k, int j, int id)
+{
+	page *p = l->p;
+	const char *s = k->links[j], *dl = NULL, *tg;
+	size_t hn = strlen(s);
+	uint16_t n;
+	if (s[hn + 1])
+		dl = s + hn + 2;
+	tg = s + hn + 2;
+	tg += strlen(tg) + 1;
+	n = add_link(l, s, dl, *tg ? tg : NULL);
+	if (n == 0)
+		return 0;
+	if (p->lfr == NULL) {
+		if ((p->lfr = calloc((size_t) p->linkcap, sizeof *p->lfr)) == NULL)
+			return n;	/* (the page's own, as it can) */
+	}
+	p->lfr[n - 1] = (uint16_t) (k->lfr != NULL && k->lfr[j] ? k->lfr[j] : id);
+	return n;
+}
+
+/* frame page k's items into the page at (dx, dy) within the frame's box
+   (l->ovf, its clip, w x h), in the order they are drawn (its positioned
+   boxes over the rest): its clips, boxes that scroll, links and controls
+   the page's own; each item's element the frame's (n: a click in it is on
+   the frame, for the page's scripts, which don't reach into it). Its
+   canvas's picture as big as the frame at least */
+static void splice(L *l, const page *k, int32_t dx, int32_t dy, int id, dnode *n, int32_t w, int32_t h)
+{
+	page *p = l->p;
+	long *map = NULL, r;
+	uint16_t *lmap = NULL, *cmap = NULL;
+	unsigned cbase = (unsigned) p->nclips;
+	int sbase = p->nscr, j;
+	uint16_t ovf = l->ovf;
+	if (k->nitems == 0)
+		return;
+	if (cbase + (unsigned long) k->nclips > 65535 || p->nscr + k->nscr > 32767)
+		return;	/* (as many as can be: not shown) */
+	map = malloc((size_t) k->nitems * sizeof *map);
+	lmap = calloc((size_t) k->nlinks + 1, sizeof *lmap);
+	cmap = calloc((size_t) k->nctls + 1, sizeof *cmap);
+	if (map == NULL || lmap == NULL || cmap == NULL) {
+		l->fail = 1;
+		goto out;
+	}
+	for (r = 0; r < k->nitems; r++) {
+		long i = page_drawn(k, r);
+		const dl_item *s = &k->items[i];
+		dl_item *d = dl_add(l);
+		if (d == NULL)
+			goto out;
+		*d = *s;
+		map[i] = p->nitems - 1;
+		d->x += dx;
+		d->y += dy;
+		d->clip = s->clip ? (uint16_t) (s->clip + cbase) : ovf;
+		if (s->link) {
+			if (lmap[s->link] == 0)
+				lmap[s->link] = kid_link(l, k, s->link - 1, id);
+			d->link = lmap[s->link];
+		}
+		if (s->ctl) {
+			if (cmap[s->ctl] == 0)
+				cmap[s->ctl] = add_ctl(l, k->ctls[s->ctl - 1]);
+			d->ctl = cmap[s->ctl];
+		}
+		if (s->type == DL_SBAR)
+			d->len = s->len + (uint32_t) sbase;
+#ifndef EW_ST
+		d->node = n;
+#endif
+		if (i == k->cbg) {
+			d->w = d->w > w ? d->w : w;
+			d->h = d->h > h ? d->h : h;
+		}
+	}
+	/* its clips, numbered on from the page's */
+	if (k->nclips > 0) {
+		long need = p->nclips + k->nclips;
+		if (need > p->clipcap) {
+			long *c = realloc(p->clips, (size_t) need * sizeof *c);
+			if (c == NULL) {
+				l->fail = 1;
+				goto out;
+			}
+			p->clips = c;
+			p->clipcap = need;
+		}
+		for (j = 0; j < k->nclips; j++)
+			p->clips[p->nclips++] = map[k->clips[j]];
+	}
+	/* its boxes that scroll */
+	for (j = 0; j < k->nscr; j++) {
+		struct pg_scroll *sc;
+		if (p->nscr == p->scrcap) {
+			int cap = p->scrcap ? p->scrcap * 2 : 8;
+			struct pg_scroll *ns = realloc(p->scr, (size_t) cap * sizeof *ns);
+			if (ns == NULL) {
+				l->fail = 1;
+				goto out;
+			}
+			p->scr = ns;
+			p->scrcap = cap;
+		}
+		sc = &p->scr[p->nscr++];
+		*sc = k->scr[j];
+		sc->clip = map[sc->clip];
+		sc->bar[0] = sc->bar[0] >= 0 ? map[sc->bar[0]] : -1;
+		sc->bar[1] = sc->bar[1] >= 0 ? map[sc->bar[1]] : -1;
+	}
+out:
+	free(map);
+	free(lmap);
+	free(cmap);
+}
+
+/* a frame's (or an iframe's) box, w x h at (x, y): its page in it, which
+   scrolls (its bars the AES's, as a box's that scrolls: scroller) but
+   with scrolling=no; its canvas's colour under it when it has one, else
+   what is under the frame shows through, as in a browser */
+static void frame_box(L *l, box *b, dnode *n, int id, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	uint16_t ovf = l->ovf;
+	const char *sc = dn_attr(n, "scrolling");
+	int bars = sc == NULL || !(contains_ci(sc, strlen(sc), "no") || contains_ci(sc, strlen(sc), "off"));
+	page *k;
+	long ck;
+	int made;
+	if (w <= 0 || h <= 0 || id <= 0)
+		return;
+	ck = clip_open(l);
+	if (ck < 0)
+		return;
+	clip_set(l, ck, 1, 1, x, y, w, h);
+	k = kid_page(l, id, w, h, &made);
+	if (k != NULL && bars && k->height > h && w > 2 * PAGE_SBAR(l->p)) {
+		/* taller than the frame: laid out again beside its bar, as a
+		   browser does (no bar across for the bar's own width); the
+		   first one gone when it was made for this */
+		int made2;
+		page *k2 = kid_page(l, id, w - PAGE_SBAR(l->p), h, &made2);
+		if (k2 != NULL) {
+			page *p = l->p;
+			if (made && made2 && p->nkids >= 2 && p->kids[p->nkids - 2] == k) {
+				page_free(k);
+				p->kids[p->nkids - 2] = k2;
+				p->nkids--;
+			}
+			k = k2;
+		}
+	}
+	if (k != NULL) {
+		if (k->bg_set)
+			fill(l, x, y, w, h, 0xff000000 | k->bg);
+		splice(l, k, x, y, id, n, w, h);
+	}
+	l->ovf = ovf;
+	if (k != NULL && bars) {
+		box fb;
+		if (b == NULL) {
+			memset(&fb, 0, sizeof fb);	/* (a frameset's frame: its element, for scroller) */
+			fb.n = n;
+			b = &fb;
+		}
+		scroller(l, b, ck, 1, 1, x + k->right, y + k->height);
+	}
+}
+
+static void frame_items(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	frame_box(l, b, b->n, (int) (intptr_t) b->img, x, y, w, h);
+}
+
+#define FS_MAX 32		/* rows or columns a frameset has at most */
+
+/* a frameset's rows or cols (the HTML Standard's rules for parsing a list
+   of dimensions, 2.3.4.6, and converting it to pixel values, 15.6.2): n
+   sizes (device px) that fill len between them; 1 at least ("*") */
+static int fs_sizes(L *l, const char *v, int32_t len, int32_t *out)
+{
+	int32_t val[FS_MAX];
+	uint8_t kind[FS_MAX];		/* 0 absolute (CSS px), 1 percent, 2 relative */
+	int n = 0, i;
+	int64_t abs = 0, pct = 0, rel = 0, left = len, sum = 0;
+	while (v != NULL && *v && n < FS_MAX) {
+		const char *e = v;
+		int32_t num = 0, got = 0;
+		while (*e && *e != ',')
+			e++;
+		while (v < e && (*v == ' ' || *v == '\t' || *v == '\n' || *v == '\r'))
+			v++;
+		while (v < e && *v >= '0' && *v <= '9') {
+			if (num < 100000)
+				num = num * 10 + (*v - '0');
+			got = 1;
+			v++;
+		}
+		while (v < e && (*v == '.' || (*v >= '0' && *v <= '9') || *v == ' '))
+			v++;	/* (a fraction: left out) */
+		kind[n] = (uint8_t) (v < e && *v == '%' ? 1 : v < e && *v == '*' ? 2 : 0);
+		val[n] = kind[n] == 2 && !got ? 1 : num;
+		n++;
+		v = *e ? e + 1 : e;
+	}
+	if (n == 0) {
+		kind[0] = 2;
+		val[n++] = 1;
+	}
+	for (i = 0; i < n; i++) {
+		if (kind[i] == 0)
+			abs += out[i] = dev(l, val[i] << 10);
+		else if (kind[i] == 1)
+			pct += out[i] = (int32_t) ((int64_t) len * val[i] / 100);
+		else
+			rel += val[i];
+	}
+	/* the absolute first, then the percentages, then the relative share
+	   what is left (each made smaller in proportion when it doesn't fit) */
+	if (abs > left && abs > 0)
+		for (i = 0; i < n; i++)
+			if (kind[i] == 0)
+				out[i] = (int32_t) (out[i] * left / abs);
+	left = abs > left ? 0 : left - abs;
+	if (pct > left && pct > 0)
+		for (i = 0; i < n; i++)
+			if (kind[i] == 1)
+				out[i] = (int32_t) (out[i] * left / pct);
+	left = pct > left ? 0 : left - pct;
+	for (i = 0; i < n; i++)
+		if (kind[i] == 2)
+			out[i] = rel > 0 ? (int32_t) (left * val[i] / rel) : 0;
+	/* (what rounding leaves, or what nothing relative takes: the last's) */
+	for (i = 0; i < n; i++)
+		sum += out[i];
+	out[n - 1] += (int32_t) (len - sum);
+	if (out[n - 1] < 0)
+		out[n - 1] = 0;
+	return n;
+}
+
+/* a frameset's frames and the framesets in it, laid out in w x h at (x,
+   y), a border bw device px wide between them; the depth it is in */
+static void frameset_layout(L *l, dnode *fs, int32_t x, int32_t y, int32_t w, int32_t h, int32_t bw, int depth)
+{
+	int32_t rh[FS_MAX], cw[FS_MAX];
+	int nr, nc, cell = 0, r, c, i;
+	const char *v;
+	dnode *k;
+	if (depth > 8 || stopped(l))
+		return;
+	/* its border: its own border or frameborder attribute, else the
+	   frameset's it is in */
+	if ((v = dn_attr(fs, "border")) != NULL || (v = dn_attr(fs, "framespacing")) != NULL)
+		bw = dev(l, attr_px(fs, dn_attr(fs, "border") != NULL ? "border" : "framespacing") << 10);
+	else if ((v = dn_attr(fs, "frameborder")) != NULL)
+		bw = (contains_ci(v, strlen(v), "no") || (v[0] == '0' && v[1] == 0)) ? 0 : bw > 0 ? bw : dev(l, 4 << 10);
+	nr = fs_sizes(l, dn_attr(fs, "rows"), h, rh);
+	nc = fs_sizes(l, dn_attr(fs, "cols"), w, cw);
+	if (bw * (nr - 1) >= h || bw * (nc - 1) >= w)
+		bw = 0;
+	if (bw > 0) {
+		/* the room the borders take, from the last row and column */
+		nr = fs_sizes(l, dn_attr(fs, "rows"), h - bw * (nr - 1), rh);
+		nc = fs_sizes(l, dn_attr(fs, "cols"), w - bw * (nc - 1), cw);
+	}
+	for (k = fs->first; k != NULL && cell < nr * nc; k = k->next) {
+		int32_t cx = x, cy = y;
+		if (k->type != DN_ELEMENT || (k->tag != T_FRAME && k->tag != T_FRAMESET))
+			continue;
+		r = cell / nc;
+		c = cell % nc;
+		for (i = 0; i < r; i++)
+			cy += rh[i] + bw;
+		for (i = 0; i < c; i++)
+			cx += cw[i] + bw;
+		if (k->tag == T_FRAMESET)
+			frameset_layout(l, k, cx, cy, cw[c], rh[r], bw, depth + 1);
+		else if (l->p->opt.frame != NULL)
+			frame_box(l, NULL, k, l->p->opt.frame(l->p->opt.ud, k), cx, cy, cw[c], rh[r]);
+		cell++;
+	}
+	/* the borders between them: grey, a lighter edge and a darker */
+	if (bw > 0) {
+		int32_t at = y;
+		for (r = 0; r + 1 < nr; r++) {
+			at += rh[r];
+			fill(l, x, at, w, bw, 0xffc0c0c0);
+			fill(l, x, at, w, 1, 0xffe8e8e8);
+			fill(l, x, at + bw - 1, w, 1, 0xff808080);
+			at += bw;
+		}
+		at = x;
+		for (c = 0; c + 1 < nc; c++) {
+			at += cw[c];
+			fill(l, at, y, bw, h, 0xffc0c0c0);
+			fill(l, at, y, 1, h, 0xffe8e8e8);
+			fill(l, at + bw - 1, y, 1, h, 0xff808080);
+			at += bw;
+		}
+	}
 }
 
 /* a CSS length of a gradient (22.10 px) in device px, 22.10 */
@@ -7487,6 +7886,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		    html->e.style->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
 			if ((hb >> 24) != 0) {
 				p->bg = over(hb, 0xffffffff) & 0xffffff;
+				p->bg_set = 1;
 				l.bg_taken = html;	/* painted once, there */
 			}
 			l.canvas_bg = html;
@@ -7494,6 +7894,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 			uint32_t bb = color(d->body->e.style, EP_BACKGROUND_COLOR);
 			if ((bb >> 24) != 0) {
 				p->bg = over(bb, 0xffffffff) & 0xffffff;
+				p->bg_set = 1;
 				l.bg_taken = d->body;
 			}
 			l.canvas_bg = d->body;
@@ -7501,6 +7902,19 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		/* its picture over the whole page, first */
 		if (l.canvas_bg != NULL && kw(l.canvas_bg->e.style, EP_DISPLAY) != KW_NONE)
 			cbg = bg_item(&l, l.canvas_bg->e.style, l.canvas_bg);
+	}
+	{
+		/* a frameset in place of a body: its frames fill the window */
+		dnode *fs;
+		for (fs = html->first; fs != NULL; fs = fs->next)
+			if (fs->type == DN_ELEMENT && (fs->tag == T_FRAMESET || fs->tag == T_BODY))
+				break;
+		if (fs != NULL && fs->tag == T_FRAMESET && o->frame != NULL) {
+			p->frameset = 1;
+			p->height = o->height > 0 ? o->height : o->width * 3 / 4;
+			frameset_layout(&l, fs, 0, 0, o->width, p->height, dev(&l, 4 << 10), 0);
+			goto laid;
+		}
 	}
 	root = new_box(&l, BX_BLOCK, html, html->e.style, NULL);
 	if (root != NULL) {
@@ -7514,6 +7928,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 			 p->height, 0, 0, 0, 0, NULL);
 		p->cbg = cbg;
 	}
+laid:
 	if (!l.fail)
 		draw_order(&l);
 	free(l.it);
@@ -7572,6 +7987,10 @@ void page_free(page *p)
 	free(p->strip);
 	free(p->sidx);
 	free(p->seg);
+	free(p->lfr);
+	while (p->nkids > 0)
+		page_free(p->kids[--p->nkids]);
+	free(p->kids);
 	if (p->mem != NULL) {
 		afree(p->mem);
 		free(p->mem);
@@ -7668,6 +8087,39 @@ const char *page_link_download(const page *p, int link)
 	const char *s = p->links[link];
 	s += strlen(s) + 1;
 	return *s ? s + 1 : NULL;
+}
+
+const char *page_link_target(const page *p, int link)
+{
+	const char *s = p->links[link];
+	s += strlen(s) + 2;
+	return s + strlen(s) + 1;
+}
+
+int page_link_frame(const page *p, int link)
+{
+	return p->lfr != NULL && link >= 0 && link < p->nlinks ? p->lfr[link] : 0;
+}
+
+/* (the whole of a link as add_link keeps it: its href, download and target) */
+static size_t link_size(const char *s)
+{
+	size_t n = strlen(s) + 2;
+	n += strlen(s + n) + 1;
+	return n + strlen(s + n) + 1;
+}
+
+int page_set_link(page *p, int link, const char *href)
+{
+	const char *o = p->links[link], *rest = o + strlen(o) + 1;
+	size_t hn = strlen(href), rn = link_size(o) - (size_t) (rest - o);
+	char *s = amalloc(p->mem, hn + 1 + rn);
+	if (s == NULL)
+		return 0;
+	memcpy(s, href, hn + 1);
+	memcpy(s + hn + 1, rest, rn);
+	p->links[link] = s;
+	return 1;
 }
 
 /* (the last item drawn there first; not one a click goes through) */

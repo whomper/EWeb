@@ -68,6 +68,9 @@
  * page prints the page's text as ^C copies it with nothing selected
  * ("copied:"). -j WIDTH (again for more): then the window made WIDTH px
  * wide, the selection placed again by its text ("selected again:").
+ * -M X,Y clicks at that place on the page (a link, a control, a summary;
+ * in a frame too, as EWEB.PRG's click), -M back is Back; both are taken in
+ * turn with -K's, the pictures and frames fetched after each.
  * -I STAGE:N: the page's build (parse, style or layout) stopped as by Esc
  * at its Nth poll in that stage (doc_poll, ec_poll: EWEB.PRG's window
  * gets its turn at each, ten times a second; here at every one), "polls:"
@@ -590,9 +593,22 @@ static int summary_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, i
    place kept) clicks only a summary */
 static int click(browser *b, const char *id)
 {
-	dnode *n = b->d ? by_id(b->d->root, id) : NULL, *det;
+	dnode *n, *det;
 	int32_t x, y, w, h;
-	int cancelled = 0, load = 0, r = BRJ_NONE, k;
+	int cancelled = 0, load = 0, r = BRJ_NONE, k, px, py;
+	if (strcmp(id, "back") == 0) {
+		/* -M back: the window's Back */
+		r = br_back(b);
+		printf("back: %d \"%s\" %s\n", r, b->title, b->url);
+		return 1;
+	}
+	if (sscanf(id, "%d,%d", &px, &py) == 2) {
+		/* -M X,Y: a click at a place on the page (in a frame too) */
+		x = px;
+		y = py;
+		goto at;
+	}
+	n = b->d ? by_id(b->d->root, id) : NULL;
 #ifdef EW_ST
 	if (n == NULL || !summary_rect(b->p, n, &x, &y, &w, &h)) {
 		printf("click %s: not shown\n", id);
@@ -615,6 +631,7 @@ static int click(browser *b, const char *id)
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
 #endif
+at:
 	if (r == BRJ_LOAD) {
 		printf("load: %d \"%s\" %s\n", load, b->title, b->url);
 		click_file(b, load);
@@ -625,7 +642,7 @@ static int click(browser *b, const char *id)
 			r = br_submit(b, NULL, c, 0, 0);
 			printf("sent: %d \"%s\" %s\n", r, b->title, b->url);
 		} else if (c != NULL && (c->kind == FC_CHECKBOX || c->kind == FC_RADIO)) {
-			form_check(b->d, c);
+			form_check(br_ctl_doc(b, c), c);
 			br_js_event(b, c, "change", &cancelled, &load);
 		} else if (link >= 0) {
 			r = br_follow(b, link);
@@ -817,7 +834,7 @@ int main(int argc, char **argv)
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-J"))
 			scripts_on = 1;
-		else if (!strcmp(argv[i], "-K") && i + 1 < argc && nclick < 16)
+		else if ((!strcmp(argv[i], "-K") || !strcmp(argv[i], "-M")) && i + 1 < argc && nclick < 16)
 			clicks[nclick++] = argv[++i];
 		else if ((!strcmp(argv[i], "-G") || !strcmp(argv[i], "-U")) && i + 1 < argc && nfind < 16) {
 			find_back[nfind] = argv[i][1] == 'U';
@@ -900,6 +917,7 @@ int main(int argc, char **argv)
 	net_init();
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
+	b.height = height > 0 ? height : 400;	/* (the window's: a frameset is as tall) */
 	b.text = (int32_t) (1024L * text / 100);
 	b.sbar = sbar;
 	b.sbar_h = sbar_h;

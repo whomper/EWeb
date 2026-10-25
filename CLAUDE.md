@@ -213,6 +213,13 @@ hub stay complete, with the evidence.
   `make pens` there), EWeb asks in `fetch_picture` and unpacks in `img.c` (`tests/browse/pentest.c`);
   `make itest` checks them against pictures decoded here (ewrender `-E` sums each picture's pens, `-Q`
   asks for pens or not) when its webgate has them.
+- **Frames and iframes** (DESIGN.md, Frames and iframes): each frame a document of its own on the
+  page's (`br_frames` on `doc.frames` in `src/browse`: `frame_cb`, `frame_page_cb`, `frame_load`,
+  fetched by `br_pictures_step`; `frame_target`, `frame_go`, the history's `BR_ENTRY.frames`), its
+  page spliced into the page's by the layout (`LAYOUT_OPT.frame`, `frame_page`; `frame_box`,
+  `splice`, `frameset_layout` in `src/layout/layout.c`; `page.kids`, `page.lfr`). After changing
+  them: `make test` (`tests/layout/frameset.html`, `frames.html`, `tests/layout/frames.py`, ewrender
+  `-M X,Y` clicks and `-M back`), `make itest` (`/site/fs.html`), `make hatarigui` (browse).
 - **SVG** is `src/svg` (fresh, in whole numbers; DESIGN.md, SVG): `svgread.c` reads an `<svg>` from
   EWeb's document (a file parsed by EWeb's HTML parser), `raster.c` fills and strokes its paths,
   anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a
@@ -228,8 +235,11 @@ hub stay complete, with the evidence.
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page
   (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
-  `docs/help/WINDOW.IMG` (and `docs/screenshot.png`) is a Hatari capture of the start page in 16
-  colours (`helpfront.py thumb`): take it again when the window changes.
+  `docs/help/WINDOW.IMG` is a Hatari capture of the start page in 16 colours (`helpfront.py
+  thumb`): take it again when the window changes. **The README's picture** `docs/screenshot.png`
+  (and every picture of EWeb on GitHub) is from the 256-colour Falcon showing a site of the modern
+  web, not EWeb's own page (Erez, 25 Oct 2026): `tools/screenshot.py URL` (Hatari, a webgate here;
+  yaary.music now), kept as a palette PNG of the screen's exact colours.
 - **The ST edition** is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
   of libjpeg-turbo, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is 68020 code); check a build

@@ -52,6 +52,8 @@ Pages:
                  srcset, icons, an SVG, a 1x1 counter, a floated thumbnail
   /site/wikitls.html  the same, secure, its pictures from another secure
                  server (the ECDSA one), as Wikipedia's from upload.wikimedia.org
+  /site/fs.html  a frameset: fsmenu.html, whose link names the main
+                 frame (fsone.html, with a picture), and fsmain.html
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
@@ -422,6 +424,16 @@ WIKI_PAGE = (b"<!DOCTYPE html><html><head><title>Atari Falcon - Wiki</title><sty
              b"<p><img src=big.png alt=png style='max-width:100%;height:auto'></p>"
              b"<img src=counter.png width=1 height=1 alt=''></body></html>\n")
 
+# a frameset (/site/fs.html): a menu whose links name the main frame, and
+# the main frame's pages (make itest, make hatarigui)
+FS_PAGE = (b"<!DOCTYPE html><html><head><title>EWeb frames</title></head><frameset cols='30%,*'>"
+           b"<frame src=fsmenu.html name=menu><frame src=fsmain.html name=main></frameset></html>\n")
+FS_MENU = (b"<!DOCTYPE html><title>Menu</title><body style='background:#dde'><p><b>Menu</b>"
+           b"<p><a href=fsone.html target=main>One in main</a><p><a href=two.html target=_top>Leave</a>\n")
+FS_MAIN = b"<!DOCTYPE html><title>Main</title><p>The main frame's first page.\n"
+FS_ONE = (b"<!DOCTYPE html><title>One</title><body style='background:#efe'><p>Page one in the main frame."
+          b"<p><img src=logo.png alt=logo>\n")
+
 # the same as a secure page whose pictures come from another secure host
 # (Wikipedia's from upload.wikimedia.org): https://127.0.0.1/site/wikitls.html,
 # its pictures from the ECDSA server (an ECDSA certificate, as Wikipedia's:
@@ -632,6 +644,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, GW_PAGE)
         elif p == "/site/wiki.html":
             self.send(200, WIKI_PAGE)
+        elif p in ("/site/fs.html", "/site/fsmenu.html", "/site/fsmain.html", "/site/fsone.html"):
+            self.send(200, {"fs": FS_PAGE, "fsmenu": FS_MENU, "fsmain": FS_MAIN, "fsone": FS_ONE}[p[6:-5]])
         elif p == "/site/wikitls.html":
             self.send(200, WIKI_TLS_PAGE.replace(b"https://localhost:PORT", b"https://127.0.0.1:%d" % self.ecdsa_port))
         elif p.startswith("/site/media/"):

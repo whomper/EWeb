@@ -62,6 +62,8 @@ const char doc_ua_css[] =
 	"mark { background-color: yellow; color: black }\n"
 	"center { text-align: -webkit-center }\n"
 	"img, svg, video, canvas, iframe, object, embed { display: inline-block }\n"
+	"iframe { border: 2px inset #767676 }\n"
+	"iframe[frameborder='0'], iframe[frameborder=no i] { border: none }\n"
 	"[dir=rtl i] { direction: rtl } [dir=ltr i] { direction: ltr }\n"
 	"[dir=ltr i], [dir=rtl i], [dir=auto i], bdi, output { unicode-bidi: isolate }\n"
 	"bdo, bdo[dir] { unicode-bidi: isolate-override }\n"

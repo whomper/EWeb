@@ -241,7 +241,7 @@ static const char *list_type(const char *v, int ol)
    being finished: compared as pointers, not as text */
 static struct {
 	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
-	const ec_atom *col, *font, *name, *open, *dir, *bdi;
+	const ec_atom *col, *font, *name, *open, *dir, *bdi, *target;
 } ha;
 
 static const char *attr_atom(const dnode *n, const ec_atom *a)
@@ -285,6 +285,7 @@ static void hint_atoms(doc *d)
 	A(open);
 	A(dir);
 	A(bdi);
+	A(target);
 #undef A
 }
 
@@ -671,10 +672,12 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 			collapse_into(d->title, sizeof d->title, buf, len);
 			free(buf);
 		}
-	} else if (n->tag == T_BASE && d->base[0] == 0) {
-		const char *h = HA(n, href);
-		if (h != NULL && strlen(h) < sizeof d->base)
+	} else if (n->tag == T_BASE) {
+		const char *h = HA(n, href), *t = HA(n, target);
+		if (h != NULL && d->base[0] == 0 && strlen(h) < sizeof d->base)
 			strcpy(d->base, h);
+		if (t != NULL && d->target[0] == 0 && strlen(t) < sizeof d->target)
+			strcpy(d->target, t);
 	}
 	for (c = n->first; c != NULL; c = c->next) {
 		if (c->type == DN_TEXT && c->len > 0)
@@ -1049,6 +1052,8 @@ void doc_free(doc *d)
 		return;
 	if (d->js_free != NULL)
 		d->js_free(d->js);
+	if (d->frames_free != NULL)
+		d->frames_free(d->frames);
 	form_free(d);
 	for (b = d->mem; b != NULL; b = next) {
 		next = b->next;

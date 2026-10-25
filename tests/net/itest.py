@@ -746,6 +746,24 @@ try:
         out = p.stdout + p.stderr
         check("the browser: an SVG picture", p.returncode == 0 and
               re.search(r"^picture %swiki\.svg decoded at \d+x\d+ 12x12 " % re.escape(site), out, re.M) is not None, out)
+        # a frameset over HTTP: its frames fetched after it; the menu's
+        # link naming the main frame loads there (its picture too), the
+        # page's address the same; Back shows the main frame's first page
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", site + "fs.html"],
+                           cwd=work, capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        m = re.search(r'^text (\d+),(\d+) \d+x\d+ .* link [1-9]\d* "One in main"$', out, re.M)
+        ok = p.returncode == 0 and m is not None and "frame %sfsmenu.html shown" % site in out and \
+            "frame %sfsmain.html shown" % site in out and "The main frame's first page." in out
+        if m:
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-M", "%d,%d" % (int(m.group(1)) + 3, int(m.group(2)) - 4),
+                                "-M", "back", site + "fs.html"], cwd=work, capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            ok = ok and p.returncode == 0 and 'followed: 0 "EWeb frames" %sfs.html' % site in out and \
+                "frame %sfsone.html shown" % site in out and \
+                re.search(r"^picture %slogo\.png (decoded|from the cache) at " % re.escape(site), out, re.M) is not None and \
+                'back: 0 "EWeb frames"' in out and out.count("frame %sfsmain.html shown" % site) == 2
+        check("the browser: frames, a link into one, Back", ok, out)
         # decoded pictures kept in the disk cache as the screen draws them:
         # the next run reads them, but for the small one (decoded each time)
         pix = os.path.join(work, "PIXCACHE")

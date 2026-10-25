@@ -1,0 +1,51 @@
+page 608 x 400, background ffffff, 47 items, 5 links, title "Frames"
+clip x 0+151 y 0+400 in 0
+fill 0,0 151x400 #ddddee
+text 6,36 40x17 #000000 sans13 bold link 0 "Menu"
+text 6,69 77x17 #0000ee sans13 link 1 "One in main"
+text 6,98 94x17 #0000ee sans13 link 2 "A form in main"
+text 6,127 111x17 #0000ee sans13 link 3 "The iframes page"
+text 6,156 139x17 #0000ee sans13 link 4 "Two in the menu itself"
+clip x 154+454 y 0+64 in 0
+fill 154,0 454x64 #eeffee
+text 160,32 124x17 #000000 sans13 link 0 "Page one, in green."
+clip x 154+454 y 67+212 in 0
+text 160,99 169x17 #000000 sans13 link 0 "Page two starts here, with "
+text 329,99 78x17 #551a8b sans13 link 5 "a link to one"
+text 411,99 146x17 #000000 sans13 link 0 "(no target: this frame)."
+text 160,128 7x17 #000000 sans13 link 0 "▸"
+text 171,128 105x17 #000000 sans13 link 0 "More in a details"
+summary 160,115 432x16 closed -
+text 160,157 42x17 #000000 sans13 link 0 "Line 3."
+text 160,186 42x17 #000000 sans13 link 0 "Line 4."
+text 160,215 42x17 #000000 sans13 link 0 "Line 5."
+text 160,244 42x17 #000000 sans13 link 0 "Line 6."
+text 160,273 42x17 #000000 sans13 link 0 "Line 7."
+text 160,302 42x17 #000000 sans13 link 0 "Line 8."
+text 160,331 280x17 #000000 sans13 link 0 "Page two ends with a findable word: quokka."
+bar y 598,67 10x212 box 1 reach 0,74 at 0,0 thumb 0-157
+clip x 154+454 y 282+118 in 0
+clip x 381+128 y 293+29 in 4
+fill 381,293 128x29 #eeffee
+text 387,325 79x17 #000000 sans13 link 0 "Page one, in"
+text 387,341 41x17 #000000 sans13 link 0 "green."
+bar y 499,293 10x29 box 2 reach 0,41 at 0,0 thumb 0-12
+fill 379,291 132x2 #767676
+fill 379,322 132x2 #767676
+fill 379,293 2x29 #767676
+fill 509,293 2x29 #767676
+text 163,324 216x17 #000000 sans13 link 0 "Nested, with an iframe of its own: "
+fill 154,64 454x3 #c0c0c0
+fill 154,64 454x1 #e8e8e8
+fill 154,66 454x1 #808080
+fill 154,279 454x3 #c0c0c0
+fill 154,279 454x1 #e8e8e8
+fill 154,281 454x1 #808080
+fill 151,0 3x400 #c0c0c0
+fill 151,0 1x400 #e8e8e8
+fill 153,0 1x400 #808080
+link 1 file://./tests/layout/frames/one.html
+link 2 file://./tests/layout/frames/form.html
+link 3 file://./tests/layout/frames.html
+link 4 file://./tests/layout/frames/two.html
+link 5 file://./tests/layout/frames/one.html

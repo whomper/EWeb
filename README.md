@@ -9,7 +9,7 @@ shows the document web: pages laid out with their stylesheets, links, lists,
 tables, pictures and forms, with cookies and a little JavaScript, in EWeb's
 own fonts.
 
-![EWeb on a Falcon](docs/screenshot.png)
+![EWeb on a Falcon in 256 colours, showing yaary.music](docs/screenshot.png)
 
 ## Highlights
 
@@ -39,7 +39,8 @@ own fonts.
   browsers show it): a page that names none is read as browsers read it
   (UTF-8 when it is, Windows-1255 on Israeli sites), and View > Encoding
   reads one again in another. The parts a page folds away (`<details>`)
-  open and close with a click.
+  open and close with a click. Frames and iframes, each a page of its own
+  in a box that scrolls, their links opening where the page says.
 - **Pictures**: JPEG (libjpeg-turbo, every kind), PNG with transparency and
   GIF, and SVG drawings, files and those written into a page (EWeb's own
   reader and anti-aliased rasteriser, `src/svg`, in whole numbers for the
