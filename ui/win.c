@@ -562,6 +562,7 @@ static void redraw(const GRECT *area, int parts)
 		return;
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, 0);
+	font_sys_push();	/* (the system font at its size: a dialog may have left another) */
 	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w > 0 && r.h > 0) {
 		GRECT c = r;

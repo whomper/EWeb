@@ -1831,6 +1831,13 @@ static int shortcut(short kstate, short key)
 
 static void av_start(const char *s);
 
+/* while a dialog is a window (MiNT, MagiC: 3.5), the AES's requests to
+   draw EWeb's own windows (WM_REDRAW), to the window each names */
+static void dialog_redraw(const short *msg)
+{
+	win_message(msg);
+}
+
 /* an event of the main loop (or one put off while a picture came) */
 static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *hover_y)
 {
@@ -2090,6 +2097,8 @@ int main(void)
 	crash_cleanup = crash_quit;
 	help_init();
 	av_init("EWEB");
+	dlg_title = "EWeb";		/* dialogs' windows where the AES has them (3.5) */
+	dlg_redraw_hook = dialog_redraw;
 	settings_load();
 	dlg_3d_on = opt.dialogs3d;	/* before the first dialog (5.6) */
 	if (!scr_init()) {

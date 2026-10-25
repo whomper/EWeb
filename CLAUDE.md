@@ -135,7 +135,11 @@ hub stay complete, with the evidence.
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
   called by `d_end` in `ui/dialogs.c`; Settings > General > 3D dialogs, `DIALOGS3D=`): after
   changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and EmuTOS both ways, the ST's
-  TOS 1.04 with the tick greyed). **A box's scroll bars** (overflow auto or scroll) are the AES's
+  TOS 1.04 with the tick greyed). Where the AES runs several programs at once (MiNT, MagiC) alerts
+  are the AES's and dialogs its windows (the guidelines' 3.5: `dlg_band`, `dlg_open`, `dlg_close`,
+  `dlg_draw` in `ui/dialogs.c`; `dlg_redraw_hook` in `main.c`): after changing a dialog, run it
+  under FreeMiNT + XaAES too (AERA-Atari's `common/tests/xaaes`, `run.py`): open it, move it by
+  its title bar, close it with its closer and with Esc. **A box's scroll bars** (overflow auto or scroll) are the AES's
   (the guidelines' 5.1: common's `panebar`, as wide and high as `pb_width`/`pb_height`,
   `LAYOUT_OPT.sbar`; drawn by `draw_box_bars` in `ui/win.c` over the page's copy, pressed through
   `pb_click`; ewrender `-a W,H`): after changing them, `make test` and `make hatarigui` (its

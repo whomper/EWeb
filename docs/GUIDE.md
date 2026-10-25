@@ -684,7 +684,10 @@ or pages still come straight from their servers.
 
 ## Settings
 
-Options > Settings (^,) has three pages (two in the ST edition):
+Options > Settings (^,) has three pages (two in the ST edition). Under
+MiNT or MagiC, it and EWeb's other dialogs open in windows of their
+own, which you can move by their title bars and close with their
+closers, as other programs' there; its alerts are the system's own.
 
 - **General:** whether pages' pictures are shown, the text size (per
   cent, 50 to 200), where words typed in the address go, the disk

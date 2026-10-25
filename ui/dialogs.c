@@ -151,10 +151,11 @@ static short d_button(short x, short y, short w, const char *s, short flags)
 	return d_add(G_BUTTON, SELECTABLE | flags, 0, (long) s, x, y, w, 1);
 }
 
-/* black band across the top, white title */
-static void d_band(short w, const char *title)
+/* black band across the top, white title: its object (in a window the
+   window's title bar names the dialog instead: dlg_band, 3.5) */
+static short d_band(short w, const char *title)
 {
-	d_add(G_BOXTEXT, 0, 0, (long) d_ted(title, 0, 0x1071), 0, 0, w, 1);
+	return d_add(G_BOXTEXT, 0, 0, (long) d_ted(title, 0, 0x1071), 0, 0, w, 1);
 }
 
 static void d_end(void)
@@ -242,16 +243,15 @@ static void d_tick_off(short k)
 static void tick_draw(short k)
 {
 	OBJECT *o = &tree[tick_box[k]];
-	short x, y;
 	o->ob_spec = (long) (s_on[tick_var[k]] ? &tick_on_blk : &tick_off_blk);
-	objc_offset(tree, tick_box[k], &x, &y);
-	objc_draw(tree, 0, 8, x, y, o->ob_width, o->ob_height);
+	dlg_draw(tree, tick_box[k]);
 }
 
 /* ---------------------------------------------------------------- pages */
 
 static short page_of[DMAX], npages, cur_page, page_tab[4], adding_page;
-static GRECT page_area;
+static short pages_obj;		/* the box the pages are in */
+static short settings_band;	/* its title band */
 
 /* rows of a page, with some air between them: row n of a page starting
    at line y is n lines and n gaps down */
@@ -292,14 +292,12 @@ static void show_page(short p, int draw)
 		   SELECTED, which the 3D look draws pressed in: 5.6) */
 		((TEDINFO *) tree[page_tab[i]].ob_spec)->te_color = i == p ? 0x1071 : 0x1180;
 	if (draw) {
-		short x, y, k;
-		for (k = 1; k <= npages; k++) {
-			objc_offset(tree, page_tab[k], &x, &y);
-			objc_draw(tree, 0, 8, x - 2, y - 2, tree[page_tab[k]].ob_width + 4,
-				  tree[page_tab[k]].ob_height + 4);
-		}
-		/* a framed field's frame lies a pixel or two outside it */
-		objc_draw(tree, 0, 8, page_area.x - 2, page_area.y - 2, page_area.w + 4, page_area.h + 4);
+		/* (dlg_draw: where the dialog is now, with a framed field's
+		   frame a pixel or two outside it) */
+		short k;
+		for (k = 1; k <= npages; k++)
+			dlg_draw(tree, page_tab[k]);
+		dlg_draw(tree, pages_obj);
 	}
 }
 
@@ -400,7 +398,7 @@ static short settings_tree(short *ok)
 	npages = 0;
 	adding_page = 0;
 	memset(page_of, 0, sizeof page_of);
-	d_band(SX + PW, " Settings");
+	settings_band = d_band(SX + PW, " Settings");
 	/* the list: plain words on white, the chosen one in a black bar, a
 	   line between it and the settings */
 	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 19);
@@ -438,15 +436,10 @@ static short settings_tree(short *ok)
 static short settings_run(short pages_box, short ok)
 {
 	short x, y, w, h, r, k;
-	form_center(tree, &x, &y, &w, &h);
+	pages_obj = pages_box;
+	dlg_band(settings_band);	/* (in a window: its title bar, 3.5) */
+	dlg_open(tree, &x, &y, &w, &h);
 	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
-	wind_update(BEG_UPDATE);
-	wind_update(3);		/* BEG_MCTRL */
-	form_dial(FMD_START, x, y, w, h);
-	objc_offset(tree, pages_box, &page_area.x, &page_area.y);
-	page_area.w = tree[pages_box].ob_width;
-	page_area.h = tree[pages_box].ob_height;
-	objc_draw(tree, 0, 8, x, y, w, h);
 	for (;;) {
 		r = dlg_do(tree, first_edit(), (short) (ok - 1));
 		if (r < 0)
@@ -471,9 +464,7 @@ static short settings_run(short pages_box, short ok)
 		}
 		break;
 	}
-	form_dial(FMD_FINISH, x, y, w, h);
-	wind_update(2);		/* END_MCTRL */
-	wind_update(END_UPDATE);
+	dlg_close();
 	if (r >= 0)
 		tree[r].ob_state &= ~SELECTED;
 	return r;
@@ -538,7 +529,7 @@ static int ask(const char *title, const char *text, char *answer, int size)
 {
 	char a[200];
 	const char *s;
-	short field, ok, r, x, y, w, h, k;
+	short field, ok, r, x, y, w, h, k, band;
 	long n;
 	char *u;
 	/* the question in at most three lines of 40 */
@@ -559,7 +550,7 @@ static int ask(const char *title, const char *text, char *answer, int size)
 	d_begin(44, 9);
 	nticks = 0;
 	memset(page_of, 0, sizeof page_of);
-	d_band(44, title);
+	band = d_band(44, title);
 	for (k = 0; k < 3; k++)
 		if (p_lines[k][0])
 			d_text(2, (short) (2 + k), p_lines[k]);
@@ -567,15 +558,10 @@ static int ask(const char *title, const char *text, char *answer, int size)
 	d_button(18, 7, 10, "Cancel", EXIT);
 	ok = d_button(31, 7, 10, "OK", EXIT | DEFAULT);
 	d_end();
-	form_center(tree, &x, &y, &w, &h);
-	wind_update(BEG_UPDATE);
-	wind_update(3);		/* BEG_MCTRL */
-	form_dial(FMD_START, x, y, w, h);
-	objc_draw(tree, 0, 8, x, y, w, h);
+	dlg_band(band);		/* (in a window: its title bar, 3.5) */
+	dlg_open(tree, &x, &y, &w, &h);
 	r = dlg_do(tree, field, (short) (ok - 1));
-	form_dial(FMD_FINISH, x, y, w, h);
-	wind_update(2);		/* END_MCTRL */
-	wind_update(END_UPDATE);
+	dlg_close();
 	if (r >= 0)
 		tree[r & 0x7fff].ob_state &= ~SELECTED;
 	if (r < 0 || (r & 0x7fff) != ok)

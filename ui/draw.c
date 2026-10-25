@@ -33,9 +33,13 @@ void clip_off(void)
 	vs_clip(vdi_h, 0, pxy);
 }
 
-/* EWeb draws its own parts in the system font only: nothing to change */
+/* EWeb draws its own parts in the system font only, at its own size:
+   set again, as a dialog may have left another (the About box's fine
+   print, last drawn when it is a window: 3.5) */
 void font_sys_push(void)
 {
+	short d;
+	vst_height(vdi_h, ch >= 16 ? 13 : 6, &d, &d);
 }
 
 void font_sys_pop(void)
