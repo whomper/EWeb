@@ -33,3 +33,4 @@ QuickJS's development and doesn't send them upstream.
 | Patch | Why |
 |---|---|
 | `quickjs-0001-eweb-freestanding.patch` | The Atari build has no operating system's C library: with `CONFIG_EWEB`, no `malloc.h` (`alloca` is the compiler's), `malloc_usable_size` answers 0 (as for Emscripten) and there are no Atomics (no threads). |
+| `quickjs-0002-eweb-bytecode-kept.patch` | Scripts kept compiled (docs/DESIGN.md): `JS_GetBytecodeTag` names the bytecode a build writes and reads (version, format, atoms, opcodes, byte order); with `CONFIG_EWEB` the bytecode, and a regular expression's (a string among a script's constants, upstream in the compiling machine's order), are big-endian on every machine, so the Pi's (`tools/jsc/aerajsc.c`) are the 68030's very bytes (`make bc68k`); `JS_SetParsePoll` is asked every 256 tokens while code is parsed, for the window's turn and Esc while the 68030 compiles a big script. |

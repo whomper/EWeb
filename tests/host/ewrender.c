@@ -71,7 +71,8 @@
  * -M X,Y clicks at that place on the page (a link, a control, a summary;
  * in a frame too, as EWEB.PRG's click), -M back is Back; both are taken in
  * turn with -K's, the pictures and frames fetched after each.
- * -I STAGE:N: the page's build (parse, style or layout) stopped as by Esc
+ * -I STAGE:N: the page's build (parse, style, layout or script: its
+ * scripts compiled and run) stopped as by Esc
  * at its Nth poll in that stage (doc_poll, ec_poll: EWEB.PRG's window
  * gets its turn at each, ten times a second; here at every one), "polls:"
  * printed with how many each stage made, and "stopped:" with the page
@@ -679,11 +680,11 @@ at:
    pf_idle, at every poll), and stopped as by Esc at the Nth while it is at
    one stage */
 static int z_stage = -1, z_at;
-static long z_polls[4];
+static long z_polls[5];
 
 static void build_idle(void)
 {
-	if (br_building > 0 && br_building < 4 && ++z_polls[br_building] == z_at && br_building == z_stage)
+	if (br_building > 0 && br_building < 5 && ++z_polls[br_building] == z_at && br_building == z_stage)
 		conn_stop = 1;
 }
 
@@ -864,7 +865,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "-I") && i + 1 < argc) {
 			const char *z = argv[++i], *c = strchr(z, ':');
 			z_stage = !strncmp(z, "parse", 5) ? BRB_PARSE : !strncmp(z, "style", 5) ? BRB_STYLE :
-				  !strncmp(z, "layout", 6) ? BRB_LAYOUT : 0;
+				  !strncmp(z, "layout", 6) ? BRB_LAYOUT : !strncmp(z, "script", 6) ? BRB_SCRIPT : 0;
 			z_at = c != NULL ? atoi(c + 1) : 0;
 		}
 		else if (!strcmp(argv[i], "-j") && i + 1 < argc && nsel_w < 8)
@@ -970,8 +971,8 @@ int main(int argc, char **argv)
 	if (z_stage >= 0) {
 		pf_idle = NULL;
 		br_poll_ms = 100;
-		printf("polls: parse %ld style %ld layout %ld\n", z_polls[BRB_PARSE], z_polls[BRB_STYLE],
-		       z_polls[BRB_LAYOUT]);
+		printf("polls: parse %ld style %ld layout %ld script %ld\n", z_polls[BRB_PARSE], z_polls[BRB_STYLE],
+		       z_polls[BRB_LAYOUT], z_polls[BRB_SCRIPT]);
 		if (r == BR_STOPPED && b.p != NULL) {
 			printf("stopped: \"%s\" %s\n", b.title, b.url);	/* (the page before stays) */
 			r = BR_SHOWN;

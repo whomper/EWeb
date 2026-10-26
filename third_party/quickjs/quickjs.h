@@ -960,6 +960,13 @@ void JS_SetHostPromiseRejectionTracker(JSRuntime *rt, JSHostPromiseRejectionTrac
 /* return != 0 if the JS code needs to be interrupted */
 typedef int JSInterruptHandler(JSRuntime *rt, void *opaque);
 void JS_SetInterruptHandler(JSRuntime *rt, JSInterruptHandler *cb, void *opaque);
+/* EWeb: cb asked every 256 tokens while code is parsed (JS_Eval, also
+   with JS_EVAL_FLAG_COMPILE_ONLY): != 0 stops it with a SyntaxError,
+   "interrupted"; NULL none */
+void JS_SetParsePoll(JSRuntime *rt, JSInterruptHandler *cb, void *opaque);
+/* EWeb: the bytecode this build writes and reads ("VERSION.BC.ATOMS.OPS"):
+   JS_ReadObject takes only bytecode written by a build with the same */
+const char *JS_GetBytecodeTag(void);
 /* if can_block is TRUE, Atomics.wait() can be used */
 void JS_SetCanBlock(JSRuntime *rt, JS_BOOL can_block);
 /* select which debug info is stripped from the compiled code */

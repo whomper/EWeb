@@ -48,6 +48,8 @@ WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway",
 # aerapens for it (make -C common/tools/pens), behind a socket as on the Pi
 # (tests/net/penssock.py)
 PENS = os.path.join(HERE, "..", "..", "common", "tools", "pens", "build", "aerapens")
+# aerajsc (EWeb's tools/jsc, built by make itest), behind a socket as on the Pi
+AERAJSC = os.path.join(HERE, "..", "..", "build", "host", "aerajsc")
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),
                         "--https", str(HTTPS), "--untrusted", str(BAD), "--ecdsa", str(EC)],
                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -904,6 +906,28 @@ try:
               and '"fetch atari"' in out and '"xhr atari"' in out and "js error" not in out, out)
         check("scripts: document.cookie, HttpOnly kept from them", p.returncode == 0
               and '"cookies seen=2; js=1"' in out and '"sent hidden=1; seen=2; js=1"' in out, out)
+        # a script over 4 KB kept compiled in the disk cache (Direct mode:
+        # EWeb compiles it once), asked again with its ETag (a 304) and read
+        # from the cache the next time
+        kc = os.path.join(work, "keptcache")
+
+        def kept(*more):
+            p = subprocess.run([ewrender, "-f", font, "-J", "-d", "-C", kc] + list(more) +
+                               ["http://localhost:%d/site/kept.html" % HTTP], cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            return p.returncode, p.stdout + p.stderr
+        rc1, out1 = kept()
+        rc2, out2 = kept()
+        count = urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://localhost:%d/site/kept/count" % HTTP).read().decode()
+        p = subprocess.run([ewrender, "-f", font, "-J", "-d", "http://localhost:%d/site/forged.html" % HTTP], cwd=work,
+                           capture_output=True, text=True, timeout=120)
+        out = p.stdout + p.stderr
+        check("scripts: a server's own compiled code isn't run", p.returncode == 0 and '"untouched"' in out
+              and "js code" not in out and "js error: SyntaxError" in out, out)
+        check("scripts kept: compiled once, then read from the cache after a 304", rc1 == 0 and rc2 == 0
+              and "js code: compiled and kept" in out1 and '"kept quick+brown5"' in out1
+              and "js code: kept from before" in out2 and '"kept quick+brown5"' in out2
+              and count == "js=2 304=1", out1 + out2 + count)
         # a refresh (<meta http-equiv=refresh>, the Refresh header): followed
         # when due, in place of the page in the history, the page it came
         # from as the Referer
@@ -1008,6 +1032,15 @@ try:
         print("itest: no webgate (%s): the gateway's cases left out" % WEBGATE)
     else:
         env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+        # the Pi's compiler of scripts (aerajsc behind its socket), when this
+        # webgate has one
+        jsc = "--js-socket" in open(WEBGATE).read() and os.access(AERAJSC, os.X_OK)
+        jsock = os.path.join(work, "js.sock")
+        jssock = None
+        if jsc:
+            jssock = subprocess.Popen([sys.executable, os.path.join(HERE, "penssock.py"), jsock, AERAJSC],
+                                      stdout=subprocess.PIPE, text=True)
+            jsc = jssock.stdout.readline().strip() == "ready"
         # the Pi's pens (aerapens behind its socket), when this webgate makes them
         pens = "--pens-socket" in open(WEBGATE).read() and os.access(PENS, os.X_OK)
         sock = os.path.join(work, "pens.sock")
@@ -1017,7 +1050,8 @@ try:
                                         stdout=subprocess.PIPE, text=True)
             pens = penssock.stdout.readline().strip() == "ready"
         gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local",
-                                 "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens-socket", sock] if pens else []),
+                                 "--cafile", os.path.join(work, "CACERT.PEM")] + (["--pens-socket", sock] if pens else []) +
+                                (["--js-socket", jsock] if jsc else []),
                                 env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         g = "127.0.0.1:%d" % GATE
         try:
@@ -1123,6 +1157,37 @@ try:
                 m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)
                 check("the gateway: a login's POST, its 303 and cookie", p.returncode == 0 and m is not None
                       and m.group(1) == "COOKIE|sid=xyz", p.stdout + p.stderr)
+                # a script asked of the Pi compiled (X-Gateway-Script): aerajsc's
+                # bytecode, kept by EWeb as it came (its ETag: a 304 the next
+                # time); a webgate without aerajsc sends it as it is, and EWeb
+                # compiles it itself
+                pc = os.path.join(work, "picache")
+
+                def pi_kept():
+                    p = subprocess.run([ewrender, "-f", font, "-W", g, "-J", "-d", "-C", pc,
+                                        "http://localhost:%d/site/kept.html" % HTTP], cwd=work, capture_output=True,
+                                       text=True, timeout=120)
+                    return p.returncode, p.stdout + p.stderr
+                was = urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://localhost:%d/site/kept/count" % HTTP).read().decode()
+                rc1, out1 = pi_kept()
+                rc2, out2 = pi_kept()
+                now = urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://localhost:%d/site/kept/count" % HTTP).read().decode()
+                if jsc:
+                    check("the gateway: a script compiled by the Pi, kept as it came", rc1 == 0 and rc2 == 0
+                          and out1.count("js code: compiled by the Pi") == 1 and '"kept quick+brown5"' in out1
+                          and out2.count("js code: compiled by the Pi") == 1 and '"kept quick+brown5"' in out2
+                          and "compiled and kept" not in out1 + out2
+                          and int(now.split()[1][4:]) == int(was.split()[1][4:]) + 1, out1 + out2 + was + now)
+                else:
+                    check("the gateway: a webgate without aerajsc, the script compiled here", rc1 == 0 and rc2 == 0
+                          and "js code: compiled and kept" in out1 and "js code: kept from before" in out2
+                          and '"kept quick+brown5"' in out2, out1 + out2)
+                p = subprocess.run([ewrender, "-f", font, "-W", g, "-J", "-d",
+                                    "http://localhost:%d/site/forged.html" % HTTP], cwd=work, capture_output=True,
+                                   text=True, timeout=120)
+                out = p.stdout + p.stderr
+                check("the gateway: a server's own compiled code isn't run", p.returncode == 0 and
+                      '"untouched"' in out and "js code" not in out, out)
                 # the Refresh header comes through webgate as the server sent it
                 rs = "https://localhost:%d/site/refresh/" % HTTPS
                 p = subprocess.run([ewrender, "-f", font, "-W", g, "-d", "-r", "2", rs + "header.html"], cwd=work,
@@ -1136,6 +1201,9 @@ try:
             if penssock is not None:
                 penssock.terminate()
                 penssock.wait(timeout=10)
+            if jssock is not None:
+                jssock.terminate()
+                jssock.wait(timeout=10)
         if ewrender:
             snapshots()
 finally:

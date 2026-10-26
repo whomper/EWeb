@@ -1546,10 +1546,11 @@ the DOM grows past "lean".
   change). Clicks, typing, ticks and choices in forms, and a form sent are events; a click's default
   (a link followed, a form sent) waits for its listeners, which may cancel it. Modules aren't run
   (no loader); their `nomodule` fallbacks are.
-- **The budget** (the design: 100-200 KB, a few seconds): 200 KB of script a page and 5 seconds for
-  its scripts, `DOMContentLoaded` and `load` (the time a script waits for the network or for an
-  answer to an alert not counted), 2 seconds for each event or timer after, 8 MB of heap and 96 KB
-  of the 128 KB stack. A page over its budget is parsed again and shown without scripts, with its
+- **The budget** (the design: 100-200 KB, a few seconds; since 26 Oct 2026, Erez's choice, pages of
+  jQuery and its friends, their scripts kept compiled: below): 1 MB of script (or of its compiled
+  code) a page and 15 seconds for its scripts, `DOMContentLoaded` and `load` (the time a script
+  waits for the network or for an answer to an alert not counted, nor compiling or reading its
+  code), 2 seconds for each event or timer after, 8 MB of heap and 96 KB of the 128 KB stack. A page over its budget is parsed again and shown without scripts, with its
   `<noscript>` parts. An event or timer over its 2 seconds is stopped; the page stays.
 - **Off by default, on per site** (the design): Options > Run this site's scripts, kept in
   `EWEB.INF` as `SCRIPTS=`, the host names. Since 24 Oct 2026 a setting too (Erez, who found
@@ -3737,12 +3738,66 @@ in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate'
     those three cost 356 million instructions (about 70 s on the DFB1; jQuery alone 79 M,
     15 s), over 90% of it QuickJS compiling them; read back as bytecode they cost about a
     twentieth (jQuery 68 M to compile, 3.8 M to read; jQuery UI 232 M and 7.0 M), and
-    bytecode made on another machine reads on the 68030. What to do with that is an open
-    question (below).
+    bytecode made on another machine reads on the 68030. Erez chose to keep them compiled
+    (below).
 
 Tests: `tests/layout/absbottom.html` (bottoms, % tops and heights, styled controls; its list
 looked at against Chromium), `floats.txt` and `gradients.txt` changed for the better (a floated
 field with its width and border; a bar at its box's bottom), `tests/js/domdoc.html`.
+
+## Scripts kept compiled (26 Oct 2026)
+
+Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
+EWeb goes through it, and by EWeb itself, once, in Direct mode. Compiling is nearly all of what a
+library costs the 68030 (jQuery 3.4.1, 88 KB: 68 million instructions to compile, 3.8 million to
+read back; jQuery UI, 509 KB: 232 and 7.0 million), so a page of them comes in a fifth of the time.
+
+- **The code** (`src/js/js.c`): "EWQJS", the bytecode's tag on a line, then QuickJS's bytecode
+  without its line numbers (a third of the size). The tag (`JS_GetBytecodeTag`: QuickJS's
+  version, the format's, how many atoms and opcodes, the byte order) says which QuickJS can read
+  it; with `CONFIG_EWEB` the bytecode and a regular expression's (a string among a script's
+  constants, upstream in the order of the machine that compiled it) are big-endian on every
+  machine, so the 68030 reads them as they are and the Pi's are the 68030's very bytes
+  (third_party/quickjs, patch 0002; `make bc68k`).
+- **Direct mode** (`run_kept`): a script of 4 KB or more (`JS_KEEP_MIN`), from a file or in the
+  page, is looked for in the disk cache under its source's sums and length and the tag (EWeb's
+  own data, `dc_put_own`: never stale, its key its contents); there, it is read; else compiled,
+  kept and run. Compiling a big one takes the 68030 seconds: the parser asks every 256 tokens
+  (`JS_SetParsePoll`, patch 0002) for the window's turn and Esc, which stops the page as Esc
+  does while it is read. Esc stops a script that runs too (the budget's interrupt).
+- **Through the Pi** (`jh_fetch_script` in `src/browse`): a `<script src>` is asked for with
+  `X-Gateway-Script: TAG` and kept under its address and the tag; webgate fetches it unpacked
+  and has AERA-Gateway's aerajsc compile it (EWeb's `tools/jsc/aerajsc.c` on EWeb's QuickJS,
+  behind `/run/webgate-js.sock` as aerapens is), and answers `application/x-eweb-qjs` with the
+  server's ETag and dates, so EWeb asks again with them and a 304 keeps the code. A webgate
+  without aerajsc, or with another tag, or a script that doesn't compile: the script comes as it
+  came, and EWeb compiles and keeps it itself. One compiled by another QuickJS is refused.
+- **Only EWeb's code and the Pi's are run as code**: QuickJS doesn't check bytecode as it
+  reads it, so bytes from anywhere else could do anything. EWeb runs its own (kept under keys
+  no address has) and an answer of `application/x-eweb-qjs` that `fetch` let stand: asked for
+  of the Pi with this build's tag, its `X-Gateway-Script` that tag, from a webgate that said at
+  `http://webgate/scripts` that it compiles them (`gate_compiles`, once a gateway). Every
+  other answer of that type is kept as `application/octet-stream`, and its bytes are read as a
+  script's source (a SyntaxError). A webgate that answers `/scripts` drops the servers' own
+  `X-Gateway-` headers; an older one (1.10 and before) passes them on, so it is never asked
+  for compiled scripts and never believed.
+- **Measured** (`build/m68k/jsbench -k DIR`, `tools/count68k.sh`; webdriveruniversity.com's
+  Popup page: jQuery, Bootstrap and jQuery UI, 678 KB): 356 million 68030 instructions before
+  (about 70 s on the DFB1), 299 million the first time in Direct mode (compiled without line
+  numbers, and kept), 51.6 million after (about 10 s), of which about 13 million read the
+  code and about 30 million are jQuery UI's own start; through the Pi the same, less the source's
+  sums. The 5-second page budget couldn't hold that start: it is 15 seconds, compiling and
+  reading not counted. The code: jQuery 95 KB, Bootstrap 34 KB, jQuery UI 216 KB.
+
+Tests: `make test` (`tests/js/kept.py`: compiled and kept, read again, the same either way; Esc
+while it compiles, `-I script:N`; a short script not kept; compiled code from elsewhere not
+run as code); `make bc68k` (the Pi's code for `tests/js/kept/lib.js` the 68030's very
+bytes, and run on the 68030 it says what the host says); `make itest` (`/site/kept.html`:
+compiled once, a 304 and the code read the next time; through webgate with aerajsc, the Pi's
+code kept as it came, and without it, compiled here; `/site/forged.html`, a server's own
+"compiled code" with its own `X-Gateway-Script`, not run, directly or through webgate);
+AERA-Gateway's `test_webgate.py` (`ScriptTest`: `/scripts`, the servers' `X-Gateway-` headers
+dropped).
 
 ## The design
 
@@ -3851,7 +3906,8 @@ lives in the other parts:
 - A lean DOM: selectors, events, classes, `innerHTML`, timers and `fetch`.
 - A hard budget of roughly 100–200 KB of script and a few seconds per page. Beyond that the page falls
   back to its `<noscript>` version.
-- Enough for menus, tabs, form checks and small widgets. Not enough for frameworks.
+- Enough for menus, tabs, form checks and small widgets. Not enough for frameworks. *Since 26 Oct
+  2026 pages of jQuery and its friends too, their scripts kept compiled (above).*
 
 ### 3. Gateway: AERA-Gateway's `web` service
 
@@ -4058,12 +4114,6 @@ out of both (their paths lead nowhere on the Atari).
 
 ## Open questions
 
-- **Pages built on jQuery and the like** (26 Oct 2026, Erez's to decide): their scripts are
-  over the 200 KB budget and, on the 68030, take 15-70 s to compile. Keeping each compiled
-  script as bytecode in the disk cache (and having the Pi compile them, with QuickJS built
-  there) would bring such a page to a few seconds; a first visit in Direct mode would still
-  compile them once. Or keep them shown without scripts, with "Through the Pi's browser" for
-  their interactions.
 
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.

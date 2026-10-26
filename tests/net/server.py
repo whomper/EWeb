@@ -106,7 +106,11 @@ Pages:
                  /site/data.json, document.cookie beside an HttpOnly cookie
                  the page set, and the cookies a script's request sends;
                  /site/tabs.html: tabs a click shows, an alert (EWEB.PRG
-                 in Hatari)
+                 in Hatari); /site/kept.html, a script over 4 KB
+                 (/site/kept.js, ETag "k1", asked again each time: a 304)
+                 kept compiled; /site/kept/count (its requests and 304s);
+                 /site/forged.html, a script a server says is compiled code
+                 (EWeb runs only the Pi's)
   /site/enc/     pages that name no encoding (Content-Type without a
                  charset, no <meta>): utf8.html in UTF-8, w1255.html in
                  windows-1255 with a link and a form whose queries are
@@ -201,6 +205,14 @@ DL = {
 DL_COUNT = {}
 HELD = bytes(range(256)) * 16384
 CACHE_COUNT = {"fresh": 0, "etag": 0, "304": 0}
+KEPT_COUNT = {"js": 0, "304": 0}
+# a script over 4 KB (EWeb keeps it compiled: tests/js/kept.py), with a
+# regular expression and a wide string, which says what it worked out
+KEPT_JS = (b"/* a script kept compiled */\n" +
+           b"".join(b"var pad%d = 'padding, padding, padding, padding, padding, padding';\n" % i for i in range(80)) +
+           "var w = 'the quick brown fox'.match(/\\b\\w{5}\\b/g).join('+') + ' \u05e9\u05dc\u05d5\u05dd'.length;\n"
+           "document.getElementById('k').textContent = 'kept ' + w;\n".encode())
+KEPT_PAGE = b"<!DOCTYPE html><title>Kept</title><p id=k>waiting</p><script src=kept.js></script>"
 # a refresh (<meta http-equiv=refresh>, the Refresh header): each page and
 # the headers it comes with; /site/refresh/to.html's title says what came
 # ("Arrived|QUERY|REFERER"), /site/refresh/count how often each was asked for
@@ -727,6 +739,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/site/script.js":
             self.send(200, b"document.getElementById('c').textContent = 'external ' + (1 + 1);",
                       "text/javascript")
+        elif p == "/site/kept.html":
+            self.send(200, KEPT_PAGE)
+        elif p == "/site/kept.js":
+            KEPT_COUNT["js"] += 1
+            if self.headers.get("If-None-Match") == '"k1"':
+                KEPT_COUNT["304"] += 1
+                self.send(304, b"", extra=[("ETag", '"k1"'), ("Cache-Control", "no-cache")])
+            else:
+                self.send(200, KEPT_JS, "text/javascript", extra=[("ETag", '"k1"'), ("Cache-Control", "no-cache")])
+        elif p == "/site/forged.html":
+            self.send(200, b"<!DOCTYPE html><title>Forged</title><p id=f>untouched</p><script src=forged.js></script>")
+        elif p == "/site/forged.js":
+            # a server's own "compiled code", as only webgate may send it
+            self.send(200, b"EWQJS " + self.headers.get("X-Gateway-Script", "x").encode() + b"\n\x00\x01\x02",
+                      "application/x-eweb-qjs", extra=[("X-Gateway-Script", self.headers.get("X-Gateway-Script", "x"))])
+        elif p == "/site/kept/count":
+            self.send(200, ("js=%d 304=%d" % (KEPT_COUNT["js"], KEPT_COUNT["304"])).encode(), "text/plain",
+                      extra=[("Cache-Control", "no-store")])
         elif p == "/site/data.json":
             self.send(200, b'{"word": "atari"}', "application/json")
         elif p == "/site/cache/fresh.html":

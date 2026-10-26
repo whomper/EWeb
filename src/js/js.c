@@ -107,6 +107,7 @@ typedef struct ejs {
 	JSValue node_proto, elem_proto, text_proto, doc_proto, frag_proto, style_proto, cl_proto, ev_proto,
 		comp_proto, loc_obj;
 	uint8_t parts;			/* the prelude's parts made (lazy_get) */
+	uint8_t stopped;		/* Esc while a script was compiled */
 	struct {
 		char *s;
 		const struct ec_sellist *l;
@@ -222,7 +223,9 @@ static void report(ejs *j)
 		}
 		JS_FreeValue(j->ctx, st);
 	}
-	if (j->over)
+	if (j->stopped)
+		say(j, "stopped", "by Esc");
+	else if (j->over)
 		say(j, "stopped", "over its time");
 	else {
 		char m[260];
@@ -242,6 +245,24 @@ static int interrupt(JSRuntime *rt, void *opaque)
 	(void) rt;
 	if (pf_ms() - j->t0 > j->deadline) {
 		j->over = 1;
+		return 1;
+	}
+	/* (while the page is made: the window alive, and Esc stops them) */
+	if (doc_poll != NULL && !doc_poll(DOC_POLL_PARSE)) {
+		j->over = j->stopped = 1;
+		return 1;
+	}
+	return 0;
+}
+
+/* while a script is compiled (a big one takes the 68030 seconds): the
+   window kept alive, and Esc stops it (doc_poll, set while a page is made) */
+static int parse_poll(JSRuntime *rt, void *opaque)
+{
+	ejs *j = opaque;
+	(void) rt;
+	if (doc_poll != NULL && !doc_poll(DOC_POLL_PARSE)) {
+		j->over = j->stopped = 1;
 		return 1;
 	}
 	return 0;
@@ -4181,6 +4202,7 @@ static int setup(ejs *j)
 	JS_SetMemoryLimit(j->rt, JS_MAX_MEMORY);
 	JS_SetMaxStackSize(j->rt, JS_STACK);
 	JS_SetInterruptHandler(j->rt, interrupt, j);
+	JS_SetParsePoll(j->rt, parse_poll, j);
 	if (JS_NewClass(j->rt, node_class, &node_def) < 0 || JS_NewClass(j->rt, style_class, &style_def) < 0 ||
 	    JS_NewClass(j->rt, comp_class, &comp_def) < 0 || JS_NewClass(j->rt, cl_class, &cl_def) < 0 ||
 	    JS_NewClass(j->rt, ev_class, &ev_def) < 0)
@@ -4301,11 +4323,112 @@ static int classic(const char *t)
 	return 0;
 }
 
+/* ---------------------------------------------------------------- scripts kept compiled */
+
+/* a script compiled: "EWQJS " and the bytecode's tag (JS_GetBytecodeTag)
+   on a line, then QuickJS's bytecode, as the disk cache keeps it
+   (js_host.code_put) and as the Pi sends it (js_host.fetch_script) */
+#define CODE_MAGIC "EWQJS "
+
+/* 1 (and the bytecode's start) when s is a script compiled by a build
+   like this one; -1 when compiled by another; 0 when it is source */
+static int is_code(const char *s, long len, long *at)
+{
+	const char *tag = JS_GetBytecodeTag();
+	long t = (long) strlen(tag);
+	if (len < 6 || memcmp(s, CODE_MAGIC, 6) != 0)
+		return 0;
+	if (len < 7 + t || memcmp(s + 6, tag, (size_t) t) != 0 || s[6 + t] != '\n')
+		return -1;
+	*at = 7 + t;
+	return 1;
+}
+
+/* the key a script's compiled code is kept under: its source's two sums
+   and length (a word at a time, with no multiply, slow on the 68030:
+   what is summed is only ever this machine's), and the bytecode's tag */
+static void code_key(const char *s, long n, char *out, int size)
+{
+	uint32_t a = 2166136261u, b = 5381;
+	long i;
+	for (i = 0; i + 4 <= n; i += 4) {
+		uint32_t w;
+		memcpy(&w, s + i, 4);
+		a = ((a << 5) | (a >> 27)) ^ w;
+		b += a;
+	}
+	for (; i < n; i++) {
+		a = ((a << 5) | (a >> 27)) ^ (unsigned char) s[i];
+		b += a;
+	}
+	snprintf(out, (size_t) size, "qjs:%s:%08lx%08lx:%ld", JS_GetBytecodeTag(), (unsigned long) a,
+		 (unsigned long) b, n);
+}
+
+/* compiled code run: read (QuickJS checks it as it reads), then run */
+static JSValue run_code(ejs *j, const char *bc, long n)
+{
+	unsigned long t = pf_ms();
+	JSValue f = JS_ReadObject(j->ctx, (const uint8_t *) bc, (size_t) n, JS_READ_OBJ_BYTECODE);
+	j->t0 += pf_ms() - t;	/* (reading it isn't the script's time, as compiling it isn't) */
+	if (JS_IsException(f))
+		return f;
+	return JS_EvalFunction(j->ctx, f);
+}
+
+/* a script big enough to keep (JS_KEEP_MIN): its code kept from before,
+   else compiled (without its line numbers, a third of the size) and
+   kept, then run. Compiling isn't the script's time: a first visit to a
+   page of jQuery and its friends compiles for a minute on the 68030,
+   with the window alive and Esc to stop it (parse_poll) */
+static JSValue run_kept(ejs *j, const char *code, long len, const char *name)
+{
+	char key[120], *got = NULL, *out;
+	long glen = 0, at;
+	unsigned long t;
+	int strip;
+	uint8_t *bc;
+	size_t n;
+	JSValue f;
+	code_key(code, len, key, sizeof key);
+	if (j->h.code_get != NULL && j->h.code_get(j->h.ud, key, &got, &glen)) {
+		if (is_code(got, glen, &at) == 1) {
+			say(j, "code", "kept from before");
+			f = run_code(j, got + at, glen - at);
+			free(got);
+			return f;
+		}
+		free(got);
+	}
+	t = pf_ms();
+	strip = JS_GetStripInfo(j->rt);
+	JS_SetStripInfo(j->rt, JS_STRIP_DEBUG);
+	f = JS_Eval(j->ctx, code, (size_t) len, name, JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY);
+	JS_SetStripInfo(j->rt, strip);
+	if (!JS_IsException(f) && j->h.code_put != NULL &&
+	    (bc = JS_WriteObject(j->ctx, &n, f, JS_WRITE_OBJ_BYTECODE)) != NULL) {
+		long h = 7 + (long) strlen(JS_GetBytecodeTag());
+		if ((out = malloc((size_t) h + n)) != NULL) {
+			snprintf(out, (size_t) h + 1, "%s%s\n", CODE_MAGIC, JS_GetBytecodeTag());
+			memcpy(out + h, bc, n);
+			j->h.code_put(j->h.ud, key, out, h + (long) n);
+			say(j, "code", "compiled and kept");
+			free(out);
+		}
+		js_free(j->ctx, bc);
+	}
+	j->t0 += pf_ms() - t;
+	if (JS_IsException(f))
+		return f;
+	return JS_EvalFunction(j->ctx, f);
+}
+
 static void run_script(ejs *j, dnode *n)
 {
 	const char *type = dn_attr(n, "type"), *src = dn_attr(n, "src");
 	char *code = NULL, *name = NULL;
 	long len = 0;
+	int compiled = 0;	/* the Pi's compiled code (JS_CODE_MIME) */
 	dnode *was = j->current, *wrote = j->write_after;
 	JSValue r;
 
@@ -4317,11 +4440,19 @@ static void run_script(ejs *j, dnode *n)
 	if (src != NULL) {
 		char mime[96];
 		int status = 0;
+		int got;
 		if (*src == 0 || j->h.fetch == NULL || j->h.resolve == NULL || (name = malloc(URL_MAX)) == NULL)
 			return;
 		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
-		if (!name[0] || !j->h.fetch(j->h.ud, j->url, name, "GET", NULL, 0, NULL, &code, &len, &status, mime, sizeof mime) ||
-		    (status != 0 && (status < 200 || status >= 300))) {
+		got = name[0] != 0;
+		if (got && j->h.fetch_script != NULL)
+			got = j->h.fetch_script(j->h.ud, j->url, name, JS_GetBytecodeTag(), &code, &len, &status, mime,
+						sizeof mime);
+		else if (got)
+			got = j->h.fetch(j->h.ud, j->url, name, "GET", NULL, 0, NULL, &code, &len, &status, mime,
+					 sizeof mime);
+		compiled = got && strcmp(mime, JS_CODE_MIME) == 0;
+		if (!got || (status != 0 && (status < 200 || status >= 300))) {
 			say(j, "not fetched", name);
 			free(code);
 			free(name);
@@ -4358,7 +4489,23 @@ static void run_script(ejs *j, dnode *n)
 	}
 	j->current = n;
 	j->write_after = n;
-	r = JS_Eval(j->ctx, code, (size_t) len, name ? name : j->url, JS_EVAL_TYPE_GLOBAL);
+	{
+		/* bytecode is run only as EWeb kept it (run_kept) or as the Pi
+		   sent it: QuickJS doesn't check it as it reads it, so code
+		   from anywhere else could do anything */
+		long at;
+		int c = compiled ? is_code(code, len, &at) : 0;
+		if (c == 1) {
+			say(j, "code", "compiled by the Pi");
+			r = run_code(j, code + at, len - at);
+		}
+		else if (compiled)
+			r = JS_ThrowTypeError(j->ctx, "compiled by another QuickJS");
+		else if (len >= JS_KEEP_MIN)
+			r = run_kept(j, code, len, name ? name : j->url);
+		else
+			r = JS_Eval(j->ctx, code, (size_t) len, name ? name : j->url, JS_EVAL_TYPE_GLOBAL);
+	}
 	if (JS_IsException(r))
 		report(j);
 	JS_FreeValue(j->ctx, r);

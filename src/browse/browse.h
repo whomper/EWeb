@@ -231,9 +231,10 @@ void br_preview_free(browser *b);
 int br_relayout(browser *b, int32_t width);
 /* what a page being made is at (doc_poll, ec_poll: GEM's turn and Esc
    meanwhile): 0 none, else parsing, styling, laying out; while one is
-   made, br_relayout only notes the width (it is laid out at it). The
-   window's turn comes every br_poll_ms ms (100) */
-enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT };
+   made, br_relayout only notes the width (it is laid out at it); running
+   its scripts (compiling a big one). The window's turn comes every
+   br_poll_ms ms (100) */
+enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT, BRB_SCRIPT };
 extern int br_building;
 extern unsigned long br_poll_ms;
 /* a details element's summary clicked (page_summary_at): the details

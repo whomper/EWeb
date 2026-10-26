@@ -32,6 +32,49 @@
 #include "libregexp.h"
 #include "libunicode.h"
 
+#if defined(CONFIG_EWEB) && !(defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+/* EWeb: a regular expression's bytecode is kept big-endian on every
+   machine, as the rest of a script's bytecode is (quickjs.c's bc_swap):
+   it is a string in the script's constants, so the Pi's compiled scripts
+   carry it to the 68030 as it is. On the 68030 these are cutils.h's own. */
+static inline uint32_t re_get_u32(const uint8_t *tab)
+{
+    return bswap32(get_u32(tab));
+}
+
+static inline void re_put_u32(uint8_t *tab, uint32_t val)
+{
+    put_u32(tab, bswap32(val));
+}
+
+static inline uint32_t re_get_u16(const uint8_t *tab)
+{
+    return bswap16(get_u16(tab));
+}
+
+static inline void re_put_u16(uint8_t *tab, uint16_t val)
+{
+    put_u16(tab, bswap16(val));
+}
+
+static inline int re_dbuf_put_u16(DynBuf *s, uint16_t val)
+{
+    return dbuf_put_u16(s, bswap16(val));
+}
+
+static inline int re_dbuf_put_u32(DynBuf *s, uint32_t val)
+{
+    return dbuf_put_u32(s, bswap32(val));
+}
+
+#define get_u32 re_get_u32
+#define put_u32 re_put_u32
+#define get_u16 re_get_u16
+#define put_u16 re_put_u16
+#define dbuf_put_u16 re_dbuf_put_u16
+#define dbuf_put_u32 re_dbuf_put_u32
+#endif
+
 /*
   TODO:
   - remove REOP_char_i and REOP_range_i by precomputing the case folding.
@@ -1011,7 +1054,7 @@ static int parse_class_string_disjunction(REParseState *s, REStringList *cr,
             c = get_class_atom(s, NULL, &p, FALSE);
             if (c < 0)
                 goto fail;
-            if (dbuf_put_u32(&str, c)) {
+            if (dbuf_put(&str, (const uint8_t *)&(uint32_t){ c }, 4)) { /* (this machine's order: read as uint32_t) */
                 re_parse_out_of_memory(s);
                 goto fail;
             }

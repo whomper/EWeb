@@ -45,17 +45,33 @@ typedef struct js_host {
 	/* what console.log writes (NULL: nowhere; EWEB.PRG's log never has
 	   it: a page may log what was typed, 7.3) */
 	void (*console)(void *ud, const char *line);
+	/* a <script src>'s file (as fetch), asked of the Pi compiled for
+	   QuickJS's bytecode tag when it goes through the Pi: its compiled
+	   code then, mime JS_CODE_MIME (only as the Pi sends it: src/browse
+	   gives no other answer that type); NULL: fetch */
+	int (*fetch_script)(void *ud, const char *site, const char *url, const char *tag, char **data, long *len,
+			    int *status, char *mime, int msize);
+	/* a script's compiled code kept (the disk cache) under key, and
+	   read back: 1 and *data (malloc'd), *len; 0 none. NULL: not kept */
+	int (*code_get)(void *ud, const char *key, char **data, long *len);
+	void (*code_put)(void *ud, const char *key, const char *data, long len);
 	void *ud;
 } js_host;
 
 enum { JS_ALERT, JS_CONFIRM, JS_PROMPT };
 
-/* the budget (the design: roughly 100-200 KB of script and a few
-   seconds a page) */
+/* a script compiled by the Pi (webgate's aerajsc): the only answer whose
+   bytecode is run */
+#define JS_CODE_MIME "application/x-eweb-qjs"
+
+/* the budget (the design: a few seconds a page; Erez, 26 Oct 2026: the
+   scripts of a page of jQuery and its friends, kept compiled) */
 #ifndef JS_MAX_SOURCE
-#define JS_MAX_SOURCE	(200L * 1024)	/* bytes of script a page may bring */
+#define JS_MAX_SOURCE	(1024L * 1024)	/* bytes of script (or of its code) a page may bring */
 #endif
-#define JS_PAGE_MS	5000		/* its scripts, DOMContentLoaded and load */
+#define JS_KEEP_MIN	4096		/* a script this long is kept compiled (js_host.code_put) */
+#define JS_PAGE_MS	15000		/* its scripts, DOMContentLoaded and load (not compiling them:
+					   jQuery UI's own start is 6 s of the DFB1's) */
 #define JS_EVENT_MS	2000		/* each event, timer or promise job after */
 #define JS_MAX_MEMORY	(8L << 20)	/* the runtime's heap */
 

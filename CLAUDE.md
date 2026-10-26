@@ -288,7 +288,12 @@ hub stay complete, with the evidence.
   is: patches in its `patches/` with the README; a runtime per document, `doc.js`; the lean DOM on
   EWeb's own nodes; the budget), run by `src/browse` where Settings > Scripts says (`RUNSCRIPTS=`: on no
   site, the sites in `SCRIPTS=`, every site but those in `NOSCRIPTS=`; Options > Run this site's
-  scripts; `br_scripts_site`, `tests/browse/sitetest.c`). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
+  scripts; `br_scripts_site`, `tests/browse/sitetest.c`). A script of 4 KB or more is kept compiled
+  (DESIGN.md, Scripts kept compiled: QuickJS's bytecode in the disk cache, `run_kept`; through the
+  Pi compiled by webgate's aerajsc, `tools/jsc`, which AERA-Gateway builds from its `jsc/` copy):
+  after changing that, or QuickJS, `make test` (`tests/js/kept.py`), `make bc68k` (the Pi's code
+  the 68030's very bytes) and `make itest` (`/site/kept.html`, with `WEBGATE=` a webgate that has
+  `--js-socket`, and without). On the Atari QuickJS and `third_party/libm` (musl's maths) are built with
   `-m68881` and run only with an FPU (the `_FPU` cookie); with `js.c` they are `EWEBJS.OVL`, a file
   of their own that `EWEB.PRG` loads when a site's scripts first run (`atari/js_ovl.c`, made by
   `atari/ovl.ld` and `tools/mkovl.py`; DESIGN.md, One EWEB.PRG for every Falcon), so `EWEB.PRG`

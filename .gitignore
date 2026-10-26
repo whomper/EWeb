@@ -20,3 +20,4 @@ CRASH.LOG
 tests/**/work/
 *.log
 common/tools/pens/build/
+/tools/jsc/build/

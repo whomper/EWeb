@@ -1101,6 +1101,11 @@ static int page_head(void *ud, HTTPRESP *rs)
 	return 1;
 }
 
+/* the gateway asked whether it compiles scripts, and its answer
+   (gate_compiles) */
+static char js_gate[300];
+static int js_gate_ok;
+
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
 {
@@ -1139,7 +1144,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		fresh = 1;
 		keep = 0;
 	}
-	if (fresh != 1) {
+	if (fetch_variant != NULL)
+		keep = 0;	/* (the memory's pages are by address alone) */
+	if (fresh != 1 && fetch_variant == NULL) {
 		centry *e = cache_get(url);
 		if (e != NULL) {
 			f->data = malloc(e->len + 1);
@@ -1298,6 +1305,17 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 			f->status = rs->status;
 			str_copy(f->url, rs->url.href, sizeof f->url);
 			str_copy(f->mime, rs->mime, sizeof f->mime);
+			/* a script's compiled code is run only as the Pi sends it,
+			   asked for (webgate drops the servers' own X-Gateway-
+			   headers): anything else that says it is, isn't (src/js) */
+			if (strcmp(f->mime, JS_CODE_MIME) == 0) {
+				char v[80];
+				if (!http_gateway[0] || !js_gate_ok || strcmp(js_gate, http_gateway) != 0 ||
+				    fetch_variant == NULL || strncmp(fetch_variant, "qjs:", 4) != 0 ||
+				    http_header(rs, "X-Gateway-Script", v, sizeof v) == NULL ||
+				    strcmp(v, fetch_variant + 4) != 0)
+					str_copy(f->mime, "application/octet-stream", sizeof f->mime);
+			}
 			str_copy(f->charset, rs->charset, sizeof f->charset);
 			str_copy(f->security, rs->security, sizeof f->security);
 			f->len = body.len;
@@ -2101,9 +2119,17 @@ parse:
 		say(b, "%s", "Running the page's scripts...");
 		js_host_of(b, &h);
 		js_doc = d;
+		br_building = BRB_SCRIPT;
 		r = js_page(d, url, base, &h);
+		br_building = BRB_PARSE;
 		js_doc = NULL;
 		js_stats(d, &ms, &bytes);
+		if (conn_stop) {
+			/* Esc (while a big script was compiled): stopped, as a
+			   page stopped while it is read */
+			doc_free(d);
+			return 0;
+		}
 		if (r == JS_TOO_MUCH || r == JS_NO_MEMORY) {
 			/* over the budget: the page as it is without them (and,
 			   on every site, the site's next pages without them) */
@@ -3803,6 +3829,74 @@ static int jh_fetch(void *ud, const char *site, const char *url, const char *met
 	return r;
 }
 
+/* does the Pi compile scripts for this build: asked once a gateway, at
+   http://webgate/scripts, which only a webgate that compiles them answers
+   ("aerajsc TAG"), one that drops the servers' own X-Gateway- headers. An
+   older webgate passes them on, so a server could say through it that its
+   bytes are compiled code: it is never asked for any, nor believed
+   (js_gate, js_gate_ok: the gateway asked, and its answer) */
+
+static int gate_compiles(browser *b, const char *tag)
+{
+	FETCH *f;
+	if (strcmp(js_gate, http_gateway) == 0)
+		return js_gate_ok;
+	str_copy(js_gate, http_gateway, sizeof js_gate);
+	js_gate_ok = 0;
+	if ((f = malloc(sizeof *f)) == NULL)
+		return 0;
+	if (fetch(b, "http://webgate/scripts", NULL, 1, "*/*", 4096, 0, NULL, f) && f->status == 200 &&
+	    f->data != NULL) {
+		char want[96];
+		snprintf(want, sizeof want, "aerajsc %s\n", tag);
+		js_gate_ok = strncmp(f->data, want, strlen(want)) == 0;
+	}
+	free(f->data);
+	free(f);
+	return js_gate_ok;
+}
+
+/* a <script src>'s file: through the Pi, asked for as QuickJS's bytecode
+   (tag: this build's), which webgate compiles when its compiler has the
+   same tag, and kept as such (under its own key); in Direct mode as it
+   is, and src/js keeps what it compiles (jh_code_put) */
+static int jh_fetch_script(void *ud, const char *site, const char *url, const char *tag, char **data, long *len,
+			   int *status, char *mime, int msize)
+{
+	const char *more = fetch_more, *variant = fetch_variant;
+	char ask[96], var[80];
+	int r;
+	if (!http_gateway[0] || !gate_compiles(ud, tag))
+		return jh_fetch(ud, site, url, "GET", NULL, 0, NULL, data, len, status, mime, msize);
+	snprintf(ask, sizeof ask, "X-Gateway-Script: %s\r\n", tag);
+	snprintf(var, sizeof var, "qjs:%s", tag);
+	fetch_more = ask;
+	fetch_variant = var;
+	r = jh_fetch(ud, site, url, "GET", NULL, 0, NULL, data, len, status, mime, msize);
+	fetch_more = more;
+	fetch_variant = variant;
+	return r;
+}
+
+/* a script's compiled code, kept in the disk cache as EWeb's own data
+   (its key its source's sums) */
+static int jh_code_get(void *ud, const char *key, char **data, long *len)
+{
+	DC_GOT g;
+	(void) ud;
+	if (!dc_get(key, &g))
+		return 0;
+	*data = g.data;
+	*len = g.len;
+	return 1;
+}
+
+static void jh_code_put(void *ud, const char *key, const char *data, long len)
+{
+	(void) ud;
+	dc_put_own(key, "compiled script", data, len);
+}
+
 static void jh_resolve(void *ud, const char *base, const char *href, char *out, int size, int utf8)
 {
 	browser *b = ud;
@@ -3875,6 +3969,9 @@ static void js_host_of(browser *b, js_host *h)
 	h->ask = jh_ask;
 	h->log = jh_log;
 	h->console = jh_console;
+	h->fetch_script = jh_fetch_script;
+	h->code_get = jh_code_get;
+	h->code_put = jh_code_put;
 	h->ud = b;
 }
 

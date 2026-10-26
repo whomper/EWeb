@@ -1,0 +1,273 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Mon, 26 Oct 2026 07:00:00 +0000
+Subject: [PATCH] EWeb: scripts compiled elsewhere, and a parse that can be
+ stopped
+
+EWeb keeps a script's bytecode in its disk cache, and the Pi (aerajsc)
+compiles scripts for it, so that the 68030 reads them instead of
+compiling them:
+
+- JS_GetBytecodeTag: what bytecode this build writes and reads (the
+  version, the format's, its atoms and opcodes, its byte order), so
+  that bytecode from another build is known to fit;
+- with CONFIG_EWEB the bytecode is big-endian on every machine (the
+  68030's order, so it reads it as it is), and so is a regular
+  expression's, a string in the script's constants that upstream keeps
+  in the order of the machine that compiled it;
+- JS_SetParsePoll: a callback every 256 tokens while code is parsed
+  (a big script takes the 68030 seconds), which can stop it.
+---
+diff --git a/libregexp.c b/libregexp.c
+index b231e9534..085dc6bf3 100644
+--- a/libregexp.c
++++ b/libregexp.c
+@@ -32,6 +32,49 @@
+ #include "libregexp.h"
+ #include "libunicode.h"
+ 
++#if defined(CONFIG_EWEB) && !(defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
++/* EWeb: a regular expression's bytecode is kept big-endian on every
++   machine, as the rest of a script's bytecode is (quickjs.c's bc_swap):
++   it is a string in the script's constants, so the Pi's compiled scripts
++   carry it to the 68030 as it is. On the 68030 these are cutils.h's own. */
++static inline uint32_t re_get_u32(const uint8_t *tab)
++{
++    return bswap32(get_u32(tab));
++}
++
++static inline void re_put_u32(uint8_t *tab, uint32_t val)
++{
++    put_u32(tab, bswap32(val));
++}
++
++static inline uint32_t re_get_u16(const uint8_t *tab)
++{
++    return bswap16(get_u16(tab));
++}
++
++static inline void re_put_u16(uint8_t *tab, uint16_t val)
++{
++    put_u16(tab, bswap16(val));
++}
++
++static inline int re_dbuf_put_u16(DynBuf *s, uint16_t val)
++{
++    return dbuf_put_u16(s, bswap16(val));
++}
++
++static inline int re_dbuf_put_u32(DynBuf *s, uint32_t val)
++{
++    return dbuf_put_u32(s, bswap32(val));
++}
++
++#define get_u32 re_get_u32
++#define put_u32 re_put_u32
++#define get_u16 re_get_u16
++#define put_u16 re_put_u16
++#define dbuf_put_u16 re_dbuf_put_u16
++#define dbuf_put_u32 re_dbuf_put_u32
++#endif
++
+ /*
+   TODO:
+   - remove REOP_char_i and REOP_range_i by precomputing the case folding.
+@@ -1011,7 +1054,7 @@ static int parse_class_string_disjunction(REParseState *s, REStringList *cr,
+             c = get_class_atom(s, NULL, &p, FALSE);
+             if (c < 0)
+                 goto fail;
+-            if (dbuf_put_u32(&str, c)) {
++            if (dbuf_put(&str, (const uint8_t *)&(uint32_t){ c }, 4)) { /* (this machine's order: read as uint32_t) */
+                 re_parse_out_of_memory(s);
+                 goto fail;
+             }
+diff --git a/quickjs.c b/quickjs.c
+index f863e1cc7..ea533d047 100644
+--- a/quickjs.c
++++ b/quickjs.c
+@@ -32,6 +32,9 @@
+ #include <time.h>
+ #include <fenv.h>
+ #include <math.h>
++/* EWeb: how often the parser asks its poll (JS_SetParsePoll) */
++#define PARSE_POLL_TOKENS 256
++
+ #if defined(CONFIG_EWEB)
+ /* EWeb on the Atari: freestanding, no malloc.h */
+ #define alloca __builtin_alloca
+@@ -364,6 +367,10 @@ struct JSRuntime {
+ 
+     JSInterruptHandler *interrupt_handler;
+     void *interrupt_opaque;
++    /* EWeb: asked every PARSE_POLL_TOKENS tokens while code is parsed */
++    JSInterruptHandler *parse_poll;
++    void *parse_poll_opaque;
++    uint32_t parse_ticks;
+ 
+     JSHostPromiseRejectionTracker *host_promise_rejection_tracker;
+     void *host_promise_rejection_tracker_opaque;
+@@ -2252,6 +2259,13 @@ void JS_SetInterruptHandler(JSRuntime *rt, JSInterruptHandler *cb, void *opaque)
+     rt->interrupt_opaque = opaque;
+ }
+ 
++void JS_SetParsePoll(JSRuntime *rt, JSInterruptHandler *cb, void *opaque)
++{
++    rt->parse_poll = cb;
++    rt->parse_poll_opaque = opaque;
++    rt->parse_ticks = 0;
++}
++
+ void JS_SetLocaleCallbacks(JSContext *ctx, const JSLocaleCallbacks *callbacks)
+ {
+     ctx->locale_callbacks = callbacks;
+@@ -23087,6 +23101,12 @@ static __exception int next_token(JSParseState *s)
+     if (js_check_stack_overflow(s->ctx->rt, 0)) {
+         return js_parse_error(s, "stack overflow");
+     }
++    if (unlikely(s->ctx->rt->parse_poll != NULL) &&
++        ++s->ctx->rt->parse_ticks >= PARSE_POLL_TOKENS) {
++        s->ctx->rt->parse_ticks = 0;
++        if (s->ctx->rt->parse_poll(s->ctx->rt, s->ctx->rt->parse_poll_opaque))
++            return js_parse_error(s, "interrupted");
++    }
+ 
+     free_token(s, &s->token);
+ 
+@@ -37823,6 +37843,7 @@ typedef enum BCTagEnum {
+ 
+ #define BC_VERSION 5
+ 
++
+ typedef struct BCWriterState {
+     JSContext *ctx;
+     DynBuf dbuf;
+@@ -37876,6 +37897,30 @@ static inline BOOL is_be(void)
+     return u.b;
+ }
+ 
++/* EWeb: bytecode is kept big-endian, the 68030's order, so that the
++   Atari reads it without turning it round (the Pi, writing it, does);
++   upstream keeps it little-endian */
++static inline BOOL bc_swap(void)
++{
++#ifdef CONFIG_EWEB
++    return !is_be();
++#else
++    return is_be();
++#endif
++}
++
++/* EWeb: what bytecode this build writes and reads: the version, the
++   format's, and how many atoms and opcodes it has, so that bytecode made
++   by another build of the same sources (the Pi's) is known to fit */
++const char *JS_GetBytecodeTag(void)
++{
++    static char tag[64];
++    if (!tag[0])
++        snprintf(tag, sizeof(tag), "%s.%d.%d.%d%s", CONFIG_VERSION, BC_VERSION,
++                 (int)JS_ATOM_END, (int)OP_COUNT, bc_swap() == is_be() ? "le" : "be");
++    return tag;
++}
++
+ static void bc_put_u8(BCWriterState *s, uint8_t v)
+ {
+     dbuf_putc(&s->dbuf, v);
+@@ -37883,21 +37928,21 @@ static void bc_put_u8(BCWriterState *s, uint8_t v)
+ 
+ static void bc_put_u16(BCWriterState *s, uint16_t v)
+ {
+-    if (is_be())
++    if (bc_swap())
+         v = bswap16(v);
+     dbuf_put_u16(&s->dbuf, v);
+ }
+ 
+ static __maybe_unused void bc_put_u32(BCWriterState *s, uint32_t v)
+ {
+-    if (is_be())
++    if (bc_swap())
+         v = bswap32(v);
+     dbuf_put_u32(&s->dbuf, v);
+ }
+ 
+ static void bc_put_u64(BCWriterState *s, uint64_t v)
+ {
+-    if (is_be())
++    if (bc_swap())
+         v = bswap64(v);
+     dbuf_put(&s->dbuf, (uint8_t *)&v, sizeof(v));
+ }
+@@ -38067,7 +38112,7 @@ static int JS_WriteFunctionBytecode(BCWriterState *s,
+         pos += len;
+     }
+ 
+-    if (is_be())
++    if (bc_swap())
+         bc_byte_swap(bc_buf, bc_len);
+ 
+     dbuf_put(&s->dbuf, bc_buf, bc_len);
+@@ -38759,7 +38804,7 @@ static int bc_get_u16(BCReaderState *s, uint16_t *pval)
+         return bc_read_error_end(s);
+     }
+     v = get_u16(s->ptr);
+-    if (is_be())
++    if (bc_swap())
+         v = bswap16(v);
+     *pval = v;
+     s->ptr += 2;
+@@ -38774,7 +38819,7 @@ static __maybe_unused int bc_get_u32(BCReaderState *s, uint32_t *pval)
+         return bc_read_error_end(s);
+     }
+     v = get_u32(s->ptr);
+-    if (is_be())
++    if (bc_swap())
+         v = bswap32(v);
+     *pval = v;
+     s->ptr += 4;
+@@ -38789,7 +38834,7 @@ static int bc_get_u64(BCReaderState *s, uint64_t *pval)
+         return bc_read_error_end(s);
+     }
+     v = get_u64(s->ptr);
+-    if (is_be())
++    if (bc_swap())
+         v = bswap64(v);
+     *pval = v;
+     s->ptr += 8;
+@@ -38908,7 +38953,7 @@ static JSString *JS_ReadString(BCReaderState *s)
+     memcpy(p->u.str8, s->ptr, size);
+     s->ptr += size;
+     if (is_wide_char) {
+-        if (is_be()) {
++        if (bc_swap()) {
+             uint32_t i;
+             for (i = 0; i < len; i++)
+                 p->u.str16[i] = bswap16(p->u.str16[i]);
+@@ -38952,7 +38997,7 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
+     }
+     b->byte_code_buf = bc_buf;
+ 
+-    if (is_be())
++    if (bc_swap())
+         bc_byte_swap(bc_buf, bc_len);
+ 
+     pos = 0;
+diff --git a/quickjs.h b/quickjs.h
+index 32a54fb2a..3e1dd2a33 100644
+--- a/quickjs.h
++++ b/quickjs.h
+@@ -960,6 +960,13 @@ void JS_SetHostPromiseRejectionTracker(JSRuntime *rt, JSHostPromiseRejectionTrac
+ /* return != 0 if the JS code needs to be interrupted */
+ typedef int JSInterruptHandler(JSRuntime *rt, void *opaque);
+ void JS_SetInterruptHandler(JSRuntime *rt, JSInterruptHandler *cb, void *opaque);
++/* EWeb: cb asked every 256 tokens while code is parsed (JS_Eval, also
++   with JS_EVAL_FLAG_COMPILE_ONLY): != 0 stops it with a SyntaxError,
++   "interrupted"; NULL none */
++void JS_SetParsePoll(JSRuntime *rt, JSInterruptHandler *cb, void *opaque);
++/* EWeb: the bytecode this build writes and reads ("VERSION.BC.ATOMS.OPS"):
++   JS_ReadObject takes only bytecode written by a build with the same */
++const char *JS_GetBytecodeTag(void);
+ /* if can_block is TRUE, Atomics.wait() can be used */
+ void JS_SetCanBlock(JSRuntime *rt, JS_BOOL can_block);
+ /* select which debug info is stripped from the compiled code */
+-- 
+2.43.0

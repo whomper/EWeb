@@ -467,6 +467,10 @@ LIBM     := third_party/libm
 LIBM_C   := $(basename $(notdir $(wildcard $(LIBM)/src/*.c)))
 JS_FLAGS  = $(EWB_FLAGS) $(NSINC) -I$(QJS) $(QJS_DEF)
 host_JS  := build/host/js/js.o $(addprefix build/host/qjs/,$(addsuffix .o,$(QJS_C)))
+# the Pi's compiler of scripts for EWeb (webgate, AERA-Gateway's jsc/:
+# tools/jsc/aerajsc.c on this QuickJS)
+build/host/aerajsc: tools/jsc/aerajsc.c $(addprefix build/host/qjs/,$(addsuffix .o,$(QJS_C)))
+	$(HOSTCC) -O2 -std=gnu99 -Wall -Wextra -Wno-unused-parameter -Werror -I$(QJS) -o $@ $^ -lm
 asan_JS  := build/asan/js/js.o $(addprefix build/asan/qjs/,$(addsuffix .o,$(QJS_C)))
 build/host/qjs/%.o: $(QJS)/%.c $(QJS_HDRS)
 	@mkdir -p $(@D)
@@ -859,7 +863,12 @@ hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
 .PHONY: hatarifiles
 
 # against servers on this computer: plain, TLS, redirects, refused certificates
-itest: build/asan/ewget build/asan/ewrender build/asanst/ewrender binary/EWEB.FNT
+# the Pi's compiled scripts on the 68030 (QEMU): the same bytes, the same run
+bc68k: build/host/aerajsc build/m68k/jsbench build/host/ewrender binary/EWEB.FNT
+	python3 tests/js/bc68k.py build/host/aerajsc build/m68k/jsbench build/host/ewrender binary/EWEB.FNT
+.PHONY: bc68k
+
+itest: build/asan/ewget build/asan/ewrender build/asanst/ewrender binary/EWEB.FNT build/host/aerajsc
 	$(MAKE) -s -C common/tools/pens
 	python3 tests/net/itest.py build/asan/ewget build/itest build/asan/ewrender binary/EWEB.FNT
 .PHONY: itest
@@ -1014,7 +1023,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 	python3 tests/bench/mkpage.py build/news
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
-test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
+test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
 		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT \
@@ -1056,6 +1065,7 @@ test: build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp 
 	python3 tests/svg/run.py build/asan/svgrender
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/js/kept.py build/asan/ewrender binary/EWEB.FNT build/host/aerajsc
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the
