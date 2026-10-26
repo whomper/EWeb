@@ -184,6 +184,11 @@ static void bm_items(void)
 	bm_seen = bm_changes;
 }
 
+/* each menu entry's state as the AES has it (1 off, 2 on; 0 not set yet):
+   menu_update runs at every key and click, and asks the AES only for
+   what changed (its 45 calls were most of a letter typed on an ST) */
+static unsigned char menu_was[2][512];
+
 /* the menu bar made again when the bookmarks changed */
 static void bm_menu(void)
 {
@@ -198,13 +203,27 @@ static void bm_menu(void)
 	menu_bar(old.tree, 0);
 	menu_bar(mb.tree, 1);
 	mbar_free(&old);
+	memset(menu_was, 0, sizeof menu_was);	/* (a new tree, as made) */
+}
+
+static void menu_set(int check, short i, int on)
+{
+	unsigned char v = on ? 2 : 1;
+	if (i < 0)
+		return;
+	if (i < 512 && menu_was[check][i] == v)
+		return;
+	if (i < 512)
+		menu_was[check][i] = v;
+	if (check)
+		menu_icheck(mb.tree, i, on ? 1 : 0);
+	else
+		menu_ienable(mb.tree, i, on ? 1 : 0);
 }
 
 static void enable(int cmd, int on)
 {
-	short i = mbar_object(&mb, cmd);
-	if (i >= 0)
-		menu_ienable(mb.tree, i, on ? 1 : 0);
+	menu_set(0, mbar_object(&mb, cmd), on);
 }
 
 #ifndef EW_ST
@@ -338,19 +357,11 @@ void menu_update(void)
 	enable(C_SCRIPTS, !loading && site_of(br.url, NULL, 0));	/* without an FPU: it says why */
 #endif
 	{
-		short i = mbar_object(&mb, C_PICTURES);
-		if (i >= 0)
-			menu_icheck(mb.tree, i, opt.pictures ? 1 : 0);
-		i = mbar_object(&mb, C_FALCON);
-		if (i >= 0)
-			menu_icheck(mb.tree, i, opt.falcon ? 1 : 0);
-		i = mbar_object(&mb, C_SNAPSHOT);
-		if (i >= 0)
-			menu_icheck(mb.tree, i, opt.snapshot && http_gateway[0] ? 1 : 0);
+		menu_set(1, mbar_object(&mb, C_PICTURES), opt.pictures);
+		menu_set(1, mbar_object(&mb, C_FALCON), opt.falcon);
+		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
-		i = mbar_object(&mb, C_SCRIPTS);
-		if (i >= 0)
-			menu_icheck(mb.tree, i, br.scripts && br_scripts_for(&br, br.url) ? 1 : 0);
+		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
 #endif
 	}
 }

@@ -3822,16 +3822,16 @@ in brackets; a page's load is a long job, held to Esc's 100 ms):
 
 | action | Falcon-4:16 before | after | ST:mono before | after |
 |---|---|---|---|---|
-| the program started (2000) | 1080 | 435 | 4880 | 1715 |
-| the home page shown | 2375 | 855 | 13630 | 3550 |
-| the sample page loaded | 1505 | 545 | 10395 | 2680 |
-| the news page loaded | 1565 | 1665 | 8065 | 7095 |
-| a letter typed in the address (50) | 50 | 55 | 175 | 165 |
-| a line scrolled (50) | 30 | 35 | 115 | 115 |
-| a page scrolled (150) | 35 | 30 | 120 | 120 |
-| Settings opened (150) | 165 | 165 | 430 | 430 |
-| Settings closed: what it uncovers (300) | 430 | 150 | 5135 | 1085 |
-| the pictures' page loaded | 1230 | 1240 | 8920 | 2685 |
+| the program started (2000) | 1080 | 400 | 4880 | 1720 |
+| the home page shown | 2375 | 795 | 13630 | 3505 |
+| the sample page loaded | 1505 | 510 | 10395 | 2570 |
+| the news page loaded | 1565 | 1650 | 8065 | 7100 |
+| a letter typed in the address (50) | 50 | 25 | 175 | 85 |
+| a line scrolled (50) | 30 | <20 | 115 | 25 |
+| a page scrolled (150) | 35 | <20 | 120 | 25 |
+| Settings opened (150) | 165 | 160 | 430 | 430 |
+| Settings closed: what it uncovers (300) | 430 | 155 | 5135 | 1085 |
+| the pictures' page loaded | 1230 | 1185 | 8920 | 2540 |
 
 Where the time went, and what changed:
 
@@ -3856,6 +3856,9 @@ Where the time went, and what changed:
   for each of its looks (as it is, greyed, raised and lit, sunk: `scr_button_dev`), kept (4 to 30
   KB of ST RAM) and put on the screen in one copy; the toolbar's ground is filled around the
   buttons, not under them.
+- **The menus.** `menu_update` runs after every key and click and set each of its 45 entries
+  through the AES whether it had changed or not: most of a letter typed or a line scrolled on the
+  ST. It now asks the AES only for what changed (`menu_set`).
 - **The polls.** The parser, the CSS engine and the layout gave GEM its turn every 256 tags,
   elements or boxes, which on the stock machines was a second and more; now every 64, 32 and 16
   (`gem_turn` itself waits 100 ms between turns).
@@ -3866,7 +3869,7 @@ the news page (84 KB and its 75 KB sheet) doesn't fit beside the 1.5 MB EWEB.PRG
 machine, and its 1.3 s file read and 0.45 s of styling between turns; a picture decoded in one
 stretch (a 96 x 96 PNG takes 365 ms to decode and 360 to dither on the stock Falcon, the home
 page's globe among them, decoded at each start as `data:` pictures aren't kept); a letter typed
-on the ST (165 ms) and Settings opened (430). The start size (1.84 MB with the BSS and the stack)
+on the ST (85 ms) and Settings opened (430). The start size (1.84 MB with the BSS and the stack)
 is the plan in the hub's message of 26 Oct: TLS into the family's `TLS.OVL`, WebP and SVG into an
 overlay of their own, the stack and the bigger static tables taken when needed.
 
