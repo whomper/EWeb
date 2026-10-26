@@ -2291,6 +2291,18 @@ static void resized(void)
 	sliders();
 }
 
+/* the window's border x for its work area on a multiple of 8 across
+   (wind_x8: the guidelines' Speed, text on bytes), and its width less
+   what that moved it where it reached the desk's right edge (a window at
+   the left edge goes 7 pixels right) */
+static void on_grid(short *x, short y, short *w, short h)
+{
+	short nx = wind_x8(icon_kind(KIND), *x, y, *w, h);
+	if (nx > *x && *x + *w <= desk_x + desk_w && nx + *w > desk_x + desk_w)
+		*w -= nx + *w - (desk_x + desk_w);
+	*x = nx;
+}
+
 int win_open(void)
 {
 	short x = opt.win_x, y = opt.win_y, w = opt.win_w, h = opt.win_h;
@@ -2330,7 +2342,7 @@ int win_open(void)
 	if (!cur->title[0])
 		str_copy(cur->title, " EWeb ", sizeof cur->title);
 	wind_set_str(cur->h, WF_NAME, cur->title);
-	x = wind_x8(icon_kind(KIND), x, y, w, h);	/* the work area's text on bytes */
+	on_grid(&x, y, &w, h);		/* the work area's text on bytes */
 	wind_open(cur->h, x, y, w, h);
 	get_work();
 	save_place();
@@ -2500,16 +2512,10 @@ static void message(const short *msg)
 			break;
 		wind_get(cur->h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
 		wind_get(cur->h, WF_FULLXYWH, &f.x, &f.y, &f.w, &f.h);
-		{
-			/* (fulled: as wide as the desk less what puts its work
-			   area on a byte) */
-			short fx = wind_x8(icon_kind(KIND), f.x, f.y, f.w, f.h);
-			f.w -= fx - f.x;
-			f.x = fx;
-		}
+		on_grid(&f.x, f.y, &f.w, f.h);	/* (fulled: within the desk, on a byte) */
 		if (c.x == f.x && c.y == f.y && c.w == f.w && c.h == f.h) {
 			wind_get(cur->h, WF_PREVXYWH, &p.x, &p.y, &p.w, &p.h);
-			p.x = wind_x8(icon_kind(KIND), p.x, p.y, p.w, p.h);
+			on_grid(&p.x, p.y, &p.w, p.h);
 			wind_set(cur->h, WF_CURRXYWH, p.x, p.y, p.w, p.h);
 		} else {
 			wind_set(cur->h, WF_CURRXYWH, f.x, f.y, f.w, f.h);
@@ -2533,7 +2539,11 @@ static void message(const short *msg)
 			h = 12 * gl_hchar;
 		/* its work area on a byte across (the guidelines' Speed:
 		   text on bytes), up to 7 pixels from where it was put */
-		wind_set(cur->h, WF_CURRXYWH, wind_x8(icon_kind(KIND), msg[4], msg[5], w, h), msg[5], w, h);
+		{
+			short x = msg[4];
+			on_grid(&x, msg[5], &w, h);
+			wind_set(cur->h, WF_CURRXYWH, x, msg[5], w, h);
+		}
 		resized();
 		if (msg[0] == WM_SIZED)
 			win_redraw(NULL);
