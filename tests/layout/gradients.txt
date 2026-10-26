@@ -32,8 +32,8 @@ text 156,144 55x13 #000000 sans10 link 0 "conic wheel"
 gradient 304,134 144x38 tile 0,0 13x13 across down repeating-conic from 0deg at 0+50% 0+50%, #cccccc 0+0%, #cccccc 0+25%, #ffffff 0+0%, #ffffff 0+50%
 text 304,144 59x13 #000000 sans10 link 0 "conic checks"
 fill 452,134 144x38 #66aa66
-gradient 452,134 144x24 tile 0,0 144x24 across down linear 180deg, #00000000, #000000cc
-text 452,144 87x13 #ffffff sans10 link 0 "a fade over green"
+gradient 452,148 144x24 tile 0,0 144x24 across down linear 180deg, #00000000, #000000cc
+text 452,158 87x13 #ffffff sans10 link 0 "a fade over green"
 gradient 8,176 144x38 tile 0,0 144x38 across down linear 180deg, #2c3e50, #4ca1af
 text 8,186 117x13 #ffffff sans10 link 0 "white on a dark gradient"
 gradient 156,176 144x38 tile 0,0 144x6 across down linear 180deg, #cccccc 0+50%, #ffffff 0+50%

@@ -131,11 +131,11 @@ fill 6,625 96x24 #eeeeff
 image 6,625 48x24 link 0 "a" file://./tests/layout/img/one.png
 image 54,625 48x24 link 0 "b" file://./tests/layout/img/one.png
 text 38,662 116x17 #000000 sans13 link 0 "a radio floated left"
-fill 504,667 62x18 #ffffff
-fill 504,667 62x1 #808080
-fill 504,684 62x1 #808080
-fill 504,667 1x18 #808080
-fill 565,667 1x18 #808080
+fill 504,667 98x18 #ffffff
+fill 504,667 98x1 #888888
+fill 504,684 98x1 #888888
+fill 504,668 1x16 #888888
+fill 601,668 1x16 #888888
 text 6,680 148x17 #000000 sans13 link 0 "a text field floated right"
 text 7,713 180x17 #000000 sans13 link 0 "Words before a wide picture "
 text 187,713 36x17 #000000 sans13 link 0 "and a"

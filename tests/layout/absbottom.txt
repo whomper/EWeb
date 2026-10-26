@@ -1,0 +1,31 @@
+page 608 x 411, background ffffff, 35 items, 0 links, title "Bottoms, % tops and styled controls"
+drawn: 14-34 0-13
+fill 6,6 596x96 #eeeeff
+text 6,16 91x13 #000000 sans10 link 0 "a box of set height"
+fill 6,86 596x16 #003366
+text 6,96 63x13 #ffffff sans10 link 0 "at its bottom"
+fill 555,82 39x12 #cc6600
+text 555,92 39x13 #ffffff sans10 link 0 "10px up"
+fill 6,6 48x48 #cc3333
+fill 6,108 596x51 #eeffee
+text 6,128 567x13 #000000 sans10 link 0 "a box as tall as its text, which is two lines long here because it has quite a lot of words in it, so that the bottom moves"
+fill 6,143 596x16 #003366
+text 6,153 63x13 #ffffff sans10 link 0 "at its bottom"
+fill 6,165 596x96 #eeeeff
+fill 255,196 96x32 #339933
+text 255,206 37x13 #000000 sans10 link 0 "centred"
+fill 6,267 240x36 #ffffee
+text 89,280 80x13 #000000 sans10 link 0 "one radio button"
+text 96,298 65x13 #000000 sans10 link 0 "another radio"
+fill 6,313 172x28 #ffffff
+fill 6,313 172x1 #999999
+fill 6,340 172x1 #999999
+fill 6,314 1x26 #999999
+fill 177,314 1x26 #999999
+fill 181,316 158x22 #ddeeff
+fill 6,351 596x28 #ffffff
+fill 6,351 596x1 #808080
+fill 6,378 596x1 #808080
+fill 6,351 1x28 #808080
+fill 601,351 1x28 #808080
+fill 6,379 71x26 #003366

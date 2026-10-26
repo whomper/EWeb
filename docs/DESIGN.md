@@ -3706,6 +3706,44 @@ Tests: `make itest` (`/site/lazy.html`: with a webgate that makes pictures ahead
 in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate's
 `test_webgate.py` (`PrefetchTest`).
 
+## Layout speed, and a site of test forms (26 Oct 2026)
+
+- **Words measured as they are read** (stage 6): the falcon4 rig's big page (131 KB, 2,406
+  elements) laid out in 33.0 million 68030 instructions, now 27.3 (`build/m68k/drawbench -P 2`,
+  `tools/count68k.sh`). An item (one for every word and space) is cleared by stores in line, not
+  a call to `memset`; a word's width is summed from its face's table of ASCII advances
+  (`font_widths`, made when the face is first used) as it is copied; a block of plain text's
+  narrowest and widest are found in one pass and kept for the layout (`L.mc`: a table asks for
+  each cell's in turn), but not a block with floats or inline blocks in it, whose measuring
+  nests (`tests/layout/deep.py`); `len()`'s calc() and percentages are apart.
+- **webdriveruniversity.com** (Erez's choice of a site of test forms, 26 Oct 2026), in Direct
+  mode (EWeb's own TLS, against the release's roots) and compared with Chromium:
+  - an absolutely placed box with `bottom` (a footer, a bar) is placed once its containing
+    block's height is known (`bottom_place`, `L.bots`), and so is one with a `top` in % in a
+    block of auto height; a positioned box of set height is the containing block's height for
+    its children's % (`L.cbh`, `abs_fill` for one sized by `top` and `bottom`);
+  - a control the page styles (a ground, a border, padding, a width or a height:
+    `styled_ctl`) is a block of its own with the control's style, as an inline block on its
+    line or a block; with a ground, that block is its frame; with a border and no ground, or
+    only a size or padding, it keeps the control's own ground, and a sized or padded one its
+    frame round the padding; a styled button has the page's padding in place of its own;
+  - an auto-width item's % or calc() margins count in its width (`cell_pref`: radio buttons
+    in a centred flex column broke at every letter);
+  - scripts: `input.type` can be set (the control becomes its new kind, `form_retype`), and
+    `document.implementation.createHTMLDocument` gives a document of detached nodes (jQuery
+    asks for both as it starts). The site's pages bring 290-680 KB of script (jQuery,
+    Bootstrap, jQuery UI): over the budget, so they are shown without it. With the budget
+    lifted on the host the Popup page works (its alert, its modal, its link). On the 68030
+    those three cost 356 million instructions (about 70 s on the DFB1; jQuery alone 79 M,
+    15 s), over 90% of it QuickJS compiling them; read back as bytecode they cost about a
+    twentieth (jQuery 68 M to compile, 3.8 M to read; jQuery UI 232 M and 7.0 M), and
+    bytecode made on another machine reads on the 68030. What to do with that is an open
+    question (below).
+
+Tests: `tests/layout/absbottom.html` (bottoms, % tops and heights, styled controls; its list
+looked at against Chromium), `floats.txt` and `gradients.txt` changed for the better (a floated
+field with its width and border; a bar at its box's bottom), `tests/js/domdoc.html`.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
@@ -4019,6 +4057,13 @@ out of both (their paths lead nowhere on the Atari).
    fetched at once (done, below: with the Pi's gateway).
 
 ## Open questions
+
+- **Pages built on jQuery and the like** (26 Oct 2026, Erez's to decide): their scripts are
+  over the 200 KB budget and, on the 68030, take 15-70 s to compile. Keeping each compiled
+  script as bytecode in the disk cache (and having the Pi compile them, with QuickJS built
+  there) would bring such a page to a few seconds; a first visit in Direct mode would still
+  compile them once. Or keep them shown without scripts, with "Through the Pi's browser" for
+  their interactions.
 
 - **Licence, if NetSurf's core wins a part:** EWeb as a whole program would then be GPL-2.0-only
   (its own files keep "or later"). Decide when it comes up.

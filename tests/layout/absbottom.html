@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Bottoms, % tops and styled controls</title>
+<style>
+body { font-family: sans-serif; margin: 8px; font-size: 13px }
+.cb { position: relative; height: 120px; background: #eef; margin-bottom: 8px }
+.grow { position: relative; background: #efe; margin-bottom: 8px; padding-bottom: 24px }
+.bot { position: absolute; bottom: 0; left: 0; right: 0; height: 20px; background: #036; color: #fff }
+.bot2 { position: absolute; bottom: 10px; right: 10px; background: #c60; color: #fff }
+.mid { position: absolute; top: 50%; left: 50%; width: 120px; height: 40px; margin: -20px 0 0 -60px; background: #393 }
+.half { position: absolute; top: 0; left: 0; width: 60px; height: 50%; background: #c33 }
+.col { display: flex; flex-direction: column; align-items: center; width: 300px; background: #ffe }
+.col label { margin: 0 5%; }
+.f1 { width: 200px; padding: 6px; border: 1px solid #999 }
+.f2 { background: #def; border: 0; padding: 4px 8px }
+.f3 { display: block; width: 100%; box-sizing: border-box; padding: 8px }
+button.b1 { background: #036; color: #fff; border: 0; padding: 6px 14px }
+</style></head>
+<body>
+<div class="cb">a box of set height<div class="bot">at its bottom</div><div class="bot2">10px up</div>
+<div class="half"></div></div>
+<div class="grow"><p>a box as tall as its text, which is two lines long here because it has quite a lot of
+words in it, so that the bottom moves</p><div class="bot">at its bottom</div></div>
+<div class="cb"><div class="mid">centred</div></div>
+<div class="col"><label><input type="radio" name="r"> one radio button</label>
+<label><input type="radio" name="r"> another radio</label></div>
+<form><p><input class="f1" value="a bordered field"> <input class="f2" value="a filled field"></p>
+<input class="f3" value="a block field"> <button class="b1">A button</button></form>
+</body></html>

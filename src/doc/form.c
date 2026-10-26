@@ -163,6 +163,11 @@ static int kind_of(dnode *n)
 	return FC_TEXT;		/* text, search, email, url, tel, number, date... and the unknown */
 }
 
+void form_retype(fctl *c)
+{
+	c->kind = (uint8_t) kind_of(c->n);
+}
+
 int form_typed(const fctl *c)
 {
 	return c->kind == FC_TEXT || c->kind == FC_PASSWORD || c->kind == FC_TEXTAREA;

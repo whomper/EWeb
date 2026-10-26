@@ -52,7 +52,9 @@ enum { JS_ALERT, JS_CONFIRM, JS_PROMPT };
 
 /* the budget (the design: roughly 100-200 KB of script and a few
    seconds a page) */
+#ifndef JS_MAX_SOURCE
 #define JS_MAX_SOURCE	(200L * 1024)	/* bytes of script a page may bring */
+#endif
 #define JS_PAGE_MS	5000		/* its scripts, DOMContentLoaded and load */
 #define JS_EVENT_MS	2000		/* each event, timer or promise job after */
 #define JS_MAX_MEMORY	(8L << 20)	/* the runtime's heap */

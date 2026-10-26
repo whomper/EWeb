@@ -2454,6 +2454,19 @@ static JSValue fprop_set(JSContext *ctx, JSValueConst this_val, JSValueConst v, 
 		free(s);
 		return r;
 	}
+	case FP_TYPE: {
+		/* (reflects the attribute: jQuery's first tests set an input's) */
+		size_t len;
+		char *s = cstr(ctx, v, &len);
+		JSValue r;
+		if (s == NULL)
+			return JS_EXCEPTION;
+		r = set_attr(ctx, n, "type", s, len);
+		free(s);
+		if (c != NULL && is_html(n, T_INPUT))
+			form_retype(c);
+		return r;
+	}
 	case FP_CHECKED: {
 		int on = JS_ToBool(ctx, v);
 		if (c == NULL)
@@ -2636,7 +2649,7 @@ static const JSCFunctionListEntry elem_funcs[] = {
 	JS_CGETSET_MAGIC_DEF("value", fprop_get, fprop_set, FP_VALUE),
 	JS_CGETSET_MAGIC_DEF("defaultValue", fprop_get, fprop_set, FP_DEFAULT),
 	JS_CGETSET_MAGIC_DEF("checked", fprop_get, fprop_set, FP_CHECKED),
-	JS_CGETSET_MAGIC_DEF("type", fprop_get, NULL, FP_TYPE),
+	JS_CGETSET_MAGIC_DEF("type", fprop_get, fprop_set, FP_TYPE),
 	JS_CGETSET_MAGIC_DEF("selectedIndex", fprop_get, fprop_set, FP_SEL_INDEX),
 	JS_CGETSET_MAGIC_DEF("options", fprop_get, NULL, FP_OPTIONS),
 	JS_CGETSET_MAGIC_DEF("form", fprop_get, NULL, FP_FORM),
@@ -3925,7 +3938,14 @@ static const char prelude[] =
 	"g.matchMedia=function(q){return{matches:false,media:String(q),onchange:null,addListener:function(){},"
 	"removeListener:function(){},addEventListener:function(){},removeEventListener:function(){}}};"
 	"g.getSelection=function(){return{rangeCount:0,toString:function(){return''},removeAllRanges:"
-	"function(){}}};if(!g.performance)g.performance={now:function(){return Date.now()}}})(globalThis)";
+	"function(){}}};if(!g.performance)g.performance={now:function(){return Date.now()}};"
+	/* document.implementation: a document of detached nodes (jQuery parses its HTML in one) */
+	"var d=g.document;d.implementation={hasFeature:function(){return true},createHTMLDocument:function(t){"
+	"var h=d.createElement('html'),e=d.createElement('head'),b=d.createElement('body');h.appendChild(e);"
+	"h.appendChild(b);return{nodeType:9,documentElement:h,head:e,body:b,title:t===undefined?'':String(t),"
+	"implementation:d.implementation,createElement:function(n){return d.createElement(n)},"
+	"createTextNode:function(s){return d.createTextNode(s)},createComment:function(s){return d.createComment(s)},"
+	"createDocumentFragment:function(){return d.createDocumentFragment()}}}}})(globalThis)";
 
 /* ---------------------------------------------------------------- location and history */
 
@@ -4330,7 +4350,7 @@ static void run_script(ejs *j, dnode *n)
 	}
 	j->bytes += len;
 	if (j->bytes > JS_MAX_SOURCE) {
-		say(j, "stopped", "over its 200 KB");
+		say(j, "stopped", "over its script budget");
 		j->over = 1;
 		free(code);
 		free(name);

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- expect: console: domdoc done -->
+<html><head><title>domdoc</title></head><body>
+<input id="i" value="x">
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+/* jQuery's own checks as it starts: a document of detached nodes */
+var d = document.implementation.createHTMLDocument("");
+check(d.body && d.head && d.documentElement, "parts");
+d.body.innerHTML = "<form></form><form></form>";
+check(d.body.childNodes.length === 2, "two forms " + d.body.childNodes.length);
+check(document.implementation.hasFeature(), "hasFeature");
+check(document.getElementsByTagName("form").length === 0, "detached");
+/* an input's type, set (jQuery's support checks set it on a fresh input) */
+var i = document.createElement("input");
+i.type = "checkbox";
+check(i.type === "checkbox", "fresh type " + i.type);
+var j = document.getElementById("i");
+j.type = "radio";
+check(j.type === "radio" && j.getAttribute("type") === "radio", "type set");
+j.type = "text";
+console.log("domdoc done");
+</script>
+</body></html>

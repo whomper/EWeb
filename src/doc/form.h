@@ -73,6 +73,7 @@ int form_insert(fctl *c, const char *s, long n);
 int form_backspace(fctl *c);
 int form_delete(fctl *c);
 void form_set(fctl *c, const char *s, long n);	/* the whole value */
+void form_retype(fctl *c);	/* its kind again, from its type attribute (a script set it) */
 /* a click on a checkbox (toggled) or radio button (chosen, the rest of
    its group not) */
 void form_check(doc *d, fctl *c);
