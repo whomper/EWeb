@@ -24,10 +24,24 @@
 #include "plat.h"
 #include "util.h"
 #include "tls.h"
+#include "chapol.c"	/* ChaCha20-Poly1305 a piece at a time */
 #ifdef TLS_030
 #include "rsa030.h"
 #endif
 #include "tlsovl.h"
+
+/* a turn for GEM between a record's pieces (chapol.c), 40 ms at most
+   apart: a 16 KB record took a stock Falcon 370 ms in one go */
+static unsigned long turn_ms;
+
+static void record_turn(void)
+{
+	unsigned long now = pf_ms();
+	if (pf_idle && now - turn_ms >= 40) {
+		pf_idle();
+		turn_ms = pf_ms();
+	}
+}
 
 /* from BearSSL's inner.h */
 #define BR_MAX_RSA_SIZE 4096
@@ -1285,6 +1299,7 @@ static int xt_check(XTIME *x, unsigned need)
 		(*in)->start_cert(in, (uint32_t)n);
 		(*in)->append(in, x->der + x->at[i], n);
 		(*in)->end_cert(in);
+		record_turn();		/* each certificate's signature checked */
 	}
 	r = (*in)->end_chain(in);
 	pk = r ? 0 : (*in)->get_pkey(in, &usages);
@@ -1325,7 +1340,7 @@ static const br_x509_class xt_vtable = {
 static int pump(TLS *t, unsigned want, int blocking)
 {
 	br_ssl_engine_context *eng = &t->cc.eng;
-	unsigned long start = pf_ms();
+	unsigned long start = pf_ms(), slice = start;
 	for (;;) {
 		unsigned st = br_ssl_engine_current_state(eng);
 		if (st & BR_SSL_CLOSED)
@@ -1356,6 +1371,15 @@ static int pump(TLS *t, unsigned want, int blocking)
 			if (r > 0) {
 				br_ssl_engine_recvrec_ack(eng, (size_t)r);
 				start = pf_ms();
+				/* bytes coming as fast as they are read keep this loop
+				   going: a turn every 40 ms (a 16 KB record at a
+				   NetUSBee's pace held a stock Falcon 900 ms) */
+				if (start - slice >= 40 && !(br_ssl_engine_current_state(eng) & want)) {
+					if (!blocking)
+						return 0;
+					record_turn();
+					slice = start = pf_ms();
+				}
 				if (t->wait0) {
 					t->waited += start - t->wait0;
 					t->wait0 = 0;
@@ -1404,6 +1428,8 @@ TLS *tls_start(int sock, const char *host, int flags, int *retry, char *err, int
 	}
 	t->sock = sock;
 	br_ssl_client_init_full(&t->cc, &t->xc, anchors, nanchors);
+	br_ssl_engine_set_poly1305(&t->cc.eng, chapol_run);
+	chapol_turn = record_turn;
 	br_ssl_engine_set_versions(&t->cc.eng, BR_TLS12, BR_TLS12);
 	if (chacha_only)
 		br_ssl_engine_set_suites(&t->cc.eng, suites_chacha, rsa_only ? 1 : 2);
