@@ -216,6 +216,19 @@ runs. It allocates nothing, so an accessory may use it at any time. Built with `
 300 ms, and 3 s of work through bgwork never held the machine longer than 85 ms on an ST (80 ms
 slices) and 40 ms on a Falcon (40 ms slices).
 
+## Speed (26 Oct 2026)
+
+The guidelines' Speed section (Erez: the stock machines set it) times what the user waits for as the
+longest stretch between event calls. Built with `-DAES_PROFILE=20`, `atari/gem.c` also reports the
+start, from `appl_init` to the first event call, as `AESSTART <ms> ms`. `tests/speed/speed.py` is
+the family's speed rig: an app's own `tests/hatari/speed.py` imports it, starts its program on one
+of the family's machines, does the user's actions one at a time (keys, clicks, menu entries), and
+checks each action's longest stretch against the guidelines' time (`speed.LINE`, `PAGE`, `DIALOG`,
+`WINDOW`, `ACC`, `START`); `report()` prints the table. `make prg` and
+`speed.py --selftest WORK [MACHINE]` run `SPT.PRG`, whose stretches are known (300, 30, 200 and
+80 ms). On `ST` (TOS 1.04) and `Falcon-4` (TOS 4.04) each is read back to the millisecond, and only
+the 200 ms one is over its time.
+
 ## People from EContact (17 Oct 2026)
 
 EMail and ECal show people by name and let the user pick them in EContact by asking EContact, with
