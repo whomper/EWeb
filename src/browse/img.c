@@ -608,8 +608,13 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		/* the screen's pens now, so that drawing has nothing to work out */
 		v->pens = malloc((size_t) w * h);
 		if (v->pens != NULL) {
-			pic_dither(v->pic, img_pal, v->pens);
-			v->serial = pal_serial;
+			if (pic_dither(v->pic, img_pal, v->pens)) {
+				v->serial = pal_serial;
+			} else {
+				/* stopped at a turn (Esc): the pens made when drawn */
+				free(v->pens);
+				v->pens = NULL;
+			}
 		}
 	}
 	v->used = im->used = ++tick;
@@ -645,7 +650,11 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 				img_used += (long) w * h;
 		}
 		if (v->pens != NULL) {
+			/* while the window is drawn: no turn taken (and none stops it) */
+			int (*poll)(void) = pic_poll;
+			pic_poll = NULL;
 			pic_dither(v->pic, img_pal, v->pens);
+			pic_poll = poll;
 			v->serial = pal_serial;
 		}
 	}

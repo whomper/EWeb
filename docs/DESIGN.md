@@ -3900,6 +3900,19 @@ the code `EWEB.PRG` runs.
 A Direct connection's first secure page now loads `TLS.OVL` first: 25 ms on the emulated Falcon
 (Hatari, the file on its hard disk), then the DSP's self-tests as before.
 
+**Pictures in slices (26 Oct 2026, AERA-Atari 5114bbc).** A PNG is unpacked a row at a time
+(common's `png.c` on `inflate_read`), its rows go to the scaler as they come, and the dither takes
+a turn every 16 rows: no picture holds the machine for its whole decode. An opaque PNG's rows go to
+the solid rows' sums as a JPEG's do, and the filters and the inflate are faster. `img.c` takes a
+dither stopped at a turn as pens not made yet (made when the picture is drawn), and the dither a
+redraw needs takes no turn. Cycle-exact in Hatari (`tests/bench/picbench.py`), decode in ms:
+
+| Picture | Falcon-4:256, before / after | ST:mono, before / after |
+|---|---|---|
+| the home page's globe, PNG 96 x 96 shown 77 x 77 | 455 / 165 | 3020 / 1145 |
+| testorig.png, 227 x 149 RGB | 705 / 710 | 4720 / 4555 |
+| a 400 x 300 RGB PNG shown 200 x 150 | 3940 / 3475 | 36670 / 27220 |
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
