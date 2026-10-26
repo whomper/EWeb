@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "ui.h"
+#include "text.h"
 #include "aboutbox.h"
 #include "av.h"
 #include "bookmark.h"
@@ -2123,6 +2124,7 @@ int main(void)
 		return 1;
 	}
 	vst_alignment(vdi_h, 0, 5);
+	text_font(vdi_h, 1, cw, ch);	/* the system font: text_n's quick way (common's text.c) */
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	graf_mouse(BUSYBEE, 0);
 

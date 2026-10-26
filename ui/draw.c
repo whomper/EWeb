@@ -13,6 +13,7 @@
 #include "bidi.h"
 #include "charset.h"
 #include "util.h"
+#include "text.h"
 
 void clip_on(GRECT *r)
 {
@@ -21,16 +22,13 @@ void clip_on(GRECT *r)
 	pxy[1] = r->y;
 	pxy[2] = r->x + r->w - 1;
 	pxy[3] = r->y + r->h - 1;
-	vs_clip(vdi_h, 1, pxy);
+	text_clip(vdi_h, pxy);	/* (text_n then knows it: common's text.c) */
 }
 
 /* no clipping: the whole screen (the shared pop-up and About box) */
 void clip_off(void)
 {
-	short pxy[4] = { 0, 0, 0, 0 };
-	pxy[2] = scr_w - 1;
-	pxy[3] = scr_h - 1;
-	vs_clip(vdi_h, 0, pxy);
+	text_noclip(vdi_h);
 }
 
 /* EWeb draws its own parts in the system font only, at its own size:
@@ -138,7 +136,7 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 {
 	char vis[BIDI_MAX];
 	const char *out = s;
-	short i, grey = (flags & TX_DIM) && planes >= 4;
+	short grey = (flags & TX_DIM) && planes >= 4;
 	if (cols <= 0)
 		return;
 	if (n > cols)
@@ -157,10 +155,7 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 	vswr_mode(vdi_h, MD_TRANS);
 	vst_color(vdi_h, (flags & TX_INVERSE) ? 0 : grey ? 9 : 1);
 	vst_effects(vdi_h, ((flags & TX_BOLD) ? 1 : 0) | ((flags & TX_DIM) && !grey ? 2 : 0));
-	for (i = 0; i < n; i += 120) {
-		short k = n - i > 120 ? 120 : (short) (n - i);
-		v_gtext_n(vdi_h, x + i * cw, y, out + i, k);
-	}
+	text_n(vdi_h, x, y, out, n);	/* TOS's quick way where the clip allows (Speed) */
 	if (flags & (TX_BOLD | TX_DIM))
 		vst_effects(vdi_h, 0);
 }
