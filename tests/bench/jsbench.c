@@ -12,7 +12,7 @@
  * does it N times; -k DIR keeps the scripts' compiled code in DIR, as
  * the disk cache does (js_host.code_put), so that a second run reads it.
  * A <script src> is read from the file it names, a path from where
- * jsbench runs (as the Pi may send it, compiled, when it is "EWQJS ...").
+ * jsbench runs (as the Pi sends it, compiled, when it is "EWQJS ...").
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +61,8 @@ static int fetch(void *ud, const char *site, const char *url, const char *method
 		return 0;
 	*len = (long) n;
 	*status = 200;
-	snprintf(mime, (size_t) msize, "text/javascript");
+	/* a file of compiled code ("EWQJS ...") comes as the Pi sends it */
+	snprintf(mime, (size_t) msize, "%s", n >= 6 && memcmp(*data, "EWQJS ", 6) == 0 ? JS_CODE_MIME : "text/javascript");
 	return 1;
 }
 
