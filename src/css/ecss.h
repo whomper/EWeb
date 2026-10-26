@@ -238,6 +238,7 @@ enum { EC_ORIGIN_UA, EC_ORIGIN_USER, EC_ORIGIN_AUTHOR };
 
 typedef struct ec_stats {
 	uint32_t sheets, rules, selectors, dropped;	/* dropped: invalid or never matching */
+	uint32_t pruned;	/* selectors for a name the document doesn't have (ec_prune) */
 	uint32_t blocks, blocks_parsed, decls;
 	uint32_t elements, shared, cached, candidates, rejected, matched;
 } ec_stats;
@@ -255,15 +256,39 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base);
 
 /* an atom: the same pointer for the same bytes, until ec_destroy() */
 const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len);
+
+/* A document's name: interned as ec_intern does, and marked as the
+ * document's (its elements' tags, classes and ids, their attributes'
+ * names). With ec_prune(c, 1), an author sheet added to c leaves out a
+ * selector whose subject needs an id, a class or a tag that no name
+ * marked so is: it can't match an element of the document (a rule is
+ * looked up by those names, and they are matched as atoms). For a
+ * document that is whole and stays so (no scripts): a big site's sheet
+ * is mostly rules for its other pages (ynet.co.il's 3.36 MB, 10,500
+ * rules: 6.1 MB kept, of which a third could match). */
+const ec_atom *ec_intern_used(ec_ctx *c, const char *s, size_t len);
+void ec_prune(ec_ctx *c, int on);
+
 const char *ec_atom_text(const ec_atom *a, size_t *len);
 /* a CSS colour written out (#f80, rgb(), a name, transparent): 1 and it
    in *argb (0xAARRGGBB), or *cur set for currentcolor; 0 if it isn't one
    (SVG's fill and stroke, src/svg) */
 int ec_color_text(const char *s, size_t len, uint32_t *argb, int *cur);
 
-/* Adds a stylesheet (the text is copied). Sheets cascade in the order
+/* Adds a stylesheet (what of its text a rule keeps is copied: css may go
+ * after). Sheets cascade in the order
  * they are added, within their origin. Returns 0, or -1 if out of memory. */
 int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin);
+/* A sheet read as it comes (a big one unpacked a piece at a time: no
+ * copy of the whole of it): begin, then each piece fed as it comes, then
+ * end, which reads what is left and frees the stream. The rules are those
+ * ec_sheet_at would add; what isn't read yet is the rule a piece ended
+ * in (an @media with what is in it), and the piece. base: as
+ * ec_sheet_at's. feed and end: 0, or -1 when out of memory. */
+typedef struct ec_stream ec_stream;
+ec_stream *ec_sheet_begin(ec_ctx *c, int origin, const char *base);
+int ec_sheet_feed(ec_stream *s, const char *css, size_t len);
+int ec_sheet_end(ec_stream *s);
 
 /* A sheet from an address of its own (a <link>'s): its url()s are made
  * absolute against base by the resolver given (1 if it could; the url
@@ -336,6 +361,7 @@ extern int (*ec_poll)(void);
 void ec_unstyle(ec_ctx *c);
 
 const ec_stats *ec_get_stats(const ec_ctx *c);
+
 const char *ec_prop_name(int prop);
 const char *ec_kw_name(int kw);
 

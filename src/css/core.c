@@ -142,6 +142,21 @@ const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len)
 	return a;
 }
 
+const ec_atom *ec_intern_used(ec_ctx *c, const char *s, size_t len)
+{
+	ec_atom *a = (ec_atom *) ec_intern(c, s, len);
+	/* (a base's atom too: once a document's name, it is kept as one,
+	   which can only keep a rule) */
+	if (a != NULL)
+		a->used = 1;
+	return a;
+}
+
+void ec_prune(ec_ctx *c, int on)
+{
+	c->prune = (uint8_t) on;
+}
+
 const char *ec_atom_text(const ec_atom *a, size_t *len)
 {
 	if (len != NULL)

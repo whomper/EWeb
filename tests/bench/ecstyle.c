@@ -32,9 +32,28 @@ static const ec_atom *atom_of(ec_ctx *c, lwc_string *s)
 	return amap[i].a;
 }
 
+int ecs_piece;
+
+int ecs_add(ec_ctx *c, const char *data, size_t len, int origin)
+{
+	ec_stream *s;
+	size_t at, k;
+	if (ecs_piece <= 0 || origin != EC_ORIGIN_AUTHOR)
+		return ec_sheet(c, data, len, origin);
+	/* as EWEB.PRG reads a big sheet: a piece at a time */
+	s = ec_sheet_begin(c, origin, NULL);
+	if (s == NULL)
+		return -1;
+	for (at = 0; at < len; at += k) {
+		k = len - at < (size_t) ecs_piece ? len - at : (size_t) ecs_piece;
+		ec_sheet_feed(s, data + at, k);
+	}
+	return ec_sheet_end(s);
+}
+
 static void add_sheet(ec_ctx *c, const char *data, size_t len, int origin, style_stats *st)
 {
-	if (ec_sheet(c, data, len, origin) == 0) {
+	if (ecs_add(c, data, len, origin) == 0) {
 		st->sheets++;
 		st->sheet_bytes += len;
 	}

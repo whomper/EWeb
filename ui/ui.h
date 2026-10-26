@@ -32,6 +32,7 @@ typedef struct {
 					   SCRIPTS= (1), every site but those in NOSCRIPTS= (2) */
 	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
 	short dialogs3d;		/* DIALOGS3D=: dialogs in the AES's 3D look where it has one (1), flat (0) */
+	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	64	/* the most CACHE= may ask for */

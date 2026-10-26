@@ -471,6 +471,17 @@ int ec_tok_is(const ec_tok *t, const char *word)
 	return word[i] == 0 && !(t->flags & TF_ESC);
 }
 
+/* (ec_skip_block_closed: *closed says whether its closer came before
+   end; a sheet read as it comes stops before a rule not all here yet) */
+static int skip_closed;
+
+const char *ec_skip_block_closed(const char *p, const char *end, char open, int *closed)
+{
+	const char *r = ec_skip_block(p, end, open);
+	*closed = skip_closed;
+	return r;
+}
+
 const char *ec_skip_block(const char *p, const char *end, char open)
 {
 	char stack[64];
@@ -520,8 +531,10 @@ const char *ec_skip_block(const char *p, const char *end, char open)
 				depth--;
 			} else if (stack[depth - 1] == ch) {
 				/* any other closer is only a token (CSS Syntax 5.4.8) */
-				if (--depth == 0)
+				if (--depth == 0) {
+					skip_closed = 1;
 					return p;
+				}
 			}
 			break;
 		case '"': case '\'':
@@ -551,5 +564,6 @@ const char *ec_skip_block(const char *p, const char *end, char open)
 			p++;
 		}
 	}
+	skip_closed = 0;
 	return end;
 }

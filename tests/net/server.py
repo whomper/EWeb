@@ -22,6 +22,8 @@ Pages:
   /site/         a page for the browser (make itest's ewrender checks): a
                  stylesheet linked (/site/style.css), links to /site/two.html
                  and an anchor on it
+  /site/big.html  a page with a big site's sheet (/site/big.css): 2.5 MB
+                 of rules for other pages, three for it, gzip'd as it goes
   /site/pics.html  pictures: a JPEG with its size given, a PNG with alpha
                  and no size (the page is laid out again when it comes), a
                  GIF, a progressive JPEG with only its width, a big PNG held
@@ -265,6 +267,19 @@ REFRESH = {
 }
 REFRESH_COUNT = {}
 SITE_CSS = b"body { background: #ffeedd } h1 { color: #aa0000 }\n"
+# a big site's sheet: 2.5 MB of rules for its other pages (classes this
+# page hasn't), in and out of @media, and three for this one, the last at
+# the end; gzip'd as it is sent (ynet.co.il's: 3.36 MB, 974 KB packed)
+BIG_CSS = b"".join(
+    (b"@media screen { .other%d .x, #other%d > p { color: #ff0000; margin: 3px 4px } }\n" % (i, i)
+     if i % 7 == 0 else b".other%d .x:hover, .other%d p.y { color: #ff0000; padding: 1px 2px 3px 4px }\n" % (i, i))
+    for i in range(30000)) + b"p.here { color: #00aa00 }\n"
+_HALF = BIG_CSS.index(b"\n", len(BIG_CSS) // 2) + 1
+BIG_CSS = BIG_CSS[:_HALF] + b"#mid { background: #eeeeee }\n" + BIG_CSS[_HALF:] + \
+    b"@media screen { p.here { font-weight: bold } }\n"
+BIG_PAGE = (b'<!DOCTYPE html><html><head><title>A big sheet</title>'
+            b'<link rel=stylesheet href="big.css"></head>'
+            b'<body><p class=here id=mid>A big site\'s sheet</p></body></html>')
 # a long page, sent in two parts 2.5 s apart: EWeb shows its start before
 # it has all come (its preview, with the site's sheet it already has)
 SLOW_PAGE = (b"<!DOCTYPE html><html><head><title>Slow</title><link rel=stylesheet href=style.css></head>"
@@ -651,6 +666,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, SITE)
         elif p == "/site/style.css":
             self.send(200, SITE_CSS, "text/css")
+        elif p == "/site/big.html":
+            self.send(200, BIG_PAGE)
+        elif p == "/site/big.css":
+            self.send(200, BIG_CSS, "text/css")
         elif p == "/site/slow.html":
             self.send(200, SLOW_PAGE, pause=2.5)
         elif p == "/site/two.html":

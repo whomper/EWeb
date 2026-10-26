@@ -1031,6 +1031,39 @@ def falcon4():
         r.end()
 
 
+def falcon4_secure():
+    """EWEB.PRG on the stock Falcon with a Direct connection: a secure page
+    at the start, from a server with an ECDSA certificate (P-256, signed
+    with P-384, as Cloudflare's sites have): TLS.OVL loaded and the roots,
+    the seed and SIGS.DAT read before the connection is opened, the
+    curves on the DSP (Erez's demozoo.org, 26 Oct 2026: no rig had a
+    stock Falcon's secure page)"""
+    work = os.path.join(OUT, "server4")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS), "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)],
+                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("falcon4: the test server", False)
+    page = "https://127.0.0.1:%d/site/" % (HTTPS + 2)
+    hd = hd_for("falcon4tls", page)
+    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "CACERT.PEM"))
+    r = Run("falcon4tls", "Falcon-4:16", hd, network=True)
+    try:
+        ev = r.wait(r"shown ", 900)
+        check("falcon4: a secure page, Direct, an ECDSA certificate", ev is not None and ev.startswith("shown " + page),
+              "\n".join(r.events()[-8:]))
+        time.sleep(2)
+        r.shot(0)
+        r.key(Q, (CTRL,))
+        check("falcon4: ^Q quits after it", r.wait(r"quit$", 120) is not None and
+              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+    finally:
+        r.end()
+        srv.stdin.close()
+        srv.wait(10)
+
+
 def dialogs():
     """the guidelines' 5.6: the Settings (and Find, another of EWeb's own
     dialogs) in the AES's 3D look where it has one, with DIALOGS3D=1, and
@@ -2063,6 +2096,7 @@ if "falcon" in WHICH:
     falcon()
 if "falcon4" in WHICH:
     falcon4()
+    falcon4_secure()
 if "deep" in WHICH:
     deep()
 if "refresh" in WHICH:

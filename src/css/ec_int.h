@@ -89,6 +89,8 @@ struct ec_atom {
 	uint8_t ref;			/* an attribute a selector looks at */
 	uint8_t shared;			/* a base context's (ec_share): its rules are
 					   the base's, a context's own are in its shadow */
+	uint8_t used;			/* a document's name (ec_intern_used): its tag,
+					   a class or an id it has */
 	uint32_t stamp;			/* the cascade's: a custom property seen */
 	ec_vec *rules[EC_NB];		/* rules whose subject has it, by kind */
 	ec_vec *sibrules[EC_NB];	/* those of them that look at siblings */
@@ -135,6 +137,7 @@ int ec_next(ec_lex *lx, ec_tok *t);			/* returns t->type */
 const char *ec_tok_text(const ec_tok *t, char *buf, size_t cap, size_t *len);
 /* the end of the block opened just before p ({, [ or (), past its closer */
 const char *ec_skip_block(const char *p, const char *end, char open);
+const char *ec_skip_block_closed(const char *p, const char *end, char open, int *closed);
 /* is the identifier token t this lower-case word? */
 int ec_tok_is(const ec_tok *t, const char *word);
 
@@ -284,6 +287,11 @@ struct ec_ctx {
 	ec_vec never;			/* rules for :hover and the like, kept for later */
 	uint32_t order;
 	uint8_t layer;			/* inside @layer: below unlayered rules */
+	uint8_t prune;			/* author rules for names the document hasn't
+					   left out (ec_prune) */
+	uint8_t streaming;		/* a sheet read as it comes (ec_sheet_feed):
+					   rules() stops before a rule not all here */
+	const char *cut;		/* where it stopped */
 	ec_stats st;
 	int stopped;			/* ec_poll said stop (ec_select) */
 	/* the widths (px) every media query evaluated holds at as it did

@@ -27,6 +27,15 @@ struct dblk {
 
 int (*doc_poll)(int what);
 
+long doc_mem(const doc *d)
+{
+	const struct dblk *b;
+	long n = 0;
+	for (b = d->mem; b != NULL; b = b->next)
+		n += (long) (DHEAD + b->size);
+	return n;
+}
+
 void *doc_alloc(doc *d, size_t n)
 {
 	struct dblk *b = d->mem;
@@ -861,7 +870,7 @@ static int split_classes(doc *d, dnode *n, const char *s, size_t len)
 		w = s;
 		while (s < e && !(*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f'))
 			s++;
-		if (s > w && (cls[n->ncls++] = ec_intern(d->css, w, (size_t) (s - w))) == NULL)
+		if (s > w && (cls[n->ncls++] = ec_intern_used(d->css, w, (size_t) (s - w))) == NULL)
 			return 0;
 	}
 	n->cls = cls;
@@ -896,7 +905,7 @@ int dn_set_attr(doc *d, dnode *n, const char *name, const char *val, size_t len)
 	if (nl == 5 && memcmp(name, "class", 5) == 0 && !split_classes(d, n, v, len))
 		return 0;
 	if (nl == 2 && memcmp(name, "id", 2) == 0)
-		n->e.id = len ? ec_intern(d->css, v, len) : NULL;
+		n->e.id = len ? ec_intern_used(d->css, v, len) : NULL;
 	n->e.hint = NULL;	/* made again from the attributes */
 	n->e.nhint = 0;
 	return 1;

@@ -131,6 +131,8 @@ extern int (*doc_poll)(int what);
    NULL if out of memory. doc_grow makes a block of old bytes new bytes
    long, in place when it was the last taken, and keeps its contents. */
 void *doc_alloc(doc *d, size_t n);
+/* the bytes d's blocks take (doc_alloc's) */
+long doc_mem(const doc *d);
 void *doc_grow(doc *d, void *p, size_t old, size_t n);
 
 /* the value of an element's attribute (NUL-terminated), or NULL */

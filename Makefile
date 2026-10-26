@@ -1063,6 +1063,8 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null
 	tests/hebrew/run.sh build/asan/hebtest
 	build/asan/ectest tests/css/cases.txt
+	build/asan/ectest -s 1 tests/css/cases.txt
+	build/asan/ectest -s 7 tests/css/cases.txt
 	build/asan/csscmp -s build/news/NEWS.CSS build/news/NEWS.HTM tests/bench/sample.html \
 		tests/hebrew/*.HTM | tail -1
 	python3 tests/layout/run.py build/asan/ewrender binary/EWEB.FNT

@@ -282,6 +282,10 @@ const char *br_fallback(const char *url);
 
 /* the page's pictures still to come (or to decode at the size shown) */
 int br_pictures_pending(browser *b);
+/* where the page's memory is, bytes: its document (doc_mem), its CSS
+   context (its names, rules and styles: ec_mem), and the pages kept in
+   memory for Back and the sheets (the kept pages') */
+void br_mem(const browser *b, long *docb, long *css, long *kept);
 /* what br_pictures_step did */
 enum {
 	BRP_NONE,		/* nothing: none were left */

@@ -144,6 +144,7 @@ int main(int argc, char **argv)
 	if (mem)
 		printf("heap parsed %ld peak %ld\n", heap_use, heap_peak);
 	doc_add_ua(d);
+	ec_prune(d->css, 1);		/* as EWEB.PRG on a page whose scripts don't run */
 	doc_sheets(d, sheet, d);
 	for (i++; i < argc; i++) {
 		size_t sn;

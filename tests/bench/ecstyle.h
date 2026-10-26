@@ -15,6 +15,10 @@ extern void (*ecs_setup)(struct ec_ctx *c);	/* if set, called on each context ma
 
 /* the UA sheet, the author sheets and the page's <style> elements */
 struct ec_ctx *ecs_sheets(node *doc, const char **data, const size_t *len, int n, style_stats *st);
+/* a sheet added: ec_sheet's, or with ecs_piece > 0 an author's read as
+   it comes (ec_sheet_feed), ecs_piece bytes at a time */
+extern int ecs_piece;
+int ecs_add(struct ec_ctx *c, const char *data, size_t len, int origin);
 /* every element's style: each node's ecn is its ec_node, with the style */
 void ecs_select(struct ec_ctx *c, node *doc, style_stats *st);
 void ecs_free(struct ec_ctx *c, node *doc);

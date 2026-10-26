@@ -770,15 +770,14 @@ static int sib_simple(const ec_simple *x)
 	return x->op >= S_EMPTY && x->op <= S_NTH_LAST_OF_TYPE;
 }
 
-static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
+/* the subject's key, the name a rule is looked up by: its id, else a
+   class, else its tag, else an attribute; NULL (kind -1) if none */
+static const ec_atom *subject_key(const ec_sel *s, int *kind_out)
 {
 	const ec_compound *cp = &s->comp[0];
-	const ec_atom *key = NULL, *anc[16];
-	int kind = -1, k, j, na = 0;
-	ec_rent e;
-	ec_vec *v;
+	const ec_atom *key = NULL;
+	int kind = -1, k;
 
-	/* the subject's key: id, then class, then tag, then attribute */
 	for (k = 0; k < cp->n; k++) {
 		const ec_simple *x = &s->simple[cp->first + k];
 		int kk = x->op == S_ID ? EC_B_ID : x->op == S_CLASS ? EC_B_CLASS :
@@ -794,6 +793,28 @@ static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
 			}
 		}
 	}
+	*kind_out = kind;
+	return key;
+}
+
+/* a selector ec_prune leaves out: its subject needs an id, a class or a
+   tag that isn't one of the document's names (an attribute's name isn't
+   enough to tell: [hidden] is looked up by an attribute it may not have) */
+static int pruned(const ec_ctx *c, const ec_sel *s)
+{
+	int kind;
+	const ec_atom *key = subject_key(s, &kind);
+	return key != NULL && kind != EC_B_ATTR && !key->used;
+}
+
+static void index_sel(ec_ctx *c, const ec_sel *s, int origin)
+{
+	const ec_atom *key, *anc[16];
+	int kind, k, j, na = 0;
+	ec_rent e;
+	ec_vec *v;
+
+	key = subject_key(s, &kind);
 	/* the ancestors' ids, classes and tags, for the filter: rarest first */
 	for (k = 1; k < s->ncomp && na < 16; k++) {
 		if (s->comp[k - 1].comb != C_DESC && s->comp[k - 1].comb != C_CHILD)
@@ -1682,8 +1703,11 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 	const ec_sellist *l;
 	ec_block *b;
 	uint32_t spec;
-	int never, k;
+	int never, k, keep;
 	size_t blen = bend - p;
+	ec_arena *a = c->pmem;
+	char *mark = a->p, *text;
+	ec_chunk *chunks = a->chunks;
 
 	if (bend > p && bend[-1] == '}')
 		blen--;
@@ -1693,15 +1717,37 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 		c->st.dropped++;
 		return bend;
 	}
+	keep = l->n;
+	if (c->prune && origin == EC_ORIGIN_AUTHOR) {
+		for (k = 0; k < l->n; k++)
+			if (pruned(c, l->sel[k])) {
+				keep--;
+				c->st.pruned++;
+			}
+		if (keep == 0) {
+			/* none of it: what its selectors took given back, if it
+			   is still the arena's last piece's end */
+			if (a->chunks == chunks)
+				a->p = mark;
+			return bend;
+		}
+	}
 	b = ec_alloc(&c->rmem, sizeof *b);
-	if (b == NULL)
+	text = ec_alloc(&c->rmem, blen + 1);
+	if (b == NULL || text == NULL)
 		return bend;
+	/* its declarations' text, parsed when first needed (the sheet's
+	   own goes when it has been read) */
+	memcpy(text, p, blen);
+	text[blen] = 0;
 	memset(b, 0, sizeof *b);
-	b->src = p;
+	b->src = text;
 	b->base = c->sheet_base;
 	b->len = blen;
 	c->st.blocks++;
 	for (k = 0; k < l->n; k++) {
+		if (keep < l->n && pruned(c, l->sel[k]))
+			continue;
 		((ec_sel *) l->sel[k])->block = b;
 		c->st.selectors++;
 		index_sel(c, l->sel[k], origin);
@@ -1795,11 +1841,17 @@ void ec_set_importer(ec_ctx *c, int (*import)(void *ud, const char *base, const 
 static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, int depth)
 {
 	char name[64];
-	int stop, n;
+	int stop, n, closed;
 	const char *bstart, *bend;
 
 	ident_lower(at, name, sizeof name);
 	n = read_prelude(lx, prelude, MAX_PRELUDE, &stop, 1);
+	/* a sheet read as it comes: not all of it here yet (NULL) */
+	if (c->streaming && depth == 0 && stop == T_EOF)
+		return NULL;
+	if (c->streaming && depth == 0 && stop == T_LBRACE &&
+	    (ec_skip_block_closed(lx->p, lx->end, '{', &closed), !closed))
+		return NULL;
 	if (stop != T_LBRACE) {
 		/* a statement: @import (only before any rule but @charset and
 		   @layer's statement, CSS Cascade 4, 2), @charset, @layer a; */
@@ -1835,28 +1887,39 @@ static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, 
 static void rules(ec_ctx *c, const char *p, const char *end, int origin, int depth)
 {
 	ec_lex lx;
+	/* read as it comes (c->streaming, the sheet's own level): where the
+	   rules all here end, for the next piece to go on from (c->cut) */
+	int streaming = c->streaming && depth == 0;
+	const char *done = p;
 
 	ec_lex_init(&lx, p, end - p);
 	for (;;) {
-		const char *start = lx.p;
+		const char *start = lx.p, *next;
 		ec_tok t;
-		int type = ec_next(&lx, &t), n, stop;
+		int type = ec_next(&lx, &t), n, stop, closed;
 
 		if (type == T_EOF)
 			break;
 		if (type == T_WS || type == T_CDO || type == T_CDC || type == T_SEMI)
 			continue;
 		if (type == T_AT) {
-			lx.p = at_rule(c, &t, &lx, origin, depth);
+			next = at_rule(c, &t, &lx, origin, depth);
+			if (next == NULL)
+				break;
+			lx.p = done = next;
 			continue;
 		}
 		lx.p = start;
 		n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
 		if (stop != T_LBRACE)
 			break;			/* the end, in the middle of a rule */
+		if (streaming && (ec_skip_block_closed(lx.p, lx.end, '{', &closed), !closed))
+			break;
 		c->import_ok = 0;
-		lx.p = style_rule(c, n, lx.p, lx.end, origin);
+		lx.p = done = style_rule(c, n, lx.p, lx.end, origin);
 	}
+	if (streaming)
+		c->cut = done;
 }
 
 #ifndef EW_ST	/* scripts' selectors: the ST edition runs no scripts */
@@ -1894,16 +1957,104 @@ int ec_matches(ec_ctx *c, const ec_sellist *l, const ec_node *e)
 
 int ec_sheet(ec_ctx *c, const char *css, size_t len, int origin)
 {
-	char *copy = ec_alloc(&c->rmem, len + 1);
-
-	if (copy == NULL)
-		return -1;
-	memcpy(copy, css, len);
-	copy[len] = 0;
+	/* read where it is: a rule's block is copied (style_rule), the rest
+	   of it isn't kept (a 3.36 MB sheet was copied whole). An @import's
+	   sheet inside one read as it comes is read whole */
+	uint8_t streaming = c->streaming;
+	const char *cut = c->cut;
+	c->streaming = 0;
 	c->st.sheets++;
 	c->import_ok = 1;
-	rules(c, copy, copy + len, origin, 0);
-	return 0;
+	rules(c, css, css + len, origin, 0);
+	c->streaming = streaming;
+	c->cut = cut;
+	return c->rmem.nomem ? -1 : 0;
+}
+
+struct ec_stream {
+	ec_ctx *c;
+	int origin;
+	const char *base;		/* in the context's memory, or NULL */
+	char *buf;			/* what has come and isn't read yet */
+	size_t len, cap;
+	int nomem;
+};
+
+ec_stream *ec_sheet_begin(ec_ctx *c, int origin, const char *base)
+{
+	ec_stream *s = calloc(1, sizeof *s);
+	if (s == NULL)
+		return NULL;
+	s->c = c;
+	s->origin = origin;
+	if (base != NULL) {
+		size_t n = strlen(base);
+		char *b = ec_alloc(&c->rmem, n + 1);
+		if (b == NULL) {
+			free(s);
+			return NULL;
+		}
+		memcpy(b, base, n + 1);
+		s->base = b;
+	}
+	c->st.sheets++;
+	c->import_ok = 1;
+	return s;
+}
+
+/* the rules all in s's buffer read (all of it: last), the rest kept */
+static void stream_read(ec_stream *s, int last)
+{
+	ec_ctx *c = s->c;
+	const char *sb = c->sheet_base;
+	size_t used;
+	c->sheet_base = s->base;
+	c->streaming = (uint8_t) !last;
+	c->cut = s->buf;
+	rules(c, s->buf, s->buf + s->len, s->origin, 0);
+	used = last ? s->len : (size_t) (c->cut - s->buf);
+	c->streaming = 0;
+	c->sheet_base = sb;
+	memmove(s->buf, s->buf + used, s->len - used);
+	s->len -= used;
+}
+
+int ec_sheet_feed(ec_stream *s, const char *css, size_t len)
+{
+	if (s->nomem)
+		return -1;
+	if (s->len + len > s->cap) {
+		/* a rule (an @media's with all in it) as long as it is, and the
+		   piece that ends it */
+		size_t cap = s->cap ? s->cap : 16384;
+		char *b;
+		while (cap < s->len + len)
+			cap *= 2;
+		b = realloc(s->buf, cap);
+		if (b == NULL) {
+			s->nomem = 1;
+			return -1;
+		}
+		s->buf = b;
+		s->cap = cap;
+	}
+	memcpy(s->buf + s->len, css, len);
+	s->len += len;
+	stream_read(s, 0);
+	return s->c->rmem.nomem ? -1 : 0;
+}
+
+int ec_sheet_end(ec_stream *s)
+{
+	int r;
+	if (s == NULL)
+		return -1;
+	if (!s->nomem && s->len)
+		stream_read(s, 1);
+	r = s->nomem || s->c->rmem.nomem ? -1 : 0;
+	free(s->buf);
+	free(s);
+	return r;
 }
 
 void ec_set_resolver(ec_ctx *c, int (*resolve)(const char *base, const char *rel, char *out, int size))

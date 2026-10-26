@@ -59,7 +59,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 1 };
+	       1, "", 1, 0 };
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -428,6 +428,8 @@ static void settings_load(void)
 			opt.palette = atoi(eq) != 0;
 		else if (!strcmp(line, "DIALOGS3D"))
 			opt.dialogs3d = atoi(eq) != 0;
+		else if (!strcmp(line, "LOG"))
+			opt.log = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -579,6 +581,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.dialogs3d);
 	put(&s, "DIALOGS3D", v, "1 = dialogs and alerts in the 3D look where the AES has one (TOS 4, MagiC, EmuTOS, "
 	    "XaAES), 0 = flat everywhere");
+	snprintf(v, sizeof v, "%d", opt.log);
+	put(&s, "LOG", v, "1 = EWEB.LOG next to EWEB.PRG: each connection and its secure handshake, step by step "
+	    "(no address's query, cookie or form field), and where EWeb waited longest; 0 = none");
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
@@ -1004,13 +1009,15 @@ static void loaded(int r)
 		log_url(shown, sizeof shown);
 		{
 			short x, y, w, h;
+			long md, mc, mk;
 			win_page_area(&x, &y, &w, &h);
+			br_mem(&br, &md, &mc, &mk);
 			log_event("shown %.400s height %ld links %d area %d %d %d %d top %ld ms %lu "
 				  "(fetch %lu, parse %lu, style %lu, layout %lu, drawn %lu) heap %ld peak %ld free %ld "
-				  "title %.200s", shown,
+				  "(doc %ld css %ld kept %ld) title %.200s", shown,
 				  br.p ? (long) br.p->height : 0L, br.p ? br.p->nlinks : 0, x, y, w, h, (long) win_top(),
 				  pf_ms() - load_t0, br.ms_fetch, br.ms_parse, br.ms_style, br.ms_layout, ms_drawn,
-				  heap_use, heap_peak, ram_free(), br.title);
+				  heap_use, heap_peak, ram_free(), md, mc, mk, br.title);
 		}
 		if (br.p && br.p->deep)
 			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
@@ -1990,6 +1997,10 @@ static void pictures(void)
 		win_status(br.pic_stopped ? "Pictures stopped." : "");
 		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
 		log_event("throbber %d", win_throb_frames());
+		if (opt.log) {
+			conn_log_hold(0);	/* the page's and its pictures' lines, at once */
+			conn_log_hold(1);
+		}
 		menu_update();
 	}
 }
@@ -2161,6 +2172,16 @@ int main(void)
 	/* secure connections: the certificates, the seed and the signatures
 	   kept next to the program, as EWGET.TTP keeps them */
 	net_init();
+	if (opt.log) {
+		/* the connections' log (LOG=1): held in memory for a page and
+		   its pictures and written once then (6.5), and at the end */
+		char line[120];
+		path_join(conn_logfile, sizeof conn_logfile, opt.workdir, "EWEB.LOG");
+		conn_log_hold(1);
+		crash_report = conn_log_append;	/* a crash's report after what is held */
+		snprintf(line, sizeof line, "EWeb %s started", EWEB_VERSION);
+		conn_log("EWeb", " -- ", line, (long) strlen(line));
+	}
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
 #ifndef EW_ST
 	/* the TLS code, the family's TLS.OVL beside it: read at the first
@@ -2338,6 +2359,8 @@ int main(void)
 	}
 	graf_mouse(BUSYBEE, 0);
 	http_close_all();
+	if (opt.log)
+		conn_log_hold(0);	/* the rest of the log, once */
 	{
 		/* the window in front last: its place is kept (WINDOW=) */
 		ewin *front = cur, *w;

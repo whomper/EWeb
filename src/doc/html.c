@@ -1693,7 +1693,9 @@ static void text_add(P *p, dnode *n, const uint8_t *s, size_t len)
 
 static const ec_atom *atom(P *p, const uint8_t *s, size_t n)
 {
-	const ec_atom *a = ec_intern(p->d->css, (const char *) s, n);
+	/* (the document's: its sheets may leave out rules for names it hasn't,
+	   ec_prune) */
+	const ec_atom *a = ec_intern_used(p->d->css, (const char *) s, n);
 	if (a == NULL)
 		oom(p);
 	return a;

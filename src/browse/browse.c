@@ -712,6 +712,8 @@ typedef struct {
 	   (UTF-8, "" none) */
 	int disposed, attach;
 	char name[256];
+	int packed;		/* data as it came, gzip (1) or zlib's deflate (2): asked
+				   for with fetch_packed (a big sheet, unpacked as it is read) */
 } FETCH;
 
 /* a page drawn while it loads (its preview, below): the page's body as it
@@ -1106,9 +1108,62 @@ static int page_head(void *ud, HTTPRESP *rs)
 static char js_gate[300];
 static int js_gate_ok;
 
+/* for the next fetch only: an answer sent packed is kept so, its data
+   as it came (FETCH.packed), in the caches too, its type saying how
+   (PACKED_TAG): a stylesheet, unpacked as it is read (sheet_cb). Taken
+   from a cache by any other fetch, it is unpacked there */
+static int fetch_packed;
+#define PACKED_TAG " packed="
+
+static int packed_head(void *ud, HTTPRESP *rs)
+{
+	(void) ud;
+	if (rs->encoding == 1 || rs->encoding == 2)
+		rs->packed = 1;
+	return 1;
+}
+
+static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
+		     int keep, const FSUBMIT *post, FETCH *f);
+
+/* fetch_raw, and an answer kept packed (its type says so) given as the
+   caller asked: packed (fetch_packed), else unpacked, up to maxbody */
 static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		 int keep, const FSUBMIT *post, FETCH *f)
 {
+	int want = fetch_packed, r;
+	char *tag;
+	r = fetch_raw(b, url, site, fresh, accept, maxbody, keep, post, f);
+	f->packed = 0;
+	if (!r || (tag = strstr(f->mime, PACKED_TAG)) == NULL)
+		return r;
+	f->packed = tag[sizeof PACKED_TAG - 1] == 'z' ? 2 : 1;
+	*tag = 0;
+	if (!want) {
+		SBUF plain;
+		int good;
+		sb_init(&plain);
+		good = f->packed == 1 ? inflate_gzip((const unsigned char *) f->data, f->len, &plain,
+						     maxbody > 0 ? maxbody : HTTP_MAXBODY) :
+		       inflate_zlib((const unsigned char *) f->data, f->len, &plain, maxbody > 0 ? maxbody : HTTP_MAXBODY);
+		free(f->data);
+		f->data = NULL;
+		f->packed = 0;
+		if (good <= 0 || (f->data = sb_steal(&plain)) == NULL) {
+			sb_free(&plain);
+			snprintf(f->err, sizeof f->err, good < 0 ? "Too big." : "Damaged.");
+			return 0;
+		}
+		f->len = plain.len;
+	}
+	return 1;
+}
+
+static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
+		     int keep, const FSUBMIT *post, FETCH *f)
+{
+	int packed = fetch_packed;
+	fetch_packed = 0;
 	memset(f, 0, sizeof *f);
 	str_copy(f->url, url, sizeof f->url);
 	if (has_scheme(url, "file")) {
@@ -1232,6 +1287,8 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		if (accept == NULL) {
 			rq.head = page_head;
 			rq.ud = f;
+		} else if (packed) {
+			rq.head = packed_head;
 		}
 		if (post != NULL) {
 			rq.method = "POST";
@@ -1316,6 +1373,9 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 				    strcmp(v, fetch_variant + 4) != 0)
 					str_copy(f->mime, "application/octet-stream", sizeof f->mime);
 			}
+			if (rs->packed && accept != NULL)	/* (packed_head's) */
+				snprintf(f->mime + strlen(f->mime), sizeof f->mime - strlen(f->mime), "%s%s",
+					 PACKED_TAG, rs->encoding == 2 ? "zlib" : "gzip");
 			str_copy(f->charset, rs->charset, sizeof f->charset);
 			str_copy(f->security, rs->security, sizeof f->security);
 			f->len = body.len;
@@ -1375,6 +1435,78 @@ typedef struct {
 	int quiet;		/* not a load: nothing said on the status line */
 } SHEETS;
 
+/* a packed answer's data, for inflate_read: what is left of it */
+typedef struct {
+	const unsigned char *p, *end;
+} PACKSRC;
+
+static int pack_get(void *u, unsigned char *buf, long n)
+{
+	PACKSRC *s = u;
+	long k = (long) (s->end - s->p);
+	if (k > n)
+		k = n;
+	memcpy(buf, s->p, (size_t) k);
+	s->p += k;
+	return (int) k;
+}
+
+/* where the DEFLATE data starts in a gzip (kind 1) or zlib (2) body, as
+   inflate_gzip and inflate_zlib find it; NULL if it isn't one */
+static const unsigned char *deflate_at(const unsigned char *p, long n, int kind)
+{
+	const unsigned char *end = p + n;
+	int flg;
+	if (kind == 2)
+		return n > 6 && (p[0] & 0x0f) == 8 && ((p[0] << 8) | p[1]) % 31 == 0 ? p + 2 : p;
+	if (n < 18 || p[0] != 0x1f || p[1] != 0x8b || p[2] != 8)
+		return NULL;
+	flg = p[3];
+	p += 10;
+	if (flg & 4) {				/* FEXTRA */
+		p += 2 + (p[0] | (p[1] << 8));
+		if (p > end)
+			return NULL;
+	}
+	if (flg & 8)				/* FNAME */
+		while (p < end && *p++)
+			;
+	if (flg & 16)				/* FCOMMENT */
+		while (p < end && *p++)
+			;
+	if (flg & 2)				/* FHCRC */
+		p += 2;
+	return p < end ? p : NULL;
+}
+
+/* the most a sheet unpacks to (its rules for the page are what stays) */
+#define SHEET_MAX (8L << 20)
+
+/* a sheet that came packed, unpacked a piece at a time into the CSS
+   engine as it is read (ec_sheet_feed): none of it whole in memory
+   (ynet.co.il's: 3.36 MB, 974 KB packed; 0.43 ran out of memory over
+   it on a 14 MB Falcon), a turn for GEM between pieces */
+static void sheet_stream(SHEETS *sh, const FETCH *f, const char *url)
+{
+	static unsigned char piece[16384];
+	PACKSRC src;
+	INFLATE *z;
+	ec_stream *s;
+	long k, total = 0;
+	src.p = deflate_at((const unsigned char *) f->data, f->len, f->packed);
+	src.end = (const unsigned char *) f->data + f->len;
+	if (src.p == NULL)
+		return;
+	z = inflate_open(pack_get, &src);
+	s = z != NULL ? ec_sheet_begin(sh->d->css, EC_ORIGIN_AUTHOR, url) : NULL;
+	while (s != NULL && (k = inflate_read(z, piece, sizeof piece)) > 0 && (total += k) <= SHEET_MAX &&
+	       ec_sheet_feed(s, (const char *) piece, (size_t) k) == 0 && (ec_poll == NULL || ec_poll()) &&
+	       !conn_stop)
+		;
+	ec_sheet_end(s);
+	inflate_close(z);
+}
+
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 {
 	SHEETS *sh = ud;
@@ -1404,11 +1536,16 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		phase(sh->b, BRPH_STYLES);
 		say(sh->b, "%s", msg);
 	}
+	fetch_packed = 1;	/* (2 MB as it comes) */
 	if (fetch(sh->b, url, sh->base, sh->fresh, "text/css,*/*;q=0.1", 2L << 20, 1, NULL, f) &&
-	    (f->status == 0 || (f->status >= 200 && f->status < 300)))
+	    (f->status == 0 || (f->status >= 200 && f->status < 300))) {
 		/* its url()s from where it came */
-		ec_sheet_at(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR,
-			    f->url[0] ? f->url : url);
+		if (f->packed)
+			sheet_stream(sh, f, f->url[0] ? f->url : url);
+		else
+			ec_sheet_at(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR,
+				    f->url[0] ? f->url : url);
+	}
 	free(f->data);
 	free(f);
 }
@@ -1483,6 +1620,9 @@ static void add_sheets(browser *b, doc *d, const char *base, int fresh, int quie
 	sh.n = 0;
 	sh.quiet = quiet;
 	ec_set_importer(d->css, import_cb, &sh);
+	/* a page whose scripts don't run stays as it was parsed: its sheets'
+	   rules for names it hasn't are left out (ec_prune) */
+	ec_prune(d->css, !d->scripting);
 	doc_sheets(d, sheet_cb, &sh);
 	ec_set_importer(d->css, NULL, NULL);	/* (sh goes) */
 	if (b->extra_css != NULL)
@@ -4547,6 +4687,13 @@ static int frame_waiting(const browser *b, int sets)
 		    (!sets || fs->f[k].el->tag == T_FRAME))
 			return k;
 	return -1;
+}
+
+void br_mem(const browser *b, long *docb, long *css, long *kept)
+{
+	*docb = b->d != NULL ? doc_mem(b->d) : 0;
+	*css = b->d != NULL && b->d->css != NULL ? (long) ec_mem(b->d->css) : 0;
+	*kept = cache_used;
 }
 
 int br_pictures_pending(browser *b)

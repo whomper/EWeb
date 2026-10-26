@@ -733,6 +733,10 @@ there at once; where the window was, when you quit:
   pictures beside EWeb's keep their colours)
 - `DIALOGS3D=` 1 for dialogs and alerts in the 3D look where the
   system has one, 0 for them flat everywhere
+- `LOG=` 1 for `EWEB.LOG` next to `EWEB.PRG`: each connection, a secure
+  one's handshake step by step, and where EWeb waited longest (never an
+  address's query, a cookie or what was typed in a form); written once a
+  page and its pictures have come. 0 (as it starts) for none
 - `PENS=` through the Pi gateway, pictures made ready for your screen on
   the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)
@@ -773,7 +777,9 @@ there at once; where the window was, when you quit:
   then ^R loads the page
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
-  `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right
+  `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right;
+  if it still fails, set `LOG=1` in `EWEB.INF`, open the page again and
+  send `EWEB.LOG` with the bug report
 - **EWeb crashed**: next time it starts, it offers to show `CRASH.LOG`;
   please send it with a bug report on EWeb's GitHub page
   (github.com/whomper/EWeb/issues)

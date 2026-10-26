@@ -3915,6 +3915,51 @@ page usable meanwhile). Cycle-exact in Hatari (`tests/bench/picbench.py`), decod
 | testorig.png, 227 x 149 RGB | 705 / 710 | 4720 / 4555 |
 | a 400 x 300 RGB PNG shown 200 x 150 | 3940 / 3475 | 36670 / 27220 |
 
+## A big site's stylesheet (26 Oct 2026)
+
+Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
+Its one stylesheet is 3.36 MB, 974 KB gzip'd: 10,500 rules for every page of the site, of which
+about 3,400 have a subject whose id, class or tag the front page has. EWeb 0.43 fetched it whole,
+unpacked it up to the 2 MB a sheet could be and then dropped it, the page unstyled: the fetch's
+buffers on top of the parsed page were the peak. Had it been read, the copy of its text EWeb kept
+(the rules' blocks point into it, parsed when first needed) and the rules would have taken 6.1 MB
+(peak 9.5 MB, `drawbench -m`).
+
+- **A sheet read as it comes** (`ec_sheet_begin`, `ec_sheet_feed`, `ec_sheet_end`): a `<link>`'s
+  sheet sent gzip'd is kept packed by `fetch` (`fetch_packed`; in the memory and disk caches too,
+  its type tagged ` packed=gzip`, unpacked there for any other fetch of it) and unpacked 16 KB at
+  a time into the CSS engine (`sheet_stream`, common's `inflate_read`), a turn for GEM between
+  pieces; it may unpack to 8 MB. The engine reads the rules that are all there and keeps the rest
+  for the next piece: `rules()` stops before a rule or an at-rule whose block hasn't closed
+  (`ec_skip_block_closed`). ynet's biggest top-level rule is 68 KB. `ectest -s 1` and `-s 7`
+  (make test) give every case's sheet a byte or seven at a time, with the same values.
+- **Only a rule's block is kept** (`style_rule`): `ec_sheet` reads the text where it is and copies
+  each block, not the sheet.
+- **Rules for names the page hasn't** (`ec_prune`, for a page whose scripts don't run): a document's
+  names are marked as it interns them (`ec_intern_used`: its tags, classes, ids), and an author
+  rule whose subject needs an id, a class or a tag none of them is, is left out with what its
+  selectors took. A rule is looked up by those names, matched as atoms (no case folded), so it
+  couldn't have matched. An attribute's name isn't enough to tell (`[hidden]`), and a page whose
+  scripts run keeps them all.
+
+ynet's sheet on an empty page: kept 6.1 MB to 0.45 MB, peak 9.5 MB to 3.8 MB (the file, read
+whole there); with the front page, 8.65 MB to 5.11 MB kept, peak 10.37 MB to 6.96 MB
+(`drawbench -m`, which reads the sheets whole and prunes as EWEB.PRG does). EWEB.PRG on Falcon-4
+with 14 MB through the real site: the sheet used (the page styled: 135 px high, its scripts not
+run), shown in 293 s over the emulated serial line, heap 8.97 MB at the page (doc 1.20 MB, CSS
+3.05 MB, kept for Back 2.09 MB: these now on the `shown` line), peak 9.45 MB; 0.43, its sheet
+dropped, 6.07 and 8.36 MB. What is left is the page's styles (the CSS context's most, about 650
+bytes an element) and the pages kept, given back when a page doesn't fit.
+
+The family's `EWEB.LOG` (`LOG=1`, 0 as it starts): `conn.c`'s log of each connection, a secure
+one's handshake step by step, held in memory for a page and its pictures and written once then,
+and at the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. No
+address's query, cookie or form field (7.3). Erez's demozoo.org failure (the connection lost in
+the handshake, Direct, 0.43) didn't happen on the emulated stock Falcon, whose disk costs
+nothing: common's `conn.c` now reads TLS.OVL, the roots, the seed and SIGS.DAT before it opens a
+connection (TLS.OVL 1.10), and `make hatarigui`'s falcon4 group loads a secure page from a
+server with an ECDSA certificate on the stock Falcon.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

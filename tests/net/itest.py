@@ -416,6 +416,20 @@ try:
               re.search(r'resized: 1 "Media" width 400\nresized: 1 "Media" width 608\n', p.stdout) and
               re.search(r'#0000aa \S+ link 0 "Sheets by', p.stdout) and "stylesheet 3" not in p.stdout,
               p.stdout + p.stderr + "count: " + rcount)
+        # a big site's sheet (2.5 MB, gzip'd as it comes: more than the 2 MB
+        # a sheet once could unpack to): unpacked a piece at a time as it is
+        # read, its rules for this page kept, the one at its very end too;
+        # twice, the second from the cache, kept packed
+        bigs = []
+        for _ in range(2):
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "608",
+                                "http://localhost:%d/site/big.html" % HTTP], cwd=work,
+                               capture_output=True, text=True, timeout=300)
+            bigs.append(p)
+        check("the browser: a big site's sheet read as it comes",
+              all(b.returncode == 0 and re.search(r'#00aa00 \S+ .*"A big site', b.stdout) and
+                  "#eeeeee" in b.stdout and "bold" in b.stdout for b in bigs),
+              "\n".join(b.stdout[-1500:] + b.stderr[-500:] for b in bigs))
         # sized while a picture comes (GEM's messages come as a request
         # waits): no request inside it, the narrow sheet after it
         p = subprocess.run([ewrender, "-f", font, "-d", "-w", "608", "-Y", "400",

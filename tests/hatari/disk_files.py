@@ -71,12 +71,16 @@ BUDGET = {
     # cache's pack made with what the session brought, in one write, and
     # its index saved
     "quit": (1, 5, 0),
-    "start again": (4, 0, 0),
+    # the second time with LOG=1 (since 0.44): EWEB.LOG written once a page
+    # and its pictures have come (the home page's: tried, then made)
+    "start again": (5, 1, 0),
     # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
     # then written over; the cache's index; SIGS.DAT read (since 0.40);
-    # TLS.OVL (since 0.43)
-    "secure page again": (8, 0, 1),
-    "quit again": (0, 1, 0),        # the cookies as they were; HISTORY.TXT (a page shown)
+    # TLS.OVL (since 0.43); EWEB.LOG, once
+    "secure page again": (9, 0, 1),
+    # the cookies as they were; HISTORY.TXT (a page shown); EWEB.INF in its
+    # own form again (LOG=1 was added by hand); EWEB.LOG's rest
+    "quit again": (1, 2, 0),
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
 
@@ -312,6 +316,10 @@ def eweb(hd):
         r.case("quit")
     finally:
         r.end()
+    # the second time with the connections' log (LOG=1): held in memory,
+    # written once a page and its pictures have come, and at the end
+    with open(os.path.join(hd, "EWEB.INF"), "ab") as f:
+        f.write(b"LOG=1\r\n")
     r = Run("eweb2", hd, "EWEB.PRG")
     try:
         if not check("  EWEB.PRG ready again", r.wait(r"shown ", 300) is not None):
@@ -324,6 +332,11 @@ def eweb(hd):
         r.case("quit again")
     finally:
         r.end()
+    log = os.path.join(hd, "EWEB.LOG")
+    text = open(log, errors="replace").read() if os.path.exists(log) else ""
+    check("  EWEB.LOG: the start, the secure page's handshake, the slowest, no cookie",
+          "EWeb %s started" % open(os.path.join(ROOT, "VERSION")).read().strip() in text and
+          "secure: TLS 1.2" in text and "the slowest:" in text and "Cookie" not in text, text[-600:])
 
 
 def ewget(hd):

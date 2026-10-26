@@ -2,7 +2,10 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /* ectest: EWeb's CSS engine against cases written from the specifications.
  *
- *   ectest tests/css/cases.txt
+ *   ectest [-s N] tests/css/cases.txt
+ *
+ * -s N: each case's sheet read as it comes (ec_sheet_feed), N bytes at a
+ * time; the values must be the same.
  *
  * Each case has a stylesheet, a page and the computed values expected:
  *
@@ -365,7 +368,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 			ec_drop_sheets(c);
 			ec_set_media(c, &m);
 			ec_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA);
-			ec_sheet(c, css, csslen, EC_ORIGIN_AUTHOR);
+			ecs_add(c, css, csslen, EC_ORIGIN_AUTHOR);
 			ecs_select(c, doc, &ss);
 			continue;
 		}
@@ -375,7 +378,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 			for (k = 0; k <= times; k++) {
 				ec_drop_sheets(c);
 				ec_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA);
-				ec_sheet(c, css, csslen, EC_ORIGIN_AUTHOR);
+				ecs_add(c, css, csslen, EC_ORIGIN_AUTHOR);
 				ecs_select(c, doc, &ss);
 				if (k == 0)
 					m0 = ec_mem(c);
@@ -459,8 +462,13 @@ int nsbench(int argc, char **argv)
 	buf css = { 0 }, html = { 0 }, expect = { 0 }, *cur = NULL;
 	unsigned opts = 0;
 
+	if (argc > 3 && !strcmp(argv[1], "-s")) {
+		ecs_piece = atoi(argv[2]);
+		argc -= 2;
+		argv += 2;
+	}
 	if (argc < 2 || (text = load(argv[1], &len)) == NULL) {
-		fprintf(stderr, "usage: ectest CASES.TXT\n");
+		fprintf(stderr, "usage: ectest [-s N] CASES.TXT\n");
 		return 2;
 	}
 	ecs_setup = setup;
@@ -487,7 +495,10 @@ int nsbench(int argc, char **argv)
 		p += n + (e != NULL);
 	}
 	flush(name, &css, &html, &expect, opts);
-	fprintf(stderr, "%d cases, %d failed\n", cases, failed);
+	if (ecs_piece > 0)
+		fprintf(stderr, "%d cases, sheets read %d bytes at a time, %d failed\n", cases, ecs_piece, failed);
+	else
+		fprintf(stderr, "%d cases, %d failed\n", cases, failed);
 	free(css.s);
 	free(html.s);
 	free(expect.s);
