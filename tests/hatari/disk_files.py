@@ -377,7 +377,7 @@ def main():
         hd = os.path.join(OUT, "hd")
         shutil.rmtree(hd, ignore_errors=True)
         os.makedirs(hd)
-        for f in ("EWEB.PRG", "EWEB.FNT", "EWGET.TTP"):
+        for f in ("EWEB.PRG", "EWEB.FNT", "EWGET.TTP", "TLS.OVL"):
             shutil.copy(os.path.join(ROOT, "binary", f), hd)
         shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
         with open(os.path.join(hd, "EWEB.INF"), "w", newline="") as f:     # as 0.26 wrote it

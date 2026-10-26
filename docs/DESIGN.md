@@ -574,7 +574,7 @@ work went: "the key exchange: x25519, N ms; the server's key: RSA 2048 bits, its
 multiplication (the key exchange, the prime curves) run in 68030 assembly since 0.40, as in TLS.OVL
 1.4: common's `rsa030.c` with `atari/mont030.S`, and `tlsovl/i31_montmul_030.c` with
 `mont31_030.S` in place of BearSSL's `i31_montmul.c`, in `EWEB.PRG` and `EWGET.TTP` (the ST
-edition has no TLS). On the emulated TT (32 MHz, `make hatarinet`'s "on a TT"), a handshake with
+edition has no TLS; since 26 Oct the family's `TLS.OVL` carries them all, below). On the emulated TT (32 MHz, `make hatarinet`'s "on a TT"), a handshake with
 the test server's RSA-2048 certificate: 5.0 s with 0.39, now 2.3 s (the key exchange 1,045 ms, the
 signature 250 ms "on the 68030", the chain 450 ms), and 2.0 s the next time (the chain's signature
 remembered in `SIGS.DAT`).
@@ -3881,6 +3881,24 @@ page's globe among them, decoded at each start as `data:` pictures aren't kept);
 on the ST (85 ms) and Settings opened (430). The start size (1.84 MB with the BSS and the stack)
 is the plan in the hub's message of 26 Oct: TLS into the family's `TLS.OVL`, WebP and SVG into an
 overlay of their own, the stack and the bigger static tables taken when needed.
+
+**The start size, step 1: TLS in `TLS.OVL` (26 Oct 2026).** `EWEB.PRG` no longer carries
+`common/`'s `tls.c`, BearSSL, the DSP's RSA and elliptic curves or the 68030 assembly for them:
+it carries `common/atari/tls_ovl.c` and `common/ui/dsp_ovl.c` in their place, and the family's
+`TLS.OVL` (1.8, 140 KB; 148 KB when loaded) beside it, read the first time a Direct connection makes
+a secure one (through the Pi it never is). `EWGET.TTP` does the same, so `make hatarinet` measures
+the code `EWEB.PRG` runs.
+
+| `EWEB.PRG` | Before | After |
+|---|---|---|
+| The file | 1,251,503 bytes | 1,113,371 |
+| Text | 1,201,228 | 1,066,720 |
+| Data | 25,680 | 24,164 |
+| BSS | 625,156 | 612,440 |
+| At the start, all three | 1,852,064 (1.77 MB) | 1,703,324 (1.62 MB) |
+
+A Direct connection's first secure page now loads `TLS.OVL` first: 25 ms on the emulated Falcon
+(Hatari, the file on its hard disk), then the DSP's self-tests as before.
 
 ## The design
 

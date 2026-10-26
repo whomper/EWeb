@@ -21,6 +21,9 @@
 #include "http.h"
 #include "conn.h"
 #include "tls.h"
+#if defined(EW_TOS) && !defined(EW_ST)
+#include "tlsovl.h"
+#endif
 #include "plat.h"
 #include "ui.h"
 
@@ -89,6 +92,17 @@ int ewget(int argc, char **argv)
 	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first */
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
+#if defined(EW_TOS) && !defined(EW_ST)
+	/* the TLS code is TLS.OVL's (EWEB.PRG's too): loaded now for a Direct
+	   https address, so that what does the work can be said */
+	if (!strncmp(url, "https:", 6) && !http_gateway[0]) {
+		char err[160];
+		if (tls_ovl_load(err, sizeof(err)))
+			out("TLS.OVL %s\n", tls_ovl_version());
+		else
+			out("TLS.OVL: %s\n", err);
+	}
+#endif
 	out("network: %s; RSA on the %s, elliptic curves on the %s\n", net_stack(), falcon_dsp_state(),
 	    falcon_dsp_ec_state());
 	/* the log (-l) written in one go at the end, not at each milestone:

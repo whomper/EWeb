@@ -96,6 +96,7 @@ def main():
     if srv.stdout.readline().strip() != "ready":
         sys.exit("ewget_test: the servers didn't start")
     shutil.copy(os.path.join(ROOT, "binary", "EWGET.TTP"), hd)
+    shutil.copy(os.path.join(ROOT, "binary", "TLS.OVL"), hd)	# the TLS code (EWEB.PRG's too)
     shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)	# the test authority
     print("---- " + machines.Machine("Falcon:16", hd).describe())
     gate = None

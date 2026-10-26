@@ -81,6 +81,7 @@ def run(out, machine, nvdi, prgdir):
         r.put(os.path.join(ROOT, "binary", "EWEB.FNT"), "EWEB")
         if not st:
             r.put(os.path.join(ROOT, "binary", "EWEBJS.OVL"), "EWEB")
+            r.put(os.path.join(ROOT, "binary", "TLS.OVL"), "EWEB")
         r.put(os.path.join(ROOT, "tests", "bench", "sample.html"))
         os.rename(os.path.join(r.hd, "SAMPLE.HTML"), os.path.join(r.hd, "SAMPLE.HTM"))
         r.put(os.path.join(ROOT, "build", "news", "NEWS.HTM"))

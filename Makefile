@@ -32,7 +32,7 @@
 #   make fuzz        the HTTP client and the URL parser under libFuzzer
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
-#   make dist        a release's files in dist/: EWEB.PRG, EWEBJS.OVL,
+#   make dist        a release's files in dist/: EWEB.PRG, EWEBJS.OVL, TLS.OVL,
 #                    EWEBST.PRG, EWEB.FNT, EWEB.HYP,
 #                    NSBENCH.TTP, NSBENCH.TXT, PICBENCH.TTP, PICBENCH.TXT,
 #                    PHOTO.JPG, EWGET.TTP, EWGET.TXT,
@@ -111,7 +111,8 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP binary/ROOTS.DAT
+all: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
+     binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
 bench68k: build/m68k/nsbench
@@ -341,13 +342,16 @@ TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fn
                  -Iatari/include -Icommon/atari/include $(NET_INC)
 # common/'s files as the other AERA apps build them
 COMMON_WARN   := -Wall -Wno-pointer-sign
+# the secure connections are the family's TLS.OVL (common/tlsovl: tls.c,
+# BearSSL and the DSP's code, in 68030 code): loaded the first time a
+# Direct connection is made (common/atari/tls_ovl.c, ui/dsp_ovl.c), so
+# EWEB.PRG starts 133 KB smaller and a page through the Pi never needs it
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
-              $(addprefix build/tos/net/,conn.o tls.o util.o futil.o inflate.o secret.o net_tos.o sting.o sting_s.o dsprsa.o \
-              dsp.o plat_tos.o ecdsp.o dspec.o dsp_ec.o crash.o crash_s.o bigbuf.o rsa030.o mont030.o)
-# RSA's check and the prime curves in 68030 assembly, as TLS.OVL 1.4 has
-# them (common/src/rsa030.c, common/atari/mont030.S; BearSSL's
-# br_i31_montymul is common/tlsovl/i31_montmul_030.c with mont31_030.S)
-build/tos/net/tls.o: TOSNET_CFLAGS += -DTLS_030
+              $(addprefix build/tos/net/,conn.o tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o secret.o net_tos.o \
+              sting.o sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o)
+binary/TLS.OVL: common/tlsovl/TLS.OVL
+	@mkdir -p binary
+	cp $< $@
 build/tos/net/mont030.o: common/atari/mont030.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
@@ -376,26 +380,8 @@ build/tos/net/crash_s.o: common/atari/crash.S
 build/tos/ewget/%.o: tests/net/%.c $(NET_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
-build/tos/bssl/%.o: $(BSSL)/src/%.c
-	@mkdir -p $(@D)
-	$(M68KCC) -m68030 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
-		-fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -w -nostdinc -isystem $(GCCINC) \
-		-Iatari/include -Icommon/atari/include -I$(BSSL)/inc -I$(BSSL)/src $(BSSL_DEF) -c $< -o $@
-build/tos/bssl/i31_montmul_030.o: common/tlsovl/i31_montmul_030.c
-	@mkdir -p $(@D)
-	$(M68KCC) -m68030 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
-		-fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -w -nostdinc -isystem $(GCCINC) \
-		-Iatari/include -Icommon/atari/include -I$(BSSL)/inc -I$(BSSL)/src $(BSSL_DEF) -c $< -o $@
-build/tos/bssl/mont31_030.o: common/tlsovl/mont31_030.S
-	@mkdir -p $(@D)
-	$(M68KCC) -m68030 -c $< -o $@
-build/tos/libbearssl.a: $(patsubst $(BSSL)/src/%.c,build/tos/bssl/%.o,$(filter-out $(BSSL)/src/int/i31_montmul.c,$(BSSL_SRC))) \
-		build/tos/bssl/i31_montmul_030.o build/tos/bssl/mont31_030.o
-	rm -f $@
-	$(CROSS)ar rcs $@ $^
-build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ) \
-		build/tos/libbearssl.a
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
+build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ)
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -565,8 +551,8 @@ build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
 build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h common/src/pic.h
 build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
-		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/libbearssl.a
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) build/tos/libbearssl.a -lgcc
+		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -660,7 +646,7 @@ build/prof/st/gem.o: common/atari/gem.c $(NET_HDRS)
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o)) build/tos/libbearssl.a -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o)) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o)) -lgcc
@@ -668,7 +654,7 @@ build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
-hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/EWEB.FNT build/news/NEWS.HTM
+hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEB.FNT build/news/NEWS.HTM
 	python3 tests/hatari/speed.py build/speed
 .PHONY: hatarispeed
 
@@ -864,7 +850,7 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
-hatarigui: binary/EWEB.PRG binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
+hatarigui: binary/EWEB.PRG binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
@@ -882,14 +868,14 @@ icons:
 # TOS 4.04 from ~/.aera/tos, else EmuTOS), through FAKESTNG, against
 # tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
 # emulated DSP
-hatarinet: binary/EWGET.TTP
+hatarinet: binary/EWGET.TTP binary/TLS.OVL
 	python3 tests/hatari/ewget_test.py
 .PHONY: hatarinet
 
 # what EWEB.PRG and EWGET.TTP do on the disk (the guidelines' 6.5), from
 # Hatari's GEMDOS trace: each case's opens and lookups against its budget
 # (tests/hatari/disk_files.py)
-hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
+hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP binary/TLS.OVL
 	python3 tests/hatari/disk_files.py build/files
 .PHONY: hatarifiles
 
@@ -1173,15 +1159,15 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
-dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/CACERT.PEM \
-		binary/ROOTS.DAT
+dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
+		binary/CACERT.PEM binary/ROOTS.DAT
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP binary/CACERT.PEM \
-		binary/ROOTS.DAT dist/
+	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
+		binary/CACERT.PEM binary/ROOTS.DAT dist/
 	cp icons/EWEB.RSC icons/EWEBNV.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
-	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/CACERT.PEM dist/ROOTS.DAT \
-		dist/zip/
+	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/TLS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/CACERT.PEM \
+		dist/ROOTS.DAT dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

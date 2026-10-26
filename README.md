@@ -122,6 +122,7 @@ and unpack it into a folder of its own. It contains:
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
 | `EWEBJS.OVL` | its JavaScript (QuickJS), loaded when a site whose scripts you turned on needs it, and only with an FPU (keep it next to `EWEB.PRG`) |
+| `TLS.OVL` | the secure connections (TLS, with the Falcon's DSP), the AERA family's own: loaded at the first secure page of a Direct connection (keep it next to `EWEB.PRG`) |
 | `EWEBST.PRG` | the ST edition: 68000 code, secure sites through AERA-Gateway's web service on a Raspberry Pi |
 | `EWEB.FNT` | its fonts (keep it next to `EWEB.PRG`) |
 | `EWEB.HYP` | the guide, for EHypView or ST-Guide (the Help key opens it) |
@@ -129,7 +130,7 @@ and unpack it into a folder of its own. It contains:
 | `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor) for TOS, EmuTOS, and NVDI with TOS's colours loaded (COLORVDI.CPX); `EWEBNV.RSC`, the same for NVDI with its own 256 colours; `EWEB.ICN` and its mask `EWEBMK.ICN` |
 
 `EWEBJS.OVL` is needed only for the scripts of sites you turn them on for;
-`CACERT.PEM` and `ROOTS.DAT` only for a Direct connection (through the Pi
+`TLS.OVL`, `CACERT.PEM` and `ROOTS.DAT` only for a Direct connection (through the Pi
 gateway they aren't used); `EWEBST.PRG` only on an ST.
 
 1. With STinG running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST or

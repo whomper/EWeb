@@ -13,6 +13,9 @@
 
 #include "ui.h"
 #include "text.h"
+#ifndef EW_ST
+#include "tlsovl.h"
+#endif
 #include "aboutbox.h"
 #include "av.h"
 #include "bookmark.h"
@@ -2159,6 +2162,11 @@ int main(void)
 	   kept next to the program, as EWGET.TTP keeps them */
 	net_init();
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
+#ifndef EW_ST
+	/* the TLS code, the family's TLS.OVL beside it: read at the first
+	   Direct connection (never through the Pi) */
+	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "TLS.OVL");
+#endif
 	{
 		/* the cookies that last: read when the first page needs them */
 		char ck[256], key[256];

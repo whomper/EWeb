@@ -17,7 +17,8 @@ and white.
   sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
   gateway, in [Settings](#settings))
 - For `EWEB.PRG` about 3.5 MB of free memory (the program itself takes
-  1.5 MB, a page up to about 11 times its size): a Falcon's own 4 MB is
+  1.6 MB, and `TLS.OVL` 0.15 MB more at the first secure site of a Direct
+  connection; a page up to about 11 times its size): a Falcon's own 4 MB is
   enough when the family's accessories aren't loaded; TT RAM is used when
   there is some. A page's scripts need an FPU and `EWEBJS.OVL` next to
   `EWEB.PRG` (0.9 MB more, taken the first time they run)
@@ -44,6 +45,7 @@ The files are in the latest release on EWeb's GitHub page
 EWEB.PRG      the program (Falcon, TT)
 EWEBST.PRG    the ST edition (ST, STE: secure sites through the gateway)
 EWEB.FNT      its fonts (needed: EWeb draws pages with them)
+TLS.OVL       secure sites in a Direct connection: the code (the family's)
 EWEB.HYP      this guide, for EHypView or ST-Guide (the Help key opens it)
 CACERT.PEM    secure sites: the root certificates
 ROOTS.DAT     the same, read ahead of time
@@ -770,8 +772,8 @@ there at once; where the window was, when you quit:
   the page's **Live view** link shows the Pi's screen to tick it, and
   then ^R loads the page
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
-- **A secure site fails**: check that `CACERT.PEM` and `ROOTS.DAT` are
-  next to `EWEB.PRG`, and the Atari's clock is right
+- **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
+  `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right
 - **EWeb crashed**: next time it starts, it offers to show `CRASH.LOG`;
   please send it with a bug report on EWeb's GitHub page
   (github.com/whomper/EWeb/issues)

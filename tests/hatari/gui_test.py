@@ -102,7 +102,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("binary/EWEB.PRG", "binary/EWEBJS.OVL", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
+    for f in ("binary/EWEB.PRG", "binary/EWEBJS.OVL", "binary/TLS.OVL", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
         if os.path.exists(os.path.join(ROOT, f)):
             shutil.copy(os.path.join(ROOT, f), hd)
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
