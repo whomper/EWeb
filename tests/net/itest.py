@@ -910,6 +910,7 @@ try:
         # EWeb compiles it once), asked again with its ETag (a 304) and read
         # from the cache the next time
         kc = os.path.join(work, "keptcache")
+        shutil.rmtree(kc, ignore_errors=True)       # (a run before this one's)
 
         def kept(*more):
             p = subprocess.run([ewrender, "-f", font, "-J", "-d", "-C", kc] + list(more) +
@@ -1162,6 +1163,7 @@ try:
                 # time); a webgate without aerajsc sends it as it is, and EWeb
                 # compiles it itself
                 pc = os.path.join(work, "picache")
+                shutil.rmtree(pc, ignore_errors=True)
 
                 def pi_kept():
                     p = subprocess.run([ewrender, "-f", font, "-W", g, "-J", "-d", "-C", pc,
