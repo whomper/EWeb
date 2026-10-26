@@ -1240,11 +1240,11 @@ static uint16_t add_ctl(L *l, fctl *c)
 
 /* ---------------------------------------------------------------- building */
 
-/* doc_poll's turn, every 256 boxes made or laid out: stopped, the layout
+/* doc_poll's turn, every 16 boxes made or laid out: stopped, the layout
    fails as when out of memory */
 static int stopped(L *l)
 {
-	if ((++l->polls & 255) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_LAYOUT))
+	if ((++l->polls & 15) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_LAYOUT))
 		l->fail = 1;
 	return l->fail;
 }

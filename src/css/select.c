@@ -1505,7 +1505,7 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 	for (; e != NULL; e = one ? NULL : e->next) {
 		uint32_t sig;
 		const ec_style *st;
-		if (c->stopped || ((c->st.elements & 255) == 0 && ec_poll != NULL && !ec_poll() && (c->stopped = 1)))
+		if (c->stopped || ((c->st.elements & 31) == 0 && ec_poll != NULL && !ec_poll() && (c->stopped = 1)))
 			return;
 		sig = e->id == NULL ? ref_sig(e) : 0;
 		st = e->id == NULL ? shared_from(c, e, sig, cd, ncand) : NULL;

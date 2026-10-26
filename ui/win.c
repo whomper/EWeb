@@ -116,9 +116,10 @@ static short paper(void)
 
 /* the icons' edition for this screen, as the throbber's */
 static const TB_ED *tb_ed;
-static char *tb_dev;			/* its pictures with their masks in the screen's own form (ST RAM), each made when first shown */
+static char *tb_dev;			/* the buttons whole, each look of each, in the screen's own form (ST RAM), each made when first shown */
 static unsigned tb_made;		/* which of them are made, a bit each */
-static int tb_nodev;			/* none kept: each made as it is drawn */
+static int tb_nodev;			/* no memory to keep them: each made as it is drawn */
+static short tb_w, tb_h;		/* the buttons' size they were made at */
 
 static const TB_ED *icons(void)
 {
@@ -134,86 +135,103 @@ static const TB_ED *icons(void)
 	return tall ? &tb_mono_tall : &tb_mono_short;
 }
 
-/* a button's picture at x, y, within clip, over the button (its holes
-   show it): its icon as it is (TB_ON), greyed when it can't be used, or
-   lit under the mouse (it wakes) */
+/* a button's looks: as it is, greyed when it can't be used, raised and
+   lit under the mouse, sunk while held down; its icon's pictures: as it
+   is, greyed, lit (it wakes) */
 enum { TB_ON, TB_GREYED, TB_LIT };
-static void draw_icon(short x, short y, int i, int how, const GRECT *clip)
-{
-	const TB_ED *e = tb_ed != NULL ? tb_ed : (tb_ed = icons());
-	int k = how * NBUT + i;
-	long n = (long) TB_W * e->h, size = 2 * scr_dev_size(TB_W, e->h);
-	GRECT at, r;
-	SBUF b;
-	char *f;
-	at.x = x;
-	at.y = y;
-	at.w = TB_W;
-	at.h = e->h;
-	r = at;
-	if (!rect_and(&r, clip))
-		return;
-	/* kept only beside TT RAM, where the pages are: on a machine of ST
-	   RAM alone (a 4 MB Falcon, an ST) its 4 to 14 KB go to the pages */
-	if (tb_dev == NULL && !tb_nodev && ((long) Mxalloc(-1L, 1) <= 0 ||
-					    (tb_dev = scr_dev_alloc(size * TB_PICS)) == NULL))
-		tb_nodev = 1;
-	f = tb_dev != NULL ? tb_dev + size * k : NULL;
-	if (f != NULL && (tb_made & (1u << k))) {
-		scr_blit_holes(f, TB_W, e->h, &at, &r);
-		return;
-	}
-	sb_init(&b);
-	if (inflate_raw(e->data + e->off[k], e->off[k + 1] - e->off[k], &b, n) == 1 && b.len == n) {
-		if (f != NULL && scr_holes_dev((const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h, f)) {
-			tb_made |= 1u << k;
-			scr_blit_holes(f, TB_W, e->h, &at, &r);
-		} else {
-			scr_holes((const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h, &at, &r);
-		}
-	}
-	sb_free(&b);
-}
+enum { LOOK_ON, LOOK_GREYED, LOOK_HOT, LOOK_DOWN, LOOKS };
 
-/* a button's frame: raised under the mouse, sunk while held down */
-static void button_frame(const GRECT *r, int down)
+/* a look's frame, as lines across and down from the button's corner: in
+   colour where there are 16 or more, light at the top and left when it
+   is raised and dark when sunk; else black, with a shadow when raised */
+static short look_frame(int look, short w, short h, SCR_LINE *l)
 {
-	short x1 = r->x, y1 = r->y, x2 = r->x + r->w - 1, y2 = r->y + r->h - 1;
+	short n = 0, down = look == LOOK_DOWN;
+#define LN(a, b, c, d, k) (l[n].x0 = (a), l[n].y0 = (b), l[n].x1 = (c), l[n].y1 = (d), l[n].col = (k), n++)
+	if (look != LOOK_HOT && look != LOOK_DOWN)
+		return 0;
 	if (planes >= 4) {
 		short lt = down ? 9 : 0, rb = down ? 0 : 9;
-		line_col(x1, y1, x2, y1, lt);
-		line_col(x1, y1, x1, y2, lt);
-		line_col(x1, y2, x2, y2, rb);
-		line_col(x2, y1, x2, y2, rb);
+		LN(0, 0, w - 1, 0, lt);
+		LN(0, 0, 0, h - 1, lt);
+		LN(0, h - 1, w - 1, h - 1, rb);
+		LN(w - 1, 0, w - 1, h - 1, rb);
 		if (down) {
-			line_col(x1 + 1, y1 + 1, x2 - 1, y1 + 1, 1);
-			line_col(x1 + 1, y1 + 1, x1 + 1, y2 - 1, 1);
+			LN(1, 1, w - 2, 1, 1);
+			LN(1, 1, 1, h - 2, 1);
 		}
+	} else {
+		LN(0, 0, w - 2, 0, 1);
+		LN(0, h - 2, w - 2, h - 2, 1);
+		LN(0, 0, 0, h - 2, 1);
+		LN(w - 2, 0, w - 2, h - 2, 1);
+		if (down) {
+			LN(1, 1, w - 3, 1, 1);
+			LN(1, 1, 1, h - 3, 1);
+		} else {
+			LN(1, h - 1, w - 1, h - 1, 1);
+			LN(w - 1, 1, w - 1, h - 1, 1);
+		}
+	}
+#undef LN
+	return n;
+}
+
+/* button i in its look, made whole in memory (its ground, its frame, its
+   icon over them) and put on the screen in one copy, within clip: none
+   of the steps is seen (on a stock Falcon the mouse going over a button
+   showed it cleared, its frame, a hole and then its icon, each made
+   again at every draw; Erez, 26 Oct 2026). The looks are kept once made
+   (4 to 30 KB of ST RAM) */
+static void draw_look(int i, int look, const GRECT *clip)
+{
+	const TB_ED *e = tb_ed != NULL ? tb_ed : (tb_ed = icons());
+	GRECT at = cur->but[i], r = at;
+	short w = at.w, h = at.h, d = look == LOOK_DOWN, nl;
+	int k = look * NBUT + i, pic = look == LOOK_GREYED ? TB_GREYED : look == LOOK_ON ? TB_ON : TB_LIT;
+	long size = scr_dev_size(w, h), n = (long) TB_W * e->h;
+	char *f, *made = NULL;
+	SCR_LINE ln[8];
+	SBUF b;
+	if (!rect_and(&r, clip))
+		return;
+	if (tb_dev != NULL && (w != tb_w || h != tb_h)) {	/* (another size of the system font) */
+		scr_dev_free(tb_dev);
+		tb_dev = NULL;
+		tb_made = 0;
+	}
+	if (tb_dev == NULL && !tb_nodev) {
+		if ((tb_dev = scr_dev_alloc(size * LOOKS * NBUT)) == NULL)
+			tb_nodev = 1;
+		tb_w = w;
+		tb_h = h;
+		tb_made = 0;
+	}
+	f = tb_dev != NULL ? tb_dev + size * k : NULL;
+	if (f != NULL && (tb_made & (1u << k))) {
+		scr_blit_dev(f, w, h, &at, &r);
 		return;
 	}
-	{
-		GRECT f = *r;
-		f.w--;
-		f.h--;
-		frame(&f, 1);
-		if (down) {
-			line_col(x1 + 1, y1 + 1, x2 - 2, y1 + 1, 1);
-			line_col(x1 + 1, y1 + 1, x1 + 1, y2 - 2, 1);
-		} else {
-			line_col(x1 + 1, y2, x2, y2, 1);
-			line_col(x2, y1 + 1, x2, y2, 1);
-		}
+	if (f == NULL && (f = made = scr_dev_alloc(size)) == NULL)
+		return;
+	nl = look_frame(look, w, h, ln);
+	sb_init(&b);
+	if (inflate_raw(e->data + e->off[pic * NBUT + i], e->off[pic * NBUT + i + 1] - e->off[pic * NBUT + i], &b, n) == 1 &&
+	    b.len == n &&
+	    scr_button_dev(w, h, paper(), ln, nl, (const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h,
+			   (w - TB_W) / 2 + d, 3 + d, f)) {
+		if (made == NULL)
+			tb_made |= 1u << k;
+		scr_blit_dev(f, w, h, &at, &r);
 	}
+	sb_free(&b);
+	scr_dev_free(made);
 }
 
 static void draw_button(int i, const GRECT *clip)
 {
-	GRECT r = cur->but[i];
-	short on = enabled(i), down = i == cur->sunk, d = down ? 1 : 0;
-	fill(&r, paper());
-	if (down || (i == cur->hot && on))
-		button_frame(&r, down);
-	draw_icon(r.x + (r.w - TB_W) / 2 + d, r.y + 3 + d, i, !on ? TB_GREYED : down || i == cur->hot ? TB_LIT : TB_ON, clip);
+	short on = enabled(i);
+	draw_look(i, !on ? LOOK_GREYED : i == cur->sunk ? LOOK_DOWN : i == cur->hot ? LOOK_HOT : LOOK_ON, clip);
 }
 
 static short addr_cols(void)
@@ -455,7 +473,28 @@ static void draw_toolbar(GRECT *clip)
 	int i;
 	if (!rect_and(&r, clip))
 		return;
-	fill(&cur->r_tool, paper());
+	{
+		/* the ground around the buttons (each button draws its own:
+		   nothing under one is drawn twice) */
+		GRECT g = cur->r_tool, *b0 = &cur->but[0], *bn = &cur->but[NBUT - 1];
+		g.h = b0->y - cur->r_tool.y;
+		fill(&g, paper());
+		g.y = b0->y + b0->h;
+		g.h = cur->r_tool.y + cur->r_tool.h - g.y;
+		fill(&g, paper());
+		g.y = b0->y;
+		g.h = b0->h;
+		g.w = b0->x - cur->r_tool.x;
+		fill(&g, paper());
+		for (i = 0; i + 1 < NBUT; i++) {
+			g.x = cur->but[i].x + cur->but[i].w;
+			g.w = cur->but[i + 1].x - g.x;
+			fill(&g, paper());
+		}
+		g.x = bn->x + bn->w;
+		g.w = cur->r_tool.x + cur->r_tool.w - g.x;
+		fill(&g, paper());
+	}
 	for (i = 0; i < NBUT; i++)
 		draw_button(i, &r);
 	draw_addr();
@@ -543,6 +582,10 @@ static void draw_page(GRECT *clip)
 	GRECT r = cur->r_page;
 	if (!rect_and(&r, clip))
 		return;
+	if (shown() == NULL) {
+		fill(&r, 0);	/* no page yet: white, at once (not made in memory a band at a time) */
+		return;
+	}
 	scr_page(shown(), &r, cur->left + (r.x - cur->r_page.x), cur->top + (r.y - cur->r_page.y));
 	draw_box_bars(shown(), &r);
 }
@@ -560,6 +603,7 @@ static void redraw(const GRECT *area, int parts)
 	a = area ? *area : cur->work;
 	if (!rect_and(&a, &cur->work))
 		return;
+	gap_tag(parts & 2 ? "draw" : "draw bars");
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, 0);
 	font_sys_push();	/* (the system font at its size: a dialog may have left another) */

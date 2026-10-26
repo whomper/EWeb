@@ -647,6 +647,31 @@ binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
+# EWEB.PRG and EWEBST.PRG timed (the guidelines' Speed): the same objects
+# with common's gem.c built with -DAES_PROFILE=20, so each stretch of 20 ms
+# or more between event calls goes to Hatari's console as AESGAP, and the
+# start as AESSTART; tests/hatari/speed.py runs them on the stock machines
+build/prof/tos/gem.o: common/atari/gem.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -DAES_PROFILE=20 -c $< -o $@
+build/prof/st/gem.o: common/atari/gem.c $(NET_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -DAES_PROFILE=20 -c $< -o $@
+build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
+		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o)) build/tos/libbearssl.a -lgcc
+build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
+		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o)) -lgcc
+build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/EWEB.FNT build/news/NEWS.HTM
+	python3 tests/hatari/speed.py build/speed
+.PHONY: hatarispeed
+
 # PICBST.TTP: a picture decoded as EWEBST.PRG decodes it (TJpgDec,
 # jpegdc, PNG, GIF; 68000 code), each step timed on the 200 Hz clock;
 # PICBENCH.TTP as EWEB.PRG does (libjpeg-turbo; on the 68030, then with

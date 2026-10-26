@@ -66,6 +66,33 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 	}
 }
 
+/* n bytes from p, byte k q[k & 3]: a long at a time where it can (a
+   row of a shade: a byte a pixel was most of the drawing on an ST) */
+typedef uint32_t long2 __attribute__((aligned(2), may_alias));	/* a long at an even address */
+static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4])
+{
+	int32_t k = 0;
+	uint8_t b[4];
+	uint32_t v;
+	long2 *l;
+	if (n <= 0)
+		return;
+	if ((uintptr_t) p & 1) {		/* (the 68000's longs: at even addresses) */
+		*p++ = q[0];
+		n--;
+		k = 1;
+	}
+	b[0] = q[k & 3];
+	b[1] = q[(k + 1) & 3];
+	b[2] = q[(k + 2) & 3];
+	b[3] = q[(k + 3) & 3];
+	memcpy(&v, b, 4);
+	for (l = (long2 *) (void *) p; n >= 4; n -= 4)
+		*l++ = v;
+	for (p = (uint8_t *) l, k = 0; k < n; k++)
+		p[k] = b[k];
+}
+
 /* the ordered dither's thresholds, 4 by 4 (Bayer) */
 static const uint8_t bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 
@@ -324,9 +351,10 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 			y0 = 0;
 		for (j = y0; j < y1; j++) {
 			const uint8_t *b = bayer[(j + c->oy) & 3];
-			uint8_t *p = c->pix + j * c->stride;
-			for (i = x0; i < x1; i++)
-				p[i] = b[(i + c->ox) & 3] < level ? light : dark;
+			uint8_t q[4];
+			for (i = 0; i < 4; i++)
+				q[i] = b[(x0 + i + c->ox) & 3] < level ? light : dark;
+			fill_pattern(c->pix + j * c->stride + x0, x1 - x0, q);
 		}
 		return;
 	}

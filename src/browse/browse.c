@@ -1397,7 +1397,10 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 	if (!sh->quiet) {
 		char host[128], msg[200];
 		host_of(url, host, sizeof host);
-		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		if (host[0])
+			snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		else
+			snprintf(msg, sizeof msg, "Stylesheet %d...", sh->n);	/* (a file's) */
 		phase(sh->b, BRPH_STYLES);
 		say(sh->b, "%s", msg);
 	}
@@ -1429,7 +1432,10 @@ static int import_cb(void *ud, const char *base, const char *href, char **data, 
 	if (!sh->quiet) {
 		char host[128], msg[200];
 		host_of(url, host, sizeof host);
-		snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		if (host[0])
+			snprintf(msg, sizeof msg, "%s: stylesheet %d...", host, sh->n);
+		else
+			snprintf(msg, sizeof msg, "Stylesheet %d...", sh->n);	/* (a file's) */
 		phase(sh->b, BRPH_STYLES);
 		say(sh->b, "%s", msg);
 	}

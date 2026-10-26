@@ -3293,9 +3293,11 @@ and a point with their letters, no word far from text) and `make hatarigui` (a d
 Stage 3's fifth part. A long page took its parse, styling and layout without a turn for GEM: on
 the page set's biggest pages 45 million 68030 instructions, about 4 s on the DFB1 and over 10 s
 on a stock Falcon, with the window not redrawn and Esc heard only after. Now each stage asks
-now and then: the parser every 256 tags (`doc_poll`, `src/doc/html.c`), the CSS engine every
-256 elements (`ec_poll`, `src/css/select.c`, a hook of its own as the engine is built on its
-headers only), the layout every 256 boxes made or laid out (`doc_poll`, `src/layout`). The hooks
+now and then: the parser every 64 tags (`doc_poll`, `src/doc/html.c`), the CSS engine every
+32 elements (`ec_poll`, `src/css/select.c`, a hook of its own as the engine is built on its
+headers only), the layout every 16 boxes made or laid out (`doc_poll`, `src/layout`); every 256
+until 26 Oct 2026, when the stock machines showed a second and more between turns (Speed on the
+stock machines, below). The hooks
 are set only while `src/browse` builds a page (`build`); they are the pictures' poll
 (`gem_turn`): GEM's turn ten times a second (the window redrawn, moved, topped; Esc, Undo, Stop),
 and 0 once Esc has set `conn_stop`. Then the stage gives up as when out of memory (the parser's
@@ -3807,6 +3809,66 @@ code kept as it came, and without it, compiled here; `/site/forged.html`, a serv
 "compiled code" with its own `X-Gateway-Script`, not run, directly or through webgate);
 AERA-Gateway's `test_webgate.py` (`ScriptTest`: `/scripts`, the servers' `X-Gateway-` headers
 dropped).
+
+## Speed on the stock machines (26 Oct 2026)
+
+Erez's rule for the family (the guidelines' Speed): the stock machines set the speed, an 8 MHz ST
+and a stock Falcon, not the DFB1. `make hatarispeed` (`tests/hatari/speed.py`, on common's
+`tests/speed`) does the user's actions on each and reads the longest stretch between EWeb's event
+calls (`AESGAP`, from common's `gem.c` built with `AES_PROFILE=20` into `build/prof`), each named
+by what EWeb was doing (`gap_event`, `gap_tag`, `gap_stage` in `ui/`). The first round, on Erez's
+TOS (4.04 on the Falcon, 1.04 on the ST), before and after the fixes below (ms; the guidelines' time
+in brackets; a page's load is a long job, held to Esc's 100 ms):
+
+| action | Falcon-4:16 before | after | ST:mono before | after |
+|---|---|---|---|---|
+| the program started (2000) | 1080 | 435 | 4880 | 1715 |
+| the home page shown | 2375 | 855 | 13630 | 3550 |
+| the sample page loaded | 1505 | 545 | 10395 | 2680 |
+| the news page loaded | 1565 | 1665 | 8065 | 7095 |
+| a letter typed in the address (50) | 50 | 55 | 175 | 165 |
+| a line scrolled (50) | 30 | 35 | 115 | 115 |
+| a page scrolled (150) | 35 | 30 | 120 | 120 |
+| Settings opened (150) | 165 | 165 | 430 | 430 |
+| Settings closed: what it uncovers (300) | 430 | 150 | 5135 | 1085 |
+| the pictures' page loaded | 1230 | 1240 | 8920 | 2685 |
+
+Where the time went, and what changed:
+
+- **The planes.** TOS's VDI doesn't answer `vq_scrninfo` (NVDI's and EdDI's), so every band of the
+  page went through `vr_trnfm`, slow, and EWeb's own conversion stored each word through a
+  multiply. `ui/screen.c` now asks `vr_trnfm` once at the start what it makes of two words; when
+  they come back interleaved, as the Atari's own screens have them, EWeb makes them so itself, with
+  running pointers and a run of 16 pixels alike (most of a page) taken from the last such run's
+  words. On the Falcon a window's conversion went from about 900 to 310 ms.
+- **The shades.** On a screen of few colours a colour it hasn't got is a pattern (`cv_fill`'s
+  shade), and it was written a pixel at a time: on the ST in monochrome most of a page's drawing, 36
+  million cycles (4.5 s) of a start that showed the sample page. It is now a long (four pixels) at a
+  time (`fill_pattern`, `src/gfx/canvas.c`): the same pixels in 2, 4 and 16 colours, a page drawn in
+  2.6 s on the ST rather than 7.5.
+- **The start.** The window opened and showed the desktop inside it until the home page was
+  made, then was drawn white a band at a time, then the page (on Erez's Falcon, the video of
+  26 Oct, 8 s of the desktop in it). Its redraw is now handled before the first page is read, and
+  with no page yet it is a VDI fill, at once.
+- **The toolbar.** Its pictures were kept only beside TT RAM, so on a stock Falcon each draw
+  unpacked and converted every icon again, and a button under the mouse showed each step: cleared,
+  framed, a hole, then the icon (Erez's second video). Each button is now made whole in memory,
+  for each of its looks (as it is, greyed, raised and lit, sunk: `scr_button_dev`), kept (4 to 30
+  KB of ST RAM) and put on the screen in one copy; the toolbar's ground is filled around the
+  buttons, not under them.
+- **The polls.** The parser, the CSS engine and the layout gave GEM its turn every 256 tags,
+  elements or boxes, which on the stock machines was a second and more; now every 64, 32 and 16
+  (`gem_turn` itself waits 100 ms between turns).
+
+Still over, the next round, worst first: drawing a whole window on the stock Falcon (about 500 ms
+of a page shown: the canvas a byte a pixel, then planes, in bands of 32 rows for want of memory);
+the news page (84 KB and its 75 KB sheet) doesn't fit beside the 1.5 MB EWEB.PRG takes on a 4 MB
+machine, and its 1.3 s file read and 0.45 s of styling between turns; a picture decoded in one
+stretch (a 96 x 96 PNG takes 365 ms to decode and 360 to dither on the stock Falcon, the home
+page's globe among them, decoded at each start as `data:` pictures aren't kept); a letter typed
+on the ST (165 ms) and Settings opened (430). The start size (1.84 MB with the BSS and the stack)
+is the plan in the hub's message of 26 Oct: TLS into the family's `TLS.OVL`, WebP and SVG into an
+overlay of their own, the stack and the bigger static tables taken when needed.
 
 ## The design
 

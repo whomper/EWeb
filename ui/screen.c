@@ -193,13 +193,47 @@ int scr_exit(void)
 	return was;
 }
 
+/* the screen's format when the VDI doesn't say (vq_scrninfo is NVDI's
+   and EdDI's; TOS's VDI hasn't it): two words of standard planes put
+   through vr_trnfm; if they come back interleaved, as the Atari's own
+   screens have them, the planes are made that way here and vr_trnfm,
+   slow (most of a page's drawing on a stock Falcon), isn't needed */
+static short own_format(void)
+{
+	unsigned short std[16], dev[16];
+	MFDB src, dst;
+	short k, g;
+	if (planes > 8)
+		return -1;
+	memset(&src, 0, sizeof src);
+	for (k = 0; k < planes; k++)
+		for (g = 0; g < 2; g++)
+			std[k * 2 + g] = (unsigned short) (0x1357 * (k + 1) + 0x0f0f * g + 1);
+	memset(dev, 0, sizeof dev);
+	src.fd_addr = std;
+	src.fd_w = 32;
+	src.fd_h = 1;
+	src.fd_wdwidth = 2;
+	src.fd_stand = 1;
+	src.fd_nplanes = planes;
+	dst = src;
+	dst.fd_addr = dev;
+	dst.fd_stand = 0;
+	vr_trnfm(vdi_h, &src, &dst);
+	for (k = 0; k < planes; k++)
+		for (g = 0; g < 2; g++)
+			if (dev[g * planes + k] != std[k * 2 + g])
+				return -1;
+	return 0;
+}
+
 int scr_init(void)
 {
 	short *info = scr_info, have;
 
 	band_w = (scr_w + 15) & ~15L;
 	have = scr_have = vq_scrninfo(vdi_h, info);
-	format = have ? info[0] : -1;
+	format = have ? info[0] : own_format();
 	if (planes == 16) {
 		truecolour = 1;
 		/* NVDI on a card with the bytes the other way round (Intel) */
@@ -318,52 +352,56 @@ static int c2p_init(void)
 	return 1;
 }
 
-static unsigned long eight(const unsigned long t[8][256], const unsigned char *s)
+static inline __attribute__((always_inline)) unsigned long eight(const unsigned long t[8][256], const unsigned char *s)
 {
 	return t[0][s[0]] | t[1][s[1]] | t[2][s[2]] | t[3][s[3]] | t[4][s[4]] | t[5][s[5]] | t[6][s[6]] | t[7][s[7]];
 }
 
-/* the chunky rows (h of them) as planes: interleaved (the screen's own
-   format, into dev_buf: each 16 pixels' words plane after plane), or
-   standard (into std_buf: plane after plane, for vr_trnfm) */
 /* chunky's h rows (words * 16 pixels each) as planes: the screen's own
-   (interleaved) in dev_buf, or the standard ones in std_buf */
+   (interleaved) in dev_buf, or the standard ones in std_buf. Stores go
+   through running pointers (an index times the planes was a multiply a
+   word, most of the time on a stock Falcon), and a run of 16 pixels
+   alike (most of a page is its background) takes its planes' words from
+   the last such run's when it is the same colour */
 static void to_planes(short h, long words, int interleaved)
 {
+	const short np = planes;
 	long plane = words * h, r, g;
 	short k;
+	unsigned last = 0x100;
+	unsigned short fill[8], w[8];
 	for (r = 0; r < h; r++) {
 		const unsigned char *src = chunky + r * words * 16;
-		unsigned short *row = interleaved ? dev_buf + r * words * planes : std_buf + r * words;
+		unsigned short *out = interleaved ? dev_buf + r * words * np : std_buf + r * words;
 		for (g = 0; g < words; g++, src += 16) {
 			const unsigned long *q = (const unsigned long *) (const void *) src;
-			unsigned long a, b, c = 0, d = 0;
-			unsigned short w[8];
-			if (q[0] == q[1] && q[0] == q[2] && q[0] == q[3] && (q[0] >> 8) == (q[0] & 0xffffffUL)) {
-				/* 16 pixels alike (most of a page is its background):
-				   each plane all set or all clear */
-				unsigned v = (unsigned) (q[0] & 0xff);
-				for (k = 0; k < planes; k++)
-					w[k] = (unsigned short) (v >> k & 1 ? 0xffff : 0);
-				goto put;
-			}
-			a = eight(c2p_lo, src);
-			b = eight(c2p_lo, src + 8);
-			if (planes > 4) {
-				c = eight(c2p_hi, src);
-				d = eight(c2p_hi, src + 8);
-			}
-			for (k = 0; k < 4 && k < planes; k++)
-				w[k] = (unsigned short) ((a >> (8 * (3 - k)) & 0xff) << 8 | (b >> (8 * (3 - k)) & 0xff));
-			for (; k < planes; k++)
-				w[k] = (unsigned short) ((c >> (8 * (7 - k)) & 0xff) << 8 | (d >> (8 * (7 - k)) & 0xff));
-put:
-			if (interleaved) {
-				for (k = 0; k < planes; k++)
-					row[g * planes + k] = w[k];
+			const unsigned short *from = w;
+			unsigned long q0 = q[0];
+			if (q0 == q[1] && q0 == q[2] && q0 == q[3] && (q0 >> 8) == (q0 & 0xffffffUL)) {
+				unsigned v = (unsigned) (q0 & 0xff);
+				if (v != last) {
+					for (k = 0; k < np; k++)
+						fill[k] = (unsigned short) (v >> k & 1 ? 0xffff : 0);
+					last = v;
+				}
+				from = fill;
 			} else {
-				for (k = 0; k < planes; k++)
-					row[k * plane + g] = w[k];
+				unsigned long a = eight(c2p_lo, src), b = eight(c2p_lo, src + 8);
+				for (k = 0; k < 4 && k < np; k++)
+					w[k] = (unsigned short) ((a >> (8 * (3 - k)) & 0xff) << 8 | (b >> (8 * (3 - k)) & 0xff));
+				if (np > 4) {
+					unsigned long c = eight(c2p_hi, src), d = eight(c2p_hi, src + 8);
+					for (; k < np; k++)
+						w[k] = (unsigned short) ((c >> (8 * (7 - k)) & 0xff) << 8 | (d >> (8 * (7 - k)) & 0xff));
+				}
+			}
+			if (interleaved) {
+				for (k = 0; k < np; k++)
+					*out++ = from[k];
+			} else {
+				unsigned short *o = out++;
+				for (k = 0; k < np; k++, o += plane)
+					*o = from[k];
 			}
 		}
 	}
@@ -581,6 +619,60 @@ void scr_holes(const unsigned char *pix, const unsigned long *col, short n, shor
 			blit(dev_buf, m, words, sx, part->w, part->x, part->y + y0, k ? 4 : 7);
 		}
 	}
+}
+
+/* VDI colour i as the canvas has it: its pixel value, or in true colour
+   its 5-6-5 pixel */
+static unsigned short vdi_px(short i)
+{
+	if (truecolour) {
+		short rgb[3];
+		vq_color(vdi_h, i, rgb);
+		return (unsigned short) ((from1000(rgb[0]) >> 3) << 11 | (from1000(rgb[1]) >> 2) << 5 |
+					 from1000(rgb[2]) >> 3);
+	}
+	return (unsigned short) (scr_have ? scr_info[16 + i] & (ncol - 1) : std_pixel(i));
+}
+
+int scr_button_dev(short w, short h, short bg, const SCR_LINE *ln, short nl, const unsigned char *pix,
+		   const unsigned long *col, short n, short pw, short ph, short ix, short iy, void *dev)
+{
+	unsigned short map[256], ground = vdi_px(bg), lc[8];
+	long words = (w + 15) / 16, row = words * 2 * planes;
+	short y0, r, x, k;
+	if (words * 16 > band_w || nl > 8)
+		return 0;
+	rgb_map(map, col, n);
+	for (k = 0; k < nl; k++)
+		lc[k] = vdi_px(ln[k].col);
+	for (y0 = 0; y0 < h; y0 += rows) {
+		short m = h - y0 > rows ? rows : h - y0;
+		for (r = 0; r < m; r++) {
+			short y = y0 + r;
+			unsigned short *d16 = dev_buf + r * words * 16;
+			unsigned char *d8 = chunky + r * words * 16;
+#define PUT(xx, v) (truecolour ? (void) (d16[xx] = (v)) : (void) (d8[xx] = (unsigned char) (v)))
+			for (x = 0; x < words * 16; x++)
+				PUT(x, ground);
+			if (y >= iy && y < iy + ph) {
+				const unsigned char *s = pix + (long) (y - iy) * pw;
+				for (x = 0; x < pw; x++)
+					if (s[x] && ix + x >= 0 && ix + x < w)
+						PUT(ix + x, map[s[x]]);
+			}
+			for (k = 0; k < nl; k++) {
+				const SCR_LINE *l = &ln[k];
+				if (y >= l->y0 && y <= l->y1)
+					for (x = l->x0; x <= l->x1; x++)
+						if (x >= 0 && x < w)
+							PUT(x, lc[k]);
+			}
+#undef PUT
+		}
+		make(m, words);
+		memcpy((char *) dev + y0 * row, dev_buf, (size_t) (m * row));
+	}
+	return 1;
 }
 
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)

@@ -20,6 +20,12 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   When a change touches one of these, do it the guideline's way, even if the old code here did it
   differently.
+- **Speed is set by the stock machines** (Erez, 26 Oct 2026; the guidelines' "Speed"): an 8 MHz ST
+  and a stock Falcon (`ST`, `ST-1`, `Falcon-4`), not the DFB1. Design and code for them: draw only
+  what changed, keep the 68000's slow operations out of inner loops, do work once. A change to
+  drawing, a loop over the data or the start gives its `AESGAP` stretches on `ST` and `Falcon-4`,
+  before and after, in its commit message. A GEM release passes the speed rig within the
+  guidelines' times.
 - **Shared code lives in [AERA-Atari](https://github.com/whomper/AERA-Atari).** Files under `common/` come from it. Change them
   there, not here, and pull them in with `tools/sync-common.sh`. A fix made only in this repo will drift
   again.
@@ -99,6 +105,12 @@ hub stay complete, with the evidence.
   `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times a picture decoded
   and dithered as EWeb does it: `PICBENCH.TTP` (as `EWEB.PRG`, on the 68030 and with the DSP) on
   the Falcon, `PICBST.TTP` (as `EWEBST.PRG`) on the cycle-exact 8 MHz ST.
+  **The stock machines' speed** (the bullet above): `make hatarispeed` (`tests/hatari/speed.py` on
+  common's `tests/speed`) does the user's actions on the stock Falcon (`Falcon-4:16`, `--nvdi` under
+  Erez's NVDI) and the 8 MHz ST (`ST:mono`) and prints each one's longest stretch between event
+  calls against the guidelines' time, from `build/prof`'s `EWEB.PRG` and `EWEBST.PRG` (common's
+  `gem.c` with `AES_PROFILE=20`; `--prg DIR` times another build, the one before a change). Its
+  `AESGAP` lines in the Hatari log name each stretch (`gap_event`, `gap_tag`, `gap_stage` in `ui/`).
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and

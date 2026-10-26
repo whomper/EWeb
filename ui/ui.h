@@ -106,6 +106,13 @@ extern ewin *cur;		/* the window worked on: the one in front, or the one a page 
 extern int loading;		/* a page is on its way: Esc and Stop stop it */
 /* what happened, for the Hatari rigs (main.c): an "EWEB ..." line through NatFeats */
 void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+/* the speed rig's names for the stretches between event calls (main.c;
+   the profile build's AESGAP lines, make build/prof/EWEB.PRG): each
+   stretch is named after the event that began it (gap_event), unless it
+   drew the window (gap_tag) or a page's making went on in it (gap_stage) */
+void gap_event(const char *what);
+void gap_tag(const char *what);
+void gap_stage(const char *what);
 
 /* drawing (draw.c): the window's parts, menus and dialogs, in the system
    font (what common/ui's About box, alerts and pop-ups take, gemui.h) */
@@ -160,6 +167,16 @@ void scr_holes(const unsigned char *pix, const unsigned long *col, short n, shor
 	       const GRECT *part);
 int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, short w, short h, void *dev);
 void scr_blit_holes(void *dev, short w, short h, const GRECT *at, const GRECT *part);
+/* a toolbar button whole, made in the screen's own form at dev
+   (scr_dev_size(w, h)): its ground in VDI colour bg, its frame's lines
+   (each straight across or down, in a VDI colour, drawn in order), its
+   picture (pw x ph, colour 0 a hole showing the ground) at ix, iy; put
+   on the screen with scr_blit_dev, in one go */
+typedef struct {
+	short x0, y0, x1, y1, col;
+} SCR_LINE;
+int scr_button_dev(short w, short h, short bg, const SCR_LINE *ln, short nl, const unsigned char *pix,
+		   const unsigned long *col, short n, short pw, short ph, short ix, short iy, void *dev);
 
 /* the windows (win.c): each function works on cur */
 extern ewin *wins;			/* all of them, the newest first */

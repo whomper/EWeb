@@ -620,6 +620,34 @@ void log_event(const char *fmt, ...)
 	nf_debug(buf);
 }
 
+/* gem.c's, in the profile build only (common's gem.c with AES_PROFILE:
+   make build/prof/EWEB.PRG); this one, doing nothing, in the others */
+#undef aes_profile_tag
+void aes_profile_tag(const char *tag);
+__attribute__((weak)) void aes_profile_tag(const char *tag)
+{
+	(void) tag;
+}
+
+static const char *gap_last;
+
+void gap_event(const char *what)
+{
+	gap_last = NULL;
+	aes_profile_tag(what);
+}
+
+void gap_tag(const char *what)
+{
+	aes_profile_tag(gap_last = what);
+}
+
+void gap_stage(const char *what)
+{
+	if (gap_last == NULL)
+		aes_profile_tag(what);
+}
+
 /* the memory, for the rigs' log: the heap's blocks in use, the most
    they were, and the RAM TOS has left (the largest block) */
 static long ram_free(void)
@@ -769,7 +797,11 @@ static void idle(void)
 {
 	short msg[8], which;
 	AEVENT ev;
+	gap_stage(br_building == BRB_PARSE ? "parse" : br_building == BRB_STYLE ? "style" :
+		  br_building == BRB_LAYOUT ? "layout" : br_building == BRB_SCRIPT ? "script" :
+		  pics ? "pictures" : "load");
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
+	gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" : "load");
 	win_throb(1);
 	if (pics) {
 		/* the page's refresh to another page is due: the picture is
@@ -2219,6 +2251,17 @@ int main(void)
 	log_event("ready %s %dx%d buf %d heap %ld free %ld", scr_mode(), scr_w, scr_h, scr_rows(), heap_use,
 		  ram_free());
 	log_event("box bars %d wide, arrows %d, across %d high", pb_width(), pb_arrow_h(), pb_height());	/* (for the rigs) */
+	{
+		/* the window drawn whole before the first page is read: its
+		   redraw handled now, not when the page's making first lets
+		   GEM in (on a stock Falcon the desktop showed in it for 8 s,
+		   Erez, 26 Oct 2026) */
+		short msg[8];
+		AEVENT ev;
+		int n = 0;
+		while (n++ < 8 && (evnt_multi_(MU_MESAG | MU_TIMER, 1, 1, 1, 0, msg, &ev) & MU_MESAG))
+			handle(MU_MESAG, msg, &ev, &hover_x, &hover_y);
+	}
 	command_line(first, sizeof first);
 	if (first[0])
 		go(first);
@@ -2242,6 +2285,8 @@ int main(void)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 || rib ? MU_TIMER : 0),
 				    0x102, 3, 0, wait, msg, &ev);
+		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
+			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {

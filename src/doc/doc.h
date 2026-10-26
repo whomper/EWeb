@@ -119,8 +119,8 @@ struct html_opts;
 doc *doc_parse_opts(const char *data, size_t len, const struct html_opts *o, const ec_media *media);
 void doc_free(doc *d);
 
-/* asked now and then while a page is made, when set: every 256 tags the
-   parser reads (DOC_POLL_PARSE) and every 256 boxes the layout makes or
+/* asked now and then while a page is made, when set: every 64 tags the
+   parser reads (DOC_POLL_PARSE) and every 16 boxes the layout makes or
    lays out (DOC_POLL_LAYOUT; ecss.h's ec_poll while it is styled). 0
    stops it, given up as when out of memory (Esc, while the program's
    window is kept alive meanwhile) */
