@@ -1309,11 +1309,13 @@ def st():
             r.key(RETURN)
             ev = r.wait(r"pictures ", 1200)
             dec = [e for e in r.events() if " decoded at " in e]
-            # the 800x600 PNG takes 1.9 MB decoded: more than a 4 MB ST
-            # gives pictures (a sixteenth of its RAM), so it says so
-            big = [e for e in r.events() if "big.png not enough memory" in e]
-            check("st: %s pictures (the big one too big for the memory)" % name,
-                  ev is not None and len(dec) == 4 and len(big) == 1, "\n".join(r.events()[-10:]))
+            # the 800x600 PNG: since its rows are unpacked one at a time
+            # (common's png.c, 26 Oct) it needs no buffer its size, and a
+            # 4 MB ST shows it too, in slices (about 100 s in monochrome,
+            # the page usable meanwhile)
+            big = [e for e in r.events() if "big.png decoded at " in e]
+            check("st: %s pictures (the big one too)" % name,
+                  ev is not None and len(dec) == 5 and len(big) == 1, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
             # translucent colours and opacity as the ST edition's 68000

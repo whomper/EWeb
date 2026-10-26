@@ -3905,7 +3905,9 @@ A Direct connection's first secure page now loads `TLS.OVL` first: 25 ms on the 
 a turn every 16 rows: no picture holds the machine for its whole decode. An opaque PNG's rows go to
 the solid rows' sums as a JPEG's do, and the filters and the inflate are faster. `img.c` takes a
 dither stopped at a turn as pens not made yet (made when the picture is drawn), and the dither a
-redraw needs takes no turn. Cycle-exact in Hatari (`tests/bench/picbench.py`), decode in ms:
+redraw needs takes no turn. With no buffer the picture's size to unpack it into, a 4 MB ST now
+shows the test pages' 800 x 600 PNG it had to refuse (about 100 s in monochrome, in slices, the
+page usable meanwhile). Cycle-exact in Hatari (`tests/bench/picbench.py`), decode in ms:
 
 | Picture | Falcon-4:256, before / after | ST:mono, before / after |
 |---|---|---|
