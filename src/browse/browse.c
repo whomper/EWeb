@@ -1689,6 +1689,8 @@ static int lay_recheck;
 /* (a url() of the page's CSS: its query in UTF-8, as an external
    sheet's, which the CSS engine has made absolute already; an <img>'s in
    the page's encoding) */
+static char *data_url(const char *url, long *len);
+
 static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h)
 {
 	browser *b = ud;
@@ -1705,6 +1707,14 @@ static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h
 		return NULL;
 	if (lay_recheck)
 		img_recheck(im);
+	if (has_scheme(url, "data") && img_state(im) != IMG_HERE && img_state(im) != IMG_FAILED) {
+		/* its bytes are in its address: here now, so that the page is
+		   laid out with its size (not laid out again when it comes) */
+		long len = 0;
+		char *data = data_url(url, &len);
+		if (data != NULL)
+			img_set_file(im, data, len);
+	}
 	img_size(im, w, h);
 	return im;
 }

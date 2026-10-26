@@ -3994,7 +3994,9 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	d->type = DL_IMAGE;
 	d->img = h;
 	d->rgb = (uint32_t) l->alpha << 24;	/* its box's opacity */
-	d->flags = DLF_TILE | DLF_NOSIZE | DLF_ALT;
+	/* its size not known yet: placed again when it is (a known one,
+	   a data: picture's or one already here, needs no new layout) */
+	d->flags = DLF_TILE | (iw > 0 && ih > 0 ? 0 : DLF_NOSIZE | DLF_ALT);
 	d->x = iw;
 	d->y = ih;
 #ifndef EW_ST
