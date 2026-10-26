@@ -59,8 +59,10 @@ BUDGET = {
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
     # the first ever: CACERT.PEM (read twice: no ROOTS.DAT yet), ROOTS.DAT
-    # (tried first) and SEED.DAT made (the release brings a ROOTS.DAT)
-    "first secure page": (4, 2, 3),
+    # (tried first) and SEED.DAT made (the release brings a ROOTS.DAT);
+    # SIGS.DAT, the server signatures already checked (common's tls.c since
+    # EWeb 0.40), looked for, read and made in a safe save
+    "first secure page": (5, 3, 4),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
@@ -70,8 +72,8 @@ BUDGET = {
     "quit": (1, 5, 0),
     "start again": (4, 0, 0),
     # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
-    # then written over; the cache's index
-    "secure page again": (6, 0, 1),
+    # then written over; the cache's index; SIGS.DAT read (since 0.40)
+    "secure page again": (7, 0, 1),
     "quit again": (0, 1, 0),        # the cookies as they were; HISTORY.TXT (a page shown)
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
