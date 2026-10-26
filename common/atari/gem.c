@@ -829,6 +829,16 @@ void vst_height(short h, short height, short *cw_, short *ch_)
 	*ch_ = ptsout[3];
 }
 
+void vqt_attributes(short h, short *a)
+{
+	short i;
+	vdi(38, 0, 0, h);
+	for (i = 0; i < 6; i++)
+		a[i] = vintout[i];
+	for (i = 0; i < 4; i++)
+		a[6 + i] = ptsout[i];
+}
+
 void vs_color(short h, short index, const short *rgb)
 {
 	vintin[0] = index;
