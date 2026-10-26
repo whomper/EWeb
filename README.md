@@ -210,7 +210,11 @@ sudo apt install -y git &&
   View > Through the Pi's browser and View > Live view): it installs
   Chromium and needs a Pi with 2 GB or more.
 - `install web` also builds `aerapens` (the pictures for the Atari's screen;
-  AERA-Gateway 1.6 and later), installing `gcc` and `make` if they're missing.
+  AERA-Gateway 1.6 and later), installing `gcc` and `make` if they're missing,
+  and, once AERA-Gateway has it, `aerajsc`, which compiles pages' scripts for
+  EWeb (EWeb 0.41 and later). EWeb runs compiled scripts only from its own cache
+  or from the Pi, trusting the Pi as it trusts your home network: anyone who can
+  answer for the Pi there could also hand EWeb a script.
 - To update: `cd ~/AERA-Gateway && ./update-pi.sh`. To check:
   `sudo aera-gateway status`, or `http://PI_IP:8280/` from a browser that
   doesn't go through the gateway.

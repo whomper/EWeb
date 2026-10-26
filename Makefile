@@ -461,7 +461,12 @@ build/asan/pic.a: $(HOSTPIC_SRC) $(HOSTPIC_3P) $(NET_HDRS)
 # edition and formtest have js_none.c.
 QJS      := third_party/quickjs
 QJS_C    := quickjs libregexp libunicode cutils dtoa
-QJS_DEF  := -DCONFIG_EWEB -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\"
+# (QuickJS's sources summed into its bytecode's tag, as tools/jsc/Makefile
+# sums them for the Pi's aerajsc: any change to them, a patch's too, is
+# bytecode kept before not read again)
+QJS_SRCS := $(sort $(wildcard $(QJS)/*.c $(QJS)/*.h))
+QJS_SUM  := $(shell cat $(QJS_SRCS) | sha256sum | cut -c1-8)
+QJS_DEF  := -DCONFIG_EWEB -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -DCONFIG_EWEB_SUM=\"$(QJS_SUM)\"
 QJS_HDRS := $(wildcard $(QJS)/*.h)
 LIBM     := third_party/libm
 LIBM_C   := $(basename $(notdir $(wildcard $(LIBM)/src/*.c)))
@@ -472,6 +477,7 @@ host_JS  := build/host/js/js.o $(addprefix build/host/qjs/,$(addsuffix .o,$(QJS_
 build/host/aerajsc: tools/jsc/aerajsc.c $(addprefix build/host/qjs/,$(addsuffix .o,$(QJS_C)))
 	$(HOSTCC) -O2 -std=gnu99 -Wall -Wextra -Wno-unused-parameter -Werror -I$(QJS) -o $@ $^ -lm
 asan_JS  := build/asan/js/js.o $(addprefix build/asan/qjs/,$(addsuffix .o,$(QJS_C)))
+build/host/qjs/quickjs.o build/asan/qjs/quickjs.o build/tos/qjs/quickjs.o build/m68k/qjs/quickjs.o: $(QJS_SRCS)
 build/host/qjs/%.o: $(QJS)/%.c $(QJS_HDRS)
 	@mkdir -p $(@D)
 	$(HOSTCC) -O2 -g -std=gnu99 -DNDEBUG $(QJS_DEF) -w -c $< -o $@
@@ -865,7 +871,9 @@ hatarifiles: binary/EWEB.PRG binary/EWEB.FNT binary/EWGET.TTP
 # against servers on this computer: plain, TLS, redirects, refused certificates
 # the Pi's compiled scripts on the 68030 (QEMU): the same bytes, the same run
 bc68k: build/host/aerajsc build/m68k/jsbench build/host/ewrender binary/EWEB.FNT
-	python3 tests/js/bc68k.py build/host/aerajsc build/m68k/jsbench build/host/ewrender binary/EWEB.FNT
+	$(MAKE) -s -C tools/jsc
+	python3 tests/js/bc68k.py build/host/aerajsc build/m68k/jsbench build/host/ewrender binary/EWEB.FNT \
+		tools/jsc/build/aerajsc
 .PHONY: bc68k
 
 itest: build/asan/ewget build/asan/ewrender build/asanst/ewrender binary/EWEB.FNT build/host/aerajsc

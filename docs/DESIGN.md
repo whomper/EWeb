@@ -3780,7 +3780,16 @@ read back; jQuery UI, 509 KB: 232 and 7.0 million), so a page of them comes in a
   other answer of that type is kept as `application/octet-stream`, and its bytes are read as a
   script's source (a SyntaxError). A webgate that answers `/scripts` drops the servers' own
   `X-Gateway-` headers; an older one (1.10 and before) passes them on, so it is never asked
-  for compiled scripts and never believed.
+  for compiled scripts and never believed. Direct mode takes no compiled code from the network
+  at all, only its own. The link to webgate is plain HTTP on the home network (the guidelines'
+  7.3), so whoever can answer for webgate there can hand EWeb compiled code: the same trust
+  EWeb already gives the Pi for pages and pens.
+- **Code kept by another build isn't read**: the tag ends with the sum of QuickJS's sources
+  (`CONFIG_EWEB_SUM`, made by the Makefile and by `tools/jsc/Makefile` alike), and the cache's
+  keys (EWeb's own and the Pi's answers') carry the tag; EWeb's own are also keyed by the
+  script's source (its two sums and length), so a script that changed is compiled again. A new
+  QuickJS, a new patch or a changed file there is a new tag, and what was kept before isn't
+  looked for (`make bc68k` checks that tools/jsc's aerajsc has EWeb's tag and bytes).
 - **Measured** (`build/m68k/jsbench -k DIR`, `tools/count68k.sh`; webdriveruniversity.com's
   Popup page: jQuery, Bootstrap and jQuery UI, 678 KB): 356 million 68030 instructions before
   (about 70 s on the DFB1), 299 million the first time in Direct mode (compiled without line

@@ -8,7 +8,10 @@ be the very same bytes (bytecode and regular expressions big-endian on
 both: third_party/quickjs/patches/...-0002); then the 68030 runs the
 Pi's code and says what the host's run says.
 
-    tests/js/bc68k.py AERAJSC JSBENCH68K EWRENDER EWEB.FNT"""
+And with a second AERAJSC (tools/jsc's own build, as AERA-Gateway's jsc/
+builds it on the Pi): its tag and its bytecode are the same as EWeb's.
+
+    tests/js/bc68k.py AERAJSC JSBENCH68K EWRENDER EWEB.FNT [AERAJSC2]"""
 import os
 import re
 import shutil
@@ -28,6 +31,12 @@ def main():
         src = open(os.path.join(HERE, "kept", "lib.js"), "rb").read()
         r = subprocess.run([jsc], input=b"EWJQ\1" + len(src).to_bytes(4, "big") + src, capture_output=True)
         pi = r.stdout.partition(b"\n")[2]
+        if len(sys.argv) > 5:
+            r2 = subprocess.run([sys.argv[5]], input=b"EWJQ\1" + len(src).to_bytes(4, "big") + src,
+                                capture_output=True)
+            if r2.stdout != r.stdout or not pi.startswith(b"EWQJS "):
+                bad += 1
+                print("bc68k: FAIL tools/jsc's aerajsc isn't EWeb's: %r and %r" % (r2.stdout[:60], r.stdout[:60]))
         # the 68030's own, kept by jsbench -k
         keep = os.path.join(work, "keep")
         os.mkdir(keep)

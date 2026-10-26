@@ -37910,14 +37910,20 @@ static inline BOOL bc_swap(void)
 }
 
 /* EWeb: what bytecode this build writes and reads: the version, the
-   format's, and how many atoms and opcodes it has, so that bytecode made
-   by another build of the same sources (the Pi's) is known to fit */
+   format's, how many atoms and opcodes it has, its byte order and its
+   sources' sum (CONFIG_EWEB_SUM, the build's), so that bytecode made by
+   another build of the same sources (the Pi's) is known to fit, and
+   bytecode kept by a build of others is never read */
+#ifndef CONFIG_EWEB_SUM
+#define CONFIG_EWEB_SUM ""
+#endif
 const char *JS_GetBytecodeTag(void)
 {
-    static char tag[64];
+    static char tag[80];
     if (!tag[0])
-        snprintf(tag, sizeof(tag), "%s.%d.%d.%d%s", CONFIG_VERSION, BC_VERSION,
-                 (int)JS_ATOM_END, (int)OP_COUNT, bc_swap() == is_be() ? "le" : "be");
+        snprintf(tag, sizeof(tag), "%s.%d.%d.%d%s%s%s", CONFIG_VERSION, BC_VERSION,
+                 (int)JS_ATOM_END, (int)OP_COUNT, bc_swap() == is_be() ? "le" : "be",
+                 CONFIG_EWEB_SUM[0] ? "." : "", CONFIG_EWEB_SUM);
     return tag;
 }
 

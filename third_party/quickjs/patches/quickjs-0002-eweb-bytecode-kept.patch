@@ -9,8 +9,10 @@ compiles scripts for it, so that the 68030 reads them instead of
 compiling them:
 
 - JS_GetBytecodeTag: what bytecode this build writes and reads (the
-  version, the format's, its atoms and opcodes, its byte order), so
-  that bytecode from another build is known to fit;
+  version, the format's, its atoms and opcodes, its byte order and the
+  sum of its sources, CONFIG_EWEB_SUM, which EWeb's Makefile makes), so
+  that bytecode from another build is known to fit, and bytecode kept
+  by a build of other sources is never read;
 - with CONFIG_EWEB the bytecode is big-endian on every machine (the
   68030's order, so it reads it as it is), and so is a regular
   expression's, a string in the script's constants that upstream keeps
@@ -82,7 +84,7 @@ index b231e9534..085dc6bf3 100644
                  goto fail;
              }
 diff --git a/quickjs.c b/quickjs.c
-index f863e1cc7..ea533d047 100644
+index f863e1cc7..e40d679ed 100644
 --- a/quickjs.c
 +++ b/quickjs.c
 @@ -32,6 +32,9 @@
@@ -141,7 +143,7 @@ index f863e1cc7..ea533d047 100644
  typedef struct BCWriterState {
      JSContext *ctx;
      DynBuf dbuf;
-@@ -37876,6 +37897,30 @@ static inline BOOL is_be(void)
+@@ -37876,6 +37897,36 @@ static inline BOOL is_be(void)
      return u.b;
  }
  
@@ -158,21 +160,27 @@ index f863e1cc7..ea533d047 100644
 +}
 +
 +/* EWeb: what bytecode this build writes and reads: the version, the
-+   format's, and how many atoms and opcodes it has, so that bytecode made
-+   by another build of the same sources (the Pi's) is known to fit */
++   format's, how many atoms and opcodes it has, its byte order and its
++   sources' sum (CONFIG_EWEB_SUM, the build's), so that bytecode made by
++   another build of the same sources (the Pi's) is known to fit, and
++   bytecode kept by a build of others is never read */
++#ifndef CONFIG_EWEB_SUM
++#define CONFIG_EWEB_SUM ""
++#endif
 +const char *JS_GetBytecodeTag(void)
 +{
-+    static char tag[64];
++    static char tag[80];
 +    if (!tag[0])
-+        snprintf(tag, sizeof(tag), "%s.%d.%d.%d%s", CONFIG_VERSION, BC_VERSION,
-+                 (int)JS_ATOM_END, (int)OP_COUNT, bc_swap() == is_be() ? "le" : "be");
++        snprintf(tag, sizeof(tag), "%s.%d.%d.%d%s%s%s", CONFIG_VERSION, BC_VERSION,
++                 (int)JS_ATOM_END, (int)OP_COUNT, bc_swap() == is_be() ? "le" : "be",
++                 CONFIG_EWEB_SUM[0] ? "." : "", CONFIG_EWEB_SUM);
 +    return tag;
 +}
 +
  static void bc_put_u8(BCWriterState *s, uint8_t v)
  {
      dbuf_putc(&s->dbuf, v);
-@@ -37883,21 +37928,21 @@ static void bc_put_u8(BCWriterState *s, uint8_t v)
+@@ -37883,21 +37934,21 @@ static void bc_put_u8(BCWriterState *s, uint8_t v)
  
  static void bc_put_u16(BCWriterState *s, uint16_t v)
  {
@@ -197,7 +205,7 @@ index f863e1cc7..ea533d047 100644
          v = bswap64(v);
      dbuf_put(&s->dbuf, (uint8_t *)&v, sizeof(v));
  }
-@@ -38067,7 +38112,7 @@ static int JS_WriteFunctionBytecode(BCWriterState *s,
+@@ -38067,7 +38118,7 @@ static int JS_WriteFunctionBytecode(BCWriterState *s,
          pos += len;
      }
  
@@ -206,7 +214,7 @@ index f863e1cc7..ea533d047 100644
          bc_byte_swap(bc_buf, bc_len);
  
      dbuf_put(&s->dbuf, bc_buf, bc_len);
-@@ -38759,7 +38804,7 @@ static int bc_get_u16(BCReaderState *s, uint16_t *pval)
+@@ -38759,7 +38810,7 @@ static int bc_get_u16(BCReaderState *s, uint16_t *pval)
          return bc_read_error_end(s);
      }
      v = get_u16(s->ptr);
@@ -215,7 +223,7 @@ index f863e1cc7..ea533d047 100644
          v = bswap16(v);
      *pval = v;
      s->ptr += 2;
-@@ -38774,7 +38819,7 @@ static __maybe_unused int bc_get_u32(BCReaderState *s, uint32_t *pval)
+@@ -38774,7 +38825,7 @@ static __maybe_unused int bc_get_u32(BCReaderState *s, uint32_t *pval)
          return bc_read_error_end(s);
      }
      v = get_u32(s->ptr);
@@ -224,7 +232,7 @@ index f863e1cc7..ea533d047 100644
          v = bswap32(v);
      *pval = v;
      s->ptr += 4;
-@@ -38789,7 +38834,7 @@ static int bc_get_u64(BCReaderState *s, uint64_t *pval)
+@@ -38789,7 +38840,7 @@ static int bc_get_u64(BCReaderState *s, uint64_t *pval)
          return bc_read_error_end(s);
      }
      v = get_u64(s->ptr);
@@ -233,7 +241,7 @@ index f863e1cc7..ea533d047 100644
          v = bswap64(v);
      *pval = v;
      s->ptr += 8;
-@@ -38908,7 +38953,7 @@ static JSString *JS_ReadString(BCReaderState *s)
+@@ -38908,7 +38959,7 @@ static JSString *JS_ReadString(BCReaderState *s)
      memcpy(p->u.str8, s->ptr, size);
      s->ptr += size;
      if (is_wide_char) {
@@ -242,7 +250,7 @@ index f863e1cc7..ea533d047 100644
              uint32_t i;
              for (i = 0; i < len; i++)
                  p->u.str16[i] = bswap16(p->u.str16[i]);
-@@ -38952,7 +38997,7 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
+@@ -38952,7 +39003,7 @@ static int JS_ReadFunctionBytecode(BCReaderState *s, JSFunctionBytecode *b,
      }
      b->byte_code_buf = bc_buf;
  

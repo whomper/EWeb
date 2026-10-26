@@ -14,11 +14,15 @@ CC     ?= cc
 QJS    ?= ../../third_party/quickjs
 QJS_C  := quickjs libregexp libunicode cutils dtoa
 CFLAGS ?= -O2
-DEF    := -DCONFIG_EWEB -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\"
+# (QuickJS's sources summed into its bytecode's tag, as EWeb's Makefile does)
+SRCS   := $(sort $(wildcard $(QJS)/*.c $(QJS)/*.h))
+SUM    := $(shell cat $(SRCS) | sha256sum | cut -c1-8)
+DEF    := -DCONFIG_EWEB -DCONFIG_VERSION=\"$(shell cat $(QJS)/VERSION)\" -DCONFIG_EWEB_SUM=\"$(SUM)\"
 OBJ    := $(addprefix build/,$(addsuffix .o,$(QJS_C)))
 
 build/aerajsc: aerajsc.c $(OBJ)
 	$(CC) $(CFLAGS) -std=gnu99 -Wall -Wextra -Wno-unused-parameter -I$(QJS) -o $@ $^ -lm
+build/quickjs.o: $(SRCS)
 build/%.o: $(QJS)/%.c $(wildcard $(QJS)/*.h)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -std=gnu99 $(DEF) -w -c $< -o $@
