@@ -631,15 +631,6 @@ void log_event(const char *fmt, ...)
 	nf_debug(buf);
 }
 
-/* gem.c's, in the profile build only (common's gem.c with AES_PROFILE:
-   make build/prof/EWEB.PRG); this one, doing nothing, in the others */
-#undef aes_profile_tag
-void aes_profile_tag(const char *tag);
-__attribute__((weak)) void aes_profile_tag(const char *tag)
-{
-	(void) tag;
-}
-
 static const char *gap_last;
 
 void gap_event(const char *what)
@@ -2326,6 +2317,15 @@ int main(void)
 	}
 
 	log_event("quit");
+	{
+		/* where this machine waited longest (gem.c keeps the four
+		   longest stretches between event calls; the guidelines' Speed) */
+		const char *slow = aes_slowest();
+		char line[200];
+		snprintf(line, sizeof line, "the slowest: %s", slow[0] ? slow : "none");
+		conn_log("EWeb", " -- ", line, (long) strlen(line));
+		log_event("%s", line);
+	}
 	graf_mouse(BUSYBEE, 0);
 	http_close_all();
 	{

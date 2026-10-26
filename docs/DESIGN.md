@@ -3859,6 +3859,15 @@ Where the time went, and what changed:
 - **The menus.** `menu_update` runs after every key and click and set each of its 45 entries
   through the AES whether it had changed or not: most of a letter typed or a line scrolled on the
   ST. It now asks the AES only for what changed (`menu_set`).
+- **The family's rules of the same day** (the guidelines' Speed > How, common at 0879983): the
+  window's work area is put on a multiple of 8 across as it opens, moves, is sized or fulled
+  (`wind_x8`), and the address's and the status line's text start on a byte (text off one costs
+  TOS 1.04 seven times as much); dialogs, popups and the About box put back what they covered
+  (common's `dlg_under`), with no redraw of the page under them, and what a dialog changes
+  (Settings: text size, pictures, colours) EWeb draws again itself, as before; the four longest
+  stretches go to the log at quit (`aes_slowest`, "the slowest: ..."). EWeb's own lists
+  (bookmarks, the history) are pages, not GEM rows, so the rule of a row's state by a mark and
+  blue is for their CSS, which has no bold rows.
 - **The polls.** The parser, the CSS engine and the layout gave GEM its turn every 256 tags,
   elements or boxes, which on the stock machines was a second and more; now every 64, 32 and 16
   (`gem_turn` itself waits 100 ms between turns).

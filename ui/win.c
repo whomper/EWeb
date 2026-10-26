@@ -84,7 +84,10 @@ static void layout(void)
 		cur->but[i].h = bh;
 		x += cur->but[i].w + 2;
 	}
-	cur->r_addr.x = x + 6;
+	/* the address's text on a byte, 4 pixels into its frame (the
+	   guidelines' Speed: TOS 1.04 draws text off a byte seven times
+	   slower; the work area is on one, wind_x8) */
+	cur->r_addr.x = cur->work.x + ((x + 6 + 4 - cur->work.x + 7) & ~7) - 4;
 	cur->r_addr.h = gl_hchar + 4;
 	cur->r_addr.y = cur->work.y + (th - 1 - cur->r_addr.h) / 2;
 	cur->r_addr.w = cur->work.x + cur->work.w - 4 - cur->r_addr.x;
@@ -407,13 +410,13 @@ static void draw_ribbon(void)
 static void draw_status(GRECT *clip)
 {
 	GRECT r = cur->r_stat;
-	short cols = (cur->r_stat.w - gl_wchar) / gl_wchar;
+	short cols = (cur->r_stat.w - 16) / gl_wchar;	/* (8 pixels each side) */
 	if (!rect_and(&r, clip))
 		return;
 	fill(&cur->r_stat, paper());
 	hline(cur->r_stat.x, cur->r_stat.x + cur->r_stat.w - 1, cur->r_stat.y);
 	if (cur->info[0] && cols > 0)
-		text_at(cur->r_stat.x + gl_wchar / 2, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols, 0);
+		text_at(cur->r_stat.x + 8, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols, 0);	/* (on a byte) */
 	draw_ribbon();
 }
 
@@ -2327,6 +2330,7 @@ int win_open(void)
 	if (!cur->title[0])
 		str_copy(cur->title, " EWeb ", sizeof cur->title);
 	wind_set_str(cur->h, WF_NAME, cur->title);
+	x = wind_x8(icon_kind(KIND), x, y, w, h);	/* the work area's text on bytes */
 	wind_open(cur->h, x, y, w, h);
 	get_work();
 	save_place();
@@ -2496,8 +2500,16 @@ static void message(const short *msg)
 			break;
 		wind_get(cur->h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
 		wind_get(cur->h, WF_FULLXYWH, &f.x, &f.y, &f.w, &f.h);
+		{
+			/* (fulled: as wide as the desk less what puts its work
+			   area on a byte) */
+			short fx = wind_x8(icon_kind(KIND), f.x, f.y, f.w, f.h);
+			f.w -= fx - f.x;
+			f.x = fx;
+		}
 		if (c.x == f.x && c.y == f.y && c.w == f.w && c.h == f.h) {
 			wind_get(cur->h, WF_PREVXYWH, &p.x, &p.y, &p.w, &p.h);
+			p.x = wind_x8(icon_kind(KIND), p.x, p.y, p.w, p.h);
 			wind_set(cur->h, WF_CURRXYWH, p.x, p.y, p.w, p.h);
 		} else {
 			wind_set(cur->h, WF_CURRXYWH, f.x, f.y, f.w, f.h);
@@ -2519,7 +2531,9 @@ static void message(const short *msg)
 			w = 40 * gl_wchar;
 		if (h < 12 * gl_hchar)
 			h = 12 * gl_hchar;
-		wind_set(cur->h, WF_CURRXYWH, msg[4], msg[5], w, h);
+		/* its work area on a byte across (the guidelines' Speed:
+		   text on bytes), up to 7 pixels from where it was put */
+		wind_set(cur->h, WF_CURRXYWH, wind_x8(icon_kind(KIND), msg[4], msg[5], w, h), msg[5], w, h);
 		resized();
 		if (msg[0] == WM_SIZED)
 			win_redraw(NULL);
