@@ -33,6 +33,7 @@ typedef struct ew_font {
 	uint8_t *data;			/* the face's first block of characters, read on first use */
 	uint8_t *more[FONT_BLOCKS - 1];	/* its other blocks, each read when a page first needs one
 					   of their characters (Greek, Cyrillic...) */
+	uint8_t *wt;			/* font_widths' table, made when first asked for */
 	int failed;
 } ew_font;
 
@@ -50,6 +51,10 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g);
 int  font_advance(ew_font *f, uint32_t cp);
 /* the width of UTF-8 text */
 long font_width(ew_font *f, const char *s, size_t n);
+/* the advance of each byte below 0x80 as a character, by the byte (256
+   entries, 0 from 0x80 on): a word of them measured as it is read (the
+   layout's words). NULL when the face can't be read */
+const uint8_t *font_widths(ew_font *f);
 
 /* the next character of UTF-8 text at *p (before end); bad bytes come
    out as U+FFFD, one at a time */

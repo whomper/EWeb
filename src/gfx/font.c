@@ -75,6 +75,8 @@ void font_drop(void)
 	for (i = 0; faces != NULL && i < nfaces; i++) {
 		free(faces[i].data);
 		faces[i].data = NULL;
+		free(faces[i].wt);
+		faces[i].wt = NULL;
 		for (b = 0; b < FONT_BLOCKS - 1; b++) {
 			free(faces[i].more[b]);
 			faces[i].more[b] = NULL;
@@ -406,6 +408,20 @@ uint32_t utf8_next(const char **p, const char *end)
 	}
 	*p = (const char *) s;
 	return c < min || c > 0x10FFFF || (c >= 0xD800 && c < 0xE000) ? 0xFFFD : c;
+}
+
+const uint8_t *font_widths(ew_font *f)
+{
+	int c, a;
+	if (f == NULL || f->wt != NULL)
+		return f != NULL ? f->wt : NULL;
+	if (!ready(f) || (f->wt = calloc(256, 1)) == NULL)
+		return NULL;
+	for (c = 0; c < 0x80; c++) {
+		a = font_advance(f, (uint32_t) c);
+		f->wt[c] = (uint8_t) (a < 0 ? 0 : a > 255 ? 255 : a);	/* (a face under 64 px: none wider) */
+	}
+	return f->wt;
 }
 
 long font_width(ew_font *f, const char *s, size_t n)

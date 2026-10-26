@@ -227,6 +227,12 @@ typedef struct {
 	int nfams;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
+	struct mcache {
+		const box *b;
+		int32_t min, max;
+	} *mc;				/* a block of text's narrowest and widest, measured
+					   together (inline_measure: a table asks for each in
+					   turn), by its box; MC_N, NULL until needed */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
 	int line0;			/* the next text run starts a line box (DLF_LINE0) */
 	uint8_t *lv;			/* each item's bidi level, its paragraph's right to left in
@@ -325,36 +331,44 @@ static int kw(const ec_style *s, int p)
 
 /* a length in device px: base is what a percentage is of (AUTO: none,
    so a percentage is auto too); AUTO for auto, none, normal */
+/* (calc(): apart, so a plain length doesn't save the registers it takes) */
+static __attribute__((noinline)) int32_t len_calc(L *l, const ec_calc *c, int32_t base)
+{
+	int32_t r = 0, v;
+	int i;
+	for (i = 0; i < c->n; i++) {
+		v = dev(l, c->a[i].px);
+		if (c->a[i].pct != 0 && base != AUTO)
+			v += (int32_t) ((int64_t) base * c->a[i].pct / (100 * 1024));
+		if (c->op == EC_CALC_SUM || i == 0)
+			r = c->op == EC_CALC_SUM ? r + v : v;
+		else if (c->op == EC_CALC_MIN)
+			r = v < r ? v : r;
+		else if (c->op == EC_CALC_MAX)
+			r = v > r ? v : r;
+		else if (i == 1)	/* clamp(min, val, max) */
+			r = v > r ? v : r;
+		else
+			r = v < r ? v : r;
+	}
+	return r;
+}
+
+/* (a percentage of base: apart too, its division 64-bit) */
+static __attribute__((noinline)) int32_t len_pct(int32_t base, int32_t pct)
+{
+	return (int32_t) ((int64_t) base * pct / (100 * 1024));
+}
+
 static int32_t len(L *l, const ec_style *s, int p, int32_t base)
 {
 	switch (s->k[p]) {
 	case EK_PX:
-		return dev(l, s->v[p].i);
+		return s->v[p].i != 0 ? dev(l, s->v[p].i) : 0;	/* (most margins and padding) */
 	case EK_PCT:
-		if (base == AUTO)
-			return AUTO;
-		return (int32_t) ((int64_t) base * s->v[p].i / (100 * 1024));
-	case EK_CALC: {
-		const ec_calc *c = s->v[p].p;
-		int32_t r = 0, v;
-		int i;
-		for (i = 0; i < c->n; i++) {
-			v = dev(l, c->a[i].px);
-			if (c->a[i].pct != 0 && base != AUTO)
-				v += (int32_t) ((int64_t) base * c->a[i].pct / (100 * 1024));
-			if (c->op == EC_CALC_SUM || i == 0)
-				r = c->op == EC_CALC_SUM ? r + v : v;
-			else if (c->op == EC_CALC_MIN)
-				r = v < r ? v : r;
-			else if (c->op == EC_CALC_MAX)
-				r = v > r ? v : r;
-			else if (i == 1)	/* clamp(min, val, max) */
-				r = v > r ? v : r;
-			else
-				r = v < r ? v : r;
-		}
-		return r;
-	}
+		return base == AUTO ? AUTO : len_pct(base, s->v[p].i);
+	case EK_CALC:
+		return len_calc(l, s->v[p].p, base);
 	default:
 		return AUTO;
 	}
@@ -2077,19 +2091,36 @@ static void fixup(L *l, box *b)
 
 /* ---------------------------------------------------------------- inline items */
 
-static ITEM *item(L *l)
+/* (a word at a time, for clearing an ITEM in place) */
+typedef uint32_t __attribute__((may_alias)) u32a;
+
+/* the items' room doubled: 0 when there is none */
+static __attribute__((noinline)) int item_grow(L *l)
 {
-	if (l->nit == l->itcap) {
-		long cap = l->itcap ? l->itcap * 2 : IT_FIRST;
-		ITEM *n = realloc(l->it, cap * sizeof *n);
-		if (n == NULL) {
-			l->fail = 1;
-			return NULL;
-		}
-		l->it = n;
-		l->itcap = cap;
+	long cap = l->itcap ? l->itcap * 2 : IT_FIRST;
+	ITEM *n = realloc(l->it, cap * sizeof *n);
+	if (n == NULL) {
+		l->fail = 1;
+		return 0;
 	}
-	memset(&l->it[l->nit], 0, sizeof l->it[0]);
+	l->it = n;
+	l->itcap = cap;
+	return 1;
+}
+
+/* a new item, cleared (in line, a word at a time, not a call to memset:
+   one is made for every word and space, and the call cost five times the
+   stores) */
+static inline __attribute__((always_inline, optimize("no-tree-loop-distribute-patterns"))) ITEM *item(L *l)
+{
+	u32a *p;
+	unsigned k;
+	if (l->nit == l->itcap && !item_grow(l))
+		return NULL;
+	p = (u32a *) &l->it[l->nit];
+#pragma GCC unroll 32
+	for (k = 0; k < sizeof l->it[0] / 4; k++)
+		*p++ = 0;
 	return &l->it[l->nit++];
 }
 
@@ -2519,6 +2550,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 	int newlines = keep || ws == KW_PRE_LINE;
 	int wrap = !(ws == KW_PRE || ws == KW_NOWRAP);
 	int32_t sw = font_advance(r->font, ' ');
+	const uint8_t *wt = font_widths(r->font);
 	uint32_t i = 0, o = 0;
 	long k;
 	char *t = amalloc(l->a, n + 1);
@@ -2572,8 +2604,21 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 			   made again in pieces where a line may end inside it */
 			uint32_t j = i, start = o;
 			int seen = 0, k;
-			if (tt != KW_UPPERCASE && tt != KW_LOWERCASE) {
-				/* (most text: a loop without text-transform's tests) */
+			int32_t ww = -1;
+			if (tt != KW_UPPERCASE && tt != KW_LOWERCASE && wt != NULL) {
+				/* (most text: a loop without text-transform's tests,
+				   measuring the word as it goes; a byte from 0x80 on,
+				   a letter's first, sets a bit of 4, 8 or 128 in seen,
+				   and font_width measures that word) */
+				ww = 0;
+				while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
+					seen |= k;
+					ww += wt[(unsigned char) s[j]];
+					t[o++] = s[j++];
+				}
+				if (seen & (4 | 8 | 128))
+					ww = -1;
+			} else if (tt != KW_UPPERCASE && tt != KW_LOWERCASE) {
 				while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
 					seen |= k;
 					t[o++] = s[j++];
@@ -2595,7 +2640,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				/* (its direction from its bytes: only one with
 				   Hebrew or another script's letters looked at) */
 				put_item(l, r, IT_WORD, t + start, o - start,
-					 (int32_t) font_width(r->font, t + start, o - start),
+					 ww >= 0 ? ww : (int32_t) font_width(r->font, t + start, o - start),
 					 seen & 136 ? -1 : seen & 16 ? 1 : seen & 32 ? 3 : 0);
 				if (!wrap && !l->fail)
 					l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
@@ -4699,57 +4744,94 @@ static void bedge(L *l, const box *b, int side, BEDGE *e);
 static int collapses(const box *t);
 static int32_t spacing(L *l, const ec_style *s, int vertical);
 
-/* the widest line of a block of text, unbroken */
+#define MC_N 64
+
+/* an item measured as a block (a float in the text, an inline-block):
+   its widest in w, its narrowest in x */
+#define MEASURED(l, it) (((l)->floats && (it)->kind == IT_FLOAT) || (it)->ib)
+
+/* a block of text's widest line, unbroken (measure: none narrower when
+   lines may end only at its breaks) */
+static int32_t widest_line(const L *l, int narrowest)
+{
+	long i;
+	int32_t lw = 0, best = 0;
+	for (i = 0; i < l->nit; i++) {
+		const ITEM *it = &l->it[i];
+		if (it->kind == IT_BREAK) {
+			best = lw > best ? lw : best;
+			lw = 0;
+		} else {
+			lw += narrowest && MEASURED(l, it) ? it->x : it->w;
+		}
+	}
+	return lw > best ? lw : best;
+}
+
+/* the widest line of a block of text, unbroken, or (l->minw) the
+   narrowest it goes; both found together, and kept for the other */
 static int32_t inline_measure(L *l, box *b)
 {
 	RUNSTATE r;
 	int line_start = 1;
 	long i;
-	int32_t lw = 0, best = 0;
+	int32_t lw = 0, best = 0, min, max;
+	struct mcache *m = NULL;
+	if (l->mc != NULL || (l->mc = calloc(MC_N, sizeof *l->mc)) != NULL) {
+		m = &l->mc[((uintptr_t) b >> 4) & (MC_N - 1)];
+		if (m->b == b)
+			return l->minw ? m->min : m->max;
+	}
 	l->nit = 0;
 	l->floats = l->ibs = 0;
 	l->cw = AUTO;
 	runstate(l, &r, b->st, NULL, NULL, b->link);
 	collect(l, b, &r, &line_start);
 	for (i = 0; (l->floats || l->ibs) && i < l->nit; i++)
-		if ((l->floats && l->it[i].kind == IT_FLOAT) || l->it[i].ib) {
+		if (MEASURED(l, &l->it[i])) {
 			/* a float in the text: beside the text on its line; an
-			   inline-block: on it, as wide as its widest (or its
-			   narrowest, measuring that) */
+			   inline-block: on it, as wide as its widest (w) and its
+			   narrowest (x, not placed while measuring) */
 			STASH s;
-			int32_t fw;
+			int32_t fmax, fmin;
+			int was = l->minw;
 			stash(l, &s);
-			fw = measure(l, s.it[i].atom);
+			l->minw = 0;
+			fmax = measure(l, s.it[i].atom);
+			l->minw = 1;
+			fmin = measure(l, s.it[i].atom);
+			l->minw = was;
 			unstash(l, &s);
-			l->it[i].w = fw;
+			l->it[i].w = fmax;
+			l->it[i].x = fmin;
 		}
-	if (l->minw && !keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
+	max = widest_line(l, 0);
+	if (!keeps_space(b->st) && kw(b->st, EP_WHITE_SPACE) != KW_NOWRAP) {
 		/* the narrowest: its widest word or picture, or run of them no
 		   line may end in (white-space pre or nowrap: canbreak 2) */
 		for (i = 0; i < l->nit; i++) {
 			const ITEM *it = &l->it[i];
+			int32_t w = MEASURED(l, it) ? it->x : it->w;
 			if (it->kind == IT_BREAK || (it->kind == IT_SPACE && it->canbreak)) {
 				best = lw > best ? lw : best;
 				lw = 0;
 			} else if (it->kind == IT_SPACE || it->canbreak == 2) {
-				lw += it->w;
+				lw += w;
 			} else {
 				best = lw > best ? lw : best;
-				lw = it->w;
+				lw = w;
 			}
 		}
-		return lw > best ? lw : best;
+		min = lw > best ? lw : best;
+	} else {
+		min = widest_line(l, 1);
 	}
-	for (i = 0; i < l->nit; i++) {
-		if (l->it[i].kind == IT_BREAK) {
-			if (lw > best)
-				best = lw;
-			lw = 0;
-		} else {
-			lw += l->it[i].w;
-		}
+	if (m != NULL && !l->fail && !l->p->deep) {
+		m->b = b;
+		m->min = min;
+		m->max = max;
 	}
-	return lw > best ? lw : best;
+	return l->minw ? min : max;
 }
 
 static int32_t extras(L *l, const box *b)
@@ -7932,6 +8014,7 @@ laid:
 	if (!l.fail)
 		draw_order(&l);
 	free(l.it);
+	free(l.mc);
 	free(l.ibx);
 	free(l.later);
 	free(l.fl);
