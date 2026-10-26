@@ -1486,25 +1486,31 @@ static const unsigned char *deflate_at(const unsigned char *p, long n, int kind)
    engine as it is read (ec_sheet_feed): none of it whole in memory
    (ynet.co.il's: 3.36 MB, 974 KB packed; 0.43 ran out of memory over
    it on a 14 MB Falcon), a turn for GEM between pieces */
+#define PIECE 16384
+
 static void sheet_stream(SHEETS *sh, const FETCH *f, const char *url)
 {
-	static unsigned char piece[16384];
+	/* (taken while it is read, not kept: in the program's BSS, its 16 KB
+	   were what a stock 4 MB Falcon under NVDI then lacked for the
+	   speed rig's news page, 0.44) */
+	unsigned char *piece;
 	PACKSRC src;
 	INFLATE *z;
 	ec_stream *s;
 	long k, total = 0;
 	src.p = deflate_at((const unsigned char *) f->data, f->len, f->packed);
 	src.end = (const unsigned char *) f->data + f->len;
-	if (src.p == NULL)
+	if (src.p == NULL || (piece = malloc(PIECE)) == NULL)
 		return;
 	z = inflate_open(pack_get, &src);
 	s = z != NULL ? ec_sheet_begin(sh->d->css, EC_ORIGIN_AUTHOR, url) : NULL;
-	while (s != NULL && (k = inflate_read(z, piece, sizeof piece)) > 0 && (total += k) <= SHEET_MAX &&
+	while (s != NULL && (k = inflate_read(z, piece, PIECE)) > 0 && (total += k) <= SHEET_MAX &&
 	       ec_sheet_feed(s, (const char *) piece, (size_t) k) == 0 && (ec_poll == NULL || ec_poll()) &&
 	       !conn_stop)
 		;
 	ec_sheet_end(s);
 	inflate_close(z);
+	free(piece);
 }
 
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
