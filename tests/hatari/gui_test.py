@@ -973,7 +973,7 @@ def scripts_modes(site):
               ev.endswith("title Tabs ready"), str(r.events()[-8:]))
         # Settings > Scripts (looked at in its screenshot): the third page
         # in the list (640x480's 8x16 characters: rows 2, 4 and 6, half a
-        # character between them); Esc keeps them
+        # character between them); Undo keeps them (Esc would empty a field: 3.5)
         r.key(COMMA, (CTRL,))
         at = r.wait(r"dialog at ", 60)
         if at is not None:
@@ -982,8 +982,8 @@ def scripts_modes(site):
             r.mouse.click(dx + 5 * 8, dy + 6 * 16 + 2 * 8 + 8)
             time.sleep(2)
             r.shot(0)
-        r.key(ESC)
-        check("scripts: Settings > Scripts shown, Esc keeps them", at is not None and
+        r.key(UNDO)
+        check("scripts: Settings > Scripts shown, Undo keeps them", at is not None and
               r.wait(r"settings ", 60) == "settings kept" and "dialog too big" not in r.events(),
               str(r.events()[-5:]))
         r.key(Q, (CTRL,))
@@ -1285,8 +1285,8 @@ def screens():
                 ev = r.wait(r"settings shown", 60)
                 time.sleep(2)
                 r.shot(2)
-                r.key(ESC)
-                check("screens: ^, shows the Settings, Esc keeps them", ev is not None and
+                r.key(UNDO)
+                check("screens: ^, shows the Settings, Undo keeps them", ev is not None and
                       r.wait(r"settings ", 60) == "settings kept", str(r.events()[-5:]))
                 # the search address holds more than its field shows (40;
                 # the guidelines' 5.4): typed in whole and saved whole
@@ -1440,8 +1440,8 @@ def st():
                 ev = r.wait(r"settings shown", 120)
                 time.sleep(3)
                 r.shot(3)
-                r.key(ESC)
-                check("st: ^, shows the Settings, Esc keeps them", ev is not None and
+                r.key(UNDO)
+                check("st: ^, shows the Settings, Undo keeps them", ev is not None and
                       r.wait(r"settings ", 120) == "settings kept", str(r.events()[-5:]))
                 # the search address longer than its field, its first and
                 # last characters put in with Shift+left and Shift+right
