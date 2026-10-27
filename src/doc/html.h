@@ -25,6 +25,10 @@ typedef struct html_opts {
 	   prescan for a <meta>) */
 	int plaintext;
 	int scripting;		/* 0: <noscript> is parsed as markup (EWeb) */
+	/* the text of scripts left out, the elements kept (a browser whose
+	   scripts won't run on the page: cnn.com's 2.6 MB of it); not the
+	   HTML Standard's tree, which html5lib's tests check */
+	int drop_scripts;
 	/* the fragment case (13.4): the context element's name and
 	   namespace (DN_NS_*), or NULL for a whole document */
 	const char *context;

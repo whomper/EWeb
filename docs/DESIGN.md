@@ -3986,7 +3986,26 @@ nothing: common's `conn.c` now reads TLS.OVL, the roots, the seed and SIGS.DAT b
 connection (TLS.OVL 1.10), and `make hatarigui`'s falcon4 group loads a secure page from a
 server with an ECDSA certificate on the stock Falcon.
 
-## ynet.co.il in a narrow window (27 Oct 2026)
+## A big page's memory, and ynet.co.il in a narrow window (27 Oct 2026)
+
+Erez on his DFB1 (128 MB TT RAM, through the Pi): cnn.com and its 73 pictures left 109 MB of TT
+RAM taken, none of it back when he went on to another page. On the emulated Falcon (Falcon:256,
+cnn.com through a webgate here): the page shown at a heap of 26.5 MB, its document 14.2 MB and its
+CSS 2.9 MB; its 71 pictures took it to 51.8 MB (peak 53.7 MB). The heap took GEMDOS blocks each as
+large as all before it (common's `libc.c`), so that peak took a 64 MB block and then what was left.
+
+- **The page's text kept once.** cnn.com's HTML is 6.1 MB: 2.6 MB of scripts and 2.5 MB of
+  `<style>`. The parser appends a text node's pieces as they come, its room doubling in the
+  document's arena, and an arena keeps every size a long text has had: 14 MB for 5 MB of text.
+  A text past `DOC_BIG` (4 KB) now moves to a block of its own (`doc_text_room`: `realloc`'d as
+  it grows, cut to its length when the parse ends, freed with the document), and a script's text
+  isn't kept at all where it won't run (`html_opts.drop_scripts`: the browser's documents whose
+  scripts don't run, their frames and previews; not html5lib's trees, which keep it). `drawbench
+  -m` on cnn.com: the heap after the parse 20.5 to 10.7 MB (6.1 MB of it the file itself), peak
+  26.7 to 17.0 MB; `tests/layout/longtext.html` has a 4.5 KB word made of 3,000 pieces.
+- **Quit's steps timed** in `EWEB.LOG` (`quit: connections and windows, settings, cookies,
+  history, the cache's index`, ms): on the emulated disk 305 ms, 250 of them the cache's index.
+  Quit frees nothing (TOS takes the program's memory back at once).
 
 **transform** (CSS Transforms 1 and 2): ynet.co.il drew its news drawer over the page; it is
 kept off it by `transform: translateX(-103%)`, as many sites hide menus and drawers, and centre

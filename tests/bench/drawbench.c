@@ -31,6 +31,7 @@
 
 #include "canvas.h"
 #include "doc.h"
+#include "html.h"
 #include "font.h"
 #include "history.h"
 #include "visited.h"
@@ -109,6 +110,7 @@ int main(int argc, char **argv)
 	doc *d;
 	page *p;
 	LAYOUT_OPT o;
+	html_opts ho;
 
 	for (; i < argc && argv[i][0] == '-'; i++) {
 		if (!strcmp(argv[i], "-P") && i + 1 < argc)
@@ -137,7 +139,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	data = slurp(argv[i], &n);
-	if (data == NULL || (d = doc_parse(data, n, NULL, &m)) == NULL) {
+	memset(&ho, 0, sizeof ho);
+	ho.drop_scripts = 1;		/* as EWEB.PRG on a page whose scripts don't run */
+	if (data == NULL || (d = doc_parse_opts(data, n, &ho, &m)) == NULL) {
 		fprintf(stderr, "drawbench: can't read %s\n", argv[i]);
 		return 1;
 	}

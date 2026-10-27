@@ -359,7 +359,7 @@ typedef struct P {
 	int ntm, captm;
 	dnode *head, *form, *ctx;
 	int mode, orig;
-	uint8_t frameset_ok, foster, scripting, skip_lf, quirks, tentative, stop;
+	uint8_t frameset_ok, foster, scripting, skip_lf, quirks, tentative, stop, drop_scripts;
 	uint32_t tags;			/* start and end tags read (doc_poll) */
 	uint8_t *ptc;			/* pending table character tokens */
 	size_t nptc, captc;
@@ -1681,7 +1681,8 @@ static void text_add(P *p, dnode *n, const uint8_t *s, size_t len)
 			cap = n->len + len;
 		if (cap < 32)
 			cap = 32;
-		n->text = doc_grow(p->d, n->text, n->cap + 1, cap + 1);
+		n->text = cap + 1 >= DOC_BIG ? doc_text_room(p->d, n, cap + 1) :
+			  doc_grow(p->d, n->text, n->cap + 1, cap + 1);
 		if (n->text == NULL)
 			oom(p);
 		n->cap = (uint32_t) cap;
@@ -2212,6 +2213,8 @@ static void insert_chars(P *p, const uint8_t *s, size_t n)
 	place(p, NULL, &parent, &before);
 	if (parent->type == DN_DOCUMENT)
 		return;
+	if (p->drop_scripts && parent->hid == H_SCRIPT && parent->ns == DN_NS_HTML && parent->type == DN_ELEMENT)
+		return;		/* a script that won't run: its text kept nowhere */
 	prev = before ? before->prev : parent->last;
 	if (prev != NULL && prev->type == DN_TEXT) {
 		text_add(p, prev, s, n);
@@ -5097,15 +5100,19 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		memset(&p, 0, sizeof p);
 		p.d = d;
 		p.scripting = (uint8_t) (o->scripting != 0);
+		p.drop_scripts = (uint8_t) (o->drop_scripts != 0);
 		p.enc = enc;
 		p.tentative = (uint8_t) tentative;
 		d->elements = 0;
-		if (o->context == NULL)
+		if (o->context == NULL) {
 			d->refresh = NULL;	/* (a try before was another tree) */
+			doc_big_free(d);
+		}
 		p.rend = &d->refresh;
 		ok = run(&p, in, n, o);
 		free(in);
 		p_free(&p);
+		doc_text_fit(d);
 		if (!ok)
 			return 0;
 		d->root = p.root;

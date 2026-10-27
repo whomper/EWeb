@@ -88,6 +88,11 @@ typedef struct doc {
 	char charset[40];		/* what the page was read as */
 	uint8_t quirks;			/* 0, 1 quirks mode, 2 limited quirks */
 	struct dblk *mem;		/* the blocks of memory (doc_alloc) */
+	/* the texts grown past DOC_BIG bytes, each a block of its own
+	   (doc_text_room): in the arena a long one left every size it had
+	   been behind it */
+	struct dbig *big;
+	uint32_t nbig, capbig;
 	uint32_t elements;
 	struct fctl *ctls;		/* the form controls, in document order (form.h) */
 	/* the <meta http-equiv=refresh>s the parser put in whose content is
@@ -126,6 +131,19 @@ void doc_free(doc *d);
    window is kept alive meanwhile) */
 enum { DOC_POLL_PARSE, DOC_POLL_LAYOUT };
 extern int (*doc_poll)(int what);
+
+/* a text node's text past DOC_BIG bytes: its own block, n->text moved
+   there (or grown) to size bytes; NULL out of memory. doc_text_fit cuts
+   each to its length (the parser's, at its end); doc_free frees them */
+#define DOC_BIG 4096
+struct dbig {
+	dnode *n;
+	char *t;
+	size_t size;
+};
+char *doc_text_room(doc *d, dnode *n, size_t size);
+void doc_text_fit(doc *d);
+void doc_big_free(doc *d);
 
 /* n bytes of the document's memory, aligned for any node or pointer;
    NULL if out of memory. doc_grow makes a block of old bytes new bytes

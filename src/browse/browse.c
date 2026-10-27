@@ -2246,6 +2246,7 @@ parse:
 	o.fallback = br_fallback(url);
 	o.plaintext = build_plain;
 	o.scripting = scripts;
+	o.drop_scripts = !scripts;
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d == NULL)
 		return 0;
@@ -2383,6 +2384,7 @@ static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len,
 	o.charset = charset && *charset ? charset : NULL;
 	o.fallback = br_fallback(url);
 	o.plaintext = plain;
+	o.drop_scripts = 1;		/* (a frame's run none) */
 	br_building = BRB_PARSE;
 	doc_poll = build_turn;
 	ec_poll = gem_turn;
@@ -2747,6 +2749,7 @@ static void preview(browser *b, const char *data, long len, long whole, const ch
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
 	o.fallback = br_fallback(url);
+	o.drop_scripts = 1;		/* (a preview runs none) */
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d != NULL) {
 		ec_set_resolver(d->css, resolve);

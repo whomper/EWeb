@@ -31,9 +31,68 @@ long doc_mem(const doc *d)
 {
 	const struct dblk *b;
 	long n = 0;
+	uint32_t i;
 	for (b = d->mem; b != NULL; b = b->next)
 		n += (long) (DHEAD + b->size);
+	for (i = 0; i < d->nbig; i++)
+		n += (long) d->big[i].size;
 	return n;
+}
+
+char *doc_text_room(doc *d, dnode *n, size_t size)
+{
+	uint32_t i;
+	char *t;
+	for (i = 0; i < d->nbig && d->big[i].t != n->text; i++)
+		;
+	if (i < d->nbig) {
+		t = realloc(n->text, size);
+		if (t == NULL)
+			return NULL;
+	} else {
+		if (d->nbig == d->capbig) {
+			uint32_t cap = d->capbig ? d->capbig * 2 : 8;
+			struct dbig *b = realloc(d->big, cap * sizeof *b);
+			if (b == NULL)
+				return NULL;
+			d->big = b;
+			d->capbig = cap;
+		}
+		t = malloc(size);
+		if (t == NULL)
+			return NULL;
+		memcpy(t, n->text, n->len + 1);		/* (its old room stays in the arena) */
+		d->big[i = d->nbig++].n = n;
+	}
+	d->big[i].t = t;
+	d->big[i].size = size;
+	return t;
+}
+
+void doc_text_fit(doc *d)
+{
+	uint32_t i;
+	for (i = 0; i < d->nbig; i++) {
+		struct dbig *b = &d->big[i];
+		char *t;
+		if (b->n->text != b->t || b->n->len + 1 >= b->size)
+			continue;
+		if ((t = realloc(b->t, b->n->len + 1)) != NULL) {
+			b->t = b->n->text = t;
+			b->size = b->n->len + 1;
+			b->n->cap = b->n->len;
+		}
+	}
+}
+
+void doc_big_free(doc *d)
+{
+	uint32_t i;
+	for (i = 0; i < d->nbig; i++)
+		free(d->big[i].t);
+	free(d->big);
+	d->big = NULL;
+	d->nbig = d->capbig = 0;
 }
 
 void *doc_alloc(doc *d, size_t n)
@@ -1064,6 +1123,7 @@ void doc_free(doc *d)
 	if (d->frames_free != NULL)
 		d->frames_free(d->frames);
 	form_free(d);
+	doc_big_free(d);
 	for (b = d->mem; b != NULL; b = next) {
 		next = b->next;
 		free(b);

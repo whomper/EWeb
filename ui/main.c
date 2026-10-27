@@ -2369,24 +2369,39 @@ int main(void)
 		log_event("%s", line);
 	}
 	graf_mouse(BUSYBEE, 0);
-	http_close_all();
+	{
+		/* each step timed, for the log (Erez's quit was slow on his
+		   real disk, 27 Oct 2026) */
+		unsigned long t0 = pf_ms(), tw, ts, tc, th, td;
+		char line[200];
+		http_close_all();
+		{
+			/* the window in front last: its place is kept (WINDOW=) */
+			ewin *front = cur, *w;
+			for (w = wins; w != NULL; w = w->next)
+				if (w != front) {
+					win_use(w);
+					win_close();
+				}
+			win_use(front);
+			win_close();
+		}
+		tw = pf_ms();
+		settings_save();
+		ts = pf_ms();
+		ck_save();	/* the cookies that last, once, if they changed */
+		tc = pf_ms();
+		hg_save();	/* the pages shown, once, if they changed */
+		th = pf_ms();
+		dc_close();	/* the cache's index, once (and its pack written again if it must be) */
+		td = pf_ms();
+		snprintf(line, sizeof line, "quit: connections and windows %lu ms, settings %lu, cookies %lu, "
+			 "history %lu, the cache's index %lu", tw - t0, ts - tw, tc - ts, th - tc, td - th);
+		conn_log("EWeb", " -- ", line, (long) strlen(line));
+		log_event("%s", line);
+	}
 	if (opt.log)
 		conn_log_hold(0);	/* the rest of the log, once */
-	{
-		/* the window in front last: its place is kept (WINDOW=) */
-		ewin *front = cur, *w;
-		for (w = wins; w != NULL; w = w->next)
-			if (w != front) {
-				win_use(w);
-				win_close();
-			}
-		win_use(front);
-		win_close();
-	}
-	settings_save();
-	ck_save();		/* the cookies that last, once, if they changed */
-	hg_save();		/* the pages shown, once, if they changed */
-	dc_close();		/* the cache's index, once (and its pack written again if it must be) */
 	menu_bar(mb.tree, 0);
 	av_exit();
 	font_free();
