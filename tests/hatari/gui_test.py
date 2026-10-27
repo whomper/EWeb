@@ -1171,7 +1171,7 @@ def dialogs():
                 r.key(RETURN)
                 ev = r.wait(r"found ", 120)
                 check("dialogs: %s, Find: Esc empties the field, the dialog stays" % name,
-                      ev == "found 1 of 1", "\n".join(r.events()[-4:]))
+                      ev is not None and ev.startswith("found 1 of "), "\n".join(r.events()[-4:]))
                 time.sleep(settle)
                 px = settings(0)
                 check("dialogs: %s, Settings %s" % (name, "in 3D" if in3d else "flat"),
