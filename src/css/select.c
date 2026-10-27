@@ -1529,6 +1529,14 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 			c->root_style = st;
 		if (e->first != NULL && EC_DEEP_BY(EC_CASCADE_ROOM)) {
 			style_flat(e, st);
+		} else if (e->first != NULL && c->prune && st->k[EP_DISPLAY] == EK_KW &&
+			   st->v[EP_DISPLAY].i == KW_NONE) {
+			/* display: none, on a page that stays as it was parsed
+			   (ec_prune: no scripts): nothing under it is drawn, so
+			   its style for all of them, none made (the speed rig's
+			   news page, a body not shown, took 0.6 MB of styles on
+			   a stock 4 MB Falcon) */
+			style_flat(e, st);
 		} else if (e->first != NULL) {
 			bloom_push(c, e);
 			style_list(c, e->first, st, 0);

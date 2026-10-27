@@ -3951,6 +3951,13 @@ run), shown in 293 s over the emulated serial line, heap 8.97 MB at the page (do
 dropped, 6.07 and 8.36 MB. What is left is the page's styles (the CSS context's most, about 650
 bytes an element) and the pages kept, given back when a page doesn't fit.
 
+**Nothing styled under `display: none`** (the same pages: `ec_prune`'s, whose scripts don't run):
+an element whose display is none gives its style to everything under it (`style_flat`), none of
+them made; nothing under it is drawn, and EWeb's selectors never look at a descendant's style.
+The speed rig's news page (its body not shown) on Falcon-4:16: its styles 3245 to 150 ms, heap
+at the page 1.36 to 0.91 MB, the largest block left free 11 KB to 1.08 MB (0.44 couldn't show it
+under NVDI); `drawbench -m`: styled 1.09 to 0.64 MB.
+
 The family's `EWEB.LOG` (`LOG=1`, 0 as it starts): `conn.c`'s log of each connection, a secure
 one's handshake step by step, held in memory for a page and its pictures and written once then,
 and at the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. No
