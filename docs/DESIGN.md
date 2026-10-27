@@ -4011,6 +4011,11 @@ ynet's front page was 135 px high and its parts over each other because of two m
   px, its third line below it, as in Chromium). Where EWeb's fonts are taller than a page's, its
   text now runs out of a box of fixed height as it would in other browsers.
 
+**Stop** is lit while what Esc stops is coming, the page's pictures too (Erez: it went grey
+while they were decoded): `ewin.stopper`, set with the throbber, its button alone redrawn when it
+changes; pressed while pictures come it stops them as Esc does (`make hatarigui`'s browse group,
+`/site/lazy.html`).
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

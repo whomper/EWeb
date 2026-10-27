@@ -58,7 +58,7 @@ static int enabled(int i)
 	case B_RELOAD: return !loading && br.cur >= 0;
 	case B_HOME: return !loading;
 	case B_SEARCH: return !loading && opt.search[0];
-	case B_STOP: return loading || br_refresh_due(&br) >= 0;	/* or the page's refresh */
+	case B_STOP: return loading || cur->stopper || br_refresh_due(&br) >= 0;	/* or the page's refresh */
 	}
 	return 0;
 }
@@ -330,6 +330,13 @@ void win_throb(int busy)
 	GRECT r, a;
 	short mx, my, d, hide;
 	unsigned long now = pf_ms();
+	if (busy != cur->stopper) {
+		/* Stop lit while what Esc stops comes, the pictures after the
+		   page too (Erez, 27 Oct 2026: it was only the page's); the
+		   button alone drawn */
+		cur->stopper = busy;
+		redraw(&cur->but[B_STOP], 1);
+	}
 	if (cur->h <= 0 || cur->iconified || cur->r_thr.w <= 0)
 		return;
 	if (busy ? now - thr_at < 110 : cur->thr_frame == 0)
@@ -1687,7 +1694,8 @@ static int link_at(short mx, short my)
 
 int win_stop_hit(short mx, short my)
 {
-	return loading && !cur->iconified && rect_hit(&cur->but[B_STOP], mx, my) && wind_find(mx, my) == cur->h;
+	return enabled(B_STOP) && !cur->iconified && rect_hit(&cur->but[B_STOP], mx, my) &&
+	       wind_find(mx, my) == cur->h;
 }
 
 static short pointer = ARROW;

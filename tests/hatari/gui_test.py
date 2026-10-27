@@ -445,6 +445,21 @@ def browse():
         r.key(0x47)		# ClrHome: the top
         time.sleep(2)
         r.shot(7)
+        # the toolbar's Stop lit while a page's pictures come, and pressed
+        # it stops them as Esc does (Erez, 27 Oct 2026: it was lit only
+        # while the page itself came)
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/lazy.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        time.sleep(0.5)
+        r.mouse.click(4 + 5 * 38 + 18, 60)
+        pics = r.wait(r"pictures ", 120)
+        evs = r.events()
+        check("browse: Stop pressed while the pictures come stops them",
+              ev is not None and ev.startswith("shown %slazy.html " % site) and pics is not None and
+              int(pics.split()[-1]) < 8 and any(e.startswith("status Pictures stopped.") for e in evs),
+              "%r\n%s" % (pics, "\n".join(evs[-6:])))
         # a frameset: its frames fetched after it, as tall as the window;
         # the menu's link naming the main frame loads there (the address
         # the same), Back (Undo) shows the main frame's page before

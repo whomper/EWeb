@@ -82,6 +82,8 @@ typedef struct ewin {
 	char addr[1024];
 	int a_focus, a_cur, a_first, a_all;
 	int thr_frame;			/* the throbber's frame shown: 0 at rest */
+	int stopper;			/* something coming that Stop and Esc stop (a load, its
+					   pictures): win_throb's busy, the Stop button lit */
 	struct {
 		short end, pen;
 	} rib[RIB_PARTS];

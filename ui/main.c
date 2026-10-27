@@ -855,8 +855,19 @@ static void idle(void)
 			}
 			win_use(was);
 		}
-		if (which & MU_BUTTON)
-			put_off(MU_BUTTON, msg, &ev);
+		if (which & MU_BUTTON) {
+			ewin *was = cur;
+			win_front();
+			if (win_stop_hit(ev.mx, ev.my)) {
+				/* Stop pressed: as Esc */
+				conn_stop = 1;
+				br_pictures_stop(&br);
+				refresh_stop(0);
+			} else {
+				put_off(MU_BUTTON, msg, &ev);
+			}
+			win_use(was);
+		}
 		return;
 	}
 	if (which & MU_MESAG) {
