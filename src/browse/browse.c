@@ -2220,6 +2220,26 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	return r;
 }
 
+/* a page's relayout for a picture or a frame come (br_pictures_step):
+   GEM's turn meanwhile, as when a page is made, so that the window is
+   alive and Esc or a key stops it (it is done again after); demozoo.org
+   and the news page on a stock Falcon took 3.5 and 7.6 s without, the
+   news page 39 s on an ST, 27 Oct 2026 */
+static int pic_turns;
+
+static page *lay_turns(browser *b, doc *d, const char *base)
+{
+	page *p;
+	if (!pic_turns)
+		return lay(b, d, base);
+	doc_poll = build_turn;
+	ec_poll = gem_turn;
+	p = lay(b, d, base);
+	doc_poll = NULL;
+	ec_poll = NULL;
+	return p;
+}
+
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout)
 {
@@ -3503,6 +3523,8 @@ int br_encoding(browser *b, const char *name)
    made (build: doc_poll, ec_poll) */
 unsigned long br_poll_ms = 100;
 
+static int in_turn;		/* GEM's turn under way (br_relayout waits till after it) */
+
 static int gem_turn(void)
 {
 	static unsigned long last;
@@ -3510,7 +3532,9 @@ static int gem_turn(void)
 	if (pf_idle && now - last >= br_poll_ms) {
 		last = now;
 		pf_idle_quick = 1;
+		in_turn = 1;
 		pf_idle();
+		in_turn = 0;
 		pf_idle_quick = 0;
 	}
 	return !conn_stop;
@@ -4460,6 +4484,12 @@ int br_relayout(browser *b, int32_t width)
 	b->width = width;
 	if (b->d == NULL || br_building)
 		return 1;	/* (a page being made: laid out at this width when it is) */
+	if (in_turn) {
+		/* (the window sized in GEM's turn of a layout under way, a
+		   picture's: laid out at this width after it) */
+		b->pic_relayout = 1;
+		return 1;
+	}
 	if (resheeting) {
 		/* sized as the page's sheets are added again (a sheet coming):
 		   laid out at this width after them, as for a picture's size;
@@ -4493,13 +4523,18 @@ int br_relayout(browser *b, int32_t width)
 			conn_stop = stop;
 		}
 	} while (b->width != w);
-	p = lay(b, b->d, base);
-	if (p == NULL)
+	p = lay_turns(b, b->d, base);
+	if (p == NULL) {
+		if (pic_turns && conn_stop)
+			b->pic_relayout = 1;	/* (stopped for what came: again after it) */
 		return 0;
+	}
 	pg_free(b->p);
 	b->p = p;
 	js_set_page(b->d, p);
 	shown_imgs(b);
+	if (b->width != w)
+		b->pic_relayout = 1;	/* (sized meanwhile: again at its width) */
 	return 1;
 }
 
@@ -4522,7 +4557,7 @@ static int relay(browser *b)
 	char base[4096];
 	doc *d = b->d;
 	page *p = NULL;
-	int k;
+	int k, styled;
 	base_of(b, d, b->url, base, sizeof base);
 	for (k = 0; k < 3 && p == NULL; k++) {
 		if (k == 1) {
@@ -4533,8 +4568,14 @@ static int relay(browser *b)
 			b->p = NULL;
 		}
 		ec_unstyle(d->css);
-		if (select_doc(d, base) >= 0)
-			p = lay(b, d, base);
+		if (pic_turns)
+			ec_poll = gem_turn;
+		styled = select_doc(d, base) >= 0;
+		ec_poll = NULL;
+		if (styled)
+			p = lay_turns(b, d, base);
+		if (p == NULL && conn_stop)
+			break;		/* (stopped for what came: not out of memory) */
 	}
 	if (p == NULL)
 		return 0;
@@ -5076,7 +5117,18 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 	return img_set_file(im, data, len);
 }
 
+static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1);
+
 int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1)
+{
+	int r;
+	pic_turns = 1;
+	r = pictures_step(b, top, height, y0, y1);
+	pic_turns = 0;
+	return r;
+}
+
+static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1)
 {
 	long k, i;
 	int fk;
@@ -5200,7 +5252,11 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 frame:
 	if (!frame_load(b, fk, NULL, 0))
 		return BRP_STOPPED;
-	if (!br_relayout(b, b->width))
+	t0 = pf_ms();
+	k = br_relayout(b, b->width);
+	b->pic_laid = pf_ms();
+	b->pic_lay_ms = b->pic_laid - t0;	/* (a picture's next waits for it too) */
+	if (!k)
 		return BRP_STOPPED;
 	frames_bury(b->d->frames);
 	return BRP_LAYOUT;
@@ -5210,9 +5266,13 @@ relayout:
 	if (b->relink) {
 		b->relink = 0;
 		k = relay(b);
+		if (!k && conn_stop)
+			b->relink = 1;
 	} else {
 		k = br_relayout(b, b->width);
 	}
+	if (!k && conn_stop)
+		b->pic_relayout = 1;	/* (stopped for what came: again after it) */
 	b->pic_laid = pf_ms();
 	b->pic_lay_ms = b->pic_laid - t0;
 	return k ? BRP_LAYOUT : BRP_STOPPED;
