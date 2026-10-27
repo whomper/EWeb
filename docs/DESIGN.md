@@ -915,6 +915,8 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   one a step of the main loop, each drawn as it comes. The window scrolls meanwhile (its arrows,
   slider, Up, Down, Space, ClrHome); anything else (a link clicked, a menu, typing) stops the
   picture coming, is done, and the pictures go on after it; Esc and Stop end them for the page.
+  What came meanwhile is kept in turn, up to 32 events (`put_off`): until 27 Oct 2026 only the
+  first was, and the rest of what was typed was lost (demozoo.org on a stock Falcon).
   Each address is kept once, with its file (so that another width or page size decodes it again
   without fetching) and each size it is decoded at; their memory is counted (an eighth of the free
   TT RAM up to 16 MB, else a sixteenth of the free ST RAM up to 1 MB), and
@@ -926,9 +928,13 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   attributes are hints for them), else the file's own size, one from the other by the
   proportions, within `max-width` and `max-height`; `vertical-align: middle` and `bottom` too.
   Before a picture's file has come, the attributes' proportions stand in, or with neither its alt
-  text: the page is laid out again when such a picture comes with other proportions, at most once
-  in two seconds and when the last has come (in the GUI rig: 0.4 to 0.7 s on the emulated Falcon
-  for the test page). A picture not there yet is framed, its alt text in it. `data-src` and the
+  text: the page is laid out again when such a picture comes with other proportions, waiting
+  after each such layout three times as long as it took (two seconds at least), and once when the
+  last has come (in the GUI rig: 0.4 to 0.7 s on the emulated Falcon for the test page). Until 27
+  Oct 2026 the two seconds counted from the layout's start, so demozoo.org's 3.5 s layouts on a
+  stock Falcon followed one another for as long as its pictures came; now they take at most a
+  quarter of that time (the log's `relaid` line gives the layout's own ms; its 45 s was a picture
+  fetched, then the layout). A picture not there yet is framed, its alt text in it. `data-src` and the
   like stand in for a `src` that is missing or a `data:` placeholder; `data:` pictures are decoded
   from the address itself.
 - **Decoding** (`common/src/pic.c`): straight to the size shown, never whole at the file's size

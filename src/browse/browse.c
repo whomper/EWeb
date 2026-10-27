@@ -2624,6 +2624,7 @@ static void show(browser *b, doc *d, page *p, const char *url, const char *secur
 	js_set_page(d, p);
 	b->pic_stopped = 0;
 	b->pic_relayout = b->relink = 0;
+	b->pic_laid = b->pic_lay_ms = 0;
 	b->pic_n = b->pic_done = 0;
 	shown_imgs(b);
 	img_trim();
@@ -5143,7 +5144,11 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 				b->pic_relayout = 1;
 		}
 	}
-	if (b->pic_relayout && (pf_ms() - b->pic_laid >= 2000 || waiting(b) == 0))
+	/* laid out again at most a quarter of the time while they come
+	   (demozoo.org on a stock Falcon, 26 Oct 2026: 3.5 s each, back to
+	   back), and once when the last has come */
+	if (b->pic_relayout && (pf_ms() - b->pic_laid >= (b->pic_lay_ms * 3 > 2000 ? b->pic_lay_ms * 3 : 2000) ||
+				waiting(b) == 0))
 		goto relayout;
 	/* decoded at each size it is shown at; what to draw again */
 	for (i = 0; i < b->p->nitems; i++) {
@@ -5201,14 +5206,16 @@ frame:
 	return BRP_LAYOUT;
 relayout:
 	b->pic_relayout = 0;
-	b->pic_laid = pf_ms();
+	t0 = pf_ms();
 	if (b->relink) {
 		b->relink = 0;
-		if (!relay(b))
-			return BRP_STOPPED;
-	} else if (!br_relayout(b, b->width))
-		return BRP_STOPPED;
-	return BRP_LAYOUT;
+		k = relay(b);
+	} else {
+		k = br_relayout(b, b->width);
+	}
+	b->pic_laid = pf_ms();
+	b->pic_lay_ms = b->pic_laid - t0;
+	return k ? BRP_LAYOUT : BRP_STOPPED;
 }
 
 int br_bookmark(browser *b)

@@ -460,6 +460,20 @@ def browse():
               ev is not None and ev.startswith("shown %slazy.html " % site) and pics is not None and
               int(pics.split()[-1]) < 8 and any(e.startswith("status Pictures stopped.") for e in evs),
               "%r\n%s" % (pics, "\n".join(evs[-6:])))
+        # keys typed while the pictures come: each put off till the
+        # picture has stopped, none lost (demozoo.org, 26 Oct 2026: only
+        # the first was kept)
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/lazy.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        time.sleep(0.5)
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/form.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 300)
+        check("browse: an address typed while the pictures come, every key kept",
+              ev is not None and ev.startswith("shown %sform.html " % site), str(ev))
         # a frameset: its frames fetched after it, as tall as the window;
         # the menu's link naming the main frame loads there (the address
         # the same), Back (Undo) shows the main frame's page before

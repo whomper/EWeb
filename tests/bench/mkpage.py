@@ -316,7 +316,13 @@ def stylesheet():
               "a:focus-visible", "img,picture,svg,video", "ul[class],ol[class]", "button", "input",
               "input,button,textarea,select", "table", "th,td", "fieldset", "legend", "label",
               "figure", "time", "abbr[title]", "code,kbd,samp,pre", "hr", "[hidden]"):
-        o(rule(e))
+        r = rule(e)
+        if e in ("html", "body"):
+            # (the page itself is never hidden: body's display:none drew
+            # nothing, 27 Oct 2026; the draws stay as they were, so every
+            # other byte does too)
+            r = r.replace("display:none", "display:block")
+        o(r)
     for c in COMPONENTS + UNUSED:
         b = "." + c
         o(rule(b, R.randint(3, 8)))

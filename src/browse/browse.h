@@ -136,7 +136,8 @@ typedef struct browser {
 	int pic_stopped;	/* Esc stopped them: no more for this page */
 	int pic_relayout;	/* one came whose size the layout didn't know */
 	int relink;		/* and styled again first: a link on it visited since */
-	unsigned long pic_laid;	/* when the page was last laid out again for them (ms) */
+	unsigned long pic_laid;	/* when the page was last laid out again for them (ms), */
+	unsigned long pic_lay_ms;	/* and how long that took */
 	int pic_n, pic_done;	/* how many to fetch, and fetched, for the status line */
 	unsigned long pf_shows;	/* the page shown (shows) whose pictures webgate was told of */
 

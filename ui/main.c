@@ -65,11 +65,16 @@ int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
 /* what came while a picture did and isn't the window's own (a menu, a
-   click, a key that isn't scrolling): done when the picture has stopped */
-static struct {
+   click, a key that isn't scrolling): done in turn when the picture has
+   stopped (keys typed meanwhile were lost after the first: demozoo.org,
+   26 Oct 2026) */
+#define LATER 32
+typedef struct {
 	short which, msg[8];
 	AEVENT ev;
-} later;
+} LATER_EV;
+static LATER_EV later[LATER];
+static int nlater;
 
 #define FROGFIND "http://frogfind.com/?q=%s"
 
@@ -802,10 +807,11 @@ static void refresh_stop(int tell)
 /* a picture is stopped for what came: it is done after */
 static void put_off(short which, const short *msg, const AEVENT *ev)
 {
-	if (later.which == 0) {
-		later.which = which;
-		memcpy(later.msg, msg, sizeof later.msg);
-		later.ev = *ev;
+	if (nlater < LATER) {
+		later[nlater].which = which;
+		memcpy(later[nlater].msg, msg, sizeof later[nlater].msg);
+		later[nlater].ev = *ev;
+		nlater++;
 	}
 	conn_stop = 1;
 }
@@ -2031,7 +2037,8 @@ static void pictures(void)
 			win_page_drawn(y0, y1);
 		break;
 	case BRP_LAYOUT:
-		log_event("relaid %.*s height %ld ms %lu", (int) strcspn(br.url, "?"), br.url, br.p ? (long) br.p->height : 0L, pf_ms() - t);
+		log_event("relaid %.*s height %ld ms %lu (layout %lu)", (int) strcspn(br.url, "?"), br.url,
+			  br.p ? (long) br.p->height : 0L, pf_ms() - t, br.pic_lay_ms);
 		win_page_relaid();
 		break;
 	case BRP_STOPPED:
@@ -2387,10 +2394,14 @@ int main(void)
 			win_use(pictures_window());
 			pictures();
 			win_use(was);
-			if (later.which) {
-				short w = later.which;
-				later.which = 0;
-				handle(w, later.msg, &later.ev, &hover_x, &hover_y);
+			if (nlater > 0) {
+				/* (copied first: what one does may put off more) */
+				int n = nlater, i;
+				static LATER_EV now[LATER];
+				memcpy(now, later, n * sizeof later[0]);
+				nlater = 0;
+				for (i = 0; i < n && !quit; i++)
+					handle(now[i].which, now[i].msg, &now[i].ev, &hover_x, &hover_y);
 			}
 		}
 		/* moving on while the pictures come; at rest once they have */
