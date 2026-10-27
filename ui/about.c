@@ -2,14 +2,16 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * about.c - EWeb's About box, the AERA programs' shared one
- * (common/ui/aboutbox.c), with the network, the DSP, the screen and the
- * memory it runs in; the keys; the iconified window.
+ * (common/ui/aboutbox.c), with the family's three status lines (the
+ * guidelines' 1.3: the connection, the screen mode, the memory); the keys;
+ * the iconified window.
  */
 #include <stdio.h>
 #include <string.h>
 
 #include "ui.h"
 #include "aboutbox.h"
+#include "aboutline.h"
 #include "iconify.h"
 #include "plat.h"
 #include "icon.h"
@@ -22,27 +24,28 @@
 
 void dlg_about(void)
 {
-	static char net[80], where[80];
+	static char net[80], mode[40], mem[80];
 	/* what the program takes from others: the ST edition has no TLS
 	   and no scripts, and TJpgDec in place of libjpeg-turbo */
 #ifdef EW_ST
-	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari ST and STE", { net, where, 0 },
+	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari ST and STE", { net, mode, mem },
 		    { "Fonts drawn from DejaVu. From NetSurf (MIT):",
 		      "libparserutils, libnsgif. JPEG: TJpgDec",
 		      "(ChaN's licence)." },
 		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 #else
-	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, where, 0 },
+	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, mode, mem },
 		    { "DejaVu fonts. MIT: BearSSL, QuickJS, musl's",
 		      "maths, NetSurf's libparserutils and libnsgif.",
 		      "JPEG: libjpeg-turbo (IJG's and BSD licences)." },
 		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 #endif
-	snprintf(net, sizeof net, "%s  \xF9  secure sites: %s",
-		 strcmp(net_stack(), "none") ? net_stack() : "no network",
-		 !opt.falcon ? (opt.gate[0] ? "the Pi gateway" : "none") :
-		 strcmp(falcon_dsp_ec_state(), "DSP") ? "68030" : "DSP");
-	snprintf(where, sizeof where, "%s%s%s", scr_mode(), about_ram()[0] ? "  \xF9  " : "", about_ram());
+	/* (secure sites' DSP or 68030 is in the log, not here) */
+	about_net_line(net, sizeof net, net_stack(),
+		       opt.falcon ? ABOUT_DIRECT : opt.gate[0] ? ABOUT_GATEWAY : ABOUT_NO_GATEWAY,
+		       loading ? ABOUT_ONLINE : ABOUT_READY);
+	snprintf(mode, sizeof mode, "%dx%d, %s", scr_w, scr_h, scr_mode());
+	about_mem_line(mem, sizeof mem);
 	about_show(&a);
 }
 
@@ -60,7 +63,7 @@ void dlg_keys(void)
 		 "^C       copy the page's text (or the address)\n"
 		 "Tab      between the page and the address\n"
 		 "Right click: a link's or the page's commands\n"
-		 "^N       a new window; ^W closes one\n"
+		 "^N       a new window; ^W the next; ^U closes\n"
 		 "^,       the Settings\n"
 		 "^Q       quit");
 }

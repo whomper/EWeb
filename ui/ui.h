@@ -31,7 +31,6 @@ typedef struct {
 	short runscripts;		/* RUNSCRIPTS=: pages' scripts run on no site (0), the sites in
 					   SCRIPTS= (1), every site but those in NOSCRIPTS= (2) */
 	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
-	short dialogs3d;		/* DIALOGS3D=: dialogs in the AES's 3D look where it has one (1), flat (0) */
 	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
 } EWOPT;
 extern EWOPT opt;
@@ -190,6 +189,7 @@ void win_use(ewin *w);			/* cur = w */
 ewin *win_of(short h);			/* EWeb's window of that handle, NULL none */
 int win_front(void);			/* cur = the one in front, if it is EWeb's: 1 if cur changed */
 int win_count(void);
+void win_next(void);			/* ^W: EWeb's next window topped, in turn (3.2) */
 int  win_open(void);			/* cur's, in front; 0 the AES has no more */
 void win_close(void);
 void win_message(const short *msg);	/* WM_*: to the window it names */
@@ -237,7 +237,7 @@ void win_select_all(void);		/* Edit > Select all, on the page */
 /* main.c */
 enum {
 	C_NONE, C_ABOUT,
-	C_NEWWIN, C_CLOSE, C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
+	C_NEWWIN, C_CLOSE, C_NEXTWIN, C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_ENCODING,
 	C_PICTURES,

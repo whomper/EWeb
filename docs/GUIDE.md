@@ -63,7 +63,9 @@ EWeb keeps everything in the folder it is started from. Start it from
 the desktop with a double click; drop a page (an `.HTM` file) on it, or
 on its window, to open that page. Other programs can hand it an address
 or a file to show (VA_START), and a mail address (a `mailto:` link) goes
-to EMail, when it is running.
+to EMail, when it is running. The Help key opens this guide in the
+viewer your system's `STGUIDE=` names (MiNT's and MagiC's custom), else
+in EHypView, ST-Guide or HypView.
 
 ## Opening pages
 
@@ -78,6 +80,9 @@ address and press Return:
 - words to search for, such as `atari falcon`: they go to FrogFind,
   a search engine made for vintage computers (another can be set in
   [Settings](#settings))
+
+**Esc** in the address field puts back the address of the page shown,
+as in any browser.
 
 While a page loads, the status bar at the foot of the window says what
 is happening and how much has come, and the thin line along its foot
@@ -236,7 +241,9 @@ not yet followed.
   (nothing is left behind). Sites wait about a minute for you to choose;
   if one gives up, EWeb asks it for the file once more. A link the page
   marks as a download (its site's own) is saved this way when you click
-  it.
+  it. Under MiNT with BGEM.NG, a file that finishes while another
+  program's window is in front says so in a notification; its Show
+  brings EWeb's window to the front.
 - **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
   page, and one its site says to save rather than show (a text file it
   sends as an attachment): EWeb asks where to save it, and the page you
@@ -324,8 +331,9 @@ The keys and the menus work on the window in front. One page loads at a
 time: while it does, the other windows can be moved, topped and
 redrawn but wait for it. Pictures come for the window in front first,
 then for the others; a page's timers and its refresh wait while its
-window is behind. **^W** (File > Close window) closes the window in
-front, and closing the last one quits EWeb.
+window is behind. **^W** (File > Next window) brings EWeb's next window
+to the front, each in turn. **^U** (File > Close window) closes the
+window in front, and closing the last one quits EWeb.
 
 How many windows there may be depends on the memory: eight beside TT
 RAM, four with 6 MB of ST RAM free, else two (a 4 MB Falcon, a 1040 ST).
@@ -490,7 +498,7 @@ of it.
 | Undo, ^Z | back |
 | Shift-Undo, Shift-^Z | forward |
 | ^R | reload |
-| Esc | stop a page loading, or its pictures; stay on a page that would go on |
+| Esc | stop a page loading, or its pictures; stay on a page that would go on; in the address, the page's address back; in a dialog's field, empty it |
 | Up, Down | scroll; with Shift, a page |
 | Left, Right | scroll a wide page sideways; with Shift, a window's width |
 | Space, Shift-Space | a page down, up |
@@ -503,7 +511,8 @@ of it.
 | Return | in a field: send its form |
 | ^, | the Settings |
 | Help | this guide |
-| ^W | close the window in front (the last one: quit) |
+| ^W | EWeb's next window to the front |
+| ^U | close the window in front (the last one: quit) |
 | ^Q | quit |
 
 Help > Keys shows the main keys in a box of their own.
@@ -690,14 +699,15 @@ Options > Settings (^,) has three pages (two in the ST edition). Under
 MiNT or MagiC, it and EWeb's other dialogs open in windows of their
 own, which you can move by their title bars and close with their
 closers, as other programs' there; its alerts are the system's own.
+In a dialog, **Esc** empties the field the cursor is in, as GEM's
+dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
 
 - **General:** whether pages' pictures are shown, the text size (per
   cent, 50 to 200), where words typed in the address go, the disk
   cache's size (MB, 0 for none), in `EWEB.PRG` whether a Falcon's DSP
-  does the pictures, whether EWeb uses its own colours in 256
-  colours, and **3D dialogs**: EWeb's dialogs and alerts in the 3D look
-  where the system has one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon;
-  greyed on TOS 1 to 3, which have none).
+  does the pictures, and whether EWeb uses its own colours in 256
+  colours. Dialogs and alerts have the 3D look wherever the system has
+  one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon).
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, and the Pi gateway's address and port (8280).
 - **Scripts** (`EWEB.PRG`): whether pages' scripts run, and on every site
@@ -731,8 +741,6 @@ there at once; where the window was, when you quit:
   pictures need; the system's first 16 stay, and its own come back when
   EWeb quits), 0 for the system's as they are (another program's
   pictures beside EWeb's keep their colours)
-- `DIALOGS3D=` 1 for dialogs and alerts in the 3D look where the
-  system has one, 0 for them flat everywhere
 - `LOG=` 1 for `EWEB.LOG` next to `EWEB.PRG`: each connection, a secure
   one's handshake step by step, and where EWeb waited longest (never an
   address's query, a cookie or what was typed in a form); written once a
@@ -794,3 +802,5 @@ IJG's and BSD licences; ChaN's TJpgDec in the ST edition), its secure
 connections BearSSL (MIT), and its scripts QuickJS with musl's maths
 (MIT). It belongs to the AERA family of Atari programs (ECal, EContact,
 EMail, EFTP, EHypView, ClaudeST, EUpdate) and looks and works as they do.
+Desk > About EWeb says how EWeb reaches the web and whether it is
+online, the screen mode, and the memory free.

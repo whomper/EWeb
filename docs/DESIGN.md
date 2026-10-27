@@ -844,9 +844,20 @@ releases.
   `dlg_3d` (EWeb's own trees in `ui/dialogs.c`'s `d_end`; the About box and alerts in common's
   code): the box on the 3D grey, buttons raised, fields white. That is TOS 4,
   MagiC, XaAES, and EmuTOS 1.4 too (its AES has TOS 4's 3D objects); TOS 1 to 3 stay flat.
-  Settings > General > 3D dialogs (`DIALOGS3D=1`; 0: flat everywhere), greyed where there's no 3D
-  look. `make hatarigui`'s `dialogs` group shows the Settings and Find on TOS 4.04 and EmuTOS
-  both ways, and greyed on the ST's TOS 1.04.
+  There is no setting for it any more (the guidelines' 5.6 of 27 Oct 2026: an AES without 3D
+  ignores the flags): the 3D dialogs tick and `DIALOGS3D=` went, and an INF that still has the
+  line is read without it and saved without it. In a dialog Esc empties the field the cursor is
+  in and the dialog stays, Undo cancels (3.5 of 27 Oct, GEM's way, in common's `dlg_do`); in
+  the address field Esc puts back the page's address, as in every browser. `make hatarigui`'s
+  `dialogs` group shows the Settings and Find on TOS 4.04 and EmuTOS (3D) and the ST's TOS 1.04
+  (flat), Esc emptying Find's field and the Settings' text size, Undo cancelling.
+- **The About box's status lines** (the guidelines' 1.3 of 27 Oct 2026, common's `aboutline.c`):
+  the connection ("STinG  •  Direct  •  ready": Direct, Pi gateway or No gateway; online while a
+  page loads), the screen ("640x480, 256 colours (EWeb's)"), the memory ("TT and ST RAM  •  Free:
+  …"). Whether secure sites' arithmetic is the DSP's or the 68030's is in the log only.
+- **Notifications** (the guidelines' 4.5, common's `notify.c`): under MiNT with BGEM.NG a file
+  saved while another program's window is in front says so ("Download finished", its name and
+  size; Show tops the window it came in). Elsewhere the status line alone says it, as before.
 - **First timings,** on the emulated Falcon (Hatari 2.4.1, EmuTOS 1.4, a 68030 at 32 MHz with
   TT-RAM, 640x480 in 16 colours; `EWEB.PRG` logs each page's phases), saved pages from the disk
   without their stylesheets:
@@ -3655,8 +3666,9 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
   address in `br.elsewhere` and the name in `br.window`. The front end loads it in the window of
   that name if it opened one (`ewin.name`), else in a new one named so (`to_window`), else, with
   no more to be had, in the window itself. A form that posts to another window is answered in
-  its own. ^W (File > Close window) closes the window in front; the last one quits (the
-  guidelines' ^W). The window in front is the one whose place `WINDOW=` keeps.
+  its own. ^U (File > Close window) closes the window in front; the last one quits; ^W (File >
+  Next window, `win_next`) tops EWeb's next window, in turn (the guidelines' 3.2 of 27 Oct
+  2026). The window in front is the one whose place `WINDOW=` keeps.
 - **Memory:** a window costs its state (14 KB, most of it its history and addresses) and its
   page. There may be eight beside TT RAM, four with 6 MB of ST RAM free at the start, else two
   (`win_max`: a 4 MB Falcon, a 1040 ST). The pages kept for Back share `br_keep_max` (each window's history its share), and

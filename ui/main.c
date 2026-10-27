@@ -34,6 +34,7 @@
 #include "img.h"
 #include "js.h"
 #include "mbar.h"
+#include "notify.h"
 #include "pic.h"
 #include "plat.h"
 #include "secret.h"
@@ -59,7 +60,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 1, 0 };
+	       1, "", 0 };
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -87,7 +88,8 @@ static const MBAR_ITEM m_file[] = {
 	{ "Reload", "^R", C_RELOAD },
 	{ "Stop", "Esc", C_STOP },
 	{ "-", 0, 0 },
-	{ "Close window", "^W", C_CLOSE },
+	{ "Close window", "^U", C_CLOSE },
+	{ "Next window", "^W", C_NEXTWIN },
 	{ "Quit", "^Q", C_QUIT },
 	{ 0, 0, 0 }
 };
@@ -329,6 +331,7 @@ void menu_update(void)
 	enable(C_HOME, !loading);
 	enable(C_NEWWIN, !loading && win_count() < win_max);
 	enable(C_CLOSE, !loading);
+	enable(C_NEXTWIN, !loading && win_count() > 1);
 	enable(C_HISTORY, !loading);
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
@@ -426,8 +429,6 @@ static void settings_load(void)
 			opt.pens = (short) (atoi(eq) < 0 ? -1 : atoi(eq) > 0);
 		else if (!strcmp(line, "PALETTE"))
 			opt.palette = atoi(eq) != 0;
-		else if (!strcmp(line, "DIALOGS3D"))
-			opt.dialogs3d = atoi(eq) != 0;
 		else if (!strcmp(line, "LOG"))
 			opt.log = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
@@ -578,9 +579,6 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.palette);
 	put(&s, "PALETTE", v, "in 256 colours: 1 = EWeb's own colours while it runs (pale tints for pages and "
 	    "pictures; TOS's first 16 kept), 0 = the system's");
-	snprintf(v, sizeof v, "%d", opt.dialogs3d);
-	put(&s, "DIALOGS3D", v, "1 = dialogs and alerts in the 3D look where the AES has one (TOS 4, MagiC, EmuTOS, "
-	    "XaAES), 0 = flat everywhere");
 	snprintf(v, sizeof v, "%d", opt.log);
 	put(&s, "LOG", v, "1 = EWEB.LOG next to EWEB.PRG: each connection and its secure handshake, step by step "
 	    "(no address's query, cookie or form field), and where EWeb waited longest; 0 = none");
@@ -826,6 +824,8 @@ static void idle(void)
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
 	gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" : "load");
 	win_throb(1);
+	if ((which & MU_MESAG) && notify_message(msg))
+		which &= ~MU_MESAG;	/* (BGEM.NG's) */
 	if (pics) {
 		/* the page's refresh to another page is due: the picture is
 		   cut short (it is fetched again if the page stays; one of the
@@ -973,14 +973,32 @@ static int save_where(void *ud, const char *name, char *path, int size)
 	return r;
 }
 
-/* said on the status line, and in the log (its size, no path) */
+static short notified_h;		/* the window a notification's Show tops */
+
+/* BGEM.NG's Show (4.5): the window the file came in, in front */
+static void notified(short id, short button)
+{
+	if (button == 1 && win_of(notified_h) != NULL)
+		wind_set(notified_h, WF_TOP, 0, 0, 0, 0);
+}
+
+/* said on the status line, and in the log (its size, no path); where
+   another program's window is in front by then, a notification too, where
+   BGEM.NG shows them (the guidelines' 4.5) */
 static void saved(const char *path, long len)
 {
 	char t[120];
+	short top, d;
 	const char *name = strrchr(path, '\\');
 	snprintf(t, sizeof t, "Saved %.60s (%ld KB).", name != NULL ? name + 1 : path, (len + 1023) >> 10);
 	status(t);
 	log_event("saved %ld", len);
+	wind_get(0, WF_TOP, &top, &d, &d, &d);
+	if (win_of(top) == NULL && cur->h > 0) {
+		notified_h = cur->h;
+		if (notify_send("Download finished", t, "Show", 1))
+			log_event("notified");
+	}
 }
 
 static void save_file(const char *url, const char *given);
@@ -1633,7 +1651,7 @@ void command(int cmd)
 		}
 		break;
 	case C_CLOSE:
-		/* the window in front; the last: EWeb quits (the guidelines' ^W) */
+		/* the window in front; the last: EWeb quits (the guidelines' ^U) */
 		if (win_count() <= 1) {
 			quit = 1;
 			break;
@@ -1642,6 +1660,7 @@ void command(int cmd)
 		win_free(cur);
 		win_front();
 		break;
+	case C_NEXTWIN: win_next(); break;
 	case C_OPENURL: win_address_focus(1); break;
 	case C_OPENFILE: open_file(); break;
 	case C_SAVE: save_page(); break;
@@ -1869,7 +1888,8 @@ static int shortcut(short kstate, short key)
 		case 0x15: cmd = C_HISTORY; break;		/* Y */
 		case 0x13: cmd = C_RELOAD; break;		/* R */
 		case 0x10: cmd = C_QUIT; break;			/* Q */
-		case 0x11: cmd = C_CLOSE; break;		/* W: the window, the last one quits */
+		case 0x16: cmd = C_CLOSE; break;		/* U: the window, the last one quits */
+		case 0x11: cmd = C_NEXTWIN; break;		/* W: the next window */
 		case 0x31: cmd = C_NEWWIN; break;		/* N */
 		case 0x2c: cmd = shift ? C_FORWARD : C_BACK; break;	/* Z */
 		case 0x0b: cmd = C_ACTUAL; break;		/* 0 */
@@ -1919,6 +1939,8 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 		graf_mkstate(hover_x, hover_y, &k, &k);
 		win_hover(*hover_x, *hover_y);
 	}
+	if ((which & MU_MESAG) && notify_message(msg))
+		which &= ~MU_MESAG;	/* (BGEM.NG's: its answer, a button) */
 	if (which & MU_MESAG) {
 		const char *va;
 		switch (msg[0]) {
@@ -2174,10 +2196,12 @@ int main(void)
 	crash_cleanup = crash_quit;
 	help_init();
 	av_init("EWEB");
+	notify_init("EWEB    ");	/* notifications through BGEM.NG (4.5) */
+	notify_clicked = notified;
+	notify_ask();
 	dlg_title = "EWeb";		/* dialogs' windows where the AES has them (3.5) */
 	dlg_redraw_hook = dialog_redraw;
 	settings_load();
-	dlg_3d_on = opt.dialogs3d;	/* before the first dialog (5.6) */
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or the Falcon's true|colour.][ Quit ]");

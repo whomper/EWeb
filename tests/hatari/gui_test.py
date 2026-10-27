@@ -88,7 +88,7 @@ HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
-Y, F, G, A, N, W = 0x15, 0x21, 0x22, 0x1E, 0x31, 0x11
+Y, F, G, A, N, W, U = 0x15, 0x21, 0x22, 0x1E, 0x31, 0x11, 0x16
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -496,7 +496,8 @@ def browse():
             check("frames: the menu's link found", False, str(ev))
         # windows: ^N opens another, with the home page; a link whose
         # target is _blank opens one too, and one naming a window opens
-        # it once, then loads there; ^W closes the window in front
+        # it once, then loads there; ^W tops the next window, ^U closes
+        # the window in front (the guidelines' 3.2, 27 Oct 2026)
         r.key(N, (CTRL,))
         nw = r.wait(r"window \d+ of ", 60)
         ev = r.wait(r"shown ", 120)
@@ -504,9 +505,25 @@ def browse():
         r.shot(29)
         check("windows: ^N opens another with the home page", nw is not None and nw.startswith("window 2 of ") and
               ev is not None, "\n".join(r.events()[-8:]))
+        mark = len(r.events())
         r.key(W, (CTRL,))
+        time.sleep(2)
+        r.shot(70)
+        r.key(W, (CTRL,))
+        time.sleep(2)
+        nexts = [e for e in r.events()[mark:] if e == "next window"]
+        check("windows: ^W tops the next window, in turn", len(nexts) == 2, "\n".join(r.events()[mark:]))
+        r.key(U, (CTRL,))
         cl = r.wait(r"window closed", 30)
-        check("windows: ^W closes the window in front", cl is not None, "\n".join(r.events()[-6:]))
+        check("windows: ^U closes the window in front", cl is not None, "\n".join(r.events()[-6:]))
+        # Esc in the address: the page's address back (3.5's exception)
+        r.key(L, (CTRL,))
+        r.type("zzz")
+        r.key(ESC)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        check("windows: Esc in the address puts the page's address back", ev is not None and
+              "zzz" not in ev and ev.startswith("shown http"), str(ev))
         r.key(L, (CTRL,))
         r.type("127.0.0.1:%d/site/blank.html" % HTTP)
         r.key(RETURN)
@@ -523,7 +540,7 @@ def browse():
             r.shot(30)
             check("windows: a _blank link opens a window", nw is not None and nw.startswith("window 2 of ") and
                   ev2 is not None and ev2.startswith("shown %sfsone.html " % site), "\n".join(r.events()[-8:]))
-            r.key(W, (CTRL,))
+            r.key(U, (CTRL,))
             cl = r.wait(r"window closed", 30)
             time.sleep(1)
             pt = link_point(site + "blank.html", area, int(m.group(5)), "Main in the side window")
@@ -532,7 +549,7 @@ def browse():
             ev2 = r.wait(r"shown ", 120)
             check("windows: a link naming a window opens it", cl is not None and nw is not None and
                   ev2 is not None and ev2.startswith("shown %sfsmain.html " % site), "\n".join(r.events()[-8:]))
-            r.key(W, (CTRL,))
+            r.key(U, (CTRL,))
             r.wait(r"window closed", 30)
         else:
             check("windows: the page of links shown", False, str(ev))
@@ -1080,12 +1097,12 @@ def falcon4_secure():
 
 
 def dialogs():
-    """the guidelines' 5.6: the Settings (and Find, another of EWeb's own
-    dialogs) in the AES's 3D look where it has one, with DIALOGS3D=1, and
-    flat once their 3D dialogs tick is off (DIALOGS3D=0): TOS 4.04, and
-    EmuTOS 1.4, whose AES draws 3D objects as TOS 4's does; on TOS 1.04
-    (EWEBST.PRG on the ST), with no 3D look, flat with the tick greyed and
-    left as it is"""
+    """the guidelines' 5.6 and 3.5: the Settings (and Find, another of
+    EWeb's own dialogs) in the AES's 3D look where it has one, with no
+    setting for it (an old INF's DIALOGS3D= read without it and gone at
+    the next save): TOS 4.04, and EmuTOS 1.4, whose AES draws 3D objects
+    as TOS 4's does; flat on TOS 1.04 (EWEBST.PRG on the ST). In a field
+    Esc empties it and the dialog stays; Undo cancels"""
     saved = os.environ.get("AERA_TOS")
     xvfb = machines.xvfb(DISPLAY)
     try:
@@ -1098,69 +1115,70 @@ def dialogs():
                     os.environ["AERA_TOS"] = saved
             else:
                 os.environ["AERA_TOS"] = tos
-            hd = hd_for(name, r"C:\TEXT.HTM", "DIALOGS3D=1\r\n")
+            hd = hd_for(name, r"C:\TEXT.HTM", "DIALOGS3D=0\r\n")
             r = Run(name, spec, hd, windowed=True, prg=prg)
             try:
                 if tos is None and not r.m.real:
                     print("skip  dialogs: %s needs Erez's TOS in ~/.aera/tos" % name)
                     continue
                 check("dialogs: %s starts" % r.m.describe(), r.wait(r"shown ", 300) is not None, str(r.events()[-3:]))
-                # the 3D dialogs tick: the General page's tenth row
-                # (EWEBST.PRG's ninth: no DSP tick); the 8 MHz ST takes
-                # seconds to draw the page again once a dialog has gone,
-                # and keys typed meanwhile may be Esc's to stop it
-                row = 9 if prg == "EWEB.PRG" else 8
+                # the 8 MHz ST takes seconds to draw the page again once a
+                # dialog has gone, and keys typed meanwhile may be Esc's to
+                # stop it
                 settle = 3 if prg == "EWEB.PRG" else 20
 
                 def settings(n):
                     """the Settings shown (8x16 characters) and their
                     background where nothing is drawn on it: right of OK
-                    (row 18), and right of the 3D dialogs tick (a third of
-                    a character's gap between rows)"""
+                    (row 18), and right of the General page's tenth row"""
                     r.key(COMMA, (CTRL,))
                     at = r.wait(r"dialog at ", 120)
                     if at is None:
-                        return None, []
+                        return []
                     dx, dy = (int(v) for v in at.split()[2:4])
                     time.sleep(3)
                     im = Image.open(r.shot(n)).convert("RGB")
-                    tick = (dx + 14 * 8 + 8, dy + (4 + row) * 16 + 2 + row * 6 + 8)
-                    return tick, [im.getpixel((dx + 56 * 8 + 4, dy + 18 * 16 + 8)),
-                                  im.getpixel((dx + 40 * 8, tick[1]))]
-
-                def find(n):
-                    """Edit > Find, another of EWeb's own dialogs"""
-                    r.key(F, (CTRL,))
-                    time.sleep(3)
-                    r.shot(n)
-                    r.key(ESC)
-                    time.sleep(settle)
+                    return [im.getpixel((dx + 56 * 8 + 4, dy + 18 * 16 + 8)),
+                            im.getpixel((dx + 40 * 8, dy + (4 + 9) * 16 + 2 + 9 * 6 + 8))]
 
                 white = lambda px: px and all(p == (255, 255, 255) for p in px)
                 grey = lambda px: px and all(p[0] == p[1] == p[2] and 64 < p[0] < 255 for p in px)
-                find(5)
-                tick, px = settings(0)
+                # Find: words typed, Esc empties the field (the dialog
+                # stays), others typed and Return: those are found
+                r.key(F, (CTRL,))
+                time.sleep(3)
+                r.type("zzz")
+                r.key(ESC)
+                time.sleep(1)
+                r.shot(5)
+                r.type("Centre")
+                r.key(RETURN)
+                ev = r.wait(r"found ", 120)
+                check("dialogs: %s, Find: Esc empties the field, the dialog stays" % name,
+                      ev == "found 1 of 1", "\n".join(r.events()[-4:]))
+                time.sleep(settle)
+                px = settings(0)
                 check("dialogs: %s, Settings %s" % (name, "in 3D" if in3d else "flat"),
-                      tick is not None and (grey(px) if in3d else white(px)), str(px))
-                # the tick: turned off where there's a 3D look, else greyed
-                # (clicked, nothing changes); OK
-                r.mouse.click(*tick)
-                time.sleep(2)
-                r.shot(1)
+                      grey(px) if in3d else white(px), str(px))
                 r.key(RETURN)
                 saved_ok = r.wait(r"settings ", 120) == "settings changed"
                 time.sleep(settle)
                 inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
-                want = "DIALOGS3D=0" if in3d else "DIALOGS3D=1"
-                check("dialogs: %s, the tick %s, saved as %s" % (name, "turned off" if in3d else "greyed", want),
-                      saved_ok and "\r\n%s\r\n\r\n" % want in inf, repr(inf[:600]))
-                find(2)
-                tick, px = settings(3)
-                check("dialogs: %s, Settings flat after" % name, tick is not None and white(px), str(px))
+                check("dialogs: %s, an old INF's DIALOGS3D= gone at the next save" % name,
+                      saved_ok and "ZOOM=" in inf and "DIALOGS3D" not in inf, repr(inf[:600]))
+                # the Settings again: Esc empties the text size (the
+                # dialog stays), Undo cancels: nothing changed
+                mark = len(r.events())
+                settings(1)
                 r.key(ESC)
-                r.wait(r"settings ", 120)
+                time.sleep(3)
+                r.shot(2)
+                stayed = not any(e.startswith("settings ") for e in r.events()[mark:])
+                r.key(UNDO)
+                ev = r.wait(r"settings ", 120)
+                check("dialogs: %s, Settings: Esc empties a field and stays, Undo cancels" % name,
+                      stayed and ev == "settings kept", "\n".join(r.events()[mark:]))
                 time.sleep(settle)
-                find(4)
                 r.key(Q, (CTRL,))
                 check("dialogs: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-4:]))
             finally:

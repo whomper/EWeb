@@ -1046,7 +1046,9 @@ static int addr_key(short kstate, short key)
 	} else if (scan == 0x0f) {			/* Tab: the keyboard to the page */
 		addr_blur();
 		return 1;
-	} else if (scan == 0x01) {			/* Esc: nothing (it never clears text) */
+	} else if (scan == 0x01) {			/* Esc: the page's address back, as every browser's (3.5) */
+		win_address(br.url);
+		win_address_focus(1);
 		return 1;
 	} else if (scan == 0x4b) {			/* Left */
 		if (cur->a_all)
@@ -2441,6 +2443,20 @@ int win_front(void)
 	}
 	cur = w;
 	return 1;
+}
+
+void win_next(void)
+{
+	ewin *w;
+	if (cur == NULL)
+		return;
+	for (w = cur->next != NULL ? cur->next : wins; w != cur && w->h <= 0; w = w->next != NULL ? w->next : wins)
+		;
+	if (w == cur)
+		return;		/* (one window: nothing) */
+	log_event("next window");
+	wind_set(w->h, WF_TOP, 0, 0, 0, 0);
+	win_front();
 }
 
 int win_count(void)

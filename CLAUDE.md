@@ -150,9 +150,9 @@ hub stay complete, with the evidence.
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
   `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
-  called by `d_end` in `ui/dialogs.c`; Settings > General > 3D dialogs, `DIALOGS3D=`): after
-  changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and EmuTOS both ways, the ST's
-  TOS 1.04 with the tick greyed). Where the AES runs several programs at once (MiNT, MagiC) alerts
+  called by `d_end` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
+  Undo cancels: 3.5): after changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and
+  EmuTOS in 3D, the ST's TOS 1.04 flat). Where the AES runs several programs at once (MiNT, MagiC) alerts
   are the AES's and dialogs its windows (the guidelines' 3.5: `dlg_band`, `dlg_open`, `dlg_close`,
   `dlg_draw` in `ui/dialogs.c`; `dlg_redraw_hook` in `main.c`): after changing a dialog, run it
   under FreeMiNT + XaAES too (AERA-Atari's `common/tests/xaaes`, `run.py`): open it, move it by
@@ -251,7 +251,7 @@ hub stay complete, with the evidence.
   `new_window` (^N, `to_window` for `BR_WINDOW`: a link's or a form's target `_blank` or a name no
   frame has, `frame_target`), as many as `win_max`; `src/browse` keeps every browser's pictures
   (`br_register`, `shown_imgs`) and shares the kept pages. After changing them: `make test`
-  (`tests/layout/frames.py`: `frames/targets.html`), `make hatarigui` (browse: ^N, ^W, `/site/blank.html`).
+  (`tests/layout/frames.py`: `frames/targets.html`), `make hatarigui` (browse: ^N, ^W, ^U, `/site/blank.html`).
 - **SVG** is `src/svg` (fresh, in whole numbers; DESIGN.md, SVG): `svgread.c` reads an `<svg>` from
   EWeb's document (a file parsed by EWeb's HTML parser), `raster.c` fills and strokes its paths,
   anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a
