@@ -281,7 +281,8 @@ hub stay complete, with the evidence.
   `common/tests/family/acc_all.py ST --prg EWeb:EWEBST.PRG:EWEB.FNT`, before each release). `EW_ST`
   keeps the arenas' pieces small, and a page that doesn't fit gives back the kept pages and the
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
-  through the gateway.
+  through the gateway, and starts `EWEB.PRG` there to see common's `cpucheck.c` (`EWEB.PRG`'s
+  `main()`, 68000 code; `app_main` is EWeb's) say it needs a Falcon or a TT.
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
   `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make

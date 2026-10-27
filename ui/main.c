@@ -2183,7 +2183,16 @@ static void av_start(const char *s)
 		go(what);
 }
 
+#ifdef EW_ST
 int main(void)
+#else
+/* EWEB.PRG's main() is common's cpucheck.c, 68000 code: on an ST it shows
+   this and goes, where the 68030 code from appl_init on would die */
+const long cpu_need = 30;
+const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, run|EWEBST.PRG, the ST edition.][ Quit ]";
+
+int app_main(void)
+#endif
 {
 	short work_out[57], msg[8], d;
 	char path[256], first[256];

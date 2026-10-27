@@ -550,8 +550,14 @@ build/tos/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
 build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h common/src/pic.h
+# EWEB.PRG's main(): the _CPU check, 68000 code, so that on an ST it says
+# so instead of dying at appl_init (common's cpucheck.c; EWEBST.PRG has none)
+build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(subst -m68030,-m68000,$(GEM_CFLAGS)) $(COMMON_WARN) -c $< -o $@
 build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
-		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o
+		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
+		build/tos/gem/common/cpucheck.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
@@ -646,7 +652,7 @@ build/prof/st/gem.o: common/atari/gem.c $(NET_HDRS)
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o)) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o)) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o)) -lgcc

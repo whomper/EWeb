@@ -1443,6 +1443,13 @@ multiplies, common's 32-bit routines, shift and subtract), matched against nativ
 million random pairs; they belong in common next to its 32-bit ones. TOS 1.x has no `Mxalloc`: the
 memory is sized from `Malloc(-1)` there.
 
+**`EWEB.PRG` started on an ST says so** (the hub, 27 Oct 2026): its `main()` is common's
+`cpucheck.c`, built alone as 68000 code, which reads `_CPU` and below a 68030 shows "EWEB.PRG needs
+a Falcon or a TT. On an ST or STE, run EWEBST.PRG, the ST edition." and goes back to the desktop;
+else it calls `app_main` (`ui/main.c`). Before, the 68030 code died at `appl_init` with an illegal
+instruction: a white screen, then the desktop. `make hatarigui`'s `st` group starts `EWEB.PRG` on
+the 1040 ST, sees the alert and presses Return.
+
 **It ran on a 1 MB ST up to 0.27** (the hub's rule for ST editions, 20 Oct 2026; no longer a target
 since 23 Oct 2026, Decisions). TOS 1.04 there leaves a
 program 940,906 bytes (919 KB, measured with a probe in Hatari); the first build needed 1015 KB to

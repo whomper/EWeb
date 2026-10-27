@@ -1367,6 +1367,43 @@ def cached_pictures(name, spec, dec):
         r.end()
 
 
+def st_cpu():
+    """EWEB.PRG (68030 code) started on the 1040 ST: its main() is common's
+    cpucheck.c, 68000 code, which says in an alert that this is the wrong
+    edition, and Return goes back to the desktop (it used to die at
+    appl_init with an illegal instruction: the hub, 27 Oct 2026). Seen in
+    the screenshots: the alert a white box mid-screen, the desktop its
+    pattern again with its menu bar"""
+    def white(n):
+        im = Image.open(r.shot(n)).convert("L")
+        mid = im.crop((200, 150, 440, 250)).histogram()
+        bar = im.crop((0, 0, 240, 18)).histogram()
+        return sum(mid[129:]) / sum(mid), sum(bar[:128])
+    r = Run("stcpu", "ST:mono", hd_for("stcpu", "about:start"))
+    try:
+        seen = None
+        for n in range(20):
+            time.sleep(2)
+            mid, _ = white(n)
+            if 0.75 < mid < 0.97:     # a white box with words, not a white screen
+                seen = n
+                break
+        check("st: EWEB.PRG on an ST says it needs a Falcon or a TT", seen is not None and not r.events(),
+              "no alert in %s-*.png; events %s" % (r.name, r.events()))
+        r.key(RETURN)
+        back = False
+        for n in range(20, 30):
+            time.sleep(2)
+            mid, bar = white(n)
+            if 0.35 < mid < 0.65 and bar > 100:
+                back = True
+                break
+        check("st: Return quits to the desktop", back and r.h.poll() is None and not r.events(),
+              "no desktop in %s-*.png; events %s" % (r.name, r.events()))
+    finally:
+        r.end()
+
+
 def st():
     """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, 4 MB,
     TOS 1.04): a page and its pictures from the disk in monochrome and in
@@ -2138,6 +2175,7 @@ if "scripts" in WHICH:
 if "screens" in WHICH:
     screens()
 if "st" in WHICH:
+    st_cpu()
     st()
 if "gateway" in WHICH:
     gateway()
