@@ -342,9 +342,10 @@ def main(argv):
              "   then lit (under the mouse),",
              "   %d pixels wide and %d rows (TB_TALL) or %d (TB_SHORT, for the 200-line" % (OW, OT, OS),
              "   screens), each pixel a byte into its edition's colours (0xRRGGBB), 0 a",
-             "   hole, each picture deflated on its own (at off[i], off[i + 1] - off[i]",
-             "   bytes): 256 colours (true colour too), 16 colours, and black and white",
-             "   (monochrome, 4 colours). */",
+             "   hole, the pictures one after another and deflated together (off[1]",
+             "   bytes: one Huffman table for all; an 8 MHz ST took 70 ms a picture to",
+             "   build one each): 256 colours (true colour too), 16 colours, and black",
+             "   and white (monochrome, 4 colours). */",
              "#define TB_W %d" % OW, "#define TB_TALL %d" % OT, "#define TB_SHORT %d" % OS,
              "#define TB_PICS %d" % (3 * len(ICONS)),
              "typedef struct { short ncol, h; const unsigned long *col; const unsigned short *off; "
@@ -356,12 +357,10 @@ def main(argv):
             pics = reduce256(pics)
         cols = colours_of(pics)
         assert len(cols) < 256
-        data, off = b"", [0]
-        for p in pics:
-            raw = bytes(cols.index(c) + 1 if c is not None else 0 for row in p for c in row)
-            z = zlib.compressobj(9, zlib.DEFLATED, -15)
-            data += z.compress(raw) + z.flush()
-            off.append(len(data))
+        raw = b"".join(bytes(cols.index(c) + 1 if c is not None else 0 for row in p for c in row) for p in pics)
+        z = zlib.compressobj(9, zlib.DEFLATED, -15)
+        data = z.compress(raw) + z.flush()
+        off = [0, len(data)]
         st = name == "mono" or (name == "16" and h == OS)
         if not st:
             lines.append("#ifndef EW_ST")

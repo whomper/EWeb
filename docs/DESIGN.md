@@ -1507,9 +1507,13 @@ as `ui/throbber.h`: 16 frames of 30 x 30, the toolbar's height (30 x 15 on the 2
 its star field, which left no A at that size) in three editions,
 TOS 4.04's 256-colour palette for 256 colours and true colour (gold, bronze and copper from its hue
 wheel, an ordered dither so the still A doesn't shimmer as the star moves), its 16 system colours,
-and black and white (monochrome and 4 colours). Each frame is deflated on its own (80 to 380
-bytes). A frame is unpacked the first time it is shown and made into the screen's own form in ST
-RAM (`scr_rgb_dev`, `ui/screen.c`), then copied from there (`vro_cpyfm`): making one took 150 ms
+and black and white (monochrome and 4 colours). An edition's frames are deflated together (210
+to 1080 bytes), and so are the toolbar's icons (`tools/mktbicons.py`): each deflated on its own,
+an 8 MHz ST built a Huffman table for each, 70 ms a frame (53,000 instructions to unpack 85
+bytes), 1.1 s of the home page's 10.5 while the throbber first went round; together, 0.2 s once
+(27 Oct 2026; the home page shown in 9.2 s). The frames are unpacked the first time one is shown
+and kept until all are made; a frame is made into the screen's own form in ST
+RAM (`scr_rgb_dev`, `ui/screen.c`) the first time it is shown, then copied from there (`vro_cpyfm`): making one took 150 ms
 on an 8 MHz ST, longer than a frame lasts, and slowed a picture's decoding by as much. The 16
 frames take 3.8 KB in monochrome, 30 KB in 256 colours; without the memory, each frame is drawn
 as it comes, as the page is (`scr_rgb`). The

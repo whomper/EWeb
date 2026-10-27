@@ -277,26 +277,25 @@ def main(argv):
              "/* throbber.h - EWeb's throbber, made by tools/mkthrobber.py: the AERA",
              "   A with a star going round it, %d frames of %d x %d (THR_TALL) or" % (FRAMES, OUT, OUT),
              "   %d x %d (THR_SHORT, for the 200-line screens), each pixel a byte into" % (OUT, OUT // 2),
-             "   its edition's colours (0xRRGGBB), each frame deflated on its own (at",
-             "   off[f], off[f + 1] - off[f] bytes): 256 colours (true colour too),",
-             "   16 colours, and black and white (monochrome, 4 colours). */",
+             "   its edition's colours (0xRRGGBB), the frames one after another and",
+             "   deflated together (off[1] bytes: one Huffman table for all; an 8 MHz",
+             "   ST took 70 ms a frame to build one each): 256 colours (true colour",
+             "   too), 16 colours, and black and white (monochrome, 4 colours). */",
              "#define THR_W %d" % OUT, "#define THR_TALL %d" % OUT, "#define THR_SHORT %d" % (OUT // 2),
              "#define THR_FRAMES %d" % FRAMES,
              "typedef struct { short ncol, h; const unsigned long *col; const unsigned short *off; const unsigned char *data; } THR_ED;",
              ""]
     for (name, tall), fr in eds.items():
         cols = []
-        packed = b""
-        off = [0]
+        idx = bytearray()
         for im in fr:
-            idx = bytearray()
             for c in im.get_flattened_data() if hasattr(im, "get_flattened_data") else im.getdata():
                 if c not in cols:
                     cols.append(c)
                 idx.append(cols.index(c))
-            z = zlib.compressobj(9, zlib.DEFLATED, -15)
-            packed += z.compress(bytes(idx)) + z.flush()
-            off.append(len(packed))
+        z = zlib.compressobj(9, zlib.DEFLATED, -15)
+        packed = z.compress(bytes(idx)) + z.flush()
+        off = [0, len(packed)]
         tag = "%s_%s" % (name, "tall" if tall else "short")
         st = not (name == "256" or (name == "16" and tall))
         if not st:

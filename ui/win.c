@@ -117,8 +117,22 @@ static short paper(void)
 	return planes >= 4 ? grey_pen() : 0;
 }
 
+/* an edition's pictures (the throbber's frames, the toolbar's icons), all
+   unpacked at once: they are deflated together (tools/mkthrobber.py,
+   mktbicons.py), one Huffman table for all. NULL out of memory */
+static unsigned char *unpack_all(const unsigned char *data, long len, long n)
+{
+	SBUF b;
+	sb_init(&b);
+	if (sb_reserve(&b, n) && inflate_raw(data, len, &b, n) == 1 && b.len == n)
+		return (unsigned char *) b.s;
+	sb_free(&b);
+	return NULL;
+}
+
 /* the icons' edition for this screen, as the throbber's */
 static const TB_ED *tb_ed;
+static unsigned char *tb_raw;		/* its pictures unpacked (kept: a look is made when first shown) */
 static char *tb_dev;			/* the buttons whole, each look of each, in the screen's own form (ST RAM), each made when first shown */
 static unsigned tb_made;		/* which of them are made, a bit each */
 static int tb_nodev;			/* no memory to keep them: each made as it is drawn */
@@ -195,7 +209,6 @@ static void draw_look(int i, int look, const GRECT *clip)
 	long size = scr_dev_size(w, h), n = (long) TB_W * e->h;
 	char *f, *made = NULL;
 	SCR_LINE ln[8];
-	SBUF b;
 	if (!rect_and(&r, clip))
 		return;
 	if (tb_dev != NULL && (w != tb_w || h != tb_h)) {	/* (another size of the system font) */
@@ -215,19 +228,17 @@ static void draw_look(int i, int look, const GRECT *clip)
 		scr_blit_dev(f, w, h, &at, &r);
 		return;
 	}
+	if (tb_raw == NULL && (tb_raw = unpack_all(e->data, e->off[1], n * TB_PICS)) == NULL)
+		return;
 	if (f == NULL && (f = made = scr_dev_alloc(size)) == NULL)
 		return;
 	nl = look_frame(look, w, h, ln);
-	sb_init(&b);
-	if (inflate_raw(e->data + e->off[pic * NBUT + i], e->off[pic * NBUT + i + 1] - e->off[pic * NBUT + i], &b, n) == 1 &&
-	    b.len == n &&
-	    scr_button_dev(w, h, paper(), ln, nl, (const unsigned char *) b.s, e->col, e->ncol, TB_W, e->h,
+	if (scr_button_dev(w, h, paper(), ln, nl, tb_raw + n * (pic * NBUT + i), e->col, e->ncol, TB_W, e->h,
 			   (w - TB_W) / 2 + d, 3 + d, f)) {
 		if (made == NULL)
 			tb_made |= 1u << k;
 		scr_blit_dev(f, w, h, &at, &r);
 	}
-	sb_free(&b);
 	scr_dev_free(made);
 }
 
@@ -273,6 +284,7 @@ static void draw_addr(void)
 static const THR_ED *thr_ed;		/* the edition for this screen, NULL: none */
 static char *thr_dev;			/* its frames in the screen's own form (ST RAM), each made when first shown */
 static unsigned thr_made;		/* which of them are made, a bit each */
+static unsigned char *thr_raw;		/* the frames unpacked, until all are made */
 static int thr_nodev;			/* no memory for them: each drawn as it comes */
 static int thr_drawn;			/* frames drawn, for the log */
 static unsigned long thr_at;		/* when the frame was last moved on (ms) */
@@ -298,7 +310,6 @@ static const THR_ED *edition(void)
 static void draw_throbber(const GRECT *clip)
 {
 	GRECT r = cur->r_thr;
-	SBUF b;
 	const THR_ED *e = thr_ed != NULL ? thr_ed : (thr_ed = edition());
 	long n = (long) THR_W * e->h, size = scr_dev_size(THR_W, e->h);
 	char *f;
@@ -312,17 +323,18 @@ static void draw_throbber(const GRECT *clip)
 		scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
 		return;
 	}
-	sb_init(&b);
-	if (inflate_raw(e->data + e->off[cur->thr_frame], e->off[cur->thr_frame + 1] - e->off[cur->thr_frame], &b, n) == 1 &&
-	    b.len == n) {
-		if (f != NULL && scr_rgb_dev((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, f)) {
-			thr_made |= 1u << cur->thr_frame;
-			scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
-		} else {
-			scr_rgb((const unsigned char *) b.s, e->col, e->ncol, THR_W, e->h, &cur->r_thr, &r);
+	if (thr_raw == NULL && (thr_raw = unpack_all(e->data, e->off[1], n * THR_FRAMES)) == NULL)
+		return;
+	if (f != NULL && scr_rgb_dev(thr_raw + n * cur->thr_frame, e->col, e->ncol, THR_W, e->h, f)) {
+		thr_made |= 1u << cur->thr_frame;
+		scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
+		if (thr_made == (1u << THR_FRAMES) - 1) {
+			free(thr_raw);	/* (unpacked again if they are to be made again) */
+			thr_raw = NULL;
 		}
+	} else {
+		scr_rgb(thr_raw + n * cur->thr_frame, e->col, e->ncol, THR_W, e->h, &cur->r_thr, &r);
 	}
-	sb_free(&b);
 }
 
 void win_throb(int busy)
