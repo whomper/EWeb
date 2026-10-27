@@ -16,7 +16,7 @@ the guidelines' time:
   its time is Esc's, 100 ms;
 - on the news page: a line scrolled (Down), a page scrolled (Shift-Down);
 - a letter typed into the address field (^L);
-- Settings (^,) opened, and closed with Esc (what it uncovers drawn).
+- Settings (^,) opened, and closed by its Cancel (what it uncovers drawn).
 
     tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR]
 
@@ -105,7 +105,12 @@ def run(out, machine, nvdi, prgdir):
         r.act("a line scrolled", speed.LINE, lambda: r.key("Down"))
         r.act("a page scrolled", speed.PAGE, lambda: r.key("shift+Down"))
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
-        r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.key("Escape"))
+        # (closed by its Cancel: Esc empties its text size field, the
+        # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
+        # Cancel at its 30th column, 18th row, 8x16 characters)
+        at = re.findall(r"EWEB dialog at (\d+) (\d+)", r.console())
+        dx, dy = (int(v) for v in at[-1]) if at else (0, 0)
+        r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.click(dx + 35 * 8, dy + 18 * 16 + 8))
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
         r.key("ctrl+q")
         time.sleep(3)
