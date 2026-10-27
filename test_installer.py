@@ -599,7 +599,7 @@ class DavFtpTest(Base):
         self.assertIsNone(self.unit("ecalgate"))
 
     def test_unknown(self):
-        self.assertEqual(self.run_ag("install", "troll"), 2)
+        self.assertEqual(self.run_ag("install", "nosuch"), 2)
         self.assertIn("no such service", self.err)
 
 
