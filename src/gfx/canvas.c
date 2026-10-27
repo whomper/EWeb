@@ -1621,9 +1621,10 @@ static void grad(canvas *c, const dl_item *d)
    time (one entry: a long at a time) or a column at a time (the entries
    worked out once for all its rows); the others a pixel at a time, from
    an entry index stepped along each row. A translucent entry is mixed
-   with what is under it in true colour, and at 8 bits drawn where its
-   alpha is above the transposed thresholds (as pictures at an opacity
-   are). */
+   with what is under it, at 8 bits the nearest pen to the mix of its
+   colour and the pen under it (as translucent fills are), and on a
+   monochrome screen drawn where its alpha is above the transposed
+   thresholds (as pictures at an opacity are). */
 #define RAMP_MAX 256
 #define RAMPS 4
 
@@ -1825,6 +1826,7 @@ static void ramp_make(canvas *c, ramp *r, int k)
 				v[t] = p;
 		}
 		r->lvl[k] = (uint8_t) (c->pal != NULL ? (a * 16 + 127) / 255 : a >= 128 ? 16 : 0);
+		r->spread[k] = (uint32_t) a << 24 | rgb;	/* (a translucent entry's mix: grad_row) */
 	}
 	r->made[k] = 1;
 }
@@ -2115,6 +2117,13 @@ static __attribute__((noinline)) void mix_cols16(ramp *r, uint16_t *s, int32_t n
 	}
 }
 
+/* 1: the screen's fills are grey patterns (monochrome) */
+static int shaded(canvas *c)
+{
+	uint8_t d, l;
+	return c->shade != NULL && c->shade(c->ud, 0, &d, &l) >= 0;
+}
+
 /* canvas row y from x, n pixels, entry idx[i] each */
 static void grad_row(canvas *c, ramp *r, int32_t x, int32_t y, int32_t n, const uint8_t *idx)
 {
@@ -2152,9 +2161,40 @@ static void grad_row(canvas *c, ramp *r, int32_t x, int32_t y, int32_t n, const 
 		}
 		return;
 	}
+	if (c->bpp == 8 && c->pal != NULL && !shaded(c)) {
+		/* each pixel mixed with the pen under it and the screen's
+		   nearest pen taken, as a translucent fill's (what each entry's
+		   last pixel under became kept: what is under is mostly one
+		   colour). Its pen where its alpha was above a threshold drew a
+		   faint glow as a grid of bright dots (atarimania.com's page on
+		   Erez's Falcon in 256 colours, 27 Oct 2026) */
+		const uint8_t *lv = r->lvl;
+		int k;
+		o += x;
+		for (i = 0; i < n; i++) {
+			uint32_t e;
+			k = idx[i];
+			if (lv[k] == 16) {
+				o[i] = (uint8_t) v[(k << 4) + b[(ph + i) & 3]];
+				continue;
+			}
+			if (o[i] == r->lu[k]) {
+				o[i] = (uint8_t) r->lo[k];
+				continue;
+			}
+			e = r->spread[k];
+			if ((e >> 24) == 0)
+				continue;
+			r->lu[k] = o[i];
+			o[i] = c->pen(c->ud, mix_rgb(e & 0xffffff, c->pal[o[i]], e >> 24));
+			r->lo[k] = o[i];
+		}
+		return;
+	}
 	if (c->bpp == 8) {
-		/* each pixel its pen where its entry's alpha is above its
-		   transposed threshold (t0..t3), four a turn */
+		/* (the fills' grey patterns, monochrome:) each pixel its pen
+		   where its entry's alpha is above its transposed threshold
+		   (t0..t3), four a turn */
 		const uint8_t *lv = r->lvl;
 		int ty = (y + c->oy) & 3;
 		unsigned t0 = bayer[ph][ty], t1 = bayer[(ph + 1) & 3][ty], t2 = bayer[(ph + 2) & 3][ty],

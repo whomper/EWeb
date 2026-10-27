@@ -2340,8 +2340,13 @@ was gone too). Now, after CSS Images 3 and 4:
     17.6 M to draw, 11.3 M of them `pen()`; the page above 5.2 M; in Hatari's Falcon the test page
     took 3.5 s the first time). A faster nearest pen there (for later) would save that.
   - **Translucent** stops or a box's opacity: true colour mixes each pixel with what is under it (in
-    32nds, as translucent fills are); with a palette an entry is drawn where its alpha is above the
-    transposed thresholds, as pictures at an opacity are.
+    32nds, as translucent fills are); with a palette too, since 27 Oct 2026: each pixel's pen and
+    the entry's colour mixed at its alpha, and the screen's nearest pen taken (each entry keeps what
+    its last pixel under became, so a background of one colour costs a look-up a pixel), as
+    translucent fills are. Until then an entry was drawn where its alpha was above the transposed
+    thresholds, as pictures at an opacity are, and a faint glow (atarimania.com's 8% teal over its
+    navy, in 256 colours on Erez's Falcon) came out as a grid of bright dots, one pixel in 16 the
+    glow's own nearest pen. On a monochrome screen it is still drawn so, the fills' grey patterns.
   - **Where it can't be drawn**, its stops' average (premultiplied), never nothing: a repeating
     gradient of no length (CSS Images 3, 3.6 says so), one whose stops can't be placed (`approx`,
     above), a ramp's memory not there, a radial gradient thousands of entries off its tile.

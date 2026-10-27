@@ -358,6 +358,18 @@ with tempfile.TemporaryDirectory() as tmp:
         expect(rows, mode, "a fade across at a quarter", 48, 40, 52, 60, (191, 0, 0), 12, 60)
         expect(rows, mode, "a fade across's right", 196, 40, 200, 60, (0, 0, 0), 12, 40)
 
+    # a faint glow over a dark page (atarimania.com's: 8% teal over navy)
+    # mixed with what is under it: with a palette no pixel the glow's own
+    # pen, which drew it as a grid of bright dots (Erez's Falcon in 256
+    # colours, 27 Oct 2026)
+    for mode in (0, 4, 16, 256):
+        rows = draw(tmp, box("background:#12142b radial-gradient(circle at 15% 0, rgba(95,168,160,.08), "
+                             "transparent 40%)", 60), mode, 60)
+        checks += 1
+        hi = max(max(p) for r in rows[0:60] for p in r[0:200])
+        if hi > 90:
+            fail("%s: a faint glow over a dark page has a pixel as bright as %d" % (name(mode), hi))
+
     # drawn in slices as the window draws them, the same as whole
     slices = (box("background:linear-gradient(to right, #036, #fc0)", 30) +
               box("background:linear-gradient(170deg, #036, #fc0, #fff)", 30) +
