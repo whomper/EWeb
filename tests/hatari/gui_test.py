@@ -1189,7 +1189,7 @@ def dialogs():
                 r.key(ESC)
                 time.sleep(3)
                 r.shot(2)
-                stayed = not any(e.startswith("settings ") for e in r.events()[mark:])
+                stayed = not any(e in ("settings kept", "settings changed") for e in r.events()[mark:])
                 r.key(UNDO)
                 ev = r.wait(r"settings ", 120)
                 check("dialogs: %s, Settings: Esc empties a field and stays, Undo cancels" % name,

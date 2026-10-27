@@ -541,6 +541,37 @@ static void put(SBUF *s, const char *key, const char *value, const char *note)
 	sb_printf(s, "; %s\r\n%s=%s\r\n\r\n", note, key, value);
 }
 
+/* a setting EWeb has no more taken out of the INF's text: its line, the
+   note above it and the empty line after (DIALOGS3D=, the guidelines'
+   5.6 of 27 Oct 2026) */
+static void drop(SBUF *s, const char *key)
+{
+	char want[40];
+	int n = snprintf(want, sizeof want, "%s=", key);
+	long at = 0, from = -1, note = -1;
+	while (at < s->len) {
+		char *eol = memchr(s->s + at, '\n', s->len - at);
+		long ll = eol ? eol - (s->s + at) + 1 : s->len - at;
+		if (s->s[at] == ';') {
+			if (note < 0)
+				note = at;
+		} else if (!strncmp(s->s + at, want, n)) {
+			from = note >= 0 ? note : at;
+			at += ll;
+			if (at < s->len && (s->s[at] == '\r' || s->s[at] == '\n'))
+				at += s->s[at] == '\r' && at + 1 < s->len && s->s[at + 1] == '\n' ? 2 : 1;
+			memmove(s->s + from, s->s + at, s->len - at + 1);
+			s->len -= at - from;
+			at = from;
+			note = -1;
+			continue;
+		} else {
+			note = -1;
+		}
+		at += ll;
+	}
+}
+
 /* the settings to EWEB.INF, a safe save when they changed it; 0: it
    couldn't be written */
 int settings_save(void)
@@ -567,6 +598,7 @@ int settings_save(void)
 	} else {
 		sb_adds(&s, inf_head);
 	}
+	drop(&s, "DIALOGS3D");
 	put(&s, "HOME", opt.home, "the start page: an address, or nothing for EWeb's own");
 	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (FrogFind: " FROGFIND ")");
 	snprintf(v, sizeof v, "%d", opt.zoom);
