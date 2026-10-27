@@ -7723,8 +7723,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (hp != AUTO) {
 			if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 				hp -= bt + bb + pt + pb;
-			if (hp > ch || (keep && hp >= 0))
-				ch = hp < 0 ? 0 : hp;
+			if (hp >= 0)
+				ch = hp;
 		}
 		mn = len(l, s, EP_MIN_HEIGHT, AUTO);
 		if (mn != AUTO && ch < mn)
@@ -7795,6 +7795,18 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			dy = len(l, s, EP_BOTTOM, AUTO);
 			dy = dy == AUTO ? 0 : -dy;
 		}
+		if (dx != 0 || dy != 0) {
+			shift_items(l, kstart, dx, dy);
+			shift_blocks(l, bstart, dx, dy);
+		}
+	}
+	if (s->v[EP_TRANSLATE_X].i != 0 || s->v[EP_TRANSLATE_Y].i != 0) {
+		/* transform's translations (the rest of it isn't drawn): moved
+		   as a relative box is, a percentage of its own border box
+		   (CSS Transforms 1, 3: the reference box). A drawer kept off
+		   the page by translateX(-100%) stays off it */
+		int32_t dx = len0(l, s, EP_TRANSLATE_X, bl + pl + w + pr + br);
+		int32_t dy = len0(l, s, EP_TRANSLATE_Y, bt + pt + ch + pb + bb);
 		if (dx != 0 || dy != 0) {
 			shift_items(l, kstart, dx, dy);
 			shift_blocks(l, bstart, dx, dy);
@@ -8028,6 +8040,24 @@ static long nsegs(const page *p)
 #define SEG_K0(p, s) ((p)->seg != NULL ? (p)->seg[s].k0 : 0)
 #define SEG_K1(p, s) ((p)->seg != NULL ? (p)->seg[s].k1 : (p)->nitems)
 
+/* the page as tall as what is drawn on it: what overflows a box of fixed
+   height (the body's too) is scrolled to, as the page's own overflow
+   (CSS 2.1, 11.1.1); what a box hides isn't */
+static void page_overflow(page *p)
+{
+	long i;
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		int32_t x0 = d->x, y0 = d->y, x1 = d->x + d->w, y1 = d->y + d->h;
+		if (d->type == DL_CLIP || y1 <= p->height || d->h <= 0)
+			continue;
+		if (d->clip && !page_clip(p, d->clip, &x0, &y0, &x1, &y1))
+			continue;
+		if (y1 > p->height)
+			p->height = y1;
+	}
+}
+
 /* the items by strips of the page, so that drawing a part of it looks
    only at the items there; and how far right they go (page.right: wide,
    else the page's width), the canvas's picture (cbg) aside */
@@ -8210,6 +8240,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		}
 		fixup(&l, root);
 		p->height = layout_block(&l, root, 0, 0, o->width, 0, &mb, &fb);
+		page_overflow(p);
 		if (l.nbots > 0)
 			bottom_place(&l, 0, o->height > 0 ? o->height : p->height);	/* (the first screen) */
 		bg_place(&l, cbg, l.canvas_bg != NULL ? l.canvas_bg->e.style : NULL, 0, 0, o->width,

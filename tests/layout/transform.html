@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- transform's translations (CSS Transforms 1, 3: a percentage of the
+     box's own border box); its rotations and scales aren't drawn. A
+     drawer off the page by translateX(-103%) isn't seen; a box centred
+     by left/top 50% and translate(-50%, -50%) is in the middle -->
+<title>transform</title>
+<style>
+body { margin: 0 }
+.drawer { position: fixed; top: 0; left: 0; width: 200px; height: 100px; background: #c00; transform: translateX(-103%) }
+.c { position: relative; width: 300px; height: 200px; background: #ddd }
+.mid { position: absolute; left: 50%; top: 50%; width: 100px; height: 40px; background: #00c; color: #fff;
+       transform: translate(-50%, -50%) rotate(15deg) }
+.m { width: 50px; height: 20px; background: #0a0; transform: matrix(1, 0, 0, 1, 30, 5) }
+.t { width: 50px; height: 20px; background: #aa0; translate: 10px 20px }
+.r { position: relative; left: 10px; width: 50px; height: 20px; background: #a0a; transform: translateY(100%) }
+</style>
+<div class=drawer>drawer</div>
+<div class=c><div class=mid>middle</div></div>
+<div class=m></div>
+<div class=t></div>
+<div class=r></div>
+<p>After them.</p>

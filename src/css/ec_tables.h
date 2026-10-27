@@ -116,7 +116,9 @@
 	P(GRID_COLUMN_END,     "grid-column-end",     VP_GRIDLINE, 0,                 EK_KW,    KW_AUTO) \
 	P(JUSTIFY_ITEMS,       "justify-items",       VP_KW,     KL_JUSTIFY_ITEMS,    EK_KW,    KW_NORMAL) \
 	P(JUSTIFY_SELF,        "justify-self",        VP_KW,     KL_JUSTIFY_SELF,     EK_KW,    KW_AUTO) \
-	P(TABLE_LAYOUT,        "table-layout",        VP_KW,     KL_TABLE_LAYOUT,     EK_KW,    KW_AUTO)
+	P(TABLE_LAYOUT,        "table-layout",        VP_KW,     KL_TABLE_LAYOUT,     EK_KW,    KW_AUTO) \
+	P(TRANSLATE_X,         "-ec-translate-x",     VP_LEN,    0,                   EK_PX,    0) \
+	P(TRANSLATE_Y,         "-ec-translate-y",     VP_LEN,    0,                   EK_PX,    0)
 
 /* The shorthands: S(id, name). Each expands into longhands when parsed. */
 #define EC_SHORTHANDS(S) \
@@ -134,7 +136,8 @@
 	S(GRID_ROW, "grid-row") S(GRID_COLUMN, "grid-column") S(GRID_AREA, "grid-area") \
 	S(GRID_TEMPLATE, "grid-template") \
 	S(WEBKIT_BACKGROUND_CLIP, "-webkit-background-clip") S(WEBKIT_TEXT_STROKE, "-webkit-text-stroke") \
-	S(ANIMATION, "animation")
+	S(ANIMATION, "animation") \
+	S(TRANSFORM, "transform") S(TRANSLATE, "translate") S(ALL, "all")
 
 /* The keywords: K(id, text). KW_NONE_ (0) is "no keyword". The last few
  * are HTML's: -webkit-left, -right and -center the text-align <center> and

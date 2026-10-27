@@ -2194,6 +2194,108 @@ static int text_stroke(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
 	return 2;
 }
 
+/* a translation added to what came before it: two lengths in px add; one
+   that can't be added to (a percentage, calc()) takes the place of a zero
+   one, and is otherwise left out (translate(-50%) translate(10px) moves
+   by -50%) */
+static void add_shift(ec_decl *to, const ec_decl *by)
+{
+	if (by->kind == EK_PX && to->kind == EK_PX)
+		to->v.i += by->v.i;
+	else if (to->kind == EK_PX && to->v.i == 0)
+		*to = *by;
+}
+
+/* transform (CSS Transforms 1 and 2): what of it moves the box, its
+   translations (translate(), translateX(), translateY(), translate3d()
+   and a matrix() that only moves), into -ec-translate-x and -y. EWeb
+   draws no rotation, scale, skew or perspective: those are read and left
+   out, the box drawn as it is where its translations put it. Pages hide
+   menus and drawers this way (translateX(-100%)) and centre boxes
+   (translate(-50%, -50%)) */
+static int transform(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
+{
+	static const char *const others[] = {
+		"rotate", "rotatex", "rotatey", "rotatez", "rotate3d", "scale", "scalex", "scaley",
+		"scalez", "scale3d", "skew", "skewx", "skewy", "perspective", "matrix3d", NULL
+	};
+	int i = 0;
+
+	put(&out[0], EP_TRANSLATE_X, EK_PX, 0);
+	put(&out[1], EP_TRANSLATE_Y, EK_PX, 0);
+	if (n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_NONE)
+		return 2;
+	while (i < n) {
+		const ec_tok *f = &t[i];
+		int end, j = i + 1, k;
+		ec_decl x, y, z;
+		if (f->type != T_FUNC || (end = block_end(t, n, i)) < 0)
+			return -1;
+		put(&x, EP_TRANSLATE_X, EK_PX, 0);
+		put(&y, EP_TRANSLATE_Y, EK_PX, 0);
+		if (ec_tok_is(f, "translate") || ec_tok_is(f, "translate3d")) {
+			if (!length(c, t, end - 1, &j, 0, &x))
+				return -1;
+			if (j < end - 1) {
+				if (t[j].type != T_COMMA || (j++, !length(c, t, end - 1, &j, 0, &y)))
+					return -1;
+				if (ec_tok_is(f, "translate3d") && (j >= end - 1 || t[j].type != T_COMMA ||
+						(j++, !length(c, t, end - 1, &j, LF_NOPCT, &z))))
+					return -1;
+			} else if (ec_tok_is(f, "translate3d")) {
+				return -1;
+			}
+		} else if (ec_tok_is(f, "translatex") || ec_tok_is(f, "translatey")) {
+			if (!length(c, t, end - 1, &j, 0, ec_tok_is(f, "translatex") ? &x : &y))
+				return -1;
+		} else if (ec_tok_is(f, "matrix")) {
+			/* a, b, c, d, e, f: moved by e and f px when a and d are 1
+			   and b and c 0 (else drawn as it is: it turns or scales) */
+			ec_fx m[6];
+			for (k = 0; k < 6; k++) {
+				ec_decl v;
+				if ((k > 0 && (j >= end - 1 || t[j++].type != T_COMMA)) || !number(c, t, end - 1, &j, 0, &v))
+					return -1;
+				m[k] = v.v.i;
+			}
+			if (m[0] == EC_FX(1) && m[1] == 0 && m[2] == 0 && m[3] == EC_FX(1)) {
+				put(&x, EP_TRANSLATE_X, EK_PX, m[4]);
+				put(&y, EP_TRANSLATE_Y, EK_PX, m[5]);
+			}
+		} else {
+			for (k = 0; others[k] != NULL && !ec_tok_is(f, others[k]); k++)
+				;
+			if (others[k] == NULL)
+				return -1;
+			j = end - 1;
+		}
+		if (j != end - 1)
+			return -1;
+		add_shift(&out[0], &x);
+		add_shift(&out[1], &y);
+		i = end;
+	}
+	return 2;
+}
+
+/* translate (CSS Transforms 2): none, or x [y [z]] */
+static int translate(ec_ctx *c, const ec_tok *t, int n, ec_decl *out)
+{
+	int i = 0;
+	ec_decl z;
+
+	put(&out[0], EP_TRANSLATE_X, EK_PX, 0);
+	put(&out[1], EP_TRANSLATE_Y, EK_PX, 0);
+	if (n == 1 && t[0].type == T_IDENT && ec_kw(&t[0]) == KW_NONE)
+		return 2;
+	if (!length(c, t, n, &i, 0, &out[0]) || (i < n && !length(c, t, n, &i, 0, &out[1])) ||
+			(i < n && !length(c, t, n, &i, LF_NOPCT, &z)) || i != n)
+		return -1;
+	out[0].prop = EP_TRANSLATE_X;
+	out[1].prop = EP_TRANSLATE_Y;
+	return 2;
+}
+
 /* text-shadow: none, or shadows ([<color>? && <length>{2,3}]#). EWeb
    draws no shadows; it keeps the first one's colour (currentcolor when
    it has none), as text whose own colour is transparent is shown in it */
@@ -2970,6 +3072,9 @@ int ec_shorthand_props(int sh, uint8_t *p)
 	case ES_ANIMATION:
 		p[0] = EP_ANIMATION_NAME;
 		return 1;
+	case ES_TRANSFORM: case ES_TRANSLATE:
+		p[0] = EP_TRANSLATE_X; p[1] = EP_TRANSLATE_Y;
+		return 2;
 	}
 	return 0;
 }
@@ -3027,6 +3132,8 @@ static int shorthand(ec_ctx *c, int sh, const ec_tok *t, int n, ec_decl *out)
 	}
 	case ES_WEBKIT_TEXT_STROKE: return text_stroke(c, t, n, out);
 	case ES_ANIMATION: return animation(t, n, 1, out);
+	case ES_TRANSFORM: return transform(c, t, n, out);
+	case ES_TRANSLATE: return translate(c, t, n, out);
 	}
 	return -1;
 }
@@ -3057,6 +3164,19 @@ int ec_parse_value(ec_ctx *c, int prop, const ec_tok *t, int n, ec_decl *out, in
 			int np, k;
 			if (kw == KW_REVERT || kw == KW_REVERT_LAYER)
 				kw = KW_UNSET;
+			if (prop == EC_SH_BASE + ES_ALL) {
+				/* all (CSS Cascade 4, 3.2): every property but
+				   direction and unicode-bidi (ynet.co.il's narrow
+				   layout: .layoutItem[style] { all: unset !important }
+				   undoes its items' absolute places) */
+				int q;
+				if (max < EC_NPROP)
+					return -1;
+				for (np = q = 0; q < EC_NPROP; q++)
+					if (q != EP_DIRECTION && q != EP_UNICODE_BIDI)
+						put(&out[np++], q, EK_KW, kw);
+				return np;
+			}
 			if (prop < EC_NPROP) {
 				p[0] = prop;
 				np = 1;

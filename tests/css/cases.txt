@@ -1566,3 +1566,62 @@ div.here p { color: green }
 #a margin-top 4px
 #a margin-bottom 5px
 @pruned 5
+
+=== transform: its translations, the rest read and not drawn (CSS Transforms 1, 2)
+--- css
+#a { transform: translateX(-103%) }
+#b { transform: translate(-50%, -50%) rotate(45deg) }
+#c { transform: translate(10px) translateY(2em) scale(2) }
+#d { transform: matrix(1, 0, 0, 1, 30, 5) }
+#e { transform: matrix(0.5, 0, 0, 0.5, 30, 5) }
+#f { transform: translate3d(1px, 2px, 3px) }
+#g { translate: 10px 20% }
+#h { transform: translate(5px); transform: wobble(3) }
+#i { transform: translate(5px) translate(6px) }
+#j { transform: none }
+--- html
+<p id=a>a<p id=b>b<p id=c>c<p id=d>d<p id=e>e<p id=f>f<p id=g>g<p id=h>h<p id=i>i<p id=j>j
+--- expect
+#a -ec-translate-x -103%
+#a -ec-translate-y 0px
+#b -ec-translate-x -50%
+#b -ec-translate-y -50%
+#c -ec-translate-x 10px
+#c -ec-translate-y 32px
+#d -ec-translate-x 30px
+#d -ec-translate-y 5px
+#e -ec-translate-x 0px
+#f -ec-translate-x 1px
+#f -ec-translate-y 2px
+#g -ec-translate-x 10px
+#g -ec-translate-y 20%
+#h -ec-translate-x 5px
+#i -ec-translate-x 11px
+#j -ec-translate-x 0px
+
+=== all: every property but direction and unicode-bidi (CSS Cascade 4, 3.2)
+--- css
+p { color: red; position: relative; top: 3px; direction: rtl; unicode-bidi: embed; margin-left: 5px }
+#a { all: unset }
+#b { all: initial }
+#c { all: inherit }
+#d { all: unset !important }
+#e { all: bogus }
+div { color: blue }
+--- html
+<div><p id=a>a<p id=b>b<p id=c>c<p id=d style="position: absolute">d<p id=e>e</div>
+--- expect
+#a color #0000ff
+#a position static
+#a top auto
+#a margin-left 0px
+#a display inline
+#a direction rtl
+#a unicode-bidi embed
+#b color #000000
+#b display inline
+#c color #0000ff
+#c display block
+#d position static
+#e position relative
+

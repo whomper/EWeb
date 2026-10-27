@@ -3959,7 +3959,7 @@ at the page 1.36 to 0.91 MB, the largest block left free 11 KB to 1.08 MB (0.44 
 under NVDI); `drawbench -m`: styled 1.09 to 0.64 MB.
 
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
-rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 632 bytes each).
+rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
 - `ec_prune` now leaves out a rule needing an id, a class or a tag the page hasn't anywhere in
   the selector, not only in its subject: `.gone p`, `#nowhere > p`, `section ~ p` with no
   section (`:not()` and `:is()` are left alone). The rules kept 1.71 to 0.72 MB.
@@ -3985,6 +3985,31 @@ the handshake, Direct, 0.43) didn't happen on the emulated stock Falcon, whose d
 nothing: common's `conn.c` now reads TLS.OVL, the roots, the seed and SIGS.DAT before it opens a
 connection (TLS.OVL 1.10), and `make hatarigui`'s falcon4 group loads a secure page from a
 server with an ECDSA certificate on the stock Falcon.
+
+## ynet.co.il in a narrow window (27 Oct 2026)
+
+**transform** (CSS Transforms 1 and 2): ynet.co.il drew its news drawer over the page; it is
+kept off it by `transform: translateX(-103%)`, as many sites hide menus and drawers, and centre
+boxes with `translate(-50%, -50%)`. The engine reads `transform`'s translations
+(`translate()`, `translateX()`/`Y()`, `translate3d()`, a `matrix()` that only moves) and
+`translate` into `-ec-translate-x` and `-y`; rotations, scales, skews and perspective are read
+and not drawn. The layout moves the box and all in it as a relative box is moved, a percentage
+of its own border box (`tests/layout/transform.html`, the CSS cases).
+
+ynet's front page was 135 px high and its parts over each other because of two more:
+- **`all`** (CSS Cascade 4, 3.2): its layout's items are placed absolutely in 1,240 px columns, and
+  at a window 940 px wide or less (landscape) its sheet undoes that with `.layoutItem[style] {
+  all: unset !important }`, which EWeb didn't know. `all: initial | inherit | unset | revert`
+  now sets every property but `direction` and `unicode-bidi` (the CSS cases): the page flows, 13,174
+  px high, its header, menu and lead story in order as Chromium draws it at 640 x 480.
+- **A box's `height`** is its height, what is in it taller overflowing it (CSS 2.1, 10.5), not
+  stretching it: EWeb's first layout made a box at least as tall as its content unless it hid what
+  overflowed. ynet's menu bar (`height: 28px`, its hidden pop-up menu in it) was 725 px tall.
+  The page is as tall as what is drawn on it, what a box hides aside (`page_overflow`): what
+  overflows a box of fixed height, the body's too, is still scrolled to (`tests/layout/overflow.py`).
+  Three test pages moved a few pixels (`overflow.html`: the `overflow-x: clip` box keeps its 32
+  px, its third line below it, as in Chromium). Where EWeb's fonts are taller than a page's, its
+  text now runs out of a box of fixed height as it would in other browsers.
 
 ## The design
 

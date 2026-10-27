@@ -679,6 +679,8 @@ static void compare(const node *n, const css_computed_style *ls, const ec_style 
 			continue;		/* nor grid's */
 		if (p == EP_BACKGROUND_SIZE_W || p == EP_BACKGROUND_SIZE_H)
 			continue;		/* nor background-size */
+		if (p == EP_TRANSLATE_X || p == EP_TRANSLATE_Y)
+			continue;		/* nor transform */
 		if (p == EP_POINTER_EVENTS || p == EP_TEXT_SHADOW || p == EP_TEXT_STROKE_WIDTH ||
 		    p == EP_TEXT_STROKE_COLOR || p == EP_BACKGROUND_CLIP || p == EP_ANIMATION_NAME)
 			continue;		/* nor these (translucency's: DESIGN.md) */
