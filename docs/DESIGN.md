@@ -3317,9 +3317,10 @@ the page set's biggest pages 45 million 68030 instructions, about 4 s on the DFB
 on a stock Falcon, with the window not redrawn and Esc heard only after. Now each stage asks
 now and then: the parser every 64 tags (`doc_poll`, `src/doc/html.c`), the CSS engine every
 32 elements (`ec_poll`, `src/css/select.c`, a hook of its own as the engine is built on its
-headers only), the layout every 16 boxes made or laid out (`doc_poll`, `src/layout`); every 256
-until 26 Oct 2026, when the stock machines showed a second and more between turns (Speed on the
-stock machines, below). The hooks
+headers only), the layout every 4 boxes made, measured or laid out (`doc_poll`, `src/layout`);
+every 256 until 26 Oct 2026, when the stock machines showed a second and more between turns (Speed
+on the stock machines, below), then 16 boxes made or laid out until 27 Oct, when the visible news
+page's grids and flexboxes held an 8 MHz ST 4.6 s between turns. The hooks
 are set only while `src/browse` builds a page (`build`); they are the pictures' poll
 (`gem_turn`): GEM's turn ten times a second (the window redrawn, moved, topped; Esc, Undo, Stop),
 and 0 once Esc has set `conn_stop`. Then the stage gives up as when out of memory (the parser's
@@ -3979,7 +3980,19 @@ an element whose display is none gives its style to everything under it (`style_
 them made; nothing under it is drawn, and EWeb's selectors never look at a descendant's style.
 The speed rig's news page (its body not shown) on Falcon-4:16: its styles 3245 to 150 ms, heap
 at the page 1.36 to 0.91 MB, the largest block left free 11 KB to 1.08 MB (0.44 couldn't show it
-under NVDI); `drawbench -m`: styled 1.09 to 0.64 MB.
+under NVDI); `drawbench -m`: styled 1.09 to 0.64 MB. Its body was hidden by `mkpage.py`'s own
+draw (`body{display:none}`, since 0.2): those figures were of a page with nothing shown.
+
+**The news page shown** (27 Oct 2026): `mkpage.py` never gives html or body `display: none` now,
+every other byte as it was. It lays out to 608 x 17,355, 3,301 items; `drawbench -m` styled 832
+KB, laid out 1.25 MB, peak 1.41 MB. On the stock Falcon it loads in 16.8 s (layout 9.0 s) and
+leaves 14 KB free; on the 8 MHz ST in 113 s (style 50 s, layout 43.6 s). It showed that a page's
+relayout for a picture or a frame come gave GEM no turn at all (the news page's iframe: 7.6 s on
+the stock Falcon, 39 s on the ST): now it has turns as a page being made does (`lay_turns`,
+`in_turn`), a table's or a flexbox's measuring polls too, and the layout polls every 4 boxes, not
+16 (on the ST the longest stretches in its layout 4.7 to 2.9 s, at 8% more time laying it out:
+40.2 to 43.6 s). Still to do: a stretch of up to 7 s on the ST where a key stops a relayout and
+the layout takes that long to give up.
 
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
