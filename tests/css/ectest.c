@@ -2,10 +2,12 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /* ectest: EWeb's CSS engine against cases written from the specifications.
  *
- *   ectest [-s N] tests/css/cases.txt
+ *   ectest [-s N] [-p] tests/css/cases.txt
  *
  * -s N: each case's sheet read as it comes (ec_sheet_feed), N bytes at a
- * time; the values must be the same.
+ * time; -p: the author's rules for names the page hasn't left out
+ * (ec_prune), as many as a case's @pruned says. The values must be the
+ * same.
  *
  * Each case has a stylesheet, a page and the computed values expected:
  *
@@ -325,6 +327,8 @@ static void setup(struct ec_ctx *c)
 	ec_set_importer(c, importer, NULL);
 }
 
+static unsigned long npruned;	/* -p: the selectors left out */
+
 static int run_case(const char *name, const char *css, size_t csslen, const char *html,
 		size_t htmllen, char *expect, unsigned opts)
 {
@@ -343,6 +347,7 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 	ecs_visited = 1;
 	c = ecs_sheets(doc, &css, &csslen, 1, &ss);
 	ecs_select(c, doc, &ss);
+	npruned += ec_get_stats(c)->pruned;
 	for (line = strtok_r(expect, "\n", &save); line != NULL; line = strtok_r(NULL, "\n", &save)) {
 		char sel[128], prop[64], want[512], got[512], id[128];
 		const node *n;
@@ -358,6 +363,16 @@ static int run_case(const char *name, const char *css, size_t csslen, const char
 			if (sscanf(line + 6, "%ld %ld", &wlo, &whi) != 2 || wlo != lo || whi != hi) {
 				fprintf(stderr, "FAIL %s: the span is %ld %ld, not %s\n", name, (long) lo, (long) hi,
 					line + 6);
+				fails++;
+			}
+			continue;
+		}
+		if (!strncmp(line, "@pruned ", 8)) {
+			/* -p: this many selectors left out (without it, none) */
+			unsigned long want = ecs_prune ? strtoul(line + 8, NULL, 10) : 0;
+			if (ec_get_stats(c)->pruned != want) {
+				fprintf(stderr, "FAIL %s: %lu selectors left out, not %lu\n", name,
+					(unsigned long) ec_get_stats(c)->pruned, want);
 				fails++;
 			}
 			continue;
@@ -467,8 +482,13 @@ int nsbench(int argc, char **argv)
 		argc -= 2;
 		argv += 2;
 	}
+	if (argc > 2 && !strcmp(argv[1], "-p")) {
+		ecs_prune = 1;
+		argc--;
+		argv++;
+	}
 	if (argc < 2 || (text = load(argv[1], &len)) == NULL) {
-		fprintf(stderr, "usage: ectest [-s N] CASES.TXT\n");
+		fprintf(stderr, "usage: ectest [-s N] [-p] CASES.TXT\n");
 		return 2;
 	}
 	ecs_setup = setup;
@@ -497,6 +517,8 @@ int nsbench(int argc, char **argv)
 	flush(name, &css, &html, &expect, opts);
 	if (ecs_piece > 0)
 		fprintf(stderr, "%d cases, sheets read %d bytes at a time, %d failed\n", cases, ecs_piece, failed);
+	else if (ecs_prune)
+		fprintf(stderr, "%d cases, %lu selectors left out, %d failed\n", cases, npruned, failed);
 	else
 		fprintf(stderr, "%d cases, %d failed\n", cases, failed);
 	free(css.s);

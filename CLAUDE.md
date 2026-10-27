@@ -318,9 +318,9 @@ hub stay complete, with the evidence.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). A big sheet is read as it comes (`ec_sheet_feed`, from `sheet_stream` in
   `src/browse`), and a page whose scripts don't run leaves out rules for names it hasn't
-  (`ec_prune`; DESIGN.md, A big site's stylesheet). After changing it, `make test` (its cases,
-  `tests/css/cases.txt`, worked out from the specifications, whole and `ectest -s` a few bytes at a
-  time; `make itest`'s `/site/big.html`) and `make csscmp` (against LibCSS on the page set: no difference may be left
+  (`ec_prune`; DESIGN.md, A big site's stylesheet); a style computed is kept once (`uniq_style`). After changing it, `make test` (its cases,
+  `tests/css/cases.txt`, worked out from the specifications, whole, `ectest -s` a few bytes at a
+  time and `ectest -p` pruned; `make itest`'s `/site/big.html`) and `make csscmp` (against LibCSS on the page set: no difference may be left
   without a reason); after a change meant for speed, count it (`tools/count68k.sh`,
   `tests/bench/measure.py -E ewcss`) and change DESIGN.md's figures. `EC_COMPAT_*` options exist
   only for csscmp.

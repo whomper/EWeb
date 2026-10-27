@@ -33,6 +33,23 @@ static const ec_atom *atom_of(ec_ctx *c, lwc_string *s)
 }
 
 int ecs_piece;
+int ecs_prune;
+
+static void mark_names(ec_ctx *c, const node *n)
+{
+	const node *ch;
+	uint32_t i;
+
+	if (n->type == N_ELEMENT) {
+		ec_intern_used(c, lwc_string_data(n->name), lwc_string_length(n->name));
+		if (n->id)
+			ec_intern_used(c, lwc_string_data(n->id), lwc_string_length(n->id));
+		for (i = 0; i < n->nclass; i++)
+			ec_intern_used(c, lwc_string_data(n->classes[i]), lwc_string_length(n->classes[i]));
+	}
+	for (ch = n->first; ch != NULL; ch = ch->next)
+		mark_names(c, ch);
+}
 
 int ecs_add(ec_ctx *c, const char *data, size_t len, int origin)
 {
@@ -96,6 +113,10 @@ ec_ctx *ecs_sheets(node *doc, const char **data, const size_t *len, int n, style
 		return NULL;
 	if (ecs_setup != NULL)
 		ecs_setup(c);
+	if (ecs_prune) {
+		mark_names(c, doc);
+		ec_prune(c, 1);
+	}
 	memset(amap, 0, sizeof amap);
 	add_sheet(c, nsbench_ua_css, strlen(nsbench_ua_css), EC_ORIGIN_UA, st);
 	for (i = 0; i < n; i++)

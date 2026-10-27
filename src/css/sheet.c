@@ -797,14 +797,22 @@ static const ec_atom *subject_key(const ec_sel *s, int *kind_out)
 	return key;
 }
 
-/* a selector ec_prune leaves out: its subject needs an id, a class or a
-   tag that isn't one of the document's names (an attribute's name isn't
-   enough to tell: [hidden] is looked up by an attribute it may not have) */
+/* a selector ec_prune leaves out: one of its elements, the subject or
+   one it looks at above or beside it, needs an id, a class or a tag that
+   isn't one of the document's names (an attribute's name isn't enough to
+   tell: [hidden] is looked up by an attribute it may not have; what is
+   inside :not() or :is() is left alone) */
 static int pruned(const ec_ctx *c, const ec_sel *s)
 {
-	int kind;
-	const ec_atom *key = subject_key(s, &kind);
-	return key != NULL && kind != EC_B_ATTR && !key->used;
+	int i, k;
+
+	for (i = 0; i < s->ncomp; i++)
+		for (k = 0; k < s->comp[i].n; k++) {
+			const ec_simple *x = &s->simple[s->comp[i].first + k];
+			if ((x->op == S_ID || x->op == S_CLASS || x->op == S_TAG) && !x->atom->used)
+				return 1;
+		}
+	return 0;
 }
 
 static void index_sel(ec_ctx *c, const ec_sel *s, int origin)

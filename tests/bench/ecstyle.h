@@ -18,6 +18,10 @@ struct ec_ctx *ecs_sheets(node *doc, const char **data, const size_t *len, int n
 /* a sheet added: ec_sheet's, or with ecs_piece > 0 an author's read as
    it comes (ec_sheet_feed), ecs_piece bytes at a time */
 extern int ecs_piece;
+/* if set, the page's names (its tags, ids and classes) are made the
+   context's before its sheets, and the author's rules for names it hasn't
+   left out (ec_prune), as EWEB.PRG does on a page whose scripts don't run */
+extern int ecs_prune;
 int ecs_add(struct ec_ctx *c, const char *data, size_t len, int origin);
 /* every element's style: each node's ecn is its ec_node, with the style */
 void ecs_select(struct ec_ctx *c, node *doc, style_stats *st);

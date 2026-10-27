@@ -37,6 +37,16 @@ Falcons, and a divide that costs 40 to 80 cycles.
   in lists of their own, so checking costs little). Elements with the same
   rules under parents with the same style take a style already computed.
   On the news page 119 of 816 elements share and 432 come from the cache.
+- **Each style once.** A style computed is looked for among those made
+  before (a hash of all of it, a rotate and an add a word, then compared
+  whole) and, when there, taken instead, the new one's memory given back
+  (`uniq_style`). Elements whose rules differ often come out the same;
+  their children then come from the cache too. ynet.co.il's front page:
+  2,011 styles made to 989, its styles' memory 1.14 MB to 0.35 MB.
+- **Rules for names the page hasn't** (`ec_prune`, a page whose scripts
+  don't run): an author rule needing an id, a class or a tag that isn't
+  the document's, in its subject or in an element it looks at above or
+  beside it, is left out as the sheet is read.
 - **Each property is written once.** Declarations are applied from the
   most important down, so nothing is written and then overwritten.
 - **Integer fixed point** (22.10) throughout; absolute units become px as

@@ -3958,6 +3958,25 @@ The speed rig's news page (its body not shown) on Falcon-4:16: its styles 3245 t
 at the page 1.36 to 0.91 MB, the largest block left free 11 KB to 1.08 MB (0.44 couldn't show it
 under NVDI); `drawbench -m`: styled 1.09 to 0.64 MB.
 
+**Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
+rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 632 bytes each).
+- `ec_prune` now leaves out a rule needing an id, a class or a tag the page hasn't anywhere in
+  the selector, not only in its subject: `.gone p`, `#nowhere > p`, `section ~ p` with no
+  section (`:not()` and `:is()` are left alone). The rules kept 1.71 to 0.72 MB.
+- A style computed is looked for among those made before (`uniq_style`: a hash of all of it,
+  then compared whole) and taken when it is there, the new one given back to the arena: elements
+  whose rules differ often come out alike, and their children then come from the style cache.
+  2,011 styles made to 989 (cached 1,647 to 2,635), 1.14 to 0.35 MB. A hash of what made a style
+  (its parent and what its rules set) cost less but missed half of them; one of every third
+  value collided too often (1.46 MB).
+
+ynet's CSS 3.09 to 1.33 MB, the heap at the styled page 5.05 to 3.28 MB, peak 6.96 to 5.98 MB
+(`drawbench -m`, which now prints the CSS context's size and its counts); the same display list.
+`measure.py -E ewcss` on the 258 pages, medians: matching bootstrap's sheet 3,308 to 3,375
+instructions an element (+2%: the hash), pico's 10,997 to 10,635 (-3%: more from the cache); the
+CSS parse 0.3% less. `ectest -p` gives every case the page's names first and prunes (make test),
+and a case of its own counts what is left out.
+
 The family's `EWEB.LOG` (`LOG=1`, 0 as it starts): `conn.c`'s log of each connection, a secure
 one's handshake step by step, held in memory for a page and its pictures and written once then,
 and at the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. No

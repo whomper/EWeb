@@ -9,7 +9,10 @@
 # (tests/bench/style.c), the viewport 640x480, the default font 16px.
 # Among the expected values, @span LO HI is the widths the media queries
 # hold at as they did, @width W the sheets added again at another width,
-# and @again N the sheets added again N times taking no more memory
+# @again N the sheets added again N times taking no more memory, and
+# @pruned N the selectors left out by ectest -p, which gives the engine
+# the page's names first and leaves out the author's rules for names it
+# hasn't (ec_prune, as EWEB.PRG on a page whose scripts don't run)
 # (tests/css/ectest.c).
 
 === the cascade: specificity, then order (CSS Cascade 4, 6.4)
@@ -1542,3 +1545,24 @@ p { color: var(--c) }
 --- expect
 #t color #ff0000
 #u color #ff0000
+
+=== rules for names the page hasn't: left out, wherever in the selector (ectest -p)
+--- css
+.gone { color: red }
+.gone p { color: red }
+#nowhere > p { margin-left: 1px }
+section ~ p { margin-right: 2px }
+p.here, .gone p { padding-left: 3px }
+div.here p { color: green }
+:not(.gone) > p { margin-top: 4px }
+[data-x] p { margin-bottom: 5px }
+--- html
+<div class=here data-x=1><p id=a class=here>x</p></div>
+--- expect
+#a color #008000
+#a margin-left 0px
+#a margin-right 0px
+#a padding-left 3px
+#a margin-top 4px
+#a margin-bottom 5px
+@pruned 5

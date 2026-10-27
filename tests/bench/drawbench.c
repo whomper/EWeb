@@ -168,6 +168,11 @@ int main(int argc, char **argv)
 	doc_select(d);
 	if (mem)
 		printf("heap styled %ld peak %ld\n", heap_use, heap_peak);
+	if (mem) {
+		const ec_stats *t = ec_get_stats(d->css);
+		printf("css %ld: %lu elements, %lu shared, %lu cached\n", (long) ec_mem(d->css),
+			(unsigned long) t->elements, (unsigned long) t->shared, (unsigned long) t->cached);
+	}
 	if (phase < 2) {
 		printf("%lu elements\n", (unsigned long) d->elements);
 		return 0;

@@ -1136,8 +1136,28 @@ static void apply_var(cascade *k, const ec_decl *d, ec_custom *cu)
 	}
 }
 
-/* the cascade for one pseudo-element (PE_NONE: the element itself) */
-static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo)
+/* for uniq_style: all of a style, a word at a time, each a rotate and an
+   add on the 68030 */
+static uint32_t style_hash(const ec_style *st)
+{
+	const uint8_t *kb = st->k;
+	uint32_t h = (uint32_t) (uintptr_t) st->custom, w;
+	int i;
+
+	for (i = 0; i < EC_NPROP; i++)
+		h = ((h << 5) | (h >> 27)) + (uint32_t) st->v[i].i;
+	for (i = 0; i + 4 <= EC_NPROP; i += 4) {
+		memcpy(&w, kb + i, 4);
+		h = ((h << 5) | (h >> 27)) + w;
+	}
+	for (; i < EC_NPROP; i++)
+		h = ((h << 5) | (h >> 27)) + kb[i];
+	return h ^ (h >> 15);
+}
+
+/* the cascade for one pseudo-element (PE_NONE: the element itself), and
+   its hash for uniq_style */
+static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo, uint32_t *hash)
 {
 	cascade k;
 	ec_style *st = ec_alloc(&c->smem, sizeof *st);
@@ -1208,6 +1228,7 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo)
 	for (i = 0; i < k.nvar; i++)
 		apply_var(&k, k.var[i], (ec_custom *) st->custom);
 	compute(&k);
+	*hash = style_hash(st);
 	return st;
 }
 
@@ -1244,6 +1265,47 @@ static uint32_t key_hash(const ec_style *parent, int n)
 	for (i = 0; i < n; i++)
 		h = (h << 5) + h + (uint32_t) (keybuf[i] >> 2) + (uint32_t) (keybuf[i] & 3);
 	return h ^ (h >> 15);
+}
+
+/* ------------------------------------------------------------ styles made once
+
+   Elements whose rules differ often come out with the same computed
+   style (classes that set what their parent's already have, a style
+   attribute that says what a rule says). Each style made is looked for
+   among those made before by its content (style_hash) and compared
+   whole; one that is there is taken, and the new one's memory given
+   back. */
+
+#define UNIQ_SIZE 1024
+
+static const ec_style **uniq;	/* ec_select's, while it runs (or NULL) */
+
+static int same_style(const ec_style *a, const ec_style *b)
+{
+	return a->custom == b->custom && a->before == b->before && a->after == b->after &&
+	       memcmp(a->k, b->k, sizeof a->k) == 0 && memcmp(a->v, b->v, sizeof a->v) == 0;
+}
+
+/* st, made since mark in c's style arena, or one made before it that is
+   the same (st and all made with it given back: nothing made before
+   looks at them) */
+static const ec_style *uniq_style(ec_ctx *c, ec_style *st, uint32_t hash, char *mark,
+		const ec_chunk *chunks)
+{
+	const ec_style **u;
+
+	if (uniq == NULL)
+		return st;
+	/* (::before and ::after's in it too: a style alike has the same ones) */
+	hash += (uint32_t) (uintptr_t) st->before * 3 + (uint32_t) (uintptr_t) st->after * 5;
+	u = &uniq[hash & (UNIQ_SIZE - 1)];
+	if (*u != NULL && same_style(*u, st)) {
+		if (c->smem.chunks == chunks)
+			c->smem.p = mark;
+		return *u;
+	}
+	*u = st;
+	return st;
 }
 
 /* ------------------------------------------------------------ the tree */
@@ -1374,6 +1436,16 @@ static const ec_style *shared_from(ec_ctx *c, const ec_node *e, uint32_t sig, co
 	return NULL;
 }
 
+/* ::before or ::after's style, made once too */
+static const ec_style *pseudo_style(ec_ctx *c, const ec_style *parent, int pseudo)
+{
+	char *mark = c->smem.p;
+	const ec_chunk *chunks = c->smem.chunks;
+	uint32_t h;
+	ec_style *st = cascade_style(c, parent, pseudo, &h);
+	return st == NULL ? NULL : uniq_style(c, st, h, mark, chunks);
+}
+
 static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *parent, int *mf)
 {
 	uint16_t k;
@@ -1382,6 +1454,9 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	centry *ce;
 	ec_style *st;
 	const ec_attr *sa;
+	char *mark;
+	const ec_chunk *chunks;
+	uint32_t sh;
 
 	nhits = link_hits = 0;
 	*mf = 0;
@@ -1452,13 +1527,16 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 		c->st.cached++;
 		return ce->style;
 	}
-	st = cascade_style(c, parent, PE_NONE);
+	mark = c->smem.p;
+	chunks = c->smem.chunks;
+	st = cascade_style(c, parent, PE_NONE, &sh);
 	if (st == NULL)
 		return parent;
 	if (any_before)
-		st->before = cascade_style(c, st, PE_BEFORE);
+		st->before = pseudo_style(c, st, PE_BEFORE);
 	if (any_after)
-		st->after = cascade_style(c, st, PE_AFTER);
+		st->after = pseudo_style(c, st, PE_AFTER);
+	st = (ec_style *) uniq_style(c, st, sh, mark, chunks);
 	{
 		uintptr_t *key = ec_alloc(&c->smem, n * sizeof *key + 1);
 		if (key != NULL) {
@@ -1554,6 +1632,8 @@ int ec_select(ec_ctx *c, ec_node *root)
 	c->stopped = 0;
 	memset(cache, 0, sizeof cache);
 	memset(icache, 0, sizeof icache);
+	/* (not in the BSS: EWEB.PRG's start on a stock Falcon) */
+	uniq = calloc(UNIQ_SIZE, sizeof *uniq);
 	memset(c->bloom, 0, sizeof c->bloom);
 	/* what var() makes parsed goes with the styles (ec_unstyle gives
 	   it back), not with the sheets */
@@ -1571,5 +1651,7 @@ int ec_select(ec_ctx *c, ec_node *root)
 		style_list(c, root, NULL, 1);
 	}
 	c->pmem = pm;
+	free(uniq);
+	uniq = NULL;
 	return c->smem.nomem || c->stopped ? -1 : 0;
 }
