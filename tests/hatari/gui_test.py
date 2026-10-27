@@ -460,14 +460,16 @@ def browse():
               ev is not None and ev.startswith("shown %slazy.html " % site) and pics is not None and
               int(pics.split()[-1]) < 8 and any(e.startswith("status Pictures stopped.") for e in evs),
               "%r\n%s" % (pics, "\n".join(evs[-6:])))
-        # keys typed while the pictures come: each put off till the
-        # picture has stopped, none lost (demozoo.org, 26 Oct 2026: only
-        # the first was kept)
+        # keys typed while the pictures come (over TLS, where a
+        # picture's step reads several keys before it stops): each put off
+        # till the picture has stopped, none lost (demozoo.org, 26 Oct
+        # 2026: only the first was kept, and an address typed then lost a
+        # character)
         r.key(L, (CTRL,))
-        r.type("127.0.0.1:%d/site/lazy.html" % HTTP)
+        r.type("https://127.0.0.1:%d/site/lazy.html" % HTTPS)
         r.key(RETURN)
-        ev = r.wait(r"shown ", 120)
-        time.sleep(0.5)
+        ev = r.wait(r"shown ", 600)
+        time.sleep(4)
         r.key(L, (CTRL,))
         r.type("127.0.0.1:%d/site/form.html" % HTTP)
         r.key(RETURN)
