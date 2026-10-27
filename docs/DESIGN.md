@@ -4005,6 +4005,12 @@ the stock Falcon, 39 s on the ST): now it has turns as a page being made does (`
 40.2 to 43.6 s). Still to do: a stretch of up to 7 s on the ST where a key stops a relayout and
 the layout takes that long to give up.
 
+The ST's profile of it (Hatari's, with EWeb's symbols) put 22 s in `memmove`: a word wider than
+its line is cut where it runs out (`split_word`), each piece an item put in among the rest, and
+common's `memmove` moved overlapping bytes downward one at a time (24 cycles a byte). It moves
+longs now, as `memcpy` does (AERA-Atari a6f936a): the news page's layout on the ST 43.7 to 35.4
+s, the page 112 to 104 s (27 Oct 2026).
+
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
 - `ec_prune` now leaves out a rule needing an id, a class or a tag the page hasn't anywhere in
