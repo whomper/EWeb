@@ -4967,6 +4967,8 @@ static int32_t measure(L *l, box *b)
 		l->p->deep = 1;
 		return 0;
 	}
+	if (stopped(l))
+		return 0;	/* (a table's or a flexbox's sizing measures every box under it: polls too) */
 	if (!b->anon)
 		w = len(l, b->st, EP_WIDTH, AUTO);
 	if (w != AUTO) {
