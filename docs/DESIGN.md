@@ -4009,7 +4009,11 @@ The ST's profile of it (Hatari's, with EWeb's symbols) put 22 s in `memmove`: a 
 its line is cut where it runs out (`split_word`), each piece an item put in among the rest, and
 common's `memmove` moved overlapping bytes downward one at a time (24 cycles a byte). It moves
 longs now, as `memcpy` does (AERA-Atari a6f936a): the news page's layout on the ST 43.7 to 35.4
-s, the page 112 to 104 s (27 Oct 2026).
+s, the page 112 to 104 s (27 Oct 2026). The same profile put 16 s in libgcc's 64-bit multiply
+(5,500 cycles each on a 68000), nearly all of it from `dev`, a CSS length made device pixels; in
+the ST edition `dev` and `line_height` multiply by 16-bit halves now (`mulu.w`, `muls.w`), the
+same products and rounding (40 million cases checked against the 64-bit one): the layout 35.5 to
+27.7 s, the page 104.3 to 94.1 s, the home page shown in 9.2 to 8.9 s.
 
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).

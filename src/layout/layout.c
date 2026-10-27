@@ -344,8 +344,25 @@ typedef struct {
 
 static int32_t dev(L *l, ec_fx v)
 {
-	int64_t r = (int64_t) v * l->zoom;
-	return (int32_t) ((r + (r >= 0 ? (1 << 19) : -(1 << 19))) >> 20);
+#ifdef EW_ST
+	/* the 68000 has no 32 x 32 multiply: GCC's 64-bit one (libgcc's
+	   __muldi3, ll68000.c) took 5,500 cycles, 16 s of the news page's
+	   layout on an 8 MHz ST (27 Oct 2026). The zoom is less than 65536,
+	   so two 16 x 16 ones (mulu.w) make the same product, and the same
+	   rounding (a negative one down: floor((r - 2^19) / 2^20)) */
+	if (l->zoom < 65536) {
+		uint32_t a = v < 0 ? 0u - (uint32_t) v : (uint32_t) v, z = (uint16_t) l->zoom;
+		uint32_t hi = (uint32_t) (uint16_t) (a >> 16) * z, lo = (uint32_t) (uint16_t) a * z;
+		uint32_t c = v < 0 ? (1u << 19) + (1u << 20) - 1 : 1u << 19;
+		uint32_t t = ((hi & 15) << 12) + (lo >> 4) + (((lo & 15) + c) >> 4);
+		uint32_t r = (hi >> 4) + (t >> 16);
+		return v == 0 ? 0 : v < 0 ? -(int32_t) r : (int32_t) r;
+	}
+#endif
+	{
+		int64_t r = (int64_t) v * l->zoom;
+		return (int32_t) ((r + (r >= 0 ? (1 << 19) : -(1 << 19))) >> 20);
+	}
 }
 
 static int kw(const ec_style *s, int p)
@@ -674,10 +691,19 @@ static int32_t line_height(L *l, const ec_style *s, ew_font *f)
 	int32_t px = font_px(l, s);
 	switch (s->k[EP_LINE_HEIGHT]) {
 	case EK_NUM:
+#ifdef EW_ST
+		/* (one muls.w, not libgcc's 64-bit multiply, as in dev) */
+		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
+			return ((int32_t) (int16_t) px * (int16_t) s->v[EP_LINE_HEIGHT].i + 512) >> 10;
+#endif
 		return (int32_t) (((int64_t) px * s->v[EP_LINE_HEIGHT].i + 512) >> 10);
 	case EK_PX:
 		return text_px(l, dev(l, s->v[EP_LINE_HEIGHT].i));
 	case EK_PCT:
+#ifdef EW_ST
+		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
+			return (int32_t) (int16_t) px * (int16_t) s->v[EP_LINE_HEIGHT].i / (100 * 1024);
+#endif
 		return (int32_t) ((int64_t) px * s->v[EP_LINE_HEIGHT].i / (100 * 1024));
 	default: {
 		int32_t h = (px * 6 + 4) / 5;		/* normal: 1.2 */
