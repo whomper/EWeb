@@ -1052,7 +1052,8 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
 		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT \
-		build/asan/svgrender
+		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
+	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt

@@ -275,7 +275,9 @@ hub stay complete, with the evidence.
 - **The ST edition** is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
   of libjpeg-turbo, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is 68020 code); check a build
-  with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. It ran on a 1 MB ST up
+  with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. `make test` runs common's
+  `oddaccess.py` over the 68000 builds (a word or long at an odd stack offset is an address error
+  there; an initialised `char` array on the stack gets `__attribute__((aligned(4)))` or a `strcpy`). It ran on a 1 MB ST up
   to 0.27; Erez dropped that target on 23 Oct 2026 (DESIGN.md, Decisions): its floor is the 4 MB
   1040 ST, with the family's accessories loaded beside it (AERA-Atari's
   `common/tests/family/acc_all.py ST --prg EWeb:EWEBST.PRG:EWEB.FNT`, before each release). `EW_ST`
