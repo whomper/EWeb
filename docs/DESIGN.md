@@ -4003,6 +4003,15 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   scripts don't run, their frames and previews; not html5lib's trees, which keep it). `drawbench
   -m` on cnn.com: the heap after the parse 20.5 to 10.7 MB (6.1 MB of it the file itself), peak
   26.7 to 17.0 MB; `tests/layout/longtext.html` has a 4.5 KB word made of 3,000 pieces.
+- **The heap gives memory back** (AERA-Atari's `libc.c`, through the hub): it doubles up to 8 MB,
+  then takes 8 MB at a time, and `heap_trim` gives TOS each block that is all free again (not the
+  first); `EWEB.PRG` calls it once a page and its pictures are in (`trimmed` in the rigs' log).
+  cnn.com through a webgate on the emulated 128 MB Falcon, with this round's document and CSS
+  savings: shown at a heap of 16.7 MB (26.5 before; its document 4.3 MB, 14.2 before), 42.0 MB
+  once its 71 pictures were in (51.8), peak 43.8 MB (53.7), 50.3 MB taken from TOS (58.7; 64 MB
+  and more before the 8 MB steps). Back on the start page 8.4 MB went back to TOS, 41.9 MB stay
+  taken for a heap of 18.0 MB in use: the page kept for Back and the pictures kept decoded sit in
+  every area, so few are wholly free.
 - **Quit's steps timed** in `EWEB.LOG` (`quit: connections and windows, settings, cookies,
   history, the cache's index`, ms): on the emulated disk 305 ms, 250 of them the cache's index.
   Quit frees nothing (TOS takes the program's memory back at once).

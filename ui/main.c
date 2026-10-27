@@ -659,6 +659,8 @@ void gap_stage(const char *what)
 		aes_profile_tag(what);
 }
 
+extern long heap_tt, heap_st;	/* (common's libc.c) what the heap holds from TOS */
+
 /* the memory, for the rigs' log: the heap's blocks in use, the most
    they were, and the RAM TOS has left (the largest block) */
 static long ram_free(void)
@@ -667,6 +669,16 @@ static long ram_free(void)
 	if (st < 0)
 		return (long) Malloc(-1L);
 	return st > tt ? st : tt;
+}
+
+/* a page and its pictures in: the heap's blocks all free again (the
+   pages before it, their fetches and decoding) go back to TOS, the
+   system's and other programs' again (Erez's 128 MB TT RAM Falcon held
+   109 MB after one big page, 27 Oct 2026) */
+static void trim(void)
+{
+	long back = heap_trim();
+	log_event("trimmed %ld heap %ld taken %ld free %ld", back, heap_use, heap_tt + heap_st, ram_free());
 }
 
 /* the key for the cookies' values couldn't be made: they go into
@@ -1045,6 +1057,8 @@ static void loaded(int r)
 	}
 	if (pv && !fresh)
 		win_preview_gone();
+	if (fresh && !br_pictures_pending(&br))
+		trim();			/* (with pictures, once they are in) */
 	switch (r) {
 	case BR_SHOWN:
 		break;
@@ -2008,6 +2022,7 @@ static void pictures(void)
 		win_status(br.pic_stopped ? "Pictures stopped." : "");
 		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
 		log_event("throbber %d", win_throb_frames());
+		trim();
 		if (opt.log) {
 			conn_log_hold(0);	/* the page's and its pictures' lines, at once */
 			conn_log_hold(1);

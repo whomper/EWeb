@@ -49,6 +49,12 @@ void *Malloc(long n)
 	return Mxalloc(n, 0);
 }
 
+long Mfree(void *p)
+{
+	(void) p;		/* (heap_trim's: the bench's core isn't given back) */
+	return 0;
+}
+
 void *malloc(size_t n)
 {
 	return heap_malloc(n);
