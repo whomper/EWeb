@@ -493,9 +493,15 @@ short evnt_timer_(unsigned long ms)
 	return aes(24, 2, 1, 0, 0);
 }
 
+/* asked only where the AES has it (AES 4.0 and later, the ?AGI cookie,
+   MagiC): TOS 4.04's AES 3.40 answers with "Illegal AES function call"
+   (EMail, 28 Oct 2026). 0 elsewhere, as for a question it can't answer */
 short appl_getinfo(short type, short *o1, short *o2, short *o3, short *o4)
 {
 	short r;
+	*o1 = *o2 = *o3 = *o4 = 0;
+	if (global[0] < 0x0400 && !get_cookie(0x3F414749L) && !get_cookie(0x4D616758L))	/* ?AGI, MagX */
+		return 0;
 	aintin[0] = type;
 	r = aes(130, 1, 5, 0, 0);
 	*o1 = aintout[1];
