@@ -4041,6 +4041,22 @@ again, a second styling and layout of the page's first 24 KB, before the page it
 the preview, 47.1 to 15.6 s; layout 27.6 to 27.5 s, which now unpacks the fonts the preview
 did); on the stock Falcon 16.0 to 14.3 s (layout 8.4 to 6.7 s).
 
+The fonts' faces are deflated in `EWEB.FNT` and unpacked when first drawn. Common's inflate made
+its look-up tables a bit at a time (two shifts by a count for each bit) and took a short code's
+bits one by one. It now reverses a code through a table of bytes and takes a short code in one
+look-up (AERA-Atari d6c18bd): the 16 faces the news page uses 6.99 to 5.20 s on the ST, 1.56 to
+1.12 s on the stock Falcon. Its drawing had three costs the 68000 pays for that the 68030
+doesn't:
+- a row's address multiplied out each row (`y * stride`, a call of libgcc's), in the fills,
+  the glyphs and the pictures;
+- a glyph's bit found by a shift by a count each pixel;
+- `dev`'s and `line_height`'s 16-bit products, which GCC 13 made calls of libgcc's 32-bit
+  multiply (268 cycles each).
+
+The rows' addresses are stepped now, the glyph's bit is a mask stepped along its byte, and the
+products are `mulu.w` and `muls.w`. The news page on the ST 60.5 to 58.6 s (drawn 7.0 to 6.1 s,
+layout 25.6 to 24.8 s); on the stock Falcon 14.2 to 14.1 s.
+
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
 - `ec_prune` now leaves out a rule needing an id, a class or a tag the page hasn't anywhere in

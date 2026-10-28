@@ -48,15 +48,19 @@ static inline int clip(canvas *c, int32_t *x, int32_t *y, int32_t *w, int32_t *h
 static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
 {
 	int32_t i, j;
+	uint8_t *row;
 	if (!clip(c, &x, &y, &w, &h))
 		return;
-	for (j = 0; j < h; j++) {
+	/* a row's address stepped, not multiplied out each row (a call of
+	   libgcc's on the 68000) */
+	row = c->pix + y * c->stride + (c->bpp == 8 ? x : 2 * x);
+	for (j = 0; j < h; j++, row += c->stride) {
 		if (c->bpp == 8) {
-			memset(c->pix + (y + j) * c->stride + x, (int) pv, (size_t) w);
+			memset(row, (int) pv, (size_t) w);
 		} else {
 			/* a word a pixel (the rows start on even addresses), as the
 			   machine stores it: the Falcon's high byte first */
-			uint8_t *p = c->pix + (y + j) * c->stride + 2 * x;
+			uint8_t *p = row;
 			uint8_t b[2] = { (uint8_t) (pv >> 8), (uint8_t) pv };
 			uint16_t v, *q = (uint16_t *) (void *) p;
 			memcpy(&v, b, 2);
@@ -268,10 +272,11 @@ static inline void mix8(canvas *c, uint8_t *p)
 static void mix_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h)
 {
 	int32_t i, j;
+	uint8_t *o, *p, *end;
 	if (!clip(c, &x, &y, &w, &h))
 		return;
-	for (j = y; j < y + h; j++) {
-		uint8_t *o = c->pix + j * c->stride, *p, *end;
+	/* (a row's address stepped) */
+	for (j = y, o = c->pix + y * c->stride; j < y + h; j++, o += c->stride) {
 		uint32_t last, to, *q, *qe;
 		if (c->bpp == 16) {
 			p = o + 2 * x;
@@ -335,6 +340,7 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 	if (c->bpp == 8 && c->shade != NULL && (level = c->shade(c->ud, rgb, &dark, &light)) >= 0) {
 		/* a pattern fixed to the page, so that it doesn't move as it scrolls */
 		int32_t i, j, x0 = x - c->ox, y0 = y - c->oy, x1, y1;
+		uint8_t *o;
 		if (item_a != 255) {
 			if (mix_init(c, rgb, MIX_SHADE)) {
 				mix.dark = dark;
@@ -349,12 +355,12 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 			x0 = 0;
 		if (y0 < 0)
 			y0 = 0;
-		for (j = y0; j < y1; j++) {
+		for (j = y0, o = c->pix + y0 * c->stride + x0; j < y1; j++, o += c->stride) {
 			const uint8_t *b = bayer[(j + c->oy) & 3];
 			uint8_t q[4];
 			for (i = 0; i < 4; i++)
 				q[i] = b[(x0 + i + c->ox) & 3] < level ? light : dark;
-			fill_pattern(c->pix + j * c->stride + x0, x1 - x0, q);
+			fill_pattern(o, x1 - x0, q);
 		}
 		return;
 	}
@@ -393,18 +399,32 @@ static inline void glyph_clip(const canvas *c, const GLYPH *g, int32_t gx, int32
 static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 {
 	int32_t gx = x + g->x, gy = y + g->y, row, col, stride = (g->w + 7) / 8, c0, c1, r0, r1;
+	const uint8_t *b0;
+	uint8_t *o0;
 	if (g->bits == NULL)
 		return;
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
-	/* a row's address once; the depth's own loop */
-	for (row = r0; row < r1; row++) {
-		const uint8_t *b = g->bits + row * stride;
-		uint8_t *o = c->pix + (gy + row) * c->stride;
+	/* a row's address once, stepped (a multiply each row was a call of
+	   libgcc's on the 68000); the depth's own loop */
+	b0 = g->bits + r0 * stride;
+	o0 = c->pix + (gy + r0) * c->stride;
+	for (row = r0; row < r1; row++, b0 += stride, o0 += c->stride) {
+		const uint8_t *b = b0;
+		uint8_t *o = o0;
 		if (c->bpp == 8) {
+			/* the glyph's bit a mask stepped along its byte, not a
+			   shift by a count each pixel (slow on the 68000) */
+			const uint8_t *bp = b + (c0 >> 3);
+			unsigned m = 0x80u >> (c0 & 7);
 			o += gx;
-			for (col = c0; col < c1; col++)
-				if (b[col >> 3] & (0x80 >> (col & 7)))
+			for (col = c0; col < c1; col++) {
+				if (*bp & m)
 					o[col] = (uint8_t) pv;
+				if ((m >>= 1) == 0) {
+					m = 0x80;
+					bp++;
+				}
+			}
 		} else {
 			o += 2 * gx;
 			for (col = c0; col < c1; col++)
@@ -450,9 +470,9 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
 	if (c->bpp == 8) {
 		/* (an int16_t tested for its sign: no extending on the 68030) */
-		for (row = r0; row < r1; row++) {
-			const uint8_t *b = g->bits + row * stride;
-			uint8_t *o = c->pix + (gy + row) * c->stride + gx;
+		const uint8_t *b = g->bits + r0 * stride;
+		uint8_t *o = c->pix + (gy + r0) * c->stride + gx;
+		for (row = r0; row < r1; row++, b += stride, o += c->stride) {
 			for (col = c0; col < c1; col++)
 				if (b[col >> 3] & (0x80 >> (col & 7))) {
 					int16_t v = mix_to[o[col]];
@@ -463,12 +483,14 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 		}
 		return;
 	}
-	for (row = r0; row < r1; row++) {
-		const uint8_t *b = g->bits + row * stride;
-		uint8_t *o = c->pix + (gy + row) * c->stride + 2 * gx;
-		for (col = c0; col < c1; col++)
-			if (b[col >> 3] & (0x80 >> (col & 7)))
-				mix16(o + 2 * col);
+	{
+		const uint8_t *b = g->bits + r0 * stride;
+		uint8_t *o = c->pix + (gy + r0) * c->stride + 2 * gx;
+		for (row = r0; row < r1; row++, b += stride, o += c->stride) {
+			for (col = c0; col < c1; col++)
+				if (b[col >> 3] & (0x80 >> (col & 7)))
+					mix16(o + 2 * col);
+		}
 	}
 }
 
@@ -528,6 +550,8 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 {
 	int32_t px = x - c->ox, py = y - c->oy, x0 = 0, y0 = 0, x1 = pic->w, y1 = pic->h, i, j;
 	unsigned op = item_a;		/* its opacity */
+	long k;
+	uint8_t *row;
 	/* what there is to draw with: its pens in the modes with a palette,
 	   its pixels in true colour (one read from the disk cache for a
 	   palette has no pixels) */
@@ -541,11 +565,15 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 		x1 = c->w - px;
 	if (py + y1 > c->h)
 		y1 = c->h - py;
-	for (j = y0; j < y1; j++) {
-		long k = (long) j * pic->w;
+	if (y0 >= y1)
+		return;
+	/* the rows' places stepped, not multiplied out (libgcc's on the 68000) */
+	k = (long) y0 * pic->w;
+	row = c->pix + (py + y0) * c->stride;
+	for (j = y0; j < y1; j++, k += pic->w, row += c->stride) {
 		const uint8_t *a = pic->alpha != NULL ? pic->alpha + k : NULL;
 		if (c->bpp == 8) {
-			uint8_t *o = c->pix + (py + j) * c->stride + px;
+			uint8_t *o = row + px;
 			const uint8_t *s = pens + k;
 			if (op != 255) {
 				/* less than opaque: drawn where the opacity is above the
@@ -567,7 +595,7 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 						o[i] = s[i];
 			}
 		} else {
-			uint8_t *o = c->pix + (py + j) * c->stride + 2 * px;
+			uint8_t *o = row + 2 * px;
 			const uint16_t *s = pic->px + k;
 			if (a == NULL && op == 255) {
 				for (i = x0; i < x1; i++) {

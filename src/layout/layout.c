@@ -342,6 +342,32 @@ typedef struct {
 
 #define LAY_AUTO INT32_MIN
 
+#ifdef EW_ST
+/* a * b, each less than 65536: the 68000's mulu.w (GCC 13 at -Os called
+   libgcc's 32-bit multiply for it, 268 cycles; dev's 41,464 a news page
+   on the ST, 1.4 s) */
+static inline uint32_t mulu16(uint32_t a, uint32_t b)
+{
+#if defined(__mc68000__) && !defined(__mc68020__)
+	__asm__ ("mulu.w %1,%0" : "+d" (a) : "d" (b));
+	return a;
+#else
+	return a * b;
+#endif
+}
+
+/* a * b, each from -32768 to 32767: muls.w */
+static inline int32_t muls16(int32_t a, int32_t b)
+{
+#if defined(__mc68000__) && !defined(__mc68020__)
+	__asm__ ("muls.w %1,%0" : "+d" (a) : "d" (b));
+	return a;
+#else
+	return a * b;
+#endif
+}
+#endif
+
 static int32_t dev(L *l, ec_fx v)
 {
 #ifdef EW_ST
@@ -352,7 +378,7 @@ static int32_t dev(L *l, ec_fx v)
 	   rounding (a negative one down: floor((r - 2^19) / 2^20)) */
 	if (l->zoom < 65536) {
 		uint32_t a = v < 0 ? 0u - (uint32_t) v : (uint32_t) v, z = (uint16_t) l->zoom;
-		uint32_t hi = (uint32_t) (uint16_t) (a >> 16) * z, lo = (uint32_t) (uint16_t) a * z;
+		uint32_t hi = mulu16(a >> 16, z), lo = mulu16(a & 0xffff, z);
 		uint32_t c = v < 0 ? (1u << 19) + (1u << 20) - 1 : 1u << 19;
 		uint32_t t = ((hi & 15) << 12) + (lo >> 4) + (((lo & 15) + c) >> 4);
 		uint32_t r = (hi >> 4) + (t >> 16);
@@ -705,7 +731,7 @@ static int32_t line_height(L *l, const ec_style *s, ew_font *f)
 #ifdef EW_ST
 		/* (one muls.w, not libgcc's 64-bit multiply, as in dev) */
 		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
-			return ((int32_t) (int16_t) px * (int16_t) s->v[EP_LINE_HEIGHT].i + 512) >> 10;
+			return (muls16(px, s->v[EP_LINE_HEIGHT].i) + 512) >> 10;
 #endif
 		return (int32_t) (((int64_t) px * s->v[EP_LINE_HEIGHT].i + 512) >> 10);
 	case EK_PX:
@@ -713,7 +739,7 @@ static int32_t line_height(L *l, const ec_style *s, ew_font *f)
 	case EK_PCT:
 #ifdef EW_ST
 		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
-			return (int32_t) (int16_t) px * (int16_t) s->v[EP_LINE_HEIGHT].i / (100 * 1024);
+			return muls16(px, s->v[EP_LINE_HEIGHT].i) / (100 * 1024);
 #endif
 		return (int32_t) ((int64_t) px * s->v[EP_LINE_HEIGHT].i / (100 * 1024));
 	default: {
