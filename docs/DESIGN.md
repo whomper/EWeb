@@ -909,10 +909,8 @@ releases.
   `app_dir()`: the folder of the command the AES started it with (`shel_read`), not the current
   folder, which TOS 1.04 and 4.04 leave as the desktop's when another program starts EWeb with
   `shel_write`. `tests/hatari/appdir.py` starts it so (AERA-Atari's `common/tests/appdir`
-  launcher), from a FAT floppy and from C: with A: current: 0.48 alerts "fonts are missing" on
-  the ST's TOS 1.04 both ways; now it shows its page there and on EmuTOS (ST and Falcon). On TOS
-  4.04 the rig can't run EWeb (the program started after Hatari's autostart one gets ST low);
-  `common/tests/appdir` shows `app_dir()` right there.
+  launcher), from a FAT floppy and from C: with A: current: 0.48 fails both ways on the ST's TOS
+  1.04 ("fonts are missing") and the Falcon's TOS 4.04; 0.49 shows its page on both and on EmuTOS.
 
 ## Pictures (19 Oct 2026)
 

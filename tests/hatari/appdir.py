@@ -21,14 +21,14 @@ own home page (EWeb 0.48 on the ST's TOS 1.04). Two cases on each machine:
           start C:\\APP\\PROBE.PRG), A:\\APP still the current folder: EWeb
           started on C:, whose folder (the root) isn't EWeb's.
 
-Not on a Falcon with Erez's TOS 4.04: there the program started after
-Hatari's autostart one runs in ST low (before the desktop has set its
-mode from NEWDESK.INF), where EWeb can't run, and Hatari's floppies give
-it only small files. common/tests/appdir shows TOS 4.04 too starting it
-in the desktop's folder, and app_dir() right there.
+A Falcon is Falcon-4 (a program flagged for TT-RAM doesn't load from a
+floppy on the 128 MB one) on a mono monitor: with a floppy in, the Falcon
+boots to ST low and TOS 4.04 runs the program started after Hatari's
+autostart one in it, where EWeb can't run; in mono it is 640x400 (the
+hub's finding, common/tests/appdir 0905935).
 
     make && python3 tests/hatari/appdir.py WORK [MACHINE...] [--prg DIR]
-    (ST and Falcon; --prg: EWEB.PRG and EWEBST.PRG from DIR, as a release)
+    (ST and Falcon-4; --prg: EWEB.PRG and EWEBST.PRG from DIR, as a release)
 
 Erez's TOS when ~/.aera/tos has it, else EmuTOS (machines.py);
 AERA_TOS=emutos for EmuTOS.
@@ -47,7 +47,7 @@ if "--prg" in argv:
     prgdir = os.path.abspath(argv[i + 1])
     del argv[i:i + 2]
 work = os.path.abspath(argv[0])
-specs = argv[1:] or ["ST", "Falcon"]
+specs = argv[1:] or ["ST", "Falcon-4"]
 failed = 0
 
 
@@ -84,6 +84,8 @@ def run(w, spec, prg, fnt, on_c):
         else:
             mtools("mcopy", "-i", img, src, "::/APP/" + name)
     args += ["--disk-a", img, "--auto", "C:\\LAUNCH.PRG"]
+    if m.name.startswith("Falcon"):         # not ST low with a floppy in (above)
+        args[args.index("--monitor") + 1] = "mono"
     log = os.path.join(w, "hatari.log")
     p = subprocess.Popen(args, env=m.env(), stdout=open(log, "w"), stderr=subprocess.STDOUT)
     shown = ""
@@ -120,9 +122,6 @@ for spec in specs:
     w = os.path.join(work, spec.replace(":", "-"))
     falcon = spec.startswith("Falcon")
     prg = os.path.join(prgdir, "EWEB.PRG" if falcon else "EWEBST.PRG")
-    if falcon and machines.Machine(spec, w).real:
-        print("%s: skipped (Erez's TOS 4.04: see above)" % spec, flush=True)
-        continue
     shown = run(os.path.join(w, "floppy"), spec, prg, small, False)
     check(shown.startswith("EWEB shown about:bookmarks "),
           "started by another program from A:\\APP: EWEB.FNT and EWEB.INF found there")
