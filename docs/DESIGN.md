@@ -3383,7 +3383,8 @@ of ST RAM alone has free (`pv_room`: the cost a kept page is counted at, the pag
 preview's, within four times `br_keep_max`), which with TT RAM any page does; a page whose length
 isn't known yet counts as a long one (48 KB, or four times the gzip bytes come). On the stock 4 MB
 Falcon a page of up to about 55 KB has one, and its big test page (130 KB, which takes 1.9 MB of
-its 2.1 MB) none; the ST edition never makes one. A preview made as the page came, when the whole
+its 2.1 MB) none; the ST edition never makes one (`pv_room`; since the 4 MB ST had the room it
+made one until 28 Oct 2026, a third of the news page's time). A preview made as the page came, when the whole
 page turns out not to fit beside it, goes before the page is read (the page shown is drawn again
 until then), and a page that doesn't fit gives it back first (make_room). Tested by `make
 hatarigui`'s browse group: the test server's `/site/slow.html` (66 KB, gzip, two parts 2.5 s apart)
@@ -4022,6 +4023,23 @@ s, the page 112 to 104 s (27 Oct 2026). The same profile put 16 s in libgcc's 64
 the ST edition `dev` and `line_height` multiply by 16-bit halves now (`mulu.w`, `muls.w`), the
 same products and rounding (40 million cases checked against the 64-bit one): the layout 35.5 to
 27.7 s, the page 104.3 to 94.1 s, the home page shown in 9.2 to 8.9 s.
+
+A new profile (28 Oct 2026) put 5.9 s in `memmove` again, all of it `split_word`'s: 3,710 cuts,
+every one at a width of 1 px. The comments (`li.comment`, `position: absolute`, width auto) hold
+a box of `width: calc(100% - 2rem)`; measured for shrink-to-fit, a percentage of a width not
+known yet was left out of the `calc()` and the `- 2rem` kept, -32 px, so the item was 1 px wide
+and every word in it cut into letters. A size's (`width`, `height`, their `min-`/`max-`,
+`flex-basis`) `calc()` with a percentage of an unknown size is now auto, as a plain percentage
+is (CSS Values 4, 10.1; `len_calc`), and a positioned box's shrink-to-fit width is the room its
+containing block has beside its `left` (or where it would have been) and `right`, but no less
+than its longest word (CSS 2.1, 10.3.7; `place_abs`), as Chrome lays it out
+(`tests/layout/shrink.html`). The page 608 x 17,373 to 9,829. The same profile put 31.7 s in a
+preview: the ST edition was to make none (A page drawn while it loads), but only `pv_room` kept
+it from one, and the 4 MB ST has the room; a preview there is a second parse, the sheets read
+again, a second styling and layout of the page's first 24 KB, before the page itself. Now
+`pv_room` says no in the ST edition. The news page on the ST 94.0 to 62.3 s (style, which counted
+the preview, 47.1 to 15.6 s; layout 27.6 to 27.5 s, which now unpacks the fonts the preview
+did); on the stock Falcon 16.0 to 14.3 s (layout 8.4 to 6.7 s).
 
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).

@@ -373,10 +373,21 @@ static int kw(const ec_style *s, int p)
 /* a length in device px: base is what a percentage is of (AUTO: none,
    so a percentage is auto too); AUTO for auto, none, normal */
 /* (calc(): apart, so a plain length doesn't save the registers it takes) */
-static __attribute__((noinline)) int32_t len_calc(L *l, const ec_calc *c, int32_t base)
+static __attribute__((noinline)) int32_t len_calc(L *l, const ec_calc *c, int32_t base, int p)
 {
 	int32_t r = 0, v;
 	int i;
+	if (base == AUTO && ((p >= EP_WIDTH && p <= EP_MAX_HEIGHT) || p == EP_FLEX_BASIS))
+		for (i = 0; i < c->n; i++)
+			if (c->a[i].pct != 0)
+				/* a size with a percentage of a size not known yet
+				   (a box measured for shrink-to-fit, an auto height)
+				   is auto, as a plain percentage is (CSS Values 4,
+				   10.1; CSS Sizing 3, 5.2.1): calc(100% - 2rem) was
+				   -32 px, and a positioned box around it 1 px wide,
+				   every word in it cut into letters (the news page:
+				   3,710 cuts, 5.9 s of its layout on the ST) */
+				return AUTO;
 	for (i = 0; i < c->n; i++) {
 		v = dev(l, c->a[i].px);
 		if (c->a[i].pct != 0 && base != AUTO)
@@ -409,7 +420,7 @@ static int32_t len(L *l, const ec_style *s, int p, int32_t base)
 	case EK_PCT:
 		return base == AUTO ? AUTO : len_pct(base, s->v[p].i);
 	case EK_CALC:
-		return len_calc(l, s->v[p].p, base);
+		return len_calc(l, s->v[p].p, base, p);
 	default:
 		return AUTO;
 	}
@@ -6042,10 +6053,27 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	left = len(l, c->st, EP_LEFT, cbw);
 	right = len(l, c->st, EP_RIGHT, cbw);
 	top = len(l, c->st, EP_TOP, fixed ? (l->p->opt.height > 0 ? l->p->opt.height : AUTO) : l->cbh);
-	if (len(l, c->st, EP_WIDTH, cbw) == AUTO && left != AUTO && right != AUTO)
+	if (len(l, c->st, EP_WIDTH, cbw) == AUTO && left != AUTO && right != AUTO) {
 		wf = cbw - left - right;	/* stretched between its sides */
-	else
+	} else {
 		wf = cell_pref(l, c, cbw);
+		if (len(l, c->st, EP_WIDTH, cbw) == AUTO) {
+			/* shrink-to-fit: its widest, but no wider than its
+			   containing block has room for beside its left (or,
+			   auto, where it would have been) and right, nor
+			   narrower than its longest word (CSS 2.1, 10.3.7) */
+			int32_t at = left != AUTO ? left : right == AUTO && sx > cbx && sx - cbx < cbw ? sx - cbx : 0;
+			int32_t avail = cbw - at - (right != AUTO ? right : 0);
+			if (wf > avail) {
+				int was = l->minw;
+				int32_t mn;
+				l->minw = 1;
+				mn = measure(l, c);
+				l->minw = was;
+				wf = avail > mn ? avail : mn;
+			}
+		}
+	}
 	if (wf > cbw)
 		wf = cbw;
 	if (wf < 1)

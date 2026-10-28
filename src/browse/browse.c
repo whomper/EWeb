@@ -2828,7 +2828,16 @@ void br_preview_step(browser *b)
    of its memory */
 static int pv_room(long len)
 {
+#ifdef EW_ST
+	/* the ST edition makes none: on an 8 MHz ST a preview is styled and
+	   laid out again with the page (its sheets read twice too), the news
+	   page's 31.7 s of 89.6 (28 Oct 2026). It used to have no room for
+	   one; the 4 MB ST, its floor since 23 Oct, had */
+	(void) len;
+	return 0;
+#else
 	return cost(len) + cost(PV_TAKE) <= 4 * br_keep_max;
+#endif
 }
 
 /* the preview gone before the page came (for its memory): the page shown

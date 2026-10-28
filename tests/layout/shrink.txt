@@ -1,0 +1,12 @@
+page 608 x 168, background ffffff, 11 items, 0 links, title "Shrink-to-fit: positioned boxes"
+fill 6,6 596x72 #eeeeff
+fill 38,6 537x24 #ddeeff
+text 38,16 523x13 #000000 sans10 link 0 "A comment as wide as its line allows, its box a calc() of the item's width, and the item as wide as the room it"
+text 38,28 130x13 #000000 sans10 link 0 "has beside the list's indent."
+fill 6,84 596x72 #eeeeff
+fill 326,84 244x12 #ffeecc
+text 326,94 244x13 #000000 sans10 link 0 "Text that would be wider than the room to its right"
+fill 454,108 61x12 #ccffcc
+text 454,118 61x13 #000000 sans10 link 0 "Unbreakable"
+fill 577,144 25x12 #ffcccc
+text 577,154 25x13 #000000 sans10 link 0 "short"

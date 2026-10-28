@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Shrink-to-fit: positioned boxes</title>
+<style>
+body { font-family: sans-serif; margin: 8px; font-size: 13px }
+.cb { position: relative; height: 90px; background: #eef; margin-bottom: 8px }
+ol { display: grid; margin: 0; padding-left: 40px }
+li.c { position: absolute; list-style: none }
+.inner { width: calc(100% - 2rem); background: #def }
+.at { position: absolute; left: 400px; top: 0; background: #fec }
+.word { position: absolute; left: 560px; top: 30px; background: #cfc }
+.short { position: absolute; right: 0; bottom: 0; background: #fcc }
+</style></head>
+<body>
+<!-- an auto-width positioned box around one whose width is a calc() of
+     it: as wide as its text allows, not 1 px with every word cut -->
+<div class="cb"><ol><li class="c"><div class="inner">A comment as wide as its line allows, its box a
+calc() of the item's width, and the item as wide as the room it has beside the list's indent.</div></li></ol></div>
+<!-- no wider than the room beside its left; no narrower than its longest word -->
+<div class="cb"><div class="at">Text that would be wider than the room to its right</div>
+<div class="word">Unbreakable</div><div class="short">short</div></div>
+</body></html>
