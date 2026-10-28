@@ -148,7 +148,9 @@ hub stay complete, with the evidence.
   `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
-  `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5).
+  `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5), and
+  after changing where EWeb finds its own files (`work_dir`, common's `app_dir`),
+  `tests/hatari/appdir.py` (EWeb started by another program, as EMail starts it).
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
   called by `d_end` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
   Undo cancels: 3.5): after changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and

@@ -2119,14 +2119,16 @@ static void throb_all(void)
 
 /* ---------------------------------------------------------------- start and end */
 
+/* EWeb's own folder, where its files are (EWEB.FNT, EWEB.INF, the cache
+   and the rest): the folder of the command the AES started it with
+   (common's app_dir, the guidelines' 6.1), not the current folder, which
+   TOS 1.04 and 4.04 leave as the desktop's when another program starts
+   EWeb (Erez, 28 Oct 2026: EWeb didn't find its fonts). Without its last
+   backslash, as path_join takes it */
 static void work_dir(char *out, int size)
 {
-	char path[160];
-	short drv = (short) Dgetdrv();
-	path[0] = 0;
-	Dgetpath(path, 0);
-	snprintf(out, size, "%c:%s", 'A' + drv, path);
-	if (out[strlen(out) - 1] == '\\')
+	snprintf(out, size, "%s", app_dir());
+	if (out[0] && out[strlen(out) - 1] == '\\')
 		out[strlen(out) - 1] = 0;
 }
 

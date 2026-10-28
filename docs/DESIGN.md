@@ -903,6 +903,16 @@ releases.
   in 32 KB pieces (`atari/plat_tos.c`): as they are where the disk driver sets `_FRB`, else
   through 32 KB in ST-RAM; a 1 MB download is 32 writes (it was 128 of 8 KB). `EWGET.TTP`'s log
   (`-l`) is written once a run, not at each milestone.
+- **Where its files are** (Erez, 28 Oct 2026: started from EMail's link, EWeb didn't find its
+  fonts). Every file of EWeb's own (`EWEB.FNT`, `EWEB.INF`, the cache, the overlays, the cookies,
+  the bookmarks, the history) is in the program's folder, taken once at start from common's
+  `app_dir()`: the folder of the command the AES started it with (`shel_read`), not the current
+  folder, which TOS 1.04 and 4.04 leave as the desktop's when another program starts EWeb with
+  `shel_write`. `tests/hatari/appdir.py` starts it so (AERA-Atari's `common/tests/appdir`
+  launcher), from a FAT floppy and from C: with A: current: 0.48 alerts "fonts are missing" on
+  the ST's TOS 1.04 both ways; now it shows its page there and on EmuTOS (ST and Falcon). On TOS
+  4.04 the rig can't run EWeb (the program started after Hatari's autostart one gets ST low);
+  `common/tests/appdir` shows `app_dir()` right there.
 
 ## Pictures (19 Oct 2026)
 
