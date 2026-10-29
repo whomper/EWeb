@@ -754,8 +754,65 @@ short wind_calc(short type, short kind, short x, short y, short w, short h,
 	return r;
 }
 
+/* The AES sends a click on a window's arrow or on its slider's track
+   twice: a second WM_ARROWED, the same, comes as the next event, the
+   button let go, so the window moved two pages a click. TOS 4.04 (Erez's
+   Falcon) does it every click; TOS 1.04 now and then, when the program
+   draws between the messages (ClaudeST: 1 click in 6 to 12 on an ST).
+   It is dropped here: the very next event of a call that can return
+   messages, the same as the last one delivered, the button up, within
+   40 ms of the call (common/tests/arrowed). A held button's repeats come
+   with it down and are kept. Not on MagiC or MiNT, nor on EmuTOS, which
+   do otherwise */
+static short arr_win = -1, arr_what;
+static unsigned long os_magic;
+
+static void sup_magic(void)
+{
+	const unsigned char *os;
+	__asm__ volatile("move.l 0x4f2.w,%0" : "=a"(os));	/* _sysbase */
+	os_magic = *(const unsigned long *)(os + 0x2c);
+}
+
+static int arrow_echoes(void)
+{
+	static short k = -1;
+	if (k < 0) {
+		Supexec(sup_magic);
+		k = global[0] < 0x0400 && os_magic != 0x45544F53L	/* 'ETOS' */
+		    && !get_cookie(0x4D616758L) && !get_cookie(0x4D694E54L);	/* MagX, MiNT */
+	}
+	return k;
+}
+
+static short evnt_multi_aes(short flags, short clicks, short mask, short state,
+			    unsigned long timer, short *msg, AEVENT *ev);
+
 short evnt_multi_(short flags, short clicks, short mask, short state,
 		  unsigned long timer, short *msg, AEVENT *ev)
+{
+	for (;;) {
+		short last = arr_win, which;	/* only the very next event can be its echo */
+		u32 t0 = last >= 0 ? tos_ms() : 0;
+		if (flags & MU_MESAG)
+			arr_win = -1;
+		which = evnt_multi_aes(flags, clicks, mask, state, timer, msg, ev);
+		if (!(which & MU_MESAG) || msg[0] != WM_ARROWED || !arrow_echoes())
+			return which;
+		if (msg[3] == last && msg[4] == arr_what && !(ev->mbutton & 1) && tos_ms() - t0 < 40) {
+			/* the echo: dropped */
+			if (which & ~MU_MESAG)
+				return ev->which = (short) (which & ~MU_MESAG);
+			continue;
+		}
+		arr_win = msg[3];
+		arr_what = msg[4];
+		return which;
+	}
+}
+
+static short evnt_multi_aes(short flags, short clicks, short mask, short state,
+			    unsigned long timer, short *msg, AEVENT *ev)
 {
 	short i;
 	aintin[0] = flags;
