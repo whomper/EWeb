@@ -848,6 +848,11 @@ int ck_save(void)
 	return ok;
 }
 
+int ck_unsaved(void)
+{
+	return changed && file[0] != 0;
+}
+
 void ck_clear(void)
 {
 	while (all != NULL) {

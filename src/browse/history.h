@@ -42,6 +42,8 @@ int hg_parse(const char *data, long len);
 /* at quit: written if they changed; 1 done (or nothing to), 0 the disk
    wouldn't take it */
 int hg_save(void);
+/* 1 when hg_save has something to write */
+int hg_unsaved(void);
 void hg_free(void);
 
 #endif

@@ -41,6 +41,8 @@ void ck_file(const char *path, const char *key);
 /* lasting cookies changed since the file was read: written now (one
    safe save); 1 when nothing needed writing or it was written */
 int ck_save(void);
+/* 1 when ck_save has something to write (the quit's box weighs its steps) */
+int ck_unsaved(void);
 /* every cookie forgotten, the file too */
 void ck_clear(void);
 long ck_count(void);

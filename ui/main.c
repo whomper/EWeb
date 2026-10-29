@@ -2488,6 +2488,17 @@ int app_main(void)
 		   real disk, 27 Oct 2026) */
 		unsigned long t0 = pf_ms(), tw, ts, tc, th, tf, td;
 		char line[200];
+		/* the quit's box (Erez, 29 Oct 2026): each step said as it
+		   starts, the bar by what each has to write (a file's few
+		   disk commands; the cache's answers by their size) */
+		long pend, answers, total, done = 0;
+		int wck = ck_unsaved() ? 3 : 0, whg = hg_unsaved() ? 3 : 0, wfl, wix;
+		dc_unsaved(&pend, &answers);
+		wfl = pend > 0 ? 2 + (int) (pend >> 15) : 0;
+		wix = answers > 0 ? 3 + (int) (answers / 100) : 0;
+		total = 2 + wck + whg + wfl + wix;
+#define QUIT_STEP(words, weight) (quit_box(words, (int) (done * 1000 / total)), done += (weight))
+		QUIT_STEP("Closing connections and windows...", 1);
 		http_close_all();
 		{
 			/* the window in front last: its place is kept (WINDOW=) */
@@ -2501,16 +2512,30 @@ int app_main(void)
 			win_close();
 		}
 		tw = pf_ms();
+		QUIT_STEP("Saving the settings...", 1);
 		settings_save();
 		ts = pf_ms();
+		if (wck)
+			QUIT_STEP("Saving the cookies...", wck);
 		ck_save();	/* the cookies that last, once, if they changed */
 		tc = pf_ms();
+		if (whg)
+			QUIT_STEP("Saving the history...", whg);
 		hg_save();	/* the pages shown, once, if they changed */
 		th = pf_ms();
+		if (wfl)
+			QUIT_STEP("Storing the cache's pages and pictures...", wfl);
 		dc_flush();	/* the cache's answers still in memory */
 		tf = pf_ms();
+		if (wix)
+			QUIT_STEP("Saving the cache's list...", wix);
 		dc_close();	/* its index, once */
 		td = pf_ms();
+#undef QUIT_STEP
+		quit_box("Done.", 1000);
+		if (td - t0 > 500)
+			evnt_timer_(300);	/* the full bar seen after a long quit */
+		quit_box_close();
 		snprintf(line, sizeof line, "quit: connections and windows %lu ms, settings %lu, cookies %lu, "
 			 "history %lu, the cache's last answers %lu, its index %lu", tw - t0, ts - tw, tc - ts, th - tc,
 			 tf - th, td - tf);

@@ -335,6 +335,11 @@ void hg_clear(void)
 	hg_changes++;
 }
 
+int hg_unsaved(void)
+{
+	return dirty && path[0] != 0;
+}
+
 int hg_save(void)
 {
 	long len;

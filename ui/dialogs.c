@@ -557,6 +557,51 @@ static int ask(const char *title, const char *text, char *answer, int size)
 	return 1;
 }
 
+/* ---------------------------------------------------------------- the quit's box */
+
+/* what quitting does, said while it does it, with a bar of how far it
+   is (Erez, 29 Oct 2026: on a slow disk a quit took half a minute, the
+   screen as it was). No buttons: it closes when the work is done */
+static char q_what[44];
+static short q_open, q_text, q_frame, q_fill, q_full;
+
+void quit_box(const char *what, int permille)
+{
+	short x, y, w, h;
+	if (permille < 0)
+		permille = 0;
+	if (permille > 1000)
+		permille = 1000;
+	str_copy(q_what, what, sizeof q_what);
+	if (!q_open) {
+		short band;
+		d_begin(44, 6);
+		band = d_band(44, "Closing EWeb");
+		q_text = d_text(2, 2, q_what);
+		tree[q_text].ob_width = 40;	/* (the longest step's words) */
+		q_frame = d_add(G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
+		q_fill = d_add(G_BOX, 0, 0, 0x00001171L, 2, 4, 1, 1);
+		d_end();
+		q_full = tree[q_frame].ob_width;
+		tree[q_fill].ob_width = (short) ((long) q_full * permille / 1000);
+		dlg_band(band);		/* (in a window: its title bar, 3.5) */
+		dlg_open(tree, &x, &y, &w, &h);
+		q_open = 1;
+		log_event("quit box %d %s", permille, q_what);
+		return;
+	}
+	tree[q_fill].ob_width = (short) ((long) q_full * permille / 1000);
+	dlg_draw(tree, 0);	/* the box whole: the last step's words gone */
+	log_event("quit box %d %s", permille, q_what);
+}
+
+void quit_box_close(void)
+{
+	if (q_open)
+		dlg_close();
+	q_open = 0;
+}
+
 #ifndef EW_ST	/* the ST edition runs no scripts */
 int dlg_prompt(const char *text, char *answer, int size)
 {

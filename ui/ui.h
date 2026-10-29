@@ -251,6 +251,10 @@ int  falcon_mode_set(int on);		/* 0 (and an alert why) when it can't */
 
 /* dialogs.c */
 int  dlg_settings(void);		/* 1: changed (in opt) */
+/* the quit's box (Erez, 29 Oct 2026): what EWeb is saving and how far it
+   is (permille), opened by its first call; quit_box_close at the end */
+void quit_box(const char *what, int permille);
+void quit_box_close(void);
 /* a page's prompt(): its question (UTF-8), the answer in answer (UTF-8,
    the page's suggestion first); 1 OK, 0 Cancel */
 int  dlg_prompt(const char *text, char *answer, int size);

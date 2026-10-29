@@ -1124,6 +1124,13 @@ def falcon4():
             time.sleep(0.5)
         check("falcon4: EWEB.LOG from the menu's Write a log, to the quit",
               ": the log started" in log and "quit:" in log, log[-400:])
+        # the quit's box (Erez, 29 Oct 2026): each step said, the bar
+        # going up to the end
+        steps = [e for e in r.events() if e.startswith("quit box ")]
+        at = [int(e.split()[2]) for e in steps]
+        check("falcon4: the quit's box, each step and the bar to the end",
+              len(steps) >= 3 and steps[0].endswith("Closing connections and windows...") and
+              at == sorted(at) and steps[-1] == "quit box 1000 Done.", str(steps))
     finally:
         r.end()
         if xvfb is not None:

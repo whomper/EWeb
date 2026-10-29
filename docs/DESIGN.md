@@ -4179,6 +4179,13 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   time of use was written for nothing: the ring forgets by place, not by use); and a cookie whose
   end alone moved (Wikipedia's on every page) is no change while the one on the disk has a day
   left. Bookmarks and `EWEB.INF` stay safe saves: they change at the user's hand, rarely.
+- **The quit's box (29 Oct 2026, Erez: the user should see what happens).** Closing EWeb: each
+  step said as it starts (connections and windows, the settings, the cookies, the history, the
+  cache's pages and pictures, its list), a bar of how far it is, each step weighed by what it
+  writes (a file's few disk commands; the cache's answers 1 a 32 KB, its list 1 a hundred
+  answers); a step with nothing to write is left out; held 300 ms full after a quit of more than
+  half a second. `quit_box` in `ui/dialogs.c` (a dialog without buttons, `dlg_open`: a window
+  under MiNT and MagiC); `make hatarigui`'s falcon4 group checks its steps from the log.
 
 **transform** (CSS Transforms 1 and 2): ynet.co.il drew its news drawer over the page; it is
 kept off it by `transform: translateX(-103%)`, as many sites hide menus and drawers, and centre

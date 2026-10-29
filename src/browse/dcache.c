@@ -751,6 +751,12 @@ void dc_job_end(void)
 	close_pak();
 }
 
+void dc_unsaved(long *bytes, long *answers)
+{
+	*bytes = loaded && dir[0] ? pending : 0;
+	*answers = loaded && dir[0] && changed ? nent : 0;
+}
+
 void dc_flush(void)
 {
 	flush();
