@@ -86,7 +86,7 @@
  * to X, Y once the pictures are in (before -L), "scrolled:" printed with
  * where it went; -d lists each box's scroll bars ("bar": how far its box
  * scrolls, and is scrolled, and the bar's thumb).
- * -C DIR keeps the disk cache in DIR (as CACHE next to EWEB.PRG; its
+ * -C DIR[,MB] keeps the disk cache in DIR, MB big (8 when not said) (as CACHE next to EWEB.PRG; its
  * index written at the end, as at quit).
  * -J runs the pages' scripts (src/js, every site's), printing what they
  * log, console.log and alert ("js ...", "console: ", "alert: ") and
@@ -836,8 +836,17 @@ int main(int argc, char **argv)
 			i++;			/* the stack's floor: above */
 		else if (!strcmp(argv[i], "-W") && i + 1 < argc)
 			str_copy(http_gateway, argv[++i], sizeof http_gateway);
-		else if (!strcmp(argv[i], "-C") && i + 1 < argc)
-			dc_dir(argv[++i], 8L << 20);
+		else if (!strcmp(argv[i], "-C") && i + 1 < argc) {
+			/* DIR, or DIR,MB (8 MB when not said) */
+			char d[400], *c;
+			long mb = 8;
+			str_copy(d, argv[++i], sizeof d);
+			if ((c = strrchr(d, ',')) != NULL) {
+				*c = 0;
+				mb = atol(c + 1);
+			}
+			dc_dir(d, mb << 20);
+		}
 		else if (!strcmp(argv[i], "-R"))
 			snapshot = 1;
 		else if (!strcmp(argv[i], "-q") && i + 1 < argc)

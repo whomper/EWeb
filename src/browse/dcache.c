@@ -421,12 +421,17 @@ static int directive(const char *cc, const char *name, long *v)
 	return 0;
 }
 
-/* Vary names only what EWeb asks with the same way each time (RFC 9111,
-   4.1): a page that varies by anything else (Cookie, Referer...) isn't
-   kept, rather than shown for a request it wasn't the answer to */
+/* Vary may name what EWeb asks with the same way each time (RFC 9111,
+   4.1): what it sends always so (User-Agent, Accept, Accept-Language,
+   Accept-Encoding), and what it never sends (Origin, Cache-Control,
+   Access-Control-Request-...: absent in every request, so always the
+   same; iamexpat.de's pictures say "Vary: Origin, Cache-Control", and
+   none was kept, 29 Oct 2026). An answer that varies by what EWeb sends
+   differently (Cookie, Referer) or by anything ("*") isn't kept, rather
+   than shown for a request it wasn't the answer to. */
 static int vary_ok(const char *v)
 {
-	static const char *const same[] = { "accept-encoding", "accept", "accept-language", "user-agent", NULL };
+	static const char *const differs[] = { "*", "cookie", "referer", "authorization", NULL };
 	const char *p = v;
 	while (*p) {
 		const char *w;
@@ -440,25 +445,19 @@ static int vary_ok(const char *v)
 		n = (size_t) (p - w);
 		if (n == 0)
 			continue;
-		for (i = 0; same[i]; i++)
-			if (strlen(same[i]) == n) {
+		for (i = 0; differs[i]; i++)
+			if (strlen(differs[i]) == n) {
 				size_t k;
 				for (k = 0; k < n; k++)
-					if ((w[k] | 0x20) != same[i][k])
+					if ((w[k] | 0x20) != differs[i][k])
 						break;
 				if (k == n)
-					break;
+					return 0;
 			}
-		if (same[i] == NULL)
-			return 0;
 	}
 	return 1;
 }
 
-/* how long an answer stays fresh, seconds, from its headers (RFC 9111,
-   4.2): max-age, else Expires less Date, else a tenth of the time since
-   Last-Modified, a day at most; less its Age. -1: not to be kept. *flags:
-   DCF_REVALIDATE and DCF_IMMUTABLE as it says. */
 static long long lifetime(const char *h, unsigned char *flags)
 {
 	char cc[256], v[128];

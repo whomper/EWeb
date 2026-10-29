@@ -305,7 +305,7 @@ static short first_edit(void)
 
 /* the search address and the gateway hold as much as their settings,
    more than their fields show */
-static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[4];
+static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
 static LFIELD f_search, f_gate;
 
 static void part_general(short x, short y)
@@ -320,8 +320,8 @@ static void part_general(short x, short y)
 	d_lfield(x, ROW(4), &f_search, s_search, 40, sizeof s_search - 1);
 	d_text(x, ROW(5), "(%s for the words; nothing: none)");
 	d_text(x, ROW(6), "Disk cache");
-	d_field(x + 12, ROW(6), s_cache, 2, '9');
-	d_text(x + 15, ROW(6), "MB  (0: none)");
+	d_field(x + 12, ROW(6), s_cache, 3, '9');
+	d_text(x + 16, ROW(6), "MB  (0: none, 512 at most)");
 #ifndef EW_ST
 	d_tick(x, ROW(7), "Pictures on the DSP (a Falcon's)", T_PICDSP);
 	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
@@ -488,8 +488,8 @@ int dlg_settings(void)
 	opt.gateport = (unsigned short) (port > 0 && port < 65536 ? port : HTTP_GATEWAY_PORT);
 	/* the size as it was unless it was changed (an INF without CACHE=
 	   keeps following the machine's memory) */
-	if (s_cache[0] && atol(s_cache) != cache_mb() && atol(s_cache) <= CACHE_MAX_MB)
-		opt.cache = (short) atoi(s_cache);
+	if (s_cache[0] && atol(s_cache) != cache_mb())
+		opt.cache = (short) (atol(s_cache) <= CACHE_MAX_MB ? atol(s_cache) : CACHE_MAX_MB);
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];

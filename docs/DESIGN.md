@@ -1371,8 +1371,15 @@ holds pictures ready to show.
   doesn't ask about while it is fresh (a site's versioned scripts and pictures). The marks are kept
   in the index (its second form, `EWDC 2`, a number more a line; the first is still read), and a 304
   with a `Cache-Control` of its own changes them.
-- **`Vary`** keeps an answer only when it varies on what EWeb always sends the same
-  (`Accept-Encoding`, `Accept`, `Accept-Language`, `User-Agent`); on anything else (a cookie) it isn't kept.
+- **`Vary`** keeps an answer when it varies on what EWeb always sends the same
+  (`Accept-Encoding`, `Accept`, `Accept-Language`, `User-Agent`) or on what it never sends
+  (`Origin`, `Cache-Control`, a CDN's `Access-Control-Request-...`: absent in every request, so
+  always the same; RFC 9111 4.1); on what it sends differently (`Cookie`, `Referer`,
+  `Authorization`) or `*` it isn't kept. Until 29 Oct 2026 only the first four were let through:
+  iamexpat.de's pictures say `Vary: Origin, Cache-Control`, none was kept, and a second visit
+  fetched all 51 again through the Pi (the decoded pixels were in the cache, but are found by the
+  file's sums, so the file came first). Now, through a webgate here: the first visit 64 requests,
+  the second the page and 7 checks (304s), 56 of its 59 pictures from the disk.
 - **Cut off** (the server can't be reached, RFC 9111 4.2.4), a page kept is shown from the cache
   however old, and the info line says so: *From the cache: the server couldn't be reached, so it
   may be out of date.* Not one marked never to be shown stale, and never for a POST.
@@ -1386,8 +1393,8 @@ holds pictures ready to show.
   smaller one decodes in about the time it takes to read). They are EWeb's own data in the pack,
   fresh for a year, until the ring comes round to them. The picture is fetched as before
   (fresh or asked again), so a changed picture gets new sums, and is decoded again.
-- **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (64 at most; 0:
-  none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
+- **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (512 at most since
+  29 Oct 2026, a field of three digits: Erez wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
   more than that, so its first pictures were gone by its last, and gone again on the next visit),
   2 MB on a machine without TT RAM.
 

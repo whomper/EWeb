@@ -139,6 +139,7 @@ static const MBAR_ITEM m_opts[] = {
 #ifndef EW_ST
 	{ "Run this site's scripts", 0, C_SCRIPTS },
 #endif
+	{ "Write a log", 0, C_LOG },	/* EWEB.LOG, as ECal's and EContact's */
 	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
@@ -371,6 +372,7 @@ void menu_update(void)
 	{
 		menu_set(1, mbar_object(&mb, C_PICTURES), opt.pictures);
 		menu_set(1, mbar_object(&mb, C_FALCON), opt.falcon);
+		menu_set(1, mbar_object(&mb, C_LOG), opt.log);
 		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
 		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
@@ -484,6 +486,27 @@ static void settings_load(void)
 long cache_mb(void)
 {
 	return opt.cache >= 0 ? opt.cache : (long) Mxalloc(-1L, 1) > 0 ? 32 : 2;
+}
+
+/* the connections' log (LOG=1, Options > Write a log): EWEB.LOG next to
+   the program, held in memory for a page and its pictures and written
+   once then (6.5), and at the end; off (0): what is held written, no
+   more. 1 at the start, 2 from the menu */
+static void log_start(int on)
+{
+	char line[120];
+	if (on) {
+		path_join(conn_logfile, sizeof conn_logfile, opt.workdir, "EWEB.LOG");
+		conn_log_hold(1);
+		crash_report = conn_log_append;	/* a crash's report after what is held */
+		snprintf(line, sizeof line, on == 2 ? "EWeb %s: the log started" : "EWeb %s started", EWEB_VERSION);
+		conn_log("EWeb", " -- ", line, (long) strlen(line));
+	} else if (conn_logfile[0]) {
+		conn_log("EWeb", " -- ", "the log stopped", 15);
+		conn_log_hold(0);
+		crash_report = NULL;
+		conn_logfile[0] = 0;
+	}
 }
 
 static void cache_open(void)
@@ -1828,6 +1851,12 @@ void command(int cmd)
 		if (falcon_mode_set(!opt.falcon))
 			settings_save();
 		break;
+	case C_LOG:
+		/* on or off at once, and kept (LOG=; the family's Write a log) */
+		opt.log = !opt.log;
+		log_start(opt.log ? 2 : 0);
+		settings_save();
+		break;
 	case C_SETHOME:
 		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0) {
 			str_copy(opt.home, br.url, sizeof opt.home);
@@ -2272,16 +2301,8 @@ int app_main(void)
 	/* secure connections: the certificates, the seed and the signatures
 	   kept next to the program, as EWGET.TTP keeps them */
 	net_init();
-	if (opt.log) {
-		/* the connections' log (LOG=1): held in memory for a page and
-		   its pictures and written once then (6.5), and at the end */
-		char line[120];
-		path_join(conn_logfile, sizeof conn_logfile, opt.workdir, "EWEB.LOG");
-		conn_log_hold(1);
-		crash_report = conn_log_append;	/* a crash's report after what is held */
-		snprintf(line, sizeof line, "EWeb %s started", EWEB_VERSION);
-		conn_log("EWeb", " -- ", line, (long) strlen(line));
-	}
+	if (opt.log)
+		log_start(1);
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
 #ifndef EW_ST
 	/* the TLS code, the family's TLS.OVL beside it: read at the first

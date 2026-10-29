@@ -34,7 +34,7 @@ typedef struct {
 	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
 } EWOPT;
 extern EWOPT opt;
-#define CACHE_MAX_MB	64	/* the most CACHE= may ask for */
+#define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: Erez wanted more, 29 Oct 2026) */
 long cache_mb(void);		/* the disk cache's size now, MB */
 
 /* common/ui/dsp.c, common/ui/dsp_ec.c */
@@ -241,7 +241,7 @@ enum {
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_ENCODING,
 	C_PICTURES,
-	C_SETTINGS, C_FALCON, C_SCRIPTS, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
+	C_SETTINGS, C_FALCON, C_SCRIPTS, C_LOG, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */

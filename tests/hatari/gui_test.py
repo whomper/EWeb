@@ -1083,6 +1083,16 @@ def falcon4():
         else:
             check("falcon4: one click on the window's track, one page down", False, ev or "no page")
             check("falcon4: one click on the window's down arrow, one line down", False, ev or "no page")
+        # Options > Write a log (the family's, as ECal's and EContact's):
+        # the log begins at once, LOG=1 kept in EWEB.INF (Erez, 29 Oct 2026)
+        r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Opt"), 5)	# the Options menu
+        time.sleep(1)
+        r.shot(2)
+        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Options"), 20 + 3 * 16 + 8)	# its 4th item
+        time.sleep(2)
+        inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+        check("falcon4: Options > Write a log, LOG=1 kept", "\nLOG=1\r\n" in inf,
+              re.findall(r"\nLOG=.*", inf).__repr__())
         n = len([e for e in r.events() if e.startswith("shown ")])
         r.key(0x13, (CTRL,))                   # ^R
         t0 = time.time()
@@ -1105,6 +1115,15 @@ def falcon4():
         r.key(Q, (CTRL,))
         check("falcon4: ^Q quits", r.wait(r"quit$", 120) is not None and
               not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+        log = ""
+        for _ in range(20):		# (written after the log's "quit")
+            if os.path.exists(os.path.join(hd, "EWEB.LOG")):
+                log = open(os.path.join(hd, "EWEB.LOG"), "rb").read().decode("latin-1")
+                if "quit:" in log:
+                    break
+            time.sleep(0.5)
+        check("falcon4: EWEB.LOG from the menu's Write a log, to the quit",
+              ": the log started" in log and "quit:" in log, log[-400:])
     finally:
         r.end()
         if xvfb is not None:

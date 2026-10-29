@@ -277,8 +277,9 @@ must always be checked gets an error instead. Sending a form forgets
 what was kept for the page it went to.
 
 The cache takes 32 MB (2 MB without TT RAM, as on a stock Falcon or an
-ST); Settings > General > Disk cache changes it, up to 64 MB, 0 for
-none. When it is full, what came first makes room for what comes, so
+ST); Settings > General > Disk cache changes it, up to 512 MB, 0 for
+none. A bigger cache keeps more, and its list, written when you quit,
+grows with it. When it is full, what came first makes room for what comes, so
 quitting takes no time: EWeb writes only what came since it last wrote
 and its list. Options > Empty the cache forgets it all.
 
@@ -744,7 +745,8 @@ there at once; where the window was, when you quit:
 - `LOG=` 1 for `EWEB.LOG` next to `EWEB.PRG`: each connection, a secure
   one's handshake step by step, and where EWeb waited longest (never an
   address's query, a cookie or what was typed in a form); written once a
-  page and its pictures have come. 0 (as it starts) for none
+  page and its pictures have come. 0 (as it starts) for none; Options >
+  Write a log turns it on and off
 - `PENS=` through the Pi gateway, pictures made ready for your screen on
   the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)
@@ -786,8 +788,8 @@ there at once; where the window was, when you quit:
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
   `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right;
-  if it still fails, set `LOG=1` in `EWEB.INF`, open the page again and
-  send `EWEB.LOG` with the bug report
+  if it still fails, tick Options > Write a log, open the page again and
+  send `EWEB.LOG` (next to `EWEB.PRG`) with the bug report
 - **EWeb crashed**: next time it starts, it offers to show `CRASH.LOG`;
   please send it with a bug report on EWeb's GitHub page
   (github.com/whomper/EWeb/issues)

@@ -249,6 +249,13 @@ int main(int argc, char **argv)
 		want("Vary: Cookie: not kept", got("http://v/2", NULL, NULL) == -1);
 		put("http://v/3", "Cache-Control: max-age=60\nVary: accept-language,referer\n", "v3");
 		want("Vary: Referer among others: not kept", got("http://v/3", NULL, NULL) == -1);
+		/* what EWeb never sends is the same in every request (iamexpat.de's
+		   pictures, 29 Oct 2026) */
+		put("http://v/5", "Cache-Control: max-age=60\nVary: Origin, Cache-Control\n", "v5");
+		want("Vary: Origin, Cache-Control (never sent): kept", got("http://v/5", "v5", NULL) == 1);
+		put("http://v/6", "Cache-Control: max-age=60\nVary: Origin, Access-Control-Request-Method, "
+		    "Access-Control-Request-Headers\n", "v6");
+		want("Vary: a CDN's CORS three: kept", got("http://v/6", "v6", NULL) == 1);
 		put("http://v/4", "Cache-Control: max-age=60, must-revalidate\nETag: \"m\"\n", "v4");
 		put("http://v/5", "Cache-Control: no-cache\nETag: \"n\"\n", "v5");
 		put("http://v/6", "Cache-Control: max-age=60\nETag: \"s\"\n", "v6");
