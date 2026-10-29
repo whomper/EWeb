@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Pictures of width 100% in grid and flex columns</title>
+<style>
+body { font-family: sans-serif; margin: 8px; font-size: 13px }
+.grid { display: grid; gap: 14px; margin-bottom: 8px }
+.one { grid-template-columns: 1fr }
+.two { grid-template-columns: minmax(0, 1.08fr) minmax(150px, .74fr) }
+.flex { display: flex; gap: 14px; margin-bottom: 8px }
+.flex > figure { flex: 1 }
+figure { margin: 0; border: 1px solid #840 }
+figure img { width: 100%; height: auto }
+.max img { width: auto; max-width: 100% }
+</style></head>
+<body>
+<!-- yaary.music's hero: a picture of 768 x 1024 at width 100% in a grid
+     column of 1fr takes the column's width, not its own (CSS Sizing 3,
+     5.2.2): the column isn't made wider than the page by it -->
+<div class="grid one"><figure><img src="img/tall.png" alt="tall"></figure></div>
+<div class="grid two"><figure><img src="img/tall.png" alt="tall"></figure><figure><img src="img/four.png" alt="four"></figure></div>
+<div class="flex"><figure><img src="img/tall.png" alt="tall"></figure><figure><img src="img/two.png" alt="two"></figure></div>
+<!-- max-width 100%, width auto: as wide as the column at most -->
+<div class="grid one max"><figure><img src="img/tall.png" alt="tall"></figure></div>
+<p>The end.</p>
+</body></html>

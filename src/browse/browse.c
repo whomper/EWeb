@@ -4901,13 +4901,22 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 		   char *variant, int vsize)
 {
 	int pens = !has_scheme(url, "file") && pens_wanted(b);
-	if (pens) {
-		int32_t w = rw, h = rh;
-		char size[32] = "";
-		if ((w > 0 && h > 0) || shown_size(b, im, &w, &h))
+	int32_t w = rw, h = rh, page = b->width > 0 ? b->width : 640;
+	char size[32] = "";
+	if (pens && ((w > 0 && h > 0) || shown_size(b, im, &w, &h))) {
+		if (w > page)
+			/* never pens wider than the window (Erez, 29 Oct 2026: a
+			   layout gone wrong asked the Pi for yaary.music's
+			   portrait at 1,651 x 2,201, 3.6 MB of pens, and a little
+			   larger at each picture that came): no wider than the
+			   page, as a picture, made larger here if it must be */
+			pens = 0;
+		else
 			snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
+	}
+	if (pens) {
 		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
-			 (long) (b->width > 0 ? b->width : 640), size, img_pal->n, img_pal_crc(),
+			 (long) page, size, img_pal->n, img_pal_crc(),
 #ifdef EW_ST
 			 "tj"
 #else
@@ -4917,11 +4926,10 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 		if (size[0])
 			snprintf(variant, vsize, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
 		else
-			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(),
-				 (long) (b->width > 0 ? b->width : 640));
+			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(), (long) page);
 		variant[strcspn(variant, ";")] = 0;
 	} else {
-		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld\r\n", (long) (b->width > 0 ? b->width : 640));
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld\r\n", (long) page);
 		variant[0] = 0;
 	}
 	return pens;
@@ -4986,7 +4994,10 @@ static void prefetch(browser *b, int32_t top, int32_t height)
 		SBUF ck;
 		if (u == NULL)
 			break;
-		if (!url_parse(u, url, NULL) || !u->special) {
+		if (!url_parse(u, url, NULL) || !u->special ||
+		    (u->hostlen == 7 && memcmp(u->href + u->host, "webgate", 7) == 0)) {
+			/* (webgate's own, live view's screen: nothing to make
+			   ahead, and the Pi would look for a site named webgate) */
 			free(u);
 			continue;
 		}

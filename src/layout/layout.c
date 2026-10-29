@@ -2793,6 +2793,21 @@ static int32_t attr_px(dnode *n, const char *name)
 	return *v == 0 || *v == 'p' || *v == ' ' ? r : 0;
 }
 
+/* a length with a percentage in it, plain or in calc() */
+static int has_pct(const ec_style *s, int p)
+{
+	int i;
+	if (s->k[p] == EK_PCT)
+		return 1;
+	if (s->k[p] == EK_CALC) {
+		const ec_calc *c = s->v[p].p;
+		for (i = 0; i < c->n; i++)
+			if (c->a[i].pct != 0)
+				return 1;
+	}
+	return 0;
+}
+
 /* a picture's size on the page, device px: CSS width and height (the
    width and height attributes are hints for them), else its own size,
    one from the other by its proportions (its file's, or the attributes'
@@ -2802,6 +2817,18 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 {
 	int32_t iw = b->iw, ih = b->ih, mw, mh;
 	int guess;
+	if (l->minw && l->cw == AUTO && !b->frame &&
+	    (has_pct(b->st, EP_WIDTH) || (b->st->k[EP_WIDTH] != EK_PX && has_pct(b->st, EP_MAX_WIDTH)))) {
+		/* measured at its narrowest, a picture whose width (or
+		   max-width) is a percentage takes none: the percentage of
+		   nothing (CSS Sizing 3, 5.2.2, compressible replaced
+		   elements). As wide as its file, yaary.music's portrait in a
+		   grid column of 1fr made the column 1,651 px on a page of
+		   609, and was asked of the Pi at that size, larger at each
+		   picture that came, until the Falcon ran out */
+		*w = *h = 0;
+		return 0;
+	}
 	*w = len(l, b->st, EP_WIDTH, l->cw);
 	*h = len(l, b->st, EP_HEIGHT, AUTO);
 	if (b->frame) {

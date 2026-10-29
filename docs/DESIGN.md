@@ -1167,7 +1167,10 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
     (`img_refetch`). `pal=` is the CRC-32 of the screen's colours: webgate keeps the last 16 sent
     to `http://webgate/palette` (POST, 2 to 256 of R G B), and answers 409 with
     `X-Gateway-Palette: need` for others before it fetches anything; EWeb sends them and asks
-    again.
+    again. Pens are never asked for wider than the page (your decision, 29 Oct 2026): a picture
+    shown wider comes as a picture no wider than the page and is made larger here (`pic_ask`).
+    The page's pictures are named to webgate ahead of time except webgate's own (live view's
+    screen).
   - **The answer:** `application/x-aera-pens`, `EWPN`: 1, the bits a pen, flags (1: a mask), N - 1;
     width, height, the picture's own width and height; the colours' CRC; the pens a row at a time,
     packed, high bits first; then a bit a pixel where it is shown (alpha 128 or more, where the
@@ -4076,6 +4079,18 @@ The `movem.l` fill made the stock Falcon slower (drawn 1.19 to 1.45 s) and stays
 The news page on the ST 58.6 to 56.1 s, drawn 6.1 to 3.7 s; the home page shown 2.9 to 2.0 s.
 The three draws after the news page's frame relaid it (a draw and two scrolls) take 9.1 s, not
 19.1. The stock Falcon is as it was.
+
+**A picture of width 100% in a grid or flex column** (29 Oct 2026, yaary.music on your Falcon:
+"loaded full size, and after a few EWeb is stuck"). Measured for a column's narrowest, a picture
+whose width (or, with width auto, max-width) is a percentage counted as wide as its file, so
+yaary.music's portrait (768 x 1024, `width: 100%` in a grid column of `minmax(0, 1.08fr)`) made
+its column 1,651 px on a page of 609. Through the Pi it was asked for as pens at 1,651 x 2,201
+(3.6 MB), each picture that came laid the page out again a little larger, and on the emulated
+Falcon its 17 pictures took 781 s. It is now the percentage of nothing, as CSS Sizing 3 (5.2.2)
+has a compressible replaced element's min-content contribution (`image_size`): the portrait
+594 x 792, and none of the page's pictures wider than the page (`tests/layout/pctimg.html`,
+within 4 px of Chromium's). EWeb draws no `aspect-ratio` or `object-fit`: the page's 4/5 and
+cover are left out together, the picture in its own proportions, never stretched.
 
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
