@@ -357,18 +357,53 @@ static inline __attribute__((always_inline)) unsigned long eight(const unsigned 
 	return t[0][s[0]] | t[1][s[1]] | t[2][s[2]] | t[3][s[3]] | t[4][s[4]] | t[5][s[5]] | t[6][s[6]] | t[7][s[7]];
 }
 
+/* 16 pixels of chunky's as np planes' words */
+static inline __attribute__((always_inline)) void sixteen(const unsigned char *src, short np, unsigned short *to)
+{
+	unsigned long a, b;
+	short k;
+#if defined(EW_ST) && defined(__mc68000__)
+	if (np == 1) {
+		/* a monochrome screen's: each pixel's low bit shifted into the
+		   word, about 20 cycles a pixel (the tables' look-ups, about 58) */
+		const unsigned char *s = src;
+		unsigned short w = 0;
+		unsigned char t;
+		__asm__(".rept 16\n\t"
+			"move.b (%1)+,%2\n\t"
+			"lsr.b #1,%2\n\t"
+			"addx.w %0,%0\n\t"
+			".endr"
+			: "+d" (w), "+a" (s), "=&d" (t) : "m" (*(const unsigned char (*)[16]) src) : "cc");
+		to[0] = w;
+		return;
+	}
+#endif
+	a = eight(c2p_lo, src);
+	b = eight(c2p_lo, src + 8);
+	for (k = 0; k < 4 && k < np; k++)
+		to[k] = (unsigned short) ((a >> (8 * (3 - k)) & 0xff) << 8 | (b >> (8 * (3 - k)) & 0xff));
+	if (np > 4) {
+		unsigned long c = eight(c2p_hi, src), d = eight(c2p_hi, src + 8);
+		for (; k < np; k++)
+			to[k] = (unsigned short) ((c >> (8 * (7 - k)) & 0xff) << 8 | (d >> (8 * (7 - k)) & 0xff));
+	}
+}
+
 /* chunky's h rows (words * 16 pixels each) as planes: the screen's own
    (interleaved) in dev_buf, or the standard ones in std_buf. Stores go
    through running pointers (an index times the planes was a multiply a
-   word, most of the time on a stock Falcon), and a run of 16 pixels
-   alike (most of a page is its background) takes its planes' words from
-   the last such run's when it is the same colour */
+   word, most of the time on a stock Falcon), and a run of 16 pixels that
+   is one long four times over (a colour, or a grey's pattern where the
+   screen has few pens: most of a page is its background) takes its
+   planes' words from the last such run's when it is the same long */
 static void to_planes(short h, long words, int interleaved)
 {
 	const short np = planes;
 	long plane = words * h, r, g;
 	short k;
-	unsigned last = 0x100;
+	unsigned long last = 0;
+	int have = 0;
 	unsigned short fill[8], w[8];
 	for (r = 0; r < h; r++) {
 		const unsigned char *src = chunky + r * words * 16;
@@ -377,23 +412,15 @@ static void to_planes(short h, long words, int interleaved)
 			const unsigned long *q = (const unsigned long *) (const void *) src;
 			const unsigned short *from = w;
 			unsigned long q0 = q[0];
-			if (q0 == q[1] && q0 == q[2] && q0 == q[3] && (q0 >> 8) == (q0 & 0xffffffUL)) {
-				unsigned v = (unsigned) (q0 & 0xff);
-				if (v != last) {
-					for (k = 0; k < np; k++)
-						fill[k] = (unsigned short) (v >> k & 1 ? 0xffff : 0);
-					last = v;
+			if (q0 == q[1] && q0 == q[2] && q0 == q[3]) {
+				if (!have || q0 != last) {
+					sixteen(src, np, fill);
+					last = q0;
+					have = 1;
 				}
 				from = fill;
 			} else {
-				unsigned long a = eight(c2p_lo, src), b = eight(c2p_lo, src + 8);
-				for (k = 0; k < 4 && k < np; k++)
-					w[k] = (unsigned short) ((a >> (8 * (3 - k)) & 0xff) << 8 | (b >> (8 * (3 - k)) & 0xff));
-				if (np > 4) {
-					unsigned long c = eight(c2p_hi, src), d = eight(c2p_hi, src + 8);
-					for (; k < np; k++)
-						w[k] = (unsigned short) ((c >> (8 * (7 - k)) & 0xff) << 8 | (d >> (8 * (7 - k)) & 0xff));
-				}
+				sixteen(src, np, w);
 			}
 			if (interleaved) {
 				for (k = 0; k < np; k++)

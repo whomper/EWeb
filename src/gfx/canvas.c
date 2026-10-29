@@ -44,6 +44,8 @@ static inline int clip(canvas *c, int32_t *x, int32_t *y, int32_t *w, int32_t *h
 	return *w > 0 && *h > 0;
 }
 
+static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4]);
+
 /* (x, y, w, h) in canvas pixels, clipped */
 static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
 {
@@ -56,7 +58,12 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 	row = c->pix + y * c->stride + (c->bpp == 8 ? x : 2 * x);
 	for (j = 0; j < h; j++, row += c->stride) {
 		if (c->bpp == 8) {
+#ifdef EW_ST
+			const uint8_t q[4] = { (uint8_t) pv, (uint8_t) pv, (uint8_t) pv, (uint8_t) pv };
+			fill_pattern(row, w, q);	/* (fill_longs' movem.l) */
+#else
 			memset(row, (int) pv, (size_t) w);
+#endif
 		} else {
 			/* a word a pixel (the rows start on even addresses), as the
 			   machine stores it: the Falcon's high byte first */
@@ -70,15 +77,46 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 	}
 }
 
-/* n bytes from p, byte k q[k & 3]: a long at a time where it can (a
-   row of a shade: a byte a pixel was most of the drawing on an ST) */
 typedef uint32_t long2 __attribute__((aligned(2), may_alias));	/* a long at an even address */
+
+/* n longs of v from l (an even address; a row's, fewer than 2 MB) */
+static void fill_longs(long2 *l, uint32_t v, int32_t n)
+{
+#if defined(EW_ST) && defined(__mc68000__)
+	/* 32 bytes a movem.l from the end down, about 2.6 cycles a byte
+	   (GCC's loop of move.l, about 9: fills were a third of a page's
+	   drawing on an ST) */
+	if (n >= 8) {
+		register long2 *e __asm__("a0") = l + n;
+		register uint32_t v0 __asm__("d0") = v;
+		uint32_t k = (uint32_t) (n >> 3) - 1;
+		__asm__ volatile("move.l %1,%%d1\n\t"
+				 "move.l %1,%%d2\n\t"
+				 "move.l %1,%%d3\n\t"
+				 "move.l %1,%%a1\n\t"
+				 "move.l %1,%%a2\n\t"
+				 "move.l %1,%%a3\n\t"
+				 "move.l %1,%%a4\n"
+				 "1:\tmovem.l %%d0-%%d3/%%a1-%%a4,-(%0)\n\t"
+				 "dbra %2,1b"
+				 : "+a" (e), "+d" (v0), "+d" (k)
+				 : : "d1", "d2", "d3", "a1", "a2", "a3", "a4", "memory", "cc");
+		n &= 7;
+	}
+#endif
+	while (n-- > 0)
+		*l++ = v;
+}
+
+/* n bytes from p, byte k q[k & 3]: longs where it can (a row of a
+   shade: a byte a pixel was most of the drawing on an ST) */
 static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4])
 {
 	int32_t k = 0;
-	uint8_t b[4];
-	uint32_t v;
-	long2 *l;
+	union {
+		uint32_t v;
+		uint8_t b[4];
+	} u;				/* (memcpy is a call where the build is freestanding) */
 	if (n <= 0)
 		return;
 	if ((uintptr_t) p & 1) {		/* (the 68000's longs: at even addresses) */
@@ -86,15 +124,13 @@ static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4])
 		n--;
 		k = 1;
 	}
-	b[0] = q[k & 3];
-	b[1] = q[(k + 1) & 3];
-	b[2] = q[(k + 2) & 3];
-	b[3] = q[(k + 3) & 3];
-	memcpy(&v, b, 4);
-	for (l = (long2 *) (void *) p; n >= 4; n -= 4)
-		*l++ = v;
-	for (p = (uint8_t *) l, k = 0; k < n; k++)
-		p[k] = b[k];
+	u.b[0] = q[k];
+	u.b[1] = q[(k + 1) & 3];
+	u.b[2] = q[(k + 2) & 3];
+	u.b[3] = q[(k + 3) & 3];
+	fill_longs((long2 *) (void *) p, u.v, n >> 2);
+	for (p += n & ~3, k = 0; k < (n & 3); k++)
+		p[k] = u.b[k];
 }
 
 /* the ordered dither's thresholds, 4 by 4 (Bayer) */
@@ -340,7 +376,7 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 	if (c->bpp == 8 && c->shade != NULL && (level = c->shade(c->ud, rgb, &dark, &light)) >= 0) {
 		/* a pattern fixed to the page, so that it doesn't move as it scrolls */
 		int32_t i, j, x0 = x - c->ox, y0 = y - c->oy, x1, y1;
-		uint8_t *o;
+		uint8_t *o, q[4][4];
 		if (item_a != 255) {
 			if (mix_init(c, rgb, MIX_SHADE)) {
 				mix.dark = dark;
@@ -355,13 +391,12 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 			x0 = 0;
 		if (y0 < 0)
 			y0 = 0;
-		for (j = y0, o = c->pix + y0 * c->stride + x0; j < y1; j++, o += c->stride) {
-			const uint8_t *b = bayer[(j + c->oy) & 3];
-			uint8_t q[4];
+		/* the pattern's four rows once, not each row's again */
+		for (j = 0; j < 4; j++)
 			for (i = 0; i < 4; i++)
-				q[i] = b[(x0 + i + c->ox) & 3] < level ? light : dark;
-			fill_pattern(o, x1 - x0, q);
-		}
+				q[j][i] = bayer[(y0 + j + c->oy) & 3][(x0 + i + c->ox) & 3] < level ? light : dark;
+		for (j = y0, o = c->pix + y0 * c->stride + x0; j < y1; j++, o += c->stride)
+			fill_pattern(o, x1 - x0, q[(j - y0) & 3]);
 		return;
 	}
 	if (item_a != 255) {
@@ -395,6 +430,30 @@ static inline void glyph_clip(const canvas *c, const GLYPH *g, int32_t gx, int32
 		*r1 = c->h - gy;
 }
 
+/* the first n (1 to 8) of a glyph's pixels from its bits v (the first in
+   bit 7) set to pv from p, until the rest of v is clear */
+static inline void bits8(uint8_t *p, unsigned v, int n, uint8_t pv)
+{
+#if defined(EW_ST) && defined(__mc68000__)
+	/* (GCC kept the pointer on the stack, about 120 cycles a pixel;
+	   this, about 40) */
+	if ((v & 0xff) == 0)
+		return;
+	__asm__ volatile("subq.w #1,%2\n"
+			 "1:\tadd.b %1,%1\n\t"
+			 "bcc.s 2f\n\t"
+			 "move.b %3,(%0)\n"
+			 "2:\taddq.w #1,%0\n\t"
+			 "tst.b %1\n\t"
+			 "dbeq %2,1b"
+			 : "+a" (p), "+d" (v), "+d" (n) : "d" (pv) : "memory", "cc");
+#else
+	for (; n > 0 && (v & 0xff) != 0; n--, p++, v <<= 1)
+		if (v & 0x80)
+			*p = pv;
+#endif
+}
+
 /* a glyph's pixels set in pv */
 static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 {
@@ -404,6 +463,8 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 	if (g->bits == NULL)
 		return;
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
+	if (c0 >= c1)
+		return;
 	/* a row's address once, stepped (a multiply each row was a call of
 	   libgcc's on the 68000); the depth's own loop */
 	b0 = g->bits + r0 * stride;
@@ -412,18 +473,24 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 		const uint8_t *b = b0;
 		uint8_t *o = o0;
 		if (c->bpp == 8) {
-			/* the glyph's bit a mask stepped along its byte, not a
-			   shift by a count each pixel (slow on the 68000) */
+			/* a byte of the glyph's bits at a time, shifted out from
+			   its top (not a shift by a count each pixel: slow on the
+			   68000), and left when the rest of it is clear (most of
+			   a glyph's box is) */
 			const uint8_t *bp = b + (c0 >> 3);
-			unsigned m = 0x80u >> (c0 & 7);
-			o += gx;
-			for (col = c0; col < c1; col++) {
-				if (*bp & m)
-					o[col] = (uint8_t) pv;
-				if ((m >>= 1) == 0) {
-					m = 0x80;
-					bp++;
-				}
+			uint8_t *p = o + gx + c0;
+			int n = 8 - (c0 & 7);
+			unsigned v = (unsigned) *bp++ << (c0 & 7);
+			for (col = c0;;) {
+				if (n > c1 - col)
+					n = (int) (c1 - col);
+				bits8(p, v, n, (uint8_t) pv);
+				col += n;
+				if (col >= c1)
+					break;
+				p += n;
+				v = *bp++;
+				n = 8;
 			}
 		} else {
 			o += 2 * gx;

@@ -4057,6 +4057,26 @@ The rows' addresses are stepped now, the glyph's bit is a mask stepped along its
 products are `mulu.w` and `muls.w`. The news page on the ST 60.5 to 58.6 s (drawn 7.0 to 6.1 s,
 layout 25.6 to 24.8 s); on the stock Falcon 14.2 to 14.1 s.
 
+A window of the news page still took 5.7 s to draw on the ST. Two windows of it, by the profile:
+- text 3.7 s: 2,400 glyphs at 10,000 cycles each, GCC's loop keeping its pointer on the stack;
+- fills 3.0 s: 10,500 rows, each a call of `memcpy` (the build is freestanding) and its
+  pattern worked out again;
+- the planes 2.4 s: 16 table look-ups for every 16 pixels, and a grey's pattern never taken for
+  one colour.
+
+In the ST edition now:
+- a glyph's byte is shifted out in a loop of six instructions (`bits8`);
+- a row is filled 32 bytes a `movem.l` (`fill_longs`), with the pattern's four rows worked out
+  once a fill;
+- a monochrome screen's word is each pixel's low bit shifted in with `addx`;
+- in every edition, a run of 16 pixels that is one long four times over (a grey's pattern as
+  well as a colour) takes the last such run's planes.
+
+The `movem.l` fill made the stock Falcon slower (drawn 1.19 to 1.45 s) and stays the 68000's.
+The news page on the ST 58.6 to 56.1 s, drawn 6.1 to 3.7 s; the home page shown 2.9 to 2.0 s.
+The three draws after the news page's frame relaid it (a draw and two scrolls) take 9.1 s, not
+19.1. The stock Falcon is as it was.
+
 **Fewer rules, each style once** (27 Oct): ynet's front page still took 3.09 MB of CSS, its kept
 rules 1.71 MB and its styles 1.14 MB (2,011 made for 3,922 elements, 528 bytes each on the Atari).
 - `ec_prune` now leaves out a rule needing an id, a class or a tag the page hasn't anywhere in
