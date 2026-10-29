@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * slots.h - a file EWeb writes again and again (the cache's index, the
+ * cookies, the history) kept in two slots, each written over in place.
+ */
+#ifndef EW_SLOTS_H
+#define EW_SLOTS_H
+
+/* the newer whole slot's data (malloc'ed, NUL-terminated), or NULL */
+char *slot_load(const char *path, long *len);
+/* written over the other slot: 0, or < 0 (the newer one is left as it was) */
+int slot_save(const char *path, const void *data, long len);
+/* both slots gone */
+void slot_remove(const char *path);
+/* the other slot's name (NAME.TX2 for NAME.TXT) */
+void slot_twin(const char *path, char *out, int size);
+
+#endif

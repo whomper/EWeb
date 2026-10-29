@@ -2465,7 +2465,7 @@ int app_main(void)
 	{
 		/* each step timed, for the log (Erez's quit was slow on his
 		   real disk, 27 Oct 2026) */
-		unsigned long t0 = pf_ms(), tw, ts, tc, th, td;
+		unsigned long t0 = pf_ms(), tw, ts, tc, th, tf, td;
 		char line[200];
 		http_close_all();
 		{
@@ -2486,10 +2486,13 @@ int app_main(void)
 		tc = pf_ms();
 		hg_save();	/* the pages shown, once, if they changed */
 		th = pf_ms();
-		dc_close();	/* the cache's index, once (and its pack written again if it must be) */
+		dc_flush();	/* the cache's answers still in memory */
+		tf = pf_ms();
+		dc_close();	/* its index, once */
 		td = pf_ms();
 		snprintf(line, sizeof line, "quit: connections and windows %lu ms, settings %lu, cookies %lu, "
-			 "history %lu, the cache's index %lu", tw - t0, ts - tw, tc - ts, th - tc, td - th);
+			 "history %lu, the cache's last answers %lu, its index %lu", tw - t0, ts - tw, tc - ts, th - tc,
+			 tf - th, td - tf);
 		conn_log("EWeb", " -- ", line, (long) strlen(line));
 		log_event("%s", line);
 	}

@@ -18,6 +18,7 @@
 
 #include "history.h"
 #include "plat.h"
+#include "slots.h"
 
 static int fails, checks;
 
@@ -59,7 +60,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	snprintf(path, sizeof path, "%s/HISTORY.TXT", argv[1]);
-	pf_remove(path);
+	slot_remove(path);
 
 	/* none at first, and none read when there is no file */
 	hg_file(path);
@@ -114,7 +115,7 @@ int main(int argc, char **argv)
 	hg_file(path);
 	want("the next start", hg_count() == 6 && is(0, "http://b.example/page#part", "B with a tab  ", 1001) &&
 	     is(2, "http://a.example/", "A, later", 1003) && hg_visited("http://c.example/"));
-	d = pf_load(path, &len);
+	d = slot_load(path, &len);	/* its newer slot (src/net/slots.c) */
 	want("the file", d != NULL && strncmp(d, "# ", 2) == 0 && strstr(d, "\n1003\thttp://a.example/\tA, later\n"));
 	free(d);
 
@@ -164,7 +165,7 @@ int main(int argc, char **argv)
 	     is(1, "http://a.example/", "A again", 103));
 	free(d);
 	hg_free();
-	pf_remove(path);
+	slot_remove(path);
 	printf("history: %d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }

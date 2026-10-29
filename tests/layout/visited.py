@@ -30,6 +30,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "net"))
+import slots  # noqa: E402  (HISTORY.TXT in two slots: src/net/slots.c)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "visited.html")
 B = os.path.join(HERE, "visited", "b.html")
@@ -81,7 +84,7 @@ def edition(ewr, fnt, full):
               colour(fresh, "B again") == "#000080" and colour(fresh, "this page") == "#800000" and
               len(fills(fresh, "#ffff00")) == 1,
               str([c for _, c in texts(fresh)]))
-        os.remove(hist)
+        slots.remove(hist)
         back = run(ewr, fnt, ["-V", hist, "-N", B])
         check("to B and Back: its links visited", colour(back, "page B") == "#800000" and
               colour(back, "B again") == "#008000", "%s %s" % (colour(back, "page B"), colour(back, "B again")))
@@ -90,16 +93,16 @@ def edition(ewr, fnt, full):
               colour(back, "a place on this page") == "#000080")
         check("nothing else of the rule taken: laid out as before",
               [w for w, _ in texts(back)] == [w for w, _ in texts(fresh)])
-        with open(hist, encoding="utf-8") as f:
-            lines = [line.rstrip("\n").split("\t") for line in f if not line.startswith("#")]
+        lines = [line.split("\t") for line in slots.read(hist).decode("utf-8").splitlines()
+                 if not line.startswith("#")]
         check("the history written", len(lines) == 2 and
               lines[0][1:] == ["file://" + PAGE, "Visited links"] and lines[1][1:] == ["file://" + B, "Page B"] and
               all(line[0].isdigit() for line in lines), str(lines))
         again = run(ewr, fnt, ["-V", hist])
         check("read at the next start", colour(again, "page B") == "#800000" and
               [w for w, _ in texts(again)] == [w for w, _ in texts(fresh)])
-        with open(hist, encoding="utf-8") as f:
-            titles = [line.rstrip("\n").split("\t")[2] for line in f if not line.startswith("#")]
+        titles = [line.split("\t")[2] for line in slots.read(hist).decode("utf-8").splitlines()
+                  if not line.startswith("#")]
         page = run(ewr, fnt, ["-V", hist], "about:history")
         words = [w[4] for w, _ in texts(page)]
         check("about:history: newest first, under the day", sorted(titles) == ["Page B", "Visited links"] and

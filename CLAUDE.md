@@ -214,7 +214,9 @@ hub stay complete, with the evidence.
   when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; `CACHE\EWEB.PAK`
   and `EWEB.IDX` next to `EWEB.PRG`, the index read when first needed and written at quit, a job's
   answers added in one write, the pack a ring of the cache's size, each answer tagged),
-  used by `fetch()` in `src/browse`. After changing it: `make test` (`tests/browse/dctest.c`),
+  used by `fetch()` in `src/browse`. The index, `COOKIES.TXT` and `HISTORY.TXT` are each two
+  slots written over in place (`src/net/slots.c`, its tests in `dctest.c`; the rigs read them
+  with `tests/net/slots.py`): a new file each quit cost Erez's SD card seconds a file. After changing it: `make test` (`tests/browse/dctest.c`),
   `make itest` (`/site/cache/`), `make hatarifiles`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`; which one an `<img>` shows, from

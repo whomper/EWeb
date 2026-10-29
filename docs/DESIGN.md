@@ -1284,8 +1284,9 @@ Kept on the disk (your decision, 19 Oct 2026). `src/net/cookie.c`, fresh code af
   path, expiry, name, value and the flags, tab-separated), the values encrypted as the apps keep
   passwords (7.2: common's `secret.c`, XTEA with the key in `EWEB.KEY`, made the first time; a
   cookie is often a login; `secret.c` now takes 4,096 characters), read once, when the first page
-  needs cookies; written once, at quit, in one safe save, and only when a lasting cookie changed (none
-  that last: the file goes). Cookies for the session never go to the disk. A reset loses what
+  needs cookies; written once, at quit, over the older of its two slots (`COOKIES.TX2` the other;
+  see Files written over in place), and only when a lasting cookie changed, not when only its end
+  moved and the one on the disk has a day left (none that last: the files go). Cookies for the session never go to the disk. A reset loses what
   changed since the start (a site asks you to log in again). Options > Forget cookies empties the
   store and removes the file at once. 3,000 cookies at most, 60 a domain (the least used go).
 - **Checked:** `tests/net/cookies.txt` (30 cases worked out from the RFC, `make test`, with
@@ -1338,7 +1339,8 @@ than a quarter of the cache (an eighth until 21 Oct 2026). Back and Forward take
 however old it is, as browsers do; Reload asks the server again (a 304 when it is unchanged).
 
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
-`CACHE\EWEB.IDX` the index, read in one open the first time the cache is needed and written at quit.
+`CACHE\EWEB.IDX` the index (and `EWEB.ID2`, its other slot: Files written over in place), read the
+first time the cache is needed and written at quit.
 What comes is gathered in memory and added to the pack in one write when a sixteenth of the cache
 has gathered, or at quit: browsing page after page opens nothing (a reset loses only what is
 fetched again). The pack is opened when a job (a page and its stylesheets, a page's pictures)
@@ -3201,7 +3203,8 @@ Stage 3's first part. **The history** is `src/browse/history.c`: each page shown
 EWeb's own) with its title and when, the newest 1000 kept in `HISTORY.TXT` next to `EWEB.PRG` (a
 line each, "when, address, title" between tabs, oldest first), read when first needed (the first
 page fetched: EWeb's own pages, the start page among them, aren't marked) and written once at quit
-when it changed (the guidelines' 6.5; `make hatarifiles`' budgets have the read and the write). `about:history`
+when it changed, over the older of its two slots since 29 Oct 2026 (`HISTORY.TX2` the other: Files
+written over in place) (the guidelines' 6.5; `make hatarifiles`' budgets have the read and the write). `about:history`
 lists them newest first under the day each was last shown, a hundred to a page, so a long history
 fits a small machine. View > History is ^Y, Safari's key (the family takes a Mac app's; ^H is
 Backspace's code), and Options > Forget history forgets them, the file at quit.
@@ -4147,8 +4150,28 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   taken for a heap of 18.0 MB in use: the page kept for Back and the pictures kept decoded sit in
   every area, so few are wholly free.
 - **Quit's steps timed** in `EWEB.LOG` (`quit: connections and windows, settings, cookies,
-  history, the cache's index`, ms): on the emulated disk 305 ms, 250 of them the cache's index.
-  Quit frees nothing (TOS takes the program's memory back at once).
+  history, the cache's last answers, its index`, ms; the answers apart since 29 Oct 2026): on
+  the emulated disk 305 ms, 250 of them the cache's index. Quit frees nothing (TOS takes the
+  program's memory back at once).
+- **Files written over in place (29 Oct 2026).** Erez's log after Wikipedia: cookies 2,935 ms,
+  history 2,905, the cache's index 24,225, on his SD card, for files of a few hundred bytes to a
+  few hundred KB. Each was a safe save (`pf_save`: NAME.IN$ made and written, NAME removed, the
+  new one renamed), so each save was a new file whose clusters GEMDOS finds by reading the FAT
+  from its start, and the FAT and the folder written again. Counted from Hatari's IDE trace
+  (EmuTOS, a 256 MB FAT16 disk half full): a safe save of 644 bytes is 60 disk commands, 50 of
+  them reading the FAT, of 300 KB 83; the same file written over in place 4 and 24. 2.9 s for
+  60 is about 48 ms a command on Erez's card. So the index, the cookies and the history are kept
+  in two slots each (`src/net/slots.c`): NAME and its twin (`EWEB.ID2`, `COOKIES.TX2`,
+  `HISTORY.TX2`), each a head (`EWS1 GEN LEN`) and its data; a save writes over the slot that
+  isn't the newer one, its data first and its head last, so a reset in the middle leaves the
+  newer slot the one read (the guidelines' 2.3). After the first save, which makes the twin, a
+  save of the cookies is 5 to 7 commands and of a 300 KB index 25 to 27 (the same trace).
+  Reading at start looks at both: 3 or 4 commands. With it: the index leaves out an answer's
+  address when it is its key (read back as the key, as 0.50 already did), half as long on
+  Wikipedia's pages; a page taken from the cache no longer counts as a change of the index (its
+  time of use was written for nothing: the ring forgets by place, not by use); and a cookie whose
+  end alone moved (Wikipedia's on every page) is no change while the one on the disk has a day
+  left. Bookmarks and `EWEB.INF` stay safe saves: they change at the user's hand, rarely.
 
 **transform** (CSS Transforms 1 and 2): ynet.co.il drew its news drawer over the page; it is
 kept off it by `transform: translateX(-103%)`, as many sites hide menus and drawers, and centre

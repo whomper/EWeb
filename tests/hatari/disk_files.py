@@ -16,8 +16,9 @@ EWEB.PRG gives through NatFeats, those the program makes itself (at a PC
 in its TPA, not the desktop's), and must stay within the case's budget:
 about one open per file the job touches, plus a safe save's. A quit
 writes COOKIES.TXT, once, as the last of the five pages set a cookie
-that lasts, and HISTORY.TXT, once, as pages were shown; pages, Back and
-Forward and idle touch nothing.
+that lasts, and HISTORY.TXT, once, as pages were shown, each over the
+older of its two slots (src/net/slots.c; a missing one made at once);
+pages, Back and Forward and idle touch nothing.
 
     tests/hatari/disk_files.py OUT      (IDLE=seconds, 300 by default)"""
 import collections
@@ -47,14 +48,15 @@ CALLS = ("Fopen", "Fcreate", "Fsfirst")
 # the most each case may do: Fopen, Fcreate, Fsfirst
 BUDGET = {
     # EWEB.INF, EWEB.FNT, BOOKMARK.HTM for the menu (a user's), HISTORY.TXT
-    # for the home page's pages opened lately (24 Oct 2026; none yet, so
-    # pf_load also looks for an unfinished safe save's file once); the home
+    # for the home page's pages opened lately (24 Oct 2026), in two slots
+    # since 29 Oct 2026 (src/net/slots.c: HISTORY.TXT and HISTORY.TX2 opened,
+    # in place of a look for an unfinished safe save's file); the home
     # page's pictures are its own (data:), not looked for in the cache
-    "start": (4, 0, 1),
-    # the first page over the network: COOKIES.TXT read (not there: its
-    # safe save's new file looked for too), the cache's index read (none
-    # yet); what the pages bring is kept in memory until quit
-    "pictures": (2, 0, 1),
+    "start": (5, 0, 0),
+    # the first page over the network: COOKIES.TXT and the cache's index
+    # read, each its two slots (none yet); what the pages bring is kept in
+    # memory until quit
+    "pictures": (4, 0, 0),
     "five pages": (0, 0, 0),
     "back and forward": (0, 0, 0),  # from memory
     "page size": (0, 2, 0),         # ^+ and ^0: EWEB.INF saved each time
@@ -66,20 +68,23 @@ BUDGET = {
     "first secure page": (6, 3, 4),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
-    # COOKIES.TXT, once (p5.html's cookie), its value encrypted: EWEB.KEY
-    # looked for, then made; HISTORY.TXT, once; EWEB.INF unchanged; the
+    # the cookies, once (p5.html's cookie), its value encrypted: EWEB.KEY
+    # looked for, then made; the history, once; EWEB.INF unchanged; the
     # cache's pack made with what the session brought, in one write, and
-    # its index saved
+    # its index saved (the three in their twins, COOKIES.TX2, HISTORY.TX2
+    # and EWEB.ID2, the slots none had: made at once)
     "quit": (1, 5, 0),
     # the second time with LOG=1 (since 0.44): EWEB.LOG written once a page
-    # and its pictures have come (the home page's: tried, then made)
-    "start again": (5, 1, 0),
-    # COOKIES.TXT and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT; SEED.DAT read,
-    # then written over; the cache's index; SIGS.DAT read (since 0.40);
-    # TLS.OVL (since 0.43); EWEB.LOG, once
-    "secure page again": (9, 0, 1),
-    # the cookies as they were; HISTORY.TXT (a page shown); EWEB.INF in its
-    # own form again (LOG=1 was added by hand); EWEB.LOG's rest
+    # and its pictures have come (the home page's: tried, then made); the
+    # history's two slots
+    "start again": (6, 1, 0),
+    # COOKIES.TXT (two slots) and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT;
+    # SEED.DAT read, then written over; the cache's index (two slots);
+    # SIGS.DAT read (since 0.40); TLS.OVL (since 0.43); EWEB.LOG, once
+    "secure page again": (11, 0, 1),
+    # the cookies as they were; the history (a page shown) in HISTORY.TXT,
+    # its older slot, made at once; EWEB.INF in its own form again (LOG=1
+    # was added by hand); EWEB.LOG's rest
     "quit again": (1, 2, 0),
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }

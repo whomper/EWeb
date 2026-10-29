@@ -27,6 +27,7 @@
 #include "cookie.h"
 #include "dcache.h"
 #include "plat.h"
+#include "slots.h"
 #include "util.h"
 
 #define HEAD 16			/* the pack's first bytes */
@@ -126,7 +127,7 @@ void dc_clear(void)
 		path_of(p, sizeof p, "EWEB.PAK");
 		pf_remove(p);
 		path_of(p, sizeof p, "EWEB.IDX");
-		pf_remove(p);
+		slot_remove(p);
 	}
 	new_gen();
 	loaded = 1;
@@ -284,23 +285,7 @@ static void load(void)
 	if (dir[0] == 0)
 		return;
 	path_of(p, sizeof p, "EWEB.IDX");
-	/* read in one open, without pf_load's look for an unfinished safe
-	   save: an index lost that way only empties the cache */
-	d = NULL;
-	{
-		int h = pf_open(p, PF_READ);
-		if (h >= 0) {
-			len = pf_open_size(h);
-			d = len >= 0 ? malloc((size_t) len + 1) : NULL;
-			if (d != NULL && pf_read(h, d, len) == len) {
-				d[len] = 0;
-			} else {
-				free(d);
-				d = NULL;
-			}
-			pf_close(h);
-		}
-	}
+	d = slot_load(p, &len);		/* its newer slot (slots.c) */
 	/* (an index of before the ring, 1 or 2: its pack has no tags, and is
 	   written over) */
 	s = d != NULL && strncmp(d, "EWDC 3 ", 7) == 0 ? d + 7 : NULL;
@@ -698,7 +683,8 @@ int dc_get(const char *key, DC_GOT *g)
 		snprintf(g->validate, sizeof g->validate, "If-None-Match: %.150s\r\n", e->etag);
 	else if (e->lastmod[0])
 		snprintf(g->validate, sizeof g->validate, "If-Modified-Since: %.60s\r\n", e->lastmod);
-	changed = 1;
+	/* (used is kept for the index, not a change: nothing reads it, the
+	   pack being a ring; an index written for it alone cost a quit) */
 	return 1;
 }
 
@@ -766,6 +752,12 @@ void dc_job_end(void)
 	close_pak();
 }
 
+void dc_flush(void)
+{
+	flush();
+	close_pak();
+}
+
 void dc_close(void)
 {
 	SBUF s;
@@ -798,11 +790,16 @@ void dc_close(void)
 			sb_addc(&s, '\t');
 			sb_adds(&s, e->key);
 			sb_addc(&s, '\t');
-			sb_adds(&s, e->url);
+			/* an address that is its key is left out (read back as the
+			   key; 0.50 reads it so too): the index half as long */
+			if (strcmp(e->url, e->key) != 0)
+				sb_adds(&s, e->url);
 			sb_addc(&s, '\n');
 		}
 		path_of(p, sizeof p, "EWEB.IDX");
-		if (s.s == NULL || pf_save(p, s.s, s.len) != 0)
+		/* written over in place: as a new file, Erez's quit took 24 s
+		   on his disk (slots.c) */
+		if (s.s == NULL || slot_save(p, s.s, s.len) != 0)
 			dc_clear();
 		sb_free(&s);
 	} else if (nent == 0 && changed) {

@@ -30,6 +30,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import server  # noqa: E402
+import slots  # noqa: E402  (the index, cookies and history in two slots)
 
 ewget = os.path.abspath(sys.argv[1])
 work = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else "build/itest")
@@ -345,8 +346,7 @@ try:
         # the one to its #end not; the history file written, and read at
         # the next start; a page from another origin's links not visited
         hist = os.path.join(work, "HISTORY.TXT")
-        if os.path.exists(hist):
-            os.remove(hist)
+        slots.remove(hist)
 
         def link_colours(*args):
             p = subprocess.run([ewrender, "-f", font, "-d", "-V", hist] + list(args), cwd=work,
@@ -358,8 +358,8 @@ try:
         rc, col, out = link_colours("-N", site + "two.html", site)
         check("visited links: to a page and Back", rc == 0 and col.get("1") == "#551a8b" and
               col.get("2") == "#0000ee", out)
-        with open(hist, encoding="utf-8") as f:
-            shown = [line.split("\t")[1] for line in f if not line.startswith("#")]
+        shown = [line.split("\t")[1] for line in (slots.read(hist) or b"").decode("utf-8").splitlines()
+                 if not line.startswith("#")]
         rc, col2, out = link_colours(site)
         check("visited links: the history kept, and read at the next start",
               shown == [site, site + "two.html"] and rc == 0 and col2.get("1") == "#551a8b" and
@@ -703,8 +703,8 @@ try:
         check("the cache: asked again, a 304", r1[1] == "etag 1" and r2[1] == "etag 1" and
               counts().endswith(" etag=2 304=1"), r1[2] + r2[2] + counts())
         check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB.PAK")) and
-              os.path.exists(os.path.join(cache, "EWEB.IDX")) and
-              "/site/cache/fresh.html" in open(os.path.join(cache, "EWEB.IDX")).read(), " ".join(os.listdir(cache)))
+              slots.exists(os.path.join(cache, "EWEB.IDX")) and
+              b"/site/cache/fresh.html" in slots.read(os.path.join(cache, "EWEB.IDX")), " ".join(os.listdir(cache)))
         # a form sent there with POST: what was kept for it is forgotten
         # (RFC 9111, 4.4), and the next look asks the server
         r1 = cached("-S", "go", site + "post.html")
@@ -881,7 +881,8 @@ try:
         # the lasting one kept in a file for the next run, another site's
         # picture's refused
         jar = os.path.join(work, "COOKIES.TXT")
-        for f in (jar, os.path.join(work, "EWEB.KEY")):
+        slots.remove(jar)
+        for f in (os.path.join(work, "EWEB.KEY"),):
             if os.path.exists(f):
                 os.remove(f)
         site = "http://localhost:%d/site/cookie/" % HTTP
@@ -895,11 +896,11 @@ try:
         rc, t, out = titles("-k", jar, "-N", site + "show", site + "set")
         check("cookies: set, and sent back", rc == 0 and t[:1] == ["COOKIE|lasting=1; session=2"], out)
         rc2, t2, out2 = titles("-k", jar, "-N", site + "show", "http://localhost:%d/site/" % HTTP)
-        kept = open(jar).read()
+        kept = (slots.read(jar) or b"").decode()
         check("cookies: the lasting one kept for the next run, its value encrypted", rc2 == 0
               and t2[:1] == ["COOKIE|lasting=1"] and "\tlasting\t{E}" in kept and "session" not in kept
               and os.path.getsize(os.path.join(work, "EWEB.KEY")) == 16, out2)
-        os.remove(jar)
+        slots.remove(jar)
         p = subprocess.run([ewrender, "-f", font, "-d", "-S", "go", site + "form.html"], cwd=work,
                            capture_output=True, text=True, timeout=120)
         m = re.search(r'^sent: \d+ "(.*)" (\S+)$', p.stdout, re.M)

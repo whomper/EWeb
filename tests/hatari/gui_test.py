@@ -75,6 +75,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "common", "tools"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "net"))
 import machines  # noqa: E402
+import slots  # noqa: E402  (HISTORY.TXT in two slots: src/net/slots.c)
 from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
@@ -853,7 +854,7 @@ def browse():
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""
         for _ in range(40):		# (written after the log's "quit")
-            hist = (saved("HISTORY.TXT") or b"").decode("utf-8", "replace")
+            hist = (slots.read(os.path.join(hd, "HISTORY.TXT")) or b"").decode("utf-8", "replace")
             if "enc/w1255.html" in hist:
                 break
             time.sleep(0.5)

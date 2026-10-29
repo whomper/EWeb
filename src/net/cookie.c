@@ -15,6 +15,7 @@
 #include "cookie.h"
 #include "plat.h"
 #include "secret.h"
+#include "slots.h"
 #include "tls.h"
 
 enum { SS_DEFAULT, SS_LAX, SS_STRICT, SS_NONE };
@@ -318,7 +319,7 @@ static void ensure(void)
 	if (loaded)
 		return;
 	loaded = 1;
-	if (file[0] == 0 || (d = pf_load(file, &len)) == NULL)
+	if (file[0] == 0 || (d = slot_load(file, &len)) == NULL)
 		return;
 	ck_load(d, len);
 	free(d);
@@ -573,6 +574,17 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 				o->used = now;		/* the same again: nothing to write */
 				ck_free(c);
 				return;
+			} else if (o->expiry && o->expiry > now + 86400 && c->expiry > now + 86400 &&
+				   strcmp(o->value, c->value) == 0 && o->secure == c->secure && o->same == c->same &&
+				   o->http_only == c->http_only) {
+				/* only its end moved (Wikipedia's on every page): the new
+				   one kept, but no file written for it while the one on
+				   the disk has a day yet (each save cost Erez's quit
+				   seconds, 29 Oct 2026) */
+				o->expiry = c->expiry;
+				o->used = now;
+				ck_free(c);
+				return;
 			} else
 				drop(pp);
 			break;
@@ -822,12 +834,14 @@ int ck_save(void)
 	if (c == NULL) {
 		/* none that last: no file */
 		changed = 0;
-		return pf_remove(file) == 0 || !pf_exists(file);
+		slot_remove(file);
+		return 1;
 	}
 	t = ck_text(&len);
 	if (t == NULL)
 		return 0;
-	ok = pf_save(file, t, len);
+	/* written over in place (slots.c: 2.9 s on Erez's disk as a new file) */
+	ok = slot_save(file, t, len) == 0;
 	free(t);
 	if (ok)
 		changed = 0;
@@ -845,7 +859,7 @@ void ck_clear(void)
 	changed = 0;
 	loaded = 1;
 	if (file[0])
-		pf_remove(file);
+		slot_remove(file);
 }
 
 long ck_count(void)

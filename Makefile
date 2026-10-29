@@ -314,10 +314,10 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 		-Icommon/src -o $@ $(filter %.c,$^)
 # the history (src/browse/history.c)
 build/asan/hgtest: tests/browse/hgtest.c src/browse/history.c src/browse/history.h common/src/util.c \
-		common/src/futil.c tests/host/plat_posix.c
+		common/src/futil.c src/net/slots.c src/net/slots.h tests/host/plat_posix.c
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
-		-Icommon/src -o $@ $(filter %.c,$^)
+		-Isrc/net -Icommon/src -o $@ $(filter %.c,$^)
 # the disk cache (src/browse/dcache.c)
 build/asan/dctest: tests/browse/dctest.c src/browse/dcache.c src/browse/dcache.h $(HOSTNET_SRC) $(NET_HDRS) \
 		build/host/libbearssl.a
@@ -816,16 +816,16 @@ build/asan/replay_bookmark: tests/fuzz/fuzz_bookmark.c common/tests/fuzz/replay.
 		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_BM_SRC)
 FUZZERS += bookmark
 # HISTORY.TXT (src/browse/history.c)
-FUZZ_HG_SRC = src/browse/history.c common/src/util.c common/src/futil.c tests/host/plat_posix.c
+FUZZ_HG_SRC = src/browse/history.c common/src/util.c common/src/futil.c src/net/slots.c tests/host/plat_posix.c
 build/fuzz/fuzz_history: tests/fuzz/fuzz_history.c $(FUZZ_HG_SRC) src/browse/history.h
 	@mkdir -p $(@D)
 	$(FUZZCC) -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined -Isrc -Isrc/browse \
-		-Icommon/src -o $@ $< $(FUZZ_HG_SRC)
+		-Isrc/net -Icommon/src -o $@ $< $(FUZZ_HG_SRC)
 build/asan/replay_history: tests/fuzz/fuzz_history.c common/tests/fuzz/replay.c $(FUZZ_HG_SRC) \
 		src/browse/history.h
 	@mkdir -p $(@D)
-	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Isrc -Isrc/browse -Icommon/src \
-		-o $@ $< common/tests/fuzz/replay.c $(FUZZ_HG_SRC)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Isrc -Isrc/browse -Isrc/net \
+		-Icommon/src -o $@ $< common/tests/fuzz/replay.c $(FUZZ_HG_SRC)
 FUZZERS += history
 
 # SVG pictures (src/svg)
@@ -1002,7 +1002,7 @@ build/m68k/drawbench: tests/bench/drawbench.c build/m68k/bench/atheap.o build/m6
 		build/m68k/ewb/layout/layout.o build/m68k/ewb/layout/find.o build/m68k/ewb/gfx/canvas.o \
 		build/m68k/ewb/gfx/font.o $(m68k_EC) $(m68k_PU) $(EWB_HDRS)
 	$(M68KCC) -m68030 -O2 -std=gnu99 -DNDEBUG $(EWB_FLAGS) $(NSINC) -static -o $@ tests/bench/drawbench.c \
-		src/browse/history.c src/browse/visited.c src/net/url.c \
+		src/browse/history.c src/browse/visited.c src/net/url.c src/net/slots.c \
 		tests/host/plat_posix.c common/src/util.c common/src/futil.c common/src/inflate.c $(filter %.o,$^)
 # a page's scripts as EWEB.PRG runs them (src/js), as 68030 code with the
 # FPU, for counting (tools/count68k.sh build/m68k/jsbench PAGE.HTM)

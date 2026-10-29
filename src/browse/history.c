@@ -9,6 +9,7 @@
 
 #include "history.h"
 #include "plat.h"
+#include "slots.h"
 #include "util.h"
 
 #define HG_MAX 1000
@@ -165,7 +166,7 @@ static void load(void)
 	if (loaded)
 		return;
 	loaded = 1;
-	if (path[0] == 0 || (d = pf_load(path, &len)) == NULL)
+	if (path[0] == 0 || (d = slot_load(path, &len)) == NULL)
 		return;
 	hg_parse(d, len);
 	free(d);
@@ -344,7 +345,7 @@ int hg_save(void)
 	d = hg_write(&len);
 	if (d == NULL)
 		return 0;
-	ok = pf_save(path, d, len) == 0;
+	ok = slot_save(path, d, len) == 0;	/* in place: slots.c */
 	free(d);
 	if (ok)
 		dirty = 0;

@@ -74,6 +74,9 @@ void dc_job_end(void);
 
 /* quit: the job ended, the pack written again if it must be, the index
    written; the memory let go */
+/* what has gathered in memory written to the pack (dc_close does it too;
+   apart for the quit's log) */
+void dc_flush(void);
 void dc_close(void);
 
 /* everything forgotten, the files too */

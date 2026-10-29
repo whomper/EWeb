@@ -10,7 +10,9 @@
  * (decoded pictures), the pack and the index read at the next start, a
  * reset between a job and quit, the pack a ring of the cache's size (and
  * after a reset, what the ring wrote over not read), and a pack that
- * isn't the index's.
+ * isn't the index's; and the two slots its index, the cookies and the
+ * history are kept in (src/net/slots.c): written over in place, the
+ * newer read, a save cut short, a file of before them.
  *
  *   dctest DIR      (a folder it may make CACHE in)
  */
@@ -20,6 +22,7 @@
 
 #include "dcache.h"
 #include "plat.h"
+#include "slots.h"
 
 static int fails, checks;
 static long long clock_s = 1792400000LL;	/* Oct 2026 */
@@ -274,6 +277,55 @@ int main(int argc, char **argv)
 		free(g.data);
 		dc_clear();
 		dc_close();
+	}
+
+	{
+		/* the slots (slots.c) */
+		char p[500], twin[520], *d;
+		long n;
+		int h;
+		snprintf(p, sizeof p, "%s%cSLOTS.TXT", dir, PF_SEP);
+		slot_twin(p, twin, sizeof twin);
+		slot_remove(p);
+		h = pf_open(p, PF_WRITE);	/* a file of before slots: no head */
+		pf_write(h, "old file\n", 9);
+		pf_close(h);
+		d = slot_load(p, &n);
+		want("slots: a file of before them read as it is", d != NULL && n == 9 && !strcmp(d, "old file\n"));
+		free(d);
+		want("slots: the first save", slot_save(p, "first, the longest of them\n", 27) == 0);
+		want("slots: the first save in the twin", pf_size(twin) == 24 + 27 && pf_size(p) == 9);
+		d = slot_load(p, &n);
+		want("slots: the newer read", d != NULL && n == 27 && !strncmp(d, "first", 5));
+		free(d);
+		want("slots: a second save", slot_save(p, "second\n", 7) == 0);
+		want("slots: written over the older", pf_size(p) == 24 + 7 && pf_size(twin) == 24 + 27);
+		want("slots: a third save", slot_save(p, "third\n", 6) == 0);
+		want("slots: in place, not made again", pf_size(twin) == 24 + 27);
+		d = slot_load(p, &n);
+		want("slots: the newest read, what lies past it left", d != NULL && n == 6 && !strcmp(d, "third\n"));
+		free(d);
+		/* a save cut short: the twin's head as a save leaves it before
+		   its end */
+		h = pf_open(twin, PF_UPDATE);
+		pf_write(h, "EWS0  ", 6);
+		pf_close(h);
+		d = slot_load(p, &n);
+		want("slots: a save cut short, the older read", d != NULL && n == 7 && !strcmp(d, "second\n"));
+		free(d);
+		/* a head that says more than the file has */
+		h = pf_open(p, PF_UPDATE);
+		pf_write(h, "EWS1 00000009 0000ffff\r\n", 24);
+		pf_close(h);
+		d = slot_load(p, &n);
+		want("slots: neither whole, nothing", d == NULL);
+		/* read again in a new run: the save goes over the right one */
+		want("slots: saved again", slot_save(p, "fourth\n", 7) == 0);
+		d = slot_load(p, &n);
+		want("slots: the fourth read", d != NULL && n == 7 && !strcmp(d, "fourth\n"));
+		free(d);
+		slot_remove(p);
+		want("slots: both gone", pf_size(p) < 0 && pf_size(twin) < 0);
 	}
 
 	dc_dir(dir, 1L << 20);
