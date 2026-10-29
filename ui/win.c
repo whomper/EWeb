@@ -2598,6 +2598,9 @@ static void message(const short *msg)
 		case WA_LFLINE: scroll_x_to(cur->left - col_step()); break;
 		case WA_RTLINE: scroll_x_to(cur->left + col_step()); break;
 		}
+		/* (one click, one step: the guidelines' 5.1, common's evnt_multi_
+		   dropping TOS's echo; the rigs count these) */
+		log_event("arrowed %d top %ld left %ld", msg[4], (long) cur->top, (long) cur->left);
 		break;
 	case WM_VSLID:
 		if (loading)

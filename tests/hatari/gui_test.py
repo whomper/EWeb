@@ -1042,7 +1042,8 @@ def falcon4():
     hd = hd_for(name, r"C:\BIG.HTM", "SCRIPTS=file\r\n")
     with open(os.path.join(hd, "BIG.HTM"), "wb") as f:
         f.write(big_page())
-    r = Run(name, "Falcon-4:16", hd)
+    xvfb = machines.xvfb(DISPLAY)
+    r = Run(name, "Falcon-4:16", hd, windowed=True)
     try:
         ready = r.wait(r"ready ", 300)
         ev = r.wait(r"shown ", 600)
@@ -1053,6 +1054,34 @@ def falcon4():
               int(m.group(1)) > 20000, str(r.events()[-6:]))
         time.sleep(2)
         r.shot(0)
+        # one click on the window's own track below its slider: one page
+        # on, one WM_ARROWED (TOS 4.04's AES sends each such click twice;
+        # common's evnt_multi_ drops the echo: the guidelines' 5.1, Erez's
+        # "still jumping two positions", 28 Oct 2026)
+        a = re.search(r" area (\d+) (\d+) (\d+) (\d+) ", ev or "")
+        if a:
+            ax, ay, aw, ah = (int(v) for v in a.groups())
+            r.mouse.click(ax + aw + 12, ay + ah - 40)
+            time.sleep(3)
+            steps = [e for e in r.events() if e.startswith("arrowed ")]
+            check("falcon4: one click on the window's track, one page down",
+                  len(steps) == 1 and steps[0].startswith("arrowed 1 ") and
+                  0 < int(steps[0].split()[3]) < ah, str(steps))
+            r.key(0x47)                        # ClrHome: back to the top
+            time.sleep(2)
+            # and one on its down arrow, just under the track: one line
+            # step (line_step in ui/win.c, three rows of the AES's font)
+            r.mouse.click(ax + aw + 12, ay + ah + 11)
+            time.sleep(3)
+            steps = [e for e in r.events() if e.startswith("arrowed ")][1:]
+            check("falcon4: one click on the window's down arrow, one line down",
+                  len(steps) == 1 and steps[0].startswith("arrowed 3 ") and
+                  0 < int(steps[0].split()[3]) < ah // 4, str(steps))
+            r.key(0x47)
+            time.sleep(2)
+        else:
+            check("falcon4: one click on the window's track, one page down", False, ev or "no page")
+            check("falcon4: one click on the window's down arrow, one line down", False, ev or "no page")
         n = len([e for e in r.events() if e.startswith("shown ")])
         r.key(0x13, (CTRL,))                   # ^R
         t0 = time.time()
@@ -1077,6 +1106,8 @@ def falcon4():
               not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
     finally:
         r.end()
+        if xvfb is not None:
+            xvfb.terminate()
 
 
 def falcon4_secure():
