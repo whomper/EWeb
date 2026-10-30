@@ -2306,6 +2306,7 @@ static void resized(void)
 			cur->top = (int32_t) ((int64_t) cur->top * br.p->height / h0);
 	}
 	br.width = win_page_w();
+	br_live_size(br.width, br.height);
 	if (cur->top > max_top())
 		cur->top = max_top();
 	if (cur->left > max_left())
@@ -2370,6 +2371,7 @@ int win_open(void)
 	save_place();
 	br.width = win_page_w();
 	br.height = win_page_h();
+	br_live_size(br.width, br.height);
 	sliders();
 	return 1;
 }

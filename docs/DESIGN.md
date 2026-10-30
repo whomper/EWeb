@@ -1452,6 +1452,18 @@ run, "As a page"; the home network refused and blocked), and `make itest`'s two 
 `ewrender -R` and the live page with a stand-in extension. Measured here: Chromium 597 MB on the
 disk, 385 MB of memory with one simple page; Erez's Pi is probably a Pi 4.
 
+**Live view at the window's width, three screens tall** (Erez, 30 Oct 2026). The 608-pixel picture
+of a 1024-pixel screen was narrower than his window, its text small, and every scroll a trip to the
+Pi (a key, a second's settle, the page and a new picture: 3–4 s). He chose the picture as wide as
+EWeb's window and three of its screens tall, which EWeb scrolls itself; only past the third screen,
+or after a click, does a new one come. Live view's address names the window's page area
+(`http://webgate/live?url=...&w=W&h=H`, `br_live_size` and `br_live_url`); webgate keeps it, and
+the Pi's browser lays the page out at that width, its window resized by webgate-ext to the picture's
+size, so a click is at the picture's own pixel. Measured with Chromium (JPEG at 0.7): 800×1800 is
+138 KB (yaary.music), 186 KB (BBC News) and 261 KB (Wikipedia), 2–4 s at Erez's 50–70 KB/s; one
+800×600 screen 53–73 KB; the old 608 pixels 32–49 KB. Those pages laid out 1800 high look as they
+should (no full-height part stretched). webgate's side is AERA-Gateway's.
+
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 
 `EWEBST.PRG` is the same sources as `EWEB.PRG` built as 68000 code (`-fno-store-merging

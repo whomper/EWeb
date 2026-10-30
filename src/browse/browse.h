@@ -341,6 +341,8 @@ void br_scripts_retry(browser *b, const char *url);
 /* the Pi's live view (webgate's own page) opening url first (an http or
    https one; NULL or another: as it is) */
 void br_live_url(const char *url, char *out, int size);
+/* the window's page area in device px, which live view's address names */
+void br_live_size(int32_t width, int32_t height);
 /* ms until its next timer, -1 for none */
 long br_js_due(const browser *b);
 /* what a script did (after br_js_step, br_js_event, br_js_click) */

@@ -65,6 +65,22 @@ int main(void)
 	expect("every site: the oldest of 17 forgotten", br_scripts_site(&b, "http://s0.example/"), 1);
 	expect("every site: the newest kept", br_scripts_site(&b, "http://s16.example/"), 0);
 	br_free(&b);
+	/* live view's address: the page, then the window's page area */
+	{
+		char live[200];
+		br_live_url("https://news.example/a b#top", live, sizeof live);
+		expect("live view: no size before a window", strcmp(live, "http://webgate/live?url=https%3A%2F%2Fnews.example%2Fa%20b"), 0);
+		br_live_size(784, 520);
+		br_live_url("https://news.example/a b#top", live, sizeof live);
+		expect("live view: the window's size named",
+		       strcmp(live, "http://webgate/live?url=https%3A%2F%2Fnews.example%2Fa%20b&w=784&h=520"), 0);
+		br_live_url("about:start", live, sizeof live);
+		expect("live view: a page not on the web", strcmp(live, "http://webgate/live?w=784&h=520"), 0);
+		br_live_url(NULL, live, 50);
+		expect("live view: a short buffer", strcmp(live, "http://webgate/live?w=784&h=520"), 0);
+		br_live_url("https://news.example/a-long-path-that-does-not-fit", live, 60);
+		expect("live view: a long address cut, its size kept", strstr(live, "&w=784&h=520") != NULL, 1);
+	}
 	printf("sitetest: %d passed, %d failed\n", passed, failed);
 	return failed != 0;
 }

@@ -1478,6 +1478,7 @@ static void home(void)
 static void live_view(void)
 {
 	char u[4200];
+	br_live_size(br.width, br.height);
 	br_live_url(br.cur >= 0 ? br.url : NULL, u, sizeof u);
 	go(u);
 }

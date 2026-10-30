@@ -929,14 +929,32 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 	sb_adds(s, "</body></html>");
 }
 
+/* the window's page area, for live view's picture (br_live_size) */
+static int32_t live_w, live_h;
+
+void br_live_size(int32_t width, int32_t height)
+{
+	live_w = width;
+	live_h = height;
+}
+
 void br_live_url(const char *url, char *out, int size)
 {
 	static const char hex[] = "0123456789ABCDEF";
 	int n = snprintf(out, size, "http://webgate/live");
-	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 >= size)
+	char wh[32];
+	/* the picture as wide as the window, three of its screens tall: the
+	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026) */
+	wh[0] = 0;
+	if (live_w > 0 && live_h > 0)
+		snprintf(wh, sizeof wh, "w=%ld&h=%ld", (long) live_w, (long) live_h);
+	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 + 32 >= size) {
+		if (wh[0] && n + 1 + (int) strlen(wh) < size)
+			snprintf(out + n, size - n, "?%s", wh);
 		return;
+	}
 	n += snprintf(out + n, size - n, "?url=");
-	for (; *url && *url != '#' && n < size - 4; url++) {
+	for (; *url && *url != '#' && n < size - 4 - 32; url++) {
 		unsigned char c = (unsigned char) *url;
 		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 		    c == '-' || c == '.' || c == '_' || c == '~') {
@@ -948,6 +966,8 @@ void br_live_url(const char *url, char *out, int size)
 		}
 	}
 	out[n] = 0;
+	if (wh[0])
+		snprintf(out + n, size - n, "&%s", wh);
 }
 
 /* Cloudflare's check ("Just a moment...", its managed challenge): a page
