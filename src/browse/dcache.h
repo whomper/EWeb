@@ -77,6 +77,9 @@ void dc_job_end(void);
 /* what has gathered in memory written to the pack (dc_close does it too;
    apart for the quit's log) */
 void dc_flush(void);
+/* told how far dc_flush or dc_close has got (done of total) as they write
+   (the quit's bar, which moved only between steps: Erez, 30 Oct 2026) */
+extern void (*dc_progress)(long done, long total);
 /* what the quit has to write, without reading anything: the answers still
    in memory (bytes) and the index's answers (0 when it hasn't changed) */
 void dc_unsaved(long *bytes, long *answers);

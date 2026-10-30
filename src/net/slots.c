@@ -30,6 +30,9 @@
 #include "slots.h"
 
 #define HEAD 24
+#define PIECE 16384L	/* written a piece at a time, slot_progress told after each */
+
+void (*slot_progress)(long done, long total);
 
 /* what was read or written last, per file: the newer slot (0: NAME,
    1: the twin), its generation, and which slots are on the disk (a save
@@ -205,7 +208,17 @@ int slot_save(const char *path, const void *data, long len)
 	/* a head that is no slot's first (GEMDOS can't seek past the end),
 	   the data, then the head */
 	memcpy(head, "EWS0                  \r\n", HEAD);
-	ok = pf_write(h, head, HEAD) == HEAD && pf_write(h, data, len) == len;
+	ok = pf_write(h, head, HEAD) == HEAD;
+	{
+		long done = 0, n;
+		while (ok && done < len) {
+			n = len - done > PIECE ? PIECE : len - done;
+			ok = pf_write(h, (const char *) data + done, n) == n;
+			done += n;
+			if (slot_progress != NULL)
+				slot_progress(done, len);
+		}
+	}
 	snprintf(head, sizeof head, "EWS1 %08lx %08lx\r\n", (known[k].gen + 1) & 0xFFFFFFFFUL, (unsigned long) len);
 	ok = ok && pf_seek(h, 0) == 0 && pf_write(h, head, HEAD) == HEAD;
 	pf_close(h);

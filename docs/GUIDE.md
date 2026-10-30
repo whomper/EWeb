@@ -285,7 +285,8 @@ and its list. Options > Empty the cache forgets it all.
 
 When you quit, a small box, Closing EWeb, says what EWeb is saving
 (the settings, the cookies, the history, the cache's pages and pictures
-and its list) with a bar of how far it has gone; it closes by itself.
+and its list) with a bar of how far it has gone, moving as the cache is
+written; it closes by itself.
 
 ## The window
 

@@ -13,6 +13,9 @@ char *slot_load(const char *path, long *len);
 int slot_save(const char *path, const void *data, long len);
 /* both slots gone */
 void slot_remove(const char *path);
+/* told how much of a slot_save's data is on the disk after each piece
+   (the quit's bar; NULL: nothing told) */
+extern void (*slot_progress)(long done, long total);
 /* the other slot's name (NAME.TX2 for NAME.TXT) */
 void slot_twin(const char *path, char *out, int size);
 

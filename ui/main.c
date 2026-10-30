@@ -1468,6 +1468,17 @@ void details(dnode *det)
 		  br.p ? (long) br.p->height : 0L, (long) win_top(), t);
 }
 
+/* the quit's step being done: where it starts in the bar, its share, the
+   whole (in weights); quit_told moves the bar through its share as the
+   cache tells how far its writing has got */
+static long q_base, q_weight, q_total = 1;
+
+static void quit_told(long done, long total)
+{
+	long part = (done >> 6) * 1000 / ((total >> 6) + 1);
+	quit_bar((int) ((q_base * 1000 + q_weight * part) / q_total));
+}
+
 static void home(void)
 {
 	go(opt.home[0] ? opt.home : "about:start");
@@ -2498,7 +2509,9 @@ int app_main(void)
 		wfl = pend > 0 ? 2 + (int) (pend >> 15) : 0;
 		wix = answers > 0 ? 3 + (int) (answers / 100) : 0;
 		total = 2 + wck + whg + wfl + wix;
-#define QUIT_STEP(words, weight) (quit_box(words, (int) (done * 1000 / total)), done += (weight))
+#define QUIT_STEP(words, weight) (quit_box(words, (int) (done * 1000 / total)), \
+					  q_base = done, q_weight = (weight), done += (weight))
+		q_total = total;
 		QUIT_STEP("Closing connections and windows...", 1);
 		http_close_all();
 		{
@@ -2524,6 +2537,9 @@ int app_main(void)
 			QUIT_STEP("Saving the history...", whg);
 		hg_save();	/* the pages shown, once, if they changed */
 		th = pf_ms();
+		/* the bar moving as the cache's writes go on, not only between
+		   the steps (Erez, 30 Oct 2026: it stood still the whole save) */
+		dc_progress = quit_told;
 		if (wfl)
 			QUIT_STEP("Storing the cache's pages and pictures...", wfl);
 		dc_flush();	/* the cache's answers still in memory */
@@ -2531,6 +2547,7 @@ int app_main(void)
 		if (wix)
 			QUIT_STEP("Saving the cache's list...", wix);
 		dc_close();	/* its index, once */
+		dc_progress = NULL;
 		td = pf_ms();
 #undef QUIT_STEP
 		quit_box("Done.", 1000);

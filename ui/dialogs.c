@@ -595,6 +595,21 @@ void quit_box(const char *what, int permille)
 	log_event("quit box %d %s", permille, q_what);
 }
 
+void quit_bar(int permille)
+{
+	short w;
+	if (!q_open)
+		return;
+	if (permille > 1000)
+		permille = 1000;
+	w = (short) ((long) q_full * permille / 1000);
+	if (w <= tree[q_fill].ob_width)
+		return;		/* nothing more to show (a pixel or less) */
+	tree[q_fill].ob_width = w;
+	dlg_draw(tree, q_fill);
+	log_event("quit box %d %s", permille, q_what);
+}
+
 void quit_box_close(void)
 {
 	if (q_open)

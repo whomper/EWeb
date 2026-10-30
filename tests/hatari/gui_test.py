@@ -1696,6 +1696,16 @@ def gateway():
                       all(("pens from the Pi" in e) == bool(pens) for e in got) and
                       not os.path.exists(os.path.join(hd, "CRASH.LOG")) and
                       (pens or os.path.isdir(os.path.join(hd, "CACHE"))), "\n".join(r.events()[-20:]))
+                if not pens:
+                    # the quit's bar moving as the cache's pictures are
+                    # written, not standing still the whole step (Erez,
+                    # 30 Oct 2026): a step for them, the bar on within it
+                    steps = [e for e in r.events() if e.startswith("quit box ")]
+                    at = [int(e.split()[2]) for e in steps]
+                    store = [e for e in steps if e.endswith("Storing the cache's pages and pictures...")]
+                    check("gateway: %s, the quit's bar moves as the cache is written" % name,
+                          len(store) >= 3 and at == sorted(at) and len(set(int(e.split()[2]) for e in store)) >= 3,
+                          "\n".join(steps))
             finally:
                 r.end()
     finally:

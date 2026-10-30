@@ -4216,7 +4216,12 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   writes (a file's few disk commands; the cache's answers 1 a 32 KB, its list 1 a hundred
   answers); a step with nothing to write is left out; held 300 ms full after a quit of more than
   half a second. `quit_box` in `ui/dialogs.c` (a dialog without buttons, `dlg_open`: a window
-  under MiNT and MagiC); `make hatarigui`'s falcon4 group checks its steps from the log.
+  under MiNT and MagiC); `make hatarigui`'s falcon4 group checks its steps from the log. The bar
+  moves within the cache's two steps too (30 Oct 2026, Erez: it stood still the whole save, then
+  the box closed): the pack's write and the list's go in pieces (32 KB and 16 KB: `dc_progress`,
+  `slot_progress`), the list's making told every 64 answers, and `quit_bar` redraws the bar alone
+  as it grows; `make hatarigui`'s gateway group checks it moves within the cache's step (on its
+  page's pictures: 23 places between 15 % and 90 %).
 
 **transform** (CSS Transforms 1 and 2): ynet.co.il drew its news drawer over the page; it is
 kept off it by `transform: translateX(-103%)`, as many sites hide menus and drawers, and centre

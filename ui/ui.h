@@ -255,6 +255,8 @@ int  dlg_settings(void);		/* 1: changed (in opt) */
    is (permille), opened by its first call; quit_box_close at the end */
 void quit_box(const char *what, int permille);
 void quit_box_close(void);
+/* the bar alone, further on within a step (drawn only when it grows) */
+void quit_bar(int permille);
 /* a page's prompt(): its question (UTF-8), the answer in answer (UTF-8,
    the page's suggestion first); 1 OK, 0 Cancel */
 int  dlg_prompt(const char *text, char *answer, int size);

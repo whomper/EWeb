@@ -69,6 +69,8 @@ static int pak_wo;		/* the pack was made this job, open for writing only */
 static int changed;
 
 static void flush(void);
+void (*dc_progress)(long done, long total);
+#define PIECE 32768L	/* a long write in pieces, dc_progress told after each */
 static void put32(char *p, unsigned long v);
 
 static void path_of(char *out, int size, const char *name)
@@ -697,6 +699,27 @@ static void put32(char *p, unsigned long v)
 	p[3] = (char) v;
 }
 
+/* the pack's write of len bytes, in pieces, dc_progress told after each */
+static int write_told(const char *buf, long len)
+{
+	long done = 0, n;
+	while (done < len) {
+		n = len - done > PIECE ? PIECE : len - done;
+		if (pf_write(pak, buf + done, n) != n)
+			return 0;
+		done += n;
+		if (dc_progress != NULL)
+			dc_progress(done, len);
+	}
+	return 1;
+}
+
+/* the index's write, told as the second half of dc_close's work */
+static void index_told(long done, long total)
+{
+	dc_progress(500 + (done >> 6) * 500 / ((total >> 6) + 1), 1000);
+}
+
 /* what has gathered, into the pack in one write at the ring's place:
    back to its start when it wouldn't fit in the cache's size, and what
    it lands on forgotten */
@@ -726,7 +749,7 @@ static void flush(void)
 				o += TAG + ent[i].len;
 			}
 	}
-	if (buf != NULL && pf_seek(pak, at) == at && pf_write(pak, buf, need) == need) {
+	if (buf != NULL && pf_seek(pak, at) == at && write_told(buf, need)) {
 		for (i = 0; i < nent; i++)
 			if (ent[i].off < 0) {
 				ent[i].off = at;
@@ -779,6 +802,8 @@ void dc_close(void)
 		sb_printf(&s, "EWDC 3 %08lx %ld %ld\n", gen, pak_len, at);
 		for (i = 0; i < nent; i++) {
 			DCE *e = &ent[i];
+			if (dc_progress != NULL && (i & 63) == 0)
+				dc_progress((long) i * 500 / nent, 1000);	/* made: the first half */
 			/* times as long: the Atari's printf has no %lld (2038 is
 			   far enough for a cache) */
 			sb_printf(&s, "%ld %ld %ld %ld %ld %d\t", e->off, e->len, (long) e->stored, (long) e->fresh,
@@ -804,8 +829,10 @@ void dc_close(void)
 		path_of(p, sizeof p, "EWEB.IDX");
 		/* written over in place: as a new file, Erez's quit took 24 s
 		   on his disk (slots.c) */
+		slot_progress = dc_progress != NULL ? index_told : NULL;
 		if (s.s == NULL || slot_save(p, s.s, s.len) != 0)
 			dc_clear();
+		slot_progress = NULL;
 		sb_free(&s);
 	} else if (nent == 0 && changed) {
 		dc_clear();
