@@ -628,7 +628,10 @@ browser:
   says "a snapshot from the Pi's browser". Turn it off for pages that
   don't need it: they come quicker straight from their servers.
 - **Live view:** the Pi's browser's screen as a picture, with the page
-  shown in EWeb opened there. A click on the picture is a click there;
+  shown in EWeb opened there. The Pi lays the page out as wide as EWeb's
+  window, and the picture is three of its screens tall: scroll through it
+  in EWeb as through any page; Page down in the row of buttons brings the
+  next three (AERA-Gateway 1.16 or later). A click on the picture is a click there;
   type into the field under it and press Type (or Type and Enter), or use
   the buttons for keys, scrolling and Back. For what a snapshot can't
   do: a login made by scripts, a cookie question, a puzzle. "As a page"

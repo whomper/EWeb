@@ -78,6 +78,7 @@ def snapshots():
                              "--cafile", os.path.join(work, "CACERT.PEM"), "--browser", "--browser-port", str(EXT)],
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     stop = []
+    shots = []          # (width, view width, view height) of each picture asked for
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     jpeg = opener.open("http://localhost:%d/site/photo.jpg" % HTTP).read()
 
@@ -93,6 +94,7 @@ def snapshots():
                     continue
                 w = json.loads(body)
                 if w.get("shot"):
+                    shots.append((w.get("shot"), w.get("w"), w.get("h")))
                     c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg)
                 elif "/site/cf/" in w["url"]:
                     # Cloudflare's check: passed, the page it goes on to;
@@ -139,6 +141,16 @@ def snapshots():
         check("the Pi's browser: live view, its screen a picture button", p.returncode == 0
               and 'title "Live: Made by script"' in out
               and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None, out)
+        if "LIVE_ROW" in open(WEBGATE).read():
+            # the window's size named (EWeb's br_live_url): the picture as
+            # wide as its page, three of its screens tall (Erez, 30 Oct 2026)
+            del shots[:]
+            p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", live + "&w=800&h=600"], cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            check("the Pi's browser: live view at the window's width, three screens tall", p.returncode == 0
+                  and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None
+                  and (790, 790, 1650) in shots, out + "asked: %r" % shots)
         if "X-Gateway-Check" in open(WEBGATE).read():
             # Cloudflare's check through the Pi: the page through its
             # browser, then the quick way with the clearance it kept; a

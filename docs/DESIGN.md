@@ -1462,7 +1462,13 @@ the Pi's browser lays the page out at that width, its window resized by webgate-
 size, so a click is at the picture's own pixel. Measured with Chromium (JPEG at 0.7): 800×1800 is
 138 KB (yaary.music), 186 KB (BBC News) and 261 KB (Wikipedia), 2–4 s at Erez's 50–70 KB/s; one
 800×600 screen 53–73 KB; the old 608 pixels 32–49 KB. Those pages laid out 1800 high look as they
-should (no full-height part stretched). webgate's side is AERA-Gateway's.
+should (no full-height part stretched). webgate's side is AERA-Gateway 1.16: the picture
+W − 10 wide, 3 × (H − 40) − 30 high (the Go to row), clamped; webgate-ext 1.5 takes the window out of
+full screen and sizes it until the tab is that (the bar of a normal window comes a moment later:
+the first try came out 87 px short, so it tries up to three times), and reports where the tab sits
+on the screen, which webgate adds to each click; the Pi's screen is 1280×3072. Tested end to end
+with the real Chromium: 800×600 gives a 790×1650 picture at 1:1, a click 1200 px down it lands on
+the link there, Wikipedia's page is 242 KB; `make itest` checks the size asked for.
 
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 
