@@ -929,13 +929,18 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 	sb_adds(s, "</body></html>");
 }
 
-/* the window's page area, for live view's picture (br_live_size) */
+/* the window's page area in CSS px, for live view's picture
+   (br_live_size): the Pi lays the page out at the width EWeb would, and
+   the picture is drawn as EWeb draws a page, a CSS pixel 0.8 of the
+   screen's at 100%, so it fills the window */
 static int32_t live_w, live_h;
 
-void br_live_size(int32_t width, int32_t height)
+void br_live_size(int32_t width, int32_t height, int32_t zoom)
 {
-	live_w = width;
-	live_h = height;
+	if (zoom <= 0)
+		zoom = 1024;
+	live_w = (int32_t) ((int64_t) width * 1024 / zoom);
+	live_h = (int32_t) ((int64_t) height * 1024 / zoom);
 }
 
 void br_live_url(const char *url, char *out, int size)

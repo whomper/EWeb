@@ -70,7 +70,7 @@ int main(void)
 		char live[200];
 		br_live_url("https://news.example/a b#top", live, sizeof live);
 		expect("live view: no size before a window", strcmp(live, "http://webgate/live?url=https%3A%2F%2Fnews.example%2Fa%20b"), 0);
-		br_live_size(784, 520);
+		br_live_size(784, 520, 1024);
 		br_live_url("https://news.example/a b#top", live, sizeof live);
 		expect("live view: the window's size named",
 		       strcmp(live, "http://webgate/live?url=https%3A%2F%2Fnews.example%2Fa%20b&w=784&h=520"), 0);
@@ -80,6 +80,9 @@ int main(void)
 		expect("live view: a short buffer", strcmp(live, "http://webgate/live?w=784&h=520"), 0);
 		br_live_url("https://news.example/a-long-path-that-does-not-fit", live, 60);
 		expect("live view: a long address cut, its size kept", strstr(live, "&w=784&h=520") != NULL, 1);
+		br_live_size(800, 400, 819);
+		br_live_url(NULL, live, sizeof live);
+		expect("live view: the size in CSS pixels", strcmp(live, "http://webgate/live?w=1000&h=500"), 0);
 	}
 	printf("sitetest: %d passed, %d failed\n", passed, failed);
 	return failed != 0;

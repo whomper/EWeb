@@ -1468,7 +1468,20 @@ full screen and sizes it until the tab is that (the bar of a normal window comes
 the first try came out 87 px short, so it tries up to three times), and reports where the tab sits
 on the screen, which webgate adds to each click; the Pi's screen is 1280×3072. Tested end to end
 with the real Chromium: 800×600 gives a 790×1650 picture at 1:1, a click 1200 px down it lands on
-the link there, Wikipedia's page is 242 KB; `make itest` checks the size asked for.
+the link there, Wikipedia's page is 242 KB; `make itest` checks the size asked for. The size EWeb names is in CSS px
+(its device px × 1024 / zoom): EWeb draws a CSS pixel 0.8 of the screen's, so a picture 790 wide
+in device px showed at 632, four fifths of the window; named in CSS px, the Pi lays the page out at
+the width EWeb itself would (1000 for an 800-pixel window), and the picture, drawn as EWeb draws a
+page, fills the window. An image button's `width` and `height` are its size before its file comes,
+as a picture's are (the HTML Standard, 15.4.3; `hints` in `src/doc/doc.c`,
+`tests/layout/pictures.html`), so live view's picture is asked for once, at the size it is shown;
+without them EWeb guessed, and asked again at the right size: a second shot of the Pi's screen.
+**Fully decoded** (Erez, 30 Oct 2026: "no time spent on the ST"): the picture comes as the
+screen's pens, like every picture through the Pi, when webgate honours `X-Gateway-Picture` on
+`/live/shot.jpg` (asked of AERA-Gateway, tested with a stand-in: the pens made at 792×1680, the
+same as EWeb's own decode to the bit, 3 ms to show). Pens are bigger than the JPEG: a byte a
+pixel at 256 colours (1.3 MB for 792×1680), half that at 16, an eighth in mono, against
+140–260 KB of JPEG that the Falcon's DSP would decode in seconds and an ST in minutes.
 
 ## The ST edition, EWEBST.PRG (20 Oct 2026)
 

@@ -409,7 +409,8 @@ static void hints(dnode *n)
 	HINT h;
 	char buf[32];
 	const char *v;
-	int cell = n->tag == T_TD || n->tag == T_TH;
+	int cell = n->tag == T_TD || n->tag == T_TH, pic;
+	const char *t;
 
 	if (n->nattr == 0 && !cell && n->e.name != ha.bdi)
 		return;
@@ -478,17 +479,22 @@ static void hints(dnode *n)
 		    (v = dimension(HA(n, topmargin), buf)) != NULL)
 			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
 	}
-	if (n->tag == T_IMG) {
+	/* an image button is sized as a picture is (the HTML Standard,
+	   15.4.3: its width and height map to the dimension properties, and
+	   hspace and vspace to its margins), so that its size is known before
+	   its file comes: webgate's live view, asked for once at that size */
+	pic = n->tag == T_IMG || (n->tag == T_INPUT && (t = HA(n, type)) != NULL && is(t, "image"));
+	if (pic) {
 		if ((v = dimension(HA(n, hspace), buf)) != NULL)
 			put(&h, "margin-left", v), put(&h, "margin-right", v);
 		if ((v = dimension(HA(n, vspace), buf)) != NULL)
 			put(&h, "margin-top", v), put(&h, "margin-bottom", v);
 	}
-	if (n->tag == T_TABLE || cell || n->tag == T_HR || n->tag == T_IMG || n->e.name == ha.col) {
+	if (n->tag == T_TABLE || cell || n->tag == T_HR || pic || n->e.name == ha.col) {
 		if ((v = dimension(HA(n, width), buf)) != NULL)
 			put(&h, "width", v);
 	}
-	if (n->tag == T_TABLE || cell || n->tag == T_TR || n->tag == T_IMG) {
+	if (n->tag == T_TABLE || cell || n->tag == T_TR || pic) {
 		if ((v = dimension(HA(n, height), buf)) != NULL)
 			put(&h, "height", v);
 	}

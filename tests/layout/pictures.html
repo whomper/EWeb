@@ -31,4 +31,7 @@ media, past a WebP one, and the src when the srcset has nothing better.</p>
 <picture><source type="image/webp" srcset="img/no.webp"><source media="(max-width: 100px)" srcset="img/no.png">
 <source media="(min-width: 200px)" srcset="img/two.png"><img src="img/one.png" alt="picture"></picture>
 <img src="img/four.png" srcset="data:image/gif;base64,R0lGODlhAQABAAAAACw= 1x" width="80" alt="src"></p>
+<!-- an image button's width and height are its size before its file
+     comes (the HTML Standard, 15.4.3), as a picture's are -->
+<p><input type=image width=150 height=75 src="img/not-here.png" alt="button"></p>
 </body></html>

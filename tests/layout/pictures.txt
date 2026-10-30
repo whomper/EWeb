@@ -1,4 +1,4 @@
-page 608 x 596, background ffffff, 56 items, 0 links, title "Pictures chosen and backgrounds"
+page 608 x 672, background ffffff, 57 items, 0 links, title "Pictures chosen and backgrounds"
 background 0,0 608x19 tile 0,0 3x19 across file://./tests/layout/img/stripe.png
 text 6,32 580x17 #000000 sans13 link 0 "Backgrounds: tiled, across the foot, one in a corner, covering, contained and half the width."
 background 6,48 170x50 tile 2,2 6x6 across down file://./tests/layout/img/tile.png
@@ -55,3 +55,4 @@ image 6,550 48x24 link 0 "1x" file://./tests/layout/img/one.png
 image 58,526 96x48 link 0 "by width" file://./tests/layout/img/two.png
 image 158,526 96x48 link 0 "picture" file://./tests/layout/img/two.png
 image 258,542 64x32 link 0 "src" file://./tests/layout/img/four.png
+image 6,590 120x60 link 0 "button" file://./tests/layout/img/not-here.png

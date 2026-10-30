@@ -74,8 +74,17 @@ def snapshots():
     import threading
     import urllib.request
     env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    # the Pi's pens, for live view's picture made as the screen shows it
+    pens = "--pens-socket" in open(WEBGATE).read() and os.access(PENS, os.X_OK)
+    sock = os.path.join(work, "pens2.sock")
+    penssock = None
+    if pens:
+        penssock = subprocess.Popen([sys.executable, os.path.join(HERE, "penssock.py"), sock, PENS],
+                                    stdout=subprocess.PIPE, text=True)
+        pens = penssock.stdout.readline().strip() == "ready"
     gate = subprocess.Popen([sys.executable, WEBGATE, "--port", str(GATE2), "--bind", "127.0.0.1", "--allow-local",
-                             "--cafile", os.path.join(work, "CACERT.PEM"), "--browser", "--browser-port", str(EXT)],
+                             "--cafile", os.path.join(work, "CACERT.PEM"), "--browser", "--browser-port", str(EXT)] +
+                            (["--pens-socket", sock] if pens else []),
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     stop = []
     shots = []          # (width, view width, view height) of each picture asked for
@@ -151,6 +160,14 @@ def snapshots():
             check("the Pi's browser: live view at the window's width, three screens tall", p.returncode == 0
                   and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None
                   and (790, 790, 1650) in shots, out + "asked: %r" % shots)
+        if pens and "live view's picture as pens" in open(WEBGATE).read():
+            # with pens asked for, the screen's own pens: nothing for the
+            # Atari to decode (Erez, 30 Oct 2026)
+            p = subprocess.run([ewrender, "-f", font, "-W", g, "-E", "-Q", "1", "-v", "-d", live + "&w=800&h=600"],
+                               cwd=work, capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            check("the Pi's browser: live view's picture as the screen's pens", p.returncode == 0
+                  and re.search(r"^pens http://webgate/live/shot\.jpg\S* 790x\d+ ", out, re.M) is not None, out)
         if "X-Gateway-Check" in open(WEBGATE).read():
             # Cloudflare's check through the Pi: the page through its
             # browser, then the quick way with the clearance it kept; a
@@ -177,6 +194,9 @@ def snapshots():
         stop.append(1)
         gate.terminate()
         gate.wait(timeout=10)
+        if penssock is not None:
+            penssock.terminate()
+            penssock.wait(timeout=10)
 
 
 def check(name, ok, out):
