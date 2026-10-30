@@ -163,11 +163,13 @@ def snapshots():
         if pens and "live view's picture as pens" in open(WEBGATE).read():
             # with pens asked for, the screen's own pens: nothing for the
             # Atari to decode (Erez, 30 Oct 2026)
-            p = subprocess.run([ewrender, "-f", font, "-W", g, "-E", "-Q", "1", "-v", "-d", live + "&w=800&h=600"],
-                               cwd=work, capture_output=True, text=True, timeout=120)
+            # (a window 800 px wide: 1000 CSS px, the picture shown at 792)
+            p = subprocess.run([ewrender, "-f", font, "-w", "800", "-W", g, "-E", "-Q", "1", "-v", "-d",
+                                live + "&w=1000&h=750"], cwd=work, capture_output=True, text=True, timeout=120)
             out = p.stdout + p.stderr
             check("the Pi's browser: live view's picture as the screen's pens", p.returncode == 0
-                  and re.search(r"^pens http://webgate/live/shot\.jpg\S* 790x\d+ ", out, re.M) is not None, out)
+                  and re.search(r"^picture http://webgate/live/shot\.jpg\S* pens from the Pi at 792x1680 ", out, re.M)
+                  is not None, out)
         if "X-Gateway-Check" in open(WEBGATE).read():
             # Cloudflare's check through the Pi: the page through its
             # browser, then the quick way with the clearance it kept; a

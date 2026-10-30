@@ -1478,8 +1478,8 @@ as a picture's are (the HTML Standard, 15.4.3; `hints` in `src/doc/doc.c`,
 without them EWeb guessed, and asked again at the right size: a second shot of the Pi's screen.
 **Fully decoded** (Erez, 30 Oct 2026: "no time spent on the ST"): the picture comes as the
 screen's pens, like every picture through the Pi, when webgate honours `X-Gateway-Picture` on
-`/live/shot.jpg` (asked of AERA-Gateway, tested with a stand-in: the pens made at 792×1680, the
-same as EWeb's own decode to the bit, 3 ms to show). Pens are bigger than the JPEG: a byte a
+`/live/shot.jpg` (AERA-Gateway 1.17: tested with a stand-in, the pens made at 792×1680, the same
+as EWeb's own decode to the bit, 3 ms to show; `make itest` checks them). Pens are bigger than the JPEG: a byte a
 pixel at 256 colours (1.3 MB for 792×1680), half that at 16, an eighth in mono, against
 140–260 KB of JPEG that the Falcon's DSP would decode in seconds and an ST in minutes.
 

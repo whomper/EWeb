@@ -631,7 +631,8 @@ browser:
   shown in EWeb opened there. The Pi lays the page out as wide as EWeb's
   window, and the picture is three of its screens tall: scroll through it
   in EWeb as through any page; Page down in the row of buttons brings the
-  next three (AERA-Gateway 1.16 or later). A click on the picture is a click there;
+  next three. The Pi sends it ready for your screen, so the Atari has
+  nothing to decode (AERA-Gateway 1.17 or later). A click on the picture is a click there;
   type into the field under it and press Type (or Type and Enter), or use
   the buttons for keys, scrolling and Back. For what a snapshot can't
   do: a login made by scripts, a cookie question, a puzzle. "As a page"
