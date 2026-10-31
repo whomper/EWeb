@@ -254,7 +254,7 @@ int scr_init(void)
 	return bufs((short) scr_h) || bufs(BAND);
 }
 
-int scr_rows(void)
+int scr_band_rows(void)
 {
 	return rows;
 }

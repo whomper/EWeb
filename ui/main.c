@@ -2505,7 +2505,7 @@ int app_main(void)
 	if (strcmp(net_stack(), "none") == 0)
 		status("No network: load STinG to reach web sites (files can be opened).");
 
-	log_event("ready %s %dx%d buf %d heap %ld free %ld", scr_mode(), scr_w, scr_h, scr_rows(), heap_use,
+	log_event("ready %s %dx%d buf %d heap %ld free %ld", scr_mode(), scr_w, scr_h, scr_band_rows(), heap_use,
 		  ram_free());
 	log_event("box bars %d wide, arrows %d, across %d high", pb_width(), pb_arrow_h(), pb_height());	/* (for the rigs) */
 	{

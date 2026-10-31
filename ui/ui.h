@@ -155,7 +155,7 @@ int scr_init(void);			/* 0: a screen EWeb can't draw on */
 void scr_palette(void);			/* PALETTE= changed: EWeb's colours set or TOS's back */
 int scr_exit(void);			/* TOS's colours back (at the end): 1 if EWeb's were on */
 const char *scr_mode(void);		/* "16 colours", "true colour", for the log */
-int scr_rows(void);			/* rows drawn at a time: the screen's, else 32 */
+int scr_band_rows(void);			/* rows drawn at a time: the screen's, else 32 */
 /* the page's part that falls on area (on the screen), the page's point
    (px, py) at area's top left; area must be within the clip set */
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
