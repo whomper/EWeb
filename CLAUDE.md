@@ -211,9 +211,10 @@ hub stay complete, with the evidence.
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
-  when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; `CACHE\EWEB.PAK`
-  and `EWEB.IDX` next to `EWEB.PRG`, the index read when first needed and written at quit, a job's
-  answers added in one write, the pack a ring of the cache's size, each answer tagged),
+  when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; in `CACHE\` next to `EWEB.PRG` a ring of
+  pieces `EWEBnn.PAK` of 4 MB at most, each with its list `EWEBnn.LST`, and the index `EWEB.IDX`
+  of 12 bytes an answer, read when first needed and written at quit with the lists that changed,
+  a job's answers added in one write, each answer tagged),
   used by `fetch()` in `src/browse`. The index, `COOKIES.TXT` and `HISTORY.TXT` are each two
   slots written over in place (`src/net/slots.c`, its tests in `dctest.c`; the rigs read them
   with `tests/net/slots.py`): a new file each quit cost Erez's SD card seconds a file. After changing it: `make test` (`tests/browse/dctest.c`),

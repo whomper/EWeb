@@ -230,6 +230,14 @@ int slot_save(const char *path, const void *data, long len)
 	return 0;
 }
 
+void slot_none(const char *path)
+{
+	int k = find(path, 1);
+	known[k].there[0] = known[k].there[1] = 0;
+	known[k].newer = 1;	/* (so the save goes to NAME) */
+	known[k].gen = 0;
+}
+
 void slot_remove(const char *path)
 {
 	char twin[220];

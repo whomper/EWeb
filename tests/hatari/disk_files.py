@@ -70,10 +70,12 @@ BUDGET = {
     "idle": (0, 0, 0),
     # the cookies, once (p5.html's cookie), its value encrypted: EWEB.KEY
     # looked for, then made; the history, once; EWEB.INF unchanged; the
-    # cache's pack made with what the session brought, in one write, and
-    # its index saved (the three in their twins, COOKIES.TX2, HISTORY.TX2
-    # and EWEB.ID2, the slots none had: made at once)
-    "quit": (1, 5, 0),
+    # cache's first piece EWEB00.PAK made with what the session brought, in
+    # one write, its list EWEB00.LST and the index saved (COOKIES.TX2,
+    # HISTORY.TX2 and EWEB.ID2, the slots none had, and the piece and its
+    # list, known not to be there: made at once; 31 Oct 2026, the cache in
+    # pieces: its list one file more)
+    "quit": (1, 6, 0),
     # the second time with LOG=1 (since 0.44): EWEB.LOG written once a page
     # and its pictures have come (the home page's: tried, then made); the
     # history's two slots

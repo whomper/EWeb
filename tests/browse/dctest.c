@@ -72,12 +72,9 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	snprintf(dir, sizeof dir, "%s/CACHE", argv[1]);
-	snprintf(path, sizeof path, "%s/EWEB.PAK", dir);
-	pf_remove(path);
-	snprintf(path, sizeof path, "%s/EWEB.IDX", dir);
-	pf_remove(path);
 	dc_now = fake_now;
 	dc_dir(dir, 1L << 20);
+	dc_clear();
 
 	/* freshness */
 	put("http://a/1", "Cache-Control: max-age=60\n", "one");
@@ -187,8 +184,21 @@ int main(int argc, char **argv)
 		want("the ring: the newest kept", got("http://e/29", data, NULL) == 1);
 		want("the ring: the oldest written over", got("http://e/0", NULL, NULL) == -1);
 		want("the ring: most of its size in use", bytes <= 64L << 10 && bytes >= 36L << 10);
-		snprintf(path, sizeof path, "%s/EWEB.PAK", dir);
-		want("the ring: the pack no bigger than the cache", pf_size(path) <= 64L << 10);
+		{
+			/* four pieces of a quarter (and a head and a tag) each, no more */
+			long all = 0, most = 0, n;
+			for (i = 0; i < 6; i++) {
+				snprintf(path, sizeof path, "%s/EWEB%02X.PAK", dir, i);
+				n = pf_size(path);
+				if (n > 0) {
+					all += n;
+					most = n > most ? n : most;
+				}
+			}
+			snprintf(path, sizeof path, "%s/EWEB04.PAK", dir);
+			want("the ring: four pieces, none bigger than a quarter", pf_size(path) < 0 &&
+			     most <= (16L << 10) + 24 && all <= (64L << 10) + 96);
+		}
 		dc_close();
 		/* a reset after the ring went round: the index from before names
 		   answers written over since, and none of them is read */
@@ -219,15 +229,20 @@ int main(int argc, char **argv)
 		dc_close();
 	}
 
-	/* a pack that isn't the index's: forgotten */
+	/* pieces that aren't the index's: forgotten */
 	{
-		int h = pf_open(path, PF_UPDATE);
-		want("the pack opened", h >= 0);
-		if (h >= 0) {
-			pf_write(h, "EWDCffffffff", 12);
-			pf_close(h);
+		int h, opened = 0;
+		for (i = 0; i < 4; i++) {
+			snprintf(path, sizeof path, "%s/EWEB%02X.PAK", dir, i);
+			h = pf_open(path, PF_UPDATE);
+			if (h >= 0) {
+				pf_write(h, "EWDCffffffff", 12);
+				pf_close(h);
+				opened++;
+			}
 		}
-		dc_dir(dir, 1L << 20);
+		want("the pieces opened", opened == 4);
+		dc_dir(dir, 64L << 10);
 		{
 			int any = 0;
 			for (i = 0; i < 38; i++) {
@@ -239,6 +254,32 @@ int main(int argc, char **argv)
 		}
 		dc_close();
 	}
+	/* the one pack of before pieces (EWEB.PAK, an index "EWDC 3"):
+	   removed, not read (Erez: no migration, 29 Oct 2026) */
+	{
+		char idx[500];
+		int h;
+		dc_dir(dir, 1L << 20);
+		dc_clear();
+		snprintf(idx, sizeof idx, "%s%cEWEB.IDX", dir, PF_SEP);
+		{
+			static const char old[] = "EWDC 3 0000abcd 100 16\n16 4 0 0 0 0\ttext/html\t\t\t\t\thttp://old/\t\n";
+			slot_save(idx, old, (long) strlen(old));
+		}
+		snprintf(path, sizeof path, "%s%cEWEB.PAK", dir, PF_SEP);
+		h = pf_open(path, PF_WRITE);
+		pf_write(h, "EWDC0000abcd\r\n\r\nTAG.page", 24);
+		pf_close(h);
+		dc_dir(dir, 1L << 20);
+		want("the pack of before: nothing read from it", dc_count(NULL) == 0 && got("http://old/", NULL, NULL) == -1);
+		want("the pack of before: removed", pf_size(path) < 0);
+		put("http://new/1", "Cache-Control: max-age=60\n", "new");
+		dc_close();
+		dc_dir(dir, 1L << 20);
+		want("the pieces after it", got("http://new/1", "new", NULL) == 1);
+		dc_close();
+	}
+
 	/* what the server says about keeping it current (RFC 9111, RFC 8246) */
 	dc_dir(dir, 1L << 20);
 	{

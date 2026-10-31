@@ -2507,7 +2507,7 @@ int app_main(void)
 		int wck = ck_unsaved() ? 3 : 0, whg = hg_unsaved() ? 3 : 0, wfl, wix;
 		dc_unsaved(&pend, &answers);
 		wfl = pend > 0 ? 2 + (int) (pend >> 15) : 0;
-		wix = answers > 0 ? 3 + (int) (answers / 100) : 0;
+		wix = answers > 0 ? 3 + (int) (answers / 400) : 0;	/* (12 bytes an answer) */
 		total = 2 + wck + whg + wfl + wix;
 #define QUIT_STEP(words, weight) (quit_box(words, (int) (done * 1000 / total)), \
 					  q_base = done, q_weight = (weight), done += (weight))

@@ -736,9 +736,14 @@ try:
         r2 = cached(site + "etag.html")
         check("the cache: asked again, a 304", r1[1] == "etag 1" and r2[1] == "etag 1" and
               counts().endswith(" etag=2 304=1"), r1[2] + r2[2] + counts())
-        check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB.PAK")) and
+        # (a ring of pieces EWEBnn.PAK, each with its list EWEBnn.LST, and
+        # the index EWEB.IDX of them all; 31 Oct 2026)
+        check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB00.PAK")) and
               slots.exists(os.path.join(cache, "EWEB.IDX")) and
-              b"/site/cache/fresh.html" in slots.read(os.path.join(cache, "EWEB.IDX")), " ".join(os.listdir(cache)))
+              slots.read(os.path.join(cache, "EWEB.IDX")).startswith(b"EWDC 4 ") and
+              slots.exists(os.path.join(cache, "EWEB00.LST")) and
+              b"/site/cache/fresh.html" in slots.read(os.path.join(cache, "EWEB00.LST")) and
+              not os.path.exists(os.path.join(cache, "EWEB.PAK")), " ".join(os.listdir(cache)))
         # a form sent there with POST: what was kept for it is forgotten
         # (RFC 9111, 4.4), and the next look asks the server
         r1 = cached("-S", "go", site + "post.html")

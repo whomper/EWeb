@@ -11,6 +11,9 @@
 char *slot_load(const char *path, long *len);
 /* written over the other slot: 0, or < 0 (the newer one is left as it was) */
 int slot_save(const char *path, const void *data, long len);
+/* known to be on the disk in neither slot (a file EWeb hasn't made
+   yet): the first save makes NAME at once, without looking for it */
+void slot_none(const char *path);
 /* both slots gone */
 void slot_remove(const char *path);
 /* told how much of a slot_save's data is on the disk after each piece

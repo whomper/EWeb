@@ -1339,6 +1339,28 @@ from the cache it wouldn't go on; since 22 Oct 2026), one with nothing to go by,
 than a quarter of the cache (an eighth until 21 Oct 2026). Back and Forward take a page from it
 however old it is, as browsers do; Reload asks the server again (a 304 when it is unchanged).
 
+**In pieces (31 Oct 2026, your choice of 29 Oct).** GEMDOS finds a place in a file by walking its
+clusters from the start: reading 8 KB from a 100 MB pack took 2 disk commands at 1 MB in, 25 at
+50 MB and 26 to 52 at 99 MB (EmuTOS on a 256 MB FAT16 disk half full, Hatari's IDE trace; your card
+about 48 ms a command); and the one index of a 100 MB cache, about 3,000 answers and 800 KB, was
+read at the first page and written at each quit, with about 1.3 MB of memory for it. Now the cache
+is a ring of pieces, `CACHE\EWEB00.PAK`, `EWEB01.PAK`... (a quarter of the cache each, 4 MB at
+most: 25 for 100 MB), each with its list `EWEBnn.LST` (two slots; an answer's address, type,
+dates and validators); `EWEB.IDX` (two slots) holds 12 bytes an answer: its key's hash, its piece,
+place and length. A job's answers go in one write into the current piece; when the next wouldn't
+fit, the next piece is written over from its start and what it held forgotten. A piece's list is
+read when one of its answers is first asked for; quit writes the lists that changed (the piece
+being written, and one whose answer a 304 made fresh) and the index. Measured with 3,200 answers of
+32,000 bytes in a 100 MB cache (`dcache.c` on the host): the index 38 KB, a list 26 KB, no file
+longer than 4 MB, about 150 KB of memory for the index. Each piece's head carries a number new
+each time it is begun, so an index or a list from before a reset doesn't read another piece; a
+piece EWeb knows isn't there (a new cache) is made at once (`slot_none` for its list: no look that
+fails; `make hatarifiles`'s quit: one file more, the list). No migration (your decision): an old
+`EWEB.PAK` and its index are removed the first time, and the cache starts again. A picture from the
+Pi as the screen's pens is kept once, its answer (`img.c` keeps no copy of pens). `dctest`: a ring
+of four pieces, pieces from another index, the pack of before removed. What follows is the cache as
+it was before, one pack; the rules for what is kept are the same.
+
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
 `CACHE\EWEB.IDX` the index (and `EWEB.ID2`, its other slot: Files written over in place), read the
 first time the cache is needed and written at quit.

@@ -81,7 +81,7 @@ own fonts.
   only, and never on a page whose scripts run); the newest 1000 kept in
   `HISTORY.TXT` (written once, at quit); Options > Forget history.
 - **A disk cache**, as HTTP has browsers keep one: pages, stylesheets and
-  pictures kept in one pack (`CACHE\EWEB.PAK`) from one run to the next,
+  pictures kept in a ring of 4 MB pieces (`CACHE\`) from one run to the next,
   asked again with their ETag or date when they say so, and pictures kept
   decoded for the screen (a page of pictures in a quarter of a second
   instead of twenty); a kept page shown when its site can't be reached;

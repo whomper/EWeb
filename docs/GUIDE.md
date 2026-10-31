@@ -55,7 +55,7 @@ SIGS.DAT      secure sites: certificate checks remembered
 COOKIES.TXT   cookies kept from one day to the next (EWeb writes it)
 EWEB.KEY      the key their values are encrypted with (EWeb writes it)
 BOOKMARK.HTM  your bookmarks (EWeb writes it)
-CACHE\        the disk cache: EWEB.PAK and EWEB.IDX (EWeb writes them)
+CACHE\        the disk cache: EWEB00.PAK... and their lists, EWEB.IDX (EWeb writes them)
 CRASH.LOG     what happened, if EWeb ever crashes
 ```
 

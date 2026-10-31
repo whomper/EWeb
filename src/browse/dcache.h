@@ -6,18 +6,16 @@
  * browser keep it (RFC 9111): fresh for as long as the answer said,
  * then asked again with its ETag or date, a 304 keeping what is there.
  *
- * On the disk (the guidelines' 6.5): one pack, CACHE\EWEB.PAK, the
- * answers one after the other, and its index, CACHE\EWEB.IDX, read in one
- * open the first time the cache is needed and written at quit. What comes
- * is gathered in memory and added to the pack in one write when a
- * sixteenth of the cache has gathered, or at quit (a reset loses only
- * what is fetched again); the pack is opened when a job first reads from
- * it, and closed when the job ends. The pack is a ring of the cache's
- * size: a write that wouldn't fit goes back to its start, and what it
- * lands on is forgotten, so quit writes only what has gathered and the
- * index. The pack and the index carry the same number, so an index from
- * before a reset doesn't read another pack, and each answer in the pack
- * its tag, so that one written over since isn't read.
+ * On the disk (the guidelines' 6.5): a ring of pieces, CACHE\EWEBnn.PAK
+ * (4 MB at most), each with its list, and an index of them all,
+ * CACHE\EWEB.IDX, read the first time the cache is needed and written at
+ * quit (dcache.c). What comes is gathered in memory and added to the
+ * current piece in one write when a sixteenth of the cache (a megabyte
+ * at most) has gathered, or at quit (a reset loses only what is fetched
+ * again); a piece is opened when a job first reads from it, and closed
+ * when the job ends. When the next answer wouldn't fit, the next piece is
+ * begun and what it held forgotten, so quit writes only what has
+ * gathered, the lists that changed and the index.
  */
 #ifndef DCACHE_H
 #define DCACHE_H
