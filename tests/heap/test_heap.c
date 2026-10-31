@@ -397,6 +397,37 @@ static void case_trim(void)
 
 short _is_acc;
 
+/* heap_grain (ClaudeST): every block what is needed, in 16 KB steps, not
+   512 KB or a quarter of what is free; a dialog's screen taken and let go
+   goes back to GEMDOS, the first block stays as small as it was */
+static void case_grain(void)
+{
+	void *keep, *big, *more;
+	long back, nfree;
+	pool_new(4L << 20);
+	heap_grain = 16384;
+	keep = heap_malloc(2000);
+	check(keep != 0 && ngrants == 1 && grants[0] == 16384, "grain: 2000 bytes take one 16 KB block");
+	more = heap_malloc(10000);
+	check(more != 0 && ngrants == 1, "grain: what fits in the first block goes there");
+	big = heap_malloc(153600);	/* a Falcon's 16-colour screen */
+	check(big != 0 && ngrants == 2 && grants[1] == 163840, "grain: 150 KB take 160 KB, not 512");
+	heap_free(big);
+	back = heap_trim();
+	check(back == 163840 && nfreed == 1 && heap_tt + heap_st == 16384, "grain: the screen's block back to GEMDOS");
+	heap_free(more);
+	heap_free(keep);
+	check(heap_trim() == 0 && heap_check(&nfree) >= 0 && nfree == 1, "grain: the first block stays");
+	check(heap_check(0) >= 0, "grain: checks out");
+	/* memory short (no 32 KB block free): exactly what is needed, as
+	   without heap_grain, not "out of memory" */
+	cap = 30000;
+	more = heap_malloc(20000);	/* more than the first block holds */
+	check(more != 0 && grants[ngrants - 1] < 32768 && grants[ngrants - 1] >= 20000,
+	      "grain: memory short: what is needed, not 32 KB");
+	check(heap_check(0) >= 0, "grain: short: checks out");
+}
+
 /* an accessory's malloc before its heap_add: 16 KB steps, not 512 KB */
 static void case_accearly(void)
 {
@@ -771,6 +802,8 @@ int main(int argc, char **argv)
 		case_frag();
 	else if (!strcmp(c, "accearly"))
 		case_accearly();
+	else if (!strcmp(c, "grain"))
+		case_grain();
 	else if (!strcmp(c, "limited"))
 		case_limited();
 	else if (!strcmp(c, "tos1"))
