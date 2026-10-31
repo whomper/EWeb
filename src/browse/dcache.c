@@ -100,8 +100,14 @@ static int pak_wo;			/* made this job, open for writing only: opened again to re
 static int changed;			/* the index to be written */
 static unsigned long seed;
 
-static void flush(void);
+static void flush_some(long limit);
+#define flush() flush_some(0)
 void (*dc_progress)(long done, long total);
+/* how much gathers in memory before it is written while a page's parts
+   come (dc_hold); the rest is written a step at a time when EWeb is idle
+   (dc_write_step) */
+static long hold_max = 1L << 20;
+static int writing;		/* dc_write_step's under way: written to the end */
 #define WRITE_STEP 32768L	/* a long write in pieces, dc_progress told after each */
 
 static void put32(char *p, unsigned long v)
@@ -766,9 +772,11 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 	e->len = len;
 	pending += len;
 	changed = 1;
-	/* a sixteenth of the cache gathered, a megabyte at most (an ST's
-	   memory): into the ring now */
-	if (pending >= max_size / 16 || pending >= (1L << 20))
+	/* held while the page's parts come (a write meanwhile stopped the
+	   pictures' download: Erez's Falcon on yaary.music, 31 Oct 2026),
+	   written at idle (dc_write_step); into the ring now only when what
+	   has gathered is more than the memory may hold */
+	if (pending >= hold_max)
 		flush();
 }
 
@@ -852,7 +860,7 @@ void dc_put_own(const char *key, const char *what, const char *data, long len)
 	e->len = len;
 	pending += len;
 	changed = 1;
-	if (pending >= max_size / 16 || pending >= (1L << 20))
+	if (pending >= hold_max)
 		flush();
 }
 
@@ -940,10 +948,11 @@ static int write_told(const char *buf, long len)
    holds in one write, then the next piece begun (what it held forgotten)
    for the rest. A piece's list is read first, so that it can be written
    whole at quit. */
-static void flush(void)
+static void flush_some(long limit)
 {
 	DCE *pend;
-	int np = 0, i, k;
+	int np = 0, i, k, bad = 0;
+	long wrote = 0;
 	if (pending <= 0)
 		return;
 	/* the answers waiting taken out, in the order they came */
@@ -963,13 +972,14 @@ static void flush(void)
 	pending = 0;
 	changed = 1;
 	k = 0;
-	while (k < np) {
+	while (k < np && (limit <= 0 || wrote < limit)) {
 		long sum = 0, o;
 		int j;
 		char *buf;
 		if (!fresh_piece[cur])
 			load_list(cur);
-		for (j = k; j < np && at + sum + TAG + pend[j].len <= piece_size; j++)
+		for (j = k; j < np && at + sum + TAG + pend[j].len <= piece_size &&
+		     (limit <= 0 || j == k || wrote + sum + TAG + pend[j].len <= limit); j++)
 			sum += TAG + pend[j].len;
 		if (j == k) {
 			/* it doesn't fit: the next piece */
@@ -982,6 +992,7 @@ static void flush(void)
 		buf = malloc((size_t) sum);
 		if (buf == NULL || !open_piece(cur, 1) || pf_seek(pak, at) != at) {
 			free(buf);
+			bad = 1;
 			break;
 		}
 		for (o = 0, i = k; i < j; i++) {
@@ -992,6 +1003,7 @@ static void flush(void)
 		}
 		if (!write_told(buf, sum)) {
 			free(buf);
+			bad = 1;
 			break;
 		}
 		free(buf);
@@ -1003,17 +1015,51 @@ static void flush(void)
 			pend[i].mem = NULL;
 		}
 		dirty[cur] = 1;
+		wrote += sum;
 		k = j;
 	}
-	/* back with the rest; what the disk wouldn't take let go */
+	/* back with the rest; what the disk wouldn't take let go, what a
+	   step left for the next kept */
 	for (i = 0; i < np; i++) {
-		if (pend[i].off < 0) {
+		if (pend[i].off < 0 && (limit <= 0 || bad)) {
 			ent_free(&pend[i]);
 			continue;
 		}
+		if (pend[i].off < 0)
+			pending += pend[i].len;
 		ent[nent++] = pend[i];
 	}
 	free(pend);
+}
+
+void dc_hold(long bytes)
+{
+	hold_max = bytes < (1L << 20) ? 1L << 20 : bytes;
+}
+
+/* written at idle once this much has gathered (a sixteenth of the cache,
+   a megabyte at most); less stays in memory until quit, and a few pages
+   touch no file (the guidelines' 6.5) */
+static long idle_min(void)
+{
+	return max_size / 16 < (1L << 20) ? max_size / 16 : 1L << 20;
+}
+
+int dc_write_due(void)
+{
+	return loaded && dir[0] && pending > 0 && (writing || pending >= idle_min());
+}
+
+void dc_write_step(void)
+{
+	if (!dc_write_due())
+		return;
+	writing = 1;		/* (begun: on to the end, below the mark too) */
+	flush_some(64L << 10);
+	if (pending <= 0) {
+		writing = 0;
+		close_pak();
+	}
 }
 
 void dc_job_end(void)

@@ -69,6 +69,14 @@ long dc_own_max(void);
 /* the end of a job (a page and its stylesheets, a page's pictures): the
    pack closed */
 void dc_job_end(void);
+/* answers are kept in memory as they come and written later, a step at a
+   time when EWeb is idle: dc_write_due says whether any wait,
+   dc_write_step writes the next (about 64 KB, one answer at least); until
+   bytes have gathered (at least 1 MB, dc_hold), when they are all written
+   at once */
+void dc_hold(long bytes);
+int dc_write_due(void);
+void dc_write_step(void);
 
 /* quit: the job ended, the pack written again if it must be, the index
    written; the memory let go */

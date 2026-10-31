@@ -509,6 +509,8 @@ static void log_start(int on)
 	}
 }
 
+static long ram_free(void);
+
 static void cache_open(void)
 {
 	char dir[256];
@@ -519,6 +521,12 @@ static void cache_open(void)
 	}
 	path_join(dir, sizeof dir, opt.workdir, "CACHE");
 	dc_dir(dir, mb << 20);
+	/* what is fetched held in memory while a page's parts come, written
+	   when EWeb is idle: a quarter of the memory free, 1 to 8 MB */
+	{
+		long hold = ram_free() / 4;
+		dc_hold(hold > (8L << 20) ? 8L << 20 : hold);
+	}
 }
 
 /* the text ends with an empty line */
@@ -2524,7 +2532,7 @@ int app_main(void)
 		int more = !loading && pictures_window() != NULL;
 		long due = loading || cur->iconified ? -1 : br_js_due(&br);
 		long rdue = refresh_due();
-		int rib, drew;
+		int rib, drew, wr;
 		short wait;
 		if (rdue >= 0 && (due < 0 || rdue < due))
 			due = rdue;	/* the page's refresh comes before its scripts' next timer */
@@ -2534,7 +2542,10 @@ int app_main(void)
 		   that the AES's screen manager has its turn too (a menu dropped,
 		   a click on the window's arrows or track; with none it seldom
 		   got the screen while the slices went on) */
-		wait = more ? 0 : win_due() ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
+		/* the cache's answers, written a step at a time when nothing
+		   else is under way (not while a page or its pictures come) */
+		wr = !more && !loading && dc_write_due();
+		wait = more ? 0 : win_due() || wr ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
@@ -2561,6 +2572,8 @@ int app_main(void)
 		if ((which & MU_TIMER) && !quit && !drew && !loading && br_js_due(&br) == 0)
 			js_timers();
 #endif
+		if ((which & MU_TIMER) && !quit && !drew && wr && !win_due() && !loading)
+			dc_write_step();
 		if ((which & MU_TIMER) && !quit && !drew && more && pictures_window() != NULL) {
 			ewin *was = cur;
 			win_use(pictures_window());

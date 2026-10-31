@@ -1364,9 +1364,14 @@ it was before, one pack; the rules for what is kept are the same.
 On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after the other and
 `CACHE\EWEB.IDX` the index (and `EWEB.ID2`, its other slot: Files written over in place), read the
 first time the cache is needed and written at quit.
-What comes is gathered in memory and added to the pack in one write when a sixteenth of the cache
-has gathered, or at quit: browsing page after page opens nothing (a reset loses only what is
-fetched again). The pack is opened when a job (a page and its stylesheets, a page's pictures)
+What comes is gathered in memory. Once a sixteenth of the cache (1 MB at most) has gathered, it
+is added to the pack when EWeb is idle, about 64 KB a turn of the main loop (`dc_write_step`), not
+while a page or its pictures come; it is written at once only past what memory may hold (`dc_hold`:
+a quarter of the RAM free at the start, 1 to 8 MB). Less waits for quit: browsing page after page
+opens nothing (a reset loses only what is fetched again). An answer written goes from memory (its
+index entry stays), and the quit writes only what is still waiting. (Until 31 Oct 2026 the 1 MB was
+written as it filled, in one stretch: on Erez's Falcon the disk stopped yaary.music's pictures'
+download each time, a page of photos filling it every few pictures with their decoded pens.) The pack is opened when a job (a page and its stylesheets, a page's pictures)
 first reads from it, and closed when the job ends; its head is checked against the index the first
 time a run opens it. The pack's first bytes and the index carry the same number, so an index from
 before a reset doesn't read another pack; what a job added after the last quit is lost then, and

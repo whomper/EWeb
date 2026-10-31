@@ -376,6 +376,50 @@ int main(int argc, char **argv)
 		want("slots: both gone", pf_size(p) < 0 && pf_size(twin) < 0);
 	}
 
+	/* a page's many pictures: held in memory as they come (dc_hold), none
+	   written, then written a step at a time when idle (dc_write_step),
+	   each read back from the pack; and a few, under the mark, wait for
+	   quit */
+	{
+		char key[64], *pic = malloc(100001);
+		long w0, n, k, steps = 0;
+		int ok = 1;
+		dc_dir(dir, 4L << 20);
+		dc_clear();
+		dc_hold(8L << 20);
+		memset(pic, 'p', 100000);
+		pic[100000] = 0;
+		for (k = 0; k < 20; k++) {
+			snprintf(key, sizeof key, "http://p/%ld.jpg", k);
+			pic[0] = (char) ('a' + k);
+			put(key, "Cache-Control: max-age=1000\n", pic);
+		}
+		dc_unsaved(&w0, &n);
+		snprintf(path, sizeof path, "%s%cEWEB00.PAK", dir, PF_SEP);
+		want("held: 2 MB of pictures, nothing written while they come", w0 >= 2000000L &&
+		     pf_size(path) < 0 && dc_write_due());
+		while (dc_write_due() && steps < 100) {
+			dc_write_step();
+			steps++;
+		}
+		dc_unsaved(&w0, &n);
+		want("then written at idle, a step at a time", w0 == 0 && steps >= 20 && steps < 40);
+		for (k = 0; k < 20; k++) {
+			snprintf(key, sizeof key, "http://p/%ld.jpg", k);
+			pic[0] = (char) ('a' + k);
+			ok &= got(key, pic, NULL) == 1;
+		}
+		want("each read back from the pack", ok);
+		put("http://p/small", "Cache-Control: max-age=1000\n", "small");
+		want("a little, under the mark: kept in memory, not due", !dc_write_due());
+		dc_close();
+		dc_dir(dir, 4L << 20);
+		want("and at quit into the pack: there at the next start",
+		     got("http://p/small", "small", NULL) == 1 && got("http://p/3.jpg", NULL, NULL) == 1);
+		dc_hold(1L << 20);
+		free(pic);
+	}
+
 	dc_dir(dir, 1L << 20);
 	dc_clear();
 	printf("disk cache: %d checks, %d failed\n", checks, fails);
