@@ -66,12 +66,40 @@ void scr_rows(short h, const short *p);
    writing mode MD_REPLACE. The caller hides the mouse, as for the VDI */
 void scr_xor(short h, const short *p);
 
+/* the box p (x1, y1, x2, y2) filled solid in pen (vr_recfl in MD_REPLACE,
+   solid, that pen): pens 0 and 1 (white, black) by the CPU on TOS's screen
+   (where text_plain goes into it), cut to the clip text_clip set, the
+   time of a row's fill on an 8 MHz ST some 2.4 ms by the VDI (EFTP, 31
+   Oct 2026); other pens, and elsewhere, the VDI. Either way the VDI's
+   writing mode and fill are left as they were. The caller hides the
+   mouse */
+void scr_fill(short h, const short *p, short pen);
+
+/* the box p filled with a 16 by 16 pattern in pens 1 (its set pixels) and
+   0, as vr_recfl in MD_REPLACE with a fill pattern in pen 1 puts it: row
+   y's sixteen pixels pat[y & 15], from the left of each 16-pixel group of
+   the screen (the VDI's patterns lie on the screen's own grid). By the CPU
+   on TOS's screen, where text_plain goes into it, cut to the clip
+   text_clip set; 0, and nothing drawn, elsewhere (the caller uses the
+   VDI). panebar.c's track (a whole bar 76 ms of an 8 MHz ST by the AES).
+   The caller hides the mouse */
+int scr_pattern(short h, const short *p, const unsigned short *pat);
+
 /* the tests' and the logs': 1 text_plain goes into the screen, 0 not
    checked yet; below 0 it is text_n: -1 not the system font or NVDI, or
    the first draw's check failed, -2 a cell neither 8x8 nor 8x16, -3 no
    such font in Line-A, -4 its header not as TOS's, -5 not 8 pixels a
    glyph, -6 a screen not of interleaved planes */
 int text_plain_state(void);
+
+/* the clip text_clip or text_noclip set last, given to the VDI again
+   (after something drew with a clip of its own: panebar.c) */
+void text_reclip(short h);
+
+/* TOS's screen as text_plain writes into it, while text_plain_state() is
+   1: its address now (Logbase), bytes a line, planes, width and height;
+   0 otherwise */
+unsigned char *scr_at(long *bpl, short *planes, short *w, short *h);
 
 /* bold (fx 1) and underline (8) on the n characters s of plain text just
    drawn at (x, y) by text_n in pen colour, when text_fx_fast(fx, mode)
