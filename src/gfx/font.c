@@ -152,11 +152,40 @@ int font_init(const char *path)
 	{
 		/* each: code << 16 | block << 12 | place (a block holds fewer than 4096) */
 		long k = 0, at = ncodes;
+		int sorted = 1;
 		for (b = 1; b < nblocks; b++)
-			for (i = 0; i < bcount[b]; i++, at++)
-				all[k++] = (uint32_t) be16(dir + 2 * at) << 16 | (uint32_t) b << 12 | (uint32_t) i;
-		if (nx)
+			for (i = 0; i < bcount[b]; i++, at++) {
+				all[k] = (uint32_t) be16(dir + 2 * at) << 16 | (uint32_t) b << 12 | (uint32_t) i;
+				if (i > 0 && all[k] >> 16 <= all[k - 1] >> 16)
+					sorted = 0;
+				k++;
+			}
+		if (nx && sorted) {
+			/* each block's codes in order (mkfont.py's): merged, not
+			   sorted (qsort's 9000 calls were most of an 8 MHz ST's
+			   0.73 s in font_init) */
+			uint32_t *m = malloc(nx * sizeof *m);
+			long from[FONT_BLOCKS], to[FONT_BLOCKS], n;
+			if (m == NULL) {
+				qsort(all, nx, sizeof *all, by_code);
+			} else {
+				for (b = 1, at = 0; b < nblocks; b++) {
+					from[b] = at;
+					to[b] = at += bcount[b];
+				}
+				for (n = 0; n < nx; n++) {
+					int best = 0;
+					for (b = 1; b < nblocks; b++)
+						if (from[b] < to[b] && (best == 0 || all[from[b]] < all[from[best]]))
+							best = b;
+					m[n] = all[from[best]++];
+				}
+				memcpy(all, m, nx * sizeof *m);
+				free(m);
+			}
+		} else if (nx) {
 			qsort(all, nx, sizeof *all, by_code);
+		}
 		for (k = 0; k < nx; k++) {
 			xcodes[k] = (uint16_t) (all[k] >> 16);
 			xblk[k] = (uint8_t) (all[k] >> 12 & 15);

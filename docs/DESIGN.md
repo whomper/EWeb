@@ -4026,6 +4026,67 @@ page usable meanwhile). Cycle-exact in Hatari (`tests/bench/picbench.py`), decod
 | testorig.png, 227 x 149 RGB | 705 / 710 | 4720 / 4555 |
 | a 400 x 300 RGB PNG shown 200 x 150 | 3940 / 3475 | 36670 / 27220 |
 
+**The speed rules for 1.0: the page drawn in slices (31 Oct 2026).** The rig of 31 Oct (0.55) had
+8 actions over on `Falcon-4:16` and all 10 on `ST:mono`, the worst a page's window drawn whole: 1.3 s
+in one stretch on the stock Falcon (the canvas 0.8 s, the copy to the screen 0.3), 3 to 4 s on the
+ST, at a page shown, a page scrolled, the start.
+
+- **Slices.** The page's part of a redraw is the window's due rectangle (`ewin.due`, `draw_due` in
+  `ui/win.c`), drawn from its top about 40 ms at a time after the event that began the stretch
+  (`ui_event_at`), in bands of at least 16 rows (a line of text: thinner bands went through every
+  line they crossed again), as many as the last bands say fit; the main loop draws the rest a turn
+  at a time, with a moment's wait between (1 ms: so that TOS's screen manager drops a menu and
+  takes a click on the window's arrows; without it they were lost while the slices went on), and
+  the idle loop while a page loads. A scroll's copy moves what is due with it; what a scroll
+  brings in is drawn at the next turn, so a line scrolled is its copy. A dialog's loop and a held
+  button draw whole (`win_sync`, `sync_draw`). What the user sees is as before, band by band, but a
+  key, a click or Esc is answered between the bands.
+- **A band's own cost.** A band looked at every item of the 256-row strips it was in, and found
+  each one's place in the order drawn by a search: the strips are 64 rows now
+  (`PAGE_STRIP`), a lone strip's list is walked as it is, and the place is stepped on from the
+  last (news page, its top 400 rows in 2-row bands: 24,800 to 15,900 68030 instructions a band).
+- **Turns where there were none.** The UA sheet (0.31 s of the stock Falcon at the first page) and
+  a sheet's pieces (1 KB on the ST: 4 KB took it 0.33 s) are read with `ec_poll`'s turns; a
+  document's finishing asks every 32 elements (0.79 s of the ST); the layout every 64 words too;
+  a picture's pens are made in the pictures' step, with turns (they were made as the window drew:
+  0.2 to 0.27 s); and a progressive JPEG's scans (1.2 s, `jpeg_read_coefficients`) through
+  libjpeg's progress hook (AERA-Atari's `pic.c`, sent to the hub).
+- **Work at every turn.** `br_pictures_pending` walked every item of the page at each turn of the
+  main loop (25 ms on the news page): the page's picture items are found once a layout
+  (`pics_of`). The sliders are set only when they change (each set draws one again). A letter
+  typed at the address's end draws only its cell. `font_init` merges the blocks' codes, already
+  in order, where it sorted them (the ST's start 0.73 s to under 0.1).
+- **The start** is measured to the window drawn ("EWEB window drawn": its toolbar, bars and the
+  page's white), the guidelines' "its window drawn"; the home page after it is made and shown as
+  any page, a load. Before, the rig ran the start to the home page shown.
+
+The rig on Erez's TOS (ms, the guidelines' time in brackets; a load is held to Esc's 100):
+
+| action | Falcon-4:16, 0.55 | now | ST:mono, 0.55 | now |
+|---|---|---|---|---|
+| the program started, window drawn (2000) | 3435* | 455 | 13840* | 1735 |
+| the home page shown | 720 | 305 | ** | 855 |
+| the sample page loaded | 485 | 290 | ** | 1180 |
+| the news page loaded | 1530 | 275 | 6190 | 1140 |
+| a letter typed in the address (50) | 20 | <20 | ** | 65 |
+| a line scrolled (50) | 300 | 75 | 4590 | 295 |
+| a page scrolled (150) | 1125 | 105 | 3305 | 275 |
+| Settings opened (150) | 190 | 155 | ** | 450 |
+| Settings closed: what it uncovers (300) | 105 | 90 | ** | 135 |
+| the pictures' page loaded | 1220 | 340 | ** | 1905 |
+
+(*: to the home page shown, as the rig measured it then; **: not kept from that run.)
+
+Still over, and why: on the stock Falcon a band of 16 rows of the news page is 60 to 75 ms (the
+canvas 40, the copy to the screen 15 to 25), so the rows a line scroll brings in come in slices
+over its 50 ms though its own stretch (the copy) is 45 to 50; the loads' longest stretches (275 to
+340 ms) are parts of the page's making and a picture's that still have no turn inside; Settings is
+the AES drawing the dialog (135 of its 155 ms). On the ST a line scrolled can't be 50 ms with a
+window across the screen: TOS 1.04 takes 55 ms to set the slider and 50 to copy the window before
+EWeb draws anything, and a band of 16 rows of the news page is about 250 ms (the window in 3.9
+s, 3.3 in bands of 32 but slices of 450 ms; 3.5 s in one stretch before); its loads' stretches are
+0.85 to 1.9 s (a picture's TJpgDec row of blocks, a style or layout step).
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.

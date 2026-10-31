@@ -3201,9 +3201,28 @@ void cv_page(canvas *c, const page *p)
 	if (s0 > s1)
 		return;
 	{
-		long at[64], last = -1, sg = -1;
+		long at[64], last = -1, sg = -1, top = c->oy, bottom = c->oy + c->h;
 		int k, ns;
 		ns = (int) (s1 - s0 + 1);
+		if (ns == 1) {
+			/* one strip: its list, in the order drawn, as it is */
+			long j;
+			for (j = p->strip[s0]; j < p->strip[s0 + 1]; j++) {
+				long r = p->sidx[j], i = r;
+				const dl_item *d;
+				if (p->seg != NULL) {
+					if (sg < 0)
+						sg = seg_of(p, r);
+					while (sg + 1 < p->nseg && p->seg[sg + 1].r0 <= r)
+						sg++;
+					i = p->seg[sg].k0 + r - p->seg[sg].r0;
+				}
+				d = &p->items[i];
+				if (i != cbg && d->y < bottom && d->y + d->h > top)
+					item(c, p, d);
+			}
+			return;
+		}
 		for (k = 0; k < ns; k++)
 			at[k] = p->strip[s0 + k];
 		for (;;) {
@@ -3229,7 +3248,7 @@ void cv_page(canvas *c, const page *p)
 						sg++;
 					k = p->seg[sg].k0 + best - p->seg[sg].r0;
 				}
-				if (k != cbg)
+				if (k != cbg && p->items[k].y < bottom && p->items[k].y + p->items[k].h > top)
 					item(c, p, &p->items[k]);
 			}
 			last = best;

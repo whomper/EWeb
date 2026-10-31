@@ -635,9 +635,12 @@ static void draw_page(GRECT *clip)
    scroll meanwhile moves what is drawn and what is due with it. */
 
 #define SLICE_MS 40
+#define BAND_MIN 16	/* (the news page's window: an 8 MHz ST draws it in 3.9 s so, 3.3 in
+			   bands of 32, whose slices are 450 ms; 3.5 s in one, before) */
 
 
 static int sync_draw;		/* a box scrolled by a held button: drawn whole each step */
+static int defer_draw;		/* a scroll: what came in drawn at the next turn, not in its stretch */
 static long row_cost = 256;	/* a row's ms, times 256: how many rows a slice takes */
 
 /* the page's part of area (the screen's) added to the window's due */
@@ -693,27 +696,23 @@ static void draw_due(void)
 	graf_mouse(M_OFF, 0);
 	font_sys_push();
 	/* the slice ends SLICE_MS after the event that began the stretch
-	   (what the event did before counts: a scroll's copy, 30 ms of a
-	   stock Falcon's line); when that time is spent, the next turn draws
-	   it (the main loop's at once). Drawn from a dialog's loop or a held
-	   button's (no event of the main loop's for a while): a slice of its
-	   own */
+	   (what the event did before counts), a few rows at least; drawn
+	   from a dialog's loop or a held button's (no event of the main
+	   loop's for a while): a slice of its own */
 	{
 		long since = (long) (t0 - ui_event_at);
-		if (since < 0 || since > 500)
-			end = t0 + SLICE_MS;
-		else if (since >= SLICE_MS - 4 && !sync_draw)
-			return;
-		else
-			end = ui_event_at + SLICE_MS;
+		end = since < 0 || since > 500 ? t0 + SLICE_MS : ui_event_at + SLICE_MS;
 	}
 	while (cur->due.w > 0 && cur->due.h > 0) {
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
 		long left = (long) (end - b0), n;
 		n = (left > 4 ? left : 4) * 256 / (row_cost > 0 ? row_cost : 1);
-		if (n < 2)
-			n = 2;
+		/* (16 rows at least, a line of text: thinner bands each went
+		   through every line they crossed again, its letters looked up
+		   and clipped, eight times over at 2 rows) */
+		if (n < BAND_MIN)
+			n = BAND_MIN;
 		band.x = (short) (cur->r_page.x + cur->due.x);
 		band.y = (short) (cur->r_page.y + cur->due.y);
 		band.w = cur->due.w;
@@ -734,7 +733,7 @@ static void draw_due(void)
 		/* what a row took, as an average of the last bands' (a tick
 		   is 5 ms: bands of less are counted with the next) */
 		dt = pf_ms() - b0;
-		if (dt >= 10 || band.h >= 64) {
+		if (band.h >= BAND_MIN && (dt >= 10 || band.h >= 64)) {
 			/* (more at once, so that the next slice isn't long too;
 			   less as an average) */
 			long c = (long) (dt * 256 / band.h);
@@ -813,7 +812,8 @@ static void redraw(const GRECT *area, int parts)
 		graf_mouse(M_ON, 0);
 		wind_update(END_UPDATE);
 	}
-	draw_due();
+	if (!defer_draw || sync_draw)
+		draw_due();
 }
 
 void win_redraw(const GRECT *area)
@@ -965,10 +965,17 @@ void win_scroll_to(int32_t y)
 		wind_update(END_UPDATE);
 		due_moved(0, -dy);	/* (what was still to draw moved too) */
 		due_add(&fresh);
-		draw_due();
+		/* the rows that came in at the main loop's next turn (a band
+		   of a few rows took a stock Falcon 25 ms on the news page, an
+		   ST 120: the key's stretch is the copy, 30 and 50 ms); now
+		   in a loop of its own (a drag that scrolls) */
+		if (sync_draw)
+			draw_due();
 		return;
 	}
+	defer_draw++;
 	win_redraw_page();
+	defer_draw--;
 }
 
 void win_scroll_by(int32_t dy)
@@ -1022,10 +1029,13 @@ static void scroll_x_to(int32_t x)
 		wind_update(END_UPDATE);
 		due_moved(-dx, 0);
 		due_add(&fresh);
-		draw_due();
+		if (sync_draw)
+			draw_due();
 		return;
 	}
+	defer_draw++;
 	win_redraw_page();
+	defer_draw--;
 }
 
 static int32_t col_step(void)
@@ -2227,8 +2237,11 @@ static int select_text(short mx, short my, short clicks, short kstate)
 			step = -line_step();
 		else if (y >= cur->r_page.y + cur->r_page.h)
 			step = line_step();
-		if (step != 0)
+		if (step != 0) {
+			sync_draw++;	/* (in this loop: drawn now, not at the main loop's turn) */
 			win_scroll_to(cur->top + step);	/* (drawn again, the selection too) */
+			sync_draw--;
+		}
 		if (x != lx || y != ly || step != 0) {
 			lx = x;
 			ly = y;

@@ -1117,6 +1117,7 @@ static void saved(const char *path, long len)
 
 static void save_file(const char *url, const char *given);
 static void to_window(const char *url, const char *name);
+static void pictures_end(void);
 
 /* what a load came to, on the screen */
 /* the page loading's preview is ready: drawn in place of the page shown */
@@ -1800,8 +1801,15 @@ void command(int cmd)
 		   conn_stop stays clear, as the page's scripts' requests need it */
 		if (loading)
 			conn_stop = 1;
-		if (br_pictures_pending(&br))
+		if (br_pictures_pending(&br)) {
 			br_pictures_stop(&br);
+			if (!loading && !br_pictures_pending(&br)) {
+				pictures_end();	/* (said here: no picture's step comes after) */
+				if (br_refresh_due(&br) >= 0)
+					refresh_stop(0);
+				break;
+			}
+		}
 		if (br_refresh_due(&br) >= 0)
 			refresh_stop(1);
 		else
@@ -2142,6 +2150,21 @@ static void refreshed(void)
 	loaded(br_refresh_go(&br));
 }
 
+/* the page's pictures all in, or stopped: said, logged, the memory they
+   took given back */
+static void pictures_end(void)
+{
+	win_status(br.pic_stopped ? "Pictures stopped." : "");
+	log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
+	log_event("throbber %d", win_throb_frames());
+	trim();
+	if (opt.log) {
+		conn_log_hold(0);	/* the page's and its pictures' lines, at once */
+		conn_log_hold(1);
+	}
+	menu_update();
+}
+
 /* the next of the page's pictures: fetched and decoded, then drawn */
 static void pictures(void)
 {
@@ -2175,17 +2198,8 @@ static void pictures(void)
 	conn_stop = 0;
 	said[0] = 0;
 	ph_pictures();
-	if (!br_pictures_pending(&br)) {
-		win_status(br.pic_stopped ? "Pictures stopped." : "");
-		log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
-		log_event("throbber %d", win_throb_frames());
-		trim();
-		if (opt.log) {
-			conn_log_hold(0);	/* the page's and its pictures' lines, at once */
-			conn_log_hold(1);
-		}
-		menu_update();
-	}
+	if (!br_pictures_pending(&br))
+		pictures_end();
 }
 
 /* the window whose pictures come next: the one in front's first, then
@@ -2510,25 +2524,32 @@ int app_main(void)
 		int more = !loading && pictures_window() != NULL;
 		long due = loading || cur->iconified ? -1 : br_js_due(&br);
 		long rdue = refresh_due();
-		int rib;
+		int rib, drew;
 		short wait;
 		if (rdue >= 0 && (due < 0 || rdue < due))
 			due = rdue;	/* the page's refresh comes before its scripts' next timer */
 		/* the ribbon, full: gone a moment later, whatever else is waited for */
 		rib = !more && win_progress_shown();
-		wait = more || win_due() ? 0 : due >= 0 && due < 1000 ? (short) due : 1000;
+		/* a page being drawn in slices: a moment's wait between them, so
+		   that the AES's screen manager has its turn too (a menu dropped,
+		   a click on the window's arrows or track; with none it seldom
+		   got the screen while the slices went on) */
+		wait = more ? 0 : win_due() ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
-				    (more || due >= 0 || rib || wait == 0 ? MU_TIMER : 0),
+				    (more || due >= 0 || rib || wait <= 1 ? MU_TIMER : 0),
 				    0x102, 3, 0, wait, msg, &ev);
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
-		if (!quit && win_due()) {
-			win_draw_due();	/* the next slice of a page being drawn (win.c) */
-			continue;
-		}
+		/* (after a key, a click or a message only if it left the time: a
+		   line scrolled is its copy, the rows come in at the next turn;
+		   a turn that only waited always draws) */
+		drew = !quit && win_due() && (!(which & ~MU_TIMER) || (long) (pf_ms() - ui_event_at) < 20);
+		if (drew)
+			win_draw_due();	/* the next slice of a page being drawn (win.c); the
+					   pictures' and the scripts' steps at the next turn */
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {
 				refreshed();	/* before the page's pictures: it is going */
@@ -2537,10 +2558,10 @@ int app_main(void)
 			win_status_again();	/* the time left, on the status bar at rest */
 		}
 #ifndef EW_ST
-		if ((which & MU_TIMER) && !quit && !loading && br_js_due(&br) == 0)
+		if ((which & MU_TIMER) && !quit && !drew && !loading && br_js_due(&br) == 0)
 			js_timers();
 #endif
-		if ((which & MU_TIMER) && !quit && more && pictures_window() != NULL) {
+		if ((which & MU_TIMER) && !quit && !drew && more && pictures_window() != NULL) {
 			ewin *was = cur;
 			win_use(pictures_window());
 			pictures();

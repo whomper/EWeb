@@ -196,7 +196,10 @@ typedef struct page {
 	unsigned long serial;		/* each layout's own (a place in one is another's no more) */
 } page;
 
-#define PAGE_STRIP 256
+/* (64: a band of the window drawn in a slice is a few rows, and each
+   looked at every item of the strips it is in; 256-row strips were most
+   of a thin band's time, 31 Oct 2026) */
+#define PAGE_STRIP 64
 
 /* the size a picture item's picture is drawn at */
 #define DL_PIC_W(d) ((d)->flags & DLF_TILE ? ((d)->tile ? (d)->tile->w : 0) : (d)->w)
