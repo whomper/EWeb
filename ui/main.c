@@ -723,8 +723,16 @@ static void gap_part(const char *what)
 }
 /* before each event call: the part that ends there said, and nothing
    counted while the AES waits */
+extern unsigned long scr_ms_canvas, scr_ms_put;
+
 static void gap_wait(void)
 {
+	if (scr_ms_canvas + scr_ms_put >= 20) {
+		char b[64];
+		snprintf(b, sizeof b, "AESDRAW canvas %lu ms put %lu ms\n", scr_ms_canvas, scr_ms_put);
+		nf_debug(b);
+	}
+	scr_ms_canvas = scr_ms_put = 0;
 	gap_part("waiting");
 	part_t0 = 0;
 }

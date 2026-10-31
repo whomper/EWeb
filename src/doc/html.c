@@ -536,7 +536,7 @@ static int emit_tag(P *p)
 	TOKEN *t = &p->t;
 	uint32_t i, k = 0;
 
-	if ((++p->tags & 63) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_PARSE))
+	if ((++p->tags & 7) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_PARSE))
 		oom(p);		/* (stopped: given up as when out of memory) */
 
 	t->type = p->is_end ? TK_END : TK_START;

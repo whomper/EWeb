@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "ui.h"
+#include "plat.h"
 #include "canvas.h"
 #include "img.h"
 
@@ -702,11 +703,16 @@ int scr_button_dev(short w, short h, short bg, const SCR_LINE *ln, short nl, con
 	return 1;
 }
 
+/* the page drawn into memory and put on the screen, ms each since the
+   speed build last read them (main.c's AESPART lines) */
+unsigned long scr_ms_canvas, scr_ms_put;
+
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 {
 	short y0;
 	canvas c;
 	long words;
+	unsigned long t0, t1;
 
 	if (area->w <= 0 || area->h <= 0)
 		return;
@@ -733,6 +739,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 			c.stride = words * 16;
 			c.bpp = 8;
 		}
+		t0 = pf_ms();
 		if (p != NULL) {
 			cv_page(&c, p);
 		} else if (truecolour) {
@@ -740,6 +747,9 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		} else {
 			memset(chunky, pen(NULL, 0xffffff), words * 16 * h);
 		}
+		t1 = pf_ms();
 		put(h, words, 0, (short) c.w, area->x, area->y + y0);
+		scr_ms_canvas += t1 - t0;
+		scr_ms_put += pf_ms() - t1;
 	}
 }

@@ -1303,13 +1303,15 @@ static uint16_t add_ctl(L *l, fctl *c)
 
 /* ---------------------------------------------------------------- building */
 
-/* doc_poll's turn, every 4 boxes made, measured or laid out (16 left
+/* doc_poll asked at each box made, measured or laid out (16 boxes left
    4.6 s between turns on an 8 MHz ST in the news page's grids and
-   flexboxes, 27 Oct 2026): stopped, the layout fails as when out of
-   memory */
+   flexboxes, 27 Oct 2026; 4 left the stock Falcon's turns 145 ms apart,
+   31 Oct; it is a clock read, the turn itself every br_poll_ms):
+   stopped, the layout fails as when out of memory */
 static int stopped(L *l)
 {
-	if ((++l->polls & 3) == 0 && doc_poll != NULL && !doc_poll(DOC_POLL_LAYOUT))
+	l->polls++;
+	if (doc_poll != NULL && !doc_poll(DOC_POLL_LAYOUT))
 		l->fail = 1;
 	return l->fail;
 }

@@ -1184,6 +1184,39 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 	return 1;
 }
 
+static int gem_turn(void);
+
+/* a file read a piece at a time, GEM's turn between (the guidelines'
+   Speed: the news page's 84 KB and its 75 KB sheet were each one stretch,
+   1.2 s on a stock Falcon, 31 Oct 2026): malloc'ed and NUL-terminated,
+   NULL when it can't be read, there isn't the memory or Esc stopped it */
+static char *load_file(const char *path, long *len)
+{
+	int h = pf_open(path, PF_READ);
+	long size, got = 0, n;
+	char *d;
+	*len = 0;
+	if (h < 0)
+		return NULL;
+	size = pf_open_size(h);
+	d = size >= 0 ? malloc((size_t) size + 1) : NULL;
+	while (d != NULL && got < size) {
+		n = size - got > 16384 ? 16384 : size - got;
+		if (pf_read(h, d + got, n) != n || !gem_turn()) {
+			free(d);
+			d = NULL;
+			break;
+		}
+		got += n;
+	}
+	pf_close(h);
+	if (d != NULL) {
+		d[size] = 0;
+		*len = size;
+	}
+	return d;
+}
+
 static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		     int keep, const FSUBMIT *post, FETCH *f)
 {
@@ -1194,7 +1227,11 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 	if (has_scheme(url, "file")) {
 		char path[512];
 		file_path(url, path, sizeof path);
-		f->data = pf_load(path, &f->len);
+		f->data = load_file(path, &f->len);
+		if (f->data == NULL && conn_stop) {
+			snprintf(f->err, sizeof f->err, "Stopped.");
+			return 0;
+		}
 		if (f->data == NULL) {
 			/* there, and as much memory couldn't be had: short of it
 			   (not a file that can't be read) */
@@ -1538,6 +1575,22 @@ static void sheet_stream(SHEETS *sh, const FETCH *f, const char *url)
 	free(piece);
 }
 
+/* a sheet as it is (a file's, the memory's), fed to the engine a few KB
+   at a time with GEM's turn between (one 75 KB sheet was a stretch of a
+   second on a stock Falcon) */
+static void sheet_pieces(SHEETS *sh, const char *data, long len, const char *url)
+{
+	ec_stream *s = ec_sheet_begin(sh->d->css, EC_ORIGIN_AUTHOR, url);
+	long at = 0, k;
+	while (s != NULL && at < len && !conn_stop) {
+		k = len - at > 4096 ? 4096 : len - at;
+		if (ec_sheet_feed(s, data + at, (size_t) k) != 0 || (ec_poll != NULL && !ec_poll()))
+			break;
+		at += k;
+	}
+	ec_sheet_end(s);
+}
+
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 {
 	SHEETS *sh = ud;
@@ -1574,8 +1627,7 @@ static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 		if (f->packed)
 			sheet_stream(sh, f, f->url[0] ? f->url : url);
 		else
-			ec_sheet_at(sh->d->css, f->data, (size_t) f->len, EC_ORIGIN_AUTHOR,
-				    f->url[0] ? f->url : url);
+			sheet_pieces(sh, f->data, f->len, f->url[0] ? f->url : url);
 	}
 	free(f->data);
 	free(f);
@@ -3555,7 +3607,7 @@ int br_encoding(browser *b, const char *name)
    turn waited a clock tick, 20 ms; a progressive JPEG on the ST polled
    hundreds of times, most of its 13.7 s); so does a long page being
    made (build: doc_poll, ec_poll) */
-unsigned long br_poll_ms = 100;
+unsigned long br_poll_ms = 60;
 
 static int in_turn;		/* GEM's turn under way (br_relayout waits till after it) */
 
