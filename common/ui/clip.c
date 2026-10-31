@@ -5,6 +5,7 @@
  * EContact's copy: the folder from scrp_read(), SCRAP.* cleared before
  * SCRAP.TXT is written, SC_CHANGED to every program.
  */
+#include <stdlib.h>
 #include <string.h>
 #include "tos.h"
 #include "gem.h"
@@ -91,35 +92,132 @@ static void tell(void)
 	shel_write(7, 0, 0, msg, 0);
 }
 
-int clip_put(const char *text, long n)
+/* the sliced writer (EPDF, 31 Oct 2026: a whole document copied): the
+   text gathers in memory and goes out a piece at a time, one Fwrite a
+   piece; no file is open between calls (an accessory's handles are the
+   program in front's, 2.2), so the first piece creates SCRAP.TXT and the
+   next ones open it again at its end. Nothing on the disk changes until
+   the first piece: given up before it, the old clipboard stays */
+#define CLIP_PIECE_000 16384L
+#define CLIP_PIECE_030 32768L
+static struct {
+	int on, ok, made;
+	char last;
+	char path[160];
+	char small[512], *buf;
+	long size, k;
+} cw;
+
+/* SCRAP.TXT made (the old SCRAP.* gone first) or opened at its end */
+static long cw_open(void)
 {
-	char dir[160], path[160], out[512];
-	long fh, i, k = 0;
-	int ok = 1;
+	long fh;
+	if (!cw.made) {
+		char dir[160];
+		strcpy(dir, cw.path);
+		dir[strrchr(dir, '\\') - dir + 1] = 0;
+		clear(dir);
+		fh = Fcreate(cw.path, 0);
+	} else if ((fh = Fopen(cw.path, 1)) >= 0)
+		Fseek(0L, (short)fh, 2);
+	if (fh < 0)
+		cw.ok = 0;
+	else
+		cw.made = 1;
+	return fh;
+}
+
+static void cw_flush(void)
+{
+	long fh;
+	if (!cw.ok || !cw.k || (fh = cw_open()) < 0)
+		return;
+	cw.ok = Fwrite((short)fh, cw.k, cw.buf) == cw.k;
+	Fclose((short)fh);
+	cw.k = 0;
+}
+
+int clip_put_begin(void)
+{
+	char dir[160];
+	if (cw.on)
+		clip_put_end(0);
 	if (!folder(dir))
 		return 0;
-	clear(dir);
-	strcpy(path, dir);
-	strcat(path, "SCRAP.TXT");
-	fh = Fcreate(path, 0);
-	if (fh < 0)
-		return 0;
-	/* lines end CR LF, whichever the program uses */
-	for (i = 0; i < n && ok; i++) {
-		if (text[i] == '\n' && (i == 0 || text[i - 1] != '\r'))
-			out[k++] = '\r';
-		out[k++] = text[i];
-		if (k >= (long)sizeof(out) - 2) {
-			ok = Fwrite((short)fh, k, out) == k;
-			k = 0;
-		}
+	memset(&cw, 0, sizeof(cw));
+	strcpy(cw.path, dir);
+	strcat(cw.path, "SCRAP.TXT");
+	cw.size = get_cookie(0x5F435055L) >= 20 ? CLIP_PIECE_030 : CLIP_PIECE_000;	/* '_CPU' */
+	if ((cw.buf = malloc((size_t)cw.size)) == 0) {
+		cw.buf = cw.small;
+		cw.size = (long)sizeof(cw.small);
 	}
-	if (ok && k)
-		ok = Fwrite((short)fh, k, out) == k;
-	Fclose((short)fh);
-	if (ok)
+	cw.on = cw.ok = 1;
+	return 1;
+}
+
+int clip_put_step(const char *text, long n)
+{
+	const char *p = text, *e = text + n;
+	if (!cw.on)
+		return 0;
+	/* lines end CR LF, whichever the program uses. The buffer's place,
+	   its room and the last character in locals, so the loop runs in
+	   registers: with them in cw's fields it took an ST 75 ms for 2 KB
+	   (EPDF's Copy, 31 Oct 2026). Room for two is kept as before: a
+	   character may bring its CR */
+	while (p < e && cw.ok) {
+		char *b = cw.buf + cw.k, last = cw.last;
+		long room = cw.size - 2 - cw.k;
+		if (room <= 0) {
+			cw_flush();
+			continue;
+		}
+		while (p < e && room > 0) {
+			char c = *p++;
+			if (c == '\n' && last != '\r') {
+				*b++ = '\r';
+				room--;
+			}
+			*b++ = last = c;
+			room--;
+		}
+		cw.k = (long)(b - cw.buf);
+		cw.last = last;
+	}
+	return cw.ok;
+}
+
+int clip_put_end(int ok)
+{
+	int done;
+	long fh;
+	if (!cw.on)
+		return 0;
+	if (ok && cw.ok) {
+		if (!cw.made && !cw.k) {		/* an empty text: an empty SCRAP.TXT */
+			if ((fh = cw_open()) >= 0)
+				Fclose((short)fh);
+		} else
+			cw_flush();
+	}
+	done = ok && cw.ok;
+	if (!done && cw.made)
+		Fdelete(cw.path);		/* given up or failed: no half a text */
+	if (cw.buf != cw.small)
+		free(cw.buf);
+	cw.on = 0;
+	if (done)
 		tell();
-	return ok;
+	return done;
+}
+
+int clip_put(const char *text, long n)
+{
+	if (!clip_put_begin())
+		return 0;
+	clip_put_step(text, n);
+	return clip_put_end(1);
 }
 
 long clip_get(char *buf, long size)
