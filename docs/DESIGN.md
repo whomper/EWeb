@@ -4129,7 +4129,7 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
 - **Settings**: `rsrc_obfix_all` fixes the dialog's objects in one call (`d_end`).
 
 The rig on Erez's TOS (ms, longest stretch; the guidelines' time in brackets, a load held to Esc's
-100), with AERA-Atari's `pic.c` change:
+100), with AERA-Atari's `pic.c` change (`89822cf`, in common since `07366f829`):
 
 | action | Falcon-4:16, 0.56 | now | ST:mono, 0.56 | now |
 |---|---|---|---|---|
@@ -4144,9 +4144,11 @@ The rig on Erez's TOS (ms, longest stretch; the guidelines' time in brackets, a 
 | Settings closed: what it uncovers (300) | 90 | 40 | 135 | 135 |
 | the pictures' page loaded | 340 | 85 | 1905 | 1910 |
 
-Every action is within its time on the stock Falcon. Without the `pic.c` change (until common is
-next synced) the home page's globe keeps one stretch of about 115 ms, the DSP's first check. The
-ST's figures stay its floor (option A above); its pictures' page is TJpgDec's rows of blocks.
+Every action is within its time on the stock Falcon (without the `pic.c` change the home page's
+globe kept one stretch of about 115 ms, the DSP's first check). With common at `07366f829` (the
+dither a row at a time, EPDF's, its turns in `dither_whole`) the rig gave the same: home 90,
+sample 100, news 100, pictures 85, Settings 150. The ST's figures stay its floor (option A above);
+its pictures' page is TJpgDec's rows of blocks.
 
 ## A big site's stylesheet (26 Oct 2026)
 
