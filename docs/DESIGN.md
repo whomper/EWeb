@@ -4101,6 +4101,53 @@ the system font there, drawn by the VDI (about five times as fast a band, a plai
 last stays a possible core for 1.1, only if Erez asks for it. The stock Falcon is held to the
 guidelines' times.
 
+**The stock Falcon within its times (31 Oct 2026).** After 0.56 four actions were still over on
+`Falcon-4:16`: a line scrolled (75), the loads (275 to 340 ms) and Settings (155). Each stretch was
+found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and given turns:
+
+- **A face's glyphs** are unpacked 2 KB at a time (`unpack_block` in `src/gfx/font.c`, common's
+  `inflate_read`), `font_poll` (GEM's turn) between; a block wanted again while it is being read is
+  not read twice.
+- **The page's making**: a turn as the parse, the sheets and the styling begin (each was one
+  stretch with the end of the step before, 115 to 165 ms); the UA sheet read 256 bytes at a time,
+  a turn once its context is made and every 8 names while its blocks are parsed for sharing
+  (`ec_share`, 0.1 s in one); a page's UTF-8 decoded 16 KB at a time (`decode` in `html.c`); and
+  the layout's last steps (ordering the list, freeing the boxes, trimming, indexing: 110 ms on the
+  news page) a turn apart (`end_turn` in `src/layout/layout.c`).
+- **Showing a page**: the title (the AES draws the title bar: 50 ms under TOS 4.04), the bars,
+  the sliders and the page's slices each come at a turn of their own (`due_bars`: 8 the title, 2
+  the bars, 4 the sliders), for a page shown and for one laid out again (a picture's size, text
+  size); the status bar set while a page loads waits for the next turn too, and a redraw of the
+  bars alone no longer draws the page's next slices with it (the status bar as the news page's
+  pictures ended drew three: 130 ms). A slice is 30 ms (40 on the ST) of bands of 8 rows (16).
+- **Pictures**: a picture's pens are dithered on the DSP with a turn every 4 rows and after its
+  program is loaded (a 192 by 128 photo was 0.2 s in one), and the DSP's first check, whose 68030
+  half looks every pen up for the first time (95 ms), takes turns but can't be stopped
+  (AERA-Atari's `pic.c`, sent to the hub); a JPEG decoded on the DSP takes a turn once its program
+  is loaded. A picture being decoded or dithered isn't dithered again as the window is drawn in a
+  turn (`dithering` in `img.c`).
+- **Settings**: `rsrc_obfix_all` fixes the dialog's objects in one call (`d_end`).
+
+The rig on Erez's TOS (ms, longest stretch; the guidelines' time in brackets, a load held to Esc's
+100), with AERA-Atari's `pic.c` change:
+
+| action | Falcon-4:16, 0.56 | now | ST:mono, 0.56 | now |
+|---|---|---|---|---|
+| the program started, window drawn (2000) | 455 | 445 | 1735 | 1750 |
+| the home page shown | 305 | 85 | 855 | 520 |
+| the sample page loaded | 290 | 95 | 1180 | 285 |
+| the news page loaded | 275 | 100 | 1140 | 530 |
+| a letter typed in the address (50) | <20 | <20 | 65 | 70 |
+| a line scrolled (50) | 75 | 50 | 295 | 290 |
+| a page scrolled (150) | 105 | 70 | 275 | 275 |
+| Settings opened (150) | 155 | 145 | 450 | 365 |
+| Settings closed: what it uncovers (300) | 90 | 40 | 135 | 135 |
+| the pictures' page loaded | 340 | 85 | 1905 | 1910 |
+
+Every action is within its time on the stock Falcon. Without the `pic.c` change (until common is
+next synced) the home page's globe keeps one stretch of about 115 ms, the DSP's first check. The
+ST's figures stay its floor (option A above); its pictures' page is TJpgDec's rows of blocks.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.

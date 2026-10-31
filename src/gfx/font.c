@@ -222,11 +222,62 @@ done:
 	return ok;
 }
 
+int (*font_poll)(void);
+
+/* unpacking a block in pieces: the packed bytes read whole first */
+struct packed_src {
+	const uint8_t *p;
+	long left;
+};
+
+static int packed_get(void *u, unsigned char *buf, long n)
+{
+	struct packed_src *s = u;
+	if (n > s->left)
+		n = s->left;
+	memcpy(buf, s->p, (size_t) n);
+	s->p += n;
+	s->left -= n;
+	return (int) n;
+}
+
+/* stored bytes of DEFLATE unpacked into exactly size bytes at out: 2 KB at
+   a time with font_poll's turn between (a face, 10 KB, took a stock
+   Falcon 130 ms in one go: most of a small page's layout; the guidelines'
+   Speed, 31 Oct 2026); 1 when whole */
+static int unpack_block(const uint8_t *packed, long stored, uint8_t *out, long size)
+{
+	struct packed_src src;
+	INFLATE *z;
+	long got = 0, n;
+	if (font_poll == NULL) {
+		SBUF o;
+		int ok;
+		sb_init(&o);
+		ok = sb_reserve(&o, size) && inflate_raw(packed, stored, &o, size) == 1 && o.len == size;
+		if (ok)
+			memcpy(out, o.s, (size_t) size);
+		sb_free(&o);
+		return ok;
+	}
+	src.p = packed;
+	src.left = stored;
+	if ((z = inflate_open(packed_get, &src)) == NULL)
+		return 0;
+	while (got < size && (n = inflate_read(z, out + got, size - got > 2048 ? 2048 : size - got)) > 0) {
+		got += n;
+		if (got < size)
+			font_poll();	/* (a stop is seen by the layout after: the face is made whole) */
+	}
+	inflate_close(z);
+	return got == size;
+}
+
 /* a face's block b read and unpacked (NULL: it can't be) */
 static uint8_t *read_block(int face, int b)
 {
 	uint32_t off, stored, size;
-	uint8_t *packed;
+	uint8_t *packed, *data;
 	SBUF out;
 	if (b == 0) {
 		off = foff[face];
@@ -240,29 +291,28 @@ static uint8_t *read_block(int face, int b)
 		stored = be32(e + 4);
 		size = be32(e + 8);
 	}
-	sb_init(&out);
+	(void) out;
 	packed = malloc(stored ? stored : 1);
 	/* the block's room at its exact size: no doubling while it unpacks */
-	if (packed && !sb_reserve(&out, (long) size)) {
+	data = malloc(size ? size : 1);
+	if (packed && data && fh >= 0 && read_at(fh, off, packed, stored) && (long) size >= 4 + 10L * bcount[b] &&
+	    unpack_block(packed, (long) stored, data, (long) size)) {
 		free(packed);
-		packed = NULL;
+		return data;
 	}
-	if (packed && fh >= 0 && read_at(fh, off, packed, stored) &&
-	    inflate_raw(packed, (long) stored, &out, (long) size) == 1 && out.len == (long) size &&
-	    out.len >= 4 + 10L * bcount[b]) {
-		free(packed);
-		return (uint8_t *) out.s;
-	}
-	sb_free(&out);
+	free(data);
 	free(packed);
 	return NULL;
 }
 
 static int load(ew_font *f)
 {
-	if (f->data || f->failed)
+	static const ew_font *loading;	/* (a turn while it unpacks may draw: not read twice) */
+	if (f->data || f->failed || f == loading)
 		return f->data != NULL;
+	loading = f;
 	f->data = read_block((int) (f - faces), 0);
+	loading = NULL;
 	if (f->data == NULL)
 		f->failed = 1;
 	if (f->data) {
@@ -350,9 +400,13 @@ static int xindex_of(uint32_t cp)
 static const uint8_t *block_of(ew_font *f, int b)
 {
 	if (f->more[b - 1] == NULL && !(f->bad & 1 << b)) {
-		f->more[b - 1] = read_block((int) (f - faces), b);
-		if (f->more[b - 1] == NULL)
+		uint8_t *d = read_block((int) (f - faces), b);
+		if (f->more[b - 1] != NULL)
+			free(d);	/* (read meanwhile, in a turn as it unpacked) */
+		else if (d == NULL)
 			f->bad |= (uint8_t) (1 << b);
+		else
+			f->more[b - 1] = d;
 	}
 	return f->more[b - 1];
 }

@@ -4705,11 +4705,19 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n, in
 		while (s < e) {
 			uint8_t c;
 			uint8_t lo = 0x80, hi = 0xbf;
-			size_t k, i, k_ = ascii_copy(o, s, e);
+			/* (16 KB at most between turns: the news page's 84 KB was
+			   0.1 s of a stock Falcon in one go) */
+			const uint8_t *lim = e - s > 16384 ? s + 16384 : e;
+			size_t k, i, k_ = ascii_copy(o, s, lim);
 			o += k_;
 			s += k_;
 			if (s >= e)
 				break;
+			if (s >= lim) {
+				if (doc_poll != NULL)
+					doc_poll(DOC_POLL_PARSE);	/* (a stop is seen by the parse after) */
+				continue;
+			}
 			c = *s;
 			if (c < 0x80) {
 				if (c == '\r') {

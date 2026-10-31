@@ -233,6 +233,11 @@ static void pix_save(ew_img *im, const var *v)
 	free(b);
 }
 
+/* a decode or a dither under way: a turn in it may draw the window, whose
+   pictures still without pens wait for the next draw (a dither inside it
+   would share the DSP's job, which is one at a time) */
+static int dithering;
+
 static var *find(const ew_img *im, int32_t w, int32_t h);
 
 static void var_free(ew_img *im, var *v)
@@ -598,7 +603,9 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 			v->pic = img_svg_decode(im->data, im->len, (int) w, (int) h, &im->why);
 		}
 	} else {
+		dithering++;	/* (a decode on the DSP has turns too) */
 		v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
+		dithering--;
 	}
 	if (v->pic == NULL && im->why == PIC_STOPPED) {
 		free(v);	/* stopped: tried again later */
@@ -608,7 +615,11 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		/* the screen's pens now, so that drawing has nothing to work out */
 		v->pens = malloc((size_t) w * h);
 		if (v->pens != NULL) {
-			if (pic_dither(v->pic, img_pal, v->pens)) {
+			int done;
+			dithering++;
+			done = pic_dither(v->pic, img_pal, v->pens);
+			dithering--;
+			if (done) {
 				v->serial = pal_serial;
 			} else {
 				/* stopped at a turn (Esc): the pens made when drawn */
@@ -642,7 +653,9 @@ static int var_dither(ew_img *im, var *v)
 			return 0;
 		img_used += (long) v->w * v->h;
 	}
+	dithering++;
 	done = pic_dither(v->pic, img_pal, v->pens);
+	dithering--;
 	if (done)
 		v->serial = pal_serial;
 	return done;
@@ -682,6 +695,8 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 		   short) while the window is drawn: no turn taken, and none
 		   stops it */
 		int (*poll)(void) = pic_poll;
+		if (dithering)
+			return 0;	/* (drawn when that one is done) */
 		pic_poll = NULL;
 		var_dither(im, v);
 		pic_poll = poll;

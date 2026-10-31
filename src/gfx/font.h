@@ -41,6 +41,9 @@ typedef struct ew_font {
 int font_init(const char *path);
 void font_free(void);
 void font_drop(void);		/* the glyphs given back, read again when used */
+/* called between the pieces of a face as it is unpacked (a turn for GEM
+   while a page is made: src/browse sets it); NULL: unpacked in one go */
+extern int (*font_poll)(void);
 
 /* the face nearest to px of that family and style; never NULL once
    font_init succeeded (a face that can't be read draws nothing) */

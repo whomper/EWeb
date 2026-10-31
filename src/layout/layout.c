@@ -8265,6 +8265,16 @@ static int hides_x(const dnode *n)
 
 static unsigned long page_serial;
 
+/* GEM's turn between the last steps of a long page's layout (the news
+   page's, after its pictures came, were 110 ms of a stock Falcon in one:
+   the guidelines' Speed, 31 Oct 2026); a stop is seen after it, the page
+   kept */
+static void end_turn(void)
+{
+	if (doc_poll != NULL)
+		doc_poll(DOC_POLL_LAYOUT);
+}
+
 page *layout_page(doc *d, const LAYOUT_OPT *o)
 {
 	L l;
@@ -8368,6 +8378,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 laid:
 	if (!l.fail)
 		draw_order(&l);
+	end_turn();
 	free(l.it);
 	free(l.mc);
 	free(l.ibx);
@@ -8382,6 +8393,7 @@ laid:
 		page_free(p);
 		return NULL;
 	}
+	end_turn();
 	if (p->cap > p->nitems + 64) {
 		/* (the room left over given back: kept as long as the page is) */
 		dl_item *n = realloc(p->items, (size_t) (p->nitems > 0 ? p->nitems : 1) * sizeof *n);
@@ -8390,8 +8402,10 @@ laid:
 			p->cap = p->nitems;
 		}
 	}
+	end_turn();
 	scrollers_place(p);
 	index_items(p, !hides_x(html) && !hides_x(d->body), cbg);
+	end_turn();
 	if (o->was != NULL && o->was->d == d) {
 		/* the boxes scrolled on the page before: as far again */
 		int i, j;

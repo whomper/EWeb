@@ -458,10 +458,12 @@ static void parse_all(ec_ctx *c, const ec_vec *v)
 void ec_share(ec_ctx *c)
 {
 	uint32_t i;
-	int k;
+	int k, n = 0;
 
 	/* every declaration block parsed now, so that a context on it never
-	   writes into it */
+	   writes into it; ec_poll's turn every 8 names (the UA sheet's, all
+	   at once, were 0.1 s of a stock Falcon as the first page was made:
+	   the guidelines' Speed, 31 Oct 2026), not stopped: it is kept whole */
 	parse_all(c, &c->universal);
 	parse_all(c, &c->never);
 	for (i = 0; i <= c->atom_mask; i++) {
@@ -470,6 +472,8 @@ void ec_share(ec_ctx *c)
 			for (k = 0; k < EC_NB; k++)
 				parse_all(c, a->rules[k]);
 			a->shared = 1;
+			if ((++n & 7) == 0 && ec_poll != NULL)
+				(void) ec_poll();
 		}
 	}
 }

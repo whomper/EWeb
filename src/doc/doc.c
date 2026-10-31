@@ -816,20 +816,25 @@ static ec_ctx *ua;
 static int ua_base(const ec_media *media)
 {
 	if (ua == NULL) {
-		/* read a piece at a time (DOC_SHEET_PIECE), ec_poll's turn between (the whole of it
+		/* read 256 bytes at a time (its first rules set the engine's tables up), ec_poll's turn between (the whole of it
 		   in one was 0.31 s of a stock Falcon as the first page was
 		   made: the guidelines' Speed, 31 Oct 2026); stopped, not kept */
-		ec_ctx *c = ec_create(media, 0);
-		ec_stream *s = c != NULL ? ec_sheet_begin(c, EC_ORIGIN_UA, NULL) : NULL;
+		ec_ctx *c;
+		ec_stream *s;
 		size_t at = 0, len = strlen(doc_ua_css), k;
-		int bad = s == NULL;
+		int bad;
+		c = ec_create(media, 0);
+		s = c != NULL ? ec_sheet_begin(c, EC_ORIGIN_UA, NULL) : NULL;
+		bad = s == NULL || (ec_poll != NULL && !ec_poll());	/* (the context made: a turn) */
 		while (!bad && at < len) {
-			k = len - at > DOC_SHEET_PIECE ? DOC_SHEET_PIECE : len - at;
+			k = len - at > 256 ? 256 : len - at;
 			bad = ec_sheet_feed(s, doc_ua_css + at, k) != 0 || (ec_poll != NULL && !ec_poll());
 			at += k;
 		}
 		if (s != NULL && ec_sheet_end(s) != 0)
 			bad = 1;
+		if (!bad && ec_poll != NULL && !ec_poll())
+			bad = 1;	/* (the sheet's last rules read: a turn) */
 		if (bad) {
 			if (c != NULL)
 				ec_destroy(c);
@@ -837,6 +842,8 @@ static int ua_base(const ec_media *media)
 		}
 		ec_share(c);
 		ua = c;
+		if (ec_poll != NULL)
+			ec_poll();	/* (kept now, a stop seen by the parse after) */
 	}
 	return 1;
 }
@@ -851,6 +858,8 @@ doc *doc_parse_opts(const char *data, size_t len, const html_opts *o, const ec_m
 	d->css = ua_base(media) ? ec_create_on(media, 0, ua) : ec_create(media, 0);
 	if (d->css != NULL && ua != NULL)
 		d->ua = ua;
+	if (doc_poll != NULL)
+		doc_poll(DOC_POLL_PARSE);	/* (a turn before the parse: a stop is seen by it) */
 	d->scripting = o != NULL && o->scripting;
 	if (d->css == NULL || !html_parse(d, data, len, o)) {
 		doc_free(d);

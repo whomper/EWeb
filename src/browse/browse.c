@@ -2284,6 +2284,7 @@ int br_building;
    by hand, else the HTTP answer's, else NULL (the page's own) */
 static int gem_turn(void);
 static int build_turn(int what);
+static int turn_now;		/* gem_turn's next call a turn, however soon */
 
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
@@ -2292,11 +2293,13 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	/* (a long page: the window kept alive meanwhile, and Esc stops it) */
 	doc_poll = build_turn;
 	ec_poll = gem_turn;
+	font_poll = gem_turn;
 	r = build1(b, data, len, charset, url, fresh, dout, pout);
 	if (!r && !conn_stop && make_room(b))
 		r = build1(b, data, len, charset, url, fresh, dout, pout);
 	doc_poll = NULL;
 	ec_poll = NULL;
+	font_poll = NULL;
 	br_building = 0;
 	return r;
 }
@@ -2315,9 +2318,11 @@ static page *lay_turns(browser *b, doc *d, const char *base)
 		return lay(b, d, base);
 	doc_poll = build_turn;
 	ec_poll = gem_turn;
+	font_poll = gem_turn;
 	p = lay(b, d, base);
 	doc_poll = NULL;
 	ec_poll = NULL;
+	font_poll = NULL;
 	return p;
 }
 
@@ -2342,6 +2347,8 @@ parse:
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Reading the page...");
 	br_building = BRB_PARSE;
+	turn_now = 1;		/* (what came before, the fetch or EWeb's own page made, one stretch with the parse's start: a turn between) */
+	gem_turn();
 	MARK("page: parse");
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
@@ -2356,6 +2363,8 @@ parse:
 	b->ms_parse = pf_ms() - t;
 	if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
 		str_copy(base, url, sizeof base);
+	turn_now = 1;		/* (the parse's end and the sheets' start were one stretch: 115 ms of a stock Falcon for the news page) */
+	gem_turn();
 	t_sheets = pf_ms();
 	MARK("page: sheets");
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
@@ -2440,6 +2449,8 @@ parse:
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	br_building = BRB_STYLE;
+	turn_now = 1;		/* (the parse's end and the styling's start were one stretch: 120 ms of a stock Falcon for the news page) */
+	gem_turn();
 	MARK("page: style");
 	if (select_doc(d, base) < 0) {
 		/* out of memory styling it (a small machine): as when laying it out,
@@ -2462,6 +2473,11 @@ parse:
 		doc_free(d);
 		return 0;
 	}
+	/* a turn before it is shown, whenever the last was: the layout's end
+	   and the page's showing (its title, bars, sliders) were one stretch,
+	   0.2 to 0.28 s of a stock Falcon (the guidelines' Speed) */
+	turn_now = 1;
+	gem_turn();
 	MARK("page: made");
 	js_set_page(d, p);
 	*dout = d;
@@ -2494,6 +2510,7 @@ static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len,
 	br_building = BRB_PARSE;
 	doc_poll = build_turn;
 	ec_poll = gem_turn;
+	font_poll = gem_turn;
 	d = doc_parse_opts(data, (size_t) len, &o, &m);
 	if (d != NULL) {
 		ec_set_resolver(d->css, resolve);
@@ -2508,6 +2525,7 @@ static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len,
 	}
 	doc_poll = NULL;
 	ec_poll = NULL;
+	font_poll = NULL;
 	br_building = 0;
 	b->width = w;
 	return d;
@@ -3624,7 +3642,8 @@ static int gem_turn(void)
 {
 	static unsigned long last;
 	unsigned long now = pf_ms();
-	if (pf_idle && now - last >= br_poll_ms) {
+	if (pf_idle && (now - last >= br_poll_ms || turn_now)) {
+		turn_now = 0;
 		last = now;
 		pf_idle_quick = 1;
 		in_turn = 1;

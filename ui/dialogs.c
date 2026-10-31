@@ -163,8 +163,7 @@ static void d_end(void)
 	short i;
 	tree[last_child].ob_next = 0;
 	tree[nobj - 1].ob_flags |= LASTOB;
-	for (i = 0; i < nobj; i++)
-		rsrc_obfix(tree, i);
+	rsrc_obfix_all(tree, nobj);	/* (common's, no AES call each: 60 of them were most of Settings' making) */
 	for (i = 0; i < nlf; i++)
 		lf_init(lf_pend[i], tree, lf_obj[i], lf_text[i], lf_cap[i], 0);
 	nlf = 0;

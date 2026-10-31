@@ -634,13 +634,20 @@ static void draw_page(GRECT *clip)
    same, but a key, a click or Esc is answered between the bands, and a
    scroll meanwhile moves what is drawn and what is due with it. */
 
+#ifdef EW_ST
 #define SLICE_MS 40
 #define BAND_MIN 16	/* (the news page's window: an 8 MHz ST draws it in 3.9 s so, 3.3 in
 			   bands of 32, whose slices are 450 ms; 3.5 s in one, before) */
+#else
+#define SLICE_MS 30	/* (a line scrolled is 50 ms at most: the rows it brings in are slices) */
+#define BAND_MIN 8	/* (a band of 16 rows of the news page was 60 to 75 ms of a stock
+			   Falcon: a line scroll's slices over its 50) */
+#endif
 
 
 static int sync_draw;		/* a box scrolled by a held button: drawn whole each step */
 static int defer_draw;		/* a scroll: what came in drawn at the next turn, not in its stretch */
+static int quiet_bars;		/* the bars' text set, not drawn: the whole window is drawn after */
 static long row_cost = 256;	/* a row's ms, times 256: how many rows a slice takes */
 
 /* the page's part of area (the screen's) added to the window's due */
@@ -757,19 +764,59 @@ int win_due(void)
 {
 	ewin *w;
 	for (w = wins; w != NULL; w = w->next)
-		if (w->due.w > 0 && w->due.h > 0)
+		if ((w->due.w > 0 && w->due.h > 0) || w->due_bars)
 			return 1;
 	return 0;
+}
+
+static void sliders(void);
+
+/* the bars kept for this turn: a turn of their own */
+static void draw_due_bars(void)
+{
+	GRECT a = cur->work;
+	int which = cur->due_bars;
+	if (cur->h <= 0 || cur->iconified) {
+		cur->due_bars = 0;
+		return;
+	}
+	if (which & 8) {
+		/* the title, a turn of its own (the AES draws the title bar
+		   again: 50 ms of a stock Falcon under TOS 4.04, the speed rig,
+		   31 Oct 2026) */
+		cur->due_bars &= ~8;
+		gap_tag("title");
+		win_title();
+		return;
+	}
+	if (!(which & 3)) {
+		/* the sliders, a turn of their own (the AES draws each again:
+		   55 to 75 ms of a stock Falcon for a new page's) */
+		cur->due_bars = 0;
+		gap_tag("sliders");
+		sliders();
+		return;
+	}
+	cur->due_bars &= 4;
+	if (!(which & 2)) {
+		a = cur->r_stat;
+		a.h -= rib_rows();
+	}
+	defer_draw++;
+	redraw(&a, 1);
+	defer_draw--;
 }
 
 void win_draw_due(void)
 {
 	ewin *was = cur, *w;
-	for (w = wins; w != NULL; w = w->next)
-		if (w->due.w > 0 && w->due.h > 0) {
-			cur = w;
+	for (w = wins; w != NULL; w = w->next) {
+		cur = w;
+		if (w->due_bars)
+			draw_due_bars();
+		else if (w->due.w > 0 && w->due.h > 0)
 			draw_due();
-		}
+	}
 	cur = was;
 }
 
@@ -777,7 +824,8 @@ void win_draw_due(void)
    page in slices (draw_due) */
 static void redraw(const GRECT *area, int parts)
 {
-	GRECT r, a;
+	GRECT r, a, pg;
+	int paged = 0;
 	if (cur->h <= 0)
 		return;
 	if (cur->iconified) {
@@ -787,7 +835,11 @@ static void redraw(const GRECT *area, int parts)
 	a = area ? *area : cur->work;
 	if (!rect_and(&a, &cur->work))
 		return;
+	if (quiet_bars)
+		parts &= ~1;
 	if ((parts & 2) && shown() != NULL) {
+		pg = cur->r_page;
+		paged = rect_and(&pg, &a);
 		due_add(&a);
 		parts &= ~2;
 	}
@@ -812,7 +864,12 @@ static void redraw(const GRECT *area, int parts)
 		graf_mouse(M_ON, 0);
 		wind_update(END_UPDATE);
 	}
-	if (!defer_draw || sync_draw)
+	/* a slice of what is due at once only for a redraw of the page (a
+	   window uncovered); the bars' alone leave the page to the turns
+	   (the status bar set as the news page's pictures ended drew three
+	   slices in its stretch: 130 ms of a stock Falcon, the speed rig,
+	   31 Oct 2026) */
+	if (paged && (!defer_draw || sync_draw))
 		draw_due();
 }
 
@@ -1089,8 +1146,13 @@ void win_page_relaid_at(int32_t y)
 	if (cur->left > max_left())
 		cur->left = max_left();
 	br_scrolled(&br, cur->top);
-	sliders();
+	/* the sliders and the page at the next turns, not in the stretch the
+	   layout ended (a picture's relayout, then the sliders and a slice,
+	   were 105 ms of a stock Falcon: the speed rig, 31 Oct 2026) */
+	cur->due_bars |= 4;
+	defer_draw++;
 	win_redraw_page();
+	defer_draw--;
 }
 
 static int32_t line_step(void)
@@ -1137,6 +1199,13 @@ void win_status(const char *s)
 	log_event("status %.*s", (int) strcspn(t + (t[0] == ' '), "?"), t + (t[0] == ' '));
 	if (cur->h > 0 && !cur->iconified) {
 		GRECT r = cur->r_stat;
+		/* while a page is made, at the next turn: drawn in the middle
+		   of its work it made a stretch of the work's and its own 40 to
+		   60 ms (a stock Falcon's) */
+		if (loading || quiet_bars) {
+			cur->due_bars |= 1;
+			return;
+		}
 		r.h -= rib_rows();
 		redraw(&r, 1);
 	}
@@ -2502,21 +2571,27 @@ void win_page_changed(void)
 {
 	int32_t y = br.scroll_to >= 0 ? br.scroll_to : 0;
 	ctl_forget();
-	gap_tag("title");
-	win_title();
-	gap_tag("address");
+	gap_tag("page shown");
+	/* the address and the status bar set, drawn with the rest of the bars
+	   below once (each was drawn twice); the page at the next turn */
+	quiet_bars++;
 	win_address(br.url);
-	gap_tag("status");
 	win_status("");
+	quiet_bars--;
+	/* the title at the next turn, the bars at the one after, then the
+	   sliders and the page */
+	cur->due_bars |= 8 | 2 | 4;
 	cur->top = 0;
 	cur->left = 0;
 	if (y > max_top())
 		y = max_top();
 	cur->top = y;
 	br_scrolled(&br, cur->top);
-	gap_tag("sliders");
-	sliders();
+	defer_draw++;
+	quiet_bars++;
 	win_redraw(NULL);
+	quiet_bars--;
+	defer_draw--;
 }
 
 /* ---------------------------------------------------------------- the window */
