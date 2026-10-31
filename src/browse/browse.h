@@ -135,6 +135,11 @@ typedef struct browser {
 	/* the page shown's pictures, fetched after it is shown */
 	int pic_stopped;	/* Esc stopped them: no more for this page */
 	int pic_relayout;	/* one came whose size the layout didn't know */
+	/* the page's picture items (DL_IMAGE), their indexes (pics_of): found
+	   once a layout, for the page whose serial and items they were */
+	long *pix, npix, pix_items;
+	unsigned long pix_serial;
+	const void *pix_p;
 	int relink;		/* and styled again first: a link on it visited since */
 	unsigned long pic_laid;	/* when the page was last laid out again for them (ms), */
 	unsigned long pic_lay_ms;	/* and how long that took */
@@ -238,6 +243,8 @@ int br_relayout(browser *b, int32_t width);
 enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT, BRB_SCRIPT };
 extern int br_building;
 extern unsigned long br_poll_ms;
+/* (the speed build: each step of a page's making named, main.c's gap_tag) */
+extern void (*br_mark)(const char *what);
 /* a details element's summary clicked (page_summary_at): the details
    opened or closed (the HTML Standard, 4.11.2), the page styled and laid
    out again (1; 0 if out of memory, after giving back the pages kept and

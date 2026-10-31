@@ -639,8 +639,12 @@ static void home_yours(SBUF *s)
 }
 
 /* EWeb's home page: home.html, with what EWeb knows put in */
+void (*br_mark)(const char *what);	/* the speed build's names for a page's steps (main.c's gap_tag) */
+#define MARK(what) (br_mark != NULL ? br_mark(what) : (void) 0)
+
 static void home_page(const browser *b, SBUF *s)
 {
+	MARK("home page made");
 	long long t = ck_now() + tls_tz_minutes * 60LL;
 	size_t i;
 	for (i = 0; i < sizeof home_parts / sizeof home_parts[0]; i++) {
@@ -2338,6 +2342,7 @@ parse:
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Reading the page...");
 	br_building = BRB_PARSE;
+	MARK("page: parse");
 	memset(&o, 0, sizeof o);
 	o.charset = charset && *charset ? charset : NULL;
 	o.fallback = br_fallback(url);
@@ -2352,6 +2357,7 @@ parse:
 	if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
 		str_copy(base, url, sizeof base);
 	t_sheets = pf_ms();
+	MARK("page: sheets");
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
 	   rendering: hidden only with scripting): d->scripting */
 	add_sheets(b, d, base, again ? 0 : fresh, 0);
@@ -2434,6 +2440,7 @@ parse:
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	br_building = BRB_STYLE;
+	MARK("page: style");
 	if (select_doc(d, base) < 0) {
 		/* out of memory styling it (a small machine): as when laying it out,
 		   not a page with no styles, which lays out to nothing */
@@ -2443,6 +2450,7 @@ parse:
 	b->ms_style = pf_ms() - t;
 	t = pf_ms();
 	br_building = BRB_LAYOUT;
+	MARK("page: layout");
 	p = lay(b, d, base);
 	while (p != NULL && p->opt.width != b->width && !conn_stop) {
 		/* (the window sized meanwhile: br_relayout left it for this) */
@@ -2454,6 +2462,7 @@ parse:
 		doc_free(d);
 		return 0;
 	}
+	MARK("page: made");
 	js_set_page(d, p);
 	*dout = d;
 	*pout = p;
@@ -3666,6 +3675,9 @@ void br_free(browser *b)
 	free(b->src);
 	br_dl_free(b);
 	br_refresh_cancel(b);
+	free(b->pix);
+	b->pix = NULL;
+	b->pix_p = NULL;
 	b->p = NULL;
 	b->d = NULL;
 	b->src = NULL;
@@ -4787,6 +4799,38 @@ static int to_do(const browser *b, const dl_item *d)
 	return st == IMG_HERE && !(d->flags & DLF_ALT) && !img_tried(im, DL_PIC_W(d), DL_PIC_H(d));
 }
 
+/* the page's picture items, their indexes in items (n of them): found
+   once a layout. br_pictures_pending and next_item looked at each of the
+   page's items at every turn of the main loop, a stock Falcon's 25 ms a
+   turn on the news page (the guidelines' Speed, 31 Oct 2026); NULL with
+   n -1 when there isn't the memory (then each item is looked at) */
+static const long *pics_of(browser *b, long *n)
+{
+	const page *p = b->p;
+	long i, k = 0;
+	if (b->pix_p != p || b->pix_serial != p->serial || b->pix_items != p->nitems) {
+		free(b->pix);
+		b->pix = NULL;
+		b->npix = 0;
+		for (i = 0; i < p->nitems; i++)
+			k += p->items[i].type == DL_IMAGE;
+		if (k > 0 && (b->pix = malloc((size_t) k * sizeof *b->pix)) == NULL) {
+			b->pix_p = NULL;
+			*n = -1;
+			return NULL;
+		}
+		for (i = 0, k = 0; i < p->nitems; i++)
+			if (p->items[i].type == DL_IMAGE)
+				b->pix[k++] = i;
+		b->npix = k;
+		b->pix_p = p;
+		b->pix_serial = p->serial;
+		b->pix_items = p->nitems;
+	}
+	*n = b->npix;
+	return b->pix;
+}
+
 /* the picture is to be fetched now (to_do's first case) */
 static int to_fetch(const browser *b, const ew_img *im)
 {
@@ -4794,13 +4838,16 @@ static int to_fetch(const browser *b, const ew_img *im)
 }
 
 /* the item to work on next: in the window first, then below, then above */
-static long next_item(const browser *b, int32_t top, int32_t height)
+static long next_item(browser *b, int32_t top, int32_t height)
 {
-	long i, best = -1;
+	long i, k, n, best = -1;
 	unsigned long bd = 0xffffffffUL;
-	for (i = 0; i < b->p->nitems; i++) {
-		const dl_item *d = &b->p->items[i];
+	const long *ix = pics_of(b, &n);
+	for (k = 0; k < (n >= 0 ? n : b->p->nitems); k++) {
+		const dl_item *d;
 		unsigned long dist;
+		i = n >= 0 ? ix[k] : k;
+		d = &b->p->items[i];
 		if (!to_do(b, d))
 			continue;
 		if (d->y + d->h > top && d->y < top + height)
@@ -4848,10 +4895,13 @@ int br_pictures_pending(browser *b)
 	long i;
 	if (b->p == NULL)
 		return 0;
+	const long *ix;
+	long n;
 	if (b->pic_relayout || frame_waiting(b, 0) >= 0)
 		return 1;
-	for (i = 0; i < b->p->nitems; i++)
-		if (to_do(b, &b->p->items[i]))
+	ix = pics_of(b, &n);
+	for (i = 0; i < (n >= 0 ? n : b->p->nitems); i++)
+		if (to_do(b, &b->p->items[n >= 0 ? ix[i] : i]))
 			return 1;
 	dc_job_end();		/* the page's pictures have come: into the pack */
 	refresh_count(b);	/* (the page loaded, as the standard has it) */
@@ -5324,8 +5374,14 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 			int ok;
 			if (!fetched)
 				say(b, "%s", "Pictures: decoding...");
+			MARK("picture: decode");
 			ok = img_decode(im, w, h);
+			MARK("picture: pens");
 			if (!ok && conn_stop)
+				return BRP_STOPPED;
+			/* its pens for the screen now, GEM's turns between (not
+			   as the window is drawn, without them) */
+			if (ok && !img_dither(im, w, h) && conn_stop)
 				return BRP_STOPPED;
 			if (b->p != p0)
 				return BRP_LAYOUT;	/* laid out again meanwhile (the window sized) */

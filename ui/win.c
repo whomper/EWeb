@@ -228,10 +228,12 @@ static void draw_look(int i, int look, const GRECT *clip)
 		scr_blit_dev(f, w, h, &at, &r);
 		return;
 	}
+	gap_tag("icons unpacked");
 	if (tb_raw == NULL && (tb_raw = unpack_all(e->data, e->off[1], n * TB_PICS)) == NULL)
 		return;
 	if (f == NULL && (f = made = scr_dev_alloc(size)) == NULL)
 		return;
+	gap_tag("a look made");
 	nl = look_frame(look, w, h, ln);
 	if (scr_button_dev(w, h, paper(), ln, nl, tb_raw + n * (pic * NBUT + i), e->col, e->ncol, TB_W, e->h,
 			   (w - TB_W) / 2 + d, 3 + d, f)) {
@@ -240,6 +242,7 @@ static void draw_look(int i, int look, const GRECT *clip)
 		scr_blit_dev(f, w, h, &at, &r);
 	}
 	scr_dev_free(made);
+	gap_tag("draw bars");
 }
 
 static void draw_button(int i, const GRECT *clip)
@@ -323,8 +326,10 @@ static void draw_throbber(const GRECT *clip)
 		scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
 		return;
 	}
+	gap_tag("throbber unpacked");
 	if (thr_raw == NULL && (thr_raw = unpack_all(e->data, e->off[1], n * THR_FRAMES)) == NULL)
 		return;
+	gap_tag("a frame made");
 	if (f != NULL && scr_rgb_dev(thr_raw + n * cur->thr_frame, e->col, e->ncol, THR_W, e->h, f)) {
 		thr_made |= 1u << cur->thr_frame;
 		scr_blit_dev(f, THR_W, e->h, &cur->r_thr, &r);
@@ -335,6 +340,7 @@ static void draw_throbber(const GRECT *clip)
 	} else {
 		scr_rgb(thr_raw + n * cur->thr_frame, e->col, e->ncol, THR_W, e->h, &cur->r_thr, &r);
 	}
+	gap_tag("draw bars");
 }
 
 void win_throb(int busy)
@@ -596,6 +602,10 @@ static void draw_box_bars(const page *p, const GRECT *clip)
 	}
 }
 
+/* the speed build's AESDRAW: a scroll's copy on the screen, the slices
+   drawn and the boxes' bars in them, ms */
+unsigned long scr_ms_copy, scr_ms_slice, scr_ms_bars;
+
 static void draw_page(GRECT *clip)
 {
 	GRECT r = cur->r_page;
@@ -605,11 +615,151 @@ static void draw_page(GRECT *clip)
 		fill(&r, 0);	/* no page yet: white, at once (not made in memory a band at a time) */
 		return;
 	}
+	unsigned long t0;
 	scr_page(shown(), &r, cur->left + (r.x - cur->r_page.x), cur->top + (r.y - cur->r_page.y));
+	t0 = pf_ms();
 	draw_box_bars(shown(), &r);
+	scr_ms_bars += pf_ms() - t0;
 }
 
-/* area of the window, through its rectangle list */
+/* ---------------------------------------------------------------- the page drawn in slices
+
+   A page's whole window takes a stock Falcon over a second to draw (the
+   canvas 0.8 s, the copy to the screen 0.3: the news page, 31 Oct 2026),
+   an ST three: longer than the guidelines' Speed lets a stretch run. So
+   the page's part of a redraw is kept as the window's due rectangle and
+   drawn from its top a slice at a time, as many rows as take about
+   SLICE_MS, with GEM's turns between (the main loop's and the idle
+   loop's). It is drawn in bands as before: what the user sees is the
+   same, but a key, a click or Esc is answered between the bands, and a
+   scroll meanwhile moves what is drawn and what is due with it. */
+
+#define SLICE_MS 40
+
+
+static int sync_draw;		/* a box scrolled by a held button: drawn whole each step */
+static long row_cost = 256;	/* a row's ms, times 256: how many rows a slice takes */
+
+/* the page's part of area (the screen's) added to the window's due */
+static void due_add(const GRECT *area)
+{
+	GRECT a = *area;
+	int32_t x0, y0, x1, y1;
+	if (!rect_and(&a, &cur->r_page))
+		return;
+	a.x -= cur->r_page.x;
+	a.y -= cur->r_page.y;
+	if (cur->due.w <= 0 || cur->due.h <= 0) {
+		cur->due = a;
+		return;
+	}
+	x0 = a.x < cur->due.x ? a.x : cur->due.x;
+	y0 = a.y < cur->due.y ? a.y : cur->due.y;
+	x1 = a.x + a.w > cur->due.x + cur->due.w ? a.x + a.w : cur->due.x + cur->due.w;
+	y1 = a.y + a.h > cur->due.y + cur->due.h ? a.y + a.h : cur->due.y + cur->due.h;
+	cur->due.x = (short) x0;
+	cur->due.y = (short) y0;
+	cur->due.w = (short) (x1 - x0);
+	cur->due.h = (short) (y1 - y0);
+}
+
+/* what is on the screen moved dx, dy (a scroll's copy): what is due with it */
+static void due_moved(int32_t dx, int32_t dy)
+{
+	GRECT a = cur->due, page;
+	if (a.w <= 0 || a.h <= 0)
+		return;
+	a.x = (short) (a.x + dx + cur->r_page.x);
+	a.y = (short) (a.y + dy + cur->r_page.y);
+	cur->due.w = 0;
+	page = cur->r_page;
+	if (rect_and(&a, &page))
+		due_add(&a);
+}
+
+/* the next slice of the window's due drawn: its top rows, through the
+   window's rectangle list; whole when sync_draw says so */
+static void draw_due(void)
+{
+	unsigned long t0 = pf_ms(), end;
+	if (cur->due.w <= 0 || cur->due.h <= 0)
+		return;
+	if (cur->h <= 0 || cur->iconified || shown() == NULL) {
+		cur->due.w = 0;
+		return;
+	}
+	gap_tag("draw");
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	font_sys_push();
+	/* the slice ends SLICE_MS after the event that began the stretch
+	   (what the event did before counts: a scroll's copy), but takes
+	   a few rows at least */
+	end = ui_event_at + SLICE_MS;
+	if ((long) (end - t0) < 8 || (long) (end - t0) > SLICE_MS)
+		end = t0 + ((long) (end - t0) < 8 ? 8 : SLICE_MS);
+	while (cur->due.w > 0 && cur->due.h > 0) {
+		GRECT band, r;
+		unsigned long b0 = pf_ms(), dt;
+		long left = (long) (end - b0), n;
+		n = (left > 4 ? left : 4) * 256 / (row_cost > 0 ? row_cost : 1);
+		if (n < 2)
+			n = 2;
+		band.x = (short) (cur->r_page.x + cur->due.x);
+		band.y = (short) (cur->r_page.y + cur->due.y);
+		band.w = cur->due.w;
+		band.h = (short) (n < cur->due.h ? n : cur->due.h);
+		wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+		while (r.w > 0 && r.h > 0) {
+			GRECT c = r;
+			if (rect_and(&c, &band)) {
+				clip_on(&c);
+				draw_page(&c);
+			}
+			wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+		}
+		cur->due.y += band.h;
+		cur->due.h -= band.h;
+		/* what a row took, as an average of the last bands' (a tick
+		   is 5 ms: bands of less are counted with the next) */
+		dt = pf_ms() - b0;
+		if (dt >= 10 || band.h >= 64) {
+			/* (more at once, so that the next slice isn't long too;
+			   less as an average) */
+			long c = (long) (dt * 256 / band.h);
+			row_cost = c > row_cost ? c : (row_cost + c) / 2;
+		}
+		if (!sync_draw && (long) (pf_ms() - end) >= 0)
+			break;
+	}
+	clip_off();
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+	scr_ms_slice += pf_ms() - t0;
+}
+
+int win_due(void)
+{
+	ewin *w;
+	for (w = wins; w != NULL; w = w->next)
+		if (w->due.w > 0 && w->due.h > 0)
+			return 1;
+	return 0;
+}
+
+void win_draw_due(void)
+{
+	ewin *was = cur, *w;
+	for (w = wins; w != NULL; w = w->next)
+		if (w->due.w > 0 && w->due.h > 0) {
+			cur = w;
+			draw_due();
+		}
+	cur = was;
+}
+
+/* area of the window, through its rectangle list: its bars at once, its
+   page in slices (draw_due) */
 static void redraw(const GRECT *area, int parts)
 {
 	GRECT r, a;
@@ -622,25 +772,32 @@ static void redraw(const GRECT *area, int parts)
 	a = area ? *area : cur->work;
 	if (!rect_and(&a, &cur->work))
 		return;
-	gap_tag(parts & 2 ? "draw" : "draw bars");
-	wind_update(BEG_UPDATE);
-	graf_mouse(M_OFF, 0);
-	font_sys_push();	/* (the system font at its size: a dialog may have left another) */
-	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
-	while (r.w > 0 && r.h > 0) {
-		GRECT c = r;
-		if (rect_and(&c, &a)) {
-			clip_on(&c);
-			if (parts & 1)
-				draw_bars(&c);
-			if (parts & 2)
-				draw_page(&c);
-		}
-		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	if ((parts & 2) && shown() != NULL) {
+		due_add(&a);
+		parts &= ~2;
 	}
-	clip_off();
-	graf_mouse(M_ON, 0);
-	wind_update(END_UPDATE);
+	if (parts) {
+		gap_tag(parts & 2 ? "draw" : "draw bars");
+		wind_update(BEG_UPDATE);
+		graf_mouse(M_OFF, 0);
+		font_sys_push();	/* (the system font at its size: a dialog may have left another) */
+		wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+		while (r.w > 0 && r.h > 0) {
+			GRECT c = r;
+			if (rect_and(&c, &a)) {
+				clip_on(&c);
+				if (parts & 1)
+					draw_bars(&c);
+				if (parts & 2)
+					draw_page(&c);
+			}
+			wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+		}
+		clip_off();
+		graf_mouse(M_ON, 0);
+		wind_update(END_UPDATE);
+	}
+	draw_due();
 }
 
 void win_redraw(const GRECT *area)
@@ -709,12 +866,23 @@ static void sliders(void)
 	int32_t h = p ? p->height : 0, m = max_top(), w = p ? p->right : 0, mw = max_left();
 	short size = (short) (h > cur->r_page.h ? (int32_t) ((int64_t) 1000 * cur->r_page.h / h) : 1000);
 	short wsize = (short) (w > cur->r_page.w ? (int32_t) ((int64_t) 1000 * cur->r_page.w / w) : 1000);
+	short v[4];
+	static const short what[4] = { WF_VSLSIZE, WF_VSLIDE, WF_HSLSIZE, WF_HSLIDE };
+	int k;
 	if (cur->h <= 0 || cur->iconified)
 		return;
-	wind_set(cur->h, WF_VSLSIZE, size < 30 ? 30 : size, 0, 0, 0);
-	wind_set(cur->h, WF_VSLIDE, (short) (m > 0 ? (int32_t) ((int64_t) 1000 * cur->top / m) : 0), 0, 0, 0);
-	wind_set(cur->h, WF_HSLSIZE, wsize < 30 ? 30 : wsize, 0, 0, 0);
-	wind_set(cur->h, WF_HSLIDE, (short) (mw > 0 ? (int32_t) ((int64_t) 1000 * cur->left / mw) : 0), 0, 0, 0);
+	v[0] = size < 30 ? 30 : size;
+	v[1] = (short) (m > 0 ? (int32_t) ((int64_t) 1000 * cur->top / m) : 0);
+	v[2] = wsize < 30 ? 30 : wsize;
+	v[3] = (short) (mw > 0 ? (int32_t) ((int64_t) 1000 * cur->left / mw) : 0);
+	/* only what changed: the AES draws a slider again at each (a line
+	   scrolled set all four, 4 of a stock Falcon's 50 ms) */
+	for (k = 0; k < 4; k++)
+		if (!cur->sl_set || v[k] != cur->sl[k]) {
+			wind_set(cur->h, what[k], v[k], 0, 0, 0);
+			cur->sl[k] = v[k];
+		}
+	cur->sl_set = 1;
 }
 
 /* the window is in front and nothing covers it: one rectangle */
@@ -742,6 +910,7 @@ void win_scroll_to(int32_t y)
 	cur->top = y;
 	if (br.pv_p == NULL)
 		br_scrolled(&br, cur->top);	/* (a preview's place isn't the page's) */
+	gap_tag("sliders");
 	sliders();
 	if (cur->iconified || cur->h <= 0)
 		return;
@@ -750,6 +919,7 @@ void win_scroll_to(int32_t y)
 		/* what stays on the screen moves; only the new rows are drawn */
 		MFDB s;
 		short pxy[8], d = (short) (dy < 0 ? -dy : dy);
+		unsigned long t0;
 		GRECT fresh = cur->r_page;
 		memset(&s, 0, sizeof s);
 		wind_update(BEG_UPDATE);
@@ -770,11 +940,16 @@ void win_scroll_to(int32_t y)
 			pxy[7] = cur->r_page.y + cur->r_page.h - 1;
 		}
 		fresh.h = d;
+		gap_tag("scroll copy");
+		t0 = pf_ms();
 		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
-		draw_page(&fresh);
+		scr_ms_copy += pf_ms() - t0;
 		clip_off();
 		graf_mouse(M_ON, 0);
 		wind_update(END_UPDATE);
+		due_moved(0, -dy);	/* (what was still to draw moved too) */
+		due_add(&fresh);
+		draw_due();
 		return;
 	}
 	win_redraw_page();
@@ -826,10 +1001,12 @@ static void scroll_x_to(int32_t x)
 		}
 		fresh.w = d;
 		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
-		draw_page(&fresh);
 		clip_off();
 		graf_mouse(M_ON, 0);
 		wind_update(END_UPDATE);
+		due_moved(-dx, 0);
+		due_add(&fresh);
+		draw_due();
 		return;
 	}
 	win_redraw_page();
@@ -1020,6 +1197,40 @@ static void addr_insert(const char *s, long n)
 	cur->a_cur += (int) n;
 }
 
+/* a letter typed at the field's end: only its cell and the cursor after
+   it drawn, through the window's rectangles (the whole field took an ST
+   75 ms a letter, more than a key's 50: the guidelines' Speed); 0 when
+   the field must be drawn whole */
+static int addr_letter(int i)
+{
+	GRECT r, cell;
+	short x = cur->r_addr.x + gl_wchar / 2 + (i - cur->a_first) * gl_wchar, y = cur->r_addr.y + 2;
+	if (cur->h <= 0 || cur->iconified || i < cur->a_first || x + gl_wchar >= cur->r_addr.x + cur->r_addr.w - 1)
+		return 0;
+	cell.x = x;
+	cell.y = y;
+	cell.w = gl_wchar + 1;	/* (the letter, and the cursor's column after it) */
+	cell.h = gl_hchar;
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	font_sys_push();
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w > 0 && r.h > 0) {
+		GRECT c = r;
+		if (rect_and(&c, &cell)) {
+			clip_on(&c);
+			fill(&cell, 0);
+			text_at(x, y, cur->addr + i, 1, 1, TX_LTR);
+			line_col(x + gl_wchar, y, x + gl_wchar, y + gl_hchar - 1, 1);
+		}
+		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	clip_off();
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+	return 1;
+}
+
 /* a key for the address field: 1 when taken */
 static int addr_key(short kstate, short key)
 {
@@ -1093,7 +1304,11 @@ static int addr_key(short kstate, short key)
 		}
 	} else if (c >= 0x20 && c != 0x7f) {
 		char s = (char) c;
+		int end = !cur->a_all && cur->a_cur == len, first = cur->a_first;
 		addr_insert(&s, 1);
+		addr_show_cursor();
+		if (end && cur->a_first == first && cur->a_cur == len + 1 && addr_letter(len))
+			return 1;
 	} else {
 		return 0;
 	}
@@ -1817,7 +2032,9 @@ static void box_to(int k, int axis, int32_t v)
 	r.y = (short) y0;
 	r.w = (short) (x1 - x0);
 	r.h = (short) (y1 - y0);
+	sync_draw++;	/* (held, each step whole: not a slice of the box's top each time) */
 	redraw(&r, 2);
+	sync_draw--;
 }
 
 /* the box whose bar (down) is held, for panebar's pb_click */
@@ -2256,8 +2473,11 @@ void win_page_changed(void)
 {
 	int32_t y = br.scroll_to >= 0 ? br.scroll_to : 0;
 	ctl_forget();
+	gap_tag("title");
 	win_title();
+	gap_tag("address");
 	win_address(br.url);
+	gap_tag("status");
 	win_status("");
 	cur->top = 0;
 	cur->left = 0;
@@ -2265,6 +2485,7 @@ void win_page_changed(void)
 		y = max_top();
 	cur->top = y;
 	br_scrolled(&br, cur->top);
+	gap_tag("sliders");
 	sliders();
 	win_redraw(NULL);
 }
@@ -2287,6 +2508,7 @@ static void resized(void)
 {
 	int32_t old_w = br.width, old_h = br.height;
 	get_work();
+	due_moved(0, 0);	/* (what is due, within the page's new area) */
 	save_place();
 	br.height = win_page_h();
 	if (br.p != NULL && (win_page_w() != old_w || (br.p->frameset && win_page_h() != old_h))) {
@@ -2538,6 +2760,7 @@ static void message(const short *msg)
 			break;
 		wind_set(cur->h, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
 		cur->iconified = 0;
+		cur->sl_set = 0;	/* (set again whole) */
 		resized();
 		win_redraw(NULL);
 		break;

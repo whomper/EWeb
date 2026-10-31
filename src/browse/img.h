@@ -67,6 +67,12 @@ int img_tried(const ew_img *im, int32_t w, int32_t h);
 /* for drawing: 1 and the picture at w x h if it is decoded, with its
    pens for img_pal (made now if they aren't) */
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens);
+/* its pens for the screen made now, at w by h (img_picture made them as it
+   drew, without a turn: 0.27 s of a stock Falcon for a photo): 1 made or
+   none to make, 0 stopped (pic_poll) or no memory; img_dithered: none
+   left to make */
+int img_dither(ew_img *im, int32_t w, int32_t h);
+int img_dithered(const ew_img *im, int32_t w, int32_t h);
 /* what went wrong last, for the log */
 const char *img_why(const ew_img *im);
 /* its last decode was read from the disk cache, not decoded */

@@ -631,6 +631,39 @@ int img_from_cache(const ew_img *im)
 	return im->cached;
 }
 
+/* v's pens for the screen's palette made; 0 when pic_poll stopped it (then
+   left to be made again) or there isn't the memory */
+static int var_dither(ew_img *im, var *v)
+{
+	int done;
+	if (v->pens == NULL) {
+		v->pens = malloc((size_t) v->w * v->h);
+		if (v->pens == NULL)
+			return 0;
+		img_used += (long) v->w * v->h;
+	}
+	done = pic_dither(v->pic, img_pal, v->pens);
+	if (done)
+		v->serial = pal_serial;
+	return done;
+}
+
+/* the picture at w by h as the screen's pens already, or none to make */
+int img_dithered(const ew_img *im, int32_t w, int32_t h)
+{
+	const var *v = find(im, w, h);
+	return img_pal == NULL || v == NULL || v->pic == NULL || v->pic->px == NULL ||
+	       (v->pens != NULL && v->serial == pal_serial);
+}
+
+int img_dither(ew_img *im, int32_t w, int32_t h)
+{
+	var *v = find(im, w, h);
+	if (img_dithered(im, w, h))
+		return 1;
+	return var_dither(im, v);
+}
+
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
 {
 	var *v = find(im, w, h);
@@ -644,19 +677,14 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 		return 0;
 	}
 	if (img_pal != NULL && (v->pens == NULL || v->serial != pal_serial)) {
-		if (v->pens == NULL) {
-			v->pens = malloc((size_t) w * h);
-			if (v->pens != NULL)
-				img_used += (long) w * h;
-		}
-		if (v->pens != NULL) {
-			/* while the window is drawn: no turn taken (and none stops it) */
-			int (*poll)(void) = pic_poll;
-			pic_poll = NULL;
-			pic_dither(v->pic, img_pal, v->pens);
-			pic_poll = poll;
-			v->serial = pal_serial;
-		}
+		/* (made by img_dither as the page's pictures come; here only
+		   when they weren't, the palette changed or a stop cut it
+		   short) while the window is drawn: no turn taken, and none
+		   stops it */
+		int (*poll)(void) = pic_poll;
+		pic_poll = NULL;
+		var_dither(im, v);
+		pic_poll = poll;
 	}
 	*pic = v->pic;
 	*pens = v->pens;

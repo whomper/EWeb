@@ -723,16 +723,17 @@ static void gap_part(const char *what)
 }
 /* before each event call: the part that ends there said, and nothing
    counted while the AES waits */
-extern unsigned long scr_ms_canvas, scr_ms_put;
+extern unsigned long scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars;
 
 static void gap_wait(void)
 {
-	if (scr_ms_canvas + scr_ms_put >= 20) {
-		char b[64];
-		snprintf(b, sizeof b, "AESDRAW canvas %lu ms put %lu ms\n", scr_ms_canvas, scr_ms_put);
+	if (scr_ms_canvas + scr_ms_put + scr_ms_copy + scr_ms_slice >= 20) {
+		char b[120];
+		snprintf(b, sizeof b, "AESDRAW canvas %lu ms put %lu ms copy %lu ms slices %lu ms bars %lu ms\n",
+			 scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars);
 		nf_debug(b);
 	}
-	scr_ms_canvas = scr_ms_put = 0;
+	scr_ms_canvas = scr_ms_put = scr_ms_copy = scr_ms_slice = scr_ms_bars = 0;
 	gap_part("waiting");
 	part_t0 = 0;
 }
@@ -742,8 +743,11 @@ static void gap_wait(void)
 #define gap_part(what) ((void) 0)
 #endif
 
+unsigned long ui_event_at;
+
 void gap_event(const char *what)
 {
+	ui_event_at = pf_ms();
 	gap_last = NULL;
 	gap_part(what);
 	aes_profile_tag(what);
@@ -928,7 +932,9 @@ static void idle(void)
 		  br_building == BRB_LAYOUT ? "layout" : br_building == BRB_SCRIPT ? "script" :
 		  pics ? "pictures" : "load");
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
-	gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" : "load");
+	gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
+		  br_building == BRB_PARSE ? "parse" : br_building == BRB_STYLE ? "style" :
+		  br_building == BRB_LAYOUT ? "layout" : pics ? "pictures" : "load");
 	win_throb(1);
 	if ((which & MU_MESAG) && notify_message(msg))
 		which &= ~MU_MESAG;	/* (BGEM.NG's) */
@@ -986,6 +992,7 @@ static void idle(void)
 			}
 			win_use(was);
 		}
+		win_draw_due();	/* (a page uncovered meanwhile: a slice of it) */
 		return;
 	}
 	if (which & MU_MESAG) {
@@ -1014,6 +1021,7 @@ static void idle(void)
 	}
 	if ((which & MU_BUTTON) && win_stop_hit(ev.mx, ev.my))
 		conn_stop = 1;
+	win_draw_due();
 	if (loading) {
 		ph_bytes_came();
 		br_preview_step(&br);	/* (once enough of the page has come) */
@@ -2331,6 +2339,7 @@ int app_main(void)
 	work_dir(opt.workdir, sizeof opt.workdir);
 	crash_install(opt.workdir, "EWeb", EWEB_VERSION);
 	crash_cleanup = crash_quit;
+	gap_tag("start: help, av");
 	help_init();
 	av_init("EWEB");
 	notify_init("EWEB    ");	/* notifications through BGEM.NG (4.5) */
@@ -2338,7 +2347,9 @@ int app_main(void)
 	notify_ask();
 	dlg_title = "EWeb";		/* dialogs' windows where the AES has them (3.5) */
 	dlg_redraw_hook = dialog_redraw;
+	gap_tag("start: settings");
 	settings_load();
+	gap_tag("start: screen");
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or the Falcon's true|colour.][ Quit ]");
@@ -2347,6 +2358,7 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
+	gap_tag("start: fonts");
 	path_join(path, sizeof path, opt.workdir, "EWEB.FNT");
 	if (!font_init(path)) {
 		graf_mouse(ARROW, 0);
@@ -2358,6 +2370,7 @@ int app_main(void)
 	}
 	/* secure connections: the certificates, the seed and the signatures
 	   kept next to the program, as EWGET.TTP keeps them */
+	gap_tag("start: net");
 	net_init();
 	if (opt.log)
 		log_start(1);
@@ -2375,16 +2388,21 @@ int app_main(void)
 		ck_file(ck, key);
 		secret_warn = key_warn;
 	}
+	gap_tag("start: cache");
 	cache_open();
 	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
 	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
 	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
 	tls_file_stamp = pf_stamp;
 	tls_file_info = pf_info;	/* CACERT.PEM looked up once (6.5) */
+	gap_tag("start: dsp");
 	falcon_dsp_init();
 	falcon_dsp_ec_init();
 	pictures_dsp_init();
 	pf_idle = idle;
+#ifdef AES_PROFILE
+	br_mark = gap_tag;
+#endif
 #ifdef EW_ST
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);
 #else
@@ -2394,6 +2412,7 @@ int app_main(void)
 
 	{
 		/* the bookmarks: read once a start (6.5), for their menu */
+		gap_tag("start: bookmarks");
 		char bm[256];
 		path_join(bm, sizeof bm, opt.workdir, "BOOKMARK.HTM");
 		bm_file(bm);
@@ -2402,6 +2421,7 @@ int app_main(void)
 		path_join(bm, sizeof bm, opt.workdir, "HISTORY.TXT");
 		hg_file(bm);
 	}
+	gap_tag("start: menus");
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EWeb: not enough memory.][ Quit ]");
 		scr_exit();
@@ -2446,6 +2466,7 @@ int app_main(void)
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
 #endif
+	gap_tag("start: window");
 	if (new_window() == NULL) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb can't open its window:|the AES has no more, or|memory is short.][ Quit ]");
@@ -2473,6 +2494,7 @@ int app_main(void)
 		int n = 0;
 		while (n++ < 8 && (evnt_multi_(MU_MESAG | MU_TIMER, 1, 1, 1, 0, msg, &ev) & MU_MESAG))
 			handle(MU_MESAG, msg, &ev, &hover_x, &hover_y);
+		log_event("window drawn");	/* (the start's end: the speed rig) */
 	}
 	command_line(first, sizeof first);
 	if (first[0])
@@ -2492,14 +2514,19 @@ int app_main(void)
 			due = rdue;	/* the page's refresh comes before its scripts' next timer */
 		/* the ribbon, full: gone a moment later, whatever else is waited for */
 		rib = !more && win_progress_shown();
-		wait = more ? 0 : due >= 0 && due < 1000 ? (short) due : 1000;
+		wait = more || win_due() ? 0 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
-		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 | (more || due >= 0 || rib ? MU_TIMER : 0),
+		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
+				    (more || due >= 0 || rib || wait == 0 ? MU_TIMER : 0),
 				    0x102, 3, 0, wait, msg, &ev);
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+		if (!quit && win_due()) {
+			win_draw_due();	/* the next slice of a page being drawn (win.c) */
+			continue;
+		}
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {
 				refreshed();	/* before the page's pictures: it is going */

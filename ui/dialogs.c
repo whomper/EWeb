@@ -424,7 +424,9 @@ static short settings_run(short pages_box, short ok)
 	short x, y, w, h, r, k;
 	pages_obj = pages_box;
 	dlg_band(settings_band);	/* (in a window: its title bar, 3.5) */
+	gap_tag("dialog: opened");
 	dlg_open(tree, &x, &y, &w, &h);
+	gap_tag("dialog: drawn");
 	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
 	for (;;) {
 		r = dlg_do(tree, first_edit(), (short) (ok - 1));
@@ -473,6 +475,7 @@ int dlg_settings(void)
 	str_copy(s_gate, opt.gate, sizeof s_gate);
 	snprintf(s_gport, sizeof s_gport, "%u", opt.gateport);
 	snprintf(s_cache, sizeof s_cache, "%ld", cache_mb());
+	gap_tag("dialog: made");
 	box = settings_tree(&ok);
 	r = settings_run(box, ok);
 	if (r != ok)

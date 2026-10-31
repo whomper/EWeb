@@ -9,7 +9,10 @@ build/prof/EWEBST.PRG), on Erez's TOS when it is here. For each of the
 user's actions, the longest stretch between EWeb's event calls against
 the guidelines' time:
 
-- the start (AESSTART) and EWeb's own home page shown;
+- the start: AESSTART and the stretches until EWeb's window is drawn
+  (its toolbar, its bars and the page's white: "EWEB window drawn"),
+  the guidelines' "its window drawn"; then EWeb's own home page, made
+  and shown as any page is, a load (each stretch Esc's 100 ms);
 - a page from the disk loaded and laid out: the sample page
   (tests/bench/sample.html), the news page (tests/bench/mkpage.py) and
   the page of pictures (tests/net/server.py's); a load is a long job, so
@@ -96,7 +99,15 @@ def run(out, machine, nvdi, prgdir):
                 f.write(data)
         r.write(os.path.join("EWEB", "EWEB.INF"), "HOME=\n")
         r.start("C:\\EWEB\\" + prg, ready="EWEB shown ", boot=600 if st else 300)
-        g = gaps_since(r, 0)
+        # (the start ends where the window is drawn; the home page after
+        # it is a load)
+        con = r.console()
+        drawn = con.find("EWEB window drawn")
+        if drawn >= 0:
+            r.start_end = drawn
+        else:
+            print("NOTE  no 'EWEB window drawn': the start counts until the home page", flush=True)
+        g = gaps_since(r, drawn if drawn >= 0 else 0)
         r.results.append(("the home page shown", max(g) if g else 0, LOAD))
         r.shot("00-home")
         load(r, "the sample page loaded", "file:///C:/SAMPLE.HTM")

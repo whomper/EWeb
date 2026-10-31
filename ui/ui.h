@@ -102,6 +102,10 @@ typedef struct ewin {
 	} sel;
 	int32_t pv_top, pv_left;	/* the page's place while its next one's preview shows */
 	int link_shown;			/* the link whose address the status bar shows, -1 none */
+	/* the page's part still to be drawn (win.c draws it in slices, GEM's
+	   turns between: the guidelines' Speed), from r_page's corner; w 0 none */
+	GRECT due;
+	short sl[4], sl_set;		/* the sliders as last set (sl_set 0: not yet) */
 } ewin;
 extern ewin *cur;		/* the window worked on: the one in front, or the one a page loads in */
 #define br (cur->b)		/* its page shown, its history */
@@ -115,6 +119,7 @@ void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void gap_event(const char *what);
 void gap_tag(const char *what);
 void gap_stage(const char *what);
+extern unsigned long ui_event_at;	/* when the last event came (ms): a slice's time counts from it */
 
 /* drawing (draw.c): the window's parts, menus and dialogs, in the system
    font (what common/ui's About box, alerts and pop-ups take, gemui.h) */
@@ -198,6 +203,11 @@ void win_close(void);
 void win_message(const short *msg);	/* WM_*: to the window it names */
 void win_redraw(const GRECT *area);	/* NULL: all of it */
 void win_redraw_page(void);
+/* the windows' pages still to be drawn: win_due says whether any is, and
+   win_draw_due draws the next slice of each (the main loop, between its
+   events, and the idle loop while a page loads) */
+int win_due(void);
+void win_draw_due(void);
 void win_preview(void);			/* the page loading's preview (br.pv_p): drawn from its top */
 void win_preview_gone(void);		/* and gone, the load stopped: the page as it was */
 void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything drawn */
