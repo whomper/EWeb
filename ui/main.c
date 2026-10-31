@@ -2276,6 +2276,7 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
+	ui_pens_init();		/* the UI's colours, by their colour (5.2) */
 	vst_alignment(vdi_h, 0, 5);
 	text_font(vdi_h, 1, cw, ch);	/* the system font: text_n's quick way (common's text.c) */
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);

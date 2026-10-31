@@ -118,11 +118,11 @@ void gap_stage(const char *what);
 
 /* drawing (draw.c): the window's parts, menus and dialogs, in the system
    font (what common/ui's About box, alerts and pop-ups take, gemui.h) */
-#define TX_BOLD     1
+#define TX_BOLD     1		/* (common's About box, its titles) */
 #define TX_INVERSE  2		/* white text */
 #define TX_RIGHT    4		/* right-to-left text against the right edge */
 #define TX_LTR     16		/* left to right even when it starts in Hebrew */
-#define TX_DIM    128		/* what can't be used: grey, else light */
+#define TX_DIM    128		/* what can't be used: dark grey, else light (common's popups) */
 void fill(GRECT *r, short color);
 void frame(GRECT *r, short color);
 void hline(short x1, short x2, short y);
@@ -136,6 +136,9 @@ void *st_ram(long n);		/* a bitmap for the blitter (the About box's icon), n <= 
 int rect_and(GRECT *a, const GRECT *b);	/* a = a & b; 0 when nothing is left */
 int rect_hit(const GRECT *r, short x, short y);
 short grey_pen(void);		/* light grey where there is one, else 0 */
+short dark_pen(void);		/* dark grey where there is one, else 1 */
+short ribbon_pen(int phase);	/* the progress ribbon's colour for a phase, 0 to 4 */
+void ui_pens_init(void);	/* those found among the first 16 (5.2), at start */
 /* UTF-8 to the Atari character set, Hebrew laid out for the screen: for
    the window's title and info line, which GEM draws as they are */
 void atari_text(const char *utf8, char *out, int size);

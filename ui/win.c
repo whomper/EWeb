@@ -260,7 +260,7 @@ static void draw_addr(void)
 	if (r.w <= 0)
 		return;
 	fill(&r, 0);
-	frame(&r, cur->a_focus ? 1 : (planes >= 4 ? 9 : 1));
+	frame(&r, cur->a_focus ? 1 : dark_pen());
 	if (n > cols)
 		n = cols;
 	if (cur->a_focus && cur->a_all && cur->addr[0]) {
@@ -395,10 +395,7 @@ int win_throb_frames(void)
    grey; black where there are only 4 colours or 2 */
 static short rib_pen(int phase)
 {
-	static const short pens[] = { 4, 13, 15, 14, 11 };
-	if (planes < 4 || phase < 0 || phase > 4)
-		return 1;
-	return pens[phase];
+	return ribbon_pen(phase);	/* (5.2: by its colour, not a pen number) */
 }
 
 static short rib_rows(void)

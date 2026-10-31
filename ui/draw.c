@@ -14,6 +14,7 @@
 #include "charset.h"
 #include "util.h"
 #include "text.h"
+#include "dialog.h"
 
 void clip_on(GRECT *r)
 {
@@ -77,10 +78,48 @@ int rect_hit(const GRECT *r, short x, short y)
 	return x >= r->x && y >= r->y && x < r->x + r->w && y < r->y + r->h;
 }
 
-/* VDI's light grey (pen 8) with 16 colours or more, else none */
+/* the UI's own colours (the guidelines' 5.2): each the pen of the first
+   16 nearest its colour in TOS's standard palette, as they are now
+   (vq_color: NVDI's 16 are not TOS's, a TT's 9 to 14 are light), never a
+   fixed pen number; found once, at start (EWeb's own 256 colours leave
+   pens 0 to 15 as they are) */
+static short pen_grey, pen_dark, pen_rib[5];
+
+void ui_pens_init(void)
+{
+	/* the ribbon's: blue, then pale cyan, magenta, yellow and green */
+	static const short rib[5][3] = { { 0, 0, 1000 }, { 500, 1000, 1000 }, { 1000, 500, 1000 },
+					 { 1000, 1000, 500 }, { 500, 1000, 500 } };
+	int i;
+	if (planes < 4) {
+		pen_grey = 0;
+		pen_dark = 1;
+		for (i = 0; i < 5; i++)
+			pen_rib[i] = 1;
+		return;
+	}
+	pen_grey = pen_nearest(vdi_h, 16, 750, 750, 750, 0);	/* TOS's light grey, pen 8 */
+	pen_dark = pen_nearest(vdi_h, 16, 450, 450, 450, 1);	/* its dark grey, pen 9: for text */
+	for (i = 0; i < 5; i++)
+		pen_rib[i] = pen_nearest(vdi_h, 16, rib[i][0], rib[i][1], rib[i][2], 0);
+}
+
+/* light grey with 16 colours or more, else none (white) */
 short grey_pen(void)
 {
-	return planes >= 4 ? 8 : 0;
+	return pen_grey;
+}
+
+/* dark grey with 16 colours or more, else black */
+short dark_pen(void)
+{
+	return pen_dark;
+}
+
+/* the progress ribbon's colour for a phase (0 to 4) */
+short ribbon_pen(int phase)
+{
+	return phase >= 0 && phase < 5 ? pen_rib[phase] : 1;
 }
 
 void fill(GRECT *r, short color)
@@ -136,7 +175,7 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 {
 	char vis[BIDI_MAX];
 	const char *out = s;
-	short grey = (flags & TX_DIM) && planes >= 4;
+	short colour;
 	if (cols <= 0)
 		return;
 	if (n > cols)
@@ -152,12 +191,23 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 		if (rtl && (flags & TX_RIGHT))
 			x += (cols - (short) n) * cw;
 	}
+	colour = (flags & TX_INVERSE) ? 0 : (flags & TX_DIM) && planes >= 4 ? dark_pen() : 1;
 	vswr_mode(vdi_h, MD_TRANS);
-	vst_color(vdi_h, (flags & TX_INVERSE) ? 0 : grey ? 9 : 1);
-	vst_effects(vdi_h, ((flags & TX_BOLD) ? 1 : 0) | ((flags & TX_DIM) && !grey ? 2 : 0));
+	vst_color(vdi_h, colour);
+	if ((flags & TX_DIM) && planes < 4)
+		vst_effects(vdi_h, 2);	/* light, in mono: a pop-up's few words */
 	text_n(vdi_h, x, y, out, n);	/* TOS's quick way where the clip allows (Speed) */
-	if (flags & (TX_BOLD | TX_DIM))
+	if ((flags & TX_DIM) && planes < 4)
 		vst_effects(vdi_h, 0);
+	if (flags & TX_BOLD) {
+		/* bold on the plain text, never vst_effects' (the guidelines'
+		   Speed: TOS's bold costs an ST far more; NVDI's widens each
+		   letter over the next) */
+		if (text_fx_fast(1, MD_TRANS))
+			text_fx(vdi_h, x, y, out, n, 1, colour);
+		else
+			text_bold_strike(vdi_h, x, y, out, n);
+	}
 }
 
 void atari_text(const char *utf8, char *out, int size)
