@@ -19,6 +19,7 @@ it, and how EWeb gets past CAPTCHAs.
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
 | 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb sets a palette of its own while it runs in 256 colours, and gives TOS's back when it quits, with a setting to keep TOS's (EWeb's own 256 colours, below). |
 | ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its buffers are the Falcon's again and its rigs dropped the 1 MB machine (The ST edition, below); it is tested on the 1040 ST with 4 MB, with the family's accessories loaded too, and no 2 MB machine is added for now. |
+| 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces; (2) `EWEB.PRG` starting on the stock 4 MB Falcon beside the family's four accessories (the hub's `acc_all.py Falcon-4`); (3) the guidelines' Speed rules met on `ST` and `Falcon-4` (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi; and a run on your DFB1 of the release that has them all. A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -4563,6 +4564,10 @@ out of both (their paths lead nowhere on the Atari).
    (numbers, Latin and mirrored brackets in Hebrew, and embeddings: done, above), UAX #14's line
    breaks (done, above); **5.** SVG (done, below), frames and iframes (done, below), more windows (done, below), pictures
    fetched at once (done, below: with the Pi's gateway).
+
+7. **1.0** (your decision, 31 Oct 2026; Decisions): the cache in 4 MB pieces, the stock 4 MB
+   Falcon beside the four accessories, the Speed rules on the stock machines, the layout's text
+   measuring, webdriveruniversity.com, then your run on the DFB1.
 
 ## Open questions
 
