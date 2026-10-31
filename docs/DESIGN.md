@@ -19,7 +19,7 @@ it, and how EWeb gets past CAPTCHAs.
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
 | 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb sets a palette of its own while it runs in 256 colours, and gives TOS's back when it quits, with a setting to keep TOS's (EWeb's own 256 colours, below). |
 | ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its buffers are the Falcon's again and its rigs dropped the 1 MB machine (The ST edition, below); it is tested on the 1040 ST with 4 MB, with the family's accessories loaded too, and no 2 MB machine is added for now. |
-| 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces (done, 0.55); (2) dropped (31 Oct 2026, your decision): `EWEB.PRG` beside all four of the family's accessories on a stock 4 MB Falcon isn't a 1.0 goal, since the four together leave too little for any program there (with them loaded a program finds 1.61 MB, `EWEB.PRG` needs 1.74 MB to load); it still runs alone there (`make hatarigui`'s `falcon4`); (3) the guidelines' Speed rules met on `ST` and `Falcon-4` (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi; and a run on your DFB1 of the release that has them all. A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
+| 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces (done, 0.55); (2) dropped (31 Oct 2026, your decision): `EWEB.PRG` beside all four of the family's accessories on a stock 4 MB Falcon isn't a 1.0 goal, since the four together leave too little for any program there (with them loaded a program finds 1.61 MB, `EWEB.PRG` needs 1.74 MB to load); it still runs alone there (`make hatarigui`'s `falcon4`); (3) the guidelines' Speed rules met on `Falcon-4`, and on the `ST` its floor recorded (your choice of 31 Oct 2026, Speed on the stock machines) (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi; and a run on your DFB1 of the release that has them all. A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -4091,6 +4091,15 @@ window across the screen: TOS 1.04 takes 55 ms to set the slider and 50 to copy 
 EWeb draws anything, and a band of 16 rows of the news page is about 250 ms (the window in 3.9
 s, 3.3 in bands of 32 but slices of 450 ms; 3.5 s in one stretch before); its loads' stretches are
 0.85 to 1.9 s (a picture's TJpgDec row of blocks, a style or layout step).
+
+**The ST's floor (Erez, 31 Oct 2026: option A of four).** For 1.0 the ST edition's figures above
+are its floor, recorded rather than met: on `ST:mono` (TOS 1.04, the news page, a window across the
+screen) a line scrolled 295 ms (TOS's slider and copy about 105 ms of it), a page scrolled 275 ms,
+the window drawn whole in 3.9 s in slices of 16 rows, loads' longest stretches 0.85 to 1.9 s. The
+other options were a smaller window by default on the ST (still not 50 ms) and the page's text in
+the system font there, drawn by the VDI (about five times as fast a band, a plainer page); the
+last stays a possible core for 1.1, only if Erez asks for it. The stock Falcon is held to the
+guidelines' times.
 
 ## A big site's stylesheet (26 Oct 2026)
 
