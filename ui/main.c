@@ -723,17 +723,17 @@ static void gap_part(const char *what)
 }
 /* before each event call: the part that ends there said, and nothing
    counted while the AES waits */
-extern unsigned long scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars;
+extern unsigned long scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars, scr_slice_rows, scr_bands;
 
 static void gap_wait(void)
 {
 	if (scr_ms_canvas + scr_ms_put + scr_ms_copy + scr_ms_slice >= 20) {
 		char b[120];
-		snprintf(b, sizeof b, "AESDRAW canvas %lu ms put %lu ms copy %lu ms slices %lu ms bars %lu ms\n",
-			 scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars);
+		snprintf(b, sizeof b, "AESDRAW canvas %lu ms put %lu ms copy %lu ms slices %lu ms bars %lu ms rows %lu in %lu\n",
+			 scr_ms_canvas, scr_ms_put, scr_ms_copy, scr_ms_slice, scr_ms_bars, scr_slice_rows, scr_bands);
 		nf_debug(b);
 	}
-	scr_ms_canvas = scr_ms_put = scr_ms_copy = scr_ms_slice = scr_ms_bars = 0;
+	scr_ms_canvas = scr_ms_put = scr_ms_copy = scr_ms_slice = scr_ms_bars = scr_slice_rows = scr_bands = 0;
 	gap_part("waiting");
 	part_t0 = 0;
 }
@@ -2057,7 +2057,9 @@ static void av_start(const char *s);
    draw EWeb's own windows (WM_REDRAW), to the window each names */
 static void dialog_redraw(const short *msg)
 {
+	win_sync(1);		/* (no slices: the main loop draws none meanwhile) */
 	win_message(msg);
+	win_sync(0);
 }
 
 /* an event of the main loop (or one put off while a picture came) */

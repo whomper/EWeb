@@ -2246,6 +2246,11 @@ static inline __attribute__((always_inline, optimize("no-tree-loop-distribute-pa
 	unsigned k;
 	if (l->nit == l->itcap && !item_grow(l))
 		return NULL;
+	/* (a turn every 64 words and spaces too: a long text in one box,
+	   each word measured, was 0.3 s of a stock Falcon between them;
+	   stopped, as when out of memory) */
+	if ((l->nit & 63) == 63 && stopped(l))
+		return NULL;
 	p = (u32a *) &l->it[l->nit];
 #pragma GCC unroll 32
 	for (k = 0; k < sizeof l->it[0] / 4; k++)

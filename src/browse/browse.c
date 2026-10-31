@@ -1587,7 +1587,7 @@ static void sheet_pieces(SHEETS *sh, const char *data, long len, const char *url
 	ec_stream *s = ec_sheet_begin(sh->d->css, EC_ORIGIN_AUTHOR, url);
 	long at = 0, k;
 	while (s != NULL && at < len && !conn_stop) {
-		k = len - at > 4096 ? 4096 : len - at;
+		k = len - at > DOC_SHEET_PIECE ? DOC_SHEET_PIECE : len - at;
 		if (ec_sheet_feed(s, data + at, (size_t) k) != 0 || (ec_poll != NULL && !ec_poll()))
 			break;
 		at += k;

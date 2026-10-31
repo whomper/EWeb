@@ -3163,6 +3163,20 @@ static void canvas_bg(canvas *c, const page *p)
 	item(c, p, &d);
 }
 
+/* the range of the order drawn (page.seg) rank r is in */
+static long seg_of(const page *p, long r)
+{
+	long a = 0, b = p->nseg - 1;
+	while (a < b) {
+		long m = (a + b + 1) / 2;
+		if (p->seg[m].r0 <= r)
+			a = m;
+		else
+			b = m - 1;
+	}
+	return a;
+}
+
 void cv_page(canvas *c, const page *p)
 {
 	long i, s0, s1, cbg = p->cbg >= 0 && p->cbg < p->nitems ? p->cbg : -1;
@@ -3187,7 +3201,7 @@ void cv_page(canvas *c, const page *p)
 	if (s0 > s1)
 		return;
 	{
-		long at[64], last = -1;
+		long at[64], last = -1, sg = -1;
 		int k, ns;
 		ns = (int) (s1 - s0 + 1);
 		for (k = 0; k < ns; k++)
@@ -3204,7 +3218,17 @@ void cv_page(canvas *c, const page *p)
 				break;
 			at[bk]++;
 			if (best != last) {
-				long k = p->seg != NULL ? page_drawn(p, best) : best;
+				long k = best;
+				if (p->seg != NULL) {
+					/* (the ranks come in order: the range they are in
+					   found once, then stepped on; page_drawn's search
+					   for each was a tenth of a thin band's time) */
+					if (sg < 0)
+						sg = seg_of(p, best);
+					while (sg + 1 < p->nseg && p->seg[sg + 1].r0 <= best)
+						sg++;
+					k = p->seg[sg].k0 + best - p->seg[sg].r0;
+				}
 				if (k != cbg)
 					item(c, p, &p->items[k]);
 			}

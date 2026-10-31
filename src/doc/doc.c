@@ -787,9 +787,14 @@ static dnode *element_from(dnode *c)
 static void finish(doc *d, dnode *top, dnode *parent)
 {
 	dnode *n = top, *c;
+	unsigned k = 0;
 	groups.n = 0;
 	finish_one(d, top, parent);
 	for (;;) {
+		/* (a turn every 32 elements: the news page's were 0.79 s of an
+		   8 MHz ST without; a stop is seen by what comes after) */
+		if ((++k & 31) == 0 && doc_poll != NULL)
+			doc_poll(DOC_POLL_PARSE);
 		if ((c = element_from(n->first)) != NULL) {
 			n = c;
 		} else {
@@ -811,11 +816,23 @@ static ec_ctx *ua;
 static int ua_base(const ec_media *media)
 {
 	if (ua == NULL) {
+		/* read a piece at a time (DOC_SHEET_PIECE), ec_poll's turn between (the whole of it
+		   in one was 0.31 s of a stock Falcon as the first page was
+		   made: the guidelines' Speed, 31 Oct 2026); stopped, not kept */
 		ec_ctx *c = ec_create(media, 0);
-		if (c == NULL)
-			return 0;
-		if (ec_sheet(c, doc_ua_css, strlen(doc_ua_css), EC_ORIGIN_UA) != 0) {
-			ec_destroy(c);
+		ec_stream *s = c != NULL ? ec_sheet_begin(c, EC_ORIGIN_UA, NULL) : NULL;
+		size_t at = 0, len = strlen(doc_ua_css), k;
+		int bad = s == NULL;
+		while (!bad && at < len) {
+			k = len - at > DOC_SHEET_PIECE ? DOC_SHEET_PIECE : len - at;
+			bad = ec_sheet_feed(s, doc_ua_css + at, k) != 0 || (ec_poll != NULL && !ec_poll());
+			at += k;
+		}
+		if (s != NULL && ec_sheet_end(s) != 0)
+			bad = 1;
+		if (bad) {
+			if (c != NULL)
+				ec_destroy(c);
 			return 0;
 		}
 		ec_share(c);

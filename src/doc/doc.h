@@ -130,6 +130,13 @@ void doc_free(doc *d);
    stops it, given up as when out of memory (Esc, while the program's
    window is kept alive meanwhile) */
 enum { DOC_POLL_PARSE, DOC_POLL_LAYOUT };
+/* how much of a style sheet is read between turns: 4 KB, 1 KB on the ST
+   (4 KB of the news page's sheet took an 8 MHz ST 0.33 s) */
+#ifdef EW_ST
+#define DOC_SHEET_PIECE 1024
+#else
+#define DOC_SHEET_PIECE 4096
+#endif
 extern int (*doc_poll)(int what);
 
 /* a text node's text past DOC_BIG bytes: its own block, n->text moved

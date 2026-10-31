@@ -208,6 +208,9 @@ void win_redraw_page(void);
    events, and the idle loop while a page loads) */
 int win_due(void);
 void win_draw_due(void);
+/* (1, then 0) what is drawn meanwhile drawn whole, not in slices: a
+   dialog's loop, which has no turns of the main loop's */
+void win_sync(int on);
 void win_preview(void);			/* the page loading's preview (br.pv_p): drawn from its top */
 void win_preview_gone(void);		/* and gone, the load stopped: the page as it was */
 void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything drawn */

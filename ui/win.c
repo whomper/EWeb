@@ -604,7 +604,7 @@ static void draw_box_bars(const page *p, const GRECT *clip)
 
 /* the speed build's AESDRAW: a scroll's copy on the screen, the slices
    drawn and the boxes' bars in them, ms */
-unsigned long scr_ms_copy, scr_ms_slice, scr_ms_bars;
+unsigned long scr_ms_copy, scr_ms_slice, scr_ms_bars, scr_slice_rows, scr_bands;
 
 static void draw_page(GRECT *clip)
 {
@@ -693,11 +693,20 @@ static void draw_due(void)
 	graf_mouse(M_OFF, 0);
 	font_sys_push();
 	/* the slice ends SLICE_MS after the event that began the stretch
-	   (what the event did before counts: a scroll's copy), but takes
-	   a few rows at least */
-	end = ui_event_at + SLICE_MS;
-	if ((long) (end - t0) < 8 || (long) (end - t0) > SLICE_MS)
-		end = t0 + ((long) (end - t0) < 8 ? 8 : SLICE_MS);
+	   (what the event did before counts: a scroll's copy, 30 ms of a
+	   stock Falcon's line); when that time is spent, the next turn draws
+	   it (the main loop's at once). Drawn from a dialog's loop or a held
+	   button's (no event of the main loop's for a while): a slice of its
+	   own */
+	{
+		long since = (long) (t0 - ui_event_at);
+		if (since < 0 || since > 500)
+			end = t0 + SLICE_MS;
+		else if (since >= SLICE_MS - 4 && !sync_draw)
+			return;
+		else
+			end = ui_event_at + SLICE_MS;
+	}
 	while (cur->due.w > 0 && cur->due.h > 0) {
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
@@ -720,6 +729,8 @@ static void draw_due(void)
 		}
 		cur->due.y += band.h;
 		cur->due.h -= band.h;
+		scr_slice_rows += (unsigned long) band.h;
+		scr_bands++;
 		/* what a row took, as an average of the last bands' (a tick
 		   is 5 ms: bands of less are counted with the next) */
 		dt = pf_ms() - b0;
@@ -736,6 +747,11 @@ static void draw_due(void)
 	graf_mouse(M_ON, 0);
 	wind_update(END_UPDATE);
 	scr_ms_slice += pf_ms() - t0;
+}
+
+void win_sync(int on)
+{
+	sync_draw += on ? 1 : -1;
 }
 
 int win_due(void)
