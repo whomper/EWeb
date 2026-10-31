@@ -700,19 +700,56 @@ void log_event(const char *fmt, ...)
 
 static const char *gap_last;
 
+#ifdef AES_PROFILE
+/* the speed build only: each part of a stretch, as the work it does
+   changes, 20 ms or more ("AESPART ms what"): a stretch's tag is only the
+   last set in it (a status line drawn after a sheet was read made the
+   whole "draw bars") */
+static const char *part_what = "event";
+static unsigned long part_t0;
+
+static void gap_part(const char *what)
+{
+	unsigned long t = pf_ms();
+	if (what == part_what && part_t0)
+		return;
+	if (part_t0 && t - part_t0 >= 20) {
+		char b[64];
+		snprintf(b, sizeof b, "AESPART %lu ms %s\n", t - part_t0, part_what);
+		nf_debug(b);
+	}
+	part_what = what;
+	part_t0 = t;
+}
+/* before each event call: the part that ends there said, and nothing
+   counted while the AES waits */
+static void gap_wait(void)
+{
+	gap_part("waiting");
+	part_t0 = 0;
+}
+#define evnt_multi_(...) (gap_wait(), (evnt_multi_)(__VA_ARGS__))
+#define evnt_timer_(ms) (gap_wait(), (evnt_timer_)(ms))
+#else
+#define gap_part(what) ((void) 0)
+#endif
+
 void gap_event(const char *what)
 {
 	gap_last = NULL;
+	gap_part(what);
 	aes_profile_tag(what);
 }
 
 void gap_tag(const char *what)
 {
+	gap_part(what);
 	aes_profile_tag(gap_last = what);
 }
 
 void gap_stage(const char *what)
 {
+	gap_part(what);
 	if (gap_last == NULL)
 		aes_profile_tag(what);
 }

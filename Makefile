@@ -649,13 +649,21 @@ build/prof/tos/gem.o: common/atari/gem.c $(NET_HDRS)
 build/prof/st/gem.o: common/atari/gem.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -DAES_PROFILE=20 -c $< -o $@
-build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
+# and main.c so, which then says how long each part of a stretch took
+# (AESPART: the tag before each change of it, 20 ms or more)
+build/prof/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
+build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
+build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o)) -lgcc
-build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o
-	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
-		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o)) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o))) -lgcc
+build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
+		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
