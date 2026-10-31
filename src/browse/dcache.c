@@ -125,8 +125,8 @@ static void path_of(char *out, int size, const char *name)
 
 static void piece_path(char *out, int size, int p, const char *ext)
 {
-	char name[16];
-	snprintf(name, sizeof name, "EWEB%02X.%s", p, ext);
+	char name[24];
+	snprintf(name, sizeof name, "EWEB%02X.%.3s", p & 0xFF, ext);
 	path_of(out, size, name);
 }
 
