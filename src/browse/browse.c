@@ -1221,6 +1221,30 @@ static char *load_file(const char *path, long *len)
 	return d;
 }
 
+/* known trackers' hosts (Erez, 1 Nov 2026: left out by default), each
+   with the names under it */
+static const char *const tracker_hosts[] = {
+	"googletagmanager.com", "google-analytics.com", "analytics.google.com"
+};
+
+int br_tracker(const char *url)
+{
+	char host[256];
+	size_t n, k, i;
+	if (!has_scheme(url, "http") && !has_scheme(url, "https"))
+		return 0;
+	host_of(url, host, sizeof host);
+	n = strlen(host);
+	for (i = 0; i < sizeof tracker_hosts / sizeof tracker_hosts[0]; i++) {
+		k = strlen(tracker_hosts[i]);
+		if (n >= k && !strcmp(host + n - k, tracker_hosts[i]) && (n == k || host[n - k - 1] == '.'))
+			return 1;
+	}
+	return 0;
+}
+
+static int fetch_nav;	/* the page itself being fetched (not one of its parts) */
+
 static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		     int keep, const FSUBMIT *post, FETCH *f)
 {
@@ -1228,6 +1252,18 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 	fetch_packed = 0;
 	memset(f, 0, sizeof *f);
 	str_copy(f->url, url, sizeof f->url);
+	if (!fetch_nav && !b->trackers && br_tracker(url)) {
+		/* a page's part from a known tracker: not asked for (no
+		   connection, no cookie sent); what wanted it goes without */
+		snprintf(f->err, sizeof f->err, "A tracker's: left out.");
+		if (b->log != NULL) {
+			char host[200], line[240];
+			host_of(url, host, sizeof host);
+			snprintf(line, sizeof line, "a tracker's left out: %s", host);	/* (its host: no query, 7.3) */
+			b->log(b->ud, line);
+		}
+		return 0;
+	}
 	if (has_scheme(url, "file")) {
 		char path[512];
 		file_path(url, path, sizeof path);
@@ -3338,6 +3374,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
+	fetch_nav = 1;	/* (a page opened is fetched whatever its host) */
 	r = fetch(b, url, b->typed ? NULL : b->url,
 		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b)) {
@@ -3348,6 +3385,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		r = fetch(b, url, b->typed ? NULL : b->url,
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	}
+	fetch_nav = 0;
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop && !gone) {
@@ -5111,8 +5149,9 @@ static void prefetch(browser *b, int32_t top, int32_t height)
 		const dl_item *d = &b->p->items[i];
 		unsigned long dist;
 		long j;
-		if (d->type != DL_IMAGE || !to_fetch(b, d->img) || img_stale(d->img))
-			continue;
+		if (d->type != DL_IMAGE || !to_fetch(b, d->img) || img_stale(d->img) ||
+		    (!b->trackers && br_tracker(img_url(d->img))))
+			continue;	/* (a tracker's isn't named to the Pi either) */
 		for (k = 0; k < n && b->p->items[list[k].item].img != d->img; k++)
 			;
 		if (k < n)

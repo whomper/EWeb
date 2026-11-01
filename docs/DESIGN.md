@@ -1100,6 +1100,14 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   `ec_sizes`), else the window's width. A picture chosen for 2x is shown at half its file's size.
   `data-srcset` and `data-sizes` stand in as `data-src` does, and a `data:` candidate (a
   placeholder) only when there is nothing else.
+- **Known trackers left out** (your decision, 1 Nov 2026): what a page asks of Google Tag
+  Manager or Google Analytics (`googletagmanager.com`, `google-analytics.com`,
+  `analytics.google.com` and the names under them) isn't fetched, in either mode: no
+  connection (a TLS handshake each on a Falcon), no cookie sent; its script, picture,
+  sheet or frame goes without (`br_tracker`, in `fetch_raw` in `src/browse`; not named to the
+  Pi's prefetch either). A page opened (typed, a link followed) is always fetched.
+  `TRACKERS=1` fetches them too. webdriveruniversity.com's Autocomplete page loads
+  `gtag/js` from Google Tag Manager: left out now. `tests/browse/sitetest.c` checks the names.
 - **What isn't fetched, and the Pi's pictures** (21 Oct 2026; your yaary.music in Falcon mode took
   minutes for its pictures: 13 MB of them, 2560-pixel JPEGs, PNGs of up to 1.9 MB, and 1.4 MB of
   WebP that EWeb fetched only to find it couldn't read). In Falcon mode a picture whose address

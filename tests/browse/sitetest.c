@@ -5,6 +5,8 @@
  * no site, on the sites chosen (SCRIPTS=), on every site but those left
  * out (NOSCRIPTS=) and those whose scripts were too much since EWeb
  * started (the newest 16), a site tried again when chosen once more.
+ * And which addresses are known trackers' (br_tracker), left out of a
+ * page's parts by default.
  * Prints each failure and how many passed.
  */
 #include <stdio.h>
@@ -30,6 +32,16 @@ int main(void)
 	char url[64];
 	int i;
 	br_init(&b, 600, 1024);
+	expect("trackers left out by default", b.trackers, 0);
+	expect("a tracker: Google Tag Manager", br_tracker("https://www.googletagmanager.com/gtm.js?id=GTM-X"), 1);
+	expect("a tracker: Google Analytics", br_tracker("https://www.google-analytics.com/analytics.js"), 1);
+	expect("a tracker: GA4's collector", br_tracker("https://region1.google-analytics.com/g/collect?v=2"), 1);
+	expect("a tracker: analytics.google.com", br_tracker("https://analytics.google.com/g/collect"), 1);
+	expect("a tracker: its own name", br_tracker("http://googletagmanager.com/"), 1);
+	expect("not one: a name that ends the same", br_tracker("https://notgoogletagmanager.com/x.js"), 0);
+	expect("not one: Google itself", br_tracker("https://www.google.com/search?q=x"), 0);
+	expect("not one: a page's own", br_tracker("https://webdriveruniversity.com/"), 0);
+	expect("not one: the disk", br_tracker("file:///C:/googletagmanager.com/A.HTM"), 0);
 	expect("the sites chosen by default", b.script_mode, 1);
 	b.script_sites = "example.com file";
 	b.noscript_sites = "";

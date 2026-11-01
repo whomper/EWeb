@@ -163,6 +163,8 @@ typedef struct browser {
 	   site but those in noscript_sites; Erez, 24 Oct 2026: a setting, the
 	   sites chosen by default), the lists host names with spaces between
 	   ("*" all, "file" pages on the disk) */
+	int trackers;		/* 1: known trackers' parts fetched too (br_tracker); 0
+				   left out, the default (Erez, 1 Nov 2026) */
 	int scripts;
 	int script_mode;
 	const char *script_sites, *noscript_sites;
@@ -340,6 +342,10 @@ int br_refresh_note(const browser *b, char *out, int size);
 int br_scripts_for(const browser *b, const char *url);
 /* the same but for an FPU and EWEBJS.OVL: the setting and the lists */
 int br_scripts_site(const browser *b, const char *url);
+/* 1: url is a known tracker's (Google Tag Manager's, Google Analytics'): a
+   page's scripts, pictures, sheets and frames from there aren't fetched
+   unless b->trackers; a page opened (typed, a link) always is */
+int br_tracker(const char *url);
 /* url's scripts were too much: on every site, its site left out until
    EWeb quits (the oldest of 16 forgotten) */
 void br_scripts_too_much(const browser *b, const char *url);

@@ -764,6 +764,10 @@ there at once; where the window was, when you quit:
 - `GATEPORT=` its port (8280)
 - `SNAPSHOT=` 1 for pages through the Pi's browser (View > Through the
   Pi's browser), 0 for pages as their servers send them
+- `TRACKERS=` 0 (as it starts) leaves out what a page asks of known
+  trackers (Google Tag Manager, Google Analytics): their scripts,
+  pictures and frames aren't fetched; 1 fetches them too. A page you
+  open yourself is always fetched
 - `RUNSCRIPTS=` pages' scripts: 0 on no site, 1 on the sites in
   `SCRIPTS=`, 2 on every site but those in `NOSCRIPTS=` (Settings >
   Scripts)

@@ -60,7 +60,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0 };
+	       1, "", 0, 0 };
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -446,6 +446,8 @@ static void settings_load(void)
 			opt.gateport = (unsigned short) atoi(eq);
 		else if (!strcmp(line, "SNAPSHOT"))
 			opt.snapshot = atoi(eq) != 0;
+		else if (!strcmp(line, "TRACKERS"))
+			opt.trackers = atoi(eq) != 0;
 		else if (!strcmp(line, "SCRIPTS"))
 			str_copy(opt.scripts, eq, sizeof opt.scripts);
 		else if (!strcmp(line, "RUNSCRIPTS"))
@@ -660,6 +662,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.snapshot);
 	put(&s, "SNAPSHOT", v, "1: pages through the Pi's browser, after their scripts ran (the gateway's "
 	    "snapshots; View menu), 0: as the servers send them");
+	snprintf(v, sizeof v, "%d", opt.trackers);
+	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
+	    "fetched too, 0: left out");
 	snprintf(v, sizeof v, "%d", opt.runscripts);
 	put(&s, "RUNSCRIPTS", v, "pages' scripts (EWEB.PRG with an FPU; Settings > Scripts): 0 = on no site, "
 	    "1 = on the sites in SCRIPTS=, 2 = on every site but those in NOSCRIPTS=");
@@ -1399,6 +1404,7 @@ static void br_setup(browser *b)
 	b->can_open = can_open;
 	b->save_as = save_where;
 	b->snapshot = opt.snapshot;
+	b->trackers = opt.trackers;
 #ifndef EW_ST
 	b->scripts = scripts_ok;
 	scripts_apply(b);
