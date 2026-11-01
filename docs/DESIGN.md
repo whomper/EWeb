@@ -462,7 +462,9 @@ computer):
 | The next request over the kept connection: no handshake | 0 s |
 | Unpacking a 36 KB page (4 KB gzip) | 0.13 s |
 
-The serial line runs at about 20 KB a second, so the times for the body aren't the network's. On your
+The handshake's time is too good on this profile: Hatari runs the DSP at the 68030's pace, so at
+32 MHz it has some three times the room it has on a stock Falcon (EPlay's finding, the guidelines
+of 1 Nov 2026); DSP figures are taken on `Falcon-4` from then on. The serial line runs at about 20 KB a second, so the times for the body aren't the network's. On your
 DFB1, `EWGET.TTP` will say what a real connection costs. A new connection to a server seen before
 resumes its TLS session, which leaves out the key exchange (tested on this computer).
 
@@ -523,8 +525,9 @@ another program holds, goes back to BearSSL. Counted on Hatari's DSP core (the D
 A handshake like Wikipedia's (X25519, a P-256 signature, a P-384 one, an RSA one) should take about 2 s
 instead of 86. With the curves this cheap, the first hello offers ECDSA as well as RSA, so a server
 with only ECDSA isn't connected to three times. In the Hatari rig (`make hatarinet`, a P-256 key signed
-with P-384) the handshake takes 1.1 s, but Hatari runs the DSP more than twice as fast as a real one
-when the 68030 is set to 32 MHz, so that figure is too good. The product is mostly overhead around the
+with P-384) the handshake takes 1.1 s, but Hatari runs the DSP at the 68030's pace, some three times
+a real one's room when the 68030 is set to 32 MHz (EPlay's finding, 1 Nov 2026), so that figure is
+too good; the table above is the DSP's own cycles, which don't depend on it. The product is mostly overhead around the
 columns (2,240 cycles for P-256, of which 620 are the products themselves): there is room to make it
 faster if a measurement on the DFB1 says it matters.
 
@@ -1046,6 +1049,9 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   | shown at 192 x 128, the DSP shrinking it | 3.07 s | 0.45 s | | |
   | a 1024 x 683 photo shown at 600 x 400 (5/8, then shrunk) | 18.5 s | 2.0 s | | |
 
+  The 32 MHz columns' "with the DSP" figures are too good: Hatari runs the DSP at the 68030's pace,
+  some three times its room there (EPlay's finding, 1 Nov 2026); the stock Falcon's columns are the
+  ones to go by, and DSP figures are taken on `Falcon-4` only from then on.
   Hatari runs a stock Falcon about 1.8 times as fast as Erez's (4.56 s against 8.49 s on the
   68030, 1.40 s against 2.57 s with the DSP), so his should take about 1.1 s for the photo with
   the DSP. What is left: the 68030 reading each pixel through the host port (a status read and
