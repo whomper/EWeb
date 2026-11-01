@@ -111,7 +111,8 @@
  * last width. -Y WIDTH: the window sized so from inside the first
  * request the page's pictures make (as GEM's messages come in pf_idle
  * while one is under way): "sized in a request:" printed, and the
- * page's sheets come after it.
+ * page's sheets come after it. -Y WIDTH@again: so inside the first
+ * fetch of a picture again at the size shown (pens from the Pi).
  * -D BYTES: the memory pictures may take (img_max; EWEB.PRG's comes
  * from the machine's RAM), 8 MB by default.
  * -e NAME: once the page is shown, it is read again in that encoding
@@ -691,10 +692,11 @@ static void build_idle(void)
 /* -Y: the window sized inside a request (pf_idle), once */
 static browser *in_req_b;
 static int32_t in_req_w;
+static int in_req_again;	/* (W@again: in a picture's fetch at its size) */
 
 static void in_request(void)
 {
-	if (in_req_w > 0) {
+	if (in_req_w > 0 && (!in_req_again || br_pic_again)) {
 		int32_t w = in_req_w;
 		in_req_w = 0;
 		printf("sized in a request: %d\n", br_relayout(in_req_b, w));
@@ -808,8 +810,10 @@ int main(int argc, char **argv)
 			resize[nresize++] = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-D") && i + 1 < argc)
 			img_max = atol(argv[++i]);
-		else if (!strcmp(argv[i], "-Y") && i + 1 < argc)
+		else if (!strcmp(argv[i], "-Y") && i + 1 < argc) {
 			in_req_w = atoi(argv[++i]);
+			in_req_again = strstr(argv[i], "@again") != NULL;
+		}
 		else if (!strcmp(argv[i], "-P") && i + 1 < argc)
 			prev = argv[++i];
 		else if (!strcmp(argv[i], "-t"))

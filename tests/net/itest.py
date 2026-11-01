@@ -1192,6 +1192,14 @@ try:
                     check("the gateway: pictures as the Pi's pens, the same to the pixel", rc0 == 0 and rc1 == 0
                           and len(png0) == len(shown) and png0 == png1 and sorted(from_pi) == sorted(shown.items()),
                           out0 + out1)
+                    # the window sized while big.png is fetched again at the
+                    # size shown: the page laid out again under that fetch,
+                    # its old items freed (Erez's bombs, 1 Nov 2026: the step
+                    # read the old item's size after the fetch)
+                    rc2, out2, _ = drawn("", "-W", g, "-Q", "1", "-Y", "400@again")
+                    check("the gateway: the window sized while a picture is fetched again at its size",
+                          rc2 == 0 and "sized in a request: 1" in out2 and "AddressSanitizer" not in out2
+                          and re.search(r"^picture \S+/big\.png pens from the Pi at ", out2, re.M), out2)
                     # kept: read back for the same pens; JPEG asked for, it is fetched
                     cache = os.path.join(work, "PENSCACHE")
                     shutil.rmtree(cache, ignore_errors=True)

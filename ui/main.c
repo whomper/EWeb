@@ -967,8 +967,14 @@ static void idle(void)
 				} else {
 					put_off(MU_MESAG, msg, &ev);
 				}
-			} else if (msg[0] == AP_TERM || msg[0] == WM_CLOSED) {
-				put_off(MU_MESAG, msg, &ev);	/* (the window may be the pictures') */
+			} else if (msg[0] == AP_TERM || msg[0] == WM_CLOSED || msg[0] == WM_SIZED ||
+				   msg[0] == WM_FULLED || msg[0] == WM_UNICONIFY || msg[0] == WM_MOVED) {
+				/* (the window may be the pictures'; a window sized,
+				   fulled or moved to the screen's edge is laid out
+				   again, which may fetch its sheets for the new width:
+				   not inside the picture's fetch, with the pictures
+				   every window shares; Erez's bombs, 1 Nov 2026) */
+				put_off(MU_MESAG, msg, &ev);
 			} else {
 				win_message(msg);
 			}

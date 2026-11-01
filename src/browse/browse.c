@@ -2350,6 +2350,7 @@ static int build(browser *b, const char *data, long len, const char *charset, co
    and the news page on a stock Falcon took 3.5 and 7.6 s without, the
    news page 39 s on an ST, 27 Oct 2026 */
 static int pic_turns;
+int br_pic_again;
 
 static page *lay_turns(browser *b, doc *d, const char *base)
 {
@@ -5420,7 +5421,10 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 		if (img_refetch(im, DL_PIC_W(d), DL_PIC_H(d)) && img_refetched(im) < 4) {
 			/* pens from the Pi for another size or screen: asked for
 			   at this size, for this screen */
-			int r = fetch_picture(b, im, DL_PIC_W(d), DL_PIC_H(d));
+			int r;
+			br_pic_again = 1;
+			r = fetch_picture(b, im, DL_PIC_W(d), DL_PIC_H(d));
+			br_pic_again = 0;
 			if (r < 0)
 				return BRP_STOPPED;
 			b->pic_done--;	/* the same picture */
@@ -5429,6 +5433,13 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 				snprintf(what, sizeof what, "failed (%s)", img_why(im));
 				log_img(b, im, what, 0, 0);
 			}
+			/* laid out again during the fetch (GEM's turns: a window
+			   sized, fulled or moved to the screen's edge): d was the
+			   old page's, freed with it; its size is read again from
+			   the new one at the next step (Erez's bombs of 1 Nov 2026,
+			   pictures through the Pi fetched again at their size) */
+			if (b->p != p0)
+				return BRP_LAYOUT;
 		}
 		if (!img_tried(im, DL_PIC_W(d), DL_PIC_H(d)) && img_state(im) == IMG_HERE) {
 			unsigned long t = pf_ms();

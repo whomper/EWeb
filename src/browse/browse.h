@@ -245,6 +245,9 @@ int br_relayout(browser *b, int32_t width);
 enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT, BRB_SCRIPT };
 extern int br_building;
 extern unsigned long br_poll_ms;
+/* a picture fetched again at the size shown (pens from the Pi): 1 during
+   that fetch (ewrender's -Y W@again sizes the window then) */
+extern int br_pic_again;
 /* (the speed build: each step of a page's making named, main.c's gap_tag) */
 extern void (*br_mark)(const char *what);
 /* a details element's summary clicked (page_summary_at): the details
