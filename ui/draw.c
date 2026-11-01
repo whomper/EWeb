@@ -131,11 +131,11 @@ void fill(GRECT *r, short color)
 	pxy[1] = r->y;
 	pxy[2] = r->x + r->w - 1;
 	pxy[3] = r->y + r->h - 1;
-	if ((color == 0 || color == 1) && text_plain_state() >= 0) {
-		/* (pens 0 and 1 by the CPU on TOS's own screen: common's fast
-		   path, the guidelines' Speed; where text_plain doesn't go into
-		   the screen, the VDI as always: its fallback restores the fill's
-		   attributes, a few calls more) */
+	if ((color == 0 || color == 1) && scr_cpu_wins()) {
+		/* (pens 0 and 1 by the CPU on TOS's own screen and a 68000:
+		   common's fast path, the guidelines' Speed; on a 68030 TOS 4's
+		   own fill is as fast or faster, so the VDI's below, its
+		   attributes set again only when they change: gem.c's) */
 		scr_fill(vdi_h, pxy, color);
 		return;
 	}
