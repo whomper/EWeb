@@ -218,11 +218,13 @@ TOS_STACK := 262144
 ST_STACK  := $(TOS_STACK)
 # (crt0 and main.c are made again when they change: the two must agree)
 build/tos/gem/main.o build/st/gem/main.o: Makefile
+# (only what is called is linked: each function and datum a section of its
+# own, the rest dropped by --gc-sections; the family's rule of 1 Nov 2026)
 TOS_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
-              -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
+              -ffunction-sections -fdata-sections -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
 TOS_LDFLAGS := -m68030 -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
-              -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
+              -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--gc-sections
 $(eval $(call target_rules,tos,$(M68KCC),$(TOS_CFLAGS)))
 tos_BENCH  := $(subst plat_posix,plat_tos,$(tos_BENCH))
 tos_RT     := build/tos/rt/crt0.o build/tos/rt/nf.o build/tos/rt/libc.o build/tos/rt/tos.o \
@@ -344,6 +346,7 @@ build/host/mkroots: common/tools/mkroots.c $(HOSTNET_SRC) $(NET_HDRS) build/host
 
 # the Atari: 68030 code (no FPU instructions), on common/'s runtime
 TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
+                 -ffunction-sections -fdata-sections \
                  -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc -isystem $(GCCINC) \
                  -Iatari/include -Icommon/atari/include $(NET_INC)
 # common/'s files as the other AERA apps build them
