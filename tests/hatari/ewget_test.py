@@ -28,17 +28,21 @@ import machines  # noqa: E402
 import server  # noqa: E402
 
 HTTP, HTTPS, EC, GATE = 18180, 18543, 18545, 18288
+BOTH = 18546	# a server with an RSA certificate and an ECDSA one
 # AERA-Gateway's webgate (EWeb's copy, gateway/, or WEBGATE=path/webgate.py)
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
 RUNS = [
     ("https", "-n 2 -o PAGE.HTM https://127.0.0.1:%d/page" % HTTPS),
     ("http to https", "-o MOVED.HTM http://127.0.0.1:%d/secure" % HTTP),
-    # an ECDSA certificate (P-256, signed with P-384): the elliptic curves
-    # on the DSP, ECDSA offered at once
+    # an ECDSA certificate (P-256, signed with P-384) and no RSA one: RSA
+    # asked for first (common's conn.c: a stock Falcon's DSP took 5.5 s for
+    # a P-256 signature), ECDSA on the retry, the elliptic curves on the DSP
     ("ECDSA", "-l EC.LOG -o EC.HTM https://127.0.0.1:%d/page" % EC),
     # again: the certificate's signature remembered in SIGS.DAT, so the
     # DSP does only the key exchange and its signature
     ("ECDSA again", "-l EC2.LOG https://127.0.0.1:%d/page" % EC),
+    # both kinds: the RSA one taken, in one try
+    ("RSA and ECDSA", "-l BOTH.LOG https://127.0.0.1:%d/page" % BOTH),
     # the release's certificates (Mozilla's list, and ROOTS.DAT made from
     # it on this computer): read from the cache, and the test authority
     # isn't among them
@@ -91,7 +95,7 @@ def main():
     srv_dir = os.path.join(work, "srv")
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "net", "server.py"), srv_dir,
                             "--http", str(HTTP), "--https", str(HTTPS), "--untrusted", str(HTTPS + 1),
-                            "--ecdsa", str(EC)],
+                            "--ecdsa", str(EC), "--both", str(BOTH)],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         sys.exit("ewget_test: the servers didn't start")
@@ -140,7 +144,7 @@ def main():
             elif name == "ECDSA":
                 net = open(os.path.join(hd, "EC.LOG"), errors="replace").read()
                 ok = ok and "ECDHE-ECDSA" in text and "elliptic curves on the DSP" in text \
-                     and "(3 tries)" not in text and "passed its elliptic-curve self-test" in net \
+                     and " tries)" in text and "passed its elliptic-curve self-test" in net \
                      and "ECDSA P-384 on the DSP" in net and "ECDSA P-256 on the DSP" in net \
                      and "the server's first answer" in net and "the handshake: " in net \
                      and "0 of 1 ECDSA signatures checked before" in net \
@@ -153,6 +157,13 @@ def main():
                 net = open(os.path.join(hd, "EC2.LOG"), errors="replace").read()
                 ok = ok and "1 of 1 ECDSA signatures checked before" in net and "ECDSA P-384" not in net \
                      and "ECDSA P-256 on the DSP" in net
+                for l in net.splitlines():
+                    if "TLS --" in l:
+                        print("---- " + l.strip())
+            elif name == "RSA and ECDSA":
+                net = open(os.path.join(hd, "BOTH.LOG"), errors="replace").read()
+                ok = ok and "ECDHE-RSA" in text and " tries)" not in text and "the server's key: RSA" in net \
+                     and "ECDSA P-256" not in net
                 for l in net.splitlines():
                     if "TLS --" in l:
                         print("---- " + l.strip())

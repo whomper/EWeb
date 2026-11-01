@@ -9,7 +9,7 @@ test authority made here (WORK/CACERT.PEM), the same server on 127.0.0.2
 nobody signed; and one with only an ECDSA certificate (a P-256 key signed
 by a P-384 test authority, as Wikipedia's are), for the elliptic curves.
 
-    server.py WORK [--http PORT] [--https PORT] [--untrusted PORT] [--ecdsa PORT]
+    server.py WORK [--http PORT] [--https PORT] [--untrusted PORT] [--ecdsa PORT] [--both PORT]
 
 Pages:
   /page          a page of text (gzip when it is asked for), keep-alive
@@ -987,9 +987,13 @@ def serve(port, ctx=None, addr="127.0.0.1"):
     return s
 
 
-def tls_context(work, cert, key):
+def tls_context(work, cert, key, cert2=None, key2=None):
+    """a server's TLS; with cert2, a second certificate of another kind
+    (RSA and ECDSA: the one a client asks for given it)"""
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(os.path.join(work, cert), os.path.join(work, key))
+    if cert2:
+        ctx.load_cert_chain(os.path.join(work, cert2), os.path.join(work, key2))
     return ctx
 
 
@@ -1000,6 +1004,7 @@ def main():
     ap.add_argument("--https", type=int, default=18443)
     ap.add_argument("--untrusted", type=int, default=18444)
     ap.add_argument("--ecdsa", type=int, default=18445)
+    ap.add_argument("--both", type=int, default=18446)	# RSA and ECDSA certificates
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
@@ -1010,6 +1015,7 @@ def main():
     serve(a.https, tls_context(a.work, "host.pem", "host.key"), "127.0.0.2")
     serve(a.untrusted, tls_context(a.work, "self.pem", "self.key"))
     serve(a.ecdsa, tls_context(a.work, "ec.pem", "ec.key"))
+    serve(a.both, tls_context(a.work, "host.pem", "host.key", "ec.pem", "ec.key"))
     print("ready", flush=True)
     try:
         sys.stdin.read()		# until whoever started us closes our stdin
