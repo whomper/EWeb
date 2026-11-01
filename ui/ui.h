@@ -76,6 +76,7 @@ typedef struct ewin {
 	char title[160];
 	GRECT but[WIN_BUTTONS];
 	int hot, sunk;			/* the button under the mouse, the one held down; -1 none */
+	int pressed;			/* the page's link held down (1 + its index), 0 none (5.8) */
 	/* the address field: Atari text (a URL is ASCII), the cursor, the
 	   first character shown, and whether it is all chosen */
 	char addr[1024];
@@ -249,6 +250,7 @@ int  win_stop_hit(short mx, short my);	/* on Stop, while loading */
 void win_clip(int what);		/* CLIP_COPY...: the address field, or the page's text */
 void win_find(int how);			/* Edit > Find (0), Find next (1), Find previous (-1) */
 int  win_mark(pg_range *r, uint32_t *rgb);	/* the selection, to mark (screen.c): 1, where and its colour */
+int  win_pressed(void);		/* the link held down (1 + its index), for screen.c; 0 none */
 void win_select_all(void);		/* Edit > Select all, on the page */
 
 /* main.c */

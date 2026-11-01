@@ -3116,6 +3116,8 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 	} else {
 		if (c->marked)
 			marked(c, p, d);
+		if (c->pressed != 0 && d->link == c->pressed)
+			rgb = 0xEE0000;	/* (:active's colour, the HTML Standard's 15.3.4) */
 		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, rgb, d->flags);
 	}
 }

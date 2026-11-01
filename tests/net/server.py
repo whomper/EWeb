@@ -1004,7 +1004,7 @@ def main():
     ap.add_argument("--https", type=int, default=18443)
     ap.add_argument("--untrusted", type=int, default=18444)
     ap.add_argument("--ecdsa", type=int, default=18445)
-    ap.add_argument("--both", type=int, default=18446)	# RSA and ECDSA certificates
+    ap.add_argument("--both", type=int, default=0)	# RSA and ECDSA certificates (0: none)
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
@@ -1015,7 +1015,8 @@ def main():
     serve(a.https, tls_context(a.work, "host.pem", "host.key"), "127.0.0.2")
     serve(a.untrusted, tls_context(a.work, "self.pem", "self.key"))
     serve(a.ecdsa, tls_context(a.work, "ec.pem", "ec.key"))
-    serve(a.both, tls_context(a.work, "host.pem", "host.key", "ec.pem", "ec.key"))
+    if a.both:
+        serve(a.both, tls_context(a.work, "host.pem", "host.key", "ec.pem", "ec.key"))
     print("ready", flush=True)
     try:
         sys.stdin.read()		# until whoever started us closes our stdin

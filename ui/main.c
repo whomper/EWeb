@@ -2078,6 +2078,27 @@ static void dialog_redraw(const short *msg)
 	win_sync(0);
 }
 
+
+/* a press's clicks, 1 or 2 (the guidelines' 5.8): the loop asks the AES
+   for one click, so that it hands a press over at once (asking for two
+   held every press back for the double-click time); a second press of the
+   same button near the first within DCLICK_MS is a double click. (The
+   AES's own setting, evnt_dclick, when common's click.c has it.) */
+#define DCLICK_MS 330
+static short clicks_now(short mx, short my, short button)
+{
+	static unsigned long at;
+	static short ax, ay, ab;
+	unsigned long t = pf_ms();
+	int two = at != 0 && t - at <= DCLICK_MS && button == ab && mx >= ax - 4 && mx <= ax + 4 &&
+		  my >= ay - 4 && my <= ay + 4;
+	at = two ? 0 : (t ? t : 1);
+	ax = mx;
+	ay = my;
+	ab = button;
+	return two ? 2 : 1;
+}
+
 /* an event of the main loop (or one put off while a picture came) */
 static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *hover_y)
 {
@@ -2139,7 +2160,7 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 				menu_update();
 			}
 		}
-		if (win_mouse(ev.mx, ev.my, ev.mbutton, ev.breturn >= 2 ? 2 : 1, ev.kstate))
+		if (win_mouse(ev.mx, ev.my, ev.mbutton, clicks_now(ev.mx, ev.my, ev.mbutton), ev.kstate))
 			menu_update();
 		do {			/* the button let go */
 			graf_mkstate(&mx, &my, &mbt, &ks);
@@ -2550,7 +2571,7 @@ int app_main(void)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
 				    (more || due >= 0 || rib || wait <= 1 ? MU_TIMER : 0),
-				    0x102, 3, 0, wait, msg, &ev);
+				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, clicks_now) */
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);

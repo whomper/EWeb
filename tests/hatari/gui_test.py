@@ -362,6 +362,19 @@ def browse():
         pt = link_point(site, area, int(m.group(5)), "the second page")
         if not check("browse: the link found on the page", pt is not None):
             return
+        # the guidelines' 5.8: pressed, the link is drawn at once in
+        # :active's red; moved off it while held and let go, nothing is
+        # followed (a drag: text selected)
+        r.mouse.move(*pt)
+        r.mouse.xdo("mousedown", "1")
+        time.sleep(0.5)
+        im = Image.open(r.shot(30)).convert("RGB").crop((pt[0] - 4, pt[1] - 12, pt[0] + 60, pt[1] + 6))
+        red = sum(1 for px in im.getdata() if px[0] > 180 and px[1] < 80 and px[2] < 80)
+        r.mouse.move(pt[0], pt[1] + 60)
+        r.mouse.xdo("mouseup", "1")
+        ev = r.wait(r"shown ", 3)
+        check("browse: a link drawn pressed at the press, not followed when let go off it (5.8)",
+              red > 5 and ev is None, "%d red pixels, %s" % (red, ev))
         r.mouse.click(*pt)
         ev = r.wait(r"shown ", 120)
         check("browse: a link clicked", ev is not None and ev.startswith("shown %stwo.html " % site), str(r.events()))

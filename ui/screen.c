@@ -725,6 +725,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 	c.pal = (const uint8_t (*)[3]) pal;	/* (translucent items mixed through it) */
 	c.picture = picture;
 	c.marked = p != NULL && win_mark(&c.mark, &c.mark_rgb);	/* (the selection, Edit > Find's words) */
+	c.pressed = (uint16_t) (p != NULL ? win_pressed() : 0);	/* (a link held down) */
 	c.aes_bars = 1;		/* (the boxes' bars: win.c draws them over this, the AES's) */
 	for (y0 = 0; y0 < area->h; y0 += rows) {
 		short h = area->h - y0 > rows ? rows : area->h - y0;

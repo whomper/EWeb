@@ -42,6 +42,9 @@ typedef struct canvas {
 	int marked;
 	pg_range mark;
 	uint32_t mark_rgb;
+	/* a link held down (1 + its index, the items' link; 0 none): its text
+	   drawn in the active colour (the guidelines' 5.8: shown at the press) */
+	uint16_t pressed;
 	/* 1: a box's scroll bars are the screen's to draw (EWEB.PRG: the
 	   AES's, panebar, over the copy; the guidelines' 5.1), not drawn here */
 	int aes_bars;

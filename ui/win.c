@@ -1926,6 +1926,51 @@ static void sel_clear(void)
 
 /* the selection marked on the screen (screen.c): 1, the stretch and its
    colour */
+int win_pressed(void)
+{
+	return cur->pressed;
+}
+
+/* the link held down (1 + its index; 0: none), the old one's and the new
+   one's runs drawn at once (the guidelines' 5.8: a press shown within
+   50 ms, before anything else) */
+static void link_press(int link1)
+{
+	int old = cur->pressed, k;
+	long i;
+	if (old == link1 || br.p == NULL)
+		return;
+	cur->pressed = link1;
+	for (k = 0; k < 2; k++) {
+		int l = k ? link1 : old;
+		int32_t x0 = INT32_MAX, y0 = INT32_MAX, x1 = INT32_MIN, y1 = INT32_MIN;
+		GRECT r;
+		if (l == 0)
+			continue;
+		for (i = 0; i < br.p->nitems; i++) {
+			const dl_item *d = &br.p->items[i];
+			if (d->type != DL_TEXT || d->link != l || d->y + d->h <= cur->top ||
+			    d->y >= cur->top + cur->r_page.h)
+				continue;
+			if (d->x < x0)
+				x0 = d->x;
+			if (d->y < y0)
+				y0 = d->y;
+			if (d->x + d->w > x1)
+				x1 = d->x + d->w;
+			if (d->y + d->h > y1)
+				y1 = d->y + d->h;
+		}
+		if (x0 >= x1)
+			continue;
+		r.x = (short) (cur->r_page.x + x0 - cur->left);
+		r.y = (short) (cur->r_page.y + y0 - cur->top);
+		r.w = (short) (x1 - x0);
+		r.h = (short) (y1 - y0);
+		redraw(&r, 2);
+	}
+}
+
 int win_mark(pg_range *r, uint32_t *rgb)
 {
 	if (br.pv_p != NULL || !sel_now())	/* (a preview: the selection is the page's) */
@@ -2286,9 +2331,15 @@ static int select_text(short mx, short my, short clicks, short kstate)
 		to = cur->sel.at[1];
 		whole = cur->sel.found;	/* (Find's yellow becomes the selection's colour) */
 	} else {
+		/* a link pressed: shown so at once (5.8), followed on release
+		   (the click after this), drawn back if it becomes a drag */
+		int pl = link_at(mx, my);
+		if (pl >= 0)
+			link_press(pl + 1);
 		for (;;) {
 			graf_mkstate(&x, &y, &mb, &ks);
 			if (!(mb & 1)) {
+				link_press(0);
 				sel_clear();
 				return 0;
 			}
@@ -2296,6 +2347,7 @@ static int select_text(short mx, short my, short clicks, short kstate)
 				break;
 			evnt_timer_(10);
 		}
+		link_press(0);
 		cur->sel.on = 0;
 		from = to = at;
 	}
