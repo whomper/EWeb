@@ -24,7 +24,7 @@ fill 72,21 2x64 #767676
 fill 234,21 2x64 #767676
 text 6,87 66x17 #222222 sans13 link 0 "An iframe "
 text 240,87 75x17 #222222 sans13 link 0 "beside text."
-clip x 8+482 y 105+96 in 0
+clip x 8+536 y 105+96 in 0
 clip x 235+128 y 116+29 in 2
 fill 235,116 128x29 #eeffee
 text 241,148 79x17 #000000 sans13 link 0 "Page one, in"

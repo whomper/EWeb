@@ -184,7 +184,7 @@ int svg_size(const char *data, long len, long *w, long *h)
 	if ((v = attr_in(t, end, "viewbox", &vl)) != NULL)
 		vb = viewbox(v, vl, &vw, &vh);
 	size_of(aw, ah, vb, vw, vh, w, h);
-	return 1;
+	return aw <= 0 && ah <= 0 && vb ? 2 : 1;
 }
 
 int svg_late(const char *data, long len)

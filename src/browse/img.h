@@ -25,6 +25,9 @@ const char *img_url(const ew_img *im);
 int img_state(const ew_img *im);
 /* its size in CSS px, from its file's header; 0 x 0 until it has come */
 void img_size(const ew_img *im, int32_t *w, int32_t *h);
+/* an SVG of proportions alone (no width or height of its own: img_size
+   gives them on 300 wide) */
+int img_ratio(const ew_img *im);
 /* a page shows it (+1), or no longer (-1) */
 void img_ref(ew_img *im, int d);
 

@@ -30,8 +30,10 @@ typedef struct {
 	/* a picture: its handle for an <img>'s src or a background's url()
 	   (as the page has it; NULL: pictures aren't shown, an <img>'s alt
 	   text is), and its size in CSS px once it is known (0 x 0 until its
-	   file has come). css: a url() of the page's CSS, whose query is
-	   UTF-8 (CSS parses it without the page's encoding) */
+	   file has come; both negative: a picture of those proportions with
+	   no size of its own, an SVG of a viewBox alone, as wide as its place
+	   where its width is auto). css: a url() of the page's CSS, whose
+	   query is UTF-8 (CSS parses it without the page's encoding) */
 	void *(*image)(void *ud, const char *src, int css, int32_t *w, int32_t *h);
 	/* a page's inline <svg> (n) as a picture, color its currentColor
 	   (0xRRGGBB): its handle and its size in CSS px, as image's; NULL:

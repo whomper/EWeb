@@ -142,12 +142,82 @@ void pf_debug(const char *s)
 int net_init(void) { return 1; }
 const char *net_stack(void) { return "POSIX"; }
 
+/* EW_PROXY="HOST:PORT": every connection through that HTTP proxy, by
+   CONNECT (a machine whose only way out is a proxy; the sites' TLS is
+   EWeb's own, end to end through the tunnel, or the proxy's where it
+   re-signs it: ewrender -c with its roots). Read in blocking mode, as
+   the tunnel's answer is short. 1 and fd set, 0 when not set, -1 */
+static int net_proxy(const char *host, unsigned short port, int *fd, char *err, int errlen)
+{
+	const char *px = getenv("EW_PROXY"), *colon;
+	struct addrinfo hints, *res;
+	char ph[128], pp[8], req[512], ans[1024];
+	size_t n = 0;
+	int f;
+	if (px == NULL || *px == 0)
+		return 0;
+	if ((colon = strrchr(px, ':')) == NULL || (size_t) (colon - px) >= sizeof ph ||
+	    strlen(colon + 1) >= sizeof pp) {
+		snprintf(err, errlen, "EW_PROXY is HOST:PORT");
+		return -1;
+	}
+	memcpy(ph, px, (size_t) (colon - px));
+	ph[colon - px] = 0;
+	strcpy(pp, colon + 1);
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	if (getaddrinfo(ph, pp, &hints, &res)) {
+		snprintf(err, errlen, "can't find the proxy %s", ph);
+		return -1;
+	}
+	f = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (f < 0 || connect(f, res->ai_addr, res->ai_addrlen) != 0) {
+		freeaddrinfo(res);
+		if (f >= 0)
+			close(f);
+		snprintf(err, errlen, "can't connect to the proxy %s", px);
+		return -1;
+	}
+	freeaddrinfo(res);
+	snprintf(req, sizeof req, "CONNECT %s:%u HTTP/1.1\r\nHost: %s:%u\r\n\r\n", host, port, host, port);
+	if (send(f, req, strlen(req), MSG_NOSIGNAL) != (ssize_t) strlen(req)) {
+		close(f);
+		snprintf(err, errlen, "the proxy %s closed", px);
+		return -1;
+	}
+	/* its answer, a byte at a time to its blank line (nothing of the
+	   tunnel after it read) */
+	while (n < sizeof ans - 1) {
+		ssize_t r = recv(f, ans + n, 1, 0);
+		if (r <= 0)
+			break;
+		n++;
+		if (n >= 4 && memcmp(ans + n - 4, "\r\n\r\n", 4) == 0)
+			break;
+	}
+	ans[n] = 0;
+	if (strncmp(ans, "HTTP/1.", 7) != 0 || strncmp(ans + 8, " 200", 4) != 0) {
+		close(f);
+		snprintf(err, errlen, "the proxy refused %s:%u: %.40s", host, port, ans);
+		return -1;
+	}
+	*fd = f;
+	return 1;
+}
+
 int net_open(const char *host, unsigned short port, char *err, int errlen)
 {
 	struct addrinfo hints, *res, *ai;
 	char ps[8], to[64];
 	int fd = -1, r;
 	const char *map = getenv("EW_HOSTS");
+	if ((r = net_proxy(host, port, &fd, err, errlen)) != 0) {
+		if (r < 0)
+			return -1;
+		fcntl(fd, F_SETFL, O_NONBLOCK);
+		return fd;
+	}
 	/* EW_HOSTS="NAME=ADDRESS ...": names found there first (make itest's
 	   host under Israel's .il, for the encoding of pages that name none) */
 	while (map != NULL && *map) {

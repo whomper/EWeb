@@ -3865,6 +3865,40 @@ Tests: `tests/layout/absbottom.html` (bottoms, % tops and heights, styled contro
 looked at against Chromium), `floats.txt` and `gradients.txt` changed for the better (a floated
 field with its width and border; a bar at its box's bottom), `tests/js/domdoc.html`.
 
+**webdriveruniversity.com again (1 Nov 2026; 1.0's sixth).** The site has a new look since (a dark
+front page of course cards and challenge cards); its front page and its 18 challenges drawn by
+EWeb (Direct, scripts off and on) and by Chromium, side by side:
+
+- **A card's button at its bottom**: a grid row or a flex line that stretches an item made its
+  background and borders taller and nothing more, so a flex column's `justify-content` and
+  `flex-grow` had no room to work with (its height not set: the room comes after). A flex column of
+  no set height keeps its items' places (`box.fc`, `struct fcol`), and `stretch_box` places them
+  in the room as `flex_layout` would at that height. A link's click area (`link_area`) is
+  stretched with its box (`NBD` 6): a card's lower half didn't click.
+- **`::before` and `::after` with no text** (a dot before a name, a bar, an icon's square) made no
+  box: now one wherever it has a size of its own (a block, an inline-block, a flex or grid item, a
+  float, one positioned), and an inline-block one is an atom on its line, as an element is.
+- **A box placed by `top` and `bottom` in a block of auto height** (a bar beside a block) was 0
+  high: as tall as they leave once the block's height is known (`bottom_place`, `by_top` 2).
+- **An SVG of a `viewBox` alone** (no width or height: proportions, no size of its own) is as wide
+  as its place, as browsers make it (CSS 2.1, 10.3.2; `svg_size` 2, `img_ratio`, `box.ratio`), not
+  300 CSS px; where its place has no width yet (a float, a cell being measured) it stays 300.
+- **A picture's percentage width taken twice**: as a block of its own (`display: block`, an
+  iframe) the block resolved `width: 60%` and the picture took 60% of that again (`L.repl`); the
+  `tests/layout/frames.html` iframe of 90% is now 536 px, not 482.
+- `tests/host/plat_posix.c` reaches the web through a proxy when `EW_PROXY=HOST:PORT` says
+  (CONNECT; for a build machine whose only way out is one, its roots given to ewrender `-c`).
+
+Left as they are: emoji (no glyphs in `EWEB.FNT`: drawn as '?'), rounded corners and shadows (not
+drawn, DESIGN.md's CSS), a `<button>`'s own elements (its text is its label: Bootstrap's
+navigation button reads "Toggle navigation"), a control whose page gives it `background:
+transparent` and a border (it keeps its own ground: the cascade doesn't say who set the
+transparent), `customElements` (the AI Playground's), and two pages over the script budget with
+Google's tag script (385 KB of the 558 KB of Datepicker's scripts).
+
+Tests: `tests/layout/cards.html` (the cards, a column's `flex-grow`, `::before` boxes, a positioned
+bar, block and inline pictures of 60%, SVGs of a `viewBox` alone; looked at against Chromium).
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when

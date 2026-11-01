@@ -14,7 +14,9 @@
 #include "pic.h"
 
 /* an SVG file's own size in CSS px (its root's width and height, else its
-   viewBox's proportions on 300 wide, else 300 x 150): 0 when it isn't one */
+   viewBox's proportions on 300 wide, else 300 x 150): 0 when it isn't one,
+   2 when its root has a viewBox and no width or height (proportions and
+   no size of its own: as wide as its place, CSS 2.1 10.3.2), else 1 */
 int svg_size(const char *data, long len, long *w, long *h);
 /* an SVG whose <svg> comes past pic_kind's first 1024 bytes (a long
    XML prolog, an editor's comments): it starts as XML does */

@@ -1803,6 +1803,10 @@ static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h
 			img_set_file(im, data, len);
 	}
 	img_size(im, w, h);
+	if (img_ratio(im)) {
+		*w = -*w;	/* (proportions alone: LAYOUT_OPT.image) */
+		*h = -*h;
+	}
 	return im;
 }
 

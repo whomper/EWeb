@@ -27,8 +27,9 @@
 
 #define AUTO INT32_MIN
 #define MAXCOLS 64			/* a table's columns that line up; more go as they come */
-#define NBD 5				/* a block's border items (top, bottom, left, right) and
-					   its clip (DL_CLIP), for a row or a flex line to stretch */
+#define NBD 6				/* a block's border items (top, bottom, left, right), its
+					   clip (DL_CLIP) and its link's click area, for a row or a
+					   flex line to stretch */
 
 /* ---------------------------------------------------------------- memory */
 
@@ -99,6 +100,8 @@ enum { BX_BLOCK, BX_INLINE, BX_TEXT, BX_BR, BX_ATOM, BX_MARK };
 enum { AT_LABEL, AT_IMAGE, AT_CONTROL };
 
 typedef struct box box;
+struct fcol;
+
 struct box {
 	uint8_t kind;
 	uint8_t inl;			/* a block whose children are inline: lines */
@@ -133,6 +136,9 @@ struct box {
 	void *img;			/* AT_IMAGE: the picture's handle; LB_SUM: the
 					   details element (dnode *) */
 	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
+	struct fcol *fc;		/* a flex column of no set height: its items (stretch_box) */
+	uint8_t ratio;			/* AT_IMAGE: proportions alone (an SVG of a viewBox): iw x
+					   ih where it has no place to be as wide as */
 };
 
 /* box.list: a list item (display: list-item); the summary a click opens
@@ -238,6 +244,7 @@ typedef struct {
 					   together (inline_measure: a table asks for each in
 					   turn), by its box; MC_N, NULL until needed */
 	int lined;			/* the items have a picture placed by its line's top or bottom */
+	int repl;			/* image_size for a picture's block of its own (repl_layout) */
 	int line0;			/* the next text run starts a line box (DLF_LINE0) */
 	uint8_t *lv;			/* each item's bidi level, its paragraph's right to left in
 					   bit 7 (bidi_levels; NULL: all left to right). A byte
@@ -327,7 +334,8 @@ typedef struct {
 		const ec_style *st;	/* top, else bottom, from it */
 		int32_t h;		/* its margin box's height */
 		dnode *n;
-		int depth, by_top;
+		int depth, by_top;	/* by_top 2: by top, as tall as top and bottom leave */
+		long bg, bd[NBD];	/* (by_top 2: its background and borders, to stretch) */
 	} *bots;
 	int nbots, botcap, cbdepth;
 	/* the positioned boxes laid out, in the document's order: each its
@@ -1159,11 +1167,11 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
    inline-block, flex...): its border box, where a click anywhere is one
    on the link, as in a browser, not only on its words and pictures; an
    item not drawn (rgb's AA 0) */
-static void link_area(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
+static long link_area(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
 {
 	dl_item *d;
 	if (w <= 0 || h <= 0 || (d = dl_add(l)) == NULL)
-		return;
+		return -1;
 	d->type = DL_FILL;
 	d->x = x;
 	d->y = y;
@@ -1173,6 +1181,7 @@ static void link_area(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32
 #ifndef EW_ST
 	d->node = b->n;
 #endif
+	return (long) (d - l->p->items);
 }
 
 /* where a click opens and closes the details det: its summary's box,
@@ -1475,9 +1484,13 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 	case FC_IMAGE: {
 		const char *src = dn_attr(n, "src");
 		int32_t iw = 0, ih = 0;
+		int ratio;
 		void *im = NULL;
 		if (src != NULL && *src && l->p->opt.image != NULL)
 			im = l->p->opt.image(l->p->opt.ud, src, 0, &iw, &ih);
+		ratio = iw < 0 && ih < 0;
+		if (ratio)
+			iw = -iw, ih = -ih;
 		if (im != NULL) {
 			if (parent->n == n) {
 				parent->repl = 1;	/* the picture is the block */
@@ -1493,6 +1506,7 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 				parent->last->img = im;
 				parent->last->iw = iw;
 				parent->last->ih = ih;
+				parent->last->ratio = (uint8_t) ratio;
 				parent->last->ctl = add_ctl(l, c);
 			}
 			return;
@@ -1757,15 +1771,24 @@ static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps)
 			o += k;
 		}
 	}
-	if (o == 0)
-		return;
-	if (block_level(kw(ps, EP_DISPLAY))) {
-		box *b = new_box(l, BX_BLOCK, NULL, ps, parent);
-		if (b != NULL)
-			add_text_box(l, b, ps, astrdup(l->a, buf, o), (uint32_t) o);
-	} else {
-		box *b = new_box(l, BX_INLINE, NULL, ps, parent);
-		if (b != NULL)
+	{
+		/* as build_element makes an element's box: an inline-block an
+		   atom in its line; with no content, a box only where it has a
+		   size of its own (a dot, a bar: a block, an inline-block, a
+		   flex or grid item, a float, one positioned) */
+		int d = kw(ps, EP_DISPLAY), pos = kw(ps, EP_POSITION), fl = kw(ps, EP_FLOAT) != KW_NONE;
+		int out = pos == KW_ABSOLUTE || pos == KW_FIXED;
+		int ib = (d == KW_INLINE_BLOCK || d == KW_INLINE_FLEX || d == KW_INLINE_GRID || d == KW_INLINE_TABLE) &&
+			 !fl && !out;
+		int blk = block_level(d) || ib || parent->flex || parent->grid;
+		box *b;
+		if (o == 0 && !blk && !fl && !out)
+			return;
+		b = new_box(l, blk || fl || out ? BX_BLOCK : BX_INLINE, NULL, ps, parent);
+		if (b == NULL)
+			return;
+		b->ib = (uint8_t) ib;
+		if (o > 0)
 			add_text_box(l, b, ps, astrdup(l->a, buf, o), (uint32_t) o);
 	}
 }
@@ -1841,10 +1864,14 @@ static void build_element(L *l, box *parent, dnode *c)
 		return;
 	case T_IMG: {
 		int32_t iw = 0, ih = 0, dens;
+		int ratio;
 		const char *alt = dn_attr(c, "alt"), *src = img_src(l, c, &dens);
 		void *h = NULL;
 		if (src != NULL && l->p->opt.image != NULL)
 			h = l->p->opt.image(l->p->opt.ud, src, 0, &iw, &ih);
+		ratio = iw < 0 && ih < 0;
+		if (ratio)
+			iw = -iw, ih = -ih;
 		if (h != NULL && dens != 1024 && iw > 0 && ih > 0) {
 			/* chosen for another density: its size in CSS px */
 			iw = (int32_t) ((int64_t) iw * 1024 / dens);
@@ -1870,6 +1897,7 @@ static void build_element(L *l, box *parent, dnode *c)
 				in->last->img = h;
 				in->last->iw = iw;
 				in->last->ih = ih;
+				in->last->ratio = (uint8_t) ratio;
 			}
 		} else if (alt != NULL && *alt != 0) {
 			atom(l, parent, c, st, AT_LABEL, alt, AUTO, AUTO);
@@ -2858,8 +2886,23 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		*w = *h = 0;
 		return 0;
 	}
-	*w = len(l, b->st, EP_WIDTH, l->cw);
+	*w = l->repl && b->st->k[EP_WIDTH] != EK_KW && l->cw != AUTO ? l->cw : len(l, b->st, EP_WIDTH, l->cw);
 	*h = len(l, b->st, EP_HEIGHT, AUTO);
+	if (b->ratio && *w == AUTO && *h == AUTO && !l->minw && l->cw != AUTO && iw > 0 && ih > 0) {
+		/* proportions and no size of its own (an SVG of a viewBox
+		   alone): as wide as its place (CSS 2.1, 10.3.2, as browsers
+		   do), less its margins, borders and padding (a block of its
+		   own has them already); 300 wide (its iw) where that isn't
+		   known */
+		const ec_style *s = b->st;
+		int32_t room = l->repl ? l->cw :
+			       l->cw - len0(l, s, EP_MARGIN_LEFT, l->cw) - len0(l, s, EP_MARGIN_RIGHT, l->cw) -
+			       len0(l, s, EP_PADDING_LEFT, l->cw) - len0(l, s, EP_PADDING_RIGHT, l->cw) -
+			       (kw(s, EP_BORDER_LEFT_STYLE) > KW_HIDDEN ? len0(l, s, EP_BORDER_LEFT_WIDTH, AUTO) : 0) -
+			       (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ? len0(l, s, EP_BORDER_RIGHT_WIDTH, AUTO) : 0);
+		if (room > 0)
+			*w = room;
+	}
 	if (b->frame) {
 		/* an iframe: its width and height each its own (the
 		   attributes' hints, else 300 x 150 CSS px), not one from
@@ -4121,6 +4164,8 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	if (u == NULL || u->len == 0)
 		return -1;
 	h = l->p->opt.image(l->p->opt.ud, u->s, 1, &iw, &ih);
+	if (iw < 0 && ih < 0)
+		iw = -iw, ih = -ih;	/* (proportions alone: its size on 300 wide) */
 	if (h == NULL)
 		return -1;
 	d = dl_add(l);
@@ -4983,14 +5028,18 @@ static int32_t inline_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int3
 }
 
 /* a picture as a block of its own (floated, display: block): no line
-   round it; with no size yet, its alt text on a line */
+   round it; with no size yet, its alt text on a line. The block's width
+   w is the picture's, where its style gives one (L.repl: its percentage
+   was of the block's containing block, not to be taken again of w) */
 static int32_t repl_layout(L *l, box *b, int32_t x, int32_t y, int32_t w)
 {
 	box *a = b->first;
 	int32_t iw, ih, fb = AUTO;
 	int guess;
 	l->cw = w;
+	l->repl = 1;
 	guess = image_size(l, a, &iw, &ih);
+	l->repl = 0;
 	if (iw <= 0 || ih <= 0)
 		return inline_layout(l, b, x, y, w, &fb);
 	image_item(l, a, x, y, iw, ih, b->link, font_of(l, b->st),
@@ -5537,6 +5586,51 @@ static void stretch(L *l, long bg, const long *bd, int32_t dh)
 		it[bd[3]].h += dh;
 	if (bd[4] >= 0)
 		it[bd[4]].h += dh;	/* its clip (DL_CLIP) */
+	if (bd[5] >= 0)
+		it[bd[5]].h += dh;	/* its link's click area */
+}
+
+/* a flex column of no set height, as flex_layout left it (box.fc): its
+   items' places in the list, backgrounds and borders, and flex-grow, for
+   placing them by its justify-content and flex-grow when a grid row or a
+   flex line makes it taller (cards whose buttons go to their bottom) */
+struct fcol {
+	int n, jc;
+	int32_t sumgrow;
+	struct fci {
+		long k0, k1, bg, bd[NBD];
+		int32_t grow;
+	} i[1];
+};
+
+static void shift_range(L *l, long k0, long k1, int32_t dx, int32_t dy);
+static void distribute(int how, int32_t free, int n, int32_t *start, int32_t *between);
+
+/* a block made dh taller by its row or line: its background and borders,
+   and a flex column's items placed in the room */
+static void stretch_box(L *l, box *b, long bg, const long *bd, int32_t dh)
+{
+	const struct fcol *fc = b->fc;
+	int32_t start, between, given = 0;
+	int i;
+	if (dh <= 0)
+		return;
+	stretch(l, bg, bd, dh);
+	if (fc == NULL || fc->i[fc->n - 1].k1 > l->p->nitems)
+		return;
+	if (fc->sumgrow > 0) {
+		/* taller by flex-grow, those below moved down */
+		for (i = 0; i < fc->n; i++) {
+			int32_t add = (int32_t) ((int64_t) dh * fc->i[i].grow / fc->sumgrow);
+			shift_range(l, fc->i[i].k0, fc->i[i].k1, 0, given);
+			stretch(l, fc->i[i].bg, fc->i[i].bd, add);
+			given += add;
+		}
+		return;
+	}
+	distribute(fc->jc, dh, fc->n, &start, &between);
+	for (i = 0; i < fc->n; i++)
+		shift_range(l, fc->i[i].k0, fc->i[i].k1, 0, start + i * between);
 }
 
 /* a cell's content (its items from k0 to k1, but its background and
@@ -6221,6 +6315,9 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	   (top auto), or by a top that is a share of that height */
 	by_top = !fixed && l->cbh == AUTO && (c->st->k[EP_TOP] == EK_PCT || c->st->k[EP_TOP] == EK_CALC);
 	bottom = top == AUTO && !fixed ? len(l, c->st, EP_BOTTOM, AUTO) : AUTO;
+	if (!fixed && !by_top && l->cbh == AUTO && top != AUTO && c->st->k[EP_BOTTOM] == EK_PX &&
+	    len(l, c->st, EP_HEIGHT, AUTO) == AUTO)
+		by_top = 2;	/* (as tall as its top and bottom leave: a bar beside a block) */
 	{
 		/* text for screen readers only: a box of a pixel that hides
 		   what overflows it, or put far off the page: nothing to see,
@@ -6267,6 +6364,8 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		e->h = hgt;
 		e->n = c->n;
 		e->depth = l->cbdepth;
+		e->bg = l->last_bg;
+		memcpy(e->bd, l->last_bd, sizeof e->bd);
 		return;
 	}
 	shift_items(l, k0, ax, ay);
@@ -6284,6 +6383,8 @@ static void bottom_place(L *l, int32_t y, int32_t ch)
 	while (l->nbots > 0 && l->bots[l->nbots - 1].depth >= l->cbdepth) {
 		struct bot *e = &l->bots[--l->nbots];
 		int32_t ay = e->by_top ? y + len0(l, e->st, EP_TOP, ch) : y + ch - len0(l, e->st, EP_BOTTOM, ch) - e->h;
+		if (e->by_top == 2)
+			stretch(l, e->bg, e->bd, ch - len0(l, e->st, EP_TOP, ch) - len0(l, e->st, EP_BOTTOM, ch) - e->h);
 		shift_range2(l, e->k0, e->k1, e->b0, e->b1, 0, ay);
 		if (e->n != NULL)
 			e->n->y += ay;
@@ -6685,7 +6786,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 					if (it[i].f != AUTO)
 						it[i].f += d;
 					if (it[i].align == KW_STRETCH && (it[i].b->anon || it[i].b->st->k[EP_HEIGHT] == EK_KW))
-						stretch(l, it[i].bg, it[i].bd, room2);
+						stretch_box(l, it[i].b, it[i].bg, it[i].bd, room2);
 				}
 				at += lh[j] + rgap + between;
 			}
@@ -6729,7 +6830,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 					       (kw(cs, EP_BORDER_TOP_STYLE) > KW_HIDDEN ? len0(l, cs, EP_BORDER_TOP_WIDTH, AUTO) : 0) +
 					       (kw(cs, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN ? len0(l, cs, EP_BORDER_BOTTOM_WIDTH, AUTO) : 0);
 				if (want > bh) {
-					stretch(l, it[i].bg, it[i].bd, want - bh);
+					stretch_box(l, it[i].b, it[i].bg, it[i].bd, want - bh);
 					bh = want;
 				}
 			}
@@ -6741,6 +6842,26 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 		}
 		total = cy;
 		free = hdef != AUTO ? hdef - total : 0;
+		b->fc = NULL;
+		if (hdef == AUTO && !rev && (sumgrow > 0 || (jc != KW_FLEX_START && jc != KW_START && jc != KW_NORMAL &&
+							     jc != KW_STRETCH && jc != 0 && jc != KW_LEFT))) {
+			/* (a row or line may make it taller: its items then
+			   placed as they would be at that height) */
+			struct fcol *fc = amalloc(&l->ba, sizeof *fc + (size_t) (n - 1) * sizeof fc->i[0]);
+			if (fc != NULL) {
+				fc->n = n;
+				fc->jc = jc;
+				fc->sumgrow = sumgrow;
+				for (i = 0; i < n; i++) {
+					fc->i[i].k0 = it[i].k0;
+					fc->i[i].k1 = it[i].k1;
+					fc->i[i].bg = it[i].bg;
+					memcpy(fc->i[i].bd, it[i].bd, sizeof fc->i[i].bd);
+					fc->i[i].grow = it[i].grow;
+				}
+				b->fc = fc;
+			}
+		}
 		if (free > 0 && sumgrow > 0) {
 			/* taller by flex-grow, those below moved down */
 			for (i = 0; i < n; i++) {
@@ -6748,7 +6869,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 				shift_range(l, it[i].k0, it[i].k1, 0, given);
 				it[i].pos += given;
 				if (add > 0)
-					stretch(l, it[i].bg, it[i].bd, add);
+					stretch_box(l, it[i].b, it[i].bg, it[i].bd, add);
 				it[i].size += add;
 				given += add;
 			}
@@ -7418,7 +7539,7 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 		if (room <= 0)
 			continue;
 		if (g->aa == KW_STRETCH && (g->b->anon || g->b->st->k[EP_HEIGHT] == EK_KW))
-			stretch(l, g->bg, g->bd, room);
+			stretch_box(l, g->b, g->bg, g->bd, room);
 		else if (g->aa == KW_CENTER || g->aa == KW_FLEX_END) {
 			int32_t d = g->aa == KW_CENTER ? room / 2 : room;
 			shift_range(l, g->k0, g->k1, 0, d);
@@ -7492,7 +7613,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	BEDGE te[4];			/* a table's own borders, when they collapse */
 	const BEDGE *ov = NULL;		/* a cell's, as they collapse */
 	int collapsed = 0;		/* a table whose borders collapse */
-	long bd[NBD] = { -1, -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
+	long bd[NBD] = { -1, -1, -1, -1, -1, -1 }, kstart = l->p->nitems, bstart = nblocks(l);
 	struct span *saved_spans = l->spans;
 	unsigned saved_alpha = l->alpha;
 	uint32_t saved_clip = l->clip;
@@ -7944,7 +8065,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				block_rect(l, b->n, bx, by, bw, bh);
 #endif
 			if (b->link && !b->anon && vis && !no_hit(s) && (b->parent == NULL || b->parent->link != b->link))
-				link_area(l, b, bx, by, bw, bh);
+				bd[5] = link_area(l, b, bx, by, bw, bh);
 		}
 	}
 	if (b->list & LB_SUM)

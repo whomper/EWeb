@@ -49,6 +49,8 @@ struct ew_img {
 	char *data;			/* the file */
 	long len;
 	int32_t iw, ih;			/* its size, CSS px (0: not known) */
+	int ratio;			/* an SVG of proportions alone (svg_size's 2): iw x ih
+					   where a size of its own is wanted */
 	int why;			/* PIC_* of the last decode that failed */
 	int kind;			/* PIC_*: what the file is */
 	var *vars;
@@ -290,6 +292,11 @@ void img_size(const ew_img *im, int32_t *w, int32_t *h)
 	*h = im->state == IMG_HERE ? im->ih : 0;
 }
 
+int img_ratio(const ew_img *im)
+{
+	return im->state == IMG_HERE && im->ratio;
+}
+
 void img_ref(ew_img *im, int d)
 {
 	im->refs += d;
@@ -425,7 +432,7 @@ void img_kept(ew_img *im)
 int img_set_file(ew_img *im, char *data, long len)
 {
 	long w, h;
-	int depth, mask;
+	int depth, mask, sized;
 	if (im->stale) {
 		/* asked for again: the same, as it was decoded; else each size
 		   it was decoded at goes, to be decoded again from this one */
@@ -450,6 +457,7 @@ int img_set_file(ew_img *im, char *data, long len)
 			return 0;
 		}
 		im->kind = IMG_PENS;
+		im->ratio = 0;
 		im->data = data;
 		im->len = len;
 		im->iw = (int32_t) be16((const unsigned char *) data + 12);
@@ -461,10 +469,13 @@ int img_set_file(ew_img *im, char *data, long len)
 	im->kind = pic_kind((const unsigned char *) data, len);
 	if (im->kind == PIC_NONE && img_svg_late != NULL && img_svg_late((const char *) data, len))
 		im->kind = PIC_SVG;
-	if ((im->kind != PIC_JPEG && im->kind != PIC_PNG && im->kind != PIC_GIF && im->kind != PIC_WEBP &&
-	     (im->kind != PIC_SVG || img_svg_size == NULL)) ||
-	    !(im->kind == PIC_SVG ? img_svg_size((const char *) data, len, &w, &h) :
-	      pic_size((const unsigned char *) data, len, &w, &h)) || w > 0x7fff || h > 0x7fff) {
+	sized = 0;
+	if (im->kind == PIC_SVG && img_svg_size != NULL)
+		sized = img_svg_size((const char *) data, len, &w, &h);
+	else if (im->kind == PIC_JPEG || im->kind == PIC_PNG || im->kind == PIC_GIF || im->kind == PIC_WEBP)
+		sized = pic_size((const unsigned char *) data, len, &w, &h);
+	im->ratio = im->kind == PIC_SVG && sized == 2;
+	if (!sized || w > 0x7fff || h > 0x7fff) {
 		free(data);
 		im->state = IMG_FAILED;
 		im->why = im->kind == PIC_NONE ? PIC_DAMAGED : PIC_UNSUPPORTED;

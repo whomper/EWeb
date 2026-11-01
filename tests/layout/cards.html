@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Cards and dots</title>
+<style>
+body { font: 13px sans-serif; margin: 8px }
+/* a grid row's cards, each a flex column: its button at its bottom
+   (justify-content), the whole card a link (webdriveruniversity.com) */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px }
+.card { display: flex; flex-direction: column; justify-content: space-between; border: 1px solid #888;
+        padding: 6px; color: #000; text-decoration: none }
+.btn { display: block; background: #c33; color: #fff; padding: 4px; text-align: center }
+/* a flex row's items, one with flex-grow in its column */
+.row { display: flex; gap: 10px; margin-bottom: 12px }
+.col { display: flex; flex-direction: column; border: 1px solid #36c; padding: 6px; width: 150px }
+.col .grow { flex-grow: 1; background: #eef }
+.col .end { background: #cec }
+.mid { justify-content: center }
+/* empty ::before boxes with a size: a dot in an inline-flex, an
+   inline-block in a block, a flex item, a positioned bar */
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: bold }
+.brand::before { content: ""; display: inline-block; width: 10px; height: 10px; background: #c33 }
+.mark::before { content: ""; display: inline-block; width: 8px; height: 8px; background: #3a3; margin-right: 4px }
+.flexdot { display: flex; gap: 6px }
+.flexdot::before { content: ""; width: 12px; height: 12px; background: #33c }
+.bar { position: relative; padding-left: 14px }
+.bar::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 4px; background: #c90 }
+.plain::before { content: "" }
+</style></head><body>
+<div class="grid">
+<a class="card" href="one.html"><div><b>01</b><div>A long title that takes three lines in its card here</div></div><span class="btn">Grab</span></a>
+<a class="card" href="two.html"><div><b>02</b><div>Short</div></div><span class="btn">Grab</span></a>
+<a class="card" href="three.html"><div><b>03</b><div>Short too</div></div><span class="btn">Grab</span></a>
+</div>
+<div class="row">
+<div class="col"><div>Head</div><div class="grow">grows</div><div class="end">foot</div></div>
+<div class="col mid"><div>centred</div></div>
+<div class="col"><div>A taller column, its text going on over several lines to make the row tall</div></div>
+</div>
+<p><span class="brand">Brand</span></p>
+<p class="mark">An inline-block before the text.</p>
+<div class="flexdot">A flex item before the text</div>
+<p class="bar">A bar at the left, positioned.</p>
+<p class="plain">Empty content and inline: no box.</p>
+<!-- a picture as a block of a percentage width: of its containing block
+     (taken twice before); an SVG of a viewBox alone: as wide as its place
+     (CSS 2.1, 10.3.2), 300 wide in a box of no width of its own -->
+<div style="width:400px;background:#eee"><img style="display:block;width:60%" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mM4Y2w8IIhh1OJRi0ctHrV41OJRi0ctHrV45FgMALcKvG66qgnAAAAAAElFTkSuQmCC" alt="block 60%"><img style="width:60%" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mM4Y2w8IIhh1OJRi0ctHrV41OJRi0ctHrV45FgMALcKvG66qgnAAAAAAElFTkSuQmCC" alt="inline 60%"></div>
+<div style="width:300px"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100'%3E%3Crect width='400' height='100' fill='%2336c'/%3E%3C/svg%3E" alt="viewBox alone"></div>
+<div style="float:left"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 100'%3E%3Crect width='400' height='100' fill='%2336c'/%3E%3C/svg%3E" alt="in a float"></div>
+</body></html>
