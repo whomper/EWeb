@@ -235,6 +235,8 @@ typedef struct {
 		int fam;
 	} fams[8];			/* font_of's family for a list of names, as found */
 	int nfams;
+	const ec_family *icon_f;	/* the last family list looked at for an icon font (add_text_box) */
+	uint8_t icon_k;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
 	struct mcache {
@@ -1366,9 +1368,113 @@ static int block_level(int d)
 	}
 }
 
+/* icon fonts: a web font of pictures at private-use code points (Bootstrap
+   3's Glyphicons, Font Awesome), which EWeb doesn't fetch (DESIGN.md: no
+   web fonts). Their commonest icons are drawn as the characters EWEB.FNT
+   has for them; the others are left out, not drawn as '?' */
+enum { ICON_NONE, ICON_GLYPH, ICON_FA };
+typedef struct {
+	uint16_t pua, cp;
+} ICONMAP;
+static const ICONMAP glyph_icons[] = {	/* (sorted) */
+	{ 0xe005, 0x2665 }, { 0xe006, 0x2605 }, { 0xe007, 0x2606 }, { 0xe013, 0x2713 }, { 0xe014, 0x2715 },
+	{ 0xe021, 0x2302 }, { 0xe072, 0x25b6 }, { 0xe079, 0x2039 }, { 0xe080, 0x203a }, { 0xe081, '+' },
+	{ 0xe082, 0x2212 }, { 0xe083, 0x2715 }, { 0xe084, 0x2713 }, { 0xe086, 0x2139 }, { 0xe089, 0x2713 },
+	{ 0xe091, 0x2190 }, { 0xe092, 0x2192 }, { 0xe093, 0x2191 }, { 0xe094, 0x2193 }, { 0xe101, '!' },
+	{ 0xe107, 0x26a0 }, { 0xe113, 0x25b4 }, { 0xe114, 0x25be }, { 0xe236, 0x2630 }, { 0xe250, 0x25b6 },
+	{ 0xe251, 0x25c0 }, { 0xe252, 0x25bc }, { 0xe253, 0x25b2 }, { 0xe257, 0x25c0 }, { 0xe258, 0x25b6 },
+	{ 0xe259, 0x25bc }, { 0xe260, 0x25b2 }
+};
+static const ICONMAP fa_icons[] = {	/* (sorted) */
+	{ 0xf004, 0x2665 }, { 0xf005, 0x2605 }, { 0xf006, 0x2606 }, { 0xf00c, 0x2713 }, { 0xf00d, 0x2715 },
+	{ 0xf015, 0x2302 }, { 0xf053, 0x2039 }, { 0xf054, 0x203a }, { 0xf055, '+' }, { 0xf056, 0x2212 },
+	{ 0xf057, 0x2715 }, { 0xf058, 0x2713 }, { 0xf05a, 0x2139 }, { 0xf060, 0x2190 }, { 0xf061, 0x2192 },
+	{ 0xf062, 0x2191 }, { 0xf063, 0x2193 }, { 0xf067, '+' }, { 0xf068, 0x2212 }, { 0xf071, 0x26a0 },
+	{ 0xf077, 0x25b4 }, { 0xf078, 0x25be }, { 0xf095, 0x260e }, { 0xf0c9, 0x2630 }, { 0xf0d7, 0x25bc },
+	{ 0xf0d8, 0x25b2 }, { 0xf0d9, 0x25c0 }, { 0xf0da, 0x25b6 }, { 0xf0e0, 0x2709 }, { 0xf104, 0x2039 },
+	{ 0xf105, 0x203a }, { 0xf106, 0x25b4 }, { 0xf107, 0x25be }, { 0xf128, '?' }, { 0xf129, 0x2139 },
+	{ 0xf12a, '!' }
+};
+
+static int icon_kind(const ec_family *f)
+{
+	if (f != NULL && f->n > 0) {
+		const char *nm = f->name[0]->s;
+		size_t n = f->name[0]->len;
+		if (contains_ci(nm, n, "glyphicons"))
+			return ICON_GLYPH;
+		if (contains_ci(nm, n, "awesome"))
+			return ICON_FA;
+	}
+	return ICON_NONE;
+}
+
+/* s with its private-use characters (U+E000 to U+F8FF) as the icon
+   font's table has them, or left out; s itself when it has none */
+static const char *icon_text(L *l, const char *s, uint32_t *n, int kind)
+{
+	const ICONMAP *map = kind == ICON_GLYPH ? glyph_icons : fa_icons;
+	int nmap = kind == ICON_GLYPH ? (int) (sizeof glyph_icons / sizeof glyph_icons[0]) :
+					 (int) (sizeof fa_icons / sizeof fa_icons[0]);
+	char *o, *out;
+	uint32_t i;
+	for (i = 0; i < *n && (uint8_t) s[i] != 0xee && (uint8_t) s[i] != 0xef; i++)
+		;
+	if (i == *n || (out = astrdup(l->a, s, *n)) == NULL)
+		return s;	/* (written over in place: never longer) */
+	o = out + i;
+	while (i < *n) {
+		uint8_t c = (uint8_t) s[i];
+		uint32_t cp;
+		if ((c == 0xee || c == 0xef) && i + 2 < *n &&
+		    ((cp = (uint32_t) (c & 0x0f) << 12 | (uint32_t) (s[i + 1] & 0x3f) << 6 | (s[i + 2] & 0x3f)) <= 0xf8ff)) {
+			int lo = 0, hi = nmap - 1;
+			i += 3;
+			while (lo <= hi) {
+				int m = (lo + hi) / 2;
+				if (map[m].pua == cp) {
+					uint32_t u = map[m].cp;
+					if (u < 0x80) {
+						*o++ = (char) u;
+					} else {	/* (all of them below U+2800: three bytes or two) */
+						if (u >= 0x800) {
+							*o++ = (char) (0xe0 | u >> 12);
+							*o++ = (char) (0x80 | (u >> 6 & 0x3f));
+						} else {
+							*o++ = (char) (0xc0 | u >> 6);
+						}
+						*o++ = (char) (0x80 | (u & 0x3f));
+					}
+					break;
+				}
+				if (map[m].pua < cp)
+					lo = m + 1;
+				else
+					hi = m - 1;
+			}
+			continue;
+		}
+		*o++ = (char) c;
+		i++;
+	}
+	*o = 0;
+	*n = (uint32_t) (o - out);
+	return out;
+}
+
 static void add_text_box(L *l, box *parent, const ec_style *st, const char *s, uint32_t n)
 {
-	box *t = new_box(l, BX_TEXT, NULL, st, parent);
+	box *t;
+	const ec_family *f = st->k[EP_FONT_FAMILY] == EK_PTR ? st->v[EP_FONT_FAMILY].p : NULL;
+	if (f != NULL) {
+		if (f != l->icon_f) {	/* (a family list looked at once in a row) */
+			l->icon_f = f;
+			l->icon_k = (uint8_t) icon_kind(f);
+		}
+		if (l->icon_k != ICON_NONE && (s = icon_text(l, s, &n, l->icon_k)) != NULL && n == 0)
+			return;
+	}
+	t = new_box(l, BX_TEXT, NULL, st, parent);
 	if (t != NULL) {
 		t->text = s;
 		t->len = n;

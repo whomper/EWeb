@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Icon fonts</title>
+<style>
+body { font: 13px sans-serif; margin: 8px }
+/* Bootstrap 3's Glyphicons and Font Awesome: web fonts EWeb doesn't
+   fetch; their common icons drawn as EWEB.FNT's characters for them,
+   the others left out, never '?' (webdriveruniversity.com's stars) */
+@font-face { font-family: 'Glyphicons Halflings'; src: url(none.woff) }
+.glyphicon { font-family: 'Glyphicons Halflings'; font-style: normal; color: #c90 }
+.glyphicon-star:before { content: "\e006" } .glyphicon-star-empty:before { content: "\e007" }
+.glyphicon-chevron-left:before { content: "\e079" } .glyphicon-chevron-right:before { content: "\e080" }
+.glyphicon-ok:before { content: "\e013" } .glyphicon-remove:before { content: "\e014" }
+.glyphicon-menu-hamburger:before { content: "\e236" } .glyphicon-film:before { content: "\e009" }
+.fa { font-family: FontAwesome; font-style: normal; color: #36c }
+.fa-star:before { content: "\f005" } .fa-heart:before { content: "\f004" } .fa-envelope:before { content: "\f0e0" }
+.fa-bars:before { content: "\f0c9" } .fa-caret-down:before { content: "\f0d7" } .fa-camera:before { content: "\f030" }
+</style></head><body>
+<p>Rating: <span class="glyphicon glyphicon-star"></span><span class="glyphicon glyphicon-star"></span><span
+class="glyphicon glyphicon-star"></span><span class="glyphicon glyphicon-star-empty"></span> (3 of 4)
+<p><span class="glyphicon glyphicon-chevron-left"></span> back, next <span class="glyphicon glyphicon-chevron-right"></span>
+<p><span class="glyphicon glyphicon-ok"></span> done <span class="glyphicon glyphicon-remove"></span> not
+<span class="glyphicon glyphicon-menu-hamburger"></span> menu, a film [<span class="glyphicon glyphicon-film"></span>] left out
+<p><i class="fa fa-star"></i> <i class="fa fa-heart"></i> <i class="fa fa-envelope"></i> mail <i class="fa fa-bars"></i>
+<i class="fa fa-caret-down"></i> a camera [<i class="fa fa-camera"></i>] left out
+<p>Private-use text in another font stays as it is: [&#xe006;]
+</body></html>
