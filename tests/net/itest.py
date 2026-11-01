@@ -483,7 +483,8 @@ try:
         rc, out = browse("http://localhost:%d/redirect" % HTTP)
         check("the browser: a redirect", rc == 0 and 'title "EWeb test"' in out, out)
         rc, out = browse("http://localhost:%d/hebrew" % HTTP)
-        check("the browser: a page in windows-1255", rc == 0 and re.search(r'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"', out),
+        check("the browser: a page in windows-1255",
+              rc == 0 and re.search(r'rtl link 0 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"', out),
               out)
         # pages that name no encoding: UTF-8 found by its bytes; windows-1255
         # read as windows-1252 but under Israel's .il, or as chosen by hand
@@ -523,7 +524,7 @@ try:
         check("encodings: Auto again", rc == 0 and 'encoding: 0 UTF-8 "\u05e9' in out, out)
         rc, out = browse(enc + "plain.txt")
         check("encodings: a text file that names none, in UTF-8", rc == 0
-              and 'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"' in out and '"<b>not bold</b> & caf\u00e9"' in out, out)
+              and 'rtl link 0 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in out and '"<b>not bold</b> & caf\u00e9"' in out, out)
         # a page's addresses: their query in its encoding for the HTML's, in
         # UTF-8 for CSS's url()s (a <style>'s, a style attribute's, a sheet's)
         # and fetch()
