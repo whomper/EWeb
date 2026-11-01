@@ -64,6 +64,12 @@ static int run(const EV *s, int n, const GRECT *r, short x, short y, short *dx, 
 
 #define RUN(s, r, x, y) run(s, (int)(sizeof(s) / sizeof(s[0])), r, x, y, &dx, &dy)
 
+/* press_update_begin's AES: how many programs run, the button, the lock */
+static short n_aes = 1, button, locks;
+short aes_count(void) { return n_aes; }
+short graf_mkstate(short *mx, short *my, short *mb, short *ks) { *mx = *my = *ks = 0; *mb = button; return 1; }
+short wind_update(short mode) { locks += mode == BEG_UPDATE ? 1 : -1; return 1; }
+
 int main(void)
 {
 	GRECT row = { 16, 100, 300, 16 }, row2 = { 16, 116, 300, 16 };
@@ -151,6 +157,27 @@ int main(void)
 	press_forget();
 	now += 50;
 	CHECK(press_double(3, 50, 105) == 0, "press_forget: the last press gone");
+
+	{
+		int took;
+
+		button = 1;
+		took = press_update_begin();
+		CHECK(took == 0 && locks == 0, "TOS, the button held: no BEG_UPDATE (it would wait for the release)");
+		press_update_end(took);
+		CHECK(locks == 0, "TOS, the button held: no END_UPDATE either");
+		button = 0;
+		took = press_update_begin();
+		CHECK(took == 1 && locks == 1, "TOS, the button up: BEG_UPDATE");
+		press_update_end(took);
+		CHECK(locks == 0, "and END_UPDATE");
+		n_aes = -1;
+		button = 1;
+		took = press_update_begin();
+		CHECK(took == 1 && locks == 1, "a multitasking AES, the button held: BEG_UPDATE kept");
+		press_update_end(took);
+		CHECK(locks == 0, "and END_UPDATE");
+	}
 
 	printf("%d checks, %d failed\n", checks, failed);
 	return failed != 0;
