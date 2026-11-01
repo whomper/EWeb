@@ -276,16 +276,21 @@ short wind_update(short mode)
 #include "click.h"
 static int fake_dbl, fake_track, tracks;
 static GRECT tracked;
+static void (*tracked_idle)(void);
 int press_double(short id, short x, short y) { (void)id, (void)x, (void)y; return fake_dbl; }
 int press_track(const GRECT *r, short x, short y, void (*idle)(void), void (*msg)(short *m), short *dx, short *dy)
 {
-	(void)x, (void)y, (void)idle, (void)msg, (void)dx, (void)dy;
+	(void)x, (void)y, (void)msg, (void)dx, (void)dy;
 	tracks++;
 	tracked = *r;
+	tracked_idle = idle;
 	return fake_track;
 }
 #endif
 static short asked_clicks;
+#ifdef DLG_CLICK
+static void idle_mark(void) { }
+#endif
 
 short evnt_multi_(short flags, short clicks, short mask, short state,
 		  unsigned long timer, short *msg, AEVENT *ev)
@@ -949,6 +954,15 @@ int main(void)
 		setup();
 		run(0, CANCEL, s2);
 		check(tracks == 1, "... its release already waited for: nothing more to wait for");
+	}
+	setup();
+	{
+		static const STEP s[] = { CLICK(ROW), END };
+		fake_dbl = 0, fake_track = PRESS_IN, tracks = 0;
+		run(0, CANCEL, s);
+		check(dlg_touch_up_idle(idle_mark) == PRESS_IN && tracks == 1 && tracked_idle == idle_mark,
+		      "dlg_touch_up_idle: the release waited for now, idle() handed to press_track");
+		check(dlg_touch_up() == -1, "... and then nothing held");
 	}
 	setup();
 	{

@@ -534,6 +534,30 @@ static void timed(void)
 	snprintf(line, sizeof(line), "DLC time: a tab (the fast way for every part): objc_draw %lu ms, fast %lu ms", (t1 - t0) / 4, (t2 - t1) / 4);
 	say(line);
 	{
+		/* where the fast way starts to win: a tab, a page (the G_IBOX
+		   that holds one), the whole; the fast way's parts for each */
+		static const short part[] = { 4, 8, 0 };
+		static const char *const name[] = { "a tab", "a page", "the whole" };
+		short q;
+		for (q = 0; q < 3; q++) {
+			long area = (long)(tree[part[q]].ob_width + 6) * (tree[part[q]].ob_height + 6);
+			dlg_fast_on = 0;
+			t0 = tos_ms();
+			for (k = 0; k < 4; k++)
+				dlg_draw(tree, part[q]);
+			t1 = tos_ms();
+			dlg_fast_on = 1;
+			memset(dlg_fast_t, 0, sizeof(dlg_fast_t));
+			for (k = 0; k < 4; k++)
+				dlg_draw(tree, part[q]);
+			t2 = tos_ms();
+			snprintf(line, sizeof(line), "DLC time: %s, %ld/8 of the dialog: objc_draw %lu ms, fast %lu ms (the walk %lu, the root's fill %lu, objc_draw %lu, the CPU's objects %lu)",
+				 name[q], area * 8 / ((long)tree[0].ob_width * tree[0].ob_height), (t1 - t0) / 4, (t2 - t1) / 4,
+				 dlg_fast_t[0] / 4, dlg_fast_t[1] / 4, dlg_fast_t[2] / 4, dlg_fast_t[3] / 4);
+			say(line);
+		}
+	}
+	{
 		/* the CPU's pieces alone: 28 letters off a byte and on one, a
 		   tab's box */
 		static const char t[] = "When a file is already there";

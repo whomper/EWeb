@@ -282,16 +282,19 @@ try:
     click(30, 8)                                     # the Desk menu (the first title's middle:
     time.sleep(1)                                    # EWeb's "EWeb" starts past x 18)
     menu = shot("1-desk-menu")
+    # the menu's box with one accessory under About and its line is small:
+    # a single-accessory run (ST-1's EMail check alone) changed 3,238 pixels
+    menu_px = 4000 if len(want) > 1 else 2000
     for _ in range(5):
         # a first boot under NVDI on a 4 MB Falcon can take more than a
         # second to draw it (EUpdate 1.19's run, 27 Oct 2026); the title
         # alone turned black is some 1,300 pixels ("ClaudeST", 1.68), the
         # menu's box many more
-        if differs(desk, menu) > 4000:
+        if differs(desk, menu) > menu_px:
             break
         time.sleep(1)
         menu = shot("1-desk-menu")
-    check(differs(desk, menu) > 4000, "the Desk menu opens (see 1-desk-menu.png: %d accessories)" % len(want))
+    check(differs(desk, menu) > menu_px, "the Desk menu opens (see 1-desk-menu.png: %d accessories)" % len(want))
     alert_rows = set()
     if alerts & set(want):
         # which rows open an alert: the TOS orders the Desk menu as it
@@ -312,7 +315,7 @@ try:
     click(300, 300)                                  # closed again
     time.sleep(1)
     for rnd in (1, 2):
-        if rnd == 2 and len(want) == 1:
+        if rnd == 2 and len(want) == 1 and not alert_rows:
             # its window is still on top: closed (^Q, which closes an
             # accessory's window in every release, before and after ^U
             # took over from ^W), so that opening it again draws it
