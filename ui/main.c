@@ -503,6 +503,13 @@ static void log_start(int on)
 		crash_report = conn_log_append;	/* a crash's report after what is held */
 		snprintf(line, sizeof line, on == 2 ? "EWeb %s: the log started" : "EWeb %s started", EWEB_VERSION);
 		conn_log("EWeb", " -- ", line, (long) strlen(line));
+		/* a vector the crash catcher left to another handler or chained
+		   after one (common's crash_vectors: 0.57's 11 bombs on Erez's
+		   Falcon left no CRASH.LOG, vector 11 not being TOS's there) */
+		if (crash_vectors()[0]) {
+			snprintf(line, sizeof line, "crash: %s", crash_vectors());
+			conn_log("EWeb", " -- ", line, (long) strlen(line));
+		}
 	} else if (conn_logfile[0]) {
 		conn_log("EWeb", " -- ", "the log stopped", 15);
 		conn_log_hold(0);
