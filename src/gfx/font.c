@@ -38,16 +38,18 @@ static uint16_t aoff[96];		/* where the advance of ' ' to 0x7F is in a face: mos
 static int qmark;			/* the index of '?' */
 /* where the advance of U+0080 to U+07FF (Latin-1 and Latin, Greek,
    Cyrillic, Hebrew: two bytes of UTF-8) and of U+2000 to U+206F (the
-   typographic quotes, dashes and spaces) is in a face, as aoff's: 1 for
-   none (Hebrew points, format characters), 0 for a character of another
-   block, measured by font_glyph. A Hebrew page's text through font_glyph
-   (index_of's search, glyph_at) took over half its layout */
+   typographic quotes, dashes and spaces) is in a face, as aoff's: 0 not
+   looked up yet, 1 for none (Hebrew points, format characters), 2 for a
+   character of another block (font_glyph's), else its place. A Hebrew
+   page's text through font_glyph (index_of's search, glyph_at) took over
+   half its layout. Each entry is found the first time it is asked for
+   (near_place): the whole table at the start was 45 ms of the 8 MHz ST's,
+   the speed rig, 1 Nov 2026 */
 #define NEAR_N (0x800 - 0x80)
 #define PUNCT_N 0x70
-static uint16_t noff[NEAR_N + PUNCT_N];	/* made by font_init (not in the heap: the pages'
-						   own places stay as they were) */
-
-static void near_places(void);
+#define NEAR_OTHER 2
+static uint16_t noff[NEAR_N + PUNCT_N];	/* (not in the heap: the pages' own places stay
+						   as they were) */
 
 static unsigned be16(const uint8_t *p) { return (unsigned) p[0] << 8 | p[1]; }
 static uint32_t be32(const uint8_t *p)
@@ -224,7 +226,7 @@ int font_init(const char *path)
 	}
 	for (i = 0; i < 96; i++)
 		aoff[i] = (uint16_t) (4 + 10 * (ascii[i] >= 0 ? ascii[i] : qmark));
-	near_places();
+	memset(noff, 0, sizeof noff);	/* (each looked up again in these fonts) */
 	ok = 1;
 done:
 	free(dir);
@@ -428,33 +430,21 @@ static long near_slot(uint32_t cp)
 	return cp - 0x80 < NEAR_N ? (long) (cp - 0x80) : cp - 0x2000 < PUNCT_N ? (long) (NEAR_N + cp - 0x2000) : -1;
 }
 
-/* noff made as font_glyph finds each glyph, in one pass over the codes
-   (a search for each took 0.36 M 68030 instructions at the start): what
-   the first block has, else 0 for another block's (font_glyph), else a
-   space's, nothing (1) or '?'s */
-static void near_places(void)
+/* noff's entry for cp, as font_glyph finds its glyph: the first
+   block's place, else another block's, else a space's, nothing (1) or
+   '?'s */
+static uint16_t near_find(uint32_t cp)
 {
-	long i, k;
-	uint16_t sp = ascii[0] >= 0 ? (uint16_t) (4 + 10 * ascii[0]) : (uint16_t) (4 + 10 * qmark);
-	uint16_t q = (uint16_t) (4 + 10 * qmark);
-	for (i = 0; i < NEAR_N + PUNCT_N; i++)
-		noff[i] = q;
-	/* (blank's and zero_width's characters in these ranges) */
-	noff[0xA0 - 0x80] = sp;
-	noff[0xAD - 0x80] = 1;
-	for (i = 0x591; i <= 0x5C7; i++)
-		noff[i - 0x80] = 1;
-	for (i = 0x2000; i < 0x2070; i++)
-		if (blank((uint32_t) i))
-			noff[NEAR_N + i - 0x2000] = sp;
-		else if (zero_width((uint32_t) i))
-			noff[NEAR_N + i - 0x2000] = 1;
-	for (i = 0; i < nx; i++)
-		if ((k = near_slot(xcodes[i])) >= 0)
-			noff[k] = 0;
-	for (i = 0; i < ncodes; i++)
-		if ((k = near_slot(codes[i])) >= 0)
-			noff[k] = (uint16_t) (4 + 10 * i);
+	int i = index_of(cp);
+	if (i >= 0)
+		return (uint16_t) (4 + 10 * i);
+	if (xindex_of(cp) >= 0)
+		return NEAR_OTHER;
+	if (blank(cp))
+		return (uint16_t) (4 + 10 * (ascii[0] >= 0 ? ascii[0] : qmark));
+	if (zero_width(cp))
+		return 1;
+	return (uint16_t) (4 + 10 * qmark);
 }
 
 /* a face's block b (1 on), read when first needed; NULL if it can't be */
@@ -519,7 +509,12 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 static unsigned near_place(uint32_t cp)
 {
 	long k = near_slot(cp);
-	return k >= 0 ? noff[k] : 0;
+	unsigned o;
+	if (k < 0)
+		return 0;
+	if ((o = noff[k]) == 0)
+		o = noff[k] = near_find(cp);
+	return o == NEAR_OTHER ? 0 : o;
 }
 
 int font_advance(ew_font *f, uint32_t cp)
@@ -589,8 +584,10 @@ long font_width(ew_font *f, const char *s, size_t n)
 			w += f->data[aoff[c]];	/* ASCII: its advance at hand */
 			s++;
 		} else if (c - (0xC2 - 0x20) < 0xE0 - 0xC2 && s + 1 < e && ((unsigned char) s[1] & 0xC0) == 0x80 &&
-			   (o = noff[(((c + 0x20) & 0x1F) << 6 | ((unsigned char) s[1] & 0x3F)) - 0x80]) != 0) {
-			/* two bytes of UTF-8 (Hebrew, Latin-1...) with its advance at hand */
+			   ((o = noff[(((c + 0x20) & 0x1F) << 6 | ((unsigned char) s[1] & 0x3F)) - 0x80]) == 1 ||
+			    o > NEAR_OTHER)) {
+			/* two bytes of UTF-8 (Hebrew, Latin-1...) with its advance at
+			   hand (else font_advance, which looks it up the first time) */
 			if (o != 1)
 				w += f->data[o];
 			s += 2;

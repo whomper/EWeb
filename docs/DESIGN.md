@@ -4257,13 +4257,15 @@ Hebrew letter went through `font_glyph` (a search of the first block's 398 codes
 read for its advance) and each word twice more (its width, its direction), its bidi levels through every
 rule of UAX #9, and each of its words was a display item of its own.
 
-- **A table of advances** (`noff` in `src/gfx/font.c`, made at the start in one pass over the
-  codes: 26 K instructions, 3.9 KB, not in the heap): where the advance of U+0080 to U+07FF (Latin-1 and Latin,
-  Greek, Cyrillic, Hebrew) and U+2000 to U+206F (the typographic quotes, dashes and spaces) is in a
-  face, as `aoff` is for ASCII; `font_width` reads two bytes of UTF-8 straight through it, and
-  `font_advance` too. A character of another block (Greek's, Cyrillic's) still goes through
-  `font_glyph`. Checked against `font_glyph` for every character to U+2FFF in every face (each family
-  and style at every size to 63 px).
+- **A table of advances** (`noff` in `src/gfx/font.c`, 3.9 KB, not in the heap; each entry found the
+  first time a page asks for its character, `near_place`: made whole at the start, in one pass over
+  the codes, it was 26 K instructions of the 68030 but 45 ms of the 8 MHz ST's start, 1735 to 1800
+  ms in 0.58, the hub's speed rig; now 1725): where the advance of U+0080 to U+07FF (Latin-1 and
+  Latin, Greek, Cyrillic, Hebrew) and U+2000 to U+206F (the typographic quotes, dashes and spaces)
+  is in a face, as `aoff` is for ASCII; `font_width` reads two bytes of UTF-8 straight through it,
+  and `font_advance` too. A character of another block (Greek's, Cyrillic's) still goes through
+  `font_glyph`. Checked against `font_glyph` for every character to U+2FFF in every face (each
+  family and style at every size to 63 px).
 - **A Hebrew word's direction from its bytes**: one of Hebrew and signs alone, with a letter's
   0xD7 in it, is right to left without `word_dir`'s look at each character.
 - **A right-to-left paragraph of Hebrew and neutrals alone** (no number, no Latin, no embedding or
