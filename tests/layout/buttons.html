@@ -22,10 +22,22 @@ html body .navbar-toggle { border-color: var(--border) !important; background-co
    page shows through; one left alone keeps its own ground */
 .tr { background: transparent; border: 1px solid #888; color: #eee }
 .tn { background: transparent; color: #eee }
+/* a button of elements as a block: as wide as its content, centred by
+   its auto margins (Bootstrap's center-block) */
+.cb { display: block; margin-left: auto; margin-right: auto; padding: 6px 12px; background: #333; color: #fff;
+      border: 1px solid #888 }
+/* border-box sizes: min-height and min-width are the border box's, as
+   height and width are (webdriveruniversity.com's buttons of 52px) */
+.mh { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 70%;
+      min-height: 52px; padding: 10px 16px; border: 1px solid #f45950 }
+.mw { box-sizing: border-box; display: inline-block; min-width: 120px; padding: 0 20px; border: 2px solid #888 }
 </style></head><body>
 <button type="button" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span
 class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button>
 <p><button class="b2"><b>Find Out More!</b></button> <button class="b3">plain</button>
 <button class="b2" style="background: #36c; color: #fff"><i>a ground</i> <b>of the page's</b></button>
+<button class="cb"><b>Find Out More!</b></button>
+<div class="mh" id="b1"><p style="margin: 0">CLICK ME!</p></div>
+<p><span class="mw">min</span>
 <p><input class="tr" value="see-through"> <input value="own ground"> <input class="tn" value="transparent, no border">
 </body></html>

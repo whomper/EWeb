@@ -1,5 +1,5 @@
-page 608 x 83, background 0f0f0f, 42 items, 0 links, title "Buttons of elements, controls made transparent"
-drawn: 7-41 0-6
+page 608 x 187, background 0f0f0f, 58 items, 0 links, title "Buttons of elements, controls made transparent"
+drawn: 7-57 0-6
 fill 563,20 18x2 #ededed
 fill 563,25 18x2 #ededed
 fill 563,30 18x2 #ededed
@@ -25,16 +25,32 @@ fill 147,16 147x1 #ff3333
 fill 147,37 147x1 #ff3333
 fill 147,17 1x20 #ff3333
 fill 293,17 1x20 #ff3333
-fill 6,49 148x1 #888888
-fill 6,66 148x1 #888888
-fill 6,50 1x16 #888888
-fill 153,50 1x16 #888888
-fill 306,50 146x1 #808080
-fill 306,65 146x1 #808080
-fill 306,50 1x16 #808080
-fill 451,50 1x16 #808080
-fill 157,48 146x18 #ffffff
-fill 157,48 146x1 #808080
-fill 157,65 146x1 #808080
-fill 157,48 1x18 #808080
-fill 302,48 1x18 #808080
+fill 245,38 118x26 #333333
+text 256,55 96x14 #ffffff sans11 bold link 0 "Find Out More!"
+fill 245,38 118x1 #888888
+fill 245,63 118x1 #888888
+fill 245,39 1x24 #888888
+fill 362,39 1x24 #888888
+text 187,93 55x13 #eeeeee sans10 link 0 "CLICK ME!"
+fill 6,74 417x1 #f45950
+fill 6,115 417x1 #f45950
+fill 6,75 1x40 #f45950
+fill 422,75 1x40 #f45950
+text 24,138 18x13 #eeeeee sans10 link 0 "min"
+fill 6,126 96x2 #888888
+fill 6,140 96x2 #888888
+fill 6,128 2x12 #888888
+fill 100,128 2x12 #888888
+fill 6,153 148x1 #888888
+fill 6,170 148x1 #888888
+fill 6,154 1x16 #888888
+fill 153,154 1x16 #888888
+fill 306,154 146x1 #808080
+fill 306,169 146x1 #808080
+fill 306,154 1x16 #808080
+fill 451,154 1x16 #808080
+fill 157,152 146x18 #ffffff
+fill 157,152 146x1 #808080
+fill 157,169 146x1 #808080
+fill 157,152 1x18 #808080
+fill 302,152 1x18 #808080

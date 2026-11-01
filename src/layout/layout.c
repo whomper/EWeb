@@ -6191,9 +6191,18 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
    widest within w */
 static int32_t float_width(L *l, box *c, int32_t w)
 {
-	int32_t wf = cell_pref(l, c, w);
+	int32_t wf = cell_pref(l, c, w), mn;
 	if (wf > w)
 		wf = w;
+	if (!c->anon && (mn = len(l, c->st, EP_MIN_WIDTH, w)) != AUTO) {
+		/* its min-width, which wins (CSS 2.1, 10.4): the border box's
+		   under border-box, else its content's (a float or an
+		   inline-block of min-width: webdriveruniversity.com's) */
+		mn += kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX ?
+		      len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w) : extras(l, c);
+		if (wf < mn)
+			wf = mn;
+	}
 	return wf < 1 ? 1 : wf;
 }
 
@@ -7739,6 +7748,16 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			w -= bl + br + pl + pr;
 		if (wauto)
 			w = cbw - ml - mr - bl - br - pl - pr;
+		if (wauto && b->ctl && b->n != NULL && b->n->tag == T_BUTTON && !b->ib) {
+			/* a button of elements as a block: as wide as its
+			   content, as browsers' buttons are (HTML 15.5.3), its
+			   auto margins centring it (Bootstrap's center-block) */
+			int32_t m = measure(l, b) - ml - mr - bl - br - pl - pr;
+			if (m > 0 && m < w) {
+				w = m;
+				wauto = 0;
+			}
+		}
 		if (!b->anon) {
 			mx = len(l, s, EP_MAX_WIDTH, cbw);
 			mn = len(l, s, EP_MIN_WIDTH, cbw);
@@ -7750,6 +7769,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 					wauto = 0;
 				}
 			}
+			if (mn != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
+				mn = mn > bl + br + pl + pr ? mn - (bl + br + pl + pr) : 0;	/* (as max-width) */
 			if (mn != AUTO && w < mn)
 				w = mn;
 		}
@@ -8060,9 +8081,18 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				ch = hp;
 		}
 		mn = len(l, s, EP_MIN_HEIGHT, AUTO);
+		mx = len(l, s, EP_MAX_HEIGHT, AUTO);
+		if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX) {
+			/* (the border box's, as height's: CSS Box Sizing 3, 3.1;
+			   webdriveruniversity.com's buttons of min-height 52px were
+			   their padding and borders taller) */
+			if (mn != AUTO)
+				mn = mn > bt + bb + pt + pb ? mn - (bt + bb + pt + pb) : 0;
+			if (mx != AUTO)
+				mx = mx > bt + bb + pt + pb ? mx - (bt + bb + pt + pb) : 0;
+		}
 		if (mn != AUTO && ch < mn)
 			ch = mn;
-		mx = len(l, s, EP_MAX_HEIGHT, AUTO);
 		if (mx != AUTO && ch > mx && keep)
 			ch = mx;
 		if (sc && scrolls(ox) && sx1 != INT32_MIN && sx1 - (x + ml + bl + pl + w) > 2 && hp == AUTO &&
