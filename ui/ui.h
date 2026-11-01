@@ -109,8 +109,10 @@ typedef struct ewin {
 	int due_bars;			/* drawn at the next turns: 8 the title, 1 the status bar, 2 all the bars, 4 the sliders */
 	short sl[4], sl_set;		/* the sliders as last set (sl_set 0: not yet) */
 } ewin;
+#ifndef EW_NO_CUR	/* (common's click.c has a cur of its own: the Makefile) */
 extern ewin *cur;		/* the window worked on: the one in front, or the one a page loads in */
 #define br (cur->b)		/* its page shown, its history */
+#endif
 extern int loading;		/* a page is on its way: Esc and Stop stop it */
 /* what happened, for the Hatari rigs (main.c): an "EWEB ..." line through NatFeats */
 void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
@@ -236,6 +238,8 @@ void win_colours(void);			/* the screen's colours changed: the toolbar's picture
 void win_throb(int busy);		/* the throbber's next frame while busy (each 110 ms), else at rest */
 int  win_throb_frames(void);		/* frames drawn since the last call, for the log */
 int  win_mouse(short mx, short my, short button, short clicks, short kstate);	/* 1: ours */
+void ui_press_idle(void);	/* a press held (common's press_track): main.c's work meanwhile */
+void ui_press_msg(short *m);	/* and a message that comes meanwhile */
 void win_hover(short mx, short my);	/* a link's address on the info line, the pointing hand */
 int  win_key(short kstate, short key);	/* 1: taken (the address field, scrolling) */
 void win_scroll_to(int32_t y);

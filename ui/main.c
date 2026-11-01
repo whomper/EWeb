@@ -2079,24 +2079,25 @@ static void dialog_redraw(const short *msg)
 }
 
 
-/* a press's clicks, 1 or 2 (the guidelines' 5.8): the loop asks the AES
-   for one click, so that it hands a press over at once (asking for two
-   held every press back for the double-click time); a second press of the
-   same button near the first within DCLICK_MS is a double click. (The
-   AES's own setting, evnt_dclick, when common's click.c has it.) */
-#define DCLICK_MS 330
-static short clicks_now(short mx, short my, short button)
+/* a press held (common's press_track, 5.8): the throbbers turning, a
+   window's redraw done at once, other messages after the press, as the
+   loop would have them */
+#define HELD 8
+static void throb_all(void);
+static short held[HELD][8];
+static int nheld;
+
+void ui_press_idle(void)
 {
-	static unsigned long at;
-	static short ax, ay, ab;
-	unsigned long t = pf_ms();
-	int two = at != 0 && t - at <= DCLICK_MS && button == ab && mx >= ax - 4 && mx <= ax + 4 &&
-		  my >= ay - 4 && my <= ay + 4;
-	at = two ? 0 : (t ? t : 1);
-	ax = mx;
-	ay = my;
-	ab = button;
-	return two ? 2 : 1;
+	throb_all();
+}
+
+void ui_press_msg(short *m)
+{
+	if (m[0] == WM_REDRAW)
+		win_message(m);
+	else if (nheld < HELD)
+		memcpy(held[nheld++], m, sizeof held[0]);
 }
 
 /* an event of the main loop (or one put off while a picture came) */
@@ -2160,8 +2161,14 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 				menu_update();
 			}
 		}
-		if (win_mouse(ev.mx, ev.my, ev.mbutton, clicks_now(ev.mx, ev.my, ev.mbutton), ev.kstate))
+		if (win_mouse(ev.mx, ev.my, ev.mbutton, 1, ev.kstate))	/* (its double clicks: win.c's, click.c) */
 			menu_update();
+		while (nheld > 0) {
+			short m[8];
+			memcpy(m, held[0], sizeof m);
+			memmove(held[0], held[1], --nheld * sizeof held[0]);
+			handle(MU_MESAG, m, &ev, hover_x, hover_y);
+		}
 		do {			/* the button let go */
 			graf_mkstate(&mx, &my, &mbt, &ks);
 			if (mbt & 3)
@@ -2572,7 +2579,7 @@ int app_main(void)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
 				    (more || due >= 0 || rib || wait <= 1 ? MU_TIMER : 0),
-				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, clicks_now) */
+				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, common's click.c) */
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);

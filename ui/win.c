@@ -22,6 +22,7 @@
 #include "ui.h"
 #include "canvas.h"
 #include "charset.h"
+#include "click.h"
 #include "clip.h"
 #include "form.h"
 #include "iconify.h"
@@ -2134,13 +2135,20 @@ void win_hover(short mx, short my)
 }
 
 /* a button held down: sunk while the mouse is on it, raised when it
-   leaves; 1 when let go on it (a click), 0 when let go elsewhere */
-static int press(int i)
+   leaves; 1 when let go on it (a click), 0 when let go elsewhere (5.8).
+   Held still, common's press_track waits, the throbbers turning and the
+   windows redrawn; once the mouse moves, it is followed here */
+static int press(int i, short mx, short my)
 {
-	short mx, my, mb, ks, in = 1;
+	short mb, ks, in = 1;
+	int r;
 	cur->sunk = i;
 	redraw(&cur->but[i], 1);
-	for (;;) {
+	r = press_track(&cur->but[i], mx, my, ui_press_idle, ui_press_msg, NULL, NULL);
+	graf_mkstate(&mx, &my, &mb, &ks);
+	if (r != PRESS_DRAG)
+		in = r == PRESS_IN;
+	else for (;;) {
 		graf_mkstate(&mx, &my, &mb, &ks);
 		if (!(mb & 1))
 			break;
@@ -2346,19 +2354,16 @@ static int select_text(short mx, short my, short clicks, short kstate)
 		/* a link pressed: shown so at once (5.8), followed on release
 		   (the click after this), drawn back if it becomes a drag */
 		int pl = link_at(mx, my);
+		short dx = 0, dy = 0;
 		if (pl >= 0)
 			link_press(pl + 1);
-		for (;;) {
-			graf_mkstate(&x, &y, &mb, &ks);
-			if (!(mb & 1)) {
-				link_press(0);
-				sel_clear();
-				return 0;
-			}
-			if (x < mx - 3 || x > mx + 3 || y < my - 3 || y > my + 3)
-				break;
-			evnt_timer_(10);
+		if (press_track(&cur->r_page, mx, my, ui_press_idle, ui_press_msg, &dx, &dy) != PRESS_DRAG) {
+			link_press(0);	/* let go: the click (common's click.c) */
+			sel_clear();
+			return 0;
 		}
+		x = (short) (mx + dx);
+		y = (short) (my + dy);
 		link_press(0);
 		cur->sel.on = 0;
 		from = to = at;
@@ -2409,7 +2414,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	for (i = 0; i < NBUT; i++) {
 		if (!rect_hit(&cur->but[i], mx, my))
 			continue;
-		if (!enabled(i) || !press(i))
+		if (!enabled(i) || !press(i, mx, my))
 			return 1;
 		switch (i) {
 		case B_BACK: command(C_BACK); break;
@@ -2435,6 +2440,9 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 				win_address_focus(1);
 			return 1;
 		}
+		/* the second press of a double click selects it all
+		   (common's click.c times it, from the desktop's setting) */
+		clicks = (button & 1) && press_double(1, mx, my) ? 2 : 1;
 		if (!cur->a_focus || clicks >= 2) {
 			win_address_focus(1);
 		} else {
@@ -2443,6 +2451,8 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			addr_show_cursor();
 			redraw_addr();
 		}
+		if (button & 1)
+			press_track(&cur->r_addr, mx, my, ui_press_idle, ui_press_msg, NULL, NULL);
 		return 1;
 	}
 	if (rect_hit(&cur->r_page, mx, my)) {
@@ -2454,6 +2464,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			context_menu(mx, my);
 			return 1;
 		}
+		clicks = (button & 1) && press_double(2, mx, my) ? 2 : 1;	/* (click.c) */
 		if (box_bar(mx, my))
 			return 1;	/* a box's scroll bar */
 		if (br.p != NULL && page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) == NULL &&
