@@ -113,7 +113,10 @@ int scr_text(short x, short y, const char *s, long n, short pen, short height, i
 int scr_spans(short y1, short y2, const short *spans, short n);
 
 /* a bitmap (rows of wb bytes, its set bits in pen, MD_TRANS) at any x, as
-   vrt_cpyfm in MD_TRANS puts a G_IMAGE's; cut to the clip. 0 elsewhere */
+   vrt_cpyfm in MD_TRANS puts a G_IMAGE's; cut to the clip. 0 elsewhere.
+   Measure before using it for many small bitmaps: a list's 32 x 32 row
+   icons were slower this way than by vrt_cpyfm on an 8 MHz ST (EFTP,
+   1 Nov 2026: a page scrolled 175 ms by the VDI, 210 by scr_bits) */
 int scr_bits(short x, short y, const unsigned char *bits, short wb, short rows, short pen);
 
 /* the box p's pixels cleared where x + y is even, as TOS 1.04's AES greys

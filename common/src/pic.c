@@ -855,14 +855,22 @@ static void dsp_load(int cmd, unsigned addr, const unsigned long *w, long n)
    byte the bits may start with begins with (0: longer than 8 bits) at
    base; maxcode[l] and valoff[l] for the longer ones, and the symbols, at
    base + $800 (as libjpeg's jpeg_make_d_derived_tbl) */
-static void dsp_huff(const unsigned char *bits, const unsigned char *val, unsigned base)
+/* the words decode_dsp builds and sends (tables, the scan's lots): taken
+   for a picture, not resident (6.9 KB of bss before; EPDF under NVDI on a
+   full Falcon, 1 Nov 2026) */
+typedef struct {
+	unsigned long a[256], b[256], c[64], d[256];
+	unsigned short w[256];
+} DSPTMP;
+
+static void dsp_huff(const unsigned char *bits, const unsigned char *val, unsigned base, DSPTMP *m)
 {
-	static unsigned long len[256], sym[256], mv[64], hv[256];
+	unsigned long *len = m->a, *sym = m->b, *mv = m->c, *hv = m->d;
 	long code = 0;
 	int l, i, p = 0;
-	memset(len, 0, sizeof len);
-	memset(sym, 0, sizeof sym);
-	memset(hv, 0, sizeof hv);
+	memset(len, 0, sizeof m->a);
+	memset(sym, 0, sizeof m->b);
+	memset(hv, 0, sizeof m->d);
 	for (i = 0; i < 64; i++)
 		mv[i] = 0xFFFFFFUL;	/* maxcode -1: none */
 	for (l = 1; l <= 16; l++) {
@@ -892,9 +900,9 @@ static void dsp_huff(const unsigned char *bits, const unsigned char *val, unsign
 /* the tables every picture has the same (the natural order, AC symbols
    split, the shifts and masks, the rows and columns used up to each
    coefficient) */
-static void dsp_fixed(void)
+static void dsp_fixed(DSPTMP *m)
 {
-	static unsigned long t[256], u[256];
+	unsigned long *t = m->a, *u = m->b;
 	int i, r, c;
 	for (i = 0; i < 64; i++)
 		t[i] = (unsigned long) dsp_zz[i];
@@ -948,6 +956,7 @@ typedef struct {
 	int b, nb, hy, vy;		/* the block in it, of nb (hy x vy of luma) */
 	int bi, bn;			/* the words of the block being sent */
 	unsigned short bw[65];
+	unsigned short *w;		/* a lot of 256 words (DSPTMP's) */
 } DSPSRC;
 
 /* streamed: what is left of buf moved to its start and buf filled again */
@@ -1046,7 +1055,7 @@ static int dsp_byte(DSPSRC *s)
 /* 256 words the DSP asked for; restart: from after the next RST marker */
 static void dsp_feed(DSPSRC *s, int restart)
 {
-	static unsigned short w[256];
+	unsigned short *w = s->w;
 	int i;
 #ifdef PIC_LIBJPEG
 	if (s->coef != NULL) {
@@ -1264,6 +1273,7 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 	PIC bp;
 	DSPSRC src;
 	DSPSHR shr;
+	DSPTMP *tmp;
 	int shrink = !direct && pic_dsp_shrink && dsp_shrink_plan(&shr, ow, oh, mw, mh, mcols, mrows, p->w, p->h);
 	int rows_mode = dj->row != NULL && (direct || shrink);
 #ifdef PIC_LIBJPEG
@@ -1319,15 +1329,20 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		src.fill = dj->fill;
 		src.fu = dj->fu;
 	}
-	if (!pic_dsp->begin(PIC_DSP_JPEG)) {
+	if ((tmp = malloc(sizeof *tmp)) == NULL || !pic_dsp->begin(PIC_DSP_JPEG)) {
+		int had = tmp != NULL;
+		free(tmp);
 		free(band);
 		free(bpx);
 		free(bal);
 		free(src.buf);
 		if (shrink)
 			dsp_shrink_free(&shr);
-		return -2;
+		if (!had)
+			*why = PIC_MEMORY;
+		return had ? -2 : 0;
 	}
+	src.w = tmp->w;
 	if (dj->on != NULL)
 		*dj->on = 1;
 	pic_dsp_failed = 0;
@@ -1397,10 +1412,10 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		}
 		dsp_load(D_LOADX, D_TRM, w, (long) k * k * 3);
 	}
-	dsp_fixed();
+	dsp_fixed(tmp);
 	for (ci = 0; ci < (grey ? 1 : 3) && !coefs; ci++) {
-		dsp_huff(dj->dcb[ci], dj->dcv[ci], D_HLA + 0x200 * ci);
-		dsp_huff(dj->acb[ci], dj->acv[ci], D_HLA + 0x100 + 0x200 * ci);
+		dsp_huff(dj->dcb[ci], dj->dcv[ci], D_HLA + 0x200 * ci, tmp);
+		dsp_huff(dj->acb[ci], dj->acv[ci], D_HLA + 0x100 + 0x200 * ci, tmp);
 	}
 	/* the transform, the quantisers (Q * 2048), the format's constants */
 	dsp_matrix(w, k);
@@ -1414,7 +1429,7 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 	}
 	dsp_load(D_LOADY, D_QT, w, grey ? 64 : 3 * 64);
 	if (shrink) {
-		static unsigned long kt[256];
+		unsigned long *kt = tmp->a;
 		/* each box's divisor: 65536 / n rounded (the scaler's), x 64; a
 		   box's columns - 1 x 16 + its rows - 1 */
 		for (i = 0; i < 256; i++) {
@@ -1479,6 +1494,7 @@ out:
 	pic_dsp->end(ok && !pic_dsp_failed);
 	if (dj->on != NULL)
 		*dj->on = 0;
+	free(tmp);
 	free(band);
 	free(bpx);
 	free(bal);

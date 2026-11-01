@@ -910,7 +910,14 @@ static void fast_draw(OBJECT *tree, short cx, short cy, short cw, short cch, int
 			}
 			sh[n].i = i;
 			reach(tree, i, x, y, &sh[n]);
-			sh[n].kind = i ? (unsigned char)fast_kind(tree, i, ch) : K_AES;
+			/* an object that doesn't reach the piece drawn: nothing to do
+			   with it here (objc_draw cuts it away, and it can't cover
+			   anything there); a small piece, a tab, is then left most
+			   of the walk's and the CPU's work */
+			if (i && (sh[n].x2 < cx || sh[n].y2 < cy || sh[n].x1 >= cx + cw || sh[n].y1 >= cy + cch))
+				sh[n].kind = K_NOTHING;
+			else
+				sh[n].kind = i ? (unsigned char)fast_kind(tree, i, ch) : K_AES;
 			if (!sh[n].kind && (tree[i].ob_type & 0xff) == G_IBOX && !tree[i].ob_state &&
 			    (signed char)(tree[i].ob_spec >> 16) == 0)
 				sh[n].kind = K_NOTHING;
@@ -1255,13 +1262,18 @@ static struct {
 
 int dlg_touch_up(void)
 {
+	return dlg_touch_up_idle(0);
+}
+
+int dlg_touch_up_idle(void (*idle)(void))
+{
 	short m[8];
 	AEVENT e;
 	int r;
 	if (!held.on)
 		return -1;
 	held.on = 0;
-	r = press_track(&held.r, held.x, held.y, 0, held_msg, 0, 0);
+	r = press_track(&held.r, held.x, held.y, idle, held_msg, 0, 0);
 	if (r == PRESS_DRAG)
 		evnt_multi_(MU_BUTTON, 1, 1, 0, 0, m, &e);	/* moved off: just its release */
 	return r;

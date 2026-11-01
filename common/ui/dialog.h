@@ -179,6 +179,11 @@ long dlg_fast_count(void);
 #define DLG_CLICKS 1
 void dlg_touch(OBJECT *tree, short *next, short x, short y);
 int dlg_touch_up(void);
+/* the same, idle() called at each turn of the wait (press_track's): the
+   old row drawn in the next turn after the pressed one (5.8, 1bad614).
+   Not called when the button was let go before the first turn: the
+   caller calls it once more after */
+int dlg_touch_up_idle(void (*idle)(void));
 #else
 #define DLG_CLICKS 2
 #endif
