@@ -3913,6 +3913,41 @@ Google's tag script (385 KB of the 558 KB of Datepicker's scripts).
 Tests: `tests/layout/cards.html` (the cards, a column's `flex-grow`, `::before` boxes, a positioned
 bar, block and inline pictures of 60%, SVGs of a `viewBox` alone; looked at against Chromium).
 
+**webdriveruniversity.com, the second round (1 Nov 2026).** The 18 challenges again, side by side
+with Chromium, after your decision to leave known trackers out:
+
+- **Trackers left out** (above, What isn't fetched): the Google tag script was most of the pages
+  over the script budget (Datepicker's 385 KB of 558); every challenge's scripts now run.
+- **A `<button>` of elements the page styles** (Bootstrap's three-bar menu button, a `<b>` in a
+  button) is laid out with its own content in its box, as browsers do, with the page's border and
+  padding; anywhere in it is the button (its items carry the control). As a block of width auto
+  it is as wide as its content, its auto margins centring it (`center-block`).
+- **A control's own ground and text colour**: the UA sheet gives controls a ground of a value of
+  its own (`UA_CTL_BG`, never drawn as it is), so the layout tells EWeb's ground from a page's
+  colour and from a page's `transparent` (a field made transparent with a border showed EWeb's
+  white), and their own text colour, black, as browsers' FieldText and ButtonText (a dark page's
+  light text made its fields unreadable).
+- **Border-box min and max sizes**: under `box-sizing: border-box`, min-height, max-height and
+  min-width are the border box's (Click Buttons' buttons of min-height 52px were 75 CSS px high);
+  a float or an inline-block takes its min-width.
+- **Custom elements, a few**: `customElements.define`, `get`, `whenDefined`; the page's elements of
+  a name defined take its class's prototype and their `connectedCallback` runs; a shadow root is
+  an element of its own, filled and looked in by the script, not drawn (EWeb has no styles scoped
+  to part of a page). The AI Playground's script stopped at `customElements`: its employee table
+  and everything after it now come.
+- **Icon fonts**: Glyphicons' and Font Awesome's commonest icons (stars, chevrons, check, cross,
+  arrows, carets, menu, home, envelope, heart) are drawn as the characters `EWEB.FNT` has for them,
+  the others left out rather than drawn as '?' (Page Object Model's rating stars, its carousel's
+  chevrons).
+
+Left as they are: emoji (three on the front page, no glyphs in `EWEB.FNT`: '?'), rounded corners
+and shadows, a shadow root's content (not drawn), and two scripts the site serves as HTML (its
+`html5shiv.js`, `respond.js` and two pages' `script.js`: a GitHub page saved as JavaScript, which
+Chromium can't run either).
+
+Tests: `tests/layout/buttons.html` and `tests/layout/icons.html` (looked at against Chromium),
+`tests/js/custom.html`, `tests/browse/sitetest.c` (the trackers' names).
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
