@@ -4131,6 +4131,19 @@ ST, at a page shown, a page scrolled, the start.
   brings in is drawn at the next turn, so a line scrolled is its copy. A dialog's loop and a held
   button draw whole (`win_sync`, `sync_draw`). What the user sees is as before, band by band, but a
   key, a click or Esc is answered between the bands.
+- **A held arrow or key** (Erez, 1 Nov 2026: in 0.57 the lines repeated down the window while an
+  arrow was held, and Page Up and Down jumped). The AES sends the next `WM_ARROWED` as soon as EWeb
+  asks for an event, so the main loop's turn that draws the rows a step brought in never came, and
+  each step's copy moved those undrawn rows along with the rest. Now a scroll with rows still due
+  draws them first, whole, then copies (`win_scroll_to`, `scroll_x_to`); a page's step while rows
+  are still due, or a line's while more than two steps' rows are, draws the window whole from its
+  new place at once (`redraw_now`), where it began its slices again from the top at each step (the
+  window's top drawn at each place, its rest never). A single step is as before, its copy, the rows
+  in slices after. Held, each step is its rows drawn and the copy: on the stock Falcon 180 ms (48
+  rows 105 to 155, the copy 25 to 30; 0.57's 50 ms was the copy alone), on the ST 450 (the rows 375
+  to 400, the copy 45; 0.57's 130). `make hatarigui`'s dialogs group holds the down arrow on the
+  numbered page and takes the screen while it is held: no band of rows may be in the window twice
+  (0.57 fails it on TOS 4.04, EmuTOS and the ST's TOS 1.04).
 - **A band's own cost.** A band looked at every item of the 256-row strips it was in, and found
   each one's place in the order drawn by a search: the strips are 64 rows now
   (`PAGE_STRIP`), a lone strip's list is walked as it is, and the place is stepped on from the

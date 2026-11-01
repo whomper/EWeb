@@ -309,6 +309,57 @@ def link_point(url, area, top, text, extra=()):
     return None
 
 
+def numbered_page(hd):
+    """C:\\NUM.HTM: 400 lines, each numbered, on a ground of its own"""
+    with open(os.path.join(hd, "NUM.HTM"), "w") as f:
+        f.write("<!doctype html><title>numbered</title><body style='font: 13px sans-serif'>")
+        for i in range(1, 401):
+            f.write("<p style='margin:2px; background:#%02x%02x%02x'>line %04d %s</p>" %
+                    ((i * 37) % 200 + 55, (i * 91) % 200 + 55, (i * 53) % 200 + 55, i, "x" * (i % 37)))
+
+
+def held_scroll(r, group, name, settle):
+    """the window's down arrow held (WM_ARROWED one on another): taken
+    while it is still held, the window shows the page's lines once each,
+    in order, but for the rows the last step brought in; 0.57 drew those
+    only at a turn of the main loop that never came while it was held,
+    and moved them along with the rest at each step, the same lines
+    repeated down the window (Erez, 1 Nov 2026). Each band of 16 rows
+    with text in most of them must be the window's only such band"""
+    mark = len(r.events())
+    r.key(L, (CTRL,))
+    time.sleep(2)
+    r.type("file:///C:/NUM.HTM")
+    r.key(RETURN)
+    shown = r.wait(r"shown file:///C:/NUM\.HTM", 300)
+    if not check("%s: %s, the numbered page for the held arrow" % (group, name), shown is not None,
+                 str(r.events()[mark:][-4:])):
+        return
+    time.sleep(settle + 2)
+    x, y, w, h = (int(v) for v in re.search(r"area (\d+) (\d+) (\d+) (\d+)", shown).groups())
+    r.mouse.move(x + w + 9, y + h + 9)     # (the down arrow, under the bar's end)
+    time.sleep(1)
+    r.mouse.xdo("mousedown", "1")
+    time.sleep(2.0 if settle < 10 else 6.0)
+    held = Image.open(r.shot(95)).convert("RGB")
+    r.mouse.xdo("mouseup", "1")
+    r.mouse.move(x + w // 2, y + h // 2)
+    tops = [e for e in r.events()[mark:] if e.startswith("arrowed ")]
+    rows = [tuple(held.crop((x, y + k, x + w, y + k + 1)).getdata()) for k in range(h - 120)]
+    textured = [len(set(row)) > 1 for row in rows]
+    seen, same = {}, []
+    for k in range(0, len(rows) - 16):
+        if sum(textured[k:k + 16]) < 10:
+            continue
+        key = hash(tuple(rows[k:k + 16]))
+        if key in seen and rows[seen[key]:seen[key] + 16] == rows[k:k + 16]:
+            same.append((seen[key], k))
+        seen.setdefault(key, k)
+    check("%s: %s, the down arrow held: no line twice in the window while it is held" % (group, name),
+          len(tops) > 3 and not same, "%d steps; the same rows at %s" % (len(tops), same[:4]))
+    time.sleep(settle)
+
+
 def held_presses(r, group, name, page, settle):
     """the guidelines' 5.8 by the screen's pixels: a link and a toolbar
     button (Home) pressed and held still for a second show pressed before
@@ -1244,6 +1295,7 @@ def dialogs():
             else:
                 os.environ["AERA_TOS"] = tos
             hd = hd_for(name, r"C:\TEXT.HTM", "DIALOGS3D=0\r\n")
+            numbered_page(hd)
             r = Run(name, spec, hd, windowed=True, prg=prg)
             try:
                 if tos is None and not r.m.real:
@@ -1309,6 +1361,7 @@ def dialogs():
                 time.sleep(settle)
                 held_presses(r, "dialogs", name, os.path.join(ROOT, "tests/layout/text.html"),
                              1 if prg == "EWEB.PRG" else 4)
+                held_scroll(r, "dialogs", name, settle)
                 r.key(Q, (CTRL,))
                 check("dialogs: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-4:]))
             finally:

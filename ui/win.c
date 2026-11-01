@@ -1005,6 +1005,15 @@ static int all_visible(void)
 	return r.x == cur->work.x && r.y == cur->work.y && r.w == cur->work.w && r.h == cur->work.h;
 }
 
+/* the whole page drawn now, in this stretch (a scroll while the last
+   one's rows are still due) */
+static void redraw_now(void)
+{
+	sync_draw++;
+	win_redraw_page();
+	sync_draw--;
+}
+
 void win_scroll_to(int32_t y)
 {
 	int32_t m = max_top(), dy;
@@ -1028,6 +1037,22 @@ void win_scroll_to(int32_t y)
 		short pxy[8], d = (short) (dy < 0 ? -dy : dy);
 		unsigned long t0;
 		GRECT fresh = cur->r_page;
+		/* what the last scroll brought in not drawn yet (a held arrow or
+		   key: its messages come one on another, and the main loop's
+		   turn that draws them never comes): drawn whole first, else
+		   the copy moved the old rows along again and again, the same
+		   lines repeated down the window till it was let go (Erez, 1
+		   Nov 2026); more than that due (a page being drawn in
+		   slices): no copy, the window drawn whole from its new place */
+		if (cur->due.w > 0 && cur->due.h > 0 && !sync_draw) {
+			if (cur->due.h > 2 * d + BAND_MIN) {
+				redraw_now();
+				return;
+			}
+			sync_draw++;
+			draw_due();
+			sync_draw--;
+		}
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
 		clip_on(&cur->r_page);
@@ -1063,6 +1088,15 @@ void win_scroll_to(int32_t y)
 			draw_due();
 		return;
 	}
+	/* a step of a page or more: the window from its new place, in slices;
+	   but whole at once while the last one is still being drawn (a page
+	   key or the bar's track held: each step's slices began again at the
+	   top, the window's top drawn at each place and its rest never, Erez's
+	   jumpy Page Up and Down, 1 Nov 2026) */
+	if (cur->due.w > 0 && cur->due.h > 0 && !sync_draw) {
+		redraw_now();
+		return;
+	}
 	defer_draw++;
 	win_redraw_page();
 	defer_draw--;
@@ -1095,6 +1129,16 @@ static void scroll_x_to(int32_t x)
 		short pxy[8], d = (short) (dx < 0 ? -dx : dx);
 		GRECT fresh = cur->r_page;
 		memset(&s, 0, sizeof s);
+		if (cur->due.w > 0 && cur->due.h > 0 && !sync_draw) {
+			/* (as up and down: the last step's columns first) */
+			if (cur->due.w > 2 * d + BAND_MIN) {
+				redraw_now();
+				return;
+			}
+			sync_draw++;
+			draw_due();
+			sync_draw--;
+		}
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
 		clip_on(&cur->r_page);
@@ -1121,6 +1165,10 @@ static void scroll_x_to(int32_t x)
 		due_add(&fresh);
 		if (sync_draw)
 			draw_due();
+		return;
+	}
+	if (cur->due.w > 0 && cur->due.h > 0 && !sync_draw) {
+		redraw_now();	/* (as up and down) */
 		return;
 	}
 	defer_draw++;
