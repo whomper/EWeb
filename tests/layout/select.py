@@ -37,7 +37,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from find import png_rows  # noqa: E402
+from find import png_rows, yellow_span  # noqa: E402
 
 PAGE = os.path.join(HERE, "find.html")
 PAGE2 = os.path.join(HERE, "select.html")
@@ -82,6 +82,33 @@ def texts(out, what="selected"):
     return got
 
 
+def part(ewr, fnt, rs, text, page=PAGE, y=None):
+    """text's place on the page as a run is given (x, baseline, w, h, text):
+    its run, else its part of the run it is in (right-to-left words and
+    the spaces between them are one run), from where Find marks it (-G);
+    the first on the line at baseline y when given"""
+    for r in rs:
+        if r[4] == text and (y is None or r[1] == y):
+            return r
+    with tempfile.TemporaryDirectory() as tmp:
+        png = os.path.join(tmp, "p.png")
+        for k in range(1, 9):
+            p = subprocess.run([ewr, "-f", fnt, "-o", png] + ["-G", text] * k + [page], capture_output=True,
+                               text=True, timeout=120)
+            found = [line for line in p.stdout.splitlines() if line.startswith("found: ")]
+            m = re.search(r"at (-?\d+),(-?\d+) (\d+)x(\d+)", found[-1]) if found else None
+            if not m:
+                break
+            x, w = int(m.group(1)), int(m.group(3))
+            r = next((r for r in rs if r[0] == x and r[2] == w and (y is None or r[1] == y)), None)
+            if r is None:
+                continue
+            span = yellow_span(png_rows(png), r[1] - 3)
+            if span is not None:
+                return (span[0], r[1], span[1] - span[0] + 1, r[3], text)
+    sys.exit("select: %r isn't on the page" % text)
+
+
 def at(r, frac):
     """a point inside run r, frac of the way along it from its left"""
     return "%d,%d" % (r[0] + int(r[2] * frac), r[1] - 3)
@@ -97,7 +124,7 @@ def edition(ewr, fnt, label):
     by = {r[4]: r for r in rs}
     first = rs[0]                                   # "The Atari Falcon came in 1992. An "
     caps = next(r for r in rs if "ATARI" in r[4])   # "end of the line ... ATARI in capitals,"
-    he = [r for r in rs if r[4] in ("לכולם", "עולם,")]
+    he = [part(ewr, fnt, rs, "עולם,"), part(ewr, fnt, rs, "לכולם")]
     last = rs[-1]
 
     one = texts(run(ewr, fnt, ["-x", at(first, 0.33) + "," + at(caps, 0.83)]))
@@ -117,10 +144,10 @@ def edition(ewr, fnt, label):
 
     words = texts(run(ewr, fnt, ["-x", at(by["Ata"], 0.5)])) + texts(run(ewr, fnt, ["-x", at(by["ri in two runs."], 0.05)]))
     check(label + "a double click's word, on into the run beside it", words == ["Atari", "Atari"], repr(words))
-    hw = texts(run(ewr, fnt, ["-x", at(by["לכולם"], 0.5)]))
+    hw = texts(run(ewr, fnt, ["-x", at(he[1], 0.5)]))
     check(label + "a Hebrew word", hw == ["לכולם"], repr(hw))
 
-    rtl = texts(run(ewr, fnt, ["-x", at(by["עולם,"], 0.15) + "," + at(by["לכולם"], 0.2)]))
+    rtl = texts(run(ewr, fnt, ["-x", at(he[0], 0.15) + "," + at(he[1], 0.2)]))
     check(label + "Hebrew as it is read, across runs drawn right to left", rtl == [", שלום לכול"], repr(rtl))
 
     alls = texts(run(ewr, fnt, ["-x", "all"]))
@@ -137,14 +164,14 @@ def edition(ewr, fnt, label):
 
     with tempfile.TemporaryDirectory() as tmp:
         png = os.path.join(tmp, "s.png")
-        run(ewr, fnt, ["-x", at(he[1] if he[1][4] == "עולם," else he[0], 0.15) + "," + at(first, 0.33)], png)
+        run(ewr, fnt, ["-x", at(he[0], 0.15) + "," + at(first, 0.33)], png)
         rows = png_rows(png)
         span = sel_span(rows, first[1] - 3)
         check(label + "marked from the place in the first run", span is not None and
               first[0] + first[2] * 0.25 < span[0] < first[0] + first[2] * 0.4, "%s %s" % (span, first))
-        hr = by["שלום"]
+        hr = part(ewr, fnt, rs, "שלום")
         span = sel_span(rows, hr[1] - 3)
-        w = by["עולם,"]
+        w = he[0]
         check(label + "a right-to-left run marked from its right", span is not None and span[1] >= hr[0] + hr[2] - 2 and
               w[0] < span[0] < w[0] + w[2], "%s %s %s" % (span, hr, w))
 
@@ -161,13 +188,14 @@ def bidi(ewr, fnt, label):
           "\u05e9\u05dc\u05d5\u05dd Atari ST \u05e2\u05d5\u05dc\u05dd\n" in p and
           "Hello \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd world" in p, repr(p))
     check(label + "a superscript and a subscript part of their word", "E = mc2 is famous, H2O too." in p, repr(p))
-    first, last = by["\u05d4\u05e4\u05dc\u05e7\u05d5\u05df"], by["\u05d1\u05d2\u05e8\u05de\u05e0\u05d9\u05d4"]
+    first = part(ewr, fnt, rs, "\u05d4\u05e4\u05dc\u05e7\u05d5\u05df", PAGE2)
+    last = part(ewr, fnt, rs, "\u05d1\u05d2\u05e8\u05de\u05e0\u05d9\u05d4", PAGE2)
     line = texts(run(ewr, fnt, ["-x", "%d,%d,%d,%d" % (first[0] + first[2] - 1, first[1] - 3, last[0] + 1,
                                                        last[1] - 3)], page=PAGE2))
     check(label + "a right-to-left line dragged over from its right to its left: all of it", line == [want],
           repr(line))
     lat = by["Atari ST"]
-    shalom = next(r for r in rs if r[4] == "\u05e9\u05dc\u05d5\u05dd" and r[1] == lat[1])
+    shalom = part(ewr, fnt, rs, "\u05e9\u05dc\u05d5\u05dd", PAGE2, lat[1])
     half = texts(run(ewr, fnt, ["-x", "%d,%d,%d,%d" % (shalom[0] + shalom[2] - 1, lat[1] - 3,
                                                        lat[0] + 20, lat[1] - 3)], page=PAGE2))
     check(label + "into the Latin words of a right-to-left line", half == ["\u05e9\u05dc\u05d5\u05dd Ata"],

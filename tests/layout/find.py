@@ -114,8 +114,11 @@ def edition(ewr, fnt, label):
     hidden = finds(ewr, fnt, ["-G", "hidden"])
     check(label + "not what no one sees", hidden == ["none (0)"], str(hidden))
     he = finds(ewr, fnt, ["-G", "שלום עולם", "-G", "עולם, שלום", "-G", "ם עו"])
+    # (the words and the spaces between them one right-to-left run: each
+    # found at its bytes as they are read, "שלום " 9 of them)
     check(label + "Hebrew as it is read", [nth(f) for f in he] == [(1, 1), (1, 1), (1, 1)] and
-          all(where(f)[0] + 1 == where(f)[2] for f in he), str(he))
+          all(where(f)[0] == where(f)[2] for f in he) and
+          [(where(f)[1], where(f)[3]) for f in he] == [(0, 17), (9, 27), (6, 13)], str(he))
     with tempfile.TemporaryDirectory() as tmp:
         png = os.path.join(tmp, "f.png")
         one = finds(ewr, fnt, ["-G", "Falcon"], png)

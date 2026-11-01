@@ -52,7 +52,7 @@ CASES = [
      ["abc 5 ~%s def" % C]),
     ("dir=auto: English first, left to right", "<p dir=rtl>%s <span dir=auto>abc 5</span> %s" % (C, D),
      ["~%s abc 5 ~%s" % (D, C)]),
-    ("RLM: the full stop goes with the Hebrew", "<p>%s.&#x200F; abc" % C, ["~. ~%s abc" % C]),
+    ("RLM: the full stop goes with the Hebrew", "<p>%s.&#x200F; abc" % C, ["~%s. abc" % C]),
     ("no RLM: the full stop with the English line", "<p>%s. abc" % C, ["~%s . abc" % C]),
     ("LRM: the mark stays by the English", "<p dir=rtl>%s world!&#x200E;" % C, ["world! ~%s" % C]),
     ("no LRM: the mark at the line's left", "<p dir=rtl>%s world!" % C, ["~! world ~%s" % C]),
@@ -87,7 +87,12 @@ def lines(page, extra=()):
     rows = {}
     for line in out.splitlines():
         m = re.match(r'text (-?\d+),(-?\d+) (\d+)x\d+ \S+ \S+( rtl)? .*"(.*)"$', line)
-        if m:
+        if m and m.group(4):
+            # a right-to-left run: its words (and the spaces between them),
+            # the last read at its left
+            for k, w in enumerate(reversed(m.group(5).split())):
+                rows.setdefault(int(m.group(2)), []).append((int(m.group(1)) + k / 1000, w, True, int(m.group(3))))
+        elif m:
             rows.setdefault(int(m.group(2)), []).append((int(m.group(1)), m.group(5).strip(), bool(m.group(4)),
                                                          int(m.group(3))))
     return [sorted(rows[y]) for y in sorted(rows)]

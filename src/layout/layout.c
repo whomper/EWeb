@@ -2708,8 +2708,25 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 		}
 		if (is_space(c)) {
 			if (keep) {
+				if (c == '\t' && sw > 0) {
+					/* to the next tab stop, every 8 spaces from the
+					   line's start (CSS Text 3, tab-size: 8; the line so
+					   far its items since the last line break): a gap,
+					   then a space (a run of text, drawn a space to a
+					   space, stops at the gap) */
+					int32_t x = 0, tw;
+					for (k = l->nit - 1; k >= 0 && l->it[k].kind != IT_BREAK; k--)
+						if (l->it[k].kind != IT_FLOAT)
+							x += l->it[k].w;
+					tw = 8 * sw - x % (8 * sw);
+					if (tw > sw) {
+						put_item(l, r, IT_GAP, NULL, 0, tw - sw, 0);
+						if (!l->fail)
+							l->it[l->nit - 1].canbreak = 2;
+					}
+				}
 				t[o] = ' ';
-				put_item(l, r, IT_SPACE, t + o, 1, c == '\t' ? 8 * sw : sw, 0);
+				put_item(l, r, IT_SPACE, t + o, 1, sw, 0);
 				o++;
 				i++;
 				it = &l->it[l->nit - 1];
@@ -2772,10 +2789,15 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				o = word_pieces(l, r, s, i, j, t, start, tt, wrap, rtl, line_start);
 			} else {
 				/* (its direction from its bytes: only one with
-				   Hebrew or another script's letters looked at) */
+				   Hebrew or another script's letters looked at;
+				   one of Hebrew and signs alone, a Hebrew letter's
+				   0xD7 in it, right to left as word_dir finds it,
+				   without its look at each character) */
+				int d = seen & 136 ? -1 : seen & 16 ? 1 : seen & 32 ? 3 : 0;
+				if (d < 0 && (seen & ~(8 | 64)) == 0 && memchr(t + start, 0xD7, o - start) != NULL)
+					d = l->visual ? 1 : 2;
 				put_item(l, r, IT_WORD, t + start, o - start,
-					 ww >= 0 ? ww : (int32_t) font_width(r->font, t + start, o - start),
-					 seen & 136 ? -1 : seen & 16 ? 1 : seen & 32 ? 3 : 0);
+					 ww >= 0 ? ww : (int32_t) font_width(r->font, t + start, o - start), d);
 				if (!wrap && !l->fail)
 					l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
 				*line_start = 0;
@@ -3412,6 +3434,20 @@ static void bidi_levels(L *l, long p0, long p1, int base)
 	para = base >= 0 ? base : bidi_first_strong(l, p0, p1, 0) == 2;
 	for (k = p0; k < p1; k++)
 		l->lv[k] = (uint8_t) (para << 7 | para);
+	if (para == 1) {
+		/* a right-to-left paragraph of right-to-left words and
+		   neutrals alone (most of a Hebrew page): every item at level
+		   1, as the rules below make it (no embedding, no number, the
+		   neutrals between R and the sos and eos of an odd level, R) */
+		for (k = p0; k < p1; k++) {
+			const ITEM *it = &l->it[k];
+			int c = bidi_class(it);
+			if (c == BC_L || c == BC_EN || c == BC_ISO || c == BC_PDI || (c == BC_BN && IT_BD(it) != BD_NONE))
+				break;
+		}
+		if (k == p1)
+			return;
+	}
 	cls = malloc((size_t) n * 3);
 	match = malloc((size_t) n * 6 * sizeof *match);
 	if (cls == NULL || match == NULL) {
@@ -4859,7 +4895,29 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 				if (it->kind == IT_ATOM) {
 					draw_atom(l, it, it->x, base);
 				} else if (it->kind == IT_WORD && (it->flags & DLF_RTL)) {
-					text(l, it->x, base + it->shift, it, it->text, it->len, it->w);
+					/* right-to-left words and the spaces between them
+					   that follow on in the text, each to the left of
+					   the one before: one run, drawn from its last
+					   letter at its left (a Hebrew page's words were a
+					   run each: 16,200 items for the rig's page in
+					   Hebrew, 2,550 in English) */
+					const char *s = it->text;
+					uint32_t len = it->len;
+					int32_t ww = it->w, left = it->x;
+					while (k + 1 < end - i) {
+						ITEM *nx = &l->it[i + k + 1];
+						if ((nx->kind != IT_SPACE && (nx->kind != IT_WORD || !(nx->flags & DLF_RTL))) ||
+						    justify || nx->text != s + len || nx->font != it->font ||
+						    nx->color != it->color || (nx->flags | DLF_RTL) != it->flags ||
+						    nx->link != it->link || nx->hidden || nx->shift != it->shift ||
+						    nx->x + nx->w != left)
+							break;
+						len += nx->len;
+						ww += nx->w;
+						left = nx->x;
+						k++;
+					}
+					text(l, left, base + it->shift, it, s, len, ww);
 				} else if (it->kind == IT_WORD || (it->kind == IT_SPACE && it->flags)) {
 					/* one run for words and spaces that follow on in the text */
 					const char *s = it->text;

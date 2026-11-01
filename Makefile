@@ -312,6 +312,12 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
 		-Icommon/src -o $@ $(filter %.c,$^)
+# EWEB.FNT's advances as the layout measures them (src/gfx/font.c)
+build/asan/fonttest: tests/layout/fonttest.c src/gfx/font.c src/gfx/font.h common/src/inflate.c common/src/util.c \
+		common/src/futil.c tests/host/plat_posix.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/gfx \
+		-Icommon/src -o $@ $(filter %.c,$^)
 # the history (src/browse/history.c)
 build/asan/hgtest: tests/browse/hgtest.c src/browse/history.c src/browse/history.h common/src/util.c \
 		common/src/futil.c src/net/slots.c src/net/slots.h tests/host/plat_posix.c
@@ -1059,7 +1065,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/hgtest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT \
+		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
@@ -1067,6 +1073,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/cookietest tests/net/cookies.txt
 	build/asan/bmtest build/asan
 	build/asan/hgtest build/asan
+	build/asan/fonttest binary/EWEB.FNT
 	build/asan/dctest build/asan
 	build/asan/pentest
 	build/asan/rftest

@@ -578,14 +578,26 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 		return;
 	pv = mixing ? 0 : pixel(c, rgb);
 	if (flags & DLF_RTL) {
-		/* letters last to first: a Hebrew word read right to left */
-		uint32_t cps[64];
-		int k = 0;
-		while (p < e && k < 64)
-			cps[k++] = utf8_next(&p, e);
-		while (k-- > 0) {
-			font_glyph(f, mirrored(cps[k]), &g);
-			draw(c, &g, px, py, pv);
+		/* letters last to first: Hebrew words read right to left, the
+		   text read back from its end (a document's text is UTF-8 as
+		   the parser made it; a byte that isn't is one character) */
+		const char *q = e;
+		while (q > p && px < c->w) {
+			const char *b = q - 1, *t;
+			uint32_t cp;
+			while (b > p && ((unsigned char) *b & 0xC0) == 0x80 && q - b < 4)
+				b--;
+			t = b;
+			cp = utf8_next(&t, q);
+			if (t != q) {
+				b = q - 1;	/* (not one character: its last byte alone) */
+				t = b;
+				cp = utf8_next(&t, q);
+			}
+			q = b;
+			font_glyph(f, mirrored(cp), &g);
+			if (px + g.adv + 8 > 0)
+				draw(c, &g, px, py, pv);
 			px += g.adv;
 		}
 	} else {

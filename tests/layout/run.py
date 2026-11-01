@@ -86,7 +86,8 @@ if "\u00f9\u00ec\u00e5\u00ed" not in dump(os.path.join(ROOT, "tests/hebrew/unlab
 # a text file: its lines, "<" and "&" as they are, its UTF-8 found
 txt = dump(os.path.join(ROOT, "tests/hebrew/unlabelled/UTF8.TXT"))
 if not ('mono13 link 0 "SPDX-License-Identifier: GPL-2.0-or-later"' in txt and
-        '"and English, <b>not bold</b> & "' in txt and 'rtl link 0 "\u05e9\u05dc\u05d5\u05dd"' in txt):
+        '"and English, <b>not bold</b> & "' in txt and
+        'rtl link 0 "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"' in txt):
     fails += 1
     print("layout: the text file isn't shown as its lines\n" + txt)
 # visual Hebrew: its lines not reordered, its words not reversed (the

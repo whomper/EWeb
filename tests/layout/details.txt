@@ -1,4 +1,4 @@
-page 608 x 1248, background ffffff, 180 items, 1 links, title "details and summary"
+page 608 x 1248, background ffffff, 177 items, 1 links, title "details and summary"
 text 10,26 7x17 #000000 sans13 link 0 "▸"
 text 21,26 173x17 #000000 sans13 link 0 "Closed: only this line shows"
 summary 10,13 588x16 closed c1
@@ -83,10 +83,7 @@ fill 6,549 596x1 #888888
 fill 6,485 1x64 #888888
 fill 601,485 1x64 #888888
 text 591,570 7x17 #000000 sans13 rtl link 0 "◂"
-text 559,570 28x17 #000000 sans13 rtl link 0 "סגור:"
-text 511,570 44x17 #000000 sans13 rtl link 0 "המשולש"
-text 472,570 35x17 #000000 sans13 rtl link 0 "מצביע"
-text 428,570 40x17 #000000 sans13 rtl link 0 "שמאלה"
+text 428,570 159x17 #000000 sans13 rtl link 0 "סגור: המשולש מצביע שמאלה"
 summary 10,557 588x16 closed -
 fill 6,553 596x1 #888888
 fill 6,576 596x1 #888888

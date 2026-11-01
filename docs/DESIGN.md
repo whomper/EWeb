@@ -700,7 +700,9 @@ releases.
   stock Falcon's pages need), and the layout looks a page's lists of font names through once
   (`font_of` matched up to 26 names in each, at every run of text): a 127 KB page of the page set
   laid out in 12.1 M instructions, from 13.9 M, half of it unpacking the eight faces it uses, the
-  first time. Hebrew vowel points take no room and are not drawn yet.
+  first time. Hebrew vowel points take no room and are not drawn yet. The advances of U+0080 to
+  U+07FF and U+2000 to U+206F are read the same way, through one table of their places (`noff`,
+  1 Nov 2026): a Hebrew page's text went through `font_glyph` letter by letter.
 - **The document** (`src/doc`): the HTML parser's tree as EWeb's nodes, each carrying the CSS engine's node,
   with a UA stylesheet from the HTML Standard's rendering section. HTML's attributes that stand for
   CSS (`bgcolor`, `width`, `align`, `border`, `cellpadding`, `<font>`...) become presentational
@@ -4150,6 +4152,52 @@ dither a row at a time, EPDF's, its turns in `dither_whole`) the rig gave the sa
 sample 100, news 100, pictures 85, Settings 150. The ST's figures stay its floor (option A above);
 its pictures' page is TJpgDec's rows of blocks.
 
+**The layout's text measured faster than glyph by glyph (1 Nov 2026; 1.0's fourth).** Since 26
+Oct a word of ASCII has been measured as it is copied (`font_widths`, above); what was still
+measured a glyph at a time was everything else, and a Hebrew page is all of it. The falcon4 rig's
+big page, and the same page with its words in Hebrew (`dir=rtl`, the same 131 KB of markup), took
+18.8 and 46.6 million 68030 instructions to lay out (`build/m68k/drawbench -P 2` less `-P 1`): each
+Hebrew letter went through `font_glyph` (a search of the first block's 398 codes, the whole glyph
+read for its advance) and each word twice more (its width, its direction), its bidi levels through every
+rule of UAX #9, and each of its words was a display item of its own.
+
+- **A table of advances** (`noff` in `src/gfx/font.c`, made at the start in one pass over the
+  codes: 26 K instructions, 3.9 KB, not in the heap): where the advance of U+0080 to U+07FF (Latin-1 and Latin,
+  Greek, Cyrillic, Hebrew) and U+2000 to U+206F (the typographic quotes, dashes and spaces) is in a
+  face, as `aoff` is for ASCII; `font_width` reads two bytes of UTF-8 straight through it, and
+  `font_advance` too. A character of another block (Greek's, Cyrillic's) still goes through
+  `font_glyph`. Checked against `font_glyph` for every character to U+2FFF in every face (each family
+  and style at every size to 63 px).
+- **A Hebrew word's direction from its bytes**: one of Hebrew and signs alone, with a letter's
+  0xD7 in it, is right to left without `word_dir`'s look at each character.
+- **A right-to-left paragraph of Hebrew and neutrals alone** (no number, no Latin, no embedding or
+  isolate) has every item at level 1, which is what UAX #9's rules give it: `bidi_levels` returns
+  there.
+- **Right-to-left words and the spaces between them are one run**, as left-to-right ones are: the
+  canvas draws a run from its last letter, reading its UTF-8 back from the end (it read 64
+  characters forward before, enough for a word). Find, selecting and copying work in such a run
+  as in any other (`tests/layout/find.py`, `select.py` now click and drag inside one).
+- **A tab in `pre`** goes to the next tab stop, every 8 spaces from the line's start (CSS Text 3,
+  `tab-size: 8`), as a gap and a space: it was a space 8 wide, which a run of text drew one
+  space wide ("spaces and tabs" in `tests/layout/text.html` drew its "and tabs" 7 spaces early).
+- `tests/layout/fonttest.c` (`make test`) checks every face's advances, as the layout reads
+  them, against `font_glyph`'s glyphs.
+
+Measured (millions of 68030 instructions, the rig's page; the styling is apart, as the cascade's
+cache moves with the program's addresses):
+
+| page | layout before | now | drawing before | now | items before | now |
+|---|---|---|---|---|---|---|
+| the rig's big page, English | 18.84 | 18.82 | 16.56 | 16.17 | 2,550 | 2,550 |
+| the same in Hebrew | 46.56 | 27.17 | 15.47 | 14.79 | 16,200 | 2,250 |
+
+The Hebrew page's heap laid out went from 1.95 MB to 1.18 MB and its peak from 3.09 MB to 1.54 MB
+(`drawbench -m`), as the English page's (1.13 and 1.47): a Hebrew page now fits a stock 4 MB
+Falcon as an English one does. The page set's layout (43 of its pages) is 1.0% less, none more;
+every page draws as before, pixel for pixel (210 pictures of the test pages, the Hebrew pages and
+the page set, in true colour and 16 colours), but for a tab in `pre` (below). What a Hebrew page's layout still costs over an
+English one is mostly its mixed lines (numbers and Latin) through UAX #9 in full.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
@@ -4712,8 +4760,8 @@ out of both (their paths lead nowhere on the Atari).
    fetched at once (done, below: with the Pi's gateway).
 
 7. **1.0** (your decision, 31 Oct 2026; Decisions): the cache in 4 MB pieces (done, 0.55), the
-   Speed rules on the stock machines, the layout's text measuring, webdriveruniversity.com, then
-   your run on the DFB1 (the stock 4 MB Falcon beside all four accessories dropped, the same day).
+   Speed rules on the stock machines (done, above: 0.57), the layout's text measuring (done,
+   above), webdriveruniversity.com, then your run on the DFB1 (the stock 4 MB Falcon beside all four accessories dropped, the same day).
 
 ## Open questions
 
