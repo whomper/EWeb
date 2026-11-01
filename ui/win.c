@@ -44,6 +44,7 @@ int win_max = 2;
 #define TEXT_CRSR  1
 
 static void redraw(const GRECT *area, int parts);
+static int screen_lock(void);
 
 /* ---------------------------------------------------------------- the toolbar */
 
@@ -87,6 +88,8 @@ static void layout(void)
 		cur->but[i].h = bh;
 		x += cur->but[i].w + 2;
 	}
+	log_event("toolbar %d %d %d %d step %d", cur->but[0].x, cur->but[0].y, cur->but[0].w, cur->but[0].h,
+		  cur->but[0].w + 2);	/* (the buttons, for the rigs: a press held) */
 	/* the address's text on a byte, 4 pixels into its frame (the
 	   guidelines' Speed: TOS 1.04 draws text off a byte seven times
 	   slower; the work area is on one, wind_x8) */
@@ -350,6 +353,7 @@ void win_throb(int busy)
 {
 	GRECT r, a;
 	short mx, my, d, hide;
+	int took;
 	unsigned long now = pf_ms();
 	if (busy != cur->stopper) {
 		/* Stop lit while what Esc stops comes, the pictures after the
@@ -369,7 +373,7 @@ void win_throb(int busy)
 	   eight times a second */
 	graf_mkstate(&mx, &my, &d, &d);
 	hide = mx > cur->r_thr.x - 20 && mx < cur->r_thr.x + cur->r_thr.w + 4 && my > cur->r_thr.y - 20 && my < cur->r_thr.y + cur->r_thr.h + 4;
-	wind_update(BEG_UPDATE);
+	took = screen_lock();	/* (it turns while a press is held too) */
 	if (hide)
 		graf_mouse(M_OFF, 0);
 	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
@@ -384,7 +388,7 @@ void win_throb(int busy)
 	clip_off();
 	if (hide)
 		graf_mouse(M_ON, 0);
-	wind_update(END_UPDATE);
+	press_update_end(took);
 }
 
 int win_throb_frames(void)
@@ -702,11 +706,26 @@ static void due_moved(int32_t dx, int32_t dy)
 		due_add(&a);
 }
 
+/* the screen's lock for a drawing (wind_update): a press's (a link drawn
+   pressed, a button sunk) by common's press_update_begin, which on TOS
+   takes none while the button is held, as TOS's AES holds BEG_UPDATE back
+   till the release or a move (5.8; EHypView, 1 Nov 2026) */
+static int pressing;	/* while a press is drawn, or held in press_track */
+
+static int screen_lock(void)
+{
+	if (pressing)
+		return press_update_begin();
+	wind_update(BEG_UPDATE);
+	return 1;
+}
+
 /* the next slice of the window's due drawn: its top rows, through the
    window's rectangle list; whole when sync_draw says so */
 static void draw_due(void)
 {
 	unsigned long t0 = pf_ms(), end;
+	int took;
 	if (cur->due.w <= 0 || cur->due.h <= 0)
 		return;
 	if (cur->h <= 0 || cur->iconified || shown() == NULL) {
@@ -714,7 +733,7 @@ static void draw_due(void)
 		return;
 	}
 	gap_tag("draw");
-	wind_update(BEG_UPDATE);
+	took = screen_lock();
 	graf_mouse(M_OFF, 0);
 	font_sys_push();
 	/* the slice ends SLICE_MS after the event that began the stretch
@@ -766,7 +785,7 @@ static void draw_due(void)
 	}
 	clip_off();
 	graf_mouse(M_ON, 0);
-	wind_update(END_UPDATE);
+	press_update_end(took);
 	scr_ms_slice += pf_ms() - t0;
 }
 
@@ -859,8 +878,9 @@ static void redraw(const GRECT *area, int parts)
 		parts &= ~2;
 	}
 	if (parts) {
+		int took;
 		gap_tag(parts & 2 ? "draw" : "draw bars");
-		wind_update(BEG_UPDATE);
+		took = screen_lock();
 		graf_mouse(M_OFF, 0);
 		font_sys_push();	/* (the system font at its size: a dialog may have left another) */
 		wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
@@ -877,7 +897,7 @@ static void redraw(const GRECT *area, int parts)
 		}
 		clip_off();
 		graf_mouse(M_ON, 0);
-		wind_update(END_UPDATE);
+		press_update_end(took);
 	}
 	/* a slice of what is due at once only for a redraw of the page (a
 	   window uncovered); the bars' alone leave the page to the turns
@@ -1980,7 +2000,9 @@ static void link_press(int link1)
 		r.y = (short) (cur->r_page.y + y0 - cur->top);
 		r.w = (short) (x1 - x0);
 		r.h = (short) (y1 - y0);
+		pressing++;	/* (shown while the button is held: screen_lock) */
 		redraw(&r, 2);
+		pressing--;
 	}
 }
 
@@ -2142,6 +2164,7 @@ static int press(int i, short mx, short my)
 {
 	short mb, ks, in = 1;
 	int r;
+	pressing++;	/* (drawn and held: screen_lock) */
 	cur->sunk = i;
 	redraw(&cur->but[i], 1);
 	r = press_track(&cur->but[i], mx, my, ui_press_idle, ui_press_msg, NULL, NULL);
@@ -2160,6 +2183,7 @@ static int press(int i, short mx, short my)
 		}
 		evnt_timer_(20);
 	}
+	pressing--;
 	cur->sunk = -1;
 	cur->hot = rect_hit(&cur->but[i], mx, my) ? i : -1;
 	redraw(&cur->but[i], 1);
@@ -2353,11 +2377,14 @@ static int select_text(short mx, short my, short clicks, short kstate)
 	} else {
 		/* a link pressed: shown so at once (5.8), followed on release
 		   (the click after this), drawn back if it becomes a drag */
-		int pl = link_at(mx, my);
+		int pl = link_at(mx, my), r;
 		short dx = 0, dy = 0;
 		if (pl >= 0)
 			link_press(pl + 1);
-		if (press_track(&cur->r_page, mx, my, ui_press_idle, ui_press_msg, &dx, &dy) != PRESS_DRAG) {
+		pressing++;
+		r = press_track(&cur->r_page, mx, my, ui_press_idle, ui_press_msg, &dx, &dy);
+		pressing--;
+		if (r != PRESS_DRAG) {
 			link_press(0);	/* let go: the click (common's click.c) */
 			sel_clear();
 			return 0;
@@ -2451,8 +2478,11 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			addr_show_cursor();
 			redraw_addr();
 		}
-		if (button & 1)
+		if (button & 1) {
+			pressing++;
 			press_track(&cur->r_addr, mx, my, ui_press_idle, ui_press_msg, NULL, NULL);
+			pressing--;
+		}
 		return 1;
 	}
 	if (rect_hit(&cur->r_page, mx, my)) {

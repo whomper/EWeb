@@ -4279,6 +4279,14 @@ click, a move of 4 pixels a drag (a selection on the page). A double click is ti
 desktop's setting (`press_double`, `evnt_dclick`), and the loop asks the AES for one click, so a
 press comes at once.
 
+A press is drawn, and the throbber turns while it is held, under common's `press_update_begin`:
+TOS's AES (1.04 and 4.04) holds `wind_update(BEG_UPDATE)` back while the left button is held still,
+so a press drawn under it could show only at the release (EHypView's finding, 1 Nov 2026); on TOS
+it takes no lock while the button is down, a multitasking AES keeps it. In monochrome a pressed
+link is white on black, GEM's selected look (its red is black there, as the link was). The
+`dialogs` group of `make hatarigui` holds a link and the Home button still for a second on TOS
+4.04, EmuTOS and the ST's TOS 1.04 (mono) and checks the screen's pixels before the release.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.

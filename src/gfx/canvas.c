@@ -3116,8 +3116,16 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 	} else {
 		if (c->marked)
 			marked(c, p, d);
-		if (c->pressed != 0 && d->link == c->pressed)
+		if (c->pressed != 0 && d->link == c->pressed) {
 			rgb = 0xEE0000;	/* (:active's colour, the HTML Standard's 15.3.4) */
+			uint8_t dk, lt;
+			if (c->shade != NULL && c->shade(c->ud, 0, &dk, &lt) >= 0) {
+				/* monochrome: red is black there, as the link was;
+				   pressed is GEM's selected look, white on black (5.8) */
+				cv_fill(c, d->x, d->y, d->w, d->h, 0x000000);
+				rgb = 0xffffff;
+			}
+		}
 		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, rgb, d->flags);
 	}
 }

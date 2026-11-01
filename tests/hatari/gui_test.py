@@ -309,6 +309,47 @@ def link_point(url, area, top, text, extra=()):
     return None
 
 
+def held_presses(r, group, name, page, settle):
+    """the guidelines' 5.8 by the screen's pixels: a link and a toolbar
+    button (Home) pressed and held still for a second show pressed before
+    the release (TOS's AES holds wind_update(BEG_UPDATE) back while the
+    button is held still, so a press drawn under it showed only at the
+    release: common's press_update_begin, EHypView's finding of 1 Nov
+    2026); moved off them and let go, nothing follows"""
+    shown = [e for e in r.events() if e.startswith("shown ")]
+    tb = [e for e in r.events() if e.startswith("toolbar ")]
+    if not check("%s: %s, the page and the toolbar for the held presses" % (group, name), shown and tb,
+                 str(r.events()[-4:])):
+        return
+    m = re.search(r"height (\d+) .*area (\d+) (\d+) (\d+) (\d+) top", shown[-1])
+    area = tuple(int(m.group(i)) for i in range(2, 6))
+    bx, by, bw, bh, step = (int(v) for v in re.findall(r"-?\d+", tb[-1])[:5])
+    hx = bx + 3 * step     # (Home, the fourth)
+    r.key(0x47, (SHIFT,))  # (Shift-ClrHome: the page's end, where its links are)
+    time.sleep(settle + 2)
+    pt = link_point(page, area, max(0, int(m.group(1)) - area[3]), "a link")
+    presses = [("a toolbar button (Home)", (hx + bw // 2, by + bh // 2), (hx, by, hx + bw, by + bh))]
+    if pt is not None and area[1] <= pt[1] < area[1] + area[3]:
+        presses.insert(0, ("a link", pt, (pt[0] - 4, pt[1] - 12, pt[0] + 60, pt[1] + 6)))
+    else:
+        check("%s: %s, a link on the screen to press" % (group, name), False, str(pt))
+    for k, (what, at, box) in enumerate(presses):
+        r.mouse.move(*at)
+        time.sleep(settle)
+        before = Image.open(r.shot(90 + 2 * k)).convert("RGB").crop(box)
+        r.mouse.xdo("mousedown", "1")
+        time.sleep(1.0)
+        held = Image.open(r.shot(91 + 2 * k)).convert("RGB").crop(box)     # (the button still down)
+        changed = sum(1 for a, b in zip(list(before.getdata()), list(held.getdata())) if a != b)
+        mark = len(r.events())
+        r.mouse.move(at[0], at[1] + 60)
+        r.mouse.xdo("mouseup", "1")
+        time.sleep(settle)
+        went = [e for e in r.events()[mark:] if e.startswith("shown ") or e.startswith("load ")]
+        check("%s: %s, %s held still a second shows pressed, let go off it nothing follows (5.8)" % (group, name, what),
+              changed > 5 and not went, "%d pixels changed; %s" % (changed, went))
+
+
 def text_point(url, area, top, text):
     """where on the screen some text of the page is"""
     x0, y0, w, _ = area
@@ -1266,6 +1307,8 @@ def dialogs():
                 check("dialogs: %s, Settings: Esc empties a field and stays, Undo cancels" % name,
                       stayed and ev == "settings kept", "\n".join(r.events()[mark:]))
                 time.sleep(settle)
+                held_presses(r, "dialogs", name, os.path.join(ROOT, "tests/layout/text.html"),
+                             1 if prg == "EWEB.PRG" else 4)
                 r.key(Q, (CTRL,))
                 check("dialogs: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-4:]))
             finally:
