@@ -85,6 +85,46 @@ void scr_fill(short h, const short *p, short pen);
    The caller hides the mouse */
 int scr_pattern(short h, const short *p, const unsigned short *pat);
 
+/* the clip the CPU's drawing here (scr_fill, scr_text, scr_xor,
+   scr_pattern) is cut to for a while, the VDI's own left as it is: r (x1,
+   y1, x2, y2), and 0 for the one text_clip or text_noclip set again;
+   dialog.c's, for objc_draw's clip */
+void scr_clip(const short *r);
+
+/* n characters s of the system font of this cell height (8 or 16: the
+   AES's), at any x, as the AES puts an object's text: in pen 1 or 0, with
+   MD_TRANS (ground 0) or with the cells' ground in pen 0 (MD_REPLACE,
+   ground 1). By the CPU on TOS's screen, where text_plain goes into it,
+   cut to the clip; 0, and nothing drawn, elsewhere (the caller lets the
+   AES or the VDI draw it). An 8 MHz ST's VDI takes some 9 ms for a dozen
+   characters off a byte (EFTP's Settings tabs, 31 Oct 2026). The caller
+   hides the mouse */
+int scr_text(short x, short y, const char *s, long n, short pen, short height, int ground);
+
+/* a band of rows y1..y2 painted by the CPU: n spans (x1, x2, pen) side by
+   side, pens 0 and 1, each row written once (the edge words by their
+   masks, the words between whole); cut to the clip. 0, and nothing
+   drawn, where text_plain doesn't go into the screen or the band has
+   more pieces than it keeps (the caller uses another way). dialog.c's
+   frames, outlines and shadows: a narrow fill of its own cost an 8 MHz
+   ST some 47 us a row */
+int scr_spans(short y1, short y2, const short *spans, short n);
+
+/* a bitmap (rows of wb bytes, its set bits in pen, MD_TRANS) at any x, as
+   vrt_cpyfm in MD_TRANS puts a G_IMAGE's; cut to the clip. 0 elsewhere */
+int scr_bits(short x, short y, const unsigned char *bits, short wb, short rows, short pen);
+
+/* the box p's pixels cleared where x + y is even, as TOS 1.04's AES greys
+   a DISABLED object (MD_TRANS, pen 0, the 50% pattern); 0 elsewhere */
+int scr_grey_off(const short *p);
+
+/* 1 where the CPU's drawing into TOS's screen beats the AES and the VDI
+   at whole boxes (dialog.c's): text_plain goes into the screen and the
+   CPU is a 68000. On a 68030 TOS 4's AES and VDI are as fast or faster
+   (a stock Falcon: Settings 90 ms by objc_draw, 117 the CPU's way; the
+   screen under it 42 ms by the VDI, 45 by the CPU) */
+int scr_cpu_wins(void);
+
 /* the tests' and the logs': 1 text_plain goes into the screen, 0 not
    checked yet; below 0 it is text_n: -1 not the system font or NVDI, or
    the first draw's check failed, -2 a cell neither 8x8 nor 8x16, -3 no
