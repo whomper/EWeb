@@ -4238,6 +4238,47 @@ every page draws as before, pixel for pixel (210 pictures of the test pages, the
 the page set, in true colour and 16 colours), but for a tab in `pre` (below). What a Hebrew page's layout still costs over an
 English one is mostly its mixed lines (numbers and Latin) through UAX #9 in full.
 
+**Common's fast paths in EWeb's own drawing (1 Nov 2026; the guidelines' Speed, the hub's audit).**
+What EWeb draws on the screen itself, outside the page (which is drawn in memory), now uses
+common's quicker ways where TOS allows them, and the VDI where it doesn't (NVDI, a GDOS font,
+another screen):
+
+- **Black text on white** (the address, a letter typed in it, the status bar in mono) by
+  `text_plain` (`TX_WHITE` in `text_at`); other text by `text_n`, bold by `text_fx`, as before.
+- **White and black boxes** by `scr_fill` where `scr_cpu_wins()` (TOS's screen and a 68000:
+  `EWEBST.PRG`); on a 68030 TOS 4's own fill is as fast or faster, so `EWEB.PRG` keeps the VDI's,
+  its attributes set again only when they change (common's `gem.c`).
+- **The page's vertical scroll** copied by `scr_rows`; the scroll bars' moves by the VDI where it
+  can (`pb_vdi`); the status bar drawn off the screen and shown at once (`offdraw`: its ground no
+  longer shows between its words, nor the ribbon's steps); the ST's dialogs partly by the CPU
+  (`-DDLG_CPU`).
+
+The speed rig, 0.57 against these (ms, longest stretch; the guidelines' time in brackets):
+
+| action | Falcon-4:16, 0.57 | now | ST:mono, 0.57 | now |
+|---|---|---|---|---|
+| the program started, window drawn (2000) | 455 | 470 | 1735 | 1795 |
+| the home page shown | 85 | 85 | 515 | 510 |
+| the sample page loaded | 100 | 95 | 280 | 265 |
+| the news page loaded | 115 | 100 | 540 | 540 |
+| a letter typed in the address (50) | 20 | <20 | 65 | 65 |
+| a line scrolled (50) | 50 | 50 | 290 | 290 |
+| a page scrolled (150) | 75 | 75 | 270 | 270 |
+| Settings opened (150) | 150 | 140 | 360 | 315 |
+| Settings closed: what it uncovers (300) | 40 | 40 | 135 | 125 |
+| the pictures' page loaded | 85 | 90 | 1910 | 1915 |
+
+The rig's longest stretches are the page's making and drawing (in memory), so these paths move
+them little; Settings on the ST is the dialog drawn partly by the CPU. NVDI's figures are the
+hub's (no NVDI here).
+
+**Pressed and let go (5.8, 1 Nov 2026).** A link is drawn pressed (red) from the press; a press
+on the page, the address or a toolbar button waits for its release through common's
+`press_track` (`click.c`), the throbbers turning and windows redrawn meanwhile: a release is the
+click, a move of 4 pixels a drag (a selection on the page). A double click is timed from the
+desktop's setting (`press_double`, `evnt_dclick`), and the loop asks the AES for one click, so a
+press comes at once.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
