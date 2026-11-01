@@ -94,3 +94,22 @@ int press_track(const GRECT *r, short x, short y, void (*idle)(void), void (*msg
 			idle();
 	}
 }
+
+int press_update_begin(void)
+{
+	short mx, my, mb, ks;
+
+	if (aes_count() == 1) {
+		graf_mkstate(&mx, &my, &mb, &ks);
+		if (mb & 1)
+			return 0;	/* TOS: BEG_UPDATE would wait for the release */
+	}
+	wind_update(BEG_UPDATE);
+	return 1;
+}
+
+void press_update_end(int took)
+{
+	if (took)
+		wind_update(END_UPDATE);
+}
