@@ -1343,6 +1343,7 @@ static box *new_box(L *l, int kind, dnode *n, const ec_style *st, box *parent)
 	if (parent != NULL) {
 		b->parent = parent;
 		b->link = parent->link;
+		b->ctl = parent->ctl;	/* (a button's content: the button's) */
 		if (parent->last != NULL)
 			parent->last->next = b;
 		else
@@ -1395,16 +1396,24 @@ static int32_t char_w(L *l, const ec_style *st)
    these: ua.c): 2 given a ground or a border, so that its own look
    goes (as in browsers: CSS UI 4, 7.1), 1 only padding or a size of
    its own, 0 neither. A box or a button to tick keeps its own look */
+/* the UA sheet's ground for a control (src/doc/ua.c): EWeb's own ground
+   where it draws one; a page's colour, transparent among them, is the
+   page's */
+#define UA_CTL_BG 0xfee0e0e0u
+
 static int styled_ctl(const ec_style *st, const fctl *c)
 {
+	uint32_t bg = color(st, EP_BACKGROUND_COLOR);
 	if (c->kind == FC_CHECKBOX || c->kind == FC_RADIO || c->kind == FC_IMAGE)
 		return 0;
-	if ((color(st, EP_BACKGROUND_COLOR) >> 24) != 0 || st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE ||
+	if (((bg >> 24) != 0 && bg != UA_CTL_BG) || st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE ||
 	    st->k[EP_BACKGROUND_IMAGE] == EK_PTR)
 		return 2;
 	if (kw(st, EP_BORDER_TOP_STYLE) > KW_HIDDEN || kw(st, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ||
 	    kw(st, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN || kw(st, EP_BORDER_LEFT_STYLE) > KW_HIDDEN)
 		return 3;
+	if (bg == 0 && c->kind != FC_SELECT)
+		return 1;	/* made transparent by the page: its frame, no ground */
 	return st->k[EP_PADDING_TOP] != EK_PX || st->v[EP_PADDING_TOP].i != 0 ||
 	       st->k[EP_PADDING_LEFT] != EK_PX || st->v[EP_PADDING_LEFT].i != 0 ||
 	       st->k[EP_WIDTH] != EK_KW || st->k[EP_HEIGHT] != EK_KW;
@@ -1417,6 +1426,18 @@ static int styled_ctl(const ec_style *st, const fctl *c)
    with the control's style, which draws its ground, border and padding
    and takes its size and its display (an inline-block on its line, or a
    block), the control drawn in its content box (box.frame) */
+static void build(L *l, box *parent, dnode *n);
+
+/* 1: n has an element among its children (not text alone) */
+static int has_elements(const dnode *n)
+{
+	const dnode *k;
+	for (k = n->first; k != NULL; k = k->next)
+		if (k->type == DN_ELEMENT)
+			return 1;
+	return 0;
+}
+
 static void control(L *l, box *parent, dnode *n, const ec_style *st)
 {
 	fctl *c = n->ctl;
@@ -1442,6 +1463,15 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		parent = new_box(l, BX_BLOCK, n, st, parent);
 		if (parent == NULL)
 			return;
+	}
+	if (styled && n->tag == T_BUTTON && has_elements(n)) {
+		/* a <button> of elements the page styles (Bootstrap's three
+		   bars, a <b> in it): its own content in its box, as browsers
+		   lay it out (HTML 15.5.3); anywhere in it is the button, the
+		   items under it carrying its control (new_box) */
+		parent->ctl = add_ctl(l, c);
+		build(l, parent, n);
+		return;
 	}
 	switch (c->kind) {
 	case FC_TEXT:
@@ -1533,7 +1563,6 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 	}
 }
 
-static void build(L *l, box *parent, dnode *n);
 
 /* ---------------------------------------------------------------- which picture */
 
@@ -2379,6 +2408,8 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 			r->deco |= DLF_STRIKE;
 	}
 	bg = color(st, EP_BACKGROUND_COLOR);
+	if (bg == UA_CTL_BG)
+		bg = 0;		/* (a control's own: it draws its ground itself) */
 	if (parent != NULL && st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE)
 		/* an inline's gradient: its colours' average over its colour
 		   (a run is one fill) */
@@ -7670,9 +7701,11 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN && br == 0 && s->v[EP_BORDER_RIGHT_WIDTH].i > 0) br = 1;
 		if (kw(s, EP_BORDER_TOP_STYLE) > KW_HIDDEN && bt == 0 && s->v[EP_BORDER_TOP_WIDTH].i > 0) bt = 1;
 		if (kw(s, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN && bb == 0 && s->v[EP_BORDER_BOTTOM_WIDTH].i > 0) bb = 1;
-		if (b->n != NULL && b->n->ctl != NULL && !b->repl && !(b->first != NULL && b->first->frame)) {
+		if (b->n != NULL && b->n->ctl != NULL && !b->repl && !(b->first != NULL && b->first->frame) &&
+		    !(b->ctl && b->n->tag == T_BUTTON)) {
 			/* a floated form control's block (control): the control
-			   draws its own frame and ground, as on a line */
+			   draws its own frame and ground, as on a line (not a
+			   button laid out with its elements, which draws none) */
 			pl = pr = pt = pb = bl = br = bt = bb = 0;
 			ctlbox = 1;
 		}
@@ -7845,10 +7878,13 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				bg_top += pt;
 				bg_bottom += pb;
 			}
-			bg = fade(color(s, EP_BACKGROUND_COLOR), l->alpha);
+			bg = color(s, EP_BACKGROUND_COLOR);
+			if (bg == UA_CTL_BG)	/* (a control's, as the UA sheet has it) */
+				bg = b->ctl && b->n != NULL && b->n->tag == T_BUTTON ? 0xffe0e0e0 : 0;
+			bg = fade(bg, l->alpha);
 			if (b->first != NULL && b->first->atom == AT_CONTROL && (b->first->frame & 1) &&
-			    b->first->n == b->n)
-				bg = fade(ctl_ground(l, b->first), l->alpha);
+			    b->first->n == b->n && color(s, EP_BACKGROUND_COLOR) == UA_CTL_BG)
+				bg = fade(ctl_ground(l, b->first), l->alpha);	/* (not one the page made transparent) */
 			if ((bg >> 24) != 0 && !(b->n != NULL && b->n == l->bg_taken))
 				bgi = fill(l, x + ml + in_l, y + mt + bg_top, bl + pl + w + pr + br - in_l - in_r, 1, bg);
 			if (b->n != l->canvas_bg) {

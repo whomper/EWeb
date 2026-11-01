@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Buttons of elements, controls made transparent</title>
+<style>
+:root { --border: #2a2a2a }
+body { font: 13px sans-serif; margin: 8px; background: #0f0f0f; color: #eee }
+/* Bootstrap's menu button (webdriveruniversity.com): three bars, its
+   words for screen readers clipped away, the page's border, no ground */
+.navbar-toggle { position: relative; float: right; padding: 9px 10px; margin: 8px 15px 8px 0;
+                 background-color: transparent; background-image: none; border: 1px solid transparent }
+html body .navbar-toggle { border-color: var(--border) !important; background-color: transparent !important }
+.navbar-toggle .icon-bar { display: block; width: 22px; height: 2px; background: #ededed }
+.navbar-toggle .icon-bar + .icon-bar { margin-top: 4px }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+           clip: rect(0, 0, 0, 0); border: 0 }
+/* a button of a <b>, a border of the page's and no ground of its own:
+   the button's own ground; one that is plain text: drawn as a control */
+.b2 { border: 1px solid #f33; padding: 4px }
+.b3 { border: 1px solid #2a2a2a }
+/* fields made transparent by the page, with a border and without: the
+   page shows through; one left alone keeps its own ground */
+.tr { background: transparent; border: 1px solid #888; color: #eee }
+.tn { background: transparent; color: #eee }
+</style></head><body>
+<button type="button" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span
+class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button>
+<p><button class="b2"><b>Find Out More!</b></button> <button class="b3">plain</button>
+<button class="b2" style="background: #36c; color: #fff"><i>a ground</i> <b>of the page's</b></button>
+<p><input class="tr" value="see-through"> <input value="own ground"> <input class="tn" value="transparent, no border">
+</body></html>

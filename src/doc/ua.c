@@ -32,6 +32,13 @@ const char doc_ua_css[] =
 	"th { font-weight: bold; text-align: -ec-center-or-inherit }\n"
 	"input, select, button, textarea { display: inline-block }\n"
 	"input, select, textarea, button { font-size: 13.33px }\n"
+	/* (EWeb's own ground for a control: a value of its own, so that the
+	   layout tells it from a page's colour, transparent among them;
+	   UA_CTL_BG in src/layout/layout.c, never drawn as it is) */
+	"input, select, textarea, button { background-color: rgba(224, 224, 224, 0.996) }\n"
+	/* (their own text colour, as browsers' FieldText and ButtonText: not
+	   the page's, which may be light on a dark page) */
+	"input, select, textarea, button { color: #000 }\n"
 	"body { margin: 8px }\n"
 	"p, blockquote, figure, listing, plaintext, pre, xmp, dl { margin-top: 1em; margin-bottom: 1em }\n"
 	"blockquote, figure { margin-left: 40px; margin-right: 40px }\n"

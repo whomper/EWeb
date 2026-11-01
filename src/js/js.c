@@ -3966,7 +3966,26 @@ static const char prelude[] =
 	"h.appendChild(b);return{nodeType:9,documentElement:h,head:e,body:b,title:t===undefined?'':String(t),"
 	"implementation:d.implementation,createElement:function(n){return d.createElement(n)},"
 	"createTextNode:function(s){return d.createTextNode(s)},createComment:function(s){return d.createComment(s)},"
-	"createDocumentFragment:function(){return d.createDocumentFragment()}}}}})(globalThis)";
+	"createDocumentFragment:function(){return d.createDocumentFragment()}}}};"
+	/* custom elements, a few (HTML 4.13): a class defined is kept, the
+	   elements of its name on the page take its prototype and their
+	   connectedCallback runs (an error in it reported, not thrown, as
+	   the standard has it); one made later stays a plain element. A
+	   shadow root is an element of its own, not drawn: its content can
+	   be made and looked in, as scripts do (EWeb has no styles scoped
+	   to a part of a page). Without them a page's script stopped at
+	   customElements, and everything after it (webdriveruniversity.com's
+	   AI Playground) */
+	"var ce={};function up(e,c){try{Object.setPrototypeOf(e,c.prototype);"
+	"if(typeof e.connectedCallback=='function')e.connectedCallback()}catch(x){console.error(String(x))}}"
+	"g.customElements={define:function(n,c){n=String(n).toLowerCase();if(ce[n])throw new Error("
+	"'customElements: '+n+' is defined already');ce[n]=c;var a=d.getElementsByTagName(n),l=[],i;"
+	"for(i=0;i<a.length;i++)l.push(a[i]);for(i=0;i<l.length;i++)up(l[i],c)},get:function(n){"
+	"return ce[String(n).toLowerCase()]},whenDefined:function(n){return Promise.resolve(ce[String(n)."
+	"toLowerCase()])},upgrade:function(){}};"
+	"Element.prototype.attachShadow=function(o){var r=d.createElement('div');if(!o||o.mode!=='closed')"
+	"Object.defineProperty(this,'shadowRoot',{value:r,configurable:true});r.host=this;return r}"
+	"})(globalThis)";
 
 /* ---------------------------------------------------------------- location and history */
 

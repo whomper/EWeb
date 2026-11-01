@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- custom elements and a shadow root, as webdriveruniversity.com's AI
+     Playground has them: the class defined, the page's element upgraded
+     and its connectedCallback run, its shadow root filled and looked in,
+     the page's script going on after customElements.define; an error in
+     a callback reported, the definition kept -->
+<!-- expect: console: Error: meant -->
+<!-- expect: "upgraded yes" -->
+<!-- expect: "shadow Go" -->
+<!-- expect: "defined wdu-x" -->
+<!-- expect: "after define" -->
+<!-- expect: "twice refused" -->
+<!-- expect: "bad kept" -->
+<html><head><title>Custom elements</title></head><body>
+<wdu-x id="a"></wdu-x><wdu-bad id="b"></wdu-bad>
+<p id="up">-</p><p id="sh">-</p><p id="def">-</p><p id="aft">-</p><p id="tw">-</p><p id="bad">-</p>
+<script>
+(function () {
+  class X extends HTMLElement {
+    connectedCallback() {
+      var s = this.attachShadow({ mode: 'open' });
+      s.innerHTML = '<input><button>Go</button><p class="r"></p>';
+      this.setAttribute('data-up', '1');
+    }
+  }
+  customElements.define('wdu-x', X);
+  class Bad extends HTMLElement { connectedCallback() { throw new Error('meant'); } }
+  customElements.define('wdu-bad', Bad);
+})();
+var a = document.getElementById('a');
+document.getElementById('up').textContent = 'upgraded ' + (a.getAttribute('data-up') === '1' ? 'yes' : 'no');
+document.getElementById('sh').textContent = 'shadow ' + a.shadowRoot.querySelector('button').textContent;
+document.getElementById('def').textContent = 'defined ' + (customElements.get('wdu-x') ? 'wdu-x' : 'none');
+document.getElementById('aft').textContent = 'after define';
+try { customElements.define('wdu-x', function () {}); document.getElementById('tw').textContent = 'twice taken'; }
+catch (e) { document.getElementById('tw').textContent = 'twice refused'; }
+document.getElementById('bad').textContent = 'bad ' + (customElements.get('wdu-bad') ? 'kept' : 'lost');
+</script>
+</body></html>
