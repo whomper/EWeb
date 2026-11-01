@@ -2377,6 +2377,7 @@ int app_main(void)
 	ui_pens_init();		/* the UI's colours, by their colour (5.2) */
 	vst_alignment(vdi_h, 0, 5);
 	text_font(vdi_h, 1, cw, ch);	/* the system font: text_n's quick way (common's text.c) */
+	pb_vdi(vdi_h);	/* the scroll bars' moves by the VDI where it can (common's panebar.c, Speed) */
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	graf_mouse(BUSYBEE, 0);
 

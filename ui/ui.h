@@ -130,6 +130,7 @@ extern unsigned long ui_event_at;	/* when the last event came (ms): a slice's ti
 #define TX_RIGHT    4		/* right-to-left text against the right edge */
 #define TX_LTR     16		/* left to right even when it starts in Hebrew */
 #define TX_DIM    128		/* what can't be used: dark grey, else light (common's popups) */
+#define TX_WHITE  256		/* on a ground of pen 0: plain text may go by text_plain (Speed) */
 void fill(GRECT *r, short color);
 void frame(GRECT *r, short color);
 void hline(short x1, short x2, short y);

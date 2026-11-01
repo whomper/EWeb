@@ -25,7 +25,9 @@
 #include "clip.h"
 #include "form.h"
 #include "iconify.h"
+#include "offdraw.h"
 #include "panebar.h"
+#include "text.h"
 #include "util.h"
 #include "inflate.h"
 #include "plat.h"
@@ -274,7 +276,7 @@ static void draw_addr(void)
 		fill(&in, 1);
 		text_at(in.x, in.y, cur->addr + cur->a_first, n, cols, TX_LTR | TX_INVERSE);
 	} else if (n > 0) {
-		text_at(r.x + gl_wchar / 2, r.y + 2, cur->addr + cur->a_first, n, cols, TX_LTR);
+		text_at(r.x + gl_wchar / 2, r.y + 2, cur->addr + cur->a_first, n, cols, TX_LTR | TX_WHITE);
 	}
 	if (cur->a_focus && !cur->a_all) {
 		short cx = r.x + gl_wchar / 2 + (cur->a_cur - cur->a_first) * gl_wchar;
@@ -433,13 +435,25 @@ static void draw_status(GRECT *clip)
 {
 	GRECT r = cur->r_stat;
 	short cols = (cur->r_stat.w - 16) / gl_wchar;	/* (8 pixels each side) */
+	int off;
 	if (!rect_and(&r, clip))
 		return;
+	/* drawn off the screen and shown at once where TOS allows (common's
+	   offdraw: the ground never shows between its words, the progress
+	   ribbon's every step; the guidelines' Speed); else on the screen */
+	off = r.h <= OFF_ROWS && off_begin(vdi_h, r.x, r.y, r.w, r.h);
+	if (off)
+		clip_on(&r);
 	fill(&cur->r_stat, paper());
 	hline(cur->r_stat.x, cur->r_stat.x + cur->r_stat.w - 1, cur->r_stat.y);
 	if (cur->info[0] && cols > 0)
-		text_at(cur->r_stat.x + 8, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols, 0);	/* (on a byte) */
+		text_at(cur->r_stat.x + 8, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols,
+			paper() == 0 ? TX_WHITE : 0);	/* (on a byte) */
 	draw_ribbon();
+	if (off) {
+		off_end();
+		clip_on(clip);	/* (the caller's, for what it draws next) */
+	}
 }
 
 static void redraw_ribbon(void)
@@ -990,11 +1004,9 @@ void win_scroll_to(int32_t y)
 	if ((dy < 0 ? -dy : dy) < cur->r_page.h && all_visible() &&
 	    cur->r_page.y + cur->r_page.h <= scr_h && cur->r_page.x + cur->r_page.w <= scr_w) {
 		/* what stays on the screen moves; only the new rows are drawn */
-		MFDB s;
 		short pxy[8], d = (short) (dy < 0 ? -dy : dy);
 		unsigned long t0;
 		GRECT fresh = cur->r_page;
-		memset(&s, 0, sizeof s);
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
 		clip_on(&cur->r_page);
@@ -1015,7 +1027,7 @@ void win_scroll_to(int32_t y)
 		fresh.h = d;
 		gap_tag("scroll copy");
 		t0 = pf_ms();
-		vro_cpyfm(vdi_h, 3, pxy, &s, &s);
+		scr_rows(vdi_h, pxy);	/* (by the CPU on TOS's screen: common's, the guidelines' Speed) */
 		scr_ms_copy += pf_ms() - t0;
 		clip_off();
 		graf_mouse(M_ON, 0);
@@ -1315,7 +1327,7 @@ static int addr_letter(int i)
 		if (rect_and(&c, &cell)) {
 			clip_on(&c);
 			fill(&cell, 0);
-			text_at(x, y, cur->addr + i, 1, 1, TX_LTR);
+			text_at(x, y, cur->addr + i, 1, 1, TX_LTR | TX_WHITE);
 			line_col(x + gl_wchar, y, x + gl_wchar, y + gl_hchar - 1, 1);
 		}
 		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);

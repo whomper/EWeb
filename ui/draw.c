@@ -131,6 +131,14 @@ void fill(GRECT *r, short color)
 	pxy[1] = r->y;
 	pxy[2] = r->x + r->w - 1;
 	pxy[3] = r->y + r->h - 1;
+	if ((color == 0 || color == 1) && text_plain_state() >= 0) {
+		/* (pens 0 and 1 by the CPU on TOS's own screen: common's fast
+		   path, the guidelines' Speed; where text_plain doesn't go into
+		   the screen, the VDI as always: its fallback restores the fill's
+		   attributes, a few calls more) */
+		scr_fill(vdi_h, pxy, color);
+		return;
+	}
 	vsf_interior(vdi_h, FIS_SOLID);
 	vsf_color(vdi_h, color);
 	vsf_perimeter(vdi_h, 0);
@@ -192,6 +200,17 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 			x += (cols - (short) n) * cw;
 	}
 	colour = (flags & TX_INVERSE) ? 0 : (flags & TX_DIM) && planes >= 4 ? dark_pen() : 1;
+	if ((flags & TX_WHITE) && colour == 1 && !(flags & (TX_DIM | TX_BOLD)) && text_plain_state() >= 0) {
+		/* black on white: as MD_REPLACE puts it, TOS's screen written
+		   by the CPU (common's text_plain, the guidelines' Speed);
+		   where it can't (NVDI, a GDOS font) EWeb's transparent text_n
+		   as before, never text_n in MD_REPLACE (EMail 1.69's NVDI) */
+		vswr_mode(vdi_h, MD_REPLACE);
+		vst_color(vdi_h, 1);
+		text_plain(vdi_h, x, y, out, n);
+		vswr_mode(vdi_h, MD_TRANS);
+		return;
+	}
 	vswr_mode(vdi_h, MD_TRANS);
 	vst_color(vdi_h, colour);
 	if ((flags & TX_DIM) && planes < 4)
