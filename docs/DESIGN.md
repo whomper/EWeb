@@ -4221,9 +4221,13 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   size); the status bar set while a page loads waits for the next turn too, and a redraw of the
   bars alone no longer draws the page's next slices with it (the status bar as the news page's
   pictures ended drew three: 130 ms). A slice is 30 ms (40 on the ST) of bands of 8 rows (16);
-  a redraw over half the window (a page shown, uncovered) is drawn in slices of 55 ms till it is
-  done, a scroll meanwhile going back to 30 (`due_big`), and a small one (about 32 rows across the
-  window: a field typed in, a link pressed) whole in one (`DUE_WHOLE`). Erez's DFB1 drew the home
+  on a machine with TT or Fast RAM (`fast_machine`: Erez's DFB1, a TT) a redraw over half the
+  window (a page shown, uncovered) is drawn in slices of 55 ms till it is done, a scroll meanwhile
+  going back to 30 (`due_big`), and a small one (about 32 rows across the window: a field typed in,
+  a link pressed) whole in one (`DUE_WHOLE`); on a stock Falcon or an ST that is 16 rows
+  (`DUE_WHOLE_STOCK`) and the slices stay 30 and 40 ms, the speed rig's limits there (a 55 ms
+  slice put the stock Falcon's news page and line over), and a scroll's rows are never drawn
+  whole (`due_scroll`). Erez's DFB1 drew the home
   page a band at a time for seconds and a typed letter's field in bands, its letters a part at a
   time (his clips of 2 Nov 2026): in Hatari's Falcon in 256 colours the home page's window was 12
   slices of 25 to 35 rows (the copy to the screen most of each), now 5 of 50 to 100.
