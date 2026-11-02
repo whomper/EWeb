@@ -521,10 +521,10 @@ static void rows_set(unsigned char *d, short rows, long line, short n, unsigned 
 
 /* the same moved from s: 28-byte blocks by movem (seven registers, so
    the counts keep theirs), then longs */
-static void rows_copy_mid(unsigned char *d, const unsigned char *s, short rows, long line, short n)
+static void rows_copy_mid2(unsigned char *d, long dline, const unsigned char *s, long sline, short rows, short n)
 {
 	short longs = (short)(n >> 2), blk = 0, rem, remj, tail = (short)(n & 2);
-	long skip = line - n;
+	long skip = sline - n, dskip = dline - n;
 
 	for (rem = longs; rem >= 7; rem -= 7)
 		blk++;			/* once a call: a short's / 7 is a library call on the 68000 */
@@ -548,11 +548,31 @@ static void rows_copy_mid(unsigned char *d, const unsigned char *s, short rows, 
 			 "beq.s 4f\n\t"
 			 "move.w (%0)+,(%1)+\n"
 			 "4:\tadda.l %6,%0\n\t"
-			 "adda.l %6,%1\n\t"
+			 "adda.l %7,%1\n\t"
 			 "dbra %2,0b"
 			 : "+a"(s), "+a"(d), "+d"(rows)
-			 : "m"(blk), "m"(remj), "m"(tail), "m"(skip)
+			 : "m"(blk), "m"(remj), "m"(tail), "m"(skip), "m"(dskip)
 			 : "d0", "d2", "d3", "d4", "d5", "d6", "d7", "a2", "memory", "cc");
+}
+
+static void rows_copy_mid(unsigned char *d, const unsigned char *s, short rows, long line, short n)
+{
+	rows_copy_mid2(d, line, s, line, rows, n);
+}
+
+/* the same for others (aboutbox.c's buffer and screen): n bytes (even)
+   of rows rows, d's and s's rows dline and sline bytes apart; no rows,
+   nothing (the loops count with dbra) */
+void scr_copy_rows(unsigned char *d, long dline, const unsigned char *s, long sline, short rows, short n)
+{
+	if (rows > 0 && n >= 2)
+		rows_copy_mid2(d, dline, s, sline, rows, (short)(n & ~1));
+}
+
+void scr_set_rows(unsigned char *d, long line, short rows, short n, unsigned long v)
+{
+	if (rows > 0 && n >= 2)
+		rows_set(d, rows, line, (short)(n & ~1), v);
 }
 
 /* the planes' words of one 16-pixel group, the pixels in mask; np
