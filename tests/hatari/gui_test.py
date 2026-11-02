@@ -2049,7 +2049,8 @@ def boxes():
         finally:
             r.end()
     finally:
-        xvfb.terminate()
+        if xvfb is not None:
+            xvfb.terminate()
 
 
 def wide():
@@ -2109,7 +2110,8 @@ def wide():
         finally:
             r.end()
     finally:
-        xvfb.terminate()
+        if xvfb is not None:
+            xvfb.terminate()
 
 
 def bar(r):
