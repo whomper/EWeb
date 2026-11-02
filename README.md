@@ -115,7 +115,7 @@ own fonts.
 
 ## Getting started
 
-Download the latest `EWEB-x.y.zip` from **[Releases](../../releases/latest)**
+Download the latest `eweb-x.y.zip` from **[Releases](../../releases/latest)**
 and unpack it into a folder of its own. It contains:
 
 | File | What it is |
@@ -245,7 +245,7 @@ make urltest    # the URL parser against the URL Standard's tests (tests/url/fet
 make fuzz       # the HTTP client, the URL and HTML parsers, cookies, the bookmark file and HISTORY.TXT under libFuzzer (clang)
 make h5test     # EWeb's HTML parser and Hubbub against the HTML parsing tests (tests/html5lib/fetch.sh first)
 make csscmp     # EWeb's CSS engine against LibCSS on the page set (tests/bench/pages.sh first)
-make dist       # dist/EWEB-x.y.zip, as on the Releases page
+make dist       # dist/eweb-x.y.zip, as on the Releases page
 ```
 
 `binary/`, `build/` and `dist/` are what make builds; they are never

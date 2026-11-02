@@ -1718,7 +1718,7 @@ static void open_file(void)
 	short button = 0;
 	char full[320], *p;
 	if (!path[0]) {
-		snprintf(path, sizeof path, "%s\\*.HTM", opt.workdir);
+		snprintf(path, sizeof path, "%s\\*.htm", opt.workdir);
 	}
 	if (!fsel_exinput(path, name, &button, "Open a page") || !button || !name[0])
 		return;

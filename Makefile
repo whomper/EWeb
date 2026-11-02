@@ -34,7 +34,7 @@
 #                    (tests/html5lib/fetch.sh first)
 #   make dist        a release's files in dist/, in lowercase (the guidelines'
 #                    6.6): eweb.prg, ewebjs.ovl, tls.ovl, ewebst.prg, eweb.fnt,
-#                    eweb.hyp, cacert.pem, roots.dat and EWEB-x.y.zip (them
+#                    eweb.hyp, cacert.pem, roots.dat and eweb-x.y.zip (them
 #                    with the desktop icon, icons/)
 #
 # Needs: gcc-m68k-linux-gnu, perl, gperf, python3, Pillow (tools/requirements.txt),
@@ -1169,7 +1169,7 @@ hebtest68k: build/m68k/hebtest build/m68k/streamtest
 	qemu-m68k -cpu m68030 build/m68k/streamtest
 .PHONY: hebtest68k
 
-# a release's files: each on its own, and all of them in EWEB-x.y.zip
+# a release's files: each on its own, and all of them in eweb-x.y.zip
 # (the Atari's text files with CR/LF)
 # EWEB.HYP, the guide (the AERA guidelines, 4.3): docs/GUIDE.md through
 # tools/mkhelp.py, the family's front page (common/tools/helpfront.py),
@@ -1202,7 +1202,7 @@ dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	cp dist/eweb.prg dist/ewebjs.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
 		dist/roots.dat dist/zip/
-	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
+	cd dist/zip && zip -q -9 -r ../eweb-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist
 

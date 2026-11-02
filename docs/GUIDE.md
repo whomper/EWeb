@@ -39,7 +39,7 @@ and white.
 
 The files are in the latest release on EWeb's GitHub page
 (github.com/whomper/EWeb/releases), each on its own and all together in
-`EWEB-x.y.zip`. Put them in a folder of their own, on any drive:
+`eweb-x.y.zip`. Put them in a folder of their own, on any drive:
 
 ```
 EWEB.PRG      the program (Falcon, TT)
