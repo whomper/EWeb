@@ -4358,10 +4358,12 @@ buffers on top of the parsed page were the peak. Had it been read, the copy of i
 (the rules' blocks point into it, parsed when first needed) and the rules would have taken 6.1 MB
 (peak 9.5 MB, `drawbench -m`).
 
-- **A page sent packed** (gzip or deflate, kept so in the caches) is unpacked by `fetch` a piece at
-  a time with GEM's turns between (`unpack`, common's `inflate_piece`): iamexpat.de's 750 KB, 3.3 MB
-  of HTML, was one stretch of 9.3 s in Hatari's DFB1 and its article's 497 KB one of 6.4 s, GEM held
-  (Erez's "full CPU", 2 Nov 2026); Esc stops it.
+- **A page sent packed** (gzip or deflate, kept so in the caches) is unpacked a piece at a time
+  with GEM's turns between, at most every 100 ms (`http_unpack` in `src/net/http.c`, common's
+  `inflate_piece`): iamexpat.de's 750 KB, 3.3 MB of HTML, was one stretch of 9.3 s in Hatari's DFB1
+  and its article's 497 KB one of 6.4 s, GEM held (Erez's "full CPU", 2 Nov 2026); now no stretch
+  of either is over 0.42 s and their fetches take as long as before (52.3 s and 34.9 s with the
+  pictures; a turn every 40 ms made them 3 s longer); Esc stops it.
 - **A sheet read as it comes** (`ec_sheet_begin`, `ec_sheet_feed`, `ec_sheet_end`): a `<link>`'s
   sheet sent gzip'd is kept packed by `fetch` (`fetch_packed`; in the memory and disk caches too,
   its type tagged ` packed=gzip`, unpacked there for any other fetch of it) and unpacked 16 KB at
