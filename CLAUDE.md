@@ -213,10 +213,11 @@ hub stay complete, with the evidence.
   `bidi_mark` controls from `unicode-bidi` and the text) and `visual_order` (a line by those
   levels), `word_pieces` cutting words where directions meet, `mirrored` in `src/gfx/canvas.c`,
   `dir=auto` in `src/doc/doc.c` (`auto_rtl`): after changing them, `make test`
-  (`tests/layout/bidi.html`, `tests/layout/embed.py`, the Hebrew pages). **The page kept off the screen** (a machine with TT or Fast RAM: `pic` in
+  (`tests/layout/bidi.html`, `tests/layout/embed.py`, the Hebrew pages). **The page kept off the screen** (every Falcon and TT where there is room: `pic` in
   `ui/win.c`, made at rest by `win_draw_ahead`, `scr_store` in `ui/screen.c`; a scroll is a copy
   from it, a due part shown whole): after changing it, `make hatarigui` and Page Down, quick and
-  slow, in Hatari's `Falcon:256` against the last release's pictures. **A page drawn while it loads**: a preview, once a load, of its start with the
+  slow, in Hatari's `Falcon:256`, `Falcon-4:16` and `TT:ttmed` against the last release's pictures,
+  and `tests/hatari/speed.py` on Falcon-4:16 (its memory there is the page's). **A page drawn while it loads**: a preview, once a load, of its start with the
   sheets EWeb has (`preview`, `br_preview_step` in `src/browse`; `shown()` in `ui/win.c`): after
   changing it, `make test` and `make hatarigui` (browse: `/site/slow.html`). **The home page** is `src/browse/home.html` (AERA's look; `tools/mkhome.py`
   puts its pictures in and makes `build/gen/home.h`, and writes the page filled in for ewrender

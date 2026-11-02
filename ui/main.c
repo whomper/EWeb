@@ -1077,6 +1077,9 @@ static void loading_on(void)
 	load_t0 = pf_ms();
 	br_scrolled(&br, win_top());
 	loading = 1;
+#ifndef EW_ST
+	win_pic_busy(1);	/* (its memory the page's while it is made) */
+#endif
 	conn_stop = 0;
 	conn_bytes = 0;
 	said[0] = 0;
@@ -2607,6 +2610,7 @@ int app_main(void)
 		   else is under way (not while a page or its pictures come) */
 		wr = !more && !loading && dc_write_due();
 #ifndef EW_ST
+		win_pic_busy(loading || more);
 		/* the page around the window kept off the screen, made at rest
 		   (before the cache's writing: a scroll waits on it) */
 		ahead = !more && !loading && !win_due() && win_ahead();

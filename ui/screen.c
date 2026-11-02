@@ -798,23 +798,27 @@ int scr_store(short w, short n)
 			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
 			return 0;
 		}
+	} else if (free_st >= size + 256L * 1024 && (store = st_alloc(size)) != NULL) {
+		/* none (a stock Falcon, a TT without it): from the system's ST
+		   RAM where 256 KB stay free, given back to it while a page
+		   loads (win_pic_busy) and when one doesn't fit (br_shed) */
+		store_heap = 0;
 	} else {
-		/* none (a stock Falcon, a TT without it): the heap is ST RAM,
-		   and on a 4 MB Falcon holds nearly all of it (110 KB left
-		   with the news page): from there, given back when a page
-		   doesn't fit (br_shed); not if the heap grew for it into the
-		   system's last 192 KB */
+		/* else from the heap (on a 4 MB Falcon nearly all the ST RAM: 110
+		   KB left with the news page), but only from what it has free
+		   already: the heap grown for it held memory the next page
+		   needed, and the news page was made twice (14 s to 28) */
 		long after;
 		store_heap = 1;
 		store = malloc((size_t) size);
 		after = (long) Mxalloc(-1, 0);
-		if (store != NULL && after < free_st && after < 192L * 1024) {
+		if (store != NULL && after < free_st) {
 			free(store);
 			store = NULL;
+			heap_trim();	/* (the block it grew by given back) */
 		}
 		if (store == NULL) {
-			log_event("kept page: no room in the heap for %ld KB, ST RAM free %ld KB", size >> 10,
-				  free_st >> 10);
+			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
 			return 0;
 		}
 	}

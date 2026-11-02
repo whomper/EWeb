@@ -789,6 +789,8 @@ static struct {
 	uint32_t mark_rgb;
 } pic;
 static int pic_keep;		/* a redraw that doesn't change the look (the AES's, a scroll's) */
+static int pic_fresh;		/* the bands just taken: the drawing at the next turn */
+static int pic_hold;		/* a page or its pictures loading where the bands are the heap's */
 
 static void pic_forget(void)
 {
@@ -814,7 +816,7 @@ static int pic_use(void)
 	pg_range m;
 	uint32_t rgb = 0;
 	int marked;
-	if (p == NULL || cur->h <= 0 || cur->iconified || cur->r_page.w <= 0 || cur->r_page.h <= 0)
+	if (pic_hold || p == NULL || cur->h <= 0 || cur->iconified || cur->r_page.w <= 0 || cur->r_page.h <= 0)
 		return 0;
 	if (pic.pw != cur->r_page.w || pic.ph != cur->r_page.h) {
 		/* (taken for this size once: with no ST RAM for it, tried again
@@ -842,6 +844,7 @@ static int pic_use(void)
 		}
 		pic.band = b;
 		pic.nb = nb;
+		pic_fresh = 1;
 	}
 	if (pic.nb <= 0)
 		return 0;
@@ -859,6 +862,16 @@ static int pic_use(void)
 		pic.mark_rgb = rgb;
 	}
 	return 1;
+}
+
+void win_pic_busy(int busy)
+{
+	/* (on a machine without TT or Fast RAM the bands are the heap's, the
+	   page's memory: given back while one loads, a 4 MB Falcon's news
+	   page otherwise didn't fit and was loaded twice, 14 s to 28) */
+	pic_hold = busy && !fast_machine();
+	if (pic_hold && pic.nb > 0)
+		win_pic_drop();
 }
 
 void win_pic_drop(void)
@@ -1067,6 +1080,13 @@ static void draw_due(void)
 	}
 #ifndef EW_ST
 	if (pic_use()) {
+		/* (taking them, the heap tried at each size on a stock Falcon,
+		   a turn of its own: with the drawing it was 105 ms of its 100) */
+		if (pic_fresh && !sync_draw) {
+			pic_fresh = 0;
+			return;
+		}
+		pic_fresh = 0;
 		draw_due_kept();
 		return;
 	}
