@@ -760,11 +760,13 @@ static int screen_lock(void)
 #ifndef EW_ST
 /* ---------------------------------------------------------------- the page kept off the screen
 
-   On a machine with TT or Fast RAM the page around the window's place is
-   kept in the screen's own form (screen.c's store): a ring of bands of
-   PIC_BAND rows, each holding one band of the page (page row / PIC_BAND,
-   at its index modulo the ring's), enough for the window's rows, a
-   window above and one below. Bands are made at rest (win_ahead: the
+   The page around the window's place is kept in the screen's own form
+   (screen.c's store, in ST RAM where there is room: every Falcon and TT
+   but a 4 MB one with a big page): a ring of bands of PIC_BAND rows,
+   each holding one band of the page (page row / PIC_BAND, at its index
+   modulo the ring's), enough for the window's rows, a window below and
+   one above (short of room, the window's and one below, or the window's
+   alone: then a part to draw is still shown whole). Bands are made at rest (win_ahead: the
    window's, then below, then above), a scroll is a copy from them to the
    screen, and a due part is made into them and then put on the screen in
    one go: what was seen a band at a time, the new rows coming down the
@@ -772,7 +774,8 @@ static int screen_lock(void)
    (2 Nov 2026). Anything that changes the page's look (a redraw of the
    page but the AES's, a picture come, the selection, a link pressed,
    another page, place across or size) forgets them all. */
-#define PIC_BAND 16
+static int PIC_BAND = 16;	/* rows a band: 8 on a machine without TT or Fast RAM (a
+				   stock Falcon's 16 of the news page were 60 to 75 ms) */
 
 static struct {
 	ewin *w;		/* the window they are of; NULL none */
@@ -811,23 +814,33 @@ static int pic_use(void)
 	pg_range m;
 	uint32_t rgb = 0;
 	int marked;
-	if (!fast_machine() || p == NULL || cur->h <= 0 || cur->iconified || cur->r_page.w <= 0 ||
-	    cur->r_page.h <= 0)
+	if (p == NULL || cur->h <= 0 || cur->iconified || cur->r_page.w <= 0 || cur->r_page.h <= 0)
 		return 0;
 	if (pic.pw != cur->r_page.w || pic.ph != cur->r_page.h) {
 		/* (taken for this size once: with no ST RAM for it, tried again
 		   only at another) */
-		short nb = (short) ((3L * cur->r_page.h + PIC_BAND - 1) / PIC_BAND + 2);
-		int32_t *b = realloc(pic.band, nb * sizeof *b);
+		short nb = 0;
+		int k;
+		int32_t *b;
 		pic.w = NULL;
 		pic.nb = 0;
 		pic.pw = cur->r_page.w;
 		pic.ph = cur->r_page.h;
-		if (b == NULL)
+		/* three windows' rows, else two, else one */
+		PIC_BAND = fast_machine() ? 16 : BAND_MIN;
+		for (k = 3; k >= 1 && nb == 0; k--) {
+			short n = (short) ((k * (long) cur->r_page.h + PIC_BAND - 1) / PIC_BAND + 2);
+			if (scr_store(cur->r_page.w, (short) (n * PIC_BAND)))
+				nb = n;
+		}
+		if (nb == 0)
 			return 0;
+		b = realloc(pic.band, nb * sizeof *b);
+		if (b == NULL) {
+			scr_store(0, 0);
+			return 0;
+		}
 		pic.band = b;
-		if (!scr_store(cur->r_page.w, (short) (nb * PIC_BAND)))
-			return 0;
 		pic.nb = nb;
 	}
 	if (pic.nb <= 0)
@@ -846,6 +859,14 @@ static int pic_use(void)
 		pic.mark_rgb = rgb;
 	}
 	return 1;
+}
+
+void win_pic_drop(void)
+{
+	scr_store(0, 0);
+	pic.w = NULL;
+	pic.nb = 0;
+	pic.pw = pic.ph = -1;	/* (taken again at the next drawing, if there is room) */
 }
 
 static int pic_has(int32_t b)
@@ -947,11 +968,16 @@ static void draw_due_kept(void)
 	unsigned long t0 = pf_ms(), end;
 	long since = (long) (t0 - ui_event_at);
 	int32_t y0 = cur->top + cur->due.y, y1 = y0 + cur->due.h;
-	/* (nothing is seen till it is all made: the longer slices, a key or a
-	   click still answered within 100 ms) */
-	end = since < 0 || since > 500 ? t0 + SLICE_BIG : ui_event_at + SLICE_BIG;
+	int slice = fast_machine() ? SLICE_BIG : SLICE_MS, kept = pic_kept(y0, y1);
+	/* (nothing is seen till it is all made: on a machine with TT or Fast
+	   RAM the longer slices, a key or a click still answered within 100
+	   ms; the put on the screen a turn of its own after a slice made the
+	   last bands: the stock Falcon's window copy is 35 ms) */
+	end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
 	gap_tag("draw");
-	if (pic_make(y0, y1, end)) {
+	if (!kept && pic_make(y0, y1, end) && sync_draw)
+		kept = 1;
+	if (kept) {
 		GRECT a;
 		int took = screen_lock();
 		a.x = (short) (cur->r_page.x + cur->due.x);
@@ -975,8 +1001,8 @@ static int ahead_range(int32_t *y0, int32_t *y1)
 {
 	const page *p = shown();
 	int32_t h = cur->r_page.h, top = cur->top, end = p != NULL ? p->height : 0, a;
-	int k;
-	for (k = 0; k < 3; k++) {
+	int k, ks = (int) ((pic.nb - 2L) * PIC_BAND / (h > 0 ? h : 1));	/* (windows the ring holds) */
+	for (k = 0; k < 3 && k < ks; k++) {
 		a = k == 0 ? top : k == 1 ? top + h : top - h;
 		*y0 = a < 0 ? 0 : a;
 		*y1 = a + h > end ? end : a + h;
@@ -1358,7 +1384,12 @@ void win_scroll_to(int32_t y)
 	if (cur->iconified || cur->h <= 0)
 		return;
 #ifndef EW_ST
-	if (pic_use()) {
+	if (pic_use() && (fast_machine() || !((dy < 0 ? -dy : dy) < cur->r_page.h && all_visible() &&
+	    cur->r_page.y + cur->r_page.h <= scr_h && cur->r_page.x + cur->r_page.w <= scr_w))) {
+		/* (on a stock Falcon or a TT without TT RAM a step within the
+		   window is the copy on the screen below, the rows it brings in
+		   put there from the kept bands at once after: the window's
+		   copy from them is 35 ms of its 50 for a line) */
 		/* the window's rows kept off the screen: put there in one copy,
 		   a line or a page alike. Not all kept: made off the screen at
 		   the next turns and put there whole (the window stays as it

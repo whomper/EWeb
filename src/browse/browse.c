@@ -639,6 +639,7 @@ static void home_yours(SBUF *s)
 }
 
 /* EWeb's home page: home.html, with what EWeb knows put in */
+void (*br_shed)(void);
 void (*br_mark)(const char *what);	/* the speed build's names for a page's steps (main.c's gap_tag) */
 #define MARK(what) (br_mark != NULL ? br_mark(what) : (void) 0)
 
@@ -2254,6 +2255,8 @@ static int shed(browser *b)
 	int freed = unkeep_all(b);
 	img_clear();
 	font_drop();
+	if (br_shed != NULL)
+		br_shed();
 	return freed;
 }
 

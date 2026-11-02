@@ -232,6 +232,7 @@ void win_draw_due(void);
    win_draw_ahead makes a slice of them (the main loop, idle) */
 int win_ahead(void);
 void win_draw_ahead(void);
+void win_pic_drop(void);	/* its ST RAM given back (a page that doesn't fit: br_shed) */
 #endif
 /* (1, then 0) what is drawn meanwhile drawn whole, not in slices: a
    dialog's loop, which has no turns of the main loop's */

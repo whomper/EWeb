@@ -2484,6 +2484,9 @@ int app_main(void)
 	pf_idle = idle;
 #ifdef AES_PROFILE
 	br_mark = gap_tag;
+#ifndef EW_ST
+	br_shed = win_pic_drop;
+#endif
 #endif
 #ifdef EW_ST
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);

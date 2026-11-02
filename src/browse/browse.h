@@ -250,6 +250,9 @@ extern unsigned long br_poll_ms;
 extern int br_pic_again;
 /* (the speed build: each step of a page's making named, main.c's gap_tag) */
 extern void (*br_mark)(const char *what);
+/* memory given back when a page doesn't fit (shed): the front end's too
+   (EWEB.PRG's page kept off the screen, in ST RAM); NULL none */
+extern void (*br_shed)(void);
 /* a details element's summary clicked (page_summary_at): the details
    opened or closed (the HTML Standard, 4.11.2), the page styled and laid
    out again (1; 0 if out of memory, after giving back the pages kept and

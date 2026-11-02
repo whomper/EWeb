@@ -767,14 +767,19 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
    row of memory: the Atari's interleaved planes, packed bytes, true
    colour (vr_trnfm's other forms aren't known to be) */
 static unsigned char *store;		/* ST RAM, store_rows of store_row bytes */
+static int store_heap;			/* from the heap (malloc): a machine with no TT RAM */
 static long store_row;
 static short store_rows, store_w, store_words;
 
 int scr_store(short w, short n)
 {
 	long row, size, free_st;
-	if (store != NULL)
-		Mfree(store);
+	if (store != NULL) {
+		if (store_heap)
+			free(store);
+		else
+			Mfree(store);
+	}
 	store = NULL;
 	store_rows = 0;
 	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))
@@ -784,10 +789,36 @@ int scr_store(short w, short n)
 		return 0;
 	row = truecolour ? store_words * 32L : format == 2 ? store_words * 16L : store_words * 2L * planes;
 	size = row * n;
-	/* (ST RAM left for the rest: a megabyte at least) */
 	free_st = (long) Mxalloc(-1, 0);
-	if (free_st < size + (1L << 20) || (store = st_alloc(size)) == NULL)
-		return 0;
+	if ((long) Mxalloc(-1, 1) > 0) {
+		/* TT or Fast RAM, where the heap is: ST RAM of its own, a
+		   megabyte left for the rest at least */
+		store_heap = 0;
+		if (free_st < size + (1L << 20) || (store = st_alloc(size)) == NULL) {
+			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
+			return 0;
+		}
+	} else {
+		/* none (a stock Falcon, a TT without it): the heap is ST RAM,
+		   and on a 4 MB Falcon holds nearly all of it (110 KB left
+		   with the news page): from there, given back when a page
+		   doesn't fit (br_shed); not if the heap grew for it into the
+		   system's last 192 KB */
+		long after;
+		store_heap = 1;
+		store = malloc((size_t) size);
+		after = (long) Mxalloc(-1, 0);
+		if (store != NULL && after < free_st && after < 192L * 1024) {
+			free(store);
+			store = NULL;
+		}
+		if (store == NULL) {
+			log_event("kept page: no room in the heap for %ld KB, ST RAM free %ld KB", size >> 10,
+				  free_st >> 10);
+			return 0;
+		}
+	}
+	log_event("kept page %ld KB, ST RAM free %ld KB", size >> 10, (long) Mxalloc(-1, 0) >> 10);
 	store_row = row;
 	store_rows = n;
 	store_w = w;
