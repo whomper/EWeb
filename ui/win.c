@@ -981,14 +981,25 @@ static void draw_due_kept(void)
 	unsigned long t0 = pf_ms(), end;
 	long since = (long) (t0 - ui_event_at);
 	int32_t y0 = cur->top + cur->due.y, y1 = y0 + cur->due.h;
-	int slice = fast_machine() ? SLICE_BIG : SLICE_MS, kept = pic_kept(y0, y1);
-	/* (nothing is seen till it is all made: on a machine with TT or Fast
-	   RAM the longer slices, a key or a click still answered within 100
-	   ms; the put on the screen a turn of its own after a slice made the
-	   last bands: the stock Falcon's window copy is 35 ms) */
-	end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
+	int kept = pic_kept(y0, y1);
+	/* small (a link pressed, a field typed in: DUE_WHOLE) or while a press
+	   is held (no turn comes till it is let go): made and put on the
+	   screen at once (the guidelines' 5.8, a press shown within 50 ms).
+	   Else in 30 ms slices on every machine (nothing is seen till it is
+	   all made; 55 ms ones were the first draw's 135 ms on the Falcon with
+	   TT RAM under NVDI, the hub's rig), and the put on the screen a turn
+	   of its own after a slice made the last bands (the stock Falcon's
+	   window copy is 35 ms) */
+	int small = pressing ||
+		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK);
+	end = since < 0 || since > 500 ? t0 + SLICE_MS : ui_event_at + SLICE_MS;
 	gap_tag("draw");
-	if (!kept && pic_make(y0, y1, end) && sync_draw)
+	if (!kept && small) {
+		sync_draw++;
+		pic_make(y0, y1, end);
+		sync_draw--;
+		kept = 1;
+	} else if (!kept && pic_make(y0, y1, end) && sync_draw)
 		kept = 1;
 	if (kept) {
 		GRECT a;
@@ -1058,6 +1069,17 @@ void win_draw_ahead(void)
 	cur = w;
 	if (pic_use() && ahead_range(&y0, &y1)) {
 		gap_tag("ahead");
+		/* (a band at a time on a machine without TT or Fast RAM: two of
+		   the news page's were 55 to 65 ms of the stock Falcon, and a key
+		   that came in one waited) */
+		if (!fast_machine()) {
+			int32_t b = (y0 > 0 ? y0 : 0) / PIC_BAND;
+			while (pic_has(b) && (b + 1) * PIC_BAND < y1)
+				b++;
+			y0 = b * PIC_BAND;
+			if (y1 > y0 + PIC_BAND)
+				y1 = y0 + PIC_BAND;
+		}
 		pic_make(y0, y1, pf_ms() + SLICE_MS);
 	}
 	cur = was;
