@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- an element's sizes as scripts read them: CSS px at EWeb's 0.8 (ewrender's
+     default), and scrollHeight as tall as its content (webdriveruniversity.com's
+     accordion: a panel of max-height 0 opened to its scrollHeight) -->
+<!-- args: -K open -K check -->
+<!-- expect: console: box 200x50 -->
+<!-- expect: console: shut 0 open 120 -->
+<!-- expect: console: opened 120 -->
+<html><head><title>geometry</title>
+<style>
+body { margin: 0 }
+#box { width: 200px; height: 50px }
+#panel { padding: 0 10px; max-height: 0; overflow: hidden }
+#panel div { height: 100px; margin: 0; padding: 12px 0 8px }
+</style>
+</head><body>
+<div id="box"></div>
+<button id="open">Open</button> <button id="check">Check</button>
+<div id="panel"><div>in the panel</div></div>
+<p id="after">after</p>
+<script>
+var panel = document.getElementById("panel");
+document.getElementById("open").addEventListener("click", function () {
+	var b = document.getElementById("box");
+	console.log("box " + b.offsetWidth + "x" + b.offsetHeight);
+	console.log("shut " + panel.offsetHeight + " open " + panel.scrollHeight);
+	panel.style.maxHeight = panel.scrollHeight + "px";
+});
+document.getElementById("check").addEventListener("click", function () {
+	console.log("opened " + panel.offsetHeight);
+});
+</script>
+</body></html>

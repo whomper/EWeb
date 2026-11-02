@@ -1747,7 +1747,7 @@ static JSValue el_matches(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 	return JS_NULL;
 }
 
-enum { RECT_OBJ, RECT_TOP, RECT_LEFT, RECT_WIDTH, RECT_HEIGHT };
+enum { RECT_OBJ, RECT_TOP, RECT_LEFT, RECT_WIDTH, RECT_HEIGHT, RECT_SWIDTH, RECT_SHEIGHT };
 
 static int rect_of(ejs *j, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
 {
@@ -1759,11 +1759,33 @@ static int rect_of(ejs *j, const dnode *n, int32_t *x, int32_t *y, int32_t *w, i
 	return 0;
 }
 
+/* a length on the page (device px) as scripts take it: CSS px (EWeb's
+   0.8 made an accordion's panel, opened to its scrollHeight, a fifth
+   short) */
+static int32_t css_px(ejs *j, int32_t v)
+{
+	int32_t z = j->pg != NULL ? j->pg->opt.zoom : 1024;
+	return z > 0 && z != 1024 ? (int32_t) ((int64_t) v * 1024 / z) : v;
+}
+
 static JSValue el_rect(JSContext *ctx, JSValueConst this_val, int magic)
 {
 	int32_t x, y, w, h;
 	THIS_ELEM(n);
+	if (magic == RECT_SWIDTH || magic == RECT_SHEIGHT) {
+		/* scrollWidth, scrollHeight: as far as its content reaches */
+		w = h = 0;
+#ifndef EW_ST
+		if (J(ctx)->pg != NULL)
+			page_node_extent(J(ctx)->pg, n, &w, &h);
+#endif
+		return JS_NewInt32(ctx, css_px(J(ctx), magic == RECT_SWIDTH ? w : h));
+	}
 	rect_of(J(ctx), n, &x, &y, &w, &h);
+	x = css_px(J(ctx), x);
+	y = css_px(J(ctx), y);
+	w = css_px(J(ctx), w);
+	h = css_px(J(ctx), h);
 	switch (magic) {
 	case RECT_TOP:
 		return JS_NewInt32(ctx, y);
@@ -2655,8 +2677,8 @@ static const JSCFunctionListEntry elem_funcs[] = {
 	JS_CGETSET_MAGIC_DEF("offsetHeight", el_rect, NULL, RECT_HEIGHT),
 	JS_CGETSET_MAGIC_DEF("clientWidth", el_rect, NULL, RECT_WIDTH),
 	JS_CGETSET_MAGIC_DEF("clientHeight", el_rect, NULL, RECT_HEIGHT),
-	JS_CGETSET_MAGIC_DEF("scrollWidth", el_rect, NULL, RECT_WIDTH),
-	JS_CGETSET_MAGIC_DEF("scrollHeight", el_rect, NULL, RECT_HEIGHT),
+	JS_CGETSET_MAGIC_DEF("scrollWidth", el_rect, NULL, RECT_SWIDTH),
+	JS_CGETSET_MAGIC_DEF("scrollHeight", el_rect, NULL, RECT_SHEIGHT),
 	JS_CGETSET_DEF("offsetParent", el_offset_parent, NULL),
 	JS_CGETSET_DEF("scrollTop", zero, ignore_set),
 	JS_CGETSET_DEF("scrollLeft", zero, ignore_set),
@@ -3808,7 +3830,7 @@ static JSValue win_get(JSContext *ctx, JSValueConst this_val, int magic)
 	ejs *j = J(ctx);
 	switch (magic) {
 	case WP_WIDTH:
-		return JS_NewInt32(ctx, j->pg != NULL ? j->pg->width : 640);
+		return JS_NewInt32(ctx, j->pg != NULL ? css_px(j, j->pg->width) : 640);
 	case WP_HEIGHT:
 		return JS_NewInt32(ctx, 400);
 	case WP_RATIO:

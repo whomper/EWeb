@@ -178,6 +178,8 @@ typedef struct page {
 	struct pg_block {
 		dnode *n;
 		int32_t x, y, w, h;
+		int32_t sh;		/* its padding box as tall as its content made it, before
+					   its height or max-height (scrollHeight); 0 not known */
 		uint16_t clip;		/* the boxes hiding what overflows them it is in (dl_item.clip) */
 	} *blocks;
 	long nblocks, blockcap;
@@ -319,6 +321,7 @@ dnode *page_summary_at(const page *p, int32_t x, int32_t y);
    when it isn't shown */
 dnode *page_node_at(const page *p, int32_t x, int32_t y);
 int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h);
+int page_node_extent(const page *p, const dnode *n, int32_t *w, int32_t *h);
 #endif
 /* where the element with that id (or an <a name>) is, or -1 (not laid
    out, or folded away in a closed details); the boxes that scroll that

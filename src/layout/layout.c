@@ -1127,7 +1127,7 @@ void page_bar_thumb(const page *p, const dl_item *bar, int32_t *t0, int32_t *t1)
 #ifndef EW_ST
 /* a block's border box, for scripts (a click's element, the element's
    place) */
-static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t h)
+static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t h, int32_t sh)
 {
 	page *p = l->p;
 	if (p->nblocks == p->blockcap) {
@@ -1143,6 +1143,7 @@ static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t 
 	p->blocks[p->nblocks].y = y;
 	p->blocks[p->nblocks].w = w;
 	p->blocks[p->nblocks].h = h;
+	p->blocks[p->nblocks].sh = sh;
 	p->blocks[p->nblocks].clip = l->ovf;
 	p->nblocks++;
 }
@@ -8175,6 +8176,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		   and what is in it is cut or scrolls) */
 		int keep = clip_y, sc = ck >= 0 && vis && (scrolls(ox) || scrolls(oy));
 		int32_t sx1 = INT32_MIN, sy1 = INT32_MIN;	/* what is in a box that scrolls: how far it goes */
+		int32_t ch0 = ch;	/* (as tall as its content: scrollHeight's) */
+		(void) ch0;		/* (none in the ST edition: no scripts) */
 		if (sc)
 			extent(l, ck, ckn, &sx1, &sy1);
 		hp = len(l, s, EP_HEIGHT, hbase);
@@ -8234,7 +8237,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			}
 #ifndef EW_ST
 			if (b->n != NULL && !b->anon)
-				block_rect(l, b->n, bx, by, bw, bh);
+				block_rect(l, b->n, bx, by, bw, bh, pt + ch0 + pb);
 #endif
 			if (b->link && !b->anon && vis && !no_hit(s) && (b->parent == NULL || b->parent->link != b->link))
 				bd[5] = link_area(l, b, bx, by, bw, bh);
@@ -8883,6 +8886,57 @@ int page_node_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, int32_
 	*w = x1 - x0;
 	*h = y1 - y0;
 	return found;
+}
+#endif
+
+#ifndef EW_ST
+/* how far a node's content reaches from its box's top left (scrollWidth,
+   scrollHeight): its box, or its descendants' boxes and items where they
+   go further (hidden by an overflow of its, or by a max-height) */
+int page_node_extent(const page *p, const dnode *n, int32_t *w, int32_t *h)
+{
+	int32_t x, y, bw, bh, x1, y1;
+	long i;
+	if (!page_node_rect(p, n, &x, &y, &bw, &bh))
+		return 0;
+	x1 = x + bw;
+	y1 = y + bh;
+	for (i = 0; i < p->nblocks; i++) {
+		const struct pg_block *b = &p->blocks[i];
+		const dnode *k;
+		if (b->n == n) {
+			/* as tall as its content made it, before its height or
+			   max-height (an accordion's panel of max-height 0) */
+			if (b->y + b->sh > y1)
+				y1 = b->y + b->sh;
+			continue;
+		}
+		for (k = b->n; k != NULL && k != n; k = k->parent)
+			;
+		if (k == NULL)
+			continue;
+		if (b->x + b->w > x1)
+			x1 = b->x + b->w;
+		if (b->y + b->h > y1)
+			y1 = b->y + b->h;
+	}
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *d = &p->items[i];
+		const dnode *k;
+		if (d->node == NULL)
+			continue;
+		for (k = d->node; k != NULL && k != n; k = k->parent)
+			;
+		if (k == NULL)
+			continue;
+		if (d->x + d->w > x1)
+			x1 = d->x + d->w;
+		if (d->y + d->h > y1)
+			y1 = d->y + d->h;
+	}
+	*w = x1 - x;
+	*h = y1 - y;
+	return 1;
 }
 #endif
 
