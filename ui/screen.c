@@ -754,3 +754,109 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		scr_ms_put += pf_ms() - t1;
 	}
 }
+
+#ifndef EW_ST
+/* ---------------------------------------------------------------- the page kept off the screen
+
+   On a machine with TT or Fast RAM, the page around the window's place
+   (win.c's pic: the window's rows, a window above and one below) is kept
+   in the screen's own form in ST RAM, rows of it drawn at rest; a scroll
+   is then a copy from it to the screen, and rows not kept yet are made
+   here and put on the screen at once, never seen a band at a time
+   (Erez's clip, 2 Nov 2026). Only where a row of the screen's form is a
+   row of memory: the Atari's interleaved planes, packed bytes, true
+   colour (vr_trnfm's other forms aren't known to be) */
+static unsigned char *store;		/* ST RAM, store_rows of store_row bytes */
+static long store_row;
+static short store_rows, store_w, store_words;
+
+int scr_store(short w, short n)
+{
+	long row, size, free_st;
+	if (store != NULL)
+		Mfree(store);
+	store = NULL;
+	store_rows = 0;
+	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))
+		return 0;
+	store_words = (short) ((w + 15) / 16);
+	if (store_words * 16L > band_w)
+		return 0;
+	row = truecolour ? store_words * 32L : format == 2 ? store_words * 16L : store_words * 2L * planes;
+	size = row * n;
+	/* (ST RAM left for the rest: a megabyte at least) */
+	free_st = (long) Mxalloc(-1, 0);
+	if (free_st < size + (1L << 20) || (store = st_alloc(size)) == NULL)
+		return 0;
+	store_row = row;
+	store_rows = n;
+	store_w = w;
+	return 1;
+}
+
+void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
+{
+	unsigned short *keep = dev_buf;
+	canvas c;
+	short y0;
+	unsigned long t0, t1;
+	if (store == NULL || p == NULL || at < 0 || at + n > store_rows)
+		return;
+	memset(&c, 0, sizeof c);
+	c.w = store_w;
+	c.ox = px;
+	c.pen = pen;
+	c.shade = shade;
+	c.pal = (const uint8_t (*)[3]) pal;
+	c.picture = picture;
+	c.marked = win_mark(&c.mark, &c.mark_rgb);
+	c.pressed = (uint16_t) win_pressed();
+	c.aes_bars = 1;
+	for (y0 = 0; y0 < n; y0 += rows) {
+		short h = n - y0 > rows ? rows : n - y0;
+		c.h = h;
+		c.oy = py + y0;
+		dev_buf = (unsigned short *) (void *) (store + (long) (at + y0) * store_row);
+		if (truecolour) {
+			c.pix = (uint8_t *) dev_buf;
+			c.stride = store_words * 32L;
+			c.bpp = 16;
+		} else {
+			c.pix = chunky;
+			c.stride = store_words * 16L;
+			c.bpp = 8;
+		}
+		t0 = pf_ms();
+		cv_page(&c, p);
+		t1 = pf_ms();
+		make(h, store_words);	/* (into the kept rows: dev_buf points there) */
+		scr_ms_canvas += t1 - t0;
+		scr_ms_put += pf_ms() - t1;
+	}
+	dev_buf = keep;
+}
+
+void scr_store_put(short at, short n, short sx, short w, short x, short y)
+{
+	MFDB src, scr;
+	short pxy[8];
+	if (store == NULL || n <= 0 || w <= 0)
+		return;
+	memset(&scr, 0, sizeof scr);
+	memset(&src, 0, sizeof src);
+	src.fd_addr = store;
+	src.fd_w = (short) (store_words * 16);
+	src.fd_h = store_rows;
+	src.fd_wdwidth = store_words;
+	src.fd_nplanes = planes;
+	pxy[0] = sx;
+	pxy[1] = at;
+	pxy[2] = sx + w - 1;
+	pxy[3] = at + n - 1;
+	pxy[4] = x;
+	pxy[5] = y;
+	pxy[6] = x + w - 1;
+	pxy[7] = y + n - 1;
+	vro_cpyfm(vdi_h, 3, pxy, &src, &scr);
+}
+#endif

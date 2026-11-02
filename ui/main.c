@@ -2590,7 +2590,7 @@ int app_main(void)
 		int more = !loading && pictures_window() != NULL;
 		long due = loading || cur->iconified ? -1 : br_js_due(&br);
 		long rdue = refresh_due();
-		int rib, drew, wr;
+		int rib, drew, wr, ahead = 0;
 		short wait;
 		if (rdue >= 0 && (due < 0 || rdue < due))
 			due = rdue;	/* the page's refresh comes before its scripts' next timer */
@@ -2603,7 +2603,12 @@ int app_main(void)
 		/* the cache's answers, written a step at a time when nothing
 		   else is under way (not while a page or its pictures come) */
 		wr = !more && !loading && dc_write_due();
-		wait = more ? 0 : win_due() || wr ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
+#ifndef EW_ST
+		/* the page around the window kept off the screen, made at rest
+		   (before the cache's writing: a scroll waits on it) */
+		ahead = !more && !loading && !win_due() && win_ahead();
+#endif
+		wait = more ? 0 : win_due() || wr || ahead ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
@@ -2629,6 +2634,11 @@ int app_main(void)
 #ifndef EW_ST
 		if ((which & MU_TIMER) && !quit && !drew && !loading && br_js_due(&br) == 0)
 			js_timers();
+#endif
+#ifndef EW_ST
+		if ((which & MU_TIMER) && !quit && !drew && ahead && !win_due() && !loading)
+			win_draw_ahead();
+		else
 #endif
 		if ((which & MU_TIMER) && !quit && !drew && wr && !win_due() && !loading)
 			dc_write_step();

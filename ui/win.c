@@ -757,6 +757,276 @@ static int screen_lock(void)
 	return 1;
 }
 
+#ifndef EW_ST
+/* ---------------------------------------------------------------- the page kept off the screen
+
+   On a machine with TT or Fast RAM the page around the window's place is
+   kept in the screen's own form (screen.c's store): a ring of bands of
+   PIC_BAND rows, each holding one band of the page (page row / PIC_BAND,
+   at its index modulo the ring's), enough for the window's rows, a
+   window above and one below. Bands are made at rest (win_ahead: the
+   window's, then below, then above), a scroll is a copy from them to the
+   screen, and a due part is made into them and then put on the screen in
+   one go: what was seen a band at a time, the new rows coming down the
+   window for a second after Page Down on Erez's DFB1, is a whole picture
+   (2 Nov 2026). Anything that changes the page's look (a redraw of the
+   page but the AES's, a picture come, the selection, a link pressed,
+   another page, place across or size) forgets them all. */
+#define PIC_BAND 16
+
+static struct {
+	ewin *w;		/* the window they are of; NULL none */
+	const page *p;
+	int32_t left;
+	short pw, ph;		/* the window's page area they were taken for */
+	short nb;		/* bands in the ring */
+	int32_t *band;		/* each slot's band of the page, -1 none */
+	int pressed, marked;	/* the canvas's marks they were made with */
+	pg_range mark;
+	uint32_t mark_rgb;
+} pic;
+static int pic_keep;		/* a redraw that doesn't change the look (the AES's, a scroll's) */
+
+static void pic_forget(void)
+{
+	int k;
+	for (k = 0; k < pic.nb; k++)
+		pic.band[k] = -1;
+}
+
+/* the page's rows y0 to y1 forgotten (a picture come where they are) */
+static void pic_forget_rows(int32_t y0, int32_t y1)
+{
+	int k;
+	for (k = 0; k < pic.nb; k++)
+		if (pic.band[k] >= 0 && pic.band[k] * PIC_BAND < y1 && (pic.band[k] + 1) * PIC_BAND > y0)
+			pic.band[k] = -1;
+}
+
+/* the kept bands for cur, taken or made anew where they don't fit: 1 if
+   there are */
+static int pic_use(void)
+{
+	const page *p = shown();
+	pg_range m;
+	uint32_t rgb = 0;
+	int marked;
+	if (!fast_machine() || p == NULL || cur->h <= 0 || cur->iconified || cur->r_page.w <= 0 ||
+	    cur->r_page.h <= 0)
+		return 0;
+	if (pic.pw != cur->r_page.w || pic.ph != cur->r_page.h) {
+		/* (taken for this size once: with no ST RAM for it, tried again
+		   only at another) */
+		short nb = (short) ((3L * cur->r_page.h + PIC_BAND - 1) / PIC_BAND + 2);
+		int32_t *b = realloc(pic.band, nb * sizeof *b);
+		pic.w = NULL;
+		pic.nb = 0;
+		pic.pw = cur->r_page.w;
+		pic.ph = cur->r_page.h;
+		if (b == NULL)
+			return 0;
+		pic.band = b;
+		if (!scr_store(cur->r_page.w, (short) (nb * PIC_BAND)))
+			return 0;
+		pic.nb = nb;
+	}
+	if (pic.nb <= 0)
+		return 0;
+	memset(&m, 0, sizeof m);
+	marked = win_mark(&m, &rgb);
+	if (pic.w != cur || pic.p != p || pic.left != cur->left || pic.pressed != cur->pressed ||
+	    pic.marked != marked || (marked && (memcmp(&m, &pic.mark, sizeof m) || rgb != pic.mark_rgb))) {
+		pic_forget();
+		pic.w = cur;
+		pic.p = p;
+		pic.left = cur->left;
+		pic.pressed = cur->pressed;
+		pic.marked = marked;
+		pic.mark = m;
+		pic.mark_rgb = rgb;
+	}
+	return 1;
+}
+
+static int pic_has(int32_t b)
+{
+	return b >= 0 && pic.band[b % pic.nb] == b;
+}
+
+/* the page's rows y0 to y1 kept */
+static int pic_kept(int32_t y0, int32_t y1)
+{
+	int32_t b;
+	if (y0 < 0)
+		y0 = 0;
+	for (b = y0 / PIC_BAND; b * PIC_BAND < y1; b++)
+		if (!pic_has(b))
+			return 0;
+	return 1;
+}
+
+/* bands of the page's rows y0 to y1 made till end (all of them with
+   sync_draw): 1 when they are all kept */
+static int pic_make(int32_t y0, int32_t y1, unsigned long end)
+{
+	int32_t b, last;
+	if (y0 < 0)
+		y0 = 0;
+	if (y1 <= y0)
+		return 1;
+	last = (y1 - 1) / PIC_BAND;
+	for (b = y0 / PIC_BAND; b <= last; b++) {
+		unsigned long b0;
+		long left, want, n, dt;
+		int32_t e;
+		if (pic_has(b))
+			continue;
+		/* a run of bands not kept, as many as the time left takes (by
+		   row_cost), within the ring's end and the rows screen.c
+		   draws at a time */
+		left = (long) (end - pf_ms());
+		want = (left > 4 ? left : 4) * 256 / (row_cost > 0 ? row_cost : 1);
+		if (sync_draw)
+			want = (last - b + 1) * PIC_BAND;
+		n = 1;
+		e = b + 1;
+		while (e <= last && !pic_has(e) && e % pic.nb != 0 && (n + 1) * PIC_BAND <= want &&
+		       (n + 1) * PIC_BAND <= scr_band_rows())
+			e++, n++;
+		b0 = pf_ms();
+		scr_store_draw(pic.p, pic.left, b * PIC_BAND, (short) (b % pic.nb * PIC_BAND), (short) (n * PIC_BAND));
+		for (; b < e; b++)
+			pic.band[b % pic.nb] = b;
+		b--;
+		dt = (long) (pf_ms() - b0);
+		scr_slice_rows += (unsigned long) (n * PIC_BAND);
+		scr_bands++;
+		if (dt >= 10 || n * PIC_BAND >= 64) {
+			long c = dt * 256 / (n * PIC_BAND);
+			row_cost = c > row_cost ? c : (row_cost + c) / 2;
+		}
+		if (!sync_draw && (long) (pf_ms() - end) >= 0)
+			return pic_kept(y0, y1);
+	}
+	return 1;
+}
+
+/* area (the screen's, within the page's) put on the screen from the
+   kept bands, through the window's rectangle list, the boxes' bars over;
+   the screen's lock taken by the caller */
+static void pic_put(const GRECT *area)
+{
+	GRECT r;
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w > 0 && r.h > 0) {
+		GRECT c = r;
+		if (rect_and(&c, area) && rect_and(&c, &cur->r_page)) {
+			short y = c.y, n = c.h;
+			while (n > 0) {
+				int32_t py = cur->top + (y - cur->r_page.y);
+				short at = (short) (py % PIC_BAND + py / PIC_BAND % pic.nb * PIC_BAND);
+				short run = (short) (pic.nb * PIC_BAND - at);	/* (to the ring's end) */
+				if (run > n)
+					run = n;
+				scr_store_put(at, run, (short) (c.x - cur->r_page.x), c.w, c.x, y);
+				y += run;
+				n -= run;
+			}
+			clip_on(&c);
+			draw_box_bars(pic.p, &c);
+		}
+		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	clip_off();
+}
+
+/* the window's due made off the screen, a slice at a time, and put on
+   the screen in one go when it is all made */
+static void draw_due_kept(void)
+{
+	unsigned long t0 = pf_ms(), end;
+	long since = (long) (t0 - ui_event_at);
+	int32_t y0 = cur->top + cur->due.y, y1 = y0 + cur->due.h;
+	/* (nothing is seen till it is all made: the longer slices, a key or a
+	   click still answered within 100 ms) */
+	end = since < 0 || since > 500 ? t0 + SLICE_BIG : ui_event_at + SLICE_BIG;
+	gap_tag("draw");
+	if (pic_make(y0, y1, end)) {
+		GRECT a;
+		int took = screen_lock();
+		a.x = (short) (cur->r_page.x + cur->due.x);
+		a.y = (short) (cur->r_page.y + cur->due.y);
+		a.w = cur->due.w;
+		a.h = cur->due.h;
+		graf_mouse(M_OFF, 0);
+		font_sys_push();
+		pic_put(&a);
+		graf_mouse(M_ON, 0);
+		press_update_end(took);
+		cur->due.w = 0;
+		cur->due_scroll = 0;
+	}
+	scr_ms_slice += pf_ms() - t0;
+}
+
+/* bands to make at rest for the window in front: its own rows, a window
+   below, a window above (1 if there are) */
+static int ahead_range(int32_t *y0, int32_t *y1)
+{
+	const page *p = shown();
+	int32_t h = cur->r_page.h, top = cur->top, end = p != NULL ? p->height : 0, a;
+	int k;
+	for (k = 0; k < 3; k++) {
+		a = k == 0 ? top : k == 1 ? top + h : top - h;
+		*y0 = a < 0 ? 0 : a;
+		*y1 = a + h > end ? end : a + h;
+		if (*y1 > *y0 && !pic_kept(*y0, *y1))
+			return 1;
+	}
+	return 0;
+}
+
+static ewin *ahead_win(void)
+{
+	short t, d;
+	ewin *w;
+	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	for (w = wins; w != NULL; w = w->next)
+		if (w->h == t && t > 0)
+			return w;
+	return NULL;
+}
+
+int win_ahead(void)
+{
+	ewin *was = cur, *w = ahead_win();
+	int32_t y0, y1;
+	int more = 0;
+	if (w == NULL || (w->due.w > 0 && w->due.h > 0))
+		return 0;
+	cur = w;
+	more = pic_use() && ahead_range(&y0, &y1);
+	cur = was;
+	return more;
+}
+
+void win_draw_ahead(void)
+{
+	ewin *was = cur, *w = ahead_win();
+	int32_t y0, y1;
+	if (w == NULL)
+		return;
+	cur = w;
+	if (pic_use() && ahead_range(&y0, &y1)) {
+		gap_tag("ahead");
+		pic_make(y0, y1, pf_ms() + SLICE_MS);
+	}
+	cur = was;
+}
+#else
+static int pic_keep;
+#endif
+
 /* the next slice of the window's due drawn: its top rows, through the
    window's rectangle list; whole when sync_draw says so */
 static void draw_due(void)
@@ -769,6 +1039,12 @@ static void draw_due(void)
 		cur->due.w = 0;
 		return;
 	}
+#ifndef EW_ST
+	if (pic_use()) {
+		draw_due_kept();
+		return;
+	}
+#endif
 	gap_tag("draw");
 	took = screen_lock();
 	graf_mouse(M_OFF, 0);
@@ -918,6 +1194,10 @@ static void redraw(const GRECT *area, int parts)
 	if ((parts & 2) && shown() != NULL) {
 		pg = cur->r_page;
 		paged = rect_and(&pg, &a);
+#ifndef EW_ST
+		if (!pic_keep && pic.w == cur)
+			pic_forget();	/* (its look changed: the kept bands with it) */
+#endif
 		due_add(&a);
 		parts &= ~2;
 	}
@@ -1054,7 +1334,9 @@ static int all_visible(void)
 static void redraw_now(void)
 {
 	sync_draw++;
+	pic_keep++;	/* (a scroll's: the look is the same) */
 	win_redraw_page();
+	pic_keep--;
 	sync_draw--;
 }
 
@@ -1075,6 +1357,42 @@ void win_scroll_to(int32_t y)
 	sliders();
 	if (cur->iconified || cur->h <= 0)
 		return;
+#ifndef EW_ST
+	if (pic_use()) {
+		/* the window's rows kept off the screen: put there in one copy,
+		   a line or a page alike. Not all kept: made off the screen at
+		   the next turns and put there whole (the window stays as it
+		   was meanwhile); at once while the last scroll's are still
+		   being made (a key held: each step shown whole) */
+		unsigned long t0;
+		int took;
+		if (!pic_kept(cur->top, cur->top + cur->r_page.h)) {
+			int pending = cur->due.w > 0 && cur->due.h > 0;
+			cur->due.x = cur->due.y = 0;
+			cur->due.w = cur->r_page.w;
+			cur->due.h = cur->r_page.h;
+			cur->due_big = 0;
+			cur->due_scroll = 1;
+			if (!pending || sync_draw)
+				return;
+			sync_draw++;
+			pic_make(cur->top, cur->top + cur->r_page.h, pf_ms());
+			sync_draw--;
+		}
+		t0 = pf_ms();
+		took = screen_lock();
+		gap_tag("scroll copy");
+		graf_mouse(M_OFF, 0);
+		font_sys_push();
+		pic_put(&cur->r_page);
+		graf_mouse(M_ON, 0);
+		press_update_end(took);
+		cur->due.w = 0;
+		cur->due_scroll = 0;
+		scr_ms_copy += pf_ms() - t0;
+		return;
+	}
+#endif
 	if ((dy < 0 ? -dy : dy) < cur->r_page.h && all_visible() &&
 	    cur->r_page.y + cur->r_page.h <= scr_h && cur->r_page.x + cur->r_page.w <= scr_w) {
 		/* what stays on the screen moves; only the new rows are drawn */
@@ -1093,9 +1411,12 @@ void win_scroll_to(int32_t y)
 				redraw_now();
 				return;
 			}
+			/* (from where the page was: the copy moves it after) */
+			cur->top -= dy;
 			sync_draw++;
 			draw_due();
 			sync_draw--;
+			cur->top += dy;
 		}
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
@@ -1142,7 +1463,9 @@ void win_scroll_to(int32_t y)
 		return;
 	}
 	defer_draw++;
+	pic_keep++;
 	win_redraw_page();
+	pic_keep--;
 	defer_draw--;
 }
 
@@ -1179,9 +1502,11 @@ static void scroll_x_to(int32_t x)
 				redraw_now();
 				return;
 			}
+			cur->left -= dx;
 			sync_draw++;
 			draw_due();
 			sync_draw--;
+			cur->left += dx;
 		}
 		wind_update(BEG_UPDATE);
 		graf_mouse(M_OFF, 0);
@@ -1231,6 +1556,10 @@ void win_page_drawn(int32_t y0, int32_t y1)
 {
 	GRECT r = cur->r_page;
 	int32_t a = y0 - cur->top, b = y1 - cur->top;
+#ifndef EW_ST
+	if (pic.w == cur)
+		pic_forget_rows(y0, y1);	/* (kept off the window too) */
+#endif
 	if (cur->h <= 0 || cur->iconified || b <= 0 || a >= cur->r_page.h)
 		return;
 	if (a < 0)
@@ -2944,6 +3273,10 @@ void win_free(ewin *w)
 		;
 	if (*pp != NULL)
 		*pp = w->next;
+#ifndef EW_ST
+	if (pic.w == w)
+		pic.w = NULL;
+#endif
 	free(w);
 	cur = was != w ? was : wins;
 }
@@ -3035,7 +3368,9 @@ static void message(const short *msg)
 		r.y = msg[5];
 		r.w = msg[6];
 		r.h = msg[7];
+		pic_keep++;	/* (uncovered: the page's look is the same) */
 		win_redraw(&r);
+		pic_keep--;
 		break;
 	case WM_TOPPED:
 	case WM_NEWTOP:

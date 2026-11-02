@@ -4232,6 +4232,27 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   page a band at a time for seconds and a typed letter's field in bands, its letters a part at a
   time (his clips of 2 Nov 2026): in Hatari's Falcon in 256 colours the home page's window was 12
   slices of 25 to 35 rows (the copy to the screen most of each), now 5 of 50 to 100.
+- **The page kept off the screen (2 Nov 2026).** Still, on Erez's DFB1 the rows a Page Down
+  brought in came down the window band by band for a second (his clip of 0.61 on iamexpat.de):
+  each slice was made off the screen but put on it as soon as it was made. On a machine with TT or
+  Fast RAM the page around the window is now kept in the screen's own form in ST RAM (`pic` in
+  `ui/win.c`, `scr_store` in `ui/screen.c`; only where a row of the screen is a row of memory: the
+  Atari's interleaved planes, packed bytes, true colour): a ring of bands of 16 rows, for the
+  window's rows, a window below and a window above (about 700 KB for a 640 x 480 screen in 256
+  colours, 1.3 MB in true colour; not taken with less than a megabyte of ST RAM left). They are made
+  while EWeb waits (`win_ahead`, `win_draw_ahead` from the main loop: 30 ms slices, the window's
+  own first, then below, then above), and a scroll whose rows are kept is one copy to the screen. A
+  part to draw is made into the bands in 55 ms slices and put on the screen in one go when all of
+  it is made, so the window never shows a half-drawn page (Erez: "drawn off screen and then
+  blitted"). A redraw that changes the look (anything but the AES's and a scroll's own), a picture
+  come (`win_page_drawn`, off the window too), the selection, a pressed link, another page, place
+  across or window size forget them. In Hatari's Falcon with TT RAM in 256 colours on the news
+  page a Page Down was on the screen in 0.2 s (1.0 to 1.1 s before, 8 to 12 screenshots of it half
+  drawn), a line in 0.2 s (0.3), never a half-drawn screenshot, every picture the same pixels as
+  0.61's. Pressed quickly, the rows not kept yet are made off the screen and shown whole, each step
+  at once while the last one is still being made. A stock Falcon and the ST draw as before; a scroll
+  there while the last one's rows were still due drew them at the new place before the copy moved
+  them (the top or bottom rows a step out of place), now from where they were.
 - **The progress ribbon's colours** are the 16 pens' nearest that are colours (`rib_nearest` in
   `ui/draw.c`): by the nearest of all (5.2) TOS's pale cyan, magenta, yellow and green came out its
   light grey, the status bar's own, and the ribbon wasn't seen after its first phase (Erez, 2 Nov

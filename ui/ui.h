@@ -167,6 +167,16 @@ int scr_band_rows(void);			/* rows drawn at a time: the screen's, else 32 */
 /* the page's part that falls on area (on the screen), the page's point
    (px, py) at area's top left; area must be within the clip set */
 void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
+#ifndef EW_ST
+/* the page kept off the screen (win.c's pic): n rows of w pixels in the
+   screen's own form in ST RAM (0 n frees them): 1 if taken; n rows of
+   the page from (px, py) made into its rows from at; n of its rows from
+   at, w of them from column sx, put on the screen at x, y (not clipped:
+   within the window's rectangle) */
+int scr_store(short w, short n);
+void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n);
+void scr_store_put(short at, short n, short sx, short w, short x, short y);
+#endif
 /* a picture of w x h, each pixel a byte into col (0xRRGGBB, ncol of them),
    at at; the part of it on part (within at and the clip set) */
 void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
@@ -216,6 +226,13 @@ void win_redraw_page(void);
    events, and the idle loop while a page loads) */
 int win_due(void);
 void win_draw_due(void);
+#ifndef EW_ST
+/* the page kept off the screen made at rest (a machine with TT or Fast
+   RAM): win_ahead 1 while the front window has bands to make, and
+   win_draw_ahead makes a slice of them (the main loop, idle) */
+int win_ahead(void);
+void win_draw_ahead(void);
+#endif
 /* (1, then 0) what is drawn meanwhile drawn whole, not in slices: a
    dialog's loop, which has no turns of the main loop's */
 void win_sync(int on);
