@@ -917,6 +917,16 @@ short v_opnvwk_(short phys, short *work_out)
 
 void v_clsvwk(short h) { vdi(101, 0, 0, h); }
 
+/* the mouse as the VDI has it: its buttons in *b, where it is in *x, *y (a
+   VDI call, no AES dispatch: TOS 1.04's graf_mkstate took an ST 4.9 ms) */
+void vq_mouse(short h, short *b, short *x, short *y)
+{
+	vdi(124, 0, 0, h);
+	*b = vintout[0];
+	*x = ptsout[0];
+	*y = ptsout[1];
+}
+
 void vq_extnd(short h, short owflag, short *work_out)
 {
 	short i;

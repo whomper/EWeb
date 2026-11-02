@@ -283,8 +283,10 @@ try:
     time.sleep(1)                                    # EWeb's "EWeb" starts past x 18)
     menu = shot("1-desk-menu")
     # the menu's box with one accessory under About and its line is small:
-    # a single-accessory run (ST-1's EMail check alone) changed 3,238 pixels
-    menu_px = 4000 if len(want) > 1 else 2000
+    # a single-accessory run (ST-1's EMail check alone) changed 3,238 pixels;
+    # four over a window white beneath the menu (EPDF 0.5.3, no info line)
+    # 3,790. The title alone turned black is some 1,300 (below)
+    menu_px = 2000
     for _ in range(5):
         # a first boot under NVDI on a 4 MB Falcon can take more than a
         # second to draw it (EUpdate 1.19's run, 27 Oct 2026); the title

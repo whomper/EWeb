@@ -270,6 +270,7 @@ typedef struct {
 void vro_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst);
 void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, const short *colors);
 void vq_extnd(short h, short owflag, short *work_out);
+void vq_mouse(short h, short *b, short *x, short *y);
 short vq_scrninfo(short h, short *work_out);	/* NVDI: 272 words; 0 without */
 short vq_gdos(void);			/* 1 if a GDOS (NVDI, SpeedoGDOS...) is loaded */
 short vst_load_fonts(short h, short select);

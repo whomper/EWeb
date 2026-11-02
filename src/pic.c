@@ -17,6 +17,12 @@
  * The scaler's columns come from a table made once a picture, and its
  * sums are 32-bit additions: the only divisions are one a component of
  * each pixel shown.
+ *
+ * PIC_NO_PNG and PIC_NO_GIF leave a decoder out, for a program whose
+ * pictures are never of that kind (EPDF: a PDF's are JPEG or its own
+ * streams); such a file is then PIC_UNSUPPORTED. Each is some 8 KB of a
+ * program's resident size (png.c; nsgif's gif.c and lzw.c), which NVDI's
+ * menus under four accessories on a 4 MB Falcon want (2 Nov 2026).
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -138,14 +144,18 @@ int pic_size(const unsigned char *d, long n, long *w, long *h)
 	switch (pic_kind(d, n)) {
 	case PIC_JPEG:
 		return jpeg_size(d, n, w, h);
+#ifndef PIC_NO_PNG
 	case PIC_PNG:
 		return png_size(d, n, w, h) && *w > 0 && *h > 0;
+#endif
+#ifndef PIC_NO_GIF
 	case PIC_GIF:
 		if (n < 10)
 			return 0;
 		*w = d[6] | ((long) d[7] << 8);
 		*h = d[8] | ((long) d[9] << 8);
 		return *w > 0 && *h > 0;
+#endif
 #ifdef PIC_LIBWEBP
 	case PIC_WEBP: {
 		int ww, hh;
@@ -2626,6 +2636,7 @@ done:
 #endif
 
 /* ---------------------------------------------------------------- PNG */
+#ifndef PIC_NO_PNG
 
 static int png_row(void *ud, long y, const unsigned char *rgba)
 {
@@ -2664,7 +2675,10 @@ static int decode_png(const unsigned char *d, long n, PIC *p, SCALER *sc, long m
 	return 0;
 }
 
+#endif /* PIC_NO_PNG */
+
 /* ---------------------------------------------------------------- GIF */
+#ifndef PIC_NO_GIF
 
 typedef struct {
 	long w, h;
@@ -2747,6 +2761,7 @@ static int decode_gif(const unsigned char *d, long n, PIC *p, SCALER *sc, long m
 	nsgif_destroy(g);
 	return 1;
 }
+#endif /* PIC_NO_GIF */
 
 /* ---------------------------------------------------------------- WebP */
 
@@ -2913,7 +2928,13 @@ PIC *pic_decode(const unsigned char *d, long n, int w, int h, long max_px, int *
 	if (why == NULL)
 		why = &dummy;
 	*why = PIC_OK;
-	if (kind != PIC_JPEG && kind != PIC_PNG && kind != PIC_GIF
+	if (kind != PIC_JPEG
+#ifndef PIC_NO_PNG
+	    && kind != PIC_PNG
+#endif
+#ifndef PIC_NO_GIF
+	    && kind != PIC_GIF
+#endif
 #ifdef PIC_LIBWEBP
 	    && kind != PIC_WEBP
 #endif
@@ -2962,11 +2983,17 @@ PIC *pic_decode(const unsigned char *d, long n, int w, int h, long max_px, int *
 		}
 		switch (kind) {
 		case PIC_JPEG: ok = decode_jpeg(d, n, p, &sc, why); break;
+#ifndef PIC_NO_PNG
 		case PIC_PNG: ok = decode_png(d, n, p, &sc, max_px, why); break;
+#endif
 #ifdef PIC_LIBWEBP
 		case PIC_WEBP: ok = decode_webp(d, n, p, &sc, why); break;
 #endif
+#ifndef PIC_NO_GIF
 		default: ok = decode_gif(d, n, p, &sc, max_px, why); break;
+#else
+		default: *why = PIC_UNSUPPORTED; break;
+#endif
 		}
 	}
 	if (ok && sc.down_y && sc.y < sc.sh && sc.dy >= 0) {
