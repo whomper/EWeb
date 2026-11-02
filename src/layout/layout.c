@@ -8744,6 +8744,7 @@ laid:
 	   278 KB of 3,753 on the stock 4 MB Falcon's test page) */
 	afree(&l.ba);
 	if (l.fail) {
+		end_turn();	/* (what was freed, a turn of its own) */
 		page_free(p);
 		return NULL;
 	}

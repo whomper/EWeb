@@ -2339,8 +2339,18 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	ec_poll = gem_turn;
 	font_poll = gem_turn;
 	r = build1(b, data, len, charset, url, fresh, dout, pout);
-	if (!r && !conn_stop && make_room(b))
-		r = build1(b, data, len, charset, url, fresh, dout, pout);
+	if (!r && !conn_stop) {
+		/* (a turn before and after what is given back: a page that
+		   didn't fit on a 4 MB Falcon under NVDI was 300 ms in one,
+		   its layout's freeing and this; the hub, 2 Nov 2026) */
+		turn_now = 1;
+		gem_turn();
+		if (make_room(b)) {
+			turn_now = 1;
+			gem_turn();
+			r = build1(b, data, len, charset, url, fresh, dout, pout);
+		}
+	}
 	doc_poll = NULL;
 	ec_poll = NULL;
 	font_poll = NULL;
