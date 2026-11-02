@@ -655,13 +655,45 @@ static void draw_page(GRECT *clip)
 
 #ifdef EW_ST
 #define SLICE_MS 40
+#define SLICE_BIG 40
 #define BAND_MIN 16	/* (the news page's window: an 8 MHz ST draws it in 3.9 s so, 3.3 in
 			   bands of 32, whose slices are 450 ms; 3.5 s in one, before) */
 #else
 #define SLICE_MS 30	/* (a line scrolled is 50 ms at most: the rows it brings in are slices) */
+#define SLICE_BIG 55	/* a due over half the window (a page shown, uncovered): longer
+			   slices, a key or a click still answered within 100 ms (70 made
+			   the stock Falcon's home page 105 ms, the rig); in 30 ms
+			   ones Erez's DFB1 drew the home page a band at a time for seconds
+			   (2 Nov 2026) */
 #define BAND_MIN 8	/* (a band of 16 rows of the news page was 60 to 75 ms of a stock
 			   Falcon: a line scroll's slices over its 50) */
 #endif
+/* a due this small (in pixels: about 32 rows across the window, 16 on a
+   machine without Fast RAM, the stock ones) is drawn whole in one slice: a
+   field typed in, a link pressed; in bands of 8 rows its letters came a
+   part at a time (Erez's clip, 2 Nov 2026). Not a scroll's rows: the stock
+   Falcon's 16 of a line drawn whole were 120 ms (the rig) */
+#define DUE_WHOLE (640L * 32)
+#define DUE_WHOLE_STOCK (640L * 16)
+
+/* a machine with TT or Fast RAM (a DFB1, a CT60, a TT): faster than the
+   stock ones whose times the guidelines' Speed sets, so a page's redraw
+   there in SLICE_BIG slices; the stock Falcon's news page in them was
+   115 ms against its 100 (the rig) */
+#ifndef EW_ST
+static int fast_ram = -1;
+#endif
+
+static int fast_machine(void)
+{
+#ifdef EW_ST
+	return 0;
+#else
+	if (fast_ram < 0)
+		fast_ram = (long) Mxalloc(-1L, 1) > 0;
+	return fast_ram;
+#endif
+}
 
 
 static int sync_draw;		/* a box scrolled by a held button: drawn whole each step */
@@ -680,6 +712,7 @@ static void due_add(const GRECT *area)
 	a.y -= cur->r_page.y;
 	if (cur->due.w <= 0 || cur->due.h <= 0) {
 		cur->due = a;
+		cur->due_big = a.h > cur->r_page.h / 2;
 		return;
 	}
 	x0 = a.x < cur->due.x ? a.x : cur->due.x;
@@ -690,12 +723,15 @@ static void due_add(const GRECT *area)
 	cur->due.y = (short) y0;
 	cur->due.w = (short) (x1 - x0);
 	cur->due.h = (short) (y1 - y0);
+	if (a.h > cur->r_page.h / 2)
+		cur->due_big = 1;
 }
 
 /* what is on the screen moved dx, dy (a scroll's copy): what is due with it */
 static void due_moved(int32_t dx, int32_t dy)
 {
 	GRECT a = cur->due, page;
+	cur->due_scroll = 1;	/* (a scroll's rows in slices, not whole: till all is drawn) */
 	if (a.w <= 0 || a.h <= 0)
 		return;
 	a.x = (short) (a.x + dx + cur->r_page.x);
@@ -704,6 +740,7 @@ static void due_moved(int32_t dx, int32_t dy)
 	page = cur->r_page;
 	if (rect_and(&a, &page))
 		due_add(&a);
+	cur->due_big = 0;	/* (a scroll: short slices, the next one answered soon) */
 }
 
 /* the screen's lock for a drawing (wind_update): a press's (a link drawn
@@ -725,7 +762,7 @@ static int screen_lock(void)
 static void draw_due(void)
 {
 	unsigned long t0 = pf_ms(), end;
-	int took;
+	int took, whole;
 	if (cur->due.w <= 0 || cur->due.h <= 0)
 		return;
 	if (cur->h <= 0 || cur->iconified || shown() == NULL) {
@@ -742,8 +779,11 @@ static void draw_due(void)
 	   loop's for a while): a slice of its own */
 	{
 		long since = (long) (t0 - ui_event_at);
-		end = since < 0 || since > 500 ? t0 + SLICE_MS : ui_event_at + SLICE_MS;
+		int slice = cur->due_big && fast_machine() ? SLICE_BIG : SLICE_MS;
+		end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
 	}
+	whole = !cur->due_scroll &&
+		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK);
 	while (cur->due.w > 0 && cur->due.h > 0) {
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
@@ -754,6 +794,8 @@ static void draw_due(void)
 		   and clipped, eight times over at 2 rows) */
 		if (n < BAND_MIN)
 			n = BAND_MIN;
+		if (whole)
+			n = cur->due.h;
 		band.x = (short) (cur->r_page.x + cur->due.x);
 		band.y = (short) (cur->r_page.y + cur->due.y);
 		band.w = cur->due.w;
@@ -783,6 +825,8 @@ static void draw_due(void)
 		if (!sync_draw && (long) (pf_ms() - end) >= 0)
 			break;
 	}
+	if (cur->due.h <= 0)
+		cur->due_scroll = 0;
 	clip_off();
 	graf_mouse(M_ON, 0);
 	press_update_end(took);

@@ -87,7 +87,7 @@ int http_unpack(const unsigned char *in, long n, int how, SBUF *out, long max)
 	src.n = end - p;
 	z = inflate_open_piece(unpack_get, &src);
 	if (z == NULL)
-		return how == 1 ? inflate_gzip(in, n, out, max) : inflate_zlib(in, n, out, max);
+		return -3;		/* (64 KB not to be had: the page's 3 MB won't be) */
 	unpack_at = pf_ms();
 	for (;;) {
 		k = inflate_piece(z, &piece, 32768, unpack_turn);
@@ -100,7 +100,7 @@ int http_unpack(const unsigned char *in, long n, int how, SBUF *out, long max)
 			break;
 		}
 		if (!sb_add(out, (const char *) piece, k)) {
-			r = 0;
+			r = -3;		/* no memory (not damaged) */
 			break;
 		}
 		if (conn_stop) {
@@ -384,7 +384,7 @@ typedef struct {
 	long max;
 	int to_sink;
 	int discard;			/* nowhere to keep it: read and forget */
-	int failed;			/* 1 the sink refused, 2 too big */
+	int failed;			/* 1 the sink refused, 2 too big, 3 no memory for it */
 } BODY;
 
 /* a sink's pieces, and the most one read copies into memory (what comes
@@ -406,7 +406,7 @@ static int read_body(CONN *c, BODY *b, long n, HTTPRESP *rs)
 				}
 			}
 			if (!sb_room(b->body, want)) {
-				b->failed = 2;
+				b->failed = 3;	/* (no memory: not its size) */
 				return 0;
 			}
 			to = b->body->s + b->body->len;
@@ -655,6 +655,7 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	if ((h->encoding == 1 || h->encoding == 2) && !b.to_sink && !rs->packed && body && body->len > start) {
 		SBUF plain;
 		int good;
+		long plain_len;
 		t0 = pf_ms();
 		sb_init(&plain);
 		/* a piece at a time with the machine's turns between: iamexpat.de's
@@ -662,14 +663,19 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		   DFB1, GEM held (Erez's "full CPU", 2 Nov 2026) */
 		good = http_unpack((const unsigned char *)body->s + start, body->len - start, h->encoding, &plain,
 				   b.max);
+		plain_len = plain.len;
 		if (good <= 0) {
 			sb_free(&plain);
 			if (good == -2)
 				str_copy(err, "stopped", errlen);
+			else if (good == -3)
+				snprintf(err, errlen, "there isn't the memory to unpack the page from %s (%ld KB unpacked)",
+					 hostport, plain_len >> 10);
 			else if (good < 0)
 				snprintf(err, errlen, "the page from %s unpacks to more than %ld KB", hostport, b.max >> 10);
 			else
 				snprintf(err, errlen, "the packed page from %s is damaged", hostport);
+			conn_log("HTTP", " !! ", err, (long) strlen(err));
 			ok = 0;
 		} else {
 			body->len = start;
@@ -699,12 +705,17 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	return ok;
 
 body_err:
-	if (b.failed == 2)
+	if (b.failed == 3)
+		snprintf(err, errlen, "there isn't the memory for the page from %s (%ld KB came)", hostport,
+			 b.body ? b.body->len >> 10 : 0L);
+	else if (b.failed == 2)
 		snprintf(err, errlen, "the page from %s is too big (more than %ld KB)", hostport, b.max >> 10);
 	else if (b.failed == 1)
 		snprintf(err, errlen, "couldn't save what %s sent (disk full?)", hostport);
 	else
 		snprintf(err, errlen, "%s: %s", hostport, c->err[0] ? c->err : "connection lost");
+	if (b.failed)
+		conn_log("HTTP", " !! ", err, (long) strlen(err));
 	goto fail;
 too_long:
 	snprintf(err, errlen, "%s sent headers too long to be real", hostport);

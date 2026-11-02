@@ -1180,7 +1180,8 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		f->packed = 0;
 		if (good <= 0 || (f->data = sb_steal(&plain)) == NULL) {
 			sb_free(&plain);
-			snprintf(f->err, sizeof f->err, good == -2 ? "stopped" : good < 0 ? "Too big." : "Damaged.");
+			snprintf(f->err, sizeof f->err, good == -2 ? "stopped" : good == -3 ? "There isn't the memory to unpack it." :
+				 good < 0 ? "Too big." : "Damaged.");
 			return 0;
 		}
 		f->len = plain.len;

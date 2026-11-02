@@ -4220,7 +4220,17 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   the bars, 4 the sliders), for a page shown and for one laid out again (a picture's size, text
   size); the status bar set while a page loads waits for the next turn too, and a redraw of the
   bars alone no longer draws the page's next slices with it (the status bar as the news page's
-  pictures ended drew three: 130 ms). A slice is 30 ms (40 on the ST) of bands of 8 rows (16).
+  pictures ended drew three: 130 ms). A slice is 30 ms (40 on the ST) of bands of 8 rows (16);
+  a redraw over half the window (a page shown, uncovered) is drawn in slices of 55 ms till it is
+  done, a scroll meanwhile going back to 30 (`due_big`), and a small one (about 32 rows across the
+  window: a field typed in, a link pressed) whole in one (`DUE_WHOLE`). Erez's DFB1 drew the home
+  page a band at a time for seconds and a typed letter's field in bands, its letters a part at a
+  time (his clips of 2 Nov 2026): in Hatari's Falcon in 256 colours the home page's window was 12
+  slices of 25 to 35 rows (the copy to the screen most of each), now 5 of 50 to 100.
+- **The progress ribbon's colours** are the 16 pens' nearest that are colours (`rib_nearest` in
+  `ui/draw.c`): by the nearest of all (5.2) TOS's pale cyan, magenta, yellow and green came out its
+  light grey, the status bar's own, and the ribbon wasn't seen after its first phase (Erez, 2 Nov
+  2026; since 31 Oct).
 - **Pictures**: a picture's pens are dithered on the DSP with a turn every 4 rows and after its
   program is loaded (a 192 by 128 photo was 0.2 s in one), and the DSP's first check, whose 68030
   half looks every pen up for the first time (95 ms), takes turns but can't be stopped
@@ -4363,7 +4373,10 @@ buffers on top of the parsed page were the peak. Had it been read, the copy of i
   `inflate_piece`): iamexpat.de's 750 KB, 3.3 MB of HTML, was one stretch of 9.3 s in Hatari's DFB1
   and its article's 497 KB one of 6.4 s, GEM held (Erez's "full CPU", 2 Nov 2026); now no stretch
   of either is over 0.42 s and their fetches take as long as before (52.3 s and 34.9 s with the
-  pictures; a turn every 40 ms made them 3 s longer); Esc stops it.
+  pictures; a turn every 40 ms made them 3 s longer); Esc stops it. Where there isn't the memory
+  for a page or its unpacking the message says so (it said "too big"), the failure is in EWEB.LOG,
+  and the log's first lines give the RAM free at the start (Erez's 0.60 failed to unpack
+  iamexpat.de on his DFB1, 2 Nov 2026, not seen in Hatari).
 - **A sheet read as it comes** (`ec_sheet_begin`, `ec_sheet_feed`, `ec_sheet_end`): a `<link>`'s
   sheet sent gzip'd is kept packed by `fetch` (`fetch_packed`; in the memory and disk caches too,
   its type tagged ` packed=gzip`, unpacked there for any other fetch of it) and unpacked 16 KB at

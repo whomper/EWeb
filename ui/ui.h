@@ -107,6 +107,8 @@ typedef struct ewin {
 	/* the page's part still to be drawn (win.c draws it in slices, GEM's
 	   turns between: the guidelines' Speed), from r_page's corner; w 0 none */
 	GRECT due;
+	int due_big;			/* due came over half the window: drawn in SLICE_BIG slices till done */
+	int due_scroll;			/* due has a scroll's rows: never drawn whole (DUE_WHOLE) */
 	int due_bars;			/* drawn at the next turns: 8 the title, 1 the status bar, 2 all the bars, 4 the sliders */
 	short sl[4], sl_set;		/* the sliders as last set (sl_set 0: not yet) */
 } ewin;

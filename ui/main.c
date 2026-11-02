@@ -506,6 +506,16 @@ static void log_start(int on)
 		/* a vector the crash catcher left to another handler or chained
 		   after one (common's crash_vectors: 0.57's 11 bombs on Erez's
 		   Falcon left no CRASH.LOG, vector 11 not being TOS's there) */
+		{
+			/* the memory TOS has for EWeb (the largest blocks): a page
+			   that "doesn't fit" says why (Erez, 2 Nov 2026) */
+			long st = (long) Mxalloc(-1L, 0), tt = (long) Mxalloc(-1L, 1);
+			if (st < 0)
+				st = (long) Malloc(-1L), tt = 0;
+			snprintf(line, sizeof line, "memory: ST RAM %ld KB free, TT/Fast RAM %ld KB", st >> 10,
+				 tt > 0 ? tt >> 10 : 0L);
+			conn_log("EWeb", " -- ", line, (long) strlen(line));
+		}
 		if (crash_vectors()[0]) {
 			snprintf(line, sizeof line, "crash: %s", crash_vectors());
 			conn_log("EWeb", " -- ", line, (long) strlen(line));

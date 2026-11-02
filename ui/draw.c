@@ -85,6 +85,36 @@ int rect_hit(const GRECT *r, short x, short y)
    pens 0 to 15 as they are) */
 static short pen_grey, pen_dark, pen_rib[5];
 
+/* a ribbon's colour: the nearest pen of the 16 that is a colour, not a
+   grey (by the nearest of all, TOS's pale cyan, magenta, yellow and green
+   came out its light grey, the status bar's own: the ribbon wasn't seen
+   after its first phase, Erez, 2 Nov 2026) */
+static short rib_nearest(short r, short g, short b)
+{
+	short p, best = -1, rgb[3];
+	long bd = 0x7fffffffL;
+	for (p = 0; p < 16; p++) {
+		long dr, dg, db, d;
+		short hi, lo;
+		vq_color(vdi_h, p, rgb);
+		hi = rgb[0] > rgb[1] ? rgb[0] : rgb[1];
+		hi = hi > rgb[2] ? hi : rgb[2];
+		lo = rgb[0] < rgb[1] ? rgb[0] : rgb[1];
+		lo = lo < rgb[2] ? lo : rgb[2];
+		if (hi - lo < 200)
+			continue;	/* (white, black, the greys) */
+		dr = rgb[0] - r;
+		dg = rgb[1] - g;
+		db = rgb[2] - b;
+		d = 3 * dr * dr + 4 * dg * dg + 2 * db * db;
+		if (d < bd) {
+			bd = d;
+			best = p;
+		}
+	}
+	return best >= 0 ? best : pen_nearest(vdi_h, 16, r, g, b, 0);
+}
+
 void ui_pens_init(void)
 {
 	/* the ribbon's: blue, then pale cyan, magenta, yellow and green */
@@ -101,7 +131,7 @@ void ui_pens_init(void)
 	pen_grey = pen_nearest(vdi_h, 16, 750, 750, 750, 0);	/* TOS's light grey, pen 8 */
 	pen_dark = pen_nearest(vdi_h, 16, 450, 450, 450, 1);	/* its dark grey, pen 9: for text */
 	for (i = 0; i < 5; i++)
-		pen_rib[i] = pen_nearest(vdi_h, 16, rib[i][0], rib[i][1], rib[i][2], 0);
+		pen_rib[i] = rib_nearest(rib[i][0], rib[i][1], rib[i][2]);
 }
 
 /* light grey with 16 colours or more, else none (white) */
