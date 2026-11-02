@@ -1382,7 +1382,10 @@ On the disk (the guidelines' 6.5): `CACHE\EWEB.PAK` holds the answers one after 
 first time the cache is needed and written at quit.
 What comes is gathered in memory. Once a sixteenth of the cache (1 MB at most) has gathered, it
 is added to the pack when EWeb is idle, about 64 KB a turn of the main loop (`dc_write_step`), not
-while a page or its pictures come; it is written at once only past what memory may hold (`dc_hold`:
+while a page or its pictures come; less where the disk takes longer than 50 ms for it (4 KB at
+least, back to 64 KB as it speeds up), and a big answer (a page's 3 MB of HTML) a step's worth at a
+time, pending in memory till the last of it is on the disk (2 Nov 2026: on Erez's SD card each
+answer was one write, GEM held 8 to 11 s a step for minutes after iamexpat.de's pictures had come); it is written at once only past what memory may hold (`dc_hold`:
 a quarter of the RAM free at the start, 1 to 8 MB). Less waits for quit: browsing page after page
 opens nothing (a reset loses only what is fetched again). An answer written goes from memory (its
 index entry stays), and the quit writes only what is still waiting. (Until 31 Oct 2026 the 1 MB was
@@ -4355,6 +4358,10 @@ buffers on top of the parsed page were the peak. Had it been read, the copy of i
 (the rules' blocks point into it, parsed when first needed) and the rules would have taken 6.1 MB
 (peak 9.5 MB, `drawbench -m`).
 
+- **A page sent packed** (gzip or deflate, kept so in the caches) is unpacked by `fetch` a piece at
+  a time with GEM's turns between (`unpack`, common's `inflate_piece`): iamexpat.de's 750 KB, 3.3 MB
+  of HTML, was one stretch of 9.3 s in Hatari's DFB1 and its article's 497 KB one of 6.4 s, GEM held
+  (Erez's "full CPU", 2 Nov 2026); Esc stops it.
 - **A sheet read as it comes** (`ec_sheet_begin`, `ec_sheet_feed`, `ec_sheet_end`): a `<link>`'s
   sheet sent gzip'd is kept packed by `fetch` (`fetch_packed`; in the memory and disk caches too,
   its type tagged ` packed=gzip`, unpacked there for any other fetch of it) and unpacked 16 KB at

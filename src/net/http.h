@@ -118,4 +118,8 @@ extern char http_gateway[128];
 extern char http_user_agent[128];
 extern char http_accept_language[64];
 
+/* a gzip (how 1) or zlib's deflate (2) answer unpacked into out, up to
+   max, a piece at a time with the machine's turn (pf_idle) every 40 ms:
+   1 whole, 0 damaged, -1 too big, -2 stopped (conn_stop) */
+int http_unpack(const unsigned char *in, long n, int how, SBUF *out, long max);
 #endif

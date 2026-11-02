@@ -420,6 +420,49 @@ int main(int argc, char **argv)
 		free(pic);
 	}
 
+	/* a big page's answer (3 MB, iamexpat.de's HTML) written at idle a
+	   step at a time, never more than a step's 64 KB in one (it was one
+	   write of seconds on Erez's SD card, GEM held all the while, 2 Nov
+	   2026), read back whole; and one left half written at quit, written
+	   whole by dc_close */
+	{
+		long big = 3L << 20, w0, n, steps = 0, was = 0, most = 0, sz;
+		char *page = malloc((size_t) big + 1);
+		int i;
+		for (i = 0; i < big; i++)
+			page[i] = (char) ('a' + i % 23);
+		page[big] = 0;
+		dc_dir(dir, 16L << 20);
+		dc_clear();
+		dc_hold(8L << 20);
+		put("http://big/page", "Cache-Control: max-age=1000\n", page);
+		snprintf(path, sizeof path, "%s%cEWEB00.PAK", dir, PF_SEP);
+		while (dc_write_due() && steps < 200) {
+			dc_write_step();
+			steps++;
+			sz = pf_size(path);
+			if (sz - was > most)
+				most = sz - was;
+			was = sz;
+		}
+		dc_unsaved(&w0, &n);
+		want("a 3 MB answer written at idle in steps of 64 KB at most", w0 == 0 && steps >= 48 &&
+		     most <= (64L << 10) + 64);
+		want("and read back whole", got("http://big/page", page, NULL) == 1);
+		page[7] = 'Z';
+		put("http://big/half", "Cache-Control: max-age=1000\n", page);
+		for (i = 0; i < 10 && dc_write_due(); i++)
+			dc_write_step();
+		dc_unsaved(&w0, &n);
+		want("half of another written at idle", w0 > 0);
+		dc_close();
+		dc_dir(dir, 16L << 20);
+		want("the rest of it at quit: whole at the next start", got("http://big/half", page, NULL) == 1 &&
+		     got("http://big/page", NULL, NULL) == 1);
+		dc_hold(1L << 20);
+		free(page);
+	}
+
 	dc_dir(dir, 1L << 20);
 	dc_clear();
 	printf("disk cache: %d checks, %d failed\n", checks, fails);

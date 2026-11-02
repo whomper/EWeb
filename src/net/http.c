@@ -17,6 +17,101 @@
 #include "tls.h"
 #include "plat.h"
 
+/* ---------------------------------------------------------------- unpacking */
+
+/* a packed answer's bytes, for inflate_piece's get */
+typedef struct {
+	const unsigned char *p;
+	long n;
+} UNPACK_SRC;
+
+static int unpack_get(void *u, unsigned char *buf, long n)
+{
+	UNPACK_SRC *s = u;
+	if (n > s->n)
+		n = s->n;
+	memcpy(buf, s->p, (size_t) n);
+	s->p += n;
+	s->n -= n;
+	return (int) n;
+}
+
+/* the machine's turn every 100 ms while it unpacks, Esc's time for a
+   load (every 40, conn.c's while data comes, made iamexpat.de's 3.3 MB
+   unpack 2.8 s longer in Hatari's DFB1, a turn there 20 to 30 ms) */
+static unsigned long unpack_at;
+
+static void unpack_turn(void)
+{
+	if (pf_idle && pf_ms() - unpack_at >= 100) {
+		pf_idle();
+		unpack_at = pf_ms();
+	}
+}
+
+int http_unpack(const unsigned char *in, long n, int how, SBUF *out, long max)
+{
+	const unsigned char *p = in, *end = in + n, *piece;
+	UNPACK_SRC src;
+	INFLATE *z;
+	long k;
+	int r;
+	if (how == 1) {
+		/* the gzip header (inflate_gzip's), the raw data after it */
+		int flg;
+		if (n < 18 || p[0] != 0x1f || p[1] != 0x8b || p[2] != 8)
+			return 0;
+		flg = p[3];
+		p += 10;
+		if (flg & 4) {			/* FEXTRA */
+			if (end - p < 2)
+				return 0;
+			p += 2 + (p[0] | (p[1] << 8));
+		}
+		if (flg & 8)			/* FNAME */
+			while (p < end && *p++)
+				;
+		if (flg & 16)			/* FCOMMENT */
+			while (p < end && *p++)
+				;
+		if (flg & 2)			/* FHCRC */
+			p += 2;
+		if (end - p < 8)
+			return 0;
+		end -= 8;			/* (its CRC and size) */
+	} else if (n > 6 && (p[0] & 0x0f) == 8 && ((p[0] << 8) | p[1]) % 31 == 0) {
+		p += 2;				/* zlib's header and Adler-32 */
+		end -= 4;
+	}
+	src.p = p;
+	src.n = end - p;
+	z = inflate_open_piece(unpack_get, &src);
+	if (z == NULL)
+		return how == 1 ? inflate_gzip(in, n, out, max) : inflate_zlib(in, n, out, max);
+	unpack_at = pf_ms();
+	for (;;) {
+		k = inflate_piece(z, &piece, 32768, unpack_turn);
+		if (k <= 0) {
+			r = k == 0;
+			break;
+		}
+		if (out->len + k > max) {
+			r = -1;
+			break;
+		}
+		if (!sb_add(out, (const char *) piece, k)) {
+			r = 0;
+			break;
+		}
+		if (conn_stop) {
+			r = -2;
+			break;
+		}
+	}
+	inflate_close(z);
+	return r;
+}
+
 char http_user_agent[128] = "EWeb (Atari Falcon030)";
 char http_accept_language[64] = "en-GB,en;q=0.9,he;q=0.8";
 void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
@@ -562,12 +657,16 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		int good;
 		t0 = pf_ms();
 		sb_init(&plain);
-		good = h->encoding == 1 ?
-		       inflate_gzip((const unsigned char *)body->s + start, body->len - start, &plain, b.max) :
-		       inflate_zlib((const unsigned char *)body->s + start, body->len - start, &plain, b.max);
+		/* a piece at a time with the machine's turns between: iamexpat.de's
+		   750 KB, 3.3 MB of HTML, was one stretch of 9.3 s in Hatari's
+		   DFB1, GEM held (Erez's "full CPU", 2 Nov 2026) */
+		good = http_unpack((const unsigned char *)body->s + start, body->len - start, h->encoding, &plain,
+				   b.max);
 		if (good <= 0) {
 			sb_free(&plain);
-			if (good < 0)
+			if (good == -2)
+				str_copy(err, "stopped", errlen);
+			else if (good < 0)
 				snprintf(err, errlen, "the page from %s unpacks to more than %ld KB", hostport, b.max >> 10);
 			else
 				snprintf(err, errlen, "the packed page from %s is damaged", hostport);

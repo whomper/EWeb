@@ -1154,6 +1154,7 @@ static int packed_head(void *ud, HTTPRESP *rs)
 
 static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		     int keep, const FSUBMIT *post, FETCH *f);
+static int gem_turn(void);
 
 /* fetch_raw, and an answer kept packed (its type says so) given as the
    caller asked: packed (fetch_packed), else unpacked, up to maxbody */
@@ -1172,15 +1173,14 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		SBUF plain;
 		int good;
 		sb_init(&plain);
-		good = f->packed == 1 ? inflate_gzip((const unsigned char *) f->data, f->len, &plain,
-						     maxbody > 0 ? maxbody : HTTP_MAXBODY) :
-		       inflate_zlib((const unsigned char *) f->data, f->len, &plain, maxbody > 0 ? maxbody : HTTP_MAXBODY);
+		good = http_unpack((const unsigned char *) f->data, f->len, f->packed, &plain,
+				   maxbody > 0 ? maxbody : HTTP_MAXBODY);
 		free(f->data);
 		f->data = NULL;
 		f->packed = 0;
 		if (good <= 0 || (f->data = sb_steal(&plain)) == NULL) {
 			sb_free(&plain);
-			snprintf(f->err, sizeof f->err, good < 0 ? "Too big." : "Damaged.");
+			snprintf(f->err, sizeof f->err, good == -2 ? "stopped" : good < 0 ? "Too big." : "Damaged.");
 			return 0;
 		}
 		f->len = plain.len;

@@ -192,8 +192,19 @@ static void meta_set(DCE *e, int which, const char *s)
 
 /* ---------------------------------------------------------------- the answers in memory */
 
+/* an answer longer than an idle step written a step at a time
+   (flush_some): how much of its tag and bytes is on the disk at the
+   ring's place, and which answer it is (its memory, until the last of
+   it is written or it is let go) */
+static long part;
+static const char *part_mem;
+
 static void ent_free(DCE *e)
 {
+	if (e->mem != NULL && e->mem == part_mem) {
+		part = 0;
+		part_mem = NULL;
+	}
 	free(e->meta);
 	free(e->mem);
 }
@@ -978,6 +989,54 @@ static void flush_some(long limit)
 		char *buf;
 		if (!fresh_piece[cur])
 			load_list(cur);
+		if (limit > 0 && TAG + pend[k].len > limit - wrote && at + TAG + pend[k].len <= piece_size) {
+			/* longer than what is left of an idle step (a big page's
+			   answer, 3 MB of HTML, was one write of seconds on Erez's
+			   SD card, GEM held all the while, 2 Nov 2026): a step's
+			   worth of it, the rest at the next steps; it stays pending,
+			   in memory, till the last of it is on the disk */
+			long n = limit - wrote, t;
+			if (pend[k].mem != part_mem)
+				part = 0;	/* (another answer: from its start) */
+			if (n > TAG + pend[k].len - part)
+				n = TAG + pend[k].len - part;
+			if (!open_piece(cur, 1) || pf_seek(pak, at + part) != at + part) {
+				bad = 1;
+				break;
+			}
+			if (part < TAG) {
+				char tag[TAG];
+				put32(tag, pend[k].hash);
+				put32(tag + 4, (unsigned long) pend[k].len);
+				t = TAG - part < n ? TAG - part : n;
+				if (pf_write(pak, tag + part, t) != t) {
+					bad = 1;
+					break;
+				}
+				part += t;
+				wrote += t;
+				n -= t;
+			}
+			if (n > 0 && pf_write(pak, pend[k].mem + (part - TAG), n) != n) {
+				bad = 1;
+				break;
+			}
+			part += n;
+			wrote += n;
+			part_mem = pend[k].mem;
+			dirty[cur] = 1;
+			if (part < TAG + pend[k].len)
+				break;		/* (the rest at the next step) */
+			pend[k].piece = (unsigned char) cur;
+			pend[k].off = at;
+			at += part;
+			free(pend[k].mem);
+			pend[k].mem = NULL;
+			part = 0;
+			part_mem = NULL;
+			k++;
+			continue;
+		}
 		for (j = k; j < np && at + sum + TAG + pend[j].len <= piece_size &&
 		     (limit <= 0 || j == k || wrote + sum + TAG + pend[j].len <= limit); j++)
 			sum += TAG + pend[j].len;
@@ -1011,6 +1070,10 @@ static void flush_some(long limit)
 			pend[i].piece = (unsigned char) cur;
 			pend[i].off = at;
 			at += TAG + pend[i].len;
+			if (pend[i].mem == part_mem) {
+				part = 0;	/* (written whole: at quit, flush) */
+				part_mem = NULL;
+			}
 			free(pend[i].mem);
 			pend[i].mem = NULL;
 		}
@@ -1050,12 +1113,32 @@ int dc_write_due(void)
 	return loaded && dir[0] && pending > 0 && (writing || pending >= idle_min());
 }
 
+/* an idle step's bytes: 64 KB, less where the disk takes longer than
+   STEP_MS for it (Erez's SD card: the cache's writes at quit 4.6 s, its
+   small index 5.6; at idle they held GEM for 8 to 11 s a step, 2 Nov
+   2026), more again as it speeds up; 4 KB at least */
+#define STEP_MS 50
+static long step_bytes = 64L << 10;
+
 void dc_write_step(void)
 {
+	unsigned long t0;
+	long dt;
 	if (!dc_write_due())
 		return;
 	writing = 1;		/* (begun: on to the end, below the mark too) */
-	flush_some(64L << 10);
+	t0 = pf_ms();
+	flush_some(step_bytes);
+	dt = (long) (pf_ms() - t0);
+	if (dt > STEP_MS + STEP_MS / 2) {
+		step_bytes = step_bytes * STEP_MS / dt;
+		if (step_bytes < (4L << 10))
+			step_bytes = 4L << 10;
+	} else if (dt < STEP_MS / 2 && step_bytes < (64L << 10)) {
+		step_bytes *= 2;
+		if (step_bytes > (64L << 10))
+			step_bytes = 64L << 10;
+	}
 	if (pending <= 0) {
 		writing = 0;
 		close_pak();
