@@ -393,7 +393,7 @@ static long inf_len;
 
 static void inf_path(char *out, int size)
 {
-	path_join(out, size, opt.workdir, "EWEB.INF");
+	path_join(out, size, opt.workdir, "eweb.inf");
 }
 
 static void settings_load(void)
@@ -498,7 +498,7 @@ static void log_start(int on)
 {
 	char line[120];
 	if (on) {
-		path_join(conn_logfile, sizeof conn_logfile, opt.workdir, "EWEB.LOG");
+		path_join(conn_logfile, sizeof conn_logfile, opt.workdir, "eweb.log");
 		conn_log_hold(1);
 		crash_report = conn_log_append;	/* a crash's report after what is held */
 		snprintf(line, sizeof line, on == 2 ? "EWeb %s: the log started" : "EWeb %s started", EWEB_VERSION);
@@ -538,7 +538,7 @@ static void cache_open(void)
 		dc_dir("", 0);		/* none: nothing read or kept */
 		return;
 	}
-	path_join(dir, sizeof dir, opt.workdir, "CACHE");
+	path_join(dir, sizeof dir, opt.workdir, "cache");
 	dc_dir(dir, mb << 20);
 	/* what is fetched held in memory while a page's parts come, written
 	   when EWeb is idle: a quarter of the memory free, 1 to 8 MB */
@@ -2006,7 +2006,7 @@ void command(int cmd)
 		break;
 	}
 	case C_HELP:
-		if (help_key(opt.workdir, "EWEB.HYP", 0, "Keys"))
+		if (help_key(opt.workdir, "eweb.hyp", 0, "Keys"))
 			dlg_keys();
 		break;
 	case C_KEYS: dlg_keys(); break;
@@ -2441,7 +2441,7 @@ int app_main(void)
 		return 1;
 	}
 	gap_tag("start: fonts");
-	path_join(path, sizeof path, opt.workdir, "EWEB.FNT");
+	path_join(path, sizeof path, opt.workdir, "eweb.fnt");
 	if (!font_init(path)) {
 		graf_mouse(ARROW, 0);
 		alert(1, "[3][EWeb's fonts are missing:|put EWEB.FNT next to|EWEB.PRG.][ Quit ]");
@@ -2456,25 +2456,25 @@ int app_main(void)
 	net_init();
 	if (opt.log)
 		log_start(1);
-	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "CACERT.PEM");
+	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "cacert.pem");
 #ifndef EW_ST
 	/* the TLS code, the family's TLS.OVL beside it: read at the first
 	   Direct connection (never through the Pi) */
-	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "TLS.OVL");
+	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tls.ovl");
 #endif
 	{
 		/* the cookies that last: read when the first page needs them */
 		char ck[256], key[256];
-		path_join(ck, sizeof ck, opt.workdir, "COOKIES.TXT");
-		path_join(key, sizeof key, opt.workdir, "EWEB.KEY");
+		path_join(ck, sizeof ck, opt.workdir, "cookies.txt");
+		path_join(key, sizeof key, opt.workdir, "eweb.key");
 		ck_file(ck, key);
 		secret_warn = key_warn;
 	}
 	gap_tag("start: cache");
 	cache_open();
-	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "ROOTS.DAT");
-	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "SEED.DAT");
-	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "SIGS.DAT");
+	path_join(tls_roots_cache, sizeof tls_roots_cache, opt.workdir, "roots.dat");
+	path_join(tls_seed_path, sizeof tls_seed_path, opt.workdir, "seed.dat");
+	path_join(tls_sigs_path, sizeof tls_sigs_path, opt.workdir, "sigs.dat");
 	tls_file_stamp = pf_stamp;
 	tls_file_info = pf_info;	/* CACERT.PEM looked up once (6.5) */
 	gap_tag("start: dsp");
@@ -2496,11 +2496,11 @@ int app_main(void)
 		/* the bookmarks: read once a start (6.5), for their menu */
 		gap_tag("start: bookmarks");
 		char bm[256];
-		path_join(bm, sizeof bm, opt.workdir, "BOOKMARK.HTM");
+		path_join(bm, sizeof bm, opt.workdir, "bookmark.htm");
 		bm_file(bm);
 		bm_items();
 		/* the pages shown: read when a page's links are first marked */
-		path_join(bm, sizeof bm, opt.workdir, "HISTORY.TXT");
+		path_join(bm, sizeof bm, opt.workdir, "history.txt");
 		hg_file(bm);
 	}
 	gap_tag("start: menus");
@@ -2544,7 +2544,7 @@ int app_main(void)
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
 	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
 #ifndef EW_ST
-	path_join(path, sizeof path, opt.workdir, "EWEBJS.OVL");
+	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
 #endif

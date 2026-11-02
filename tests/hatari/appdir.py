@@ -114,7 +114,7 @@ if not os.path.exists(small):
                     "mkfont.FAMILIES = mkfont.FAMILIES[:1]; mkfont.SIZES = [13]; "
                     "sys.argv = ['mkfont', %r]; mkfont.main()"
                     % (os.path.join(ROOT, "tools"), small)], check=True)
-inf = os.path.join(work, "EWEB.INF")
+inf = os.path.join(work, "eweb.inf")
 with open(inf, "w", newline="") as f:
     f.write("HOME=about:bookmarks\r\n")
 

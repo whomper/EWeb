@@ -14,7 +14,7 @@
  * history are kept in (src/net/slots.c): written over in place, the
  * newer read, a save cut short, a file of before them.
  *
- *   dctest DIR      (a folder it may make CACHE in)
+ *   dctest DIR      (a folder it may make cache in)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "dctest DIR\n");
 		return 2;
 	}
-	snprintf(dir, sizeof dir, "%s/CACHE", argv[1]);
+	snprintf(dir, sizeof dir, "%s/cache", argv[1]);
 	dc_now = fake_now;
 	dc_dir(dir, 1L << 20);
 	dc_clear();
@@ -188,7 +188,7 @@ int main(int argc, char **argv)
 			/* four pieces of a quarter (and a head and a tag) each, no more */
 			long all = 0, most = 0, n;
 			for (i = 0; i < 6; i++) {
-				snprintf(path, sizeof path, "%s/EWEB%02X.PAK", dir, i);
+				snprintf(path, sizeof path, "%s/eweb%02x.pak", dir, i);
 				n = pf_size(path);
 				if (n > 0) {
 					all += n;
@@ -233,7 +233,7 @@ int main(int argc, char **argv)
 	{
 		int h, opened = 0;
 		for (i = 0; i < 4; i++) {
-			snprintf(path, sizeof path, "%s/EWEB%02X.PAK", dir, i);
+			snprintf(path, sizeof path, "%s/eweb%02x.pak", dir, i);
 			h = pf_open(path, PF_UPDATE);
 			if (h >= 0) {
 				pf_write(h, "EWDCffffffff", 12);
@@ -261,12 +261,12 @@ int main(int argc, char **argv)
 		int h;
 		dc_dir(dir, 1L << 20);
 		dc_clear();
-		snprintf(idx, sizeof idx, "%s%cEWEB.IDX", dir, PF_SEP);
+		snprintf(idx, sizeof idx, "%s%ceweb.idx", dir, PF_SEP);
 		{
 			static const char old[] = "EWDC 3 0000abcd 100 16\n16 4 0 0 0 0\ttext/html\t\t\t\t\thttp://old/\t\n";
 			slot_save(idx, old, (long) strlen(old));
 		}
-		snprintf(path, sizeof path, "%s%cEWEB.PAK", dir, PF_SEP);
+		snprintf(path, sizeof path, "%s%ceweb.pak", dir, PF_SEP);
 		h = pf_open(path, PF_WRITE);
 		pf_write(h, "EWDC0000abcd\r\n\r\nTAG.page", 24);
 		pf_close(h);
@@ -395,7 +395,7 @@ int main(int argc, char **argv)
 			put(key, "Cache-Control: max-age=1000\n", pic);
 		}
 		dc_unsaved(&w0, &n);
-		snprintf(path, sizeof path, "%s%cEWEB00.PAK", dir, PF_SEP);
+		snprintf(path, sizeof path, "%s%ceweb00.pak", dir, PF_SEP);
 		want("held: 2 MB of pictures, nothing written while they come", w0 >= 2000000L &&
 		     pf_size(path) < 0 && dc_write_due());
 		while (dc_write_due() && steps < 100) {
@@ -436,7 +436,7 @@ int main(int argc, char **argv)
 		dc_clear();
 		dc_hold(8L << 20);
 		put("http://big/page", "Cache-Control: max-age=1000\n", page);
-		snprintf(path, sizeof path, "%s%cEWEB00.PAK", dir, PF_SEP);
+		snprintf(path, sizeof path, "%s%ceweb00.pak", dir, PF_SEP);
 		while (dc_write_due() && steps < 200) {
 			dc_write_step();
 			steps++;

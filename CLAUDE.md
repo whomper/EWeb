@@ -224,8 +224,8 @@ hub stay complete, with the evidence.
   the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
   `make hatarigui` after changing it.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
-  when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; in `CACHE\` next to `EWEB.PRG` a ring of
-  pieces `EWEBnn.PAK` of 4 MB at most, each with its list `EWEBnn.LST`, and the index `EWEB.IDX`
+  when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; in `cache\` next to `EWEB.PRG` a ring of
+  pieces `ewebnn.pak` of 4 MB at most, each with its list `ewebnn.lst`, and the index `eweb.idx`
   of 12 bytes an answer, read when first needed and written at quit with the lists that changed,
   a job's answers added in one write, each answer tagged),
   used by `fetch()` in `src/browse`. The index, `COOKIES.TXT` and `HISTORY.TXT` are each two
@@ -303,6 +303,9 @@ hub stay complete, with the evidence.
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
   through the gateway, and starts `EWEB.PRG` there to see common's `cpucheck.c` (`EWEB.PRG`'s
   `main()`, 68000 code; `app_main` is EWeb's) say it needs a Falcon or a TT.
+- **File names are lowercase** (the guidelines' 6.6, DESIGN.md's Decisions): every file EWeb opens or makes by
+  a name of its own, and every file of a release (`make dist`); the rigs put EWeb's files on Hatari's drive
+  under those names and read what it writes in lowercase (common's `ci_path` where the case may vary).
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
   `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make

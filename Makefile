@@ -32,12 +32,10 @@
 #   make fuzz        the HTTP client and the URL parser under libFuzzer
 #   make h5test      Hubbub against the HTML tree-construction tests
 #                    (tests/html5lib/fetch.sh first)
-#   make dist        a release's files in dist/: EWEB.PRG, EWEBJS.OVL, TLS.OVL,
-#                    EWEBST.PRG, EWEB.FNT, EWEB.HYP,
-#                    NSBENCH.TTP, NSBENCH.TXT, PICBENCH.TTP, PICBENCH.TXT,
-#                    PHOTO.JPG, EWGET.TTP, EWGET.TXT,
-#                    CACERT.PEM, ROOTS.DAT, SAMPLE.HTM, NEWS.HTM, NEWS.CSS and
-#                    EWEB-x.y.zip (with the desktop icon, icons/)
+#   make dist        a release's files in dist/, in lowercase (the guidelines'
+#                    6.6): eweb.prg, ewebjs.ovl, tls.ovl, ewebst.prg, eweb.fnt,
+#                    eweb.hyp, cacert.pem, roots.dat and EWEB-x.y.zip (them
+#                    with the desktop icon, icons/)
 #
 # Needs: gcc-m68k-linux-gnu, perl, gperf, python3, Pillow (tools/requirements.txt),
 # fonts-dejavu-core and fonts-dejavu-extra; hatari, Xvfb and xdotool for the rigs.
@@ -358,7 +356,7 @@ COMMON_WARN   := -Wall -Wno-pointer-sign
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
               $(addprefix build/tos/net/,conn.o tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o secret.o net_tos.o \
               sting.o sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o)
-binary/TLS.OVL: common/tlsovl/TLS.OVL
+binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
 	cp $< $@
 build/tos/net/mont030.o: common/atari/mont030.S
@@ -1198,11 +1196,12 @@ dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/
 		binary/CACERT.PEM binary/ROOTS.DAT
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	cp binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
-		binary/CACERT.PEM binary/ROOTS.DAT dist/
-	cp icons/EWEB.RSC icons/EWEBNV.RSC icons/EWEB.ICN icons/EWEBMK.ICN dist/zip/icons/
-	cp dist/EWEB.PRG dist/EWEBJS.OVL dist/TLS.OVL dist/EWEBST.PRG dist/EWEB.FNT dist/EWEB.HYP dist/CACERT.PEM \
-		dist/ROOTS.DAT dist/zip/
+	for f in EWEB.PRG EWEBJS.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT; do \
+		cp binary/$$f dist/$$(echo $$f | tr A-Z a-z) || exit 1; done
+	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
+		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
+	cp dist/eweb.prg dist/ewebjs.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
+		dist/roots.dat dist/zip/
 	cd dist/zip && zip -q -9 -r ../EWEB-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

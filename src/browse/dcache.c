@@ -132,7 +132,7 @@ static void path_of(char *out, int size, const char *name)
 static void piece_path(char *out, int size, int p, const char *ext)
 {
 	char name[24];
-	snprintf(name, sizeof name, "EWEB%02X.%.3s", p & 0xFF, ext);
+	snprintf(name, sizeof name, "eweb%02x.%.3s", p & 0xFF, ext);
 	path_of(out, size, name);
 }
 
@@ -283,7 +283,7 @@ static void begin_piece(int p)
 	pgen[p] = new_number();
 	if (!exists[p]) {
 		char path[300];
-		piece_path(path, sizeof path, p, "LST");
+		piece_path(path, sizeof path, p, "lst");
 		slot_none(path);	/* its list made at once at quit */
 	}
 	listed[p] = 1;		/* its list: what goes in it now */
@@ -299,12 +299,12 @@ static void remove_files(int n)
 	char p[300];
 	int i;
 	for (i = 0; i < n; i++) {
-		piece_path(p, sizeof p, i, "PAK");
+		piece_path(p, sizeof p, i, "pak");
 		pf_remove(p);
-		piece_path(p, sizeof p, i, "LST");
+		piece_path(p, sizeof p, i, "lst");
 		slot_remove(p);
 	}
-	path_of(p, sizeof p, "EWEB.IDX");
+	path_of(p, sizeof p, "eweb.idx");
 	slot_remove(p);
 }
 
@@ -387,11 +387,11 @@ static void load(void)
 	seed = new_number();
 	if (dir[0] == 0)
 		return;
-	path_of(p, sizeof p, "EWEB.IDX");
+	path_of(p, sizeof p, "eweb.idx");
 	d = slot_load(p, &len);		/* its newer slot (slots.c) */
 	if (d != NULL && strncmp(d, "EWDC 3 ", 7) == 0) {
 		/* the one pack of before: removed, not read */
-		path_of(p, sizeof p, "EWEB.PAK");
+		path_of(p, sizeof p, "eweb.pak");
 		pf_remove(p);
 	}
 	s = d != NULL && strncmp(d, "EWDC 4 ", 7) == 0 ? d + 7 : NULL;
@@ -446,7 +446,7 @@ static void load_list(int p)
 	if (listed[p])
 		return;
 	listed[p] = 1;
-	piece_path(path, sizeof path, p, "LST");
+	piece_path(path, sizeof path, p, "lst");
 	d = slot_load(path, &len);
 	snprintf(want, sizeof want, "EWDL 1 %08lx\n", pgen[p]);
 	if (d != NULL && strncmp(d, want, strlen(want)) == 0) {
@@ -530,7 +530,7 @@ static int open_piece(int p, int write)
 	if (pak >= 0 && pak_piece == p && (write || !pak_wo))
 		return 1;
 	close_pak();
-	piece_path(path, sizeof path, p, "PAK");
+	piece_path(path, sizeof path, p, "pak");
 	snprintf(want, sizeof want, "EWDC%08lx\r\n\r\n", pgen[p]);
 	if (fresh_piece[p]) {
 		if (!write)
@@ -1201,7 +1201,7 @@ static void save_list(int p)
 			sb_adds(&s, meta(e, M_URL));
 		sb_addc(&s, '\n');
 	}
-	piece_path(path, sizeof path, p, "LST");
+	piece_path(path, sizeof path, p, "lst");
 	if (s.s != NULL && slot_save(path, s.s, s.len) == 0)
 		dirty[p] = 0;
 	sb_free(&s);
@@ -1246,7 +1246,7 @@ void dc_close(void)
 				sb_add(&s, r, REC);
 			}
 		}
-		path_of(p, sizeof p, "EWEB.IDX");
+		path_of(p, sizeof p, "eweb.idx");
 		/* written over in place: as a new file, Erez's quit took 24 s
 		   on his disk (slots.c) */
 		slot_progress = dc_progress != NULL ? index_told : NULL;

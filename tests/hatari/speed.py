@@ -97,7 +97,7 @@ def run(out, machine, nvdi, prgdir):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(data)
-        r.write(os.path.join("EWEB", "EWEB.INF"), "HOME=\n")
+        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n")
         r.start("C:\\EWEB\\" + prg, ready="EWEB shown ", boot=600 if st else 300)
         # (the start ends where the window is drawn; the home page after
         # it is a load)

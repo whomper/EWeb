@@ -898,10 +898,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
 			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
-			/* the key beside it, as EWEB.KEY beside COOKIES.TXT */
+			/* the key beside it, as eweb.key beside cookies.txt */
 			static char key[1024];
 			const char *f = argv[++i], *sl = strrchr(f, '/');
-			snprintf(key, sizeof key, "%.*sEWEB.KEY", sl ? (int) (sl - f + 1) : 0, f);
+			snprintf(key, sizeof key, "%.*seweb.key", sl ? (int) (sl - f + 1) : 0, f);
 			ck_file(f, key);
 		}
 		else

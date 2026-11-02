@@ -104,7 +104,7 @@ def inf_check(hd):
     """EWEB.INF as ^+ and ^0 saved it: the guidelines' 6.1, an empty line
     after every setting and after the heading, none doubled, the values
     kept"""
-    text = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+    text = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
     lines = text.split("\r\n")
     alone = [l for i, l in enumerate(lines[:-1]) if re.match(r"[A-Z]+=", l) and lines[i + 1] != ""]
     check("  EWEB.INF: an empty line after each setting",
@@ -325,7 +325,7 @@ def eweb(hd):
         r.end()
     # the second time with the connections' log (LOG=1): held in memory,
     # written once a page and its pictures have come, and at the end
-    with open(os.path.join(hd, "EWEB.INF"), "ab") as f:
+    with open(os.path.join(hd, "eweb.inf"), "ab") as f:
         f.write(b"LOG=1\r\n")
     r = Run("eweb2", hd, "EWEB.PRG")
     try:
@@ -339,7 +339,7 @@ def eweb(hd):
         r.case("quit again")
     finally:
         r.end()
-    log = os.path.join(hd, "EWEB.LOG")
+    log = os.path.join(hd, "eweb.log")
     text = open(log, errors="replace").read() if os.path.exists(log) else ""
     check("  EWEB.LOG: the start, the secure page's handshake, the slowest, no cookie",
           "EWeb %s started" % open(os.path.join(ROOT, "VERSION")).read().strip() in text and
@@ -399,12 +399,12 @@ def main():
         hd = os.path.join(OUT, "hd")
         shutil.rmtree(hd, ignore_errors=True)
         os.makedirs(hd)
-        for f in ("EWEB.PRG", "EWEB.FNT", "EWGET.TTP", "TLS.OVL"):
-            shutil.copy(os.path.join(ROOT, "binary", f), hd)
-        shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
-        with open(os.path.join(hd, "EWEB.INF"), "w", newline="") as f:     # as 0.26 wrote it
+        for f in ("EWEB.PRG", "EWEB.FNT", "EWGET.TTP", "TLS.OVL"):      # named as a release has them (6.6)
+            shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f[-4:] in (".PRG", ".TTP") else f.lower()))
+        shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))      # the test authority
+        with open(os.path.join(hd, "eweb.inf"), "w", newline="") as f:     # as 0.26 wrote it
             f.write(OLD_INF)
-        with open(os.path.join(hd, "BOOKMARK.HTM"), "w", newline="") as f:     # a user's bookmarks
+        with open(os.path.join(hd, "bookmark.htm"), "w", newline="") as f:     # a user's bookmarks
             f.write("<!DOCTYPE NETSCAPE-Bookmark-file-1>\r\n<DL><p>\r\n    <DT><A HREF=\"http://68k.news/\">"
                     "68k.news</A>\r\n</DL><p>\r\n")
         eweb(hd)

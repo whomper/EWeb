@@ -103,9 +103,9 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("binary/EWEB.PRG", "binary/EWEBJS.OVL", "binary/TLS.OVL", "binary/EWEBST.PRG", "binary/EWEB.FNT"):
-        if os.path.exists(os.path.join(ROOT, f)):
-            shutil.copy(os.path.join(ROOT, f), hd)
+    for f in ("EWEB.PRG", "EWEBJS.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT"):   # named as a release has them (6.6)
+        if os.path.exists(os.path.join(ROOT, "binary", f)):
+            shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/alpha.html"), os.path.join(hd, "ALPHA.HTM"))
@@ -124,7 +124,7 @@ def hd_for(name, home, inf=""):
         os.makedirs(os.path.dirname(os.path.join(hd, k.upper())), exist_ok=True)
         with open(os.path.join(hd, k.upper()), "wb") as f:
             f.write(data)
-    with open(os.path.join(hd, "EWEB.INF"), "w") as f:
+    with open(os.path.join(hd, "eweb.inf"), "w") as f:
         f.write("HOME=%s\r\n%s" % (home, inf))
     return hd
 
@@ -440,7 +440,7 @@ def browse():
     site = "http://127.0.0.1:%d/site/" % HTTP
     # (the home page's search box: its words to the test site's echo)
     hd = hd_for("browse", site, "SEARCH=%secho?q=%%s\r\n" % site)
-    shutil.copy(os.path.join(work, "CACERT.PEM"), hd)      # the test authority
+    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))      # the test authority
     r = Run("browse", "Falcon:16", hd, windowed=True, network=True)
     try:
         ev = r.wait(r"shown ", 300)
@@ -827,7 +827,7 @@ def browse():
             # shows them; the Bookmarks menu has it; Remove takes it away
             r.key(D, (CTRL,))
             ev = r.wait(r"bookmarked ", 30)
-            bm = (saved("BOOKMARK.HTM") or b"").decode("utf-8", "replace")
+            bm = (saved("bookmark.htm") or b"").decode("utf-8", "replace")
             check("bookmarks: ^D adds the page", ev == "bookmarked 1 1" and
                   'HREF="%sfiles.html">Files</A>' % site in bm, str(r.events()) + "\n" + bm)
             r.key(D, (CTRL,))
@@ -846,14 +846,14 @@ def browse():
                 r.mouse.click(area[0] + area[2] // 2, area[1] + area[3] - 20)
                 time.sleep(0.5)
                 pt = link_point("about:bookmarks", area, int(m.group(5)), "Remove",
-                                ("-m", os.path.join(hd, "BOOKMARK.HTM")))
+                                ("-m", os.path.join(hd, "bookmark.htm")))
                 r.shot(13)
                 if check("bookmarks: Remove found on the page", pt is not None):
                     r.mouse.click(*pt)
                     ev = r.wait(r"shown ", 60)
                     check("bookmarks: Remove takes it away", ev is not None and
                           ev.startswith("shown about:bookmarks ") and
-                          "HREF" not in (saved("BOOKMARK.HTM") or b"HREF").decode("utf-8", "replace"),
+                          "HREF" not in (saved("bookmark.htm") or b"HREF").decode("utf-8", "replace"),
                           str(r.events()))
                     r.shot(14)
         # the history: ^Y shows it (written at quit: below)
@@ -959,7 +959,7 @@ def browse():
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""
         for _ in range(40):		# (written after the log's "quit")
-            hist = (slots.read(os.path.join(hd, "HISTORY.TXT")) or b"").decode("utf-8", "replace")
+            hist = (slots.read(os.path.join(hd, "history.txt")) or b"").decode("utf-8", "replace")
             if "enc/w1255.html" in hist:
                 break
             time.sleep(0.5)
@@ -1052,7 +1052,7 @@ def scripts_without(site):
     """without EWEBJS.OVL: the page as with its scripts off, and the status
     line says why"""
     hd = hd_for("scriptsnoovl", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
-    os.remove(os.path.join(hd, "EWEBJS.OVL"))
+    os.remove(os.path.join(hd, "ewebjs.ovl"))
     r = Run("scriptsnoovl", "Falcon:16", hd, windowed=True, network=True)
     try:
         ev = r.wait(r"shown ", 300)
@@ -1098,7 +1098,7 @@ def scripts_modes(site):
         r.wait(r"quit$", 60)
     finally:
         r.end()
-    inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+    inf = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
     check("scripts: RUNSCRIPTS= kept in EWEB.INF", "\r\nRUNSCRIPTS=2\r\n" in inf, repr(inf[:300]))
     hd = hd_for("scriptsnone", site + "tabs.html", "RUNSCRIPTS=0\r\nSCRIPTS=127.0.0.1\r\n")
     r = Run("scriptsnone", "Falcon:16", hd, windowed=True, network=True)
@@ -1195,7 +1195,7 @@ def falcon4():
         r.shot(2)
         r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Options"), 20 + 3 * 16 + 8)	# its 4th item
         time.sleep(2)
-        inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+        inf = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
         check("falcon4: Options > Write a log, LOG=1 kept", "\nLOG=1\r\n" in inf,
               re.findall(r"\nLOG=.*", inf).__repr__())
         n = len([e for e in r.events() if e.startswith("shown ")])
@@ -1219,11 +1219,11 @@ def falcon4():
         r.shot(1)
         r.key(Q, (CTRL,))
         check("falcon4: ^Q quits", r.wait(r"quit$", 120) is not None and
-              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+              not os.path.exists(os.path.join(hd, "crash.log")), str(r.events()[-5:]))
         log = ""
         for _ in range(20):		# (written after the log's "quit")
-            if os.path.exists(os.path.join(hd, "EWEB.LOG")):
-                log = open(os.path.join(hd, "EWEB.LOG"), "rb").read().decode("latin-1")
+            if os.path.exists(os.path.join(hd, "eweb.log")):
+                log = open(os.path.join(hd, "eweb.log"), "rb").read().decode("latin-1")
                 if "quit:" in log:
                     break
             time.sleep(0.5)
@@ -1258,7 +1258,7 @@ def falcon4_secure():
         return check("falcon4: the test server", False)
     page = "https://127.0.0.1:%d/site/" % (HTTPS + 2)
     hd = hd_for("falcon4tls", page)
-    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "CACERT.PEM"))
+    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))
     r = Run("falcon4tls", "Falcon-4:16", hd, network=True)
     try:
         ev = r.wait(r"shown ", 900)
@@ -1268,7 +1268,7 @@ def falcon4_secure():
         r.shot(0)
         r.key(Q, (CTRL,))
         check("falcon4: ^Q quits after it", r.wait(r"quit$", 120) is not None and
-              not os.path.exists(os.path.join(hd, "CRASH.LOG")), str(r.events()[-5:]))
+              not os.path.exists(os.path.join(hd, "crash.log")), str(r.events()[-5:]))
     finally:
         r.end()
         srv.stdin.close()
@@ -1343,7 +1343,7 @@ def dialogs():
                 r.key(RETURN)
                 saved_ok = r.wait(r"settings ", 120) == "settings changed"
                 time.sleep(settle)
-                inf = open(os.path.join(hd, "EWEB.INF"), "rb").read().decode("latin-1")
+                inf = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
                 check("dialogs: %s, an old INF's DIALOGS3D= gone at the next save" % name,
                       saved_ok and "ZOOM=" in inf and "DIALOGS3D" not in inf, repr(inf[:600]))
                 # the Settings again: Esc empties the text size (the
@@ -1387,7 +1387,7 @@ def svg_page(r, group, name, shot):
     dec = [e for e in evs if re.search(r"^picture (file:///C:/IMG/STAR\.SVG|data:) decoded at ", e)]
     check("%s: %s SVG drawings" % (group, name), ev is not None and len(dec) >= 7 and
           any(e.startswith("picture file:///C:/IMG/MISSING.SVG failed") for e in evs) and
-          not os.path.exists(os.path.join(OUT, name, "CRASH.LOG")), "\n".join(evs[-14:]))
+          not os.path.exists(os.path.join(OUT, name, "crash.log")), "\n".join(evs[-14:]))
     time.sleep(2)
     r.shot(shot)
 
@@ -1472,7 +1472,7 @@ def screens():
                 r.key(RETURN)
                 saved = r.wait(r"settings ", 60) == "settings changed"
                 time.sleep(2)
-                inf = open(os.path.join(OUT, name, "EWEB.INF"), "rb").read().decode("latin-1")
+                inf = open(os.path.join(OUT, name, "eweb.inf"), "rb").read().decode("latin-1")
                 check("screens: the search address holds more than its field shows",
                       ev is not None and saved and "\r\nSEARCH=%s\r\n\r\n" % long_search in inf,
                       repr(inf[:400]))
@@ -1669,7 +1669,7 @@ def st():
                 r.key(RETURN)
                 saved = r.wait(r"settings ", 120) == "settings changed"
                 time.sleep(3)
-                inf = open(os.path.join(OUT, name, "EWEB.INF"), "rb").read().decode("latin-1")
+                inf = open(os.path.join(OUT, name, "eweb.inf"), "rb").read().decode("latin-1")
                 check("st: the search address holds more than its field shows, Shift+arrows at its ends",
                       ev is not None and saved and "\r\nSEARCH=%s\r\n\r\n" % long_search in inf,
                       repr(inf[:400]))
@@ -1790,7 +1790,7 @@ def gateway():
                 time.sleep(2)
                 r.shot(1)
                 check("gateway: %s, a page as Wikipedia's after it" % name, wev is not None and
-                      not os.path.exists(os.path.join(hd, "CRASH.LOG")), "\n".join(r.events()[-25:]))
+                      not os.path.exists(os.path.join(hd, "crash.log")), "\n".join(r.events()[-25:]))
                 r.key(UNDO)
                 r.wait(r"shown ", 600)
                 r.key(Q, (CTRL,))
@@ -1803,8 +1803,8 @@ def gateway():
                       name, "as the Pi's pens" if pens else "the Pi's JPEG and PNG, decoded"),
                       ev is not None and len(got) == 5 and quit is not None and
                       all(("pens from the Pi" in e) == bool(pens) for e in got) and
-                      not os.path.exists(os.path.join(hd, "CRASH.LOG")) and
-                      (pens or os.path.isdir(os.path.join(hd, "CACHE"))), "\n".join(r.events()[-20:]))
+                      not os.path.exists(os.path.join(hd, "crash.log")) and
+                      (pens or os.path.isdir(os.path.join(hd, "cache"))), "\n".join(r.events()[-20:]))
                 if not pens:
                     # the quit's bar moving as the cache's pictures are
                     # written, not standing still the whole step (Erez,
@@ -1843,7 +1843,7 @@ def falcon():
         return check("falcon: the test server", False)
     page = "https://127.0.0.1:%d/site/wikitls.html" % HTTPS
     hd = hd_for("falconwiki", page)
-    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "CACERT.PEM"))
+    shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))
     r = Run("falconwiki", "Falcon:256", hd, network=True)
     try:
         ev = r.wait(r"shown ", 1200)
@@ -1865,7 +1865,7 @@ def falcon():
         check("falcon: a secure page's pictures from another secure host on the DSP, scrolled, again",
               ev is not None and pv is not None and len(dec) >= 7 and again is not None and quit is not None and
               any(re.search(r"/site/wiki\.svg decoded at \d+x\d+ 12x12 ", e) for e in dec) and
-              not os.path.exists(os.path.join(hd, "CRASH.LOG")), "\n".join(r.events()[-30:]))
+              not os.path.exists(os.path.join(hd, "crash.log")), "\n".join(r.events()[-30:]))
     finally:
         r.end()
         srv.stdin.close()
@@ -1911,7 +1911,7 @@ def deep():
                       stop is not None and stop.startswith("stopped "), "\n".join(r.events()[-8:]))
             r.key(Q, (CTRL,))
             quit = r.wait(r"quit$", 300)
-            ok = after is not None and quit is not None and not os.path.exists(os.path.join(hd, "CRASH.LOG"))
+            ok = after is not None and quit is not None and not os.path.exists(os.path.join(hd, "crash.log"))
             check("deep: %s, a page 1000 deep cut, then the next page" % name, ok and cut is not None,
                   "\n".join(r.events()[-10:]))
         finally:

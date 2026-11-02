@@ -379,7 +379,7 @@ try:
         # Back, the link to it in its visited colour (the UA sheet's) and
         # the one to its #end not; the history file written, and read at
         # the next start; a page from another origin's links not visited
-        hist = os.path.join(work, "HISTORY.TXT")
+        hist = os.path.join(work, "history.txt")
         slots.remove(hist)
 
         def link_colours(*args):
@@ -739,12 +739,12 @@ try:
               counts().endswith(" etag=2 304=1"), r1[2] + r2[2] + counts())
         # (a ring of pieces EWEBnn.PAK, each with its list EWEBnn.LST, and
         # the index EWEB.IDX of them all; 31 Oct 2026)
-        check("the cache: its files", os.path.exists(os.path.join(cache, "EWEB00.PAK")) and
-              slots.exists(os.path.join(cache, "EWEB.IDX")) and
-              slots.read(os.path.join(cache, "EWEB.IDX")).startswith(b"EWDC 4 ") and
-              slots.exists(os.path.join(cache, "EWEB00.LST")) and
-              b"/site/cache/fresh.html" in slots.read(os.path.join(cache, "EWEB00.LST")) and
-              not os.path.exists(os.path.join(cache, "EWEB.PAK")), " ".join(os.listdir(cache)))
+        check("the cache: its files", os.path.exists(os.path.join(cache, "eweb00.pak")) and
+              slots.exists(os.path.join(cache, "eweb.idx")) and
+              slots.read(os.path.join(cache, "eweb.idx")).startswith(b"EWDC 4 ") and
+              slots.exists(os.path.join(cache, "eweb00.lst")) and
+              b"/site/cache/fresh.html" in slots.read(os.path.join(cache, "eweb00.lst")) and
+              not os.path.exists(os.path.join(cache, "eweb.pak")), " ".join(os.listdir(cache)))
         # a form sent there with POST: what was kept for it is forgotten
         # (RFC 9111, 4.4), and the next look asks the server
         r1 = cached("-S", "go", site + "post.html")
@@ -920,9 +920,9 @@ try:
         # cookies: set and sent back, a 303's cookie on the next request,
         # the lasting one kept in a file for the next run, another site's
         # picture's refused
-        jar = os.path.join(work, "COOKIES.TXT")
+        jar = os.path.join(work, "cookies.txt")
         slots.remove(jar)
-        for f in (os.path.join(work, "EWEB.KEY"),):
+        for f in (os.path.join(work, "eweb.key"),):
             if os.path.exists(f):
                 os.remove(f)
         site = "http://localhost:%d/site/cookie/" % HTTP
@@ -939,7 +939,7 @@ try:
         kept = (slots.read(jar) or b"").decode()
         check("cookies: the lasting one kept for the next run, its value encrypted", rc2 == 0
               and t2[:1] == ["COOKIE|lasting=1"] and "\tlasting\t{E}" in kept and "session" not in kept
-              and os.path.getsize(os.path.join(work, "EWEB.KEY")) == 16, out2)
+              and os.path.getsize(os.path.join(work, "eweb.key")) == 16, out2)
         slots.remove(jar)
         p = subprocess.run([ewrender, "-f", font, "-d", "-S", "go", site + "form.html"], cwd=work,
                            capture_output=True, text=True, timeout=120)
