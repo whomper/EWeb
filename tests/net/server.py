@@ -62,7 +62,8 @@ Pages:
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
                  the Pi's pens from the disk cache, by the pens asked for;
-                 freshpics.html pics.html with its pictures from there
+                 freshpics.html pics.html with its pictures kept the same
+                 way, from /site/freshpics/ (hits of their own)
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -684,7 +685,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif p == "/site/fresh.html":
             self.send(200, FRESH_PAGE)
         elif p == "/site/freshpics.html":
-            self.send(200, PICS_PAGE.replace(b"src=", b"src=fresh/"))
+            self.send(200, PICS_PAGE.replace(b"src=", b"src=freshpics/"))
         elif p == "/site/gwpics.html":
             self.send(200, GW_PAGE)
         elif p == "/site/wiki.html":
@@ -876,6 +877,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
         elif p.startswith("/site/echo"):
             self.send(200, echo_page("GET", "", p.partition("?")[2].encode()))
+        elif p.startswith("/site/freshpics/") and p[16:] in PICS:
+            HITS[p[6:]] = HITS.get(p[6:], 0) + 1
+            self.send(200, PICS[p[16:]][0], PICS[p[16:]][1], extra=[("Cache-Control", "max-age=3600")])
         elif p.startswith("/site/fresh/") and p[12:] in PICS:
             HITS[p[6:]] = HITS.get(p[6:], 0) + 1
             self.send(200, PICS[p[12:]][0], PICS[p[12:]][1], extra=[("Cache-Control", "max-age=3600")])

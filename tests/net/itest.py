@@ -839,7 +839,7 @@ try:
               outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
               outs[1])
         # their files not kept beside them (Erez, 3 Nov 2026): pics.html's
-        # pictures kept an hour (/site/fresh/), each decoded one a record
+        # pictures kept an hour (/site/freshpics/), each decoded one a record
         # in the pack (img.c, dc_stub), the small GIF's file kept (decoded
         # each time); the next run shows them from the records and the
         # pixels, none asked for; at a size not kept (a narrower window:
@@ -859,25 +859,25 @@ try:
                                text=True, timeout=120)
             out = p.stdout + p.stderr
             return p.returncode, out, dict((k, (how, sz)) for k, how, sz in re.findall(
-                r"^picture %sfresh/(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), out, re.M))
+                r"^picture %sfreshpics/(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), out, re.M))
         r1 = fresh_run()
         pak = b"".join(open(os.path.join(rec, f), "rb").read() for f in os.listdir(rec) if f.endswith(".pak"))
         kept = [k for k in want if k != "anim.gif" and body(k)[:4096] in pak]
         check("the cache: decoded pictures' files not kept but their records, the GIF's kept",
               r1[0] == 0 and not kept and body("anim.gif") in pak and pak.count(b"EWFS\x01") == 4,
               "files kept: %s, records %d\n%s" % (kept, pak.count(b"EWFS\x01"), r1[1]))
-        hits0 = {k: int(fhits("fresh/" + k)) for k in want}
+        hits0 = {k: int(fhits("freshpics/" + k)) for k in want}
         r2 = fresh_run()
         check("the cache: the next run from the records and the pixels, nothing asked for",
               r2[0] == 0 and all(r2[2].get(k, ("", ""))[0] == "from the cache" for k in want if k != "anim.gif") and
-              {k: int(fhits("fresh/" + k)) for k in want} == hits0, r2[1])
+              {k: int(fhits("freshpics/" + k)) for k in want} == hits0, r2[1])
         r3 = fresh_run("-w", "400")
         big = r3[2].get("big.png", ("", "0x0"))
         check("the cache: a size not kept fetched whole and decoded, the others read back",
               r3[0] == 0 and big[0] == "decoded" and big[1] != want["big.png"] and
-              int(fhits("fresh/big.png")) == hits0["big.png"] + 1 and
+              int(fhits("freshpics/big.png")) == hits0["big.png"] + 1 and
               all(r3[2].get(k, ("", ""))[0] == "from the cache" for k in ("photo.jpg", "logo.png", "prog.jpg")) and
-              re.search(r"^image \S+ %s link \d+ \"a big one\" %sfresh/big\.png$" % (big[1], re.escape(site)),
+              re.search(r"^image \S+ %s link \d+ \"a big one\" %sfreshpics/big\.png$" % (big[1], re.escape(site)),
                         r3[1], re.M) is not None, r3[1])
         # pictures from a sheet's url() (its folder's) and from srcset
         p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/bg.html" % HTTP],
