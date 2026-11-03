@@ -1135,9 +1135,20 @@ static long idle_min(void)
 	return max_size / 16 < (1L << 20) ? max_size / 16 : 1L << 20;
 }
 
+static int on_quit;
+
+void dc_on_quit(int on)
+{
+	on_quit = on;
+}
+
 int dc_write_due(void)
 {
-	return loaded && dir[0] && pending > 0 && (writing || pending >= idle_min());
+	/* (at quit only: written at idle only when three quarters of what
+	   memory may hold has gathered, so that no page's part waits on a
+	   write of it all: a machine without TT RAM, 1 MB) */
+	return loaded && dir[0] && pending > 0 &&
+	       (writing || (on_quit ? pending >= hold_max / 4 * 3 : pending >= idle_min()));
 }
 
 /* an idle step's bytes: 64 KB, less where the disk takes longer than

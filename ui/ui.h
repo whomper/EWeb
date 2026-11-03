@@ -33,6 +33,8 @@ typedef struct {
 	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
 	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
 	short trackers;			/* TRACKERS=1: known trackers' parts fetched too (0: left out, Erez's default of 1 Nov 2026) */
+	short cachequit;		/* CACHEQUIT=: the disk cache written only at quit (1, Erez's default of
+					   3 Nov 2026), or a step at a time while EWeb is idle (0) */
 } EWOPT;
 extern EWOPT opt;
 #define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: Erez wanted more, 29 Oct 2026) */

@@ -279,9 +279,17 @@ what was kept for the page it went to.
 The cache takes 32 MB (2 MB without TT RAM, as on a stock Falcon or an
 ST); Settings > General > Disk cache changes it, up to 512 MB, 0 for
 none. A bigger cache keeps more, and its list, written when you quit,
-grows with it. When it is full, what came first makes room for what comes, so
-quitting takes no time: EWeb writes only what came since it last wrote
-and its list. Options > Empty the cache forgets it all.
+grows with it. When it is full, what came first makes room for what comes.
+Options > Empty the cache forgets it all.
+
+The cache is written to the disk only when you quit (Settings >
+General > Write it to the disk only when quitting, ticked): what comes
+while you browse is held in memory, so the disk stays quiet, and
+quitting writes it all at once, which takes longer after a long
+session. Untick it to have EWeb write a little at a time whenever it
+is idle; quitting then writes only what came last. Either way, a
+picture EWeb has decoded is kept as the screen shows it, not as the
+file it came in.
 
 When you quit, a small box, Closing EWeb, says what EWeb is saving
 (the settings, the cookies, the history, the cache's pages and pictures
@@ -777,6 +785,8 @@ there at once; where the window was, when you quit:
 - `CACHE=` the disk cache's size, MB, 0 for none (Settings > General);
   not in the file until you change it, and till then 32 with TT RAM,
   else 2
+- `CACHEQUIT=` 1: the cache written to the disk only when EWeb quits;
+  0: a little at a time while EWeb is idle (Settings > General)
 - `WINDOW=` where the window was
 
 ## When something goes wrong

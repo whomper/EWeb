@@ -214,10 +214,10 @@ static void make_ticks(void)
 	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
 }
 
-#define NTICK 8
+#define NTICK 10
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -321,11 +321,12 @@ static void part_general(short x, short y)
 	d_text(x, ROW(6), "Disk cache");
 	d_field(x + 12, ROW(6), s_cache, 3, '9');
 	d_text(x + 16, ROW(6), "MB  (0: none, 512 at most)");
+	d_tick(x + 3, ROW(7), "Write it to the disk only when quitting", T_CACHEQUIT);
 #ifndef EW_ST
-	d_tick(x, ROW(7), "Pictures on the DSP (a Falcon's)", T_PICDSP);
-	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
+	d_tick(x, ROW(8), "Pictures on the DSP (a Falcon's)", T_PICDSP);
+	d_tick(x, ROW(9), "EWeb's own colours in 256 colours", T_PALETTE);
 #else
-	d_tick(x, ROW(7), "EWeb's own colours in 256 colours", T_PALETTE);
+	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
 #endif
 }
 
@@ -467,6 +468,7 @@ int dlg_settings(void)
 	s_on[T_DSP] = (short) opt.dsp;
 	s_on[T_PICDSP] = opt.picdsp;
 	s_on[T_PALETTE] = opt.palette;
+	s_on[T_CACHEQUIT] = opt.cachequit;
 	s_on[T_SCRIPTS] = opt.runscripts != 0;
 	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
@@ -495,6 +497,7 @@ int dlg_settings(void)
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];
+	opt.cachequit = s_on[T_CACHEQUIT];
 #ifndef EW_ST
 	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
 #endif

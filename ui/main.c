@@ -60,7 +60,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 0 };
+	       1, "", 0, 0, 1 };
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -456,6 +456,8 @@ static void settings_load(void)
 			str_copy(opt.noscripts, eq, sizeof opt.noscripts);
 		else if (!strcmp(line, "CACHE"))
 			opt.cache = (short) atoi(eq);
+		else if (!strcmp(line, "CACHEQUIT"))
+			opt.cachequit = atoi(eq) != 0;
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -529,6 +531,7 @@ static void log_start(int on)
 }
 
 static long ram_free(void);
+static void cache_when(void);
 
 static void cache_open(void)
 {
@@ -540,12 +543,20 @@ static void cache_open(void)
 	}
 	path_join(dir, sizeof dir, opt.workdir, "cache");
 	dc_dir(dir, mb << 20);
-	/* what is fetched held in memory while a page's parts come, written
-	   when EWeb is idle: a quarter of the memory free, 1 to 8 MB */
-	{
-		long hold = ram_free() / 4;
-		dc_hold(hold > (8L << 20) ? 8L << 20 : hold);
-	}
+	cache_when();
+}
+
+/* when the disk cache is written (CACHEQUIT=). At quit (Erez's default
+   of 3 Nov 2026: his SD card ran all the while he browsed, the cache's
+   steps at idle): what comes is held in memory, as much as the cache's
+   size and a quarter of the memory free, written only past that and at
+   quit. Else held while a page's parts come and written a step at a time
+   when EWeb is idle: a quarter of the memory free, 1 to 8 MB */
+static void cache_when(void)
+{
+	long hold = ram_free() / 4, most = opt.cachequit ? cache_mb() << 20 : 8L << 20;
+	dc_on_quit(opt.cachequit);
+	dc_hold(hold > most ? most : hold);
 }
 
 /* the text ends with an empty line */
@@ -694,6 +705,8 @@ int settings_save(void)
 		put(&s, "CACHE", v, "the disk cache (CACHE next to EWEB.PRG), MB: pages, pictures as the screen "
 		    "shows them; 0: none");
 	}
+	put(&s, "CACHEQUIT", opt.cachequit ? "1" : "0", "when the disk cache is written: 1 = only when EWeb "
+	    "quits (what comes is held in memory till then), 0 = a little at a time while EWeb is idle");
 	snprintf(v, sizeof v, "%d,%d,%d,%d", opt.win_x, opt.win_y, opt.win_w, opt.win_h);
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
@@ -1925,7 +1938,8 @@ void command(int cmd)
 		break;
 #endif
 	case C_SETTINGS: {
-		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed;
+		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed,
+		    cachequit = opt.cachequit;
 #ifndef EW_ST
 		int scripted = br_scripts_for(&br, br.url);
 #endif
@@ -1948,6 +1962,8 @@ void command(int cmd)
 			if (cache != opt.cache) {
 				dc_close();	/* what it holds kept; made smaller at the next quit */
 				cache_open();
+			} else if (cachequit != opt.cachequit) {
+				cache_when();	/* (what is held now: written as the new way says) */
 			}
 			/* each window's page laid out again or drawn again */
 			each_window(pics != opt.pictures || zoom != opt.zoom, palette != opt.palette);

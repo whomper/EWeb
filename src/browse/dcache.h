@@ -82,6 +82,10 @@ void dc_job_end(void);
    bytes have gathered (at least 1 MB, dc_hold), when they are all written
    at once */
 void dc_hold(long bytes);
+/* on: nothing is written while EWeb is idle (dc_write_due says none)
+   until three quarters of dc_hold's bytes have gathered, and the rest at
+   dc_close (CACHEQUIT=1); off: a step at a time when idle */
+void dc_on_quit(int on);
 int dc_write_due(void);
 void dc_write_step(void);
 
