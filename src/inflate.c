@@ -538,7 +538,8 @@ struct inflate {
 	HUFF lit, dst;
 	const HUFF *lc, *dc;
 	unsigned char *buf;		/* inflate_piece's window and output, or 0 */
-	long bpos;			/* its next place */
+	long bpos;			/* its next place, from buf + boff */
+	int boff;			/* 0 or 1: where the window starts in buf */
 	unsigned char *win;		/* inflate_read's ring, after the struct; 0 for a piece one */
 };
 
@@ -1001,7 +1002,8 @@ void inflate_close(INFLATE *z)
 
 /* ---------------- a piece where it lies ---------------- */
 
-#define PBUF (2 * WIN + 260)	/* the window, a piece, and a match run on */
+#define PBUF (2 * WIN + 261)	/* the window (from its first or second byte), a piece,
+				   and a match run on */
 
 #ifdef INFLATE_ASM
 /* the hot loop in 68000 assembly (atari/inflate_fast.S): the program
@@ -1037,15 +1039,23 @@ INFLATE *inflate_open_piece(int (*get)(void *u, unsigned char *buf, long n), voi
 
 long inflate_piece(INFLATE *z, const unsigned char **pp, long max, void (*turn)(void))
 {
-	unsigned char *b = z->buf, *op, *end;
+	unsigned char *b = z->buf + z->boff, *op, *end;
 	if (z->state == Z_BAD) {
 		*pp = b + z->bpos;
 		return -1;
 	}
 	if (max > WIN)
 		max = WIN;
-	if (z->bpos > WIN) {		/* the window to the buffer's foot */
-		memmove(b, b + z->bpos - WIN, WIN);
+	if (z->bpos > WIN) {
+		/* the window to the buffer's foot, from its first or second byte
+		   as the bytes lie: moved a long at a time, not a byte (an odd
+		   piece's end made the 68000's memmove copy 32 KB a byte at a
+		   time each piece: 2 s of a map's page on an ST, 3 Nov 2026) */
+		const unsigned char *from = b + z->bpos - WIN;
+		int off = (int)((unsigned long)from & 1) ^ (int)((unsigned long)z->buf & 1);
+		memmove(z->buf + off, from, WIN);
+		z->boff = off;
+		b = z->buf + off;
 		z->bpos = WIN;
 	}
 	op = b + z->bpos;

@@ -101,7 +101,7 @@ if nvdi and not m.nvdi():
     sys.exit("acc_all: no NVDI here (machines.py, AERA_NVDI)")
 def get(app, names):
     """the release's files that --use doesn't give; True if it has them"""
-    need = [n for n in names if n not in use]
+    need = [n for n in names if n.upper() not in use]
     if not need:
         return True
     return subprocess.run([sys.executable, os.path.join(TOOLS, "getrelease.py"), app, rel] + need,
@@ -157,18 +157,18 @@ if prg:
     parts = prg.split(":")
     prg, pf, more = (parts[0], parts[1], parts[2:]) if len(parts) > 1 else (prg, prg.upper() + ".PRG", [])
     if not get(prg, [pf] + more):
-        sys.exit("acc_all: %s's release has no %s" % (prg, " ".join(n for n in [pf] + more if n not in use)))
+        sys.exit("acc_all: %s's release has no %s" % (prg, " ".join(n for n in [pf] + more if n.upper() not in use)))
     if not again:
         os.makedirs(os.path.join(hd, prg.upper()), exist_ok=True)
-        shutil.copy(use.get(pf, os.path.join(rel, pf)), os.path.join(hd, prg.upper(), pf))
+        shutil.copy(use.get(pf.upper(), os.path.join(rel, pf)), os.path.join(hd, prg.upper(), pf))
         for f in more:
-            shutil.copy(use.get(f, os.path.join(rel, f)), os.path.join(hd, prg.upper(), f))
+            shutil.copy(use.get(f.upper(), os.path.join(rel, f)), os.path.join(hd, prg.upper(), f))
     auto = ["--auto", "C:\\%s\\%s" % (prg.upper(), pf)]
 versions = ", ".join("%s %s" % (a, use[f] if f in use else
                                  open(os.path.join(rel, repo.get(a, a).upper() + ".VERSION")).read().strip())
                      for a, f in want.items())
 if prg:
-    versions += ", %s %s in front" % (prg, use[pf] if pf in use else
+    versions += ", %s %s in front" % (prg, use[pf.upper()] if pf.upper() in use else
                                       open(os.path.join(rel, prg.upper() + ".VERSION")).read().strip())
 print("on %s%s; %s%s" % (m.describe(), " with NVDI" if nvdi else "", versions,
                          "; booted again (the accessories at what they measured)" if again else ""), flush=True)
