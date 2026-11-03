@@ -1938,6 +1938,7 @@ void command(int cmd)
 				/* the pages drawn again in the colours now on the
 				   screen, their pictures dithered to them */
 				scr_palette();
+				bar_pens();
 				win_colours();
 			}
 			falcon_dsp_init();
@@ -2443,6 +2444,7 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
+	bar_pens();		/* the progress bar's (5.9), after EWeb's 256 colours */
 	gap_tag("start: fonts");
 	path_join(path, sizeof path, opt.workdir, "eweb.fnt");
 	if (!font_init(path)) {

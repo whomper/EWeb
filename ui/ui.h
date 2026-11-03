@@ -62,7 +62,6 @@ extern short ap_id;
    it (its parts, where it is scrolled to, the address typed, the control
    with the keyboard, the selection); one loads at a time */
 #define WIN_BUTTONS 6		/* win.c's: Back, Forward, Reload, Home, Search, Stop */
-#define RIB_PARTS 16		/* the ribbon's parts, a phase's colour each */
 typedef struct ewin {
 	browser b;
 	struct ewin *next;
@@ -85,11 +84,9 @@ typedef struct ewin {
 	int thr_frame;			/* the throbber's frame shown: 0 at rest */
 	int stopper;			/* something coming that Stop and Esc stop (a load, its
 					   pictures): win_throb's busy, the Stop button lit */
-	struct {
-		short end, pen;
-	} rib[RIB_PARTS];
-	int nrib;
-	short rib_at;			/* how far it has come */
+	int rib_on;			/* the progress bar shown (the guidelines' 5.9) */
+	short rib_at;			/* how far it has come, 0 to PB_FULL */
+	short rib_drawn;		/* how far it is drawn on the screen */
 	unsigned long rib_full;		/* when it filled (ms), 0: not full */
 	int at_rest;			/* the status bar says what the page says */
 	struct fctl *f_focus;		/* the control the keyboard is in, NULL none */
@@ -150,7 +147,7 @@ int rect_and(GRECT *a, const GRECT *b);	/* a = a & b; 0 when nothing is left */
 int rect_hit(const GRECT *r, short x, short y);
 short grey_pen(void);		/* light grey where there is one, else 0 */
 short dark_pen(void);		/* dark grey where there is one, else 1 */
-short ribbon_pen(int phase);	/* the progress ribbon's colour for a phase, 0 to 4 */
+void bar_pens(void);		/* the progress bar's pens found (5.9): at start, after the palette changes */
 void ui_pens_init(void);	/* those found among the first 16 (5.2), at start */
 /* UTF-8 to the Atari character set, Hebrew laid out for the screen: for
    the window's title and info line, which GEM draws as they are */

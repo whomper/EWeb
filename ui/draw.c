@@ -10,6 +10,7 @@
 #include <stdlib.h>
 
 #include "ui.h"
+#include "progbar.h"
 #include "bidi.h"
 #include "charset.h"
 #include "util.h"
@@ -83,55 +84,24 @@ int rect_hit(const GRECT *r, short x, short y)
    (vq_color: NVDI's 16 are not TOS's, a TT's 9 to 14 are light), never a
    fixed pen number; found once, at start (EWeb's own 256 colours leave
    pens 0 to 15 as they are) */
-static short pen_grey, pen_dark, pen_rib[5];
-
-/* a ribbon's colour: the nearest pen of the 16 that is a colour, not a
-   grey (by the nearest of all, TOS's pale cyan, magenta, yellow and green
-   came out its light grey, the status bar's own: the ribbon wasn't seen
-   after its first phase, Erez, 2 Nov 2026) */
-static short rib_nearest(short r, short g, short b)
-{
-	short p, best = -1, rgb[3];
-	long bd = 0x7fffffffL;
-	for (p = 0; p < 16; p++) {
-		long dr, dg, db, d;
-		short hi, lo;
-		vq_color(vdi_h, p, rgb);
-		hi = rgb[0] > rgb[1] ? rgb[0] : rgb[1];
-		hi = hi > rgb[2] ? hi : rgb[2];
-		lo = rgb[0] < rgb[1] ? rgb[0] : rgb[1];
-		lo = lo < rgb[2] ? lo : rgb[2];
-		if (hi - lo < 200)
-			continue;	/* (white, black, the greys) */
-		dr = rgb[0] - r;
-		dg = rgb[1] - g;
-		db = rgb[2] - b;
-		d = 3 * dr * dr + 4 * dg * dg + 2 * db * db;
-		if (d < bd) {
-			bd = d;
-			best = p;
-		}
-	}
-	return best >= 0 ? best : pen_nearest(vdi_h, 16, r, g, b, 0);
-}
+static short pen_grey, pen_dark;
 
 void ui_pens_init(void)
 {
-	/* the ribbon's: blue, then pale cyan, magenta, yellow and green */
-	static const short rib[5][3] = { { 0, 0, 1000 }, { 500, 1000, 1000 }, { 1000, 500, 1000 },
-					 { 1000, 1000, 500 }, { 500, 1000, 500 } };
-	int i;
 	if (planes < 4) {
 		pen_grey = 0;
 		pen_dark = 1;
-		for (i = 0; i < 5; i++)
-			pen_rib[i] = 1;
 		return;
 	}
 	pen_grey = pen_nearest(vdi_h, 16, 750, 750, 750, 0);	/* TOS's light grey, pen 8 */
 	pen_dark = pen_nearest(vdi_h, 16, 450, 450, 450, 1);	/* its dark grey, pen 9: for text */
-	for (i = 0; i < 5; i++)
-		pen_rib[i] = rib_nearest(rib[i][0], rib[i][1], rib[i][2]);
+}
+
+/* the progress bar's pens (common's progbar, the guidelines' 5.9), on the
+   status bar's ground: light grey, white with fewer than 16 colours */
+void bar_pens(void)
+{
+	progbar_pens(vdi_h, planes >= 4 ? pen_grey : 0);
 }
 
 /* light grey with 16 colours or more, else none (white) */
@@ -144,12 +114,6 @@ short grey_pen(void)
 short dark_pen(void)
 {
 	return pen_dark;
-}
-
-/* the progress ribbon's colour for a phase (0 to 4) */
-short ribbon_pen(int phase)
-{
-	return phase >= 0 && phase < 5 ? pen_rib[phase] : 1;
 }
 
 void fill(GRECT *r, short color)

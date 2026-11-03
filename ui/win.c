@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "ui.h"
+#include "progbar.h"
 #include "canvas.h"
 #include "charset.h"
 #include "click.h"
@@ -400,40 +401,39 @@ int win_throb_frames(void)
 
 /* ---------------------------------------------------------------- the status bar */
 
-/* the ribbon: how far a load has come, 0..1024 of the bar's width, in
-   parts each the colour of the phase it came in */
-
-/* each phase's pen (connecting, the page, its stylesheets, building it,
-   its pictures): the darker colours of the system 16, which read on the
-   grey; black where there are only 4 colours or 2 */
-static short rib_pen(int phase)
-{
-	return ribbon_pen(phase);	/* (5.2: by its colour, not a pen number) */
-}
+/* the progress bar (common's progbar, the guidelines' 5.9; Erez, 3 Nov
+   2026): how far a load has come, 0..PB_FULL of the status bar's width,
+   at its foot, filling from left to right; its colours lie fixed along
+   its width (blues in 256 colours, pens 1 to 15 in 16, black else) and
+   the status bar's words name the phase */
 
 static short rib_rows(void)
 {
 	return tall ? 3 : 2;
 }
 
+/* the bar's box: the status bar's foot, inside its edges */
+static void rib_box(GRECT *r)
+{
+	r->x = cur->r_stat.x + 1;
+	r->w = cur->r_stat.w - 2;
+	r->y = cur->r_stat.y + cur->r_stat.h - rib_rows();
+	r->h = rib_rows();
+}
+
 static void draw_ribbon(void)
 {
-	GRECT r;
-	short x0 = cur->r_stat.x + 1, w = cur->r_stat.w - 2, from = 0;
-	int i;
-	r.y = cur->r_stat.y + cur->r_stat.h - rib_rows();
-	r.h = rib_rows();
-	for (i = 0; i < cur->nrib; i++) {
-		r.x = x0 + (short) ((long) w * from / 1024);
-		r.w = (short) ((long) w * cur->rib[i].end / 1024) - (r.x - x0);
-		if (r.w > 0)
-			fill(&r, cur->rib[i].pen);
-		from = cur->rib[i].end;
-	}
-	r.x = x0 + (short) ((long) w * from / 1024);
-	r.w = x0 + w - r.x;
-	if (r.w > 0)
-		fill(&r, paper());
+	GRECT b, g;
+	short at = cur->rib_on ? cur->rib_at : 0;
+	rib_box(&b);
+	if (at > 0)
+		progbar_fill(vdi_h, b.x, b.y, b.w, b.h, 0, at);
+	g = b;
+	g.x = b.x + (short) ((long) b.w * at / PB_FULL);
+	g.w = b.x + b.w - g.x;
+	if (g.w > 0)
+		fill(&g, paper());
+	cur->rib_drawn = at;
 }
 
 static void draw_status(GRECT *clip)
@@ -461,37 +461,64 @@ static void draw_status(GRECT *clip)
 	}
 }
 
+/* the bar from what is drawn to where it is now, through the window's
+   rectangle list (only what is new: the guidelines' Speed); all of it
+   drawn again when it went back (another load) */
 static void redraw_ribbon(void)
 {
-	GRECT r = cur->r_stat;
-	r.y = cur->r_stat.y + cur->r_stat.h - rib_rows();
-	r.h = rib_rows();
-	redraw(&r, 1);
+	GRECT b, r, a;
+	short from = cur->rib_drawn, to = cur->rib_on ? cur->rib_at : 0;
+	int took;
+	rib_box(&b);
+	if (to < from) {
+		redraw(&b, 1);
+		return;
+	}
+	if (to == from)
+		return;
+	a = b;
+	a.x = b.x + (short) ((long) b.w * from / PB_FULL);
+	a.w = b.x + (short) ((long) b.w * to / PB_FULL) - a.x;
+	cur->rib_drawn = to;
+	if (a.w <= 0)
+		return;
+	took = screen_lock();
+	graf_mouse(M_OFF, 0);
+	wind_get(cur->h, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w > 0 && r.h > 0) {
+		GRECT c = r;
+		if (rect_and(&c, &a)) {
+			clip_on(&c);
+			progbar_fill(vdi_h, b.x, b.y, b.w, b.h, from, to);
+		}
+		wind_get(cur->h, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	clip_off();
+	graf_mouse(M_ON, 0);
+	press_update_end(took);
 }
 
+/* how far a load has come (0 to PB_FULL; phase < 0: done, the bar gone).
+   The phase itself no longer has a colour (5.9): the status bar's words
+   name it */
 void win_progress(int phase, int at)
 {
 	if (phase < 0) {
-		if (cur->nrib == 0)
+		if (!cur->rib_on)
 			return;
-		cur->nrib = 0;
+		cur->rib_on = 0;
 		cur->rib_at = 0;
 		cur->rib_full = 0;
 	} else {
-		if (at > 1024)
-			at = 1024;
-		if (at <= cur->rib_at && cur->nrib > 0)
+		if (at > PB_FULL)
+			at = PB_FULL;
+		if (at < 0)
+			at = 0;
+		if (cur->rib_on && at <= cur->rib_at)
 			return;		/* it only goes on */
-		if (cur->nrib > 0 && cur->rib[cur->nrib - 1].pen == rib_pen(phase))
-			cur->rib[cur->nrib - 1].end = (short) at;
-		else if (cur->nrib < RIB_PARTS) {
-			cur->rib[cur->nrib].pen = rib_pen(phase);
-			cur->rib[cur->nrib++].end = (short) at;
-		} else {
-			cur->rib[cur->nrib - 1].end = (short) at;
-		}
+		cur->rib_on = 1;
 		cur->rib_at = (short) at;
-		cur->rib_full = at == 1024 ? pf_ms() | 1 : 0;
+		cur->rib_full = at == PB_FULL ? pf_ms() | 1 : 0;
 	}
 	if (cur->h > 0 && !cur->iconified)
 		redraw_ribbon();
@@ -505,7 +532,7 @@ int win_progress_shown(void)
 	for (cur = wins; cur != NULL; cur = cur->next) {
 		if (cur->rib_full && pf_ms() - cur->rib_full >= 800)
 			win_progress(-1, 0);
-		shown |= cur->nrib > 0;
+		shown |= cur->rib_on;
 	}
 	cur = was;
 	return shown;

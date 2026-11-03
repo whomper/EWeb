@@ -833,9 +833,11 @@ releases.
   throbber, below, at the right end), the page under it with the window's slider, a status bar at the
   foot (your choice of 21 Oct 2026, design C of four drawn: a link's address under the mouse, what a
   load is doing, how a secure page came; and along its foot a line two or three pixels high that
-  fills from left to right as a load comes, each part in its phase's colour, the darker system
-  colours that read on the grey: connecting blue, the page cyan, its stylesheets magenta, building
-  it yellow, its pictures green; black with 4 colours or 2. Each phase has its stretch of the line
+  fills from left to right as a load comes: since 3 Nov 2026 the family's progress bar (the
+  guidelines' 5.9, your decision: common's `progbar`), its colours fixed along its width and shown
+  as it fills, blue from dark navy at the left to light sky blue at the right in 256 colours, pens
+  1 to 15 in order in 16 (less the grey's own), black on any other screen; the status bar's words
+  name the phase (it was a colour a phase before). Each phase has its stretch of the line
   (0-8%, 8-41%, 41-55%, 55-64%, 64-100%); within one it goes on with the bytes that come (never to
   the end, as how much will come isn't known) or with the pictures done; once full it goes a moment
   later. GEM's info line takes only text, so the window has none and draws its own), the
@@ -4268,10 +4270,11 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   - A scroll while the last one's rows were still due drew them at the new place before the copy
     moved them (the top or bottom rows a step out of place, every machine): now from where they
     were.
-- **The progress ribbon's colours** are the 16 pens' nearest that are colours (`rib_nearest` in
-  `ui/draw.c`): by the nearest of all (5.2) TOS's pale cyan, magenta, yellow and green came out its
-  light grey, the status bar's own, and the ribbon wasn't seen after its first phase (Erez, 2 Nov
-  2026; since 31 Oct).
+- **The progress bar** is common's `progbar` (the guidelines' 5.9, 3 Nov 2026): `bar_pens` in
+  `ui/draw.c` finds its pens at the start and after EWeb's 256 colours change (its blues are read
+  from the palette as it is), and `win_progress` draws only what it gained since the last turn
+  (`redraw_ribbon`, `rib_drawn`), the ground beyond it in the status bar's grey. The phases' own
+  colours went (on 2 Nov TOS's pale ones had come out the status bar's grey: `rib_nearest`, gone).
 - **Pictures**: a picture's pens are dithered on the DSP with a turn every 4 rows and after its
   program is loaded (a 192 by 128 photo was 0.2 s in one), and the DSP's first check, whose 68030
   half looks every pen up for the first time (95 ms), takes turns but can't be stopped
