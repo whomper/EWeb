@@ -9,6 +9,9 @@ tests/layout/overflow.html through ewrender:
   drawn (no red pixel in the picture), in EWEB.PRG's edition and the
   ST's;
 - a link hidden so isn't followed when clicked (-K);
+- pictures beside such a box (clipped.html: a carousel's slides to its
+  right and left) drawn in 2, 16 and 256 colours and true colour
+  without a fault (0.63 copied less than nothing for them);
 - a carousel's 2000-pixel track in such a box doesn't make the page
   wider than the window (no "wider:" line);
 - a box positioned in such a box: within it when the box is its
@@ -92,6 +95,16 @@ def main():
             red = [(x, y) for y in range(h) for x, (r, g, b) in enumerate(rows[y]) if r > 150 and g < 110 and b < 110]
             if red:
                 fail("%s: red text that a box hides was drawn, at %s" % (os.path.basename(ed), red[:5]))
+            # pictures beside such a box, a carousel's slides waiting to
+            # its right and left: none of them on the box's canvas, drawn
+            # in every mode without a copy of less than nothing (0.63's
+            # two bombs, Erez 3 Nov 2026: memcpy with x1 < x0)
+            for pens in ("2", "16", "256", None):
+                p = subprocess.run([ed, "-f", font, "-o", out] + (["-p", pens] if pens else []) +
+                                   [os.path.join(HERE, "clipped.html")], capture_output=True, text=True, timeout=120)
+                if p.returncode != 0 or "ERROR" in p.stderr:
+                    fail("%s -p %s: pictures beside a box hiding its overflow: %s" %
+                         (os.path.basename(ed), pens or "true colour", p.stderr[-800:]))
     d = subprocess.run([ewrender, "-f", font, "-d", PAGE], capture_output=True, text=True, timeout=120).stdout
     if re.search(r"^wider:", d, re.M):
         fail("a carousel's track made the page wider than the window")

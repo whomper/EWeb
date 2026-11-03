@@ -644,7 +644,10 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 		x1 = c->w - px;
 	if (py + y1 > c->h)
 		y1 = c->h - py;
-	if (y0 >= y1)
+	/* none of it on this canvas: a picture beside a box that hides its
+	   overflow (a carousel's next slide) is on the page's canvas but not
+	   on the box's, and its width here would be less than nothing */
+	if (y0 >= y1 || x0 >= x1)
 		return;
 	/* the rows' places stepped, not multiplied out (libgcc's on the 68000) */
 	k = (long) y0 * pic->w;

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<title>Pictures beside a box that hides its overflow</title>
+<style>
+.frame { width: 120px; height: 60px; overflow: hidden; position: relative; border: 1px solid #000; }
+.track { position: absolute; top: 0; left: 0; width: 600px; white-space: nowrap; }
+.track img { width: 100px; height: 50px; }
+.left { position: absolute; top: 0; left: -300px; }
+</style>
+<p>A carousel: its first slide shows, the others wait to the right of the box, and one to its left.</p>
+<div class="frame">
+ <div class="track"><img src="img/one.png" alt="one"><img src="img/four.png" alt="two"><img src="img/one.png" alt="three"><img src="img/four.png" alt="four"></div>
+ <img class="left" src="img/four.png" alt="left">
+</div>
+<p>After the box.</p>
