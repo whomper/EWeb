@@ -61,7 +61,8 @@ Pages:
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
   /site/fresh.html  the photo from /site/fresh/, kept an hour (max-age):
-                 the Pi's pens from the disk cache, by the pens asked for
+                 the Pi's pens from the disk cache, by the pens asked for;
+                 freshpics.html pics.html with its pictures from there
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -682,6 +683,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, WEBP_PAGE)
         elif p == "/site/fresh.html":
             self.send(200, FRESH_PAGE)
+        elif p == "/site/freshpics.html":
+            self.send(200, PICS_PAGE.replace(b"src=", b"src=fresh/"))
         elif p == "/site/gwpics.html":
             self.send(200, GW_PAGE)
         elif p == "/site/wiki.html":

@@ -838,29 +838,47 @@ try:
               [(k, "decoded" if k == "anim.gif" else "from the cache", v) for k, v in want.items()]) and
               outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
               outs[1])
-        # their files not kept beside them (Erez, 3 Nov 2026): each a record
-        # in the pack (img.c, dc_stub), the small GIF's kept whole (decoded
-        # each time); asked for again at a size not kept (a narrower
-        # window: the big one smaller), the file is fetched whole, decoded,
-        # and the others still read back
+        # their files not kept beside them (Erez, 3 Nov 2026): pics.html's
+        # pictures kept an hour (/site/fresh/), each decoded one a record
+        # in the pack (img.c, dc_stub), the small GIF's file kept (decoded
+        # each time); the next run shows them from the records and the
+        # pixels, none asked for; at a size not kept (a narrower window:
+        # the big one smaller) its file is fetched whole and decoded, the
+        # others still read back
         def body(name):
             return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(site + name, timeout=10).read()
-        pak = b"".join(open(os.path.join(pix, f), "rb").read() for f in os.listdir(pix) if f.endswith(".pak"))
+        def fhits(name):
+            return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                "http://localhost:%d/site/hits/%s" % (HTTP, name), timeout=10).read()
+        rec = os.path.join(work, "RECCACHE")
+        shutil.rmtree(rec, ignore_errors=True)
+
+        def fresh_run(*more):
+            p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-C", rec] + list(more) +
+                               ["http://localhost:%d/site/freshpics.html" % HTTP], cwd=work, capture_output=True,
+                               text=True, timeout=120)
+            out = p.stdout + p.stderr
+            return p.returncode, out, dict((k, (how, sz)) for k, how, sz in re.findall(
+                r"^picture %sfresh/(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), out, re.M))
+        r1 = fresh_run()
+        pak = b"".join(open(os.path.join(rec, f), "rb").read() for f in os.listdir(rec) if f.endswith(".pak"))
         kept = [k for k in want if k != "anim.gif" and body(k)[:4096] in pak]
-        check("the cache: decoded pictures' files not kept, the GIF's kept", not kept and body("anim.gif") in pak
-              and pak.count(b"EWFS\x01") >= 4, "files kept: %s" % kept)
-        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "400", "-C", pix,
-                            "http://localhost:%d/site/pics.html" % HTTP], cwd=work, capture_output=True, text=True,
-                           timeout=120)
-        out = p.stdout + p.stderr
-        narrow = dict((k, (how, sz)) for k, how, sz in
-                      re.findall(r"^picture %s(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), out, re.M))
-        big = narrow.get("big.png", ("", "0x0"))
+        check("the cache: decoded pictures' files not kept but their records, the GIF's kept",
+              r1[0] == 0 and not kept and body("anim.gif") in pak and pak.count(b"EWFS\x01") == 4,
+              "files kept: %s, records %d\n%s" % (kept, pak.count(b"EWFS\x01"), r1[1]))
+        hits0 = {k: int(fhits("fresh/" + k)) for k in want}
+        r2 = fresh_run()
+        check("the cache: the next run from the records and the pixels, nothing asked for",
+              r2[0] == 0 and all(r2[2].get(k, ("", ""))[0] == "from the cache" for k in want if k != "anim.gif") and
+              {k: int(fhits("fresh/" + k)) for k in want} == hits0, r2[1])
+        r3 = fresh_run("-w", "400")
+        big = r3[2].get("big.png", ("", "0x0"))
         check("the cache: a size not kept fetched whole and decoded, the others read back",
-              p.returncode == 0 and big[0] == "decoded" and big[1] != want["big.png"] and
-              all(narrow.get(k, ("", ""))[0] == "from the cache" for k in ("photo.jpg", "logo.png", "prog.jpg")) and
-              re.search(r"^image \S+ %s link \d+ \"a big one\" %sbig\.png$" % (big[1], re.escape(site)),
-                        out, re.M) is not None, out)
+              r3[0] == 0 and big[0] == "decoded" and big[1] != want["big.png"] and
+              int(fhits("fresh/big.png")) == hits0["big.png"] + 1 and
+              all(r3[2].get(k, ("", ""))[0] == "from the cache" for k in ("photo.jpg", "logo.png", "prog.jpg")) and
+              re.search(r"^image \S+ %s link \d+ \"a big one\" %sfresh/big\.png$" % (big[1], re.escape(site)),
+                        r3[1], re.M) is not None, r3[1])
         # pictures from a sheet's url() (its folder's) and from srcset
         p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/bg.html" % HTTP],
                            cwd=work, capture_output=True, text=True, timeout=120)
