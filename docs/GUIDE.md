@@ -283,7 +283,7 @@ grows with it. When it is full, what came first makes room for what comes.
 Options > Empty the cache forgets it all.
 
 The cache is written to the disk only when you quit (Settings >
-General > Write it to the disk only when quitting, ticked): what comes
+General > Write it to the disk only at quit, ticked): what comes
 while you browse is held in memory, so the disk stays quiet, and
 quitting writes it all at once, which takes longer after a long
 session. Untick it to have EWeb write a little at a time whenever it

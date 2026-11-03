@@ -1461,7 +1461,7 @@ holds pictures ready to show.
   run showing all from the records with no request; at 400 wide the big one fetched whole
   (one request more) and decoded, the others read back.
 - **Written at quit** (your decision of 3 Nov 2026, a setting, at quit by default:
-  `CACHEQUIT=`, Settings > General > Write it to the disk only when quitting). Measured on the
+  `CACHEQUIT=`, Settings > General > Write it to the disk only at quit). Measured on the
   Falcon with 128 MB TT RAM: a page of 24 photos wrote 2.5 MB after its pictures had come, 157
   writes in 64 KB steps at idle (40 opens of the piece), and on your SD card (about 48 ms a
   disk command) a slow step shrinks to 4 KB: about a minute of the disk after each such page,

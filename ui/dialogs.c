@@ -321,7 +321,7 @@ static void part_general(short x, short y)
 	d_text(x, ROW(6), "Disk cache");
 	d_field(x + 12, ROW(6), s_cache, 3, '9');
 	d_text(x + 16, ROW(6), "MB  (0: none, 512 at most)");
-	d_tick(x + 3, ROW(7), "Write it to the disk only when quitting", T_CACHEQUIT);
+	d_tick(x + 3, ROW(7), "Write it to the disk only at quit", T_CACHEQUIT);
 #ifndef EW_ST
 	d_tick(x, ROW(8), "Pictures on the DSP (a Falcon's)", T_PICDSP);
 	d_tick(x, ROW(9), "EWeb's own colours in 256 colours", T_PALETTE);

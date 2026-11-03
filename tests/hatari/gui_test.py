@@ -1310,7 +1310,8 @@ def dialogs():
                 def settings(n):
                     """the Settings shown (8x16 characters) and their
                     background where nothing is drawn on it: right of OK
-                    (row 18), and right of the General page's tenth row"""
+                    (row 18), and right of the General page's tenth row
+                    (past its words, which end by column 53)"""
                     r.key(COMMA, (CTRL,))
                     at = r.wait(r"dialog at ", 120)
                     if at is None:
@@ -1319,7 +1320,7 @@ def dialogs():
                     time.sleep(3)
                     im = Image.open(r.shot(n)).convert("RGB")
                     return [im.getpixel((dx + 56 * 8 + 4, dy + 18 * 16 + 8)),
-                            im.getpixel((dx + 40 * 8, dy + (4 + 9) * 16 + 2 + 9 * 6 + 8))]
+                            im.getpixel((dx + 55 * 8, dy + (4 + 9) * 16 + 2 + 9 * 6 + 8))]
 
                 white = lambda px: px and all(p == (255, 255, 255) for p in px)
                 grey = lambda px: px and all(p[0] == p[1] == p[2] and 64 < p[0] < 255 for p in px)
