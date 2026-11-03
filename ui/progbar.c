@@ -21,10 +21,17 @@ static long dist(const short *a, const short *b)
 /* black: the darkest of the first n pens */
 static short black_pen(short h, short n)
 {
+	/* pen 1, GEM's black, unless another is darker: EmuTOS in ST high
+	   answers both pens 1000,1000,1000, and the first of a tie was pen 0,
+	   white on white (EPDF's bar not shown, 3 Nov 2026) */
 	short p, best = 1, rgb[3];
-	long bl = 0x7fffffffL;
+	long bl;
+	vq_color(h, 1, rgb);
+	bl = 299L * rgb[0] + 587L * rgb[1] + 114L * rgb[2];
 	for (p = 0; p < n; p++) {
 		long l;
+		if (p == 1)
+			continue;
 		vq_color(h, p, rgb);
 		l = 299L * rgb[0] + 587L * rgb[1] + 114L * rgb[2];
 		if (l < bl) {
@@ -40,72 +47,77 @@ void progbar_pens(short h, short ground)
 	short g[3], rgb[3], p, i;
 	vq_color(h, ground, g);
 	if (planes == 8) {
-		/* 256 colours: the blues the palette has, dark to light, spread
-		   along the bar (pens 16 and up hold whatever palette is loaded:
-		   TOS 4's has no light blue, NVDI's and EWeb's do; found again when
-		   it changes, the app's call), never the ground's own. A palette
-		   without a blue takes each step's nearest pen. */
-		static short blue[256];
-		static long bl[256];
-		short nb = 0, j;
+		/* 256 colours: each of PB_SHADES steps is the pen nearest to its blue
+		   on a smooth ramp from deep navy to sky blue, among the pens that are
+		   blue at all (pens 16 and up hold whatever palette is loaded: TOS 4's
+		   has no light blue, NVDI's and EWeb's do; found again when it
+		   changes, the app's call), never the ground's own. Blue is a hue
+		   band, not "more blue than green": in a coarse palette the teals and
+		   purples next to it made the steps jump (EPDF's shots, 3 Nov 2026).
+		   The picks are sorted dark to light, each pen once. */
+		short want[PB_SHADES][3], cand[256], nc = 0, j;
+		long bd[PB_SHADES], lm[PB_SHADES];
 		for (p = 0; p < 256; p++) {
+			short mx, mn;
 			vq_color(h, p, rgb);
 			if (p == ground || dist(rgb, g) < 3000L)
 				continue;	/* (it wouldn't show) */
-			/* blue, from deep blue to sky blue: more blue than green by a
-			   tenth at least, and no more red than green (no purple) */
-			if (rgb[2] - rgb[1] < 100 || rgb[0] > rgb[1] + 60)
+			mx = rgb[2];
+			mn = rgb[0] < rgb[1] ? rgb[0] : rgb[1];
+			/* blue is the strongest and the colour is not a grey: 250 of 1000 */
+			if (rgb[0] > mx || rgb[1] > mx || mx - mn < 250)
 				continue;
-			bl[nb] = 299L * rgb[0] + 587L * rgb[1] + 114L * rgb[2];
-			/* one pen a colour: the same blue twice is one */
-			for (j = 0; j < nb; j++)
-				if (bl[j] == bl[nb])
-					break;
-			if (j < nb)
+			/* hue 195 to 250 degrees: 240 + 60 * (r - g) / (b - min) */
+			if (60L * (rgb[0] - rgb[1]) < -45L * (mx - mn) || 60L * (rgb[0] - rgb[1]) > 10L * (mx - mn))
 				continue;
-			for (j = nb; j > 0 && bl[j - 1] > bl[nb]; j--)
-				;
-			{
-				long l = bl[nb];
-				short k;
-				for (k = nb; k > j; k--) {
-					bl[k] = bl[k - 1];
-					blue[k] = blue[k - 1];
-				}
-				bl[j] = l;
-				blue[j] = p;
-			}
-			nb++;
+			cand[nc++] = p;
 		}
-		if (nb > 0) {
-			/* PB_SHADES of them, evenly from the darkest to the lightest */
-			npen = nb < PB_SHADES ? nb : PB_SHADES;
-			for (i = 0; i < npen; i++)
-				pen[i] = blue[npen > 1 ? (long) (nb - 1) * i / (npen - 1) : 0];
-		} else {
-			long bd[PB_SHADES];
-			short want[PB_SHADES][3];
+		for (i = 0; i < PB_SHADES; i++) {
+			int c;
+			for (c = 0; c < 3; c++)
+				want[i][c] = (short) (dark[c] + (long) (light[c] - dark[c]) * i / (PB_SHADES - 1));
+			bd[i] = 0x7fffffffL;
+			pen[i] = -1;
+		}
+		if (nc == 0) {
+			/* no blue at all: the nearest pen of any to each step */
+			for (p = 0; p < 256; p++)
+				if (p != ground)
+					cand[nc++] = p;
+		}
+		for (j = 0; j < nc; j++) {
+			vq_color(h, cand[j], rgb);
 			for (i = 0; i < PB_SHADES; i++) {
-				int c;
-				for (c = 0; c < 3; c++)
-					want[i][c] = (short) (dark[c] + (long) (light[c] - dark[c]) * i / (PB_SHADES - 1));
-				bd[i] = 0x7fffffffL;
-				pen[i] = 1;
-			}
-			for (p = 0; p < 256; p++) {
-				vq_color(h, p, rgb);
-				if (p == ground || dist(rgb, g) < 3000L)
-					continue;
-				for (i = 0; i < PB_SHADES; i++) {
-					long d = dist(rgb, want[i]);
-					if (d < bd[i]) {
-						bd[i] = d;
-						pen[i] = p;
-					}
+				long d = dist(rgb, want[i]);
+				if (d < bd[i]) {
+					bd[i] = d;
+					pen[i] = cand[j];
 				}
 			}
-			npen = PB_SHADES;
 		}
+		/* each pen once, dark to light */
+		npen = 0;
+		for (i = 0; i < PB_SHADES; i++) {
+			short k, at, cur = pen[i];
+			long l;
+			if (cur < 0)
+				continue;
+			for (k = 0; k < npen && pen[k] != cur; k++)
+				;
+			if (k < npen)
+				continue;
+			vq_color(h, cur, rgb);
+			l = 299L * rgb[0] + 587L * rgb[1] + 114L * rgb[2];
+			for (at = npen; at > 0 && lm[at - 1] > l; at--) {
+				lm[at] = lm[at - 1];
+				pen[at] = pen[at - 1];
+			}
+			lm[at] = l;
+			pen[at] = cur;
+			npen++;
+		}
+		if (npen == 0)
+			pen[npen++] = 1;
 	} else if (planes == 4) {
 		/* 16 colours: pens 1 to 15 in order, less any the ground's
 		   colour (white, the bar's light grey) */

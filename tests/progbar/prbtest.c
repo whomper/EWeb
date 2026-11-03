@@ -77,6 +77,12 @@ int main(void)
 		n += snprintf(line + n, sizeof line - n, " %d", progbar_pen(i));
 	nf_debug(line);
 	nf_debug("\n");
+	for (i = 0; i < progbar_npens(); i++) {
+		short c[3];
+		vq_color(vdi_h, progbar_pen(i), c);
+		snprintf(line, sizeof line, "PRB rgb %d %d %d %d\n", progbar_pen(i), c[0], c[1], c[2]);
+		nf_debug(line);
+	}
 	snprintf(line, sizeof line, "PRB planes %d ground %d\nPRB ready\n", planes, ground);
 	nf_debug(line);
 	for (;;) {

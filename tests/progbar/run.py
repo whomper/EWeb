@@ -51,7 +51,11 @@ try:
         sys.exit("run.py: PRBTEST didn't start (see hatari.log)")
     time.sleep(2)
     subprocess.run(["import", "-display", display, "-window", win(), os.path.join(shots, "progbar.png")], env=env)
-    print("%s: %s" % (m.describe(), " ".join(l for l in open(log, errors="replace").read().splitlines()
-                                                if l.startswith("PRB ") and "ready" not in l)))
+    lines = [l for l in open(log, errors="replace").read().splitlines() if l.startswith("PRB ") and "ready" not in l]
+    print("%s: %s" % (m.describe(), " ".join(l for l in lines if " rgb " not in l)))
+    if "--rgb" in sys.argv:
+        for l in lines:
+            if " rgb " in l:
+                print("   ", l[4:])
 finally:
     hatari.kill()

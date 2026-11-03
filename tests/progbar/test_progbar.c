@@ -77,6 +77,13 @@ static void tos16(int tt)
 	memcpy(pal, tt ? t : f, sizeof f);
 }
 
+/* hue 195 to 250 degrees, blue the strongest, not a grey */
+static int blue_hue(short p)
+{
+	long r = pal[p][0], g = pal[p][1], b = pal[p][2], mn = r < g ? r : g;
+	return b >= r && b >= g && b - mn >= 250 && 60 * (r - g) >= -45 * (b - mn) && 60 * (r - g) <= 10 * (b - mn);
+}
+
 static long lum(short p)
 {
 	return 299L * pal[p][0] + 587L * pal[p][1] + 114L * pal[p][2];
@@ -154,18 +161,18 @@ int main(void)
 		char what[40];
 		snprintf(what, sizeof what, "256, cube, ground %d", ground);
 		progbar_pens(0, ground);
-		check(progbar_npens() == PB_SHADES, "256: 16 steps");
+		check(progbar_npens() >= 8 && progbar_npens() <= PB_SHADES, "256: 8 to 16 steps");
 		ok = 1;
 		for (i = 0; i < progbar_npens(); i++) {
 			short p = progbar_pen(i);
 			ok &= p != ground;
-			ok &= pal[p][2] >= pal[p][1] + 100 && pal[p][0] <= pal[p][1] + 60;	/* blue, no purple */
+			ok &= blue_hue(p);	/* blue, no teal, no purple */
 			if (i)
 				ok &= lum(p) >= lum(progbar_pen(i - 1));		/* dark to light */
 		}
 		check(ok, "256: blue, dark to light, never the ground's");
 		check(lum(progbar_pen(0)) < 150000L, "256: its left end dark");
-		check(lum(progbar_pen(PB_SHADES - 1)) > 600000L, "256: its right end light");
+		check(lum(progbar_pen(progbar_npens() - 1)) > 600000L, "256: its right end light");
 		fills(608, what);
 	}
 	/* 256 colours, few blues and none light (as TOS 4's): only blues,
@@ -178,10 +185,10 @@ int main(void)
 	set(43, 0, 267, 533);
 	set(44, 0, 0, 467);		/* the same blue again */
 	progbar_pens(0, 8);
-	ok = progbar_npens() >= 5 && progbar_npens() <= 7;
+	ok = progbar_npens() >= 3 && progbar_npens() <= 7;
 	for (i = 0; i < progbar_npens(); i++) {
 		short p = progbar_pen(i);
-		ok &= pal[p][2] >= pal[p][1] + 100 && pal[p][0] <= pal[p][1] + 60;
+		ok &= blue_hue(p);
 		if (i)
 			ok &= lum(p) > lum(progbar_pen(i - 1));
 	}
@@ -247,6 +254,13 @@ int main(void)
 	set(3, 0, 0, 0);
 	progbar_pens(0, 0);
 	check(progbar_npens() == 1 && progbar_pen(0) == 3, "4 colours: black wherever it is");
+	/* mono where both pens read alike: EmuTOS in ST high answers
+	   1000,1000,1000 for pens 0 and 1; GEM's black, pen 1, not white */
+	planes = 1;
+	set(0, 1000, 1000, 1000);
+	set(1, 1000, 1000, 1000);
+	progbar_pens(0, 0);
+	check(progbar_npens() == 1 && progbar_pen(0) == 1, "mono, both pens alike: pen 1");
 
 	printf("progbar: %d checks, %s\n", checks, fails ? "FAILED" : "all passed");
 	return fails != 0;
