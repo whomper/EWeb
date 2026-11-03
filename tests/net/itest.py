@@ -838,6 +838,29 @@ try:
               [(k, "decoded" if k == "anim.gif" else "from the cache", v) for k, v in want.items()]) and
               outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
               outs[1])
+        # their files not kept beside them (Erez, 3 Nov 2026): each a record
+        # in the pack (img.c, dc_stub), the small GIF's kept whole (decoded
+        # each time); asked for again at a size not kept (a narrower
+        # window: the big one smaller), the file is fetched whole, decoded,
+        # and the others still read back
+        def body(name):
+            return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(site + name, timeout=10).read()
+        pak = b"".join(open(os.path.join(pix, f), "rb").read() for f in os.listdir(pix) if f.endswith(".pak"))
+        kept = [k for k in want if k != "anim.gif" and body(k)[:4096] in pak]
+        check("the cache: decoded pictures' files not kept, the GIF's kept", not kept and body("anim.gif") in pak
+              and pak.count(b"EWFS\x01") >= 4, "files kept: %s" % kept)
+        p = subprocess.run([ewrender, "-f", font, "-v", "-d", "-w", "400", "-C", pix,
+                            "http://localhost:%d/site/pics.html" % HTTP], cwd=work, capture_output=True, text=True,
+                           timeout=120)
+        out = p.stdout + p.stderr
+        narrow = dict((k, (how, sz)) for k, how, sz in
+                      re.findall(r"^picture %s(\S+) (decoded|from the cache) at (\d+x\d+)" % re.escape(site), out, re.M))
+        big = narrow.get("big.png", ("", "0x0"))
+        check("the cache: a size not kept fetched whole and decoded, the others read back",
+              p.returncode == 0 and big[0] == "decoded" and big[1] != want["big.png"] and
+              all(narrow.get(k, ("", ""))[0] == "from the cache" for k in ("photo.jpg", "logo.png", "prog.jpg")) and
+              re.search(r"^image \S+ %s link \d+ \"a big one\" %sbig\.png$" % (big[1], re.escape(site)),
+                        out, re.M) is not None, out)
         # pictures from a sheet's url() (its folder's) and from srcset
         p = subprocess.run([ewrender, "-f", font, "-v", "-d", "http://localhost:%d/site/bg.html" % HTTP],
                            cwd=work, capture_output=True, text=True, timeout=120)

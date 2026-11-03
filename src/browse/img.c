@@ -18,6 +18,15 @@
  * that screen, it is read, not decoded and dithered again (seconds on a
  * 68030 for a photo).
  *
+ * Its file isn't kept beside it (Erez's choice, 3 Nov 2026: a page of
+ * photos wrote the files and their pixels, 2.5 MB, to his SD card): once
+ * decoded and kept, the answer in the disk cache is its record in place
+ * of its bytes (dc_stub: "EWFS", its kind, size and the file's sums and
+ * length), with the answer's address, dates and validators as they were.
+ * From the cache a picture is its record (img_set_file), and each size is
+ * found by it; a size or a palette not kept asks for the file again
+ * (img_refetch, the file fetched whole: br_pictures_step).
+ *
  * Through the Pi's gateway a picture may come as pens (aerapens, the
  * very code EWeb runs, on the Pi): "EWPN", the screen's pens packed at
  * its depth for one size and one palette, and a mask where it has
@@ -58,6 +67,8 @@ struct ew_img {
 	int cur;			/* the page shown shows it */
 	unsigned long used;		/* when last drawn or decoded */
 	unsigned long sum[2];		/* the file's contents, for the disk cache's key */
+	long flen;			/* and its length */
+	int record;			/* only its record came (the disk cache's): no file */
 	int cached;			/* its last decode came from the disk cache */
 	int refetched;			/* asked for again for pens of another size or screen */
 	int stale;			/* to be asked for again (img_recheck) */
@@ -137,8 +148,63 @@ static void pix_key(const ew_img *im, int32_t w, int32_t h, char *out, int size)
 	unsigned long p[2] = { 0, 0 };
 	if (img_pal != NULL)
 		sums((const char *) img_pal->rgb, (long) img_pal->n * 3, p);
-	snprintf(out, (size_t) size, "pix:%08lx%08lx:%ld:%ldx%ld:%s%08lx", im->sum[0], im->sum[1], im->len, (long) w,
+	snprintf(out, (size_t) size, "pix:%08lx%08lx:%ld:%ldx%ld:%s%08lx", im->sum[0], im->sum[1], im->flen, (long) w,
 		 (long) h, img_pal != NULL ? "p" : "tc", p[0] ^ p[1]);
+}
+
+/* is v (w x h) in the disk cache */
+static int pix_has(const ew_img *im, int32_t w, int32_t h)
+{
+	char key[120];
+	pix_key(im, w, h, key, sizeof key);
+	return dc_has(key);
+}
+
+/* the record of a picture's file kept in the disk cache in place of its
+   bytes: "EWFS", 1, its kind, its ratio (img.h), 0, its width and height
+   (2 bytes each), the file's two sums and its length (4 each), big-endian */
+#define REC_LEN 24
+
+static void put32b(unsigned char *p, unsigned long v)
+{
+	p[0] = (unsigned char) (v >> 24);
+	p[1] = (unsigned char) (v >> 16);
+	p[2] = (unsigned char) (v >> 8);
+	p[3] = (unsigned char) v;
+}
+
+static unsigned long get32b(const unsigned char *p)
+{
+	return (unsigned long) p[0] << 24 | (unsigned long) p[1] << 16 | (unsigned long) p[2] << 8 | p[3];
+}
+
+int img_is_record(const char *data, long len)
+{
+	return len == REC_LEN && memcmp(data, "EWFS\1", 5) == 0;
+}
+
+/* the answer the file came in, in the disk cache: its record from now on
+   (its address without a fragment is its key there, as fetch keeps it) */
+static void record_save(const ew_img *im)
+{
+	unsigned char r[REC_LEN];
+	char key[4096];
+	if (im->record || im->data == NULL || strlen(im->url) >= sizeof key)
+		return;
+	memcpy(r, "EWFS\1", 5);
+	r[5] = (unsigned char) im->kind;
+	r[6] = (unsigned char) im->ratio;
+	r[7] = 0;
+	r[8] = (unsigned char) (im->iw >> 8);
+	r[9] = (unsigned char) im->iw;
+	r[10] = (unsigned char) (im->ih >> 8);
+	r[11] = (unsigned char) im->ih;
+	put32b(r + 12, im->sum[0]);
+	put32b(r + 16, im->sum[1]);
+	put32b(r + 20, (unsigned long) im->flen);
+	strcpy(key, im->url);
+	key[strcspn(key, "#")] = 0;
+	dc_stub(key, (const char *) r, REC_LEN);
 }
 
 /* v (w x h) from the disk cache: 1 when it was there and whole */
@@ -233,6 +299,9 @@ static void pix_save(ew_img *im, const var *v)
 	pix_key(im, v->w, v->h, key, sizeof key);
 	dc_put_own(key, im->url, (const char *) b, len);
 	free(b);
+	/* kept as the screen draws it: the file needn't be (its record) */
+	if (dc_has(key))
+		record_save(im);
 }
 
 /* a decode or a dither under way: a turn in it may draw the window, whose
@@ -397,6 +466,11 @@ int img_refetched(ew_img *im)
 	return im->refetched++;
 }
 
+int img_has_record(const ew_img *im)
+{
+	return im->state == IMG_HERE && im->record;
+}
+
 int img_is_pens(const ew_img *im)
 {
 	return im->state == IMG_HERE && im->kind == IMG_PENS;
@@ -406,6 +480,8 @@ int img_refetch(const ew_img *im, int32_t w, int32_t h)
 {
 	const unsigned char *d = (const unsigned char *) im->data;
 	unsigned long crc;
+	if (im->state == IMG_HERE && im->record)
+		return find(im, w, h) == NULL && !(PIX_KEPT(im, w, h) && pix_has(im, w, h));
 	if (!img_is_pens(im) || find(im, w, h) != NULL)
 		return 0;
 	crc = (unsigned long) d[16] << 24 | (unsigned long) d[17] << 16 | (unsigned long) d[18] << 8 | d[19];
@@ -432,12 +508,29 @@ void img_kept(ew_img *im)
 int img_set_file(ew_img *im, char *data, long len)
 {
 	long w, h;
-	int depth, mask, sized;
+	int depth, mask, sized, rec = img_is_record(data, len);
 	if (im->stale) {
 		/* asked for again: the same, as it was decoded; else each size
-		   it was decoded at goes, to be decoded again from this one */
+		   it was decoded at goes, to be decoded again from this one (a
+		   record and a file the same when the record's sums are the
+		   file's) */
+		unsigned long s[2];
+		long n = len;
 		im->stale = 0;
-		if (im->state == IMG_HERE && len == im->len && memcmp(data, im->data, (size_t) len) == 0) {
+		if (rec) {
+			s[0] = get32b((const unsigned char *) data + 12);
+			s[1] = get32b((const unsigned char *) data + 16);
+			n = (long) get32b((const unsigned char *) data + 20);
+		} else {
+			sums(data, len, s);
+		}
+		if (im->state == IMG_HERE && im->kind != IMG_PENS && n == im->flen && s[0] == im->sum[0] &&
+		    s[1] == im->sum[1]) {
+			free(data);
+			return 2;
+		}
+		if (im->state == IMG_HERE && im->kind == IMG_PENS && len == im->len &&
+		    memcmp(data, im->data, (size_t) len) == 0) {
 			free(data);
 			return 2;
 		}
@@ -448,6 +541,23 @@ int img_set_file(ew_img *im, char *data, long len)
 	img_used -= im->len;
 	im->data = NULL;
 	im->len = 0;
+	im->record = 0;
+	if (rec) {
+		/* the disk cache's record of the file: each size it is kept
+		   at is found by it, another is asked for whole (img_refetch) */
+		const unsigned char *r = (const unsigned char *) data;
+		im->kind = r[5];
+		im->ratio = r[6];
+		im->iw = (int32_t) be16(r + 8);
+		im->ih = (int32_t) be16(r + 10);
+		im->sum[0] = get32b(r + 12);
+		im->sum[1] = get32b(r + 16);
+		im->flen = (long) get32b(r + 20);
+		im->record = 1;
+		im->state = IMG_HERE;
+		free(data);
+		return 1;
+	}
 	if (len >= 4 && memcmp(data, "EWPN", 4) == 0) {
 		/* pens from the Pi */
 		if (!pens_head((const unsigned char *) data, len, &depth, &mask, &w, &h)) {
@@ -483,6 +593,7 @@ int img_set_file(ew_img *im, char *data, long len)
 	}
 	im->data = data;
 	im->len = len;
+	im->flen = len;
 	sums(data, len, im->sum);
 	{
 		long nw, nh;
@@ -602,6 +713,16 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		im->vars = v;
 		img_used += var_bytes(v);
 		return 1;
+	}
+	if (im->record) {
+		/* its record only, and this size not kept: none (it is asked
+		   for whole first, img_refetch; tried so as it couldn't be) */
+		im->why = PIC_DAMAGED;
+		v->used = im->used = ++tick;
+		v->next = im->vars;
+		im->vars = v;
+		img_used += var_bytes(v);
+		return 0;
 	}
 	max = im->kind == PIC_JPEG ? img_max_px * 12 : im->kind == PIC_WEBP ? WEBP_MAX_PX : img_max_px;
 	if (im->kind == PIC_SVG) {

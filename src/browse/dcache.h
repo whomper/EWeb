@@ -52,6 +52,13 @@ int dc_has(const char *key);
 void dc_put(const char *key, const char *url, const char *headers, const char *mime, const char *charset,
 	    const char *security, const char *data, long len);
 
+/* the answer kept for key, its bytes put in place by data (a picture's
+   record, img.c: its file not kept once it is decoded, Erez's choice of
+   3 Nov 2026), its address, type, dates and validators kept: 1, or 0
+   when nothing is kept for key, or data wouldn't be smaller. data is
+   copied */
+int dc_stub(const char *key, const char *data, long len);
+
 /* a 304 for key: what is kept is fresh again, for as long as headers say */
 void dc_fresh(const char *key, const char *headers);
 

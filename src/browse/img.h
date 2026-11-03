@@ -2,7 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * img.h - the pictures pages show (img.c): each address once, its file
- * as it came (kept, to decode it again at another size), and the
+ * as it came (kept in memory, to decode it again at another size; in the
+ * disk cache only its record once it is decoded and kept), and the
  * picture decoded at each size a page shows it (common/src/pic.c), with
  * its pens for the screen's colours. browse.c fetches the files after a
  * page is shown; the canvas draws what is decoded.
@@ -48,9 +49,17 @@ int img_stale(const ew_img *im);
 /* it didn't come again (the server couldn't be reached): kept as it is */
 void img_kept(ew_img *im);
 /* its file is pens from the Pi that can't be shown at w x h on this
-   screen (another size, another palette): it is to be asked for again,
-   at that size (img_decode gives 0 meanwhile, and tries nothing) */
+   screen (another size, another palette), or only its record came and
+   that size isn't kept: it is to be asked for again, at that size (img_
+   decode gives 0 meanwhile, and tries nothing) */
 int img_refetch(const ew_img *im, int32_t w, int32_t h);
+/* only the disk cache's record of its file came (no file: each size
+   kept is found by it; img_refetch says when the file is to be asked
+   for whole) */
+int img_has_record(const ew_img *im);
+/* is data a picture's record (what the disk cache keeps of a picture's
+   answer once it is decoded and kept: img.c) */
+int img_is_record(const char *data, long len);
 /* how many times it was asked for again so (each time one more) */
 int img_refetched(ew_img *im);
 /* its file is pens from the Pi (img_decode only unpacks them) */

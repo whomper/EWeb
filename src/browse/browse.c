@@ -1076,6 +1076,11 @@ static const char *fetch_more, *fetch_refuse;
 /* for the disk cache: the request's variant (the pens asked for), after
    the address, or NULL */
 static const char *fetch_variant;
+/* for the next fetch only: a picture's record (img.c) taken from the disk
+   cache as its answer (fetch_picture's; any other fetch of that address,
+   a page or a file saved, has its file), or the file fetched whole, not
+   looked for in the disk cache (a record's picture at a size not kept) */
+static int fetch_record_ok, fetch_whole;
 /* requests under way: GEM's messages come meanwhile (pf_idle), and a
    window sized then doesn't fetch the page's sheets inside one
    (br_relayout) */
@@ -1250,8 +1255,8 @@ static int fetch_nav;	/* the page itself being fetched (not one of its parts) */
 static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		     int keep, const FSUBMIT *post, FETCH *f)
 {
-	int packed = fetch_packed;
-	fetch_packed = 0;
+	int packed = fetch_packed, record_ok = fetch_record_ok, whole = fetch_whole;
+	fetch_packed = fetch_record_ok = fetch_whole = 0;
 	memset(f, 0, sizeof *f);
 	str_copy(f->url, url, sizeof f->url);
 	if (!fetch_nav && !b->trackers && br_tracker(url)) {
@@ -1340,7 +1345,12 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 		/* a page through the Pi's browser: a snapshot of it as it is now,
 		   never kept (webgate says no-store), so not looked for either */
 		int snap = b->snapshot && accept == NULL && post == NULL && http_gateway[0];
-		if (post == NULL && !snap && dc_get(key, &got)) {
+		int in_dc = post == NULL && !snap && !whole && dc_get(key, &got);
+		if (in_dc && !record_ok && img_is_record(got.data, got.len)) {
+			free(got.data);	/* a picture's record, not its file: fetched */
+			in_dc = 0;
+		}
+		if (in_dc) {
 			/* fresh (immutable: even for Reload, RFC 8246), or any age
 			   for Back and Forward */
 			if ((fresh != 1 && (got.fresh || fresh == 2)) || (fresh == 1 && got.fresh && got.immutable)) {
@@ -5307,6 +5317,11 @@ static int fetch_picture(browser *b, ew_img *im, int32_t rw, int32_t rh)
 		fetch_more = http_gateway[0] ? fit : NULL;
 		fetch_variant = pens ? variant : NULL;
 		fetch_refuse = picture_refuse;
+		/* its record from the disk cache will do (each size kept found
+		   by it); a record's picture asked for again (a size not kept)
+		   is fetched whole */
+		fetch_whole = !pens && img_has_record(im);
+		fetch_record_ok = !fetch_whole;
 		ok = fetch(b, url, b->url, 0, "image/jpeg,image/png,image/svg+xml,image/gif;q=0.9", max, 0, NULL, f);
 		if (ok && pens && f->status == 409 && !conn_stop) {
 			/* the Pi hasn't the screen's colours: sent, then asked again */

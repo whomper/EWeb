@@ -1443,6 +1443,19 @@ holds pictures ready to show.
   smaller one decodes in about the time it takes to read). They are EWeb's own data in the pack,
   fresh for a year, until the ring comes round to them. The picture is fetched as before
   (fresh or asked again), so a changed picture gets new sums, and is decoded again.
+- **Its file isn't kept beside them** (your choice, 3 Nov 2026). A page of 24 photos (1.7 MB of
+  JPEGs) wrote 2.5 MB to the disk, the files and their pixels (Hatari, the Falcon with 128 MB
+  TT RAM, every GEMDOS call counted), on your SD card about a minute of writing a page. Once a
+  picture is decoded and kept, its answer in the cache is its record in place of its bytes
+  (`dc_stub`; img.c's `record_save`: "EWFS", its kind, size, the file's two sums and length, 24
+  bytes), its address, dates and validators as they were: fresh, it is shown from the record
+  and the pixels kept; stale, it is asked about with its validator, a 304 the record again.
+  A size or a palette not kept (another window width, 16 colours after 256) asks for the file
+  whole (`img_refetch`, `fetch_whole`), decoded and kept again. Only a picture's fetch takes a
+  record from the cache: a page or a file saved from that address is fetched. A picture
+  decoded each time (shown smaller than 64×64) keeps its file, and pens from the Pi are kept
+  once as before. `make itest`: none of `pics.html`'s decoded files in the pack, the
+  GIF's kept, and the page at another width fetching the big one whole.
 - **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (512 at most since
   29 Oct 2026, a field of three digits: Erez wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
   more than that, so its first pictures were gone by its last, and gone again on the next visit),

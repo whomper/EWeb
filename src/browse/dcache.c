@@ -791,6 +791,33 @@ void dc_put(const char *key, const char *url, const char *headers, const char *m
 		flush();
 }
 
+int dc_stub(const char *key, const char *data, long len)
+{
+	DCE *e;
+	char *m;
+	if (dir[0] == 0)
+		return 0;
+	load();
+	e = find(key);
+	/* (not EWeb's own, nor one being written now, a piece at a time) */
+	if (e == NULL || (e->flags & DCF_OWN) || e->meta == NULL || len >= e->len ||
+	    (e->mem != NULL && e->mem == part_mem) || (m = malloc((size_t) len + 1)) == NULL)
+		return 0;
+	memcpy(m, data, (size_t) len);
+	if (e->off < 0) {
+		pending -= e->len;	/* not on the disk yet: it never will be */
+		free(e->mem);
+	} else {
+		dirty[e->piece] = 1;	/* its piece's list without it; its bytes there forgotten */
+	}
+	e->mem = m;
+	e->off = -1;
+	e->len = len;
+	pending += len;
+	changed = 1;
+	return 1;
+}
+
 void dc_fresh(const char *key, const char *headers)
 {
 	char v[96];

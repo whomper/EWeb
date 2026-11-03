@@ -328,6 +328,41 @@ int main(int argc, char **argv)
 	}
 
 	{
+		/* a picture's file put in place by its record (dc_stub, img.c:
+		   Erez, 3 Nov 2026), in memory and once on the disk: its
+		   validator and freshness kept, its bytes the record's, across
+		   a run; EWeb's own data and an address not kept left alone */
+		char v[300];
+		static const char big[] = "JPEG-FILE-JPEG-FILE-JPEG-FILE-JPEG-FILE";
+		dc_dir(dir, 1L << 20);
+		put("http://r/a.jpg", "Cache-Control: max-age=600\nETag: \"a1\"\n", big);
+		want("record: put in place in memory", dc_stub("http://r/a.jpg", "REC", 3) == 1);
+		want("record: its bytes", got("http://r/a.jpg", "REC", v) == 1 && strstr(v, "\"a1\"") != NULL);
+		put("http://r/b.jpg", "Cache-Control: max-age=600\nLast-Modified: Mon, 02 Nov 2026 10:00:00 GMT\n", big);
+		dc_job_end();
+		dc_close();	/* b on the disk as it came */
+		dc_dir(dir, 1L << 20);
+		want("record: the file there first", got("http://r/b.jpg", big, NULL) == 1);
+		want("record: put in place of one on the disk", dc_stub("http://r/b.jpg", "RECB", 4) == 1);
+		want("record: no bigger than what it replaces", dc_stub("http://r/b.jpg", big, (long) strlen(big)) == 0);
+		want("record: none for an address not kept", dc_stub("http://r/none.jpg", "R", 1) == 0);
+		dc_put_own("pix:r", "http://r/a.jpg", "PIXELS-PIXELS", 13);
+		want("record: not over EWeb's own data", dc_stub("pix:r", "R", 1) == 0);
+		dc_job_end();
+		dc_close();
+		dc_dir(dir, 1L << 20);
+		want("record: kept across a run", got("http://r/a.jpg", "REC", NULL) == 1);
+		want("record: on the disk's in place of the file", got("http://r/b.jpg", "RECB", v) == 1 &&
+		     strstr(v, "If-Modified-Since: Mon, 02 Nov 2026") != NULL);
+		want("record: the own data beside it", got("pix:r", "PIXELS-PIXELS", NULL) == 1);
+		clock_s += 3600;
+		want("record: stale as the file was, its validator to ask with", got("http://r/a.jpg", "REC", v) == 0 &&
+		     strstr(v, "If-None-Match: \"a1\"") != NULL);
+		dc_clear();
+		dc_close();
+	}
+
+	{
 		/* the slots (slots.c) */
 		char p[500], twin[520], *d;
 		long n;
