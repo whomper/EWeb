@@ -1454,8 +1454,12 @@ holds pictures ready to show.
   whole (`img_refetch`, `fetch_whole`), decoded and kept again. Only a picture's fetch takes a
   record from the cache: a page or a file saved from that address is fetched. A picture
   decoded each time (shown smaller than 64×64) keeps its file, and pens from the Pi are kept
-  once as before. `make itest`: none of `pics.html`'s decoded files in the pack, the
-  GIF's kept, and the page at another width fetching the big one whole.
+  once as before. Measured the same way, three pages of 24 photos (5 MB of JPEGs, 256 colours):
+  written in the first run 7.5 MB before, 1.5 MB now; read back in the next run, page by page,
+  2.1 to 2.2 MB before, 0.45 to 0.48 MB now. `make itest` (`freshpics.html`, its pictures kept an
+  hour): four records in the pack and none of the decoded files, the GIF's file kept; the next
+  run showing all from the records with no request; at 400 wide the big one fetched whole
+  (one request more) and decoded, the others read back.
 - **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (512 at most since
   29 Oct 2026, a field of three digits: Erez wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
   more than that, so its first pictures were gone by its last, and gone again on the next visit),
