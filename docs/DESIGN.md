@@ -1466,9 +1466,12 @@ holds pictures ready to show.
   writes in 64 KB steps at idle (40 opens of the piece), and on your SD card (about 48 ms a
   disk command) a slow step shrinks to 4 KB: about a minute of the disk after each such page,
   while you went on browsing. Now what comes is held in memory, as much as the cache's size and
-  a quarter of the memory free (with 128 MB TT RAM, 30 MB), and written at quit in one write
-  a piece, with Closing EWeb's bar; only past three quarters of that is some of it written at
-  idle (on a machine without TT RAM, about 1 MB). Untick it, and the cache is written a step
+  a quarter of the memory free (with 128 MB TT RAM, 30 MB), and written at quit, each piece
+  opened once and written in order (32 KB at a time, for Closing EWeb's bar); only past three
+  quarters of that is some of it written at idle (on a machine without TT RAM, about 1 MB).
+  Measured again (the same Falcon, three pages of 24 photos): while browsing nothing but the
+  log reached the disk, 2 KB a page, none in a minute idle; the quit wrote 1.36 MB to the
+  piece in 44 writes and its list, 0.6 s in Hatari. Untick it, and the cache is written a step
   at a time at idle as before.
 - **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (512 at most since
   29 Oct 2026, a field of three digits: Erez wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
