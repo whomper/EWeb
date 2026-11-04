@@ -108,7 +108,8 @@ typedef struct ewin {
 	GRECT due;
 	int due_big;			/* due came over half the window: drawn in SLICE_BIG slices till done */
 	int due_scroll;			/* due has a scroll's rows: never drawn whole (DUE_WHOLE) */
-	int due_bars;			/* drawn at the next turns: 8 the title, 1 the status bar, 2 all the bars, 4 the sliders */
+	int due_bars;			/* drawn at the next turns: 8 the title, 1 the status bar, 2 all the bars, 4 the sliders,
+					   16 the sliders once the page's rows due are drawn (a scroll's) */
 	short sl[4], sl_set;		/* the sliders as last set (sl_set 0: not yet) */
 } ewin;
 #ifndef EW_NO_CUR	/* (common's click.c has a cur of its own: the Makefile) */

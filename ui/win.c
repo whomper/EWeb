@@ -1271,7 +1271,7 @@ static void draw_due_bars(void)
 		sliders();
 		return;
 	}
-	cur->due_bars &= 4;
+	cur->due_bars &= 4 | 16;
 	if (!(which & 2)) {
 		a = cur->r_stat;
 		a.h -= rib_rows();
@@ -1286,10 +1286,12 @@ void win_draw_due(void)
 	ewin *was = cur, *w;
 	for (w = wins; w != NULL; w = w->next) {
 		cur = w;
-		if (w->due_bars)
+		if (w->due_bars & ~16)
 			draw_due_bars();
 		else if (w->due.w > 0 && w->due.h > 0)
 			draw_due();
+		else if (w->due_bars)
+			draw_due_bars();	/* (a scroll's sliders, after its rows) */
 	}
 	cur = was;
 }
@@ -1473,8 +1475,11 @@ void win_scroll_to(int32_t y)
 	cur->top = y;
 	if (br.pv_p == NULL)
 		br_scrolled(&br, cur->top);	/* (a preview's place isn't the page's) */
-	gap_tag("sliders");
-	sliders();
+	/* the sliders after the page has moved and its new rows are in: a
+	   turn of their own (with them a line scrolled was the AES's 20 ms
+	   and the copy's 30 in one, 55 of its 50 on a stock Falcon; while a
+	   key is held they follow when it is let go) */
+	cur->due_bars |= 16;
 	if (cur->iconified || cur->h <= 0)
 		return;
 #ifndef EW_ST
