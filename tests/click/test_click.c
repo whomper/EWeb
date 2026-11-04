@@ -17,6 +17,7 @@ static int checks, failed;
 #define CHECK(c, what) do { checks++; if (c) printf("ok   %s\n", what); \
 	else { failed++; printf("FAIL %s\n", what); } } while (0)
 
+short aes_double;			/* gem.c's: the AES counted two presses */
 static unsigned long now = 10000;
 static short rate = 2;			/* 275 ms */
 static short m1_leave, m1_x, m1_y, m1_w, m1_h;
@@ -157,6 +158,15 @@ int main(void)
 	press_forget();
 	now += 50;
 	CHECK(press_double(3, 50, 105) == 0, "press_forget: the last press gone");
+
+	/* a multitasking AES hands a double click over as one event it counted
+	   as two (gem.c sets aes_double): that press is the second at once */
+	now += 2000;
+	press_forget();
+	aes_double = 1;
+	CHECK(press_double(4, 80, 105) == 1, "the AES counted two: a double click with no press before it");
+	CHECK(aes_double == 0, "and the flag is used up");
+	CHECK(press_double(4, 80, 105) == 0, "the next press alone: a single click");
 
 	{
 		int took;

@@ -14,6 +14,7 @@ void evnt_set_m1(short leave, short x, short y, short w, short h);
 short evnt_multi_(short flags, short clicks, short mask, short state, unsigned long timer, short *msg, AEVENT *ev);
 #define BEG_UPDATE 1
 #define END_UPDATE 0
+extern short aes_double;
 short aes_count(void);
 short graf_mkstate(short *mx, short *my, short *mb, short *ks);
 short wind_update(short mode);

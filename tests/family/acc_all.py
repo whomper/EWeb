@@ -3,15 +3,16 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 """All the AERA accessories at once (Erez, 19 Oct 2026): ECal, EContact,
 EHypView and EMail's EMail check (EMAILCHK.ACC), their latest releases
-(getrelease.py), loaded together on a 4 MB machine, as on Erez's own:
+(getrelease.py), loaded together on a Falcon with TT RAM, as on Erez's own.
+Not on a 4 MB machine, ST or Falcon-4 (Erez, 4 Nov 2026: the accessories are not run there; the
+4 MB machines stay targets for the programs, each on its own): the script says so and stops.
 
     common/tests/family/acc_all.py WORK [MACHINE] [--nvdi [--font]] [--display :N] [--use FILE]...
                                    [--accs ECal,EContact] [--prg EMail] [--again]
 
-MACHINE is ST (4 MB, TOS 1.04: ECALST.ACC and ECONTST.ACC, the ST
-editions, while a release has them; ECAL.ACC and ECONTACT.ACC when it
-doesn't, or when --use gives them, as from TLS.OVL on) or Falcon-4 (4 MB, no TT RAM, TOS 4.04: ECAL.ACC and
-ECONTACT.ACC), ST by default; EHYPVIEW.ACC runs on both. --nvdi boots
+MACHINE is Falcon (the DFB1: 14 MB + TT RAM, TOS 4.04, ECAL.ACC and ECONTACT.ACC),
+Falcon by default, or another machine with more than 4 MB (TT); ST-1 (1 MB, TOS 1.04) takes
+ECALST.ACC and ECONTST.ACC, the ST editions, while a release has them. --nvdi boots
 with Erez's NVDI (machines.py, m.nvdi()); --font gives EHypView one of
 his Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
 candidate's accessory (ECAL.ACC, say) or --prg's program (EMAIL.PRG) in place of the release's
@@ -71,7 +72,10 @@ rest = [a for a in args if not a.startswith("--")]
 if not rest:
     sys.exit(__doc__)
 work = os.path.abspath(rest[0])
-machine = rest[1] if len(rest) > 1 else "ST"
+machine = rest[1] if len(rest) > 1 else "Falcon"
+if machine.split(":")[0] in ("ST", "Falcon-4"):
+    sys.exit("acc_all: the accessories are not run on a 4 MB machine (%s): Erez, 4 Nov 2026. "
+             "Run it on Falcon (TT RAM)." % machine)
 st = machine.startswith("ST")
 
 fails = 0
