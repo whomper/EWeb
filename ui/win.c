@@ -1753,7 +1753,10 @@ void win_scroll_to(int32_t y)
 			cur->due.h = cur->r_page.h;
 			cur->due_big = 0;
 			cur->due_scroll = 1;
-			if (!pending || sync_draw)
+			/* (a held key's step over WHOLE_MS made here was 435 to 880
+			   ms of a stock Falcon's stretch: in pieces by the main
+			   loop instead, the guidelines' Speed) */
+			if (!pending || sync_draw || (!win_whole_only && due_ms(cur) > WHOLE_MS))
 				return;
 			sync_draw++;
 			pic_make(cur->top, cur->top + cur->r_page.h, pf_ms());
