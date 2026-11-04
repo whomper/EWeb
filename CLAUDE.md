@@ -303,8 +303,8 @@ hub stay complete, with the evidence.
   `oddaccess.py` over the 68000 builds (a word or long at an odd stack offset is an address error
   there; an initialised `char` array on the stack gets `__attribute__((aligned(4)))` or a `strcpy`). It ran on a 1 MB ST up
   to 0.27; Erez dropped that target on 23 Oct 2026 (DESIGN.md, Decisions): its floor is the 4 MB
-  1040 ST, with the family's accessories loaded beside it (AERA-Atari's
-  `common/tests/family/acc_all.py ST --prg EWeb:EWEBST.PRG:EWEB.FNT`, before each release). `EW_ST`
+  1040 ST, on its own (Erez, 4 Nov 2026: the family's accessories are no longer run beside a
+  program on a 4 MB machine; the hub's `acc_all.py` runs on `Falcon` only). `EW_ST`
   keeps the arenas' pieces small, and a page that doesn't fit gives back the kept pages and the
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
   through the gateway, and starts `EWEB.PRG` there to see common's `cpucheck.c` (`EWEB.PRG`'s
