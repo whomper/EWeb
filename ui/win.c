@@ -803,6 +803,7 @@ static int screen_lock(void)
    another page, place across or size) forgets them all. */
 static int PIC_BAND = 16;	/* rows a band: 8 on a machine without TT or Fast RAM (a
 				   stock Falcon's 16 of the news page were 60 to 75 ms) */
+#define PIC_WINS 16		/* windows kept at most (pic_use) */
 
 static struct {
 	ewin *w;		/* the window they are of; NULL none */
@@ -857,12 +858,18 @@ static int pic_use(void)
 		pic.nb = 0;
 		pic.pw = cur->r_page.w;
 		pic.ph = cur->r_page.h;
-		/* three windows' rows, else two, else one */
+		/* up to PIC_WINS windows' rows where ST RAM stays half free
+		   (made at rest, the page read on: a stock Falcon draws a window
+		   in about half a second, and Erez's 14 MB scrolled past three
+		   in a second or two, 4 Nov 2026), else three, two, one */
 		PIC_BAND = fast_machine() ? 16 : BAND_MIN;
-		for (k = 3; k >= 1 && nb == 0; k--) {
-			short n = (short) ((k * (long) cur->r_page.h + PIC_BAND - 1) / PIC_BAND + 2);
-			if (scr_store(cur->r_page.w, (short) (n * PIC_BAND)))
-				nb = n;
+		for (k = PIC_WINS; k >= 1 && nb == 0; k--) {
+			long n = (k * (long) cur->r_page.h + PIC_BAND - 1) / PIC_BAND + 2;
+			if (n * PIC_BAND > 32000)
+				continue;
+			if (k > 3 ? scr_store_ample(cur->r_page.w, (short) (n * PIC_BAND))
+				  : scr_store(cur->r_page.w, (short) (n * PIC_BAND)))
+				nb = (short) n;
 		}
 		if (nb == 0)
 			return 0;
@@ -898,7 +905,11 @@ void win_pic_busy(int busy)
 	/* (on a machine without TT or Fast RAM the bands are the heap's, the
 	   page's memory: given back while one loads, a 4 MB Falcon's news
 	   page otherwise didn't fit and was loaded twice, 14 s to 28) */
-	pic_hold = busy && !fast_machine();
+	/* (2: a page loading; 1: its pictures, while which the rows are kept
+	   where they aren't the heap's: a 14 MB Falcon's page was drawn
+	   afresh at each scroll till its last picture came, Erez's video
+	   of 4 Nov 2026) */
+	pic_hold = !fast_machine() && (busy == 2 || (busy == 1 && (scr_store_heap() || pic.nb <= 0)));
 	if (pic_hold && pic.nb > 0)
 		win_pic_drop();
 }
@@ -1055,8 +1066,12 @@ static int ahead_range(int32_t *y0, int32_t *y1)
 	const page *p = shown();
 	int32_t h = cur->r_page.h, top = cur->top, end = p != NULL ? p->height : 0, a;
 	int k, ks = (int) ((pic.nb - 2L) * PIC_BAND / (h > 0 ? h : 1));	/* (windows the ring holds) */
-	for (k = 0; k < 3 && k < ks; k++) {
-		a = k == 0 ? top : k == 1 ? top + h : top - h;
+	/* the window, the one below, the one above, then on down the page
+	   as far as the ring holds (a page is read down) */
+	for (k = 0; k < ks; k++) {
+		a = k == 0 ? top : k == 2 ? top - h : top + (k == 1 ? 1 : k - 1) * h;
+		if (k > 2 && a >= end)
+			break;
 		*y0 = a < 0 ? 0 : a;
 		*y1 = a + h > end ? end : a + h;
 		if (*y1 > *y0 && !pic_kept(*y0, *y1))
@@ -1100,6 +1115,7 @@ int win_ahead(void)
 /* a part of a band made ahead stops once its time is up (common's
    AES_PROFILE build: a stretch under 20 ms isn't reported) */
 #define AHEAD_MS 20
+#define AHEAD_RUN 4	/* bands a run made ahead at most (a stock Falcon's) */
 static int ahead_stop(void *ud)
 {
 	return (long) (pf_ms() - *(unsigned long *) ud) >= 0;
@@ -1130,19 +1146,32 @@ void win_draw_ahead(void)
 			   time and the rest at the next turns: a band of the news
 			   page's big headlines was 45 to 65 ms of the stock
 			   Falcon's, and a line scrolled meanwhile 55 of its 50) */
-			int32_t b = (y0 > 0 ? y0 : 0) / PIC_BAND;
+			int32_t b = (y0 > 0 ? y0 : 0) / PIC_BAND, e, k;
 			unsigned long end = pf_ms() + AHEAD_MS;
 			while (pic_has(b) && (b + 1) * PIC_BAND < y1)
 				b++;
 			if (!pic_has(b)) {
-				/* (its place in the ring no longer the band it held: in
-				   true colour the part is drawn there) */
-				pic.band[b % pic.nb] = -1;
-				if (scr_store_draw_part(pic.p, pic.left, b * PIC_BAND, (short) (b % pic.nb * PIC_BAND),
-							(short) PIC_BAND, ahead_stop, &end)) {
-					pic.band[b % pic.nb] = b;
+				/* a run of bands not kept, up to AHEAD_RUN of them (a
+				   line of text across a run's edge is worked out again
+				   in each: the news page in runs of 8 rows was 24% more
+				   68030 instructions than in runs of 400, in 32 5%),
+				   within the ring and 64 of its rows (a piece's, where
+				   it is in pieces), and the run the same at each turn
+				   till it is made */
+				short at = (short) (b % pic.nb * PIC_BAND), n = (short) PIC_BAND;
+				for (e = b + 1; e * PIC_BAND < y1 && !pic_has(e) && e % pic.nb != 0 &&
+				     n + PIC_BAND <= AHEAD_RUN * PIC_BAND && n + PIC_BAND <= scr_band_rows() &&
+				     (at % 64) + n + PIC_BAND <= 64; e++)
+					n = (short) (n + PIC_BAND);
+				/* (their places in the ring no longer the bands they
+				   held: in true colour the part is drawn there) */
+				for (k = b; k < e; k++)
+					pic.band[k % pic.nb] = -1;
+				if (scr_store_draw_part(pic.p, pic.left, b * PIC_BAND, at, n, ahead_stop, &end)) {
+					for (k = b; k < e; k++)
+						pic.band[k % pic.nb] = k;
 					scr_bands++;
-					scr_slice_rows += (unsigned long) PIC_BAND;
+					scr_slice_rows += (unsigned long) n;
 				}
 			}
 			cur = was;

@@ -174,6 +174,8 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
    at, w of them from column sx, put on the screen at x, y (not clipped:
    within the window's rectangle) */
 int scr_store(short w, short n);
+int scr_store_ample(short w, short n);	/* the same where ST RAM stays half free */
+int scr_store_heap(void);		/* the kept rows the heap's */
 void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n);
 /* the same for a band of n rows (the buffers' rows at most) in parts, at
    GEM's turns: drawn until stop(ud) says, then on from there at the next

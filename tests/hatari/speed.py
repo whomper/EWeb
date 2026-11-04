@@ -138,6 +138,28 @@ def pages_fresh(r, n=3):
     return out
 
 
+def pages_read(r, n=4, rest=10):
+    """the page's top read for rest seconds (EWeb draws on down the page
+    meanwhile), then n pages down a third of a second apart: each one's
+    window whole, from its key (Erez, 4 Nov 2026)"""
+    r.key("Home")
+    time.sleep(1)
+    r.still()
+    time.sleep(rest)
+    start = os.path.getsize(r.log)
+    for _ in range(n):
+        r.key("shift+Down")
+        time.sleep(0.33)
+    time.sleep(1)
+    r.still()
+    s = scrolls_since(r, start)
+    gaps = gaps_since(r, start)
+    r.n += 1
+    r.shot("%02d-pages-read" % r.n)
+    return ("%d pages down after %d s at the top" % (n, rest), max(ms for ms, _ in s) if s else None,
+            "whole %d times, longest stretch %d ms" % (len(s), max(gaps) if gaps else 0))
+
+
 def run(out, machine, nvdi, prgdir):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
@@ -197,6 +219,7 @@ def run(out, machine, nvdi, prgdir):
         seen.append(held(r, "Down", "an arrow held 3 s, down"))
         seen.append(held(r, "Up", "an arrow held 3 s, up"))
         seen.extend(pages_fresh(r))
+        seen.append(pages_read(r))
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,

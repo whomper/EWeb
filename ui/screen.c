@@ -389,7 +389,7 @@ static inline __attribute__((always_inline)) void sixteen(const unsigned char *s
 		   speed rig's Falcon-14); the same words as the tables', 2
 		   million random runs */
 		const unsigned long *q = (const unsigned long *) (const void *) src;
-		unsigned long x0 = q[0], y0 = q[1], x1 = q[2], y1 = q[3], t;
+		unsigned long x0 = q[0], y0 = q[1], x1 = q[2], y1 = q[3], t, x, y;
 #define C2P_T8(x, y) do { \
 		t = (x ^ (x >> 7)) & 0x00AA00AAUL; x ^= t ^ (t << 7); \
 		t = (y ^ (y >> 7)) & 0x00AA00AAUL; y ^= t ^ (t << 7); \
@@ -397,6 +397,18 @@ static inline __attribute__((always_inline)) void sixteen(const unsigned char *s
 		t = (y ^ (y >> 14)) & 0x0000CCCCUL; y ^= t ^ (t << 14); \
 		t = (x & 0xF0F0F0F0UL) | ((y >> 4) & 0x0F0F0F0FUL); \
 		y = ((x << 4) & 0xF0F0F0F0UL) | (y & 0x0F0F0F0FUL); x = t; } while (0)
+		if (np <= 4) {
+			/* 4 planes or 2: two pixels a byte (pixel i's in its high
+			   half, i + 8's in its low), one transpose for the 16:
+			   plane k's in x's byte k, pixels 0-7, and y's, 8-15 (the
+			   same words, 2 million random runs) */
+			x = (x0 & 0x0f0f0f0fUL) << 4 | (x1 & 0x0f0f0f0fUL);
+			y = (y0 & 0x0f0f0f0fUL) << 4 | (y1 & 0x0f0f0f0fUL);
+			C2P_T8(x, y);
+			for (k = 0; k < np; k++)
+				to[k] = (unsigned short) ((x >> (8 * k) & 0xff) << 8 | (y >> (8 * k) & 0xff));
+			return;
+		}
 		C2P_T8(x0, y0);
 		C2P_T8(x1, y1);
 #undef C2P_T8
@@ -901,6 +913,37 @@ int scr_store(short w, short n)
 	store_rows = n;
 	store_w = w;
 	return 1;
+}
+
+/* n rows w wide kept, as scr_store, but only where they leave the
+   system's ST RAM half free and a megabyte more (more of the page than
+   the window and one either side, drawn at rest: a stock Falcon draws a
+   window of a page in about half a second, and Erez's 14 MB scrolled
+   past three windows in a second or two, 4 Nov 2026); not from the heap */
+int scr_store_ample(short w, short n)
+{
+	long row, size, free_st;
+	scr_store(0, 0);
+	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))
+		return 0;
+	row = truecolour ? ((w + 15) / 16) * 32L : format == 2 ? ((w + 15) / 16) * 16L : ((w + 15) / 16) * 2L * planes;
+	size = row * n;
+	free_st = (long) Mxalloc(-1, 0);
+	if (free_st == -32 || free_st < 2 * size + (1L << 20))
+		return 0;
+	if (!scr_store(w, n))
+		return 0;
+	if (store_heap) {
+		scr_store(0, 0);
+		return 0;
+	}
+	return 1;
+}
+
+/* the kept rows the heap's (a 4 MB Falcon's: given back while pictures come) */
+int scr_store_heap(void)
+{
+	return store != NULL && store_heap;
 }
 
 /* a band being drawn in parts (scr_store_draw_part): where it goes, and
