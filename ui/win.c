@@ -1801,7 +1801,10 @@ void win_scroll_to(int32_t y)
 		   Nov 2026); more than that due (a page being drawn in
 		   slices): no copy, the window drawn whole from its new place */
 		if (cur->due.w > 0 && cur->due.h > 0 && !sync_draw) {
-			if (cur->due.h > 2 * d + BAND_MIN) {
+			/* (and over WHOLE_MS: a held key's batch moves hundreds of
+			   rows, and what it left due drawn here was 515 to 645 ms of
+			   a stock Falcon's stretch: the pieces' instead) */
+			if (cur->due.h > 2 * d + BAND_MIN || (!win_whole_only && due_ms(cur) > WHOLE_MS)) {
 				redraw_now();
 				return;
 			}
