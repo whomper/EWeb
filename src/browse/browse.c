@@ -5500,6 +5500,7 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_is_pens(im) ? "pens from the Pi" :
 							       img_from_cache(im) ? "from the cache" : "decoded") :
 				 img_why(im), (long) w, (long) h);
+			MARK("picture: logged");
 			log_img(b, im, what, ms_fetch, pf_ms() - t);
 		}
 		if (d->y < lo)
@@ -5507,6 +5508,7 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 		if (d->y + d->h > hi)
 			hi = d->y + d->h;
 	}
+	MARK("pictures: trimmed");
 	img_trim();
 	if (hi > lo) {
 		*y0 = lo;
@@ -5514,8 +5516,16 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 	}
 	return BRP_DRAWN;
 frame:
+	/* (GEM's turns either side of the frame's making: the news page's
+	   iframe, 85 ms of a stock Falcon's, was in one stretch with the
+	   step before it, 110 ms of the speed rig's 100) */
+	turn_now = 1;
+	gem_turn();
+	MARK("frame: made");
 	if (!frame_load(b, fk, NULL, 0))
 		return BRP_STOPPED;
+	turn_now = 1;
+	gem_turn();
 	t0 = pf_ms();
 	k = br_relayout(b, b->width);
 	b->pic_laid = pf_ms();
