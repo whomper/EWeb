@@ -411,12 +411,20 @@ static int xindex_of(uint32_t cp)
 	return -1;
 }
 
-/* noff's entry for cp, as font_glyph finds its glyph in the first block */
+/* a character the fonts haven't got that is drawn as nothing: format
+   characters, Hebrew points, and emoji (EWEB.FNT has no pictures of
+   them: webdriveruniversity.com's front page was a row of '?'s, 3 Nov
+   2026), with what joins and colours them (variation selectors, the
+   keycap, tags); the symbols among them the fonts have (U+2605, U+2713...)
+   are drawn, since only a character not found comes here */
 static inline int zero_width(uint32_t cp)
 {
 	return cp == 0x200B || cp == 0x200C || cp == 0x200D || cp == 0xAD || cp == 0xFEFF ||
 	       (cp >= 0x200E && cp <= 0x200F) || (cp >= 0x202A && cp <= 0x202E) ||
-	       (cp >= 0x2066 && cp <= 0x2069) || (cp >= 0x591 && cp <= 0x5C7);
+	       (cp >= 0x2066 && cp <= 0x2069) || (cp >= 0x591 && cp <= 0x5C7) ||
+	       (cp >= 0x1F000 && cp <= 0x1FAFF) || (cp >= 0xFE00 && cp <= 0xFE0F) || cp == 0x20E3 ||
+	       (cp >= 0x2600 && cp <= 0x27BF) || (cp >= 0x2B00 && cp <= 0x2BFF) || (cp >= 0x231A && cp <= 0x23FF) ||
+	       (cp >= 0xE0020 && cp <= 0xE007F);
 }
 
 static inline int blank(uint32_t cp)
