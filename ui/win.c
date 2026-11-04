@@ -751,6 +751,26 @@ static long rcost(void)
 	return row_cost;
 }
 
+/* the dearest rows lately (row_cost's most, coming down slowly): whether
+   a draw is whole or in pieces is told by it, before it begins (a page's
+   top is often cheaper than its body: told by the rows first drawn, a
+   stock Falcon's news page went on whole for 500 to 850 ms) */
+static long row_cost_hi;
+
+static void row_cost_seen(long c)
+{
+	row_cost = c > row_cost ? c : (row_cost + c) / 2;
+	if (c > row_cost_hi)
+		row_cost_hi = c;
+	else
+		row_cost_hi -= (row_cost_hi - c) / 16;
+}
+
+static long rcost_hi(void)
+{
+	return row_cost_hi > rcost() ? row_cost_hi : rcost();
+}
+
 /* the page's part of area (the screen's) added to the window's due */
 static void due_add(const GRECT *area)
 {
@@ -1000,7 +1020,7 @@ static int pic_make(int32_t y0, int32_t y1, unsigned long end)
 		scr_bands++;
 		if (dt >= 10 || n * PIC_BAND >= 64) {
 			long c = dt * 256 / (n * PIC_BAND);
-			row_cost = c > row_cost ? c : (row_cost + c) / 2;
+			row_cost_seen(c);
 		}
 		if (!sync_draw && (long) (pf_ms() - end) >= 0)
 			return pic_kept(y0, y1);
@@ -1331,7 +1351,7 @@ static void draw_due(void)
 			/* (more at once, so that the next slice isn't long too;
 			   less as an average) */
 			long c = (long) (dt * 256 / band.h);
-			row_cost = c > row_cost ? c : (row_cost + c) / 2;
+			row_cost_seen(c);
 		}
 		if (!sync_draw && (long) (pf_ms() - end) >= 0)
 			break;
@@ -1399,7 +1419,7 @@ static void draw_due_bars(void)
 /* what the window's due takes to draw, by the rows drawn so far (rcost) */
 static long due_ms(const ewin *w)
 {
-	return (long) w->due.h * rcost() / 256 * w->due.w / (w->r_page.w > 0 ? w->r_page.w : 1);
+	return (long) w->due.h * rcost_hi() / 256 * w->due.w / (w->r_page.w > 0 ? w->r_page.w : 1);
 }
 
 int win_whole_only;
@@ -1426,12 +1446,9 @@ void win_draw_due(void)
 		cur = w;
 		if (w->due.w > 0 && w->due.h > 0 && w->due_since == 0)
 			w->due_since = pf_ms() | 1;
-		/* (more than half a piece by the rows drawn so far: a piece
-		   first, and the rest whole after it if what the piece took says
-		   the stretch stays within WHOLE_MS, else at the next turns:
-		   pages differ threefold a row, the sample page's rate made the
-		   news page's 950 ms on a stock Falcon one stretch) */
-		long_draw = w->due.w > 0 && w->due.h > 0 && !win_whole_only && due_ms(w) > PIECE_MS / 2;
+		/* (over WHOLE_MS by the dearest rows lately: in pieces, from its
+		   first to its last; else whole) */
+		long_draw = w->due.w > 0 && w->due.h > 0 && !win_whole_only && due_ms(w) > WHOLE_MS;
 		sync_draw++;
 		for (k = 0; k < 16; k++) {	/* (each step clears what it drew) */
 			if (w->due_bars & ~16)
@@ -1444,9 +1461,7 @@ void win_draw_due(void)
 					piece--;
 					sync_draw++;
 					long_draw = 0;
-					if (w->due.w > 0 && w->due.h > 0 &&
-					    (long) (pf_ms() - ui_event_at) + due_ms(w) > WHOLE_MS)
-						break;	/* (a piece: the rest at the next turns) */
+					break;	/* (a piece: the rest at the next turns) */
 				} else {
 					draw_due();
 				}
