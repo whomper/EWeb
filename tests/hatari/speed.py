@@ -111,6 +111,33 @@ def held(r, key, what, secs=3):
             "%d rows a second, whole %d times, longest stretch %d ms" % (rows // secs, len(s), max(gaps) if gaps else 0))
 
 
+def pages_fresh(r, n=3):
+    """pages the kept page hasn't made yet, as Erez's Page Downs on a
+    stock Falcon (4 Nov 2026): the page's end (Shift-ClrHome), then n
+    pages up a third of a second apart; each one's window whole, from its
+    key"""
+    out = []
+    start = os.path.getsize(r.log)
+    r.key("shift+Home")
+    time.sleep(1)
+    r.still()
+    s = scrolls_since(r, start)
+    out.append(("the page's end (nothing kept there)", s[-1][0] if s else None, ""))
+    start = os.path.getsize(r.log)
+    for _ in range(n):
+        r.key("shift+Up")
+        time.sleep(0.33)
+    time.sleep(1)
+    r.still()
+    s = scrolls_since(r, start)
+    gaps = gaps_since(r, start)
+    r.n += 1
+    r.shot("%02d-pages-up" % r.n)
+    out.append(("%d pages up, one after another" % n, max(ms for ms, _ in s) if s else None,
+                "whole %d times, longest stretch %d ms" % (len(s), max(gaps) if gaps else 0)))
+    return out
+
+
 def run(out, machine, nvdi, prgdir):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
@@ -169,6 +196,7 @@ def run(out, machine, nvdi, prgdir):
         seen.append(("a page scrolled", max(ms for ms, _ in s) if s else None, ""))
         seen.append(held(r, "Down", "an arrow held 3 s, down"))
         seen.append(held(r, "Up", "an arrow held 3 s, up"))
+        seen.extend(pages_fresh(r))
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
