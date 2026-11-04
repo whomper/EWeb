@@ -492,6 +492,21 @@ static void fresh(ejs *j)
 	}
 }
 
+/* fresh, and n's tree too when it isn't the document's (an element made
+   by a script and not put in yet, a fragment): matching reads the links
+   doc_refresh makes, and a tree out of the document had none (the date
+   picker's month and days, found in its template by class, were never
+   filled in: webdriveruniversity.com) */
+static void fresh_at(ejs *j, dnode *n)
+{
+	dnode *t = n;
+	fresh(j);
+	while (t->parent != NULL)
+		t = t->parent;
+	if (t != j->d->root)
+		doc_refresh_tree(j->d, t);
+}
+
 static void run_script(ejs *j, dnode *n);
 
 static int started(ejs *j, const dnode *n)
@@ -807,7 +822,7 @@ static JSValue query(JSContext *ctx, dnode *root, JSValueConst sel, int all)
 	dnode *n;
 	if (l == NULL)
 		return JS_EXCEPTION;
-	fresh(j);
+	fresh_at(j, root);
 	a = all ? JS_NewArray(ctx) : JS_NULL;
 	for (n = root->first ? root->first : NULL; n != NULL; n = next_in(n, root, 1))
 		if (matches(j, l, n)) {
@@ -1738,7 +1753,7 @@ static JSValue el_matches(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 	THIS_ELEM(n);
 	if (argc < 1 || (l = selector(ctx, argv[0])) == NULL)
 		return JS_EXCEPTION;
-	fresh(j);
+	fresh_at(j, n);
 	if (!closest)
 		return JS_NewBool(ctx, matches(j, l, n));
 	for (k = n; k != NULL; k = k->parent)
@@ -1813,6 +1828,22 @@ static JSValue el_rect(JSContext *ctx, JSValueConst this_val, int magic)
 static JSValue el_rect_fn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	return el_rect(ctx, this_val, RECT_OBJ);
+}
+
+/* getClientRects: its box as one rectangle, none when it has no box
+   (display: none, not laid out); jQuery's sizes (outerWidth, as a date
+   picker places itself: webdriveruniversity.com) ask it whether an
+   element is shown */
+static JSValue el_rects_fn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	int32_t x, y, w, h;
+	JSValue a;
+	THIS_ELEM(n);
+	a = JS_NewArray(ctx);
+	rect_of(J(ctx), n, &x, &y, &w, &h);
+	if (w > 0 || h > 0)
+		JS_SetPropertyUint32(ctx, a, 0, el_rect(ctx, this_val, RECT_OBJ));
+	return a;
 }
 
 static JSValue el_dataset(JSContext *ctx, JSValueConst this_val)
@@ -2671,6 +2702,7 @@ static const JSCFunctionListEntry elem_funcs[] = {
 	JS_CGETSET_DEF("style", el_style, el_set_style),
 	JS_CGETSET_DEF("dataset", el_dataset, NULL),
 	JS_CFUNC_DEF("getBoundingClientRect", 0, el_rect_fn),
+	JS_CFUNC_DEF("getClientRects", 0, el_rects_fn),
 	JS_CGETSET_MAGIC_DEF("offsetTop", el_rect, NULL, RECT_TOP),
 	JS_CGETSET_MAGIC_DEF("offsetLeft", el_rect, NULL, RECT_LEFT),
 	JS_CGETSET_MAGIC_DEF("offsetWidth", el_rect, NULL, RECT_WIDTH),

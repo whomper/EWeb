@@ -170,6 +170,11 @@ void dn_remove_attr(doc *d, dnode *n, const char *name);
 /* after a script changed the tree: the element links, flags and hints
    the CSS engine reads, and the form controls, made again */
 void doc_refresh(doc *d);
+/* the same for a tree that isn't the document's (top: an element a script
+   made, a fragment, another document's root, and what is under it), for
+   matching selectors in it: querySelector on an element not yet put in
+   the page (jQuery's HTML, parsed in a document of its own) */
+void doc_refresh_tree(doc *d, dnode *top);
 
 /* The parsing in the HTML Standard's shared declarative refresh steps
    (4.2.5.3), for a <meta http-equiv=refresh>'s content and the Refresh

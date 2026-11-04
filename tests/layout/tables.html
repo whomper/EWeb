@@ -13,4 +13,19 @@
 <table width="100%" bgcolor="#eeeeee" cellpadding=4><tr><td>left<td align=right>right</table>
 <table align=center cellspacing=0 border=0><tr><td bgcolor=ccddee>centred<td>table</table>
 <table><tr><td>outer<td><table border=1><tr><td>inner<td>cells</table></table>
+<!-- cells with no row: in an anonymous row of their own, and a block
+     floated beside a cell in a cell of its own (CSS 2.1, 17.2.1); a field
+     of a width in percent no wider than it must be at its narrowest
+     (Bootstrap 3's input group: the field and its button in 180px) -->
+<style>
+.ig { display: table; border-collapse: separate; width: 180px; margin: 4px 0 }
+.ig input { float: left; width: 100%; display: table-cell; box-sizing: border-box; height: 26px; padding: 2px 6px;
+            border: 1px solid #999; background: #fff }
+.ig span { display: table-cell; width: 1%; white-space: nowrap; vertical-align: middle; padding: 2px 8px;
+           border: 1px solid #999; background: #ddd }
+.cells { display: table; border-spacing: 4px; background: #eee }
+.cells div { display: table-cell; background: #cde; padding: 2px }
+</style>
+<div class="ig"><input value="11-04-2026"><span>[c]</span></div>
+<div class="cells"><div>one</div> <div>two</div> <div>three</div></div>
 </body></html>

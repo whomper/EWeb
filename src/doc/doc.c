@@ -935,6 +935,24 @@ void doc_refresh(doc *d)
 	form_init(d);
 }
 
+void doc_refresh_tree(doc *d, dnode *top)
+{
+	dnode *c;
+	bd_doc = d;
+	hint_atoms(d);
+	if (top->type == DN_ELEMENT) {
+		finish(d, top, NULL);
+		top->e.index = top->e.nsib = 1;
+	} else {
+		for (c = top->first; c != NULL; c = c->next)
+			if (c->type == DN_ELEMENT) {
+				finish(d, c, NULL);
+				c->e.index = c->e.nsib = 1;
+			}
+	}
+	bd_doc = NULL;
+}
+
 /* the class attribute, split at white space, into n->cls */
 static int split_classes(doc *d, dnode *n, const char *s, size_t len)
 {

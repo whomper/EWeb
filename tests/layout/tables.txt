@@ -1,4 +1,4 @@
-page 608 x 200, background ffffff, 66 items, 0 links, title "Tables"
+page 608 x 254, background ffffff, 85 items, 0 links, title "Tables"
 text 11,24 43x17 #000000 sans13 bold link 0 "Name"
 fill 9,9 47x1 #808080
 fill 9,28 47x1 #808080
@@ -65,3 +65,21 @@ fill 47,165 76x1 #808080
 fill 47,190 76x1 #808080
 fill 47,166 1x24 #808080
 fill 122,166 1x24 #808080
+fill 6,197 129x21 #ffffff
+fill 6,197 129x1 #999999
+fill 6,217 129x1 #999999
+fill 6,198 1x19 #999999
+fill 134,198 1x19 #999999
+fill 135,197 15x22 #dddddd
+text 142,213 17x17 #000000 sans13 link 0 "[c]"
+fill 135,197 15x1 #999999
+fill 135,218 15x1 #999999
+fill 135,198 1x20 #999999
+fill 149,198 1x20 #999999
+fill 6,222 104x26 #eeeeee
+fill 9,225 28x20 #ccddee
+text 11,240 24x17 #000000 sans13 link 0 "one"
+fill 40,225 26x20 #ccddee
+text 42,240 22x17 #000000 sans13 link 0 "two"
+fill 69,225 38x20 #ccddee
+text 71,240 34x17 #000000 sans13 link 0 "three"

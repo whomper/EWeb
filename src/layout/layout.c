@@ -2272,6 +2272,132 @@ static inline int text_float(const box *b, const box *c)
 	return !b->row && !b->flex && !b->grid && !b->table && floated(c);
 }
 
+static int row_group(const box *g);
+static int out_of_flow(const box *c);
+static void fixup(L *l, box *b);
+
+/* a table's anonymous parts (CSS 2.1, 17.2.1), where a table or a row
+   group has cells of its own (Bootstrap's input group: a table of a
+   field floated and a cell beside it, no row; webdriveruniversity.com's
+   datepicker had the cell under its field, as a block): each run of
+   children that aren't rows, row groups or captions and has a cell in it
+   goes in a row of its own, and in that row what isn't a cell in a cell
+   of its own (a cell floated or positioned is a block), white space
+   between them dropped. A run with no cell is left as it was (a table
+   of text alone, rows in a wrapper: as before) */
+static int is_cell(const box *c)
+{
+	return c->kind == BX_BLOCK && !c->anon && c->st != NULL && !c->ib &&
+	       kw(c->st, EP_DISPLAY) == KW_TABLE_CELL && kw(c->st, EP_FLOAT) == KW_NONE;
+}
+
+static int is_rowish(const box *c)
+{
+	return c->kind == BX_BLOCK && (c->tablerow || row_group(c) ||
+				       (!c->anon && c->st != NULL && kw(c->st, EP_DISPLAY) == KW_TABLE_CAPTION));
+}
+
+/* an anonymous block of b's (a row, rows set; else a cell) round the run
+   first..end, put in its place after prev */
+static box *anon_round(L *l, box *b, box *prev, box *first, box *end, int rows)
+{
+	box *a = amalloc(&l->ba, sizeof *a), *k, *next = end->next;
+	if (a == NULL) {
+		l->fail = 1;
+		return NULL;
+	}
+	memset(a, 0, sizeof *a);
+	a->kind = BX_BLOCK;
+	a->anon = 1;
+	a->st = b->st;
+	a->parent = b;
+	a->link = b->link;
+	a->aw = a->ah = AUTO;
+	a->tablerow = (uint8_t) rows;
+	a->row = (uint8_t) rows;
+	a->first = first;
+	a->last = end;
+	for (k = first; ; k = k->next) {
+		k->parent = a;
+		if (k == end)
+			break;
+	}
+	end->next = NULL;
+	a->next = next;
+	if (prev)
+		prev->next = a;
+	else
+		b->first = a;
+	if (next == NULL)
+		b->last = a;
+	return a;
+}
+
+/* in an anonymous row: what isn't a cell in cells, white space dropped */
+static void anon_cells(L *l, box *row)
+{
+	box *c, *prev = NULL, *next;
+	for (c = row->first; c != NULL; c = next) {
+		box *end = c, *a;
+		int blank_run = 1;
+		next = c->next;
+		if (is_cell(c) || out_of_flow(c)) {
+			prev = c;
+			continue;
+		}
+		for (;;) {
+			if (end->kind != BX_TEXT || !blank(end->text, end->len) || keeps_space(end->st))
+				blank_run = 0;
+			if (end->next == NULL || is_cell(end->next) || out_of_flow(end->next))
+				break;
+			end = end->next;
+		}
+		next = end->next;
+		if (blank_run) {
+			if (prev)
+				prev->next = next;
+			else
+				row->first = next;
+			if (next == NULL)
+				row->last = prev;
+			continue;
+		}
+		if ((a = anon_round(l, row, prev, c, end, 0)) == NULL)
+			return;
+		fixup(l, a);	/* (its blocks or its lines) */
+		prev = a;
+	}
+}
+
+static void table_anon(L *l, box *b)
+{
+	box *c, *prev = NULL, *next;
+	for (c = b->first; c != NULL; c = next) {
+		box *end = c, *a;
+		int cells = 0;
+		next = c->next;
+		if (is_rowish(c)) {
+			prev = c;
+			continue;
+		}
+		for (;;) {
+			cells |= is_cell(end);
+			if (end->next == NULL || is_rowish(end->next))
+				break;
+			end = end->next;
+		}
+		next = end->next;
+		if (!cells) {
+			prev = end;
+			continue;
+		}
+		if ((a = anon_round(l, b, prev, c, end, 1)) == NULL)
+			return;
+		anon_cells(l, a);
+		prev = a;
+	}
+}
+
 static void fixup(L *l, box *b)
 {
 	box *c, *prev, *next;
@@ -2294,6 +2420,11 @@ static void fixup(L *l, box *b)
 	}
 	if (b->kind != BX_BLOCK)
 		return;
+	if (b->table || row_group(b)) {
+		table_anon(l, b);
+		if (l->fail)
+			return;
+	}
 	if (b->flex || b->grid) {
 		/* a flex or grid container's element children are its items, blocks
 		   (its text and pictures go in anonymous items) */
@@ -5352,6 +5483,14 @@ static int32_t measure(L *l, box *b)
 		return 0;	/* (a table's or a flexbox's sizing measures every box under it: polls too) */
 	if (!b->anon)
 		w = len(l, b->st, EP_WIDTH, AUTO);
+	if (l->minw && w == AUTO && !b->anon && b->n != NULL && b->st->k[EP_WIDTH] == EK_PCT &&
+	    (b->n->tag == T_INPUT || b->n->tag == T_SELECT || b->n->tag == T_TEXTAREA)) {
+		/* a field of a width in percent: at its narrowest, no wider than
+		   its padding and borders (CSS Sizing 3, 5.2.2: compressible),
+		   so that a table shares out what is left round it (Bootstrap's
+		   input group: the field and the button beside it in 180px) */
+		return extras(l, b);
+	}
 	if (w != AUTO) {
 		if (kw(b->st, EP_BOX_SIZING) == KW_BORDER_BOX)
 			return w + len0(l, b->st, EP_MARGIN_LEFT, AUTO) + len0(l, b->st, EP_MARGIN_RIGHT, AUTO);

@@ -618,6 +618,12 @@ static int click(browser *b, const char *id)
 		/* -M X,Y: a click at a place on the page (in a frame too) */
 		x = px;
 		y = py;
+#ifndef EW_ST
+		/* (the page's scripts told first, as a click by id is) */
+		r = br_js_click(b, x, y, &cancelled, &load);
+		printf("click %d,%d: %s%s\n", px, py, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
+		       cancelled ? ", cancelled" : "");
+#endif
 		goto at;
 	}
 	n = b->d ? by_id(b->d->root, id) : NULL;

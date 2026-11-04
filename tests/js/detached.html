@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- Selectors in a tree not yet in the page (an element filled by
+     innerHTML, another document's, a fragment), as jQuery parses HTML
+     before it is put in (webdriveruniversity.com's date picker filled its
+     month and days by class in its template); getClientRects, which
+     jQuery's sizes ask whether an element is shown -->
+<!-- args: -T 200 -->
+<!-- expect: console: in-div 1 1 1 1 -->
+<!-- expect: console: other-doc 1 1 1 -->
+<!-- expect: console: frag 0 1 1 -->
+<!-- expect: console: matches true closest x -->
+<!-- expect: console: rects 1 0 -->
+<html><head><title>Detached trees</title></head><body>
+<p id="shown">a paragraph</p><p id="none" style="display: none">none</p>
+<script>
+var html = '<div class="x"><table><thead><tr><th class="y">a</th></tr></thead><tbody><tr><td>b</td></tr></tbody></table></div>';
+function n(root, q) { return root.querySelectorAll(q).length; }
+var a = document.createElement('div');
+a.innerHTML = html;
+console.log('in-div ' + n(a, '.x') + ' ' + n(a, '.y') + ' ' + n(a, 'thead th') + ' ' + n(a, '.x .y'));
+var d = document.implementation.createHTMLDocument('');
+d.body.innerHTML = html;
+console.log('other-doc ' + n(d.body, '.x') + ' ' + n(d.body, 'thead th.y') + ' ' + n(d.body, 'div tbody td'));
+var f = document.createDocumentFragment();
+f.appendChild(d.body.firstChild);
+console.log('frag ' + n(f.firstChild, '.x') + ' ' + n(f.firstChild, '.y') + ' ' + n(f.firstChild, '.x .y'));
+var th = a.querySelector('th');
+console.log('matches ' + th.matches('.x th.y') + ' closest ' + th.closest('div').className);
+setTimeout(function () {	/* (laid out by then) */
+	console.log('rects ' + document.getElementById('shown').getClientRects().length + ' ' +
+		    document.getElementById('none').getClientRects().length);
+}, 0);
+</script>
+</body></html>
