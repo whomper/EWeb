@@ -4,7 +4,7 @@
 """make test's check of a page drawn in parts (src/gfx/canvas.c's
 cv_page_part, as ui/win.c makes the kept page's bands on a stock Falcon:
 a band's items until its time is up, the rest at the next turns): every
-page of tests/layout, and the news page, drawn by ewrender -k in bands of
+page of tests/layout, and the news page, drawn by ewrender -i in bands of
 8 rows, each stopped every 4 items, the same pixels as the page drawn
 whole, in 16 colours and in true colour.
 
@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def draw(ewr, fnt, page, extra, out, parts):
-    cmd = [ewr, "-f", fnt, "-o", out] + extra + (["-k"] if parts else []) + page
+    cmd = [ewr, "-f", fnt, "-o", out] + extra + (["-i"] if parts else []) + page
     r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=300)
     return r.returncode, r.stderr.decode(errors="replace")
 

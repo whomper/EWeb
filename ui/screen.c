@@ -380,6 +380,34 @@ static inline __attribute__((always_inline)) void sixteen(const unsigned char *s
 		return;
 	}
 #endif
+#ifndef EW_ST
+	if (np >= 2) {
+		/* the 68030's: two 8 by 8 bit transposes in registers (Hacker's
+		   Delight 7-3), no tables: their 16 KB missed its 256-byte data
+		   cache at most looks, and a window of a page in 256 colours was
+		   650 ms of a stock Falcon's to convert (its drawing 700, the
+		   speed rig's Falcon-14); the same words as the tables', 2
+		   million random runs */
+		const unsigned long *q = (const unsigned long *) (const void *) src;
+		unsigned long x0 = q[0], y0 = q[1], x1 = q[2], y1 = q[3], t;
+#define C2P_T8(x, y) do { \
+		t = (x ^ (x >> 7)) & 0x00AA00AAUL; x ^= t ^ (t << 7); \
+		t = (y ^ (y >> 7)) & 0x00AA00AAUL; y ^= t ^ (t << 7); \
+		t = (x ^ (x >> 14)) & 0x0000CCCCUL; x ^= t ^ (t << 14); \
+		t = (y ^ (y >> 14)) & 0x0000CCCCUL; y ^= t ^ (t << 14); \
+		t = (x & 0xF0F0F0F0UL) | ((y >> 4) & 0x0F0F0F0FUL); \
+		y = ((x << 4) & 0xF0F0F0F0UL) | (y & 0x0F0F0F0FUL); x = t; } while (0)
+		C2P_T8(x0, y0);
+		C2P_T8(x1, y1);
+#undef C2P_T8
+		/* (planes 0-3 in y's bytes from its low end, 4-7 in x's) */
+		for (k = 0; k < 4 && k < np; k++)
+			to[k] = (unsigned short) ((y0 >> (8 * k) & 0xff) << 8 | (y1 >> (8 * k) & 0xff));
+		for (; k < np; k++)
+			to[k] = (unsigned short) ((x0 >> (8 * (k - 4)) & 0xff) << 8 | (x1 >> (8 * (k - 4)) & 0xff));
+		return;
+	}
+#endif
 	a = eight(c2p_lo, src);
 	b = eight(c2p_lo, src + 8);
 	for (k = 0; k < 4 && k < np; k++)

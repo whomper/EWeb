@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-k] [-N URL] [-L WIDTH] [-e ENC]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-i] [-N URL] [-L WIDTH] [-e ENC]
  *            [-p COLOURS] PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -a a box's scroll bars' width down
@@ -33,7 +33,7 @@
  * every scroll position and in pieces across, at 8 and 16 bits, each into
  * a buffer of just its size: under AddressSanitizer a pixel drawn past a
  * band's edge stops it (on the Falcon it would land in ST RAM next to the
- * band, TOS's). -k draws the PNG in bands of 8 rows, each in the parts
+ * band, TOS's). -i draws the PNG in bands of 8 rows, each in the parts
  * cv_page_part stops at, as the kept page's are made on a stock Falcon
  * (ui/win.c): tests/layout/parts.py holds it to the page drawn whole.
  * The page's pictures are fetched and decoded before it is
@@ -816,7 +816,7 @@ int main(int argc, char **argv)
 			dump = 1;
 		else if (!strcmp(argv[i], "-B"))
 			band = 1;
-		else if (!strcmp(argv[i], "-k"))
+		else if (!strcmp(argv[i], "-i"))
 			parts = 1;
 		else if (!strcmp(argv[i], "-E"))
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
@@ -926,7 +926,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-k] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1427,7 +1427,7 @@ int main(int argc, char **argv)
 			c.mark_rgb = 0xffff00;
 		}
 		if (parts) {
-			/* -k: in bands of 8 rows, each in parts (cv_page_part
+			/* -i: in bands of 8 rows, each in parts (cv_page_part
 			   stopped as often as it asks), as the kept page's are
 			   made on a stock Falcon (ui/win.c) */
 			int32_t y;
