@@ -27,7 +27,8 @@ the guidelines' time:
     tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR]
 
 MACHINE is Falcon-4:16, ST:mono or ST:med (the first two when none is
-named); --nvdi runs each under Erez's NVDI with its GDOS font (machines.py,
+named), or Falcon-14:16 (Falcon-4 with 14 MB of ST RAM, as Erez runs his
+with its DFB1X and TT-RAM off); --nvdi runs each under Erez's NVDI with its GDOS font (machines.py,
 AERA_NVDI; on the ST too, Erez, 2 Nov 2026); --prg the folder
 the programs are taken from (build/prof; another for a build before a
 change, to time both). Each machine's
@@ -113,8 +114,16 @@ def held(r, key, what, secs=3):
 def run(out, machine, nvdi, prgdir):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
+    # Falcon-14: a stock Falcon (16 MHz, no FPU, no TT-RAM) with 14 MB of
+    # ST RAM, Erez's own with its DFB1X and TT-RAM off (4 Nov 2026):
+    # Falcon-4's settings and Hatari's --memsize 14 after them
+    base, extra = machine, ()
+    if machine.startswith("Falcon-14"):
+        base, extra = "Falcon-4" + machine[len("Falcon-14"):], ("--memsize", "14")
     r = speed.Rig(os.path.join(out, re.sub(r"[^a-z0-9]+", "-", machine.lower()) + ("-nvdi" if nvdi else "")),
-                  machine, nvdi=nvdi, display=":93" if st else ":92")
+                  base, nvdi=nvdi, display=":93" if st else ":92", extra=extra)
+    if extra:
+        print("NOTE  %s: %s with %s" % (machine, base, " ".join(extra)), flush=True)
     try:
         r.put(os.path.join(prgdir, prg), "EWEB")
         r.put(os.path.join(ROOT, "binary", "EWEB.FNT"), "EWEB")
