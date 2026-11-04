@@ -73,6 +73,7 @@ typedef struct ewin {
 	unsigned long drawn;		/* b.shows when it last drew a new page (main.c) */
 	GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
 	int32_t top;			/* the page's row at r_page's top */
+	uint8_t went_up;		/* its last scroll was up: the page made ahead upwards (win.c) */
 	int32_t left;			/* its column at r_page's left (a page wider than the window) */
 	char info[160];			/* the status bar's text as set (Atari text) */
 	char title[160];

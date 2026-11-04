@@ -1067,10 +1067,14 @@ static int ahead_range(int32_t *y0, int32_t *y1)
 	int32_t h = cur->r_page.h, top = cur->top, end = p != NULL ? p->height : 0, a;
 	int k, ks = (int) ((pic.nb - 2L) * PIC_BAND / (h > 0 ? h : 1));	/* (windows the ring holds) */
 	/* the window, the one below, the one above, then on down the page
-	   as far as the ring holds (a page is read down) */
+	   as far as the ring holds (a page is read down); after a scroll up,
+	   the one above, the one below, then on up */
 	for (k = 0; k < ks; k++) {
-		a = k == 0 ? top : k == 2 ? top - h : top + (k == 1 ? 1 : k - 1) * h;
-		if (k > 2 && a >= end)
+		int32_t s = (int32_t) (k == 0 ? 0 : k == 2 ? -1 : k == 1 ? 1 : k - 1);
+		if (cur->went_up)
+			s = -s;
+		a = top + s * h;
+		if (k > 2 && (a >= end || a + h <= 0))
 			break;
 		*y0 = a < 0 ? 0 : a;
 		*y1 = a + h > end ? end : a + h;
@@ -1582,6 +1586,7 @@ void win_scroll_to(int32_t y)
 		return;
 	}
 	cur->top = y;
+	cur->went_up = dy < 0;
 	scroll_w = cur;
 	scroll_t0 = ui_event_at;
 	if (br.pv_p == NULL)
