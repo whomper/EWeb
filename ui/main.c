@@ -2642,12 +2642,22 @@ int app_main(void)
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
-		/* (after a key, a click or a message only if it left the time: a
-		   line scrolled is its copy, the rows come in at the next turn;
-		   a turn that only waited always draws) */
-		drew = !quit && win_due() && (!(which & ~MU_TIMER) || (long) (pf_ms() - ui_event_at) < 20);
+		/* keys already waiting (an arrow held: the AES's repeats came
+		   while the last step was drawn) taken before drawing, so that
+		   one drawing shows them all and the page stops where the key
+		   was let go */
+		if (which & MU_KEYBD) {
+			short n = 0, w2;
+			AEVENT ev2;
+			while (!quit && n++ < 16 &&
+			       ((w2 = evnt_multi_(MU_KEYBD | MU_TIMER, 0x101, 3, 0, 0, msg, &ev2)) & MU_KEYBD))
+				handle(MU_KEYBD, msg, &ev2, &hover_x, &hover_y);
+		}
+		/* what is due drawn whole, now (Erez, 4 Nov 2026: drawing is not
+		   a job sliced between turns; the guidelines' Speed) */
+		drew = !quit && win_due();
 		if (drew)
-			win_draw_due();	/* the next slice of a page being drawn (win.c); the
+			win_draw_due();	/* the page's rows, the bars, the sliders (win.c); the
 					   pictures' and the scripts' steps at the next turn */
 #ifdef AES_PROFILE
 		{

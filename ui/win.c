@@ -1194,8 +1194,8 @@ static void draw_due(void)
 		int slice = cur->due_big && fast_machine() ? SLICE_BIG : SLICE_MS;
 		end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
 	}
-	whole = !cur->due_scroll &&
-		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK);
+	whole = sync_draw || (!cur->due_scroll &&
+		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK));
 	while (cur->due.w > 0 && cur->due.h > 0) {
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
@@ -1299,16 +1299,26 @@ static void draw_due_bars(void)
 
 void win_draw_due(void)
 {
+	/* all of it, each window's whole, in this turn (Erez, 4 Nov 2026:
+	   drawing is not a job sliced between turns, the guidelines' Speed):
+	   its title and bars, its page's rows, a scroll's sliders after them */
 	ewin *was = cur, *w;
+	sync_draw++;
 	for (w = wins; w != NULL; w = w->next) {
+		int k;
 		cur = w;
-		if (w->due_bars & ~16)
-			draw_due_bars();
-		else if (w->due.w > 0 && w->due.h > 0)
-			draw_due();
-		else if (w->due_bars)
-			draw_due_bars();	/* (a scroll's sliders, after its rows) */
+		for (k = 0; k < 16; k++) {	/* (each step clears what it drew) */
+			if (w->due_bars & ~16)
+				draw_due_bars();
+			else if (w->due.w > 0 && w->due.h > 0)
+				draw_due();
+			else if (w->due_bars)
+				draw_due_bars();	/* (a scroll's sliders, after its rows) */
+			else
+				break;
+		}
 	}
+	sync_draw--;
 	cur = was;
 }
 
