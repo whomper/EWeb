@@ -1462,6 +1462,20 @@ static void redraw_now(void)
 	sync_draw--;
 }
 
+/* the last scroll: its window and when its key, click or message came */
+static ewin *scroll_w;
+static unsigned long scroll_t0;
+
+int win_scroll_whole(long *ms, int32_t *top)
+{
+	if (scroll_w == NULL || (scroll_w->due.w > 0 && scroll_w->due.h > 0) || scroll_w->due_bars)
+		return 0;
+	*ms = (long) (pf_ms() - scroll_t0);
+	*top = scroll_w->top;
+	scroll_w = NULL;
+	return 1;
+}
+
 void win_scroll_to(int32_t y)
 {
 	int32_t m = max_top(), dy;
@@ -1473,6 +1487,8 @@ void win_scroll_to(int32_t y)
 	if (dy == 0)
 		return;
 	cur->top = y;
+	scroll_w = cur;
+	scroll_t0 = ui_event_at;
 	if (br.pv_p == NULL)
 		br_scrolled(&br, cur->top);	/* (a preview's place isn't the page's) */
 	/* the sliders after the page has moved and its new rows are in: a
@@ -3396,6 +3412,8 @@ void win_free(ewin *w)
 {
 	ewin **pp;
 	ewin *was = cur;
+	if (scroll_w == w)
+		scroll_w = NULL;
 	cur = w;
 	win_close();
 	br_free(&w->b);

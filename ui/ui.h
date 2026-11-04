@@ -272,6 +272,10 @@ void win_hover(short mx, short my);	/* a link's address on the info line, the po
 int  win_key(short kstate, short key);	/* 1: taken (the address field, scrolling) */
 void win_scroll_to(int32_t y);
 void win_scroll_by(int32_t dy);
+/* the last scroll's window whole (its rows and sliders drawn): 1 once,
+   with the ms since its event and where the page is (the speed build's
+   AESSCROLL lines) */
+int  win_scroll_whole(long *ms, int32_t *top);
 int32_t win_top(void);
 int32_t win_page_w(void);		/* the page's width, for the layout */
 void win_page_area(short *x, short *y, short *w, short *h);	/* where the page is on the screen */

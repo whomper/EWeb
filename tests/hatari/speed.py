@@ -78,6 +78,38 @@ def load(r, what, url, most=900):
     return typed
 
 
+def scrolls_since(r, start):
+    """the scrolls whose window came whole since start: (ms from their
+    event, the page's top), from the speed build's AESSCROLL lines"""
+    with open(r.log, errors="replace") as f:
+        f.seek(start)
+        return [(int(a), int(b)) for a, b in re.findall(r"AESSCROLL (\d+) ms top (-?\d+)", f.read())]
+
+
+def held(r, key, what, secs=3):
+    """a key held down for secs: how far the page went a second, how many
+    times the window came whole, the longest wait for it, the longest
+    stretch between event calls"""
+    start = os.path.getsize(r.log)
+    con = r.console()
+    tops = re.findall(r"AESSCROLL \d+ ms top (-?\d+)", con)
+    top0 = int(tops[-1]) if tops else 0
+    r.xdo("keydown", key)
+    time.sleep(secs)
+    r.xdo("keyup", key)
+    time.sleep(1)
+    r.still()
+    s = scrolls_since(r, start)
+    gaps = gaps_since(r, start)
+    r.n += 1
+    r.shot("%02d-%s" % (r.n, re.sub(r"[^a-z0-9]+", "-", what.lower()).strip("-")))
+    if not s:
+        return (what, None, "no scroll came whole")
+    rows = abs(s[-1][1] - top0)
+    return (what, max(ms for ms, _ in s),
+            "%d rows a second, whole %d times, longest stretch %d ms" % (rows // secs, len(s), max(gaps) if gaps else 0))
+
+
 def run(out, machine, nvdi, prgdir):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
@@ -117,8 +149,17 @@ def run(out, machine, nvdi, prgdir):
         load(r, "the sample page loaded", "file:///C:/SAMPLE.HTM")
         typed = load(r, "the news page loaded", "file:///C:/NEWS.HTM")
         r.results.append(("the address typed (each letter)", max(typed) if typed else 0, speed.KEY))
+        seen = []
+        start = os.path.getsize(r.log)
         r.act("a line scrolled", speed.LINE, lambda: r.key("Down"))
+        s = scrolls_since(r, start)
+        seen.append(("a line scrolled", max(ms for ms, _ in s) if s else None, ""))
+        start = os.path.getsize(r.log)
         r.act("a page scrolled", speed.PAGE, lambda: r.key("shift+Down"))
+        s = scrolls_since(r, start)
+        seen.append(("a page scrolled", max(ms for ms, _ in s) if s else None, ""))
+        seen.append(held(r, "Down", "an arrow held 3 s, down"))
+        seen.append(held(r, "Up", "an arrow held 3 s, up"))
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
@@ -133,7 +174,14 @@ def run(out, machine, nvdi, prgdir):
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
         r.key("ctrl+q")
         time.sleep(3)
-        return r.report()
+        bad = r.report()
+        # what the user sees (Erez, 4 Nov 2026: the user's experience
+        # first), recorded, not held to a time: the window whole after
+        # the key, from EWeb's AESSCROLL lines
+        print("seen on %s (the window whole, ms from the key)" % r.describe())
+        for what, ms, more in seen:
+            print("  %-40s %8s  %s" % (what, "?" if ms is None else ms, more), flush=True)
+        return bad
     finally:
         r.stop()
 

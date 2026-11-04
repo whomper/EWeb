@@ -2649,6 +2649,19 @@ int app_main(void)
 		if (drew)
 			win_draw_due();	/* the next slice of a page being drawn (win.c); the
 					   pictures' and the scripts' steps at the next turn */
+#ifdef AES_PROFILE
+		{
+			/* the speed build: a scroll's window whole, from its event
+			   (what the user sees; tests/hatari/speed.py) */
+			long ms;
+			int32_t top;
+			if (win_scroll_whole(&ms, &top)) {
+				char b[64];
+				snprintf(b, sizeof b, "AESSCROLL %ld ms top %ld\n", ms, (long) top);
+				nf_debug(b);
+			}
+		}
+#endif
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {
 				refreshed();	/* before the page's pictures: it is going */
