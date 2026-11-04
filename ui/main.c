@@ -2720,8 +2720,11 @@ int app_main(void)
 					handle(now[i].which, now[i].msg, &now[i].ev, &hover_x, &hover_y);
 			}
 		}
-		/* moving on while the pictures come; at rest once they have */
-		throb_all();
+		/* moving on while the pictures come; at rest once they have (not
+		   between a long draw's pieces: a frame of it was 20 ms of an ST's
+		   turn, a third of what the pieces cost over drawing whole) */
+		if (!win_due())
+			throb_all();
 	}
 
 	log_event("quit");
