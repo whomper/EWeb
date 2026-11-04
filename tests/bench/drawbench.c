@@ -107,7 +107,8 @@ int main(int argc, char **argv)
 	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0, mem = 0;
 	const char *find = NULL;
 	long drags = 0, from = 0, to = 8000;
-	int rows = ROWS;
+	int rows = ROWS, sum = 0;
+	uint32_t crc = 0;
 	size_t n;
 	char *data;
 	doc *d;
@@ -132,6 +133,8 @@ int main(int argc, char **argv)
 			drags = atol(argv[++i]);
 		else if (!strcmp(argv[i], "-m"))
 			mem = 1;
+		else if (!strcmp(argv[i], "-S"))
+			sum = 1;	/* the pixels drawn summed (a canvas change checked as 68030 code) */
 		else if (!strcmp(argv[i], "-R") && i + 1 < argc)
 			rows = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-y") && i + 1 < argc)
@@ -241,7 +244,14 @@ int main(int argc, char **argv)
 		for (y = (int32_t) from; y < p->height && y < to; y += rows) {
 			c.oy = y;
 			cv_page(&c, p);
+			if (sum) {
+				long k, n = c.stride * (p->height - y < rows ? p->height - y : rows);
+				for (k = 0; k < n; k++)
+					crc = (crc << 5 | crc >> 27) ^ c.pix[k];
+			}
 		}
+		if (sum)
+			printf("pixels %08lx\n", (unsigned long) crc);
 	}
 	return 0;
 }

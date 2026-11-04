@@ -447,6 +447,16 @@ static inline void bits8(uint8_t *p, unsigned v, int n, uint8_t pv)
 			 "tst.b %1\n\t"
 			 "dbeq %2,1b"
 			 : "+a" (p), "+d" (v), "+d" (n) : "d" (pv) : "memory", "cc");
+#elif defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+	/* only the set bits visited, each found by the 68030's BFFFO
+	   (__builtin_clz): a glyph's byte is mostly clear, and the loop over
+	   every pixel was most of a line of text's drawing */
+	unsigned b = v & (0xff00U >> n) & 0xff;
+	while (b != 0) {
+		int k = __builtin_clz(b) - (int) (8 * sizeof(unsigned) - 8);
+		p[k] = pv;
+		b &= ~(0x80U >> k);
+	}
 #else
 	for (; n > 0 && (v & 0xff) != 0; n--, p++, v <<= 1)
 		if (v & 0x80)
@@ -469,6 +479,38 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 	   libgcc's on the 68000); the depth's own loop */
 	b0 = g->bits + r0 * stride;
 	o0 = c->pix + (gy + r0) * c->stride;
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+	if (c->bpp == 8 && c0 == 0 && c1 <= 16) {
+		/* most of a page's letters: as wide as 16 pixels, whole across:
+		   each row's bits one word, only its set ones visited (BFFFO),
+		   the row's pointers stepped (the general loop's work for each
+		   byte was most of a line of text's drawing on the 68030) */
+		uint8_t *o = o0 + gx, pb = (uint8_t) pv;
+		const uint8_t *b = b0;
+		unsigned keep = (0xffff0000U >> c1) & 0xffff;
+		long ostride = c->stride;
+		if (stride == 1) {
+			for (row = r0; row < r1; row++, b++, o += ostride) {
+				unsigned v = ((unsigned) *b << 8) & keep;
+				while (v != 0) {
+					int k = __builtin_clz(v) - (int) (8 * sizeof(unsigned) - 16);
+					o[k] = pb;
+					v &= ~(0x8000U >> k);
+				}
+			}
+		} else {
+			for (row = r0; row < r1; row++, b += stride, o += ostride) {
+				unsigned v = ((unsigned) b[0] << 8 | b[1]) & keep;
+				while (v != 0) {
+					int k = __builtin_clz(v) - (int) (8 * sizeof(unsigned) - 16);
+					o[k] = pb;
+					v &= ~(0x8000U >> k);
+				}
+			}
+		}
+		return;
+	}
+#endif
 	for (row = r0; row < r1; row++, b0 += stride, o0 += c->stride) {
 		const uint8_t *b = b0;
 		uint8_t *o = o0;
