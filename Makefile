@@ -683,7 +683,7 @@ build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEB.FNT build/news/NEWS.HTM
-	python3 tests/hatari/speed.py build/speed
+	python3 tests/hatari/speed.py build/speed $(if $(AERA_WITH_NVDI),--nvdi)
 .PHONY: hatarispeed
 
 # PICBST.TTP: a picture decoded as EWEBST.PRG decodes it (TJpgDec,

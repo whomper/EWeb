@@ -19,12 +19,16 @@ the guidelines' time:
   its time is Esc's, 100 ms;
 - on the news page: a line scrolled (Down), a page scrolled (Shift-Down);
 - a letter typed into the address field (^L);
-- Settings (^,) opened, and closed by its Cancel (what it uncovers drawn).
+- Settings (^,) opened, and closed by its Cancel (what it uncovers drawn);
+- the About box opened from the Desk menu (the guidelines' Speed: 200 ms
+  on an 8 MHz ST in low or medium, else a dialog's 150; Erez, 2 Nov
+  2026), and closed by Esc (what it uncovers drawn).
 
     tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR]
 
-MACHINE is Falcon-4:16 or ST:mono (both when none is named); --nvdi runs
-the Falcon under Erez's NVDI (machines.py, AERA_NVDI); --prg the folder
+MACHINE is Falcon-4:16, ST:mono or ST:med (the first two when none is
+named); --nvdi runs each under Erez's NVDI with its GDOS font (machines.py,
+AERA_NVDI; on the ST too, Erez, 2 Nov 2026); --prg the folder
 the programs are taken from (build/prof; another for a build before a
 change, to time both). Each machine's
 table is printed; 1 when any action is over its time.
@@ -122,6 +126,10 @@ def run(out, machine, nvdi, prgdir):
         at = re.findall(r"EWEB dialog at (\d+) (\d+)", r.console())
         dx, dy = (int(v) for v in at[-1]) if at else (0, 0)
         r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.click(dx + 35 * 8, dy + 18 * 16 + 8))
+        # (the Desk menu's first entry: its title at the bar's left, the
+        # entry the first row under the bar, 8x16 characters)
+        r.act("the About box opened", r.about, lambda: r.menu(20, 28))
+        r.act("the About box closed (what it uncovers)", speed.WINDOW, lambda: r.key("Escape"))
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
         r.key("ctrl+q")
         time.sleep(3)
@@ -144,7 +152,7 @@ def main():
     out, machines = a[0], a[1:] or ["Falcon-4:16", "ST:mono"]
     bad = 0
     for m in machines:
-        bad |= run(out, m, nvdi and m.startswith("Falcon"), prgdir)
+        bad |= run(out, m, nvdi, prgdir)
     sys.exit(bad)
 
 
