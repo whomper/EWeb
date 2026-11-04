@@ -1502,6 +1502,38 @@ int win_scroll_whole(long *ms, int32_t *top)
 	return 1;
 }
 
+/* keys already waiting taken together (main.c, an arrow held): their
+   scrolls only move the window's place, and one scroll from where it was
+   to where they left it is made at the end, a copy and its new rows once
+   (each a copy of its own made 16 repeats 600 ms of a stock Falcon's
+   before anything was drawn, the speed rig's Falcon-14) */
+static int scroll_batch;
+static ewin *batch_w;
+static int32_t batch_top;
+
+void win_scroll_batch(int on)
+{
+	if (on) {
+		scroll_batch = 1;
+		batch_w = NULL;
+		return;
+	}
+	scroll_batch = 0;
+	if (batch_w != NULL) {
+		ewin *was = cur, *w;
+		for (w = wins; w != NULL && w != batch_w; w = w->next)
+			;
+		if (w != NULL && batch_top != w->top) {
+			int32_t to = w->top;
+			cur = w;
+			w->top = batch_top;
+			win_scroll_to(to);
+		}
+		cur = was;
+		batch_w = NULL;
+	}
+}
+
 void win_scroll_to(int32_t y)
 {
 	int32_t m = max_top(), dy;
@@ -1512,6 +1544,14 @@ void win_scroll_to(int32_t y)
 	dy = y - cur->top;
 	if (dy == 0)
 		return;
+	if (scroll_batch && (batch_w == NULL || batch_w == cur)) {
+		if (batch_w == NULL) {
+			batch_w = cur;
+			batch_top = cur->top;
+		}
+		cur->top = y;
+		return;
+	}
 	cur->top = y;
 	scroll_w = cur;
 	scroll_t0 = ui_event_at;

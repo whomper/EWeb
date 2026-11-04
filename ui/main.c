@@ -2649,9 +2649,11 @@ int app_main(void)
 		if (which & MU_KEYBD) {
 			short n = 0, w2;
 			AEVENT ev2;
+			win_scroll_batch(1);	/* (their scrolls made as one) */
 			while (!quit && n++ < 16 &&
 			       ((w2 = evnt_multi_(MU_KEYBD | MU_TIMER, 0x101, 3, 0, 0, msg, &ev2)) & MU_KEYBD))
 				handle(MU_KEYBD, msg, &ev2, &hover_x, &hover_y);
+			win_scroll_batch(0);
 		}
 		/* what is due drawn whole, now (Erez, 4 Nov 2026: drawing is not
 		   a job sliced between turns; the guidelines' Speed) */

@@ -272,6 +272,10 @@ void win_hover(short mx, short my);	/* a link's address on the info line, the po
 int  win_key(short kstate, short key);	/* 1: taken (the address field, scrolling) */
 void win_scroll_to(int32_t y);
 void win_scroll_by(int32_t dy);
+/* on: the scrolls that follow only move the window's place; off: one
+   scroll made from where it was to where they left it (keys already
+   waiting, taken together) */
+void win_scroll_batch(int on);
 /* the last scroll's window whole (its rows and sliders drawn): 1 once,
    with the ms since its event and where the page is (the speed build's
    AESSCROLL lines) */
