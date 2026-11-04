@@ -62,6 +62,12 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y);
 /* the page's background, then every item that falls on the canvas */
 void cv_page(canvas *c, const page *p);
+/* the same in parts, for a canvas within one of the page's strips:
+   from 0 (the background first), stopping between items when stop(ud)
+   says (asked every 4 items); the place to go on from (the same canvas,
+   its pixels as they were left), or -1 when it is all drawn. A canvas
+   over more than a strip is drawn whole. */
+long cv_page_part(canvas *c, const page *p, long from, int (*stop)(void *), void *ud);
 /* form controls (DL_CTL items) are drawn from their state, form.h: */
 struct fctl;
 /* text in lines at most w wide, broken at its line breaks and spaces

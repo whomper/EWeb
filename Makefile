@@ -1110,6 +1110,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/browse/trim.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/find.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/layout/parts.py build/asan/ewrender binary/EWEB.FNT build/news/NEWS.HTM build/news/NEWS.CSS
 	python3 tests/layout/select.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/stop.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/stacking.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender

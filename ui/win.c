@@ -822,6 +822,7 @@ static int pic_hold;		/* a page or its pictures loading where the bands are the 
 static void pic_forget(void)
 {
 	int k;
+	scr_store_part_drop();	/* (a band half made with them) */
 	for (k = 0; k < pic.nb; k++)
 		pic.band[k] = -1;
 }
@@ -830,6 +831,7 @@ static void pic_forget(void)
 static void pic_forget_rows(int32_t y0, int32_t y1)
 {
 	int k;
+	scr_store_part_drop();
 	for (k = 0; k < pic.nb; k++)
 		if (pic.band[k] >= 0 && pic.band[k] * PIC_BAND < y1 && (pic.band[k] + 1) * PIC_BAND > y0)
 			pic.band[k] = -1;
@@ -903,7 +905,7 @@ void win_pic_busy(int busy)
 
 void win_pic_drop(void)
 {
-	scr_store(0, 0);
+	scr_store(0, 0);	/* (and a band half made) */
 	pic.w = NULL;
 	pic.nb = 0;
 	pic.pw = pic.ph = -1;	/* (taken again at the next drawing, if there is room) */
@@ -1087,6 +1089,14 @@ int win_ahead(void)
 	return more;
 }
 
+/* a part of a band made ahead stops once its time is up (common's
+   AES_PROFILE build: a stretch under 20 ms isn't reported) */
+#define AHEAD_MS 20
+static int ahead_stop(void *ud)
+{
+	return (long) (pf_ms() - *(unsigned long *) ud) >= 0;
+}
+
 void win_draw_ahead(void)
 {
 	ewin *was = cur, *w = ahead_win();
@@ -1100,12 +1110,27 @@ void win_draw_ahead(void)
 		   the news page's were 55 to 65 ms of the stock Falcon, and a key
 		   that came in one waited) */
 		if (!fast_machine()) {
+			/* (and that band in parts, its items until the slice's
+			   time and the rest at the next turns: a band of the news
+			   page's big headlines was 45 to 65 ms of the stock
+			   Falcon's, and a line scrolled meanwhile 55 of its 50) */
 			int32_t b = (y0 > 0 ? y0 : 0) / PIC_BAND;
+			unsigned long end = pf_ms() + AHEAD_MS;
 			while (pic_has(b) && (b + 1) * PIC_BAND < y1)
 				b++;
-			y0 = b * PIC_BAND;
-			if (y1 > y0 + PIC_BAND)
-				y1 = y0 + PIC_BAND;
+			if (!pic_has(b)) {
+				/* (its place in the ring no longer the band it held: in
+				   true colour the part is drawn there) */
+				pic.band[b % pic.nb] = -1;
+				if (scr_store_draw_part(pic.p, pic.left, b * PIC_BAND, (short) (b % pic.nb * PIC_BAND),
+							(short) PIC_BAND, ahead_stop, &end)) {
+					pic.band[b % pic.nb] = b;
+					scr_bands++;
+					scr_slice_rows += (unsigned long) PIC_BAND;
+				}
+			}
+			cur = was;
+			return;
 		}
 		pic_make(y0, y1, pf_ms() + SLICE_MS);
 	}

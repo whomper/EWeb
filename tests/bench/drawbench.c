@@ -23,6 +23,8 @@
  * the first to the last kept and placed again (page_text_index,
  * page_text_place: when the page is laid out again) and its text copied
  * (page_copy_text, ^C); its length printed.
+ * -R ROWS draws ROWS at a time (400 at most; 8 is the kept page's band on
+ * a stock Falcon, ui/win.c), -y FROM,TO only the page's rows FROM to TO.
  * Prints the page's height and items.
  */
 #include <stdio.h>
@@ -104,7 +106,8 @@ int main(int argc, char **argv)
 	const char *fnt = "binary/EWEB.FNT";
 	int i = 1, phase = 3, bpp = 8, hist = 0, mark = 0, mem = 0;
 	const char *find = NULL;
-	long drags = 0;
+	long drags = 0, from = 0, to = 8000;
+	int rows = ROWS;
 	size_t n;
 	char *data;
 	doc *d;
@@ -129,9 +132,15 @@ int main(int argc, char **argv)
 			drags = atol(argv[++i]);
 		else if (!strcmp(argv[i], "-m"))
 			mem = 1;
+		else if (!strcmp(argv[i], "-R") && i + 1 < argc)
+			rows = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-y") && i + 1 < argc)
+			sscanf(argv[++i], "%ld,%ld", &from, &to);
 	}
+	if (rows < 1 || rows > ROWS)
+		rows = ROWS;
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m] [-R ROWS] [-y FROM,TO] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
@@ -221,7 +230,7 @@ int main(int argc, char **argv)
 		int32_t y;
 		memset(&c, 0, sizeof c);
 		c.w = W;
-		c.h = ROWS;
+		c.h = rows;
 		c.bpp = bpp;
 		c.stride = (long) W * bpp / 8;
 		c.pen = pen;
@@ -229,7 +238,7 @@ int main(int argc, char **argv)
 		c.pix = malloc((size_t) c.stride * ROWS);
 		if (c.pix == NULL)
 			return 1;
-		for (y = 0; y < p->height && y < 8000; y += ROWS) {
+		for (y = (int32_t) from; y < p->height && y < to; y += rows) {
 			c.oy = y;
 			cv_page(&c, p);
 		}

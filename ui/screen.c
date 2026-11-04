@@ -774,6 +774,7 @@ static short store_rows, store_w, store_words;
 int scr_store(short w, short n)
 {
 	long row, size, free_st;
+	scr_store_part_drop();
 	if (store != NULL) {
 		if (store_heap)
 			free(store);
@@ -829,6 +830,102 @@ int scr_store(short w, short n)
 	return 1;
 }
 
+/* a band being drawn in parts (scr_store_draw_part): where it goes, and
+   its pixels so far (in planar and packed modes a buffer of its own, not
+   chunky, which anything drawn meanwhile writes over; in true colour the
+   kept rows themselves) */
+static struct {
+	const page *p;
+	int32_t px, py;
+	short at, n;
+	long pos;		/* (cv_page_part's place; 0: none) */
+} part;
+static unsigned char *part_buf;
+static long part_size;
+
+void scr_store_part_drop(void)
+{
+	part.pos = 0;
+	part.p = NULL;
+}
+
+static void store_canvas(canvas *c, int32_t px)
+{
+	memset(c, 0, sizeof *c);
+	c->w = store_w;
+	c->ox = px;
+	c->pen = pen;
+	c->shade = shade;
+	c->pal = (const uint8_t (*)[3]) pal;
+	c->picture = picture;
+	c->marked = win_mark(&c->mark, &c->mark_rgb);
+	c->pressed = (uint16_t) win_pressed();
+	c->aes_bars = 1;
+}
+
+int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n, int (*stop)(void *), void *ud)
+{
+	unsigned short *keep = dev_buf;
+	unsigned char *was = chunky;
+	canvas c;
+	long pos;
+	unsigned long t0, t1;
+	if (store == NULL || p == NULL || at < 0 || at + n > store_rows)
+		return 1;
+	if (n > rows) {
+		scr_store_draw(p, px, py, at, n);
+		return 1;
+	}
+	if (!truecolour && part_size < store_words * 16L * n) {
+		free(part_buf);
+		part_size = 0;
+		part_buf = malloc((size_t) (store_words * 16L * n));
+		if (part_buf == NULL) {
+			scr_store_draw(p, px, py, at, n);
+			return 1;
+		}
+		part_size = store_words * 16L * n;
+	}
+	if (part.pos == 0 || part.p != p || part.px != px || part.py != py || part.at != at || part.n != n) {
+		part.p = p;
+		part.px = px;
+		part.py = py;
+		part.at = at;
+		part.n = n;
+		part.pos = 0;
+	}
+	store_canvas(&c, px);
+	c.h = n;
+	c.oy = py;
+	dev_buf = (unsigned short *) (void *) (store + (long) at * store_row);
+	if (truecolour) {
+		c.pix = (uint8_t *) dev_buf;
+		c.stride = store_words * 32L;
+		c.bpp = 16;
+	} else {
+		c.pix = part_buf;
+		c.stride = store_words * 16L;
+		c.bpp = 8;
+	}
+	t0 = pf_ms();
+	pos = cv_page_part(&c, p, part.pos, stop, ud);
+	t1 = pf_ms();
+	scr_ms_canvas += t1 - t0;
+	if (pos >= 0) {
+		part.pos = pos;
+		dev_buf = keep;
+		return 0;
+	}
+	if (!truecolour)
+		chunky = part_buf;	/* (made from the part's own pixels) */
+	make(n, store_words);	/* (in true colour its bytes turned, where the screen's are) */
+	chunky = was;
+	dev_buf = keep;
+	scr_ms_put += pf_ms() - t1;
+	scr_store_part_drop();
+	return 1;
+}
+
 void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 {
 	unsigned short *keep = dev_buf;
@@ -837,6 +934,8 @@ void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 	unsigned long t0, t1;
 	if (store == NULL || p == NULL || at < 0 || at + n > store_rows)
 		return;
+	if (part.pos != 0 && at < part.at + part.n && at + n > part.at)
+		scr_store_part_drop();	/* (its rows drawn whole: in true colour over its pixels) */
 	memset(&c, 0, sizeof c);
 	c.w = store_w;
 	c.ox = px;

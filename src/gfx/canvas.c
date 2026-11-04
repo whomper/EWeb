@@ -3202,6 +3202,56 @@ static long seg_of(const page *p, long r)
 	return a;
 }
 
+/* a canvas within one of the page's strips: the strip, else -1 */
+static long one_strip(const canvas *c, const page *p)
+{
+	long s0, s1;
+	if (p->strip == NULL || c->h > 60 * PAGE_STRIP || c->oy < 0)
+		return -1;
+	s0 = c->oy / PAGE_STRIP;
+	s1 = (c->oy + c->h - 1) / PAGE_STRIP;
+	return s0 == s1 && s0 < p->nstrips ? s0 : -1;
+}
+
+long cv_page_part(canvas *c, const page *p, long from, int (*stop)(void *), void *ud)
+{
+	long s = one_strip(c, p), cbg = p->cbg >= 0 && p->cbg < p->nitems ? p->cbg : -1, j, sg = -1, n = 0;
+	int32_t top = c->oy, bottom = c->oy + c->h;
+	if (s < 0) {
+		/* (more than a strip: whole, as cv_page draws it) */
+		if (from == 0)
+			cv_page(c, p);
+		return -1;
+	}
+	if (from == 0) {
+		cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
+		if (cbg >= 0)
+			canvas_bg(c, p);
+		from = 1;
+	}
+	/* the strip's list, in the order drawn, from the entry it stopped
+	   at; the time asked after every 4 items */
+	for (j = p->strip[s] + from - 1; j < p->strip[s + 1]; j++) {
+		long r = p->sidx[j], i = r;
+		const dl_item *d;
+		if (stop != NULL && n > 0 && (n & 3) == 0 && stop(ud))
+			return j - p->strip[s] + 1;
+		if (p->seg != NULL) {
+			if (sg < 0)
+				sg = seg_of(p, r);
+			while (sg + 1 < p->nseg && p->seg[sg + 1].r0 <= r)
+				sg++;
+			i = p->seg[sg].k0 + r - p->seg[sg].r0;
+		}
+		d = &p->items[i];
+		if (i != cbg && d->y < bottom && d->y + d->h > top) {
+			item(c, p, d);
+			n++;
+		}
+	}
+	return -1;
+}
+
 void cv_page(canvas *c, const page *p)
 {
 	long i, s0, s1, cbg = p->cbg >= 0 && p->cbg < p->nitems ? p->cbg : -1;

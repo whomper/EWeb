@@ -7,7 +7,7 @@
  * layout by eye and for make test's comparisons. The page is loaded as
  * EWeb loads it (src/browse): a file, or a URL over the network.
  *
- *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-N URL] [-L WIDTH] [-e ENC]
+ *   ewrender [-w WIDTH] [-z ZOOM] [-X TEXT%] [-f EWEB.FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H HEIGHT] [-B] [-k] [-N URL] [-L WIDTH] [-e ENC]
  *            [-p COLOURS] PAGE.HTM|URL [SHEET.CSS...]
  *
  * -w the page's width in pixels (608), -a a box's scroll bars' width down
@@ -33,7 +33,10 @@
  * every scroll position and in pieces across, at 8 and 16 bits, each into
  * a buffer of just its size: under AddressSanitizer a pixel drawn past a
  * band's edge stops it (on the Falcon it would land in ST RAM next to the
- * band, TOS's). The page's pictures are fetched and decoded before it is
+ * band, TOS's). -k draws the PNG in bands of 8 rows, each in the parts
+ * cv_page_part stops at, as the kept page's are made on a stock Falcon
+ * (ui/win.c): tests/layout/parts.py holds it to the page drawn whole.
+ * The page's pictures are fetched and decoded before it is
  * drawn or dumped, as EWEB.PRG does after showing it (-n: none, their
  * alt text, as before pictures came). -F NAME=VALUE (again for more)
  * fills a form's field, ticks a box or radio button (NAME=VALUE too:
@@ -470,6 +473,13 @@ static long bands(const page *p, int32_t width)
 	return n;
 }
 
+/* -k's: every part as short as cv_page_part allows */
+static int stop_now(void *ud)
+{
+	(void) ud;
+	return 1;
+}
+
 static void said(void *ud, const char *what)
 {
 	if (*(int *) ud)
@@ -750,7 +760,7 @@ int main(int argc, char **argv)
 	int32_t width = 608, zoom = 819, top = 0, height = -1, text = 100, sbar = 0, sbar_h = 0;
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
-	int dump = 0, show_tree = 0, verbose = 0, band = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
+	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	int colours = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
@@ -806,6 +816,8 @@ int main(int argc, char **argv)
 			dump = 1;
 		else if (!strcmp(argv[i], "-B"))
 			band = 1;
+		else if (!strcmp(argv[i], "-k"))
+			parts = 1;
 		else if (!strcmp(argv[i], "-E"))
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
 		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
@@ -914,7 +926,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-k] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1414,7 +1426,23 @@ int main(int argc, char **argv)
 			page_range(p, &found[0], &found[1], &c.mark);
 			c.mark_rgb = 0xffff00;
 		}
-		cv_page(&c, p);
+		if (parts) {
+			/* -k: in bands of 8 rows, each in parts (cv_page_part
+			   stopped as often as it asks), as the kept page's are
+			   made on a stock Falcon (ui/win.c) */
+			int32_t y;
+			for (y = 0; y < c.h; y += 8) {
+				canvas s = c;
+				long pos = 0;
+				s.pix = c.pix + (long) y * c.stride;
+				s.oy = c.oy + y;
+				s.h = c.h - y < 8 ? c.h - y : 8;
+				do
+					pos = cv_page_part(&s, p, pos, stop_now, NULL);
+				while (pos >= 0);
+			}
+		} else
+			cv_page(&c, p);
 		if (!write_png(out, &c)) {
 			perror(out);
 			return 1;

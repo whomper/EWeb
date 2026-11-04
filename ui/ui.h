@@ -174,6 +174,12 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py);
    within the window's rectangle) */
 int scr_store(short w, short n);
 void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n);
+/* the same for a band of n rows (the buffers' rows at most) in parts, at
+   GEM's turns: drawn until stop(ud) says, then on from there at the next
+   call for the same rows; 1 once it is kept. A band drawn whole over it,
+   or scr_store_part_drop, starts it again. */
+int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n, int (*stop)(void *), void *ud);
+void scr_store_part_drop(void);
 void scr_store_put(short at, short n, short sx, short w, short x, short y);
 #endif
 /* a picture of w x h, each pixel a byte into col (0xRRGGBB, ncol of them),
