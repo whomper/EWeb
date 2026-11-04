@@ -2638,7 +2638,10 @@ int app_main(void)
 		   (before the cache's writing: a scroll waits on it) */
 		ahead = !more && !loading && !win_due() && win_ahead();
 #endif
-		wait = more ? 0 : win_due() || wr || ahead ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
+		/* (a page's draw in pieces: the next at once, the AES only asked
+		   for what is waiting: a 1 ms wait was a timer tick of the AES's,
+		   20 ms an ST's piece, a third of the pieces' cost over whole) */
+		wait = more || win_due() ? 0 : wr || ahead ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |

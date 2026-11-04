@@ -1056,8 +1056,11 @@ static void draw_due_kept(void)
 	int small = pressing ||
 		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK);
 	end = since < 0 || since > 500 ? t0 + SLICE_MS : ui_event_at + SLICE_MS;
-	if (piece)
-		end = t0 + PIECE_MS;
+	if (piece) {
+		end = (since < 0 || since > 500 ? t0 : ui_event_at) + PIECE_MS;
+		if ((long) (end - t0) < 10)
+			end = t0 + 10;
+	}
 	gap_tag("draw");
 	if (!kept && small) {
 		sync_draw++;
@@ -1244,7 +1247,7 @@ static int pic_keep;
 static void draw_due(void)
 {
 	unsigned long t0 = pf_ms(), end;
-	int took, whole;
+	int took, whole, band_n;
 	if (cur->due.w <= 0 || cur->due.h <= 0)
 		return;
 	if (cur->h <= 0 || cur->iconified || shown() == NULL) {
@@ -1276,11 +1279,17 @@ static void draw_due(void)
 		long since = (long) (t0 - ui_event_at);
 		int slice = cur->due_big && fast_machine() ? SLICE_BIG : SLICE_MS;
 		end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
-		if (piece)
-			end = t0 + PIECE_MS;	/* (a piece of a long draw: its own) */
+		if (piece) {
+			/* (a piece of a long draw: within PIECE_MS of the turn's
+			   event, what the turn did before counted; a band at least) */
+			end = (since < 0 || since > 500 ? t0 : ui_event_at) + PIECE_MS;
+			if ((long) (end - t0) < 10)
+				end = t0 + 10;
+		}
 	}
 	whole = sync_draw || (!cur->due_scroll &&
 		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK));
+	band_n = 0;
 	while (cur->due.w > 0 && cur->due.h > 0) {
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
@@ -1288,9 +1297,13 @@ static void draw_due(void)
 		n = (left > 4 ? left : 4) * 256 / rcost();
 		/* (16 rows at least, a line of text: thinner bands each went
 		   through every line they crossed again, its letters looked up
-		   and clipped, eight times over at 2 rows) */
-		if (n < BAND_MIN)
-			n = BAND_MIN;
+		   and clipped, eight times over at 2 rows; a piece's 8, and none
+		   begun after the first that its time hasn't room for: an ST's 16
+		   rows were 100 to 150 ms) */
+		if (piece && band_n > 0 && n < 8)
+			break;
+		if (n < (piece ? 8 : BAND_MIN))
+			n = piece ? 8 : BAND_MIN;
 		if (whole)
 			n = cur->due.h;
 		band.x = (short) (cur->r_page.x + cur->due.x);
@@ -1308,6 +1321,7 @@ static void draw_due(void)
 		}
 		cur->due.y += band.h;
 		cur->due.h -= band.h;
+		band_n++;
 		scr_slice_rows += (unsigned long) band.h;
 		scr_bands++;
 		/* what a row took, as an average of the last bands' (a tick
@@ -1412,27 +1426,36 @@ void win_draw_due(void)
 		cur = w;
 		if (w->due.w > 0 && w->due.h > 0 && w->due_since == 0)
 			w->due_since = pf_ms() | 1;
-		long_draw = w->due.w > 0 && w->due.h > 0 && due_ms(w) > WHOLE_MS && !win_whole_only;
-		if (long_draw)
-			piece++;
-		else
-			sync_draw++;
+		/* (more than half a piece by the rows drawn so far: a piece
+		   first, and the rest whole after it if what the piece took says
+		   the stretch stays within WHOLE_MS, else at the next turns:
+		   pages differ threefold a row, the sample page's rate made the
+		   news page's 950 ms on a stock Falcon one stretch) */
+		long_draw = w->due.w > 0 && w->due.h > 0 && !win_whole_only && due_ms(w) > PIECE_MS / 2;
+		sync_draw++;
 		for (k = 0; k < 16; k++) {	/* (each step clears what it drew) */
 			if (w->due_bars & ~16)
 				draw_due_bars();
 			else if (w->due.w > 0 && w->due.h > 0) {
-				draw_due();
-				if (long_draw)
-					break;	/* (a piece: the rest at the next turns) */
+				if (long_draw) {
+					sync_draw--;
+					piece++;
+					draw_due();
+					piece--;
+					sync_draw++;
+					long_draw = 0;
+					if (w->due.w > 0 && w->due.h > 0 &&
+					    (long) (pf_ms() - ui_event_at) + due_ms(w) > WHOLE_MS)
+						break;	/* (a piece: the rest at the next turns) */
+				} else {
+					draw_due();
+				}
 			} else if (w->due_bars)
 				draw_due_bars();	/* (a scroll's sliders, after its rows) */
 			else
 				break;
 		}
-		if (long_draw)
-			piece--;
-		else
-			sync_draw--;
+		sync_draw--;
 		if (w->due_since != 0 && !(w->due.w > 0 && w->due.h > 0)) {
 			/* (its page's rows all drawn: the time from when they were
 			   first met, whole or in pieces, for the speed rig) */
