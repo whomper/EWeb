@@ -294,7 +294,9 @@ hub stay complete, with the evidence.
   (and every picture of EWeb on GitHub) is from the 256-colour Falcon showing a site of the modern
   web, not EWeb's own page (Erez, 25 Oct 2026): `tools/screenshot.py URL` (Hatari, a webgate here;
   yaary.music now), kept as a palette PNG of the screen's exact colours.
-- **The ST edition** is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
+- **The ST edition** is frozen after 1.0 (Erez, 4 Nov 2026; DESIGN.md, Decisions): bug fixes only,
+  no new features; its rigs run for a release, not for each change, and a new feature stays out of
+  it (`EW_ST`). It is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
   of libjpeg-turbo, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is 68020 code); check a build
   with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. `make test` runs common's
