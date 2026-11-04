@@ -192,7 +192,7 @@ static int count_poll(void)
 static int slices(int argc, char **argv)
 {
 	static PIC_PAL pal;
-	long tried = 0, bad = 0, stopped = 0;
+	long tried = 0, bad = 0, stopped = 0, every_row = 0, every_16 = 0;
 	int a, k;
 #ifdef WITH_DSP_SIM
 	pic_dsp_dither = 0;	/* the 68030's (the DSP's takes no turns: -X compares it) */
@@ -226,6 +226,26 @@ static int slices(int argc, char **argv)
 				bad++;
 			}
 			pic_free(q);
+			if (k) {
+				/* the scaler's turns every row (pic_scale_poll_rows 1): the same
+				   picture, and never fewer turns than every 16 */
+				long p16 = polls;
+				pic_scale_poll_rows = 1;
+				polls = 0;
+				q = pic_decode(d, n, w, h, 4L << 20, &why);
+				pic_scale_poll_rows = 16;
+				if (q == NULL || memcmp(p->px, q->px, np * 2) != 0) {
+					printf("FAIL %s %dx%d: not the same with a turn every row\n", argv[a], w, h);
+					bad++;
+				}
+				if (polls < p16) {
+					printf("FAIL %s %dx%d: %ld turns every row, %ld every 16\n", argv[a], w, h, polls, p16);
+					bad++;
+				}
+				every_row += polls;
+				every_16 += p16;
+				pic_free(q);
+			}
 			pic_pal_init(&pal, 256, (const unsigned char (*)[3]) pal256);
 			x = malloc(np);
 			y = malloc(np);
@@ -272,7 +292,11 @@ static int slices(int argc, char **argv)
 #ifdef WITH_DSP_SIM
 	pic_dsp_dither = 1;
 #endif
-	printf("in slices: %ld pictures, %ld stopped, %ld failed\n", tried, stopped, bad);
+	if (every_row <= every_16) {
+		printf("FAIL the scaler took no more turns with pic_scale_poll_rows 1 (%ld) than 16 (%ld)\n", every_row, every_16);
+		bad++;
+	}
+	printf("in slices: %ld pictures, %ld stopped, %ld failed (scaler turns: %ld every row, %ld every 16)\n", tried, stopped, bad, every_row, every_16);
 	return bad != 0;
 }
 

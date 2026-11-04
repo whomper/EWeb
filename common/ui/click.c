@@ -52,6 +52,10 @@ int press_double(short id, short x, short y)
 {
 	int second = last.valid && last.id == id && near(last.x, x) && near(last.y, y) &&
 		     tos_ms() - last.up <= press_dclick();
+	if (aes_double) {	/* a multitasking AES counted two presses and gave them as one event (gem.c) */
+		aes_double = 0;
+		second = 1;
+	}
 	cur.id = id;
 	cur.x = x;
 	cur.y = y;

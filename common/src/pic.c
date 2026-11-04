@@ -50,6 +50,7 @@
 #endif
 
 int (*pic_poll)(void);
+int pic_scale_poll_rows = 16;
 
 /* ---------------------------------------------------------------- kinds */
 
@@ -435,7 +436,7 @@ static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
 {
 	long x, w = s->pic->w;
 	unsigned long *q;
-	if (pic_poll != NULL && ++s->polls >= 16) {
+	if (pic_poll != NULL && ++s->polls >= pic_scale_poll_rows) {
 		s->polls = 0;
 		if (!pic_poll())
 			return 0;
@@ -536,7 +537,7 @@ rgba:
 		s->s16 = 0;
 	}
 	s->solid = 0;		/* the sums weigh alpha from now on */
-	if (pic_poll != NULL && ++s->polls >= 16) {
+	if (pic_poll != NULL && ++s->polls >= pic_scale_poll_rows) {
 		s->polls = 0;
 		if (!pic_poll())
 			return 0;
@@ -1270,6 +1271,17 @@ typedef struct {
 
 /* 1 decoded, 0 not (why), -1 the DSP stopped answering, -2 it couldn't
    be had */
+/* a turn between the set-up's steps (the Huffman tables, the fast AC tables,
+   the quantisers: 70 ms together on a stock Falcon, before the first MCU's
+   poll; EPlay, 3 Nov 2026); the DSP waits for the host meanwhile */
+#define SETUP_TURN() \
+	do { \
+		if (pic_poll != NULL && !pic_poll()) { \
+			*why = PIC_STOPPED; \
+			goto out; \
+		} \
+	} while (0)
+
 static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 {
 	int grey = dj->grey, direct = dj->direct, k = dj->k;
@@ -1423,9 +1435,11 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		dsp_load(D_LOADX, D_TRM, w, (long) k * k * 3);
 	}
 	dsp_fixed(tmp);
+	SETUP_TURN();
 	for (ci = 0; ci < (grey ? 1 : 3) && !coefs; ci++) {
 		dsp_huff(dj->dcb[ci], dj->dcv[ci], D_HLA + 0x200 * ci, tmp);
 		dsp_huff(dj->acb[ci], dj->acv[ci], D_HLA + 0x100 + 0x200 * ci, tmp);
+		SETUP_TURN();
 	}
 	/* the transform, the quantisers (Q * 2048), the format's constants */
 	dsp_matrix(w, k);
@@ -1438,6 +1452,7 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		}
 	}
 	dsp_load(D_LOADY, D_QT, w, grey ? 64 : 3 * 64);
+	SETUP_TURN();
 	if (shrink) {
 		unsigned long *kt = tmp->a;
 		/* each box's divisor: 65536 / n rounded (the scaler's), x 64; a
@@ -1477,12 +1492,21 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		int rows = (int) (oh - my * mh < mh ? oh - my * mh : mh);
 		/* rows mode: the rows this MCU row makes, from y0 */
 		long y0 = rows_mode ? (shrink ? shr.ya[my] : my * mh) : 0;
-		for (mx = 0; mx < mcols && !pic_dsp_failed; mx++)
+		for (mx = 0; mx < mcols && !pic_dsp_failed; mx++) {
 			if (shrink)
 				dsp_read(rows_mode ? &bp : p, ow, NULL, &src, shr.xa[mx], shr.ya[my] - y0, shr.ce[mx], shr.re[my]);
 			else
 				dsp_read(rows_mode ? &bp : p, ow, band, &src, mx * mw, my * mh - y0,
 					 (int) (ow - mx * mw < mw ? ow - mx * mw : mw), rows);
+			/* a turn every 8 MCUs inside a wide row too (a 500-wide cover at
+			   2/8 left 75 ms between turns on a stock Falcon: EPlay, 3 Nov
+			   2026); the DSP waits for the next scan words meanwhile, as it
+			   does between rows */
+			if (pic_poll != NULL && (mx & 7) == 7 && mx + 1 < mcols && !pic_dsp_failed && !pic_poll()) {
+				*why = PIC_STOPPED;
+				goto out;
+			}
+		}
 		if (rows_mode && !pic_dsp_failed) {
 			int r, n = shrink ? shr.re[my] : rows;
 			for (r = 0; r < n; r++)
