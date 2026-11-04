@@ -1653,11 +1653,17 @@ static int all_visible(void)
    one's rows are still due) */
 static void redraw_now(void)
 {
-	sync_draw++;
+	/* (whole where the window takes WHOLE_MS or less; else in pieces by
+	   the main loop: a held key's window drawn here was 935 ms of a stock
+	   Falcon's stretch, the speed rig) */
+	int whole = win_whole_only || (long) cur->r_page.h * rcost_hi() / 256 <= WHOLE_MS;
+	if (whole)
+		sync_draw++;
 	pic_keep++;	/* (a scroll's: the look is the same) */
 	win_redraw_page();
 	pic_keep--;
-	sync_draw--;
+	if (whole)
+		sync_draw--;
 }
 
 /* the last scroll: its window and when its key, click or message came */
