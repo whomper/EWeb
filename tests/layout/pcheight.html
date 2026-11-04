@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><title>Heights in percentages</title>
+<style>
+/* a height in percent is of the containing block's height when that is
+   set, not its content's (CSS 2.1, 10.5): else it is auto. Within
+   max-height; through an anonymous block; under border-box, the content
+   box's; a frame of 300px with a box of 86% and words padded down in it
+   (webdriveruniversity.com's double-click box) */
+body { font: 13px sans-serif; margin: 8px }
+.f { height: 120px; background: #ddd; margin-bottom: 6px }
+.f > div { height: 50%; background: #f99 }
+.m { height: 200px; max-height: 120px; background: #ddd; margin-bottom: 6px }
+.m > div { height: 50%; background: #9f9 }
+.bb { box-sizing: border-box; height: 120px; padding: 20px; border: 4px solid #555; background: #ddd; margin-bottom: 6px }
+.bb > div { height: 100%; background: #99f }
+.a { background: #ddd; margin-bottom: 6px }
+.a > div { height: 80%; background: #fc9 }
+.n { height: 100px; background: #ddd; margin-bottom: 6px }
+.n > div { height: 50%; background: #c9f }
+.t { height: 150px; max-height: 150px; overflow: hidden; background: #181818 }
+.d { height: 86%; background: #1f1f1f; border: 1px solid #f45950; margin-top: 10px; color: #f45950; text-align: center }
+.d h2 { padding-top: 40px; margin: 0 }
+</style></head><body>
+<div class="f"><div>50% of 120px</div></div>
+<div class="m"><div>50% of 120px (max-height)</div></div>
+<div class="bb"><div>100% of the content box</div></div>
+<div class="a"><div>80% of auto: auto</div></div>
+<div class="n">words, an anonymous block<div>50% of 100px</div></div>
+<div class="t"><div class="d"><h2>Double Click Me!</h2></div></div>
+</body></html>

@@ -1,0 +1,29 @@
+page 608 x 537, background ffffff, 28 items, 0 links, title "Heights in percentages"
+fill 6,6 596x96 #dddddd
+fill 6,6 596x48 #ff9999
+text 6,16 68x13 #000000 sans10 link 0 "50% of 120px"
+fill 6,107 596x96 #dddddd
+fill 6,107 596x48 #99ff99
+text 6,117 135x13 #000000 sans10 link 0 "50% of 120px (max-height)"
+fill 6,208 596x96 #dddddd
+fill 25,227 558x58 #9999ff
+text 25,237 121x13 #000000 sans10 link 0 "100% of the content box"
+fill 6,208 596x3 #555555
+fill 6,301 596x3 #555555
+fill 6,211 3x90 #555555
+fill 599,211 3x90 #555555
+fill 6,309 596x12 #dddddd
+fill 6,309 596x12 #ffcc99
+text 6,319 88x13 #000000 sans10 link 0 "80% of auto: auto"
+fill 6,326 596x80 #dddddd
+text 6,336 134x13 #000000 sans10 link 0 "words, an anonymous block"
+fill 6,338 596x40 #cc99ff
+text 6,348 68x13 #000000 sans10 link 0 "50% of 100px"
+fill 6,411 596x120 #181818
+clip x 6+596 y 411+120 in 0
+fill 6,419 596x105 #1f1f1f
+text 230,467 148x19 #f45950 sans16 bold link 0 "Double Click Me!"
+fill 6,419 596x1 #f45950
+fill 6,523 596x1 #f45950
+fill 6,420 1x103 #f45950
+fill 601,420 1x103 #f45950

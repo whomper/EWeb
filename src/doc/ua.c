@@ -39,6 +39,9 @@ const char doc_ua_css[] =
 	/* (their own text colour, as browsers' FieldText and ButtonText: not
 	   the page's, which may be light on a dark page) */
 	"input, select, textarea, button { color: #000 }\n"
+	/* (a button's words centred, as in browsers' sheets, whether EWeb
+	   draws it or lays out its content) */
+	"button { text-align: center }\n"
 	"body { margin: 8px }\n"
 	"p, blockquote, figure, listing, plaintext, pre, xmp, dl { margin-top: 1em; margin-bottom: 1em }\n"
 	"blockquote, figure { margin-left: 40px; margin-right: 40px }\n"

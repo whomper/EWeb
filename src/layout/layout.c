@@ -287,6 +287,12 @@ typedef struct {
 	int32_t cbx, cby, cbw;
 	int32_t cbh;			/* its height, when that is known (a set height; the
 					   window's for the page): AUTO when not */
+	/* the content height of the block whose children are being laid out,
+	   when its height is set (not its content's): what their heights'
+	   percentages are of (CSS 2.1, 10.5); AUTO when it isn't, and they
+	   are auto (webdriveruniversity.com's double-click box, 86% of its
+	   frame of 300px, was as tall as its words) */
+	int32_t defh;
 	/* the absolutely positioned box place_abs is laying out: what its
 	   height's percentage is of (its containing block's height, AUTO),
 	   and the height between its top and bottom (AUTO: none) */
@@ -338,8 +344,21 @@ typedef struct {
 		dnode *n;
 		int depth, by_top;	/* by_top 2: by top, as tall as top and bottom leave */
 		long bg, bd[NBD];	/* (by_top 2: its background and borders, to stretch) */
+		/* by_top 2: the entries below it that are its own (what is in it
+		   placed by bottom or by a share of its height, nested), placed
+		   when it is stretched, against its padding box then: cy down,
+		   ch high as laid out (a carousel's arrows, top 50% in a control
+		   of top 0 and bottom 0) */
+		int nested;
+		int32_t cy, ch;
 	} *bots;
 	int nbots, botcap, cbdepth;
+	/* place_abs's box that will be stretched (by_top 2): its layout_block
+	   leaves its own entries for it (defer_n of them, its padding box
+	   defer_cy down and defer_ch high) */
+	const box *defer_box;
+	int defer_n;
+	int32_t defer_cy, defer_ch;
 	/* the positioned boxes laid out, in the document's order: each its
 	   items (k0 to k1) and z-index, for the order they are drawn in
 	   (draw_order) */
@@ -1535,6 +1554,14 @@ static int styled_ctl(const ec_style *st, const fctl *c)
    block), the control drawn in its content box (box.frame) */
 static void build(L *l, box *parent, dnode *n);
 
+static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps);
+
+/* 1: a ::before or ::after style that makes a box */
+static int pseudo_shown(const ec_style *ps)
+{
+	return ps != NULL && ps->k[EP_CONTENT] == EK_PTR && kw(ps, EP_DISPLAY) != KW_NONE;
+}
+
 /* 1: n has an element among its children (not text alone) */
 static int has_elements(const dnode *n)
 {
@@ -1571,13 +1598,20 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		if (parent == NULL)
 			return;
 	}
-	if (styled && n->tag == T_BUTTON && has_elements(n)) {
-		/* a <button> of elements the page styles (Bootstrap's three
-		   bars, a <b> in it): its own content in its box, as browsers
-		   lay it out (HTML 15.5.3); anywhere in it is the button, the
-		   items under it carrying its control (new_box) */
+	if (styled && n->tag == T_BUTTON &&
+	    (has_elements(n) || pseudo_shown(st->before) || pseudo_shown(st->after) ||
+	     (kw(st, EP_TEXT_ALIGN) != KW_CENTER && kw(st, EP_TEXT_ALIGN) != KW_WEBKIT_CENTER))) {
+		/* a <button> the page styles with elements in it (Bootstrap's
+		   three bars, a <b> in it), with a ::before or an ::after, or
+		   its words not centred (webdriveruniversity.com's accordion:
+		   the title on the left, a '+' floated right): its own content
+		   in its box, as browsers lay it out (HTML 15.5.3); anywhere in
+		   it is the button, the items under it carrying its control
+		   (new_box) */
 		parent->ctl = add_ctl(l, c);
+		pseudo(l, parent, n, st->before);
 		build(l, parent, n);
+		pseudo(l, parent, n, st->after);
 		return;
 	}
 	switch (c->kind) {
@@ -2220,9 +2254,12 @@ static int keeps_space(const ec_style *s)
 	return w == KW_PRE || w == KW_PRE_WRAP || w == KW_BREAK_SPACES;
 }
 
+/* (an element's box, or a ::before's or an ::after's: no element, not
+   anonymous; webdriveruniversity.com's accordion floats its '+' right
+   from an ::after, on the line of the title before it) */
 static inline int floated(const box *c)
 {
-	return c->kind == BX_BLOCK && !c->anon && c->n != NULL && kw(c->st, EP_FLOAT) != KW_NONE;
+	return c->kind == BX_BLOCK && !c->anon && kw(c->st, EP_FLOAT) != KW_NONE;
 }
 
 /* a float among a block's (or an inline's) text: it goes with the line
@@ -6379,6 +6416,8 @@ static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t w
    block, as EWeb has no viewport of its own): out of the flow, where
    left, right and top put it in its containing block, else where it
    would have been (sx, sy) */
+static void place_bots(L *l, int n, int32_t y, int32_t ch);
+
 static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 {
 	int fixed = kw(c->st, EP_POSITION) == KW_FIXED;
@@ -6446,9 +6485,22 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	if (l->abs_base != AUTO && top != AUTO && len(l, c->st, EP_BOTTOM, l->abs_base) != AUTO &&
 	    len(l, c->st, EP_HEIGHT, l->abs_base) == AUTO)
 		l->abs_fill = l->abs_base - top - len(l, c->st, EP_BOTTOM, l->abs_base);	/* between top and bottom */
-	l->mov++;
-	hgt = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
-	l->mov--;
+	{
+		/* (as by_top 2 below: stretched once its containing block's
+		   height is known, what is in it placed by that height then) */
+		const box *saved_defer = l->defer_box;
+		int will = !fixed && l->cbh == AUTO && top != AUTO && c->st->k[EP_TOP] != EK_PCT &&
+			   c->st->k[EP_TOP] != EK_CALC && c->st->k[EP_BOTTOM] == EK_PX &&
+			   len(l, c->st, EP_HEIGHT, AUTO) == AUTO;
+		l->defer_box = will ? c : NULL;
+		l->defer_n = 0;
+		l->mov++;
+		hgt = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
+		l->mov--;
+		l->defer_box = saved_defer;
+		if (!will)
+			l->defer_n = 0;
+	}
 	l->abs_box = NULL;
 	l->ovf = ovf;
 	f1 = l->nlater;
@@ -6473,6 +6525,8 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		int32_t cw = len(l, c->st, EP_WIDTH, cbw), chh = len(l, c->st, EP_HEIGHT, AUTO);
 		int hides = kw(c->st, EP_OVERFLOW_X) != KW_VISIBLE || kw(c->st, EP_OVERFLOW_Y) != KW_VISIBLE;
 		if ((hides && ((cw != AUTO && cw <= 2) || (chh != AUTO && chh <= 2))) || ax + wf <= 0 || ay < -1000) {
+			l->nbots -= l->defer_n;	/* (its own entries: their items gone too) */
+			l->defer_n = 0;
 			l->p->nitems = k0;
 			l->p->nclips = c0;
 			l->p->nscr = s0;
@@ -6513,7 +6567,24 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		e->depth = l->cbdepth;
 		e->bg = l->last_bg;
 		memcpy(e->bd, l->last_bd, sizeof e->bd);
+		e->nested = by_top == 2 ? l->defer_n : 0;
+		e->cy = l->defer_cy;
+		e->ch = l->defer_ch;
+		if (by_top != 2 && l->defer_n > 0) {
+			/* (not stretched after all: its own placed by its height now,
+			   below its entry) */
+			struct bot self = *e;
+			l->nbots--;
+			place_bots(l, l->defer_n, l->defer_cy, l->defer_ch);
+			l->bots[l->nbots++] = self;
+		}
+		l->defer_n = 0;
 		return;
+	}
+	if (l->defer_n > 0) {
+		/* (not stretched: its own placed by its height as laid out) */
+		place_bots(l, l->defer_n, l->defer_cy, l->defer_ch);
+		l->defer_n = 0;
 	}
 	shift_items(l, k0, ax, ay);
 	shift_blocks(l, b0, ax, ay);
@@ -6525,17 +6596,38 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 /* the boxes placed by bottom (or a top of a share of the height) in the
    containing block ending (depth l->cbdepth), its padding box from y
    down, ch high: down to where they go */
+/* the entry on top of l->bots placed in a padding box y down and ch
+   high (and, stretched, its own below it, against its height then) */
+static void place_bot(L *l, int32_t y, int32_t ch)
+{
+	struct bot e = l->bots[--l->nbots];	/* (a copy: those below it are popped as it is placed) */
+	int32_t ay = e.by_top ? y + len0(l, e.st, EP_TOP, ch) : y + ch - len0(l, e.st, EP_BOTTOM, ch) - e.h, dh = 0;
+	if (e.by_top == 2) {
+		dh = ch - len0(l, e.st, EP_TOP, ch) - len0(l, e.st, EP_BOTTOM, ch) - e.h;
+		stretch(l, e.bg, e.bd, dh);
+	}
+	if (e.nested > 0)
+		place_bots(l, e.nested, e.cy, e.ch + (dh > 0 ? dh : 0));
+	shift_range2(l, e.k0, e.k1, e.b0, e.b1, 0, ay);
+	if (e.n != NULL)
+		e.n->y += ay;
+}
+
+/* n entries off the top of l->bots (theirs below them counted in n)
+   placed in a padding box y down and ch high */
+static void place_bots(L *l, int n, int32_t y, int32_t ch)
+{
+	while (n > 0 && l->nbots > 0) {
+		int own = l->bots[l->nbots - 1].nested;
+		place_bot(l, y, ch);
+		n -= 1 + own;
+	}
+}
+
 static void bottom_place(L *l, int32_t y, int32_t ch)
 {
-	while (l->nbots > 0 && l->bots[l->nbots - 1].depth >= l->cbdepth) {
-		struct bot *e = &l->bots[--l->nbots];
-		int32_t ay = e->by_top ? y + len0(l, e->st, EP_TOP, ch) : y + ch - len0(l, e->st, EP_BOTTOM, ch) - e->h;
-		if (e->by_top == 2)
-			stretch(l, e->bg, e->bd, ch - len0(l, e->st, EP_TOP, ch) - len0(l, e->st, EP_BOTTOM, ch) - e->h);
-		shift_range2(l, e->k0, e->k1, e->b0, e->b1, 0, ay);
-		if (e->n != NULL)
-			e->n->y += ay;
-	}
+	while (l->nbots > 0 && l->bots[l->nbots - 1].depth >= l->cbdepth)
+		place_bot(l, y, ch);
 }
 
 /* the absolutely positioned boxes place_abs left (f0..f1), now that the
@@ -7748,6 +7840,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	int32_t table_sh = 0, table_sv = 0, saved_top = l->fl_top;
 	int32_t saved_cbx = l->cbx, saved_cby = l->cby, saved_cbw = l->cbw, saved_cbh = l->cbh;
 	int32_t hbase = AUTO, hfill = AUTO;	/* (place_abs's box: abs_base, abs_fill) */
+	int32_t saved_defh = l->defh;
 	int saved_cbmov = l->cbmov, saved_fl0 = l->fl0, own = own_context(b), pos = b->anon ? KW_STATIC : kw(s, EP_POSITION);
 	int vis = b->anon || kw(s, EP_VISIBILITY) == KW_VISIBLE;	/* its background and borders drawn */
 	uint16_t saved_ctl = l->ctl_in;
@@ -7775,6 +7868,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		hbase = l->abs_base;
 		hfill = l->abs_fill;
 		l->abs_box = NULL;
+	} else if (!b->anon) {
+		hbase = l->defh;	/* (in the flow: its containing block's, when set) */
 	}
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: this box and what is in it left out */
@@ -8071,6 +8166,29 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (hd != AUTO && hd > 8)
 			b->first->ah = hd;
 	}
+	if (!b->anon) {
+		/* what its children's percentages are of: its content height,
+		   when its height is set (a length, or a percentage of a height
+		   that is), within its max-height; not a table's parts' */
+		int32_t dh = AUTO, dmx;
+		int dd = kw(s, EP_DISPLAY);
+		if (!b->table && !b->tablerow && dd != KW_TABLE_CELL && dd != KW_TABLE_ROW_GROUP &&
+		    dd != KW_TABLE_HEADER_GROUP && dd != KW_TABLE_FOOTER_GROUP) {
+			dh = len(l, s, EP_HEIGHT, hbase);
+			if (dh == AUTO && hfill != AUTO)
+				dh = hfill - mt - mb - (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX ? 0 : bt + bb + pt + pb);
+			if (dh != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
+				dh -= bt + bb + pt + pb;
+			dmx = len(l, s, EP_MAX_HEIGHT, AUTO);
+			if (dh != AUTO && dmx != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
+				dmx = dmx > bt + bb + pt + pb ? dmx - (bt + bb + pt + pb) : 0;
+			if (dh != AUTO && dmx != AUTO && dh > dmx)
+				dh = dmx;
+			if (dh != AUTO && dh < 0)
+				dh = 0;
+		}
+		l->defh = dh;
+	}
 	if (b->repl) {
 		ch = repl_layout(l, b, cx, cy, w);
 	} else if (b->inl) {
@@ -8078,7 +8196,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	} else if (b->flex || b->grid) {
 		int32_t hd = AUTO;
 		if (!b->anon) {
-			hd = len(l, s, EP_HEIGHT, AUTO);
+			hd = len(l, s, EP_HEIGHT, hbase);
 			if (hd != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 				hd -= bt + bb + pt + pb;
 			if (hd != AUTO && hd < 0)
@@ -8200,6 +8318,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			if (mx != AUTO)
 				mx = mx > bt + bb + pt + pb ? mx - (bt + bb + pt + pb) : 0;
 		}
+		if (mx != AUTO && hp != AUTO && hp >= 0 && ch == hp && hp > mx)
+			ch = mx;	/* (a set height within max-height, whatever its overflow) */
 		if (mn != AUTO && ch < mn)
 			ch = mn;
 		if (mx != AUTO && ch > mx && keep)
@@ -8285,8 +8405,17 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 	}
 	if (pos != KW_STATIC && pos != KW_STICKY) {
-		if (l->nbots > 0)
+		if (b == l->defer_box) {
+			/* to be stretched (place_abs): its own entries left for then */
+			int n = 0;
+			while (n < l->nbots && l->bots[l->nbots - 1 - n].depth >= l->cbdepth)
+				n++;
+			l->defer_n = n;
+			l->defer_cy = l->cby;
+			l->defer_ch = pt + ch + pb;
+		} else if (l->nbots > 0) {
 			bottom_place(l, l->cby, pt + ch + pb);
+		}
 		l->cbdepth--;
 		l->cbmov = saved_cbmov;
 		l->cbovf = saved_cbovf;
@@ -8303,6 +8432,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	l->clip = saved_clip;
 	if (lay >= 0 && lay < l->nlay)
 		l->lay[lay].k1 = l->p->nitems;
+	l->defh = saved_defh;
 	*mb_out = mb;
 	*first = fb;
 	return mt + bt + pt + ch + pb + bb + mb;
@@ -8660,6 +8790,7 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	l.text = o->text > 0 ? o->text : 1024;
 	l.cbw = o->width;		/* the page: the containing block of what is absolute in nothing positioned */
 	l.cbh = o->height > 0 ? o->height : AUTO;	/* (its first screen) */
+	l.defh = AUTO;
 	l.last_bg = -1;
 	l.visual = strcmp(d->charset, "ISO-8859-8") == 0;
 	if (html == NULL || html->e.style == NULL) {

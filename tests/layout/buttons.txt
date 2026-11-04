@@ -1,5 +1,5 @@
-page 608 x 187, background 0f0f0f, 58 items, 0 links, title "Buttons of elements, controls made transparent"
-drawn: 7-57 0-6
+page 608 x 269, background 0f0f0f, 64 items, 0 links, title "Buttons of elements, controls made transparent"
+drawn: 7-63 0-6
 fill 563,20 18x2 #ededed
 fill 563,25 18x2 #ededed
 fill 563,30 18x2 #ededed
@@ -41,16 +41,21 @@ fill 6,126 96x2 #888888
 fill 6,140 96x2 #888888
 fill 6,128 2x12 #888888
 fill 100,128 2x12 #888888
-fill 6,153 148x1 #888888
-fill 6,170 148x1 #888888
-fill 6,154 1x16 #888888
-fill 153,154 1x16 #888888
-fill 306,154 146x1 #808080
-fill 306,169 146x1 #808080
-fill 306,154 1x16 #808080
-fill 451,154 1x16 #808080
-fill 157,152 146x18 #ffffff
-fill 157,152 146x1 #808080
-fill 157,169 146x1 #808080
-fill 157,152 1x18 #808080
-fill 302,152 1x18 #808080
+fill 6,142 596x44 #2a2a2a
+text 578,168 10x15 #9a9a9a sans12 bold link 0 "+"
+text 20,168 109x15 #ededed sans12 bold link 0 "Manual Testing"
+fill 6,185 596x1 #3a3a3a
+fill 6,196 118x28 #2a2a2a
+fill 6,235 148x1 #888888
+fill 6,252 148x1 #888888
+fill 6,236 1x16 #888888
+fill 153,236 1x16 #888888
+fill 306,236 146x1 #808080
+fill 306,251 146x1 #808080
+fill 306,236 1x16 #808080
+fill 451,236 1x16 #808080
+fill 157,234 146x18 #ffffff
+fill 157,234 146x1 #808080
+fill 157,251 146x1 #808080
+fill 157,234 1x18 #808080
+fill 302,234 1x18 #808080

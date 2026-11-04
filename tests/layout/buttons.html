@@ -31,6 +31,14 @@ html body .navbar-toggle { border-color: var(--border) !important; background-co
 .mh { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 70%;
       min-height: 52px; padding: 10px 16px; border: 1px solid #f45950 }
 .mw { box-sizing: border-box; display: inline-block; min-width: 120px; padding: 0 20px; border: 2px solid #888 }
+/* a button of words the page styles, left-aligned, its '+' floated
+   right from an ::after (webdriveruniversity.com's accordion): laid out
+   by its content, the '+' on the title's line; one that keeps its words
+   centred and has no ::before or ::after: drawn as a control */
+.acc { background-color: #2a2a2a; color: #ededed; padding: 18px; width: 100%; border: none;
+       border-bottom: 1px solid #3a3a3a; text-align: left; font-size: 15px; font-weight: bolder }
+.acc:after { content: '\002B'; color: #9a9a9a; font-weight: bold; float: right; margin-left: 5px }
+.ctr { background-color: #2a2a2a; color: #ededed; padding: 8px; border: none }
 </style></head><body>
 <button type="button" class="navbar-toggle"><span class="sr-only">Toggle navigation</span><span
 class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></span></button>
@@ -39,5 +47,7 @@ class="icon-bar"></span><span class="icon-bar"></span><span class="icon-bar"></s
 <button class="cb"><b>Find Out More!</b></button>
 <div class="mh" id="b1"><p style="margin: 0">CLICK ME!</p></div>
 <p><span class="mw">min</span>
+<button class="acc">Manual Testing</button>
+<p><button class="ctr">centred, no ::after</button>
 <p><input class="tr" value="see-through"> <input value="own ground"> <input class="tn" value="transparent, no border">
 </body></html>
