@@ -160,7 +160,15 @@ def pages_read(r, n=4, rest=10):
             "whole %d times, longest stretch %d ms" % (len(s), max(gaps) if gaps else 0))
 
 
-def run(out, machine, nvdi, prgdir):
+def eater(kb):
+    """C:\\AUTO\\EAT.PRG's code: kb KB kept resident (Ptermres), as NVDI
+    holds about 340 KB of a stock Falcon's ST RAM (the hub's NVDI run and
+    a plain one, 4 Nov 2026), for a run where there is no NVDI:
+      move.w #0,-(sp); move.l #N,-(sp); move.w #$31,-(sp); trap #1"""
+    return bytes.fromhex("3F3C0000" "2F3C%08X" % (kb * 1024) + "3F3C0031" "4E41")
+
+
+def run(out, machine, nvdi, prgdir, eat=0):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
     # Falcon-14: a stock Falcon (16 MHz, no FPU, no TT-RAM) with 14 MB of
@@ -173,6 +181,9 @@ def run(out, machine, nvdi, prgdir):
                   base, nvdi=nvdi, display=":93" if st else ":92", extra=extra)
     if extra:
         print("NOTE  %s: %s with %s" % (machine, base, " ".join(extra)), flush=True)
+    if eat:
+        speed.machines.write_prg(os.path.join(r.hd, "AUTO", "EAT.PRG"), eater(eat))
+        print("NOTE  %s: %d KB kept resident at boot (--eat)" % (machine, eat), flush=True)
     try:
         r.put(os.path.join(prgdir, prg), "EWEB")
         r.put(os.path.join(ROOT, "binary", "EWEB.FNT"), "EWEB")
@@ -252,6 +263,11 @@ def main():
         sys.exit(__doc__)
     nvdi = "--nvdi" in a
     a = [x for x in a if x != "--nvdi"]
+    eat = 0
+    if "--eat" in a:
+        i = a.index("--eat")
+        eat = int(a[i + 1])
+        del a[i:i + 2]
     prgdir = os.path.join(ROOT, "build", "prof")
     if "--prg" in a:
         i = a.index("--prg")
@@ -260,7 +276,7 @@ def main():
     out, machines = a[0], a[1:] or ["Falcon-4:16", "ST:mono"]
     bad = 0
     for m in machines:
-        bad |= run(out, m, nvdi, prgdir)
+        bad |= run(out, m, nvdi, prgdir, eat)
     sys.exit(bad)
 
 
