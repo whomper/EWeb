@@ -734,7 +734,15 @@ static long row_cost = 0;	/* a row's ms, times 256: how many rows a slice takes 
    of at most 100 ms, each put on the screen whole, a key or a click
    answered between them (the guidelines' Speed, Erez's B of 4 Nov 2026) */
 #define WHOLE_MS 300
+#ifdef EW_ST
+/* the ST edition's pieces up to 300 ms (Erez, 4 Nov 2026): each turn
+   between pieces is about 40 ms of an 8 MHz ST's, and in 100 ms pieces
+   its pages took 58 to 105 % longer to finish than drawn whole (home
+   3.1 s against 1.6, news 5.8 against 3.3: the speed rig, ST:mono) */
+#define PIECE_MS 280
+#else
 #define PIECE_MS 85
+#endif
 static int piece;		/* this turn's draw is a piece of a long one */
 
 /* row_cost, guessed by the machine before any row is drawn: an ST's 11 ms
