@@ -79,6 +79,9 @@ int img_tried(const ew_img *im, int32_t w, int32_t h);
 /* for drawing: 1 and the picture at w x h if it is decoded, with its
    pens for img_pal (made now if they aren't) */
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens);
+/* what there is of it decoded at w by h, without making anything (NULL:
+   nothing yet): ui/win.c's relayout tells a picture come by it */
+const void *img_have(ew_img *im, int32_t w, int32_t h);
 /* its pens for the screen made now, at w by h (img_picture made them as it
    drew, without a turn: 0.27 s of a stock Falcon for a photo): 1 made or
    none to make, 0 stopped (pic_poll) or no memory; img_dithered: none

@@ -26,6 +26,7 @@
 #include "click.h"
 #include "clip.h"
 #include "form.h"
+#include "img.h"
 #include "iconify.h"
 #include "offdraw.h"
 #include "panebar.h"
@@ -1838,6 +1839,68 @@ void win_page_clamp(void)
 	sliders();
 }
 
+/* the window as a relayout found it (br_relaying): a word for each band
+   of RL_BAND rows of what it showed (cv_rows_sum), to draw again only the
+   bands whose word changes (a frame or a picture come: the news page's
+   iframe drew the window whole again, 3.1 s of an ST's, 0.5 of a stock
+   Falcon's, the speed rig of 4 Nov 2026) */
+#define RL_BAND 8
+#define RL_MAX 160
+static struct {
+	ewin *w;
+	const doc *d;
+	int32_t top, left;
+	short pw, ph;
+	int n;
+	uint32_t sum[RL_MAX];
+} rl;
+
+static const void *rl_pic(void *img, int32_t w, int32_t h)
+{
+	return img_have(img, w, h);
+}
+
+static void rl_sums(const page *p, uint32_t *out, int n)
+{
+	int k;
+	for (k = 0; k < n; k++) {
+		int32_t y0 = cur->top + (int32_t) k * RL_BAND;
+		out[k] = cv_rows_sum(p, y0, y0 + RL_BAND, cur->left, cur->left + cur->r_page.w, rl_pic);
+	}
+}
+
+void win_relaying(browser *b, const page *old)
+{
+	ewin *was = cur, *w;
+	rl.w = NULL;
+	for (w = wins; w != NULL && &w->b != b; w = w->next)
+		;
+	if (w == NULL)
+		return;
+	cur = w;
+	if (!cur->iconified && cur->h > 0 && cur->r_page.h > 0 && shown() == old &&
+	    (cur->r_page.h + RL_BAND - 1) / RL_BAND <= RL_MAX) {
+		rl.n = (cur->r_page.h + RL_BAND - 1) / RL_BAND;
+		rl_sums(old, rl.sum, rl.n);
+		rl.w = cur;
+		rl.d = old->d;
+		rl.top = cur->top;
+		rl.left = cur->left;
+		rl.pw = cur->r_page.w;
+		rl.ph = cur->r_page.h;
+	}
+#ifndef EW_ST
+	if (pic.p == old) {
+		/* (kept of a page about to go: not taken for its next, which may
+		   be where it was) */
+		pic_forget();
+		pic.w = NULL;
+		pic.p = NULL;
+	}
+#endif
+	cur = was;
+}
+
 void win_page_relaid_at(int32_t y)
 {
 	cur->top = y;
@@ -1848,6 +1911,28 @@ void win_page_relaid_at(int32_t y)
 	if (cur->left > max_left())
 		cur->left = max_left();
 	br_scrolled(&br, cur->top);
+	if (rl.w == cur && shown() != NULL && shown()->d == rl.d && cur->top == rl.top && cur->left == rl.left &&
+	    cur->r_page.w == rl.pw && cur->r_page.h == rl.ph && !cur->iconified) {
+		/* only the bands of the window that changed */
+		uint32_t now[RL_MAX];
+		int k, a = -1, z = -1;
+		rl_sums(shown(), now, rl.n);
+		rl.w = NULL;
+		for (k = 0; k < rl.n; k++)
+			if (now[k] != rl.sum[k]) {
+				if (a < 0)
+					a = k;
+				z = k;
+			}
+		cur->due_bars |= 4;
+		if (a >= 0) {
+			defer_draw++;
+			win_page_drawn(cur->top + (int32_t) a * RL_BAND, cur->top + (int32_t) (z + 1) * RL_BAND);
+			defer_draw--;
+		}
+		return;
+	}
+	rl.w = NULL;
 	/* the sliders and the page at the next turns, not in the stretch the
 	   layout ended (a picture's relayout, then the sliders and a slice,
 	   were 105 ms of a stock Falcon: the speed rig, 31 Oct 2026) */

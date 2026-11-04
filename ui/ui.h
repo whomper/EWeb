@@ -253,6 +253,7 @@ void win_page_changed(void);		/* a new page: title, scroll, toolbar, everything 
 void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the page drawn */
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
 void win_page_relaid_at(int32_t y);	/* laid out again: at y on it, drawn */
+void win_relaying(browser *b, const page *old);	/* br_relaying: what the window shows of old noted */
 void win_page_clamp(void);		/* laid out again where it is: the place kept within it */
 void win_title(void);
 /* the status bar's text; "" for what the page says: its refresh while

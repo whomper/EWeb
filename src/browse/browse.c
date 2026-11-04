@@ -640,6 +640,7 @@ static void home_yours(SBUF *s)
 
 /* EWeb's home page: home.html, with what EWeb knows put in */
 void (*br_shed)(void);
+void (*br_relaying)(browser *b, const page *old);
 void (*br_mark)(const char *what);	/* the speed build's names for a page's steps (main.c's gap_tag) */
 #define MARK(what) (br_mark != NULL ? br_mark(what) : (void) 0)
 
@@ -4751,6 +4752,8 @@ int br_relayout(browser *b, int32_t width)
 			b->pic_relayout = 1;	/* (stopped for what came: again after it) */
 		return 0;
 	}
+	if (br_relaying != NULL && b->p != NULL)
+		br_relaying(b, b->p);
 	MARK("relayout: old page freed");
 	pg_free(b->p);
 	b->p = p;

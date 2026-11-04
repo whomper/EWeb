@@ -253,6 +253,10 @@ extern void (*br_mark)(const char *what);
 /* memory given back when a page doesn't fit (shed): the front end's too
    (EWEB.PRG's page kept off the screen, in ST RAM); NULL none */
 extern void (*br_shed)(void);
+/* the page shown about to be laid out again, its old page still there
+   (ui/win.c notes what the window shows of it, to draw again only what
+   changes); NULL: none */
+extern void (*br_relaying)(browser *b, const page *old);
 /* a details element's summary clicked (page_summary_at): the details
    opened or closed (the HTML Standard, 4.11.2), the page styled and laid
    out again (1; 0 if out of memory, after giving back the pages kept and

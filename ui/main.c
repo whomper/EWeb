@@ -2507,6 +2507,7 @@ int app_main(void)
 	br_mark = gap_tag;
 #ifndef EW_ST
 	br_shed = win_pic_drop;
+	br_relaying = win_relaying;
 #endif
 #endif
 #ifdef EW_ST

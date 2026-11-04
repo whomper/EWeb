@@ -809,6 +809,12 @@ int img_dither(ew_img *im, int32_t w, int32_t h)
 	return var_dither(im, v);
 }
 
+const void *img_have(ew_img *im, int32_t w, int32_t h)
+{
+	var *v = im != NULL ? find(im, w, h) : NULL;
+	return v != NULL ? (const void *) v->pic : NULL;
+}
+
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
 {
 	var *v = find(im, w, h);

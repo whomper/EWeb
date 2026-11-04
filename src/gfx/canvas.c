@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /* canvas.c - the display list drawn into memory (see canvas.h). */
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -3292,6 +3293,118 @@ long cv_page_part(canvas *c, const page *p, long from, int (*stop)(void *), void
 		}
 	}
 	return -1;
+}
+
+/* a word of what the items touching rows y0 to y1 (x0 to x1 across)
+   draw there: their kinds, places, colours, text, pictures, gradients
+   and clips, in the order drawn, and the page's ground. Two layouts of
+   a page alike there draw it alike (a picture's own pixels aside: they
+   come by a redraw of their own). ui/win.c: after a relayout only the
+   bands of the window whose word changed are drawn again (a frame come
+   on the news page drew the window again whole, 3.1 s of an ST's and
+   0.5 of a stock Falcon's) */
+static uint32_t mix32(uint32_t h, uint32_t v)
+{
+	h ^= v;
+	h *= 0x01000193UL;	/* (FNV-1a's step, a word at a time) */
+	return h ^ (h >> 15);
+}
+
+static uint32_t mix_bytes(uint32_t h, const void *b, unsigned long n)
+{
+	const unsigned char *q = b;
+	while (n-- > 0)
+		h = (h ^ *q++) * 0x01000193UL;
+	return h;
+}
+
+uint32_t cv_rows_sum(const page *p, int32_t y0, int32_t y1, int32_t x0, int32_t x1,
+		     const void *(*pic)(void *img, int32_t w, int32_t h))
+{
+	uint32_t h = 0x811c9dc5UL;
+	long s, s0, s1, j, sg = -1;
+	h = mix32(h, p->bg);
+	h = mix32(h, (uint32_t) (y1 > p->height ? p->height : -1));
+	if (p->cbg >= 0 && p->cbg < p->nitems)
+		h = mix32(mix32(h, p->items[p->cbg].rgb), (uint32_t) (uintptr_t) p->items[p->cbg].img);
+	if (p->strip == NULL || p->nstrips <= 0) {
+		s0 = 0;
+		s1 = 0;
+		h = mix32(h, (uint32_t) p->nitems);	/* (no index: not to be told apart) */
+		for (j = 0; j < p->nitems; j++)
+			h = mix32(h, (uint32_t) (p->items[j].y ^ p->items[j].h << 12 ^ p->items[j].x << 20));
+		return h;
+	}
+	s0 = y0 / PAGE_STRIP;
+	s1 = (y1 - 1) / PAGE_STRIP;
+	if (s0 < 0)
+		s0 = 0;
+	if (s1 >= p->nstrips)
+		s1 = p->nstrips - 1;
+	for (s = s0; s <= s1; s++)
+		for (j = p->strip[s]; j < p->strip[s + 1]; j++) {
+			long r = p->sidx[j], i = r;
+			const dl_item *d;
+			if (p->seg != NULL) {
+				sg = seg_of(p, r);
+				i = p->seg[sg].k0 + r - p->seg[sg].r0;
+			}
+			d = &p->items[i];
+			if (i == p->cbg || d->y >= y1 || d->y + d->h <= y0 || d->x >= x1 || d->x + d->w <= x0)
+				continue;
+			/* (an item in two strips counted in each: the same for both
+			   layouts) */
+			h = mix32(h, (uint32_t) d->type | (uint32_t) d->flags << 8 | (uint32_t) (uint16_t) d->base << 16);
+			h = mix32(h, (uint32_t) d->x);
+			h = mix32(h, (uint32_t) d->y);
+			h = mix32(h, (uint32_t) d->w);
+			h = mix32(h, (uint32_t) d->h);
+			h = mix32(h, d->rgb);
+			h = mix32(h, (uint32_t) (uintptr_t) d->font);
+			h = mix32(h, (uint32_t) d->ctl << 16 | d->link);
+			if (d->clip) {
+				int32_t a = d->x, b = d->y, e = d->x + d->w, f = d->y + d->h;
+				if (!page_clip(p, d->clip, &a, &b, &e, &f))
+					a = b = e = f = 0;
+				h = mix32(mix32(mix32(mix32(h, (uint32_t) a), (uint32_t) b), (uint32_t) e), (uint32_t) f);
+			}
+			switch (d->type) {
+			case DL_TEXT:
+				if (d->text != NULL)
+					h = mix_bytes(h, d->text, d->len);
+				break;
+			case DL_IMAGE:
+				h = mix32(h, (uint32_t) (uintptr_t) d->img);
+				/* (and what of the picture there is at that size: one
+				   decoded meanwhile draws otherwise) */
+				if (pic != NULL && d->img != NULL)
+					h = mix32(h, (uint32_t) (uintptr_t) pic(d->img, DL_PIC_W(d), DL_PIC_H(d)));
+				if ((d->flags & DLF_TILE) && d->tile != NULL)
+					h = mix_bytes(h, d->tile, sizeof *d->tile);
+				break;
+			case DL_GRAD:
+				if (d->img != NULL) {
+					const ec_grad *g = d->img;
+					h = mix_bytes(h, g, offsetof(ec_grad, rel));
+					h = mix32(h, (uint32_t) (uintptr_t) g->rel);
+					h = mix_bytes(h, g->s, (unsigned long) g->n * sizeof g->s[0]);
+				}
+				if (d->tile != NULL)
+					h = mix_bytes(h, d->tile, sizeof *d->tile);
+				break;
+			case DL_CTL:
+				h = mix32(h, d->ink);
+				h = mix32(h, d->len);
+				break;
+			case DL_SUM:
+				h = mix32(h, (uint32_t) (uintptr_t) d->det);
+				break;
+			default:
+				h = mix32(h, d->len);
+				break;
+			}
+		}
+	return h;
 }
 
 void cv_page(canvas *c, const page *p)
