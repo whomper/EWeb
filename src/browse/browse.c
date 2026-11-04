@@ -3730,6 +3730,10 @@ static int build_turn(int what)
 void br_init(browser *b, int32_t width, int32_t zoom)
 {
 	pic_poll = gem_turn;
+	/* (a turn asked at every row the scaler takes: gem_turn keeps its own
+	   time; at every 16 an 800-pixel PNG's turns were 120 to 180 ms of a
+	   16 MHz 68030's, the speed rig's Falcon:16) */
+	pic_scale_poll_rows = 1;
 	http_cookie_in = cookie_in;
 	http_cookie_out = cookie_out;
 	img_svg_size = svg_size;	/* SVG pictures: src/svg's */
@@ -3903,6 +3907,7 @@ static int frames_relaid(browser *b)
 {
 	if (!br_relayout(b, b->width))
 		return BR_STOPPED;
+	MARK("relayout: old frames freed");
 	frames_bury(b->d->frames);
 	b->scroll_to = b->cur >= 0 ? b->hist[b->cur].y : -1;
 	return BR_SHOWN;
@@ -4682,6 +4687,7 @@ int br_relayout(browser *b, int32_t width)
 		return 1;
 	}
 	base_of(b, b->d, b->url, base, sizeof base);
+	MARK("relayout: media");
 	do {
 		/* a media query the page's sheets have (theirs, or an @media in
 		   them) goes the other way at this width: its sheets are added
@@ -4707,15 +4713,18 @@ int br_relayout(browser *b, int32_t width)
 			conn_stop = stop;
 		}
 	} while (b->width != w);
+	MARK("relayout: layout");
 	p = lay_turns(b, b->d, base);
 	if (p == NULL) {
 		if (pic_turns && conn_stop)
 			b->pic_relayout = 1;	/* (stopped for what came: again after it) */
 		return 0;
 	}
+	MARK("relayout: old page freed");
 	pg_free(b->p);
 	b->p = p;
 	js_set_page(b->d, p);
+	MARK("relayout: pictures shown");
 	shown_imgs(b);
 	if (b->width != w)
 		b->pic_relayout = 1;	/* (sized meanwhile: again at its width) */
