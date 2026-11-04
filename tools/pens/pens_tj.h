@@ -21,6 +21,7 @@
 #define pic_pal_init tj_pic_pal_init
 #define pic_pal_nearest tj_pic_pal_nearest
 #define pic_poll tj_pic_poll
+#define pic_scale_poll_rows tj_pic_scale_poll_rows
 #define pic_size tj_pic_size
 #define pic_why_text tj_pic_why_text
 #define pic_dither_close tj_pic_dither_close
