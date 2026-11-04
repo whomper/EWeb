@@ -740,8 +740,13 @@ static long row_cost = 0;	/* a row's ms, times 256: how many rows a slice takes 
    its pages took 58 to 105 % longer to finish than drawn whole (home
    3.1 s against 1.6, news 5.8 against 3.3: the speed rig, ST:mono) */
 #define PIECE_MS 280
+/* (and in bands of 32 rows at least: in 12 the news page's headlines,
+   gone through again in each band they cross, were 20 ms a row of the
+   canvas against 8 drawn whole, and its pieces 45 % over whole) */
+#define PIECE_BAND 32
 #else
 #define PIECE_MS 85
+#define PIECE_BAND 8
 #endif
 static int piece;		/* this turn's draw is a piece of a long one */
 
@@ -1328,10 +1333,10 @@ static void draw_due(void)
 		   and clipped, eight times over at 2 rows; a piece's 8, and none
 		   begun after the first that its time hasn't room for: an ST's 16
 		   rows were 100 to 150 ms) */
-		if (piece && band_n > 0 && n < 8)
+		if (piece && band_n > 0 && n < PIECE_BAND)
 			break;
-		if (n < (piece ? 8 : BAND_MIN))
-			n = piece ? 8 : BAND_MIN;
+		if (n < (piece ? PIECE_BAND : BAND_MIN))
+			n = piece ? PIECE_BAND : BAND_MIN;
 		if (whole)
 			n = cur->due.h;
 		band.x = (short) (cur->r_page.x + cur->due.x);
