@@ -1084,7 +1084,15 @@ int win_ahead(void)
 	if (w == NULL || (w->due.w > 0 && w->due.h > 0))
 		return 0;
 	cur = w;
-	more = pic_use() && ahead_range(&y0, &y1);
+	/* (the bands not taken yet for this size: taken by win_draw_ahead at
+	   a turn of its own, not here, where the turn's own work went first:
+	   a stock Falcon's three tries after the news page's last picture
+	   were 60 ms of the load's 110, the speed rig) */
+	if (!pic_hold && shown() != NULL && cur->h > 0 && !cur->iconified &&
+	    (pic.pw != cur->r_page.w || pic.ph != cur->r_page.h))
+		more = 1;
+	else
+		more = pic_use() && ahead_range(&y0, &y1);
 	cur = was;
 	return more;
 }
@@ -1104,6 +1112,14 @@ void win_draw_ahead(void)
 	if (w == NULL)
 		return;
 	cur = w;
+	if (pic.pw != cur->r_page.w || pic.ph != cur->r_page.h) {
+		/* the bands taken: this turn's work, the first band at the next */
+		gap_tag("ahead: bands taken");
+		pic_use();
+		pic_fresh = 0;
+		cur = was;
+		return;
+	}
 	if (pic_use() && ahead_range(&y0, &y1)) {
 		gap_tag("ahead");
 		/* (a band at a time on a machine without TT or Fast RAM: two of
