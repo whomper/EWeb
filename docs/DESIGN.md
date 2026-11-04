@@ -3984,6 +3984,41 @@ Chromium can't run either).
 Tests: `tests/layout/buttons.html` and `tests/layout/icons.html` (looked at against Chromium),
 `tests/js/custom.html`, `tests/browse/sitetest.c` (the trackers' names).
 
+**webdriveruniversity.com, the third round (4 Nov 2026).** The 18 challenges side by side with
+Chromium at 640 pixels (`ewrender -W` through a webgate, scripts on), then their clicks:
+
+- **Emoji** `EWEB.FNT` hasn't got are drawn as nothing, with what joins and colours them, not as
+  '?' (the front page's rocket, alarm clock and fire); a symbol it has (a star, a tick, a heart)
+  is drawn (`zero_width` in `src/gfx/font.c`).
+- **Heights in percent** (CSS 2.1, 10.5) are of the containing block's height when that is set,
+  within its max-height, through anonymous blocks (`L.defh`); they were auto but for positioned
+  boxes (Actions' double-click box, 86% of a frame of 300px, was as tall as its words). A set
+  height is kept within max-height whatever the overflow.
+- **A button the page styles** is laid out by its own content when its words aren't centred or
+  it has a `::before` or `::after` (the accordion's titles on the left, its '+' floated right);
+  the UA sheet centres a button's words, as browsers' do. A float from a `::before` or an
+  `::after` is a float in the text, on its line.
+- **A box placed by top and bottom** in a block of no set height (Bootstrap 3's carousel
+  controls) is stretched once that height is known, and what in it is placed by a share of its
+  height (the arrows, top 50%) waits for it (`struct bot`'s `nested`): the arrows sat at the top.
+- **Anonymous table parts** (CSS 2.1, 17.2.1): a run of a table's children with a cell in it
+  goes in a row, and in that row what isn't a cell in a cell (Bootstrap 3's input group: a field
+  floated and its button, no row; `table_anon`). A field of a width in percent counts, at its
+  narrowest, as its padding and borders (CSS Sizing 3, compressible).
+- **Selectors in a tree out of the page** (an element filled by `innerHTML`, a fragment, another
+  document's) match: `doc_refresh_tree` makes its links first (jQuery parses HTML in a document
+  of its own; the Datepicker found its month and days by class in its template). And
+  `getClientRects`, which jQuery's sizes ask.
+
+So the Datepicker shows today's date with its button beside it; the button opens the calendar
+and a day picked fills the field. Left: the calendar opens over its field, placed by its height
+as the last layout had it (none: scripts don't lay the page out again when they ask a size,
+Phase 3's first item); a cell of width 1% before a field narrower than its words (a spanning
+row's widths shared by column, as a page of the set showed, would need the share reworked);
+rounded corners and shadows; Glyphicons' calendar. Tests: `tests/layout/pcheight.html`,
+`buttons.html`, `absbottom.html`, `tables.html`, `icons.html`, `tests/js/detached.html`; the page
+set's display lists before and after: one page changed, its search field where Chromium has it.
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
