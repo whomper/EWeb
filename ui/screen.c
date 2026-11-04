@@ -766,23 +766,53 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
    (Erez's clip, 2 Nov 2026). Only where a row of the screen's form is a
    row of memory: the Atari's interleaved planes, packed bytes, true
    colour (vr_trnfm's other forms aren't known to be) */
-static unsigned char *store;		/* ST RAM, store_rows of store_row bytes */
+/* the kept rows in pieces, each piece_rows rows (a whole number of 16:
+   a band of win.c's never crosses two): one piece where ST RAM is had in
+   one block, else pieces of PIECE_ROWS from the heap where it has room
+   already (a 4 MB Falcon with the news page: 484 KB free in the heap but
+   none of it 331 KB in one, and the kept page was a window and 26 rows;
+   a line scrolled was then whole 425 ms after the key, a page 2 s) */
+#define PIECE_ROWS 64
+#define PIECES_MAX 128
+static unsigned char *piece[PIECES_MAX];
+static short npieces, piece_rows;
+static unsigned char *store;		/* (piece[0]: kept rows there are) */
 static int store_heap;			/* from the heap (malloc): a machine with no TT RAM */
 static long store_row;
 static short store_rows, store_w, store_words;
+
+/* the address of kept row r */
+static unsigned char *store_at(long r)
+{
+	return piece[r / piece_rows] + (r % piece_rows) * store_row;
+}
+
+/* rows from r to the end of its piece */
+static short piece_left(short r)
+{
+	return (short) (piece_rows - r % piece_rows);
+}
+
+static void store_free(void)
+{
+	short k;
+	for (k = 0; k < npieces; k++) {
+		if (store_heap)
+			free(piece[k]);
+		else
+			Mfree(piece[k]);
+		piece[k] = NULL;
+	}
+	npieces = 0;
+	store = NULL;
+	store_rows = 0;
+}
 
 int scr_store(short w, short n)
 {
 	long row, size, free_st;
 	scr_store_part_drop();
-	if (store != NULL) {
-		if (store_heap)
-			free(store);
-		else
-			Mfree(store);
-	}
-	store = NULL;
-	store_rows = 0;
+	store_free();
 	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))
 		return 0;
 	store_words = (short) ((w + 15) / 16);
@@ -791,40 +821,55 @@ int scr_store(short w, short n)
 	row = truecolour ? store_words * 32L : format == 2 ? store_words * 16L : store_words * 2L * planes;
 	size = row * n;
 	free_st = (long) Mxalloc(-1, 0);
+	store_row = row;
 	if ((long) Mxalloc(-1, 1) > 0) {
 		/* TT or Fast RAM, where the heap is: ST RAM of its own, a
 		   megabyte left for the rest at least */
 		store_heap = 0;
-		if (free_st < size + (1L << 20) || (store = st_alloc(size)) == NULL) {
+		if (free_st < size + (1L << 20) || (piece[0] = st_alloc(size)) == NULL) {
 			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
 			return 0;
 		}
-	} else if (free_st >= size + 256L * 1024 && (store = st_alloc(size)) != NULL) {
+		npieces = 1;
+		piece_rows = n;
+	} else if (free_st >= size + 256L * 1024 && (piece[0] = st_alloc(size)) != NULL) {
 		/* none (a stock Falcon, a TT without it): from the system's ST
 		   RAM where 256 KB stay free, given back to it while a page
 		   loads (win_pic_busy) and when one doesn't fit (br_shed) */
 		store_heap = 0;
+		npieces = 1;
+		piece_rows = n;
 	} else {
 		/* else from the heap (on a 4 MB Falcon nearly all the ST RAM: 110
 		   KB left with the news page), but only from what it has free
 		   already: the heap grown for it held memory the next page
 		   needed, and the news page was made twice (14 s to 28) */
-		long after;
+		short k, want = (short) ((n + PIECE_ROWS - 1) / PIECE_ROWS);
 		store_heap = 1;
-		store = malloc((size_t) size);
-		after = (long) Mxalloc(-1, 0);
-		if (store != NULL && after < free_st) {
-			free(store);
-			store = NULL;
-			heap_trim();	/* (the block it grew by given back) */
+		piece_rows = PIECE_ROWS;
+		if (want > PIECES_MAX) {
+			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
+			return 0;
 		}
-		if (store == NULL) {
+		for (k = 0; k < want; k++) {
+			piece[k] = malloc((size_t) (row * PIECE_ROWS));
+			if (piece[k] != NULL && (long) Mxalloc(-1, 0) < free_st) {
+				free(piece[k]);
+				piece[k] = NULL;
+			}
+			if (piece[k] == NULL)
+				break;
+			npieces = k + 1;
+		}
+		if (npieces < want) {
+			store_free();
+			heap_trim();	/* (any block it grew by given back) */
 			log_event("kept page: no room for %ld KB, ST RAM free %ld KB", size >> 10, free_st >> 10);
 			return 0;
 		}
 	}
-	log_event("kept page %ld KB, ST RAM free %ld KB", size >> 10, (long) Mxalloc(-1, 0) >> 10);
-	store_row = row;
+	log_event("kept page %ld KB in %d, ST RAM free %ld KB", size >> 10, npieces, (long) Mxalloc(-1, 0) >> 10);
+	store = piece[0];
 	store_rows = n;
 	store_w = w;
 	return 1;
@@ -897,7 +942,12 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 	store_canvas(&c, px);
 	c.h = n;
 	c.oy = py;
-	dev_buf = (unsigned short *) (void *) (store + (long) at * store_row);
+	if (piece_left(at) < n) {
+		/* (across two pieces: not a band of win.c's) */
+		scr_store_draw(p, px, py, at, n);
+		return 1;
+	}
+	dev_buf = (unsigned short *) (void *) store_at(at);
 	if (truecolour) {
 		c.pix = (uint8_t *) dev_buf;
 		c.stride = store_words * 32L;
@@ -946,11 +996,13 @@ void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 	c.marked = win_mark(&c.mark, &c.mark_rgb);
 	c.pressed = (uint16_t) win_pressed();
 	c.aes_bars = 1;
-	for (y0 = 0; y0 < n; y0 += rows) {
+	for (y0 = 0; y0 < n; y0 += c.h) {
 		short h = n - y0 > rows ? rows : n - y0;
+		if (h > piece_left(at + y0))
+			h = piece_left(at + y0);	/* (to its piece's end) */
 		c.h = h;
 		c.oy = py + y0;
-		dev_buf = (unsigned short *) (void *) (store + (long) (at + y0) * store_row);
+		dev_buf = (unsigned short *) (void *) store_at(at + y0);
 		if (truecolour) {
 			c.pix = (uint8_t *) dev_buf;
 			c.stride = store_words * 32L;
@@ -978,19 +1030,26 @@ void scr_store_put(short at, short n, short sx, short w, short x, short y)
 		return;
 	memset(&scr, 0, sizeof scr);
 	memset(&src, 0, sizeof src);
-	src.fd_addr = store;
 	src.fd_w = (short) (store_words * 16);
-	src.fd_h = store_rows;
+	src.fd_h = piece_rows;
 	src.fd_wdwidth = store_words;
 	src.fd_nplanes = planes;
-	pxy[0] = sx;
-	pxy[1] = at;
-	pxy[2] = sx + w - 1;
-	pxy[3] = at + n - 1;
-	pxy[4] = x;
-	pxy[5] = y;
-	pxy[6] = x + w - 1;
-	pxy[7] = y + n - 1;
-	vro_cpyfm(vdi_h, 3, pxy, &src, &scr);
+	while (n > 0) {
+		/* a copy a piece (one where it is all one) */
+		short r = at % piece_rows, k = piece_left(at) < n ? piece_left(at) : n;
+		src.fd_addr = piece[at / piece_rows];
+		pxy[0] = sx;
+		pxy[1] = r;
+		pxy[2] = sx + w - 1;
+		pxy[3] = r + k - 1;
+		pxy[4] = x;
+		pxy[5] = y;
+		pxy[6] = x + w - 1;
+		pxy[7] = y + k - 1;
+		vro_cpyfm(vdi_h, 3, pxy, &src, &scr);
+		at += k;
+		y += k;
+		n -= k;
+	}
 }
 #endif
