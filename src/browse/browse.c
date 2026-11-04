@@ -1181,6 +1181,15 @@ static int fetch(browser *b, const char *url, const char *site, int fresh, const
 		sb_init(&plain);
 		good = http_unpack((const unsigned char *) f->data, f->len, f->packed, &plain,
 				   maxbody > 0 ? maxbody : HTTP_MAXBODY);
+		if (good == -3 && http_room != NULL) {
+			/* (no room: given back where it can be, and once more from
+			   what came, not fetched again) */
+			sb_free(&plain);
+			sb_init(&plain);
+			if (http_room())
+				good = http_unpack((const unsigned char *) f->data, f->len, f->packed, &plain,
+						   maxbody > 0 ? maxbody : HTTP_MAXBODY);
+		}
 		free(f->data);
 		f->data = NULL;
 		f->packed = 0;
@@ -2297,6 +2306,20 @@ static int make_room(browser *b)
 	return shed(b) || freed;
 }
 
+/* http_room while a page is opened: room made in its browser (the page
+   shown goes too, as for one that didn't fit), and said so for the
+   load's end (room_gone) */
+static browser *room_b;
+static int room_gone;
+
+static int room_cb(void)
+{
+	if (room_b == NULL || !make_room(room_b))
+		return 0;
+	room_gone = 1;
+	return 1;
+}
+
 /* ---------------------------------------------------------------- visited links */
 
 /* d's links marked visited or not (visited.c) before it is styled, when
@@ -3400,8 +3423,13 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
 	fetch_nav = 1;	/* (a page opened is fetched whatever its host) */
+	room_b = b;
+	room_gone = 0;
 	r = fetch(b, url, b->typed ? NULL : b->url,
 		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
+	room_b = NULL;
+	if (room_gone)
+		gone = b->p == NULL;
 	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b)) {
 		/* it didn't fit beside the pages kept and the one shown (a page
 		   loaded again on a small machine): they go, and once more (not
@@ -3736,6 +3764,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	pic_scale_poll_rows = 1;
 	http_cookie_in = cookie_in;
 	http_cookie_out = cookie_out;
+	http_room = room_cb;
 	img_svg_size = svg_size;	/* SVG pictures: src/svg's */
 	img_svg_late = svg_late;
 	img_svg_decode = svg_decode;

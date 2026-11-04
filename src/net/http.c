@@ -79,6 +79,17 @@ int http_unpack(const unsigned char *in, long n, int how, SBUF *out, long max)
 		if (end - p < 8)
 			return 0;
 		end -= 8;			/* (its CRC and size) */
+		{
+			/* its size unpacked (mod 4 GB) at its end: the room
+			   taken once, whole. Grown by doubling, iamexpat.de's
+			   3.3 MB asked for 4 MB at 2 MB unpacked, the 2 MB and
+			   the packed 756 KB still held, and a 14 MB Falcon with
+			   6.7 MB free couldn't (Erez, 4 Nov 2026) */
+			unsigned long size = (unsigned long) end[4] | (unsigned long) end[5] << 8 |
+					     (unsigned long) end[6] << 16 | (unsigned long) end[7] << 24;
+			if (size > 0 && (long) size > 0 && (long) size <= max && !sb_reserve(out, (long) size))
+				return -3;
+		}
 	} else if (n > 6 && (p[0] & 0x0f) == 8 && ((p[0] << 8) | p[1]) % 31 == 0) {
 		p += 2;				/* zlib's header and Adler-32 */
 		end -= 4;
@@ -116,6 +127,7 @@ char http_user_agent[128] = "EWeb (Atari Falcon030)";
 char http_accept_language[64] = "en-GB,en;q=0.9,he;q=0.8";
 void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
 void (*http_cookie_out)(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req);
+int (*http_room)(void);
 
 #define LINE_MAX_  16384		/* one header line */
 #define HEAD_MAX   65536		/* all the headers of an answer */
@@ -663,6 +675,16 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		   DFB1, GEM held (Erez's "full CPU", 2 Nov 2026) */
 		good = http_unpack((const unsigned char *)body->s + start, body->len - start, h->encoding, &plain,
 				   b.max);
+		if (good == -3 && http_room != NULL) {
+			/* no room: the memory the caller can give back given, and
+			   unpacked again from what came (not fetched again: iamexpat.de's
+			   772 KB came twice, 40 s each, Erez's log of 4 Nov 2026) */
+			sb_free(&plain);
+			sb_init(&plain);
+			if (http_room())
+				good = http_unpack((const unsigned char *)body->s + start, body->len - start,
+						   h->encoding, &plain, b.max);
+		}
 		plain_len = plain.len;
 		if (good <= 0) {
 			sb_free(&plain);

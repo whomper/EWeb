@@ -107,6 +107,11 @@ void http_close_all(void);	/* close the kept connections */
 extern void (*http_cookie_in)(const HTTPREQ *rq, const URL *u, const char *method, const char *value);
 extern void (*http_cookie_out)(const HTTPREQ *rq, const URL *u, const char *method, SBUF *req);
 
+/* memory given back for an answer that hadn't the room to be unpacked
+   (the browser's pages kept and shown): 1 when some was, and it is
+   unpacked once more from what came (NULL: none) */
+extern int (*http_room)(void);
+
 /* AERA-Gateway's webgate on the Pi: "PI_IP" or "PI_IP:8280", "" for
    none. When set, every request goes there in proxy form ("GET
    https://host/path") and the Pi makes the connection onwards, TLS 1.2
