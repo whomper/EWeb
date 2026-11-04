@@ -256,7 +256,7 @@ void win_page_relaid(void);		/* laid out again for its pictures: the same place,
 void win_page_relaid_at(int32_t y);	/* laid out again: at y on it, drawn */
 void win_relaying(browser *b, const page *old);	/* br_relaying: what the window shows of old noted */
 int win_whole(long *ms);	/* a page's due drawn to its end since the last ask: 1, its ms */
-extern int win_whole_only;	/* every draw whole, however long (the speed build's DRAWWHOLE=1) */
+extern int win_whole_only;	/* every draw whole, however long (1; the speed build's DRAWPIECES=1: 0) */
 void win_page_clamp(void);		/* laid out again where it is: the place kept within it */
 void win_title(void);
 /* the status bar's text; "" for what the page says: its refresh while

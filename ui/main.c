@@ -461,6 +461,8 @@ static void settings_load(void)
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
 			win_whole_only = atoi(eq) != 0;	/* (the speed rig's comparison: never saved) */
+		else if (!strcmp(line, "DRAWPIECES"))
+			win_whole_only = atoi(eq) == 0;
 #endif
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];

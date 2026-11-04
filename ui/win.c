@@ -1435,7 +1435,10 @@ static long due_ms(const ewin *w)
 	return (long) w->due.h * rcost_hi() / 256 * w->due.w / (w->r_page.w > 0 ? w->r_page.w : 1);
 }
 
-int win_whole_only;
+/* every draw whole, as 0.69 (Erez, 4 Nov 2026: whole until a page in
+   pieces finishes no later than drawn whole; the speed build's
+   DRAWPIECES=1 measures the pieces meanwhile) */
+int win_whole_only = 1;
 static long whole_ms = -1;
 
 int win_whole(long *ms)

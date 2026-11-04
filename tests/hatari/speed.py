@@ -211,11 +211,12 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=False):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(data)
-        # (--whole: every draw whole, however long, the speed build's
-        # DRAWWHOLE=1: the guidelines' comparison of whole and pieces)
-        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" + ("DRAWWHOLE=1\n" if whole else ""))
-        if whole:
-            print("NOTE  %s: every draw whole (--whole)" % machine, flush=True)
+        # (EWeb draws whole, as 0.69, until pieces are no slower: Erez, 4
+        # Nov 2026; --pieces: a draw over 300 ms in pieces, the speed
+        # build's DRAWPIECES=1, to measure them against whole)
+        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" + ("DRAWWHOLE=1\n" if whole else "DRAWPIECES=1\n"))
+        if not whole:
+            print("NOTE  %s: a draw over 300 ms in pieces (--pieces)" % machine, flush=True)
         r.start("C:\\EWEB\\" + prg, ready="EWEB shown ", boot=600 if st else 300)
         # (the start ends where the window is drawn; the home page after
         # it is a load)
@@ -284,7 +285,7 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=False):
         # the time to the finished picture, the longest of the action's
         # draws (the guidelines' Speed: whole against pieces, --whole)
         print("finished picture on %s%s (ms from its rows due to its last drawn)"
-              % (r.describe(), ", every draw whole" if whole else ""))
+              % (r.describe(), "" if whole else ", in pieces"))
         for what, ms in fin:
             print("  %-40s %8s" % (what, "?" if ms is None else ms), flush=True)
         return bad
@@ -297,8 +298,8 @@ def main():
     if not a:
         sys.exit(__doc__)
     nvdi = "--nvdi" in a
-    whole = "--whole" in a
-    a = [x for x in a if x not in ("--nvdi", "--whole")]
+    whole = "--pieces" not in a
+    a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces")]
     eat = 0
     if "--eat" in a:
         i = a.index("--eat")
