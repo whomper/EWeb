@@ -74,6 +74,7 @@ typedef struct ewin {
 	GRECT work, r_tool, r_page, r_addr, r_thr, r_stat;
 	int32_t top;			/* the page's row at r_page's top */
 	uint8_t went_up;		/* its last scroll was up: the page made ahead upwards (win.c) */
+	unsigned long due_since;	/* when its page's due was first met undrawn (the speed build's AESWHOLE) */
 	int32_t left;			/* its column at r_page's left (a page wider than the window) */
 	char info[160];			/* the status bar's text as set (Atari text) */
 	char title[160];
@@ -254,6 +255,8 @@ void win_page_drawn(int32_t y0, int32_t y1);	/* a picture came: that part of the
 void win_page_relaid(void);		/* laid out again for its pictures: the same place, drawn */
 void win_page_relaid_at(int32_t y);	/* laid out again: at y on it, drawn */
 void win_relaying(browser *b, const page *old);	/* br_relaying: what the window shows of old noted */
+int win_whole(long *ms);	/* a page's due drawn to its end since the last ask: 1, its ms */
+extern int win_whole_only;	/* every draw whole, however long (the speed build's DRAWWHOLE=1) */
 void win_page_clamp(void);		/* laid out again where it is: the place kept within it */
 void win_title(void);
 /* the status bar's text; "" for what the page says: its refresh while

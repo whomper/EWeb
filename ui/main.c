@@ -458,6 +458,10 @@ static void settings_load(void)
 			opt.cache = (short) atoi(eq);
 		else if (!strcmp(line, "CACHEQUIT"))
 			opt.cachequit = atoi(eq) != 0;
+#ifdef AES_PROFILE
+		else if (!strcmp(line, "DRAWWHOLE"))
+			win_whole_only = atoi(eq) != 0;	/* (the speed rig's comparison: never saved) */
+#endif
 		else if (!strcmp(line, "WINDOW")) {
 			short *v[4];
 			char *p = eq;
@@ -2671,6 +2675,11 @@ int app_main(void)
 			if (win_scroll_whole(&ms, &top)) {
 				char b[64];
 				snprintf(b, sizeof b, "AESSCROLL %ld ms top %ld\n", ms, (long) top);
+				nf_debug(b);
+			}
+			if (win_whole(&ms)) {
+				char b[48];
+				snprintf(b, sizeof b, "AESWHOLE %ld ms\n", ms);
 				nf_debug(b);
 			}
 		}

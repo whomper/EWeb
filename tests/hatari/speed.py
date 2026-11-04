@@ -87,6 +87,15 @@ def scrolls_since(r, start):
         return [(int(a), int(b)) for a, b in re.findall(r"AESSCROLL (\d+) ms top (-?\d+)", f.read())]
 
 
+def wholes_since(r, start):
+    """the page's draws finished since start, each its ms from when its
+    rows were first due (the speed build's AESWHOLE lines): drawn whole or
+    in pieces, the time to the finished picture"""
+    with open(r.log, errors="replace") as f:
+        f.seek(start)
+        return [int(a) for a in re.findall(r"AESWHOLE (\d+) ms", f.read())]
+
+
 def held(r, key, what, secs=3):
     """a key held down for secs: how far the page went a second, how many
     times the window came whole, the longest wait for it, the longest
@@ -168,7 +177,7 @@ def eater(kb):
     return bytes.fromhex("3F3C0000" "2F3C%08X" % (kb * 1024) + "3F3C0031" "4E41")
 
 
-def run(out, machine, nvdi, prgdir, eat=0):
+def run(out, machine, nvdi, prgdir, eat=0, whole=False):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
     # Falcon-14: a stock Falcon (16 MHz, no FPU, no TT-RAM) with 14 MB of
@@ -202,7 +211,11 @@ def run(out, machine, nvdi, prgdir, eat=0):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(data)
-        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n")
+        # (--whole: every draw whole, however long, the speed build's
+        # DRAWWHOLE=1: the guidelines' comparison of whole and pieces)
+        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" + ("DRAWWHOLE=1\n" if whole else ""))
+        if whole:
+            print("NOTE  %s: every draw whole (--whole)" % machine, flush=True)
         r.start("C:\\EWEB\\" + prg, ready="EWEB shown ", boot=600 if st else 300)
         # (the start ends where the window is drawn; the home page after
         # it is a load)
@@ -215,16 +228,29 @@ def run(out, machine, nvdi, prgdir, eat=0):
         g = gaps_since(r, drawn if drawn >= 0 else 0)
         r.results.append(("the home page shown", max(g) if g else 0, LOAD))
         r.shot("00-home")
+        fin = []
+        w = re.findall(r"AESWHOLE (\d+) ms", con[drawn if drawn >= 0 else 0:])
+        fin.append(("the home page shown", max(int(x) for x in w) if w else None))
+        start = os.path.getsize(r.log)
         load(r, "the sample page loaded", "file:///C:/SAMPLE.HTM")
+        w = wholes_since(r, start)
+        fin.append(("the sample page loaded", max(w) if w else None))
+        start = os.path.getsize(r.log)
         typed = load(r, "the news page loaded", "file:///C:/NEWS.HTM")
+        w = wholes_since(r, start)
+        fin.append(("the news page loaded", max(w) if w else None))
         r.results.append(("the address typed (each letter)", max(typed) if typed else 0, speed.KEY))
         seen = []
         start = os.path.getsize(r.log)
         r.act("a line scrolled", speed.LINE, lambda: r.key("Down"))
+        w = wholes_since(r, start)
+        fin.append(("a line scrolled", max(w) if w else None))
         s = scrolls_since(r, start)
         seen.append(("a line scrolled", max(ms for ms, _ in s) if s else None, ""))
         start = os.path.getsize(r.log)
         r.act("a page scrolled", speed.PAGE, lambda: r.key("shift+Down"))
+        w = wholes_since(r, start)
+        fin.append(("a page scrolled", max(w) if w else None))
         s = scrolls_since(r, start)
         seen.append(("a page scrolled", max(ms for ms, _ in s) if s else None, ""))
         seen.append(held(r, "Down", "an arrow held 3 s, down"))
@@ -242,7 +268,10 @@ def run(out, machine, nvdi, prgdir, eat=0):
         # entry the first row under the bar, 8x16 characters)
         r.act("the About box opened", r.about, lambda: r.menu(20, 28))
         r.act("the About box closed (what it uncovers)", speed.WINDOW, lambda: r.key("Escape"))
+        start = os.path.getsize(r.log)
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
+        w = wholes_since(r, start)
+        fin.append(("the pictures' page loaded", max(w) if w else None))
         r.key("ctrl+q")
         time.sleep(3)
         bad = r.report()
@@ -252,6 +281,12 @@ def run(out, machine, nvdi, prgdir, eat=0):
         print("seen on %s (the window whole, ms from the key)" % r.describe())
         for what, ms, more in seen:
             print("  %-40s %8s  %s" % (what, "?" if ms is None else ms, more), flush=True)
+        # the time to the finished picture, the longest of the action's
+        # draws (the guidelines' Speed: whole against pieces, --whole)
+        print("finished picture on %s%s (ms from its rows due to its last drawn)"
+              % (r.describe(), ", every draw whole" if whole else ""))
+        for what, ms in fin:
+            print("  %-40s %8s" % (what, "?" if ms is None else ms), flush=True)
         return bad
     finally:
         r.stop()
@@ -262,7 +297,8 @@ def main():
     if not a:
         sys.exit(__doc__)
     nvdi = "--nvdi" in a
-    a = [x for x in a if x != "--nvdi"]
+    whole = "--whole" in a
+    a = [x for x in a if x not in ("--nvdi", "--whole")]
     eat = 0
     if "--eat" in a:
         i = a.index("--eat")
@@ -276,7 +312,7 @@ def main():
     out, machines = a[0], a[1:] or ["Falcon-4:16", "ST:mono"]
     bad = 0
     for m in machines:
-        bad |= run(out, m, nvdi, prgdir, eat)
+        bad |= run(out, m, nvdi, prgdir, eat, whole)
     sys.exit(bad)
 
 

@@ -727,7 +727,29 @@ static int fast_machine(void)
 static int sync_draw;		/* a box scrolled by a held button: drawn whole each step */
 static int defer_draw;		/* a scroll: what came in drawn at the next turn, not in its stretch */
 static int quiet_bars;		/* the bars' text set, not drawn: the whole window is drawn after */
-static long row_cost = 256;	/* a row's ms, times 256: how many rows a slice takes */
+static long row_cost = 0;	/* a row's ms, times 256: how many rows a slice takes (0: not
+				   known yet, guessed by the machine: due_ms) */
+/* a draw of WHOLE_MS or less drawn whole, in one stretch; a longer one
+   (an 8 MHz ST's page, 1.3 to 3.3 s; a stock Falcon's biggest) in pieces
+   of at most 100 ms, each put on the screen whole, a key or a click
+   answered between them (the guidelines' Speed, Erez's B of 4 Nov 2026) */
+#define WHOLE_MS 300
+#define PIECE_MS 85
+static int piece;		/* this turn's draw is a piece of a long one */
+
+/* row_cost, guessed by the machine before any row is drawn: an ST's 11 ms
+   a row, a stock Falcon's 2, a fast one's a quarter */
+static long rcost(void)
+{
+	if (row_cost <= 0) {
+#ifdef EW_ST
+		row_cost = 11 * 256;
+#else
+		row_cost = fast_machine() ? 64 : 2 * 256;
+#endif
+	}
+	return row_cost;
+}
 
 /* the page's part of area (the screen's) added to the window's due */
 static void due_add(const GRECT *area)
@@ -960,7 +982,7 @@ static int pic_make(int32_t y0, int32_t y1, unsigned long end)
 		   row_cost), within the ring's end and the rows screen.c
 		   draws at a time */
 		left = (long) (end - pf_ms());
-		want = (left > 4 ? left : 4) * 256 / (row_cost > 0 ? row_cost : 1);
+		want = (left > 4 ? left : 4) * 256 / rcost();
 		if (sync_draw)
 			want = (last - b + 1) * PIC_BAND;
 		n = 1;
@@ -1034,6 +1056,8 @@ static void draw_due_kept(void)
 	int small = pressing ||
 		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK);
 	end = since < 0 || since > 500 ? t0 + SLICE_MS : ui_event_at + SLICE_MS;
+	if (piece)
+		end = t0 + PIECE_MS;
 	gap_tag("draw");
 	if (!kept && small) {
 		sync_draw++;
@@ -1042,6 +1066,29 @@ static void draw_due_kept(void)
 		kept = 1;
 	} else if (!kept && pic_make(y0, y1, end) && sync_draw)
 		kept = 1;
+	if (!kept && piece) {
+		/* a piece of a long draw: the due's rows made so far from its top
+		   put on the screen now, whole (the rest at the next turns) */
+		int32_t b = y0 / PIC_BAND, ky;
+		while (b * PIC_BAND < y1 && pic_has(b))
+			b++;
+		ky = b * PIC_BAND < y1 ? b * PIC_BAND : y1;
+		if (ky > y0) {
+			GRECT a;
+			int took = screen_lock();
+			a.x = (short) (cur->r_page.x + cur->due.x);
+			a.y = (short) (cur->r_page.y + cur->due.y);
+			a.w = cur->due.w;
+			a.h = (short) (ky - y0);
+			graf_mouse(M_OFF, 0);
+			font_sys_push();
+			pic_put(&a);
+			graf_mouse(M_ON, 0);
+			press_update_end(took);
+			cur->due.y += a.h;
+			cur->due.h -= a.h;
+		}
+	}
 	if (kept) {
 		GRECT a;
 		int took = screen_lock();
@@ -1229,6 +1276,8 @@ static void draw_due(void)
 		long since = (long) (t0 - ui_event_at);
 		int slice = cur->due_big && fast_machine() ? SLICE_BIG : SLICE_MS;
 		end = since < 0 || since > 500 ? t0 + slice : ui_event_at + slice;
+		if (piece)
+			end = t0 + PIECE_MS;	/* (a piece of a long draw: its own) */
 	}
 	whole = sync_draw || (!cur->due_scroll &&
 		(long) cur->due.w * cur->due.h <= (fast_machine() ? DUE_WHOLE : DUE_WHOLE_STOCK));
@@ -1236,7 +1285,7 @@ static void draw_due(void)
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
 		long left = (long) (end - b0), n;
-		n = (left > 4 ? left : 4) * 256 / (row_cost > 0 ? row_cost : 1);
+		n = (left > 4 ? left : 4) * 256 / rcost();
 		/* (16 rows at least, a line of text: thinner bands each went
 		   through every line they crossed again, its letters looked up
 		   and clipped, eight times over at 2 rows) */
@@ -1333,28 +1382,64 @@ static void draw_due_bars(void)
 	defer_draw--;
 }
 
+/* what the window's due takes to draw, by the rows drawn so far (rcost) */
+static long due_ms(const ewin *w)
+{
+	return (long) w->due.h * rcost() / 256 * w->due.w / (w->r_page.w > 0 ? w->r_page.w : 1);
+}
+
+int win_whole_only;
+static long whole_ms = -1;
+
+int win_whole(long *ms)
+{
+	if (whole_ms < 0)
+		return 0;
+	*ms = whole_ms;
+	whole_ms = -1;
+	return 1;
+}
+
 void win_draw_due(void)
 {
-	/* all of it, each window's whole, in this turn (Erez, 4 Nov 2026:
-	   drawing is not a job sliced between turns, the guidelines' Speed):
-	   its title and bars, its page's rows, a scroll's sliders after them */
+	/* each window's in this turn: its title and bars, its page's rows, a
+	   scroll's sliders after them; whole where it takes WHOLE_MS or less
+	   (Erez, 4 Nov 2026: drawing is not a job sliced between turns), else
+	   a piece of its page's rows, the rest at the next turns */
 	ewin *was = cur, *w;
-	sync_draw++;
 	for (w = wins; w != NULL; w = w->next) {
-		int k;
+		int k, long_draw;
 		cur = w;
+		if (w->due.w > 0 && w->due.h > 0 && w->due_since == 0)
+			w->due_since = pf_ms() | 1;
+		long_draw = w->due.w > 0 && w->due.h > 0 && due_ms(w) > WHOLE_MS && !win_whole_only;
+		if (long_draw)
+			piece++;
+		else
+			sync_draw++;
 		for (k = 0; k < 16; k++) {	/* (each step clears what it drew) */
 			if (w->due_bars & ~16)
 				draw_due_bars();
-			else if (w->due.w > 0 && w->due.h > 0)
+			else if (w->due.w > 0 && w->due.h > 0) {
 				draw_due();
-			else if (w->due_bars)
+				if (long_draw)
+					break;	/* (a piece: the rest at the next turns) */
+			} else if (w->due_bars)
 				draw_due_bars();	/* (a scroll's sliders, after its rows) */
 			else
 				break;
 		}
+		if (long_draw)
+			piece--;
+		else
+			sync_draw--;
+		if (w->due_since != 0 && !(w->due.w > 0 && w->due.h > 0)) {
+			/* (its page's rows all drawn: the time from when they were
+			   first met, whole or in pieces, for the speed rig) */
+			whole_ms = (long) (pf_ms() - w->due_since);
+			w->due_since = 0;
+		}
 	}
-	sync_draw--;
 	cur = was;
 }
 
