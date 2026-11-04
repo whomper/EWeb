@@ -5299,6 +5299,11 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 				item_float(l, k, x, w, cy);
 		firstline = 0;
 		i = broke ? j + 1 : j;
+		/* (GEM's turn asked at each line too: a long paragraph's lines
+		   were the longest stretch of the news page's layout, 110 ms of
+		   a stock Falcon's after its iframe came) */
+		if (i < l->nit && stopped(l))
+			break;
 	}
 	free(ord);
 	free(l->lv);
