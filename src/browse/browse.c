@@ -3430,10 +3430,12 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	room_b = NULL;
 	if (room_gone)
 		gone = b->p == NULL;
-	if (!r && f->nomem && !conn_stop && post == NULL && make_room(b)) {
+	if (!r && f->nomem && !room_gone && !conn_stop && post == NULL && make_room(b)) {
 		/* it didn't fit beside the pages kept and the one shown (a page
 		   loaded again on a small machine): they go, and once more (not
-		   a form sent, which the server may have had) */
+		   a form sent, which the server may have had; nor one whose room
+		   was made already, unpacking it: it came, and fetched again it
+		   comes the same, iamexpat.de's 772 KB twice on Erez's 0.69) */
 		gone = b->p == NULL;
 		r = fetch(b, url, b->typed ? NULL : b->url,
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);

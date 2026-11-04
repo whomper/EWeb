@@ -1068,14 +1068,16 @@ static int ahead_range(int32_t *y0, int32_t *y1)
 	int k, ks = (int) ((pic.nb - 2L) * PIC_BAND / (h > 0 ? h : 1));	/* (windows the ring holds) */
 	/* the window, the one below, the one above, then on down the page
 	   as far as the ring holds (a page is read down); after a scroll up,
-	   the one above, the one below, then on up */
-	for (k = 0; k < ks; k++) {
-		int32_t s = (int32_t) (k == 0 ? 0 : k == 2 ? -1 : k == 1 ? 1 : k - 1);
-		if (cur->went_up)
-			s = -s;
+	   the one above, the one below, then on up; where the page ends that
+	   way, on the other way (at its top after ClrHome, on down: the
+	   speed rig's 4 pages down were 700 ms each, not 105) */
+	int f = cur->went_up ? -1 : 1, n = 0;
+	for (k = 0; k < 2 * ks + 2 && n < ks; k++) {
+		int32_t s = (int32_t) (k == 0 ? 0 : k == 1 ? f : k == 2 ? -f : k - 1 <= ks ? f * (k - 1) : -f * (k - ks));
 		a = top + s * h;
-		if (k > 2 && (a >= end || a + h <= 0))
-			break;
+		if (a >= end || a + h <= 0)
+			continue;
+		n++;
 		*y0 = a < 0 ? 0 : a;
 		*y1 = a + h > end ? end : a + h;
 		if (*y1 > *y0 && !pic_kept(*y0, *y1))
