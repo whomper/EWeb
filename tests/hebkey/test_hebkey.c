@@ -8,7 +8,22 @@
 static int fails, checks;
 #define CK(c) do { checks++; if (!(c)) { fails++; printf("FAIL line %d: %s\n", __LINE__, #c); } } while (0)
 
-static int hooked;
+static int hooked, tn_calls, vc_calls;
+static char tn_s[8];
+static short tn_x, tn_y, vc_col;
+void vst_color(short h, short color) { (void)h; vc_calls++; vc_col = color; }
+void text_n(short h, short x, short y, const char *s, long n)
+{
+	(void)h;
+	tn_calls++;
+	tn_x = x;
+	tn_y = y;
+	tn_s[0] = n > 0 ? s[0] : 0;
+	tn_s[1] = n > 1 ? s[1] : 0;
+	tn_s[2] = 0;
+}
+
+
 static void hook(void) { hooked++; }
 
 /* the AES's key word: scancode << 8 | ascii */
@@ -51,6 +66,14 @@ int main(void)
 	CK(key_char(0, KEY(0x10, 'q')) == 'q');
 	set_hebrew_kbd(1);
 	CK(hooked == 2 && hebrew_kbd == 1);
+	/* the badge: only while the keyboard is on, the two letters ayin bet */
+	set_hebrew_kbd(0);
+	hebrew_badge(1, 100, 20, 1);
+	CK(tn_calls == 0 && vc_calls == 0);
+	set_hebrew_kbd(1);
+	hebrew_badge(1, 100, 20, 3);
+	CK(tn_calls == 1 && vc_calls == 1 && vc_col == 3);
+	CK(tn_x == 100 && tn_y == 20 && (unsigned char)tn_s[0] == 0xD3 && (unsigned char)tn_s[1] == 0xC3);
 	printf("hebkey: %d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }

@@ -26,4 +26,12 @@ extern void (*hebrew_kbd_hook)(void);
 void set_hebrew_kbd(short on);
 unsigned char key_char(short kstate, short key);
 
+/* the badge: the two letters "ayin bet" (Atari codes 0xD3 0xC3) the apps
+   show while the keyboard is on, at the right end of a dialog's title bar
+   (ECal's and EContact's field.c); x, y the top left of the two cells, in
+   the text font the app has set (text_font), colour the pen. Does nothing
+   while the keyboard is off. The AES draws a title in the system font,
+   which has no Hebrew: the badge belongs where the app draws its own. */
+void hebrew_badge(short vdi, short x, short y, short colour);
+
 #endif
