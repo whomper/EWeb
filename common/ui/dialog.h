@@ -81,6 +81,13 @@ void dlg_close(void);
    front (a click outside it rings the bell). Elsewhere evnt_multi_. */
 short dlg_evnt(short flags, short clicks, short mask, short state,
 	       unsigned long timer, short *msg, AEVENT *e);
+/* the app's work while a dialog waits for the user (a player's queue
+   that must go on being fed while Settings or About is open): when set,
+   a wait with no timer of its own (dlg_do, the About box, any dlg_evnt
+   without MU_TIMER) wakes every 20 ms and calls it, short work (a
+   Speed turn: well under 50 ms). NULL by default; set it while the app's
+   job runs and clear it when the job ends. */
+extern void (*dlg_idle)(void);
 /* what the app draws itself over the open dialog's tree (lists, a
    sample, with the VDI): draw(x, y, w, h) draws that piece of it again,
    called after the tree when the AES asks for a piece of the window (on
