@@ -2128,6 +2128,13 @@ void win_status(const char *s)
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else
 		t[0] = 0;
+#ifndef EW_ST
+	if (hebrew_kbd) {
+		/* (as ECal's status line says it) */
+		size_t n = strlen(t);
+		snprintf(t + n, sizeof t - n, "%sHebrew keyboard (F10)", n ? "   " : " ");
+	}
+#endif
 	if (strcmp(t, cur->info) == 0)
 		return;
 	str_copy(cur->info, t, sizeof cur->info);
@@ -2267,7 +2274,7 @@ static int addr_letter(int i)
 static int addr_key(short kstate, short key)
 {
 	short scan = KEY_SCAN(key);
-	unsigned char c = KEY_ASCII(key);
+	unsigned char c = key_char(kstate, key);	/* (the Hebrew keyboard's when it is on) */
 	int len = (int) strlen(cur->addr), shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0;
 	if (key_ctrl(kstate, key)) {
 		switch (scan) {
@@ -2650,7 +2657,7 @@ static int ctl_key(short kstate, short key)
 	long kc, cc;
 	int r;
 	if (c == NULL || br.d == NULL || br.d->js == NULL || key_ctrl(kstate, key) ||
-	    !key_named(KEY_SCAN(key), KEY_ASCII(key), name, sizeof name, &kc, &cc))
+	    !key_named(KEY_SCAN(key), key_char(kstate, key), name, sizeof name, &kc, &cc))
 		return ctl_key_take(kstate, key);
 	if (ctl_keyev(c, "keydown", name, kc, 0) || (cc && ctl_alive(c) && ctl_keyev(c, "keypress", name, cc, cc))) {
 		if (ctl_alive(c))
@@ -2673,7 +2680,7 @@ static int ctl_key_take(short kstate, short key)
 	fctl *c = cur->f_focus;
 	const dl_item *it = br.p ? page_ctl_item(br.p, c) : NULL;
 	short scan = KEY_SCAN(key);
-	unsigned char ch = KEY_ASCII(key);
+	unsigned char ch = key_char(kstate, key);	/* (the Hebrew keyboard's when it is on) */
 	int shift = (kstate & (K_LSHIFT | K_RSHIFT)) != 0, typing = form_typed(c), changed = 0;
 
 	if (it == NULL) {		/* no longer shown */

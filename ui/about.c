@@ -65,6 +65,9 @@ void dlg_keys(void)
 		 "Right click: a link's or the page's commands\n"
 		 "^N       a new window; ^W the next; ^U closes\n"
 		 "^,       the Settings\n"
+#ifndef EW_ST
+		 "F10      the Hebrew keyboard, on and off\n"
+#endif
 		 "^Q       quit");
 }
 

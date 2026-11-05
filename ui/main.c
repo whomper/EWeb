@@ -60,7 +60,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 0, 1 };
+	       1, "", 0, 0, 0, 1 };	/* (runscripts, noscripts, log, hebrew, trackers, cachequit) */
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -140,6 +140,9 @@ static const MBAR_ITEM m_opts[] = {
 	{ "Run this site's scripts", 0, C_SCRIPTS },
 #endif
 	{ "Write a log", 0, C_LOG },	/* EWEB.LOG, as ECal's and EContact's */
+#ifndef EW_ST
+	{ "Hebrew keyboard", "F10", C_KBD },	/* as ECal's, EContact's and EMail's */
+#endif
 	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
@@ -373,6 +376,9 @@ void menu_update(void)
 		menu_set(1, mbar_object(&mb, C_PICTURES), opt.pictures);
 		menu_set(1, mbar_object(&mb, C_FALCON), opt.falcon);
 		menu_set(1, mbar_object(&mb, C_LOG), opt.log);
+#ifndef EW_ST
+		menu_set(1, mbar_object(&mb, C_KBD), hebrew_kbd);
+#endif
 		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
 		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
@@ -438,6 +444,8 @@ static void settings_load(void)
 			opt.palette = atoi(eq) != 0;
 		else if (!strcmp(line, "LOG"))
 			opt.log = atoi(eq) != 0;
+		else if (!strcmp(line, "HEBREW"))
+			opt.hebrew = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -686,6 +694,10 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.log);
 	put(&s, "LOG", v, "1 = EWEB.LOG next to EWEB.PRG: each connection and its secure handshake, step by step "
 	    "(no address's query, cookie or form field), and where EWeb waited longest; 0 = none");
+#ifndef EW_ST
+	snprintf(v, sizeof v, "%d", opt.hebrew);
+	put(&s, "HEBREW", v, "1 = EWeb starts with the Hebrew keyboard (F10 switches it), 0 = without");
+#endif
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
@@ -2002,6 +2014,9 @@ void command(int cmd)
 		if (falcon_mode_set(!opt.falcon))
 			settings_save();
 		break;
+	case C_KBD:
+		set_hebrew_kbd(!hebrew_kbd);
+		break;
 	case C_LOG:
 		/* on or off at once, and kept (LOG=; the family's Write a log) */
 		opt.log = !opt.log;
@@ -2077,6 +2092,41 @@ void command(int cmd)
 
 /* ---------------------------------------------------------------- keys */
 
+/* the Hebrew keyboard: the Israeli SI-1452 layout by the key's place (scan
+   codes 0x10 to 0x35), as Atari characters; 0 the key's own. The family's
+   table (ECal's, EContact's, EMail's, from ClaudeST) */
+short hebrew_kbd;
+#ifndef EW_ST
+static const unsigned char hebrew_keys[0x36 - 0x10] = {
+	/* 10 q..p */ '/', '\'', 0xD4, 0xD5, 0xC2, 0xCA, 0xC7, 0xD8, 0xDA, 0xD2,
+	/* 1a [ ] ret ctrl */ 0, 0, 0, 0,
+	/* 1e a..' */ 0xD6, 0xC5, 0xC4, 0xCC, 0xD1, 0xCB, 0xC9, 0xCD, 0xD9, 0xDB, ',',
+	/* 29 ` lshift \ */ 0, 0, 0,
+	/* 2c z../ */ 0xC8, 0xD0, 0xC3, 0xC6, 0xCF, 0xCE, 0xD3, 0xD7, 0xDC, '.'
+};
+#endif
+
+unsigned char key_char(short kstate, short key)
+{
+	unsigned char ascii = KEY_ASCII(key);
+#ifndef EW_ST
+	short scan = KEY_SCAN(key);
+	if (hebrew_kbd && !(kstate & (K_LSHIFT | K_RSHIFT | 0x08)) && !key_ctrl(kstate, key) &&	/* (0x08: Alternate) */
+	    scan >= 0x10 && scan < 0x36 && hebrew_keys[scan - 0x10])
+		ascii = hebrew_keys[scan - 0x10];
+#else
+	(void) kstate;
+#endif
+	return ascii;
+}
+
+void set_hebrew_kbd(short on)
+{
+	hebrew_kbd = on;
+	menu_update();
+	win_status("");	/* (the status line says so: "Hebrew keyboard (F10)") */
+}
+
 static int shortcut(short kstate, short key)
 {
 	short scan = KEY_SCAN(key);
@@ -2088,6 +2138,12 @@ static int shortcut(short kstate, short key)
 		command(C_HELP);
 		return 1;
 	}
+#ifndef EW_ST
+	if (scan == 0x44 && !key_ctrl(kstate, key)) {	/* F10: the Hebrew keyboard, as the family's */
+		set_hebrew_kbd(!hebrew_kbd);
+		return 1;
+	}
+#endif
 	if (scan == 0x61) {		/* Undo: Back, with Shift Forward */
 		command(shift ? C_FORWARD : C_BACK);
 		return 1;
@@ -2532,6 +2588,7 @@ int app_main(void)
 	   its profiled build gave the kept page back for a page that didn't
 	   fit, and the releases kept up to 16 windows of ST RAM while a big
 	   page was refused for want of memory) */
+	hebrew_kbd = opt.hebrew;	/* (HEBREW=: Settings > Start with the Hebrew keyboard) */
 	br_shed = win_pic_drop;
 	br_relaying = win_relaying;
 	/* (a machine of ST RAM alone and little of it, the stock 4 MB Falcon:

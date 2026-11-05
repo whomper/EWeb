@@ -174,7 +174,13 @@ In a field:
   several lines it starts a new line)
 
 Hebrew can be typed with the Atari's Hebrew keyboard, and shows right to
-left as it is typed.
+left as it is typed. On an Atari with another keyboard, **F10** (or
+Options > Hebrew keyboard) switches EWeb's own Hebrew keyboard on and
+off, as in the other AERA programs: the letter keys type the Hebrew
+letters of the Israeli layout, in a page's fields and in the address,
+and the status line says "Hebrew keyboard (F10)" while it is on.
+Settings > General > Start with the Hebrew keyboard has it on from the
+start.
 
 Click a box (or its words) to tick it, a round button to choose it from
 its group, a list to choose from it (a long list shows a screenful at a
@@ -524,6 +530,7 @@ of it.
 | Tab, Shift-Tab | the page's next field (or the one before), then the address |
 | Return | in a field: send its form |
 | ^, | the Settings |
+| F10 | the Hebrew keyboard, on and off (the Falcon's EWEB.PRG) |
 | Help | this guide |
 | ^W | EWeb's next window to the front |
 | ^U | close the window in front (the last one: quit) |

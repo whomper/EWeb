@@ -4515,6 +4515,17 @@ heap's peak 8.9 MB and 265 KB of ST RAM left), the kept page given back while it
 (`win_pic_busy`). Through the network the packed 750 KB and the unpacked page come on top of
 that, and NVDI and the accessories take their share: his `EWEB.LOG` says which part runs out.
 
+**The Hebrew keyboard (5 Nov 2026; Erez: "just like other AERA applications").** As ECal's,
+EContact's and EFTP's: F10 or Options > Hebrew keyboard (ticked) switches it, the letter keys
+then type the Israeli SI-1452 layout's letters (the family's table, `key_char` in `ui/main.c`)
+in a page's fields, the address and the scripts' key events; the info line ends with "Hebrew
+keyboard (F10)", as the family's main windows do today; Settings > General > Start with the
+Hebrew keyboard (`HEBREW=`). `EWEB.PRG` only (the ST edition is frozen). EWeb's dialogs type
+Hebrew once common's `hebkey.c` (AERA-Atari 89a3334: `dlg_do` through `key_char`) is synced in,
+and their title badge ("עב", as ECal's dialogs) with it. Erez is asked through the hub whether
+the info line shows a badge in place of the words, in every app. `make hatarigui`'s browse
+group types shin into the search field with F10 on and checks what was sent.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.

@@ -700,6 +700,23 @@ def browse():
             ev = r.wait(r"shown ", 120)
             check("forms: Back to the form", ev is not None and ev.startswith("shown %sform.html " % site),
                   str(r.events()))
+            # the Hebrew keyboard (F10, as the family's apps: Erez, 5 Nov
+            # 2026): 'a' types shin, sent as UTF-8; F10 again, off
+            r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 0, right=True))
+            r.key(0x44)
+            time.sleep(1)
+            st = r.events()
+            r.type("a")
+            r.key(0x44)
+            r.key(RETURN)
+            ev = r.wait(r"shown ", 120)
+            check("forms: the Hebrew keyboard's letter typed (F10)", ev is not None and
+                  ev.endswith("title GET||q=atarist%D7%A9&go=Find") and
+                  any("status" in e and "Hebrew keyboard (F10)" in e for e in st), str(r.events()))
+            r.key(UNDO)
+            ev = r.wait(r"shown ", 120)
+            check("forms: Back to the form again", ev is not None and ev.startswith("shown %sform.html " % site),
+                  str(r.events()))
             # the login: its name typed, Tab to the password, Tab to the
             # box, Space ticks it; its button clicked sends it with POST
             r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 2))
