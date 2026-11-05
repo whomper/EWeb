@@ -1991,7 +1991,7 @@ void win_page_clamp(void)
 }
 
 /* the window as a relayout found it (br_relaying): a word for each band
-   of RL_BAND rows of what it showed (cv_rows_sum), to draw again only the
+   of RL_BAND rows of what it showed (cv_bands_sum), to draw again only the
    bands whose word changes (a frame or a picture come: the news page's
    iframe drew the window whole again, 3.1 s of an ST's, 0.5 of a stock
    Falcon's, the speed rig of 4 Nov 2026) */
@@ -2013,11 +2013,10 @@ static const void *rl_pic(void *img, int32_t w, int32_t h)
 
 static void rl_sums(const page *p, uint32_t *out, int n)
 {
-	int k;
-	for (k = 0; k < n; k++) {
-		int32_t y0 = cur->top + (int32_t) k * RL_BAND;
-		out[k] = cv_rows_sum(p, y0, y0 + RL_BAND, cur->left, cur->left + cur->r_page.w, rl_pic);
-	}
+	/* (in one pass: a band at a time, each item's word made in every band
+	   of it, "relayout: pictures shown" was 215 ms in 4 parts of the stock
+	   Falcon, 0.69's 130 in 2) */
+	cv_bands_sum(p, cur->top, n, RL_BAND, cur->left, cur->left + cur->r_page.w, rl_pic, out);
 }
 
 void win_relaying(browser *b, const page *old)

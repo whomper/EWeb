@@ -68,11 +68,12 @@ void cv_page(canvas *c, const page *p);
    its pixels as they were left), or -1 when it is all drawn. A canvas
    over more than a strip is drawn whole. */
 long cv_page_part(canvas *c, const page *p, long from, int (*stop)(void *), void *ud);
-/* a word of what the page draws in rows y0 to y1, x0 to x1 across: two
-   layouts' words alike, they draw those rows alike (ui/win.c's relayout);
-   pic: what of a picture there is at a size (NULL: not asked) */
-uint32_t cv_rows_sum(const page *p, int32_t y0, int32_t y1, int32_t x0, int32_t x1,
-		     const void *(*pic)(void *img, int32_t w, int32_t h));
+/* a word of what the page draws in each of nb bands of band rows from
+   row y0, x0 to x1 across, into out: two layouts' words alike, they draw
+   that band alike (ui/win.c's relayout); pic: what of a picture there is
+   at a size (NULL: not asked). One pass, each item's word made once */
+void cv_bands_sum(const page *p, int32_t y0, int nb, int32_t band, int32_t x0, int32_t x1,
+		  const void *(*pic)(void *img, int32_t w, int32_t h), uint32_t *out);
 /* form controls (DL_CTL items) are drawn from their state, form.h: */
 struct fctl;
 /* text in lines at most w wide, broken at its line breaks and spaces
