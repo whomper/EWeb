@@ -16,6 +16,8 @@
 #define EC_FIRST 2048
 #endif
 
+size_t ec_chunk_max = EC_CHUNK;
+
 void *ec_alloc_slow(ec_arena *a, size_t n)
 {
 	size_t size = a->chunk_size ? a->chunk_size : 32768;
@@ -403,9 +405,9 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 	c->opts = opts;
 	c->span_lo = 0;
 	c->span_hi = INT32_MAX;
-	c->mem.chunk_size = EC_CHUNK;
-	c->rmem.chunk_size = EC_CHUNK;
-	c->smem.chunk_size = EC_CHUNK;
+	c->mem.chunk_size = ec_chunk_max;
+	c->rmem.chunk_size = ec_chunk_max;
+	c->smem.chunk_size = ec_chunk_max;
 	c->pmem = &c->rmem;
 	if (atoms_grow(c) != 0) {
 		free(c);

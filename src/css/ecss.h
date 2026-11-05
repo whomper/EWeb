@@ -339,6 +339,9 @@ int ec_sheets_short(const ec_ctx *c);
 /* the bytes c's memory takes: its atoms, sheets and styles (the pieces
  * they are in, but what is left of the last of each) */
 size_t ec_mem(const ec_ctx *c);
+/* the most a context's arenas grow by at a time (64 KB; the ST edition 4
+   KB): set before a context is made, smaller where memory is short */
+extern size_t ec_chunk_max;
 
 /* The stack's floor: the cascade, the layout and the scripts go no deeper
  * into a document than this; what is deeper isn't laid out (a page nested

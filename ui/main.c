@@ -2526,10 +2526,21 @@ int app_main(void)
 	pf_idle = idle;
 #ifdef AES_PROFILE
 	br_mark = gap_tag;
+#endif
 #ifndef EW_ST
+	/* (in every build, not the speed rig's alone: from 0.62 to 0.70 only
+	   its profiled build gave the kept page back for a page that didn't
+	   fit, and the releases kept up to 16 windows of ST RAM while a big
+	   page was refused for want of memory) */
 	br_shed = win_pic_drop;
 	br_relaying = win_relaying;
-#endif
+	/* (a machine of ST RAM alone and little of it, the stock 4 MB Falcon:
+	   the CSS arenas grow by 16 KB at most, not 64. A page's styles a few
+	   KB more had them take a 64 KB piece more, and the kept page then
+	   found room for 2 windows, not 3: a line scrolled 55 ms, a page 95,
+	   against 35 and 50) */
+	if ((long) Mxalloc(-1L, 1) <= 0 && (long) Mxalloc(-1L, 0) < (6L << 20))
+		ec_chunk_max = 16384;
 #endif
 #ifdef EW_ST
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);
