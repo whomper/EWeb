@@ -223,6 +223,11 @@ int js_event(doc *d, dnode *n, const char *type)
 	return ovl ? ovl->event(d, n, type) : 0;
 }
 
+int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode)
+{
+	return ovl ? ovl->key(d, n, type, key, keycode, charcode) : 0;
+}
+
 void js_run(doc *d, const char *code)
 {
 	if (ovl)

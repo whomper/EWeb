@@ -99,7 +99,11 @@
  * the ST edition too; a link followed says where EWEB.PRG scrolls to,
  * "top", as "top:" does for an address with a #fragment, and "opened"
  * when a closed details was opened to show it), and -T MS lets the
- * page's timers run for MS ms.
+ * page's timers run for MS ms, before the clicks and after each; -u
+ * ID=TEXT, in turn with them, types TEXT into the field ID ("*": the
+ * first one typed into) a key at a
+ * time with its key events ("\\n" Return; the form isn't sent) (what a
+ * click starts on a timer: a dialog's fade, a text that comes later).
  * -r N follows the page's refresh (<meta http-equiv=refresh>, the
  * Refresh header) when it is due, up to N times ("refresh:" where to,
  * "refreshed:" what came); -b then goes Back ("(refresh)" when the page
@@ -613,11 +617,90 @@ static int summary_rect(const page *p, const dnode *n, int32_t *x, int32_t *y, i
    summary; then the page's tasks due at once (a toggle event), as
    EWEB.PRG's loop runs them. The ST edition (no scripts, no element's
    place kept) clicks only a summary */
+/* -T MS: the page's timers for MS ms (none when 0) */
+static void run_timers(browser *b, int ms)
+{
+	unsigned long t0 = pf_ms();
+	long due;
+	while (ms > 0 && (due = br_js_due(b)) >= 0 && (long) (pf_ms() - t0) + due <= ms) {
+		int load = 0, k;
+		if (due > 0)
+			usleep((useconds_t) due * 1000);
+		k = br_js_step(b, &load);
+		if (k == BRJ_LOAD) {
+			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+			click_file(b, load);
+		}
+	}
+}
+
+#ifndef EW_ST
+/* -u ID=TEXT: TEXT typed into the field ID as EWEB.PRG types it, a key
+   at a time (keydown, a character's keypress, the character put in and
+   input, keyup); "\n" is Return, whose keypress the page's scripts see
+   (the form isn't sent: no site's form goes anywhere from the tests) */
+static void typed(browser *b, const char *spec)
+{
+	char id[128];
+	const char *eq = strchr(spec, '='), *t;
+	dnode *n;
+	fctl *c = NULL;
+	int cancelled, load, r = BRJ_NONE, keys = 0, stopped = 0;
+	if (eq == NULL || (size_t) (eq - spec) >= sizeof id) {
+		printf("type %s: ID=TEXT\n", spec);
+		return;
+	}
+	memcpy(id, spec, (size_t) (eq - spec));
+	id[eq - spec] = 0;
+	n = b->d ? by_id(b->d->root, id) : NULL;
+	if (n != NULL)
+		for (c = b->d->ctls; c != NULL && c->n != n; c = c->next)
+			;
+	else if (b->d != NULL && strcmp(id, "*") == 0)	/* the first field one types into */
+		for (c = b->d->ctls; c != NULL && !form_typed(c); c = c->next)
+			;
+	if (c == NULL) {
+		printf("type %s: no such field\n", id);
+		return;
+	}
+	for (t = eq + 1; *t; t++) {
+		char ch[2] = { *t, 0 };
+		int nl = t[0] == '\\' && t[1] == 'n';
+		const char *name = nl ? "Enter" : ch;
+		long kc = nl ? 13 : (*t >= 'a' && *t <= 'z' ? *t - 32 : (unsigned char) *t), cc = nl ? 13 : (unsigned char) *t;
+		if (nl)
+			t++;
+		keys++;
+		r = br_js_key(b, c, "keydown", name, kc, 0, &cancelled, &load);
+		if (!cancelled)
+			r = br_js_key(b, c, "keypress", name, cc, cc, &cancelled, &load);
+		if (cancelled)
+			stopped++;
+		else if (!nl && form_insert(c, ch, 1))
+			r = br_js_event(b, c, "input", &cancelled, &load);
+		r = br_js_key(b, c, "keyup", name, kc, 0, &cancelled, &load);
+		if (r == BRJ_LOAD) {
+			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+			click_file(b, load);
+			return;
+		}
+	}
+	printf("typed %s: %d keys%s, the field \"%.*s\"\n", id, keys, stopped ? " (some cancelled)" : "",
+	       (int) c->len, c->v ? c->v : "");
+}
+#endif
+
 static int click(browser *b, const char *id)
 {
 	dnode *n, *det;
 	int32_t x, y, w, h;
 	int cancelled = 0, load = 0, r = BRJ_NONE, k, px, py;
+#ifndef EW_ST
+	if (strncmp(id, "type:", 5) == 0) {
+		typed(b, id + 5);
+		return 1;
+	}
+#endif
 	if (strcmp(id, "back") == 0) {
 		/* -M back: the window's Back */
 		r = br_back(b);
@@ -881,6 +964,13 @@ int main(int argc, char **argv)
 			scripts_on = 1;
 		else if ((!strcmp(argv[i], "-K") || !strcmp(argv[i], "-M")) && i + 1 < argc && nclick < 16)
 			clicks[nclick++] = argv[++i];
+		else if (!strcmp(argv[i], "-u") && i + 1 < argc && nclick < 16) {
+			/* (in turn with the clicks) */
+			static char tp[16][300];
+			snprintf(tp[nclick], sizeof tp[nclick], "type:%s", argv[++i]);
+			clicks[nclick] = tp[nclick];
+			nclick++;
+		}
 		else if ((!strcmp(argv[i], "-G") || !strcmp(argv[i], "-U")) && i + 1 < argc && nfind < 16) {
 			find_back[nfind] = argv[i][1] == 'U';
 			finds[nfind++] = argv[++i];
@@ -1138,23 +1228,11 @@ int main(int argc, char **argv)
 		if (b.p == NULL)
 			return 1;
 	}
-	if (timers > 0) {
-		unsigned long t0 = pf_ms();
-		long due;
-		while ((due = br_js_due(&b)) >= 0 && (long) (pf_ms() - t0) + due <= timers) {
-			int load = 0, k;
-			if (due > 0)
-				usleep((useconds_t) due * 1000);
-			k = br_js_step(&b, &load);
-			if (k == BRJ_LOAD) {
-				printf("load: %d \"%s\" %s\n", load, b.title, b.url);
-				click_file(&b, load);
-			}
-		}
-	}
+	run_timers(&b, timers);
 	for (i = 0; i < nclick; i++) {
 		click(&b, clicks[i]);
 		pictures(&b);
+		run_timers(&b, timers);
 	}
 	for (i = 0; i < nfind; i++) {
 		/* Edit > Find: from the top, then on from (back: before) the

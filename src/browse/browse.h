@@ -384,6 +384,10 @@ int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load);
 /* an event at a form control ("input", "change", "focus", "blur",
    "submit" at its form): *cancelled likewise */
 int br_js_event(browser *b, struct fctl *c, const char *type, int *cancelled, int *load);
+/* a key typed into c (js_key's): what the scripts did, *cancelled if one
+   cancelled the key */
+int br_js_key(browser *b, struct fctl *c, const char *type, const char *key, long keycode, long charcode,
+	      int *cancelled, int *load);
 /* a link to javascript:...: its code run */
 int br_js_url(browser *b, const char *url, int *load);
 

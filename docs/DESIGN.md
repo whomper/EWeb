@@ -4024,6 +4024,25 @@ rounded corners and shadows; Glyphicons' calendar. Tests: `tests/layout/pcheight
 `buttons.html`, `absbottom.html`, `tables.html`, `icons.html`, `tests/js/detached.html`; the page
 set's display lists before and after: one page changed, its search field where Chromium has it.
 
+**The challenges in use (5 Nov 2026; the third round, on).** Each challenge's clicks, timers and
+typing, Direct (ewrender `-J` with `-K` clicks, `-T` timers, now also after each click: a dialog's
+fade and a text that comes later are started by the click; `-u ID=TEXT` typing a key at a time):
+
+- **Working as in Chromium:** Click Buttons (its three dialogs), Popup & Alerts (the alert, the
+  modal, the confirm box answered "You pressed OK!"), Hidden Elements (the button not displayed
+  isn't there to click, the other two open their dialogs), Ajax Loader (its button after the
+  wait, its dialog after the click), Accordion (each item opens; "LOADING COMPLETE." and the
+  panel's text after its timer, 10 s whatever the page says).
+- **Key events** (a key typed into a field: keydown, a character's keypress, keyup, with key,
+  keyCode, charCode and which; a keydown or keypress cancelled keeps its character out): there
+  were none, so the To-Do List's Return (jQuery's `keypress`, `event.which === 13`) added
+  nothing; now its item is added and the field emptied. `js_key` (`src/js/js.c`, in
+  `EWEBJS.OVL`'s table), `br_js_key`, `ctl_keyev` and win.c's `ctl_key`; `tests/js/keys.html`.
+- **The site's own faults, as Chromium has them:** a few of its scripts are HTML (Click
+  Buttons' and Hidden Elements' `js/script.js` wrapped in `<script>`, `js/html5shiv.js` and
+  `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.
+- Login Portal sends its form to the site: tried on a copy, never on the site.
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when

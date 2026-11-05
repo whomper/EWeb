@@ -342,7 +342,7 @@ hub stay complete, with the evidence.
   of their own that `EWEB.PRG` loads when a site's scripts first run (`atari/js_ovl.c`, made by
   `atari/ovl.ld` and `tools/mkovl.py`; DESIGN.md, One EWEB.PRG for every Falcon), so `EWEB.PRG`
   has no FPU instruction at all (`m68k-linux-gnu-objdump -d`); the ST edition has `js_none.c`. After changing them: `make test`
-  (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers), `make itest`
+  (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers, `-u ID=TEXT` typed with its key events), `make itest`
   (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882, with and without `EWEBJS.OVL`).
   `EWEB.PRG` runs on the stock 4 MB Falcon (Erez, 23 Oct 2026): `make hatarigui`'s `falcon4` group.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards

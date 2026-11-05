@@ -67,6 +67,12 @@ int js_event(doc *d, dnode *n, const char *type)
 	return 0;
 }
 
+int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode)
+{
+	(void) d, (void) n, (void) type, (void) key, (void) keycode, (void) charcode;
+	return 0;
+}
+
 void js_run(doc *d, const char *code)
 {
 	(void) d, (void) code;

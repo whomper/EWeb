@@ -346,6 +346,8 @@ void status(const char *s);
 int  page_click(int32_t x, int32_t y);
 void win_ctl_check(void);		/* after a script: the control with the keyboard may be gone */
 void ctl_event(struct fctl *c, const char *type);
+/* a key typed into c told to the page's scripts: 1 if one cancelled it */
+int ctl_keyev(struct fctl *c, const char *type, const char *key, long keycode, long charcode);
 int  settings_save(void);
 
 /* about.c */

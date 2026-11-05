@@ -2594,8 +2594,82 @@ static void ctl_paste(fctl *c)
 	free(buf);
 }
 
-/* a key for the control with the keyboard: 1 when taken */
+#ifndef EW_ST
+/* the key's name and codes as a page's scripts see them (KeyboardEvent's
+   key, keyCode; charCode for one that types a character): 0 for none */
+static int key_named(short scan, unsigned char ch, char *name, size_t n, long *kc, long *cc)
+{
+	static const struct { short scan; const char *name; short code; } k[] = {
+		{ 0x1c, "Enter", 13 }, { 0x72, "Enter", 13 }, { 0x0e, "Backspace", 8 }, { 0x53, "Delete", 46 },
+		{ 0x0f, "Tab", 9 }, { 0x01, "Escape", 27 }, { 0x4b, "ArrowLeft", 37 }, { 0x48, "ArrowUp", 38 },
+		{ 0x4d, "ArrowRight", 39 }, { 0x50, "ArrowDown", 40 }, { 0x47, "Home", 36 },
+	};
+	unsigned i;
+	*cc = 0;
+	for (i = 0; i < sizeof k / sizeof k[0]; i++)
+		if (k[i].scan == scan) {
+			str_copy(name, k[i].name, n);
+			*kc = k[i].code;
+			*cc = k[i].code == 13 ? 13 : 0;	/* (Enter's keypress too) */
+			return 1;
+		}
+	if (ch >= 0x20 && ch != 0x7f) {
+		unsigned long u = atari_to_uni(ch);
+		if (u < 0x80) {
+			name[0] = (char) u;
+			name[1] = 0;
+		} else if (u < 0x800 && n >= 3) {
+			name[0] = (char) (0xc0 | (u >> 6));
+			name[1] = (char) (0x80 | (u & 0x3f));
+			name[2] = 0;
+		} else if (n >= 4) {
+			name[0] = (char) (0xe0 | (u >> 12));
+			name[1] = (char) (0x80 | ((u >> 6) & 0x3f));
+			name[2] = (char) (0x80 | (u & 0x3f));
+			name[3] = 0;
+		}
+		/* (keydown's keyCode: a letter's capital, else the character) */
+		*kc = (long) (u >= 'a' && u <= 'z' ? u - 32 : u);
+		*cc = (long) u;
+		return 1;
+	}
+	return 0;
+}
+#endif
+
+static int ctl_key_take(short kstate, short key);
+
+/* a key for the control with the keyboard: 1 when taken; told first to
+   the page's scripts (keydown, a character's keypress: a listener may
+   cancel it; keyup after: webdriveruniversity.com's to-do list adds its
+   item at Return's keypress) */
 static int ctl_key(short kstate, short key)
+{
+#ifndef EW_ST
+	fctl *c = cur->f_focus;
+	char name[12];
+	long kc, cc;
+	int r;
+	if (c == NULL || br.d == NULL || br.d->js == NULL || key_ctrl(kstate, key) ||
+	    !key_named(KEY_SCAN(key), KEY_ASCII(key), name, sizeof name, &kc, &cc))
+		return ctl_key_take(kstate, key);
+	if (ctl_keyev(c, "keydown", name, kc, 0) || (cc && ctl_alive(c) && ctl_keyev(c, "keypress", name, cc, cc))) {
+		if (ctl_alive(c))
+			ctl_keyev(c, "keyup", name, kc, 0);
+		return 1;
+	}
+	if (!ctl_alive(c) || cur->f_focus != c)
+		return 1;	/* (a script took the field away, or the keyboard) */
+	r = ctl_key_take(kstate, key);
+	if (ctl_alive(c))
+		ctl_keyev(c, "keyup", name, kc, 0);
+	return r;
+#else
+	return ctl_key_take(kstate, key);
+#endif
+}
+
+static int ctl_key_take(short kstate, short key)
 {
 	fctl *c = cur->f_focus;
 	const dl_item *it = br.p ? page_ctl_item(br.p, c) : NULL;

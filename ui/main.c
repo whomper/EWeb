@@ -1390,6 +1390,15 @@ void ctl_event(struct fctl *c, const char *type)
 	scripted(br_js_event(&br, c, type, &cancelled, &load), load);
 }
 
+int ctl_keyev(struct fctl *c, const char *type, const char *key, long keycode, long charcode)
+{
+	int cancelled = 0, load = 0;
+	if (loading || br.d == NULL || br.d->js == NULL)
+		return 0;
+	scripted(br_js_key(&br, c, type, key, keycode, charcode, &cancelled, &load), load);
+	return cancelled;
+}
+
 /* the page's timers that are due */
 static void js_timers(void)
 {
@@ -1407,6 +1416,12 @@ int page_click(int32_t x, int32_t y)
 void ctl_event(struct fctl *c, const char *type)
 {
 	(void) c, (void) type;
+}
+
+int ctl_keyev(struct fctl *c, const char *type, const char *key, long keycode, long charcode)
+{
+	(void) c, (void) type, (void) key, (void) keycode, (void) charcode;
+	return 0;
 }
 #endif
 

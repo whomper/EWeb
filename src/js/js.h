@@ -110,6 +110,10 @@ void js_run_timers(doc *d);
 /* an event at n ("click", "input", "change", "submit", "focus",
    "blur"), from the user: 1 if a listener cancelled its default action */
 int js_event(doc *d, dnode *n, const char *type);
+/* a key typed at n: "keydown", "keypress" or "keyup", with its key
+   ("a", "Enter", "Backspace"), keyCode and charCode (which: the one of
+   them that type has); 1 if a listener cancelled its default action */
+int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode);
 /* a javascript: address followed: its code run */
 void js_run(doc *d, const char *code);
 /* a details element opened or closed by the user (a click on its

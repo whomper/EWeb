@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<!-- args: -u todo=Milk\n -u nox=axbx -->
+<!-- expect: typed todo: 5 keys, the field "" -->
+<!-- expect: console: added Milk -->
+<!-- expect: console: keys k-M-i-l-k-Enter -->
+<!-- expect: typed nox: 4 keys (some cancelled), the field "ab" -->
+<!-- expect: "Milk" -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- Key events from typing in a field (as webdriveruniversity.com's
+     to-do list: its item added at Return's keypress, read by jQuery's
+     event.which): keydown, keypress and keyup with key, keyCode,
+     charCode and which; a keydown cancelled keeps its character out. -->
+<html><head><title>keys</title></head><body>
+<p><input id="todo" type="text"></p>
+<ul id="list"></ul>
+<p><input id="nox" type="text"></p>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+var todo = document.getElementById("todo"), seen = [], inputs = 0;
+todo.addEventListener("keydown", function (e) {
+	check(e.keyCode === (e.key === "Enter" ? 13 : e.key.toUpperCase().charCodeAt(0)), "keydown keyCode " + e.key);
+	check(e.charCode === 0, "keydown charCode");
+});
+todo.addEventListener("keypress", function (e) {
+	seen.push(e.key);
+	check(e.which === (e.key === "Enter" ? 13 : e.key.charCodeAt(0)), "keypress which " + e.key);
+	check(e.charCode === e.which, "keypress charCode");
+	if (e.which === 13) {
+		var li = document.createElement("li");
+		li.textContent = this.value;
+		document.getElementById("list").appendChild(li);
+		console.log("added " + this.value);
+		this.value = "";
+	}
+});
+todo.addEventListener("input", function () { inputs++; });
+todo.addEventListener("keyup", function (e) {
+	if (e.key === "Enter") {
+		check(inputs === 4, "an input a character, " + inputs);
+		console.log("keys k-" + seen.join("-"));
+	}
+});
+document.getElementById("nox").addEventListener("keydown", function (e) {
+	if (e.key === "x")
+		e.preventDefault();
+});
+</script>
+</body></html>

@@ -4504,6 +4504,16 @@ int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load
 	return js_after(b, load_r);
 }
 
+int br_js_key(browser *b, fctl *c, const char *type, const char *key, long keycode, long charcode,
+	      int *cancelled, int *load_r)
+{
+	*cancelled = 0;
+	if (b->d == NULL || b->d->js == NULL || c == NULL || frame_of(b, c->n) > 0)
+		return BRJ_NONE;
+	*cancelled = js_key(b->d, c->n, type, key, keycode, charcode);
+	return js_after(b, load_r);
+}
+
 int br_js_url(browser *b, const char *url, int *load_r)
 {
 	char *code;
@@ -4567,6 +4577,14 @@ int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
 int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load_r)
 {
 	(void) b, (void) c, (void) type, (void) load_r;
+	*cancelled = 0;
+	return BRJ_NONE;
+}
+
+int br_js_key(browser *b, fctl *c, const char *type, const char *key, long keycode, long charcode,
+	      int *cancelled, int *load_r)
+{
+	(void) b, (void) c, (void) type, (void) key, (void) keycode, (void) charcode, (void) load_r;
 	*cancelled = 0;
 	return BRJ_NONE;
 }

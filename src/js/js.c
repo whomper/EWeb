@@ -4807,6 +4807,41 @@ int js_event(doc *d, dnode *n, const char *type)
 	return r;
 }
 
+int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode)
+{
+	ejs *j = d->js;
+	JSContext *ctx;
+	JSValue ev;
+	int r;
+	if (j == NULL)
+		return 0;
+	ctx = j->ctx;
+	arm(j, JS_EVENT_MS);
+	ev = new_event(ctx, type, 1, 1);
+	if (JS_IsException(ev)) {
+		report(j);
+		return 0;
+	}
+	ev_of(ev)->trusted = 1;
+	/* (KeyboardEvent's: key and code, and the old keyCode, charCode and
+	   which that jQuery and the pages of before read) */
+	JS_SetPropertyStr(ctx, ev, "key", JS_NewString(ctx, key));
+	JS_SetPropertyStr(ctx, ev, "code", JS_NewString(ctx, key));
+	JS_SetPropertyStr(ctx, ev, "keyCode", JS_NewInt32(ctx, (int32_t) keycode));
+	JS_SetPropertyStr(ctx, ev, "charCode", JS_NewInt32(ctx, (int32_t) charcode));
+	JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, (int32_t) (charcode ? charcode : keycode)));
+	JS_SetPropertyStr(ctx, ev, "repeat", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+	r = dispatch(j, n, ev);
+	JS_FreeValue(ctx, ev);
+	jobs(j);
+	sweep(j);
+	return r;
+}
+
 void js_run(doc *d, const char *code)
 {
 	ejs *j = d->js;
