@@ -36,6 +36,9 @@ extern int dlg_fast_on;
 LFIELD *lf_of(OBJECT *tree, short obj) __attribute__((weak));
 void lf_enter(LFIELD *f, short *idx) __attribute__((weak));
 int lf_key(LFIELD *f, short key, short ch, short kstate, short *idx) __attribute__((weak));
+/* the Hebrew keyboard (hebkey.c), in an app that has it: a key types what key_char
+   says; without it, the key's own character */
+unsigned char key_char(short kstate, short key) __attribute__((weak));
 
 #define BEG_MCTRL 3
 #define END_MCTRL 2
@@ -1306,8 +1309,8 @@ void dlg_touch(OBJECT *tree, short *next, short x, short y)
 }
 #endif
 
-short dlg_evnt(short flags, short clicks, short mask, short state,
-	       unsigned long timer, short *msg, AEVENT *e)
+static short dlg_evnt_(short flags, short clicks, short mask, short state,
+		       unsigned long timer, short *msg, AEVENT *e)
 {
 	short i, k, top, d1;
 #ifdef DLG_CLICK
@@ -1376,6 +1379,30 @@ short dlg_evnt(short flags, short clicks, short mask, short state,
 	}
 }
 
+void (*dlg_idle)(void);
+
+#define DLG_IDLE_MS 20
+
+/* dlg_evnt_, with the app's work done meanwhile: while dlg_idle is set
+   and the caller asks for no timer of its own, the wait wakes every
+   DLG_IDLE_MS (AES time, not CPU) and calls dlg_idle, then waits on; what
+   the caller gets is as without it (no MU_TIMER). A caller with its own
+   timer (a held press, a blinking cursor) keeps it and its own idle. */
+short dlg_evnt(short flags, short clicks, short mask, short state,
+	       unsigned long timer, short *msg, AEVENT *e)
+{
+	if (!dlg_idle || (flags & MU_TIMER))
+		return dlg_evnt_(flags, clicks, mask, state, timer, msg, e);
+	for (;;) {
+		short r = dlg_evnt_(flags | MU_TIMER, clicks, mask, state, DLG_IDLE_MS, msg, e);
+		e->which = r & ~MU_TIMER;
+		if (e->which)
+			return e->which;
+		if (dlg_idle)
+			dlg_idle();
+	}
+}
+
 short dlg_do(OBJECT *tree, short start, short cancel)
 {
 	short next, edit = 0, idx = 0, cont = 1, m[8];
@@ -1403,7 +1430,7 @@ short dlg_do(OBJECT *tree, short start, short cancel)
 		if (e.which & MU_KEYBD) {
 			if (dlg_esc(e.kreturn) && !dlg_undo(e.kreturn))
 				e.kreturn = 0x011b;	/* ^[ too: the key objc_edit empties a field on */
-			if (lf && !dlg_undo(e.kreturn) && lf_key(lf, e.kreturn, e.kreturn & 0xff, e.kstate, &idx)) {
+			if (lf && !dlg_undo(e.kreturn) && lf_key(lf, e.kreturn, key_char ? key_char(e.kstate, e.kreturn) : e.kreturn & 0xff, e.kstate, &idx)) {
 				/* the long field took it (Esc empties it) */
 			} else if (dlg_cancel_key(e.kreturn, edit > 0)) {
 				/* Cancel: the field isn't given the key, so it keeps its text */
