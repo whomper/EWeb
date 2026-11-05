@@ -3303,14 +3303,14 @@ long cv_page_part(canvas *c, const page *p, long from, int (*stop)(void *), void
    bands of the window whose word changed are drawn again (a frame come
    on the news page drew the window again whole, 3.1 s of an ST's and
    0.5 of a stock Falcon's) */
-static uint32_t mix32(uint32_t h, uint32_t v)
+static __attribute__((noinline)) uint32_t mix32(uint32_t h, uint32_t v)
 {
 	h ^= v;
 	h *= 0x01000193UL;	/* (FNV-1a's step, a word at a time) */
 	return h ^ (h >> 15);
 }
 
-static uint32_t mix_bytes(uint32_t h, const void *b, unsigned long n)
+static __attribute__((noinline)) uint32_t mix_bytes(uint32_t h, const void *b, unsigned long n)
 {
 	const unsigned char *q = b;
 	while (n-- > 0)
