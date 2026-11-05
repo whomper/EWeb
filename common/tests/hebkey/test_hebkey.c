@@ -8,21 +8,28 @@
 static int fails, checks;
 #define CK(c) do { checks++; if (!(c)) { fails++; printf("FAIL line %d: %s\n", __LINE__, #c); } } while (0)
 
-static int hooked, tn_calls, vc_calls;
-static char tn_s[8];
-static short tn_x, tn_y, vc_col;
-void vst_color(short h, short color) { (void)h; vc_calls++; vc_col = color; }
-void text_n(short h, short x, short y, const char *s, long n)
+static int hooked, cp_calls, ram_calls;
+static short cp_pxy[8], cp_col[2], cp_h, cp_mode, cp_w, cp_planes;
+static unsigned short cp_bits[16];
+static short cell_h = 16;
+void vqt_attributes(short h, short *a) { (void)h; a[9] = cell_h; }
+void *st_ram(long n) { static unsigned short buf[64]; (void)n; ram_calls++; return buf; }
+void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, const short *colors)
 {
-	(void)h;
-	tn_calls++;
-	tn_x = x;
-	tn_y = y;
-	tn_s[0] = n > 0 ? s[0] : 0;
-	tn_s[1] = n > 1 ? s[1] : 0;
-	tn_s[2] = 0;
+	int i;
+	(void)h; (void)dst;
+	cp_calls++;
+	cp_mode = mode;
+	for (i = 0; i < 8; i++)
+		cp_pxy[i] = pxy[i];
+	cp_col[0] = colors[0];
+	cp_col[1] = colors[1];
+	cp_h = src->fd_h;
+	cp_w = src->fd_w;
+	cp_planes = src->fd_nplanes;
+	for (i = 0; i < src->fd_h; i++)
+		cp_bits[i] = ((unsigned short *)src->fd_addr)[i];
 }
-
 
 static void hook(void) { hooked++; }
 
@@ -66,14 +73,37 @@ int main(void)
 	CK(key_char(0, KEY(0x10, 'q')) == 'q');
 	set_hebrew_kbd(1);
 	CK(hooked == 2 && hebrew_kbd == 1);
-	/* the badge: only while the keyboard is on, the two letters ayin bet */
+	/* the badge: a bitmap of ayin and bet, only while the keyboard is on */
 	set_hebrew_kbd(0);
 	hebrew_badge(1, 100, 20, 1);
-	CK(tn_calls == 0 && vc_calls == 0);
+	CK(cp_calls == 0 && ram_calls == 0);
 	set_hebrew_kbd(1);
 	hebrew_badge(1, 100, 20, 3);
-	CK(tn_calls == 1 && vc_calls == 1 && vc_col == 3);
-	CK(tn_x == 100 && tn_y == 20 && (unsigned char)tn_s[0] == 0xD3 && (unsigned char)tn_s[1] == 0xC3);
+	CK(cp_calls == 1 && cp_mode == 2 && cp_col[0] == 3 && cp_col[1] == 0);
+	CK(cp_w == 16 && cp_h == 16 && cp_planes == 1);
+	CK(cp_pxy[0] == 0 && cp_pxy[2] == 15 && cp_pxy[3] == 15 && cp_pxy[4] == 100 && cp_pxy[5] == 20 &&
+	   cp_pxy[6] == 115 && cp_pxy[7] == 35);
+	CK(cp_bits[0] == 0 && cp_bits[2] == 0 && cp_bits[3] == 0x7C86 && cp_bits[11] == 0x7EC0 && cp_bits[12] == 0);
+	{
+		short w, h;
+		int r, ink = 0;
+		cell_h = 8;
+		hebrew_badge_size(1, &w, &h);
+		CK(w == 16 && h == 8);
+		hebrew_badge(1, 5, 6, 2);
+		CK(cp_calls == 2 && cp_h == 8 && cp_pxy[7] == 13 && cp_pxy[3] == 7);
+		CK(cp_bits[0] == 0 && cp_bits[7] == 0 && cp_bits[1] == 0x7C84 && cp_bits[6] == 0x7E60);
+		for (r = 0; r < 8; r++)
+			if (cp_bits[r])
+				ink++;
+		CK(ink == 6);
+		cell_h = 13;
+		hebrew_badge_size(1, &w, &h);
+		CK(h == 16);
+		cell_h = 12;
+		hebrew_badge_size(1, &w, &h);
+		CK(h == 8);
+	}
 	printf("hebkey: %d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }
