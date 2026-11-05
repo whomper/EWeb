@@ -4491,6 +4491,30 @@ link is white on black, GEM's selected look (its red is black there, as the link
 `dialogs` group of `make hatarigui` holds a link and the Home button still for a second on TOS
 4.04, EmuTOS and the ST's TOS 1.04 (mono) and checks the screen's pixels before the release.
 
+**The kept page's memory on a 4 MB Falcon, and two hooks only the speed build had (5 Nov
+2026).** The hub's checks of 0.70 on `Falcon-4:16` found its loads slower under NVDI and, here,
+a line and a page scrolled slower with each change made after it (55-60 and 90-95 ms, 0.70's
+35-40 and 50), whatever the change: the band sums in one pass, the key events, the window above
+drawn ahead from its foot. The cause was none of them. A build's heap after the news page
+depends on where the loads' previews happened to be cut (the home page's styles 908 bytes more
+in one build than another, where nothing in them changed), and the CSS arenas grew in pieces as
+big as all before them, up to 64 KB: a few KB more took a whole piece more (1521832 bytes in use
+against 0.70's 1456292), and the kept page, made only of what the heap has free, then had room
+for 2 windows' rows, not 3 (331 KB). On a machine of ST RAM alone with less than 6 MB of it free
+at the start, the arenas now grow by 16 KB at most (`ec_chunk_max`): 1423572 bytes, 3 windows
+kept, a line 40 ms, a page 55, 3 pages up 235 (0.70 295), 4 pages down 480 (465), the loads'
+longest stretches 10 to 20 ms longer (the same with 32 KB pieces, so moved by the memory, not
+the pieces).
+
+And `br_shed` (the kept page given back when a page doesn't fit) and `br_relaying` (a
+relayout's changed bands) were set inside `main.c`'s `AES_PROFILE`: from 0.62 to 0.70 only
+`build/prof`'s `EWEB.PRG`, the speed rig's, had them. Now every Falcon build has them. That
+wasn't what kept iamexpat.de from Erez's 14 MB Falcon: its 3.3 MB of HTML from the disk shows on
+the emulated `Falcon-14:256` with 0.70 as released too (7884 rows, 192 links, in 18 to 20 s, the
+heap's peak 8.9 MB and 265 KB of ST RAM left), the kept page given back while it loads
+(`win_pic_busy`). Through the network the packed 750 KB and the unpacked page come on top of
+that, and NVDI and the accessories take their share: his `EWEB.LOG` says which part runs out.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
