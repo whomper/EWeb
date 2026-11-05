@@ -170,6 +170,59 @@ static void d_end(void)
 	dlg_3d(tree);		/* the AES's 3D look where it has one (5.6) */
 }
 
+/* ---------------------------------------------------------------- the Hebrew keyboard's badge */
+
+/* while the Hebrew keyboard is on, a dialog that takes typing carries
+   common's badge (hebrew_badge: ayin and bet) at its title band's right
+   end, as the family's dialogs do; in a dialog window the title is the
+   AES's and the info line says it (the hub, 5 Nov 2026) */
+static short badge_band = -1;
+
+static void badge_show(void)
+{
+#ifndef EW_ST
+	short bx, by, bw, bh, w, h, c[4];
+	if (badge_band < 0 || !hebrew_kbd || dlg_in_window())
+		return;
+	objc_offset(tree, badge_band, &bx, &by);
+	bw = tree[badge_band].ob_width;
+	bh = tree[badge_band].ob_height;
+	hebrew_badge_size(vdi_h, &w, &h);
+	c[0] = bx;
+	c[1] = by;
+	c[2] = (short) (bx + bw - 1);
+	c[3] = (short) (by + bh - 1);
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	vs_clip(vdi_h, 1, c);
+	hebrew_badge(vdi_h, (short) (bx + bw - w - cw / 2), (short) (by + (bh - h) / 2), 0);	/* (white on the band's black) */
+	vs_clip(vdi_h, 0, c);
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+#endif
+}
+
+static void badge_open(short band)
+{
+	badge_band = band;
+	badge_show();
+}
+
+static void badge_close(void)
+{
+	badge_band = -1;
+}
+
+/* the keyboard switched (F10) while a dialog is open: its band again,
+   with the badge or without */
+void dlg_hebrew_changed(void)
+{
+	if (badge_band < 0 || dlg_in_window())
+		return;
+	dlg_draw(tree, badge_band);
+	badge_show();
+}
+
 /* ---------------------------------------------------------------- ticks */
 
 /* a tick box, 16 pixels square, and the tick in it */
@@ -427,6 +480,7 @@ static short settings_run(short pages_box, short ok)
 	dlg_band(settings_band);	/* (in a window: its title bar, 3.5) */
 	gap_tag("dialog: opened");
 	dlg_open(tree, &x, &y, &w, &h);
+	badge_open(settings_band);
 	gap_tag("dialog: drawn");
 	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
 	for (;;) {
@@ -453,6 +507,7 @@ static short settings_run(short pages_box, short ok)
 		}
 		break;
 	}
+	badge_close();
 	dlg_close();
 	if (r >= 0)
 		tree[r].ob_state &= ~SELECTED;
@@ -555,7 +610,9 @@ static int ask(const char *title, const char *text, char *answer, int size)
 	d_end();
 	dlg_band(band);		/* (in a window: its title bar, 3.5) */
 	dlg_open(tree, &x, &y, &w, &h);
+	badge_open(band);
 	r = dlg_do(tree, field, (short) (ok - 1));
+	badge_close();
 	dlg_close();
 	if (r >= 0)
 		tree[r & 0x7fff].ob_state &= ~SELECTED;

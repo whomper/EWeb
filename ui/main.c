@@ -2100,6 +2100,7 @@ static void hebkbd_changed(void)
 {
 	menu_update();
 	win_status("");	/* (the info line says so: "Hebrew keyboard (F10)") */
+	dlg_hebrew_changed();	/* (and a dialog open, its title's badge) */
 }
 #endif
 
