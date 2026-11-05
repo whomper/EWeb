@@ -39,10 +39,8 @@ typedef struct {
 } EWOPT;
 extern EWOPT opt;
 /* the Hebrew keyboard (F10, Options > Hebrew keyboard, as the family's
-   apps): on, a letter key types the Hebrew letter of the Israeli layout */
-extern short hebrew_kbd;
-void set_hebrew_kbd(short on);
-unsigned char key_char(short kstate, short key);	/* the key's character, the Hebrew layout's when it is on */
+   apps): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */
+#include "hebkey.h"
 #define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: Erez wanted more, 29 Oct 2026) */
 long cache_mb(void);		/* the disk cache's size now, MB */
 

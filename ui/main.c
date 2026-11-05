@@ -2092,40 +2092,16 @@ void command(int cmd)
 
 /* ---------------------------------------------------------------- keys */
 
-/* the Hebrew keyboard: the Israeli SI-1452 layout by the key's place (scan
-   codes 0x10 to 0x35), as Atari characters; 0 the key's own. The family's
-   table (ECal's, EContact's, EMail's, from ClaudeST) */
-short hebrew_kbd;
+/* the Hebrew keyboard is common's (hebkey.c: the family's SI-1452 table,
+   key_char, set_hebrew_kbd); when it is switched, the menu's tick and the
+   info line's words */
 #ifndef EW_ST
-static const unsigned char hebrew_keys[0x36 - 0x10] = {
-	/* 10 q..p */ '/', '\'', 0xD4, 0xD5, 0xC2, 0xCA, 0xC7, 0xD8, 0xDA, 0xD2,
-	/* 1a [ ] ret ctrl */ 0, 0, 0, 0,
-	/* 1e a..' */ 0xD6, 0xC5, 0xC4, 0xCC, 0xD1, 0xCB, 0xC9, 0xCD, 0xD9, 0xDB, ',',
-	/* 29 ` lshift \ */ 0, 0, 0,
-	/* 2c z../ */ 0xC8, 0xD0, 0xC3, 0xC6, 0xCF, 0xCE, 0xD3, 0xD7, 0xDC, '.'
-};
-#endif
-
-unsigned char key_char(short kstate, short key)
+static void hebkbd_changed(void)
 {
-	unsigned char ascii = KEY_ASCII(key);
-#ifndef EW_ST
-	short scan = KEY_SCAN(key);
-	if (hebrew_kbd && !(kstate & (K_LSHIFT | K_RSHIFT | 0x08)) && !key_ctrl(kstate, key) &&	/* (0x08: Alternate) */
-	    scan >= 0x10 && scan < 0x36 && hebrew_keys[scan - 0x10])
-		ascii = hebrew_keys[scan - 0x10];
-#else
-	(void) kstate;
-#endif
-	return ascii;
-}
-
-void set_hebrew_kbd(short on)
-{
-	hebrew_kbd = on;
 	menu_update();
-	win_status("");	/* (the status line says so: "Hebrew keyboard (F10)") */
+	win_status("");	/* (the info line says so: "Hebrew keyboard (F10)") */
 }
+#endif
 
 static int shortcut(short kstate, short key)
 {
@@ -2589,6 +2565,7 @@ int app_main(void)
 	   fit, and the releases kept up to 16 windows of ST RAM while a big
 	   page was refused for want of memory) */
 	hebrew_kbd = opt.hebrew;	/* (HEBREW=: Settings > Start with the Hebrew keyboard) */
+	hebrew_kbd_hook = hebkbd_changed;
 	br_shed = win_pic_drop;
 	br_relaying = win_relaying;
 	/* (a machine of ST RAM alone and little of it, the stock 4 MB Falcon:
