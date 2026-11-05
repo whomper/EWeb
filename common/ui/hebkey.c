@@ -3,6 +3,7 @@
 /* The Hebrew keyboard (hebkey.h). Weak definitions: see there. */
 #include "gem.h"
 #include "hebkey.h"
+#include "text.h"
 
 #ifndef K_ALT
 #define K_ALT 0x08
@@ -39,4 +40,12 @@ void set_hebrew_kbd(short on)
 	hebrew_kbd = on;
 	if (hebrew_kbd_hook)
 		hebrew_kbd_hook();
+}
+
+void hebrew_badge(short vdi, short x, short y, short colour)
+{
+	if (!hebrew_kbd)
+		return;
+	vst_color(vdi, colour);
+	text_n(vdi, x, y, "\xD3\xC3", 2);
 }

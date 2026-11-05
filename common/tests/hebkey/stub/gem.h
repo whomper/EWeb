@@ -13,4 +13,5 @@ static inline int key_ctrl(short kstate, short key)
 	return (kstate & K_CTRL) || (ascii >= 1 && ascii <= 26 && scan != 0x0e && scan != 0x0f &&
 				     scan != 0x1c && scan != 0x72);
 }
+void vst_color(short h, short color);
 #endif
