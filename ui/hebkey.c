@@ -3,7 +3,8 @@
 /* The Hebrew keyboard (hebkey.h). Weak definitions: see there. */
 #include "gem.h"
 #include "hebkey.h"
-#include "text.h"
+#include <string.h>
+void *st_ram(long n);	/* gemui.h: ST RAM to blit from */
 
 #ifndef K_ALT
 #define K_ALT 0x08
@@ -42,10 +43,65 @@ void set_hebrew_kbd(short on)
 		hebrew_kbd_hook();
 }
 
+/* The badge is a bitmap of the two letters ayin and bet, "ayin bet" read
+   right to left (ayin at the right), so it shows in any app and any VDI
+   font, with or without a Hebrew one. Two sizes: 16 rows for a text cell
+   13 rows high or more, else 8. Letters are 8 pixels wide, bet at the
+   left. */
+static const unsigned char bet_tall[9] = {0x7C, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x7E};
+static const unsigned char ayin_tall[9] = {0x86, 0x82, 0x84, 0x88, 0x50, 0x30, 0x20, 0x40, 0xC0};
+static const unsigned char bet_low[6] = {0x7C, 0x06, 0x04, 0x04, 0x04, 0x7E};
+static const unsigned char ayin_low[6] = {0x84, 0x84, 0x48, 0x30, 0x20, 0x60};
+
+void hebrew_badge_size(short vdi, short *w, short *h)
+{
+	short a[10];
+	vqt_attributes(vdi, a);
+	*w = 16;
+	*h = a[9] >= 13 ? 16 : 8;
+}
+
 void hebrew_badge(short vdi, short x, short y, short colour)
 {
+	short w, h, r, n, top, pxy[8], colors[2];
+	unsigned short *bits;
+	const unsigned char *b, *a;
+	MFDB src, dst;
 	if (!hebrew_kbd)
 		return;
-	vst_color(vdi, colour);
-	text_n(vdi, x, y, "\xD3\xC3", 2);
+	hebrew_badge_size(vdi, &w, &h);
+	bits = st_ram(2L * h);
+	if (!bits)
+		return;
+	if (h == 16) {
+		n = 9;
+		top = 3;
+		b = bet_tall;
+		a = ayin_tall;
+	} else {
+		n = 6;
+		top = 1;
+		b = bet_low;
+		a = ayin_low;
+	}
+	for (r = 0; r < h; r++)
+		bits[r] = r >= top && r < top + n ? (unsigned short)((b[r - top] << 8) | a[r - top]) : 0;
+	memset(&src, 0, sizeof(src));
+	memset(&dst, 0, sizeof(dst));
+	src.fd_addr = bits;
+	src.fd_w = w;
+	src.fd_h = h;
+	src.fd_wdwidth = 1;
+	src.fd_nplanes = 1;
+	pxy[0] = 0;
+	pxy[1] = 0;
+	pxy[2] = w - 1;
+	pxy[3] = h - 1;
+	pxy[4] = x;
+	pxy[5] = y;
+	pxy[6] = x + w - 1;
+	pxy[7] = y + h - 1;
+	colors[0] = colour;
+	colors[1] = 0;
+	vrt_cpyfm(vdi, 2, pxy, &src, &dst, colors);	/* transparent */
 }

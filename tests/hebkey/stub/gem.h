@@ -13,5 +13,10 @@ static inline int key_ctrl(short kstate, short key)
 	return (kstate & K_CTRL) || (ascii >= 1 && ascii <= 26 && scan != 0x0e && scan != 0x0f &&
 				     scan != 0x1c && scan != 0x72);
 }
-void vst_color(short h, short color);
+typedef struct {
+	void *fd_addr;
+	short fd_w, fd_h, fd_wdwidth, fd_stand, fd_nplanes, fd_r1, fd_r2, fd_r3;
+} MFDB;
+void vqt_attributes(short h, short *a);
+void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, const short *colors);
 #endif
