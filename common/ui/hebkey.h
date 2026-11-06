@@ -38,4 +38,13 @@ unsigned char key_char(short kstate, short key);
 void hebrew_badge_size(short vdi, short *w, short *h);
 void hebrew_badge(short vdi, short x, short y, short colour);
 
+/* where every app puts it (Erez, 6 Nov 2026): at the RIGHT END of a dialog's
+   title band and of a main window's info line, in place of the words
+   "Hebrew keyboard (F10)". x, y, w, h is that band or line (its inside);
+   the badge sits 3 pixels in from the right edge, centred up and down (at
+   the top when the band is lower than the badge). Select the font the band
+   is drawn in first (it sets the size). Does nothing while the keyboard is
+   off, so an app redraws the band when F10 is pressed. */
+void hebrew_badge_right(short vdi, short x, short y, short w, short h, short colour);
+
 #endif

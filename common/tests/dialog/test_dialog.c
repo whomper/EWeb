@@ -493,6 +493,22 @@ short form_dial(short flag, short x, short y, short w, short h)
 	return 1;
 }
 
+/* dlg_win_button's: the button's state now, and where it is let go */
+static short fake_mb, fake_watch, watches;
+short graf_mkstate(short *mx, short *my, short *mb, short *ks)
+{
+	*mx = *my = *ks = 0;
+	*mb = fake_mb;
+	return 1;
+}
+
+short graf_watchbox(OBJECT *t, short obj, short instate, short outstate)
+{
+	watches++;
+	t[obj].ob_state = fake_watch ? instate : outstate;
+	return fake_watch;
+}
+
 short graf_handle(short *wchar, short *hchar, short *wbox, short *hbox)
 {
 	*wchar = 8;
@@ -1282,6 +1298,21 @@ int main(void)
 	check(pen_nearest(1, 16, 1000, 1000, 500, 0) == 14, "pen_nearest: pale yellow, not for text: pen 14");
 	check(pen_nearest(1, 2, 1000, 0, 0, 1) == 1, "pen_nearest: two pens, text: black");
 	check(pen_nearest(1, 256, 0, 0, 1000, 1) == 4, "pen_nearest: 256 pens: only the first 16");
+	/* a window's button (dlg_win_button): taken only on a press let go over it */
+	setup();
+	fake_mb = 0, fake_watch = 1, watches = 0;
+	check(!dlg_win_button(tree, OK) && !watches, "dlg_win_button: the button already up: nothing (a selector's click)");
+	fake_mb = 1;
+	check(dlg_win_button(tree, OK) && watches == 1 && !(tree[OK].ob_state & SELECTED),
+	      "dlg_win_button: pressed and let go over it: taken, SELECTED off again");
+	fake_watch = 0;
+	check(!dlg_win_button(tree, OK), "dlg_win_button: let go elsewhere: nothing");
+	fake_watch = 1;
+	tree[OK].ob_state |= DISABLED;
+	check(!dlg_win_button(tree, OK), "dlg_win_button: a disabled button: nothing");
+	tree[OK].ob_state &= ~DISABLED;
+	check(!dlg_win_button(tree, TITLE) && !dlg_win_button(tree, -1), "dlg_win_button: not an EXIT object: nothing");
+	fake_mb = 0;
 printf("%d checks, %d failed\n", checks, failed);
 	return failed != 0;
 }

@@ -105,3 +105,13 @@ void hebrew_badge(short vdi, short x, short y, short colour)
 	colors[1] = 0;
 	vrt_cpyfm(vdi, 2, pxy, &src, &dst, colors);	/* transparent */
 }
+
+void hebrew_badge_right(short vdi, short x, short y, short w, short h, short colour)
+{
+	short bw, bh, by;
+	if (!hebrew_kbd)
+		return;
+	hebrew_badge_size(vdi, &bw, &bh);
+	by = h > bh ? (short)(y + (h - bh) / 2) : y;
+	hebrew_badge(vdi, (short)(x + w - bw - 3), by, colour);
+}
