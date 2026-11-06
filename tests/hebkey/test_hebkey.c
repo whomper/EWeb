@@ -104,6 +104,24 @@ int main(void)
 		hebrew_badge_size(1, &w, &h);
 		CK(h == 8);
 	}
+	/* hebrew_badge_right: the right end of a band, centred, off when the keyboard is off */
+	{
+		int c0;
+		cell_h = 16;
+		set_hebrew_kbd(0);
+		c0 = cp_calls;
+		hebrew_badge_right(1, 10, 100, 300, 20, 1);
+		CK(cp_calls == c0);
+		set_hebrew_kbd(1);
+		hebrew_badge_right(1, 10, 100, 300, 20, 1);
+		CK(cp_calls == c0 + 1 && cp_pxy[4] == 10 + 300 - 16 - 3 && cp_pxy[5] == 102);
+		CK(cp_pxy[6] == cp_pxy[4] + 15 && cp_pxy[7] == cp_pxy[5] + 15);
+		hebrew_badge_right(1, 0, 50, 200, 12, 1);	/* a band lower than the badge: at the top */
+		CK(cp_pxy[5] == 50 && cp_pxy[4] == 200 - 16 - 3);
+		cell_h = 8;
+		hebrew_badge_right(1, 0, 0, 100, 16, 2);
+		CK(cp_pxy[5] == 4 && cp_pxy[7] == 11 && cp_pxy[4] == 81);
+	}
 	printf("hebkey: %d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }

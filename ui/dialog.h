@@ -195,6 +195,15 @@ int dlg_touch_up_idle(void (*idle)(void));
 #define DLG_CLICKS 2
 #endif
 
+/* a window's own object tree (not a dialog: a program's main window of
+   buttons, EConvert's): a press on its EXIT button o taken as a dialog's
+   are, only when let go over it, shown pressed meanwhile (graf_watchbox).
+   1: let go over it (its SELECTED taken off again; the caller redraws o
+   and acts); 0: not one, the button already up (a click a file selector
+   left: fsel.h), or let go elsewhere. A button that acted on the press
+   emptied EConvert's list on a click it never had (5 Nov 2026) */
+int dlg_win_button(OBJECT *tree, short o);
+
 /* the pen of the first npens (16 at most: the UI's) whose colour is nearest
    r, g, b (VDI's 0-1000), read with vq_color; text: one dark enough to read
    on white, where there is one. A UI colour in 16 colours or fewer is never

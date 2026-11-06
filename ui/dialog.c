@@ -1488,6 +1488,20 @@ short dlg_do(OBJECT *tree, short start, short cancel)
 	return next;
 }
 
+int dlg_win_button(OBJECT *tree, short o)
+{
+	short mx, my, mb, ks;
+	if (o < 0 || !(tree[o].ob_flags & EXIT) || (tree[o].ob_state & DISABLED))
+		return 0;
+	graf_mkstate(&mx, &my, &mb, &ks);
+	if (!(mb & 1))
+		return 0;		/* the button already up: no press on it */
+	if (!graf_watchbox(tree, o, SELECTED, 0))
+		return 0;		/* let go elsewhere */
+	tree[o].ob_state &= ~SELECTED;
+	return 1;
+}
+
 #ifdef DLG_TRACE
 #include <stdio.h>
 /* built with -DDLG_TRACE: each exit object's place on the screen to the

@@ -3333,6 +3333,14 @@ void pic_dither_row(PIC_DITHER *dt, const unsigned short *px, const unsigned cha
 	dt->y++;
 }
 
+void pic_dither_sharp(PIC_DITHER *dt)
+{
+	if (dt != NULL) {
+		free(dt->rows);
+		dt->rows = dt->cur = dt->nxt = NULL;	/* (row_two and row_many's nearest pens) */
+	}
+}
+
 void pic_dither_close(PIC_DITHER *dt)
 {
 	if (dt != NULL) {

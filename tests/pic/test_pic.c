@@ -457,8 +457,54 @@ static int dsame(int argc, char **argv)
 }
 #endif
 
+/* Sharp (pic_dither_sharp): each pixel its nearest pen, on 2 and 16 pens,
+   and a dither's row (the default) not that on a gradient */
+static int sharp(void)
+{
+	static PIC_PAL pal[2];
+	unsigned short px[256];
+	unsigned char a[256], b[256];
+	int k, x, bad = 0, differs = 0;
+	pic_pal_init(&pal[0], 2, bw);
+	pic_pal_init(&pal[1], 16, vga16);
+	for (x = 0; x < 256; x++)
+		px[x] = (unsigned short) (((x >> 3) << 11) | ((x >> 2) << 5) | ((255 - x) >> 3));
+	for (k = 0; k < 2; k++) {
+		PIC_DITHER *d = pic_dither_open(256, &pal[k]), *s = pic_dither_open(256, &pal[k]);
+		int y;
+		if (d == NULL || s == NULL)
+			return 1;
+		pic_dither_sharp(s);
+		for (y = 0; y < 4; y++) {
+			pic_dither_row(d, px, NULL, a);
+			pic_dither_row(s, px, NULL, b);
+			for (x = 0; x < 256; x++) {
+				unsigned v = px[x];
+				int r = ((v >> 8) & 0xF8) | (v >> 13), g = ((v >> 3) & 0xFC) | ((v >> 9) & 3), bl = ((v << 3) & 0xF8) | ((v >> 2) & 7);
+				if (b[x] != pic_pal_nearest(&pal[k], r, g, bl)) {
+					if (!bad)
+						printf("FAIL sharp, %d pens: pixel %d pen %d, its nearest %d\n", pal[k].n, x, b[x],
+						       pic_pal_nearest(&pal[k], r, g, bl));
+					bad++;
+				}
+				differs += a[x] != b[x];
+			}
+		}
+		pic_dither_close(d);
+		pic_dither_close(s);
+	}
+	if (!differs) {
+		printf("FAIL sharp: the same pens as the dither's on a gradient\n");
+		bad++;
+	}
+	printf("sharp: %s (%d pens differ from the dither's)\n", bad ? "FAIL" : "ok", differs);
+	return bad != 0;
+}
+
 static int run(int argc, char **argv)
 {
+	if (argc >= 2 && strcmp(argv[1], "-S") == 0)
+		return sharp();
 	if (argc >= 2 && strcmp(argv[1], "-r") == 0)
 		return robust(argc - 2, argv + 2);
 	if (argc >= 2 && strcmp(argv[1], "-s") == 0)
