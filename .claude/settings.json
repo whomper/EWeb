@@ -1,20 +1,25 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
-      "Bash(m68k-linux-gnu-objdump *)",
-      "Bash(m68k-linux-gnu-nm *)",
-      "Bash(m68k-linux-gnu-size *)",
-      "Bash(git merge-base *)",
-      "Bash(git fetch *)",
-      "Bash(git add *)",
-      "Bash(git push origin HEAD:claude/epic-mayer-depxcc)",
-      "Bash(mkdir *)",
-      "mcp__github__actions_list",
-      "mcp__github__actions_get",
-      "mcp__github__get_release_by_tag",
-      "mcp__claude-code-remote__list_sessions",
-      "mcp__claude-code-remote__send_message",
-      "mcp__claude-code-remote__send_later"
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Agent",
+      "Skill",
+      "Workflow",
+      "mcp__github",
+      "mcp__GitHub",
+      "mcp__claude-code-remote",
+      "mcp__claude-artifacts",
+      "mcp__Claude_Docs",
+      "mcp__code-remote"
     ]
   }
 }
