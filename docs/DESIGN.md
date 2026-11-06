@@ -4528,6 +4528,38 @@ dialog's band. `make hatarigui`'s browse group types shin into the search field 
 checks what was sent, and that the info line's foot changes with F10 on and is as before with
 it off.
 
+**Code aligned to the 68030's cache (6 Nov 2026).** The info line's badge added 140 to 296
+bytes to `ui/` and moved every function after it; nothing of it runs while the keyboard is off,
+yet on `Falcon-4:16` the news page took 990 ms in place of 945 (its style stage 3510 to 3620 ms)
+and four pages down after 10 s at the top 560 in place of 470, the same in the hub's runs and in
+ours, twice: the loops of the CSS engine and the layout had crossed the 68030's 16-byte cache
+lines differently (the common sync alone, the same code at the same places, was 935 and 470).
+So the 68030 build gives each function of `TOS_CFLAGS`'s code (the page's: CSS, document,
+layout, drawing, NetSurf's libraries, the pictures; not the GEM side's `TOSNET_CFLAGS`) a line
+of its own (`-falign-functions=16`): a change elsewhere no longer moves them across lines.
+`EWEB.PRG` is about 6 KB larger (the speed rig's build 183,753 to 189,818 bytes); the ST edition is left as it was
+(`EWEBST.PRG` byte for byte the same). Aligning only `src/css`, `src/doc`, `src/layout` and
+`src/gfx` (3 KB) was not enough (news 975, pages down 490). The rig on `Falcon-4:16`, TOS 4.04,
+0.70 / the badge / the badge aligned (ms, longest stretch):
+
+| Row | 0.70 | Badge | Aligned |
+|---|---|---|---|
+| The home page shown | 570 | 570 | 545 |
+| The sample page loaded | 460 | 460 | 435 |
+| The news page loaded | 955 | 990 | 940 |
+| The pictures' page loaded | 490 | 490 | 465 |
+| Settings opened | 155 | 160 | 130 |
+| Settings closed | 40 | 40 | 50 |
+| The About box closed | 55 | 50 | 60 |
+| A page scrolled | 50 | 50 | 55 |
+| An arrow held, down / up (seen) | 810 / 1195 | 830 / 1245 | 790 / 1185 |
+| The page's end (seen) | 515 | 515 | 485 |
+| 3 pages up (seen) | 235 | 305 | 235 |
+| 4 pages down after 10 s (seen) | 475 | 560 | 465 |
+
+Three rows are a tick or two slower than 0.70 (Settings closed, the About box closed, a page
+scrolled; each well within its time), the price of the rest; the hub puts it to Erez.
+
 ## A big site's stylesheet (26 Oct 2026)
 
 Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.

@@ -218,7 +218,11 @@ ST_STACK  := $(TOS_STACK)
 build/tos/gem/main.o build/st/gem/main.o: Makefile
 # (only what is called is linked: each function and datum a section of its
 # own, the rest dropped by --gc-sections; the family's rule of 1 Nov 2026)
-TOS_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
+# (and each function of the page's code at a 16-byte line of the 68030's
+# cache: else a change anywhere before it moves its loops across lines, and
+# the stock Falcon's page loads go 3% slower or faster with it; 6 Nov 2026,
+# DESIGN.md, Code aligned to the 68030's cache. Not the ST edition's)
+TOS_CFLAGS := -m68030 -msoft-float -O2 -falign-functions=16 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -ffunction-sections -fdata-sections -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
 TOS_LDFLAGS := -m68030 -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
@@ -579,7 +583,7 @@ binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 # (-fdisable-tree-bswap, as every 68000 build), no TLS (common's
 # tls_none.c: BearSSL's 150 KB left out) and no DSP; secure sites through
 # AERA-Gateway's webgate (GATEWAY=). The same sources as EWEB.PRG.
-ST_CFLAGS     := $(subst -O2,-Os,$(subst -m68030,-m68000,$(TOS_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST
+ST_CFLAGS     := $(subst -O2,-Os,$(subst -m68030,-m68000,$(filter-out -falign-functions=16,$(TOS_CFLAGS)))) -fno-store-merging -fdisable-tree-bswap -DEW_ST
 ST_LDFLAGS    := $(subst -m68030,-m68000,$(TOS_LDFLAGS))
 STNET_CFLAGS  := $(subst -O2,-Os,$(subst -m68030,-m68000,$(TOSNET_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST \
                  -DTLS_FULL_EDITION=\"EWEB.PRG\"
