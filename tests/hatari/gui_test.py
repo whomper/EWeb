@@ -341,22 +341,37 @@ def held_scroll(r, group, name, settle):
     time.sleep(1)
     r.mouse.xdo("mousedown", "1")
     time.sleep(2.0 if settle < 10 else 6.0)
-    held = Image.open(r.shot(95)).convert("RGB")
+    # three pictures a third of a second apart while it is held: a step's
+    # copy on the screen (by the CPU, from the top down) taken half done
+    # shows one band twice, a step apart, where the copy has got to, and
+    # is gone a moment later; the fault this looks for stays on the screen
+    # while the arrow is held (the same lines down the window), so it is
+    # in every picture
+    shots = []
+    for n in range(3):
+        if n:
+            time.sleep(0.33)
+        shots.append(Image.open(r.shot(95 + n)).convert("RGB"))
     r.mouse.xdo("mouseup", "1")
     r.mouse.move(x + w // 2, y + h // 2)
     tops = [e for e in r.events()[mark:] if e.startswith("arrowed ")]
-    rows = [tuple(held.crop((x, y + k, x + w, y + k + 1)).getdata()) for k in range(h - 120)]
-    textured = [len(set(row)) > 1 for row in rows]
-    seen, same = {}, []
-    for k in range(0, len(rows) - 16):
-        if sum(textured[k:k + 16]) < 10:
-            continue
-        key = hash(tuple(rows[k:k + 16]))
-        if key in seen and rows[seen[key]:seen[key] + 16] == rows[k:k + 16]:
-            same.append((seen[key], k))
-        seen.setdefault(key, k)
+
+    def twice(held):
+        rows = [tuple(held.crop((x, y + k, x + w, y + k + 1)).getdata()) for k in range(h - 120)]
+        textured = [len(set(row)) > 1 for row in rows]
+        seen, same = {}, []
+        for k in range(0, len(rows) - 16):
+            if sum(textured[k:k + 16]) < 10:
+                continue
+            key = hash(tuple(rows[k:k + 16]))
+            if key in seen and rows[seen[key]:seen[key] + 16] == rows[k:k + 16]:
+                same.append((seen[key], k))
+            seen.setdefault(key, k)
+        return same
+    same = [twice(im) for im in shots]
     check("%s: %s, the down arrow held: no line twice in the window while it is held" % (group, name),
-          len(tops) > 3 and not same, "%d steps; the same rows at %s" % (len(tops), same[:4]))
+          len(tops) > 3 and not all(same), "%d steps; the same rows in each picture at %s" %
+          (len(tops), [s[:4] for s in same]))
     time.sleep(settle)
 
 
