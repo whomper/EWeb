@@ -701,18 +701,28 @@ def browse():
             check("forms: Back to the form", ev is not None and ev.startswith("shown %sform.html " % site),
                   str(r.events()))
             # the Hebrew keyboard (F10, as the family's apps: Erez, 5 Nov
-            # 2026): 'a' types shin, sent as UTF-8; F10 again, off
+            # 2026): 'a' types shin, sent as UTF-8; F10 again, off. Its
+            # badge at the info line's right end while it is on (Erez,
+            # 6 Nov 2026), gone when it is off
             r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 0, right=True))
+            time.sleep(1)
+            def foot(n):
+                im = Image.open(r.shot(n)).convert("RGB")
+                return im.crop((im.width - 80, im.height - 48, im.width, im.height))
+            off_before = foot("hebrew-off")
             r.key(0x44)
             time.sleep(1)
-            st = r.events()
+            on = foot("hebrew-on")
             r.type("a")
             r.key(0x44)
+            time.sleep(1)
+            off_after = foot("hebrew-off-again")
             r.key(RETURN)
             ev = r.wait(r"shown ", 120)
-            check("forms: the Hebrew keyboard's letter typed (F10)", ev is not None and
+            same = lambda a, b: list(a.getdata()) == list(b.getdata())
+            check("forms: the Hebrew keyboard's letter typed (F10), its badge on the info line", ev is not None and
                   ev.endswith("title GET||q=atarist%D7%A9&go=Find") and
-                  any("status" in e and "Hebrew keyboard (F10)" in e for e in st), str(r.events()))
+                  not same(off_before, on) and same(off_before, off_after), str(r.events()))
             r.key(UNDO)
             ev = r.wait(r"shown ", 120)
             check("forms: Back to the form again", ev is not None and ev.startswith("shown %sform.html " % site),

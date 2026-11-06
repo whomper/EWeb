@@ -174,20 +174,20 @@ static void d_end(void)
 
 /* while the Hebrew keyboard is on, a dialog that takes typing carries
    common's badge (hebrew_badge: ayin and bet) at its title band's right
-   end, as the family's dialogs do; in a dialog window the title is the
-   AES's and the info line says it (the hub, 5 Nov 2026) */
+   end, as the family's dialogs do (hebrew_badge_right, placed as the main
+   window's info line has it); in a dialog window the title is the AES's,
+   and the main window's info line shows it (Erez, 6 Nov 2026) */
 static short badge_band = -1;
 
 static void badge_show(void)
 {
 #ifndef EW_ST
-	short bx, by, bw, bh, w, h, c[4];
+	short bx, by, bw, bh, c[4];
 	if (badge_band < 0 || !hebrew_kbd || dlg_in_window())
 		return;
 	objc_offset(tree, badge_band, &bx, &by);
 	bw = tree[badge_band].ob_width;
 	bh = tree[badge_band].ob_height;
-	hebrew_badge_size(vdi_h, &w, &h);
 	c[0] = bx;
 	c[1] = by;
 	c[2] = (short) (bx + bw - 1);
@@ -195,7 +195,7 @@ static void badge_show(void)
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, 0);
 	vs_clip(vdi_h, 1, c);
-	hebrew_badge(vdi_h, (short) (bx + bw - w - cw / 2), (short) (by + (bh - h) / 2), 0);	/* (white on the band's black) */
+	hebrew_badge_right(vdi_h, bx, by, bw, bh, 0);	/* (white on the band's black; placed as the info line's) */
 	vs_clip(vdi_h, 0, c);
 	graf_mouse(M_ON, 0);
 	wind_update(END_UPDATE);

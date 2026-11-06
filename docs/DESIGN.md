@@ -4518,13 +4518,15 @@ that, and NVDI and the accessories take their share: his `EWEB.LOG` says which p
 **The Hebrew keyboard (5 Nov 2026; Erez: "just like other AERA applications").** As ECal's,
 EContact's and EFTP's: F10 or Options > Hebrew keyboard (ticked) switches it, the letter keys
 then type the Israeli SI-1452 layout's letters (the family's table, `key_char` in `ui/main.c`)
-in a page's fields, the address and the scripts' key events; the info line ends with "Hebrew
-keyboard (F10)", as the family's main windows do today; Settings > General > Start with the
-Hebrew keyboard (`HEBREW=`). `EWEB.PRG` only (the ST edition is frozen). EWeb's dialogs type
-Hebrew once common's `hebkey.c` (AERA-Atari 89a3334: `dlg_do` through `key_char`) is synced in,
-and their title badge ("עב", as ECal's dialogs) with it. Erez is asked through the hub whether
-the info line shows a badge in place of the words, in every app. `make hatarigui`'s browse
-group types shin into the search field with F10 on and checks what was sent.
+in a page's fields, the address and the scripts' key events; Settings > General > Start with
+the Hebrew keyboard (`HEBREW=`). `EWEB.PRG` only (the ST edition is frozen). The dialogs type
+Hebrew through common's `dlg_do` and `key_char`. Its badge ("עב", common's `hebrew_badge_right`:
+3 pixels in from the right, centred up and down) is at the right end of the main window's info
+line, in place of the words "Hebrew keyboard (F10)" (Erez, 6 Nov 2026: in every app), and of a
+dialog's title band; F10 draws each window's line again (`win_hebrew_changed`) and an open
+dialog's band. `make hatarigui`'s browse group types shin into the search field with F10 on,
+checks what was sent, and that the info line's foot changes with F10 on and is as before with
+it off.
 
 ## A big site's stylesheet (26 Oct 2026)
 

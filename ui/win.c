@@ -444,6 +444,15 @@ static void draw_status(GRECT *clip)
 	int off;
 	if (!rect_and(&r, clip))
 		return;
+#ifndef EW_ST
+	if (hebrew_kbd) {
+		/* the words stop short of the Hebrew keyboard's badge at the
+		   line's right end (Erez, 6 Nov 2026: in every app) */
+		short bw, bh;
+		hebrew_badge_size(vdi_h, &bw, &bh);
+		cols = (short) ((cur->r_stat.w - 8 - bw - 3 - 8) / gl_wchar);
+	}
+#endif
 	/* drawn off the screen and shown at once where TOS allows (common's
 	   offdraw: the ground never shows between its words, the progress
 	   ribbon's every step; the guidelines' Speed); else on the screen */
@@ -455,6 +464,11 @@ static void draw_status(GRECT *clip)
 	if (cur->info[0] && cols > 0)
 		text_at(cur->r_stat.x + 8, cur->r_stat.y + 2, cur->info, (long) strlen(cur->info), cols,
 			paper() == 0 ? TX_WHITE : 0);	/* (on a byte) */
+#ifndef EW_ST
+	/* (nothing while the keyboard is off) */
+	hebrew_badge_right(vdi_h, cur->r_stat.x, (short) (cur->r_stat.y + 1), cur->r_stat.w,
+		(short) (cur->r_stat.h - 1 - rib_rows()), 1);
+#endif
 	draw_ribbon();
 	if (off) {
 		off_end();
@@ -2128,13 +2142,6 @@ void win_status(const char *s)
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else
 		t[0] = 0;
-#ifndef EW_ST
-	if (hebrew_kbd) {
-		/* (as ECal's status line says it) */
-		size_t n = strlen(t);
-		snprintf(t + n, sizeof t - n, "%sHebrew keyboard (F10)", n ? "   " : " ");
-	}
-#endif
 	if (strcmp(t, cur->info) == 0)
 		return;
 	str_copy(cur->info, t, sizeof cur->info);
@@ -2154,6 +2161,30 @@ void win_status(const char *s)
 		redraw(&r, 1);
 	}
 }
+
+#ifndef EW_ST
+/* the Hebrew keyboard switched (F10): each window's info line again, its
+   badge shown or gone (at the next turn while a page is made, as
+   win_status's words) */
+void win_hebrew_changed(void)
+{
+	ewin *was = cur, *w;
+	for (w = wins; w != NULL; w = w->next) {
+		GRECT r;
+		if (w->h <= 0 || w->iconified)
+			continue;
+		cur = w;
+		if (loading || quiet_bars) {
+			cur->due_bars |= 1;
+			continue;
+		}
+		r = cur->r_stat;
+		r.h -= rib_rows();
+		redraw(&r, 1);
+	}
+	cur = was;
+}
+#endif
 
 void win_status_again(void)
 {

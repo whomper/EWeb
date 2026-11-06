@@ -269,6 +269,7 @@ void win_title(void);
    else its security. Each change is logged ("status ...") */
 void win_status(const char *s);
 void win_status_again(void);		/* what the page says, again if the bar says it (the time left) */
+void win_hebrew_changed(void);		/* the Hebrew keyboard switched: each info line's badge again */
 /* the status bar's ribbon: a load has come so far (0..1024) in a phase
    (BRPH_*: its colour); phase -1 clears it */
 void win_progress(int phase, int at);
