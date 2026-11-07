@@ -222,10 +222,6 @@ int page_clip(const page *p, unsigned clip, int32_t *x0, int32_t *y0, int32_t *x
 /* the item drawn rth (page.seg) */
 long page_drawn(const page *p, long r);
 
-/* the nearest row at or above y, and below lo, where no text item crosses
-   (a band drawn to it goes through no line twice); y when there is none */
-int32_t page_text_gap(const page *p, int32_t lo, int32_t y);
-
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);
 void page_free(page *p);

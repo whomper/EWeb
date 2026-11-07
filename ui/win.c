@@ -1033,15 +1033,6 @@ static int pic_make(int32_t y0, int32_t y1, unsigned long end)
 		want = (left > 4 ? left : 4) * 256 / rcost();
 		if (sync_draw)
 			want = (last - b + 1) * PIC_BAND;
-		else if (piece)
-			/* a piece of a long draw: runs as tall as a whole draw's (the
-			   screen's buffer, 32 rows on a stock Falcon), the piece over
-			   after the run its time ends in. A run cut to the time left
-			   (down to a band of 8) went through every line of text it
-			   crossed again: the news page's drawing 29.6 M instructions
-			   in 8-row bands against 19.2 M whole (drawbench -R; Erez,
-			   7 Nov 2026: pieces as fast as whole) */
-			want = scr_band_rows();
 		n = 1;
 		e = b + 1;
 		while (e <= last && !pic_has(e) && e % pic.nb != 0 && (n + 1) * PIC_BAND <= want &&
@@ -1363,16 +1354,6 @@ static void draw_due(void)
 			n = piece ? PIECE_BAND : BAND_MIN;
 		if (whole)
 			n = cur->due.h;
-		else if (piece && n < cur->due.h && shown() != NULL) {
-			/* (a piece's band ends between lines of text, where it can:
-			   a line its edge cut was gone through in both bands, an
-			   8 MHz ST's 32-row bands 11 % over drawn whole; Erez, 7 Nov
-			   2026: pieces as fast as whole) */
-			int32_t py = cur->top + cur->due.y;
-			int32_t g = page_text_gap(shown(), py, py + (int32_t) n);
-			if (g - py >= PIECE_BAND / 2)
-				n = g - py;
-		}
 		band.x = (short) (cur->r_page.x + cur->due.x);
 		band.y = (short) (cur->r_page.y + cur->due.y);
 		band.w = cur->due.w;
