@@ -5118,6 +5118,25 @@ its media queries' conditions). The figures aren't quite the same work: HighWire
 reading `NEWS.CSS` from the disk and making boxes, EWeb's neither. The page's images were left
 out of both (their paths lead nowhere on the Atari).
 
+**Side by side on modern pages** (7 Nov 2026; Hatari, Falcon in 256 colours, 14 MB, TOS 4.04;
+EWeb 0.71 and HighWire 0.4.8; each page saved to the disk with its stylesheets inlined, scripts
+and pictures left out; scripts off in EWeb). EWeb's time is its own load figure; HighWire's is from
+its start until its stop sign went out, less an empty page's (about ±0.5 s):
+
+| Page | EWeb | HighWire |
+|---|---|---|
+| yaary.music | as designed (dark theme, menu, heading, buttons); 5.1 s | the page's WordPress style block shown as text (an `<svg` inside its CSS ends HighWire's `<style>`); 3.6 s |
+| webdriveruniversity.com | as designed (dark hero, coloured heading); 2.7 s | a hidden sale banner shown, and UTF-8 dashes and emoji as Latin-1 letters; 0.8 s |
+| its Dropdown challenge | the page with its three selects; 3.4 s | nothing drawn: still busy after 5 minutes |
+| Wikipedia, Atari Falcon | the article's text, lists and buttons; 6.3 s | the same text plainly, buttons as words; 2.0 s |
+| Hebrew test page (UTF-8) | right to left, mixed with English and numbers; 0.35 s | the Hebrew as Latin-1 letters |
+| `NEWS.HTM` (random CSS: a jumble in Chromium too) | 7.0 s | a plain list; 2.7 s |
+
+HighWire is quicker on the pages it can show because it leaves out most of their CSS (the
+selectors, flexbox and custom properties these pages are built with), and so it draws them as
+lists of text; EWeb spends its time in the style and layout those pages need (yaary.music: parse
+0.76 s, style 1.73 s, layout 1.73 s).
+
 ## Order of work
 
 1. **The gateway's `web` service, in AERA-Gateway,** with live view for CAB. This gets you past
