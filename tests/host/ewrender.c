@@ -635,7 +635,8 @@ static void run_timers(browser *b, int ms)
 }
 
 #ifndef EW_ST
-/* -u ID=TEXT: TEXT typed into the field ID as EWEB.PRG types it, a key
+/* -u ID=TEXT: TEXT typed into the field ID (or @NAME: the field of that
+   name; *: the first one types into) as EWEB.PRG types it, a key
    at a time (keydown, a character's keypress, the character put in and
    input, keyup); "\n" is Return, whose keypress the page's scripts see
    (the form isn't sent: no site's form goes anywhere from the tests) */
@@ -659,6 +660,12 @@ static void typed(browser *b, const char *spec)
 	else if (b->d != NULL && strcmp(id, "*") == 0)	/* the first field one types into */
 		for (c = b->d->ctls; c != NULL && !form_typed(c); c = c->next)
 			;
+	else if (b->d != NULL && id[0] == '@')	/* @NAME: the field of that name */
+		for (c = b->d->ctls; c != NULL; c = c->next) {
+			const char *nm = c->n ? dn_attr(c->n, "name") : NULL;
+			if (nm != NULL && strcmp(nm, id + 1) == 0 && form_typed(c))
+				break;
+		}
 	if (c == NULL) {
 		printf("type %s: no such field\n", id);
 		return;
@@ -756,6 +763,10 @@ at:
 		} else if (c != NULL && (c->kind == FC_CHECKBOX || c->kind == FC_RADIO)) {
 			form_check(br_ctl_doc(b, c), c);
 			br_js_event(b, c, "change", &cancelled, &load);
+		} else if (c != NULL && c->kind == FC_RESET) {
+			/* (as win.c's click on one) */
+			form_reset(br_ctl_doc(b, c), c->form);
+			printf("reset\n");
 		} else if (link >= 0) {
 			r = br_follow(b, link);
 			printf("followed: %d \"%s\" %s top %d%s\n", r, b->title, b->url, (int) b->scroll_to,

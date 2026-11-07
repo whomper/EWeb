@@ -4044,6 +4044,11 @@ fade and a text that comes later are started by the click; `-u ID=TEXT` typing a
   line taller; and an inline control the page doesn't style keeps its own left and right margins
   on its line (that page's `margin-right: 6px` between a box and its label was lost). Test:
   `tests/layout/ctlmargin.html`.
+- **Contact Us** works as in Chromium, tried on a copy of the page (its form never leaves the
+  page: action `javascript:void(0)`, its `onsubmit` writes the body): the four fields filled and
+  sent show "Thank You for your Message!", a bad address both errors, RESET empties the fields.
+  ewrender types into a field by its name (`-u @NAME=TEXT`) and its click on a reset button resets
+  the form as `win.c`'s does. Tests: `tests/js/contact.html`, `contact2.html`.
 - **The site's own faults, as Chromium has them:** a few of its scripts are HTML (Click
   Buttons' and Hidden Elements' `js/script.js` wrapped in `<script>`, `js/html5shiv.js` and
   `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.

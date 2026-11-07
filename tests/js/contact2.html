@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!-- args: -u @first_name=Ada -u @email=ada -K clear -->
+<!-- expect: reset -->
+<!-- expect: placeholder First Name -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A form sent to a script (as webdriveruniversity.com's Contact Us: its
+     action javascript:void(0), its onsubmit writing the page's body):
+     the fields typed by their names (ewrender -u @NAME), the submit button
+     clicked; contact.html sends it; this resets it -->
+<html><head><title>contact</title></head><body>
+<form action="javascript:void(0);" method="post" id="f" onsubmit="return check();">
+<input name="first_name" type="text" placeholder="First Name">
+<input name="last_name" type="text" placeholder="Last Name">
+<input name="email" type="text" placeholder="Email Address">
+<textarea name="message" placeholder="Comments"></textarea>
+<input id="clear" type="reset" value="RESET"> <input id="send" type="submit" value="SUBMIT">
+</form>
+<script>
+function check() {
+	var v = function (n) { return (document.getElementsByName(n)[0] || {}).value.trim(); };
+	var empty = !v("first_name") || !v("last_name") || !v("email") || !v("message");
+	var ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v("email"));
+	if (empty || !ok)
+		document.body.innerHTML = "<br>" + (empty ? " Error: all fields are required<br>" : "") +
+			(ok ? "" : " Error: Invalid email address");
+	else
+		document.body.innerHTML = "<h1>Thank You for your Message!</h1>";
+	return false;
+}
+</script>
+</body></html>
