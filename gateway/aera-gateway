@@ -9,6 +9,7 @@ says how they are.
   sudo ./aera-gateway install dav                           ECal's and EContact's (ecalgate)
   sudo ./aera-gateway install ftp                           EFTP's (eftpgate)
   sudo ./aera-gateway install web                           EWeb's (webgate)
+  sudo ./aera-gateway install translate                     translation for the apps (translategate)
   sudo ./aera-gateway install claude --network --atari ATARI_IP
                                                             ClaudeST's bridge (claude-st)
   sudo ./aera-gateway install all --allow ATARI_IP --mail IMAP SMTP[:587] [POP3] [--browser]
@@ -48,14 +49,16 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+import zipfile
 
-VERSION = "1.17"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
+VERSION = "1.22"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
 HERE = os.path.dirname(os.path.realpath(__file__))
 PROG = sys.argv[0] if sys.argv[0].endswith("aera-gateway") else "aera-gateway"   # as typed, for advice
 OPT = "/opt/aera-gateway"                   # the gateways' code on the Pi
 UNITS = "/etc/systemd/system"
 OLD_BIN = "/usr/local/bin"                  # where the apps' own install.sh put them
-FILES = ("aeragate.py", "emailgate.py", "ecalgate.py", "eftpgate.py", "webgate.py")
+FILES = ("aeragate.py", "emailgate.py", "ecalgate.py", "eftpgate.py", "webgate.py", "translategate.py",
+         "translate-phrases.tsv")
 EXT = "webgate-ext"                         # webgate's browser extension, a folder next to them
 HOME_NETS = ("192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8")
 CLAUDEST = "whomper/ClaudeST"
@@ -290,6 +293,7 @@ class Gateway:
     key = name = script = title = ""
     packages = ()               # Debian packages beyond python3 and ca-certificates
     state = False               # a StateDirectory (eftpgate's SSH host keys)
+    home = None                 # its user's home, when it needs one (webgate's, for Ubuntu's Chromium snap)
     removed = ""
 
     def unit_file(self):
@@ -583,7 +587,7 @@ class Dav(Gateway):
         return "\n".join([
             "",
             "ecalgate is running. In ECal and EContact on the Atari, Settings > Connection:",
-            "   Pi gateway:  %s" % ip,
+            "   Gateway:     %s" % ip,
             "   Port:        %s" % ns.port,
             "",
             "Check it from any browser on your network: http://%s:%s/" % (ip, ns.port)])
@@ -650,7 +654,7 @@ class Ftp(Gateway):
         return "\n".join([
             "",
             "eftpgate is running. In EFTP on the Atari, Options > Settings > Secure:",
-            "   Pi gateway:  %s" % ip,
+            "   Gateway:     %s" % ip,
             "   Port:        %s" % ns.port,
             "",
             "Then give your FTPS and SFTP sites their real server names in File > Sites."])
@@ -661,11 +665,17 @@ class Web(Gateway):
     title = "EWeb gateway for the Atari (HTTP and HTTPS)"
     removed = "webgate removed."
     packages = ("python3-pil",)             # Pillow: pictures made for the Atari's page
-    # the Pi's browser (--browser): Chromium full screen in a screen of
+    # the Gateway's browser (--browser): Chromium full screen in a screen of
     # its own, going out through webgate (127.0.0.1), as user webgate
     SCREEN, BROWSER = "webgate-screen", "webgate-browser"
     DISPLAY = ":99"
     PROFILE = "/var/lib/webgate/browser"
+    home = "/var/lib/webgate"
+    # Ubuntu's Chromium is a snap: snapd starts it only from its user's own
+    # systemd (a lingering webgate), with a home snapd knows (homedirs) and
+    # its profile and extension in the snap's own folder there
+    SNAP_DIR = "/var/lib/webgate/snap/chromium/common"
+    SNAP_UNIT = "/var/lib/webgate/.config/systemd/user/webgate-browser.service"
     MIN_MEMORY = 1536                       # MB: a Pi with 2 GB or more
     # aerapens (EWeb's pictures as the Atari's pens): built here from this
     # copy's pens/, run by systemd one a connection on its socket
@@ -713,12 +723,12 @@ class Web(Gateway):
             ns.browser = o.browser
 
     def prepare(self, pi, ns):
-        """the Pi's browser: enough memory (before anything changes), and its
+        """the Gateway's browser: enough memory (before anything changes), and its
         programs; and aerapens built"""
         if ns.browser:
             m = re.search(r"^MemTotal:\s+(\d+) kB", pi.read("/proc/meminfo") or "", re.M)
             if m and int(m.group(1)) // 1024 < self.MIN_MEMORY:
-                raise Failed("The Pi's browser needs a Pi with 2 GB of memory or more; this one has %d MB.\n"
+                raise Failed("The Gateway's browser needs a Pi with 2 GB of memory or more; this one has %d MB.\n"
                              "webgate works without it: sudo %s install web --no-browser"
                              % (int(m.group(1)) // 1024, PROG))
         self.build_pens(pi)
@@ -733,7 +743,7 @@ class Web(Gateway):
         if not pi.which("xdotool"):
             need.append("xdotool")
         if need:
-            heading("Installing the Pi's browser (%s): this takes a while" % ", ".join(need))
+            heading("Installing the Gateway's browser (%s): this takes a while" % ", ".join(need))
             pi.run("apt-get", "update", "-qq")
             pi.run("apt-get", "install", "-y", "-qq", *need)
 
@@ -741,14 +751,26 @@ class Web(Gateway):
         keep = [k for k in keep if not k.startswith("Environment=DISPLAY=")]
         return super().unit(ns, keep + (["Environment=DISPLAY=" + self.DISPLAY] if ns.browser else []))
 
+    def snap(self, pi):
+        """is the browser Ubuntu's Chromium snap (its chromium-browser
+        package only puts the snap in)?"""
+        path = pi.which("chromium", "chromium-browser") or ""
+        return path.startswith("/snap/") or (path.endswith("/chromium-browser") and pi.ok("snap", "list", "chromium")
+                                             and not pi.exists("/usr/lib/chromium-browser/chromium-browser"))
+
+    def profile(self, pi):
+        return self.SNAP_DIR + "/browser" if self.snap(pi) else self.PROFILE
+
     def browser_units(self, pi, ns):
-        """(the screen's unit, the browser's unit)"""
+        """(the screen's unit, the browser's unit: a system one, or for the
+        snap webgate's own user one)"""
         port = ns.browser_port
-        chromium = pi.which("chromium", "chromium-browser") or "/usr/bin/chromium"
-        ext = "%s/%s" % (OPT, EXT)
+        snap = self.snap(pi)
+        chromium = "/snap/bin/chromium" if snap else pi.which("chromium", "chromium-browser") or "/usr/bin/chromium"
+        ext = self.SNAP_DIR + "/" + EXT if snap else "%s/%s" % (OPT, EXT)
         args = [chromium, "--kiosk", "--no-first-run", "--no-default-browser-check", "--noerrdialogs",
                 "--disable-infobars", "--disable-session-crashed-bubble", "--password-store=basic",
-                "--user-data-dir=" + self.PROFILE, "--load-extension=" + ext, "--disable-extensions-except=" + ext,
+                "--user-data-dir=" + self.profile(pi), "--load-extension=" + ext, "--disable-extensions-except=" + ext,
                 # everything through webgate, which connects only where 7.3 lets it
                 "--proxy-server=http://127.0.0.1:%d" % port, "--proxy-bypass-list=<-loopback>;127.0.0.1:%d" % port,
                 # and it resolves nothing itself: names go to webgate as they are
@@ -758,22 +780,31 @@ class Web(Gateway):
         common = ["User=" + self.name, "Restart=always", "RestartSec=5",
                   "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes"]
         screen = "\n".join([
-            "[Unit]", "Description=webgate's screen for the Pi's browser (EWeb's snapshots and live view)",
+            "[Unit]", "Description=webgate's screen for the Gateway's browser (EWeb's snapshots and live view)",
             "After=%s.service" % self.name, "JoinsNamespaceOf=%s.service" % self.name, "",
             "[Service]",
             # tall enough for live view's window: EWeb's page width, three of its screens (webgate-ext sizes it)
             "ExecStart=%s %s -screen 0 1280x3072x24 -nolisten tcp" % (pi.which("Xvfb") or "/usr/bin/Xvfb",
                                                                     self.DISPLAY),
             "NoNewPrivileges=yes"] + common + ["", "[Install]", "WantedBy=multi-user.target", ""])
+        wait = ("ExecStartPre=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do xdotool getdisplaygeometry >/dev/null "
+                "2>&1 && exit 0; sleep 1; done; exit 1'")
+        if snap:
+            # webgate's own systemd starts it (snapd's rule); the snap's
+            # confinement is its sandbox, and the screen is reached by its
+            # abstract socket
+            return screen, "\n".join([
+                "[Unit]", "Description=The Gateway's browser for EWeb (Ubuntu's Chromium snap, out through webgate only)",
+                "", "[Service]", "Environment=DISPLAY=" + self.DISPLAY, wait,
+                "ExecStart=" + " ".join(unit_word(w) for w in args), "Restart=always", "RestartSec=5",
+                "", "[Install]", "WantedBy=default.target", ""])
         browser = "\n".join([
-            "[Unit]", "Description=The Pi's browser for EWeb (Chromium, out through webgate only)",
+            "[Unit]", "Description=The Gateway's browser for EWeb (Chromium, out through webgate only)",
             "Requires=%s.service" % self.SCREEN, "After=%s.service %s.service" % (self.SCREEN, self.name),
             "JoinsNamespaceOf=%s.service" % self.name, "",
             "[Service]",
             "Environment=DISPLAY=" + self.DISPLAY, "Environment=HOME=/var/lib/webgate", "StateDirectory=webgate",
-            # the screen may take a moment
-            "ExecStartPre=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do xdotool getdisplaygeometry >/dev/null "
-            "2>&1 && exit 0; sleep 1; done; exit 1'",
+            wait,               # (the screen may take a moment)
             "ExecStart=" + " ".join(unit_word(w) for w in args),
             "# Chromium's own sandbox needs its setuid helper or user namespaces: no NoNewPrivileges here"]
             + common + ["", "[Install]", "WantedBy=multi-user.target", ""])
@@ -783,20 +814,62 @@ class Web(Gateway):
         if not ns.browser:
             self.browser_off(pi, quiet=False)
             return
+        snap = self.snap(pi)
         screen, browser = self.browser_units(pi, ns)
+        if snap:
+            self.snap_ready(pi)
+            if pi.exists(unit_path(self.BROWSER)):          # a system browser unit from before
+                pi.run("systemctl", "disable", "--now", self.BROWSER + ".service", check=False, out="hide",
+                       errors=False)
+                pi.remove(unit_path(self.BROWSER))
         pi.write(unit_path(self.SCREEN), screen)
-        pi.write(unit_path(self.BROWSER), browser)
+        pi.write(self.SNAP_UNIT if snap else unit_path(self.BROWSER), browser)
         # Chromium keeps an extension's old background script in its
         # profile: a new webgate-ext starts afresh (the logins stay)
         for d in ("Service Worker", "Extension State", "Extension Rules"):
-            pi.rmtree("%s/Default/%s" % (self.PROFILE, d))
+            pi.rmtree("%s/Default/%s" % (self.profile(pi), d))
         pi.run("systemctl", "daemon-reload")
-        pi.run("systemctl", "enable", self.SCREEN + ".service", self.BROWSER + ".service", out="hide")
+        pi.run("systemctl", "enable", self.SCREEN + ".service", *([] if snap else [self.BROWSER + ".service"]),
+               out="hide")
         pi.run("systemctl", "restart", self.SCREEN + ".service", check=False)
-        pi.run("systemctl", "restart", self.BROWSER + ".service", check=False)
-        say("The Pi's browser (Chromium, in webgate's own screen) is running for EWeb's snapshots and live view.")
+        if snap:
+            user = ("systemctl", "--user", "-M", self.name + "@")
+            pi.run("chown", "-R", "%s:%s" % (self.name, self.name), self.home + "/.config", check=False)
+            pi.run(*user, "daemon-reload", check=False)
+            pi.run(*user, "enable", self.BROWSER + ".service", check=False, out="hide")
+            pi.run(*user, "restart", self.BROWSER + ".service", check=False)
+        else:
+            pi.run("systemctl", "restart", self.BROWSER + ".service", check=False)
+        say("The Gateway's browser (Chromium, in webgate's own screen) is running for EWeb's snapshots and live view.")
+
+    def snap_ready(self, pi):
+        """webgate as snapd wants the user it starts Chromium for: its home
+        (/var/lib/webgate) one snapd knows, its own systemd running
+        without a login, and the snap's folder there with webgate-ext"""
+        if (pi.out("getent", "passwd", self.name).split(":") + [""] * 6)[5] != self.home:
+            # usermod won't while webgate's programs run: a moment's stop
+            pi.run("systemctl", "stop", self.name + ".service", check=False)
+            pi.run("usermod", "--home", self.home, self.name)
+            pi.run("systemctl", "start", self.name + ".service", check=False)
+        dirs = [d for d in pi.out("snap", "get", "system", "homedirs").strip().split(",") if d]
+        if "/var/lib" not in dirs:
+            pi.run("snap", "set", "system", "homedirs=" + ",".join(dirs + ["/var/lib"]))
+        pi.run("loginctl", "enable-linger", self.name)
+        d = self.home
+        for part in ("", "/snap", "/snap/chromium", "/snap/chromium/common", "/snap/chromium/common/browser"):
+            pi.run("install", "-d", "-o", self.name, "-g", self.name, d + part)
+        pi.rmtree(self.SNAP_DIR + "/" + EXT)
+        for f in sorted(glob.glob(pi.path("%s/%s/*" % (OPT, EXT)))):
+            pi.copy(f, "%s/%s/%s" % (self.SNAP_DIR, EXT, os.path.basename(f)), 0o644)
+        # the snap reads only what is its user's in its home (AppArmor's owner rules)
+        pi.run("chown", "-R", "%s:%s" % (self.name, self.name), self.SNAP_DIR + "/" + EXT)
 
     def browser_off(self, pi, quiet=True):
+        if pi.exists(self.SNAP_UNIT):
+            user = ("systemctl", "--user", "-M", self.name + "@")
+            pi.run(*user, "disable", "--now", self.BROWSER + ".service", check=False, out="hide", errors=False)
+            pi.remove(self.SNAP_UNIT)
+            pi.run("loginctl", "disable-linger", self.name, check=False, errors=False)
         if not pi.exists(unit_path(self.BROWSER)) and not pi.exists(unit_path(self.SCREEN)):
             return
         for u in (self.BROWSER, self.SCREEN):
@@ -804,7 +877,7 @@ class Web(Gateway):
             pi.remove(unit_path(u))
         pi.run("systemctl", "daemon-reload")
         if not quiet:
-            say("The Pi's browser is off (its profile, with any logins, stays in %s)." % self.PROFILE)
+            say("The Gateway's browser is off (its profile, with any logins, stays in %s)." % self.profile(pi))
 
     def after_remove(self, pi):
         self.browser_off(pi)
@@ -1000,20 +1073,189 @@ class Web(Gateway):
     def describe(self, ns):
         return "servers at home %s%s%s" % ("allowed" if ns.allow_local else "refused",
                                            ", CA " + ns.cafile if ns.cafile else "",
-                                           "; the Pi's browser" if ns.browser else "")
+                                           "; the Gateway's browser" if ns.browser else "")
 
     def tell(self, ns, ip):
         return "\n".join([
             "",
             "webgate is running. In EWeb on the Atari, Settings > Secure:",
-            "   Pi gateway:  %s" % ip,
+            "   Gateway:     %s" % ip,
             "   Port:        %s" % ns.port,
             "",
             "Check it from any browser on your network: http://%s:%s/" % (ip, ns.port)])
 
 
+class Translate(Gateway):
+    """translategate: text translated on the Pi for the Atari apps, by a
+    local engine (no text leaves the home network). The engine, Argos
+    Translate's models run by CTranslate2, is in a venv of its own under
+    /opt/translategate with its models, downloaded once here and offline
+    after (Erez, 7 Nov 2026); "stand-in" needs nothing (CI)."""
+    key, name, script = "translate", "translategate", "translategate.py"
+    title = "Translation for the Atari apps (a local engine, nothing leaves the home network)"
+    removed = "translategate removed."
+    DIR = "/opt/translategate"
+    VENV = DIR + "/venv"
+    MODELS = DIR + "/models"
+    INDEX = "https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json"
+    LANGUAGES = "en,he"
+    PIP = ("ctranslate2>=4,<5", "sentencepiece>=0.2,<0.3")
+    MIN_MEMORY = 3500                       # MB: the models loaded beside the other gateways (a 4 GB Pi
+                                            # says about 3790)
+
+    def options(self, ap):
+        super().options(ap)
+        ap.add_argument("--port", type=int, help="the port on the Pi (8480 is the default)")
+        ap.add_argument("--engine", choices=("argos", "stand-in"),
+                        help="argos (the default): Argos Translate's models; stand-in: no engine, for tests")
+        ap.add_argument("--languages", metavar="CODES",
+                        help="the languages to translate between, e.g. en,he (the default), en,he,de")
+        ap.add_argument("-v", "--verbose", action="store_true", default=None, help="log every request")
+        ap.add_argument("--no-verbose", dest="verbose", action="store_false")
+
+    def take_over(self, pi, ns):
+        ns.engine = "argos"
+
+    def apply(self, ns, o):
+        super().apply(ns, o)
+        if o.port is not None:
+            ns.port = o.port
+        if o.engine is not None:
+            ns.engine = o.engine
+        if o.verbose is not None:
+            ns.verbose = o.verbose
+        self.languages = None
+        if o.languages is not None:
+            codes = [c.strip() for c in o.languages.split(",") if c.strip()]
+            if len(codes) < 2 or not all(re.fullmatch(r"[a-z]{2,3}", c) for c in codes):
+                raise Usage("--languages: two or more codes, e.g. en,he")
+            self.languages = codes
+
+    def args(self, ns):
+        out = ["--port", str(ns.port)] + super().args(ns)
+        if ns.engine != ns.default["engine"]:
+            out += ["--engine", ns.engine]
+        out += ["-v"] if ns.verbose else []
+        return out + ns.extra
+
+    def ports(self, ns):
+        return [str(ns.port)]
+
+    def unit(self, ns, keep):
+        text = super().unit(ns, keep)
+        if ns.engine == "argos":
+            text = text.replace("ExecStart=/usr/bin/python3 ", "ExecStart=%s/bin/python3 " % self.VENV)
+        # the engine's memory (about 420 MB at its peak), beside the other
+        # gateways on a 4 GB Pi; and when memory runs out, the kernel takes
+        # a browser's page or a conversion before the loaded models
+        return text.replace("Restart=always", "MemoryMax=1G\nOOMScoreAdjust=-300\nRestart=always", 1)
+
+    def describe(self, ns):
+        return "engine " + ns.engine
+
+    def prepare(self, pi, ns):
+        """the engine: the memory for it (before anything changes), its venv
+        and its models; kept as they are on an update"""
+        if ns.engine != "argos":
+            return
+        arch = self.arch(pi)
+        if not self.arch_ok(pi):
+            raise Failed("translategate's engine needs a 64-bit system (CTranslate2 is made for aarch64 and "
+                         "x86_64): uname -m says %s.\nOn a Raspberry Pi: the 64-bit Raspberry Pi OS." % arch)
+        if not self.memory_ok(pi):
+            raise Failed("translategate's engine needs a Pi with 4 GB of memory or more; this one has %d MB."
+                         % self.memory(pi))
+        venv = pi.path(self.VENV)
+        if not pi.ok(venv + "/bin/python3", "-c", "import ctranslate2, sentencepiece"):
+            heading("Setting up translategate's engine (CTranslate2, in %s)" % self.VENV)
+            if not pi.ok("python3", "-c", "import venv, ensurepip"):
+                pi.run("apt-get", "update", "-qq")
+                pi.run("apt-get", "install", "-y", "-qq", "python3-venv", "python3-pip")
+            pi.rmtree(self.VENV)
+            pi.run("python3", "-m", "venv", venv)
+            pi.run(venv + "/bin/pip", "install", "-q", *self.PIP)
+        have = {os.path.basename(os.path.dirname(f))
+                for f in glob.glob(pi.path(self.MODELS) + "/*/metadata.json")}
+        want = self.languages or sorted({c for p in have for c in p.split("_")}) or self.LANGUAGES.split(",")
+        missing = [(a, b) for a in want for b in want if a != b and "%s_%s" % (a, b) not in have]
+        if missing:
+            self.fetch(pi, missing)
+
+    def memory(self, pi):
+        m = re.search(r"^MemTotal:\s+(\d+) kB", pi.read("/proc/meminfo") or "", re.M)
+        return int(m.group(1)) // 1024 if m else None
+
+    def arch(self, pi):
+        return pi.out("uname", "-m").strip()
+
+    def arch_ok(self, pi):
+        return self.arch(pi) in ("", "aarch64", "arm64", "x86_64")
+
+    def memory_ok(self, pi):
+        mb = self.memory(pi)
+        return mb is None or mb >= self.MIN_MEMORY
+
+    def fetch(self, pi, pairs):
+        """Argos Translate's models for pairs, from its index (once; offline after)"""
+        heading("Downloading the translation models: %s" % ", ".join("%s>%s" % p for p in pairs))
+        try:
+            with urllib.request.urlopen(self.INDEX, timeout=60) as r:
+                index = json.load(r)
+        except (OSError, ValueError) as e:
+            raise Failed("can't read Argos Translate's list of models (%s)" % e)
+        newest = {}
+        for p in index:
+            k = (p.get("from_code"), p.get("to_code"))
+            links = [u for u in p.get("links", []) if u.startswith("https://")]
+            if k in pairs and links:
+                v = tuple(int(x) for x in re.findall(r"\d+", str(p.get("package_version", "0"))))
+                if k not in newest or v > newest[k][0]:
+                    newest[k] = (v, links[0])
+        gone = [p for p in pairs if p not in newest]
+        if gone:
+            raise Failed("Argos Translate has no model for %s" % ", ".join("%s>%s" % p for p in gone))
+        for (a, b), (_, url) in sorted(newest.items()):
+            tmp = tempfile.mkdtemp(prefix="translategate-")
+            try:
+                say("   %s>%s from %s" % (a, b, url))
+                # (its server turns away Python's own User-Agent)
+                req = urllib.request.Request(url, headers={"User-Agent": "aera-gateway/" + VERSION})
+                with urllib.request.urlopen(req, timeout=600) as r, open(os.path.join(tmp, "m.zip"), "wb") as f:
+                    shutil.copyfileobj(r, f)
+                with zipfile.ZipFile(os.path.join(tmp, "m.zip")) as z:
+                    names = z.namelist()
+                    top = names[0].split("/")[0]
+                    want = ("%s/metadata.json" % top, "%s/sentencepiece.model" % top,
+                            "%s/model/model.bin" % top)
+                    if any(n not in names for n in want) or any(n.startswith("/") or ".." in n.split("/")
+                                                                for n in names):
+                        raise Failed("the %s>%s model isn't one translategate can use" % (a, b))
+                    z.extractall(tmp, [n for n in names if n.startswith(top + "/model/") or n in want])
+                dst = "%s/%s_%s" % (self.MODELS, a, b)
+                pi.rmtree(dst)
+                pi.makedirs(self.MODELS)
+                shutil.copytree(os.path.join(tmp, top), pi.path(dst))
+            except (OSError, zipfile.BadZipFile) as e:
+                raise Failed("can't download the %s>%s model (%s)" % (a, b, e))
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+    def after_remove(self, pi):
+        pi.rmtree(self.DIR)
+
+    def tell(self, ns, ip):
+        return "\n".join([
+            "",
+            "translategate is running%s. In the apps on the Atari, Translate:" % (
+                "" if ns.engine == "argos" else " (engine: %s)" % ns.engine),
+            "   Gateway:  %s" % ip,
+            "   Port:     %s" % ns.port,
+            "",
+            "Check it from any browser on your network: http://%s:%s/status" % (ip, ns.port)])
+
+
 MAIL = Mail()
-GATEWAYS = [MAIL, Dav(), Ftp(), Web()]
+GATEWAYS = [MAIL, Dav(), Ftp(), Web(), Translate()]
 
 
 def put_files(pi, src):
@@ -1024,7 +1266,7 @@ def put_files(pi, src):
     pi.rmtree(old)
     pi.makedirs(new)
     for f in FILES:
-        pi.copy(os.path.join(src, f), "%s/%s" % (new, f), 0o644 if f == "aeragate.py" else 0o755)
+        pi.copy(os.path.join(src, f), "%s/%s" % (new, f), 0o755 if f.endswith(".py") and f != "aeragate.py" else 0o644)
     for f in sorted(glob.glob(os.path.join(src, EXT, "*"))):
         pi.copy(f, "%s/%s/%s" % (new, EXT, os.path.basename(f)), 0o644)
     had = pi.exists(OPT)
@@ -1068,7 +1310,8 @@ def install_gateway(pi, gw, o, src=HERE):
     gw.prepare(pi, ns)
     need_packages(pi, gw)
     if not pi.ok("id", gw.name):
-        pi.run("useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", gw.name)
+        pi.run("useradd", "--system", "--no-create-home", *(["--home-dir", gw.home] if gw.home else []),
+               "--shell", "/usr/sbin/nologin", gw.name)
     undo, done = put_files(pi, src)
     pi.write(gw.unit_file(), gw.unit(ns, carried(old_unit)))
     pi.run("systemctl", "daemon-reload")
@@ -1099,7 +1342,7 @@ def install_gateway(pi, gw, o, src=HERE):
     if old_script and os.path.dirname(old_script) != OPT:
         pi.remove(old_script)           # the app's own copy: this one answers now
     firewall(pi, gw.open_ports(ns), ns.allow)
-    say(gw.tell(ns, pi.ip() or "PI_IP"))
+    say(gw.tell(ns, pi.ip() or "GATEWAY_IP"))
 
 
 def remove_gateway(pi, gw):
@@ -1327,7 +1570,7 @@ CLAUDE_SESSION_KEY=
         heading("Done")
         if s.mode == "tcp":
             say("Backend: %s   network: listening on port %s for the Atari at %s" % (s.backend, s.tcp_port, s.atari),
-                "In ClaudeST on the Atari, Options > Settings > Network:  %s, port %s" % (pi.ip() or "PI_IP",
+                "In ClaudeST on the Atari, Options > Settings > Network:  %s, port %s" % (pi.ip() or "GATEWAY_IP",
                                                                                          s.tcp_port))
         else:
             say("Backend: %s   serial port: %s   baud: %s" % (s.backend, s.port, s.baud))
@@ -1362,7 +1605,8 @@ CLAUDE = Claude()
 SERVICES = {g.key: g for g in GATEWAYS + [CLAUDE]}
 NAMES = {"email": "mail", "emailgate": "mail", "cal": "dav", "ecal": "dav", "econtact": "dav",
          "contacts": "dav", "ecalgate": "dav", "eftp": "ftp", "eftpgate": "ftp",
-         "claudest": "claude", "claude-st": "claude", "eweb": "web", "webgate": "web"}
+         "claudest": "claude", "claude-st": "claude", "eweb": "web", "webgate": "web",
+         "translation": "translate", "translategate": "translate"}
 
 
 def service(name):
@@ -1430,6 +1674,14 @@ def install_all(pi, o, src=HERE):
         if svc is MAIL and not o.mail and not svc.installed(pi) and not pi.exists(Mail.STUNNEL):
             skipped.append("mail (name your provider's servers: --mail IMAP SMTP[:587] [POP3])")
             continue
+        if svc.key == "translate" and not svc.installed(pi) and not svc.arch_ok(pi):
+            skipped.append("translate (its engine needs the 64-bit Raspberry Pi OS: uname -m says %s)"
+                           % svc.arch(pi))
+            continue
+        if svc.key == "translate" and not svc.installed(pi) and not svc.memory_ok(pi):
+            skipped.append("translate (its engine needs a Pi with 4 GB of memory or more; this one has %d MB)"
+                           % svc.memory(pi))
+            continue
         if svc is CLAUDE:
             argv = ["--from", o.source] if o.source else []
             serial = svc.installed(pi) and "--serial" in CLAUDE.get_var(pi, "CLAUDE_ST_ARGS")
@@ -1483,7 +1735,7 @@ def main(argv=None, pi=None):
                             help="the Atari that may use them (more: IP1,IP2); claude's --atari too")
             ap.add_argument("--mail", nargs="+", metavar="SERVER",
                             help="IMAP_SERVER SMTP_SERVER[:587] [POP3_SERVER]: without them, mail is left out")
-            ap.add_argument("--browser", action="store_true", help="web with the Pi's browser (a Pi with 2 GB)")
+            ap.add_argument("--browser", action="store_true", help="web with the Gateway's browser (a Pi with 2 GB)")
             ap.add_argument("--from", dest="source", metavar="DIR", help="ClaudeST's bridge from this copy")
             o = ap.parse_args(rest[1:])
             if o.mail and len(o.mail) not in (2, 3):

@@ -811,7 +811,7 @@ class LiveTest(unittest.TestCase):
             r, data, _ = self.ask("http://webgate/live?url=https%3A%2F%2Fexample.com%2F", turn=False)
             self.assertLess(time.monotonic() - t, 5)
             self.assertEqual(r.status, 200)
-            self.assertIn("<b>The Pi's browser isn't listening", data.decode("utf-8"))
+            self.assertIn("<b>The Gateway's browser isn't listening", data.decode("utf-8"))
             self.assertIn("systemctl restart webgate-browser", data.decode("utf-8"))
             self.assertNotIn("shot.jpg", data.decode("utf-8"))
             r, data, _ = self.ask("http://webgate/live/shot.jpg?n=1", turn=False)
@@ -1079,7 +1079,7 @@ class SnapshotTest(unittest.TestCase):
         finally:
             webgate.Config.browser = True
         self.assertEqual(r.status, 501)
-        self.assertTrue(data.startswith(b"webgate: snapshots need the Pi's browser"))
+        self.assertTrue(data.startswith(b"webgate: snapshots need the Gateway's browser"))
 
 
 CF_CHECK = (b'<!DOCTYPE html><html><head><title>Just a moment...</title></head><body><noscript>Enable '
