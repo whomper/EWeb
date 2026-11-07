@@ -4037,7 +4037,7 @@ Chromium at 640 pixels (`ewrender -W` through a webgate, scripts on), then their
 
 So the Datepicker shows today's date with its button beside it; the button opens the calendar
 and a day picked fills the field. Left: the calendar opened over its field, placed by its height
-as the last layout had it (since 7 Nov under its field: the third round); a cell of width 1% before a field narrower than its words (a spanning
+as the last layout had it (since 7 Nov under its field: the third round); a cell of width 1% before a field narrower than its words (since 7 Nov as wide as they are, `tables.html`: cell_min) (a spanning
 row's widths shared by column, as a page of the set showed, would need the share reworked);
 rounded corners and shadows; Glyphicons' calendar. Tests: `tests/layout/pcheight.html`,
 `buttons.html`, `absbottom.html`, `tables.html`, `icons.html`, `tests/js/detached.html`; the page
