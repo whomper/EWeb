@@ -40,17 +40,16 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
 - **Only formal releases leave the build machine.** Erez gets vX.Y releases made by the Release workflow from
   `main`, nothing else: no test builds, no CI artifacts, no builds from a branch.
-  Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, roll back
-  with a release: revert on `main`, release the next number, and say in the bad release's notes that it
-  is withdrawn and which one to use.
+  Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, fix
+  forward: a new release with the next number, before any other work; never a rollback (Erez, 7 Nov 2026).
 - **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2). Release when
   work on `main` is ready:
   - this repo's checks pass;
-  - the rigs on his TOS pass, where this file asks for them;
-  - the hub's family checks pass.
+  - the rigs this file asks for pass (on EmuTOS where the session has nothing else).
 
-  Then give Erez the link in one line, with anything he has to do, and send the hub the link. Roll
-  back a bad release the same way.
+  Then give Erez the link in one line, with anything he has to do, and send the hub the link. The
+  hub's checks (Erez's TOS and NVDI, the configurations of AERA-Atari's standards/TEST-MATRIX.md) follow
+  the release; a fault they find is fixed forward by a new release that comes before any other work.
 - **Who decides what** (Erez, 31 Oct 2026; the guidelines' "Who decides what"). Erez's part, put
   to him before the work as a decision with a short context:
   - new programs and ideas, their core capabilities, and how they work with the other programs;
