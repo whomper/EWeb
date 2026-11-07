@@ -300,6 +300,17 @@ def check(name, ok, detail=""):
     return ok
 
 
+skipped = 0
+
+
+def skip(reason):
+    """a step that can't run here: said, and counted in the summary (never
+    "all passed" over it: the guidelines' 1.2, 7 Nov 2026)"""
+    global skipped
+    skipped += 1
+    print("SKIPPED: %s" % reason)
+
+
 def link_point(url, area, top, text, extra=()):
     """where on the screen the link with this text is: ewrender's display
     list of the same page, at the window's width"""
@@ -1393,7 +1404,7 @@ def dialogs():
             r = Run(name, spec, hd, windowed=True, prg=prg)
             try:
                 if tos is None and not r.m.real:
-                    print("skip  dialogs: %s needs Erez's TOS in ~/.aera/tos" % name)
+                    skip("dialogs: %s needs Erez's TOS in ~/.aera/tos" % name)
                     continue
                 check("dialogs: %s starts" % r.m.describe(), r.wait(r"shown ", 300) is not None, str(r.events()[-3:]))
                 # the 8 MHz ST takes seconds to draw the page again once a
@@ -1796,7 +1807,7 @@ def st():
             r.end()
     webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
     if not os.path.exists(webgate):
-        print("skip  st: through the gateway (no webgate at %s)" % webgate)
+        skip("st: through the gateway (no webgate at %s)" % webgate)
         return
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
@@ -1841,7 +1852,7 @@ def st():
             time.sleep(2)
             r.shot(1)
         else:
-            print("skip  st: the Pi's pens (no aerapens, or a webgate without them)")
+            skip("st: the Pi's pens (no aerapens, or a webgate without them)")
         r.key(Q, (CTRL,))
         check("st: quits after the network", r.wait(r"quit$", 120) is not None, str(r.events()))
     finally:
@@ -1863,7 +1874,7 @@ def gateway():
     every picture shown, and EWeb quits, CACHE written"""
     webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
     if not os.path.exists(webgate):
-        print("skip  gateway: no webgate at %s" % webgate)
+        skip("gateway: no webgate at %s" % webgate)
         return
     work = os.path.join(OUT, "server")
     os.makedirs(work, exist_ok=True)
@@ -2462,12 +2473,12 @@ if "browse" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         browse()
     else:
-        print("skip  browse: needs Xvfb and xdotool")
+        skip("browse: needs Xvfb and xdotool")
 if "scripts" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         scripts()
     else:
-        print("skip  scripts: needs Xvfb and xdotool")
+        skip("scripts: needs Xvfb and xdotool")
 if "screens" in WHICH:
     screens()
 if "st" in WHICH:
@@ -2488,22 +2499,22 @@ if "details" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         details()
     else:
-        print("skip  details: needs Xvfb and xdotool")
+        skip("details: needs Xvfb and xdotool")
 if "wide" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         wide()
     else:
-        print("skip  wide: needs Xvfb and xdotool")
+        skip("wide: needs Xvfb and xdotool")
 if "boxes" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         boxes()
     else:
-        print("skip  boxes: needs Xvfb and xdotool")
+        skip("boxes: needs Xvfb and xdotool")
 if "dialogs" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         dialogs()
     else:
-        print("skip  dialogs: needs Xvfb and xdotool")
+        skip("dialogs: needs Xvfb and xdotool")
 if __name__ == "__main__":	# (tools/screenshot.py imports it for its Hatari)
-    print("gui_test: %s" % ("all passed" if not fails else "%d failed" % fails))
+    print("gui_test: %s" % ("%d failed" % fails if fails else "passed, %d skipped" % skipped if skipped else "all passed"))
     sys.exit(1 if fails else 0)
