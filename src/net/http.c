@@ -468,8 +468,15 @@ static long chunk_size(const char *s)
 /* send the request and read the answer: 1 ok, 0 failed, -1 failed on a
    kept connection before anything came back (worth one more try on a
    new one: the server may have closed it meanwhile) */
-static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRESP *rs, RHDR *h,
-		    SBUF *body, char *err, int errlen)
+/* the Gateway's phases (common's conn_phase; the guidelines' 7.3), where
+   it is set and the request goes to the Gateway */
+static int phases(void)
+{
+	return conn_phase != NULL && http_gateway[0] != 0;
+}
+
+static int exchange1(const HTTPREQ *rq, const char *method, const URL *u, HTTPRESP *rs, RHDR *h,
+		     SBUF *body, char *err, int errlen)
 {
 	SBUF req, line;
 	KEPT *k;
@@ -517,6 +524,8 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 	else if (!strcmp(method, "POST") || !strcmp(method, "PUT"))
 		sb_adds(&req, "Content-Length: 0\r\n");
 	sb_adds(&req, "\r\n");
+	if (phases())
+		conn_phase(GATE_SEND, req.len + (rq->body && strcmp(method, "GET") && strcmp(method, "HEAD") ? rq->bodylen : 0));
 	if (!req.s || !conn_write(c, req.s, req.len) ||
 	    (rq->body && strcmp(method, "GET") && strcmp(method, "HEAD") && !conn_write(c, rq->body, rq->bodylen))) {
 		snprintf(err, errlen, "%s: %s", hostport, c->err[0] ? c->err : "connection lost while sending");
@@ -525,6 +534,8 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		return reused ? -1 : 0;
 	}
 	sb_free(&req);
+	if (phases())
+		conn_phase(GATE_WAIT, 0);
 	t0 = pf_ms();
 	/* the status line, skipping 1xx answers (100 Continue) */
 	for (;;) {
@@ -581,6 +592,8 @@ static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRES
 		if (rs->status >= 200 || rs->status == 101)
 			break;
 	}
+	if (phases())
+		conn_phase(GATE_RECEIVE, h->clen);
 	if (h->bad) {
 		snprintf(err, errlen, "%s sent a length that can't be right", hostport);
 		goto fail;
@@ -752,6 +765,15 @@ fail:
 	sb_free(&line);
 	drop(k);
 	return 0;
+}
+
+static int exchange(const HTTPREQ *rq, const char *method, const URL *u, HTTPRESP *rs, RHDR *h,
+		    SBUF *body, char *err, int errlen)
+{
+	int r = exchange1(rq, method, u, rs, h, body, err, errlen);
+	if (phases())
+		conn_phase(GATE_DONE, 0);
+	return r;
 }
 
 int http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int errlen)

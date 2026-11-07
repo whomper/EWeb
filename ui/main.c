@@ -938,6 +938,55 @@ static void say(void *ud, const char *what)
 	status(a);
 }
 
+/* The Gateway's three phases while a page comes through it (the
+   guidelines' 7.3: common's conn_phase, called by http.c): sending,
+   the Gateway at work, receiving with its KB; drawn when the phase (or
+   the KB) changed and the last draw was 100 ms ago or more, then the
+   status line goes back to what the browser said */
+static int gph, gph_shown;	/* the phase now and the one on the line (GATE_*), 0 none */
+static long gph_bytes, gph_kb;	/* conn_bytes when receiving began; the KB shown */
+static unsigned long gph_drawn;
+
+static void gate_show(void)
+{
+	char a[120];
+	long kb = (conn_bytes - gph_bytes) / 1024;
+	if (!gph || (gph == gph_shown && (gph != GATE_RECEIVE || kb == gph_kb)) ||
+	    (long) (pf_ms() - gph_drawn) < 100)
+		return;
+	if (gph == GATE_SEND)
+		str_copy(a, "Sending to the Gateway...   (Esc stops)", sizeof a);
+	else if (gph == GATE_WAIT)
+		str_copy(a, "The Gateway is loading the page...   (Esc stops)", sizeof a);
+	else
+		snprintf(a, sizeof a, "Receiving from the Gateway... %ld KB   (Esc stops)", kb);
+	status(a);
+	gph_shown = gph;
+	gph_kb = kb;
+	gph_drawn = pf_ms();
+}
+
+static void gate_phase(int p, long bytes)
+{
+	char a[200];
+	(void) bytes;
+	/* the page itself, not its sheets or pictures */
+	if (!loading || ph > BRPH_PAGE)
+		p = GATE_DONE;
+	if (p == GATE_DONE) {
+		if (gph_shown && said[0]) {
+			snprintf(a, sizeof a, "%s   (Esc stops)", said);
+			status(a);
+		}
+		gph = gph_shown = 0;
+		return;
+	}
+	if (p == GATE_RECEIVE)
+		gph_bytes = conn_bytes;
+	gph = p;
+	gate_show();
+}
+
 static unsigned long esc_quiet_until;	/* after a stop: Esc held stops nothing more for a second */
 
 static void keys_flush(void)
@@ -1093,8 +1142,10 @@ static void idle(void)
 		ph_bytes_came();
 		br_preview_step(&br);	/* (once enough of the page has come) */
 	}
-	/* how much has come, as it comes */
-	if (loading && said[0] && conn_bytes - said_bytes >= 1024) {
+	/* how much has come, as it comes (from the Gateway, its phases) */
+	if (gph)
+		gate_show();
+	else if (loading && said[0] && conn_bytes - said_bytes >= 1024) {
 		char a[200];
 		snprintf(a, sizeof a, "%s %ld KB   (Esc stops)", said, (conn_bytes - said_bytes) / 1024);
 		status(a);
@@ -1116,6 +1167,7 @@ static void loading_on(void)
 	said[0] = 0;
 	win_progress(-1, 0);
 	ph = -1;
+	gph = gph_shown = 0;
 	graf_mouse(BUSYBEE, 0);
 	win_toolbar();
 	menu_update();
@@ -1471,6 +1523,7 @@ static void br_setup(browser *b)
 	b->pens = opt.pens;
 	b->say = say;
 	b->phase = on_phase;
+	conn_phase = gate_phase;
 	b->previewed = previewed;
 	b->log = log_line;
 	b->can_open = can_open;

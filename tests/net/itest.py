@@ -1159,6 +1159,8 @@ try:
                     break
                 time.sleep(0.1)
             rc, out = run("-g", g, "-n", "2", "-o", "gw.htm", "https://localhost:%d/page" % HTTPS)
+            check("the gateway: its three phases, in order",
+                  re.search(r"^  Gateway: send \d+, wait, receive %d, done$" % len(server.PAGE), out, re.M) is not None, out)
             check("the gateway: https", rc == 0 and "TLS 1.3" in out and "through the Gateway" in out
                   and "the connection was kept open" in out and "unpack" in out and saved("gw.htm") == server.PAGE,
                   out)

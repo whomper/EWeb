@@ -27,6 +27,21 @@
 #include "plat.h"
 #include "ui.h"
 
+/* the Gateway's phases (conn_phase) as they came, for make itest */
+static char phs[160];
+
+static void on_gate_phase(int p, long bytes)
+{
+	static const char *const name[] = { "", "send", "wait", "receive", "done" };
+	size_t n = strlen(phs);
+	if (p < 1 || p > 4 || n + 24 > sizeof(phs))
+		return;
+	if (p == GATE_SEND || p == GATE_RECEIVE)
+		snprintf(phs + n, sizeof(phs) - n, "%s%s %ld", n ? ", " : "", name[p], bytes);
+	else
+		snprintf(phs + n, sizeof(phs) - n, "%s%s", n ? ", " : "", name[p]);
+}
+
 EWOPT opt = { .falcon = 1, .dsp = 1 };
 
 static void usage(void)
@@ -117,6 +132,8 @@ int ewget(int argc, char **argv)
 		rq.url = url;
 		sb_init(&body);
 		out("\nfetch %d: %s\n", i + 1, url);
+		phs[0] = 0;
+		conn_phase = http_gateway[0] ? on_gate_phase : NULL;
 		if (!http_request(&rq, &rs, &body, err, sizeof(err))) {
 			out("  failed: %s (after %lu ms)\n", err, rs.t.total_ms);
 			rc = 1;
@@ -135,6 +152,8 @@ int ewget(int argc, char **argv)
 			else if (rs.security[0])
 				out("  TLS     %6lu ms   %s\n", rs.t.tls_ms, rs.security);
 			out("  wait    %6lu ms   (from the request to the answer's first line)\n", rs.t.wait_ms);
+			if (phs[0])
+				out("  Gateway: %s\n", phs);
 			if (rs.t.body_ms >= 10)
 				out("  body    %6lu ms   %ld bytes, %lu.%lu KB/s\n", rs.t.body_ms, rs.length,
 				    kb_s(rs.length, rs.t.body_ms) / 10, kb_s(rs.length, rs.t.body_ms) % 10);
