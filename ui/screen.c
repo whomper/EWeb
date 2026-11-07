@@ -237,8 +237,10 @@ int scr_init(void)
 	format = have ? info[0] : own_format();
 	if (planes == 16) {
 		truecolour = 1;
-		/* NVDI on a card with the bytes the other way round (Intel) */
-		swapped = have && (info[14] & 2);
+		/* NVDI on a card with the bytes the other way round (Intel):
+		   vq_scrninfo's bit order, work_out[14], bit 7 (EdDI 1.1); bit 1
+		   is the Falcon's own order, the 5-6-5 drawn here as it is */
+		swapped = have && (info[14] & 0x80);
 		/* the screen's height when there is the ST RAM, keeping some for others */
 		return bufs((short) scr_h) || bufs(BAND);
 	}
