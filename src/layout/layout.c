@@ -2298,8 +2298,10 @@ static void fixup(L *l, box *b);
    children that aren't rows, row groups or captions and has a cell in it
    goes in a row of its own, and in that row what isn't a cell in a cell
    of its own (a cell floated or positioned is a block), white space
-   between them dropped. A run with no cell is left as it was (a table
-   of text alone, rows in a wrapper: as before) */
+   between them dropped. A run with no cell but text or blocks goes in
+   a row and a cell too (CSS 2.1, 17.2.1: pouet.net's boxes, a
+   display: table of a heading and a paragraph, were 1px wide); white
+   space alone, or rows in a wrapper, are left as they were */
 static int is_cell(const box *c)
 {
 	return c->kind == BX_BLOCK && !c->anon && c->st != NULL && !c->ib &&
@@ -2389,7 +2391,7 @@ static void table_anon(L *l, box *b)
 	box *c, *prev = NULL, *next;
 	for (c = b->first; c != NULL; c = next) {
 		box *end = c, *a;
-		int cells = 0;
+		int cells = 0, content = 0, wrapper = 0;
 		next = c->next;
 		if (is_rowish(c)) {
 			prev = c;
@@ -2397,12 +2399,21 @@ static void table_anon(L *l, box *b)
 		}
 		for (;;) {
 			cells |= is_cell(end);
+			if (!(end->kind == BX_TEXT && blank(end->text, end->len) && !keeps_space(end->st)) &&
+			    !out_of_flow(end))
+				content = 1;
+			if (end->first != NULL) {
+				box *k;
+				for (k = end->first; k != NULL; k = k->next)
+					if (is_rowish(k))
+						wrapper = 1;
+			}
 			if (end->next == NULL || is_rowish(end->next))
 				break;
 			end = end->next;
 		}
 		next = end->next;
-		if (!cells) {
+		if (!cells && (!content || wrapper)) {
 			prev = end;
 			continue;
 		}
@@ -6095,17 +6106,32 @@ static int row_group(const box *g)
 /* a table whose borders collapse into its cells (CSS 2.1, 17.6.2): one
    that asks, with rows of its own (in it, or in its row groups); one
    without keeps its own borders */
+/* a row with a cell of the page's in it (not only an anonymous cell
+   round a table's text: table_anon) */
+static int real_row(const box *r)
+{
+	const box *k;
+	if (!r->tablerow)
+		return 0;
+	if (!r->anon)
+		return 1;
+	for (k = r->first; k != NULL; k = k->next)
+		if (!k->anon)
+			return 1;
+	return 0;
+}
+
 static int collapses(const box *t)
 {
 	const box *c, *r;
 	if (!t->table || t->anon || kw(t->st, EP_BORDER_COLLAPSE) != KW_COLLAPSE)
 		return 0;
 	for (c = t->first; c != NULL; c = c->next) {
-		if (c->tablerow)
+		if (real_row(c))
 			return 1;
-		if (row_group(c) || c->anon)
+		if (row_group(c) || (c->anon && !c->tablerow))
 			for (r = c->first; r != NULL; r = r->next)
-				if (r->tablerow)
+				if (real_row(r))
 					return 1;
 	}
 	return 0;

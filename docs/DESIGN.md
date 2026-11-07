@@ -4030,6 +4030,12 @@ Chromium at 640 pixels (`ewrender -W` through a webgate, scripts on), then their
   goes in a row, and in that row what isn't a cell in a cell (Bootstrap 3's input group: a field
   floated and its button, no row; `table_anon`). A field of a width in percent counts, at its
   narrowest, as its padding and borders (CSS Sizing 3, compressible).
+- **A table of text or blocks alone** (7 Nov 2026, a tester's photo of pouet.net's prod page):
+  a `display: table` with no row or cell in it, its heading and paragraph, now goes in an
+  anonymous row and cell too (17.2.1), and is as wide as they need: pouet.net's boxes, centred
+  with `margin: auto`, were 1px wide, a letter a line, and the page 8,340 px tall (now 1,052, as
+  Chromium lays it out). White space alone and rows in a wrapper stay as they were, and such a
+  table keeps its own borders where they collapse (`real_row`). Test: `tests/layout/anontable.html`.
 - **Selectors in a tree out of the page** (an element filled by `innerHTML`, a fragment, another
   document's) match: `doc_refresh_tree` makes its links first (jQuery parses HTML in a document
   of its own; the Datepicker found its month and days by class in its template). And

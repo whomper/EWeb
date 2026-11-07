@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A display: table of text or blocks alone, no row or cell in it: they
+     go in an anonymous row and cell (CSS 2.1, 17.2.1), and the table is
+     as wide as they need. pouet.net's boxes (a heading and a paragraph in
+     a table centred with margin: auto) were 1px wide, a letter a line. A
+     table of white space alone stays empty; rows in a wrapper as before. -->
+<html><head><title>anontable</title>
+<style>
+.t { display: table; background: #eee; margin: 4px 0 }
+.c { display: table; margin: 4px auto; background: #def; padding: 1px }
+.c h2 { margin: 1px; background: #248; color: #fff; font-size: 100% }
+.box { margin: 0 auto; max-width: 300px; display: table; outline: 1px solid red }
+.r { display: table-row } .d { display: table-cell; border: 1px solid #999 }
+</style></head><body>
+<div class="t">popularity helper</div>
+<div class="c"><h2>popularity helper</h2><div>increase the popularity of this prod</div></div>
+<div class="box"><table style="width:100%;background:#ccc"><tr><td>main</td></tr></table>
+<div class="c"><h2>comments</h2><div>a comment long enough to wrap inside the box of three hundred pixels</div></div></div>
+<div class="t"> </div>
+<div class="t"><div><div class="r"><div class="d">a row in a wrapper</div></div></div></div>
+</body></html>
