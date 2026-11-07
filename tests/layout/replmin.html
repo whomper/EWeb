@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- Replaced elements within min-width and min-height (CSS 2.1, 10.4 and
+     10.7), which win over max: an iframe of min-height 210px (300 x 150
+     by default: webdriveruniversity.com's AI Playground's was 150 high),
+     one whose height is under its min-height, one whose min-width is over
+     its max-width, and pictures of 40 x 20 with a min-width (the height
+     kept in proportion) and with both set -->
+<html><body style="margin:0">
+<iframe style="border:none;min-height:210px" srcdoc="<p>a"></iframe>
+<iframe style="border:none;height:50px;min-height:100px" srcdoc="<p>b"></iframe>
+<iframe style="border:none;width:100px;max-width:80px;min-width:120px" srcdoc="<p>c"></iframe>
+<p><img src="img/one.png" width="40" height="20" style="min-width:80px">
+<img src="img/one.png" style="width:40px;height:20px;min-width:60px;min-height:30px">
+</body></html>

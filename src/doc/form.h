@@ -78,6 +78,10 @@ void form_set(fctl *c, const char *s, long n);	/* the whole value */
 void form_set_file(fctl *c, const char *path);
 /* the chosen file's name (its path's last part), "" none */
 const char *form_file_name(const fctl *c);
+/* its type, by its name's extension as browsers guess it, and its size
+   in bytes (form_file_size's; -1 not known) */
+const char *form_file_type(const fctl *c);
+long form_file_len(const fctl *c);
 void form_retype(fctl *c);	/* its kind again, from its type attribute (a script set it) */
 /* a click on a checkbox (toggled) or radio button (chosen, the rest of
    its group not) */
@@ -113,6 +117,7 @@ typedef struct {
 #define FORM_FILE_MAX (4L << 20)
 #endif
 extern char *(*form_file_load)(const char *path, long *len);
+extern long (*form_file_size)(const char *path);
 
 /* the form submitted: by the button submitter (NULL: the form's
    default, from Return in a field), (x, y) where a picture button was

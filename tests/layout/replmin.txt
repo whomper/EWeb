@@ -1,0 +1,9 @@
+page 608 x 224, background ffffff, 8 items, 0 links, title ""
+clip x 0+240 y 0+168 in 0
+text 6,32 8x17 #000000 sans13 link 0 "a"
+clip x 244+240 y 88+80 in 0
+text 250,120 8x17 #000000 sans13 link 0 "b"
+clip x 488+96 y 48+120 in 0
+text 494,80 7x17 #000000 sans13 link 0 "c"
+image 0,192 64x16 link 0 "" file://./tests/layout/img/one.png
+image 68,184 48x24 link 0 "" file://./tests/layout/img/one.png

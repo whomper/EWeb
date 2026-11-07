@@ -1020,6 +1020,7 @@ static void entries(doc *d, dnode *form, fctl *submitter, int32_t x, int32_t y, 
 static unsigned long boundary_n;
 
 char *(*form_file_load)(const char *path, long *len);
+long (*form_file_size)(const char *path);
 
 /* a file's type by its extension, as browsers guess it for the commonest;
    the rest application/octet-stream */
@@ -1063,6 +1064,18 @@ const char *form_file_name(const fctl *c)
 		if (*p == '\\' || *p == '/' || *p == ':')
 			n = p + 1;
 	return n;
+}
+
+const char *form_file_type(const fctl *c)
+{
+	return file_type(form_file_name(c));
+}
+
+long form_file_len(const fctl *c)
+{
+	if (c->file == NULL || form_file_size == NULL)
+		return -1;
+	return form_file_size(c->file);
 }
 
 int form_submit(doc *d, fctl *from, fctl *submitter, int32_t x, int32_t y, FSUBMIT *s)

@@ -3776,7 +3776,8 @@ static int build_turn(int what)
 void br_init(browser *b, int32_t width, int32_t zoom)
 {
 	pic_poll = gem_turn;
-	form_file_load = upload_file;	/* (a file a form sends: read here, GEM's turn between) */
+	form_file_load = upload_file;
+	form_file_size = pf_size;	/* (a script's File.size) */	/* (a file a form sends: read here, GEM's turn between) */
 	/* (a turn asked at every row the scaler takes: gem_turn keeps its own
 	   time; at every 16 an 800-pixel PNG's turns were 120 to 180 ms of a
 	   16 MHz 68030's, the speed rig's Falcon:16) */

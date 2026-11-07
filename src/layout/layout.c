@@ -3238,6 +3238,15 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
 		if (mh != AUTO && *h > mh && mh >= 0)
 			*h = mh;
+		/* and within min-width and min-height, which win over the
+		   max (CSS 2.1, 10.4 and 10.7; webdriveruniversity.com's AI
+		   Playground: an iframe of min-height 210px was 150 high) */
+		mw = len(l, b->st, EP_MIN_WIDTH, l->cw);
+		if (mw != AUTO && *w < mw)
+			*w = mw;
+		mh = len(l, b->st, EP_MIN_HEIGHT, AUTO);
+		if (mh != AUTO && *h < mh)
+			*h = mh;
 		*w = *w < 0 ? 0 : *w;
 		*h = *h < 0 ? 0 : *h;
 		return 0;
@@ -3272,6 +3281,20 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	}
 	mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
 	if (mh != AUTO && *h > mh && mh >= 0) {
+		if (iw > 0 && len(l, b->st, EP_WIDTH, l->cw) == AUTO)
+			*w = (int32_t) ((int64_t) *w * mh / *h);
+		*h = mh;
+	}
+	/* within min-width and min-height too (CSS 2.1, 10.4, 10.7): the
+	   other side kept in proportion where the page didn't set it */
+	mw = len(l, b->st, EP_MIN_WIDTH, l->cw);
+	if (mw != AUTO && *w < mw && *w > 0) {
+		if (iw > 0 && len(l, b->st, EP_HEIGHT, AUTO) == AUTO)
+			*h = (int32_t) ((int64_t) *h * mw / *w);
+		*w = mw;
+	}
+	mh = len(l, b->st, EP_MIN_HEIGHT, AUTO);
+	if (mh != AUTO && *h < mh && *h > 0) {
 		if (iw > 0 && len(l, b->st, EP_WIDTH, l->cw) == AUTO)
 			*w = (int32_t) ((int64_t) *w * mh / *h);
 		*h = mh;

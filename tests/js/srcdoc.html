@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- args: -K go -->
+<!-- expect: console: srcdoc "" then <p>in the frame -->
+<!-- expect: console: attribute <p>in the frame -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- An iframe's srcdoc as a property: the attribute's (the HTML Standard
+     reflects it), so a page that sets it (webdriveruniversity.com's AI
+     Playground's iFrame Login) has its frame's document -->
+<html><head><title>srcdoc</title></head><body>
+<iframe id="f"></iframe>
+<button id="go" onclick="var f = document.getElementById('f'), was = f.srcdoc;
+  f.srcdoc = '<p>in the frame';
+  console.log('srcdoc &quot;' + was + '&quot; then ' + f.srcdoc);
+  console.log('attribute ' + f.getAttribute('srcdoc'))">go</button>
+</body></html>

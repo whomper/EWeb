@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- args: -K check -u pick=tests/js/upload/note.txt -K check -K text -->
+<!-- expect: console: files 0 null null -->
+<!-- expect: file pick: "note.txt" chosen -->
+<!-- expect: console: files 1 note.txt 22 text/plain true -->
+<!-- expect: console: text input: null; checkbox: null; div: undefined -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A file control's files (the HTML Standard's FileList of File): none
+     until one is chosen, then its name, size and type, as
+     webdriveruniversity.com's AI Playground's File Upload Validator reads
+     them; files is null on another input and not on other elements -->
+<html><head><title>files</title></head><body>
+<input type="file" id="pick">
+<input type="text" id="t"><input type="checkbox" id="c"><div id="d"></div>
+<button id="check" onclick="var l = document.getElementById('pick').files, f = l[0];
+  console.log('files ' + l.length + ' ' + (f ? f.name + ' ' + f.size + ' ' + f.type + ' ' +
+    (l.item(0) === f && l.item(1) === null && f.lastModified > 0) : 'null ' + l.item(0)))">check</button>
+<button id="text" onclick="console.log('text input: ' + document.getElementById('t').files +
+  '; checkbox: ' + document.getElementById('c').files + '; div: ' + document.getElementById('d').files)">text</button>
+</body></html>

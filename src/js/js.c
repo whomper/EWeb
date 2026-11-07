@@ -1565,7 +1565,7 @@ static JSValue el_attributes(JSContext *ctx, JSValueConst this_val)
 	X(placeholder, "placeholder", 0) X(htmlFor, "for", 0) X(method, "method", 0) \
 	X(enctype, "enctype", 0) X(content, "content", 0) X(accessKey, "accesskey", 0) \
 	X(autocomplete, "autocomplete", 0) X(pattern, "pattern", 0) X(min, "min", 0) X(max, "max", 0) \
-	X(step, "step", 0) X(label, "label", 0) X(role, "role", 0) X(slot, "slot", 0) \
+	X(step, "step", 0) X(label, "label", 0) X(role, "role", 0) X(slot, "slot", 0) X(srcdoc, "srcdoc", 0) \
 	X(href, "href", 1) X(src, "src", 1) X(action, "action", 1) X(cite, "cite", 1) \
 	X(hidden, "hidden", 2) X(disabled, "disabled", 2) X(required, "required", 2) \
 	X(readOnly, "readonly", 2) X(multiple, "multiple", 2) X(autofocus, "autofocus", 2) \
@@ -2327,7 +2327,53 @@ static void option_text(const dnode *o, SB *b)
 }
 
 enum { FP_VALUE, FP_CHECKED, FP_TYPE, FP_SEL_INDEX, FP_OPTIONS, FP_FORM, FP_TEXT, FP_SELECTED, FP_DEFAULT,
-       FP_ELEMENTS, FP_LENGTH, FP_INDEX };
+       FP_ELEMENTS, FP_LENGTH, FP_INDEX, FP_FILES };
+
+/* a FileList's item(i) */
+static JSValue files_item(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	int32_t i = 0;
+	if (argc > 0 && JS_ToInt32(ctx, &i, argv[0]))
+		return JS_EXCEPTION;
+	if (i < 0)
+		return JS_NULL;
+	{
+		JSValue v = JS_GetPropertyUint32(ctx, this_val, (uint32_t) i);
+		if (JS_IsUndefined(v))
+			return JS_NULL;
+		return v;
+	}
+}
+
+/* a file control's files (the HTML Standard's FileList, of none or one
+   File: its name, size and type; lastModified the time it was asked,
+   as the File API has it for a time not known), made each time it is
+   asked */
+static JSValue file_list(JSContext *ctx, fctl *c)
+{
+	JSValue l = JS_NewArray(ctx), f;
+	const char *nm = form_file_name(c);
+	if (JS_IsException(l))
+		return l;
+	JS_SetPropertyStr(ctx, l, "item", JS_NewCFunction(ctx, files_item, "item", 1));
+	if (!nm[0])
+		return l;
+	f = JS_NewObject(ctx);
+	if (JS_IsException(f)) {
+		JS_FreeValue(ctx, l);
+		return f;
+	}
+	{
+		long n = form_file_len(c);
+		JS_SetPropertyStr(ctx, f, "name", JS_NewString(ctx, nm));
+		JS_SetPropertyStr(ctx, f, "size", JS_NewInt64(ctx, n < 0 ? 0 : n));
+		JS_SetPropertyStr(ctx, f, "type", JS_NewString(ctx, form_file_type(c)));
+		JS_SetPropertyStr(ctx, f, "lastModified", JS_Eval(ctx, "Date.now()", 10, "<eweb>", JS_EVAL_TYPE_GLOBAL));
+		JS_SetPropertyStr(ctx, f, "webkitRelativePath", JS_NewString(ctx, ""));
+	}
+	JS_SetPropertyUint32(ctx, l, 0, f);
+	return l;
+}
 
 static JSValue fprop_get(JSContext *ctx, JSValueConst this_val, int magic)
 {
@@ -2336,6 +2382,10 @@ static JSValue fprop_get(JSContext *ctx, JSValueConst this_val, int magic)
 	THIS_ELEM(n);
 	c = ctl_of(j, n);
 	switch (magic) {
+	case FP_FILES:
+		if (c != NULL && c->kind == FC_FILE)
+			return file_list(ctx, c);
+		return is_html(n, T_INPUT) ? JS_NULL : JS_UNDEFINED;
 	case FP_VALUE:
 		if (is_html(n, T_OPTION)) {
 			const char *v = dn_attr(n, "value");
@@ -2747,6 +2797,7 @@ static const JSCFunctionListEntry elem_funcs[] = {
 	JS_CGETSET_MAGIC_DEF("index", fprop_get, NULL, FP_INDEX),
 	JS_CGETSET_MAGIC_DEF("elements", fprop_get, NULL, FP_ELEMENTS),
 	JS_CGETSET_MAGIC_DEF("length", fprop_get, NULL, FP_LENGTH),
+	JS_CGETSET_MAGIC_DEF("files", fprop_get, NULL, FP_FILES),
 };
 
 /* ---------------------------------------------------------------- computed style */

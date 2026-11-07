@@ -4077,6 +4077,35 @@ fade and a text that comes later are started by the click; `-u ID=TEXT` typing a
   `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.
 - Login Portal sends its form to the site: tried on a copy, never on the site.
 
+**The AI Playground in use (7 Nov 2026).** Its 27 challenges on a copy of the page (ewrender
+`-J`, each one's clicks, typing and timers; the API intercept through a local server, as the
+page asks `../api/user.json`):
+
+- **Working as in Chromium:** Flaky Loader (its content after 3 to
+  8 s), the Multi-Step Form, the toast, Re-Enable Delay ("Ready"), Conditional Validation (the
+  code asked, then "Submitted successfully."), the race, the lazy element, the Employee
+  Directory (filtered as typed), Stale Element, Invisible Success, Timing Mismatch,
+  Network States, the confirm and prompt dialogs, the localStorage session ("Welcome,
+  testuser"), Attribute vs Visual State, the Mutation Observer's items, the API intercept
+  (its two users), the shop's cart and checkout steps.
+- **A file control's `files`** (the HTML Standard's FileList, of none or one File: its name,
+  size and type, `lastModified` when asked): the File Upload Validator reads `files[0]`, and
+  says "File accepted" with its name, size and type, or "No file selected." (`file_list` in
+  `src/js/js.c`; `form_file_type`, `form_file_len` in `src/doc/form.c`, the size from
+  `src/browse`'s `pf_size`). `files` is null on another input. Test: `tests/js/files.html`.
+- **`srcdoc` as a property** (the HTML Standard reflects it): the iFrame Login's script sets it,
+  and its frame's document came only from the attribute (its login inside the frame
+  not tried: ewrender's `-u` and `-K` reach the page's own controls only). Test: `tests/js/srcdoc.html`.
+- **A picture's or an iframe's min-width and min-height** (CSS 2.1, 10.4 and 10.7; they win
+  over the max): the login frame of `min-height: 210px` was 150 high, its button cut off. A
+  picture whose other side the page didn't set keeps its proportions. Test:
+  `tests/layout/replmin.html`.
+
+Left as they are: the Priority Board's drag and drop (HTML's drag events: a drag on EWeb's
+page selects its text), the Shadow DOM widget's content (not drawn, as before), and the New Tab
+challenge, whose `window.open('', '_blank')` EWeb answers with null, as a blocker of pop-ups
+does (a page's script opening a window is Erez's call).
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
