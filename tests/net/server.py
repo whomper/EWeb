@@ -10,6 +10,7 @@ nobody signed; and one with only an ECDSA certificate (a P-256 key signed
 by a P-384 test authority, as Wikipedia's are), for the elliptic curves.
 
     server.py WORK [--http PORT] [--https PORT] [--untrusted PORT] [--ecdsa PORT] [--both PORT]
+              [--silent PORT]
 
 Pages:
   /page          a page of text (gzip when it is asked for), keep-alive
@@ -156,6 +157,7 @@ import random
 import socket
 import socketserver
 import ssl
+import struct
 import subprocess
 import sys
 import threading
@@ -1012,6 +1014,54 @@ def serve(port, ctx=None, addr="127.0.0.1"):
     return s
 
 
+# the ECDHE-ECDSA suites (RFC 8422, 7905): a ClientHello without one gets
+# no answer from an ECDSA-only server that hangs up (www.atari.org.pl)
+ECDSA_SUITES = {0xc02b, 0xc02c, 0xcca9, 0xc023, 0xc024, 0xc009, 0xc00a}
+
+
+def hello_suites(data):
+    """the cipher suites a TLS ClientHello record offers (None: not one)"""
+    if len(data) < 44 or data[0] != 22 or data[5] != 1:
+        return None
+    p = 5 + 4 + 2 + 32
+    p += 1 + data[p]
+    if p + 2 > len(data):
+        return None
+    n = int.from_bytes(data[p:p + 2], "big")
+    return {int.from_bytes(data[p + 2 + i:p + 4 + i], "big") for i in range(0, n, 2)}
+
+
+class SilentServer(Server):
+    """an ECDSA-only server that resets a hello without an ECDSA suite, no
+    alert sent (www.atari.org.pl's, 7 Nov 2026: EWeb asked RSA first, got
+    "the connection was lost" and no retry)"""
+    ctx = None
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        sock.settimeout(30)
+        data = b""
+        while len(data) < 5 or len(data) < 5 + int.from_bytes(data[3:5], "big"):
+            more = sock.recv(16384, socket.MSG_PEEK)
+            if not more or len(more) == len(data):
+                break
+            data = more
+        suites = hello_suites(data)
+        if suites is not None and not (suites & ECDSA_SUITES):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            sock.close()
+            raise OSError("an RSA-only hello: reset")
+        sock.settimeout(None)
+        return self.ctx.wrap_socket(sock, server_side=True), addr
+
+
+def serve_silent(port, ctx, addr="127.0.0.1"):
+    s = SilentServer((addr, port), Handler)
+    s.ctx = ctx
+    threading.Thread(target=s.serve_forever, daemon=True).start()
+    return s
+
+
 def tls_context(work, cert, key, cert2=None, key2=None):
     """a server's TLS; with cert2, a second certificate of another kind
     (RSA and ECDSA: the one a client asks for given it)"""
@@ -1030,6 +1080,7 @@ def main():
     ap.add_argument("--untrusted", type=int, default=18444)
     ap.add_argument("--ecdsa", type=int, default=18445)
     ap.add_argument("--both", type=int, default=0)	# RSA and ECDSA certificates (0: none)
+    ap.add_argument("--silent", type=int, default=0)	# ECDSA only, an RSA-only hello reset (0: none)
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
@@ -1042,6 +1093,8 @@ def main():
     serve(a.ecdsa, tls_context(a.work, "ec.pem", "ec.key"))
     if a.both:
         serve(a.both, tls_context(a.work, "host.pem", "host.key", "ec.pem", "ec.key"))
+    if a.silent:
+        serve_silent(a.silent, tls_context(a.work, "ec.pem", "ec.key"))
     print("ready", flush=True)
     try:
         sys.stdin.read()		# until whoever started us closes our stdin
