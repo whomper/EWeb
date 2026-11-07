@@ -10,7 +10,7 @@ nobody signed; and one with only an ECDSA certificate (a P-256 key signed
 by a P-384 test authority, as Wikipedia's are), for the elliptic curves.
 
     server.py WORK [--http PORT] [--https PORT] [--untrusted PORT] [--ecdsa PORT] [--both PORT]
-              [--silent PORT]
+              [--silent PORT] [--dns PORT]
 
 Pages:
   /page          a page of text (gzip when it is asked for), keep-alive
@@ -1062,6 +1062,60 @@ def serve_silent(port, ctx, addr="127.0.0.1"):
     return s
 
 
+# the test DNS (FAKESTNG's NAMESERVER through serial_bridge.py's
+# FAKESTING_DNS): a name's A record, through a CNAME as a CDN's are, no
+# such name, or no answer at all; lost.test's first question goes
+# unanswered (a datagram lost: the question is asked again). Hatari runs
+# fast, so no answer is made late by the clock here
+DNS_NAMES = {"site.test": (0, None), "lost.test": (0, None), "cdn.test": (0, "site.test"),
+             "none.test": None}
+dns_seen = set()
+
+
+def dns_answer(q):
+    """the answer to a DNS question, and how long to wait; None: none"""
+    if len(q) < 17:
+        return None, 0
+    i, labels = 12, []
+    while i < len(q) and q[i]:
+        labels.append(q[i + 1:i + 1 + q[i]].decode("ascii", "replace"))
+        i += 1 + q[i]
+    name = ".".join(labels).lower()
+    question = q[12:i + 5]
+    if name not in DNS_NAMES:
+        return None, 0			# (dropped: no answer at all)
+    if name == "lost.test" and name not in dns_seen:
+        dns_seen.add(name)
+        return None, 0
+    if DNS_NAMES[name] is None:		# NXDOMAIN
+        return q[:2] + b"\x81\x83\x00\x01\x00\x00\x00\x00\x00\x00" + question, 0
+    delay, cname = DNS_NAMES[name]
+    rr = b""
+    if cname:
+        target = b"".join(bytes([len(l)]) + l.encode() for l in cname.split(".")) + b"\x00"
+        rr += b"\xc0\x0c\x00\x05\x00\x01\x00\x00\x00\x3c" + struct.pack(">H", len(target)) + target
+    rr += b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" + bytes([127, 0, 0, 1])
+    return q[:2] + b"\x81\x80\x00\x01" + struct.pack(">H", 2 if cname else 1) + b"\x00\x00\x00\x00" + \
+        question + rr, delay
+
+
+def serve_dns(port, addr="127.0.0.1"):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind((addr, port))
+
+    def answer(data, peer):
+        a, delay = dns_answer(data)
+        if a is not None:
+            time.sleep(delay)
+            s.sendto(a, peer)
+
+    def loop():
+        while True:
+            data, peer = s.recvfrom(512)
+            threading.Thread(target=answer, args=(data, peer), daemon=True).start()
+    threading.Thread(target=loop, daemon=True).start()
+
+
 def tls_context(work, cert, key, cert2=None, key2=None):
     """a server's TLS; with cert2, a second certificate of another kind
     (RSA and ECDSA: the one a client asks for given it)"""
@@ -1081,6 +1135,7 @@ def main():
     ap.add_argument("--ecdsa", type=int, default=18445)
     ap.add_argument("--both", type=int, default=0)	# RSA and ECDSA certificates (0: none)
     ap.add_argument("--silent", type=int, default=0)	# ECDSA only, an RSA-only hello reset (0: none)
+    ap.add_argument("--dns", type=int, default=0)	# the test DNS, UDP (0: none)
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     make_certs(a.work)
@@ -1095,6 +1150,8 @@ def main():
         serve(a.both, tls_context(a.work, "host.pem", "host.key", "ec.pem", "ec.key"))
     if a.silent:
         serve_silent(a.silent, tls_context(a.work, "ec.pem", "ec.key"))
+    if a.dns:
+        serve_dns(a.dns)
     print("ready", flush=True)
     try:
         sys.stdin.read()		# until whoever started us closes our stdin

@@ -30,9 +30,20 @@ import server  # noqa: E402
 HTTP, HTTPS, EC, GATE = 18180, 18543, 18545, 18288
 BOTH = 18546	# a server with an RSA certificate and an ECDSA one
 SILENT = 18547	# ECDSA only, an RSA-only hello reset with no alert (www.atari.org.pl)
+DNS = 18553	# the test DNS: FAKESTNG's NAMESERVER, through the bridge (FAKESTING_DNS)
 # AERA-Gateway's webgate (EWeb's copy, gateway/, or WEBGATE=path/webgate.py)
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
 RUNS = [
+    # names looked up over STinG's UDP, the program going on meanwhile
+    # (common's net_tos.c, 7 Nov 2026: STinG's own resolve() held EWeb's
+    # window 11 s looking up cdnjs.cloudflare.com): a CDN's name, a CNAME
+    # to the address; a question lost and asked again; no such name
+    ("by name", "-l DNS.LOG -o DNS.HTM http://cdn.test:%d/page" % HTTP),
+    ("a question lost", "-l DNS2.LOG -o DNS2.HTM http://lost.test:%d/page" % HTTP),
+    ("no such name", "-l DNS3.LOG http://none.test:%d/page" % HTTP),
+    # no answer at all to any try: STinG's own resolve() then (the hub's
+    # fallback, AERA-Atari 45f67146c), which FAKESTNG hasn't: can't find
+    ("no answer", "-l DNS4.LOG http://quiet.test:%d/page" % HTTP),
     ("https", "-n 2 -o PAGE.HTM https://127.0.0.1:%d/page" % HTTPS),
     ("http to https", "-o MOVED.HTM http://127.0.0.1:%d/secure" % HTTP),
     # an ECDSA certificate (P-256, signed with P-384) and no RSA one: RSA
@@ -102,8 +113,9 @@ def main():
     srv_dir = os.path.join(work, "srv")
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "net", "server.py"), srv_dir,
                             "--http", str(HTTP), "--https", str(HTTPS), "--untrusted", str(HTTPS + 1),
-                            "--ecdsa", str(EC), "--both", str(BOTH), "--silent", str(SILENT)],
+                            "--ecdsa", str(EC), "--both", str(BOTH), "--silent", str(SILENT), "--dns", str(DNS)],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    os.environ["FAKESTING_DNS"] = "127.0.0.1:%d" % DNS	# (serial_bridge.py's)
     if srv.stdout.readline().strip() != "ready":
         sys.exit("ewget_test: the servers didn't start")
     shutil.copy(os.path.join(ROOT, "binary", "EWGET.TTP"), hd)
@@ -170,6 +182,25 @@ def main():
                      and "ECDSA P-256 on the DSP" in net
                 for l in net.splitlines():
                     if "TLS --" in l:
+                        print("---- " + l.strip())
+            elif name in ("by name", "a question lost", "no such name", "no answer"):
+                log = {"by name": "DNS.LOG", "a question lost": "DNS2.LOG", "no such name": "DNS3.LOG",
+                       "no answer": "DNS4.LOG"}[name]
+                net = open(os.path.join(hd, log), errors="replace").read()
+                host = cmdline.split("//")[1].split(":")[0]
+                m = re.search(r"%s found in (\d+) ms" % re.escape(host), net)
+                if name == "no such name":
+                    ok = "done (1)" in text and "can't find none.test" in text and m is None
+                elif name == "no answer":
+                    t = re.search(r"can't find quiet\.test \(after (\d+) ms\)", text)
+                    ok = "done (1)" in text and t is not None and int(t.group(1)) >= 5900 and m is None
+                else:
+                    ok = ok and m is not None and \
+                         open(os.path.join(hd, "DNS.HTM" if name == "by name" else "DNS2.HTM"), "rb").read() == server.PAGE
+                    if name == "a question lost":
+                        ok = ok and int(m.group(1)) >= 2900	# (one wait of 3 s, then the answer)
+                for l in net.splitlines():
+                    if "DNS" in l or "HTTP" in l:
                         print("---- " + l.strip())
             elif name == "ECDSA, no answer to RSA":
                 net = open(os.path.join(hd, "SIL.LOG"), errors="replace").read()
