@@ -26,7 +26,7 @@ int main(void)
 	about_net_line(b, sizeof(b), "STinG", ABOUT_DIRECT, ABOUT_ONLINE);
 	is(b, "STinG  \xF9  Direct  \xF9  online", "STinG, Direct, online");
 	about_net_line(b, sizeof(b), "none", ABOUT_GATEWAY, ABOUT_OFFLINE);
-	is(b, "No network  \xF9  Pi gateway  \xF9  offline", "no stack: No network");
+	is(b, "No network  \xF9  Gateway  \xF9  offline", "no stack: No network");
 	about_net_line(b, sizeof(b), "MiNTnet", "Serial port, 19200 baud", 0);
 	is(b, "MiNTnet  \xF9  Serial port, 19200 baud", "no state: two items");
 

@@ -148,9 +148,14 @@ void (*conn_tick)(void);
    big download crawl on an Atari disk. Milestones (" -- ", " !! ")
    write it out at once, so a crash loses little; but not those of a TLS
    handshake (start_tls) */
-static char logstat[4096];
-static char *logbuf = logstat;
-static int loglen, logcap = sizeof(logstat), job_hold;
+/* The buffer is taken from the heap at the first line logged and given
+   back when the log is switched off (conn_logfile empty): an app that
+   logs nothing carries no 4 KB of BSS (EMail, 7 Nov 2026: translation
+   needed those 4 KB on a 1 MB ST). Where the heap has no 4 KB the lines
+   are written out one at a time, as the unbuffered log always was. */
+#define LOG_SMALL 4096
+static char *logbuf;
+static int loglen, logcap, job_hold, logbig;
 
 /* a job's milestones (" -- ") stay in the buffer too until it ends (the
    guidelines, 6.5: a sync that wrote each one opened the log 30 times),
@@ -168,22 +173,27 @@ long net_sendbuf = 4096;
 
 void conn_log_hold(int on)
 {
-	if (on && !job_hold && conn_logfile[0] && logbuf == logstat &&
-	    conn_log_hold_bytes > (long)sizeof(logstat)) {
+	if (on && !job_hold && conn_logfile[0] && !logbig &&
+	    conn_log_hold_bytes > LOG_SMALL) {
 		char *b = malloc(conn_log_hold_bytes);
 		if (b) {
-			memcpy(b, logbuf, loglen);
+			if (logbuf) {
+				memcpy(b, logbuf, loglen);
+				free(logbuf);
+			}
 			logbuf = b;
 			logcap = (int)conn_log_hold_bytes;
+			logbig = 1;
 		}
 	}
 	job_hold = on;
 	if (!on) {
 		conn_log_flush();
-		if (logbuf != logstat) {
+		if (logbig) {
 			free(logbuf);
-			logbuf = logstat;
-			logcap = sizeof(logstat);
+			logbuf = 0;
+			logcap = 0;
+			logbig = 0;
 		}
 	}
 }
@@ -212,6 +222,19 @@ void conn_log_append(const char *text, long n)
 
 static void log_add(const char *s, long n)
 {
+	if (!logbuf) {
+		logbuf = malloc(LOG_SMALL);
+		if (logbuf)
+			logcap = LOG_SMALL;
+	}
+	if (!logbuf) {			/* no room: this piece goes straight out */
+		int h;
+		if (conn_logfile[0] && (h = pf_open(conn_logfile, PF_APPEND)) >= 0) {
+			pf_write(h, s, n);
+			pf_close(h);
+		}
+		return;
+	}
 	while (n > 0) {
 		long k = (long)logcap - loglen;
 		if (k > n)
@@ -248,8 +271,14 @@ static void log_stamp(void)
 
 void conn_log(const char *who, const char *dir, const char *text, long n)
 {
-	if (!conn_logfile[0])
+	if (!conn_logfile[0]) {		/* switched off: the buffer goes back */
+		if (logbuf) {
+			free(logbuf);
+			logbuf = 0;
+			logcap = loglen = logbig = 0;
+		}
 		return;
+	}
 	log_stamp();
 	log_add(who, strlen(who));
 	log_add(dir, strlen(dir));

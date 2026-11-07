@@ -11,7 +11,7 @@
 #include "util.h"
 
 /* how a connection is protected */
-#define SEC_PLAIN    0	/* none (through the Pi gateway, or a local server) */
+#define SEC_PLAIN    0	/* none (through the Gateway, or a local server) */
 #define SEC_TLS      1	/* TLS from the first byte (993, 995, 465, 443, 990) */
 #define SEC_STARTTLS 2	/* plain first, then STARTTLS / STLS / AUTH TLS (143, 110, 587, 21) */
 

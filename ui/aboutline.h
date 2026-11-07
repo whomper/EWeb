@@ -18,7 +18,7 @@
 
 /* how the app reaches its servers, line 1's middle */
 #define ABOUT_DIRECT     "Direct"
-#define ABOUT_GATEWAY    "Pi gateway"
+#define ABOUT_GATEWAY    "Gateway"
 #define ABOUT_NO_GATEWAY "No gateway"
 /* its state, line 1's end */
 #define ABOUT_ONLINE     "online"		/* a connection open now */
