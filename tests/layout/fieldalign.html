@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A field's text where the page aligns it (text-align on the field):
+     webdriveruniversity.com's Login Portal centres its fields' text and
+     placeholders. A text that doesn't fit scrolls from the left. -->
+<html><head><title>fields' text-align</title><style>
+body { margin: 8px; font: 16px sans-serif; }
+input, textarea { width: 220px; display: block; margin-bottom: 6px; }
+</style></head><body>
+<input style="text-align: center" placeholder="Username">
+<input style="text-align: center" value="centred">
+<input style="text-align: right" value="at the right">
+<input style="text-align: end" value="at the end">
+<input type="password" style="text-align: center" value="secret">
+<input value="left as before">
+<div style="text-align: center"><input value="the field's own: inherited"></div>
+<input style="text-align: center" value="a text far too long for its field, scrolled from the left as before">
+<textarea style="text-align: center">two lines
+centred</textarea>
+</body></html>

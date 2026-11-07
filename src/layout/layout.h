@@ -73,9 +73,11 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP, DL_SBAR };
 					   touches the run before (two flex items, two cells) */
 #define DLF_ALT 32			/* and with no size at all: its alt text's room (the text
 					   is an item of its own), nothing drawn */
+#define DLF_CENTRE 32			/* DL_CTL: its text centred (text-align: center) */
 #define DLF_TILE 64			/* DL_IMAGE: a background picture, tiled over the item
 					   (tile); DL_GRAD: always; DL_FILL: its picture or
 					   gradient is the next item */
+#define DLF_RIGHT 64			/* DL_CTL: its text at the right (text-align: right, end) */
 #define DLF_NOHIT 128			/* pointer-events: none: a click goes through it to what
 					   is under it (its link, its control) */
 

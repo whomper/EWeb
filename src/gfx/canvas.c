@@ -1123,9 +1123,25 @@ static long line_end(const char *t, const long *st, int nl, int k, long tl)
    that fits goes against the right edge */
 static int32_t line_x(const dl_item *d, const VLINE *v, int32_t scroll)
 {
-	if (v->rtl && v->x[v->n] <= d->w - 6)
-		return d->x + d->w - 3 - v->x[v->n];
+	/* (a line that fits: where the page aligns the field's text, else
+	   right to left at the right; one that doesn't scrolls from the left) */
+	if (v->x[v->n] <= d->w - 6) {
+		if (d->flags & DLF_CENTRE)
+			return d->x + 2 + (d->w - 5 - v->x[v->n]) / 2;
+		if (v->rtl || (d->flags & DLF_RIGHT))
+			return d->x + d->w - 3 - v->x[v->n];
+	}
 	return d->x + 2 - scroll;
+}
+
+/* where an empty field's caret stands: as its text would start */
+static int32_t empty_x(const dl_item *d)
+{
+	if (d->flags & DLF_CENTRE)
+		return d->x + 2 + (d->w - 5) / 2;
+	if (d->flags & DLF_RIGHT)
+		return d->x + d->w - 3;
+	return d->x + 2;
 }
 
 /* a textarea's first line's baseline, or a field's */
@@ -1164,7 +1180,7 @@ static void field(canvas *cv, const dl_item *d, fctl *c, unsigned op)
 	if (tl == 0 && ph != NULL) {
 		hint(cv, d, ph, base, op);
 		if (c->focus)
-			caret(cv, d, d->x + 2, base);
+			caret(cv, d, empty_x(d), base);
 		free(own);
 		return;
 	}
@@ -1201,7 +1217,7 @@ static void textarea(canvas *cv, const dl_item *d, fctl *c, unsigned op)
 	if (c->len == 0 && ph != NULL) {
 		hint(cv, d, ph, base, op);
 		if (c->focus)
-			caret(cv, d, d->x + 2, base);
+			caret(cv, d, empty_x(d), base);
 		return;
 	}
 	nl = lines_of(d, c, &st);

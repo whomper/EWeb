@@ -1502,8 +1502,12 @@ int main(int argc, char **argv)
 				for (q = lab; *q; q++)
 					if (*q == '\n')
 						*q = '|';	/* a textarea's lines on one line */
-				printf("control %d,%d %dx%d %s %s%s%s \"%s\"%s%s%s\n", (int) it->x, (int) it->y,
-				       (int) it->w, (int) it->h, col, kinds[c->kind], c->disabled ? " disabled" : "", nohit,
+				/* (a field's text centred or at the right: text-align) */
+				int fld = c->kind == FC_TEXT || c->kind == FC_PASSWORD || c->kind == FC_TEXTAREA;
+				printf("control %d,%d %dx%d %s %s%s%s%s \"%s\"%s%s%s\n", (int) it->x, (int) it->y,
+				       (int) it->w, (int) it->h, col, kinds[c->kind],
+				       fld && (it->flags & DLF_CENTRE) ? " centred" : fld && (it->flags & DLF_RIGHT) ? " right" : "",
+				       c->disabled ? " disabled" : "", nohit,
 				       lab, form_placeholder(c) ? " placeholder " : "",
 				       form_placeholder(c) ? form_placeholder(c) : "", alpha_of(it));
 			} else

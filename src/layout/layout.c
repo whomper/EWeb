@@ -4708,6 +4708,15 @@ static void control_item(L *l, ITEM *it, int32_t x, int32_t y, int32_t h, int32_
 		 c->kind == FC_CHECKBOX ? fade(0xff000000, it->alpha) : it->color;
 	d->rgb = (uint32_t) it->alpha << 24 | (d->ink & 0xffffff);
 	d->flags = it->flags & DLF_NOHIT;
+	{
+		/* a field's text where the page aligns it (webdriveruniversity.com's
+		   Login Portal: centred); left, start and justify as it was */
+		int ta = kw(b->st, EP_TEXT_ALIGN);
+		if (ta == KW_CENTER || ta == KW_WEBKIT_CENTER)
+			d->flags |= DLF_CENTRE;
+		else if (ta == KW_RIGHT || (ta == KW_END && kw(b->st, EP_DIRECTION) != KW_RTL))
+			d->flags |= DLF_RIGHT;
+	}
 	d->font = it->font;
 	d->ctl = b->ctl;
 	d->link = it->link;
