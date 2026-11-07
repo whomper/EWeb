@@ -1,0 +1,29 @@
+page 608 x 127, background ffffff, 35 items, 0 links, title "Controls' margins"
+fill 6,6 14x14 #ffffff
+fill 6,6 14x1 #808080
+fill 6,19 14x1 #808080
+fill 6,6 1x14 #808080
+fill 19,6 1x14 #808080
+text 25,19 59x17 #000000 sans14 link 0 "Option 1"
+fill 6,23 14x14 #ffffff
+fill 6,23 14x1 #808080
+fill 6,36 14x1 #808080
+fill 6,23 1x14 #808080
+fill 19,23 1x14 #808080
+text 25,36 59x17 #000000 sans14 link 0 "Option 2"
+text 25,53 39x17 #000000 sans13 link 0 "Green"
+text 25,70 28x17 #000000 sans13 link 0 "Blue"
+text 6,102 8x17 #000000 sans13 link 0 "a"
+fill 14,89 14x14 #ffffff
+fill 14,89 14x1 #808080
+fill 14,102 14x1 #808080
+fill 14,89 1x14 #808080
+fill 27,89 1x14 #808080
+text 44,102 12x17 #000000 sans13 link 0 "b "
+fill 56,87 33x21 #ffffff
+fill 56,87 33x1 #808080
+fill 56,107 33x1 #808080
+fill 56,87 1x21 #808080
+fill 88,87 1x21 #808080
+text 105,102 11x17 #000000 sans13 link 0 "c "
+text 162,102 8x17 #000000 sans13 link 0 "d"

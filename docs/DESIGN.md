@@ -4038,6 +4038,12 @@ fade and a text that comes later are started by the click; `-u ID=TEXT` typing a
   were none, so the To-Do List's Return (jQuery's `keypress`, `event.which === 13`) added
   nothing; now its item is added and the field emptied. `js_key` (`src/js/js.c`, in
   `EWEBJS.OVL`'s table), `br_js_key`, `ctl_keyev` and win.c's `ctl_key`; `tests/js/keys.html`.
+- **Checkboxes and radio buttons** are 13 CSS px square whatever the font's size, as browsers
+  draw them (Dropdown, Checkboxes and Radio Buttons: in labels of 18px they were a line high),
+  sized from the font (its height for 13 of its px) and set on the baseline without making the
+  line taller; and an inline control the page doesn't style keeps its own left and right margins
+  on its line (that page's `margin-right: 6px` between a box and its label was lost). Test:
+  `tests/layout/ctlmargin.html`.
 - **The site's own faults, as Chromium has them:** a few of its scripts are HTML (Click
   Buttons' and Hidden Elements' `js/script.js` wrapped in `<script>`, `js/html5shiv.js` and
   `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.

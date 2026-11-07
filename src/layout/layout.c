@@ -1577,7 +1577,7 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 	fctl *c = n->ctl;
 	ew_font *f = font_of(l, st);
 	char lab[256];
-	int32_t w, h = AUTO, line = f->ascent + f->descent + 4;
+	int32_t w, h = AUTO;
 	box *b;
 
 	int styled;
@@ -1636,7 +1636,17 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 	}
 	case FC_CHECKBOX:
 	case FC_RADIO:
-		w = line - 2;
+		/* 13 CSS px whatever the font's size, as browsers draw them
+		   (webdriveruniversity.com's checkboxes in a label of 18px
+		   were a line high and more): the font's height for 13 of its
+		   CSS px, square, never under 7 device px */
+		{
+			int32_t css = st->k[EP_FONT_SIZE] == EK_PX ? st->v[EP_FONT_SIZE].i >> 10 : 16;
+			w = (f->ascent + f->descent) * 13 / (css < 8 ? 8 : css) + 2;
+			if (w < 7)
+				w = 7;
+			h = w;
+		}
 		break;
 	case FC_SELECT: {
 		/* as wide as its widest option, so that choosing one moves nothing */
@@ -3383,6 +3393,15 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 #endif
 			if (c->atom == AT_CONTROL && c->frame)
 				r.bg = pr->bg;	/* (its block draws its ground) */
+			if (c->atom == AT_CONTROL && !c->frame) {
+				/* a control of its own look: its margins on the
+				   line (a styled one's are its block's) */
+				int32_t ml = len0(l, c->st, EP_MARGIN_LEFT, AUTO);
+				if (ml > 0) {
+					put_item(l, &r, IT_GAP, NULL, 0, ml, 0);
+					*line_start = 0;
+				}
+			}
 			put_item(l, &r, IT_ATOM, c->text, c->len,
 				 c->atom == AT_CONTROL && c->frame && l->cw != AUTO ? l->cw : atom_w(l, c, r.font), 0);
 			it = &l->it[l->nit - 1];
@@ -3454,14 +3473,28 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				}
 			} else if (c->ah != AUTO || c->atom != AT_LABEL) {
 				int32_t h = c->ah != AUTO ? c->ah : r.font->ascent + r.font->descent + 4;
-				it->asc = h - 2 - r.font->descent;
-				it->desc = r.font->descent + 2;
-				if (it->asc < r.asc)
-					it->asc = r.asc;
+				fctl *k = c->ctl ? l->p->ctls[c->ctl - 1] : NULL;
+				if (k != NULL && (k->kind == FC_CHECKBOX || k->kind == FC_RADIO)) {
+					/* a box or a button as tall as it is, on
+					   the baseline, its line as tall as the
+					   text's (browsers' 13px square) */
+					it->asc = h - 1;
+					it->desc = 1;
+				} else {
+					it->asc = h - 2 - r.font->descent;
+					it->desc = r.font->descent + 2;
+					if (it->asc < r.asc)
+						it->asc = r.asc;
+				}
 				it->asc -= it->shift;
 				it->desc += it->shift;
 			}
 			*line_start = 0;
+			if (c->atom == AT_CONTROL && !c->frame) {
+				int32_t mr = len0(l, c->st, EP_MARGIN_RIGHT, AUTO);
+				if (mr > 0)
+					put_item(l, &r, IT_GAP, NULL, 0, mr, 0);
+			}
 			break;
 		}
 		case BX_INLINE: {

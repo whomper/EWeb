@@ -20,20 +20,20 @@ fill 156,50 146x1 #808080
 fill 156,67 146x1 #808080
 fill 156,50 1x18 #808080
 fill 301,50 1x18 #808080
-fill 6,81 16x18 #ffffff
+fill 6,81 16x16 #ffffff
 fill 6,81 16x1 #808080
-fill 6,98 16x1 #808080
-fill 6,81 1x18 #808080
-fill 21,81 1x18 #808080
-text 26,94 96x17 #000000 sans13 link 0 "Remember me"
-fill 126,81 16x18 #ffffff
+fill 6,96 16x1 #808080
+fill 6,81 1x16 #808080
+fill 21,81 1x16 #808080
+text 26,96 96x17 #000000 sans13 link 0 "Remember me"
+fill 126,81 16x16 #ffffff
 fill 126,81 16x1 #808080
-fill 126,98 16x1 #808080
-fill 126,81 1x18 #808080
-fill 141,81 1x18 #808080
-text 146,94 50x17 #000000 sans13 link 0 "Not this"
-text 26,125 13x17 #000000 sans13 link 0 "A "
-text 59,125 9x17 #000000 sans13 link 0 "B"
+fill 126,96 16x1 #808080
+fill 126,81 1x16 #808080
+fill 141,81 1x16 #808080
+text 146,96 50x17 #000000 sans13 link 0 "Not this"
+text 26,127 13x17 #000000 sans13 link 0 "A "
+text 59,127 9x17 #000000 sans13 link 0 "B"
 fill 6,143 173x18 #e0e0e0
 fill 6,143 173x1 #808080
 fill 6,160 173x1 #808080

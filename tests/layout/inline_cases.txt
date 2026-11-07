@@ -1,23 +1,23 @@
 page 608 x 701, background ffffff, 70 items, 0 links, title "Inline blocks: cases"
 drawn: 0-26 28-45 49-53 57-66 68-69 27-27 46-48 54-56 67-67
-fill 6,6 16x18 #ffffff
+fill 6,6 16x16 #ffffff
 fill 6,6 16x1 #808080
-fill 6,23 16x1 #808080
-fill 6,6 1x18 #808080
-fill 21,6 1x18 #808080
-text 26,19 140x17 #000000 sans13 link 0 "In an inline-block label"
-fill 6,24 16x18 #ffffff
+fill 6,21 16x1 #808080
+fill 6,6 1x16 #808080
+fill 21,6 1x16 #808080
+text 26,21 140x17 #000000 sans13 link 0 "In an inline-block label"
+fill 6,24 16x16 #ffffff
 fill 6,24 16x1 #808080
-fill 6,41 16x1 #808080
-fill 6,24 1x18 #808080
-fill 21,24 1x18 #808080
-text 26,37 94x17 #000000 sans13 link 0 "In a block label"
-fill 6,42 16x18 #ffffff
+fill 6,39 16x1 #808080
+fill 6,24 1x16 #808080
+fill 21,24 1x16 #808080
+text 26,39 94x17 #000000 sans13 link 0 "In a block label"
+fill 6,42 16x16 #ffffff
 fill 6,42 16x1 #808080
-fill 6,59 16x1 #808080
-fill 6,42 1x18 #808080
-fill 21,42 1x18 #808080
-text 26,55 102x17 #000000 sans13 link 0 "In an inline label"
+fill 6,57 16x1 #808080
+fill 6,42 1x16 #808080
+fill 21,42 1x16 #808080
+text 26,57 102x17 #000000 sans13 link 0 "In an inline label"
 text 6,173 49x17 #000000 sans13 link 0 "Hidden "
 text 103,173 23x17 #000000 sans13 link 0 "box"
 text 46,202 57x17 #0000004c sans13 link 0 "INFADED"
@@ -57,12 +57,12 @@ text 0,173 63x17 #000000 sans13 link 0 "FIXEDBOX"
 text 52,597 47x17 #000000 sans13 link 0 "DEEPIN"
 text 6,597 46x17 #000000 sans13 link 0 "DEEP1 "
 text 103,597 42x17 #000000 sans13 link 0 "DEEP2"
-fill 6,629 16x18 #ffffff
+fill 6,629 16x16 #ffffff
 fill 6,629 16x1 #808080
-fill 6,646 16x1 #808080
-fill 6,629 1x18 #808080
-fill 21,629 1x18 #808080
-text 26,642 23x17 #000000 sans13 link 0 "Lab"
+fill 6,644 16x1 #808080
+fill 6,629 1x16 #808080
+fill 21,629 1x16 #808080
+text 26,644 23x17 #000000 sans13 link 0 "Lab"
 text 320,253 52x17 #000000 sans13 link 0 "LABPOS"
 text 55,692 39x17 #000000 sans13 link 0 "INNER"
 text 6,692 49x17 #000000 sans13 link 0 "Anchor "

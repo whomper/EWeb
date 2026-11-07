@@ -1,4 +1,4 @@
-page 608 x 497, background ffffff, 42 items, 2 links, title "Bottoms, % tops and styled controls"
+page 608 x 495, background ffffff, 42 items, 2 links, title "Bottoms, % tops and styled controls"
 drawn: 21-41 0-20
 fill 6,6 596x96 #eeeeff
 text 6,16 91x13 #000000 sans10 link 0 "a box of set height"
@@ -21,20 +21,20 @@ fill 43,300 13x13 #0000ff
 fill 9,338 6x6 #000000
 fill 513,267 89x80 #ff00004c
 fill 550,300 13x13 #0000ff
-fill 6,353 240x36 #ffffee
-text 89,366 80x13 #000000 sans10 link 0 "one radio button"
-text 96,384 65x13 #000000 sans10 link 0 "another radio"
-fill 6,399 172x28 #ffffff
-fill 6,399 172x1 #999999
-fill 6,426 172x1 #999999
-fill 6,400 1x26 #999999
-fill 177,400 1x26 #999999
-fill 181,402 158x22 #ddeeff
-fill 6,437 596x28 #ffffff
-fill 6,437 596x1 #808080
-fill 6,464 596x1 #808080
-fill 6,437 1x28 #808080
-fill 601,437 1x28 #808080
-fill 6,465 71x26 #003366
+fill 6,353 240x34 #ffffee
+text 89,368 80x13 #000000 sans10 link 0 "one radio button"
+text 96,385 65x13 #000000 sans10 link 0 "another radio"
+fill 6,397 172x28 #ffffff
+fill 6,397 172x1 #999999
+fill 6,424 172x1 #999999
+fill 6,398 1x26 #999999
+fill 177,398 1x26 #999999
+fill 181,400 158x22 #ddeeff
+fill 6,435 596x28 #ffffff
+fill 6,435 596x1 #808080
+fill 6,462 596x1 #808080
+fill 6,435 1x28 #808080
+fill 601,435 1x28 #808080
+fill 6,463 71x26 #003366
 link 1 file://./tests/layout/absbottom.html#p
 link 2 file://./tests/layout/absbottom.html#n

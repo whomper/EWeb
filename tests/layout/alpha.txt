@@ -103,18 +103,18 @@ text 6,750 242x17 #000000 sans13 link 0 "Of opacity 0, faded in by an animation"
 text 6,779 124x17 #000000 sans13 link 0 "and by AOS's script"
 image 6,795 48x24 link 0 "lazy" file://./tests/layout/img/one.png
 text 58,819 217x17 #000000 sans13 link 0 "a picture a lazy loader would show"
-fill 25,835 16x18 #ffffff
+fill 25,835 16x16 #ffffff
 fill 25,835 16x1 #808080
-fill 25,852 16x1 #808080
-fill 25,835 1x18 #808080
-fill 40,835 1x18 #808080
-text 41,848 246x17 #000000 sans13 link 0 "a box of opacity 0 for a custom control"
-fill 6,853 16x18 #ffffff
+fill 25,850 16x1 #808080
+fill 25,835 1x16 #808080
+fill 40,835 1x16 #808080
+text 41,850 246x17 #000000 sans13 link 0 "a box of opacity 0 for a custom control"
+fill 6,853 16x16 #ffffff
 fill 6,853 16x1 #808080
-fill 6,870 16x1 #808080
-fill 6,853 1x18 #808080
-fill 21,853 1x18 #808080
-text 26,866 183x17 #00000000 sans13 link 0 "a tick in a transparent colour"
+fill 6,868 16x1 #808080
+fill 6,853 1x16 #808080
+fill 21,853 1x16 #808080
+text 26,868 183x17 #00000000 sans13 link 0 "a tick in a transparent colour"
 text 6,884 74x17 #0000ee sans13 link 3 "under a veil"
 text 6,884 189x17 #0000ee00 sans13 nohit link 4 "a veil of opacity 0 a click goes"
 text 6,900 50x17 #0000ee00 sans13 nohit link 4 "through"
