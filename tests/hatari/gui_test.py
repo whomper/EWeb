@@ -110,6 +110,11 @@ def hd_for(name, home, inf=""):
     shutil.copy(os.path.join(ROOT, "tests/layout/text.html"), os.path.join(hd, "TEXT.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/alpha.html"), os.path.join(hd, "ALPHA.HTM"))
     shutil.copy(os.path.join(ROOT, "tests/layout/gradients.html"), os.path.join(hd, "GRAD.HTM"))
+    # two flat colours for true colour's byte order (a light grey shows a
+    # swap at once: #dddddd turned is pink)
+    with open(os.path.join(hd, "SWAP.HTM"), "w") as f:
+        f.write("<!DOCTYPE html><title>swap</title><body style='margin:0;background:#dddddd'>"
+                "<div style='height:60px;background:#2060c0'></div></body>\n")
     with open(os.path.join(ROOT, "tests/layout/svg.html"), "rb") as f:
         page = f.read().replace(b"img/star.svg", b"IMG/STAR.SVG").replace(b"img/missing.svg", b"IMG/MISSING.SVG")
     with open(os.path.join(hd, "SVG.HTM"), "wb") as f:
@@ -1436,6 +1441,31 @@ def svg_page(r, group, name, shot):
     r.shot(shot)
 
 
+def swap_colours(r, name):
+    """true colour: the page's colours as they are on the screen, where
+    the VDI says how its pixels are laid out (NVDI's vq_scrninfo: run
+    with AERA_WITH_NVDI=1) and where it doesn't (TOS's VDI)"""
+    r.key(L, (CTRL,))
+    r.type("file:///C:/SWAP.HTM")
+    r.key(RETURN)
+    ev = r.wait(r"shown ", 120)
+    m = re.search(r" area (\d+) (\d+) (\d+) (\d+)", ev or "")
+    time.sleep(2)
+    im = Image.open(r.shot(6)).convert("RGB")
+    if m is None:
+        check("screens: %s colours in their byte order" % name, False, ev or "no shown line")
+        return
+    x, y, w, h = (int(v) for v in m.groups())
+    sx, sy = im.width / 640.0, im.height / 200.0
+    def at(px, py):
+        return im.getpixel((int(px * sx), int(py * sy)))
+    got = [at(x + w // 2, y + 15), at(x + w // 2, y + h - 10)]
+    want = [(0x20, 0x60, 0xc0), (0xdd, 0xdd, 0xdd)]
+    check("screens: %s colours in their byte order%s" % (name, " (NVDI)" if os.environ.get("AERA_WITH_NVDI") else ""),
+          all(all(abs(a - b) <= 12 for a, b in zip(g, wnt)) for g, wnt in zip(got, want)),
+          "got %s, want %s" % (got, want))
+
+
 def screens():
     for name, spec, tc in (("falcon256", "Falcon:256", False), ("truecolour", "Falcon:16", True),
                            ("ttmed", "TT:ttmed", False), ("ttmono", "TT:mono", False)):
@@ -1490,6 +1520,8 @@ def screens():
                   ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
             time.sleep(2)
             r.shot(5)
+            if tc:
+                swap_colours(r, name)
             svg_page(r, "screens", name, 7)
             if name == "falcon256":
                 # ^, the Settings dialog (looked at in its screenshot); Esc
