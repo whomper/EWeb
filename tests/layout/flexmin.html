@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A flex container's items aligned in the height it has within
+     min-height and max-height (CSS Flexbox 1, 9.4 step 8 and 9.2):
+     webdriveruniversity.com's Actions page, "DROP HERE!" in a box of
+     height 150px and min-height 270px. -->
+<html><head><title>flex within min- and max-height</title><style>
+body { margin: 0; font: 16px sans-serif; }
+.f { display: flex; align-items: center; width: 300px; background: #ccc; margin: 4px; }
+.f p { margin: 0; }
+.c { flex-direction: column; justify-content: center; }
+</style></head><body>
+<div class="f" style="height: 150px; min-height: 270px"><p>row: height under min-height</p></div>
+<div class="f" style="min-height: 200px"><p>row: auto height, min-height</p></div>
+<div class="f" style="height: 300px; max-height: 100px"><p>row: height over max-height</p></div>
+<div class="f c" style="height: 150px; min-height: 270px"><p>column: height under min-height</p></div>
+<div class="f c" style="min-height: 200px"><p>column: auto height, min-height</p></div>
+<div class="f" style="min-height: 120px; align-items: stretch"><p style="background: #8cf">row: stretched to min-height</p></div>
+</body></html>

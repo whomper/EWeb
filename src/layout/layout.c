@@ -7000,7 +7000,11 @@ static void flex_resolve(FITEM *it, int n, int32_t room)
 	}
 }
 
-static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef, int32_t *first)
+/* hdef its content height when set (within min- and max-height), else
+   AUTO; hmin its min-height then (a row that doesn't wrap as tall, a
+   column's free space within it), else AUTO */
+static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef, int32_t hmin,
+			   int32_t *first)
 {
 	const ec_style *s = b->st;
 	int dir = kw(s, EP_FLEX_DIRECTION), column = dir == KW_COLUMN || dir == KW_COLUMN_REVERSE;
@@ -7171,6 +7175,8 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			/* a line that doesn't wrap fills a container of a set height */
 			if (!wrap && hdef != AUTO && hdef > h)
 				h = hdef;
+			else if (!wrap && hdef == AUTO && hmin != AUTO && hmin > h)
+				h = hmin;
 			lh[j] = h;
 			total += h + (j < nl - 1 ? rgap : 0);
 		}
@@ -7257,6 +7263,9 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			cy += bh + (i < n - 1 ? rgap : 0);
 		}
 		total = cy;
+		/* (an auto height made taller by min-height: as though set) */
+		if (hdef == AUTO && hmin != AUTO && hmin > total)
+			hdef = hmin;
 		free = hdef != AUTO ? hdef - total : 0;
 		b->fc = NULL;
 		if (hdef == AUTO && !rev && (sumgrow > 0 || (jc != KW_FLEX_START && jc != KW_START && jc != KW_NORMAL &&
@@ -8371,15 +8380,35 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 	} else if (b->inl) {
 		ch = inline_layout(l, b, cx, cy, w, &fb);
 	} else if (b->flex || b->grid) {
-		int32_t hd = AUTO;
+		int32_t hd = AUTO, hmn = AUTO;
 		if (!b->anon) {
+			/* its height within min-height and max-height (the
+			   flexbox's 9.2: the items aligned in the height it will
+			   have; webdriveruniversity.com's Actions, a height of
+			   150px with a min-height of 270px), and its min-height
+			   alone when its height is auto */
+			int32_t edge = kw(s, EP_BOX_SIZING) == KW_BORDER_BOX ? bt + bb + pt + pb : 0, hx;
 			hd = len(l, s, EP_HEIGHT, hbase);
-			if (hd != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
-				hd -= bt + bb + pt + pb;
+			hmn = len(l, s, EP_MIN_HEIGHT, AUTO);
+			hx = len(l, s, EP_MAX_HEIGHT, AUTO);
+			if (hd != AUTO)
+				hd -= edge;
+			if (hmn != AUTO)
+				hmn = hmn > edge ? hmn - edge : 0;
+			if (hx != AUTO)
+				hx = hx > edge ? hx - edge : 0;
+			if (hd != AUTO && hx != AUTO && hd > hx)
+				hd = hx;
+			if (hd != AUTO && hmn != AUTO && hd < hmn)
+				hd = hmn;
 			if (hd != AUTO && hd < 0)
 				hd = 0;
+			if (hmn != AUTO && hx != AUTO && hmn > hx)
+				hmn = hx > 0 ? hx : AUTO;
+			if (hmn != AUTO && hmn <= 0)
+				hmn = AUTO;
 		}
-		ch = b->grid ? grid_layout(l, b, cx, cy, w, hd, &fb) : flex_layout(l, b, cx, cy, w, hd, &fb);
+		ch = b->grid ? grid_layout(l, b, cx, cy, w, hd, &fb) : flex_layout(l, b, cx, cy, w, hd, hmn, &fb);
 	} else if (b->row) {
 		ch = row_layout(l, b, cx, cy, w, &fb);
 	} else {

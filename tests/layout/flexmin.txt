@@ -1,0 +1,14 @@
+page 608 x 949, background ffffff, 13 items, 0 links, title "flex within min- and max-height"
+fill 3,3 240x216 #cccccc
+text 3,116 184x17 #000000 sans13 link 0 "row: height under min-height"
+fill 3,222 240x160 #cccccc
+text 3,307 180x17 #000000 sans13 link 0 "row: auto height, min-height"
+fill 3,385 240x80 #cccccc
+text 3,430 179x17 #000000 sans13 link 0 "row: height over max-height"
+fill 3,468 240x216 #cccccc
+text 18,581 209x17 #000000 sans13 link 0 "column: height under min-height"
+fill 3,687 240x160 #cccccc
+text 20,772 205x17 #000000 sans13 link 0 "column: auto height, min-height"
+fill 3,850 240x96 #cccccc
+fill 3,850 181x96 #88ccff
+text 3,863 181x17 #000000 sans13 link 0 "row: stretched to min-height"

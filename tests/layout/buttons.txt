@@ -31,7 +31,7 @@ fill 245,38 118x1 #888888
 fill 245,63 118x1 #888888
 fill 245,39 1x24 #888888
 fill 362,39 1x24 #888888
-text 187,93 55x13 #eeeeee sans10 link 0 "CLICK ME!"
+text 187,99 55x13 #eeeeee sans10 link 0 "CLICK ME!"
 fill 6,74 417x1 #f45950
 fill 6,115 417x1 #f45950
 fill 6,75 1x40 #f45950
