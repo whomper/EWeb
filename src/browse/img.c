@@ -308,6 +308,13 @@ static void pix_save(ew_img *im, const var *v)
    pictures still without pens wait for the next draw (a dither inside it
    would share the DSP's job, which is one at a time) */
 static int dithering;
+/* and the picture it is for: kept whole meanwhile. The DSP writes a
+   decode's pixels and a dither's pens in supervisor mode, so a size freed
+   in a turn of it (img_trim, img_clear: memory made in the turn) would be
+   written after it was given back, past any bomb (Erez's crash scrolling
+   an atariage.com topic, 7 Nov 2026: the vectors and TOS's own variables
+   overwritten) */
+static const ew_img *busy_im;
 
 static var *find(const ew_img *im, int32_t w, int32_t h);
 
@@ -735,8 +742,11 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 			v->pic = img_svg_decode(im->data, im->len, (int) w, (int) h, &im->why);
 		}
 	} else {
+		const ew_img *was = busy_im;
 		dithering++;	/* (a decode on the DSP has turns too) */
+		busy_im = im;
 		v->pic = pic_decode((const unsigned char *) im->data, im->len, (int) w, (int) h, max, &im->why);
+		busy_im = was;
 		dithering--;
 	}
 	if (v->pic == NULL && im->why == PIC_STOPPED) {
@@ -748,8 +758,11 @@ int img_decode(ew_img *im, int32_t w, int32_t h)
 		v->pens = malloc((size_t) w * h);
 		if (v->pens != NULL) {
 			int done;
+			const ew_img *was = busy_im;
 			dithering++;
+			busy_im = im;
 			done = pic_dither(v->pic, img_pal, v->pens);
+			busy_im = was;
 			dithering--;
 			if (done) {
 				v->serial = pal_serial;
@@ -785,9 +798,14 @@ static int var_dither(ew_img *im, var *v)
 			return 0;
 		img_used += (long) v->w * v->h;
 	}
-	dithering++;
-	done = pic_dither(v->pic, img_pal, v->pens);
-	dithering--;
+	{
+		const ew_img *was = busy_im;
+		dithering++;
+		busy_im = im;
+		done = pic_dither(v->pic, img_pal, v->pens);
+		busy_im = was;
+		dithering--;
+	}
 	if (done)
 		v->serial = pal_serial;
 	return done;
@@ -876,7 +894,7 @@ void img_trim(void)
 	while (img_used > img_max) {
 		ew_img *im, *old = NULL, **pp;
 		for (im = all; im != NULL; im = im->next)
-			if (im->refs == 0 && (old == NULL || im->used < old->used))
+			if (im->refs == 0 && im != busy_im && (old == NULL || im->used < old->used))
 				old = im;
 		if (old == NULL)
 			break;
@@ -893,7 +911,7 @@ void img_trim(void)
 		ew_img *im, *oi = NULL;
 		var *v, *ov = NULL;
 		for (im = all; im != NULL; im = im->next)
-			for (v = im->vars; v != NULL; v = v->next)
+			for (v = im != busy_im ? im->vars : NULL; v != NULL; v = v->next)
 				if (v->pic != NULL && (!im->cur || (v->used < im->used &&
 				    (img_size_shown == NULL || !img_size_shown(im, v->w, v->h)))) &&
 				    (ov == NULL || v->used < ov->used)) {
@@ -921,7 +939,7 @@ void img_clear(void)
 	ew_img **pp = &all;
 	while (*pp != NULL) {
 		ew_img *im = *pp;
-		if (im->refs == 0) {
+		if (im->refs == 0 && im != busy_im) {
 			*pp = im->next;
 			img_free(im);
 		} else {
