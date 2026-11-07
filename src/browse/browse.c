@@ -1738,7 +1738,11 @@ static ec_media media_of(const browser *b)
 {
 	ec_media m;
 	m.width = (int32_t) ((int64_t) b->width * 1024 / b->zoom);
-	m.height = (int32_t) ((int64_t) 400 * 1024 / b->zoom);
+	/* the window's page area (vh, a media query's height), in CSS px as
+	   the width is: 100vh the window's height (webdriveruniversity.com's
+	   footer at the foot of a min-height of calc(100vh - 84px)); 400
+	   device px before the window is known */
+	m.height = (int32_t) ((int64_t) (b->height > 0 ? b->height : 400) * 1024 / b->zoom);
 	m.font_size = 16;
 	return m;
 }
