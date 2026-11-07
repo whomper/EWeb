@@ -75,12 +75,12 @@ MACHINES = {
                "14 MB ST RAM, 128 MB TT RAM, the DSP, VGA",
                ["--machine", "falcon", "--cpuclock", "32", "--fpu", "68882", "--memsize", "14",
                 "--ttram", "128", "--addr24", "off", "--dsp", "emu", "--monitor", "vga"],
-               ["16", "256"], "tos404.img"),
+               ["16", "256", "65536"], "tos404.img"),
     "Falcon-4": ("a Falcon030 as sold: 68030 at 16 MHz, no FPU, 4 MB ST RAM and no TT RAM, the DSP, VGA "
                  "(Erez, 19 Oct 2026: the machine for all three accessories loaded at once)",
                  ["--machine", "falcon", "--cpuclock", "16", "--memsize", "4", "--ttram", "0",
                   "--addr24", "on", "--dsp", "emu", "--monitor", "vga"],
-                 ["16", "256"], "tos404.img"),
+                 ["16", "256", "65536"], "tos404.img"),
 }
 
 SCREENS = {
@@ -90,8 +90,10 @@ SCREENS = {
     "ttmed": ["--monitor", "vga", "--tos-res", "ttmed"],  # TT 640x480, 16 colours
     "16": [],                                           # Falcon 640x480, 16 colours
     "256": [],                                          # Falcon 640x480, 256 colours
+    "65536": [],                                        # Falcon 640x480, true colour (16 bits)
 }
-FALCON_MODE = {"16": 0x001A, "256": 0x001B}    # VGA | 80 columns | 4 or 8 planes
+FALCON_MODE = {"16": 0x001A, "256": 0x001B,    # VGA | 80 columns | 4 or 8 planes
+               "65536": 0x001C}                 # ... | 16 bits (R5G6B5, Motorola order)
 
 EMUTOS = ("https://downloads.sourceforge.net/project/emutos/emutos/1.4/emutos-512k-1.4.zip",
           "1ef7bd25f61bcfc66d19debc2f0ebb0d5e5ba811ccd7f0fddfcb105bb72d1663", "etos512us.img")
