@@ -1363,6 +1363,16 @@ static void draw_due(void)
 			n = piece ? PIECE_BAND : BAND_MIN;
 		if (whole)
 			n = cur->due.h;
+		else if (piece && n < cur->due.h && shown() != NULL) {
+			/* (a piece's band ends between lines of text, where it can:
+			   a line its edge cut was gone through in both bands, an
+			   8 MHz ST's 32-row bands 11 % over drawn whole; Erez, 7 Nov
+			   2026: pieces as fast as whole) */
+			int32_t py = cur->top + cur->due.y;
+			int32_t g = page_text_gap(shown(), py, py + (int32_t) n);
+			if (g - py >= PIECE_BAND / 2)
+				n = g - py;
+		}
 		band.x = (short) (cur->r_page.x + cur->due.x);
 		band.y = (short) (cur->r_page.y + cur->due.y);
 		band.w = cur->due.w;

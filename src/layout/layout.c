@@ -8860,6 +8860,32 @@ out:
 	free(o.seg);
 }
 
+int32_t page_text_gap(const page *p, int32_t lo, int32_t y)
+{
+	int32_t r = y;
+	int moved = 1;
+	if (p == NULL || p->strip == NULL || y <= lo + 1 || lo < 0)
+		return y;
+	/* (an item crossing r moves it up to that item's top, until none
+	   does; the items in strips from lo's to y's) */
+	while (moved && r > lo) {
+		long s, s0 = lo / PAGE_STRIP, s1 = (y - 1) / PAGE_STRIP, k;
+		moved = 0;
+		if (s1 >= p->nstrips)
+			s1 = p->nstrips - 1;
+		for (s = s0; s <= s1 && !moved; s++)
+			for (k = p->strip[s]; k < p->strip[s + 1]; k++) {
+				const dl_item *d = &p->items[page_drawn(p, p->sidx[k])];
+				if (d->type == DL_TEXT && d->y < r && d->y + d->h > r) {
+					r = d->y;
+					moved = 1;
+					break;
+				}
+			}
+	}
+	return r > lo ? r : y;
+}
+
 long page_drawn(const page *p, long r)
 {
 	long a = 0, b;
