@@ -3517,10 +3517,27 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		    select_text(mx, my, clicks, kstate))
 			return 1;	/* text selected */
 		/* the page's scripts first: a click event, which may say no to
-		   what the click does, or change the page */
-		if (!(kstate & 0x08) && page_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top))
-			return 1;
-		c = br.p ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) : NULL;
+		   what the click does, or change the page. What the click is on
+		   is what was under the mouse before they ran (as a browser
+		   fixes the event's target): what they moved there takes no
+		   click (webdriveruniversity.com's autocomplete: its list went,
+		   the form's submit button came under the mouse and was sent) */
+		{
+			fctl *c0 = br.p ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, NULL) : NULL;
+			int l0 = link_at(mx, my), l1, moved;
+			char *h0 = l0 >= 0 && br.p->links[l0] != NULL ? strdup(br.p->links[l0]) : NULL;
+			if (!(kstate & 0x08) && page_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top)) {
+				free(h0);
+				return 1;
+			}
+			c = br.p ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) : NULL;
+			l1 = link_at(mx, my);
+			moved = c != c0 || (l1 >= 0) != (l0 >= 0) ||
+				(l1 >= 0 && (h0 == NULL || br.p->links[l1] == NULL || strcmp(h0, br.p->links[l1]) != 0));
+			free(h0);
+			if (moved)
+				return 1;
+		}
 		if (c != NULL && !loading) {
 			/* a label's text stands for its control */
 			int label = it->type == DL_TEXT;

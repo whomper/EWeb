@@ -4049,6 +4049,12 @@ fade and a text that comes later are started by the click; `-u ID=TEXT` typing a
   sent show "Thank You for your Message!", a bad address both errors, RESET empties the fields.
   ewrender types into a field by its name (`-u @NAME=TEXT`) and its click on a reset button resets
   the form as `win.c`'s does. Tests: `tests/js/contact.html`, `contact2.html`.
+- **Autocomplete**: typed letters bring its list ("Ch": Chicken and Chips, the letters in
+  bold); a suggestion clicked fills the field. That click also sent the form: its script took the
+  list away, the submit button came up under the mouse, and EWeb looked for the click's control
+  after the scripts. A click is now on what was under the mouse before they ran, as browsers fix
+  an event's target: what they move there takes no click (`win.c`'s click, ewrender's alike).
+  Test: `tests/js/target.html`.
 - **The site's own faults, as Chromium has them:** a few of its scripts are HTML (Click
   Buttons' and Hidden Elements' `js/script.js` wrapped in `<script>`, `js/html5shiv.js` and
   `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.

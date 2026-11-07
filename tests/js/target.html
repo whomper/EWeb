@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- args: -M 30,34 -->
+<!-- expect: moved under the mouse by the scripts: no click -->
+<!-- expect: console: picked Chicken -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A click's target is what was under the mouse before the page's
+     scripts ran (as webdriveruniversity.com's autocomplete: a suggestion
+     clicked fills the field and its list goes, the form's submit button
+     comes up under the mouse; it was sent) -->
+<html><head><title>target</title><style>body{font-family:sans-serif} #f{display:block}</style></head><body>
+<form action="javascript:void(0)" onsubmit="console.log('FAIL sent'); return false;">
+<input id="f" name="food" type="text">
+<div id="list"><div id="pick">Chicken</div></div>
+<div><input type="submit" value="Submit" style="width:200px"></div>
+</form>
+<script>
+document.getElementById("pick").addEventListener("click", function () {
+	document.getElementById("f").value = this.textContent;
+	console.log("picked " + this.textContent);
+	var l = document.getElementById("list");
+	l.parentNode.removeChild(l);
+});
+</script>
+</body></html>

@@ -697,11 +697,28 @@ static void typed(browser *b, const char *spec)
 }
 #endif
 
+#ifndef EW_ST
+/* what is under (x, y) before the page's scripts run: its control, and
+   its link's address (as win.c's click: what they move there takes no
+   click) */
+static char *under(browser *b, int32_t x, int32_t y, fctl **c, int *l)
+{
+	*c = b->p ? page_ctl_at(b->p, x, y, NULL) : NULL;
+	*l = b->p ? page_link_at(b->p, x, y) : -1;
+	return *l >= 0 && b->p->links[*l] != NULL ? strdup(b->p->links[*l]) : NULL;
+}
+#endif
+
 static int click(browser *b, const char *id)
 {
 	dnode *n, *det;
 	int32_t x, y, w, h;
 	int cancelled = 0, load = 0, r = BRJ_NONE, k, px, py;
+	char *h0 = NULL;
+#ifndef EW_ST
+	int l0 = -1;
+	fctl *c0 = NULL;
+#endif
 #ifndef EW_ST
 	if (strncmp(id, "type:", 5) == 0) {
 		typed(b, id + 5);
@@ -720,6 +737,7 @@ static int click(browser *b, const char *id)
 		y = py;
 #ifndef EW_ST
 		/* (the page's scripts told first, as a click by id is) */
+		h0 = under(b, x, y, &c0, &l0);
 		r = br_js_click(b, x, y, &cancelled, &load);
 		printf("click %d,%d: %s%s\n", px, py, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 		       cancelled ? ", cancelled" : "");
@@ -745,6 +763,7 @@ static int click(browser *b, const char *id)
 	}
 	x += w / 2;
 	y += h / 2;
+	h0 = under(b, x, y, &c0, &l0);
 	r = br_js_click(b, x, y, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
@@ -756,6 +775,15 @@ at:
 	} else if (!cancelled) {
 		int link = page_link_at(b->p, x, y);
 		fctl *c = page_ctl_at(b->p, x, y, NULL);
+#ifndef EW_ST
+		if (c != c0 || (link >= 0) != (l0 >= 0) ||
+		    (link >= 0 && (h0 == NULL || b->p->links[link] == NULL || strcmp(h0, b->p->links[link]) != 0))) {
+			printf("moved under the mouse by the scripts: no click\n");
+			free(h0);
+			h0 = NULL;
+			goto due;
+		}
+#endif
 		if (c != NULL && (c->kind == FC_SUBMIT || c->kind == FC_IMAGE)) {
 			r = br_submit(b, NULL, c, 0, 0);
 			printf("sent: %d \"%s\" %s\n", r, b->title, b->url);
@@ -778,6 +806,10 @@ at:
 			       !r ? "failed" : dn_attr(det, "open") ? "opened" : "closed", b->p ? (int) b->p->height : 0);
 		}
 	}
+#ifndef EW_ST
+due:
+#endif
+	free(h0);
 	for (k = 0; k < 64 && br_js_due(b) == 0; k++) {
 		if (br_js_step(b, &load) == BRJ_LOAD) {
 			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
