@@ -2374,6 +2374,15 @@ static void pictures(void)
 	said[0] = 0;
 	r = br_pictures_step(&br, win_top(), win_page_h(), &y0, &y1);
 	pics = 0;
+#ifndef EW_ST
+	if (pic_dsp_bad) {
+		/* (the DSP refused to write a picture where the system hadn't
+		   given memory: the CPU made it; common's dspjpeg.c, after
+		   Erez's crash of 7 Nov 2026) */
+		log_event("dsp: bad destination $%08lx", pic_dsp_bad);
+		pic_dsp_bad = 0;
+	}
+#endif
 	switch (r) {
 	case BRP_DRAWN:
 		if (y1 > y0)
