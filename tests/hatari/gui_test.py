@@ -1762,7 +1762,7 @@ def st():
             r.type(site + "pics.html")
             r.key(RETURN)
             ev = r.wait(r"pictures ", 1200)
-            got = [e for e in r.events() if " pens from the Pi at " in e]
+            got = [e for e in r.events() if " pens from the Gateway at " in e]
             check("st: pictures through the gateway as the Pi's pens", ev is not None and len(got) == 5,
                   "\n".join(r.events()[-12:]))
             time.sleep(2)
@@ -1823,7 +1823,7 @@ def gateway():
             try:
                 ev = r.wait(r"pictures ", 1800)
                 evs = r.events()
-                got = [e for e in evs if re.search(r"^picture \S+ (decoded|pens from the Pi) at ", e)]
+                got = [e for e in evs if re.search(r"^picture \S+ (decoded|pens from the Gateway) at ", e)]
                 time.sleep(2)
                 r.shot(0)
                 # then a page as a Wikipedia article's, and back
@@ -1846,7 +1846,7 @@ def gateway():
                 check("gateway: %s, every picture %s, quits" % (
                       name, "as the Pi's pens" if pens else "the Pi's JPEG and PNG, decoded"),
                       ev is not None and len(got) == 5 and quit is not None and
-                      all(("pens from the Pi" in e) == bool(pens) for e in got) and
+                      all(("pens from the Gateway" in e) == bool(pens) for e in got) and
                       not os.path.exists(os.path.join(hd, "crash.log")) and
                       (pens or os.path.isdir(os.path.join(hd, "cache"))), "\n".join(r.events()[-20:]))
                 if not pens:

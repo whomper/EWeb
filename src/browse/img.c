@@ -847,7 +847,7 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 const char *img_why(const ew_img *im)
 {
 	if (im->why == PENS_REFETCH)
-		return "pens from the Pi for another size or screen";
+		return "pens from the Gateway for another size or screen";
 	if (im->state == IMG_FAILED && im->kind != PIC_NONE && im->why == PIC_UNSUPPORTED)
 		return pic_kind_name(im->kind);
 	if (im->state == IMG_FAILED && im->why == PIC_OK)

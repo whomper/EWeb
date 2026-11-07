@@ -142,7 +142,7 @@ def snapshots():
                            capture_output=True, text=True, timeout=120)
         out = p.stdout + p.stderr
         check("the Pi's browser: a page as it shows it", p.returncode == 0 and 'title "Made by script"' in out
-              and "a snapshot from the Pi's browser" in out and page + "#shown" in out, out)
+              and "a snapshot from the Gateway's browser" in out and page + "#shown" in out, out)
         live = "http://webgate/live?url=" + urllib.request.quote(page, safe="")
         p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", live], cwd=work,
                            capture_output=True, text=True, timeout=120)
@@ -168,7 +168,7 @@ def snapshots():
                                 live + "&w=1000&h=750"], cwd=work, capture_output=True, text=True, timeout=120)
             out = p.stdout + p.stderr
             check("the Pi's browser: live view's picture as the screen's pens", p.returncode == 0
-                  and re.search(r"^picture http://webgate/live/shot\.jpg\S* pens from the Pi at 792x1680 ", out, re.M)
+                  and re.search(r"^picture http://webgate/live/shot\.jpg\S* pens from the Gateway at 792x1680 ", out, re.M)
                   is not None, out)
         if "X-Gateway-Check" in open(WEBGATE).read():
             # Cloudflare's check through the Pi: the page through its
@@ -182,7 +182,7 @@ def snapshots():
                 return p.returncode, p.stdout + p.stderr
             rc, out = through(cf)
             check("the Pi's browser: Cloudflare's check passed there", rc == 0 and
-                  'title "Through the Pi:"' in out and "a snapshot from the Pi's browser" in out, out)
+                  'title "Through the Pi:"' in out and "a snapshot from the Gateway's browser" in out, out)
             rc, out = through(cf + "next")
             seen = opener.open("http://localhost:%d/site/cf/seen" % HTTP).read().decode()
             check("the Pi's browser: the site's next page there too, for the visit", rc == 0 and
@@ -1159,7 +1159,7 @@ try:
                     break
                 time.sleep(0.1)
             rc, out = run("-g", g, "-n", "2", "-o", "gw.htm", "https://localhost:%d/page" % HTTPS)
-            check("the gateway: https", rc == 0 and "TLS 1.3" in out and "through the gateway" in out
+            check("the gateway: https", rc == 0 and "TLS 1.3" in out and "through the Gateway" in out
                   and "the connection was kept open" in out and "unpack" in out and saved("gw.htm") == server.PAGE,
                   out)
             rc, out = run("-g", g, "-o", "gwmoved.htm", "http://localhost:%d/secure" % HTTP)
@@ -1171,7 +1171,7 @@ try:
             check("the gateway: a certificate nobody signed", "502 Bad Gateway" in out
                   and saved("gwbad.txt").startswith(b"webgate: localhost has an untrusted certificate"), out)
             rc, out = run("-g", "127.0.0.1:1", "https://localhost:%d/page" % HTTPS)
-            check("the gateway: not there", rc != 0 and "the gateway (127.0.0.1)" in out, out)
+            check("the gateway: not there", rc != 0 and "the Gateway (127.0.0.1)" in out, out)
             if ewrender:
                 p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", "https://localhost:%d/site/pics.html"
                                     % HTTPS], cwd=work, capture_output=True, text=True, timeout=120)
@@ -1218,7 +1218,7 @@ try:
                     rc0, out0, png0 = drawn("")
                     rc1, out1, png1 = drawn("", "-W", g, "-Q", "1")
                     check("the gateway: pens asked of a webgate without them, the pictures as before", rc0 == 0
-                          and rc1 == 0 and len(png0) == 5 and len(png1) == 5 and "pens from the Pi" not in out1, out1)
+                          and rc1 == 0 and len(png0) == 5 and len(png1) == 5 and "pens from the Gateway" not in out1, out1)
                 if pens:
                     # the Pi's pens: the page drawn in 16 colours through the
                     # gateway is the page drawn without it, to the pixel (the
@@ -1229,7 +1229,7 @@ try:
                              "prog.jpg": "128x96", "big.png": "596x447"}
                     rc0, out0, png0 = drawn("pens0.png")
                     rc1, out1, png1 = drawn("pens1.png", "-W", g, "-Q", "1")
-                    from_pi = re.findall(r"^picture \S+/(\S+) pens from the Pi at (\d+x\d+)", out1, re.M)
+                    from_pi = re.findall(r"^picture \S+/(\S+) pens from the Gateway at (\d+x\d+)", out1, re.M)
                     check("the gateway: pictures as the Pi's pens, the same to the pixel", rc0 == 0 and rc1 == 0
                           and len(png0) == len(shown) and png0 == png1 and sorted(from_pi) == sorted(shown.items()),
                           out0 + out1)
@@ -1240,7 +1240,7 @@ try:
                     rc2, out2, _ = drawn("", "-W", g, "-Q", "1", "-Y", "400@again")
                     check("the gateway: the window sized while a picture is fetched again at its size",
                           rc2 == 0 and "sized in a request: 1" in out2 and "AddressSanitizer" not in out2
-                          and re.search(r"^picture \S+/big\.png pens from the Pi at ", out2, re.M), out2)
+                          and re.search(r"^picture \S+/big\.png pens from the Gateway at ", out2, re.M), out2)
                     # kept: read back for the same pens; JPEG asked for, it is fetched
                     cache = os.path.join(work, "PENSCACHE")
                     shutil.rmtree(cache, ignore_errors=True)
@@ -1251,7 +1251,7 @@ try:
                             "http://localhost:%d/site/hits/fresh/photo.jpg" % HTTP, timeout=10).read()
                     check("the gateway: the Pi's pens from the disk cache, not for the JPEG", all(o[0] == 0 for o in outs)
                           and outs[0][2] == outs[1][2] and len(outs[0][2]) == 1 and hits() == b"2"
-                          and "pens from the Pi at 192x128" in outs[1][1]
+                          and "pens from the Gateway at 192x128" in outs[1][1]
                           and re.search(r"^picture \S+ decoded at 192x128", outs[2][1], re.M) is not None,
                           "\n".join(o[1] for o in outs) + "\nhits: %r" % hits())
                 else:
@@ -1280,8 +1280,8 @@ try:
                 now = urllib.request.build_opener(urllib.request.ProxyHandler({})).open("http://localhost:%d/site/kept/count" % HTTP).read().decode()
                 if jsc:
                     check("the gateway: a script compiled by the Pi, kept as it came", rc1 == 0 and rc2 == 0
-                          and out1.count("js code: compiled by the Pi") == 1 and '"kept quick+brown5"' in out1
-                          and out2.count("js code: compiled by the Pi") == 1 and '"kept quick+brown5"' in out2
+                          and out1.count("js code: compiled by the Gateway") == 1 and '"kept quick+brown5"' in out1
+                          and out2.count("js code: compiled by the Gateway") == 1 and '"kept quick+brown5"' in out2
                           and "compiled and kept" not in out1 + out2
                           and int(now.split()[1][4:]) == int(was.split()[1][4:]) + 1, out1 + out2 + was + now)
                 else:

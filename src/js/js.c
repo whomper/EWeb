@@ -4569,7 +4569,7 @@ static void run_script(ejs *j, dnode *n)
 		long at;
 		int c = compiled ? is_code(code, len, &at) : 0;
 		if (c == 1) {
-			say(j, "code", "compiled by the Pi");
+			say(j, "code", "compiled by the Gateway");
 			r = run_code(j, code + at, len - at);
 		}
 		else if (compiled)

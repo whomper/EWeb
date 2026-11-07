@@ -214,7 +214,7 @@ static KEPT *get_conn(const URL *u, HTTPTIME *t, int *reused, char *err, int err
 			char e[200];
 			str_copy(e, err, sizeof(e));
 			if (gw)
-				snprintf(err, errlen, "the gateway (%s): %s", host, e);
+				snprintf(err, errlen, "the Gateway (%s): %s", host, e);
 			else
 				snprintf(err, errlen, "%s: %s", host, e);
 		}
@@ -790,7 +790,7 @@ int http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int err
 			char at[2048];
 			URL su;
 			if (http_header(rs, "X-Gateway-TLS", v, sizeof(v)))
-				snprintf(rs->security, sizeof(rs->security), "%.70s, through the gateway", v);
+				snprintf(rs->security, sizeof(rs->security), "%.70s, through the Gateway", v);
 			else
 				rs->security[0] = 0;
 			/* a snapshot from the Pi's browser: where the browser ended up
@@ -798,7 +798,7 @@ int http_request(const HTTPREQ *rq, HTTPRESP *rs, SBUF *body, char *err, int err
 			if (http_header(rs, "X-Gateway-Snapshot-URL", at, sizeof(at)) && url_parse(&su, at, NULL) &&
 			    su.special) {
 				rs->url = su;
-				snprintf(rs->security, sizeof(rs->security), "a snapshot from the Pi's browser");
+				snprintf(rs->security, sizeof(rs->security), "a snapshot from the Gateway's browser");
 			}
 		}
 		if (rq->no_redirect || !h.location[0] ||

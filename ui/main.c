@@ -123,7 +123,7 @@ static const MBAR_ITEM m_view[] = {
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
 	{ "-", 0, 0 },
-	{ "Through the Pi's browser", 0, C_SNAPSHOT },
+	{ "Through the Gateway's browser", 0, C_SNAPSHOT },
 	{ "Live view", 0, C_LIVE },
 	{ 0, 0, 0 }
 };
@@ -680,7 +680,7 @@ int settings_save(void)
 	put(&s, "ZOOM", v, "the size of the text, per cent (Larger text, Smaller text)");
 	snprintf(v, sizeof v, "%d", opt.falcon);
 	put(&s, "FALCON", v, "1 = Direct connection: secure pages with TLS on this Atari (68020 or better: "
-	    "Falcon, TT; EWEB.PRG); 0 = through the Pi gateway");
+	    "Falcon, TT; EWEB.PRG); 0 = through the Gateway");
 	snprintf(v, sizeof v, "%d", opt.dsp);
 	put(&s, "DSP", v, "Direct connection: 1 = the DSP does the secure connections' arithmetic, 0 = the 68030 does");
 	snprintf(v, sizeof v, "%d", opt.pictures);
@@ -699,14 +699,14 @@ int settings_save(void)
 	put(&s, "HEBREW", v, "1 = EWeb starts with the Hebrew keyboard (F10 switches it), 0 = without");
 #endif
 	snprintf(v, sizeof v, "%d", opt.pens);
-	put(&s, "PENS", v, "through the Pi gateway, pictures made for this screen on the Pi: 1 = always (as it "
+	put(&s, "PENS", v, "through the Gateway, pictures made for this screen on the Gateway: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
-	put(&s, "GATE", opt.gate, "the Raspberry Pi gateway's address, for secure pages without a Direct connection "
-	    "(aera-gateway install web on the Pi)");
+	put(&s, "GATE", opt.gate, "the Gateway's address, for secure pages without a Direct connection "
+	    "(aera-gateway install web on a Raspberry Pi)");
 	snprintf(v, sizeof v, "%u", opt.gateport);
-	put(&s, "GATEPORT", v, "the gateway's port");
+	put(&s, "GATEPORT", v, "the Gateway's port");
 	snprintf(v, sizeof v, "%d", opt.snapshot);
-	put(&s, "SNAPSHOT", v, "1: pages through the Pi's browser, after their scripts ran (the gateway's "
+	put(&s, "SNAPSHOT", v, "1: pages through the Gateway's browser, after their scripts ran (the Gateway's "
 	    "snapshots; View menu), 0: as the servers send them");
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -1702,9 +1702,9 @@ static int can_open(void *ud, const char *url)
 		return 1;
 	log_event("secure page: needs the gateway");
 	if (!tls_available)
-		alert(1, "[1][Secure pages need the|Raspberry Pi gateway: on the|Pi, aera-gateway install web,|then its address in|Settings > Secure.][ OK ]");
+		alert(1, "[1][Secure pages need the|Gateway: on a Raspberry Pi,|aera-gateway install web,|then its address in|Settings > Secure.][ OK ]");
 	else
-		alert(1, "[1][Secure pages need a Direct|connection (Options menu) or|the Raspberry Pi gateway|(Settings > Secure).][ OK ]");
+		alert(1, "[1][Secure pages need a Direct|connection (Options menu) or|the Gateway|(Settings > Secure).][ OK ]");
 	return 0;
 }
 

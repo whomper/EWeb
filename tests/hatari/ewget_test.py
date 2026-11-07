@@ -168,7 +168,7 @@ def main():
                     if "TLS --" in l:
                         print("---- " + l.strip())
             elif name == "through the gateway":
-                ok = ok and "TLS 1.3" in text and "through the gateway" in text \
+                ok = ok and "TLS 1.3" in text and "through the Gateway" in text \
                      and "the connection was kept open" in text \
                      and open(os.path.join(hd, "GW.HTM"), "rb").read() == server.PAGE
             elif name == "on a TT":

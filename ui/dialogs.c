@@ -395,13 +395,13 @@ static void part_secure(short x, short y)
 	d_tick(x, ROW(0), "Direct connection: TLS on this Atari", T_FALCON);
 	d_tick(x + 3, ROW(1), "Check certificates on the DSP", T_DSP);
 	d_text(x + 3, ROW(2), note);
-	d_text(x, ROW(3), "Pi gateway");
+	d_text(x, ROW(3), "Gateway");
 	d_lfield(x + 11, ROW(3), &f_gate, s_gate, 18, sizeof s_gate - 1);
 	d_text(x + 31, ROW(3), "Port");
 	d_field(x + 36, ROW(3), s_gport, 5, '9');
-	d_text(x + 3, ROW(4), "Pages go through the Pi gateway without");
+	d_text(x + 3, ROW(4), "Pages go through the Gateway without");
 	d_text(x + 3, ROW(5), "a Direct connection (the ST: always).");
-	d_text(x + 3, ROW(6), "On the Pi: aera-gateway install web");
+	d_text(x + 3, ROW(6), "On the Gateway: aera-gateway install web");
 }
 
 #ifndef EW_ST

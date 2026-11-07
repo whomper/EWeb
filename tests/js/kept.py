@@ -76,7 +76,7 @@ def main():
         with open(os.path.join(pi, "kept.html"), "w") as f:
             f.write(open(page).read().replace("kept/lib.js", "lib.js"))
         notpi = run(os.path.join(pi, "kept.html"), "-C", os.path.join(work, "cache4"))
-        check("compiled code from elsewhere isn't run as code", "js code: compiled by the Pi" not in notpi and
+        check("compiled code from elsewhere isn't run as code", "js code: compiled by the Gateway" not in notpi and
               "console: kept" not in notpi and "js error: SyntaxError" in notpi, notpi)
     finally:
         shutil.rmtree(work, ignore_errors=True)

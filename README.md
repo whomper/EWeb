@@ -101,7 +101,7 @@ own fonts.
   own palette, with the pale tints pages need (a setting keeps the
   system's).
 - **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP
-  (a Direct connection); or through the Pi gateway, AERA-Gateway's web service on a
+  (a Direct connection); or through the Gateway, AERA-Gateway's web service on a
   Raspberry Pi (TLS 1.3 sites too).
 - **The family's ways**: the About box, menus, shortcuts, right-click menus,
   VA_START and drag and drop, the help file, iconify, the crash report; a
@@ -130,7 +130,7 @@ and unpack it into a folder of its own. It contains:
 | `icons/` | EWeb's desktop icon: `EWEB.RSC` (black and white for TOS 1 and 2, and in colour, 16 and 256 colours, to copy into `DESKICON.RSC` and `DESKCICN.RSC` with a resource editor) for TOS, EmuTOS, and NVDI with TOS's colours loaded (COLORVDI.CPX); `EWEBNV.RSC`, the same for NVDI with its own 256 colours; `EWEB.ICN` and its mask `EWEBMK.ICN` |
 
 `EWEBJS.OVL` is needed only for the scripts of sites you turn them on for;
-`TLS.OVL`, `CACERT.PEM` and `ROOTS.DAT` only for a Direct connection (through the Pi
+`TLS.OVL`, `CACERT.PEM` and `ROOTS.DAT` only for a Direct connection (through the Gateway
 gateway they aren't used); `EWEBST.PRG` only on an ST.
 
 1. With STinG running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST or
@@ -145,7 +145,7 @@ wide, about 3.5 MB free (the program itself takes 1.5 MB, a page up to about
 11 times its size; a Falcon's own 4 MB is enough when the family's
 accessories aren't loaded); its scripts need an FPU and 0.9 MB more; STinG
 or MiNTnet for the network. On an ST or STE (TOS 1.04 or newer, with
-4 MB), the ST edition `EWEBST.PRG`, with the Pi gateway's address
+4 MB), the ST edition `EWEBST.PRG`, with the Gateway's address
 in Settings > Secure.
 
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
@@ -172,22 +172,22 @@ with the server's RSA or ECDSA signatures and the key exchange worked out
 on the DSP: on Erez's DFB1 a handshake with Wikipedia's ECDSA certificates
 took 8 s the first time and about 3 s after (signatures once checked are
 kept in `SIGS.DAT`), where the 68030 alone had taken 86 s. A TT, which has
-no DSP, does it all on its 68030, so there the Pi gateway is the quicker
+no DSP, does it all on its 68030, so there the Gateway is the quicker
 way. Every certificate is checked against the authorities in `CACERT.PEM`
 (Mozilla's list; `ROOTS.DAT` is the same list read in advance), with its
 name and dates; there is no way to skip the check. A kept connection serves
 the next requests to the same server, and a new one to it resumes the TLS
 session, which saves most of the handshake.
 
-Or through the Pi gateway (its address in Settings > Secure, with Falcon
+Or through the Gateway (its address in Settings > Secure, with Falcon
 mode off; always for the ST edition): every page then goes to
 AERA-Gateway's web service on a Raspberry Pi, which makes the secure
 connection (TLS 1.2 or 1.3, its certificates checked) and hands the page
 over your home network. It also makes pictures smaller, turns WebP and the
 like into JPEG or PNG, and can send a picture ready for the Atari's screen,
 in its own colours, made with EWeb's own decoder and dither. With
-`--browser` it opens pages in the Pi's own browser for snapshots and live
-view (CAPTCHAs, pages made by scripts). To set it up, on the Pi (Raspberry
+`--browser` it opens pages in the Gateway's own browser for snapshots and live
+view (CAPTCHAs, pages made by scripts). To set it up, on the Raspberry Pi (Raspberry
 Pi OS bullseye or newer, or any Debian or Ubuntu with Python 3.9 or newer),
 with the Atari's address for `ATARI_IP`:
 
@@ -208,20 +208,20 @@ sudo apt install -y git &&
 ```
 
 - Add `--browser` to the last line for snapshots and live view (in EWeb,
-  View > Through the Pi's browser and View > Live view): it installs
-  Chromium and needs a Pi with 2 GB or more.
+  View > Through the Gateway's browser and View > Live view): it installs
+  Chromium and needs a Raspberry Pi with 2 GB or more.
 - `install web` also builds `aerapens` (the pictures for the Atari's screen;
   AERA-Gateway 1.6 and later), installing `gcc` and `make` if they're missing,
   and, once AERA-Gateway has it, `aerajsc`, which compiles pages' scripts for
   EWeb (EWeb 0.41 and later). EWeb runs compiled scripts only from its own cache
-  or from the Pi, trusting the Pi as it trusts your home network: anyone who can
-  answer for the Pi there could also hand EWeb a script.
+  or from the Gateway, trusting the Gateway as it trusts your home network: anyone who can
+  answer for the Gateway there could also hand EWeb a script.
 - To update: `cd ~/AERA-Gateway && ./update-pi.sh`. To check:
   `sudo aera-gateway status`, or `http://PI_IP:8280/` from a browser that
   doesn't go through the gateway.
-- In EWeb: Settings > Secure, the Pi gateway `PI_IP`, port `8280`; in
+- In EWeb: Settings > Secure, the Gateway `PI_IP`, port `8280`; in
   `EWEB.PRG` turn the Direct connection off too (Options > Direct connection,
-  or its tick in Settings > Secure): while it is on, pages don't go through the Pi.
+  or its tick in Settings > Secure): while it is on, pages don't go through the Gateway.
 
 The gateway's own README, with its options and what to do when something
 doesn't work: [gateway/README.md](gateway/README.md#web-ewebs-gateway).
@@ -237,9 +237,9 @@ make help HCP=/path/to/hcp   # binary/EWEB.HYP (common/tools/build-hcp.sh builds
 make bench      # build/host/nsbench and build/host/ewget, for this computer
 make bench68k   # build/m68k/nsbench, a 68030 Linux program for tools/count68k.sh
 make test       # nsbench, the CSS engine's cases, the Hebrew pages, the input stream, the HTTP client, cookies, bookmarks, the history, the disk cache, the fuzz finds, forms, the layout and the scripts, with ASan and UBSan
-make itest      # ewget and the browser against servers on this computer, over TCP and TLS, and through the Pi gateway's webgate (gateway/)
+make itest      # ewget and the browser against servers on this computer, over TCP and TLS, and through the Gateway's webgate (gateway/)
 make hatarinet  # EWGET.TTP on an emulated Falcon, through FAKESTNG, against those servers
-make hatarigui  # EWEB.PRG on emulated Falcons and TTs, EWEBST.PRG on STs: browsing over the network, scripts, every screen mode, the Pi gateway
+make hatarigui  # EWEB.PRG on emulated Falcons and TTs, EWEBST.PRG on STs: browsing over the network, scripts, every screen mode, the Gateway
 make hatarifiles  # what EWEB.PRG and EWGET.TTP do on the disk, against each case's budget
 make urltest    # the URL parser against the URL Standard's tests (tests/url/fetch.sh first)
 make fuzz       # the HTTP client, the URL and HTML parsers, cookies, the bookmark file and HISTORY.TXT under libFuzzer (clang)
@@ -264,7 +264,7 @@ docs/NSBENCH.TXT      NSBENCH's guide, as it goes into a release
 docs/PICBENCH.TXT     PICBENCH's guide, as it goes into a release
 docs/EWGET.TXT        EWGET's guide, as it goes into a release
 docs/help/            the guide's window picture (WINDOW.IMG, a Hatari capture)
-gateway/              AERA-Gateway's Raspberry Pi gateways, webgate.py (EWeb's) among them:
+gateway/              AERA-Gateway's services for the Raspberry Pi, webgate.py (EWeb's) among them:
                       a read-only copy (tools/sync-gateway.sh)
 ui/                   EWEB.PRG's GEM side: the window, the toolbar (its pictures in
                       tbicons.h, made by tools/mktbicons.py), the page on the screen
@@ -299,7 +299,7 @@ tests/hatari/         EWGET.TTP, EWEB.PRG and EWEBST.PRG in Hatari (through comm
                       and what they do on the disk (disk_files.py)
 tests/host/ewrender.c a page or URL drawn as EWeb draws it, into a PNG or a display list
 tests/layout/         the layout's test pages and their display lists
-tests/browse/         the bookmarks, the history, the disk cache, the Pi's pens, a refresh, and a page's
+tests/browse/         the bookmarks, the history, the disk cache, the Gateway's pens, a refresh, and a page's
                       encoding (enctest.c: the sniffing, the default by address, queries)
 tests/forms/          what forms send (cases.txt, from the HTML Standard), formtest.c
 tests/js/             pages whose scripts check themselves, run by ewrender -J (run.py)
@@ -345,7 +345,7 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   address, the file written at quit and read again), the disk cache on a clock of
   its own (`tests/browse/dctest.c`: how long an answer stays fresh, what may
   not be kept, asking again and a 304, the pack a ring of the cache's size),
-  pictures that come as the Pi's pens (`tests/browse/pentest.c`), the fuzz
+  pictures that come as the Gateway's pens (`tests/browse/pentest.c`), the fuzz
   targets' seeds and past finds (`tests/fuzz`), and the scripts' test pages
   (`tests/js`: the DOM, events, forms, `document.write`, timers, computed
   styles, a page left for another, errors and the budget), and a page's encoding
@@ -365,7 +365,7 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   servers (an ECDSA one too, its curves on the DSP, twice), with a `.CMD`
   file dropped on it, with the release's `CACERT.PEM` and `ROOTS.DAT`
   (twice: the second time `ROOTS.DAT` knows `CACERT.PEM`'s date), and
-  through AERA-Gateway's webgate (TLS 1.3 from the Pi to the server).
+  through AERA-Gateway's webgate (TLS 1.3 from the Gateway to the server).
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
 - `make test` also sends forms (`tests/forms/cases.txt`, worked out from the
@@ -400,9 +400,9 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   pictures read back from the cache the next time, and the Settings (^,); `st`, `EWEBST.PRG` on a 4 MB
   1040 ST (TOS 1.04) in monochrome and medium resolution, a
   secure page without the gateway, then a secure page and its pictures, as
-  the Pi's pens, through AERA-Gateway's webgate; `gateway`, `EWEB.PRG` on
+  the Gateway's pens, through AERA-Gateway's webgate; `gateway`, `EWEB.PRG` on
   the Falcon through webgate with the family's accessories loaded, the
-  pictures as JPEG and PNG and as the Pi's pens; `falcon`, a secure page
+  pictures as JPEG and PNG and as the Gateway's pens; `falcon`, a secure page
   whose pictures come from another secure host, TLS and the JPEGs on the
   DSP; `falcon4`, `EWEB.PRG` on the stock 4 MB Falcon (no FPU, no TT RAM): a
   177 KB page loaded and loaded again, and the pictures' page; `deep`, a page nested 1000 deep on the Falcon and the 1040 ST, cut,
@@ -430,14 +430,14 @@ common/               the AERA shared code (git subtree of AERA-Atari): don't ed
   scripts (`/site/script.html`: a file's script, `fetch` and
   `XMLHttpRequest`, `document.cookie` without the HttpOnly cookie). Then
   the same through AERA-Gateway's webgate (`gateway/`, or `WEBGATE=`): TLS
-  1.3 from the Pi, a redirect, a big chunked answer, a certificate it can't
+  1.3 from the Gateway, a redirect, a big chunked answer, a certificate it can't
   check refused, pictures made smaller and WebP made JPEG, pictures as the
-  Pi's pens (the same to the pixel, and read back from the disk cache), a
-  login's POST and its cookie; and the Pi's browser (`--browser`, with a
+  Gateway's pens (the same to the pixel, and read back from the disk cache), a
+  login's POST and its cookie; and the Gateway's browser (`--browser`, with a
   stand-in for webgate-ext): a snapshot and the live view. The decoders'
   own tests (PngSuite, libjpeg-turbo's and libnsgif's pictures against
   Pillow, the 68030 build under QEMU, the DSP's JPEG and dither against
-  the 68030's, and the Pi's pens against the Atari's own code) are
+  the 68030's, and the Gateway's pens against the Atari's own code) are
   AERA-Atari's `common/tests/pic` (`make test`, `make test68k`, `make
   testdsp`, `make pens` there).
 - `make hatarifiles`: what `EWEB.PRG` and `EWGET.TTP` do on the disk, from

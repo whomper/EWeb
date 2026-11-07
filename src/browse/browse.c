@@ -930,8 +930,8 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 			   "JavaScript: words typed in the address go there.</p>");
 	}
 	if (http_gateway[0])
-		sb_adds(s, "<p class=small>Google's own page can be shown through the Pi's browser "
-			   "(View &gt; Through the Pi's browser).</p>");
+		sb_adds(s, "<p class=small>Google's own page can be shown through the Gateway's browser "
+			   "(View &gt; Through the Gateway's browser).</p>");
 	sb_adds(s, "</body></html>");
 }
 
@@ -1025,15 +1025,15 @@ static void cf_page(SBUF *s, const char *url, int check)
 		   its screen, the address opened, to tick the box) */
 		char live[4200];
 		br_live_url(url, live, sizeof live);
-		sb_adds(s, check == 2 ? "<p>The Pi's browser met the check too, and it wants a click: <a href=\"" :
-			   "<p>The Pi's browser didn't get through the check in time: <a href=\"");
+		sb_adds(s, check == 2 ? "<p>The Gateway's browser met the check too, and it wants a click: <a href=\"" :
+			   "<p>The Gateway's browser didn't get through the check in time: <a href=\"");
 		esc(s, live);
-		sb_adds(s, check == 2 ? "\">Live view</a> shows the Pi's screen to tick it; then load this page "
+		sb_adds(s, check == 2 ? "\">Live view</a> shows the Gateway's screen to tick it; then load this page "
 					"again (^R).</p>" :
 			   "\">Live view</a> shows what it shows; then load this page again (^R).</p>");
 	} else if (http_gateway[0]) {
-		sb_adds(s, "<p class=small>The Pi's browser may pass the check: View &gt; Through the "
-			   "Pi's browser.</p>");
+		sb_adds(s, "<p class=small>The Gateway's browser may pass the check: View &gt; Through the "
+			   "Gateway's browser.</p>");
 	}
 	sb_adds(s, "</body></html>");
 }
@@ -5549,7 +5549,7 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 			if (b->p != p0)
 				return BRP_LAYOUT;	/* laid out again meanwhile (the window sized) */
 			ms_decode += pf_ms() - t;
-			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_is_pens(im) ? "pens from the Pi" :
+			snprintf(what, sizeof what, "%s at %ldx%ld", ok ? (img_is_pens(im) ? "pens from the Gateway" :
 							       img_from_cache(im) ? "from the cache" : "decoded") :
 				 img_why(im), (long) w, (long) h);
 			MARK("picture: logged");

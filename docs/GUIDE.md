@@ -14,8 +14,8 @@ and white.
   the Falcon's true colour.
   On an ST or STE (TOS 1.04 or newer) with 4 MB, use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
-  sites through AERA-Gateway's web service on a Raspberry Pi (the Pi
-  gateway, in [Settings](#settings))
+  sites through AERA-Gateway's web service on a Raspberry Pi (the Gateway,
+  in [Settings](#settings))
 - For `EWEB.PRG` about 3.5 MB of free memory (the program itself takes
   1.6 MB, and `TLS.OVL` 0.15 MB more at the first secure site of a Direct
   connection; a page up to about 11 times its size): a Falcon's own 4 MB is
@@ -132,12 +132,12 @@ the ST edition shows none). SVG drawings, as logos and icons often are,
 EWeb draws itself at the size the page shows them, in both editions,
 whether they come as a file or are written into the page; their
 writing, clipping, masks and filters aren't drawn. Pictures EWeb can't
-show (a bigger WebP, AVIF) aren't fetched at all; through the Raspberry Pi gateway they
-come as JPEG or PNG, and big ones come made smaller on the Pi, a few dozen
+show (a bigger WebP, AVIF) aren't fetched at all; through the Gateway they
+come as JPEG or PNG, and big ones come made smaller on the Gateway, a few dozen
 kilobytes instead of a megabyte, or ready for your screen (see
-[Secure sites](#secure-sites)). The Pi also fetches a page's pictures a
+[Secure sites](#secure-sites)). The Gateway also fetches a page's pictures a
 few at a time as soon as the page is shown, so that each is ready when
-EWeb asks for it, once the Pi has a gateway that does (`update-pi.sh`
+EWeb asks for it, once the Gateway has a version that does (`update-pi.sh`
 brings the latest). A picture whose size the page doesn't give
 shows its description first, and the page is laid out again when its
 size is known (at most every two seconds, so that it doesn't jump about
@@ -629,31 +629,31 @@ and run for 5 seconds as it opens (2 seconds for each click or timer
 after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
-those, use the Pi's browser (below). The ST edition runs no scripts and
+those, use the Gateway's browser (below). The ST edition runs no scripts and
 has no such menu item; on a Falcon without an FPU, picking it says
 "JavaScript needs an FPU (a 68881 or 68882)", and pages are shown as
 with scripts off.
 
-With the Pi gateway set up for it (`aera-gateway` with its browser, on
-the Pi) and in use (its address in Settings > Secure, and on a Falcon or
-TT the Direct connection off), two things in the View menu use the Pi's own web
+With the Gateway set up for it (`aera-gateway` with its browser, on
+the Gateway) and in use (its address in Settings > Secure, and on a Falcon or
+TT the Direct connection off), two things in the View menu use the Gateway's own web
 browser:
 
-- **Through the Pi's browser:** each page is opened by the browser on
-  the Pi, its scripts run there, and EWeb shows the page as it then
+- **Through the Gateway's browser:** each page is opened by the browser on
+  the Gateway, its scripts run there, and EWeb shows the page as it then
   stands: a snapshot. Links and forms work as on any page; the status bar
-  says "a snapshot from the Pi's browser". Turn it off for pages that
+  says "a snapshot from the Gateway's browser". Turn it off for pages that
   don't need it: they come quicker straight from their servers.
-- **Live view:** the Pi's browser's screen as a picture, with the page
-  shown in EWeb opened there. The Pi lays the page out as wide as EWeb's
+- **Live view:** the Gateway's browser's screen as a picture, with the page
+  shown in EWeb opened there. The Gateway lays the page out as wide as EWeb's
   window, and the picture is three of its screens tall: scroll through it
   in EWeb as through any page; Page down in the row of buttons brings the
-  next three. The Pi sends it ready for your screen, so the Atari has
+  next three. The Gateway sends it ready for your screen, so the Atari has
   nothing to decode (AERA-Gateway 1.17 or later). A click on the picture is a click there;
   type into the field under it and press Type (or Type and Enter), or use
   the buttons for keys, scrolling and Back. For what a snapshot can't
   do: a login made by scripts, a cookie question, a puzzle. "As a page"
-  brings what the Pi's browser shows back as a page in EWeb.
+  brings what the Gateway's browser shows back as a page in EWeb.
 
 ## Secure sites
 
@@ -665,25 +665,25 @@ takes a few seconds; later ones are quicker, as EWeb remembers what it
 checked (`SIGS.DAT`).
 
 Without a Direct connection, and always in the ST edition, pages come through
-the Pi gateway: AERA-Gateway's web service on a Raspberry Pi in your
-home (set up as below), whose address you type in Settings > Secure. The Pi makes the secure connection (TLS 1.3 too) and
+the Gateway: AERA-Gateway's web service on a Raspberry Pi in your
+home (set up as below), whose address you type in Settings > Secure. The Gateway makes the secure connection (TLS 1.3 too) and
 hands the page over your home network. It also makes each picture as the
 page can show it: one wider than the page comes made smaller, and WebP,
-AVIF and the like come as JPEG or PNG (the Pi needs `python3-pil`, which
+AVIF and the like come as JPEG or PNG (the Gateway needs `python3-pil`, which
 `aera-gateway install web` adds). A photo of a megabyte comes as a few
-dozen kilobytes, and the Falcon decodes far less. When the Pi's gateway
+dozen kilobytes, and the Falcon decodes far less. When the Gateway
 can, it makes each picture ready for your screen too, in its own colours
 and at the size the page shows it, exactly as EWeb would have made it:
 EWeb takes them so whenever the gateway is on (a photo in a moment
 instead of seconds on a Falcon, half a minute on an ST). After you change
-the screen's colours, pictures come again from the Pi. `PENS=0` in
-`EWEB.INF` turns it off (the Atari then decodes the Pi's JPEGs), `PENS=-1`
+the screen's colours, pictures come again from the Gateway. `PENS=0` in
+`EWEB.INF` turns it off (the Atari then decodes the Gateway's JPEGs), `PENS=-1`
 takes them only when that is quicker than the Falcon's DSP. With neither, EWeb
 says so when you open a secure page, and the page shown stays.
 
 The status bar says how a secure page came.
 
-### Setting up the Pi gateway
+### Setting up the Gateway
 
 On the Raspberry Pi (Raspberry Pi OS), in a terminal, with your Atari's
 address in place of `ATARI_IP`:
@@ -704,18 +704,18 @@ sudo apt install -y git &&
   ~/AERA-Gateway/update-pi.sh --allow ATARI_IP
 ```
 
-- Add `--browser` to the last line for **Through the Pi's browser** and
+- Add `--browser` to the last line for **Through the Gateway's browser** and
   **Live view** (see [Pages made by scripts](#pages-made-by-scripts)):
-  it installs Chromium and needs a Pi with 2 GB or more.
+  it installs Chromium and needs a Raspberry Pi with 2 GB or more.
 - `install web` also builds the part that makes pictures ready for your
   screen (AERA-Gateway 1.6 and later), and installs `gcc` and `make` for
   it if they're missing.
-- To update the Pi later: `cd ~/AERA-Gateway && ./update-pi.sh`.
-- To check it: `sudo aera-gateway status` on the Pi; or, before EWeb
+- To update the Gateway later: `cd ~/AERA-Gateway && ./update-pi.sh`.
+- To check it: `sudo aera-gateway status` on the Raspberry Pi; or, before EWeb
   goes through it (or with a Direct connection), open `http://PI_IP:8280/` (the
-  Pi's address) in EWeb: it says webgate is running.
+  Raspberry Pi's address) in EWeb: it says webgate is running.
 
-Then in EWeb: **Settings > Secure**, the Pi gateway `PI_IP` (the Pi's
+Then in EWeb: **Settings > Secure**, the Gateway `PI_IP` (the Raspberry Pi's
 address), port `8280`; on a Falcon or TT, untick Direct connection there too,
 or pages still come straight from their servers.
 
@@ -735,7 +735,7 @@ dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
   colours. Dialogs and alerts have the 3D look wherever the system has
   one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon).
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
-  checks certificates, and the Pi gateway's address and port (8280).
+  checks certificates, and the Gateway's address and port (8280).
 - **Scripts** (`EWEB.PRG`): whether pages' scripts run, and on every site
   or only on those you choose (see
   [Pages made by scripts](#pages-made-by-scripts)).
@@ -755,7 +755,7 @@ there at once; where the window was, when you quit:
   (FrogFind: `http://frogfind.com/?q=%s`)
 - `ZOOM=` the size of the text, per cent (50 to 200)
 - `FALCON=` 1 for a Direct connection (secure pages on this Atari), 0 for the
-  Pi gateway
+  Gateway
 - `DSP=` 1 to let the DSP do the secure connections' arithmetic
 - `PICTURES=` 1 to show pictures, 0 for what they are instead (View >
   Show pictures)
@@ -772,14 +772,14 @@ there at once; where the window was, when you quit:
   address's query, a cookie or what was typed in a form); written once a
   page and its pictures have come. 0 (as it starts) for none; Options >
   Write a log turns it on and off
-- `PENS=` through the Pi gateway, pictures made ready for your screen on
-  the Pi: 1 always, -1 only when that is quicker than the DSP, 0 never
+- `PENS=` through the Gateway, pictures made ready for your screen on
+  the Gateway: 1 always, -1 only when that is quicker than the DSP, 0 never
   (the Atari decodes them)
-- `GATE=` the Pi gateway's address: without a Direct connection every page comes
-  through the Pi, which makes the secure connection itself (TLS 1.3 too)
+- `GATE=` the Gateway's address: without a Direct connection every page comes
+  through the Gateway, which makes the secure connection itself (TLS 1.3 too)
 - `GATEPORT=` its port (8280)
-- `SNAPSHOT=` 1 for pages through the Pi's browser (View > Through the
-  Pi's browser), 0 for pages as their servers send them
+- `SNAPSHOT=` 1 for pages through the Gateway's browser (View > Through the
+  Gateway's browser), 0 for pages as their servers send them
 - `TRACKERS=` 0 (as it starts) leaves out what a page asks of known
   trackers (Google Tag Manager, Google Analytics): their scripts,
   pictures and frames aren't fetched; 1 fetches them too. A page you
@@ -811,10 +811,10 @@ there at once; where the window was, when you quit:
 - **"This site lets in only browsers that pass Cloudflare's check"**:
   the site has Cloudflare's check ("Just a moment...") in front of it, a
   script for the big browsers that EWeb can't run. The page links to the
-  Internet Archive's copy of the page, if it has one. Through the Pi
-  gateway with its browser (AERA-Gateway with `--browser`), the Pi passes
+  Internet Archive's copy of the page, if it has one. Through the Gateway
+  with its browser (AERA-Gateway with `--browser`), the Gateway passes
   the check itself and EWeb shows the page; when the check wants a click,
-  the page's **Live view** link shows the Pi's screen to tick it, and
+  the page's **Live view** link shows the Gateway's screen to tick it, and
   then ^R loads the page
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
