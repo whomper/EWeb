@@ -55,6 +55,11 @@ typedef struct js_host {
 	   read back: 1 and *data (malloc'd), *len; 0 none. NULL: not kept */
 	int (*code_get)(void *ud, const char *key, char **data, long *len);
 	void (*code_put)(void *ud, const char *key, const char *data, long len);
+	/* the page d styled and laid out again now, for a script that reads
+	   where its boxes are after changing them (offsetHeight,
+	   getBoundingClientRect: a date picker placed under its field);
+	   js_set_page is given the new page. 1 done; NULL or 0: not here */
+	int (*relayout)(void *ud, doc *d);
 	void *ud;
 } js_host;
 
@@ -93,8 +98,9 @@ const char *js_problem(void);
 /* the page's scripts run: url is its address, base what its links are
    resolved against. The document's js is set (JS_DONE). */
 int js_page(doc *d, const char *url, const char *base, const js_host *h);
-/* the document changed (since the last call): style and lay it out
-   again (doc_refresh first) */
+/* the document changed (since the last call): 1 style and lay it out
+   again (doc_refresh first); 2 already laid out as it is (js_host's
+   relayout, for a script that read its boxes), to be shown */
 int js_changed(doc *d);
 /* where a script sent the browser (location, form.submit's address),
    or NULL; its method and body for a form sent with POST (NULL: GET) */

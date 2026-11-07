@@ -5774,6 +5774,27 @@ static int32_t spacing(L *l, const ec_style *s, int vertical)
 	return dev(l, s->v[k].i);
 }
 
+/* a cell's narrowest content, its padding and borders round it (its
+   width not counted: cell_pref) */
+static int32_t cell_min(L *l, box *c)
+{
+	int minw = l->minw;
+	int32_t m = 0;
+	box *k;
+	l->minw = 1;
+	if (c->inl) {
+		m = inline_measure(l, c);
+	} else {
+		for (k = c->first; k != NULL; k = k->next) {
+			int32_t v = out_of_flow(k) ? 0 : measure(l, k);
+			if (v > m)
+				m = v;
+		}
+	}
+	l->minw = minw;
+	return m + extras(l, c);
+}
+
 /* a cell's widest, or the width it asks for */
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
@@ -5789,8 +5810,17 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		return m;
 	}
 	if (kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX)
-		return cw + len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w);
-	return cw + extras(l, c);
+		cw += len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w);
+	else
+		cw += extras(l, c);
+	{
+		/* a width is the least it takes, not the most: no narrower
+		   than its narrowest content (CSS 2.1, 17.5.2.2: a column's
+		   least is its cells' min-content; a date picker's cells of
+		   20px, its bold "Su" wider at a zoom that makes them 18) */
+		int32_t m = cell_min(l, c);
+		return m > cw ? m : cw;
+	}
 }
 
 static int rowspan(const box *c);
@@ -8547,7 +8577,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (hp != AUTO) {
 			if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 				hp -= bt + bb + pt + pb;
-			if (hp >= 0)
+			/* (a cell's height is the least it takes: its row as tall
+			   as its content, CSS 2.1, 17.5.3; a date picker's cells
+			   of 20px, its month's name on two lines) */
+			if (hp >= 0 && !(kw(s, EP_DISPLAY) == KW_TABLE_CELL && ch > hp))
 				ch = hp;
 		}
 		mn = len(l, s, EP_MIN_HEIGHT, AUTO);

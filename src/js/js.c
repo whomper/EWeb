@@ -83,6 +83,9 @@ typedef struct ejs {
 	int changed;			/* the document changed: style and lay out again */
 	int stale;			/* the tree changed since the CSS engine's links were made */
 	unsigned long edits, styled;	/* changes made; and at the last styling (getComputedStyle) */
+	unsigned long laid;		/* edits when the page (pg) was laid out */
+	int relayouts;			/* laid out again for a script this turn (laid_now) */
+	int relaid;			/* and the page is as it is (js_changed's 2) */
 	timer *running;			/* the timer whose function runs */
 	int loaded;			/* load has fired */
 	dnode *current;			/* the script running (document.currentScript) */
@@ -279,6 +282,7 @@ static void arm(ejs *j, unsigned long ms)
 	j->t0 = pf_ms();
 	j->deadline = ms;
 	j->over = 0;
+	j->relayouts = 0;
 }
 
 /* the promise jobs waiting */
@@ -1770,10 +1774,33 @@ static JSValue el_matches(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
 enum { RECT_OBJ, RECT_TOP, RECT_LEFT, RECT_WIDTH, RECT_HEIGHT, RECT_SWIDTH, RECT_SHEIGHT };
 
+/* the page laid out as the document is now, before a script reads its
+   boxes: a script that shows a box and then places it by its size
+   (webdriveruniversity's date picker, under its field) read the boxes
+   of before. At most a few times a turn: a loop that reads after each
+   change would lay the page out again and again; its time isn't the
+   script's (as the network's) */
+static void laid_now(ejs *j)
+{
+	unsigned long t;
+	if (j->edits == j->laid || j->pg == NULL || j->h.relayout == NULL || j->relayouts >= 4)
+		return;
+	j->relayouts++;
+	t = pf_ms();
+	if (j->h.relayout(j->h.ud, j->d)) {
+		j->stale = 0;		/* (restyled from a refreshed tree) */
+		j->styled = j->edits + 1;
+		j->relaid = 1;
+	}
+	j->laid = j->edits;		/* (or not here: not asked again) */
+	j->t0 += pf_ms() - t;
+}
+
 static int rect_of(ejs *j, const dnode *n, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
 {
 	*x = *y = *w = *h = 0;
 #ifndef EW_ST
+	laid_now(j);
 	if (j->pg != NULL && page_node_rect(j->pg, n, x, y, w, h))
 		return 1;
 #endif
@@ -1797,6 +1824,7 @@ static JSValue el_rect(JSContext *ctx, JSValueConst this_val, int magic)
 		/* scrollWidth, scrollHeight: as far as its content reaches */
 		w = h = 0;
 #ifndef EW_ST
+		laid_now(J(ctx));
 		if (J(ctx)->pg != NULL)
 			page_node_extent(J(ctx)->pg, n, &w, &h);
 #endif
@@ -4832,8 +4860,11 @@ int js_changed(doc *d)
 	if (j == NULL)
 		return 0;
 	r = j->changed || j->stale;
+	if (r && j->relaid && j->laid == j->edits && j->pg != NULL)
+		r = 2;
 	j->changed = 0;
 	j->stale = 0;
+	j->relaid = 0;
 	return r;
 }
 
@@ -5028,8 +5059,10 @@ void js_toggled(doc *d, dnode *n)
 void js_set_page(doc *d, const page *p)
 {
 	ejs *j = d->js;
-	if (j != NULL)
+	if (j != NULL) {
 		j->pg = p;
+		j->laid = j->edits;
+	}
 }
 
 void js_stats(doc *d, unsigned long *ms, long *bytes)

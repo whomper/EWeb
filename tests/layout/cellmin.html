@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A cell's width is the least it takes (CSS 2.1, 17.5.2.2): a column is
+     no narrower than its cells' narrowest content. webdriveruniversity's
+     Datepicker: cells of 20px, at EWeb's zoom 18 device px, its bold "Su"
+     wider: it broke in two. Each word below stays whole. -->
+<html><head><title>cellmin</title>
+<style>td,th{width:20px;height:20px;text-align:center;padding:0;border:1px solid #999}
+.box{position:absolute;left:300px;top:8px;border:1px solid red;padding:4px}</style>
+</head><body>
+<table><tr><th>&laquo;</th><th colspan=5>November 2026</th><th>&raquo;</th></tr>
+<tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr>
+<tr><td>25</td><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td><td>31</td></tr></table>
+<table style="width:100px"><tr><td style="width:10px">Wednesday</td><td>x</td></tr></table>
+<div class="box"><table><tr><th>Su</th><th>Mo</th><th>Sa</th></tr>
+<tr><td style="width:4px">100</td><td>2</td><td>3</td></tr></table></div>
+</body></html>

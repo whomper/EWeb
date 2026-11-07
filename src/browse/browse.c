@@ -4417,6 +4417,8 @@ static void jh_console(void *ud, const char *line)
 		b->console(b->ud, line);
 }
 
+static int jh_relayout(void *ud, doc *d);
+
 static void js_host_of(browser *b, js_host *h)
 {
 	h->fetch = jh_fetch;
@@ -4429,6 +4431,7 @@ static void js_host_of(browser *b, js_host *h)
 	h->fetch_script = jh_fetch_script;
 	h->code_get = jh_code_get;
 	h->code_put = jh_code_put;
+	h->relayout = jh_relayout;
 	h->ud = b;
 }
 
@@ -4455,6 +4458,14 @@ static int restyle(browser *b)
 	shown_imgs(b);
 	str_copy(b->title, d->title, sizeof b->title);
 	return 1;
+}
+
+/* a script reading its boxes after changing them: the page shown laid
+   out again now (not a frame's: its page is spliced into this one's) */
+static int jh_relayout(void *ud, doc *d)
+{
+	browser *b = ud;
+	return d == b->d && b->p != NULL && restyle(b);
 }
 
 /* what the page's scripts did: a new address, or a changed page */
@@ -4526,8 +4537,13 @@ static int js_after(browser *b, int *load_r)
 	}
 	if (js_navigation(b->d, NULL, NULL, NULL) != NULL)
 		js_navigation_done(b->d);	/* sent on and on: no further */
-	if (js_changed(b->d) && restyle(b))
-		return BRJ_DRAWN;
+	switch (js_changed(b->d)) {
+	case 2:
+		return BRJ_DRAWN;	/* (laid out as it is for a script: jh_relayout) */
+	case 1:
+		if (restyle(b))
+			return BRJ_DRAWN;
+	}
 	return BRJ_NONE;
 }
 

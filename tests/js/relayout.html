@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!-- args: -K open -K grow -->
+<!-- expect: console: shown 90 tall, under its field at 1 -->
+<!-- expect: console: grown 180, scrollHeight 180 -->
+<!-- expect: console: placed 1 -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A script that changes the page and then reads its boxes reads them
+     as they are now (the page laid out again first, js_host's
+     relayout): webdriveruniversity.com's Datepicker shows its calendar
+     and places it under its field by the calendar's height -->
+<html><head><title>relayout</title>
+<style>#cal{display:none;height:90px;position:absolute;left:0} #f{margin-top:40px;height:20px}</style>
+</head><body>
+<input id="f" value="date">
+<div id="cal"><div id="in" style="height:90px"></div></div>
+<button id="open" onclick="
+  var c = document.getElementById('cal'), f = document.getElementById('f');
+  c.style.display = 'block';
+  var r = f.getBoundingClientRect();
+  c.style.top = (r.top + r.height) + 'px';
+  console.log('shown ' + c.offsetHeight + ' tall, under its field at ' +
+    (c.getBoundingClientRect().top == r.bottom ? 1 : 0));
+">open</button>
+<button id="grow" onclick="
+  var c = document.getElementById('cal');
+  document.getElementById('in').style.height = '180px';
+  c.style.height = 'auto';
+  console.log('grown ' + c.offsetHeight + ', scrollHeight ' + c.scrollHeight);
+  console.log('placed ' + (c.offsetTop > 0 ? 1 : 0));
+">grow</button>
+</body></html>

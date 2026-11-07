@@ -1725,7 +1725,9 @@ the DOM grows past "lean".
   if each were deferred; what `document.write` writes goes in after its script, and a script that
   writes is run in its turn. Then `DOMContentLoaded` and `load`, and the timers due. A script that
   changed the document has it styled and laid out again (after its event or timer, not at each
-  change). Clicks, typing, ticks and choices in forms, and a form sent are events; a click's default
+  change), and before it reads a box it changed (`offset...`, `getBoundingClientRect`,
+  `scrollWidth` and `scrollHeight`: js_host's `relayout`, `laid_now`), at most four times in a
+  turn, that time not counted as the script's. Clicks, typing, ticks and choices in forms, and a form sent are events; a click's default
   (a link followed, a form sent) waits for its listeners, which may cancel it. Modules aren't run
   (no loader); their `nomodule` fallbacks are.
 - **The budget** (the design: 100-200 KB, a few seconds; since 26 Oct 2026, Erez's choice, pages of
@@ -4034,9 +4036,8 @@ Chromium at 640 pixels (`ewrender -W` through a webgate, scripts on), then their
   `getClientRects`, which jQuery's sizes ask.
 
 So the Datepicker shows today's date with its button beside it; the button opens the calendar
-and a day picked fills the field. Left: the calendar opens over its field, placed by its height
-as the last layout had it (none: scripts don't lay the page out again when they ask a size,
-Phase 3's first item); a cell of width 1% before a field narrower than its words (a spanning
+and a day picked fills the field. Left: the calendar opened over its field, placed by its height
+as the last layout had it (since 7 Nov under its field: the third round); a cell of width 1% before a field narrower than its words (a spanning
 row's widths shared by column, as a page of the set showed, would need the share reworked);
 rounded corners and shadows; Glyphicons' calendar. Tests: `tests/layout/pcheight.html`,
 `buttons.html`, `absbottom.html`, `tables.html`, `icons.html`, `tests/js/detached.html`; the page
@@ -4077,6 +4078,14 @@ fade and a text that comes later are started by the click; `-u ID=TEXT` typing a
   Buttons' and Hidden Elements' `js/script.js` wrapped in `<script>`, `js/html5shiv.js` and
   `js/respond.js` its 404 page): a SyntaxError in each, nothing lost.
 - Login Portal sends its form to the site: tried on a copy, never on the site.
+- **The Datepicker's calendar** (7 Nov 2026): shown by its button, then placed by its height,
+  which the script read before the page was laid out again: 0, so it opened on its field. Now a
+  script that reads a box after changing the page has it laid out first (above, When they run;
+  `tests/js/relayout.html`). And a table cell's width is the least it takes, not the most
+  (CSS 2.1, 17.5.2.2: a column is no narrower than its cells' narrowest content, `cell_min`):
+  its cells of 20px are 18 device px at EWeb's zoom, and its bold "Su" and "Sa" broke in two;
+  and so is its height (17.5.3: the row as tall as its content), its month's name on two lines
+  ran into the row below (`tests/layout/cellmin.html`).
 
 **The AI Playground in use (7 Nov 2026).** Its 27 challenges on a copy of the page (ewrender
 `-J`, each one's clicks, typing and timers; the API intercept through a local server, as the
