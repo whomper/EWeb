@@ -343,10 +343,11 @@ def held_scroll(r, group, name, settle):
     time.sleep(2.0 if settle < 10 else 6.0)
     # three pictures a third of a second apart while it is held: a step's
     # copy on the screen (by the CPU, from the top down) taken half done
-    # shows one band twice, a step apart, where the copy has got to, and
-    # is gone a moment later; the fault this looks for stays on the screen
-    # while the arrow is held (the same lines down the window), so it is
-    # in every picture
+    # shows one band twice where the copy has got to, gone a moment later
+    # (one picture in a run at most); the fault this looks for stays on
+    # the screen while the arrow is held (the same lines down the window:
+    # 0.57 shows it in at least two of the three on TOS 4.04, EmuTOS and
+    # TOS 1.04), so two pictures of three with a band twice fail it
     shots = []
     for n in range(3):
         if n:
@@ -370,7 +371,7 @@ def held_scroll(r, group, name, settle):
         return same
     same = [twice(im) for im in shots]
     check("%s: %s, the down arrow held: no line twice in the window while it is held" % (group, name),
-          len(tops) > 3 and not all(same), "%d steps; the same rows in each picture at %s" %
+          len(tops) > 3 and sum(1 for x in same if x) < 2, "%d steps; the same rows in each picture at %s" %
           (len(tops), [s[:4] for s in same]))
     time.sleep(settle)
 

@@ -4237,11 +4237,13 @@ ST, at a page shown, a page scrolled, the start.
   in slices after. Held, each step is its rows drawn and the copy: on the stock Falcon 180 ms (48
   rows 105 to 155, the copy 25 to 30; 0.57's 50 ms was the copy alone), on the ST 450 (the rows 375
   to 400, the copy 45; 0.57's 130). `make hatarigui`'s dialogs group holds the down arrow on the
-  numbered page and takes the screen three times while it is held, a third of a second apart: no
-  band of rows may be in the window twice in all three (0.57 fails it on TOS 4.04, EmuTOS and the
-  ST's TOS 1.04). One picture alone was not enough (6 Nov 2026): taken while a step's copy was
-  half done it showed one band twice, a step (14 rows) apart where the copy had got to, gone a
-  moment later; 0.71's candidate, whose timing differs, caught that in two of three runs.
+  numbered page and takes the screen three times while it is held, a third of a second apart: a
+  band of rows in the window twice in two of the three fails it (0.57's release fails it on TOS
+  4.04, EmuTOS and the ST's TOS 1.04: the bands in two or three of the pictures each run). One
+  picture alone was not enough (6 Nov 2026): taken while a step's copy was half done it showed
+  one band twice where the copy had got to, gone a moment later; 0.71's candidate, whose timing
+  differs, caught that in two of three runs, and shows it in one picture of three at most. All
+  three pictures was too lax: 0.57's third picture on the Falcon is clean.
 - **A band's own cost.** A band looked at every item of the 256-row strips it was in, and found
   each one's place in the order drawn by a search: the strips are 64 rows now
   (`PAGE_STRIP`), a lone strip's list is walked as it is, and the place is stepped on from the
