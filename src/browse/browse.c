@@ -743,6 +743,15 @@ static void js_host_of(browser *b, js_host *h);
 static const doc *js_doc;
 #endif
 static int js_after(browser *b, int *load_r);
+/* what a script wrote into a window it opened (window.open), for that
+   window's about:blank */
+static char *opened_html;
+static long opened_len;
+/* and the address of the page that opened it: the written page's site
+   (its scripts run where the opener's do) and the base of its links, as
+   browsers give an about:blank its opener's origin and base */
+static char opened_from[1024];
+static const char *build_opener;	/* set for the build of that page */
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post);
 static int load(browser *b, const char *url, int mode);
 
@@ -2439,7 +2448,9 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	char base[4096];
 
 	unsigned long t = pf_ms(), t_sheets;
-	int scripts = br_scripts_for(b, url), again = 0;
+	/* (a page a script opened and wrote: its opener's site) */
+	const char *site = build_opener != NULL && !strcmp(url, "about:blank") ? build_opener : url;
+	int scripts = br_scripts_for(b, site), again = 0;
 	html_opts o;
 
 	b->note[0] = 0;
@@ -2465,8 +2476,8 @@ parse:
 		return 0;
 	ec_set_resolver(d->css, resolve);
 	b->ms_parse = pf_ms() - t;
-	if (d->base[0] == 0 || !resolve_enc(url, d->base, base, sizeof base, doc_enc(d)))
-		str_copy(base, url, sizeof base);
+	if (d->base[0] == 0 || !resolve_enc(site, d->base, base, sizeof base, doc_enc(d)))
+		str_copy(base, site, sizeof base);
 	turn_now = 1;		/* (the parse's end and the sheets' start were one stretch: 115 ms of a stock Falcon for the news page) */
 	gem_turn();
 	t_sheets = pf_ms();
@@ -3402,7 +3413,18 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	sb_init(&src);
 	if (has_scheme(url, "about")) {
-		if (strcmp(url + 6, "blank") == 0) {
+		if (strcmp(url + 6, "blank") == 0 && opened_html != NULL && mode == NAV_NEW) {
+			/* a window a script opened and wrote (window.open's
+			   document.write): its page, once */
+			sb_add(&src, opened_html, opened_len);
+			free(opened_html);
+			opened_html = NULL;
+			build_opener = opened_from;
+			r = own_page(b, url, &src, mode);
+			build_opener = NULL;
+			sb_free(&src);
+			return r;
+		} else if (strcmp(url + 6, "blank") == 0) {
 			sb_adds(&src, "<html><head><title></title></head><body></body></html>");
 		} else if (strncmp(url + 6, "bookmarks", 9) == 0) {
 			/* ?remove=I-MARK: that one gone, the list shown again in
@@ -4453,6 +4475,26 @@ static int js_after(browser *b, int *load_r)
 			free(u);
 			*load_r = BR_SAVE;
 			return BRJ_LOAD;
+		}
+		/* window.open, from a click or key of the user's: for another
+		   window (a new one, or the one of its name), what the script
+		   wrote kept for it to show in place of about:blank */
+		{
+			const char *html, *win;
+			long hlen;
+			if (u != NULL && (win = js_navigation_window(b->d, &html, &hlen)) != NULL &&
+			    strlen(u) < sizeof b->elsewhere) {
+				str_copy(b->elsewhere, u, sizeof b->elsewhere);
+				str_copy(b->window, win, sizeof b->window);
+				free(opened_html);
+				opened_html = html != NULL && !strcmp(u, "about:blank") ? str_ndup(html, hlen) : NULL;
+				opened_len = opened_html != NULL ? hlen : 0;
+				str_copy(opened_from, b->url, sizeof opened_from);
+				js_navigation_done(b->d);
+				free(u);
+				*load_r = BR_WINDOW;
+				return BRJ_LOAD;
+			}
 		}
 		memset(&s, 0, sizeof s);
 		if (post != NULL) {

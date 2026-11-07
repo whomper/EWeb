@@ -45,6 +45,12 @@ const char *js_navigation_download(doc *d)
 	return NULL;
 }
 
+const char *js_navigation_window(doc *d, const char **html, long *len)
+{
+	(void) d, (void) html, (void) len;
+	return NULL;
+}
+
 void js_navigation_done(doc *d)
 {
 	(void) d;

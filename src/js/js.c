@@ -103,6 +103,12 @@ typedef struct ejs {
 					   to get there (a.click()), NULL none */
 	long nav_len;
 	char nav_ctype[96];
+	char *nav_win;			/* window.open's: the window's name ("" a new one),
+					   NULL a navigation of this window */
+	char *nav_html;			/* and what the script wrote into it */
+	long nav_hlen;
+	int active;			/* a user's click or key is being handled (window.open
+					   only then, as browsers' transient activation) */
 	const page *pg;
 	JSValue node_proto, elem_proto, text_proto, doc_proto, frag_proto, style_proto, cl_proto, ev_proto,
 		comp_proto, loc_obj;
@@ -2649,8 +2655,10 @@ static void nav_clear(ejs *j)
 	free(j->nav);
 	free(j->nav_body);
 	free(j->nav_dl);
-	j->nav = j->nav_body = j->nav_dl = NULL;
-	j->nav_len = 0;
+	free(j->nav_win);
+	free(j->nav_html);
+	j->nav = j->nav_body = j->nav_dl = j->nav_win = j->nav_html = NULL;
+	j->nav_len = j->nav_hlen = 0;
 }
 
 /* click(), focus(), blur(), submit(), reset() (magic) */
@@ -3920,6 +3928,68 @@ static JSValue win_null(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 	return JS_NULL;
 }
 
+/* window.open's own part (the prelude's open makes the window it gives):
+   only while a click or a key of the user's is handled (Erez, 7 Nov
+   2026: a page may open a window from a click; at other times null, as
+   a blocker of pop-ups answers). url ("" about:blank) and target: _self,
+   _top and _parent this window's navigation; _blank or none a new
+   window; another name the window of that name. true when it opens */
+static JSValue win_open(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	ejs *j = J(ctx);
+	const char *u = argc > 0 ? JS_ToCString(ctx, argv[0]) : NULL;
+	const char *t = argc > 1 ? JS_ToCString(ctx, argv[1]) : NULL;
+	char *to = NULL, name[64];
+	int self, ok = 0;
+	str_copy(name, t != NULL ? t : "", sizeof name);
+	self = !strcmp(name, "_self") || !strcmp(name, "_top") || !strcmp(name, "_parent");
+	if (!strcmp(name, "_blank"))
+		name[0] = 0;
+	if (j->active && (to = malloc(URL_MAX)) != NULL) {
+		if (u == NULL || u[0] == 0)
+			str_copy(to, self ? "" : "about:blank", URL_MAX);
+		else if (j->h.resolve != NULL)
+			j->h.resolve(j->h.ud, j->base, u, to, URL_MAX, 0);
+		else
+			str_copy(to, u, URL_MAX);
+		if (to[0] && strncmp(to, "javascript:", 11) != 0) {
+			nav_clear(j);
+			j->nav = to;
+			to = NULL;
+			if (!self && (j->nav_win = malloc(strlen(name) + 1)) != NULL)
+				strcpy(j->nav_win, name);
+			ok = 1;
+		}
+	}
+	free(to);
+	JS_FreeCString(ctx, u);
+	JS_FreeCString(ctx, t);
+	return JS_NewBool(ctx, ok);
+}
+
+/* the window it opened: what its document.write gives (the page it
+   shows, when it opened about:blank) */
+static JSValue win_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	ejs *j = J(ctx);
+	size_t n;
+	const char *s;
+	char *m;
+	if (argc < 1 || j->nav_win == NULL)
+		return JS_UNDEFINED;
+	s = JS_ToCStringLen(ctx, &n, argv[0]);
+	if (s == NULL)
+		return JS_EXCEPTION;
+	if (j->nav_hlen + (long) n <= JS_MAX_SOURCE && (m = realloc(j->nav_html, (size_t) j->nav_hlen + n + 1)) != NULL) {
+		memcpy(m + j->nav_hlen, s, n);
+		j->nav_hlen += (long) n;
+		m[j->nav_hlen] = 0;
+		j->nav_html = m;
+	}
+	JS_FreeCString(ctx, s);
+	return JS_UNDEFINED;
+}
+
 enum { WP_WIDTH, WP_HEIGHT, WP_ZERO, WP_RATIO };
 
 static JSValue win_get(JSContext *ctx, JSValueConst this_val, int magic)
@@ -4035,7 +4105,8 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_DEF("print", 0, node_noop),
 	JS_CFUNC_DEF("close", 0, node_noop),
 	JS_CFUNC_DEF("postMessage", 2, node_noop),
-	JS_CFUNC_DEF("open", 3, win_null),
+	JS_CFUNC_DEF("__ewOpen", 2, win_open),
+	JS_CFUNC_DEF("__ewWrite", 1, win_write),
 	JS_CFUNC_DEF("addEventListener", 3, add_listener),
 	JS_CFUNC_DEF("removeEventListener", 3, remove_listener),
 	JS_CFUNC_DEF("dispatchEvent", 1, dispatch_event),
@@ -4102,6 +4173,18 @@ static const char prelude[] =
 	"for(i=0;i<a.length;i++)l.push(a[i]);for(i=0;i<l.length;i++)up(l[i],c)},get:function(n){"
 	"return ce[String(n).toLowerCase()]},whenDefined:function(n){return Promise.resolve(ce[String(n)."
 	"toLowerCase()])},upgrade:function(){}};"
+	/* window.open: the browser asked (__ewOpen), and a window given
+	   whose document.write writes the page it opens; null when it
+	   doesn't open (no click or key of the user's) */
+	"var eo=g.__ewOpen,ew=g.__ewWrite;delete g.__ewOpen;delete g.__ewWrite;"
+	"g.open=function(u,t){t=t===undefined?'_blank':String(t);"
+	"if(!eo(u===undefined||u===null?'':String(u),t))return null;"
+	"if(t=='_self'||t=='_top'||t=='_parent')return g;"
+	"var w={closed:false,opener:g,name:t=='_blank'?'':t,focus:function(){},blur:function(){},"
+	"close:function(){w.closed=true},postMessage:function(){},location:{href:u?String(u):'about:blank'},"
+	"document:{open:function(){return this},close:function(){},"
+	"write:function(){ew(Array.prototype.join.call(arguments,''))},"
+	"writeln:function(){ew(Array.prototype.join.call(arguments,'')+'\\n')}}};w.window=w.self=w;return w};"
 	"Element.prototype.attachShadow=function(o){var r=d.createElement('div');if(!o||o.mode!=='closed')"
 	"Object.defineProperty(this,'shadowRoot',{value:r,configurable:true});r.host=this;return r}"
 	"})(globalThis)";
@@ -4774,6 +4857,16 @@ const char *js_navigation_download(doc *d)
 	return j != NULL && j->nav != NULL ? j->nav_dl : NULL;
 }
 
+const char *js_navigation_window(doc *d, const char **html, long *len)
+{
+	ejs *j = d->js;
+	if (j == NULL || j->nav == NULL || j->nav_win == NULL)
+		return NULL;
+	*html = j->nav_html;
+	*len = j->nav_hlen;
+	return j->nav_win;
+}
+
 void js_navigation_done(doc *d)
 {
 	ejs *j = d->js;
@@ -4866,8 +4959,10 @@ int js_event(doc *d, dnode *n, const char *type)
 	bubbles = strcmp(type, "focus") != 0 && strcmp(type, "blur") != 0;
 	cancelable = !strcmp(type, "click") || !strcmp(type, "submit") || !strcmp(type, "keydown");
 	arm(j, JS_EVENT_MS);
+	j->active++;		/* (the user's: a window may open) */
 	r = fire(j, n, type, bubbles, cancelable);
 	jobs(j);
+	j->active--;
 	sweep(j);
 	return r;
 }
@@ -4900,9 +4995,11 @@ int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, lo
 	JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
 	JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
 	JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+	j->active++;		/* (the user's: a window may open) */
 	r = dispatch(j, n, ev);
 	JS_FreeValue(ctx, ev);
 	jobs(j);
+	j->active--;
 	sweep(j);
 	return r;
 }

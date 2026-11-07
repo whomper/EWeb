@@ -201,6 +201,11 @@ const char *js_navigation_download(doc *d)
 	return ovl ? ovl->navigation_download(d) : NULL;
 }
 
+const char *js_navigation_window(doc *d, const char **html, long *len)
+{
+	return ovl ? ovl->navigation_window(d, html, len) : NULL;
+}
+
 void js_navigation_done(doc *d)
 {
 	if (ovl)

@@ -57,6 +57,8 @@ Pages:
   /site/fs.html  a frameset: fsmenu.html, whose link names the main
                  frame (fsone.html, with a picture), and fsmain.html
   /site/blank.html  links whose targets are other windows (_blank, a name)
+  /site/popup.html  a button whose script opens a window and writes its page
+                 (window.open from a click)
   /site/lazy.html  8 pictures, each LAZY seconds in coming (lazy/N.png)
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
@@ -483,6 +485,11 @@ LAZY_PAGE = (b"<!DOCTYPE html><title>Lazy</title><p>Pictures from far away:<p>" 
 BLANK_PAGE = (b"<!DOCTYPE html><title>Windows</title><p><a href=fsone.html target=_blank>One in a new window</a>"
               b"<p><a href=fsmain.html target=side>Main in the side window</a>\n")
 
+# a window a script opens from a click and writes (/site/popup.html)
+POPUP_PAGE = (b"<!DOCTYPE html><title>Popup</title><p><button onclick=\"var w = window.open('', '_blank');"
+              b"w.document.write('<title>Opened</title><p>A page its opener wrote.');w.document.close()\">"
+              b"Open a window</button>\n")
+
 # the same as a secure page whose pictures come from another secure host
 # (Wikipedia's from upload.wikimedia.org): https://127.0.0.1/site/wikitls.html,
 # its pictures from the ECDSA server (an ECDSA certificate, as Wikipedia's:
@@ -706,6 +713,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, PICS["logo.png"][0], "image/png")
         elif p == "/site/blank.html":
             self.send(200, BLANK_PAGE)
+        elif p == "/site/popup.html":
+            self.send(200, POPUP_PAGE)
         elif p in ("/site/fs.html", "/site/fsmenu.html", "/site/fsmain.html", "/site/fsone.html"):
             self.send(200, {"fs": FS_PAGE, "fsmenu": FS_MENU, "fsmain": FS_MAIN, "fsone": FS_ONE}[p[6:-5]])
         elif p == "/site/wikitls.html":

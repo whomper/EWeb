@@ -1115,6 +1115,27 @@ def scripts_run(site):
               sv is not None and got == "saved %d" % len(server.SMALL) and os.path.exists(path) and
               open(path, "rb").read() == server.SMALL, str(r.events()))
         r.shot(4)
+        # window.open from a click (Erez, 7 Nov 2026): a new window, the
+        # page its script wrote shown in it; ^U closes it
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/popup.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            r.mouse.click(*ctl_point(site + "popup.html", area, int(m.group(5)), 0))
+            nw = r.wait(r"window \d+ of ", 60)
+            ev2 = r.wait(r"shown ", 120)
+            time.sleep(2)
+            r.shot(5)
+            check("scripts: window.open from a click opens a window with the page it wrote",
+                  nw is not None and nw.startswith("window 2 of ") and ev2 is not None and
+                  ev2.startswith("shown about:blank ") and ev2.endswith("title Opened"), "\n".join(r.events()[-8:]))
+            r.key(U, (CTRL,))
+            r.wait(r"window closed", 30)
+        else:
+            check("scripts: the popup page shown", False, str(ev))
         r.key(Q, (CTRL,))
         check("scripts: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

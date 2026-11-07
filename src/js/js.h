@@ -102,6 +102,10 @@ const char *js_navigation(doc *d, const char **post, long *len, const char **cty
 /* when that is a link a script clicked (a.click()) that has a download
    attribute: its value ("" for no name), else NULL */
 const char *js_navigation_download(doc *d);
+/* when it is window.open's (from a click or key of the user's): the
+   window's name ("" a new one), and what the script wrote into it with
+   document.write (NULL none: the window shows the address); else NULL */
+const char *js_navigation_window(doc *d, const char **html, long *len);
 void js_navigation_done(doc *d);
 /* ms until the next timer is due (0: now), -1 for none */
 long js_due(doc *d);

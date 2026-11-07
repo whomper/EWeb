@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!-- args: -K write -K ok -->
+<!-- expect: console: at load: null -->
+<!-- expect: window "": about:blank, 0 "Written" -->
+<!-- expect: console: confirmed in the window -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- window.open (Erez, 7 Nov 2026: from a click): null at other times, as
+     a blocker of pop-ups answers; from a click a window, whose
+     document.write is the page it shows (webdriveruniversity.com's AI
+     Playground's New Tab), its scripts run as its opener's site's -->
+<html><head><title>popup</title>
+<script>console.log('at load: ' + window.open('popup/page.html'));</script></head><body>
+<button id="write" onclick="var w = window.open('', '_blank');
+  w.document.write('<title>Written</title><p>A page written by its opener.',
+    '<button id=ok onclick=&quot;console.log(\'confirmed in the window\')&quot;>OK</button>');
+  w.document.close()">write</button>
+</body></html>

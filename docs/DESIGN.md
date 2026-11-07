@@ -24,6 +24,7 @@ it, and how EWeb gets past CAPTCHAs.
 | User experience | **The first measure of quality** (4 Nov 2026) | What the user feels comes before everything else, scrolling first: as smooth and as fast as each machine allows. Each change is measured by what is seen (the screen whole after a line, a page, a held key, a drag), not only by how soon EWeb answers. |
 | ST edition | **Frozen after 1.0** (4 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
 | A long draw | **Whole, as 0.69, until pieces are no slower** (Erez, 4 Nov 2026) | Performance never goes backwards (Erez: "Performance must not go backwards or bad, just for the better always"). The family's rule of 4 Nov (a draw over 300 ms in pieces of at most 100 ms, keys answered between) made EWeb's pages finish later than 0.69's whole draw: on the stock Falcon (Falcon-4:16) 5 to 14 % (home 610 ms against 569, news 1090 against 954), on an 8 MHz ST in 300 ms pieces (Erez's choice for the ST) 9 to 18 %, in 100 ms ones 58 to 105 %. So EWeb draws whole, and the drawing is made faster until a page in pieces finishes no later than 0.69's whole; then the pieces are switched on (`win_whole_only` in `ui/win.c`). The pieces' code stays, measured by the speed build's `DRAWPIECES=1` (`tests/hatari/speed.py --pieces`; `AESWHOLE`, the time to the finished picture): whole or pieces told before the draw by the dearest rows lately, an ST's pieces up to 300 ms in bands of 32 rows. |
+| A window a page's script opens | **From a click or a key of the user's** (Erez, 7 Nov 2026: "yes, allow window.open from a click") | As browsers: `window.open` opens a window while the user's click or key is handled; at other times (as the page loads, from a timer) it is null, as a blocker of pop-ups answers. What the script writes into the `about:blank` it opened is that window's page, with its opener's site. (webdriveruniversity.com's AI Playground, New Tab; DESIGN.md, The AI Playground in use.) |
 | TT-RAM | **All of it but a share left for other programs, a setting** (4 Nov 2026; Phase 2) | The program and its memory are already in TT-RAM without EWeb's code knowing (common's heap asks for TT-RAM first). Its fixed ceilings go (pages kept for Back and Forward a quarter of the free TT-RAM up to 24 MB, pictures an eighth up to 16 MB, eight windows): EWeb keeps pages and pictures until the free TT-RAM comes down to the share left for others, then lets the oldest go, and gives memory back when something needs it. The share is a setting, a percentage of the TT-RAM, 50 by default (Settings > General; `TTLEAVE=` in `eweb.inf`). A machine without TT-RAM (the stock Falcon, the ST) is as before. |
 | A 4 MB Falcon with NVDI | **Its memory diet after 1.0** (4 Nov 2026; Phase 2) | A stock 4 MB Falcon with NVDI leaves EWeb about 1.2 MB for a page (the heap stays near 880 KB, 318 KB of ST RAM free: the hub's rig), and the news test page needs about 1.5 MB at its peak (parsed 450 KB, styled 832 KB: its computed styles 192 KB, the sheet's rules 114 KB; laid out 1.17 MB, the layout's boxes 112 KB more while it works), so it says it hasn't the memory there (0.66 on). Without NVDI it fits. Cutting the 300 to 400 KB (styles shared in parts, smaller boxes, the rules given back after styling) is Phase 2's; until then a big page there says so. |
 | The Gateway's name | **Gateway** (Erez, 7 Nov 2026; the guidelines' 7.3) | The user sees "Gateway", never "Pi" or "Pi gateway": the status line, Settings > Secure, View > Through the Gateway's browser, the alerts, EWeb's own pages, the help guide and the README. "Raspberry Pi" stays where the hardware is meant (setting it up). The INF keys (`GATE=`, `GATEPORT=`) and the code's names stay; this document keeps the old words where it records what was done then. |
@@ -4101,10 +4102,22 @@ page asks `../api/user.json`):
   picture whose other side the page didn't set keeps its proportions. Test:
   `tests/layout/replmin.html`.
 
+- **A window a page's script opens** (Erez, 7 Nov 2026: "yes, allow window.open from a click"):
+  `window.open` while a click or a key of the user's is handled (as browsers' transient
+  activation; `ejs.active` in `js_event` and `js_key`) opens a window as a link for one does: a
+  new one for `_blank` or no name, the window of that name for another, this one for `_self`,
+  `_top` and `_parent`, its address resolved against the page's (`win_open` in `src/js/js.c`,
+  `js_navigation_window`, `js_after`'s `BR_WINDOW` in `src/browse`, `to_window` in `ui/main.c`).
+  At any other time (as a page loads, from a timer) it is null, as a blocker of pop-ups answers.
+  The window it gives has `document.write`: what the script writes into the `about:blank` it
+  opened is that window's page (`opened_html`), its site and the base of its links its opener's
+  (`build_opener`: its scripts run where the opener's do), as browsers give it the opener's
+  origin. The New Tab challenge's window shows its order and its Confirm button says
+  "Confirmed!". Tests: `tests/js/popup.html`, `popup2.html`, `make hatarigui`'s `scripts`
+  group (`/site/popup.html`).
+
 Left as they are: the Priority Board's drag and drop (HTML's drag events: a drag on EWeb's
-page selects its text), the Shadow DOM widget's content (not drawn, as before), and the New Tab
-challenge, whose `window.open('', '_blank')` EWeb answers with null, as a blocker of pop-ups
-does (a page's script opening a window is Erez's call).
+page selects its text), and the Shadow DOM widget's content (not drawn, as before).
 
 ## Scripts kept compiled (26 Oct 2026)
 

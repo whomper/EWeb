@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- args: -K go -->
+<!-- expect: console: a window -->
+<!-- expect: window "named": file:// -->
+<!-- expect: /tests/js/popup/page.html, 0 "The page opened" -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- window.open of an address from a click: it opens in the window of
+     the name given (a new one here), the address resolved against the
+     page's -->
+<html><head><title>popup2</title></head><body>
+<button id="go" onclick="var w = window.open('popup/page.html', 'named');
+  console.log(w && w.closed === false ? 'a window' : 'none')">go</button>
+</body></html>

@@ -14,5 +14,6 @@
 const js_exports js_ovl_head __attribute__((section(".ovlhead"), used)) = {
 	JS_OVL_MAGIC, JS_ABI,
 	js_page, js_changed, js_navigation, js_navigation_download, js_navigation_done,
-	js_due, js_run_timers, js_event, js_run, js_toggled, js_set_page, js_stats, js_key
+	js_due, js_run_timers, js_event, js_run, js_toggled, js_set_page, js_stats, js_key,
+	js_navigation_window
 };

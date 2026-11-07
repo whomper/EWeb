@@ -349,6 +349,9 @@ little below and to the right of the one in front; **Control-click** a
 link, or choose Open it in a new window from its menu, to read it in one.
 A link the page means for a new window (its target) opens one too, and
 a link naming a window EWeb opened for it earlier loads in that window.
+Where a site's scripts run, a page may open a window when you click on
+it or type into it, as browsers let it; at other times, as it loads or
+later on its own, it can't (no pop-ups).
 Each window has its own page, Back and Forward, and address; the
 settings, bookmarks, history, cookies and cache are the same in all of
 them.
