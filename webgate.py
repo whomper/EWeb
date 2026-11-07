@@ -540,8 +540,8 @@ class Bridge:
     def why(self):
         """what to say when the browser didn't answer"""
         if self.gone():
-            return ("the Pi's browser isn't listening (webgate-ext last asked %d s ago); "
-                    "on the Pi: sudo systemctl restart webgate-browser" % (time.monotonic() - self.polled))
+            return ("the Gateway's browser isn't listening (webgate-ext last asked %d s ago); "
+                    "on the Raspberry Pi: sudo systemctl restart webgate-browser" % (time.monotonic() - self.polled))
         return "it didn't answer"
 
     def ask(self, url, wait, **more):
@@ -1116,7 +1116,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def live(self, u):
         if not Config.browser:
-            self.reply(501, "webgate: live view needs the Pi's browser (webgate --browser)\n")
+            self.reply(501, "webgate: live view needs the Gateway's browser (webgate --browser)\n")
             return
         a = parse_qs(u.query, keep_blank_values=True)
         part = u.path[len("/live"):]
@@ -1184,7 +1184,7 @@ class Handler(BaseHTTPRequestHandler):
         url = a.get("url", [""])[0].strip()
         if url and "://" not in url:
             url = "https://" + url          # (Go to's "www.example.com")
-        title = "the Pi's browser"
+        title = "the Gateway's browser"
         if url and not self.browser_may_open(url):
             return
         if url:
@@ -1237,7 +1237,7 @@ class Handler(BaseHTTPRequestHandler):
     def snapshot(self, u):
         """the page as the Pi's browser shows it, after its scripts ran"""
         if not Config.browser:
-            self.reply(501, "webgate: snapshots need the Pi's browser (webgate --browser)\n")
+            self.reply(501, "webgate: snapshots need the Gateway's browser (webgate --browser)\n")
             return
         if not self.browser_may_open(self.path):
             return
@@ -1355,9 +1355,9 @@ LIVE_KEYS = {"enter": "Return", "tab": "Tab", "backspace": "BackSpace", "esc": "
              "up": "Page_Up", "down": "Page_Down", "back": "alt+Left", "reload": "F5"}
 
 LIVE_SCREEN = """<form action="http://webgate/live/click"><input type=image name=at width=%(w)d
- height=%(h)d src="http://webgate/live/shot.jpg?n=%(n)d" alt="the Pi's browser"></form>"""
+ height=%(h)d src="http://webgate/live/shot.jpg?n=%(n)d" alt="the Gateway's browser"></form>"""
 
-LIVE_NONE = """<p><b>The Pi's browser has no page open yet.</b> Put an address in the field above and
+LIVE_NONE = """<p><b>The Gateway's browser has no page open yet.</b> Put an address in the field above and
  choose Go to; then its screen shows here, and a click on it is a click there.</p>"""
 
 LIVE_GONE = """<p><b>%(why)s.</b></p>"""
