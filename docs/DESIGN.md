@@ -4562,8 +4562,12 @@ of its own (`-falign-functions=16`): a change elsewhere no longer moves them acr
 | 3 pages up (seen) | 235 | 305 | 235 |
 | 4 pages down after 10 s (seen) | 475 | 560 | 465 |
 
-Three rows are a tick or two slower than 0.70 (Settings closed, the About box closed, a page
-scrolled; each well within its time), the price of the rest; the hub puts it to Erez.
+Paired with 0.70 on one machine (A B A B, common's `speedcmp.py`, 7 Nov 2026): 20 rows the same
+or faster, four up by a 5 ms step (noise), and one slower: Settings closed 40 to 55 ms (its time
+300). On the 4 MB Falcon with the news page and its kept bands, 81 KB is free as Settings opens,
+too little for common's `dlg_under` to keep the 470 by 326 pixels it covers, so the page under it
+is drawn again as it closes. Erez (7 Nov 2026): a small difference like that isn't worth the
+work; it stays.
 
 ## A big site's stylesheet (26 Oct 2026)
 
