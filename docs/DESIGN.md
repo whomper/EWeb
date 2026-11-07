@@ -1267,8 +1267,8 @@ the HTML Standard:
   `<input type=image>` is its picture; a `<label>`'s words stand for its control.
 - **Sending** (the standard's form submission): the entry list (the button that sent it, a picture
   button's `name.x` and `name.y`, `_charset_`, `dirname`, unticked boxes and disabled controls
-  left out), then `application/x-www-form-urlencoded`, `multipart/form-data` (a file field sends no
-  file: EWeb can't upload yet) or `text/plain`, line breaks as CR LF; `formaction`, `formmethod`,
+  left out), then `application/x-www-form-urlencoded`, `multipart/form-data` (a file field's file
+  sent: below) or `text/plain`, line breaks as CR LF; `formaction`, `formmethod`,
   `formenctype`; a dialog's form sends nothing. The text goes in the page's character set (a letter
   it lacks as `&#N;`, as browsers do; `accept-charset` as the standard picks from it: Encodings,
   below), so Windows-1255 sites get
@@ -1276,6 +1276,21 @@ the HTML Standard:
   or 303 answer fetched with GET; a POST's answer isn't cached; Back to it, once it isn't kept,
   fetches its address with GET rather than sending again). Return in a field sends the form by its
   first submit button, or without one when the field is the form's only one (implicit submission).
+- **A file sent** (Erez, 7 Nov 2026; webdriveruniversity.com's File Upload): a click on a file field
+  opens the file selector (`choose_file` in `ui/win.c`, from the last file's folder, common's
+  `fsel_settle` after it), the file chosen is the control's (`fctl.file`, `form_set_file`), its
+  name drawn from its start in a control as wide as a field of 20, and `input` and `change` go to
+  the page's scripts. `multipart/form-data` sends the file's name, its type by its extension
+  (`file_type` in `src/doc/form.c`: the commonest, else `application/octet-stream`) and its bytes,
+  read by `src/browse` (`form_file_load`: `load_file`, GEM's turn between pieces) and held whole
+  while the form is sent, so no more than 4 MB, 1 MB in the ST edition (`FORM_FILE_MAX`; a bigger one, or one that can't be
+  read, sends nothing and the status line says why). urlencoded and `text/plain` send its name
+  alone, as the standard has it. To scripts its `value` is `C:\fakepath\NAME`, as browsers give it,
+  and a script may only empty it. Reset and a new page leave none chosen; the log says a file was
+  chosen, never which (7.3). Tested by `tests/forms/cases.txt` (its bytes, its name alone, reset,
+  unreadable), `tests/js/upload.html` (ewrender `-u ID=PATH`), `make itest` (a picture's every byte
+  through the local server: ewrender `-F NAME=PATH`) and `make hatarigui` (browse: the file
+  selector on TOS 4.04, then the echo page).
 - **EWEB.PRG** (`ui/win.c`): a click puts the caret in a field (the pointer a text cursor over
   one); Tab and Shift-Tab go from control to control (then to the address); Left, Right, ClrHome,
   Up and Down in a textarea, Backspace, Delete; ^C, ^X, ^V; the Atari's keys (Hebrew too) typed as

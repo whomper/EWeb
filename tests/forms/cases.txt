@@ -288,3 +288,32 @@ html <form action="  /x?old=1#frag  "><input name=q value=1><input type=submit n
 submit go
 expect get /x?old=1#frag
 body q=1&go=1
+
+case a file chosen: multipart sends its name, its type by its extension and its bytes
+html <form method=post enctype=multipart/form-data action=up><input type=file name=f><input type=submit name=s value=go></form>
+file f tests/js/upload/note.txt
+submit s
+expect post up multipart/form-data;
+body --{B}\r\nContent-Disposition: form-data; name="f"; filename="note.txt"\r\nContent-Type: text/plain\r\n\r\nEWeb sends this file.\n\r\n--{B}\r\nContent-Disposition: form-data; name="s"\r\n\r\ngo\r\n--{B}--\r\n
+
+case a file chosen: a form sent with GET has its name alone
+html <form action=up><input type=file name=filename><input type=submit name=go value=Send></form>
+file filename tests/js/upload/note.txt
+submit go
+expect get up
+body filename=note.txt&go=Send
+
+case a file chosen and the form reset: none again
+html <form method=post enctype=multipart/form-data action=up><input type=file name=f><input type=submit name=go></form>
+file f tests/js/upload/note.txt
+reset
+label f No file
+submit go
+expect post up multipart/form-data;
+body --{B}\r\nContent-Disposition: form-data; name="f"; filename=""\r\nContent-Type: application/octet-stream\r\n\r\n\r\n--{B}\r\nContent-Disposition: form-data; name="go"\r\n\r\n\r\n--{B}--\r\n
+
+case a file that can't be read: nothing sent
+html <form method=post enctype=multipart/form-data action=up><input type=file name=f><input type=submit name=go></form>
+file f tests/forms/no-such-file.bin
+submit go
+expect none

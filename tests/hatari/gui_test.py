@@ -767,6 +767,31 @@ def browse():
                   ev.endswith("title POST|application/x-www-form-urlencoded|user=erez&pw=pw&keep=on&lang=en"
                               "&note=a&login=Log+in"), str(r.events()))
             r.shot(10)
+            # a file sent: Back to the form, its file control clicked (the
+            # file selector: TABLES.HTM, next to EWEB.PRG, typed in its
+            # selection line, Return), its name on the control, the form
+            # sent: the echo page has its every byte
+            r.key(UNDO)
+            ev = r.wait(r"shown ", 120)
+            if ev is not None and ev.startswith("shown %sform.html " % site):
+                r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 9))
+                time.sleep(3)		# the file selector
+                r.type("TABLES.HTM")
+                r.key(RETURN)
+                chosen = r.wait(r"a file chosen for a control", 30)
+                time.sleep(1)
+                r.shot(11)
+                r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 10))
+                ev = r.wait(r"shown ", 120)
+                data = open(os.path.join(ROOT, "tests/layout/tables.html"), "rb").read()
+                import hashlib
+                check("forms: a file chosen with the file selector and sent", chosen is not None and
+                      ev is not None and ev.endswith('title POST|multipart/form-data|title=x;f=(file "TABLES.HTM")'
+                                                     '[%d text/html %s];up=Send'
+                                                     % (len(data), hashlib.sha1(data).hexdigest()[:12])),
+                      str(r.events()[-6:]))
+            else:
+                check("forms: Back to the form for a file", False, str(ev))
         # saving: the page shown (^S, the file selector's OK), a link's
         # file (Alternate-click), a file EWeb doesn't show (opened)
         def saved(name):

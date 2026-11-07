@@ -663,11 +663,25 @@ static void typed(browser *b, const char *spec)
 	else if (b->d != NULL && id[0] == '@')	/* @NAME: the field of that name */
 		for (c = b->d->ctls; c != NULL; c = c->next) {
 			const char *nm = c->n ? dn_attr(c->n, "name") : NULL;
-			if (nm != NULL && strcmp(nm, id + 1) == 0 && form_typed(c))
+			if (nm != NULL && strcmp(nm, id + 1) == 0 && (form_typed(c) || c->kind == FC_FILE))
 				break;
 		}
 	if (c == NULL) {
 		printf("type %s: no such field\n", id);
+		return;
+	}
+	if (c->kind == FC_FILE) {
+		/* a file control: TEXT the file chosen, as the file selector
+		   gives it (win.c's choose_file), then input and change */
+		form_set_file(c, eq + 1);
+		r = br_js_event(b, c, "input", &cancelled, &load);
+		if (r != BRJ_LOAD)
+			r = br_js_event(b, c, "change", &cancelled, &load);
+		printf("file %s: \"%s\" chosen\n", id, form_file_name(c));
+		if (r == BRJ_LOAD) {
+			printf("load: %d \"%s\" %s\n", load, b->title, b->url);
+			click_file(b, load);
+		}
 		return;
 	}
 	for (t = eq + 1; *t; t++) {
@@ -1218,6 +1232,8 @@ int main(int argc, char **argv)
 				form_set(c, eq ? eq + 1 : "", eq ? (long) strlen(eq + 1) : 0);
 				if (first == NULL)
 					first = c;
+			} else if (c->kind == FC_FILE) {
+				form_set_file(c, eq ? eq + 1 : NULL);	/* -F NAME=PATH: the file chosen */
 			} else if (c->kind == FC_CHECKBOX || c->kind == FC_RADIO) {
 				form_check(b.d, c);
 			} else if (c->kind == FC_SELECT && eq != NULL) {

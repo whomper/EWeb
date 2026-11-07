@@ -1238,6 +1238,17 @@ static char *load_file(const char *path, long *len)
 	return d;
 }
 
+/* a file a form sends (form.h's form_file_load): FORM_FILE_MAX at most,
+   as the whole body is held to be sent */
+static char *upload_file(const char *path, long *len)
+{
+	long size = pf_size(path);
+	*len = 0;
+	if (size < 0 || size > FORM_FILE_MAX)
+		return NULL;
+	return load_file(path, len);
+}
+
 /* known trackers' hosts (Erez, 1 Nov 2026: left out by default), each
    with the names under it */
 static const char *const tracker_hosts[] = {
@@ -3765,6 +3776,7 @@ static int build_turn(int what)
 void br_init(browser *b, int32_t width, int32_t zoom)
 {
 	pic_poll = gem_turn;
+	form_file_load = upload_file;	/* (a file a form sends: read here, GEM's turn between) */
 	/* (a turn asked at every row the scaler takes: gem_turn keeps its own
 	   time; at every 16 an 800-pixel PNG's turns were 120 to 180 ms of a
 	   16 MHz 68030's, the speed rig's Falcon:16) */
@@ -4067,8 +4079,15 @@ int br_submit(browser *b, fctl *from, fctl *submitter, int32_t x, int32_t y)
 			return BR_STOPPED;
 		}
 	}
-	if (!form_submit(d, from, submitter, x, y, &s))
+	if (!form_submit(d, from, submitter, x, y, &s)) {
+		if (s.err[0]) {
+			/* (a file it can't send: said, the page as it was) */
+			snprintf(b->note, sizeof b->note, "%s", s.err);
+			if (b->say != NULL)
+				b->say(b->ud, s.err);
+		}
 		return BR_STOPPED;
+	}
 	base_of(b, d, in, base, sizeof base);
 	/* no action: the page's own address, without its fragment */
 	if (s.action[0] == 0) {

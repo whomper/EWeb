@@ -1291,6 +1291,13 @@ static void control(canvas *cv, const dl_item *d, fctl *c)
 		cv_text(cv, d->font, d->x + d->w - aw - 3, d->y + d->base, arrow, 3, d->rgb & 0xffffff, 0);
 		break;
 	}
+	case FC_FILE:
+		/* the file's name from its start, cut at the control's end (it
+		   is as wide as a field: layout.c) */
+		form_label(c, lab, sizeof lab);
+		clip_x1 = d->x + d->w - 3 - cv->ox;
+		label(cv, d, lab, d->x + 3, 0);
+		break;
 	default:		/* buttons, boxes */
 		form_label(c, lab, sizeof lab);
 		label(cv, d, lab, 0, 1);

@@ -291,6 +291,8 @@ static void options(fctl *c)
 static void defaults(fctl *c)
 {
 	c->checked = dn_attr(c->n, "checked") != NULL;
+	free(c->file);		/* (a file control: none chosen, as the page had it) */
+	c->file = NULL;
 	if (c->kind == FC_SELECT) {
 		free(c->opt);
 		free(c->sel);
@@ -448,6 +450,7 @@ void form_free(doc *d)
 		free(c->v);
 		free(c->opt);
 		free(c->sel);
+		free(c->file);
 		free(c);
 	}
 	d->ctls = NULL;
@@ -523,7 +526,10 @@ void form_label(const fctl *c, char *out, int size)
 		collapse(v, (long) strlen(v), out, size);
 		return;
 	case FC_FILE:
-		put(out, size, &o, "No file", 7);
+		if (c->file != NULL && c->file[0])
+			put(out, size, &o, form_file_name(c), (long) strlen(form_file_name(c)));
+		else
+			put(out, size, &o, "No file", 7);
 		return;
 	case FC_SELECT: {
 		int any = 0;
@@ -870,8 +876,9 @@ static void urlencode(OUT *o, const char *s, long n)
 
 /* the entry list */
 typedef struct {
-	char *name, *value;	/* UTF-8 */
+	char *name, *value;	/* UTF-8 (a file's: its name) */
 	int file;
+	const char *path;	/* a file entry's file here, NULL none chosen */
 } ENTRY;
 
 typedef struct {
@@ -907,6 +914,7 @@ static void entry(ENTRIES *l, const char *name, long nn, const char *value, long
 	memcpy(e->value, value, (size_t) vn);
 	e->value[vn] = 0;
 	e->file = file;
+	e->path = NULL;
 	l->n++;
 }
 
@@ -985,7 +993,11 @@ static void entries(doc *d, dnode *form, fctl *submitter, int32_t x, int32_t y, 
 			entry_s(l, name, v ? v : "on", 0);
 			break;
 		case FC_FILE:
-			entry_s(l, name, "", 1);
+			/* its file's name (urlencoded and plain text send that
+			   alone; multipart its bytes too) */
+			entry_s(l, name, form_file_name(c), 1);
+			if (l->ok && c->file != NULL && c->file[0])
+				l->e[l->n - 1].path = c->file;
 			break;
 		case FC_SUBMIT:
 			v = dn_attr(c->n, "value");
@@ -1006,6 +1018,52 @@ static void entries(doc *d, dnode *form, fctl *submitter, int32_t x, int32_t y, 
 }
 
 static unsigned long boundary_n;
+
+char *(*form_file_load)(const char *path, long *len);
+
+/* a file's type by its extension, as browsers guess it for the commonest;
+   the rest application/octet-stream */
+static const char *file_type(const char *name)
+{
+	static const char *const map[][2] = {
+		{ "txt", "text/plain" }, { "htm", "text/html" }, { "html", "text/html" }, { "css", "text/css" },
+		{ "csv", "text/csv" }, { "xml", "text/xml" }, { "js", "text/javascript" },
+		{ "json", "application/json" }, { "pdf", "application/pdf" }, { "zip", "application/zip" },
+		{ "jpg", "image/jpeg" }, { "jpeg", "image/jpeg" }, { "png", "image/png" }, { "gif", "image/gif" },
+		{ "webp", "image/webp" }, { "svg", "image/svg+xml" }, { "bmp", "image/bmp" },
+		{ "mp3", "audio/mpeg" }, { "wav", "audio/wav" }, { "mid", "audio/midi" },
+	};
+	const char *dot = strrchr(name, '.');
+	size_t k;
+	if (dot != NULL)
+		for (k = 0; k < sizeof map / sizeof map[0]; k++)
+			if (lower_eq(dot + 1, map[k][0]))
+				return map[k][1];
+	return "application/octet-stream";
+}
+
+void form_set_file(fctl *c, const char *path)
+{
+	free(c->file);
+	c->file = NULL;
+	if (path != NULL && path[0]) {
+		size_t n = strlen(path) + 1;
+		c->file = malloc(n);
+		if (c->file != NULL)
+			memcpy(c->file, path, n);
+	}
+}
+
+const char *form_file_name(const fctl *c)
+{
+	const char *p, *n;
+	if (c->file == NULL)
+		return "";
+	for (p = n = c->file; *p; p++)
+		if (*p == '\\' || *p == '/' || *p == ':')
+			n = p + 1;
+	return n;
+}
 
 int form_submit(doc *d, fctl *from, fctl *submitter, int32_t x, int32_t y, FSUBMIT *s)
 {
@@ -1091,8 +1149,45 @@ int form_submit(doc *d, fctl *from, fctl *submitter, int32_t x, int32_t y, FSUBM
 				o.ok = 0;
 			free(t.s);
 			out_adds(&o, "\"");
-			if (l.e[i].file)
-				out_adds(&o, "; filename=\"\"\r\nContent-Type: application/octet-stream");
+			if (l.e[i].file) {
+				/* its name escaped as a name is, its type by its
+				   extension, its bytes as they are (the HTML
+				   Standard, 4.10.21.8; none chosen: an empty part) */
+				char *data = NULL;
+				long n = 0;
+				out_adds(&o, "; filename=\"");
+				memset(&t, 0, sizeof t);
+				t.ok = 1;
+				for (p = l.e[i].value; *p; p++)
+					if (*p == '\n')
+						out_adds(&t, "%0A");
+					else if (*p == '\r')
+						out_adds(&t, "%0D");
+					else if (*p == '"')
+						out_adds(&t, "%22");
+					else
+						out_add(&t, p, 1);
+				encode(&o, cs, t.s ? t.s : "", t.len);
+				if (!t.ok)
+					o.ok = 0;
+				free(t.s);
+				out_adds(&o, "\"\r\nContent-Type: ");
+				out_adds(&o, l.e[i].path != NULL ? file_type(l.e[i].value) : "application/octet-stream");
+				out_adds(&o, "\r\n\r\n");
+				if (l.e[i].path != NULL) {
+					data = form_file_load != NULL ? form_file_load(l.e[i].path, &n) : NULL;
+					if (data == NULL) {
+						snprintf(s->err, sizeof s->err, "%.50s can't be read or is too big to send.",
+							 l.e[i].value);
+						o.ok = 0;
+					} else {
+						out_add(&o, data, n);
+						free(data);
+					}
+				}
+				out_adds(&o, "\r\n");
+				continue;
+			}
 			out_adds(&o, "\r\n\r\n");
 			encode(&o, cs, l.e[i].value, (long) strlen(l.e[i].value));
 			out_adds(&o, "\r\n");

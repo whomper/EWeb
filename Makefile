@@ -544,7 +544,7 @@ build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
 GEM_UI     := main draw screen win about dialogs
-GEM_COMMON := aboutbox aboutline alert notify popup dialog field help av iconify clip mbar dd panebar text offdraw click progbar hebkey
+GEM_COMMON := aboutbox aboutline alert notify popup dialog field help av iconify clip mbar dd panebar text offdraw click progbar hebkey fsel
 GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DEW_STACK=$(TOS_STACK) $(EWB_INC) $(NSINC)
 # (common's click.c keeps a static named cur, the name EWeb's ui.h gives
 # the window worked on: ui.h leaves its own out of that file, until

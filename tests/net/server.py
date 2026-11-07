@@ -405,6 +405,15 @@ def echo_page(method, ctype, body):
             disp = head.decode().split("\r\n")[0]
             name = disp.split('name="', 1)[1].split('"', 1)[0]
             file = "(file %s)" % disp.split("filename=", 1)[1] if "filename=" in disp else ""
+            ptype = [h for h in head.decode().split("\r\n") if h.lower().startswith("content-type:")]
+            if file and value[:-2]:
+                # (a file's bytes: their length, their type and a digest, so
+                # that the title says they all came)
+                import hashlib
+                file += "[%d %s %s]" % (len(value) - 2, ptype[0].split(":", 1)[1].strip() if ptype else "?",
+                                        hashlib.sha1(value[:-2]).hexdigest()[:12])
+                parts.append("%s=%s" % (name, file))
+                continue
             parts.append("%s=%s%s" % (name, value[:-2].decode(), file))
         text = ";".join(parts)
         ctype = "multipart/form-data"

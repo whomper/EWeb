@@ -193,8 +193,10 @@ a list or a button that has the keyboard (from Tab), **Space** does what
 a click does.
 
 A form goes in the page's own character set, as browsers send it; Back
-after sending shows it as you filled it in. EWeb can't send files yet
-(a file field sends none), and buttons that need JavaScript do nothing
+after sending shows it as you filled it in. A click on a file field
+opens the file selector: the file you choose is shown in the field and
+sent with the form (up to 4 MB, 1 MB with `EWEBST.PRG`; a form sent with GET sends its name
+only, as browsers do). Buttons that need JavaScript do nothing
 unless you let that site's scripts run (see
 [Pages made by scripts](#pages-made-by-scripts)).
 
@@ -578,8 +580,6 @@ the top one. Older pages that centre their tables and boxes with
 meant, with pictures beside or within the text where `align` puts them.
 It doesn't yet show:
 
-- a file to send: a file field shows "No file" (EWeb can't send files
-  yet)
 - AVIF pictures, and WebP ones of more than about a megapixel (EWeb
   asks servers for JPEG, PNG and GIF, which most send then; of a
   picture offered in several forms and sizes it takes a JPEG, PNG or

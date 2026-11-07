@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- args: -K submit-button -u myFile=tests/js/upload/note.txt -K submit-button -->
+<!-- expect: alert: You need to select a file to upload! -->
+<!-- expect: file myFile: "note.txt" chosen -->
+<!-- expect: console: changed C:\fakepath\note.txt -->
+<!-- expect: alert: Your file has now been uploaded! -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A file chosen for a page's file control (as webdriveruniversity.com's
+     File Upload): its value as browsers give it, C:\fakepath\NAME, and
+     its change event; the submit button's script told whether one is -->
+<html><head><title>upload</title><script>
+function fileSubmitted() {
+  if (document.getElementById("myFile").value.length == 0)
+    alert("You need to select a file to upload!");
+  else
+    alert("Your file has now been uploaded!");
+}
+</script></head><body>
+<form onsubmit="return false">
+<input type="file" id="myFile" name="filename" onchange="console.log('changed ' + this.value)">
+<input type="submit" id="submit-button" onclick="fileSubmitted()">
+</form></body></html>

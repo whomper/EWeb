@@ -1623,6 +1623,11 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		w = size * char_w(l, st) + 6;
 		break;
 	}
+	case FC_FILE:
+		/* as wide as a field of 20, whatever file is chosen (its name
+		   cut at the end), so that choosing one moves nothing */
+		w = 20 * char_w(l, st) + 6;
+		break;
 	case FC_TEXTAREA: {
 		int cols = dn_attr(n, "cols") ? atoi(dn_attr(n, "cols")) : 20;
 		int rows = dn_attr(n, "rows") ? atoi(dn_attr(n, "rows")) : 2;

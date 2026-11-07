@@ -935,6 +935,14 @@ try:
               and url == "http://localhost:%d/site/echo" % HTTP, out)
         rc, title, url, out = send("-F", "title=hi", "-S", "up")
         check("forms: multipart", rc == 0 and title == 'POST|multipart/form-data|title=hi;f=(file "");up=Send', out)
+        # a file sent: a picture's every byte, its type by its extension
+        pic = os.path.join(HERE, "..", "layout", "img", "one.png")
+        data = open(pic, "rb").read()
+        import hashlib
+        rc, title, url, out = send("-F", "title=pic", "-F", "f=" + pic, "-S", "up")
+        check("forms: multipart with a file chosen", rc == 0 and title ==
+              'POST|multipart/form-data|title=pic;f=(file "one.png")[%d image/png %s];up=Send'
+              % (len(data), hashlib.sha1(data).hexdigest()[:12]), out)
         rc, title, url, out = send("-S", "s")
         check("forms: a POST answered with 303 is fetched with GET", rc == 0 and title == "GET||after=1"
               and url == "http://localhost:%d/site/echo?after=1" % HTTP, out)

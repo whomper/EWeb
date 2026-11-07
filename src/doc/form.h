@@ -26,7 +26,7 @@ enum {
 	FC_RESET,
 	FC_BUTTON,			/* does nothing without a script */
 	FC_IMAGE,			/* <input type=image>: a submit button that is a picture */
-	FC_FILE,			/* sent empty: EWeb doesn't upload files yet */
+	FC_FILE,			/* a file from this machine, chosen with the file selector */
 	FC_TEXTAREA,
 	FC_SELECT
 };
@@ -50,6 +50,7 @@ struct fctl {
 	int nopt;			/* a select's options, in order */
 	dnode **opt;
 	uint8_t *sel;			/* each chosen or not */
+	char *file;			/* FC_FILE: the chosen file's path here (malloc'ed), NULL none */
 };
 
 /* the document's controls, made once it is parsed (each element's ctl
@@ -73,6 +74,10 @@ int form_insert(fctl *c, const char *s, long n);
 int form_backspace(fctl *c);
 int form_delete(fctl *c);
 void form_set(fctl *c, const char *s, long n);	/* the whole value */
+/* a file control's file: its path on this machine, NULL or "" none */
+void form_set_file(fctl *c, const char *path);
+/* the chosen file's name (its path's last part), "" none */
+const char *form_file_name(const fctl *c);
 void form_retype(fctl *c);	/* its kind again, from its type attribute (a script set it) */
 /* a click on a checkbox (toggled) or radio button (chosen, the rest of
    its group not) */
@@ -95,7 +100,19 @@ typedef struct {
 	char *body;			/* POST: the body; GET: the query (without '?') */
 	long len;
 	char ctype[96];			/* POST: Content-Type */
+	char err[96];			/* why nothing is sent, "" none said (a file that
+					   can't be read or is too big) */
 } FSUBMIT;
+
+/* how a chosen file is read for a multipart form: its bytes malloc'ed and
+   *len, NULL when it can't be (set by src/browse; NULL: files sent empty);
+   no more than FORM_FILE_MAX */
+#ifdef EW_ST
+#define FORM_FILE_MAX (1L << 20)	/* (the ST: 4 MB in all) */
+#else
+#define FORM_FILE_MAX (4L << 20)
+#endif
+extern char *(*form_file_load)(const char *path, long *len);
 
 /* the form submitted: by the button submitter (NULL: the form's
    default, from Return in a field), (x, y) where a picture button was

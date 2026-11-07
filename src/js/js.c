@@ -2362,6 +2362,16 @@ static JSValue fprop_get(JSContext *ctx, JSValueConst this_val, int magic)
 			const char *v = dn_attr(n, "value");
 			return JS_NewString(ctx, v ? v : "on");
 		}
+		if (c != NULL && c->kind == FC_FILE) {
+			/* the chosen file's name behind the fake path browsers give
+			   (the HTML Standard: C:\fakepath\NAME), "" none */
+			char t[300];
+			const char *nm = form_file_name(c);
+			if (!nm[0])
+				return JS_NewString(ctx, "");
+			snprintf(t, sizeof t, "C:\\fakepath\\%s", nm);
+			return JS_NewString(ctx, t);
+		}
 		if (c != NULL && c->v != NULL)
 			return JS_NewStringLen(ctx, c->v, (size_t) c->len);
 		{
@@ -2507,6 +2517,10 @@ static JSValue fprop_set(JSContext *ctx, JSValueConst this_val, JSValueConst v, 
 					break;
 				}
 			}
+		} else if (c != NULL && c->kind == FC_FILE) {
+			/* (a script may only empty it: the HTML Standard) */
+			if (len == 0)
+				form_set_file(c, NULL);
 		} else if (c != NULL && c->kind != FC_CHECKBOX && c->kind != FC_RADIO && c->kind != FC_SUBMIT &&
 			   c->kind != FC_RESET && c->kind != FC_BUTTON && c->kind != FC_IMAGE) {
 			form_set(c, s, (long) len);

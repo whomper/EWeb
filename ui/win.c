@@ -30,6 +30,7 @@
 #include "iconify.h"
 #include "offdraw.h"
 #include "panebar.h"
+#include "fsel.h"
 #include "text.h"
 #include "util.h"
 #include "inflate.h"
@@ -2451,6 +2452,8 @@ void win_ctl_check(void)
 }
 
 /* a box ticked or an option chosen: input, then change */
+static void choose_file(fctl *c);
+
 static void ctl_events(fctl *c)
 {
 	ctl_event(c, "input");
@@ -2606,9 +2609,37 @@ static void ctl_press(fctl *c, const dl_item *it, short mx, short my)
 		win_redraw_page();
 		break;
 	case FC_FILE:
-		win_status("EWeb doesn't send files yet.");
+		choose_file(c);
 		break;
 	}
+}
+
+/* a file control clicked: the file selector, from the folder of the last
+   file chosen (EWeb's own folder the first time); the file chosen is the
+   control's, its name shown, input and change for the page's scripts */
+static void choose_file(fctl *c)
+{
+	static char path[256], name[64];
+	char full[320], *p;
+	short button = 0;
+	int ok;
+	if (!path[0])
+		snprintf(path, sizeof path, "%s\\*.*", opt.workdir);
+	ok = fsel_exinput(path, name, &button, "Choose a file to send");
+	fsel_settle();
+	if (!ok || !button || !name[0])
+		return;
+	str_copy(full, path, sizeof full);
+	p = strrchr(full, '\\');
+	if (p != NULL)
+		p[1] = 0;
+	if (strlen(full) + strlen(name) >= sizeof full)
+		return;
+	strcat(full, name);
+	form_set_file(c, full);
+	log_event("a file chosen for a control");	/* (not its name: the log has no field, 7.3) */
+	ctl_redraw(c);
+	ctl_events(c);
 }
 
 /* the text of the clipboard's first line (all of it into a textarea) */

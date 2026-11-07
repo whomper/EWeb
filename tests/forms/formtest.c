@@ -81,6 +81,29 @@ static void fail(const char *name, const char *what, const char *want, const cha
 	failed++;
 }
 
+/* form.h's form_file_load for the tests: the file whole */
+static char *read_file(const char *path, long *len)
+{
+	FILE *f = fopen(path, "rb");
+	char *d = NULL;
+	long n;
+	*len = 0;
+	if (f == NULL)
+		return NULL;
+	if (fseek(f, 0, SEEK_END) == 0 && (n = ftell(f)) >= 0 && n <= FORM_FILE_MAX && fseek(f, 0, SEEK_SET) == 0 &&
+	    (d = malloc((size_t) n + 1)) != NULL) {
+		if (fread(d, 1, (size_t) n, f) != (size_t) n) {
+			free(d);
+			d = NULL;
+		} else {
+			d[n] = 0;
+			*len = n;
+		}
+	}
+	fclose(f);
+	return d;
+}
+
 int main(int argc, char **argv)
 {
 	FILE *f;
@@ -89,6 +112,8 @@ int main(int argc, char **argv)
 	FSUBMIT s;
 	int have = 0, ok = 1;
 	ec_media m;
+
+	form_file_load = read_file;
 
 	if (argc != 2 || (f = fopen(argv[1], "r")) == NULL) {
 		fprintf(stderr, "formtest CASES.TXT\n");
@@ -154,6 +179,20 @@ int main(int argc, char **argv)
 				form_set(c, buf, (long) strlen(buf));
 			} else {
 				form_insert(c, buf, (long) strlen(buf));
+			}
+		} else if (strncmp(line, "file ", 5) == 0) {
+			/* file NAME PATH: the file chosen for a file control (its
+			   bytes read as browse.c reads them, here with stdio) */
+			char *sp = strchr(arg, ' ');
+			fctl *c;
+			*sp = 0;
+			c = named(d, arg, NULL);
+			if (c == NULL || c->kind != FC_FILE) {
+				fprintf(stderr, "FAIL %s: no file control %s\n", name, arg);
+				failed++;
+				ok = 0;
+			} else {
+				form_set_file(c, sp + 1);
 			}
 		} else if (strncmp(line, "back ", 5) == 0) {
 			char *sp = strchr(arg, ' ');
