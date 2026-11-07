@@ -1450,10 +1450,17 @@ static long due_ms(const ewin *w)
 	return (long) w->due.h * rcost_hi() / 256 * w->due.w / (w->r_page.w > 0 ? w->r_page.w : 1);
 }
 
-/* every draw whole, as 0.69 (Erez, 4 Nov 2026: whole until a page in
-   pieces finishes no later than drawn whole; the speed build's
-   DRAWPIECES=1 measures the pieces meanwhile) */
+/* EWEB.PRG draws whole, as 0.69 (Erez, 4 Nov 2026: whole until a page in
+   pieces finishes no later than drawn whole); the ST edition in pieces
+   (Erez, 7 Nov 2026: "lets do this only for the ST": its window waited
+   3.3 s on the news page whole, 0.76 in pieces, the page done 12 to 17 %
+   later). The speed build's DRAWWHOLE=1 and DRAWPIECES=1 measure the
+   other way */
+#ifdef EW_ST
+int win_whole_only = 0;
+#else
 int win_whole_only = 1;
+#endif
 static long whole_ms = -1;
 
 int win_whole(long *ms)

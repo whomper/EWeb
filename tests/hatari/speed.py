@@ -177,7 +177,7 @@ def eater(kb):
     return bytes.fromhex("3F3C0000" "2F3C%08X" % (kb * 1024) + "3F3C0031" "4E41")
 
 
-def run(out, machine, nvdi, prgdir, eat=0, whole=False):
+def run(out, machine, nvdi, prgdir, eat=0, whole=None):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
     # Falcon-14: a stock Falcon (16 MHz, no FPU, no TT-RAM) with 14 MB of
@@ -211,12 +211,15 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=False):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
                 f.write(data)
-        # (EWeb draws whole, as 0.69, until pieces are no slower: Erez, 4
-        # Nov 2026; --pieces: a draw over 300 ms in pieces, the speed
-        # build's DRAWPIECES=1, to measure them against whole)
-        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" + ("DRAWWHOLE=1\n" if whole else "DRAWPIECES=1\n"))
+        # (EWEB.PRG draws whole, the ST edition in pieces: Erez, 4 and 7
+        # Nov 2026; --whole and --pieces make every machine draw one way,
+        # the speed build's DRAWWHOLE=1 and DRAWPIECES=1, to compare them)
+        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" +
+                ("DRAWWHOLE=1\n" if whole is True else "DRAWPIECES=1\n" if whole is False else ""))
+        if whole is None:
+            whole = not st
         if not whole:
-            print("NOTE  %s: a draw over 300 ms in pieces (--pieces)" % machine, flush=True)
+            print("NOTE  %s: a draw over 300 ms in pieces" % machine, flush=True)
         r.start("C:\\EWEB\\" + prg, ready="EWEB shown ", boot=600 if st else 300)
         # (the start ends where the window is drawn; the home page after
         # it is a load)
@@ -298,7 +301,7 @@ def main():
     if not a:
         sys.exit(__doc__)
     nvdi = "--nvdi" in a
-    whole = "--pieces" not in a
+    whole = True if "--whole" in a else False if "--pieces" in a else None
     a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces")]
     eat = 0
     if "--eat" in a:
