@@ -14,6 +14,16 @@
 #include "translate.h"
 
 static int fails;
+static int ph[16], nph;
+static long phb[16];
+static void on_phase(int p, long b)
+{
+	if (nph < 16) {
+		ph[nph] = p;
+		phb[nph++] = b;
+	}
+}
+
 static void check(int ok, const char *what)
 {
 	printf("%s %s\n", ok ? "ok  " : "FAIL", what);
@@ -166,6 +176,46 @@ int main(void)
 	      translate_status_code("HTTP/1.0 200") == 200 && !translate_status_code("HTTP/2 200 OK") &&
 	      !translate_status_code("ICY 200 OK") && !translate_status_code("HTTP/1.0 2x0 OK") &&
 	      !translate_status_code("HTTP/1.0 2000 OK") && !translate_status_code(""), "status lines");
+
+	/* the phases for the status line: send, wait, receive, done, in that order,
+   with the sizes; none for the quick questions */
+	{
+		extern void (*conn_phase)(int, long);
+		reset();
+		nph = 0;
+		conn_phase = on_phase;
+		sb_init(&out);
+		script(0, ok200(0, "Hello world", "he"), -1);
+		translate_piece("PI_IP", 8480, "en", NULL, "SHALOM OLAM", 11, &out, from, NULL, err, sizeof(err));
+		check(nph == 4 && ph[0] == GATE_SEND && phb[0] == sentlen && ph[1] == GATE_WAIT && ph[2] == GATE_RECEIVE &&
+		      phb[2] == 11 && ph[3] == GATE_DONE, "phases: send (request size), wait, receive (answer size), done");
+		reset();
+		nph = 0;
+		script(0, "HTTP/1.0 503 Loading\r\n\r\n", -1);
+		sb_reset(&out);
+		translate_piece("PI_IP", 8480, "en", NULL, "x", 1, &out, from, NULL, err, sizeof(err));
+		check(nph == 3 && ph[1] == GATE_WAIT && ph[2] == GATE_DONE, "phases: a refusal has no receive, and ends with done");
+		reset();
+		nph = 0;
+		refuse_open = 1;
+		translate_piece("PI_IP", 8480, "en", NULL, "x", 1, &out, from, NULL, err, sizeof(err));
+		check(nph == 2 && ph[0] == GATE_SEND && ph[1] == GATE_DONE, "phases: no connection gives send, then done");
+		reset();
+		nph = 0;
+		script(0, "HTTP/1.0 200 OK\r\nContent-Length: 50\r\n\r\nshort", -1);
+		translate_piece("PI_IP", 8480, "en", NULL, "x", 1, &out, from, NULL, err, sizeof(err));
+		check(nph == 4 && ph[3] == GATE_DONE, "phases: an answer that breaks off still ends with done");
+		reset();
+		nph = 0;
+		{
+			char info[80];
+			script(0, "HTTP/1.0 200 OK\r\nContent-Length: 4\r\n\r\nok\nr", -1);
+			translate_status("PI_IP", 8480, info, sizeof(info), err, sizeof(err));
+			check(nph == 0, "phases: none for /status, a quick question");
+		}
+		conn_phase = 0;
+		sb_free(&out);
+	}
 
 	/* a piece: 200 with a Content-Length */
 	sb_init(&out);

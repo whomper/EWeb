@@ -89,4 +89,19 @@ extern void (*conn_tick)(void);
 /* set by the UI (Esc, the Stop button): every wait ends at once */
 extern int conn_stop;
 
+/* The three phases of handing work to the Gateway (a PDF to convert, a
+   letter to translate, a page to render; Erez, 7 Nov 2026), so the status
+   line can say where the time goes. A gateway client calls conn_phase at
+   each change when it is set (never when NULL):
+     GATE_SEND     the request goes out (bytes: its size);
+     GATE_WAIT     all of it is sent and the Gateway works (bytes 0);
+     GATE_RECEIVE  the answer comes in (bytes: its size, -1 if unknown);
+     GATE_DONE     finished, with an answer or a failure (bytes 0).
+   An app sets the status line from its handler (guideline 7.3 has the
+   words) and shows progress inside SEND and RECEIVE from conn_bytes_out
+   and conn_bytes in its conn_tick. "Sent" means handed to the network:
+   the last few KB may still be on the way. */
+enum { GATE_SEND = 1, GATE_WAIT, GATE_RECEIVE, GATE_DONE };
+extern void (*conn_phase)(int phase, long bytes);
+
 #endif

@@ -198,11 +198,18 @@ static void put_err(char *err, int errlen, const char *s)
 		str_copy(err, s, errlen);
 }
 
+/* the phases (conn_phase) are for work handed over, a POST; the status and
+   language lists are quick questions the app words as it likes */
+static int phased(const SBUF *req)
+{
+	return conn_phase && req->len > 4 && !memcmp(req->s, "POST", 4);
+}
+
 /* one request, one answer. Returns the status code (0 if there was no
    usable answer, err says why); the body of a 200 is appended to body (at
    most maxbody bytes); from_hdr (TR_LANG) gets X-Translate-From. */
-static int http(const char *host, unsigned short port, const SBUF *req, const char *what,
-		SBUF *body, long maxbody, char *from_hdr, int *same, char *err, int errlen)
+static int http_run(const char *host, unsigned short port, const SBUF *req, const char *what,
+		    SBUF *body, long maxbody, char *from_hdr, int *same, char *err, int errlen)
 {
 	CONN *c;
 	SBUF line;
@@ -210,6 +217,8 @@ static int http(const char *host, unsigned short port, const SBUF *req, const ch
 	int code, h;
 	char msg[160];
 
+	if (phased(req))
+		conn_phase(GATE_SEND, req->len);
 	if (from_hdr)
 		from_hdr[0] = 0;
 	if (same)
@@ -226,6 +235,8 @@ static int http(const char *host, unsigned short port, const SBUF *req, const ch
 		conn_close(c);
 		return 0;
 	}
+	if (phased(req))
+		conn_phase(GATE_WAIT, 0);
 	sb_init(&line);
 	if (conn_getline(c, &line) < 0) {
 		put_err(err, errlen, c->err[0] ? c->err : "no answer from the Gateway");
@@ -280,6 +291,8 @@ static int http(const char *host, unsigned short port, const SBUF *req, const ch
 		conn_close(c);
 		return 0;
 	}
+	if (phased(req))
+		conn_phase(GATE_RECEIVE, clen);
 	if (clen >= 0) {
 		if (clen > 0 && !conn_getbytes(c, body, clen)) {
 			put_err(err, errlen, c->err[0] ? c->err : "the Gateway's answer broke off");
@@ -309,6 +322,15 @@ static int http(const char *host, unsigned short port, const SBUF *req, const ch
 	}
 	conn_close(c);
 	return 200;
+}
+
+static int http(const char *host, unsigned short port, const SBUF *req, const char *what,
+		SBUF *body, long maxbody, char *from_hdr, int *same, char *err, int errlen)
+{
+	int code = http_run(host, port, req, what, body, maxbody, from_hdr, same, err, errlen);
+	if (phased(req))
+		conn_phase(GATE_DONE, 0);
+	return code;
 }
 
 static int get(const char *host, unsigned short port, const char *path, SBUF *body, long maxbody,

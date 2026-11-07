@@ -143,6 +143,7 @@ const char *conn_security(CONN *c)
 long conn_bytes, conn_bytes_out;
 int conn_stop;
 void (*conn_tick)(void);
+void (*conn_phase)(int phase, long bytes);
 
 /* the log is written in blocks: opening the file for every line made a
    big download crawl on an Atari disk. Milestones (" -- ", " !! ")
