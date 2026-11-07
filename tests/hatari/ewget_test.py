@@ -29,6 +29,7 @@ import server  # noqa: E402
 
 HTTP, HTTPS, EC, GATE = 18180, 18543, 18545, 18288
 BOTH = 18546	# a server with an RSA certificate and an ECDSA one
+SILENT = 18547	# ECDSA only, an RSA-only hello reset with no alert (www.atari.org.pl)
 # AERA-Gateway's webgate (EWeb's copy, gateway/, or WEBGATE=path/webgate.py)
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
 RUNS = [
@@ -41,6 +42,12 @@ RUNS = [
     # again: the certificate's signature remembered in SIGS.DAT, so the
     # DSP does only the key exchange and its signature
     ("ECDSA again", "-l EC2.LOG https://127.0.0.1:%d/page" % EC),
+    # ECDSA only, and the server hangs up on an RSA-only hello with no
+    # alert (www.atari.org.pl, 7 Nov 2026: "the connection was lost during
+    # the TLS handshake"): ChaCha20 and RSA, every cipher and RSA, both
+    # reset; ECDSA on the third try (common's tls.c, TLS.OVL 1.13). Its
+    # signatures checked anew (SIGS.DAT removed first), on the DSP
+    ("ECDSA, no answer to RSA", "-l SIL.LOG -o SIL.HTM https://127.0.0.1:%d/page" % SILENT),
     # both kinds: the RSA one taken, in one try
     ("RSA and ECDSA", "-l BOTH.LOG https://127.0.0.1:%d/page" % BOTH),
     # the release's certificates (Mozilla's list, and ROOTS.DAT made from
@@ -95,7 +102,7 @@ def main():
     srv_dir = os.path.join(work, "srv")
     srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "net", "server.py"), srv_dir,
                             "--http", str(HTTP), "--https", str(HTTPS), "--untrusted", str(HTTPS + 1),
-                            "--ecdsa", str(EC), "--both", str(BOTH)],
+                            "--ecdsa", str(EC), "--both", str(BOTH), "--silent", str(SILENT)],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     if srv.stdout.readline().strip() != "ready":
         sys.exit("ewget_test: the servers didn't start")
@@ -118,6 +125,10 @@ def main():
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
+            if name == "ECDSA, no answer to RSA":
+                for f in os.listdir(hd):
+                    if f.lower() == "sigs.dat":
+                        os.remove(os.path.join(hd, f))
             if name == "on a TT":	# the test authority again
                 shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)
                 os.remove(os.path.join(hd, "ROOTS.DAT"))
@@ -159,6 +170,16 @@ def main():
                      and "ECDSA P-256 on the DSP" in net
                 for l in net.splitlines():
                     if "TLS --" in l:
+                        print("---- " + l.strip())
+            elif name == "ECDSA, no answer to RSA":
+                net = open(os.path.join(hd, "SIL.LOG"), errors="replace").read()
+                ok = ok and "ECDHE-ECDSA" in text and "(3 tries)" in text \
+                     and "no ChaCha20 here: again with every cipher" in net \
+                     and "the connection was lost during the TLS handshake" in net \
+                     and "ECDSA P-256 on the DSP" in net and "0 of 1 ECDSA signatures checked before" in net \
+                     and open(os.path.join(hd, "SIL.HTM"), "rb").read() == server.PAGE
+                for l in net.splitlines():
+                    if "TLS --" in l or "HTTP" in l:
                         print("---- " + l.strip())
             elif name == "RSA and ECDSA":
                 net = open(os.path.join(hd, "BOTH.LOG"), errors="replace").read()
