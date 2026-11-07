@@ -15,7 +15,8 @@ HD is the folder Hatari shows as C:. From a rig:
     subprocess.Popen(["hatari"] + m.args() + ["--auto", "C:\\\\APP.PRG"], env=m.env())
     print(m.describe())         # "Falcon:256, TOS 4.04" - put it in the report
 
-The TOS: Erez's own (TOS 1.04 from his ST, TOS 4.04 from his Falcon) when
+The TOS: Erez's own (TOS 1.04 from his ST, TOS 4.04 from his Falcon; the
+STE's tos162.img, where he has one) when
 the folder $AERA_TOS (~/.aera/tos) has them, else EmuTOS 1.4, fetched once
 into ~/.cache/aera. AERA_TOS=emutos takes EmuTOS always. The TOS images
 are never put in git (Atari's copyright), nor sent anywhere.
@@ -23,7 +24,7 @@ are never put in git (Atari's copyright), nor sent anywhere.
 Each machine starts with its own settings: its own HOME for Hatari (so no
 NVRAM is shared between rigs), the Falcon's screen mode in its NVRAM and,
 for a real TOS 4, in C:\\NEWDESK.INF (TOS 4's desktop takes the mode from
-there), unless the rig brought its own. An ST, which has no clock, gets
+there), unless the rig brought its own. An ST or an STE, which has no clock, gets
 C:\\AUTO\\CLOCK.PRG, setting this computer's date and time. Standard Python
 only.
 
@@ -68,6 +69,9 @@ MACHINES = {
            ["--machine", "st", "--memsize", "4"], ["mono", "med", "low"], "tos104us.img"),
     "ST-1": ("an ST with 1 MB, the smallest the family runs on (the ST editions)",
              ["--machine", "st", "--memsize", "1"], ["mono", "med", "low"], "tos104us.img"),
+    "STE": ("an STE: 68000 at 8 MHz, 4 MB, its 8-bit DMA sound (EPlay's STE edition, 7 Nov 2026); "
+            "TOS 1.62 (STE's own; 1.04 has no DMA sound), else EmuTOS",
+            ["--machine", "ste", "--memsize", "4"], ["mono", "med", "low"], "tos162.img"),
     "TT": ("a TT030: 68030 at 32 MHz, 68882, 4 MB ST RAM and 16 MB TT RAM (68030 code in fast RAM)",
            ["--machine", "tt", "--cpuclock", "32", "--fpu", "68882", "--memsize", "4",
             "--ttram", "16", "--addr24", "off"], ["ttmed", "mono", "med"], "tos306.img"),
