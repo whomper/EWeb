@@ -1449,21 +1449,16 @@ def swap_colours(r, name):
     r.type("file:///C:/SWAP.HTM")
     r.key(RETURN)
     ev = r.wait(r"shown ", 120)
-    m = re.search(r" area (\d+) (\d+) (\d+) (\d+)", ev or "")
     time.sleep(2)
     im = Image.open(r.shot(6)).convert("RGB")
-    if m is None:
-        check("screens: %s colours in their byte order" % name, False, ev or "no shown line")
-        return
-    x, y, w, h = (int(v) for v in m.groups())
-    sx, sy = im.width / 640.0, im.height / 200.0
-    def at(px, py):
-        return im.getpixel((int(px * sx), int(py * sy)))
-    got = [at(x + w // 2, y + 15), at(x + w // 2, y + h - 10)]
+    # each colour's pixels, wherever the window is on the screenshot (its
+    # borders and scale are Hatari's): a band 60 px tall and the page's
+    # ground both cover thousands; turned bytes give neither
     want = [(0x20, 0x60, 0xc0), (0xdd, 0xdd, 0xdd)]
+    got = [sum(1 for p in im.getdata() if all(abs(a - b) <= 12 for a, b in zip(p, w))) for w in want]
     check("screens: %s colours in their byte order%s" % (name, " (NVDI)" if os.environ.get("AERA_WITH_NVDI") else ""),
-          all(all(abs(a - b) <= 12 for a, b in zip(g, wnt)) for g, wnt in zip(got, want)),
-          "got %s, want %s" % (got, want))
+          ev is not None and ev.startswith("shown file:///C:/SWAP.HTM ") and all(n >= 2000 for n in got),
+          "pixels of %s: %s" % (want, got))
 
 
 def screens():
