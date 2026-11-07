@@ -4597,7 +4597,8 @@ heap's peak 8.9 MB and 265 KB of ST RAM left), the kept page given back while it
 that, and NVDI and the accessories take their share: his `EWEB.LOG` says which part runs out.
 
 **The Hebrew keyboard (5 Nov 2026; Erez: "just like other AERA applications").** As ECal's,
-EContact's and EFTP's: F10 or Options > Hebrew keyboard (ticked) switches it, the letter keys
+EContact's and EFTP's: F10 switches it (no menu item since 7 Nov 2026: Erez, the guidelines'
+5.3; Options > Hebrew keyboard until then), the letter keys
 then type the Israeli SI-1452 layout's letters (the family's table, `key_char` in `ui/main.c`)
 in a page's fields, the address and the scripts' key events; Settings > General > Start with
 the Hebrew keyboard (`HEBREW=`). `EWEB.PRG` only (the ST edition is frozen). The dialogs type

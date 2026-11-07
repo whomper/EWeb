@@ -38,8 +38,8 @@ typedef struct {
 					   3 Nov 2026), or a step at a time while EWeb is idle (0) */
 } EWOPT;
 extern EWOPT opt;
-/* the Hebrew keyboard (F10, Options > Hebrew keyboard, as the family's
-   apps): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */
+/* the Hebrew keyboard (F10 alone, as the family's apps; no menu item:
+   Erez, 7 Nov 2026): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */
 #include "hebkey.h"
 void dlg_hebrew_changed(void);	/* the open dialog's badge again (dialogs.c) */
 #define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: Erez wanted more, 29 Oct 2026) */
@@ -314,7 +314,7 @@ enum {
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_ENCODING,
 	C_PICTURES,
-	C_SETTINGS, C_FALCON, C_SCRIPTS, C_LOG, C_KBD, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
+	C_SETTINGS, C_FALCON, C_SCRIPTS, C_LOG, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */

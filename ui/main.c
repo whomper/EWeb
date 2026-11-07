@@ -140,9 +140,8 @@ static const MBAR_ITEM m_opts[] = {
 	{ "Run this site's scripts", 0, C_SCRIPTS },
 #endif
 	{ "Write a log", 0, C_LOG },	/* EWEB.LOG, as ECal's and EContact's */
-#ifndef EW_ST
-	{ "Hebrew keyboard", "F10", C_KBD },	/* as ECal's, EContact's and EMail's */
-#endif
+	/* (the Hebrew keyboard is F10's alone, no menu item: Erez, 7 Nov
+	   2026, the guidelines' 5.3) */
 	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
 	{ "-", 0, 0 },
@@ -376,9 +375,6 @@ void menu_update(void)
 		menu_set(1, mbar_object(&mb, C_PICTURES), opt.pictures);
 		menu_set(1, mbar_object(&mb, C_FALCON), opt.falcon);
 		menu_set(1, mbar_object(&mb, C_LOG), opt.log);
-#ifndef EW_ST
-		menu_set(1, mbar_object(&mb, C_KBD), hebrew_kbd);
-#endif
 		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
 		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
@@ -2066,9 +2062,6 @@ void command(int cmd)
 	case C_FALCON:
 		if (falcon_mode_set(!opt.falcon))
 			settings_save();
-		break;
-	case C_KBD:
-		set_hebrew_kbd(!hebrew_kbd);
 		break;
 	case C_LOG:
 		/* on or off at once, and kept (LOG=; the family's Write a log) */
