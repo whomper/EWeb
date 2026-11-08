@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import translategate as tg  # noqa: E402
@@ -252,6 +253,14 @@ class ArgosShapeTest(unittest.TestCase):
         self.assertEqual(self.eng.translate(["בברכה,", "Thanks!"], "he", "en"), ["Best regards,", "THANKS!"])
         self.assertEqual(self.model.fed, ["Thanks!"])
 
+    def test_through_english(self):
+        m = self.model
+        self.eng.pair = {("he", "en"): (m, m), ("en", "he"): (m, m), ("de", "en"): (m, m), ("en", "de"): (m, m)}
+        self.assertIn(("he", "de"), self.eng.pairs())
+        self.assertNotIn(("he", "he"), self.eng.pairs())
+        self.assertEqual(self.eng.translate(["two words here."], "he", "de"), ["TWO WORDS HERE."])
+        self.assertEqual(self.model.fed, ["two words here.", "TWO WORDS HERE."])     # he>en, then en>de
+
     def test_short_gets_a_full_stop(self):
         self.assertEqual(self.eng.translate(["Dana", "new order", "One. Two words here."], "en", "he"),
                          ["DANA", "NEW ORDER", "ONE. TWO WORDS HERE."])
@@ -304,6 +313,134 @@ class JobTest(Base):
         self.assertLess(took, 1.5)
         t.join()
         self.assertEqual(got["long"][0], 200)
+
+
+class EnHe(tg.StandIn):
+    """the default install: English and Hebrew only"""
+    NAMES = {"en": "English", "he": "Hebrew"}
+
+
+class NotInstalledTest(Base):
+    engine = EnHe
+
+    def test_german_is_not_already_english(self):
+        st, hd, body = self.tr("Guten Tag, ich hoffe, es geht Ihnen gut. Die Rechnung ist nicht korrekt, %s." % SECRET)
+        self.assertEqual((st, body), (422, "translategate: that pair of languages isn't installed\n"))
+        self.assertEqual(hd["x-translate-from"], "de")
+        self.assertNotIn("x-translate-same", hd)
+
+    def test_argos_detects_beyond_its_pairs(self):
+        eng = tg.Argos.__new__(tg.Argos)
+        eng.pair = {("en", "he"): None, ("he", "en"): None}
+        s = "Guten Tag, ich hoffe, es geht Ihnen gut. Wir haben die Rechnung erhalten und sie ist nicht korrekt."
+        self.assertEqual(eng.detect(s), "de")
+        self.assertEqual(eng.detect("Thanks"), "en")
+        self.assertEqual(eng.detect("I hope this letter finds you well and that the old Falcon still runs."), "en")
+        self.assertEqual(eng.detect("שלום, מה שלומך?"), "he")
+
+
+class LanguagesTest(Base):
+    """the Languages page's three requests, against a fake download"""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        import translatelangs as tl
+        self.tl = tl
+        self.models = tempfile.mkdtemp(prefix="tg-models.")
+        self.state = tempfile.mkdtemp(prefix="tg-state.")
+        tg.Config.models, tg.Config.state = self.models, self.state
+        tg.Jobs.started = None
+        self.restarts = []
+        tg.Config.restart = lambda: self.restarts.append(1)
+        self.fetched = []
+        self.fail = None
+
+        def fetch_one(pair, url, models, progress):
+            if self.fail:
+                raise tl.Fail(self.fail)
+            self.fetched.append(pair)
+            d = os.path.join(models, "%s_%s" % pair)
+            os.makedirs(d)
+            open(os.path.join(d, "metadata.json"), "w").close()
+            progress(1 << 20)
+
+        def links(want, index=None):
+            return {p: "https://example.invalid/%s_%s" % p for p in want}
+        self.patch = unittest.mock.patch.object(tl, "links", links)
+        self.patch.start()
+        tg.Config.start_job = lambda: tl.job(self.state, self.models, fetch_one=fetch_one)
+        for p in (("he", "en"), ("en", "he")):          # en,he installed
+            os.makedirs(os.path.join(self.models, "%s_%s" % p))
+            open(os.path.join(self.models, "%s_%s" % p, "metadata.json"), "w").close()
+
+    def tearDown(self):
+        self.patch.stop()
+        tg.Config.start_job = None
+        super().tearDown()
+
+    def page(self):
+        st, _, body = self.gate.ask("/languages?all=1")
+        self.assertEqual(st, 200)
+        lines = body.decode().splitlines()
+        rows = {l.split("\t")[0]: l.split("\t") for l in lines[2:]}
+        return lines[0], lines[1], rows
+
+    def post(self, body):
+        return self.gate.ask("/languages", body)
+
+    def test_page(self):
+        cap, used, rows = self.page()
+        self.assertEqual(cap, "cap_mb %d" % self.tl.CAP_MB)
+        self.assertEqual(used, "used_mb 230")
+        self.assertEqual(rows["en"], ["en", "English", "0", "installed"])
+        self.assertEqual(rows["he"], ["he", "Hebrew", "230", "installed"])
+        self.assertEqual(rows["de"], ["de", "German", "287", "available"])
+        # the plain list for the apps' Translate into, as before
+        st, _, body = self.gate.ask("/languages")
+        self.assertEqual(body.decode().splitlines()[0], "de\tGerman")
+
+    def test_install_and_remove(self):
+        st, hd, body = self.post("de")                  # he unticked, de ticked: one request
+        self.assertEqual((st, body), (202, b"job 1\n"))
+        self.assertEqual(hd["x-translate-job"], "1")
+        st, _, body = self.gate.ask("/job")
+        self.assertEqual(body, b"job 1\ndone\n")
+        self.assertEqual(sorted(self.fetched), [("de", "en"), ("en", "de")])
+        self.assertEqual(self.tl.installed(self.models), {"en", "de"})
+        tg.Jobs.check()
+        self.assertEqual(self.restarts, [1])            # translategate starts again with the models
+        _, used, rows = self.page()
+        self.assertEqual((used, rows["he"][3], rows["de"][3]), ("used_mb 287", "available", "installed"))
+        st, _, body = self.post("de,en")                # nothing to change
+        self.assertEqual((st, body), (200, b"job 0\ndone\n"))
+        self.assertIn("languages job 1: de,en", self.log.getvalue())
+
+    def test_refusals(self):
+        st, _, body = self.post("de,ru,es,et")          # 287+336+355+298
+        self.assertEqual((st, body), (422, ("translategate: those languages take 1276 MB; %d MB fit\n"
+                                            % self.tl.CAP_MB).encode()))
+        st, _, body = self.post("de,klingon")
+        self.assertEqual((st, body), (400, b"translategate: a language code isn't right\n"))
+        self.assertEqual(self.fetched, [])
+        st, _, body = self.gate.ask("/job")
+        self.assertEqual(body, b"job 0\nnone\n")
+
+    def test_failed(self):
+        self.fail = "the Gateway's disk is full"
+        st, _, _ = self.post("he,de")
+        self.assertEqual(st, 202)
+        st, _, body = self.gate.ask("/job")
+        self.assertEqual(body, b"job 1\nfailed: the Gateway's disk is full\n")
+        self.assertEqual(self.tl.installed(self.models), {"en", "he"})
+
+    def test_one_job_at_a_time(self):
+        tg.Config.start_job = None                      # the job not started yet
+        self.assertEqual(self.post("he,de")[0], 202)
+        st, _, body = self.gate.ask("/job")
+        self.assertEqual(body, b"job 1\nrunning\nbytes 0 of 0\n")
+        st, _, body = self.post("he,fr")
+        self.assertEqual((st, body), (503, b"translategate: a languages job is running\n"))
 
 
 class LoadingTest(Base):

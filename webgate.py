@@ -30,7 +30,9 @@ or 1.3) and hands the answer back as it comes:
     transparency or was a GIF or a palette PNG), its own size written in
     it ("webgate natural WxH": a JPEG's comment, a PNG's tEXt) so that the
     page is laid out as with the original. A megabyte of photo becomes a
-    few dozen kilobytes, and the Atari decodes it at its size. Needs
+    few dozen kilobytes, and the Atari decodes it at its size. deep=1: a
+    true-colour Atari; a picture made smaller keeps all its colours (a PNG
+    not cut to 256, a JPEG of quality 90). Needs
     Pillow (python3-pil); without it pictures pass as they came.
   - a picture asked for with pens ("X-Gateway-Picture: fit=608;
     size=400x300; pens=16; pal=CRC; ed=lj") comes as the Atari's screen
@@ -398,11 +400,13 @@ def make_pens(data, want):
         int.from_bytes(out[14:16], "big")), which
 
 
-def make_picture(data, fit):
+def make_picture(data, fit, deep=False):
     """data (a picture's file) made for a page fit pixels wide: (bytes,
     content type, what was done) or None to send it as it came (no Pillow,
     not a picture, too many pixels, or a JPEG, PNG or GIF the page can show
-    as it is)"""
+    as it is). deep: the Atari shows true colour (X-Gateway-Picture's
+    deep=1), so a picture with transparency or few colours stays a PNG of
+    all its colours (not 256) and a JPEG is written at quality 90"""
     try:
         from PIL import Image, ImageOps, PngImagePlugin
     except ImportError:
@@ -428,11 +432,11 @@ def make_picture(data, fit):
         if alpha or flat:
             info = PngImagePlugin.PngInfo()
             info.add_text("webgate", mark)
-            im.quantize(256, method=Image.FASTOCTREE if alpha else Image.MEDIANCUT).save(
+            (im if deep else im.quantize(256, method=Image.FASTOCTREE if alpha else Image.MEDIANCUT)).save(
                 out, "PNG", optimize=True, pnginfo=info)
             body, ctype = out.getvalue(), "image/png"
         else:
-            im.save(out, "JPEG", quality=80, optimize=True, progressive=False)
+            im.save(out, "JPEG", quality=90 if deep else 80, optimize=True, progressive=False)
             jpg = out.getvalue()
             com = b"webgate " + mark.encode()
             # the comment first, after SOI (Pillow before 9.4 can't write one)
@@ -621,7 +625,7 @@ def picture_answer(resp, conn, u, port, want):
     if resp.will_close:
         UP.drop(u.scheme, u.hostname, port)
     pens = make_pens(data, want) if want["pens"] else None
-    made = (pens[0], "application/x-aera-pens", pens[1]) if pens else make_picture(data, want["fit"])
+    made = (pens[0], "application/x-aera-pens", pens[1]) if pens else make_picture(data, want["fit"], want["deep"])
     skip = HOP_BY_HOP | ({"content-type", "content-length"} if made else set())
     headers = [(k, v) for k, v in resp.getheaders() if theirs(k, skip)]
     if made:
@@ -638,8 +642,9 @@ def picture_answer(resp, conn, u, port, want):
 def picture_want(value):
     """X-Gateway-Picture: fit=WIDTH (0: none), and for pens size=WxH
     (None: fit wide at most), pens=N, pal=CRC (8 hex digits), ed=lj or
-    tj: a dict; pens 0 when they weren't asked for, or not right"""
-    want = {"fit": 0, "size": None, "pens": 0, "pal": None, "ed": "lj"}
+    tj, deep=1 (a true-colour screen: make_picture): a dict; pens 0 when
+    they weren't asked for, or not right"""
+    want = {"fit": 0, "size": None, "pens": 0, "pal": None, "ed": "lj", "deep": False}
     for part in (value or "").split(";"):
         k, _, v = part.strip().partition("=")
         if k == "fit" and v.isdigit() and 16 <= int(v) <= 4096:
@@ -654,6 +659,8 @@ def picture_want(value):
             want["pal"] = int(v, 16)
         elif k == "ed" and v in ("lj", "tj"):
             want["ed"] = v
+        elif k == "deep":
+            want["deep"] = v == "1"
     if not want["fit"] or want["pal"] is None:
         want["pens"] = 0
     return want

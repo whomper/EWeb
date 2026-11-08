@@ -9,6 +9,7 @@ says how they are.
   sudo ./aera-gateway install dav                           ECal's and EContact's (ecalgate)
   sudo ./aera-gateway install ftp                           EFTP's (eftpgate)
   sudo ./aera-gateway install web                           EWeb's (webgate)
+  sudo ./aera-gateway install pdf                           EConvert's and EPDF's converter (pdfgate)
   sudo ./aera-gateway install translate                     translation for the apps (translategate)
   sudo ./aera-gateway install claude --network --atari ATARI_IP
                                                             ClaudeST's bridge (claude-st)
@@ -49,16 +50,15 @@ import tarfile
 import tempfile
 import time
 import urllib.request
-import zipfile
 
-VERSION = "1.22"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
+VERSION = "1.31"                         # AERA-Gateway's release: the Release workflow tags it vX.Y
 HERE = os.path.dirname(os.path.realpath(__file__))
 PROG = sys.argv[0] if sys.argv[0].endswith("aera-gateway") else "aera-gateway"   # as typed, for advice
 OPT = "/opt/aera-gateway"                   # the gateways' code on the Pi
 UNITS = "/etc/systemd/system"
 OLD_BIN = "/usr/local/bin"                  # where the apps' own install.sh put them
-FILES = ("aeragate.py", "emailgate.py", "ecalgate.py", "eftpgate.py", "webgate.py", "translategate.py",
-         "translate-phrases.tsv")
+FILES = ("aeragate.py", "emailgate.py", "ecalgate.py", "eftpgate.py", "webgate.py", "pdfgate.py",
+         "translategate.py", "translatelangs.py", "translate-phrases.tsv", "translate-languages.tsv")
 EXT = "webgate-ext"                         # webgate's browser extension, a folder next to them
 HOME_NETS = ("192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8")
 CLAUDEST = "whomper/ClaudeST"
@@ -85,10 +85,14 @@ class Pi:
         return os.path.join(self.root, p.lstrip("/"))
 
     def run(self, *cmd, check=True, out="show", errors=True, input=None):
-        """out: "show" it, "hide" it or "keep" it (returned)"""
-        r = subprocess.run(cmd, input=input, universal_newlines=True,
-                           stdout={"show": None, "hide": subprocess.DEVNULL, "keep": subprocess.PIPE}[out],
-                           stderr=None if errors else subprocess.DEVNULL)
+        """out: "show" it, "hide" it or "keep" it (returned); a program that
+        isn't there fails as a shell's would (127), not with a traceback"""
+        try:
+            r = subprocess.run(cmd, input=input, universal_newlines=True,
+                               stdout={"show": None, "hide": subprocess.DEVNULL, "keep": subprocess.PIPE}[out],
+                               stderr=None if errors else subprocess.DEVNULL)
+        except OSError:
+            r = subprocess.CompletedProcess(cmd, 127, "" if out == "keep" else None, None)
         if check and r.returncode:
             raise Failed("%s failed" % " ".join(cmd))
         return r
@@ -1085,6 +1089,111 @@ class Web(Gateway):
             "Check it from any browser on your network: http://%s:%s/" % (ip, ns.port)])
 
 
+class Pdf(Gateway):
+    """pdfgate: PDFs converted for EConvert and EPDF by aerapdf, EPDF's
+    converter, built here from this copy's pdf/ (EPDF's source at the
+    commit in pdf/EPDF, tools/sync-pdf.sh)"""
+    key, name, script = "pdf", "pdfgate", "pdfgate.py"
+    title = "PDF converter for EConvert and EPDF on the Atari"
+    removed = "pdfgate removed."
+    PDF_SRC = os.path.join(os.path.dirname(HERE), "pdf")
+    PDF_DIR = "/opt/aera-gateway-pdf"
+    built = None                            # this install's aerapdf, built in prepare() ("kept": as it is)
+    source = None                           # the sum of the pdf/ it is built from
+
+    def options(self, ap):
+        super().options(ap)
+        ap.add_argument("--port", type=int, help="the port on the Pi (8380 is the default)")
+        ap.add_argument("-v", "--verbose", action="store_true", default=None, help="log every request")
+        ap.add_argument("--no-verbose", dest="verbose", action="store_false")
+
+    def apply(self, ns, o):
+        super().apply(ns, o)
+        if o.port is not None:
+            ns.port = o.port
+        if o.verbose is not None:
+            ns.verbose = o.verbose
+
+    def check(self, ns):
+        if not os.path.isdir(os.path.join(self.PDF_SRC, "epdf")):
+            raise Failed("This copy has no pdf/ (EPDF's converter): install pdf from AERA-Gateway itself.")
+
+    def pdf_sum(self):
+        """a sum of this copy's pdf/: the same sum, the same aerapdf"""
+        h = hashlib.sha256()
+        for top, dirs, files in sorted(os.walk(self.PDF_SRC)):
+            dirs[:] = sorted(d for d in dirs if d != "build")
+            for f in sorted(files):
+                if f != "aerapdf":
+                    path = os.path.join(top, f)
+                    h.update(os.path.relpath(path, self.PDF_SRC).encode() + b"\0")
+                    with open(path, "rb") as fh:
+                        h.update(fh.read())
+        return h.hexdigest()
+
+    def prepare(self, pi, ns):
+        """aerapdf built from pdf/, unless the one there is from the same pdf/"""
+        self.built = None
+        self.source = self.pdf_sum()
+        if pi.exists(self.PDF_DIR + "/aerapdf") and \
+                (pi.read(self.PDF_DIR + "/BUILT") or "").strip() == self.source:
+            self.built = "kept"
+            return
+        need = [pkg for prog, pkg in (("cc", "gcc"), ("make", "make")) if not pi.which(prog)]
+        if need:
+            heading("Installing %s, to build aerapdf (EPDF's converter)" % " and ".join(need))
+            pi.run("apt-get", "update", "-qq")
+            pi.run("apt-get", "install", "-y", "-qq", *need)
+        heading("Building aerapdf: this takes a few minutes on a Pi")
+        tmp = tempfile.mkdtemp(prefix="aerapdf-")
+        shutil.copytree(self.PDF_SRC, os.path.join(tmp, "pdf"), ignore=shutil.ignore_patterns("aerapdf", "build"))
+        if pi.run("make", "-s", "-C", os.path.join(tmp, "pdf"), check=False).returncode != 0 or \
+                not os.path.isfile(os.path.join(tmp, "pdf", "aerapdf")):
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise Failed("aerapdf didn't build (see above): pdfgate isn't installed.")
+        self.built = tmp
+
+    def before_start(self, pi):
+        """aerapdf, its fonts and which EPDF it is from, in place before
+        pdfgate starts"""
+        if not self.built or self.built == "kept":
+            self.built = None
+            return
+        try:
+            pdf = os.path.join(self.built, "pdf")
+            pi.rmtree(self.PDF_DIR + "/fonts")
+            pi.makedirs(self.PDF_DIR + "/fonts")
+            pi.copy(os.path.join(pdf, "aerapdf"), self.PDF_DIR + "/aerapdf", 0o755)
+            for f in sorted(glob.glob(os.path.join(pdf, "epdf", "third_party", "liberation", "fonts", "*.ttf"))):
+                pi.copy(f, "%s/fonts/%s" % (self.PDF_DIR, os.path.basename(f)), 0o644)
+            with open(os.path.join(pdf, "EPDF")) as fh:
+                pi.write(self.PDF_DIR + "/SOURCE", fh.read().strip() + "\n")
+            pi.write(self.PDF_DIR + "/BUILT", self.source + "\n")
+        finally:
+            shutil.rmtree(self.built, ignore_errors=True)
+            self.built = None
+
+    def after_remove(self, pi):
+        pi.rmtree(self.PDF_DIR)
+
+    def args(self, ns):
+        out = ["--port", str(ns.port)] + super().args(ns)
+        out += ["-v"] if ns.verbose else []
+        return out + ns.extra
+
+    def ports(self, ns):
+        return [str(ns.port)]
+
+    def tell(self, ns, ip):
+        return "\n".join([
+            "",
+            "pdfgate is running. In EConvert and EPDF on the Atari, Gateway mode, Through the Gateway:",
+            "   Gateway:     %s" % ip,
+            "   Port:        %s" % ns.port,
+            "",
+            "Check it from any browser on your network: http://%s:%s/version" % (ip, ns.port)])
+
+
 class Translate(Gateway):
     """translategate: text translated on the Pi for the Atari apps, by a
     local engine (no text leaves the home network). The engine, Argos
@@ -1098,8 +1207,9 @@ class Translate(Gateway):
     VENV = DIR + "/venv"
     MODELS = DIR + "/models"
     INDEX = "https://raw.githubusercontent.com/argosopentech/argospm-index/main/index.json"
-    LANGUAGES = "en,he"
+    LANGUAGES = "en,de"                     # the default (Erez, 7 Nov 2026)
     PIP = ("ctranslate2>=4,<5", "sentencepiece>=0.2,<0.3")
+    MAX_MEMORY = 1536                       # MB translategate may take (MemoryMax) on a 4 GB Pi
     MIN_MEMORY = 3500                       # MB: the models loaded beside the other gateways (a 4 GB Pi
                                             # says about 3790)
 
@@ -1109,7 +1219,9 @@ class Translate(Gateway):
         ap.add_argument("--engine", choices=("argos", "stand-in"),
                         help="argos (the default): Argos Translate's models; stand-in: no engine, for tests")
         ap.add_argument("--languages", metavar="CODES",
-                        help="the languages to translate between, e.g. en,he (the default), en,he,de")
+                        help="the languages to have, e.g. en,de (the default), en,de,he: exactly these (others "
+                             "removed), each one to and from English, the others through English; each takes "
+                             "120-300 MB loaded, 1108 MB of them at most")
         ap.add_argument("-v", "--verbose", action="store_true", default=None, help="log every request")
         ap.add_argument("--no-verbose", dest="verbose", action="store_false")
 
@@ -1128,7 +1240,7 @@ class Translate(Gateway):
         if o.languages is not None:
             codes = [c.strip() for c in o.languages.split(",") if c.strip()]
             if len(codes) < 2 or not all(re.fullmatch(r"[a-z]{2,3}", c) for c in codes):
-                raise Usage("--languages: two or more codes, e.g. en,he")
+                raise Usage("--languages: two or more codes, e.g. en,de")
             self.languages = codes
 
     def args(self, ns):
@@ -1148,7 +1260,12 @@ class Translate(Gateway):
         # the engine's memory (about 420 MB at its peak), beside the other
         # gateways on a 4 GB Pi; and when memory runs out, the kernel takes
         # a browser's page or a conversion before the loaded models
-        return text.replace("Restart=always", "MemoryMax=1G\nOOMScoreAdjust=-300\nRestart=always", 1)
+        # (the models may change from the Atari's Languages page, up to
+        # translatelangs.CAP_MB of them: the most they may take, always)
+        mm = "%dM" % self.MAX_MEMORY if ns.engine == "argos" else "1G"
+        text = text.replace("Restart=always", "MemoryMax=%s\nOOMScoreAdjust=-300\nRestart=always" % mm, 1)
+        # the languages' job's files (request, job), translategate's to write
+        return text.replace("NoNewPrivileges=yes", "StateDirectory=translategate\nNoNewPrivileges=yes", 1)
 
     def describe(self, ns):
         return "engine " + ns.engine
@@ -1177,9 +1294,25 @@ class Translate(Gateway):
         have = {os.path.basename(os.path.dirname(f))
                 for f in glob.glob(pi.path(self.MODELS) + "/*/metadata.json")}
         want = self.languages or sorted({c for p in have for c in p.split("_")}) or self.LANGUAGES.split(",")
-        missing = [(a, b) for a in want for b in want if a != b and "%s_%s" % (a, b) not in have]
+        # Argos's models go to and from English (a few others aside): a
+        # pair through English, he>en>de, is what translategate does for the rest
+        missing = [p for x in sorted(set(want) - {"en"}) for p in ((x, "en"), ("en", x))
+                   if "%s_%s" % p not in have]
         if missing:
             self.fetch(pi, missing)
+        if self.languages:                  # exactly these: the others' models removed
+            for d in have:
+                if not set(d.split("_")) <= set(want) | {"en"}:
+                    pi.rmtree("%s/%s" % (self.MODELS, d))
+        # the models' room: what translatelangs (and the Languages page) allow
+        tl = load(HERE, "translatelangs.py")
+        need = tl.size_mb(want)
+        if need > tl.CAP_MB:
+            for a, b in missing:
+                pi.rmtree("%s/%s_%s" % (self.MODELS, a, b))
+            raise Failed("The translation models for %s take %d MB; %d MB fit beside the other gateways. "
+                         "Name fewer languages (--languages en,de)." % (",".join(sorted(set(want) | {"en"})),
+                                                                       need, tl.CAP_MB))
 
     def memory(self, pi):
         m = re.search(r"^MemTotal:\s+(\d+) kB", pi.read("/proc/meminfo") or "", re.M)
@@ -1198,49 +1331,50 @@ class Translate(Gateway):
     def fetch(self, pi, pairs):
         """Argos Translate's models for pairs, from its index (once; offline after)"""
         heading("Downloading the translation models: %s" % ", ".join("%s>%s" % p for p in pairs))
+        tl = load(HERE, "translatelangs.py")
         try:
-            with urllib.request.urlopen(self.INDEX, timeout=60) as r:
-                index = json.load(r)
-        except (OSError, ValueError) as e:
-            raise Failed("can't read Argos Translate's list of models (%s)" % e)
-        newest = {}
-        for p in index:
-            k = (p.get("from_code"), p.get("to_code"))
-            links = [u for u in p.get("links", []) if u.startswith("https://")]
-            if k in pairs and links:
-                v = tuple(int(x) for x in re.findall(r"\d+", str(p.get("package_version", "0"))))
-                if k not in newest or v > newest[k][0]:
-                    newest[k] = (v, links[0])
-        gone = [p for p in pairs if p not in newest]
-        if gone:
-            raise Failed("Argos Translate has no model for %s" % ", ".join("%s>%s" % p for p in gone))
-        for (a, b), (_, url) in sorted(newest.items()):
-            tmp = tempfile.mkdtemp(prefix="translategate-")
-            try:
-                say("   %s>%s from %s" % (a, b, url))
-                # (its server turns away Python's own User-Agent)
-                req = urllib.request.Request(url, headers={"User-Agent": "aera-gateway/" + VERSION})
-                with urllib.request.urlopen(req, timeout=600) as r, open(os.path.join(tmp, "m.zip"), "wb") as f:
-                    shutil.copyfileobj(r, f)
-                with zipfile.ZipFile(os.path.join(tmp, "m.zip")) as z:
-                    names = z.namelist()
-                    top = names[0].split("/")[0]
-                    want = ("%s/metadata.json" % top, "%s/sentencepiece.model" % top,
-                            "%s/model/model.bin" % top)
-                    if any(n not in names for n in want) or any(n.startswith("/") or ".." in n.split("/")
-                                                                for n in names):
-                        raise Failed("the %s>%s model isn't one translategate can use" % (a, b))
-                    z.extractall(tmp, [n for n in names if n.startswith(top + "/model/") or n in want])
-                dst = "%s/%s_%s" % (self.MODELS, a, b)
-                pi.rmtree(dst)
-                pi.makedirs(self.MODELS)
-                shutil.copytree(os.path.join(tmp, top), pi.path(dst))
-            except (OSError, zipfile.BadZipFile) as e:
-                raise Failed("can't download the %s>%s model (%s)" % (a, b, e))
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
+            urls = tl.links(pairs)
+            for p in sorted(urls):
+                say("   %s>%s from %s" % (p[0], p[1], urls[p]))
+                tl.fetch(p, urls[p], pi.path(self.MODELS))
+        except tl.Fail as e:
+            raise Failed(str(e))
+
+    UNITS_LANGS = ("translategate-langs.path", "translategate-langs.service")
+
+    def langs_units(self):
+        """the languages' job: translategate writes a request, systemd runs
+        translatelangs for it, as translategate's user, the only one of the
+        two that connects anywhere (Argos Translate's downloads)"""
+        path = "\n".join([
+            "[Unit]", "Description=translategate's languages: a request from an app's Languages page", "",
+            "[Path]", "PathModified=/var/lib/translategate/request", "Unit=translategate-langs.service", "",
+            "[Install]", "WantedBy=multi-user.target", ""])
+        svc = "\n".join([
+            "[Unit]", "Description=translategate's languages: Argos Translate's models put in and taken out", "",
+            "[Service]", "Type=oneshot", "User=translategate",
+            "ExecStart=/usr/bin/python3 %s/translatelangs.py job" % OPT,
+            "StateDirectory=translategate", "ReadWritePaths=%s" % self.MODELS,
+            "TimeoutStartSec=3600", "MemoryMax=256M",
+            "NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes", "PrivateTmp=yes",
+            "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX", ""])
+        return {self.UNITS_LANGS[0]: path, self.UNITS_LANGS[1]: svc}
+
+    def before_start(self, pi):
+        """the models translategate's own (the Languages page changes them),
+        and the languages' job set up"""
+        pi.makedirs(self.MODELS)
+        pi.run("chown", "-R", "translategate:translategate", self.MODELS)
+        for name, text in self.langs_units().items():
+            pi.write("%s/%s" % (UNITS, name), text)
+        pi.run("systemctl", "daemon-reload")
+        pi.run("systemctl", "enable", "--now", self.UNITS_LANGS[0], out="hide")
 
     def after_remove(self, pi):
+        pi.run("systemctl", "disable", "--now", *self.UNITS_LANGS, check=False, out="hide", errors=False)
+        for name in self.UNITS_LANGS:
+            pi.remove("%s/%s" % (UNITS, name))
+        pi.run("systemctl", "daemon-reload")
         pi.rmtree(self.DIR)
 
     def tell(self, ns, ip):
@@ -1255,7 +1389,7 @@ class Translate(Gateway):
 
 
 MAIL = Mail()
-GATEWAYS = [MAIL, Dav(), Ftp(), Web(), Translate()]
+GATEWAYS = [MAIL, Dav(), Ftp(), Web(), Pdf(), Translate()]
 
 
 def put_files(pi, src):
@@ -1606,6 +1740,7 @@ SERVICES = {g.key: g for g in GATEWAYS + [CLAUDE]}
 NAMES = {"email": "mail", "emailgate": "mail", "cal": "dav", "ecal": "dav", "econtact": "dav",
          "contacts": "dav", "ecalgate": "dav", "eftp": "ftp", "eftpgate": "ftp",
          "claudest": "claude", "claude-st": "claude", "eweb": "web", "webgate": "web",
+         "epdf": "pdf", "econvert": "pdf", "pdfgate": "pdf",
          "translation": "translate", "translategate": "translate"}
 
 
@@ -1624,22 +1759,22 @@ def status(pi, src=HERE):
     stale = False
     for svc in GATEWAYS + [CLAUDE]:
         if not svc.installed(pi):
-            say("  %-7s %-10s not installed" % (svc.key, svc.name))
+            say("  %-9s %-13s not installed" % (svc.key, svc.name))
             continue
         state = pi.out("systemctl", "is-active", svc.name).strip() or "stopped"
         if svc is CLAUDE:
-            say("  %-7s %-10s %-9s %s" % (svc.key, svc.name, state, svc.describe(pi)))
+            say("  %-9s %-13s %-9s %s" % (svc.key, svc.name, state, svc.describe(pi)))
             continue
         try:
             ns, _, script = svc.current(pi, src)
         except Failed as e:
-            say("  %-7s %-10s %-9s %s" % (svc.key, svc.name, state, e))
+            say("  %-9s %-13s %-9s %s" % (svc.key, svc.name, state, e))
             continue
         ports = " ".join("%s%s" % (p, "" if listening(pi, p) else " (not listening)") for p in svc.ports(ns))
         who = "only " + ", ".join(ns.allow) if ns.allow else "home network"
-        say("  %-7s %-10s %-9s port %s; %s; %s" % (svc.key, svc.name, state, ports, who, svc.describe(ns)))
+        say("  %-9s %-13s %-9s port %s; %s; %s" % (svc.key, svc.name, state, ports, who, svc.describe(ns)))
         if os.path.dirname(script) != OPT:
-            say("          set up by the app's own install.sh: sudo %s update takes it over" % PROG)
+            say("                          set up by the app's own install.sh: sudo %s update takes it over" % PROG)
             stale = True
     if any(svc.installed(pi) for svc in GATEWAYS) and not stale:
         differ = [f for f in FILES if pi.read("%s/%s" % (OPT, f)) != open(os.path.join(src, f)).read()]
@@ -1673,6 +1808,9 @@ def install_all(pi, o, src=HERE):
     for svc in GATEWAYS + [CLAUDE]:
         if svc is MAIL and not o.mail and not svc.installed(pi) and not pi.exists(Mail.STUNNEL):
             skipped.append("mail (name your provider's servers: --mail IMAP SMTP[:587] [POP3])")
+            continue
+        if svc.key == "pdf" and not os.path.isdir(os.path.join(Pdf.PDF_SRC, "epdf")):
+            skipped.append("pdf (EPDF's converter comes only with AERA-Gateway itself, not an app's copy)")
             continue
         if svc.key == "translate" and not svc.installed(pi) and not svc.arch_ok(pi):
             skipped.append("translate (its engine needs the 64-bit Raspberry Pi OS: uname -m says %s)"
