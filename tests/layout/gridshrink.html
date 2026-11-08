@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- yaary.music's software pages (Erez, 8 Nov 2026): a grid's minmax(0, 40px)
+     columns at the card's width, the card's text inside it; and a picture
+     whose width is a percentage, with a long alt text and no size yet,
+     in a grid column of 140px: as wide as 75% of the column -->
+<title>grid columns that shrink</title>
+<style>
+img { max-width: 100%; height: auto; display: block; }
+.row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 20px; align-items: center; }
+.tile { aspect-ratio: 1; max-width: 100%; display: grid; place-items: center; margin: 0; background: #333;
+        border: 1px solid #555; }
+.tile img { width: 75%; }
+.cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 20px; }
+.card { display: grid; gap: 10px; align-content: start; padding: 22px; background: #ddd; }
+.icons { display: grid; grid-template-columns: repeat(8, minmax(0, 40px)); gap: 6px; min-height: 32px; }
+.icons img { width: 100%; height: auto; aspect-ratio: 1; }
+</style>
+<div class="row"><figure class="tile"><img src="img/missing-icon.webp" width="256" height="256"
+ alt="EFTP icon: two folders, a gold one for this Atari and a blue one for the server, with a blue arrow going up to the server and a green one coming down"></figure>
+<div><p>Program // AERA | Erez Yaary</p></div></div>
+<div class="cards">
+<a class="card" href="#st"><div class="icons"><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""></div>
+<h3>Atari ST</h3><p>Calendar, contacts, mail, FTP, hypertext, the web, Claude and updates from GitHub, for the ST, STE, TT and Falcon.</p></a>
+<a class="card" href="#xl"><div class="icons"><img src="img/one.png" width="256" height="256" alt=""><img src="img/one.png" width="256" height="256" alt=""></div>
+<h3>Atari XL</h3><p>A disk utility and file transfer over FujiNet, for the 400, 800, XL and XE.</p></a>
+</div>

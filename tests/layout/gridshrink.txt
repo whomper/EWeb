@@ -1,0 +1,32 @@
+page 608 x 328, background ffffff, 29 items, 2 links, title "grid columns that shrink"
+fill 6,6 112x84 #333333
+image 7,7 82x82 guessed link 0 "EFTP icon: two folders, a gold one for this Atari and a blue one for the server, with a blue arrow going up to the server and a green one coming down" file://./tests/layout/img/missing-icon.webp
+fill 6,6 112x1 #555555
+fill 6,89 112x1 #555555
+fill 6,7 1x82 #555555
+fill 117,7 1x82 #555555
+text 134,53 184x17 #000000 sans13 link 0 "Program // AERA | Erez Yaary"
+fill 6,106 291x216 #dddddd
+image 24,124 28x14 link 1 "" file://./tests/layout/img/one.png
+image 57,124 28x14 link 1 "" file://./tests/layout/img/one.png
+image 90,124 28x14 link 1 "" file://./tests/layout/img/one.png
+image 123,124 28x14 link 1 "" file://./tests/layout/img/one.png
+image 156,124 27x13 link 1 "" file://./tests/layout/img/one.png
+image 188,124 27x13 link 1 "" file://./tests/layout/img/one.png
+image 220,124 27x13 link 1 "" file://./tests/layout/img/one.png
+image 252,124 27x13 link 1 "" file://./tests/layout/img/one.png
+text 24,186 62x17 #0000ee sans14 bold link 1 "Atari ST"
+text 24,240 189x17 #0000ee sans13 link 1 "Calendar, contacts, mail, FTP,"
+text 24,256 255x17 #0000ee sans13 link 1 "hypertext, the web, Claude and updates"
+text 24,272 230x17 #0000ee sans13 link 1 "from GitHub, for the ST, STE, TT and"
+text 24,288 45x17 #0000ee sans13 link 1 "Falcon."
+fill 6,106 291x216 #00000000 link 1
+fill 311,106 291x216 #dddddd
+image 329,124 28x14 link 2 "" file://./tests/layout/img/one.png
+image 362,124 28x14 link 2 "" file://./tests/layout/img/one.png
+text 329,186 61x17 #0000ee sans14 bold link 2 "Atari XL"
+text 329,240 212x17 #0000ee sans13 link 2 "A disk utility and file transfer over"
+text 329,256 229x17 #0000ee sans13 link 2 "FujiNet, for the 400, 800, XL and XE."
+fill 311,106 291x216 #00000000 link 2
+link 1 file://./tests/layout/gridshrink.html#st
+link 2 file://./tests/layout/gridshrink.html#xl

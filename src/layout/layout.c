@@ -3250,6 +3250,14 @@ static int has_pct(const ec_style *s, int p)
    one from the other by its proportions (its file's, or the attributes'
    before it has come), within max-width and max-height. 0: not known
    until its file comes */
+/* a picture measured at its narrowest whose width (or max-width) is a
+   percentage: it takes none (image_size) */
+static int compressible(const L *l, const box *b)
+{
+	return l->minw && l->cw == AUTO && !b->frame &&
+	       (has_pct(b->st, EP_WIDTH) || (b->st->k[EP_WIDTH] != EK_PX && has_pct(b->st, EP_MAX_WIDTH)));
+}
+
 static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 {
 	int32_t iw = b->iw, ih = b->ih, mw, mh;
@@ -3259,8 +3267,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	   72) */
 	int32_t hb = l->rhb_on ? l->rhb : l->defh;
 	int guess;
-	if (l->minw && l->cw == AUTO && !b->frame &&
-	    (has_pct(b->st, EP_WIDTH) || (b->st->k[EP_WIDTH] != EK_PX && has_pct(b->st, EP_MAX_WIDTH)))) {
+	if (compressible(l, b)) {
 		/* measured at its narrowest, a picture whose width (or
 		   max-width) is a percentage takes none: the percentage of
 		   nothing (CSS Sizing 3, 5.2.2, compressible replaced
@@ -5639,8 +5646,15 @@ static int32_t measure(L *l, box *b)
 		int32_t ih;
 		l->cw = AUTO;
 		image_size(l, b->first, &inner, &ih);
-		if (inner <= 0)
+		/* (no size yet: its alt text on a line; but one that takes
+		   none at its narrowest takes none, its alt text too: the
+		   EFTP page's icon, 75% of a grid's 140px column, made the
+		   column as wide as its alt text, and was drawn 782 px wide
+		   (Erez, 8 Nov 2026)) */
+		if (inner <= 0 && !compressible(l, b->first))
 			inner = inline_measure(l, b);
+		else if (inner < 0)
+			inner = 0;
 	} else if (b->inl) {
 		inner = inline_measure(l, b);
 	} else if (b->grid && b->st->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR) {
@@ -5653,9 +5667,22 @@ static int32_t measure(L *l, box *b)
 			if (m > widest)
 				widest = m;
 		}
-		for (k = 0; k < t->n; k++)
-			inner += (t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
-				  t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest) + (k ? g : 0);
+		for (k = 0; k < t->n; k++) {
+			int32_t v;
+			if (l->minw) {
+				/* at its narrowest a track is its minimum: none for
+				   minmax(0, 40px) (yaary.music's eight icons in a
+				   card made the card's column 291 px, its text
+				   running out of it) */
+				v = t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest;
+				if (t->t[k].mn.k != EC_TR_LEN && t->t[k].mx.k == EC_TR_LEN && dev(l, t->t[k].mx.v) < v)
+					v = dev(l, t->t[k].mx.v);
+			} else {
+				v = t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
+				    t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest;
+			}
+			inner += v + (k ? g : 0);
+		}
 	} else if (b->table) {
 		/* its columns at their widest, and the spacing between them */
 		int32_t cols[MAXCOLS], sp = spacing(l, b->st, 0);
