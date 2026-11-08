@@ -35,6 +35,10 @@ typedef struct {
 	short trackers;			/* TRACKERS=1: known trackers' parts fetched too (0: left out, Erez's default of 1 Nov 2026) */
 	short cachequit;		/* CACHEQUIT=: the disk cache written only at quit (1, Erez's default of
 					   3 Nov 2026), or a step at a time while EWeb is idle (0) */
+	short translate;		/* TRANSLATE=: pages translated (1; View > Translate), as
+					   they come (0); Erez, 8 Nov 2026 (AERA-Atari's
+					   standards/TRANSLATION-SERVICE.md) */
+	char translate_to[8];		/* TRANSLATETO=: into which language ("en") */
 } EWOPT;
 extern EWOPT opt;
 /* the Hebrew keyboard (F10 alone, as the family's apps; no menu item:
@@ -320,7 +324,7 @@ enum {
 	C_NEWWIN, C_CLOSE, C_NEXTWIN, C_OPENURL, C_OPENFILE, C_SAVE, C_RELOAD, C_STOP, C_QUIT,
 	C_CUT, C_COPY, C_PASTE, C_SELALL,
 	C_BACK, C_FORWARD, C_HOME, C_SEARCH, C_SNAPSHOT, C_LIVE, C_LARGER, C_SMALLER, C_ACTUAL, C_ENCODING,
-	C_PICTURES,
+	C_PICTURES, C_TRANSLATE,
 	C_SETTINGS, C_FALCON, C_SCRIPTS, C_LOG, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
 	C_HELP, C_KEYS,
 	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV,

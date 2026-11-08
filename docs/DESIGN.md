@@ -4993,6 +4993,29 @@ while they were decoded): `ewin.stopper`, set with the throbber, its button alon
 changes; pressed while pictures come it stops them as Esc does (`make hatarigui`'s browse group,
 `/site/lazy.html`).
 
+## Translation (8 Nov 2026)
+
+Erez approved the family's translation service for EWeb ("Yes to all of it", 8 Nov 2026; AERA-Atari's
+`standards/TRANSLATION-SERVICE.md`, which holds the whole decision). For EWeb:
+
+- **The switch:** a checked **View > Translate** for every page (`TRANSLATE=` in `EWEB.INF`, off as it
+  starts), into `TRANSLATETO=` (`en`); Settings' "Translate into" and "Languages..." (common's
+  `langs.c`) come with the Direct path. Not in the ST edition (frozen).
+- **Off is as today:** no request, no header, no new code run. `br_translation_runs` (`src/browse`)
+  counts every time any of translation's code runs; EWEB.PRG names it to the rigs at each page's
+  pictures and at quit (`translation N`), and `make hatarigui`'s gateway group checks it stays 0 with
+  Translate off, and that `TRANSLATE=0` is kept.
+- **Through the Gateway:** one header on the document request, `X-Gateway-Translate: to=CODE`; webgate
+  translates the page's text there (AERA-Gateway's `translateclient.py`, 1.32) and says so in the
+  answer's words of `POST /translate` (`X-Translate-From`, `X-Translate-Same`, the refusal lines).
+  EWeb sends it only once webgate takes it: today's webgate passes an unknown `X-Gateway-` header on
+  to the server.
+- **Direct:** the page shows at once untranslated, then in 2 KB pieces through common's
+  `translate.c`, the first screen first, the rest at the relayout throttle; Esc stops it.
+- **Memory only:** translations are never written to the Atari's disk; Back translates again when the
+  kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
+  line.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

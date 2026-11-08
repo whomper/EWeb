@@ -1933,6 +1933,16 @@ def gateway():
                       all(("pens from the Gateway" in e) == bool(pens) for e in got) and
                       not os.path.exists(os.path.join(hd, "crash.log")) and
                       (pens or os.path.isdir(os.path.join(hd, "cache"))), "\n".join(r.events()[-20:]))
+                # Translate off (as it starts: AERA-Atari's
+                # standards/TRANSLATION-SERVICE.md, "Off means as today"):
+                # none of translation's code ran, for the page or at quit,
+                # and the setting kept
+                tr = [e for e in r.events() if e.startswith("translation ")]
+                inf = os.path.join(hd, "eweb.inf")
+                inf = open(inf, errors="replace").read() if os.path.exists(inf) else ""
+                check("gateway: %s, Translate off: no translation code run, TRANSLATE=0 kept" % name,
+                      len(tr) >= 2 and all(e == "translation 0" for e in tr) and
+                      re.search(r"^TRANSLATE=0\r?$", inf, re.M) is not None, "\n".join(tr))
                 if not pens:
                     # the quit's bar moving as the cache's pictures are
                     # written, not standing still the whole step (Erez,

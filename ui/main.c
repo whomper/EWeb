@@ -60,9 +60,21 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 1, 1 };	/* (runscripts, noscripts, log, trackers, cachequit) */
+	       1, "", 0, 1, 1, 0, "en" };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
+					   translate_to) */
 int loading;
 static short quit;
+
+/* the language pages are translated into, NULL with Translate off (the ST
+   edition has no translation: frozen, DESIGN.md) */
+static const char *translate_to(void)
+{
+#ifndef EW_ST
+	if (opt.translate && opt.translate_to[0])
+		return opt.translate_to;
+#endif
+	return NULL;
+}
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
 /* what came while a picture did and isn't the window's own (a menu, a
    click, a key that isn't scrolling): done in turn when the picture has
@@ -122,6 +134,9 @@ static const MBAR_ITEM m_view[] = {
 	{ "Encoding...", 0, C_ENCODING },
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
+#ifndef EW_ST
+	{ "Translate", 0, C_TRANSLATE },	/* (the ST edition is frozen: DESIGN.md) */
+#endif
 	{ "-", 0, 0 },
 	{ "Through the Gateway's browser", 0, C_SNAPSHOT },
 	{ "Live view", 0, C_LIVE },
@@ -357,6 +372,9 @@ void menu_update(void)
 	enable(C_SETHOME, !loading && br.cur >= 0);
 	enable(C_ENCODING, !loading && br.encodable && br.src != NULL);
 	enable(C_PICTURES, !loading);
+#ifndef EW_ST
+	enable(C_TRANSLATE, !loading);
+#endif
 	enable(C_SNAPSHOT, !loading && http_gateway[0]);
 	enable(C_LIVE, !loading && http_gateway[0]);
 	enable(C_BMADD, !loading && br.cur >= 0 && strncmp(br.url, "about:", 6) != 0);
@@ -377,6 +395,7 @@ void menu_update(void)
 		menu_set(1, mbar_object(&mb, C_LOG), opt.log);
 		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
+		menu_set(1, mbar_object(&mb, C_TRANSLATE), opt.translate);
 		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
 #endif
 	}
@@ -448,6 +467,10 @@ static void settings_load(void)
 			opt.gateport = (unsigned short) atoi(eq);
 		else if (!strcmp(line, "SNAPSHOT"))
 			opt.snapshot = atoi(eq) != 0;
+		else if (!strcmp(line, "TRANSLATE"))
+			opt.translate = atoi(eq) != 0;
+		else if (!strcmp(line, "TRANSLATETO"))
+			str_copy(opt.translate_to, eq, sizeof opt.translate_to);
 		else if (!strcmp(line, "TRACKERS"))
 			opt.trackers = atoi(eq) != 0;
 		else if (!strcmp(line, "SCRIPTS"))
@@ -698,6 +721,12 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.snapshot);
 	put(&s, "SNAPSHOT", v, "1: pages through the Gateway's browser, after their scripts ran (the Gateway's "
 	    "snapshots; View menu), 0: as the servers send them");
+#ifndef EW_ST
+	snprintf(v, sizeof v, "%d", opt.translate);
+	put(&s, "TRANSLATE", v, "1: pages translated on the Gateway (View menu), 0: as they come (no "
+	    "request, no header)");
+	put(&s, "TRANSLATETO", opt.translate_to, "the language pages are translated into");
+#endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
 	    "fetched too, 0: left out");
@@ -1564,6 +1593,7 @@ static void br_setup(browser *b)
 	b->can_open = can_open;
 	b->save_as = save_where;
 	b->snapshot = opt.snapshot;
+	b->translate = translate_to();
 	b->trackers = opt.trackers;
 #ifndef EW_ST
 	b->scripts = scripts_ok;
@@ -1642,6 +1672,7 @@ static void each_window(int relayout, int redraw)
 		br.pictures = opt.pictures;
 		br.text = (int32_t) (1024L * opt.zoom / 100);
 		br.snapshot = opt.snapshot;
+		br.translate = translate_to();
 #ifndef EW_ST
 		scripts_apply(&br);
 #endif
@@ -2038,6 +2069,15 @@ void command(int cmd)
 		if (br.cur >= 0 && strncmp(br.url, "about:", 6) != 0 && strncmp(br.url, "file:", 5) != 0)
 			command(C_RELOAD);
 		break;
+#ifndef EW_ST
+	case C_TRANSLATE:
+		/* a setting: on the disk at once (6.5) */
+		opt.translate = (short) !opt.translate;
+		each_window(0, 0);
+		settings_save();
+		log_event("translate %s", opt.translate ? "on" : "off");
+		break;
+#endif
 	case C_LIVE:
 		live_view();
 		break;
@@ -2380,6 +2420,7 @@ static void pictures_end(void)
 {
 	win_status(br.pic_stopped ? "Pictures stopped." : "");
 	log_event("pictures %.*s %d", (int) strcspn(br.url, "?"), br.url, br.pic_done);
+	log_event("translation %lu", br_translation_runs);	/* 0 with Translate off (the rigs) */
 	log_event("throbber %d", win_throb_frames());
 	trim();
 	if (opt.log) {
@@ -2886,6 +2927,7 @@ int app_main(void)
 			throb_all();
 	}
 
+	log_event("translation %lu", br_translation_runs);
 	log_event("quit");
 	{
 		/* where this machine waited longest (gem.c keeps the four

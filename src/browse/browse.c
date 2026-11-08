@@ -2379,6 +2379,7 @@ static void preview(browser *b, const char *data, long len, long whole, const ch
 static int build_plain;
 
 int br_building;
+unsigned long br_translation_runs;
 
 /* the source made into a page (doc styled and laid out): 1, or 0 when
    out of memory or stopped while fetching its sheets. Out of memory, the

@@ -167,6 +167,11 @@ typedef struct browser {
 	long rate;		/* bytes a second the last big answer came at (0: not known) */
 	int snapshot;		/* pages through the Pi's browser: webgate's snapshots,
 				   after their scripts ran (with the gateway only) */
+	/* Translate (View > Translate; AERA-Atari's
+	   standards/TRANSLATION-SERVICE.md): the language pages are made in,
+	   NULL off. Off, nothing of translation runs: no request, no header,
+	   and br_translation_runs stays 0 (the rigs count it) */
+	const char *translate;
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), on
@@ -255,6 +260,9 @@ int br_relayout(browser *b, int32_t width);
    br_poll_ms ms (100) */
 enum { BRB_PARSE = 1, BRB_STYLE, BRB_LAYOUT, BRB_SCRIPT };
 extern int br_building;
+/* times any of translation's code ran (browser.translate): 0 while
+   Translate is off, which the rigs check */
+extern unsigned long br_translation_runs;
 extern unsigned long br_poll_ms;
 /* a picture fetched again at the size shown (pens from the Pi): 1 during
    that fetch (ewrender's -Y W@again sizes the window then) */
