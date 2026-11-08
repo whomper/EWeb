@@ -189,7 +189,8 @@ static int dns_query(const char *name, u32 *ip)
    UDP reads differ: it answers as it always did) */
 
 #define DNS_TRIES 2		/* a question to each nameserver, then again */
-#define DNS_WAIT 3000		/* ms for each answer */
+#define DNS_WAIT 3000		/* ms for the answer of the second round */
+#define DNS_WAIT1 1500		/* ms for the first round's: a nameserver that is up answers in 0.1 to 0.3 s */
 
 /* the nameservers in STinG's NAMESERVER ("a.b.c.d, e.f.g.h" or spaces
    between): up to max of them */
@@ -255,8 +256,13 @@ static int sting_dns(const char *name, u32 *ip)
 				sting_udp_close(cn);
 				return -2;
 			}
-			if (pf_ms() - t0 > DNS_WAIT)
+			if (pf_ms() - t0 > (tries < nns ? DNS_WAIT1 : DNS_WAIT)) {
+				char m[80];
+				snprintf(m, sizeof(m), "%s: no answer from nameserver %d in %lu ms", name, tries % nns + 1,
+					 pf_ms() - t0);
+				conn_log("DNS", " -- ", m, strlen(m));
 				break;
+			}
 			if (pf_idle)
 				pf_idle();
 		}
@@ -312,8 +318,15 @@ static int resolve(const char *host, u32 *ip)
 			return 0;		/* (stopped: net_open says so) */
 		if (r == 0)
 			return have_mintnet && dns_query(host, ip);	/* no such name */
-		if (r == -1)
+		if (r == -1) {
 			r = sting_resolve(host, ip) > 0;
+			if (r == 1) {
+				snprintf(msg, sizeof(msg), "%s found by STinG's resolve() in %lu ms", host, pf_ms() - t0);
+				conn_log("DNS", " -- ", msg, strlen(msg));
+				name_keep(host, *ip);
+				return 1;
+			}
+		}
 		if (r == 1) {
 			snprintf(msg, sizeof(msg), "%s found in %lu ms", host, pf_ms() - t0);
 			conn_log("DNS", " -- ", msg, strlen(msg));
