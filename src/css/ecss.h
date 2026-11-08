@@ -207,6 +207,8 @@ typedef struct ec_node {
 #define EC_NODE_LINK	1		/* an a or area with an href */
 #define EC_NODE_EMPTY	2		/* no element children and no text */
 #define EC_NODE_VISITED	4		/* a link (EC_NODE_LINK) whose address has been visited */
+#define EC_NODE_HOVER	8		/* :hover's: the element clicked last and those it is in (EWeb's
+					   hover, by a click: ec_hover_reveal) */
 
 /* ------------------------------------------------------------ the engine */
 
@@ -336,6 +338,15 @@ void ec_drop_sheets(ec_ctx *c);
 /* 1 when a sheet added since ec_create or ec_drop_sheets didn't all fit
  * in memory: a rule of it, or the whole of it, left out. */
 int ec_sheets_short(const ec_ctx *c);
+/* 1 when a rule of c's has :hover on an element left of its subject
+ * (".menu:hover .submenu", "li:hover > ul": what the mouse over an
+ * element shows), which match the elements of EC_NODE_HOVER; a :hover
+ * of the subject alone (a:hover's colour) matches nothing, as before */
+int ec_hover_reveal(const ec_ctx *c);
+/* 1 when e, hovered, would match a compound with :hover of c's rules (its
+ * other selectors: ".menu" of ".menu:hover .submenu"): only then does its
+ * hover change what the page shows */
+int ec_hover_may(ec_ctx *c, const ec_node *e);
 /* the bytes c's memory takes: its atoms, sheets and styles (the pieces
  * they are in, but what is left of the last of each) */
 size_t ec_mem(const ec_ctx *c);

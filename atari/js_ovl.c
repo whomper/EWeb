@@ -233,6 +233,16 @@ int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, lo
 	return ovl ? ovl->key(d, n, type, key, keycode, charcode) : 0;
 }
 
+int js_mouse(doc *d, dnode *n, const char *type, long x, long y, int button, int detail, dnode *related)
+{
+	return ovl ? ovl->mouse(d, n, type, x, y, button, detail, related) : 0;
+}
+
+int js_moves(doc *d)
+{
+	return ovl ? ovl->moves(d) : 0;
+}
+
 void js_run(doc *d, const char *code)
 {
 	if (ovl)

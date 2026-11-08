@@ -69,9 +69,12 @@ Falcons, and a divide that costs 40 to 80 cycles.
   family, the `of-type` ones; `:link`, `:any-link`; `:lang()`, `:dir()`;
   `:enabled`, `:disabled`, `:checked`, `:required`, `:optional`,
   `:read-only`, `:read-write`, `:placeholder-shown`; `:open` (since 22 Oct
-  2026: a details or dialog with its `open` attribute). `:hover`, `:focus`
-  and the other user-action pseudo-classes never match in a still page;
-  their rules are kept apart for when EWeb is interactive. `::before` and
+  2026: a details or dialog with its `open` attribute). `:hover` left of
+  a selector's subject (`.menu:hover .submenu`) matches the element the
+  user clicked last and those it is in (`EC_NODE_HOVER`, since 8 Nov 2026:
+  EWeb's hover is a click; `ec_hover_reveal`, `ec_hover_may`); `:hover` of
+  the subject itself, `:focus` and the other user-action pseudo-classes
+  never match, their rules kept apart. `::before` and
   `::after` get styles. Unknown pseudo-classes and pseudo-elements make a
   selector invalid, as browsers do; `:has()` is not supported.
 - **The cascade:** origins, `!important`, specificity, order, the style

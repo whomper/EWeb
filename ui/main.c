@@ -1432,14 +1432,42 @@ static void scripted(int r, int load)
 	}
 }
 
-int page_click(int32_t x, int32_t y)
+int page_click(int32_t x, int32_t y, int detail)
 {
 	int cancelled = 0, load = 0, r;
 	if (loading || br.d == NULL || br.d->js == NULL)
 		return 0;
-	r = br_js_click(&br, x, y, &cancelled, &load);
+	r = br_js_click(&br, x, y, detail, 0, &cancelled, &load);	/* (its mousedown told at the press: page_mouse) */
 	scripted(r, load);
 	return cancelled || r == BRJ_LOAD;
+}
+
+int page_mouse(const char *type, int32_t x, int32_t y, int detail)
+{
+	int cancelled = 0, load = 0, r;
+	if (loading || br.d == NULL || br.d->js == NULL)
+		return 0;
+	r = br_js_mouse(&br, type, x, y, detail, &cancelled, &load);
+	scripted(r, load);
+	return r == BRJ_LOAD ? 2 : cancelled;
+}
+
+int page_hover_click(int32_t x, int32_t y)
+{
+	if (loading || !br_hover_click(&br, x, y))
+		return 0;
+	log_event("hover by a click: laid out again, height %ld", br.p ? (long) br.p->height : 0L);
+	win_ctl_check();
+	win_page_relaid();
+	return 1;
+}
+
+void page_hover(int32_t x, int32_t y)
+{
+	int load = 0;
+	if (loading || br.d == NULL || br.d->js == NULL)
+		return;
+	scripted(br_js_hover(&br, x, y, &load), load);
 }
 
 void ctl_event(struct fctl *c, const char *type)
@@ -1467,7 +1495,24 @@ static void js_timers(void)
 }
 
 #else	/* the ST edition: no scripts */
-int page_click(int32_t x, int32_t y)
+int page_click(int32_t x, int32_t y, int detail)
+{
+	(void) x, (void) y, (void) detail;
+	return 0;
+}
+
+int page_mouse(const char *type, int32_t x, int32_t y, int detail)
+{
+	(void) type, (void) x, (void) y, (void) detail;
+	return 0;
+}
+
+void page_hover(int32_t x, int32_t y)
+{
+	(void) x, (void) y;
+}
+
+int page_hover_click(int32_t x, int32_t y)
 {
 	(void) x, (void) y;
 	return 0;

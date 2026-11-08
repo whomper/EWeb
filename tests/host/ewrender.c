@@ -739,6 +739,81 @@ static int click(browser *b, const char *id)
 		return 1;
 	}
 #endif
+#ifndef EW_ST
+	{
+		/* the mouse beyond a click (as win.c gives it): -K hover:ID
+		   (or hover:X,Y) the mouse come over it, dbl:ID a double click,
+		   down:ID and up:ID a press and its release (a click held),
+		   drag:ID:DX,DY a press, the mouse moved by DX, DY in four
+		   steps and let go; tap:ID a click as the page's :hover */
+		static const char *const verbs[] = { "hover:", "dbl:", "down:", "up:", "drag:", "tap:" };
+		int v;
+		for (v = 0; v < 6 && strncmp(id, verbs[v], strlen(verbs[v])) != 0; v++)
+			;
+		if (v < 6) {
+			char name[128], *colon;
+			int32_t dx = 0, dy = 0;
+			const char *arg = id + strlen(verbs[v]);
+			str_copy(name, arg, sizeof name);
+			if (v == 4 && (colon = strchr(name, ':')) != NULL) {
+				long a, c;
+				if (sscanf(colon + 1, "%ld,%ld", &a, &c) == 2) {
+					dx = (int32_t) a;
+					dy = (int32_t) c;
+				}
+				*colon = 0;
+			}
+			if (sscanf(name, "%d,%d", &px, &py) == 2) {
+				x = px;
+				y = py;
+			} else {
+				n = b->d ? by_id(b->d->root, name) : NULL;
+				if (n == NULL || !page_node_rect(b->p, n, &x, &y, &w, &h)) {
+					printf("%s%s: not shown\n", verbs[v], name);
+					return 0;
+				}
+				x += w / 2;
+				y += h / 2;
+			}
+			if (v == 5) {
+				/* tap:ID, EWeb's hover by a click (win.c's, before the
+				   click itself): :hover's element */
+				k = br_hover_click(b, x, y);
+				printf("tap %s: %s, height %d\n", name, k ? "laid out again" : "nothing", b->p ? (int) b->p->height : 0);
+				goto due;
+			}
+			if (v == 0) {
+				r = br_js_hover(b, x, y, &load);
+				printf("hover %s: %s\n", name, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing");
+			} else if (v == 1) {
+				br_js_click(b, x, y, 1, 1, &cancelled, &load);
+				r = br_js_click(b, x, y, 2, 1, &cancelled, &load);
+				printf("double click %s: %s%s\n", name, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
+				       cancelled ? ", cancelled" : "");
+			} else if (v == 2 || v == 3) {
+				r = br_js_mouse(b, v == 2 ? "mousedown" : "mouseup", x, y, 1, &cancelled, &load);
+				printf("%s %s: %s%s\n", v == 2 ? "press" : "release", name,
+				       r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing", cancelled ? ", cancelled" : "");
+			} else {
+				int s;
+				r = br_js_mouse(b, "mousedown", x, y, 1, &cancelled, &load);
+				if (!cancelled) {
+					printf("drag %s: its press not taken by a script (a selection)\n", name);
+					return 1;
+				}
+				for (s = 1; s <= 4 && r != BRJ_LOAD; s++)
+					r = br_js_mouse(b, "mousemove", x + dx * s / 4, y + dy * s / 4, 1, &cancelled, &load);
+				if (r != BRJ_LOAD)
+					r = br_js_mouse(b, "mouseup", x + dx, y + dy, 1, &cancelled, &load);
+				printf("drag %s by %ld,%ld: %s\n", name, (long) dx, (long) dy,
+				       r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing");
+			}
+			if (r == BRJ_LOAD)
+				click_file(b, load);
+			goto due;
+		}
+	}
+#endif
 	if (strcmp(id, "back") == 0) {
 		/* -M back: the window's Back */
 		r = br_back(b);
@@ -752,7 +827,7 @@ static int click(browser *b, const char *id)
 #ifndef EW_ST
 		/* (the page's scripts told first, as a click by id is) */
 		h0 = under(b, x, y, &c0, &l0);
-		r = br_js_click(b, x, y, &cancelled, &load);
+		r = br_js_click(b, x, y, 1, 1, &cancelled, &load);
 		printf("click %d,%d: %s%s\n", px, py, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 		       cancelled ? ", cancelled" : "");
 #endif
@@ -778,7 +853,7 @@ static int click(browser *b, const char *id)
 	x += w / 2;
 	y += h / 2;
 	h0 = under(b, x, y, &c0, &l0);
-	r = br_js_click(b, x, y, &cancelled, &load);
+	r = br_js_click(b, x, y, 1, 1, &cancelled, &load);
 	printf("click %s: %s%s\n", id, r == BRJ_DRAWN ? "laid out again" : r == BRJ_LOAD ? "a script loaded" : "nothing",
 	       cancelled ? ", cancelled" : "");
 #endif

@@ -2762,10 +2762,42 @@ static JSValue el_act(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
 	return JS_UNDEFINED;
 }
 
+static void restyle_now(ejs *j);
+
+/* a style's keyword (0: not one) */
+static int style_kw(const ec_style *s, int p)
+{
+	return s != NULL && s->k[p] == EK_KW ? s->v[p].i : 0;
+}
+
+/* offsetParent (CSSOM View, 7.1): null for the body, the root, an element
+   not in the page or with no box, or one fixed; else the nearest element
+   it is in that is positioned, or (its own position static) a td, th or
+   table, or the body. (The body's was the body, and jQuery's
+   offsetParent(), which goes on up while what it finds is static, went
+   round for ever: jQuery UI's draggable stopped at its first move) */
 static JSValue el_offset_parent(JSContext *ctx, JSValueConst this_val)
 {
+	ejs *j = J(ctx);
+	dnode *k;
+	int stat;
 	THIS_ELEM(n);
-	return wrap(ctx, J(ctx)->d->body);
+	restyle_now(j);
+	if (n == j->d->body || n == j->d->html || n->type != DN_ELEMENT || !connected(j, n) || n->e.style == NULL ||
+	    style_kw(n->e.style, EP_DISPLAY) == KW_NONE || style_kw(n->e.style, EP_POSITION) == KW_FIXED)
+		return JS_NULL;
+	for (k = n->parent; k != NULL && k->type == DN_ELEMENT; k = k->parent)
+		if (k->e.style == NULL || style_kw(k->e.style, EP_DISPLAY) == KW_NONE)
+			return JS_NULL;	/* (in a box not shown: none of its own) */
+	stat = style_kw(n->e.style, EP_POSITION) == KW_STATIC;
+	for (k = n->parent; k != NULL && k->type == DN_ELEMENT; k = k->parent) {
+		if (k == j->d->body)
+			break;
+		if ((k->e.style != NULL && style_kw(k->e.style, EP_POSITION) != KW_STATIC) ||
+		    (stat && (is_html(k, T_TD) || is_html(k, T_TH) || is_html(k, T_TABLE))))
+			return wrap(ctx, k);
+	}
+	return j->d->body != NULL ? wrap(ctx, j->d->body) : JS_NULL;
 }
 
 static JSValue zero(JSContext *ctx, JSValueConst this_val)
@@ -5033,6 +5065,93 @@ int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, lo
 	j->active--;
 	sweep(j);
 	return r;
+}
+
+/* a mouse's event at n (the UI Events spec's MouseEvent): where on the
+   page (x, y the page's device px; pageX in CSS px, as its boxes are,
+   and clientX the same, as the page's scripts see it not scrolled:
+   scrollY 0), its button (0 the left, 2 the right), detail
+   (the clicks' count) and relatedTarget (what the mouse came from or
+   went to: mouseover, mouseout and the rest). mouseenter and mouseleave
+   don't bubble, nor can be cancelled; the others can */
+int js_mouse(doc *d, dnode *n, const char *type, long x, long y, int button, int detail, dnode *related)
+{
+	ejs *j = d->js;
+	JSContext *ctx;
+	JSValue ev;
+	int r, flat, held;
+	if (j == NULL)
+		return 0;
+	ctx = j->ctx;
+	flat = !strcmp(type, "mouseenter") || !strcmp(type, "mouseleave");
+	arm(j, JS_EVENT_MS);
+	ev = new_event(ctx, type, !flat, !flat);
+	if (JS_IsException(ev)) {
+		report(j);
+		return 0;
+	}
+	ev_of(ev)->trusted = 1;
+	x = css_px(j, (int32_t) x);	/* (the page's device px as its CSS px, as its boxes are) */
+	y = css_px(j, (int32_t) y);
+	JS_SetPropertyStr(ctx, ev, "clientX", JS_NewInt32(ctx, (int32_t) x));
+	JS_SetPropertyStr(ctx, ev, "clientY", JS_NewInt32(ctx, (int32_t) y));
+	JS_SetPropertyStr(ctx, ev, "pageX", JS_NewInt32(ctx, (int32_t) x));
+	JS_SetPropertyStr(ctx, ev, "pageY", JS_NewInt32(ctx, (int32_t) y));
+	JS_SetPropertyStr(ctx, ev, "screenX", JS_NewInt32(ctx, (int32_t) x));
+	JS_SetPropertyStr(ctx, ev, "screenY", JS_NewInt32(ctx, (int32_t) y));
+	JS_SetPropertyStr(ctx, ev, "offsetX", JS_NewInt32(ctx, 0));
+	JS_SetPropertyStr(ctx, ev, "offsetY", JS_NewInt32(ctx, 0));
+	JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
+	/* buttons: those held (a mousemove's detail says whether the button
+	   is: a drag); which, jQuery's: 1 the left, 3 the right */
+	held = !strcmp(type, "mousedown") || (!strcmp(type, "mousemove") && detail > 0);
+	JS_SetPropertyStr(ctx, ev, "buttons", JS_NewInt32(ctx, held ? (button == 2 ? 2 : 1) : 0));
+	JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, button + 1));
+	JS_SetPropertyStr(ctx, ev, "detail", JS_NewInt32(ctx, strcmp(type, "mousemove") ? detail : 0));
+	JS_SetPropertyStr(ctx, ev, "relatedTarget", related != NULL ? wrap(ctx, related) : JS_NULL);
+	JS_SetPropertyStr(ctx, ev, "shiftKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "ctrlKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "altKey", JS_FALSE);
+	JS_SetPropertyStr(ctx, ev, "metaKey", JS_FALSE);
+	j->active++;		/* (the user's: a window may open) */
+	r = dispatch(j, n, ev);
+	JS_FreeValue(ctx, ev);
+	jobs(j);
+	j->active--;
+	sweep(j);
+	return r;
+}
+
+/* whether the page's scripts listen for the mouse moving over it
+   (mouseover, mouseout, mouseenter, mouseleave, mousemove: a listener,
+   or an on... attribute), so that EWeb follows the mouse only for a
+   page that asks */
+int js_moves(doc *d)
+{
+	static const char *const kinds[] = { "mouseover", "mouseout", "mouseenter", "mouseleave", "mousemove" };
+	ejs *j = d->js;
+	listener *l;
+	dnode *n;
+	unsigned k;
+	if (j == NULL)
+		return 0;
+	for (l = j->ls; l != NULL; l = l->next)
+		for (k = 0; k < sizeof kinds / sizeof *kinds; k++)
+			if (!l->gone && !strcmp(l->type, kinds[k]))
+				return 1;
+	if (d->root == NULL)
+		return 0;
+	for (n = d->root->first; n != NULL; n = next_in(n, d->root, 1)) {
+		uint16_t i;
+		if (n->type != DN_ELEMENT)
+			continue;
+		for (i = 0; i < n->nattr; i++) {
+			const char *s = ec_atom_text(n->attrs[i].name, NULL);
+			if (s != NULL && !strncmp(s, "onmouse", 7))
+				return 1;
+		}
+	}
+	return 0;
 }
 
 void js_run(doc *d, const char *code)

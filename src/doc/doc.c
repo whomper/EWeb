@@ -714,7 +714,7 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 
 	n->e.parent = parent ? &parent->e : NULL;
 	n->e.first = NULL;
-	n->e.flags = 0;
+	n->e.flags &= EC_NODE_HOVER;	/* (EWeb's hover kept: br_hover_click) */
 	n->e.cls = n->cls;
 	n->e.ncls = n->ncls;
 	n->e.attr = n->attrs;

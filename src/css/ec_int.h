@@ -203,7 +203,7 @@ enum {
 	S_FIRST_OF_TYPE, S_LAST_OF_TYPE, S_ONLY_OF_TYPE, S_NTH_OF_TYPE, S_NTH_LAST_OF_TYPE,
 	S_LINK, S_VISITED, S_ANY_LINK, S_NEVER, S_NOT, S_IS, S_LANG, S_DIR,
 	S_ENABLED, S_DISABLED, S_CHECKED, S_REQUIRED, S_OPTIONAL, S_READ_WRITE, S_READ_ONLY,
-	S_PLACEHOLDER_SHOWN, S_OPEN
+	S_PLACEHOLDER_SHOWN, S_OPEN, S_HOVER
 };
 
 #define SF_ICASE	1		/* [attr=value i] */
@@ -299,6 +299,12 @@ struct ec_ctx {
 	int32_t span_lo, span_hi;
 
 	int sibling_rules;		/* any selector looks at siblings */
+	int hover_reveal;		/* a selector has :hover left of its subject (ec_hover_reveal) */
+	/* those compounds (ec_hover_may), the first EC_NHOV; nhov past it: more */
+#define EC_NHOV 128
+	const struct ec_sel *hov_sel[EC_NHOV];
+	uint8_t hov_ci[EC_NHOV];
+	int nhov;
 
 	/* url()s in a sheet from another address (ec_sheet_at) */
 	int (*resolve)(const char *base, const char *rel, char *out, int size);

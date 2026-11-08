@@ -40,6 +40,8 @@ typedef struct js_exports {
 	void (*stats)(doc *d, unsigned long *ms, long *bytes);
 	int (*key)(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode);
 	const char *(*navigation_window)(doc *d, const char **html, long *len);
+	int (*mouse)(doc *d, dnode *n, const char *type, long x, long y, int button, int detail, dnode *related);
+	int (*moves)(doc *d);
 } js_exports;
 
 /* the addresses of what the overlay imports, in mkovl.py's order, and a

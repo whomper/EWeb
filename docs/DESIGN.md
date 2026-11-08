@@ -25,6 +25,7 @@ it, and how EWeb gets past CAPTCHAs.
 | ST edition | **Frozen after 1.0** (4 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
 | A long draw | **Whole on the Falcon and TT, as 0.69; in pieces on the ST** (Erez, 4 and 7 Nov 2026) | On 7 Nov 2026, after a day's work to make pieces as fast as whole (full-height runs, bands ending between lines, pieces one after another while no key waits: none closed the gap; per piece the screen taken, the mouse hidden and the window's rectangles walked again, about 10 ms of a stock Falcon's), Erez: "lets do this only for the ST". The 8 MHz ST draws a long page in pieces (its window answered after 0.76 s on the news page, against 3.3 s whole; the page done 12 to 17 % later); `EWEB.PRG` draws whole (`win_whole_only`: 0 in the ST edition). Before that: | Performance never goes backwards (Erez: "Performance must not go backwards or bad, just for the better always"). The family's rule of 4 Nov (a draw over 300 ms in pieces of at most 100 ms, keys answered between) made EWeb's pages finish later than 0.69's whole draw: on the stock Falcon (Falcon-4:16) 5 to 14 % (home 610 ms against 569, news 1090 against 954), on an 8 MHz ST in 300 ms pieces (Erez's choice for the ST) 9 to 18 %, in 100 ms ones 58 to 105 %. So EWeb draws whole, and the drawing is made faster until a page in pieces finishes no later than 0.69's whole; then the pieces are switched on (`win_whole_only` in `ui/win.c`). The pieces' code stays, measured by the speed build's `DRAWPIECES=1` (`tests/hatari/speed.py --pieces`; `AESWHOLE`, the time to the finished picture): whole or pieces told before the draw by the dearest rows lately, an ST's pieces up to 300 ms in bands of 32 rows. |
 | A window a page's script opens | **From a click or a key of the user's** (Erez, 7 Nov 2026: "yes, allow window.open from a click") | As browsers: `window.open` opens a window while the user's click or key is handled; at other times (as the page loads, from a timer) it is null, as a blocker of pop-ups answers. What the script writes into the `about:blank` it opened is that window's page, with its opener's site. (webdriveruniversity.com's AI Playground, New Tab; DESIGN.md, The AI Playground in use.) |
+| The mouse over a page | **Its scripts hear it; a click is the hover** (Erez, 8 Nov 2026: of hover as on a PC, a click as the hover, or none) | A page's scripts are told of the mouse as browsers tell them (mouseover, mouseout, mouseenter, mouseleave as it goes from element to element; mousedown, mouseup, click, dblclick; a drag whose press a script takes: mousemove with the button held), which costs nothing on a page that doesn't listen. What a page's CSS shows with the mouse over an element (`.menu:hover .submenu`, a hover menu) a click on that element shows, until the next click elsewhere, as on a phone: a page is laid out again only for a click that opens or closes such a thing, never as the mouse moves (on the stock Falcon a layout is 0.1 to 0.5 s on a small page, seconds on a big one). A :hover that only colours the element under the mouse is left out. (webdriveruniversity.com's Actions and Scrolling; DESIGN.md, The mouse.) |
 | TT-RAM | **All of it but a share left for other programs, a setting** (4 Nov 2026; Phase 2) | The program and its memory are already in TT-RAM without EWeb's code knowing (common's heap asks for TT-RAM first). Its fixed ceilings go (pages kept for Back and Forward a quarter of the free TT-RAM up to 24 MB, pictures an eighth up to 16 MB, eight windows): EWeb keeps pages and pictures until the free TT-RAM comes down to the share left for others, then lets the oldest go, and gives memory back when something needs it. The share is a setting, a percentage of the TT-RAM, 50 by default (Settings > General; `TTLEAVE=` in `eweb.inf`). A machine without TT-RAM (the stock Falcon, the ST) is as before. |
 | A 4 MB Falcon with NVDI | **Its memory diet after 1.0** (4 Nov 2026; Phase 2) | A stock 4 MB Falcon with NVDI leaves EWeb about 1.2 MB for a page (the heap stays near 880 KB, 318 KB of ST RAM free: the hub's rig), and the news test page needs about 1.5 MB at its peak (parsed 450 KB, styled 832 KB: its computed styles 192 KB, the sheet's rules 114 KB; laid out 1.17 MB, the layout's boxes 112 KB more while it works), so it says it hasn't the memory there (0.66 on). Without NVDI it fits. Cutting the 300 to 400 KB (styles shared in parts, smaller boxes, the rules given back after styling) is Phase 2's; until then a big page there says so. |
 | The Gateway's name | **Gateway** (Erez, 7 Nov 2026; the guidelines' 7.3) | The user sees "Gateway", never "Pi" or "Pi gateway": the status line, Settings > Secure, View > Through the Gateway's browser, the alerts, EWeb's own pages, the help guide and the README. "Raspberry Pi" stays where the hardware is meant (setting it up). The INF keys (`GATE=`, `GATEPORT=`) and the code's names stay; this document keeps the old words where it records what was done then. |
@@ -4133,6 +4134,52 @@ page asks `../api/user.json`):
 
 Left as they are: the Priority Board's drag and drop (HTML's drag events: a drag on EWeb's
 page selects its text), and the Shadow DOM widget's content (not drawn, as before).
+
+**The mouse (8 Nov 2026; webdriveruniversity.com's Actions and Scrolling).** A page's scripts had a
+click and nothing else of the mouse, and `:hover` never matched; Actions' drag and drop, double
+click, hover menus and click-and-hold, and Scrolling's boxes that count the mouse, did nothing.
+Erez chose (Decisions, The mouse over a page): scripts hear the mouse, a click is the hover.
+
+- **The events** (UI Events' MouseEvent: `js_mouse` in `src/js/js.c`, in `EWEBJS.OVL`'s table):
+  pageX and clientX alike (scripts see the page unscrolled, scrollY 0), in CSS px as the page's
+  boxes are (Scrolling's last box, `e.pageY - this.offsetTop`, was below its top), button,
+  buttons, which, detail, relatedTarget; mouseenter and mouseleave neither bubble nor can be
+  cancelled.
+- **A press** (`win.c`'s click on the page): mousedown at the press, before anything else of it;
+  the release mouseup, then click, and on a double click's second press dblclick (`br_js_click`'s
+  `detail`, `down`). A press whose mousedown a script cancels (jQuery UI's draggable, a slider)
+  gives the mouse to the page while the button is held (`script_drag`): mousemove (buttons 1)
+  where it goes, mouseup where it is let go, and no text is selected; let go where it was
+  pressed, it is a click as any. A text selection's drag ends with mouseup, no click.
+- **The mouse over the page** (`win_hover`, at each move: `page_hover`, `br_js_hover`): when the
+  element under it changes, mouseout and mouseleave (up to the element that holds both) from the
+  one before, mouseover and mouseenter to this one, and a mousemove; only for a page whose scripts
+  listen for them (`js_moves`: a listener or an `onmouse...` attribute; asked again after a script
+  ran but for those the mouse's moves ran), so a page that doesn't costs a pointer's comparison.
+- **A click as the hover** (`br_hover_click` in `src/browse`, called by `win.c` before a click's
+  scripts; not on a link, which is followed): the element clicked and those it is in are
+  `EC_NODE_HOVER` (kept through a refresh) until the next click. In the CSS engine `:hover` is a
+  selector of its own (`S_HOVER`) where it is left of the subject (`.dropdown:hover
+  .dropdown-content`, `li:hover > ul`: `ec_hover_reveal`); of the subject alone (`a:hover`'s
+  colour) it matches nothing, as before, and in `:not()`, `:is()` and csscmp's LibCSS mode none.
+  The page is laid out again only when the hover leaves or comes to an element such a compound
+  names (`ec_hover_may`: the compound's other selectors, the first 128 kept): a click on the menu
+  opens it, on its item keeps it, beside it closes it, on a paragraph of a page with no such menu
+  costs nothing.
+
+- **offsetParent** (CSSOM View, 7.1) was the body for every element, the body's own too, and
+  jQuery's `offsetParent()`, which goes on up while what it finds is static, went round until
+  the script's time ran out: jQuery UI's draggable stopped at its first move. Now null for the
+  body, the root, an element not in the page, in a box not shown or fixed; else the nearest
+  positioned element it is in, a td, th or table for a static one, or the body.
+
+So Actions works as in Chromium: the box dragged onto its target says "Dropped!", a double click
+turns its box green, the click held changes its words and they come back, and a click on "Hover
+Over Me First!" shows its links; and Scrolling's boxes count the mouse coming over them.
+
+Tests: `tests/js/mouse.html` (ewrender `-K down:ID`, `up:ID`, `dbl:ID`, `hover:ID`,
+`drag:ID:DX,DY`), `tests/js/hover.html` (`-K tap:ID`, the click as the hover),
+`tests/js/offsetparent.html`.
 
 ## Scripts kept compiled (26 Oct 2026)
 

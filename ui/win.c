@@ -3181,6 +3181,13 @@ void win_hover(short mx, short my)
 			if (rect_hit(&cur->but[i], mx, my) && enabled(i))
 				b = i;
 	hot_button(b);
+	if (h == cur->h && t == cur->h && !cur->iconified && !loading && br.p != NULL && rect_hit(&cur->r_page, mx, my)) {
+		page_hover(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);	/* (the page's scripts: mouseover...) */
+		cur->hov_page = 1;
+	} else if (cur->hov_page) {
+		cur->hov_page = 0;
+		page_hover(-1, -1);
+	}
 	if (h == cur->h && t == cur->h && !cur->iconified && !loading) {
 		fctl *c = br.p && rect_hit(&cur->r_page, mx, my) ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, NULL)
 							     : NULL;
@@ -3413,7 +3420,7 @@ static int select_text(short mx, short my, short clicks, short kstate)
 		pg_pos a, b;
 		if (link_at(mx, my) >= 0 || page_summary_at(br.p, px, py) != NULL)
 			return 0;
-		if (page_click(px, py) || br.p == NULL || page_pos_at(br.p, px, py, &at) != 2)
+		if (page_click(px, py, 2) || br.p == NULL || page_pos_at(br.p, px, py, &at) != 2)
 			return 1;	/* (a script said no, or there is no word there) */
 		ctl_blur();
 		page_word(br.p, &at, &a, &b);
@@ -3484,7 +3491,45 @@ static int select_text(short mx, short my, short clicks, short kstate)
 	sel_keep();
 	if (cur->sel.on)
 		log_event("selected: %ld", cur->sel.ix[1] > cur->sel.ix[0] ? cur->sel.ix[1] - cur->sel.ix[0] : cur->sel.ix[0] - cur->sel.ix[1]);
+	page_mouse("mouseup", px, py, 1);	/* (a drag's end: no click, as browsers) */
 	return 1;
+}
+
+/* a press whose mousedown the page's script cancelled (jQuery UI's
+   draggable, a slider): the mouse's moves are the page's while the
+   button is held, each a mousemove (detail 1: held) where it is, and
+   the release a mouseup there; no text is selected. 1 if it moved (a
+   drag: no click), 0 if it was let go where it was pressed (a click,
+   which goes on as one) */
+static int script_drag(short mx, short my)
+{
+	short x = mx, y = my, mb = 1, ks, lx = mx, ly = my;
+	int moved = 0;
+	int32_t px = mx - cur->r_page.x + cur->left, py = my - cur->r_page.y + cur->top;
+	log_event("a drag for the page's scripts");
+	for (;;) {
+		evnt_timer_(20);
+		graf_mkstate(&x, &y, &mb, &ks);
+		if (!moved && (x - mx > 2 || mx - x > 2 || y - my > 2 || my - y > 2))
+			moved = 1;
+		px = x - cur->r_page.x + cur->left;
+		py = y - cur->r_page.y + cur->top;
+		if (!(mb & 1))
+			break;
+		if (moved && (x != lx || y != ly)) {
+			lx = x;
+			ly = y;
+			sync_draw++;	/* (drawn now: the page follows the mouse) */
+			if (page_mouse("mousemove", px, py, 1) == 2 || br.p == NULL) {
+				sync_draw--;
+				return 1;	/* (a script loaded another page) */
+			}
+			sync_draw--;
+		}
+	}
+	if (moved)
+		page_mouse("mouseup", px, py, 1);
+	return moved;
 }
 
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
@@ -3551,9 +3596,26 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		clicks = (button & 1) && press_double(2, mx, my) ? 2 : 1;	/* (click.c) */
 		if (box_bar(mx, my))
 			return 1;	/* a box's scroll bar */
-		if (br.p != NULL && page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) == NULL &&
-		    select_text(mx, my, clicks, kstate))
-			return 1;	/* text selected */
+		/* the press told to the page's scripts (mousedown): one that
+		   cancels it takes the drag that follows (a draggable, a
+		   slider), and no text is selected */
+		{
+			int down = (button & 1) && br.p != NULL ?
+				   page_mouse("mousedown", mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, clicks) : 0;
+			if (down == 2 || br.p == NULL)
+				return 1;	/* (a script loaded another page) */
+			if (down == 1) {
+				if (script_drag(mx, my))
+					return 1;
+			} else if (page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) == NULL &&
+				   select_text(mx, my, clicks, kstate))
+				return 1;	/* text selected */
+		}
+		/* a click is the page's hover (Erez, 8 Nov 2026): what the page
+		   shows with the mouse over an element (a menu), a click shows,
+		   until the next; not on a link, which is followed */
+		if ((button & 1) && link_at(mx, my) < 0)
+			page_hover_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);
 		/* the page's scripts first: a click event, which may say no to
 		   what the click does, or change the page. What the click is on
 		   is what was under the mouse before they ran (as a browser
@@ -3564,7 +3626,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			fctl *c0 = br.p ? page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, NULL) : NULL;
 			int l0 = link_at(mx, my), l1, moved;
 			char *h0 = l0 >= 0 && br.p->links[l0] != NULL ? strdup(br.p->links[l0]) : NULL;
-			if (!(kstate & 0x08) && page_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top)) {
+			if (!(kstate & 0x08) && page_click(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, clicks)) {
 				free(h0);
 				return 1;
 			}

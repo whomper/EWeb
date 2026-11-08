@@ -400,6 +400,7 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 		/* its rules come first, as if its sheets had been added here */
 		c->order = base->order;
 		c->sibling_rules = base->sibling_rules;
+		c->hover_reveal = base->hover_reveal;
 	}
 	c->media = *media;
 	c->opts = opts;
@@ -546,6 +547,8 @@ void ec_drop_sheets(ec_ctx *c)
 	memset(&c->never, 0, sizeof c->never);
 	c->order = c->base != NULL ? c->base->order : 0;
 	c->sibling_rules = c->base != NULL ? c->base->sibling_rules : 0;
+	c->hover_reveal = c->base != NULL ? c->base->hover_reveal : 0;
+	c->nhov = 0;
 	c->layer = 0;
 	memset(&c->st, 0, sizeof c->st);
 	c->span_lo = 0;
@@ -555,6 +558,11 @@ void ec_drop_sheets(ec_ctx *c)
 int ec_sheets_short(const ec_ctx *c)
 {
 	return c->rmem.nomem;
+}
+
+int ec_hover_reveal(const ec_ctx *c)
+{
+	return c->hover_reveal;
 }
 
 /* an arena's pieces but what is left of the last */

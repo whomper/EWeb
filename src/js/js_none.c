@@ -79,6 +79,18 @@ int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, lo
 	return 0;
 }
 
+int js_mouse(doc *d, dnode *n, const char *type, long x, long y, int button, int detail, dnode *related)
+{
+	(void) d, (void) n, (void) type, (void) x, (void) y, (void) button, (void) detail, (void) related;
+	return 0;
+}
+
+int js_moves(doc *d)
+{
+	(void) d;
+	return 0;
+}
+
 void js_run(doc *d, const char *code)
 {
 	(void) d, (void) code;

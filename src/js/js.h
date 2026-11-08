@@ -124,6 +124,14 @@ int js_event(doc *d, dnode *n, const char *type);
    ("a", "Enter", "Backspace"), keyCode and charCode (which: the one of
    them that type has); 1 if a listener cancelled its default action */
 int js_key(doc *d, dnode *n, const char *type, const char *key, long keycode, long charcode);
+/* the mouse at n: "mousedown", "mouseup", "click", "dblclick", "mousemove"
+   (detail 1 while its button is held: a drag), "mouseover", "mouseout",
+   "mouseenter", "mouseleave" (related: where it came from or went to),
+   at x, y on the page, button 0 the left, 2 the right, detail the
+   clicks' count; 1 if a listener cancelled its default action */
+int js_mouse(doc *d, dnode *n, const char *type, long x, long y, int button, int detail, dnode *related);
+/* whether the page's scripts listen for the mouse moving over it */
+int js_moves(doc *d);
 /* a javascript: address followed: its code run */
 void js_run(doc *d, const char *code);
 /* a details element opened or closed by the user (a click on its

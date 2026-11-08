@@ -4468,12 +4468,62 @@ static int jh_relayout(void *ud, doc *d)
 	return d == b->d && b->p != NULL && restyle(b);
 }
 
+int br_hover_click(browser *b, int32_t x, int32_t y)
+{
+	dnode *n = NULL, *k;
+	if (b->d == NULL || b->p == NULL || b->d->css == NULL || !ec_hover_reveal(b->d->css))
+		return 0;
+	if (b->hclick_d != b->d) {
+		b->hclick = NULL;
+		b->hclick_d = b->d;
+	}
+	if (x >= 0 && (n = page_node_at(b->p, x, y)) != NULL) {
+		if (n->type != DN_ELEMENT)
+			n = n->parent;
+		for (k = n; k != NULL && k->parent != NULL; k = k->parent)
+			;
+		if (k != b->d->root)
+			n = NULL;	/* (a frame's element: its own page's) */
+	}
+	if (n == b->hclick)
+		return 0;
+	{
+		/* laid out again only when an element the hover leaves or
+		   comes to is one a rule's :hover names (the menu, not the
+		   paragraph clicked beside it) */
+		int may = 0;
+		dnode *c, *j;
+		/* c: the element both are in, whose hover stays */
+		for (c = b->hclick; c != NULL; c = c->parent) {
+			for (j = n; j != NULL && j != c; j = j->parent)
+				;
+			if (j == c)
+				break;
+		}
+		for (k = b->hclick; k != NULL && k != c; k = k->parent)
+			if (k->type == DN_ELEMENT) {
+				k->e.flags &= (uint16_t) ~EC_NODE_HOVER;
+				if (!may)
+					may = ec_hover_may(b->d->css, &k->e);
+			}
+		for (k = n; k != NULL && k != c; k = k->parent)
+			if (k->type == DN_ELEMENT) {
+				k->e.flags |= EC_NODE_HOVER;
+				if (!may)
+					may = ec_hover_may(b->d->css, &k->e);
+			}
+		b->hclick = n;
+		return may ? restyle(b) : 0;
+	}
+}
+
 /* what the page's scripts did: a new address, or a changed page */
 static int js_after(browser *b, int *load_r)
 {
 	static int depth;
 	const char *to, *post, *ctype;
 	long len;
+	b->moves_d = NULL;	/* (a listener of the mouse's moves may have come) */
 	if (b->d == NULL || b->d->js == NULL)
 		return BRJ_NONE;
 	if ((to = js_navigation(b->d, &post, &len, &ctype)) != NULL && depth < 4) {
@@ -4560,21 +4610,113 @@ int br_js_step(browser *b, int *load_r)
 	return js_after(b, load_r);
 }
 
-int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
+/* what is under (x, y) for a mouse's event: its element, else the body
+   (a press beside every box is the page's still: jQuery UI's drag
+   listens on the document) */
+static dnode *mouse_node(browser *b, int32_t x, int32_t y)
+{
+	dnode *n = page_node_at(b->p, x, y);
+	if (n != NULL && n->type != DN_ELEMENT)
+		n = n->parent;
+	return n != NULL ? n : b->d->body;
+}
+
+int br_js_click(browser *b, int32_t x, int32_t y, int detail, int down, int *cancelled, int *load_r)
 {
 	*cancelled = 0;
-#ifndef EW_ST
 	if (b->d != NULL && b->d->js != NULL && b->p != NULL) {
-		dnode *n = page_node_at(b->p, x, y);
-		if (n != NULL)
-			*cancelled = js_event(b->d, n, "click");
+		/* (as browsers: mousedown, mouseup and click at the press's
+		   element; a double click's second press its dblclick too) */
+		dnode *n = mouse_node(b, x, y);
+		if (n != NULL) {
+			if (down)
+				js_mouse(b->d, n, "mousedown", x, y, 0, detail, NULL);
+			js_mouse(b->d, n, "mouseup", x, y, 0, detail, NULL);
+			*cancelled = js_mouse(b->d, n, "click", x, y, 0, detail, NULL);
+			if (detail == 2)
+				*cancelled |= js_mouse(b->d, n, "dblclick", x, y, 0, detail, NULL);
+		}
 		return js_after(b, load_r);
 	}
-#else
-	(void) x, (void) y;
-#endif
 	(void) load_r;
 	return BRJ_NONE;
+}
+
+int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, int *cancelled, int *load_r)
+{
+	*cancelled = 0;
+	if (b->d != NULL && b->d->js != NULL && b->p != NULL) {
+		dnode *n = mouse_node(b, x, y);
+		if (n != NULL)
+			*cancelled = js_mouse(b->d, n, type, x, y, 0, detail, NULL);
+		return js_after(b, load_r);
+	}
+	(void) load_r;
+	return BRJ_NONE;
+}
+
+int br_js_moves(browser *b)
+{
+	return b->d != NULL && b->d->js != NULL && js_moves(b->d);
+}
+
+/* the mouse come over (x, y) (-1: off the page): when the element under
+   it isn't the one before, mouseout and mouseleave from that one (up to
+   the element over both), mouseover and mouseenter to this one, and a
+   mousemove (the UI Events spec's order) */
+int br_js_hover(browser *b, int32_t x, int32_t y, int *load_r)
+{
+	dnode *n, *old, *k, *c, *path[64];
+	int np = 0, i;
+	if (b->d == NULL || b->d->js == NULL || b->p == NULL)
+		return BRJ_NONE;
+	if (b->hov_d != b->d) {
+		b->hov = NULL;
+		b->hov_d = b->d;
+	}
+	if (b->moves_d != b->d) {
+		b->moves = js_moves(b->d);	/* (asked again after the scripts ran: js_after) */
+		b->moves_d = b->d;
+	}
+	if (!b->moves && b->hov == NULL)
+		return BRJ_NONE;
+	n = x < 0 || !b->moves ? NULL : mouse_node(b, x, y);
+	old = b->hov;
+	if (n == old)
+		return BRJ_NONE;
+	b->hov = n;
+	/* c: the element over both (NULL: none) */
+	for (c = old; c != NULL; c = c->parent) {
+		for (k = n; k != NULL && k != c; k = k->parent)
+			;
+		if (k == c)
+			break;
+	}
+	if (old != NULL) {
+		js_mouse(b->d, old, "mouseout", x, y, 0, 0, n);
+		for (k = old; k != NULL && k != c && k->type == DN_ELEMENT; k = k->parent)
+			js_mouse(b->d, k, "mouseleave", x, y, 0, 0, n);
+	}
+	if (n != NULL) {
+		js_mouse(b->d, n, "mouseover", x, y, 0, 0, old);
+		for (k = n; k != NULL && k != c && k->type == DN_ELEMENT && np < 64; k = k->parent)
+			path[np++] = k;
+		for (i = np - 1; i >= 0; i--)
+			js_mouse(b->d, path[i], "mouseenter", x, y, 0, 0, old);
+		js_mouse(b->d, n, "mousemove", x, y, 0, 0, NULL);
+	}
+	{
+		/* (asked again after scripts the mouse's moves ran only when the
+		   page changed: not a walk of the page at each element the
+		   mouse goes over) */
+		doc *md = b->d;
+		int mv = b->moves, r = js_after(b, load_r);
+		if (b->d == md && r == BRJ_NONE) {
+			b->moves = mv;
+			b->moves_d = md;
+		}
+		return r;
+	}
 }
 
 int br_js_event(browser *b, fctl *c, const char *type, int *cancelled, int *load_r)
@@ -4649,10 +4791,35 @@ int br_js_step(browser *b, int *load_r)
 	return BRJ_NONE;
 }
 
-int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load_r)
+int br_js_click(browser *b, int32_t x, int32_t y, int detail, int down, int *cancelled, int *load_r)
+{
+	(void) b, (void) x, (void) y, (void) detail, (void) down, (void) load_r;
+	*cancelled = 0;
+	return BRJ_NONE;
+}
+
+int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, int *cancelled, int *load_r)
+{
+	(void) b, (void) type, (void) x, (void) y, (void) detail, (void) load_r;
+	*cancelled = 0;
+	return BRJ_NONE;
+}
+
+int br_js_moves(browser *b)
+{
+	(void) b;
+	return 0;
+}
+
+int br_hover_click(browser *b, int32_t x, int32_t y)
+{
+	(void) b, (void) x, (void) y;
+	return 0;
+}
+
+int br_js_hover(browser *b, int32_t x, int32_t y, int *load_r)
 {
 	(void) b, (void) x, (void) y, (void) load_r;
-	*cancelled = 0;
 	return BRJ_NONE;
 }
 

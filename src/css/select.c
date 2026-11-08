@@ -251,6 +251,10 @@ static int match_compound(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, 
 			break;
 		case S_NEVER:
 			return 0;
+		case S_HOVER:
+			if (!(e->flags & EC_NODE_HOVER))
+				return 0;
+			break;
 		case S_NOT:
 			if (ec_match_list(c, x->arg, e, mf) ^ 1)
 				break;
@@ -358,6 +362,19 @@ static int match_from(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, int 
 		return M_FAIL_SIBS;
 	}
 	return M_NO;
+}
+
+int ec_hover_may(ec_ctx *c, const ec_node *e)
+{
+	ec_node h = *e;
+	int i, mf = 0;
+	if (c->nhov > EC_NHOV)
+		return 1;	/* (more than were kept: any may) */
+	h.flags |= EC_NODE_HOVER;
+	for (i = 0; i < c->nhov; i++)
+		if (match_compound(c, c->hov_sel[i], c->hov_ci[i], &h, 0, &mf))
+			return 1;
+	return 0;
 }
 
 int ec_match_list(ec_ctx *c, const ec_sellist *l, const ec_node *e, int *mf)

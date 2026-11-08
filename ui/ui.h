@@ -110,6 +110,7 @@ typedef struct ewin {
 	} sel;
 	int32_t pv_top, pv_left;	/* the page's place while its next one's preview shows */
 	int link_shown;			/* the link whose address the status bar shows, -1 none */
+	int hov_page;			/* the mouse was over the page (its scripts told: page_hover) */
 	/* the page's part still to be drawn (win.c draws it in slices, GEM's
 	   turns between: the guidelines' Speed), from r_page's corner; w 0 none */
 	GRECT due;
@@ -347,9 +348,17 @@ void details(dnode *det);		/* a details' summary clicked: opened or closed */
 void menu_update(void);
 void status(const char *s);
 /* the page's scripts (src/js): a click at (x, y) on the page, before
-   its default (1: done, a script said no or loaded a page); an event at
-   a form control ("input", "change") */
-int  page_click(int32_t x, int32_t y);
+   its default (1: done, a script said no or loaded a page; detail 2 the
+   second press of a double click: its dblclick too); a mouse's event
+   there ("mousedown" at a press, "mousemove", "mouseup": 1 if cancelled);
+   the mouse over (x, y) (-1: off the page), for mouseover and the rest;
+   an event at a form control ("input", "change") */
+int  page_click(int32_t x, int32_t y, int detail);
+int  page_mouse(const char *type, int32_t x, int32_t y, int detail);
+void page_hover(int32_t x, int32_t y);
+/* a click at (x, y) (-1: off the page) as the page's hover (br_hover_click):
+   1 if it was laid out again for it */
+int  page_hover_click(int32_t x, int32_t y);
 void win_ctl_check(void);		/* after a script: the control with the keyboard may be gone */
 void ctl_event(struct fctl *c, const char *type);
 /* a key typed into c told to the page's scripts: 1 if one cancelled it */

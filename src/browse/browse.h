@@ -73,6 +73,17 @@ typedef struct browser {
 	/* the page shown */
 	doc *d;
 	page *p;
+	/* the element the mouse is over, for its scripts (br_js_hover), in
+	   the document hov_d (another: forgotten) */
+	struct dnode *hov;
+	doc *hov_d;
+	/* whether its scripts listen for the mouse moving (js_moves), for the
+	   document moves_d (another, or NULL after a script ran: asked again) */
+	int moves;
+	doc *moves_d;
+	/* :hover's element, the one clicked last (br_hover_click), in hclick_d */
+	struct dnode *hclick;
+	doc *hclick_d;
 	char url[4096];		/* its address, after redirects, fragment included */
 	char title[256];	/* UTF-8, "" for none */
 	char security[96];	/* how it came: "TLS 1.2, ..." or "" */
@@ -377,10 +388,27 @@ enum {
 };
 /* its timers that are due run */
 int br_js_step(browser *b, int *load);
-/* a click at (x, y) on the page: its element's click event; *cancelled
-   if a script said no to the default (following the link, pressing the
-   button) */
-int br_js_click(browser *b, int32_t x, int32_t y, int *cancelled, int *load);
+/* a click at (x, y) on the page: its element's mousedown (down: not
+   told at the press already), mouseup and click, and a dblclick for the
+   second press of a double click (detail 2); *cancelled if a script said
+   no to the default (following the link, pressing the button) */
+int br_js_click(browser *b, int32_t x, int32_t y, int detail, int down, int *cancelled, int *load);
+/* one mouse's event at (x, y) (js_mouse's: "mousedown" at a press,
+   "mousemove" with detail 1 while a drag goes on, "mouseup"); *cancelled
+   likewise (a mousedown cancelled: the drag is the page's, not a
+   selection of its text) */
+int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, int *cancelled, int *load);
+/* whether the page's scripts listen for the mouse moving over it */
+int br_js_moves(browser *b);
+/* a click at (x, y) (-1: none) as EWeb's hover (Erez, 8 Nov 2026): the
+   element under it, and those it is in, are :hover's until the next
+   click, so that what a page shows when the mouse is over an element (a
+   menu: ec_hover_reveal) a click shows; 1 if the page was laid out
+   again for it */
+int br_hover_click(browser *b, int32_t x, int32_t y);
+/* the mouse at (x, y) on the page (-1, -1: gone from it): mouseover,
+   mouseenter and the rest when the element under it changes */
+int br_js_hover(browser *b, int32_t x, int32_t y, int *load);
 /* an event at a form control ("input", "change", "focus", "blur",
    "submit" at its form): *cancelled likewise */
 int br_js_event(browser *b, struct fctl *c, const char *type, int *cancelled, int *load);

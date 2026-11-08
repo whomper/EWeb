@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!-- args: -K tap:menu -K tap:item -K tap:away -K tap:away -K tap:plain -->
+<!-- expect: tap menu: laid out again, height 223 -->
+<!-- expect: tap item: nothing, height 223 -->
+<!-- expect: tap away: laid out again, height 126 -->
+<!-- expect: tap away: nothing, height 126 -->
+<!-- expect: tap plain: nothing, height 126 -->
+<!-- absent: "Link 1" -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- EWeb's hover, by a click (Erez, 8 Nov 2026): what a page shows when
+     the mouse is over an element (webdriveruniversity.com's Actions:
+     .dropdown:hover .dropdown-content) a click on it shows, the element
+     clicked and those it is in :hover's until the next click; a click
+     on one of the menu's items keeps it open, a click elsewhere closes
+     it, a click on the same element again changes nothing. The page is
+     laid out again only when the hover comes to or leaves an element a
+     :hover names (the menu: not its item, which is in it, nor the plain
+     box); a :hover of the subject alone (a colour) matches nothing. -->
+<html><head><title>hover</title>
+<style>
+div { margin: 8px; padding: 8px; border: 1px solid black; }
+.dropdown-content { display: none; }
+.dropdown:hover .dropdown-content { display: block; }
+#plain:hover { color: red; }
+</style></head><body>
+<div class="dropdown" id="menu">Hover over me
+<div class="dropdown-content"><p id="item">Link 1</p><p>Link 2</p></div>
+</div>
+<div id="away">away</div>
+<div id="plain">plain</div>
+</body></html>

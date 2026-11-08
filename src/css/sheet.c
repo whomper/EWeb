@@ -244,7 +244,7 @@ static int anb(const ec_tok *t, int i, int n, int16_t *a, int16_t *b)
 }
 
 static const char *const never_pc[] = {
-	"hover", "active", "focus", "focus-visible", "focus-within", "target",
+	"active", "focus", "focus-visible", "focus-within", "target",
 	"target-within", "current", "past", "future", "playing", "paused", "autofill",
 	"user-invalid", "user-valid", "modal", "fullscreen", "popover-open",
 	"picture-in-picture", "valid", "invalid", "in-range", "out-of-range", "default",
@@ -336,6 +336,17 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 		   ":root, :host" still matches the root (LibCSS doesn't know it) */
 		if (strcmp(name, "host") == 0 && (c->opts & EC_COMPAT_SELECTORS))
 			return 0;
+		if (strcmp(name, "hover") == 0) {
+			/* :hover: an element's left of the subject matches
+			   (EC_NODE_HOVER); in :not(), :is() and the like, and in
+			   csscmp's LibCSS mode, none (complex() says which) */
+			b->b++;
+			if (builder_depth > 1 || (c->opts & EC_COMPAT_SELECTORS)) {
+				b->never = 1;
+				return add_simple(b, S_NEVER) != NULL;
+			}
+			return add_simple(b, S_HOVER) != NULL;
+		}
 		if (str_in(name, never_pc) || strcmp(name, "host") == 0) {
 			if (!add_simple(b, S_NEVER))
 				return 0;
@@ -662,9 +673,27 @@ static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 	sel->visited = (uint8_t) b->visited;
 	sel->comp = comp;
 	sel->simple = simple;
-	for (k = 0; k < b->ncomp; k++)
+	for (k = 0; k < b->ncomp; k++) {
+		int j;
 		if (comp[k].comb == C_ADJ || comp[k].comb == C_SIB)
 			c->sibling_rules = 1;
+		/* :hover of the subject's compound (comp[0]): never (its
+		   colour or underline: nothing a click on it should cost a
+		   layout for); left of it, what hovering an element shows */
+		for (j = 0; j < comp[k].n; j++)
+			if (simple[comp[k].first + j].op == S_HOVER) {
+				if (k == 0)
+					sel->never = 1;
+				else if (!sel->never) {
+					c->hover_reveal = 1;
+					if (c->nhov < EC_NHOV) {
+						c->hov_sel[c->nhov] = sel;
+						c->hov_ci[c->nhov] = (uint8_t) k;
+					}
+					c->nhov++;
+				}
+			}
+	}
 out:
 	builder_depth--;
 	return sel;

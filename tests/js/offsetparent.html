@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- expect: console: offsetParent: ok -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- offsetParent (CSSOM View, 7.1): null for the body, the root, an
+     element with no box and a fixed one; else the nearest positioned
+     element it is in, a td, th or table for a static one, or the body.
+     The body's was the body, and jQuery's offsetParent() went round for
+     ever (jQuery UI's draggable stopped at its first move). -->
+<html><head><title>offsetParent</title></head><body>
+<div id="pos" style="position: relative"><p><span id="a">a</span></p></div>
+<table><tr><td id="cell"><span id="b">b</span></td></tr></table>
+<div id="free"><span id="c">c</span></div>
+<div style="display: none"><span id="hidden">h</span></div>
+<div id="fixed" style="position: fixed">f</div>
+<table><tr><td><span id="d" style="position: absolute">d</span></td></tr></table>
+<script>
+function $(id) { return document.getElementById(id); }
+var bad = [];
+function want(what, got, exp) { if (got !== exp) bad.push(what + " " + (got && got.id || got)); }
+want("body", document.body.offsetParent, null);
+want("html", document.documentElement.offsetParent, null);
+want("a", $("a").offsetParent, $("pos"));
+want("b", $("b").offsetParent, $("cell"));
+want("c", $("c").offsetParent, document.body);
+want("hidden", $("hidden").offsetParent, null);
+want("fixed", $("fixed").offsetParent, null);
+want("d", $("d").offsetParent, document.body);
+var detached = document.createElement("div");
+want("detached", detached.offsetParent, null);
+console.log("offsetParent: " + (bad.length ? "FAIL " + bad.join(", ") : "ok"));
+</script>
+</body></html>

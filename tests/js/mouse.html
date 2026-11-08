@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- args: -K down:hold -K up:hold -K dbl:twice -K hover:zone -K hover:inner -K hover:away -K drag:knob:120,0 -K plain -->
+<!-- expect: console: down 1 at hold -->
+<!-- expect: console: up at hold -->
+<!-- expect: console: double 2 -->
+<!-- expect: console: enter zone from null -->
+<!-- expect: console: over inner from zone -->
+<!-- expect: console: leave zone to away -->
+<!-- expect: console: dragged by 150,0 in 4 moves -->
+<!-- expect: console: plain: mousedown mouseup click -->
+<!-- expect: "Click and hold!" -->
+<!-- expect: "zone entered 1 " -->
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- The mouse beyond a click (as webdriveruniversity.com's Actions and
+     Scrolling): mousedown and mouseup at a press and its release (a
+     click held changes the box's words, and they come back), dblclick at
+     a double click's second press, mouseover, mouseout, mouseenter and
+     mouseleave as the mouse goes over the page (relatedTarget), a drag
+     whose mousedown a script cancels (jQuery UI's draggable): mousemoves
+     with the button held, then mouseup, the mouse's place in CSS px as
+     the page's boxes are (EWeb's 120 px at its 0.8: 150); and a click's
+     order. -->
+<html><head><title>mouse</title>
+<style>
+div { margin: 8px; padding: 8px; border: 1px solid black; }
+#zone { height: 80px; }
+#knob { width: 40px; height: 20px; position: relative; }
+</style></head><body>
+<div id="hold">Click and hold!</div>
+<div id="twice">Double click me</div>
+<div id="zone">zone entered 0 <span id="inner">inner</span></div>
+<div id="away">away</div>
+<div id="knob">knob</div>
+<div id="plain">plain</div>
+<script>
+function check(ok, what) { if (!ok) console.log("FAIL " + what); }
+function name(n) { return n ? n.id || n.nodeName : "null"; }
+var hold = document.getElementById("hold");
+hold.addEventListener("mousedown", function (e) {
+	check(e.button === 0 && e.which === 1 && e.buttons === 1, "mousedown's button");
+	check(typeof e.clientX === "number" && e.pageY > 0, "mousedown's place");
+	this.textContent = "Well done! keep holding that click now.....";
+	console.log("down " + e.detail + " at " + name(e.target));
+});
+hold.addEventListener("mouseup", function (e) {
+	check(e.buttons === 0, "mouseup's buttons");
+	this.textContent = "Click and hold!";
+	console.log("up at " + name(e.target));
+});
+var clicks = 0;
+document.getElementById("twice").addEventListener("click", function (e) { clicks++; check(e.detail === clicks, "click's detail"); });
+document.getElementById("twice").addEventListener("dblclick", function (e) {
+	console.log("double " + clicks);
+});
+var zone = document.getElementById("zone"), entered = 0;
+zone.addEventListener("mouseenter", function (e) {
+	check(!e.bubbles && !e.cancelable, "mouseenter neither bubbles nor can be cancelled");
+	entered++;
+	zone.firstChild.data = "zone entered " + entered + " ";
+	console.log("enter zone from " + name(e.relatedTarget));
+});
+zone.addEventListener("mouseover", function (e) {
+	if (e.target.id === "inner")
+		console.log("over inner from " + name(e.relatedTarget));
+});
+zone.addEventListener("mouseleave", function (e) { console.log("leave zone to " + name(e.relatedTarget)); });
+/* a draggable, as jQuery UI makes one: its press cancelled, then the
+   document's moves */
+var knob = document.getElementById("knob"), sx, sy, moves = 0;
+knob.addEventListener("mousedown", function (e) {
+	e.preventDefault();
+	sx = e.pageX;
+	sy = e.pageY;
+	function move(m) {
+		check(m.buttons === 1, "a drag's move has the button held");
+		moves++;
+		knob.style.left = (m.pageX - sx) + "px";
+	}
+	function up(u) {
+		document.removeEventListener("mousemove", move);
+		document.removeEventListener("mouseup", up);
+		console.log("dragged by " + (u.pageX - sx) + "," + (u.pageY - sy) + " in " + moves + " moves");
+	}
+	document.addEventListener("mousemove", move);
+	document.addEventListener("mouseup", up);
+});
+var order = [];
+["mousedown", "mouseup", "click"].forEach(function (t) {
+	document.getElementById("plain").addEventListener(t, function () {
+		order.push(t);
+		if (t === "click")
+			console.log("plain: " + order.join(" "));
+	});
+});
+</script>
+</body></html>
