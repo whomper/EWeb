@@ -193,12 +193,16 @@ def main():
                     ok = "done (1)" in text and "can't find none.test" in text and m is None
                 elif name == "no answer":
                     t = re.search(r"can't find quiet\.test \(after (\d+) ms\)", text)
-                    ok = "done (1)" in text and t is not None and int(t.group(1)) >= 5900 and m is None
+                    # (common's net_tos.c from 0ebdf28: a first wait of 1.5 s, then
+                    # 3 s, each unanswered try in the log)
+                    ok = "done (1)" in text and t is not None and int(t.group(1)) >= 4400 and m is None and \
+                         len(re.findall(r"quiet\.test: no answer from nameserver", net)) == 2
                 else:
                     ok = ok and m is not None and \
                          open(os.path.join(hd, "DNS.HTM" if name == "by name" else "DNS2.HTM"), "rb").read() == server.PAGE
                     if name == "a question lost":
-                        ok = ok and int(m.group(1)) >= 2900	# (one wait of 3 s, then the answer)
+                        # (one wait of 1.5 s, logged, then the answer)
+                        ok = ok and int(m.group(1)) >= 1400 and "lost.test: no answer from nameserver" in net
                 for l in net.splitlines():
                     if "DNS" in l or "HTTP" in l:
                         print("---- " + l.strip())
