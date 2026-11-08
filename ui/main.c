@@ -60,7 +60,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 0, 0, 1 };	/* (runscripts, noscripts, log, hebrew, trackers, cachequit) */
+	       1, "", 0, 1, 1 };	/* (runscripts, noscripts, log, trackers, cachequit) */
 int loading;
 static short quit;
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
@@ -440,8 +440,6 @@ static void settings_load(void)
 			opt.palette = atoi(eq) != 0;
 		else if (!strcmp(line, "LOG"))
 			opt.log = atoi(eq) != 0;
-		else if (!strcmp(line, "HEBREW"))
-			opt.hebrew = atoi(eq) != 0;
 		else if (!strcmp(line, "FALCON"))
 			opt.falcon = atoi(eq) != 0;
 		else if (!strcmp(line, "GATE"))
@@ -690,10 +688,6 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.log);
 	put(&s, "LOG", v, "1 = EWEB.LOG next to EWEB.PRG: each connection and its secure handshake, step by step "
 	    "(no address's query, cookie or form field), and where EWeb waited longest; 0 = none");
-#ifndef EW_ST
-	snprintf(v, sizeof v, "%d", opt.hebrew);
-	put(&s, "HEBREW", v, "1 = EWeb starts with the Hebrew keyboard (F10 switches it), 0 = without");
-#endif
 	snprintf(v, sizeof v, "%d", opt.pens);
 	put(&s, "PENS", v, "through the Gateway, pictures made for this screen on the Gateway: 1 = always (as it "
 	    "starts), -1 = only when quicker than the DSP, 0 = never (the Atari decodes them)");
@@ -2665,7 +2659,8 @@ int app_main(void)
 	   its profiled build gave the kept page back for a page that didn't
 	   fit, and the releases kept up to 16 windows of ST RAM while a big
 	   page was refused for want of memory) */
-	hebrew_kbd = opt.hebrew;	/* (HEBREW=: Settings > Start with the Hebrew keyboard) */
+	/* (the Hebrew keyboard starts off, F10 alone switches it: Erez, 8 Nov
+	   2026, the guidelines' 5.3; an old HEBREW= line is left unread) */
 	hebrew_kbd_hook = hebkbd_changed;
 	br_shed = win_pic_drop;
 	br_relaying = win_relaying;
@@ -2813,6 +2808,7 @@ int app_main(void)
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+		win_page_colours();	/* (a new page in front: its own colours, 256 colours) */
 		/* keys already waiting (an arrow held: the AES's repeats came
 		   while the last step was drawn) taken before drawing, so that
 		   one drawing shows them all and the page stops where the key

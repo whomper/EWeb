@@ -32,7 +32,6 @@ typedef struct {
 					   SCRIPTS= (1), every site but those in NOSCRIPTS= (2) */
 	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
 	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
-	short hebrew;			/* HEBREW=: EWeb starts with the Hebrew keyboard (1) or not (0) */
 	short trackers;			/* TRACKERS=1: known trackers' parts fetched too (0: left out, Erez's default of 1 Nov 2026) */
 	short cachequit;		/* CACHEQUIT=: the disk cache written only at quit (1, Erez's default of
 					   3 Nov 2026), or a step at a time while EWeb is idle (0) */
@@ -169,6 +168,13 @@ void atari_text(const char *utf8, char *out, int size);
    monochrome to the Falcon's true colour */
 int scr_init(void);			/* 0: a screen EWeb can't draw on */
 void scr_palette(void);			/* PALETTE= changed: EWeb's colours set or TOS's back */
+/* the page's own colours on EWeb's last pens (pagecol.h; 256 colours,
+   EWeb's): 1 if they changed (what was drawn in them is to be drawn
+   again) */
+int scr_page_colours(const struct page *p);
+/* the page in front's colours on the screen, its windows drawn again
+   when they changed (each turn of the main loop: only a new page asks) */
+void win_page_colours(void);
 int scr_exit(void);			/* TOS's colours back (at the end): 1 if EWeb's were on */
 const char *scr_mode(void);		/* "16 colours", "true colour", for the log */
 int scr_band_rows(void);			/* rows drawn at a time: the screen's, else 32 */

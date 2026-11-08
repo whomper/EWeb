@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- AtariAge's forum list (Invision Community), as EWeb drew it wrongly:
+     a list item's children of display: table-cell, no table round them,
+     go in an anonymous table (CSS 2.1, 17.2.1, its third rule), side by
+     side; its middle cell of width 100% takes what the others leave, not
+     the whole width (a percentage is no least: 17.5.2.2); text of
+     font-size 0 takes no room and shows nothing, its ::after of a size
+     shown; a logo of max-height 100% in a header of a set height is as
+     high as the header. -->
+<html><head><title>forumrow</title>
+<style>
+ol { list-style: none; padding: 0; margin: 0 }
+li { border-bottom: 1px solid #ccc }
+.icon, .main, .stats, .last { display: table-cell; padding: 4px; vertical-align: middle }
+.main { width: 100% }
+.stats { white-space: nowrap }
+.last ul, ul.last { list-style: none; margin: 0 }
+.short li:last-child { font-size: 0 }
+.short time:after { content: attr(data-short); font-size: 11px; display: block }
+.cf:after { visibility: hidden; display: block; font-size: 0; content: " "; clear: both; height: 0 }
+header { height: 40px; background: #036 }
+header img { max-height: 100%; width: auto }
+</style></head><body>
+<header><img src="img/four.png" alt="logo"></header>
+<ol>
+<li class="cf"><div class="icon">[A]</div><div class="main"><b>Atari News</b><br>Please post Atari-related news here.</div>
+<div class="stats">14.3k posts</div><ul class="last short"><li>Atari at Costco</li><li>By <a href="#">Someone</a>, <time data-short="1 hr">1 hour ago</time></li></ul></li>
+<li><div class="icon">[B]</div> <div class="main"><b>Atari General</b></div> <div class="stats">28.2k posts</div></li>
+</ol>
+<table><tr><td style="width:100%">a cell of 100%</td><td>beside it</td></tr></table>
+</body></html>

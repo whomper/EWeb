@@ -27,6 +27,7 @@
 #include "plat.h"
 #include "canvas.h"
 #include "img.h"
+#include "pagecol.h"
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
@@ -45,6 +46,9 @@ static short scr_info[272], scr_have;	/* vq_scrninfo's answer */
 static short saved[256][3];		/* in 256 colours, the pens EWeb set, as they were */
 static unsigned char set_pen[256];	/* which ones */
 static int own;				/* EWeb's colours are on the screen */
+static short page_vdi[EW_PAGE];		/* the VDI's pen for the page's colour k (pixel EW_PIC_PENS + k) */
+static uint32_t page_rgb[EW_PAGE];	/* what is on them, 0xRRGGBB */
+static int page_n;			/* how many are the page's */
 
 static unsigned char from1000(short v)
 {
@@ -117,19 +121,16 @@ static int bufs(short n)
 	return 0;
 }
 
-/* EWeb's colour for its pen k of 239 (0..1000 a part, the VDI's): the
-   cube's 6 levels of each part, then greys, more of them light (pages'
-   backgrounds) */
+/* EWeb's colour for its pen k of 239 (0..1000 a part, the VDI's):
+   pagecol.c's (its cube, its greys; the page's colours black until a
+   page sets them) */
 static void own_colour(int k, short rgb[3])
 {
-	static const unsigned char grey[23] = { 13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191,
-						 212, 220, 226, 231, 235, 238, 241, 244, 247, 250, 253 };
-	if (k < 216) {
-		rgb[0] = (short) (k / 36 * 200);
-		rgb[1] = (short) (k / 6 % 6 * 200);
-		rgb[2] = (short) (k % 6 * 200);
-	} else
-		rgb[0] = rgb[1] = rgb[2] = (short) ((grey[k - 216] * 1000L + 127) / 255);
+	uint8_t q[3];
+	ew_own_colour(k, q);
+	rgb[0] = (short) ((q[0] * 1000L + 127) / 255);
+	rgb[1] = (short) ((q[1] * 1000L + 127) / 255);
+	rgb[2] = (short) ((q[2] * 1000L + 127) / 255);
 }
 
 /* EWeb's colours on the pens that draw pixel values 16 to 254, or TOS's
@@ -148,12 +149,16 @@ static void own_pens(int on)
 			set_pen[i] = 1;
 			own_colour(px - 16, rgb);
 			vs_color(vdi_h, i, rgb);
+			if (px >= EW_PIC_PENS)
+				page_vdi[px - EW_PIC_PENS] = i;
 		} else if (set_pen[i]) {
 			vs_color(vdi_h, i, saved[i]);
 			set_pen[i] = 0;
 		}
 	}
 	own = on;
+	page_n = 0;
+	memset(page_rgb, 0, sizeof page_rgb);
 }
 
 /* each pixel value's colour, and the pictures' pens from them */
@@ -173,8 +178,44 @@ static void read_pens(void)
 		pal[px][2] = from1000(rgb[2]);
 	}
 	memset(nearest_of, 0, sizeof nearest_of);
-	/* the pictures are made of these pens (img.c, Floyd-Steinberg) */
-	pic_pal_init(&pic_pal, ncol, (const unsigned char (*)[3]) pal);
+	/* the pictures are made of these pens (img.c, Floyd-Steinberg); with
+	   EWeb's colours the fixed ones alone, so that a picture's pens stay
+	   when the page's colours change (pagecol.h) */
+	pic_pal_init(&pic_pal, own ? EW_PIC_PENS : ncol, (const unsigned char (*)[3]) pal);
+}
+
+int scr_page_colours(const struct page *p)
+{
+	uint32_t want[EW_PAGE];
+	short rgb[3];
+	int n, k;
+#ifdef EW_ST
+	(void) want, (void) rgb, (void) n, (void) k;
+	return 0;	/* (the ST edition: no 256 colours) */
+#else
+	if (!own || ncol != 256 || truecolour || p == NULL)
+		return 0;
+	n = page_colours(p, (const uint8_t (*)[3]) pal, EW_PIC_PENS, want, EW_PAGE);
+	for (k = n; k < EW_PAGE; k++)
+		want[k] = 0;	/* (the rest black: a colour of the fixed ones too) */
+	if (n == page_n && !memcmp(want, page_rgb, sizeof want))
+		return 0;
+	for (k = 0; k < EW_PAGE; k++) {
+		if (want[k] == page_rgb[k])
+			continue;
+		rgb[0] = (short) (((want[k] >> 16 & 255) * 1000L + 127) / 255);
+		rgb[1] = (short) (((want[k] >> 8 & 255) * 1000L + 127) / 255);
+		rgb[2] = (short) (((want[k] & 255) * 1000L + 127) / 255);
+		vs_color(vdi_h, page_vdi[k], rgb);
+		pal[EW_PIC_PENS + k][0] = (unsigned char) (want[k] >> 16);
+		pal[EW_PIC_PENS + k][1] = (unsigned char) (want[k] >> 8);
+		pal[EW_PIC_PENS + k][2] = (unsigned char) want[k];
+	}
+	memcpy(page_rgb, want, sizeof want);
+	page_n = n;
+	memset(nearest_of, 0, sizeof nearest_of);	/* (pen(): the new colours) */
+	return 1;
+#endif
 }
 
 void scr_palette(void)

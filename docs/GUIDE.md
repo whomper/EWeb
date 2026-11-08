@@ -181,9 +181,8 @@ left as it is typed. On an Atari with another keyboard, **F10** switches
 EWeb's own Hebrew keyboard on and off, as in the other AERA programs: the letter keys type the Hebrew
 letters of the Israeli layout, in a page's fields and in the address,
 and the status line shows the badge "עב" at its right end while it is
-on (dialogs show it at the right of their title).
-Settings > General > Start with the Hebrew keyboard has it on from the
-start.
+on (dialogs show it at the right of their title). It is off when
+EWeb starts.
 
 Click a box (or its words) to tick it, a round button to choose it from
 its group, a list to choose from it (a long list shows a screenful at a

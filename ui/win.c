@@ -4049,6 +4049,26 @@ int win_count(void)
 	return n;
 }
 
+void win_page_colours(void)
+{
+#ifndef EW_ST
+	static const page *last;
+	ewin *w, *was = cur;
+	if (cur == NULL || br.p == last || loading)
+		return;
+	last = br.p;
+	if (!scr_page_colours(br.p))
+		return;
+	log_event("the page's colours: on the screen, the windows drawn again");
+	for (w = wins; w != NULL; w = w->next) {
+		cur = w;
+		if (w->h > 0 && !w->iconified)
+			redraw(&w->r_page, 2);
+	}
+	cur = was;
+#endif
+}
+
 /* (the pictures were made in the screen's pens of the time) */
 void win_colours(void)
 {

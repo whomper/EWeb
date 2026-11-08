@@ -293,6 +293,11 @@ typedef struct {
 	   are auto (webdriveruniversity.com's double-click box, 86% of its
 	   frame of 300px, was as tall as its words) */
 	int32_t defh;
+	/* a picture laid out as a block of its own (repl_layout): its
+	   containing block's height, for its height's percentages, as defh
+	   is for the others' (defh is its own by then); rhb_on while so */
+	int32_t rhb;
+	int rhb_on;
 	/* the absolutely positioned box place_abs is laying out: what its
 	   height's percentage is of (its containing block's height, AUTO),
 	   and the height between its top and bottom (AUTO: none) */
@@ -1406,14 +1411,15 @@ static const ICONMAP glyph_icons[] = {	/* (sorted) */
 	{ 0xe259, 0x25bc }, { 0xe260, 0x25b2 }
 };
 static const ICONMAP fa_icons[] = {	/* (sorted) */
-	{ 0xf004, 0x2665 }, { 0xf005, 0x2605 }, { 0xf006, 0x2606 }, { 0xf00c, 0x2713 }, { 0xf00d, 0x2715 },
-	{ 0xf015, 0x2302 }, { 0xf053, 0x2039 }, { 0xf054, 0x203a }, { 0xf055, '+' }, { 0xf056, 0x2212 },
-	{ 0xf057, 0x2715 }, { 0xf058, 0x2713 }, { 0xf05a, 0x2139 }, { 0xf060, 0x2190 }, { 0xf061, 0x2192 },
-	{ 0xf062, 0x2191 }, { 0xf063, 0x2193 }, { 0xf067, '+' }, { 0xf068, 0x2212 }, { 0xf071, 0x26a0 },
-	{ 0xf077, 0x25b4 }, { 0xf078, 0x25be }, { 0xf095, 0x260e }, { 0xf0c9, 0x2630 }, { 0xf0d7, 0x25bc },
-	{ 0xf0d8, 0x25b2 }, { 0xf0d9, 0x25c0 }, { 0xf0da, 0x25b6 }, { 0xf0e0, 0x2709 }, { 0xf104, 0x2039 },
-	{ 0xf105, 0x203a }, { 0xf106, 0x25b4 }, { 0xf107, 0x25be }, { 0xf128, '?' }, { 0xf129, 0x2139 },
-	{ 0xf12a, '!' }
+	{ 0xf004, 0x2665 }, { 0xf005, 0x2605 }, { 0xf006, 0x2606 }, { 0xf009, 0x25a0 }, { 0xf00b, 0x2261 },
+	{ 0xf00c, 0x2713 }, { 0xf00d, 0x2715 }, { 0xf015, 0x2302 }, { 0xf039, 0x2261 }, { 0xf053, 0x2039 },
+	{ 0xf054, 0x203a }, { 0xf055, '+' }, { 0xf056, 0x2212 }, { 0xf057, 0x2715 }, { 0xf058, 0x2713 },
+	{ 0xf05a, 0x2139 }, { 0xf060, 0x2190 }, { 0xf061, 0x2192 }, { 0xf062, 0x2191 }, { 0xf063, 0x2193 },
+	{ 0xf067, '+' }, { 0xf068, 0x2212 }, { 0xf071, 0x26a0 }, { 0xf077, 0x25b4 }, { 0xf078, 0x25be },
+	{ 0xf095, 0x260e }, { 0xf0c9, 0x2630 }, { 0xf0d7, 0x25bc }, { 0xf0d8, 0x25b2 }, { 0xf0d9, 0x25c0 },
+	{ 0xf0da, 0x25b6 }, { 0xf0e0, 0x2709 }, { 0xf104, 0x2039 }, { 0xf105, 0x203a }, { 0xf106, 0x25b4 },
+	{ 0xf107, 0x25be }, { 0xf10c, 0x25cb }, { 0xf111, 0x25cf }, { 0xf112, 0x21a9 }, { 0xf128, '?' },
+	{ 0xf129, 0x2139 }, { 0xf12a, '!' }
 };
 
 static int icon_kind(const ec_family *f)
@@ -1486,6 +1492,11 @@ static void add_text_box(L *l, box *parent, const ec_style *st, const char *s, u
 {
 	box *t;
 	const ec_family *f = st->k[EP_FONT_FAMILY] == EK_PTR ? st->v[EP_FONT_FAMILY].p : NULL;
+	/* text of font-size 0 takes no room and shows nothing (font_px's
+	   floor is for the smallest size read, not for none: AtariAge's
+	   forum list hides "By name," so, its ::after shown instead) */
+	if (st->k[EP_FONT_SIZE] == EK_PX && st->v[EP_FONT_SIZE].i <= 0)
+		return;
 	if (f != NULL) {
 		if (f != l->icon_f) {	/* (a family list looked at once in a row) */
 			l->icon_f = f;
@@ -2424,6 +2435,39 @@ static void table_anon(L *l, box *b)
 	}
 }
 
+/* a cell, a row or a row group not in a table (CSS 2.1, 17.2.1, its
+   third rule): each run of them in a block, with the white space between
+   them, goes in an anonymous table of its own, made as a table's parts
+   are (AtariAge's forum list: a list item of four cells, an icon, the
+   forum, its count and its last post, side by side) */
+static int table_part(const box *c)
+{
+	return is_cell(c) || (c->kind == BX_BLOCK && !c->anon && (c->tablerow || row_group(c)));
+}
+
+static void loose_cells(L *l, box *b)
+{
+	box *c, *prev = NULL;
+	for (c = b->first; c != NULL; prev = c, c = c->next) {
+		box *end = c, *k, *a;
+		if (!table_part(c))
+			continue;
+		for (k = c->next; k != NULL; k = k->next) {
+			if (table_part(k))
+				end = k;
+			else if (k->kind != BX_TEXT || !blank(k->text, k->len) || keeps_space(k->st))
+				break;
+		}
+		if ((a = anon_round(l, b, prev, c, end, 0)) == NULL)
+			return;
+		a->table = 1;
+		table_anon(l, a);
+		if (l->fail)
+			return;
+		c = a;
+	}
+}
+
 static void fixup(L *l, box *b)
 {
 	box *c, *prev, *next;
@@ -2448,6 +2492,10 @@ static void fixup(L *l, box *b)
 		return;
 	if (b->table || row_group(b)) {
 		table_anon(l, b);
+		if (l->fail)
+			return;
+	} else if (!b->row && !b->tablerow && !b->flex && !b->grid) {
+		loose_cells(l, b);
 		if (l->fail)
 			return;
 	}
@@ -3205,6 +3253,11 @@ static int has_pct(const ec_style *s, int p)
 static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 {
 	int32_t iw = b->iw, ih = b->ih, mw, mh;
+	/* what its height's percentages are of: the block it is in, when
+	   that block's height is set (CSS 2.1, 10.5, 10.7: forums.atariage.com's
+	   logo, max-height 100% of a header 55px high, was drawn at its file's
+	   72) */
+	int32_t hb = l->rhb_on ? l->rhb : l->defh;
 	int guess;
 	if (l->minw && l->cw == AUTO && !b->frame &&
 	    (has_pct(b->st, EP_WIDTH) || (b->st->k[EP_WIDTH] != EK_PX && has_pct(b->st, EP_MAX_WIDTH)))) {
@@ -3219,7 +3272,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		return 0;
 	}
 	*w = l->repl && b->st->k[EP_WIDTH] != EK_KW && l->cw != AUTO ? l->cw : len(l, b->st, EP_WIDTH, l->cw);
-	*h = len(l, b->st, EP_HEIGHT, AUTO);
+	*h = len(l, b->st, EP_HEIGHT, hb);
 	if (b->ratio && *w == AUTO && *h == AUTO && !l->minw && l->cw != AUTO && iw > 0 && ih > 0) {
 		/* proportions and no size of its own (an SVG of a viewBox
 		   alone): as wide as its place (CSS 2.1, 10.3.2, as browsers
@@ -3246,7 +3299,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		mw = len(l, b->st, EP_MAX_WIDTH, l->cw);
 		if (mw != AUTO && *w > mw && mw >= 0)
 			*w = mw;
-		mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
+		mh = len(l, b->st, EP_MAX_HEIGHT, hb);
 		if (mh != AUTO && *h > mh && mh >= 0)
 			*h = mh;
 		/* and within min-width and min-height, which win over the
@@ -3255,7 +3308,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		mw = len(l, b->st, EP_MIN_WIDTH, l->cw);
 		if (mw != AUTO && *w < mw)
 			*w = mw;
-		mh = len(l, b->st, EP_MIN_HEIGHT, AUTO);
+		mh = len(l, b->st, EP_MIN_HEIGHT, hb);
 		if (mh != AUTO && *h < mh)
 			*h = mh;
 		*w = *w < 0 ? 0 : *w;
@@ -3286,11 +3339,11 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	}
 	mw = len(l, b->st, EP_MAX_WIDTH, l->cw);
 	if (mw != AUTO && *w > mw && mw >= 0) {
-		if (iw > 0 && len(l, b->st, EP_HEIGHT, AUTO) == AUTO)
+		if (iw > 0 && len(l, b->st, EP_HEIGHT, hb) == AUTO)
 			*h = (int32_t) ((int64_t) *h * mw / *w);
 		*w = mw;
 	}
-	mh = len(l, b->st, EP_MAX_HEIGHT, AUTO);
+	mh = len(l, b->st, EP_MAX_HEIGHT, hb);
 	if (mh != AUTO && *h > mh && mh >= 0) {
 		if (iw > 0 && len(l, b->st, EP_WIDTH, l->cw) == AUTO)
 			*w = (int32_t) ((int64_t) *w * mh / *h);
@@ -3300,11 +3353,11 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	   other side kept in proportion where the page didn't set it */
 	mw = len(l, b->st, EP_MIN_WIDTH, l->cw);
 	if (mw != AUTO && *w < mw && *w > 0) {
-		if (iw > 0 && len(l, b->st, EP_HEIGHT, AUTO) == AUTO)
+		if (iw > 0 && len(l, b->st, EP_HEIGHT, hb) == AUTO)
 			*h = (int32_t) ((int64_t) *h * mw / *w);
 		*w = mw;
 	}
-	mh = len(l, b->st, EP_MIN_HEIGHT, AUTO);
+	mh = len(l, b->st, EP_MIN_HEIGHT, hb);
 	if (mh != AUTO && *h < mh && *h > 0) {
 		if (iw > 0 && len(l, b->st, EP_WIDTH, l->cw) == AUTO)
 			*w = (int32_t) ((int64_t) *w * mh / *h);
@@ -5833,6 +5886,12 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		   box's width is its width, its content overflowing it
 		   (10.2), and costs no second measure */
 		int32_t m = cell_min(l, c);
+		/* a percentage is a share of the table, not a least: the
+		   narrowest it goes is its content's (AtariAge's forum list,
+		   its middle cell 100%, the cells beside it pushed off the
+		   page) */
+		if (l->minw && c->st->k[EP_WIDTH] == EK_PCT)
+			return m;
 		return m > cw ? m : cw;
 	}
 	return cw;
@@ -8473,7 +8532,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		l->defh = dh;
 	}
 	if (b->repl) {
+		l->rhb = hbase;
+		l->rhb_on = 1;
 		ch = repl_layout(l, b, cx, cy, w);
+		l->rhb_on = 0;
 	} else if (b->inl) {
 		ch = inline_layout(l, b, cx, cy, w, &fb);
 	} else if (b->flex || b->grid) {

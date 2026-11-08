@@ -1788,10 +1788,10 @@ static void grad(canvas *c, const dl_item *d)
    scrolled has no seams (Floyd-Steinberg, the pictures' dither, carries
    each pixel's error to the next and so can't be drawn a band at a time
    without seams, and keeping its pens for a body's gradient, as a
-   picture's are kept, would take a megabyte): 16 pens that make the
-   colour together (Knoll's pattern dither: each the screen's nearest to
-   the colour plus the error the pens before it left, sorted by
-   brightness), the fills' grey pattern on a monochrome screen, or in
+   picture's are kept, would take a megabyte): with a palette the
+   screen's nearest pen, solid (a gradient in steps: Knoll's pattern of
+   16 pens made it dotted, Erez's photo of 8 Nov 2026), the fills' grey
+   pattern on a monochrome screen, or in
    true colour 16 5-6-5 values a step apart, so that a gentle gradient
    isn't banded. A linear gradient at right angles is drawn a row at a
    time (one entry: a long at a time) or a column at a time (the entries
@@ -1916,6 +1916,14 @@ static uint32_t isqrt32(uint32_t v)
 	return r;
 }
 
+/* whether a pen is near enough a colour to stand for it (about 32
+   levels a part off at most, weighted as ui/screen.c's pen() weighs) */
+static int pen_near(const uint8_t *q, uint32_t rgb)
+{
+	long dr = (long) (rgb >> 16 & 255) - q[0], dg = (long) (rgb >> 8 & 255) - q[1], db = (long) (rgb & 255) - q[2];
+	return 2 * dr * dr + 4 * dg * dg + 3 * db * db <= 9L * 32 * 32;
+}
+
 /* 8 bits: the 16 pens of a colour's pattern (Knoll's pattern dither):
    each the screen's nearest to the colour plus the error the pens before
    it left, so that together they make it; sorted by brightness, so that
@@ -1994,12 +2002,21 @@ static void ramp_make(canvas *c, ramp *r, int k)
 			/* the fills' pattern */
 			for (t = 0; t < 16; t++)
 				v[t] = t < level ? light : dark;
-		} else if (c->pal != NULL) {
-			knoll(c, rgb, v);
 		} else {
+			/* the screen's nearest pen, solid, where it is near (Erez,
+			   8 Nov 2026: a gradient in steps, not dots: Knoll's
+			   pattern of up to 16 pens for each entry made
+			   yaary.music's button and cards dotted, and the text on
+			   them); Knoll's pattern only where no pen is near (16 or
+			   4 colours with no light blue or mid grey: the nearest
+			   pen would be another colour, not a step of it) */
 			uint8_t p = c->pen(c->ud, rgb);
-			for (t = 0; t < 16; t++)
-				v[t] = p;
+			if (c->pal != NULL && !pen_near(c->pal[p], rgb)) {
+				knoll(c, rgb, v);
+			} else {
+				for (t = 0; t < 16; t++)
+					v[t] = p;
+			}
 		}
 		r->lvl[k] = (uint8_t) (c->pal != NULL ? (a * 16 + 127) / 255 : a >= 128 ? 16 : 0);
 		r->spread[k] = (uint32_t) a << 24 | rgb;	/* (a translucent entry's mix: grad_row) */
@@ -2140,6 +2157,13 @@ static int32_t lcm4(int32_t v)
 	return v % 4 == 0 ? v : v % 2 == 0 ? 2 * v : 4 * v;
 }
 
+/* 1: the screen's fills are grey patterns (monochrome) */
+static int shaded(canvas *c)
+{
+	uint8_t d, l;
+	return c->shade != NULL && c->shade(c->ud, 0, &d, &l) >= 0;
+}
+
 /* canvas row y from x, n pixels, all of entry k */
 static void grad_run(canvas *c, ramp *r, int k, int32_t x, int32_t y, int32_t n)
 {
@@ -2165,6 +2189,27 @@ static void grad_run(canvas *c, ramp *r, int k, int32_t x, int32_t y, int32_t n)
 	}
 	if (r->lvl[k] == 0)
 		return;
+	if (c->bpp == 8 && c->pal != NULL && !shaded(c)) {
+		/* each pixel mixed with the pen under it, the screen's nearest
+		   pen taken, as grad_row's (its pens where its alpha was above
+		   the thresholds let the page through in dots: yaary.music's
+		   cards, of 92% alpha, in Erez's photo of 8 Nov 2026) */
+		uint32_t e = r->spread[k], m0 = mix_rgb(e & 0xffffff, c->pal[o[0]], e >> 24);
+		if ((e >> 24) == 0)
+			return;
+		if (!pen_near(c->pal[c->pen(c->ud, m0)], m0))
+			goto pattern;	/* (no pen near the mix: 16 colours' light blue) */
+		for (i = 0; i < n; i++) {
+			if (o[i] == r->lu[k]) {
+				o[i] = (uint8_t) r->lo[k];
+				continue;
+			}
+			r->lu[k] = o[i];
+			o[i] = c->pen(c->ud, mix_rgb(e & 0xffffff, c->pal[o[i]], e >> 24));
+			r->lo[k] = o[i];
+		}
+		return;
+	}
 	if (c->bpp == 16) {
 		/* mixed as a translucent fill is (mix16, the entry's alpha in
 		   32nds): a run of pixels as the last ones takes their result,
@@ -2175,6 +2220,7 @@ static void grad_run(canvas *c, ramp *r, int k, int32_t x, int32_t y, int32_t n)
 		mix_px(c, x, y, n, 1);
 		return;
 	}
+pattern:
 	{
 		/* its pens where its alpha is above the transposed thresholds:
 		   a pattern of four put in a long at a time through its mask */
@@ -2293,12 +2339,6 @@ static __attribute__((noinline)) void mix_cols16(ramp *r, uint16_t *s, int32_t n
 	}
 }
 
-/* 1: the screen's fills are grey patterns (monochrome) */
-static int shaded(canvas *c)
-{
-	uint8_t d, l;
-	return c->shade != NULL && c->shade(c->ud, 0, &d, &l) >= 0;
-}
 
 /* canvas row y from x, n pixels, entry idx[i] each */
 static void grad_row(canvas *c, ramp *r, int32_t x, int32_t y, int32_t n, const uint8_t *idx)

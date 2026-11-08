@@ -138,6 +138,7 @@
 #include "history.h"
 #include "browse.h"
 #include "canvas.h"
+#include "pagecol.h"
 #include "conn.h"
 #include "cookie.h"
 #include "dcache.h"
@@ -976,7 +977,7 @@ int main(int argc, char **argv)
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
-	int colours = 0;
+	int colours = 0, own_pal = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL;
 	char where[4096];
@@ -1035,6 +1036,8 @@ int main(int argc, char **argv)
 			parts = 1;
 		else if (!strcmp(argv[i], "-E"))
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
+		else if (!strcmp(argv[i], "--own"))
+			own_pal = 1;	/* -p 256 with EWeb's own colours and the page's (pagecol.h) */
 		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
 			colours = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-N") && i + 1 < argc)
@@ -1201,8 +1204,17 @@ int main(int argc, char **argv)
 	b.search = search;
 	b.pens = pens;
 	make_pal(band ? 256 : colours ? colours : 16);
+	if (own_pal && colours == 256) {
+		for (i = 0; i < EW_OWN; i++) {
+			uint8_t q[3];
+			ew_own_colour(i, q);
+			memcpy(scr_pal[16 + i], q, 3);
+		}
+		scr_pal[255][0] = scr_pal[255][1] = scr_pal[255][2] = 0;
+	}
 	if (band || penlist || colours) {
-		pic_pal_init(&pal, colours ? colours : 16, (const unsigned char (*)[3]) scr_pal);
+		pic_pal_init(&pal, own_pal && colours == 256 ? EW_PIC_PENS : colours ? colours : 16,
+			     (const unsigned char (*)[3]) scr_pal);
 		img_pal = &pal;
 	}
 	if (prev != NULL) {
@@ -1616,6 +1628,18 @@ int main(int argc, char **argv)
 		}
 	} else {
 		canvas c;
+		if (own_pal && colours == 256) {
+			/* the page's own colours on EWeb's last pens, as
+			   ui/screen.c sets them for the page in front */
+			uint32_t pc[EW_PAGE];
+			int np = page_colours(p, (const uint8_t (*)[3]) scr_pal, EW_PIC_PENS, pc, EW_PAGE), q;
+			for (q = 0; q < np; q++) {
+				scr_pal[EW_PIC_PENS + q][0] = (unsigned char) (pc[q] >> 16);
+				scr_pal[EW_PIC_PENS + q][1] = (unsigned char) (pc[q] >> 8);
+				scr_pal[EW_PIC_PENS + q][2] = (unsigned char) pc[q];
+			}
+			fprintf(stderr, "page colours: %d\n", np);
+		}
 		memset(&c, 0, sizeof c);
 		c.w = width;
 		c.h = height > 0 ? height : (p->height > 0 ? p->height : 1);
