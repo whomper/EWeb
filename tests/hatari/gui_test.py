@@ -184,16 +184,17 @@ class Mouse:
 class Run:
     """Hatari with EWEB.PRG, its events and its command FIFO"""
 
-    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG", accs=()):
+    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG"):
         self.name = name
         self.fifo = os.path.join(OUT, name + ".fifo")
         self.log = os.path.join(OUT, name + ".log")
         for p in (self.fifo,):
             if os.path.exists(p):
                 os.remove(p)
+        # EWeb alone: no other AERA program or accessory beside it (Erez,
+        # 8 Nov 2026, the guidelines' 1.2; the hub's family checks run them
+        # together)
         self.m = machines.Machine(spec, hd)
-        if accs:
-            self.m.accs(accs)       # the family's accessories, from their releases
         args = ["hatari"] + self.m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                              "--cmd-fifo", self.fifo, "--auto", "C:\\" + prg]
         if truecolour:
@@ -1902,8 +1903,7 @@ def gateway():
             name = "gwpens%d" % pens
             inf = "FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\nPENS=%d\r\n" % (GATE, pens)
             hd = hd_for(name, page, inf)
-            # with the family's accessories loaded, as on Erez's Falcon
-            r = Run(name, "Falcon:256", hd, network=True, accs=("ECal", "EContact", "EHypView"))
+            r = Run(name, "Falcon:256", hd, network=True)
             try:
                 ev = r.wait(r"pictures ", 1800)
                 evs = r.events()

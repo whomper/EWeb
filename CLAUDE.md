@@ -64,10 +64,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   How it is made is the team's, without asking: code, structure, shared code, tests, measurements,
   fixes, docs and releases inside an approved phase.
-- **Testing with another AERA program uses its latest release**, what Erez runs, never a build of its
-  `main`: `common/tools/getrelease.py APP DIR FILE...` fetches it. Only for a change both programs are
-  still making, test against the other's `main` at a named commit, say so, and test again against its
-  release when it is out.
+- **No app tests itself with another AERA program or accessory** (Erez, 8 Nov 2026; the guidelines'
+  1.2): its tests and rigs run it alone, with nothing else of the family loaded beside it, started by
+  it or fetched for it. Shared code taken as source (`common/`, `gateway/`) is the app's own. The
+  hub's family checks run the programs together.
 - **Every new source file starts with the SPDX line and copyright** (see any `.c` file); a generator
   writes them into the files it makes.
 - **The name** reads "AERA | Erez Yaary" wherever it is given: copyright lines
@@ -162,7 +162,10 @@ hub stay complete, with the evidence.
   xdotool), and look at its screenshots in `build/gui`; after anything that reads or writes files,
   `make hatarifiles` (each case's opens and lookups against its budget: the guidelines' 6.5), and
   after changing where EWeb finds its own files (`work_dir`, common's `app_dir`),
-  `tests/hatari/appdir.py` (EWeb started by another program, as EMail starts it).
+  `tests/hatari/appdir.py` (EWeb started by another program: common's test launcher, as a
+  program that opens a link starts it). EWeb's tests run EWeb alone, with no other AERA program or
+  accessory loaded, started or fetched (Erez, 8 Nov 2026, the guidelines' 1.2): the hub's family
+  checks run them together.
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
   called by `d_end` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
   Undo cancels: 3.5): after changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and
