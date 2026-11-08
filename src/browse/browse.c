@@ -5452,7 +5452,11 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(), (long) page);
 		variant[strcspn(variant, ";")] = 0;
 	} else {
-		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld\r\n", (long) page);
+		/* deep=1: a screen of no palette (true colour) shows every colour
+		   of a picture the Pi makes smaller, so it keeps them (a PNG not
+		   cut to 256, a JPEG of quality 90: Erez, 8 Nov 2026, the pictures
+		   through the Gateway as exact as direct) */
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld%s\r\n", (long) page, img_pal == NULL ? "; deep=1" : "");
 		variant[0] = 0;
 	}
 	return pens;

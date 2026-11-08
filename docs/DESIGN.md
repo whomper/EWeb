@@ -1145,6 +1145,14 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   the JPEG's first comment or under the keyword `webgate` in a PNG's tEXt before its pixels; EWeb
   (`img.c`) lays it out at that size, so the page is the same either way, and the disk cache keeps
   it with the size in it. A JPEG, PNG or GIF the page can show as it is comes as it is.
+  On a true-colour screen (the Falcon's 16 bits, NVDI's true colour too: no palette, `img_pal`
+  NULL) the request adds `deep=1` (Erez, 8 Nov 2026: "When the screen is true color or above, the
+  gateway should treat it as such"): a picture made smaller keeps all its colours, a PNG not cut
+  to 256 and a JPEG of quality 90. Measured against the same picture fetched directly (ewrender,
+  a 640 window, RGB565): a picture no wider than the window is the same to the pixel either way;
+  a 1200x360 gradient PNG with transparency shown at the window's width differed in 97.9% of its
+  pixels (most 3 steps) and differs in 5.3% (1 step) with `deep=1`; a 1600x900 photo in 61%, by
+  1 step (the Pi's Lanczos against the Atari's own scaler). An older webgate ignores the word.
   Of yaary.music's pictures, an 865 KB photo (2560 x 1920) comes as 72 KB, 608 x 456, and a
   1.8 MB PNG with transparency as 30 KB (measured with webgate's `make_picture`). Without Pillow
   on the Pi, pictures pass as they came. The site itself can do more: its pictures have no
