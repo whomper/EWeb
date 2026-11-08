@@ -116,6 +116,197 @@ static const char *ok200(int i, const char *body, const char *from)
 	return abuf[i];
 }
 
+/* ---- translate_langs_parse against the first way it was written (a line copied, strchr for the
+   tabs), kept here as the reference: the new one reads the lines in place (the guidelines' Speed) and
+   must keep every list and every mangled list as it was ---- */
+static int t_utf8_ok(const unsigned char *s, long n)
+{
+	long i = 0;
+	while (i < n) {
+		unsigned char c = s[i];
+		int k;
+		unsigned long u;
+		if (c < 0x80) {
+			i++;
+			continue;
+		}
+		if (c >= 0xC2 && c <= 0xDF) {
+			k = 1;
+			u = c & 0x1F;
+		} else if (c >= 0xE0 && c <= 0xEF) {
+			k = 2;
+			u = c & 0x0F;
+		} else if (c >= 0xF0 && c <= 0xF4) {
+			k = 3;
+			u = c & 0x07;
+		} else
+			return 0;
+		if (i + k >= n)
+			return 0;
+		{
+			int j;
+			for (j = 1; j <= k; j++) {
+				if ((s[i + j] & 0xC0) != 0x80)
+					return 0;
+				u = (u << 6) | (s[i + j] & 0x3F);
+			}
+		}
+		if ((k == 2 && u < 0x800) || (k == 3 && u < 0x10000) || u > 0x10FFFF ||
+		    (u >= 0xD800 && u <= 0xDFFF))
+			return 0;
+		i += k + 1;
+	}
+	return 1;
+}
+
+static int old_next_line(const char *s, long n, long *at, char *buf, int max)
+{
+	long i = *at, k = 0;
+	if (i >= n)
+		return 0;
+	while (i < n && s[i] != '\n') {
+		if (s[i] != '\r' && k < max - 1)
+			buf[k++] = s[i];
+		i++;
+	}
+	buf[k] = 0;
+	*at = i < n ? i + 1 : n;
+	return 1;
+}
+
+static int old_digits_only(const char *p, int *out)
+{
+	long v = 0;
+	int any = 0;
+	while (*p >= '0' && *p <= '9' && v < 1000000L) {
+		v = v * 10 + (*p++ - '0');
+		any = 1;
+	}
+	if (!any || *p)
+		return 0;
+	*out = (int)v;
+	return 1;
+}
+
+/* digits at p, then whatever follows (a job's number, then its line end) */
+int old_langs_parse(TR_LANGS *out, const char *text, long n)
+{
+	char line[160];
+	long at = 0;
+	int have_cap = 0;
+	memset(out, 0, sizeof(*out));
+	while (old_next_line(text, n, &at, line, sizeof(line))) {
+		char *t1, *t2, *t3;
+		int mb;
+		if (!strncmp(line, "cap_mb ", 7)) {
+			have_cap = old_digits_only(line + 7, &out->cap_mb);
+			continue;
+		}
+		if (!strncmp(line, "used_mb ", 8)) {
+			old_digits_only(line + 8, &out->used_mb);
+			continue;
+		}
+		t1 = strchr(line, '\t');
+		if (!t1)
+			continue;
+		*t1++ = 0;
+		t2 = strchr(t1, '\t');
+		if (!t2)
+			continue;
+		*t2++ = 0;
+		t3 = strchr(t2, '\t');
+		if (!t3)
+			continue;
+		*t3++ = 0;
+		if (!translate_code_ok(line) || strlen(line) >= TR_LANG || !old_digits_only(t2, &mb))
+			continue;
+		if (strcmp(t3, "installed") && strcmp(t3, "available"))
+			continue;
+		if (!t_utf8_ok((const unsigned char *)t1, (long)strlen(t1)) || out->n >= TR_LANGS_MAX)
+			continue;
+		str_copy(out->l[out->n].code, line, TR_LANG);
+		str_copy(out->l[out->n].name, t1, TR_LANGNAME);
+		out->l[out->n].mb = mb;
+		out->l[out->n].installed = out->l[out->n].want = !strcmp(t3, "installed");
+		out->n++;
+	}
+	return have_cap;
+}
+
+
+static unsigned long rnd_state = 12345;
+static unsigned rnd(unsigned n)
+{
+	rnd_state = rnd_state * 1103515245UL + 12345UL;
+	return (unsigned)((rnd_state >> 16) % n);
+}
+
+static void same_parse(void)
+{
+	static const char *rowpool[] = {
+		"fr\tFrench\t125\tavailable\n", "he\t\xD7\xA2\xD7\x91\xD7\xA8\xD7\x99\xD7\xAA\t229\tinstalled\n",
+		"de\tGerman\t286\tavailable\n", "es\tSpanish\t354\tavailable\n", "en\tEnglish\t0\tinstalled\n",
+		"pt-BR\tPortuguese (Brazil)\t129\tavailable\r\n", "zt\tChinese (traditional)\t139\tinstalled\n",
+		"ru\t\xD0\xA0\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xB9\t336\tavailable\n", "cap_mb 1108\n", "used_mb 230\n",
+		"cap_mb 600\r\n", "xx\tCaf\xC3\xA9\t12\tavailable\n", "\n", "garbage line\n",
+	};
+	static const char alphabet[] = "\t\n abcxyz019-:_\xC3\xA9\xD7\xA2\xFF\x80";	/* (no CR: the first way dropped every CR, a CR inside a field is no list) */
+	static TR_LANGS a, b;
+	long iter, bad = 0, kept = 0;
+	for (iter = 0; iter < 30000; iter++) {
+		char buf[900];
+		long len = 0, k, m;
+		int ra, rb, i;
+		int rows = (int)rnd(14) + 1;
+		for (i = 0; i < rows; i++) {
+			const char *r = rowpool[rnd((unsigned)(sizeof(rowpool) / sizeof(rowpool[0])))];
+			long rl = (long)strlen(r);
+			if (len + rl < (long)sizeof(buf) - 8) {
+				memcpy(buf + len, r, rl);
+				len += rl;
+			}
+		}
+		m = (long)rnd(5);		/* 0 to 4 mangles */
+		for (k = 0; k < m && len > 0; k++) {
+			long at = (long)rnd((unsigned)len);
+			switch (rnd(4)) {
+			case 0:
+				buf[at] = alphabet[rnd(sizeof(alphabet) - 1)];
+				break;
+			case 1:
+				memmove(buf + at + 1, buf + at, (size_t)(len - at));
+				buf[at] = alphabet[rnd(sizeof(alphabet) - 1)];
+				len++;
+				break;
+			case 2:
+				memmove(buf + at, buf + at + 1, (size_t)(len - at - 1));
+				len--;
+				break;
+			default:
+				len = at;		/* cut short */
+			}
+		}
+		for (k = 0; k < len; k++)		/* a CR is a line end's (the first way dropped every CR, even inside a number) */
+			if (buf[k] == '\r' && (k + 1 >= len || buf[k + 1] != '\n'))
+				buf[k] = 'x';
+		memset(&a, 0xAA, sizeof(a));
+		memset(&b, 0xBB, sizeof(b));
+		ra = old_langs_parse(&a, buf, len);
+		rb = translate_langs_parse(&b, buf, len);
+		if (ra != rb || a.cap_mb != b.cap_mb || a.used_mb != b.used_mb || a.n != b.n) {
+			bad++;
+			continue;
+		}
+		for (i = 0; i < a.n; i++)
+			if (strcmp(a.l[i].code, b.l[i].code) || strcmp(a.l[i].name, b.l[i].name) || a.l[i].mb != b.l[i].mb ||
+			    a.l[i].installed != b.l[i].installed || a.l[i].want != b.l[i].want)
+				bad++;
+		kept += a.n;
+	}
+	check(bad == 0 && kept > 20000, "languages: 30,000 mangled lists parse as the first way read them");
+	printf("     (%ld rows kept in all, %ld differences)\n", kept, bad);
+}
+
 int main(void)
 {
 	SBUF out, req;
@@ -293,6 +484,103 @@ int main(void)
 		sb_reset(&out);
 		check(translate_languages("PI_IP", 8480, &out, err, sizeof(err)) && strstr(out.s, "en\tEnglish\n") &&
 		      strstr(out.s, "he\t\xD7\xA2"), "GET /languages");
+	}
+
+	/* the Languages page: the list with sizes, the ticks, the request, the job */
+	{
+		static const char list[] =
+			"cap_mb 600\nused_mb 229\n"
+			"fr\tFrench\t125\tavailable\n"
+			"he\t\xD7\xA2\xD7\x91\xD7\xA8\xD7\x99\xD7\xAA\t229\tinstalled\n"
+			"de\tGerman\t286\tavailable\n"
+			"es\tSpanish\t354\tavailable\n"
+			"bad code\tNo\t5\tavailable\n"
+			"xx\tNo mb\tx\tavailable\n"
+			"en\tEnglish\t0\tinstalled\n";
+		static TR_LANGS L;
+		static TR_JOB J;
+		char codes[64];
+		int job = -1;
+		check(translate_langs_parse(&L, list, (long)strlen(list)) && L.cap_mb == 600 && L.used_mb == 229 && L.n == 5,
+		      "languages: the list parsed, bad rows left out");
+		check(L.l[1].installed && L.l[1].want && !L.l[0].installed && L.l[1].mb == 229 && !strcmp(L.l[4].code, "en"),
+		      "languages: installed and wanted start the same");
+		check(translate_langs_total(&L) == 229 && !translate_langs_changed(&L), "languages: the total and nothing changed");
+		check(translate_langs_fits(&L, 2) && translate_langs_over(&L, 2) == 0, "languages: German fits (229 + 286 of 600)");
+		L.l[2].want = 1;
+		check(translate_langs_total(&L) == 515 && translate_langs_changed(&L), "languages: ticking German: 515 MB, changed");
+		check(!translate_langs_fits(&L, 3) && translate_langs_over(&L, 3) == 269,
+		      "languages: Spanish would go 269 MB past the room");
+		check(translate_langs_codes(&L, codes, sizeof(codes)) && !strcmp(codes, "he,de"), "languages: the set is he,de (no English)");
+		check(!translate_langs_codes(&L, codes, 4), "languages: no room for the codes: refused");
+		L.l[1].want = 0;
+		check(translate_langs_codes(&L, codes, sizeof(codes)) && !strcmp(codes, "de"), "languages: Hebrew unticked: de");
+		L.l[2].want = 0;
+		check(translate_langs_codes(&L, codes, sizeof(codes)) && !codes[0], "languages: nothing ticked: an empty set");
+		check(!translate_langs_parse(&L, "hello\n", 6), "languages: not the list: refused");
+
+		reset();
+		script(0, ok200(0, list, "en"), -1);
+		check(translate_langs_get("PI_IP", 8480, &L, err, sizeof(err)) && L.n == 5 &&
+		      !strncmp(sent, "GET /languages?all=1 HTTP/1.0\r\n", 31), "languages: GET /languages?all=1");
+
+		reset();
+		script(0, "HTTP/1.0 202 Accepted\r\nX-Translate-Job: 7\r\nContent-Length: 6\r\n\r\njob 7\n", -1);
+		check(translate_langs_set("PI_IP", 8480, "he,de", &job, err, sizeof(err)) && job == 7 &&
+		      !strncmp(sent, "POST /languages HTTP/1.0\r\n", 26) && strstr(sent, "Content-Length: 5\r\n") &&
+		      !strncmp(sent + sentlen - 5, "he,de", 5), "languages: POST /languages, job 7");
+		reset();
+		script(0, "HTTP/1.0 200 OK\r\nContent-Length: 11\r\n\r\njob 0\ndone\n", -1);
+		check(translate_langs_set("PI_IP", 8480, "he", &job, err, sizeof(err)) && job == 0, "languages: nothing to do: job 0");
+		reset();
+		script(0, "HTTP/1.0 422 Unprocessable\r\nContent-Length: 0\r\n\r\n", -1);
+		check(!translate_langs_set("PI_IP", 8480, "he,de,es", &job, err, sizeof(err)) && err[0], "languages: refused: 422");
+		check(strstr(err, "don't fit") != NULL, "languages: a 422 says the languages don't fit (not 'that language pair')");
+		reset();
+		script(0, "HTTP/1.0 503 Busy\r\nContent-Length: 0\r\n\r\n", -1);
+		check(!translate_langs_set("PI_IP", 8480, "he", &job, err, sizeof(err)) && strstr(err, "busy with languages"),
+		      "languages: a 503 says a job is running");
+		{
+			/* AERA-Gateway's table has 50 rows (en and 49): none may be dropped */
+			static char big_list[8000];
+			int k, len = snprintf(big_list, sizeof(big_list), "cap_mb 1108\nused_mb 0\nen\tEnglish\t0\tinstalled\n");
+			for (k = 0; k < 49; k++)
+				len += snprintf(big_list + len, sizeof(big_list) - len, "%c%c\tLanguage %d\t%d\tavailable\n",
+						'a' + k / 26, 'a' + k % 26, k, 100 + k);
+			check(translate_langs_parse(&L, big_list, len) && L.n == 50 && !strcmp(L.l[49].code, "bw"),
+			      "languages: the Gateway's 50 rows all kept (TR_LANGS_MAX was 48)");
+		}
+		same_parse();
+		{
+			static TR_LANGS P;
+			char big_name[200];
+			int k, len;
+			check(translate_langs_parse(&P, "cap_mb 600\r\nfr\tFrench\t125\tavailable", 35) && P.n == 1 && !strcmp(P.l[0].name, "French") &&
+			      P.cap_mb == 600, "languages: CR LF line ends, no line end on the last row");
+			strcpy(big_name, "cap_mb 1\nxx\t");
+			for (k = 0; k < 22; k++)
+				strcat(big_name, "\xC3\xA9");	/* 44 bytes of 2-byte letters: over TR_LANGNAME */
+			strcat(big_name, "\t5\tavailable\n");
+			len = (int)strlen(big_name);
+			check(translate_langs_parse(&P, big_name, len) && P.n == 1 && strlen(P.l[0].name) == 38 &&
+			      !(((unsigned char)P.l[0].name[37]) & 0x40) , "languages: a long name is cut between two letters, never inside one");
+		}
+		check(translate_timeout_ms == 60000L, "translate_timeout_ms starts at 60 s");
+		reset();
+		check(!translate_langs_set("PI_IP", 8480, "he;de", &job, err, sizeof(err)) && nconn == 0,
+		      "languages: a code with a stray character is never sent");
+
+		check(translate_job_parse(&J, "job 7\nrunning\nbytes 120 of 290\n", 31) && J.id == 7 && J.state == TR_JOB_RUNNING &&
+		      J.done == 120 && J.total == 290, "job: running, 120 of 290");
+		check(translate_job_parse(&J, "job 7\ndone\n", 11) && J.state == TR_JOB_DONE, "job: done");
+		check(translate_job_parse(&J, "job 8\nfailed: no room\n", 22) && J.state == TR_JOB_FAILED && !strcmp(J.why, "no room"),
+		      "job: failed with its reason");
+		check(translate_job_parse(&J, "job 0\nnone\n", 11) && J.state == TR_JOB_NONE, "job: none");
+		check(!translate_job_parse(&J, "what\n", 5), "job: not a job answer: refused");
+		reset();
+		script(0, ok200(0, "job 7\nrunning\nbytes 1 of 2\n", "en"), -1);
+		check(translate_job_get("PI_IP", 8480, &J, err, sizeof(err)) && J.done == 1 && !strncmp(sent, "GET /job HTTP/1.0\r\n", 19),
+		      "job: GET /job");
 	}
 
 	/* the whole text, Hebrew in Atari text, three pieces */

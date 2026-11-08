@@ -326,7 +326,7 @@ def run(a):
                 h.kill()
                 h.wait()
         if xvfb:
-            xvfb.terminate()
+            machines.xvfb_stop(xvfb)
         log.close()
         out = os.path.join(work, "out")
         try:

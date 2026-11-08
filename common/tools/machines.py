@@ -186,6 +186,20 @@ def emutos():
     return img
 
 
+def xvfb_stop(p, timeout=10):
+    """end an Xvfb xvfb() started and wait for it to be gone (terminate alone
+    returns while its socket still answers: the next rig took it for a
+    display and Hatari found no X; EMail, 8 Nov 2026). None is fine."""
+    if p is None:
+        return
+    p.terminate()
+    try:
+        p.wait(timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+
+
 def xvfb(display, size="1024x768x24", timeout=20):
     """An X display for a rig: None when one answers on display already,
     else the Xvfb started on it, once it answers (Hatari started on a
@@ -199,9 +213,16 @@ def xvfb(display, size="1024x768x24", timeout=20):
         except FileNotFoundError:   # no xdpyinfo: the server's socket answers
             # (a socket left by an Xvfb that was killed is only a file:
             # taken for a display, the rig's xdotool found no window)
+            # (and a dying Xvfb's socket still answers for a moment: its lock
+            # must name a process that is alive, EMail 8 Nov 2026)
+            n = display.lstrip(":").split(".")[0]
+            try:
+                os.kill(int(open("/tmp/.X%s-lock" % n).read().strip()), 0)
+            except (OSError, ValueError):
+                return False
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             try:
-                sock.connect("/tmp/.X11-unix/X" + display.lstrip(":").split(".")[0])
+                sock.connect("/tmp/.X11-unix/X" + n)
                 return True
             except OSError:
                 return False
@@ -323,6 +344,9 @@ class Machine:
     def accs(self, apps):
         """the family's accessories alongside (see above); returns what was put
         on C:, e.g. ["ECal v2.16"]"""
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hubonly
+        hubonly.require("machines.py accs()")
         os.makedirs(self.hd, exist_ok=True)
         done = []
         for app in apps:

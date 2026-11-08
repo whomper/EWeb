@@ -11,6 +11,8 @@
 #include "translate.h"
 
 #define TR_TIMEOUT_MS 60000L	/* a piece of 2 KB takes seconds on the Gateway; the service answers 504 beyond this */
+
+long translate_timeout_ms = TR_TIMEOUT_MS;
 #define TR_HDRMAX     40	/* header lines read before giving up */
 
 /* ---- the pure parts ---- */
@@ -228,7 +230,7 @@ static int http_run(const char *host, unsigned short port, const SBUF *req, cons
 		put_err(err, errlen, msg);
 		return 0;
 	}
-	c->timeout_ms = TR_TIMEOUT_MS;
+	c->timeout_ms = translate_timeout_ms;
 	conn_log("TRANSLATE", " >> ", what, (long)strlen(what));	/* never the text */
 	if (!conn_write(c, req->s, req->len)) {
 		put_err(err, errlen, c->err[0] ? c->err : "couldn't send to the Gateway");
@@ -281,7 +283,7 @@ static int http_run(const char *host, unsigned short port, const SBUF *req, cons
 		conn_close(c);
 		return 0;
 	}
-	if (code != 200) {
+	if (code != 200 && code != 202) {
 		put_err(err, errlen, translate_refusal(code));
 		conn_close(c);
 		return code;
@@ -321,7 +323,7 @@ static int http_run(const char *host, unsigned short port, const SBUF *req, cons
 		}
 	}
 	conn_close(c);
-	return 200;
+	return code;
 }
 
 static int http(const char *host, unsigned short port, const SBUF *req, const char *what,
@@ -554,4 +556,293 @@ char *translate_atari(const char *host, unsigned short port, const char *to, con
 	if (!res)
 		put_err(err, errlen, "out of memory");
 	return res;
+}
+
+
+/* ---- the Languages page ---- */
+
+/* the next line of s[*at..n): NUL-terminated copy in buf (cut at max), advances *at; 0 at the end */
+static int next_line(const char *s, long n, long *at, char *buf, int max)
+{
+	long i = *at, k = 0;
+	if (i >= n)
+		return 0;
+	while (i < n && s[i] != '\n') {
+		if (s[i] != '\r' && k < max - 1)
+			buf[k++] = s[i];
+		i++;
+	}
+	buf[k] = 0;
+	*at = i < n ? i + 1 : n;
+	return 1;
+}
+
+/* digits at p, then whatever follows (a job's number, then its line end) */
+static int num_prefix(const char *p, int *out)
+{
+	long v = 0;
+	int any = 0;
+	while (*p >= '0' && *p <= '9' && v < 1000000L) {
+		v = v * 10 + (*p++ - '0');
+		any = 1;
+	}
+	if (!any)
+		return 0;
+	*out = (int)v;
+	return 1;
+}
+
+/* digits from p up to e and nothing else: 1 with *out set */
+static int digits_to(const char *p, const char *e, int *out)
+{
+	long v = 0;
+	if (p >= e)
+		return 0;
+	for (; p < e; p++) {
+		if (*p < '0' || *p > '9' || v >= 1000000L)
+			return 0;
+		v = v * 10 + (*p - '0');
+	}
+	*out = (int)v;
+	return 1;
+}
+
+/* the lines are read where they lie (no copy of each, no search for the tabs but one pass: the
+   guidelines' Speed, 50 rows took an 8 MHz ST 80 ms the first way) */
+int translate_langs_parse(TR_LANGS *out, const char *text, long n)
+{
+	long at = 0;
+	int have_cap = 0;
+	out->cap_mb = out->used_mb = out->n = 0;	/* (every row is written whole as it is kept) */
+	while (at < n) {
+		const char *l = text + at, *e, *t[3], *end;
+		int nt = 0, mb;
+		long i = at;
+		TR_LANGINFO *r;
+		char code[TR_LANG];
+		while (i < n && text[i] != '\n')
+			i++;
+		at = i < n ? i + 1 : n;
+		end = text + i;
+		while (end > l && end[-1] == '\r')
+			end--;
+		while (l < end && *l == '\r')
+			l++;
+		if (end - l >= 7 && !memcmp(l, "cap_mb ", 7)) {
+			have_cap = digits_to(l + 7, end, &out->cap_mb);
+			continue;
+		}
+		if (end - l >= 8 && !memcmp(l, "used_mb ", 8)) {
+			digits_to(l + 8, end, &out->used_mb);
+			continue;
+		}
+		for (e = l; e < end && nt < 3; e++)
+			if (*e == '\t')
+				t[nt++] = e;
+		if (nt < 3)
+			continue;
+		if (t[0] - l < 2 || t[0] - l >= TR_LANG)
+			continue;
+		memcpy(code, l, t[0] - l);
+		code[t[0] - l] = 0;
+		if (!translate_code_ok(code) || !digits_to(t[1] + 1, t[2], &mb))
+			continue;
+		/* the state is the last field: "installed" or "available" (a fifth field, a tab, isn't one) */
+		if (!((end - t[2] - 1 == 9 && (!memcmp(t[2] + 1, "installed", 9) || !memcmp(t[2] + 1, "available", 9)))))
+			continue;
+		if (!utf8_ok((const unsigned char *)t[0] + 1, (long)(t[1] - t[0] - 1)) || out->n >= TR_LANGS_MAX)
+			continue;
+		r = &out->l[out->n++];
+		memcpy(r->code, code, strlen(code) + 1);
+		{
+			long k = t[1] - t[0] - 1;
+			if (k > TR_LANGNAME - 1) {
+				k = TR_LANGNAME - 1;
+				while (k > 0 && (((unsigned char)t[0][1 + k]) & 0xC0) == 0x80)
+					k--;		/* not in the middle of a character */
+			}
+			memcpy(r->name, t[0] + 1, k);
+			r->name[k] = 0;
+		}
+		r->mb = mb;
+		r->installed = r->want = !memcmp(t[2] + 1, "installed", 9);
+	}
+	return have_cap;
+}
+
+int translate_langs_total(const TR_LANGS *l)
+{
+	int i, t = 0;
+	for (i = 0; i < l->n; i++)
+		if (l->l[i].want && strcmp(l->l[i].code, "en"))
+			t += l->l[i].mb;
+	return t;
+}
+
+int translate_langs_over(const TR_LANGS *l, int i)
+{
+	int t;
+	if (i < 0 || i >= l->n || l->l[i].want || !strcmp(l->l[i].code, "en"))
+		return 0;
+	t = translate_langs_total(l) + l->l[i].mb - l->cap_mb;
+	return t > 0 ? t : 0;
+}
+
+int translate_langs_fits(const TR_LANGS *l, int i)
+{
+	return translate_langs_over(l, i) == 0;
+}
+
+int translate_langs_changed(const TR_LANGS *l)
+{
+	int i;
+	for (i = 0; i < l->n; i++)
+		if (l->l[i].want != l->l[i].installed && strcmp(l->l[i].code, "en"))
+			return 1;
+	return 0;
+}
+
+int translate_langs_codes(const TR_LANGS *l, char *out, int max)
+{
+	int i, k = 0;
+	if (max < 1)
+		return 0;
+	for (i = 0; i < l->n; i++) {
+		int len;
+		if (!l->l[i].want || !strcmp(l->l[i].code, "en"))
+			continue;
+		len = (int)strlen(l->l[i].code);
+		if (k + len + 2 > max) {
+			out[0] = 0;
+			return 0;
+		}
+		if (k)
+			out[k++] = ',';
+		memcpy(out + k, l->l[i].code, len);
+		k += len;
+	}
+	out[k] = 0;
+	return 1;
+}
+
+int translate_langs_get(const char *host, unsigned short port, TR_LANGS *out, char *err, int errlen)
+{
+	SBUF b;
+	int ok;
+	sb_init(&b);
+	out->cap_mb = out->used_mb = out->n = 0;
+	ok = get(host, port, "/languages?all=1", &b, 16384, err, errlen);
+	/* (the names are checked as UTF-8 one by one as the rows are read) */
+	if (ok && !translate_langs_parse(out, b.s ? b.s : "", b.len)) {
+		put_err(err, errlen, "that isn't the Gateway's list of languages");
+		ok = 0;
+	}
+	sb_free(&b);
+	return ok;
+}
+
+int translate_langs_set(const char *host, unsigned short port, const char *codes, int *job,
+			char *err, int errlen)
+{
+	SBUF req, body;
+	int code, ok = 0;
+	long n = codes ? (long)strlen(codes) : 0;
+	const char *p;
+	if (job)
+		*job = 0;
+	if (!host_ok(host) || n > 4000) {
+		put_err(err, errlen, "no address for the Gateway");
+		return 0;
+	}
+	for (p = codes; p && *p; p++)
+		if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') ||
+		      *p == '-' || *p == ',')) {
+			put_err(err, errlen, "a language code isn't right");
+			return 0;
+		}
+	sb_init(&req);
+	sb_init(&body);
+	if (!sb_printf(&req, "POST /languages HTTP/1.0\r\nHost: %s\r\nContent-Type: text/plain\r\n"
+			     "Content-Length: %ld\r\nConnection: close\r\n\r\n", host, n) ||
+	    (n && !sb_add(&req, codes, n))) {
+		put_err(err, errlen, "out of memory");
+		sb_free(&req);
+		return 0;
+	}
+	code = http(host, port, &req, "POST /languages", &body, 256, NULL, NULL, err, errlen);
+	/* translate_refusal's words are for a piece of text ("that language pair isn't
+	   installed"): here 422 is "over the room", 503 "a job is running" */
+	if (code == 422)
+		put_err(err, errlen, "those languages don't fit on the Gateway");
+	else if (code == 503)
+		put_err(err, errlen, "the Gateway is busy with languages already");
+	if (code == 200 || code == 202) {
+		int id = 0;
+		const char *q = body.s ? body.s : "";
+		if (!strncmp(q, "job ", 4) && num_prefix(q + 4, &id))
+			ok = 1;
+		else
+			put_err(err, errlen, "that isn't the Gateway's answer");
+		if (ok && job)
+			*job = id;
+	}
+	sb_free(&req);
+	sb_free(&body);
+	return ok;
+}
+
+int translate_job_parse(TR_JOB *j, const char *text, long n)
+{
+	char line[160];
+	long at = 0;
+	int have_id = 0;
+	memset(j, 0, sizeof(*j));
+	j->state = TR_JOB_NONE;
+	while (next_line(text, n, &at, line, sizeof(line))) {
+		if (!strncmp(line, "job ", 4)) {
+			have_id = num_prefix(line + 4, &j->id);
+		} else if (!strcmp(line, "running")) {
+			j->state = TR_JOB_RUNNING;
+		} else if (!strcmp(line, "done")) {
+			j->state = TR_JOB_DONE;
+		} else if (!strcmp(line, "none")) {
+			j->state = TR_JOB_NONE;
+		} else if (!strncmp(line, "failed", 6)) {
+			const char *w = line + 6;
+			j->state = TR_JOB_FAILED;
+			if (*w == ':')
+				w++;
+			while (*w == ' ')
+				w++;
+			if (utf8_ok((const unsigned char *)w, (long)strlen(w)))
+				str_copy(j->why, w, sizeof(j->why));
+		} else if (!strncmp(line, "bytes ", 6)) {
+			const char *q = line + 6;
+			long d = 0, t = 0;
+			while (*q >= '0' && *q <= '9')
+				d = d * 10 + (*q++ - '0');
+			if (!strncmp(q, " of ", 4)) {
+				q += 4;
+				while (*q >= '0' && *q <= '9')
+					t = t * 10 + (*q++ - '0');
+				j->done = d;
+				j->total = t;
+			}
+		}
+	}
+	return have_id;
+}
+
+int translate_job_get(const char *host, unsigned short port, TR_JOB *j, char *err, int errlen)
+{
+	SBUF b;
+	int ok;
+	sb_init(&b);
+	ok = get(host, port, "/job", &b, 512, err, errlen);
+	if (ok && !translate_job_parse(j, b.s ? b.s : "", b.len)) {
+		put_err(err, errlen, "that isn't the Gateway's answer");
+		ok = 0;
+	}
+	sb_free(&b);
+	return ok;
 }

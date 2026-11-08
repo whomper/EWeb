@@ -266,7 +266,7 @@ class Rig:
             self.hatari.kill()
         self.m.stop()
         if self.x:
-            self.x.terminate()      # not kill: Xvfb removes its lock as it goes
+            machines.xvfb_stop(self.x)      # not kill: Xvfb removes its lock as it goes
             try:
                 self.x.wait(5)
             except Exception:
