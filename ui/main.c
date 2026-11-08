@@ -22,6 +22,7 @@
 #include "history.h"
 #include "clip.h"
 #include "conn.h"
+#include "translate.h"
 #include "cookie.h"
 #include "crash.h"
 #include "dcache.h"
@@ -60,8 +61,8 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 1, 1, 0, "en" };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-					   translate_to) */
+	       1, "", 0, 1, 1, 0, "en", 8480 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
+					   translate_to, translate_port) */
 int loading;
 static short quit;
 
@@ -76,6 +77,7 @@ static const char *translate_to(void)
 	return NULL;
 }
 static int pics;		/* the page's pictures are coming: the window scrolls meanwhile */
+static int xlating;		/* a piece of the page is with the Gateway to translate (pics too) */
 /* what came while a picture did and isn't the window's own (a menu, a
    click, a key that isn't scrolling): done in turn when the picture has
    stopped (keys typed meanwhile were lost after the first: demozoo.org,
@@ -348,7 +350,8 @@ void menu_update(void)
 {
 	int addr = win_address_has_focus();
 	enable(C_RELOAD, !loading && br.cur >= 0);
-	enable(C_STOP, loading || br_pictures_pending(&br) || br_refresh_due(&br) >= 0);
+	enable(C_STOP, loading || br_pictures_pending(&br) || br_refresh_due(&br) >= 0 ||
+	       br_translate_pending(&br, 0, 0, 0));
 	enable(C_BACK, !loading && br_can_back(&br));
 	enable(C_FORWARD, !loading && br_can_forward(&br));
 	enable(C_HOME, !loading);
@@ -471,6 +474,8 @@ static void settings_load(void)
 			opt.translate = atoi(eq) != 0;
 		else if (!strcmp(line, "TRANSLATETO"))
 			str_copy(opt.translate_to, eq, sizeof opt.translate_to);
+		else if (!strcmp(line, "TRANSLATEPORT"))
+			opt.translate_port = (unsigned short) atoi(eq);
 		else if (!strcmp(line, "TRACKERS"))
 			opt.trackers = atoi(eq) != 0;
 		else if (!strcmp(line, "SCRIPTS"))
@@ -726,6 +731,10 @@ int settings_save(void)
 	put(&s, "TRANSLATE", v, "1: pages translated on the Gateway (View menu), 0: as they come (no "
 	    "request, no header)");
 	put(&s, "TRANSLATETO", opt.translate_to, "the language pages are translated into");
+	if (opt.translate_port != 8480) {
+		snprintf(v, sizeof v, "%u", opt.translate_port);
+		put(&s, "TRANSLATEPORT", v, "the Gateway's translation service's port (8480)");
+	}
 #endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -976,7 +985,8 @@ static void gate_show(void)
 	if (gph == GATE_SEND)
 		str_copy(a, "Sending to the Gateway...   (Esc stops)", sizeof a);
 	else if (gph == GATE_WAIT)
-		str_copy(a, "The Gateway is loading the page...   (Esc stops)", sizeof a);
+		str_copy(a, xlating ? "The Gateway is translating...   (Esc stops)" :
+			 "The Gateway is loading the page...   (Esc stops)", sizeof a);
 	else
 		snprintf(a, sizeof a, "Receiving from the Gateway... %ld KB   (Esc stops)", kb);
 	status(a);
@@ -989,8 +999,8 @@ static void gate_phase(int p, long bytes)
 {
 	char a[200];
 	(void) bytes;
-	/* the page itself, not its sheets or pictures */
-	if (!loading || ph > BRPH_PAGE)
+	/* the page itself, not its sheets or pictures; a piece translated */
+	if (!xlating && (!loading || ph > BRPH_PAGE))
 		p = GATE_DONE;
 	if (p == GATE_DONE) {
 		if (gph_shown && said[0]) {
@@ -1259,6 +1269,7 @@ static void saved(const char *path, long len)
 static void save_file(const char *url, const char *given);
 static void to_window(const char *url, const char *name);
 static void pictures_end(void);
+static void page_translate_begin(void);
 
 /* what a load came to, on the screen */
 /* the page loading's preview is ready: drawn in place of the page shown */
@@ -1333,6 +1344,8 @@ static void loaded(int r)
 		win_preview_gone();
 	if (fresh && !br_pictures_pending(&br))
 		trim();			/* (with pictures, once they are in) */
+	if (fresh)
+		page_translate_begin();	/* (Translate on: the page as it came, then translated) */
 	switch (r) {
 	case BR_SHOWN:
 		break;
@@ -2006,6 +2019,11 @@ void command(int cmd)
 		   conn_stop stays clear, as the page's scripts' requests need it */
 		if (loading)
 			conn_stop = 1;
+		if (br_translate_pending(&br, 0, 0, 0)) {
+			br_translate_stop(&br);
+			win_status("Translation stopped.");
+			log_event("translation stopped");
+		}
 		if (br_pictures_pending(&br)) {
 			br_pictures_stop(&br);
 			if (!loading && !br_pictures_pending(&br)) {
@@ -2076,6 +2094,18 @@ void command(int cmd)
 		each_window(0, 0);
 		settings_save();
 		log_event("translate %s", opt.translate ? "on" : "off");
+		if (opt.translate) {
+			page_translate_begin();	/* the page shown */
+		} else if (br.tr_shows != 0 && br.tr_shows == br.shows) {
+			/* the page shown was translated: as it came again: read from its source, as
+			   View > Encoding (memory only: nothing to forget on the
+			   disk) */
+			br_translate_stop(&br);
+			if (br.src != NULL && br.encodable)
+				loaded(br_encoding(&br, br.enc));
+			else
+				command(C_RELOAD);
+		}
 		break;
 #endif
 	case C_LIVE:
@@ -2428,6 +2458,72 @@ static void pictures_end(void)
 		conn_log_hold(1);
 	}
 	menu_update();
+}
+
+/* ---------------------------------------------------------------- Translate */
+
+/* the page shown, translated on the Gateway (View > Translate; xlate.c):
+   as it came first, then a piece at a time from the idle loop. Not
+   EWeb's own pages. Off: nothing here runs (browser.translate NULL) */
+static void page_translate_begin(void)
+{
+	int r;
+	if (br.translate == NULL || br.p == NULL || !strncmp(br.url, "about:", 6))
+		return;
+	if (!opt.gate[0]) {
+		win_status("To translate, set the Gateway's address in Settings > Secure.");
+		log_event("translate: no Gateway");
+		return;
+	}
+	r = br_translate_start(&br, opt.gate, opt.translate_port);
+	log_event("translate start %d", r);
+	menu_update();
+}
+
+/* one piece of the page in front's text, the screen's first: the
+   Gateway's three phases on the status line (gate_phase), Esc stops */
+static void page_translate_step(void)
+{
+	char err[160], a[220];
+	int r;
+	unsigned long t = pf_ms();
+	xlating = pics = 1;
+	conn_stop = 0;
+	conn_bytes = 0;
+	said[0] = 0;
+	r = br_translate_step(&br, win_top(), win_page_h(), err, sizeof err);
+	xlating = pics = 0;
+	conn_stop = 0;
+	if (r == 2) {
+		log_event("translated relaid %.*s height %ld ms %lu", (int) strcspn(br.url, "?"), br.url,
+			  br.p ? (long) br.p->height : 0L, pf_ms() - t);
+		win_page_relaid();
+		win_title();	/* (the title is translated with the screen's text) */
+	}
+	if (r < 0) {
+		if (!strcmp(err, "stopped"))
+			str_copy(a, "Translation stopped.", sizeof a);
+		else
+			snprintf(a, sizeof a, "Not translated: %s.", err);
+		br_translate_stop(&br);
+		win_status(a);
+		log_event("translate failed %s", err);
+	} else if (!br_translate_pending(&br, 0, 0, 0)) {
+		long done, total;
+		char from[TR_LANG];
+		br_translate_progress(&br, &done, &total, from, sizeof from);
+		win_status("");
+		log_event("translated %ld of %ld from %s", done, total, from[0] ? from : "?");
+	} else {
+		win_status("");
+	}
+	menu_update();
+}
+
+/* is there translating to do in the window in front? */
+static int translate_due(void)
+{
+	return !cur->iconified && br.xl != NULL && br_translate_pending(&br, 0, 0, 0);
 }
 
 /* the next of the page's pictures: fetched and decoded, then drawn */
@@ -2815,7 +2911,8 @@ int app_main(void)
 
 	while (!quit) {
 		short which;
-		int more = !loading && pictures_window() != NULL;
+		int xl = !loading && translate_due();
+		int more = (!loading && pictures_window() != NULL) || xl;
 		long due = loading || cur->iconified ? -1 : br_js_due(&br);
 		long rdue = refresh_due();
 		int rib, drew, wr, ahead = 0;
@@ -2905,11 +3002,18 @@ int app_main(void)
 #endif
 		if ((which & MU_TIMER) && !quit && !drew && wr && !win_due() && !loading)
 			dc_write_step();
-		if ((which & MU_TIMER) && !quit && !drew && more && pictures_window() != NULL) {
-			ewin *was = cur;
-			win_use(pictures_window());
-			pictures();
-			win_use(was);
+		if ((which & MU_TIMER) && !quit && !drew && more) {
+			/* the screen's text translated before the pictures, the
+			   rest of it after them */
+			if (xl && translate_due() &&
+			    (pictures_window() == NULL || br_translate_pending(&br, win_top(), win_page_h(), 1))) {
+				page_translate_step();
+			} else if (pictures_window() != NULL) {
+				ewin *was = cur;
+				win_use(pictures_window());
+				pictures();
+				win_use(was);
+			}
 			if (nlater > 0) {
 				/* (copied first: what one does may put off more) */
 				int n = nlater, i;

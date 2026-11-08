@@ -479,6 +479,22 @@ What you type into a page's forms, and the words in its links, go to
 the site in the page's encoding (or the one its form asks for), as
 sites made for those pages expect.
 
+## Translating pages
+
+With the Gateway's translation service installed (`aera-gateway install
+translate` on the Gateway, its address in Settings > Secure), View >
+Translate translates every page you open, on the Gateway: nothing of the
+text leaves your home network. EWeb (not the ST edition) shows the page as
+it comes at once, then its words are sent a little at a time, those on the
+screen first; the page is shown again with them as they come back, and the
+rest follows while you read. The status line says when the Gateway is at
+work; Esc stops it, and what came stays.
+
+The translation is kept in memory only, never on the disk: Back and Reload
+translate again. Turn Translate off and the page shown is as it came.
+Program code, `<pre>` text and what a page marks not to translate stay as
+they are.
+
 ## Finding words
 
 **Edit > Find...** (**^F**) asks for words and marks the first of them
@@ -784,6 +800,9 @@ there at once; where the window was, when you quit:
 - `GATEPORT=` its port (8280)
 - `SNAPSHOT=` 1 for pages through the Gateway's browser (View > Through the
   Gateway's browser), 0 for pages as their servers send them
+- `TRANSLATE=` 1 translates pages on the Gateway (View > Translate), 0 (as it
+  starts) shows them as they come
+- `TRANSLATETO=` the language they are translated into (`en`)
 - `TRACKERS=` 0 (as it starts) leaves out what a page asks of known
   trackers (Google Tag Manager, Google Analytics): their scripts,
   pictures and frames aren't fetched; 1 fetches them too. A page you

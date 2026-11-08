@@ -80,12 +80,12 @@ from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
-                         "details", "wide", "boxes", "dialogs"]
+                         "details", "wide", "boxes", "dialogs", "translate"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
 SLOT = int(os.environ.get("GUI_SLOT", "0"))
-HTTP, HTTPS, GATE = (p + 1000 * SLOT for p in (18280, 18643, 18289))
+HTTP, HTTPS, GATE, XLATE = (p + 1000 * SLOT for p in (18280, 18643, 18289, 18480))
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
@@ -2476,6 +2476,54 @@ def details():
             xvfb.terminate()
 
 
+def translate():
+    """View > Translate on, Direct (src/browse/xlate.c): EWEB.PRG on the
+    Falcon in 256 colours shows a page from its disk as it is, then has it
+    translated by a stand-in for the Gateway's translategate
+    (tests/browse/fakexl.py): the screen's text in the first piece, every
+    piece back, the page laid out again, and it quits"""
+    work = os.path.join(OUT, "xlate")
+    os.makedirs(work, exist_ok=True)
+    log = os.path.join(work, "requests")
+    if os.path.exists(log):
+        os.remove(log)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/browse/fakexl.py"), str(XLATE), log],
+                           stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("translate: the stand-in translategate", False)
+    name = "translate"
+    try:
+        inf = "TRANSLATE=1\r\nGATE=127.0.0.1\r\nTRANSLATEPORT=%d\r\n" % XLATE
+        hd = hd_for(name, r"C:\XLATE.HTM", inf)
+        shutil.copy(os.path.join(ROOT, "tests/browse/xlate.html"), os.path.join(hd, "XLATE.HTM"))
+        r = Run(name, "Falcon:256", hd, network=True)
+        try:
+            start = r.wait(r"translate start ", 300)
+            done = r.wait(r"translated \d+ of ", 600)
+            time.sleep(2)
+            r.shot(0)
+            reqs = open(log).read().splitlines() if os.path.exists(log) else []
+            evs = r.events()
+            relaid = [e for e in evs if e.startswith("translated relaid ")]
+            m = re.match(r"translated (\d+) of (\d+) from (\S+)", done or "")
+            check("translate: the page translated, the screen's text first, laid out again",
+                  start == "translate start 1" and m is not None and m.group(1) == m.group(2) and
+                  m.group(3) == "de" and len(reqs) >= 2 and reqs[0].split(" ", 2)[2] == "The test page" and
+                  len(relaid) >= 2 and not os.path.exists(os.path.join(hd, "crash.log")),
+                  "\n".join(evs[-25:]) + "\n" + "\n".join(reqs))
+            r.key(Q, (CTRL,))
+            quit = r.wait(r"quit$", 300)
+            inf = os.path.join(hd, "eweb.inf")
+            inf = open(inf, errors="replace").read() if os.path.exists(inf) else ""
+            check("translate: quits, TRANSLATE=1 kept", quit is not None and
+                  re.search(r"^TRANSLATE=1\r?$", inf, re.M) is not None, "\n".join(r.events()[-10:]))
+        finally:
+            r.end()
+    finally:
+        srv.terminate()
+        srv.wait(10)
+
+
 os.makedirs(OUT, exist_ok=True)
 if not os.path.exists(os.path.join(ROOT, "binary/EWEB.PRG")):
     sys.exit("gui_test: make binary/EWEB.PRG binary/EWEB.FNT build/host/ewrender first")
@@ -2520,6 +2568,8 @@ if "boxes" in WHICH:
         boxes()
     else:
         skip("boxes: needs Xvfb and xdotool")
+if "translate" in WHICH:
+    translate()
 if "dialogs" in WHICH:
     if shutil.which("Xvfb") and shutil.which("xdotool"):
         dialogs()

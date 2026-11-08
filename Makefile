@@ -273,6 +273,7 @@ BSSL_DEF  := -DBR_USE_URANDOM=0 -DBR_USE_GETENTROPY=0 -DBR_USE_UNIX_TIME=0 -DBR_
              -DBR_USE_WIN32_RAND=0 -DBR_RDRAND=0
 NET_SRC   := $(sort $(wildcard src/net/*.c))
 NETC_SRC  := common/src/conn.c common/src/tls.c common/src/util.c common/src/futil.c common/src/inflate.c \
+             common/src/translate.c common/src/charset.c \
              common/src/secret.c
 NET_HDRS  := $(wildcard src/*.h src/net/*.h ui/*.h tests/net/*.h common/src/*.h common/atari/*.h \
              common/atari/include/*.h common/ui/*.h atari/include/*.h)
@@ -358,7 +359,7 @@ COMMON_WARN   := -Wall -Wno-pointer-sign
 # Direct connection is made (common/atari/tls_ovl.c, ui/dsp_ovl.c), so
 # EWEB.PRG starts 133 KB smaller and a page through the Pi never needs it
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
-              $(addprefix build/tos/net/,conn.o tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o secret.o net_tos.o \
+              $(addprefix build/tos/net/,conn.o tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o translate.o secret.o net_tos.o \
               sting.o sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o)
 binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
@@ -1112,6 +1113,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/layout/details.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/frames.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/browse/trim.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
+	python3 tests/browse/xlate.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/visited.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/find.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/parts.py build/asan/ewrender binary/EWEB.FNT build/news/NEWS.HTM build/news/NEWS.CSS

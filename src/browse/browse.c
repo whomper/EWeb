@@ -3830,6 +3830,7 @@ void br_free(browser *b)
 {
 	int i;
 	br_preview_free(b);
+	br_translate_stop(b);
 	if (b->p != NULL)
 		pg_free(b->p);
 	if (b->d != NULL)

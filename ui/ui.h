@@ -39,6 +39,8 @@ typedef struct {
 					   they come (0); Erez, 8 Nov 2026 (AERA-Atari's
 					   standards/TRANSLATION-SERVICE.md) */
 	char translate_to[8];		/* TRANSLATETO=: into which language ("en") */
+	unsigned short translate_port;	/* TRANSLATEPORT=: translategate's port on the Gateway (8480;
+					   written only when another, as for the rigs) */
 } EWOPT;
 extern EWOPT opt;
 /* the Hebrew keyboard (F10 alone, as the family's apps; no menu item:

@@ -979,7 +979,7 @@ int main(int argc, char **argv)
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	int colours = 0, own_pal = 0;
 	static PIC_PAL pal;
-	const char *next = NULL, *prev = NULL;
+	const char *next = NULL, *prev = NULL, *xl_arg = NULL;
 	char where[4096];
 	browser b;
 	page *p;
@@ -1138,6 +1138,8 @@ int main(int argc, char **argv)
 			save_link = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-Z") && i + 1 < argc)
 			selector_ms = atol(argv[++i]);	/* the file selector's time */
+		else if (!strcmp(argv[i], "--translate") && i + 1 < argc)
+			xl_arg = argv[++i];	/* HOST:PORT:TO: translated Direct (xlate.c), as EWEB.PRG */
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
 			str_copy(conn_logfile, argv[++i], sizeof conn_logfile);	/* the HTTP dialogue, as EWGET -l */
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) {
@@ -1275,6 +1277,36 @@ int main(int argc, char **argv)
 		printf("top: %d\n", (int) b.scroll_to);	/* where EWEB.PRG scrolls to */
 	pictures(&b);
 	pf_idle = NULL;
+	if (xl_arg != NULL) {
+		/* the page translated as EWEB.PRG does it: the screen (TOP, H)
+		   first, a piece at a time */
+		static char host[104], to[8];
+		unsigned port = 0;
+		char err[160];
+		int32_t h = height > 0 ? height : 400;
+		int n = 0;
+		if (sscanf(xl_arg, "%103[^:]:%u:%7s", host, &port, to) != 3) {
+			fprintf(stderr, "ewrender: --translate HOST:PORT:TO\n");
+			return 2;
+		}
+		b.translate = to;
+		r = br_translate_start(&b, host, (unsigned short) port);
+		printf("translate: %d\n", r);
+		while (r > 0 && br_translate_pending(&b, top, h, 0)) {
+			int screen = br_translate_pending(&b, top, h, 1);
+			r = br_translate_step(&b, top, h, err, sizeof err);
+			printf("piece %d: %d%s%s%s\n", ++n, r, screen ? " (screen)" : "", err[0] ? " " : "", err);
+		}
+		{
+			long done, total;
+			char from[8];
+			br_translate_progress(&b, &done, &total, from, sizeof from);
+			printf("translated: %ld of %ld from %s \"%s\" runs %lu\n", done, total, from[0] ? from : "?",
+			       b.title, br_translation_runs);
+		}
+		if (r < 0)
+			br_translate_stop(&b);
+	}
 	if (enc != NULL) {
 		r = br_encoding(&b, strcmp(enc, "auto") == 0 ? "" : enc);
 		pictures(&b);

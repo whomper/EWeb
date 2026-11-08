@@ -172,6 +172,8 @@ typedef struct browser {
 	   NULL off. Off, nothing of translation runs: no request, no header,
 	   and br_translation_runs stays 0 (the rigs count it) */
 	const char *translate;
+	struct xlate *xl;	/* the page's translation under way (xlate.c), NULL none */
+	unsigned long tr_shows;	/* = shows: the page shown has translations put in */
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), on
@@ -263,6 +265,17 @@ extern int br_building;
 /* times any of translation's code ran (browser.translate): 0 while
    Translate is off, which the rigs check */
 extern unsigned long br_translation_runs;
+/* Translate, Direct (xlate.c): the page shown as it came, then its text to
+   the Gateway's translategate at host:port in pieces of about 2 KB, those
+   on the screen (top, height) first. br_translate_start: 1 there is text
+   to do. br_translate_step does one piece: 2 it was put in and the page
+   laid out again (draw it), 1 put in, 0 nothing left, -1 failed (err: a
+   refusal, a stop, no Gateway; br_translate_stop then). Memory only. */
+int  br_translate_start(browser *b, const char *host, unsigned short port);
+int  br_translate_pending(browser *b, int32_t top, int32_t height, int screen_only);
+int  br_translate_step(browser *b, int32_t top, int32_t height, char *err, int errlen);
+void br_translate_stop(browser *b);
+void br_translate_progress(browser *b, long *done, long *total, char *from, int fromlen);
 extern unsigned long br_poll_ms;
 /* a picture fetched again at the size shown (pens from the Pi): 1 during
    that fetch (ewrender's -Y W@again sizes the window then) */

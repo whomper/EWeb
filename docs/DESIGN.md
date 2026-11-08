@@ -5010,8 +5010,23 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   answer's words of `POST /translate` (`X-Translate-From`, `X-Translate-Same`, the refusal lines).
   EWeb sends it only once webgate takes it: today's webgate passes an unknown `X-Gateway-` header on
   to the server.
-- **Direct:** the page shows at once untranslated, then in 2 KB pieces through common's
-  `translate.c`, the first screen first, the rest at the relayout throttle; Esc stops it.
+- **Direct** (`src/browse/xlate.c`, built 8 Nov 2026): the page shows at once as it came; then
+  its text nodes, each a paragraph of the request (white space collapsed, a space kept at either
+  end), go to translategate (`GATE=`, port 8480, `TRANSLATEPORT=` for the rigs) through common's
+  `translate_piece` in pieces of about 2 KB: the title and what is on the screen first, before the
+  page's pictures, then the rest after them. The answer's paragraphs are put in the text nodes
+  in the document's memory; the page is laid out again when the screen's pieces are back, then at
+  most every 3 s, and at the end. Left as they are: scripts, styles, `<textarea>`, `<pre>`,
+  `<select>`, `translate="no"`, SVG and MathML, text without a letter. A piece is one
+  connection; the status line has the Gateway's three phases ("The Gateway is translating...");
+  Esc stops; a refusal or no Gateway leaves the rest as it came, with why on the status line.
+  Turning Translate off reads the page again from its source (as View > Encoding). Tests:
+  `make test`'s `tests/browse/xlate.py` (ewrender `--translate HOST:PORT:TO` against
+  `tests/browse/fakexl.py`, a stand-in translategate: the screen first, pieces of 2 KB, links
+  kept, the same language, a refusal, no Gateway) and `make hatarigui`'s translate group (EWEB.PRG
+  on the Falcon in 256 colours, the stand-in on the host). Until webgate takes
+  `X-Gateway-Translate`, a page through the Gateway is translated this way too. Not in the ST
+  edition (`EW_ST`: stubs).
 - **Memory only:** translations are never written to the Atari's disk; Back translates again when the
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
