@@ -25,6 +25,16 @@ back the converted PDF, the same file EConvert would have written
 
     GET /version   ->  "aerapdf EPDF-COMMIT"   (which converter answers)
 
+translate=CODE (Erez, 8 Nov 2026; EPDF's docs/PI-GATEWAY.md): the
+converted PDF also carries each page's text translated into CODE, by
+translategate on this machine (aerapdf runs translateclient, its
+translator, once a page; the text never leaves the Gateway). The 102s
+cover both; the 200 says X-Translate-From: CODE (most pages' language),
+and X-Translate-Same: 1 when every page was in CODE already. Refused as
+422 "pdfgate: no translation from LANG into LANG", 503 "pdfgate: the
+translation service is busy" or 504. Pages the conversion's time didn't
+reach come as they were. Without translate, nothing changes.
+
 The rules are aeragate's: the home network only, or --allow; the log says
 who converted how much, never the file's name or what is in it. One
 conversion at a time (--jobs): an Atari that waits for its turn is told so
@@ -67,6 +77,7 @@ class Config:
     jobs = threading.BoundedSemaphore(1)
     tmp = None
     verbose = False
+    translator = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translateclient.py")
 
 
 # the options EConvert has, each as aerapdf's flag; values checked
@@ -78,7 +89,9 @@ OPTIONS = {
     "picture_width": ("--picture-width", (64, 4096)),
     "double": (None, ("0", "1")),
     "name": (None, None),               # the PDF's own name, kept in the result's AERA entry
+    "translate": ("--translate", None),     # a language, ISO 639-1
 }
+LAST_SECONDS = 60                       # of a conversion's time, kept for converting after translating
 NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}")
 
 
@@ -97,6 +110,11 @@ def flags(query):
             if not NAME.fullmatch(v):
                 return None, "name?"
             name = v
+            continue
+        if k == "translate":
+            if not re.fullmatch(r"[a-z]{2}", v):
+                return None, "translate=%s" % v[:10]
+            out += [flag, v, "--translator", Config.translator]
             continue
         if isinstance(ok[0], int):
             if not re.fullmatch(r"[0-9]{1,5}", v) or not ok[0] <= int(v) <= ok[1]:
@@ -241,8 +259,9 @@ class Handler(BaseHTTPRequestHandler):
             self.note(499, got, 0, " (the Atari went away while waiting)")
             return
         t0 = time.monotonic()
+        tr = {}
         try:
-            status, text = self.run(args, src, dst, t0)
+            status, text = self.run(args, src, dst, t0, tr)
         finally:
             Config.jobs.release()
         if status == 499:
@@ -258,6 +277,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/pdf")
             self.send_header("Content-Length", str(n))
+            if tr.get("from"):
+                self.send_header("X-Translate-From", tr["from"])
+            if tr.get("same"):
+                self.send_header("X-Translate-Same", "1")
             self.send_header("Connection", "close")
             self.end_headers()
             with open(dst, "rb") as f:
@@ -279,12 +302,23 @@ class Handler(BaseHTTPRequestHandler):
                 return False
         return True
 
-    def run(self, args, src, dst, t0):
-        """aerapdf on src: (200, None), or (status, "pdfgate: why")"""
+    def run(self, args, src, dst, t0, tr):
+        """aerapdf on src: (200, None), or (status, "pdfgate: why"); tr gets
+        the translation's language ("from") and whether it was all in it
+        ("same")"""
         cmd = [Config.aerapdf, "--progress", "--fonts", Config.fonts] + args + [src, dst]
+        env = None
+        if "--translate" in args:
+            to = args[args.index("--translate") + 1]
+            # translateclient's: the language last seen, and the time
+            # translating ends, so the conversion ends in its own time
+            noted = os.path.join(os.path.dirname(os.path.dirname(src)), "language")
+            last = min(LAST_SECONDS, Config.seconds // 4)
+            env = dict(os.environ, TRANSLATECLIENT_NOTE=noted,
+                       TRANSLATECLIENT_UNTIL="%.0f" % (time.time() + Config.seconds - last))
         try:
             p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.PIPE, cwd=os.path.dirname(src))
+                                 stderr=subprocess.PIPE, cwd=os.path.dirname(src), env=env)
         except OSError:
             return 503, "pdfgate: no aerapdf\n"
         try:
@@ -307,6 +341,10 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.write(("HTTP/1.1 102 Processing\r\nX-Progress: %s/%s\r\n\r\n" %
                                           m.groups()).encode())
                         self.wfile.flush()
+                elif env and re.fullmatch(r"(from|same) [a-z]{2,8}", line):
+                    k, v = line.split()
+                    tr["from"] = to if k == "same" else v
+                    tr["same"] = k == "same"
                 elif line:
                     said = line
             p.wait()
@@ -320,6 +358,19 @@ class Handler(BaseHTTPRequestHandler):
             return 200, None
         if time.monotonic() - t0 >= Config.seconds or p.returncode in (-9, -24):
             return 504, "pdfgate: the PDF took over %d s\n" % Config.seconds
+        if env and p.returncode == 2:
+            try:
+                with open(noted) as f:
+                    lang = f.read().strip()
+            except OSError:
+                lang = ""
+            if re.fullmatch(r"[a-z]{2,3}", lang):
+                return 422, "pdfgate: no translation from %s into %s\n" % (lang, to)
+            return 422, "pdfgate: no translation into %s\n" % to
+        if env and p.returncode == 3:
+            return 503, "pdfgate: the translation service is busy\n"
+        if env and p.returncode == 4:
+            return 504, "pdfgate: the translation took too long\n"
         # aerapdf's last line, its own words, without the Pi's paths
         said = said.replace(src, "the PDF").replace(dst, "the result")
         said = re.sub(r"^econvert: ", "", said)[:200] or "it couldn't be converted"
@@ -341,6 +392,7 @@ def parser():
     ap.add_argument("--memory-mb", type=int, default=768, help="the memory a conversion may take")
     ap.add_argument("--jobs", type=int, default=1, help="conversions at once")
     ap.add_argument("--tmp", help="where the PDFs are kept while they are converted")
+    ap.add_argument("--translator", default=Config.translator, help="aerapdf's translator (translateclient)")
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap
 
@@ -354,6 +406,7 @@ def main(argv=None):
     Config.memory = a.memory_mb << 20
     Config.jobs = threading.BoundedSemaphore(max(1, a.jobs))
     Config.tmp = a.tmp
+    Config.translator = os.path.abspath(a.translator)
     Config.verbose = a.verbose
     srv = ThreadingHTTPServer((a.bind, a.port), Handler)
     srv.daemon_threads = True
