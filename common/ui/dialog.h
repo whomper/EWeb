@@ -149,6 +149,7 @@ int dlg_cancel_key(short key, int in_field);
 void dlg_3d(OBJECT *tree);
 /* 1 where the AES draws 3D objects */
 int dlg_3d_ok(void);
+int dlg_3d_why(char *buf, int size);	/* a log line: why 3D is on or off */
 /* 1, the default: 3D wherever the AES has it. No app sets it: there is no
    setting for it (a tester, Erez 27 Oct 2026: an AES without 3D ignores
    the flags anyway). The tests set 0 to see the flat look on a 3D AES */

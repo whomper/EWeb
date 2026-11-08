@@ -10,6 +10,7 @@
  * form_keybd and objc_edit see it, and so is Esc in a dialog without a
  * text field; in a text field Esc empties it, as GEM's form_do does.
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "tos.h"
@@ -1503,7 +1504,6 @@ int dlg_win_button(OBJECT *tree, short o)
 }
 
 #ifdef DLG_TRACE
-#include <stdio.h>
 /* built with -DDLG_TRACE: each exit object's place on the screen to the
    emulator's console (NatFeats), "DLG exit OBJ X Y W H TEXT", so a test
    rig in Hatari can click it */
@@ -1537,19 +1537,37 @@ static void trace(OBJECT *tree)
 #define FL3DACT 0x0600
 #define FL3DMASK 0x0600
 
+static short g3_v, g3_q[4], g3_asked, g3_rc;
+
 int dlg_3d_ok(void)
 {
 	static int ok = -1;
 	short v, a, b, c, d;
 	if (ok < 0) {
 		v = aes_version();
+		g3_v = v;
 		ok = v >= 0x0340;
 		/* appl_getinfo(13): 3D objects; asked only where it exists (an
 		   AES 4, or ?AGI): EmuTOS's hangs */
-		if (ok && (v >= 0x0400 || get_cookie(0x3F414749L)) && appl_getinfo(13, &a, &b, &c, &d))
-			ok = a != 0;
+		if (ok && (v >= 0x0400 || get_cookie(0x3F414749L))) {
+			g3_asked = 1;
+			g3_rc = appl_getinfo(13, &a, &b, &c, &d);
+			g3_q[0] = a; g3_q[1] = b; g3_q[2] = c; g3_q[3] = d;
+			if (g3_rc)
+				ok = a != 0;
+		}
 	}
 	return ok;
+}
+
+/* one line for the log: what dlg_3d_ok asked the AES and what it answered
+   (a dialog drawn flat where it should be 3D: Erez's Falcon, 8 Nov) */
+int dlg_3d_why(char *buf, int size)
+{
+	int ok = dlg_3d_ok();
+	return snprintf(buf, size, "3D dialogs: %s; AES %04x, appl_getinfo(13) %s: %d %d %d %d",
+			ok ? "on" : "off", g3_v & 0xffff, g3_asked ? (g3_rc ? "answered" : "failed") : "not asked",
+			g3_q[0], g3_q[1], g3_q[2], g3_q[3]);
 }
 
 int dlg_3d_on = 1;
