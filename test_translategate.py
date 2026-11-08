@@ -443,6 +443,126 @@ class LanguagesTest(Base):
         self.assertEqual((st, body), (503, b"translategate: a languages job is running\n"))
 
 
+class LocalTest(unittest.TestCase):
+    """the local socket and translateclient, as webgate and pdfgate use them"""
+    engine = None
+
+    def setUp(self):
+        import tempfile
+        import translateclient as tc
+        self.tc = tc
+        self.log = Log()
+        self.redirect = contextlib.redirect_stderr(self.log)
+        self.redirect.__enter__()
+        tg.Config.engine = (self.engine or tg.StandIn)()
+        tg.Config.local_seconds = 600
+        tg.LANES = tg.Lanes(2)
+        d = tempfile.mkdtemp(prefix="tg-local.")
+        self.sock = os.path.join(d, "local.sock")
+        self.srv = tg.serve_local(self.sock)
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        self.redirect.__exit__(None, None, None)
+        self.assertNotIn(SECRET.lower(), self.log.getvalue().lower())
+
+    def test_translate(self):
+        self.assertEqual(os.stat(self.sock).st_mode & 0o777, 0o660)
+        text, used, same = self.tc.translate("Hallo %s, das ist gut.\n\nZwei." % SECRET, "en", sock=self.sock)
+        self.assertEqual((text, used, same), ("en: HALLO %s, DAS IST GUT.\n\nen: ZWEI." % SECRET.upper(), "de", False))
+        text, used, same = self.tc.translate("Good morning, %s." % SECRET, "en", sock=self.sock)
+        self.assertEqual((text, used, same), ("Good morning, %s." % SECRET, "en", True))
+        self.assertIn("translategate: local de>en 200,", self.log.getvalue())
+
+    def test_a_whole_page(self):
+        page = "\n\n".join("Paragraph %d of the %s page." % (i, SECRET) for i in range(600))   # ~20 KB
+        self.assertGreater(len(page), 8192)
+        text, used, _ = self.tc.translate(page, "en", "de", sock=self.sock)
+        self.assertEqual(text.count("\n\n"), 599)
+
+    def page(self, text, to, until=None, note=None, sock=None):
+        """translateclient as aerapdf runs it: (exit, stdout, stderr)"""
+        out, err = io.BytesIO(), io.StringIO()
+        env = {}
+        if until is not None:
+            env["TRANSLATECLIENT_UNTIL"] = "%.3f" % until
+        if note:
+            env["TRANSLATECLIENT_NOTE"] = note
+        rc = self.tc.page(["--to", to], io.BytesIO(text.encode()), out, err, env, sock or self.sock)
+        return rc, out.getvalue().decode(), err.getvalue()
+
+    def test_page(self):
+        """aerapdf's translator: paragraphs in, the same number out"""
+        import tempfile
+        note = os.path.join(tempfile.mkdtemp(prefix="tg-note."), "language")
+        rc, out, err = self.page("Hallo %s, das ist gut.\n\n \nZwei.\n" % SECRET, "en", note=note)
+        self.assertEqual((rc, out, err), (0, "en: HALLO %s, DAS IST GUT.\n\nen: ZWEI.\n" % SECRET.upper(), "from de\n"))
+        self.assertEqual(open(note).read(), "de\n")
+        self.assertEqual(self.page("Good morning, %s." % SECRET, "en"), (0, "", "same en\n"))
+        self.assertEqual(self.page("", "en"), (0, "", "same en\n"))
+        # refused: 2 for a pair not installed (the language noted), 3 for no translategate
+        rc, out, err = self.page("Hallo %s, das ist nicht gut." % SECRET, "fr", note=note)
+        self.assertEqual((rc, out), (2, ""))
+        self.assertEqual(open(note).read(), "de\n")
+        self.assertEqual(self.page("Hallo.", "en", sock=self.sock + ".none")[0], 3)
+        self.assertEqual(self.page("Hallo.", "EN")[0], 1)
+        # the conversion's time gone: the page as it was, the language last seen
+        rc, out, err = self.page("Eins.\n\nZwei.", "en", until=time.time() - 1, note=note)
+        self.assertEqual((rc, out, err), (0, "Eins.\n\nZwei.\n", "from de\ndone 0 of 2\n"))
+
+    def test_refused(self):
+        with self.assertRaises(self.tc.Refused) as e:
+            self.tc.translate("Hallo %s, das ist nicht gut." % SECRET, "fr", sock=self.sock)
+        self.assertEqual((e.exception.status, e.exception.line, e.exception.used),
+                         (422, "translategate: that pair of languages isn't installed", "de"))
+        # the Languages page isn't the local socket's
+        st, _, body = self.tc.ask("POST", "/languages", b"de", sock=self.sock)
+        self.assertEqual((st, body), (404, b"translategate: no such page\n"))
+        st, _, _ = self.tc.ask("GET", "/job", sock=self.sock)
+        self.assertEqual(st, 404)
+        with self.assertRaises(self.tc.Unreachable):
+            self.tc.translate("x", "en", sock=self.sock + ".none")
+
+
+class LocalSlowTest(LocalTest):
+    engine = Slow
+
+    def test_parts_as_far_as_time_allows(self):
+        parts = ["Part %d about %s." % (i, SECRET) for i in range(40)]
+        out, used, done = self.tc.translate_parts(parts, "en", "de", seconds=1, sock=self.sock, piece=60)
+        self.assertEqual(used, "de")
+        self.assertTrue(0 < done < 40, done)
+        self.assertEqual(out, ["en: PART %d ABOUT %s." % (i, SECRET.upper()) for i in range(done)])
+
+    def test_page_in_part(self):
+        """a page the time doesn't cover: what was done, the rest as it was"""
+        long = " und".join(["%s ist gut"] * 90)        # (a paragraph a piece: a second each)
+        paras = [("Teil %d: " % i) + long % ((SECRET,) * 90) + "." for i in range(20)]
+        rc, out, err = self.page("\n\n".join(paras), "en", until=time.time() + 2)
+        got = out.rstrip("\n").split("\n\n")
+        self.assertEqual((rc, len(got)), (0, 20))
+        self.assertEqual(err.splitlines()[0], "from de")
+        n = int(err.splitlines()[1].split()[1])
+        self.assertEqual(err.splitlines()[1], "done %d of 20" % n)
+        self.assertTrue(0 < n < 20, n)
+        self.assertTrue(got[0].startswith("en: TEIL 0: %s IST GUT" % SECRET.upper()), got[0][:40])
+        self.assertEqual(got[n:], paras[n:])
+
+    def test_a_piece_over_the_time(self):
+        """the first piece not back in its time: 4, and the job stopped"""
+        old = self.tc.GRACE
+        self.tc.GRACE = 0
+        try:
+            with self.assertRaises(self.tc.TimedOut):
+                self.tc.translate_parts(["Ein Teil ist %s." % SECRET] * 8, "en", "de", seconds=0.2,
+                                        sock=self.sock)
+        finally:
+            self.tc.GRACE = old
+
+    test_translate = test_a_whole_page = test_refused = test_page = None
+
+
 class LoadingTest(Base):
     engine = staticmethod(lambda: tg.StandIn(load=30))
 

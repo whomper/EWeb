@@ -39,10 +39,42 @@ if b"FAIL" in data:
     sys.exit(1)
 if b"SLOW" in data:
     time.sleep(60)
+said = None
+if "--translate" in a:
+    # a page's text through the translator, as aerapdf does
+    import subprocess
+    to, tr = a[a.index("--translate") + 1], a[a.index("--translator") + 1]
+    text = data.split(b"TEXT:", 1)[1] if b"TEXT:" in data else b"Hallo, das ist gut.\n\nZwei."
+    p = subprocess.run([tr, "--to", to], input=text, capture_output=True)
+    if p.returncode:
+        print("econvert: the translation failed", file=sys.stderr)
+        sys.exit(p.returncode if 2 <= p.returncode <= 4 else 1)
+    said = p.stderr.decode().splitlines()[0]
+    a = a + ["=", p.stdout.decode()]
 for i in range(0, 1001, 250):
     print("progress %d 1000" % i, file=sys.stderr, flush=True)
     time.sleep(0.6)
-open(dst, "wb").write(b"%PDF-converted " + " ".join(a[:-2]).encode())
+open(dst, "wb").write(b"%PDF-converted " + " ".join(a[:-2] if said is None else a[:-4] + a[-2:]).encode())
+if said:
+    print(said, file=sys.stderr)
+'''
+
+
+# answers as translateclient does: zz the pair isn't installed (the language
+# noted), yy busy, xx too long; else "[CODE]" before each paragraph
+TRANSLATOR = r'''#!/usr/bin/env python3
+import os, sys
+to = sys.argv[2]
+assert float(os.environ["TRANSLATECLIENT_UNTIL"]) > 0
+if to in ("zz", "yy", "xx"):
+    open(os.environ["TRANSLATECLIENT_NOTE"], "w").write("he\n")
+    sys.exit({"zz": 2, "yy": 3, "xx": 4}[to])
+paras = sys.stdin.read().split("\n\n")
+if to == "de":
+    print("same de", file=sys.stderr)
+    sys.exit(0)
+print("\n\n".join("[%s] %s" % (to, p) for p in paras))
+print("from he", file=sys.stderr)
 '''
 
 
@@ -84,6 +116,11 @@ class Gate(unittest.TestCase):
         with open(fake, "w") as f:
             f.write(FAKE)
         os.chmod(fake, os.stat(fake).st_mode | stat.S_IEXEC)
+        tr = os.path.join(cls.dir, "translator")
+        with open(tr, "w") as f:
+            f.write(TRANSLATOR)
+        os.chmod(tr, os.stat(tr).st_mode | stat.S_IEXEC)
+        pdfgate.Config.translator = tr
         with open(os.path.join(cls.dir, "SOURCE"), "w") as f:
             f.write("0123abc\n")
         pdfgate.Config.aerapdf = fake
@@ -130,6 +167,69 @@ class Gate(unittest.TestCase):
             status, _, body = final(post(self.port, q, PDF))
             self.assertEqual(status, 400, q)
             self.assertTrue(body.startswith(b"pdfgate: "), body)
+
+    def test_translated(self):
+        """translate=CODE: aerapdf with the translator, the language said"""
+        a = post(self.port, "?pages=mono&translate=en", PDF)
+        self.assertIn(b"X-Progress: 250/1000", a)
+        status, head, body = final(a)
+        self.assertEqual(status, 200)
+        self.assertIn("X-Translate-From: he\r\n", head)
+        self.assertNotIn("X-Translate-Same", head)
+        tr = os.path.join(self.dir, "translator").encode()
+        self.assertEqual(body, b"%PDF-converted --progress --fonts " + self.dir.encode() +
+                         b" --pages mono --translate en --translator " + tr +
+                         b" = [en] Hallo, das ist gut.\n\n[en] Zwei.\n")
+        status, head, _ = final(post(self.port, "?translate=de", PDF))
+        self.assertEqual(status, 200)
+        self.assertIn("X-Translate-From: de\r\nX-Translate-Same: 1\r\n", head)
+
+    def test_without_translate_unchanged(self):
+        status, head, _ = final(post(self.port, "?pages=mono", PDF))
+        self.assertEqual(status, 200)
+        self.assertNotIn("X-Translate", head)
+
+    def test_translate_refused(self):
+        for to, want in (("zz", (422, b"pdfgate: no translation from he into zz\n")),
+                         ("yy", (503, b"pdfgate: the translation service is busy\n")),
+                         ("xx", (504, b"pdfgate: the translation took too long\n"))):
+            status, _, body = final(post(self.port, "?translate=" + to, PDF))
+            self.assertEqual((status, body), want, to)
+        for q in ("?translate=EN", "?translate=eng", "?translate=", "?translate=e1"):
+            status, _, body = final(post(self.port, q, PDF))
+            self.assertEqual(status, 400, q)
+            self.assertTrue(body.startswith(b"pdfgate: translate="), body)
+
+    def test_translated_by_translategate(self):
+        """the real translateclient against translategate's local socket
+        (its stand-in engine): the text and no word of it in the log"""
+        import contextlib
+        import io
+        import translategate as tg
+        d = tempfile.mkdtemp(prefix="test-pdfgate-tg-")
+        sock = os.path.join(d, "local.sock")
+        tg.Config.engine = tg.StandIn()
+        tg.LANES = tg.Lanes(2)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            srv = tg.serve_local(sock)
+            os.environ["TRANSLATECLIENT_SOCKET"] = sock
+            pdfgate.Config.translator = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                     "translateclient.py")
+            try:
+                status, head, body = final(post(self.port, "?translate=en", PDF + b"TEXT:Pomegranate ist gut."))
+                refused = final(post(self.port, "?translate=fr", PDF + b"TEXT:Pomegranate ist nicht gut."))
+            finally:
+                pdfgate.Config.translator = os.path.join(self.dir, "translator")
+                del os.environ["TRANSLATECLIENT_SOCKET"]
+                srv.shutdown()
+                srv.server_close()
+                shutil.rmtree(d, ignore_errors=True)
+        self.assertEqual(status, 200)
+        self.assertIn("X-Translate-From: de\r\n", head)
+        self.assertTrue(body.endswith(b" = en: POMEGRANATE IST GUT.\n"), body[-60:])
+        self.assertEqual(refused[:3:2], (422, b"pdfgate: no translation from de into fr\n"))
+        self.assertNotIn("pomegranate", err.getvalue().lower())
 
     def test_not_a_pdf(self):
         status, _, body = final(post(self.port, "", b"GIF89a" + b"x" * 100))

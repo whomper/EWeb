@@ -377,6 +377,11 @@ downloads them; translategate then starts again with them). Nothing is
 sent until the page closes with OK, and only from the Ataris allowed
 (`--allow`). The sizes are `gateway/translate-languages.tsv`'s.
 
+webgate and pdfgate reach translategate on the Gateway itself, through
+its local socket (`/run/translategate/local.sock`, open only to the
+`aera-translate` group; `gateway/translateclient.py`), so the models are
+loaded once, in translategate alone.
+
 Check it from any browser on your network: `http://GATEWAY_IP:8480/status`
 answers "translategate 1", the engine and "ready". `--port N` gives it
 another port, `-v` logs the status pages too, and `--engine stand-in`

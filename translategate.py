@@ -51,6 +51,7 @@ import os
 import re
 import select
 import socket
+import socketserver
 import sys
 import threading
 import time
@@ -67,6 +68,8 @@ PROTOCOL = "1"
 class Config:
     allow = []
     max_bytes = 8192            # a request's body
+    local_bytes = 256 << 10     # one on the local socket: a whole page or text, for webgate and pdfgate
+    local_seconds = 600
     seconds = 60                # a request, then 504
     short = 300                 # a body this small has a worker of its own (a subject, a few words)
     workers = 2                 # requests translated at once, the short one's included
@@ -484,7 +487,16 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(code if code in (400, 413) else 400, "bad request")
 
     def note(self, text):
-        aeragate.say("translategate: %s %s" % (self.client_address[0], text))
+        aeragate.say("translategate: %s %s" % (self.who(), text))
+
+    def who(self):
+        return self.client_address[0]
+
+    def max_bytes(self):
+        return Config.max_bytes
+
+    def seconds(self):
+        return Config.seconds
 
     def reply(self, status, why, headers=(), body=None):
         data = body if body is not None else ("translategate: %s\n" % why).encode()
@@ -574,8 +586,8 @@ class Handler(BaseHTTPRequestHandler):
             self.refuse(400, "no Content-Length")
             return
         size = int(size)
-        if size > Config.max_bytes:
-            self.refuse(413, "the text is over %d KB" % (Config.max_bytes >> 10), size)
+        if size > self.max_bytes():
+            self.refuse(413, "the text is over %d KB" % (self.max_bytes() >> 10), size)
             return
         data = self.rfile.read(size)
         if len(data) < size:
@@ -604,7 +616,7 @@ class Handler(BaseHTTPRequestHandler):
             self.refuse(422, "that pair of languages isn't installed", size, pair,
                         headers=[("X-Translate-From", used)])
             return
-        deadline = t0 + Config.seconds
+        deadline = t0 + self.seconds()
         sock = self.connection
 
         def check():
@@ -625,7 +637,7 @@ class Handler(BaseHTTPRequestHandler):
             if str(e) == "dropped":
                 self.note("%s dropped, %d bytes" % (pair, size))
             else:
-                self.refuse(504, "it took over %d s" % Config.seconds, size, pair)
+                self.refuse(504, "it took over %d s" % self.seconds(), size, pair)
             return
         except Exception as e:          # the engine's words could hold the text: its name only
             self.refuse(500, "the engine failed", size, pair + " (%s)" % type(e).__name__)
@@ -740,7 +752,56 @@ class Server(ThreadingHTTPServer):
 
     def handle_error(self, request, client_address):
         # never the traceback: its lines and values could quote the text
-        aeragate.say("translategate: %s error (%s)" % (client_address[0], sys.exc_info()[0].__name__))
+        who = client_address[0] if isinstance(client_address, tuple) else "local"
+        aeragate.say("translategate: %s error (%s)" % (who, sys.exc_info()[0].__name__))
+
+
+class LocalHandler(Handler):
+    """the local socket: the Gateway's own gateways (webgate, pdfgate,
+    through translateclient), on the same machine. The same /translate,
+    /status and /languages; a whole page or text at once (it is shaped
+    and translated here a paragraph at a time), with longer to do it;
+    nothing of the Languages page"""
+
+    def allowed(self):
+        if self.command == "POST" and urlsplit(self.path).path != "/translate" or \
+                urlsplit(self.path).path == "/job" or "all=1" in urlsplit(self.path).query:
+            self.refuse(404, "no such page")
+            return False
+        return True                     # who may connect is the socket's group and mode
+
+    def who(self):
+        return "local"
+
+    def max_bytes(self):
+        return Config.local_bytes
+
+    def seconds(self):
+        return Config.local_seconds
+
+
+class LocalServer(socketserver.ThreadingUnixStreamServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        aeragate.say("translategate: local error (%s)" % sys.exc_info()[0].__name__)
+
+
+def serve_local(path):
+    """the local socket at path, for the gateways' users only (0660; the
+    group is the unit's, aera-translate)"""
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    old = os.umask(0o117)
+    try:
+        srv = LocalServer(path, LocalHandler)
+    finally:
+        os.umask(old)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    aeragate.say("translategate: local socket %s" % path)
+    return srv
 
 
 def parser():
@@ -755,6 +816,8 @@ def parser():
     ap.add_argument("--state", default="/var/lib/translategate", help="the languages' job's files")
     ap.add_argument("--workers", type=int, default=2, help="requests at once (one kept for short ones)")
     ap.add_argument("--time", type=int, default=60, help="seconds a request may take")
+    ap.add_argument("--local", help="a Unix socket for the Gateway's own gateways (translateclient), "
+                    "e.g. /run/translategate/local.sock")
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap
 
@@ -772,6 +835,8 @@ def main(argv=None):
         Jobs.started = Jobs.current()[0]
     threading.Thread(target=Jobs.watch, daemon=True).start()
     srv = Server((a.bind, a.port), Handler)
+    if a.local:
+        serve_local(a.local)
     aeragate.say("translategate %s listening on %s:%d" % (VERSION, a.bind, srv.server_address[1]))
     Config.engine = Argos(a.models, workers=Config.workers) if a.engine == "argos" else StandIn()
     if a.engine != "argos":             # (argos says its own once it has loaded)
