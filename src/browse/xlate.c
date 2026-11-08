@@ -51,6 +51,7 @@ struct xlate {
 	int nu, left;		/* units, and those not yet done */
 	SBUF words;
 	int changed;		/* translations put in since the last layout */
+	int dir_set;		/* the page's <html> has the language's dir and lang */
 	int screen_done;	/* the screen's pieces are back (laid out) */
 	unsigned long laid;	/* when it was last laid out */
 	long bytes, done_bytes;
@@ -65,6 +66,17 @@ static int has_letter(const char *s, long n)
 		if (c >= 0x80 || ((c | 0x20) >= 'a' && (c | 0x20) <= 'z'))
 			return 1;
 	}
+	return 0;
+}
+
+/* written right to left (webgate's list) */
+static int rtl_lang(const char *code)
+{
+	static const char *const rtl[] = { "he", "ar", "fa", "ur", "yi", "ps", "dv" };
+	unsigned i;
+	for (i = 0; i < sizeof rtl / sizeof rtl[0]; i++)
+		if (!strcmp(code, rtl[i]))
+			return 1;
 	return 0;
 }
 
@@ -342,10 +354,24 @@ int br_translate_step(browser *b, int32_t top, int32_t height, char *err, int er
 	   every XL_RELAYOUT_MS, and at the end */
 	if (x->changed && ((!x->screen_done && !br_translate_pending(b, top, height, 1)) || x->left == 0 ||
 			   (long) (pf_ms() - x->laid) >= XL_RELAYOUT_MS)) {
+		int restyled = 0;
 		x->screen_done = 1;
 		x->changed = 0;
 		x->laid = pf_ms();
-		if (!br_relayout(b, b->width)) {
+		if (!x->dir_set && b->d->html != NULL) {
+			/* the page's direction and language are the translation's
+			   (as webgate sets them): a Hebrew paragraph right to left,
+			   against the right edge, its Latin words and numbers in
+			   their own direction */
+			x->dir_set = 1;
+			if (!dn_set_attr(b->d, b->d->html, "dir", rtl_lang(x->to) ? "rtl" : "ltr", 3) ||
+			    !dn_set_attr(b->d, b->d->html, "lang", x->to, strlen(x->to))) {
+				str_copy(err, "out of memory", errlen);
+				return -1;
+			}
+			restyled = 1;
+		}
+		if (restyled ? !br_restyle(b) : !br_relayout(b, b->width)) {
 			str_copy(err, "out of memory", errlen);
 			return -1;
 		}

@@ -54,6 +54,18 @@ def run(page, *extra):
     return out.stdout + out.stderr, reqs
 
 
+def hebrew_line(out):
+    """the first line of a paragraph translated into Hebrew (the stand-in's
+    "shalom WORDS 2026 olam"): right to left against the right edge, the
+    Latin words and the number one run in their own direction, between"""
+    items = [(int(m.group(1)), int(m.group(2)), m.group(3)) for m in
+             re.finditer(r'^text (\d+),32 (\d+)x\d+ .*? link \d+ "(.*)"$', out, re.M)]
+    items.sort()
+    return (len(items) == 3 and items[0][2] == "\u05e2\u05d5\u05dc\u05dd" and
+            items[1][2] == "OPEN THE DOOR NOW 2026" and items[2][2].strip() == "\u05e9\u05dc\u05d5\u05dd" and
+            items[2][0] + items[2][1] >= 600), items
+
+
 def texts(out):
     return [m.group(1) for m in re.finditer(r'^text .*? link \d+ "(.*)"$', out, re.M)]
 
@@ -91,6 +103,15 @@ try:
     out, reqs = run(ref)
     check("a refusal: the page as it came, why said",
           "REFUSE this" in texts(out) and re.search(r"^piece 1: -1 \(screen\) \S", out, re.M), out)
+    # into Hebrew: the page's dir and lang the translation's (as webgate
+    # sets them)
+    he = os.path.join(work, "he.html")
+    open(he, "w").write("<!DOCTYPE html><title>t</title><p>Open the door now</p>")
+    o = subprocess.run([ewr, "-f", fnt, "-o", os.path.join(work, "x.png"), "-d", "--translate",
+                        "127.0.0.1:%d:he" % port, he], capture_output=True, text=True, timeout=120).stdout
+    ok, items = hebrew_line(o)
+    check("into Hebrew: right to left at the right edge, Latin and the number in their own direction",
+          ok, o + str(items))
     # no Gateway answering: said, the page as it came
     out = subprocess.run([ewr, "-f", fnt, "-o", os.path.join(work, "x.png"), "-d", "--translate",
                           "127.0.0.1:%d:en" % free_port(), page], capture_output=True, text=True, timeout=120).stdout
@@ -104,7 +125,8 @@ try:
         site = os.path.join(work, "site")
         os.makedirs(site)
         for name, body in (("x.html", open(page).read()),
-                           ("refuse.html", "<!DOCTYPE html><title>t</title><p>REFUSE this</p>")):
+                           ("refuse.html", "<!DOCTYPE html><title>t</title><p>REFUSE this</p>"),
+                           ("he.html", "<!DOCTYPE html><title>t</title><p>Open the door now</p>")):
             open(os.path.join(site, name), "w").write(body)
         hp, gp, sock = free_port(), free_port(), os.path.join(work, "xl.sock")
         xsrv = subprocess.Popen([sys.executable, os.path.join(HERE, "fakexl.py"), sock, log],
@@ -141,6 +163,10 @@ try:
             out, asked = via("x.html")
             check("through the Gateway, Translate off: nothing asked of translategate",
                   not asked and "gateway translation" not in out and 'title "The test page"' in out, out)
+            out, asked = via("he.html", "--gwtranslate", "he")
+            ok, items = hebrew_line(out)
+            check("through the Gateway into Hebrew: right to left, as Direct", ok and
+                  re.search(r'^gateway translation: 1 ', out, re.M), out + str(items))
             out, asked = via("refuse.html", "--gwtranslate", "en")
             check("through the Gateway: a refusal, the page as it came, why in the note",
                   re.search(r'^gateway translation: 3 note "Not translated: \S', out, re.M) and

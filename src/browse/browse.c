@@ -4544,6 +4544,11 @@ static int restyle(browser *b)
 	return 1;
 }
 
+int br_restyle(browser *b)
+{
+	return b->d != NULL && b->p != NULL && !br_building && restyle(b);
+}
+
 /* a script reading its boxes after changing them: the page shown laid
    out again now (not a frame's: its page is spliced into this one's) */
 static int jh_relayout(void *ud, doc *d)

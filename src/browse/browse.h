@@ -277,6 +277,9 @@ extern unsigned long br_translation_runs;
    laid out again (draw it), 1 put in, 0 nothing left, -1 failed (err: a
    refusal, a stop, no Gateway; br_translate_stop then). Memory only. */
 int  br_translate_start(browser *b, const char *host, unsigned short port);
+/* the page shown styled and laid out again (a translation's dir and lang
+   on its <html>): 0 out of memory */
+int  br_restyle(browser *b);
 int  br_translate_pending(browser *b, int32_t top, int32_t height, int screen_only);
 int  br_translate_step(browser *b, int32_t top, int32_t height, char *err, int errlen);
 void br_translate_stop(browser *b);

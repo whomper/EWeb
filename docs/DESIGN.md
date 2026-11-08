@@ -5020,6 +5020,10 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   `<select>`, `translate="no"`, SVG and MathML, text without a letter. A piece is one
   connection; the status line has the Gateway's three phases ("The Gateway is translating...");
   Esc stops; a refusal or no Gateway leaves the rest as it came, with why on the status line.
+  With the screen's pieces in, the page's `<html>` takes the target's `dir` and `lang` (rtl for he,
+  ar, fa, ur, yi, ps, dv, as webgate sets them) and the page is styled again: a Hebrew paragraph
+  right to left against the right edge, its Latin words and numbers in their own direction (the
+  hub, 8 Nov 2026: EMail's "Translate..." box had shown Hebrew left to right).
   Turning Translate off reads the page again from its source (as View > Encoding). Tests:
   `make test`'s `tests/browse/xlate.py` (ewrender `--translate HOST:PORT:TO` against
   `tests/browse/fakexl.py`, a stand-in translategate: the screen first, pieces of 2 KB, links

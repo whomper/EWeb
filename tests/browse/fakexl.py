@@ -4,7 +4,8 @@
 """A stand-in for the Gateway's translategate (AERA-Atari's
 standards/TRANSLATION-SERVICE.md) for tests/browse/xlate.py: POST
 /translate?to=CODE answers each paragraph (blank lines between them) as
-"<CODE>PARAGRAPH IN CAPITALS</CODE>", from "de"; a body with "SAMETEXT"
+"<CODE>PARAGRAPH IN CAPITALS</CODE>" (into he: Hebrew words round it and
+2026), from "de"; a body with "SAMETEXT"
 comes back X-Translate-Same: 1, one with "REFUSE" 503. Each request's size
 and first paragraph is written to LOG, a line each.
 
@@ -69,7 +70,13 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        out = "\n\n".join("<%s>%s</%s>" % (to, p.upper(), to) for p in paras).encode("utf-8")
+        if to == "he":
+            # Hebrew around the words in capitals and a number: a right to
+            # left paragraph with a Latin run and digits in it
+            out = "\n\n".join("\u05e9\u05dc\u05d5\u05dd %s 2026 \u05e2\u05d5\u05dc\u05dd" % p.upper()
+                                for p in paras).encode("utf-8")
+        else:
+            out = "\n\n".join("<%s>%s</%s>" % (to, p.upper(), to) for p in paras).encode("utf-8")
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(out)))
         self.end_headers()
