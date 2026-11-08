@@ -5824,14 +5824,18 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		cw += len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w);
 	else
 		cw += extras(l, c);
-	{
-		/* a width is the least it takes, not the most: no narrower
-		   than its narrowest content (CSS 2.1, 17.5.2.2: a column's
-		   least is its cells' min-content; a date picker's cells of
-		   20px, its bold "Su" wider at a zoom that makes them 18) */
+	if (kw(c->st, EP_DISPLAY) == KW_TABLE_CELL) {
+		/* a cell's width is the least it takes, not the most: no
+		   narrower than its narrowest content (CSS 2.1, 17.5.2.2: a
+		   column's least is its cells' min-content; a date picker's
+		   cells of 20px, its bold "Su" wider at a zoom that makes
+		   them 18). A float's, a flex or grid item's or a positioned
+		   box's width is its width, its content overflowing it
+		   (10.2), and costs no second measure */
 		int32_t m = cell_min(l, c);
 		return m > cw ? m : cw;
 	}
+	return cw;
 }
 
 static int rowspan(const box *c);
