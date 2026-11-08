@@ -18,6 +18,11 @@
 #define TR_PIECE_DEFAULT 2048	/* what the client sends at a time: a few paragraphs, seconds on the Gateway */
 #define TR_LANG  8		/* a language code with its NUL: "en", "he", "pt-BR" */
 
+/* how long a request waits for the Gateway, ms (60 s: a piece of text takes seconds). A quick
+   question that must not hold the app up (the job's progress, langs_job_step) sets less
+   for its own request and puts this back */
+extern long translate_timeout_ms;
+
 /* a turn between pieces: done and total in bytes of the Atari text; non-zero
    stops (Esc) */
 typedef int (*translate_turn_fn)(long done, long total);
@@ -104,5 +109,53 @@ char *translate_utf8(const char *host, unsigned short port, const char *to, cons
 char *translate_atari(const char *host, unsigned short port, const char *to, const char *from,
 		      const char *atari, long n, translate_turn_fn turn, char *from_used,
 		      long *outlen, char *err, int errlen);
+
+/* ---- the Languages page (standards/TRANSLATION-SERVICE.md, "Managing the installed
+   languages"): what the Gateway has, the set the user ticks, and the job that installs it ----
+
+   The dialog (ui/langs.c) shows the list with each language's size in MB and the
+   room, lets the user tick and untick, and sends ONE request when it closes with
+   OK; Cancel sends nothing. English is always there (it is not ticked). The
+   sizes, the room and what is installed are the Gateway's numbers. */
+#define TR_LANGS_MAX 64		/* (AERA-Gateway's table has 50 rows; 48 left two out) */
+#define TR_LANGNAME  40		/* the name in UTF-8, with its NUL */
+typedef struct {
+	char code[TR_LANG];
+	char name[TR_LANGNAME];
+	int mb;			/* download and disk size, both directions together */
+	int installed;		/* the Gateway has it */
+	int want;		/* ticked: starts as installed */
+} TR_LANGINFO;
+typedef struct {
+	int cap_mb, used_mb;	/* the room for languages, and what the installed ones take */
+	int n;
+	TR_LANGINFO l[TR_LANGS_MAX];
+} TR_LANGS;
+/* the pure parts: "cap_mb N / used_mb N / CODE<TAB>NAME<TAB>MB<TAB>installed|available" lines.
+   1 if it is the list (cap_mb found), else 0; bad rows are left out; want = installed. */
+int  translate_langs_parse(TR_LANGS *out, const char *text, long n);
+/* MB the ticked set takes (English is free), and whether ticking language i would still fit */
+int  translate_langs_total(const TR_LANGS *l);
+int  translate_langs_fits(const TR_LANGS *l, int i);
+/* how many MB past the room ticking i would go (0 if it fits) */
+int  translate_langs_over(const TR_LANGS *l, int i);
+/* has the user changed anything (want differs from installed)? */
+int  translate_langs_changed(const TR_LANGS *l);
+/* the ticked set for POST /languages: "he,de" (English left out, the Gateway adds it); 0 if no room */
+int  translate_langs_codes(const TR_LANGS *l, char *out, int max);
+/* the network: GET /languages?all=1 */
+int  translate_langs_get(const char *host, unsigned short port, TR_LANGS *out, char *err, int errlen);
+/* POST /languages with codes (translate_langs_codes): *job gets the job number (0: nothing to do) */
+int  translate_langs_set(const char *host, unsigned short port, const char *codes, int *job,
+			 char *err, int errlen);
+/* the job: "job N / running / bytes D of T", "done", "failed: why", "none" */
+enum { TR_JOB_NONE, TR_JOB_RUNNING, TR_JOB_DONE, TR_JOB_FAILED };
+typedef struct {
+	int id, state;
+	long done, total;	/* bytes, while running */
+	char why[96];		/* a failed job's reason */
+} TR_JOB;
+int  translate_job_parse(TR_JOB *j, const char *text, long n);
+int  translate_job_get(const char *host, unsigned short port, TR_JOB *j, char *err, int errlen);
 
 #endif

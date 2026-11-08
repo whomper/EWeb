@@ -45,7 +45,7 @@ static const STEP *script;
 static short pre_keys[4], npre;		/* typed before the dialog came */
 static jmp_buf out;
 static int failed, checks;
-static int updates, update_low, mouse_off, cursor, ed_char_esc, bells, draws;
+static int updates, update_low, mouse_off, cursor, ed_char_esc, bells, draws, ed_init, ed_end, ed_moves;
 static int dial_start, dial_finish, blits, opened, closed, vwk_fails;
 static short planes = 1, blit_dir[2];
 /* the multitasking AES: its windows */
@@ -90,7 +90,7 @@ static void setup(void)
 		ted[i].te_txtlen = 20;
 		tree[F1 + i].ob_spec = (long)&ted[i];
 	}
-	updates = update_low = mouse_off = cursor = ed_char_esc = bells = draws = 0;
+	updates = update_low = mouse_off = cursor = ed_char_esc = bells = draws = ed_init = ed_end = ed_moves = 0;
 	dial_start = dial_finish = blits = opened = closed = vwk_fails = 0;
 	npre = 0;
 	planes = 1;
@@ -433,16 +433,23 @@ short objc_edit(OBJECT *t, short obj, short ch, short *idx, short kind)
 	if (kind == ED_INIT) {
 		*idx = (short)strlen(s);
 		cursor++;
+		ed_init++;
 	} else if (kind == ED_END) {
 		cursor--;
+		ed_end++;
 	} else if (kind == ED_CHAR) {
 		if (ch == KEY_ESC || (ch & 0xff) == 0x1b) {
 			ed_char_esc++;
 			s[0] = 0;		/* what TOS does with Esc in a field */
 			*idx = 0;
 		} else if (ch == 0x4b00) {	/* the cursor left */
+			ed_moves++;
 			if (*idx > 0)
 				(*idx)--;
+		} else if (ch == 0x4d00) {	/* the cursor right */
+			ed_moves++;
+			if (*idx < (short)strlen(s))
+				(*idx)++;
 		} else if ((ch & 0xff) >= ' ' && *idx < 30) {
 			s[(*idx)++] = (char)ch;
 			s[*idx] = 0;
@@ -671,6 +678,26 @@ static void test_long_fields(void)
 	check(r == CANCEL && big[63] == '#' && !strcmp(big + 64, TOKEN + 63) && strlen(big) == 94,
 	      "Left 30 times, then a letter: put in there; Undo cancels and the text stays");
 	check(ed_char_esc == 0 && cursor == 0, "... Undo never reached objc_edit");
+
+	/* the arrows inside the view: the cursor moves one place in the AES, it is not put at the end and
+	   walked back (the jump to the end and back on every arrow, Erez 8 Nov) */
+	setup();
+	ted[0].te_ptmplt = tmpl;
+	strcpy(big, TOKEN);
+	lf_init(&f, tree, F1, big, 99, 0);
+	n = 0;
+	for (i = 0; i < 6; i++)
+		s[n++] = (STEP)KEY(0x4b00);
+	for (i = 0; i < 3; i++)
+		s[n++] = (STEP)KEY(0x4d00);
+	s[n++] = (STEP)KEY(0x4b00);
+	s[n++] = (STEP)KEY(KEY_RETURN);
+	s[n] = (STEP)END;
+	r = run(F1, CANCEL, s);
+	check(r == OK && f.cur == 93 - 6 + 3 - 1 && !strcmp(big, TOKEN), "Left 6, Right 3, Left: the cursor in the right place, the text as it was");
+	check(ed_init == 1, "... the cursor put at the end once (when the dialog opened), not for every arrow");
+	check(ed_moves == 10, "... each arrow one move in the AES");
+	tidy("arrows in a long field");
 
 	/* Esc in a long field empties it, as GEM's fields; the dialog stays */
 	setup();
