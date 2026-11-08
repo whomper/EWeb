@@ -45,6 +45,7 @@ class FakePi(ag.Pi):
         self.homedirs = ""          # snapd's homedirs setting
         self.no_modules = set()     # Python modules that aren't there
         self.arch = "aarch64"       # uname -m
+        self.broken_build = False   # make fails (aerapdf's build)
 
     def have(self, prog):
         return prog == "python3" or (prog == "ufw" and self.ufw is not None)
@@ -139,9 +140,15 @@ class FakePi(ag.Pi):
                 pass
         elif c[0] == "ls":
             rc = 2
-        elif c[0] == "make":            # aerapens' or aerajsc's build: a stand-in for what it makes
+        elif c[0] == "make":            # aerapens', aerajsc's or aerapdf's build: a stand-in for what it makes
             where = c[c.index("-C") + 1]
-            with open(os.path.join(where, "aerajsc" if os.path.basename(where) == "jsc" else "aerapens"), "wb") as f:
+            if self.broken_build:
+                rc = 2
+                if check:
+                    raise ag.Failed("%s failed" % " ".join(cmd))
+                return subprocess.CompletedProcess(cmd, rc, "", "")
+            made = {"jsc": "aerajsc", "pdf": "aerapdf"}.get(os.path.basename(where), "aerapens")
+            with open(os.path.join(where, made), "wb") as f:
                 f.write(b"\x7fELF\x02\x01\x01\0" + bytes(range(256)))       # a program's bytes, not text
         elif c[:2] == ["python3", "-c"] and c[2].startswith("import "):
             rc = 1 if c[2][7:] in self.no_modules else 0
@@ -243,6 +250,17 @@ class Base(unittest.TestCase):
 
     def execstart(self, name):
         return [line for line in self.unit(name).splitlines() if line.startswith("ExecStart=")][0]
+
+
+class RunTest(unittest.TestCase):
+    def test_no_such_program(self):
+        # what isn't there yet (translategate's venv on a first install) is a
+        # failed command, never a traceback
+        pi = ag.Pi()
+        self.assertFalse(pi.ok("/no/such/venv/bin/python3", "-c", "import ctranslate2"))
+        self.assertEqual(pi.out("/no/such/program"), "")
+        with self.assertRaises(ag.Failed):
+            pi.run("/no/such/program")
 
 
 class WriteTest(unittest.TestCase):
@@ -683,6 +701,43 @@ class DavFtpTest(Base):
         self.assertIsNone(self.pi.read("/etc/systemd/system/webgate-js.socket"))
         self.assertFalse(self.pi.exists("/opt/aera-gateway-jsc"))
 
+    @unittest.skipUnless(os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")),
+                         "needs AERA-Gateway's pdf/ (an app's copy of gateway/ has none)")
+    def test_pdf(self):
+        self.pi.ufw = True
+        self.assertEqual(self.run_ag("install", "epdf", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.execstart("pdfgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/pdfgate.py "
+                                                    "--port 8380 --allow 192.168.1.50")
+        self.assertEqual(self.pi.rules, [("192.168.1.50", "8380")])
+        self.assertIn("Gateway:     192.168.1.10", self.out)
+        self.assertIn("Port:        8380", self.out)
+        make = [c for c in self.pi.cmds if c[0] == "make" and os.path.basename(c[3]) == "pdf"][-1]
+        self.assertFalse(make[3].startswith(os.path.dirname(ag.HERE)))      # never in the copy itself
+        self.assertTrue(self.pi.exists("/opt/aera-gateway-pdf/aerapdf"))
+        self.assertTrue(self.pi.exists("/opt/aera-gateway-pdf/fonts/sans.ttf"))
+        with open(os.path.join(ag.Pdf.PDF_SRC, "EPDF")) as f:
+            self.assertEqual(self.pi.read("/opt/aera-gateway-pdf/SOURCE"), f.read().strip() + "\n")
+        # built from the same pdf/: kept, not built again; another: built
+        builds = lambda: len([c for c in self.pi.cmds if c[0] == "make" and os.path.basename(c[3]) == "pdf"])
+        n = builds()
+        self.assertEqual(self.run_ag("install", "pdf", "-v"), 0, self.err)
+        self.assertEqual(builds(), n)
+        self.assertIn("--port 8380 --allow 192.168.1.50 -v", self.execstart("pdfgate"))
+        self.pi.write("/opt/aera-gateway-pdf/BUILT", "another\n")
+        self.assertEqual(self.run_ag("install", "pdf"), 0, self.err)
+        self.assertEqual(builds(), n + 1)
+        self.assertEqual(self.run_ag("remove", "pdf"), 0, self.err)
+        self.assertIsNone(self.unit("pdfgate"))
+        self.assertFalse(self.pi.exists("/opt/aera-gateway-pdf"))
+
+    @unittest.skipUnless(os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")),
+                         "needs AERA-Gateway's pdf/ (an app's copy of gateway/ has none)")
+    def test_pdf_not_built(self):
+        self.pi.broken_build = True
+        self.assertEqual(self.run_ag("install", "pdf"), 1)
+        self.assertIn("aerapdf didn't build", self.err)
+        self.assertIsNone(self.unit("pdfgate"))
+
     def test_web_browser_needs_memory(self):
         self.pi.write("/proc/meminfo", "MemTotal:         948304 kB\n")
         self.assertEqual(self.run_ag("install", "web", "--browser"), 1)
@@ -696,13 +751,13 @@ class DavFtpTest(Base):
         unit = self.unit("translategate")
         self.assertIn("ExecStart=/opt/translategate/venv/bin/python3 /opt/aera-gateway/translategate.py "
                       "--port 8480 --allow 192.168.1.50 --engine argos\n", unit)
-        for want in ("User=translategate", "MemoryMax=1G", "OOMScoreAdjust=-300", "ProtectSystem=strict", "NoNewPrivileges=yes"):
+        for want in ("User=translategate", "MemoryMax=1536M", "OOMScoreAdjust=-300", "StateDirectory=translategate", "ProtectSystem=strict", "NoNewPrivileges=yes"):
             self.assertIn(want, unit)
         venvs = [c for c in self.pi.cmds if c[:3] == ("python3", "-m", "venv")]
         self.assertEqual(len(venvs), 1)
         pip = [c for c in self.pi.cmds if c[0].endswith("/venv/bin/pip")]
         self.assertEqual(pip[-1][3:], ag.Translate.PIP)
-        self.assertEqual(self.fetched, [[("en", "he"), ("he", "en")]])
+        self.assertEqual(self.fetched, [[("de", "en"), ("en", "de")]])            # English and German
         self.assertIn("Gateway:  192.168.1.10", self.out)
         self.assertIn("Port:     8480", self.out)
         # an update keeps the engine, its models and the settings
@@ -711,10 +766,31 @@ class DavFtpTest(Base):
         self.assertEqual(len(self.fetched), 1)
         self.assertIn("--port 8481 --allow 192.168.1.50 --engine argos\n", self.execstart("translategate") + "\n")
         # another language: only its models
-        self.assertEqual(self.run_ag("install", "translate", "--languages", "en,he,de"), 0, self.err)
-        self.assertEqual(self.fetched[-1], [("de", "en"), ("de", "he"), ("en", "de"), ("he", "de")])
+        self.assertEqual(self.run_ag("install", "translate", "--languages", "en,de,he"), 0, self.err)
+        self.assertEqual(self.fetched[-1], [("en", "he"), ("he", "en")])       # through English
+        # with German there, a plain install again asks for nothing
+        n = len(self.fetched)
+        self.assertEqual(self.run_ag("install", "translate"), 0, self.err)
+        self.assertEqual(len(self.fetched), n)
+        # exactly the languages named: Hebrew's models go
+        self.assertEqual(self.run_ag("install", "translate", "--languages", "en,de"), 0, self.err)
+        self.assertEqual(len(self.fetched), n)
+        self.assertFalse(self.pi.exists(ag.Translate.MODELS + "/he_en"))
+        self.assertTrue(self.pi.exists(ag.Translate.MODELS + "/de_en"))
+        # the languages' job, for the Atari's Languages page
+        path = self.pi.read("/etc/systemd/system/translategate-langs.path")
+        job = self.pi.read("/etc/systemd/system/translategate-langs.service")
+        self.assertIn("PathModified=/var/lib/translategate/request", path)
+        for want in ("User=translategate", "ExecStart=/usr/bin/python3 /opt/aera-gateway/translatelangs.py job",
+                     "ReadWritePaths=/opt/translategate/models", "ProtectSystem=strict"):
+            self.assertIn(want, job)
+        self.assertIn(("chown", "-R", "translategate:translategate", "/opt/translategate/models"), self.pi.cmds)
+        self.assertIn(("systemctl", "enable", "--now", "translategate-langs.path"), self.pi.cmds)
+        self.assertTrue(self.pi.exists("/opt/aera-gateway/translatelangs.py"))
+        self.assertTrue(self.pi.exists("/opt/aera-gateway/translate-languages.tsv"))
         self.assertEqual(self.run_ag("remove", "translate"), 0, self.err)
         self.assertIsNone(self.unit("translategate"))
+        self.assertIsNone(self.pi.read("/etc/systemd/system/translategate-langs.path"))
         self.assertFalse(self.pi.exists("/opt/translategate"))
 
     def test_translate_stand_in(self):
@@ -730,6 +806,14 @@ class DavFtpTest(Base):
         self.assertIn("needs a Pi with 4 GB of memory or more; this one has 1902 MB", self.err)
         self.assertIsNone(self.unit("translategate"))
         self.assertEqual(self.run_ag("install", "translate", "--languages", "en"), 2)
+
+    def test_translate_too_many_languages(self):
+        self.assertEqual(self.run_ag("install", "translate", "--languages", "en,he,de"), 0, self.err)
+        # he 230 + de 287 + ru 336 + es 355 = 1208 MB: more than translatelangs.CAP_MB
+        self.assertEqual(self.run_ag("install", "translate", "--languages", "en,he,de,ru,es"), 1)
+        self.assertIn("The translation models for de,en,es,he,ru take 1208 MB; 1108 MB fit", self.err)
+        self.assertFalse(self.pi.exists(ag.Translate.MODELS + "/ru_en"))
+        self.assertTrue(self.pi.exists(ag.Translate.MODELS + "/de_en"))
 
     def test_translate_needs_64_bits(self):
         self.pi.arch = "armv7l"
@@ -777,7 +861,8 @@ class ClaudeTest(Base):
             self.assertIn("--allow 192.168.1.50", self.execstart(name), name)
         self.assertIn("imap.mail.me.com smtp.mail.me.com:587", self.execstart("emailgate"))
         self.assertIn("--tcp 0.0.0.0:2323 --allow 192.168.1.50", self.pi.read(self.conf))
-        self.assertIn("Installed: mail, dav, ftp, web, translate, claude", self.out)
+        self.assertIn("Installed: mail, dav, ftp, web, %stranslate, claude" %
+                      ("pdf, " if os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")) else ""), self.out)
         # again, without --mail or --allow: everything kept as it is
         self.assertEqual(self.run_ag("install", "all", "--from", self.src), 0, self.err)
         self.assertIn("--allow 192.168.1.50", self.execstart("ecalgate"))
@@ -788,7 +873,8 @@ class ClaudeTest(Base):
         # install all leaves translate out on a Pi too small for its engine, and installs the others
         self.pi.write("/proc/meminfo", "MemTotal:        1948304 kB\n")
         self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src), 0, self.err)
-        self.assertIn("Installed: dav, ftp, web, claude", self.out)
+        self.assertIn("Installed: dav, ftp, web, %sclaude" %
+                      ("pdf, " if os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")) else ""), self.out)
         self.assertIn("translate (its engine needs a Pi with 4 GB of memory or more; this one has 1902 MB)", self.out)
         self.assertIsNone(self.unit("translategate"))
 

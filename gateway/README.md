@@ -292,11 +292,38 @@ enable-linger webgate`). The profile is then in
 `/var/lib/webgate/snap/chromium/common/browser`, and the snap's own
 confinement is the browser's sandbox. The same command sets it all up.
 
+## pdf: EConvert's and EPDF's converter
+
+```
+sudo aera-gateway install pdf --allow ATARI_IP
+```
+
+EConvert and EPDF can have a PDF converted by the Gateway instead of by
+the Atari: much faster than a Falcon (a page in a second or two rather than
+minutes), and on any Atari, an ST included. The Atari sends the PDF,
+pdfgate converts it with aerapdf and sends the converted PDF back: the
+same file, byte for byte, that EConvert writes on a Falcon with the same
+settings, because aerapdf is EConvert's own converter (EPDF's source,
+copied into `pdf/` by `tools/sync-pdf.sh` at a named EPDF commit) built
+for the Pi. `install pdf` builds it (a few minutes; it installs gcc and
+make if they aren't there) and puts its fonts beside it in
+`/opt/aera-gateway-pdf`. `install all` includes it.
+
+In EConvert and EPDF on the Atari, Gateway mode, Through the Gateway:
+the Gateway's IP address, port 8380. Check it from any browser on your network:
+`http://GATEWAY_IP:8380/version` answers "aerapdf" and the EPDF commit it was
+built from. The exchange is EPDF's (its `docs/PI-GATEWAY.md`).
+
+One PDF is converted at a time, each with at most 600 seconds and 768 MB;
+a PDF of more than 64 MB is refused. The PDF and the result are on the
+Gateway's disk only while it converts. The log says which Atari converted how
+many bytes, never the file's name or what is in it.
+
 ## translate: translation for the apps
 
 ```
 sudo aera-gateway install translate
-sudo aera-gateway install translate --languages en,he,de
+sudo aera-gateway install translate --languages en,de,he
 ```
 
 An app with its Translate setting on sends the Gateway text in UTF-8;
@@ -311,15 +338,19 @@ The engine is Argos Translate's models (OpenNMT, one a pair of
 languages) run by CTranslate2. `install translate` puts CTranslate2 and
 SentencePiece in a Python venv of their own, `/opt/translategate/venv`
 (it installs python3-venv if it isn't there), and downloads the models
-for English and Hebrew both ways (about 230 MB) into
+for English and German both ways (about 290 MB) into
 `/opt/translategate/models`, once; after that it works offline. It needs
 a Raspberry Pi with 4 GB of memory or more and the 64-bit Raspberry Pi OS
 (`uname -m` says aarch64; CTranslate2 isn't made for the 32-bit one): the
-models take about 400 MB loaded and stay loaded, so a short text (a
+models take about 500 MB loaded and stay loaded, so a short text (a
 subject, a few words) is answered in a second or two. translategate may
-take 1 GB at most, and when memory runs out on the Pi the kernel stops a
-browser's page or a conversion before it. `--languages` adds the pairs between the
-codes given. An update keeps the engine and its models; `remove
+take 1.5 GB at most, and when memory runs out on the Pi the kernel stops a
+browser's page or a conversion before it. `--languages en,de,he` names the
+languages to have (Hebrew added here; a language left out is removed):
+each one to and from English, and the others through English (Hebrew to
+German goes by way of English). Each language takes 120-300 MB loaded;
+on a 4 GB Pi there is room for 1108 MB of them, so `install translate`
+refuses a set of languages that wouldn't fit. An update keeps the engine and its models; `remove
 translate` removes them.
 
 The Gateway shapes the text, the same for every app: paragraphs come
@@ -338,6 +369,13 @@ greetings and closings come from `gateway/translate-phrases.tsv`, a plain
 list that grows as real use shows a phrase the models get wrong. Known
 gaps, from the fixed sets: "Re:" before a subject isn't translated, and
 "הזמנה חדשה" (a new order) comes back as "A new invitation".
+
+The apps that translate also have a Languages page: tick the languages
+wanted, see the memory they take against the room there is, and on OK
+the Gateway installs and removes them itself (translategate-langs.service
+downloads them; translategate then starts again with them). Nothing is
+sent until the page closes with OK, and only from the Ataris allowed
+(`--allow`). The sizes are `gateway/translate-languages.tsv`'s.
 
 Check it from any browser on your network: `http://GATEWAY_IP:8480/status`
 answers "translategate 1", the engine and "ready". `--port N` gives it

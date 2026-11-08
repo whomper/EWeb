@@ -233,6 +233,37 @@ class ProxyTest(unittest.TestCase):
         self.assertEqual(im.convert("RGBA").getpixel((10, 10))[3], 120)
 
     @unittest.skipUnless(PICS, "needs Pillow")
+    def test_picture_deep(self):
+        # a true-colour Atari (deep=1): a picture made smaller keeps all its colours
+        import io
+        from PIL import Image
+        g = Image.new("RGBA", (1200, 360))
+        g.putdata([(x * 255 // 1199, 128, 255 - x * 255 // 1199, 255 if y < 300 else 100)
+                   for y in range(360) for x in range(1200)])
+        b = io.BytesIO()
+        g.save(b, "PNG")
+        png = b.getvalue()
+        data, ctype, _ = webgate.make_picture(png, 640)
+        im = self.opened(data)
+        self.assertEqual((ctype, im.mode, im.size), ("image/png", "P", (640, 192)))
+        data, ctype, _ = webgate.make_picture(png, 640, deep=True)
+        im = self.opened(data)
+        self.assertEqual((ctype, im.mode, im.size), ("image/png", "RGBA", (640, 192)))
+        self.assertGreater(len(im.getcolors(1 << 20)), 256)
+        self.assertEqual(im.info.get("webgate"), "natural 1200x360")
+        j = Image.new("RGB", (1600, 900))
+        j.putdata([(x % 256, y % 256, (x + y) % 256) for y in range(900) for x in range(1600)])
+        b = io.BytesIO()
+        j.save(b, "JPEG", quality=95)
+        flat, _, _ = webgate.make_picture(b.getvalue(), 640)
+        deep, ctype, _ = webgate.make_picture(b.getvalue(), 640, deep=True)
+        self.assertEqual((ctype, self.opened(deep).size), ("image/jpeg", (640, 360)))
+        self.assertGreater(len(deep), len(flat))                # quality 90 against 80
+        self.assertTrue(webgate.picture_want("fit=640; deep=1")["deep"])
+        self.assertFalse(webgate.picture_want("fit=640")["deep"])
+        self.assertFalse(webgate.picture_want("fit=640; deep=0")["deep"])
+
+    @unittest.skipUnless(PICS, "needs Pillow")
     def test_picture_turned_upright(self):
         r, data = self.picture("turned.jpg", fit=64)
         im = self.opened(data)
