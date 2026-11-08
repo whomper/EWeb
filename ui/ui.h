@@ -333,6 +333,11 @@ enum {
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
 };
 void command(int cmd);
+#ifndef EW_ST
+/* a language install the Gateway runs after Settings > Translate >
+   Languages... (common's langs.h): followed on the status line */
+extern int translate_job_on;
+#endif
 int  falcon_mode_set(int on);		/* 0 (and an alert why) when it can't */
 
 /* dialogs.c */

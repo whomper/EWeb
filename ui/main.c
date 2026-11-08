@@ -23,6 +23,10 @@
 #include "clip.h"
 #include "conn.h"
 #include "translate.h"
+#ifndef EW_ST
+#include "langs.h"
+extern langs_job translate_job;
+#endif
 #include "cookie.h"
 #include "crash.h"
 #include "dcache.h"
@@ -2132,7 +2136,9 @@ void command(int cmd)
 		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed,
 		    cachequit = opt.cachequit;
 #ifndef EW_ST
-		int scripted = br_scripts_for(&br, br.url);
+		int scripted = br_scripts_for(&br, br.url), translated = opt.translate;
+		char to_was[sizeof opt.translate_to];
+		str_copy(to_was, opt.translate_to, sizeof to_was);
 #endif
 		log_event("settings shown");
 		changed = dlg_settings();
@@ -2163,6 +2169,20 @@ void command(int cmd)
 				/* the page again, with its scripts or without */
 				command(C_RELOAD);
 				break;
+			}
+			if (translated != opt.translate || strcmp(to_was, opt.translate_to) != 0) {
+				/* Translate on, off, or into another language: as
+				   View > Translate does */
+				log_event("translate %s %s", opt.translate ? "on" : "off", opt.translate_to);
+				if (br.tr_shows != 0 && br.tr_shows == br.shows) {
+					br_translate_stop(&br);
+					if (br.src != NULL && br.encodable)
+						loaded(br_encoding(&br, br.enc));	/* (as it came; translated again below) */
+					else
+						command(C_RELOAD);
+				}
+				if (opt.translate)
+					page_translate_begin();
 			}
 #endif
 		}
@@ -2919,6 +2939,10 @@ int app_main(void)
 		short wait;
 		if (rdue >= 0 && (due < 0 || rdue < due))
 			due = rdue;	/* the page's refresh comes before its scripts' next timer */
+#ifndef EW_ST
+		if (translate_job_on && (due < 0 || due > 1000))
+			due = 1000;	/* (a language install followed: a look each second) */
+#endif
 		/* the ribbon, full: gone a moment later, whatever else is waited for */
 		rib = !more && win_progress_shown();
 		/* a page being drawn in slices: a moment's wait between them, so
@@ -2981,6 +3005,17 @@ int app_main(void)
 				char b[48];
 				snprintf(b, sizeof b, "AESWHOLE %ld ms\n", ms);
 				nf_debug(b);
+			}
+		}
+#endif
+#ifndef EW_ST
+		if ((which & MU_TIMER) && !quit && translate_job_on && !loading) {
+			int js = langs_job_step(&translate_job, pf_ms());
+			if (js)
+				win_status(translate_job.text);
+			if (js == 2) {
+				translate_job_on = 0;
+				log_event("languages job %d state %d", translate_job.id, translate_job.state);
 			}
 		}
 #endif

@@ -19,8 +19,15 @@
 #include "http.h"
 #include "tls.h"
 #include "util.h"
+#include "alert.h"
+#include "plat.h"
+#ifndef EW_ST
+#include "langs.h"
+#include "popup.h"
+#include "translate.h"
+#endif
 
-#define DMAX 96		/* objects: Settings' three pages take about 60 */
+#define DMAX 112	/* objects: Settings' four pages take about 70 */
 #define TMAX 16
 
 static OBJECT tree[DMAX];
@@ -270,7 +277,7 @@ static void make_ticks(void)
 #define NTICK 10
 static short s_on[NTICK];
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE };
 
 static short d_tick(short x, short y, const char *label, short var)
 {
@@ -292,7 +299,7 @@ static void tick_draw(short k)
 
 /* ---------------------------------------------------------------- pages */
 
-static short page_of[DMAX], npages, cur_page, page_tab[4], adding_page;
+static short page_of[DMAX], npages, cur_page, page_tab[5], adding_page;
 static short pages_obj;		/* the box the pages are in */
 static short settings_band;	/* its title band */
 
@@ -419,7 +426,153 @@ static void part_scripts(short x, short y)
 		d_text(x, ROW(8), "its pages are shown without scripts.");
 	}
 }
-#define NPAGES 3
+
+/* ---------------------------------------------------------------- Translate */
+
+/* EWeb's Translate page (EWEB.PRG; AERA-Atari's
+   standards/TRANSLATION-SERVICE.md, Erez, 8 Nov 2026): on or off (as View >
+   Translate), the language pages are translated into, from those the
+   Gateway has installed (asked for when the button is pressed, never
+   before: with Translate off nothing goes to the Gateway), and common's
+   Languages dialog for what the Gateway installs */
+static char s_to[TR_LANG], to_label[28];
+static short to_btn, langs_btn;
+langs_job translate_job;
+int translate_job_on;
+
+/* a language's name for the button: the Gateway's as last asked, else
+   the commonest's, else its code */
+static char known_code[TR_LANGS_MAX][TR_LANG], known_name[TR_LANGS_MAX][LANGS_NAME];
+static int nknown;
+
+static void lang_label(const char *code, char *out, int size)
+{
+	static const char *const names[][2] = {
+		{ "en", "English" }, { "he", "Hebrew" }, { "de", "German" }, { "fr", "French" },
+		{ "es", "Spanish" }, { "it", "Italian" }, { "pt", "Portuguese" }, { "nl", "Dutch" },
+		{ "ru", "Russian" }, { "ar", "Arabic" }, { "ja", "Japanese" }, { "zh", "Chinese" },
+	};
+	int i;
+	for (i = 0; i < nknown; i++)
+		if (!strcmp(known_code[i], code)) {
+			str_copy(out, known_name[i], size);
+			return;
+		}
+	for (i = 0; i < (int) (sizeof names / sizeof names[0]); i++)
+		if (!strcmp(names[i][0], code)) {
+			str_copy(out, names[i][1], size);
+			return;
+		}
+	str_copy(out, code, size);
+}
+
+static void part_translate(short x, short y)
+{
+	rows_at(y);
+	d_tick(x, ROW(0), "Translate pages (as View > Translate)", T_TRANSLATE);
+	d_text(x, ROW(2), "Translate into");
+	lang_label(s_to, to_label, sizeof to_label);
+	to_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) to_label, x + 16, ROW(2), 16, 1);
+	langs_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) "Languages...", x + 16, ROW(4), 16, 1);
+	d_text(x, ROW(6), "On the Gateway (its address on the");
+	d_text(x, ROW(7), "Secure page): aera-gateway install");
+	d_text(x, ROW(8), "translate. Languages... chooses what");
+	d_text(x, ROW(9), "it has. Pages are translated there,");
+	d_text(x, ROW(10), "kept in memory only.");
+}
+
+/* the Gateway's address as the Secure page has it now */
+static const char *gate_now(void)
+{
+	static char g[sizeof s_gate];
+	str_copy(g, s_gate, sizeof g);
+	str_trim(g);
+	return g;
+}
+
+static void say_no_gateway(const char *why)
+{
+	alert(1, "[1][The Gateway's languages|couldn't be had:|%.100s][ OK ]", why);
+}
+
+/* "Translate into": the installed languages in a popup under the button */
+static void choose_language(void)
+{
+	SBUF list;
+	char err[160], *p, *e;
+	static char lab[TR_LANGS_MAX][LANGS_NAME + 2];
+	static const char *labp[TR_LANGS_MAX];
+	short bx, by, k, n = 0;
+	if (!gate_now()[0]) {
+		say_no_gateway("set its address on the Secure page");
+		return;
+	}
+	sb_init(&list);
+	graf_mouse(BUSYBEE, 0);
+	k = (short) translate_languages(gate_now(), opt.translate_port, &list, err, sizeof err);
+	graf_mouse(ARROW, 0);
+	if (!k) {
+		sb_free(&list);
+		say_no_gateway(err);
+		return;
+	}
+	nknown = 0;
+	for (p = list.s; p != NULL && *p && n < TR_LANGS_MAX; p = *e ? e + 1 : e) {
+		TR_LANGINFO li;
+		char *tab = strchr(p, '\t');
+		e = strchr(p, '\n');
+		if (e == NULL)
+			e = p + strlen(p);
+		if (tab == NULL || tab > e || tab - p >= TR_LANG)
+			continue;
+		memset(&li, 0, sizeof li);
+		memcpy(li.code, p, (size_t) (tab - p));
+		snprintf(li.name, sizeof li.name, "%.*s", (int) (e - tab - 1), tab + 1);
+		if (li.name[0] && li.name[strlen(li.name) - 1] == '\r')
+			li.name[strlen(li.name) - 1] = 0;
+		str_copy(known_code[nknown], li.code, TR_LANG);
+		langs_name(&li, known_name[nknown]);
+		snprintf(lab[n], sizeof lab[n], "%s%s", strcmp(li.code, s_to) ? "  " : "\x08 ", known_name[nknown]);
+		labp[n] = lab[n];
+		nknown++;
+		n++;
+	}
+	sb_free(&list);
+	if (n == 0) {
+		say_no_gateway("it has no language installed: Languages...");
+		return;
+	}
+	objc_offset(tree, to_btn, &bx, &by);
+	k = popup(bx, (short) (by + tree[to_btn].ob_height), labp, n);
+	if (k >= 0 && k < nknown) {
+		str_copy(s_to, known_code[k], sizeof s_to);
+		lang_label(s_to, to_label, sizeof to_label);
+		log_event("translate into %s", s_to);
+	}
+}
+
+/* Languages...: common's dialog; an install is a job on the Gateway that
+   main.c follows on the status line (translate_job) */
+static void languages(void)
+{
+	static langs l;
+	int r;
+	if (!gate_now()[0]) {
+		say_no_gateway("set its address on the Secure page");
+		return;
+	}
+	memset(&l, 0, sizeof l);
+	l.host = gate_now();
+	l.port = opt.translate_port;
+	r = langs_run(&l);
+	log_event("languages %d job %d", r, l.job);
+	if (r == 1 && l.job) {
+		langs_job_begin(&translate_job, l.host, l.port, l.job, l.add_mb, pf_ms());
+		translate_job_on = 1;
+	}
+}
+
+#define NPAGES 4
 #else
 #define NPAGES 2
 #endif
@@ -430,7 +583,7 @@ static void part_scripts(short x, short y)
 
 static short settings_tree(short *ok)
 {
-	static const char *const names[] = { "  General", "  Secure", "  Scripts" };
+	static const char *const names[] = { "  General", "  Secure", "  Scripts", "  Translate" };
 	short k, box, from, gap = (short) (gl_hchar / 2);
 	d_begin(SX + PW, 20);
 	nticks = 0;
@@ -458,8 +611,10 @@ static short settings_tree(short *ok)
 		else if (k == 2)
 			part_secure(SX, 4);
 #ifndef EW_ST
-		else
+		else if (k == 3)
 			part_scripts(SX, 4);
+		else
+			part_translate(SX, 4);
 #endif
 		page_mark(from);
 	}
@@ -504,6 +659,18 @@ static short settings_run(short pages_box, short ok)
 				show_page(k, 1);
 			continue;
 		}
+#ifndef EW_ST
+		if (r == to_btn || r == langs_btn) {
+			if (r == to_btn)
+				choose_language();
+			else
+				languages();
+			tree[r].ob_state &= ~SELECTED;
+			dlg_draw(tree, 0);	/* (what the popup or the dialog covered) */
+			badge_show();
+			continue;
+		}
+#endif
 		break;
 	}
 	badge_close();
@@ -526,6 +693,10 @@ int dlg_settings(void)
 	s_on[T_CACHEQUIT] = opt.cachequit;
 	s_on[T_SCRIPTS] = opt.runscripts != 0;
 	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
+#ifndef EW_ST
+	s_on[T_TRANSLATE] = opt.translate;
+	str_copy(s_to, opt.translate_to, sizeof s_to);
+#endif
 	snprintf(s_zoom, sizeof s_zoom, "%d", opt.zoom);
 	str_copy(s_search, opt.search, sizeof s_search);
 	str_copy(s_gate, opt.gate, sizeof s_gate);
@@ -554,6 +725,9 @@ int dlg_settings(void)
 	opt.palette = s_on[T_PALETTE];
 	opt.cachequit = s_on[T_CACHEQUIT];
 #ifndef EW_ST
+	opt.translate = s_on[T_TRANSLATE];
+	if (s_to[0])
+		str_copy(opt.translate_to, s_to, sizeof opt.translate_to);
 #endif
 #ifndef EW_ST
 	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
