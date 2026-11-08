@@ -490,6 +490,16 @@ screen first; the page is shown again with them as they come back, and the
 rest follows while you read. The status line says when the Gateway is at
 work; Esc stops it, and what came stays.
 
+Settings > Translate has the same switch, the language pages are translated
+into (Translate into: the languages the Gateway has, asked for when you press
+the button) and Languages..., which shows the languages the Gateway offers with
+their sizes: tick the ones you want and OK; the Gateway installs them while you
+go on, and the status line says how far it is.
+
+Through the Gateway (no Direct connection) with AERA-Gateway 1.33 or later, the
+Gateway translates each page before it sends it; with an older one, or a page
+from the cache, EWeb sends the words as above.
+
 The translation is kept in memory only, never on the disk: Back and Reload
 translate again. Turn Translate off and the page shown is as it came.
 Program code, `<pre>` text and what a page marks not to translate stay as
@@ -802,7 +812,8 @@ there at once; where the window was, when you quit:
   Gateway's browser), 0 for pages as their servers send them
 - `TRANSLATE=` 1 translates pages on the Gateway (View > Translate), 0 (as it
   starts) shows them as they come
-- `TRANSLATETO=` the language they are translated into (`en`)
+- `TRANSLATETO=` the language they are translated into (`en`; Settings >
+  Translate)
 - `TRACKERS=` 0 (as it starts) leaves out what a page asks of known
   trackers (Google Tag Manager, Google Analytics): their scripts,
   pictures and frames aren't fetched; 1 fetches them too. A page you

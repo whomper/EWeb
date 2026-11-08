@@ -720,6 +720,13 @@ typedef struct {
 	char name[256];
 	int packed;		/* data as it came, gzip (1) or zlib's deflate (2): asked
 				   for with fetch_packed (a big sheet, unpacked as it is read) */
+	/* through the Gateway with Translate on (fetch_xl): 1 webgate
+	   translated it (X-Translate-From), 2 it was already in the
+	   language (X-Translate-Same), 3 refused (X-Translate-Refused:
+	   tr_why), 0 none of these; tr_part X-Translate-Partial ("64K") */
+	int tr;
+	char tr_why[160], tr_part[16];
+	int gwxl;		/* the answer says webgate translates (X-Gateway-Translate: 1) */
 } FETCH;
 
 /* a page drawn while it loads (its preview, below): the page's body as it
@@ -1083,6 +1090,9 @@ static void cookie_out(const HTTPREQ *rq, const URL *u, const char *method, SBUF
 /* for the next fetch only: more header lines (each with CRLF), and the
    types whose answer isn't wanted (HTTPREQ.refuse); NULL: none */
 static const char *fetch_more, *fetch_refuse;
+/* the page's own request through the Gateway with Translate on:
+   "X-Gateway-Translate: to=CODE\r\n" (load), NULL otherwise */
+static const char *fetch_xl;
 /* for the disk cache: the request's variant (the pens asked for), after
    the address, or NULL */
 static const char *fetch_variant;
@@ -1152,6 +1162,14 @@ static int page_head(void *ud, HTTPRESP *rs)
    (gate_compiles) */
 static char js_gate[300];
 static int js_gate_ok;
+/* does the Gateway translate pages (X-Gateway-Translate: 1 on its
+   GET http://webgate/): asked once a gateway, only with Translate on (an
+   older webgate passes the header on to the server, so it is never sent
+   to one that hasn't said so) */
+#ifndef EW_ST
+static char xl_gate[300];
+static int xl_gate_ok;
+#endif
 
 /* for the next fetch only: an answer sent packed is kept so, its data
    as it came (FETCH.packed), in the caches too, its type saying how
@@ -1171,6 +1189,9 @@ static int packed_head(void *ud, HTTPRESP *rs)
 static int fetch_raw(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
 		     int keep, const FSUBMIT *post, FETCH *f);
 static int gem_turn(void);
+#ifndef EW_ST
+static int gate_translates(browser *b);
+#endif
 
 /* fetch_raw, and an answer kept packed (its type says so) given as the
    caller asked: packed (fetch_packed), else unpacked, up to maxbody */
@@ -1418,6 +1439,8 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 		memset(&rq, 0, sizeof rq);
 		rq.url = url;
 		rq.headers = have ? got.validate : snap ? "X-Gateway-Snapshot: 1\r\n" : NULL;
+		if (fetch_xl != NULL && accept == NULL && post == NULL && !snap && http_gateway[0])
+			rq.headers = fetch_xl;	/* (webgate asks the server whole: no validators) */
 		if (fetch_more != NULL) {
 			both = malloc(strlen(rq.headers ? rq.headers : "") + strlen(fetch_more) + 1);
 			if (both != NULL) {
@@ -1541,19 +1564,33 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 					       strcmp(cf, "challenge") == 0;
 				if (http_gateway[0] && http_header(rs, "X-Gateway-Check", cf, sizeof cf) != NULL)
 					f->check = strcmp(cf, "click") == 0 ? 2 : 1;
+				if (http_gateway[0] && http_header(rs, "X-Gateway-Translate", cf, sizeof cf) != NULL)
+					f->gwxl = cf[0] == '1';
+				if (http_gateway[0] && fetch_xl != NULL && accept == NULL) {
+					if (http_header(rs, "X-Translate-Refused", f->tr_why, sizeof f->tr_why) != NULL)
+						f->tr = 3;
+					else if (http_header(rs, "X-Translate-Same", cf, sizeof cf) != NULL && cf[0] == '1')
+						f->tr = 2;
+					else if (http_header(rs, "X-Translate-From", cf, sizeof cf) != NULL)
+						f->tr = 1;
+					http_header(rs, "X-Translate-Partial", f->tr_part, sizeof f->tr_part);
+				}
 			}
 			/* an answer whose Content-Disposition says attachment, or
 			   names a file to save, isn't kept, here or on the disk:
 			   from the cache it would have neither its name nor
 			   "attachment" */
-			if (f->status == 200 && post == NULL && !f->disposed)
+			if (f->tr == 1) {
+				/* a translation: memory only, never the disk, and
+				   not kept as the page (Back asks again) */
+			} else if (f->status == 200 && post == NULL && !f->disposed)
 				dc_put(key, f->url, rs->headers.s ? rs->headers.s : "", f->mime, f->charset, f->security,
 				       f->data, f->len);
 			else if (f->disposed)
 				dc_drop(key);
 			/* a page with a Refresh header isn't kept, here or on the disk
 			   (dc_put): from the cache it wouldn't go on */
-			if (f->status == 200 && keep && !f->refresh[0] && !f->disposed) {
+			if (f->status == 200 && keep && !f->refresh[0] && !f->disposed && f->tr != 1) {
 				cache_put(url, f->url, f->data, f->len, f->mime, f->charset, f->security);
 				/* after a redirect, under where it came from too: the
 				   history keeps that address, and Back asks for it */
@@ -3461,6 +3498,22 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	else
 		say(b, "Opening %s...", host);
 	b->ms_fetch = pf_ms();
+	{
+		/* Translate on, through the Gateway: the page asked for
+		   translated (webgate, X-Gateway-Translate) where webgate
+		   takes it; else it comes as it is and is translated Direct
+		   (xlate.c, the front end) */
+		fetch_xl = NULL;
+#ifndef EW_ST
+		static char xlh[48];
+		if (b->translate != NULL && http_gateway[0] && post == NULL && !b->snapshot &&
+		    !has_scheme(url, "file") && gate_translates(b)) {
+			snprintf(xlh, sizeof xlh, "X-Gateway-Translate: to=%s\r\n", b->translate);
+			fetch_xl = xlh;
+			br_translation_runs++;
+		}
+#endif
+	}
 	fetch_nav = 1;	/* (a page opened is fetched whatever its host) */
 	room_b = b;
 	room_gone = 0;
@@ -3480,6 +3533,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	}
 	fetch_nav = 0;
+	fetch_xl = NULL;
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r) {
 		if (conn_stop && !gone) {
@@ -3593,6 +3647,19 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
 		b->at = b->cur;
 		enc_set(b, f->charset, enc, encodable);
+		/* translated by webgate: the page shown is the translation (memory
+		   only; the front end translates nothing more), else why not */
+		b->tr_gate = f->tr;
+		b->trg_shows = b->shows;
+		if (f->tr == 1) {
+			b->tr_shows = b->shows;
+			if (f->tr_part[0] && !b->note[0])
+				snprintf(b->note, sizeof b->note, "Translated on the Gateway: the first %s of its text.",
+					 f->tr_part);
+		} else if (f->tr == 3 && !b->note[0]) {
+			const char *why = strchr(f->tr_why, ' ');
+			snprintf(b->note, sizeof b->note, "Not translated: %.78s", why != NULL ? why + 1 : f->tr_why);
+		}
 		keep_trim(b);
 		/* a page loaded anew: its refresh. Back and Forward leave it be,
 		   as the standard lets them (a page that goes on at once would
@@ -4313,6 +4380,21 @@ static int gate_compiles(browser *b, const char *tag)
 	free(f->data);
 	free(f);
 	return js_gate_ok;
+}
+
+static int gate_translates(browser *b)
+{
+	FETCH *f;
+	if (strcmp(xl_gate, http_gateway) == 0)
+		return xl_gate_ok;
+	str_copy(xl_gate, http_gateway, sizeof xl_gate);
+	xl_gate_ok = 0;
+	if ((f = malloc(sizeof *f)) == NULL)
+		return 0;
+	xl_gate_ok = fetch(b, "http://webgate/", NULL, 1, "*/*", 4096, 0, NULL, f) && f->status == 200 && f->gwxl;
+	free(f->data);
+	free(f);
+	return xl_gate_ok;
 }
 
 /* a <script src>'s file: through the Pi, asked for as QuickJS's bytecode

@@ -2519,9 +2519,128 @@ def translate():
                   re.search(r"^TRANSLATE=1\r?$", inf, re.M) is not None, "\n".join(r.events()[-10:]))
         finally:
             r.end()
+        translate_settings(log)
+        translate_gateway()
     finally:
         srv.terminate()
         srv.wait(10)
+
+
+def translate_settings(log):
+    """Settings > Translate (EWEB.PRG, in a window on TOS 4.04): the page,
+    Translate into asking the Gateway's installed languages (the stand-in's)
+    and Hebrew chosen from its popup, Languages... opened (common's dialog,
+    the stand-in's list) and cancelled with Esc: nothing sent; OK keeps
+    TRANSLATETO=he"""
+    if not (shutil.which("Xvfb") and shutil.which("xdotool")):
+        return skip("translate: Settings needs Xvfb and xdotool")
+    xvfb = machines.xvfb(DISPLAY)
+    name = "translateset"
+    try:
+        hd = hd_for(name, r"C:\TEXT.HTM", "GATE=127.0.0.1\r\nTRANSLATEPORT=%d\r\n" % XLATE)
+        r = Run(name, "Falcon:16", hd, windowed=True, network=True)
+        try:
+            r.wait(r"shown ", 300)
+            time.sleep(3)
+            if os.path.exists(log):
+                os.remove(log)
+            r.key(COMMA, (CTRL,))
+            at = r.wait(r"dialog at ", 120)
+            dx, dy = (int(v) for v in at.split()[2:4])
+            time.sleep(2)
+            # the fourth page's name in the list (8x16 characters: column 3,
+            # line 8, three gaps of 8 above it)
+            r.mouse.click(dx + 4 * 8, dy + 8 * 16 + 3 * 8 + 8)
+            time.sleep(2)
+            r.shot(0)
+            # Translate into: the button at column 30, the page's third row
+            # (line 6, two gaps of 6 and 2)
+            r.mouse.click(dx + 34 * 8, dy + 6 * 16 + 14 + 8)
+            time.sleep(4)
+            r.shot(1)
+            # the popup under it: its second line, Hebrew
+            r.mouse.click(dx + 34 * 8, dy + 7 * 16 + 14 + 16 + 8 + 4)
+            chosen = r.wait(r"translate into ", 60)
+            time.sleep(2)
+            # Languages...: two rows down; Esc closes it, nothing sent
+            r.mouse.click(dx + 34 * 8, dy + 8 * 16 + 14 + 12 + 8)
+            time.sleep(5)
+            r.shot(2)
+            r.key(ESC)
+            langs = r.wait(r"languages ", 60)
+            time.sleep(2)
+            r.key(RETURN)
+            ok = r.wait(r"settings ", 60)
+            time.sleep(2)
+            reqs = open(log).read().splitlines() if os.path.exists(log) else []
+            r.key(Q, (CTRL,))
+            r.wait(r"quit$", 120)
+            inf = os.path.join(hd, "eweb.inf")
+            inf = open(inf, errors="replace").read() if os.path.exists(inf) else ""
+            check("translate: Settings > Translate into asks the Gateway's languages, Hebrew chosen",
+                  chosen == "translate into he" and "GET /languages" in reqs, "\n".join(r.events()[-12:]) +
+                  "\n" + "\n".join(reqs))
+            check("translate: Languages... opened with the Gateway's list, Esc sends nothing",
+                  langs == "languages 0 job 0" and "GET /languages?all=1" in reqs and
+                  not any(q.startswith("POST") for q in reqs), "\n".join(r.events()[-12:]) + "\n" + "\n".join(reqs))
+            check("translate: OK keeps TRANSLATETO=he", ok == "settings changed" and
+                  re.search(r"^TRANSLATETO=he\r?$", inf, re.M) is not None, repr(inf[-400:]))
+        finally:
+            r.end()
+    finally:
+        if xvfb is not None:
+            xvfb.terminate()
+
+
+def translate_gateway():
+    """Translate on through the Gateway (FALCON=0): webgate from EWeb's
+    gateway/ copy asked with X-Gateway-Translate (it says it takes it),
+    translating with the stand-in on translategate's local socket: the
+    page comes translated, nothing more is asked Direct"""
+    webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
+    if "X-Gateway-Translate" not in open(webgate).read():
+        return skip("translate: %s has no X-Gateway-Translate" % webgate)
+    work = os.path.join(OUT, "xlgate")
+    site = os.path.join(work, "site")
+    os.makedirs(site, exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "tests/browse/xlate.html"), os.path.join(site, "x.html"))
+    log, sock = os.path.join(work, "requests"), os.path.join(work, "xl.sock")
+    for f in (log, sock):
+        if os.path.exists(f):
+            os.remove(f)
+    xsrv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/browse/fakexl.py"), sock, log],
+                            stdout=subprocess.PIPE, text=True)
+    xsrv.stdout.readline()
+    hsrv = subprocess.Popen([sys.executable, "-m", "http.server", str(HTTP), "--bind", "127.0.0.1",
+                             "--directory", site], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    gate = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/browse/xlgate.py"), sock, webgate,
+                             "--port", str(GATE), "--bind", "127.0.0.1", "--allow-local"], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    name = "translategw"
+    try:
+        time.sleep(2)
+        inf = "TRANSLATE=1\r\nFALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\nTRANSLATEPORT=%d\r\n" % (GATE, XLATE)
+        hd = hd_for(name, "http://127.0.0.1:%d/x.html" % HTTP, inf)
+        r = Run(name, "Falcon:256", hd, network=True)
+        try:
+            ev = r.wait(r"translated on the Gateway ", 600)
+            time.sleep(3)
+            r.shot(0)
+            reqs = open(log).read().splitlines() if os.path.exists(log) else []
+            evs = r.events()
+            check("translate: through the Gateway, webgate translates the page, nothing asked Direct",
+                  ev == "translated on the Gateway 1" and reqs and reqs[0].split(" ", 2)[2] == "The test page" and
+                  not any(e.startswith("translate start") for e in evs) and
+                  not os.path.exists(os.path.join(hd, "crash.log")), "\n".join(evs[-15:]) + "\n" + "\n".join(reqs))
+            r.key(Q, (CTRL,))
+            check("translate: through the Gateway, quits", r.wait(r"quit$", 300) is not None, str(r.events()[-4:]))
+        finally:
+            r.end()
+    finally:
+        for p in (gate, hsrv, xsrv):
+            p.terminate()
+            p.wait(10)
 
 
 os.makedirs(OUT, exist_ok=True)

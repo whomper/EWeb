@@ -2105,7 +2105,7 @@ void command(int cmd)
 			   View > Encoding (memory only: nothing to forget on the
 			   disk) */
 			br_translate_stop(&br);
-			if (br.src != NULL && br.encodable)
+			if (br.src != NULL && br.encodable && !(br.tr_gate == 1 && br.trg_shows == br.shows))
 				loaded(br_encoding(&br, br.enc));
 			else
 				command(C_RELOAD);
@@ -2176,7 +2176,7 @@ void command(int cmd)
 				log_event("translate %s %s", opt.translate ? "on" : "off", opt.translate_to);
 				if (br.tr_shows != 0 && br.tr_shows == br.shows) {
 					br_translate_stop(&br);
-					if (br.src != NULL && br.encodable)
+					if (br.src != NULL && br.encodable && !(br.tr_gate == 1 && br.trg_shows == br.shows))
 						loaded(br_encoding(&br, br.enc));	/* (as it came; translated again below) */
 					else
 						command(C_RELOAD);
@@ -2490,6 +2490,12 @@ static void page_translate_begin(void)
 	int r;
 	if (br.translate == NULL || br.p == NULL || !strncmp(br.url, "about:", 6))
 		return;
+	if (br.tr_gate != 0 && br.trg_shows == br.shows) {
+		/* (webgate translated it, found it in the language already,
+		   or refused: the note says why) */
+		log_event("translated on the Gateway %d", br.tr_gate);
+		return;
+	}
 	if (!opt.gate[0]) {
 		win_status("To translate, set the Gateway's address in Settings > Secure.");
 		log_event("translate: no Gateway");

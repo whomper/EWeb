@@ -174,6 +174,11 @@ typedef struct browser {
 	const char *translate;
 	struct xlate *xl;	/* the page's translation under way (xlate.c), NULL none */
 	unsigned long tr_shows;	/* = shows: the page shown has translations put in */
+	int tr_gate;		/* the page shown through the Gateway with Translate on: 1
+				   webgate translated it, 2 it was in the language already,
+				   3 webgate refused (b->note says why), 0 none of these;
+				   for the page shown while trg_shows = shows */
+	unsigned long trg_shows;
 	int typed;		/* the page loading was typed (br_go): no Referer */
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), on

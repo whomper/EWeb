@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ewr, fnt = sys.argv[1], sys.argv[2]
@@ -95,6 +96,61 @@ try:
                           "127.0.0.1:%d:en" % free_port(), page], capture_output=True, text=True, timeout=120).stdout
     check("no Gateway: the page as it came", re.search(r"^piece 1: -1 ", out, re.M) and
           "First heading" in texts(out), out)
+    # through the Gateway (webgate from EWeb's gateway/ copy, or WEBGATE,
+    # with the stand-in on translategate's local socket): the page asked
+    # for translated (X-Gateway-Translate) where webgate says it takes it
+    webgate = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
+    if "X-Gateway-Translate" in open(webgate).read():
+        site = os.path.join(work, "site")
+        os.makedirs(site)
+        for name, body in (("x.html", open(page).read()),
+                           ("refuse.html", "<!DOCTYPE html><title>t</title><p>REFUSE this</p>")):
+            open(os.path.join(site, name), "w").write(body)
+        hp, gp, sock = free_port(), free_port(), os.path.join(work, "xl.sock")
+        xsrv = subprocess.Popen([sys.executable, os.path.join(HERE, "fakexl.py"), sock, log],
+                                stdout=subprocess.PIPE, text=True)
+        assert xsrv.stdout.readline().strip() == "ready"
+        hsrv = subprocess.Popen([sys.executable, "-m", "http.server", str(hp), "--bind", "127.0.0.1",
+                                 "--directory", site], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+        gate = subprocess.Popen([sys.executable, os.path.join(HERE, "xlgate.py"), sock, webgate, "--port", str(gp),
+                                 "--bind", "127.0.0.1", "--allow-local"], env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(50):
+                try:
+                    socket.create_connection(("127.0.0.1", gp), 0.2).close()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+
+            def via(name, *extra):
+                if os.path.exists(log):
+                    os.remove(log)
+                o = subprocess.run([ewr, "-f", fnt, "-o", os.path.join(work, "x.png"), "-d", "-W",
+                                    "127.0.0.1:%d" % gp] + list(extra) + ["http://127.0.0.1:%d/%s" % (hp, name)],
+                                   capture_output=True, text=True, timeout=120)
+                return o.stdout + o.stderr, os.path.exists(log)
+
+            out, asked = via("x.html", "--gwtranslate", "en")
+            t = texts(out)
+            check("through the Gateway: webgate translates the page, the links kept, <pre> as it is",
+                  re.search(r'^gateway translation: 1 ', out, re.M) and asked and
+                  'title "<en>THE TEST PAGE</en>"' in out and "<en>A LINK INSIDE IT</en>" in t and
+                  "code stays as it is" in t and ", 1 links," in out, out)
+            out, asked = via("x.html")
+            check("through the Gateway, Translate off: nothing asked of translategate",
+                  not asked and "gateway translation" not in out and 'title "The test page"' in out, out)
+            out, asked = via("refuse.html", "--gwtranslate", "en")
+            check("through the Gateway: a refusal, the page as it came, why in the note",
+                  re.search(r'^gateway translation: 3 note "Not translated: \S', out, re.M) and
+                  "REFUSE this" in texts(out), out)
+        finally:
+            for p in (gate, hsrv, xsrv):
+                p.terminate()
+                p.wait(10)
+    else:
+        print("skip  through the Gateway: %s has no X-Gateway-Translate" % webgate)
 finally:
     srv.terminate()
     srv.wait(10)

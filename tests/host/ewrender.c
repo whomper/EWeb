@@ -979,7 +979,7 @@ int main(int argc, char **argv)
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
 	int colours = 0, own_pal = 0;
 	static PIC_PAL pal;
-	const char *next = NULL, *prev = NULL, *xl_arg = NULL;
+	const char *next = NULL, *prev = NULL, *xl_arg = NULL, *gw_to = NULL;
 	char where[4096];
 	browser b;
 	page *p;
@@ -1138,6 +1138,8 @@ int main(int argc, char **argv)
 			save_link = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "-Z") && i + 1 < argc)
 			selector_ms = atol(argv[++i]);	/* the file selector's time */
+		else if (!strcmp(argv[i], "--gwtranslate") && i + 1 < argc)
+			gw_to = argv[++i];	/* Translate on through the Gateway (-W): the page asked for translated */
 		else if (!strcmp(argv[i], "--translate") && i + 1 < argc)
 			xl_arg = argv[++i];	/* HOST:PORT:TO: translated Direct (xlate.c), as EWEB.PRG */
 		else if (!strcmp(argv[i], "-l") && i + 1 < argc)
@@ -1189,6 +1191,7 @@ int main(int argc, char **argv)
 	net_init();
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
+	b.translate = gw_to;	/* (--gwtranslate: NULL off, as EWEB.PRG with Translate off) */
 	b.height = height > 0 ? height : 400;	/* (the window's: a frameset is as tall) */
 	b.text = (int32_t) (1024L * text / 100);
 	b.sbar = sbar;
@@ -1277,6 +1280,9 @@ int main(int argc, char **argv)
 		printf("top: %d\n", (int) b.scroll_to);	/* where EWEB.PRG scrolls to */
 	pictures(&b);
 	pf_idle = NULL;
+	if (gw_to != NULL)
+		printf("gateway translation: %d note \"%s\" runs %lu\n", b.trg_shows == b.shows ? b.tr_gate : 0, b.note,
+		       br_translation_runs);
 	if (xl_arg != NULL) {
 		/* the page translated as EWEB.PRG does it: the screen (TOP, H)
 		   first, a piece at a time */

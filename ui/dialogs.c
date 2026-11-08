@@ -474,11 +474,10 @@ static void part_translate(short x, short y)
 	lang_label(s_to, to_label, sizeof to_label);
 	to_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) to_label, x + 16, ROW(2), 16, 1);
 	langs_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) "Languages...", x + 16, ROW(4), 16, 1);
-	d_text(x, ROW(6), "On the Gateway (its address on the");
-	d_text(x, ROW(7), "Secure page): aera-gateway install");
-	d_text(x, ROW(8), "translate. Languages... chooses what");
-	d_text(x, ROW(9), "it has. Pages are translated there,");
-	d_text(x, ROW(10), "kept in memory only.");
+	d_text(x, ROW(6), "On the Gateway (Secure page's address):");
+	d_text(x, ROW(7), "aera-gateway install translate.");
+	d_text(x, ROW(8), "Pages are translated there and kept");
+	d_text(x, ROW(9), "in memory only.");
 }
 
 /* the Gateway's address as the Secure page has it now */

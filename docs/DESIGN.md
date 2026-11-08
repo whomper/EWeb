@@ -5008,8 +5008,8 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
 - **Through the Gateway:** one header on the document request, `X-Gateway-Translate: to=CODE`; webgate
   translates the page's text there (AERA-Gateway's `translateclient.py`, 1.32) and says so in the
   answer's words of `POST /translate` (`X-Translate-From`, `X-Translate-Same`, the refusal lines).
-  EWeb sends it only once webgate takes it: today's webgate passes an unknown `X-Gateway-` header on
-  to the server.
+  EWeb sends it only to a webgate that says it takes it (below): an older one passes an unknown
+  `X-Gateway-` header on to the server.
 - **Direct** (`src/browse/xlate.c`, built 8 Nov 2026): the page shows at once as it came; then
   its text nodes, each a paragraph of the request (white space collapsed, a space kept at either
   end), go to translategate (`GATE=`, port 8480, `TRANSLATEPORT=` for the rigs) through common's
@@ -5027,6 +5027,23 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   on the Falcon in 256 colours, the stand-in on the host). Until webgate takes
   `X-Gateway-Translate`, a page through the Gateway is translated this way too. Not in the ST
   edition (`EW_ST`: stubs).
+- **Through the Gateway** (built 8 Nov 2026, AERA-Gateway 1.33, tested from `gateway/` at e7c7a6e):
+  `load` asks webgate once a gateway whether it translates (`GET http://webgate/`, X-Gateway-Translate:
+  1; only with Translate on, so Off asks nothing), then sends `X-Gateway-Translate: to=CODE` on the
+  page's own GET (not a POST, a snapshot, a file; no validators: webgate asks the server whole). The
+  answer's X-Translate-From marks it translated (`b->tr_gate` 1: kept in neither cache, the front
+  end translates nothing more; Translate off reloads it), X-Translate-Same leaves it, a refusal
+  (X-Translate-Refused: STATUS why) and a partial one (X-Translate-Partial) go on the status line.
+  A page that came from the cache without asking, or through an older webgate, is translated
+  Direct. Tests: `tests/browse/xlate.py` runs webgate (`tests/browse/xlgate.py` puts the stand-in on
+  translategate's local socket): translated, Off asks nothing, a refusal; `make hatarigui`'s translate
+  group runs EWEB.PRG through it on the Falcon in 256 colours.
+- **Settings > Translate** (EWEB.PRG): the switch, Translate into (a popup of the languages the
+  Gateway has, `GET /languages`, asked only when the button is pressed) and Languages..., common's
+  `langs.c` dialog, whose install job `main.c` follows on the status line (`langs_job_step`, a look
+  each second). The rig's translate group opens it in a window on TOS 4.04: Hebrew chosen from the
+  popup, Languages... opened with the stand-in's list and cancelled with Esc (nothing sent), OK keeps
+  `TRANSLATETO=`.
 - **Memory only:** translations are never written to the Atari's disk; Back translates again when the
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
