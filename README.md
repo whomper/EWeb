@@ -13,8 +13,8 @@ accelerator; its ST edition runs on an ST or STE with 4 MB.
 - **Secure sites:** TLS 1.2 on the Atari itself, the DSP doing the maths.
 - **Translation:** pages translated into your language on your own Gateway.
 - **Hebrew:** pages right to left in every Hebrew encoding, and typing Hebrew (F10).
-- **Browsing:** several windows, search from the address bar, bookmarks, history, find, saving.
-- **A disk cache:** pages come back at once, even when their site can't be reached.
+- **Browsing:** several windows, address-bar search, bookmarks, history, find, a disk cache.
+- **File downloads:** files of any size saved straight to disk as they come; pages saved too.
 - **Every screen:** monochrome to the Falcon's true colour, in EWeb's own fonts.
 - **AERA family:** the family's menus, shortcuts, dialogs and help; mail links open EMail.
 
