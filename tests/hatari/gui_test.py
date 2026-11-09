@@ -483,6 +483,7 @@ def browse():
         time.sleep(3)		# the file selector
         r.key(RETURN)
         box = r.wait(r"download box ", 60)
+        closed = None
         time.sleep(8)
         if how == "Esc":
             r.shot(5)
@@ -490,15 +491,27 @@ def browse():
         elif box is not None:
             bx, by, bw, bh = (int(v) for v in box.split()[-4:])
             r.shot(6)		# (the bar part of the way, by the file's size)
-            # (while the file comes the emulated mouse lags the host's: the
-            # pointer put in step at the corner, moved, let settle, then
-            # the click)
-            r.mouse.move(0, 0)
+            # (the emulated pointer may sit off the host's after a long run:
+            # the box logs where each press came, and a press off Cancel is
+            # followed by one moved by the difference)
+            tx, ty = bx + bw // 2, by + bh // 2
+            r.mouse.move(tx, ty)
             time.sleep(2)
-            r.mouse.move(bx + bw // 2, by + bh // 2)
-            time.sleep(3)
-            r.mouse.xdo("click", "1")
-        closed = r.wait(r"download box closed ", 120)
+            for _ in range(3):
+                r.mouse.xdo("click", "1")
+                got = r.wait(r"download box (click|closed)", 20)
+                if got and got.startswith("download box closed"):
+                    closed = got
+                    break
+                m = re.match(r"download box click (-?\d+) (-?\d+) on (-?\d+)", got or "")
+                if not m or int(m.group(3)) >= 0 and abs(int(m.group(1)) - tx) < bw // 2 and \
+                        abs(int(m.group(2)) - ty) < bh // 2:
+                    break
+                loc = dict(l.split("=") for l in r.mouse.xdo("getmouselocation", "--shell").split())
+                r.mouse.xdo("mousemove", str(int(loc["X"]) + tx - int(m.group(1))),
+                            str(int(loc["Y"]) + ty - int(m.group(2))))
+                time.sleep(2)
+        closed = closed or r.wait(r"download box closed ", 120)
         ev = r.wait(r"stopped", 30)
         check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
               box.startswith("download box %s %s cancel " % (name, "-1" if how == "Esc" else len(server.BIG))) and
@@ -544,6 +557,7 @@ def browse():
         # closed by the Atari)
         blog = os.path.join(OUT, "browse.bridge.log")
         mark = len(open(blog).read().splitlines()) if os.path.exists(blog) else 0
+        time.sleep(5)
         r.key(L, (CTRL,))
         r.type("https://127.0.0.1:%d/trickle" % HTTPS)
         r.key(RETURN)
