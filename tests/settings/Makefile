@@ -34,12 +34,16 @@ TCFLAGS := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic
 TLDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
             -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 T       := $(B)/atari
-LIB     := dialog alert popup click text bidi clip field dlgbuild settings gem libc tos
+LIB     := fontsel mbar dialog alert popup click text bidi clip field dlgbuild settings gem libc tos
 OBJS    := $(T)/crt0.o $(T)/nf.o $(T)/setdemo.o $(T)/draw.o $(addprefix $(T)/,$(addsuffix .o,$(LIB)))
 
 prg: $(T)/SETDEMO.PRG
 prof:
-	$(MAKE) T=$(B)/prof EXTRA=-DAES_PROFILE=20 $(B)/prof/SETDEMO.PRG
+	$(MAKE) T=$(B)/prof EXTRA="-DAES_PROFILE=20 $(XTRA)" $(B)/prof/SETDEMO.PRG
+# the programs' own build on an ST: dialog.c's DLG_CPU (the guidelines' Speed; never in an accessory) and click.c's
+# DLG_CLICK; the name keeps it apart from the plain demo: make cpu, python3 run.py WORK MACHINE --speed --prg cpu
+cpu:
+	$(MAKE) T=$(B)/cpu EXTRA="-DAES_PROFILE=20 -DDLG_CPU -DDLG_CLICK" $(B)/cpu/SETDEMO.PRG
 $(T)/SETDEMO.PRG: $(T)/setdemo.elf ../../tools/elf2tos.py
 	python3 ../../tools/elf2tos.py $< $@
 $(T)/setdemo.elf: $(OBJS)
@@ -63,4 +67,4 @@ $(T)/%.o: $(A)/%.S | $(T)
 	$(CROSS)gcc -m68000 -c -o $@ $<
 $(T):
 	mkdir -p $@
-.PHONY: prg prof
+.PHONY: prg prof cpu

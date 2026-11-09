@@ -87,6 +87,7 @@ typedef struct {
 	short wc, hc;			/* the AES's character cell, read by db_begin */
 	void *mem;			/* db_alloc's block */
 	void *extra;			/* its last part: db_alloc's `extra` bytes, zeroed */
+	void (*draw)(OBJECT *tree, short obj);	/* how a tick box is drawn again (NULL: dlg_draw; settings.c's, alone over the ground) */
 } DLGB;
 
 /* The arrays are the caller's (a static dialog)... */

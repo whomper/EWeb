@@ -298,7 +298,10 @@ short db_tick_hit(const DLGB *b, short obj)
 static void tick_draw(DLGB *b, short k)
 {
 	b->tree[b->tick[k].box].ob_spec = (long)(*b->tick[k].var ? &db_tick_on : &db_tick_off);
-	dlg_draw(b->tree, b->tick[k].box);
+	if (b->draw)
+		b->draw(b->tree, b->tick[k].box);
+	else
+		dlg_draw(b->tree, b->tick[k].box);
 }
 
 void db_tick_flip(DLGB *b, short k)

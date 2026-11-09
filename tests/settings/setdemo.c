@@ -6,6 +6,9 @@
  *
  *   key 1   EMail 2.14's Settings (ui/dialogs.c: part_mail ... part_connection): six pages, 57 x 17
  *   key 2   EHypView 1.39's Settings (src/gem/settings.c): General and Library, 57 x 18
+ *   key 3   the radio buttons and the keyboard's reach (D24, D25): an Output page, as EPlay's, with a group of three
+ *           choices (the last greyed while the "no DSP" tick is on), a pop-up with a greyed item, and a plain page
+ *   key 4   the Font dialog (ui/fontsel.c: the title band, Cancel and OK)
  *   key q   ends
  *
  * run.py opens them on TOS 1.04 (ST:mono, flat) and TOS 4.04 (Falcon:16, 3D), takes a screenshot of each page
@@ -21,6 +24,8 @@
 #include "text.h"
 #include "dialog.h"
 #include "settings.h"
+#include "mbar.h"
+#include "fontsel.h"
 
 extern short text_round;
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes, gl_wchar, gl_hchar, ap_id;
@@ -242,6 +247,94 @@ static int ehypview_dialog(void)
 	return k;
 }
 
+
+/* ============ the radio buttons and the keyboard's reach: an EPlay-like Output page ============ */
+
+static short rd_out, rd_nodsp, rd_rate, rd_tick2, rd_log, rd_acts;
+static char rd_name[12];
+static const char *const rd_label[] = { "Auto", "FDI", "DSP" };
+static const char *const rd_rates[] = { "49 kHz", "32 kHz", "25 kHz", "12 kHz" };
+
+/* DSP applies unless the tick says this machine has none */
+static int rd_when(SETTINGS *s, short obj, short c, void *user)
+{
+	(void)s, (void)obj, (void)user;
+	return c != 2 || !rd_nodsp;
+}
+
+static void rd_act(SETTINGS *s, void *user)
+{
+	(void)s, (void)user;
+	rd_acts++;
+}
+
+static void rd_output(SETTINGS *s, short x, short y, void *user)
+{
+	short r;
+	(void)user;
+	set_text(s, x, y, "Player name:");
+	set_field(s, (short)(x + 14), y, rd_name, 11, 'X');
+	set_text(s, x, set_y(s, 1), "Output:");
+	r = set_radio(s, x, set_y(s, 2), 9, rd_label, 3, &rd_out);
+	set_choice_when(s, r, rd_when, 0);
+	set_tick(s, x, set_y(s, 3), "This machine has no DSP", &rd_nodsp);
+	set_tick(s, x, set_y(s, 4), "Write a log", &rd_log);
+	set_text(s, x, set_y(s, 5), "Sample rate:");
+	r = set_popup(s, (short)(x + 14), set_y(s, 5), 14, rd_rates, 4, &rd_rate);
+	set_popup_enable(s, r, 0, 0);
+	set_button(s, x, set_y(s, 7), 14, "Languages...", rd_act, 0);
+}
+
+static void rd_plain(SETTINGS *s, short x, short y, void *user)
+{
+	(void)user;
+	set_text(s, x, y, "Nothing to type here.");
+	set_tick(s, x, set_y(s, 1), "Another tick", &rd_tick2);
+}
+
+static int radios_dialog(void)
+{
+	static const SET_PAGE pages[] = { { "Output", rd_output }, { "Plain", rd_plain } };
+	SET_DEF d;
+	int k;
+	rd_out = 0, rd_nodsp = 0, rd_rate = 1, rd_tick2 = 0, rd_log = 0, rd_acts = 0;
+	strcpy(rd_name, "Dana");
+	memset(&d, 0, sizeof(d));
+	d.title = "Settings";
+	d.pages = pages;
+	d.npages = 2;
+	d.height = 17;
+	k = settings_dialog(&d);
+	{
+		char b[160];
+		snprintf(b, sizeof(b), "SETDEMO radios out %d nodsp %d rate %d log %d tick2 %d acts %d name '%s'\n", rd_out, rd_nodsp, rd_rate,
+			 rd_log, rd_tick2, rd_acts, rd_name);
+		nf_debug(b);
+	}
+	return k;
+}
+
+/* ============ the Font dialog (ui/fontsel.c): its title band and its Cancel and OK, for the screenshots ============ */
+
+static void font_apply(fontsel *f)
+{
+	char b[100];
+	snprintf(b, sizeof(b), "SETDEMO font applied id %d pt %d\n", f->id, f->pt);
+	nf_debug(b);
+}
+
+static int font_dialog(void)
+{
+	static fontsel f;
+	memset(&f, 0, sizeof(f));
+	f.app = "SETDEMO";
+	f.id = 1;
+	f.pt = gl_hchar >= 16 ? 16 : 8;
+	f.gdos = FS_UNLOADED;
+	f.apply = font_apply;
+	return fontsel_run(&f);
+}
+
 /* Where the AES runs several programs (XaAES), keys go to the program whose window is on top: a window of the
    demo's own, white, over the desktop; the dialog is a window of its own over it (dlg_redraw_hook draws this one) */
 static short mainwin;
@@ -273,6 +366,14 @@ static void paint_main(const short *msg)
 	wind_update(END_UPDATE);
 }
 
+/* a menu bar where the AES runs several programs (the dialogs are windows there; MD17): a title chosen while one is open is
+   dropped by dlg_evnt, so "SETDEMO menu T I" is never said for it; one chosen otherwise says it */
+static MBAR mbar;
+static const MBAR_ITEM mb_desk[] = { { "About SETDEMO...", 0, 1 }, { 0 } };
+static const MBAR_ITEM mb_test[] = { { "Do it", "^D", 2 }, { "Do more", 0, 3 }, { 0 } };
+static const MBAR_TITLE mb_bar[] = { { " Desk ", mb_desk }, { " Test ", mb_test }, { 0 } };
+static int have_bar;
+
 int main(void)
 {
 	short wo[57], d, m[8];
@@ -289,6 +390,9 @@ int main(void)
 	planes = wo[4];
 	vst_alignment(vdi_h, 0, 5);
 	text_font(vdi_h, 1, cw, ch);
+	/* as an app has drawn its window's text before it opens a dialog: text.c checks its fast path on the first
+	   draw (scr_cpu_wins), which dialog.c's DLG_CPU path asks */
+	text_plain(vdi_h, 8, 100, "SETDEMO", 7);
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	graf_mouse(ARROW, 0);
 	dlg_title = "SETDEMO";
@@ -300,6 +404,10 @@ int main(void)
 		wind_open(mainwin, desk_x, desk_y, desk_w, desk_h);
 		wind_get(mainwin, WF_WORKXYWH, &x, &y, &w, &h);
 		dlg_redraw_hook = paint_main;
+		if (mbar_build(&mbar, mb_bar, gl_wchar, gl_hchar, scr_w, scr_h) == 0) {
+			menu_bar(mbar.tree, 1);
+			have_bar = 1;
+		}
 	}
 	say("SETDEMO screen %s %d %d %d %d\n", "", scr_w, scr_h, gl_wchar, gl_hchar);
 	nf_debug("SETDEMO ready\n");
@@ -308,7 +416,13 @@ int main(void)
 		if (e.which & MU_MESAG) {
 			if (m[0] == WM_REDRAW)
 				paint_main(m);
-			else if (m[0] == WM_TOPPED || m[0] == WM_NEWTOP)
+			else if (m[0] == MN_SELECTED) {
+				char b[60];
+				snprintf(b, sizeof(b), "SETDEMO menu %d %d\n", m[3], m[4]);
+				nf_debug(b);
+				if (have_bar)
+					menu_tnormal(mbar.tree, m[3], 1);
+			} else if (m[0] == WM_TOPPED || m[0] == WM_NEWTOP)
 				wind_set(m[3], WF_TOP, m[3], 0, 0, 0);
 			else if (m[0] == WM_CLOSED || m[0] == AP_TERM)
 				run = 0;
@@ -323,6 +437,14 @@ int main(void)
 			case '2':
 				now_name = "ehypview";
 				r = ehypview_dialog();
+				break;
+			case '3':
+				now_name = "radios";
+				r = radios_dialog();
+				break;
+			case '4':
+				now_name = "font";
+				r = font_dialog();
 				break;
 			case 'q':
 				run = 0;

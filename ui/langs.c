@@ -5,7 +5,8 @@
  * TRANSLATION-SERVICE.md), on the Gateway's client (src/translate.c).
  * Laid out as the Font dialog is (fontsel.c): 48 by 17 cells of the system
  * font, one list with a pane bar of AES objects at its right (panebar.c),
- * the total line, a line for what the user is told, OK and Cancel. The
+ * the total line, a line for what the user is told, Cancel and OK (10 wide, OK
+ * at the right) under a black title band " Languages". The
  * rows are drawn by the app's gemui.h calls and kept to the clip the
  * dialog's window may draw (dlg_cut), so the list is right in a window of
  * the AES's (MiNT, MagiC) and over the screen (TOS).
@@ -513,7 +514,10 @@ static void tr_end(void)
 }
 
 static langs *lg;
-static short o_list, o_tot, o_msg, o_msg2, o_ok, o_cancel;
+static short o_list, o_tot, o_msg, o_msg2, o_ok, o_cancel, o_band;
+/* the title band (5.10, D22): the first row, the dialog's width, white on black, the text left with a space before it as
+   Settings has it; in a window of the AES's the window's own title replaces it (dlg_band) */
+static TEDINFO band_ted = { (char *)" Languages", (char *)"", (char *)"", 3, 0, 0, 0x1071, 0, 0, 11, 1 };
 static short ord[TR_LANGS_MAX];
 static langs_nm names[TR_LANGS_MAX];
 static int cur, top, rows, cols;
@@ -1114,6 +1118,7 @@ int langs_run(langs *l)
 	/* 48 x 18 cells (the Font dialog's 17 and a line for the message): the lists a few pixels down, so no label loses its
 	   descenders and the list loses no row */
 	tr_begin(48, 18);
+	o_band = tr_add(G_BOXTEXT, 0, 0, (long)&band_ted, 0, 0, 48, 1);
 	tr_add(G_STRING, 0, 0, (long)"Languages on the Gateway", 2, 1, 24, 1);
 	o_list = tr_add(G_BOX, 0, 0, 0x00FF1100L, 2, 2, 44, 10);
 	/* the total and the message are G_STRINGs the AES draws on the dialog's own ground (3D or
@@ -1121,8 +1126,9 @@ int langs_run(langs *l)
 	o_tot = tr_add(G_STRING, 0, 0, (long)tot_text, 2, 12, 44, 1);
 	o_msg = tr_add(G_STRING, 0, 0, (long)msg_l1, 2, 13, 44, 1);
 	o_msg2 = tr_add(G_STRING, 0, 0, (long)msg_l2, 2, 14, 44, 1);
-	o_ok = tr_add(G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 26, 16, 9, 1);
-	o_cancel = tr_add(G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 37, 16, 9, 1);
+	/* Cancel then OK, OK at the right, 10 wide each (5.10, D26: Settings' W - 24 and W - 12) */
+	o_cancel = tr_add(G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 24, 16, 10, 1);
+	o_ok = tr_add(G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 36, 16, 10, 1);
 	tr_end();
 	ltree[o_list].ob_y += 3;
 	ltree[o_list].ob_height -= 3;
@@ -1136,6 +1142,7 @@ int langs_run(langs *l)
 	MARK("tree built");
 
 	dlg_name("Languages");
+	dlg_band(o_band);		/* in a window its title says it (3.5) */
 	dlg_open(ltree, &x, &y, &w, &h);
 	MARK("dlg_open");
 	place();

@@ -79,6 +79,23 @@
  * and OK always have room. The page's area, for a page switch, is rows 2 to H - 3: a page's objects stay
  * inside it, above the buttons' row.
  *
+ * The keyboard reaches every control (the guidelines' 5.10, D25; 9 Nov 2026). The focus is the text field that has the
+ * cursor, one control (a tick, a radio group, a pop-up, a button the app acts on) or the list of pages; it is shown
+ * by a thin ring 2 pixels outside it, drawn only once a key has been used (after a click it is gone again, and a page
+ * without a text field looks as it always did). Tab and Shift+Tab visit the page's fields and controls in the order
+ * they were added, then the list, and round; Space ticks a tick, opens a pop-up, does a button's work; Left, Right,
+ * Up and Down choose in a radio group (greyed choices skipped, no wrapping); Up and Down in the list choose the page,
+ * and from control to control elsewhere; in a text field every key is as it was (Up and Down go to the next field,
+ * Space is a space), Return is OK, Esc and Undo are Cancel. The dialog opens with the first text field as it always did,
+ * else with the list. The ring is the app's frame() and clip_on() (gemui.h), drawn over the tree through dlg_more.
+ *
+ * A page switch draws the two names that changed and the page's area only (9 Nov 2026), each object by itself
+ * (dialog.h: dlg_draw_one, dlg_draw_range: no walk of the AES through the dialog's hundred objects), the page in
+ * turns of 20 ms with an event call between, then Cancel and OK where the area's margin reached their frames; a
+ * click is found by dlg_find, in C. On an 8 MHz ST (TOS 1.04) the longest stretch of a switch went from 280-345 ms to
+ * 45 (a program with -DDLG_CPU) or 55 ms, on a stock Falcon (TOS 4.04) from 110-155 ms to 30-45 ms; the pixels
+ * are the old ones'. The page's objects follow each other from heading to its last object, on the root alone.
+ *
  * Tested in tests/settings (make test: the built tree's geometry and the keys against a stand-in AES;
  * run.py, SETDEMO.PRG: EMail's Connection page and EHypView's General page in Hatari on TOS 4.04 and
  * TOS 1.04, pixel for pixel; --xaaes under FreeMiNT and XaAES).
@@ -152,6 +169,26 @@ short set_long(SETTINGS *s, short x, short y, char *buf, short len, short cap, c
    the choices over it with the one now chosen ticked, a click on another changes *sel at once.
    At most 16 choices of 31 characters (a longer list is a button with "...": set_value). Returns its object */
 short set_popup(SETTINGS *s, short x, short y, short w, const char *const *choices, short n, short *sel);
+/* radio buttons (5.6, D24): one of up to four choices as AES buttons 10 characters apart, the way EFTP's Site Manager
+   and EPlay's Output have them (G_BUTTON, RBUTTON: the 3D look has them pressed in when chosen, flat the chosen one is
+   turned over). labels[0..n-1] (not copied), each w characters wide (8 or 9), the first at x, y; *sel (0 to n - 1) is
+   the app's, changed at once by a click or the arrow keys; Cancel puts it back. Four are 40 characters and 12
+   pixels wide, from the page's column SX: they fit the 42 of the page (not the value column SX + 30). The engine, not
+   the AES, keeps the one chosen (the AES would unchoose the buttons of every other group of the page). Returns the
+   group's number (its first button's object), 0 if there is no room (none of the buttons is made) */
+short set_radio(SETTINGS *s, short x, short y, short w, const char *const *labels, short n, short *sel);
+#define SET_RADIOS 4
+/* A choice that does not apply is greyed and cannot be chosen, by a click or by a key (D24; EPlay's FDI and DSP on a machine
+   without them). set_radio_enable: choice c of the radio group (set_radio's number) normal (on 1) or greyed (0); the
+   same for item `item` of a pop-up button (set_popup's object): its line greyed in the pop-up (popup.h's "~"), not
+   chosen. A greyed choice that is the chosen one stays chosen: the app decides what to do with it (it may move *sel) */
+void set_radio_enable(SETTINGS *s, short radio, short choice, int on);
+void set_popup_enable(SETTINGS *s, short popup, short item, int on);
+/* ...or a function that says it: when(s, obj, choice, user) is 1 when choice of the group or pop-up obj applies. It is
+   asked as the dialog opens and after every change the user makes (a click, a key, a button's work), so a choice follows
+   another setting; the buttons whose answer changed are drawn */
+typedef int (*SET_WHEN)(SETTINGS *s, short obj, short choice, void *user);
+void set_choice_when(SETTINGS *s, short obj, SET_WHEN when, void *user);
 /* a button the app acts on: act(s, user) when clicked, then the dialog is drawn again. w characters wide */
 short set_button(SETTINGS *s, short x, short y, short w, const char *label, SET_ACT act, void *user);
 /* the same, shown as a pop-up button without the arrow (a choice from a long list: its text ends in "...",
