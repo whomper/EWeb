@@ -474,6 +474,50 @@ def browse():
     # (the home page's search box: its words to the test site's echo)
     hd = hd_for("browse", site, "SEARCH=%secho?q=%%s\r\n" % site)
     shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))      # the test authority
+    def dl_case(how):
+        name = "CHUNKED" if how == "Esc" else "TRICKLE.ZIP"
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/%s" % (HTTP, "chunked" if how == "Esc" else "trickle"))
+        r.key(RETURN)
+        sv = r.wait(r"save link", 120)
+        time.sleep(3)		# the file selector
+        r.key(RETURN)
+        box = r.wait(r"download box ", 60)
+        time.sleep(8)
+        if how == "Esc":
+            r.shot(5)
+            r.key(0x01)
+        elif box is not None:
+            bx, by, bw, bh = (int(v) for v in box.split()[-4:])
+            r.shot(6)		# (the bar part of the way, by the file's size)
+            r.mouse.click(bx + bw // 2, by + bh // 2)
+        closed = r.wait(r"download box closed ", 120)
+        ev = r.wait(r"stopped", 30)
+        check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
+              box.startswith("download box %s %s cancel " % (name, "-1" if how == "Esc" else len(server.BIG))) and
+              ev is not None and closed is not None and closed.startswith("download box closed 2 ") and
+              int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, name)) and
+              not os.path.exists(os.path.join(hd, name.lower())) and
+              (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
+
+    def dl_click(when):
+        # the mouse still the AES's after the box: a link on the start page
+        # clicked is followed (a press the box took and kept would leave
+        # the button held for good)
+        r.key(L, (CTRL,))
+        r.type(site)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        pt2 = link_point(site, tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5)),
+                         "the second page") if m else None
+        if pt2 is not None:
+            r.mouse.click(*pt2)
+        ev = r.wait(r"shown ", 120)
+        check("downloads: a click taken after the box (%s)" % when, ev is not None and "two.html" in ev, str(r.events()[-6:]))
+        r.shot(69 if when == "Cancel" else 68)
+
+
     def downloads():
         # 2 MB that come slowly over the serial line, a file EWeb doesn't
         # show: the file selector, then the download's box (Erez, 9 Nov
@@ -482,31 +526,7 @@ def browse():
         # box's Cancel stops it too
         # (Cancel on /trickle, which comes slowly with its size: the
         # emulated serial line at full speed loses the mouse's packets)
-        for how in ("Esc", "Cancel"):
-            name = "CHUNKED" if how == "Esc" else "TRICKLE.ZIP"
-            r.key(L, (CTRL,))
-            r.type("127.0.0.1:%d/%s" % (HTTP, "chunked" if how == "Esc" else "trickle"))
-            r.key(RETURN)
-            sv = r.wait(r"save link", 120)
-            time.sleep(3)		# the file selector
-            r.key(RETURN)
-            box = r.wait(r"download box ", 60)
-            time.sleep(8)
-            if how == "Esc":
-                r.shot(5)
-                r.key(0x01)
-            elif box is not None:
-                bx, by, bw, bh = (int(v) for v in box.split()[-4:])
-                r.shot(6)		# (the bar part of the way, by the file's size)
-                r.mouse.click(bx + bw // 2, by + bh // 2)
-            closed = r.wait(r"download box closed ", 120)
-            ev = r.wait(r"stopped", 30)
-            check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
-                  box.startswith("download box %s %s cancel " % (name, "-1" if how == "Esc" else len(server.BIG))) and
-                  ev is not None and closed is not None and closed.startswith("download box closed 2 ") and
-                  int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, name)) and
-                  not os.path.exists(os.path.join(hd, name.lower())) and
-                  (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
+        dl_case("Cancel")
         # the same file from the secure site: the box is up before the
         # second request (the first stopped at its headers), so through its
         # handshake too; Esc then leaves no file and no connection open
@@ -537,6 +557,9 @@ def browse():
               not left and not os.path.exists(os.path.join(hd, "TRICKLE.ZIP")) and
               not os.path.exists(os.path.join(hd, "trickle.zip")),
               str(r.events()[-8:]) + "\n" + "\n".join(lines))
+        dl_click("Cancel and https")
+        dl_case("Esc")
+        dl_click("Esc on a file at the line's full speed")
 
     r = Run("browse", "Falcon:16", hd, windowed=True, network=True)
     try:
@@ -552,12 +575,7 @@ def browse():
         if not check("browse: the link found on the page", pt is not None):
             return
         if os.environ.get("GUI_DL_ONLY"):
-            # (the download box's cases alone, then a click still taken)
-            downloads()
-            r.mouse.click(*pt)
-            ev = r.wait(r"shown ", 120)
-            check("downloads: a click taken after the box", ev is not None and "two.html" in ev, str(r.events()[-6:]))
-            r.shot(69)
+            downloads()		# (the download box's cases alone)
             return
         # the guidelines' 5.8: pressed, the link is drawn at once in
         # :active's red; moved off it while held and let go, nothing is
@@ -622,7 +640,6 @@ def browse():
         check("browse: a secure page", ev is not None and ev.startswith("shown https://127.0.0.1:%d/site/ " % HTTPS),
               str(r.events()))
         r.shot(4)
-        downloads()
         # a page of pictures: shown first, its pictures after, the window
         # scrolled while they come (Down doesn't stop them)
         r.key(L, (CTRL,))
@@ -1106,6 +1123,7 @@ def browse():
               "encoding windows-1255" in evs and ev.startswith("shown %senc/w1255.html " % site) and
               ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
         r.shot(16)
+        downloads()		# (last: the serial line at full speed may unsettle the emulated mouse)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""
