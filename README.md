@@ -9,16 +9,25 @@ accelerator. Its ST edition runs on an ST or STE with 4 MB.
 
 ## Highlights
 
-- **Modern pages**: EWeb's own HTML parser, CSS engine and layout (flexbox, grid, tables, floats),
-  pictures (JPEG, PNG, GIF, WebP, SVG), forms, frames and a little JavaScript.
-- **Secure sites on the Atari itself**: TLS 1.2 with the Falcon's DSP doing the heavy maths, or
-  through the AERA Gateway on a Raspberry Pi.
-- **Hebrew**, right to left, in every Hebrew encoding; **translation** of pages through the
+- **Modern pages**: EWeb's own HTML parser, CSS engine and layout (flexbox, grid, tables, floats,
+  frames), much faster on a 68030 than NetSurf's.
+- **Pictures**: JPEG, PNG, GIF, WebP and SVG, JPEGs decoded on the Falcon's DSP, dithered to any
+  screen; shown after the page, so you can read while they come.
+- **Forms and logins**: every kind of field, file uploads, cookies kept between runs.
+- **JavaScript** on the sites you choose: menus, tabs, form checks, pop-ups, drag and drop.
+- **Translation**: View > Translate translates pages into your language on the Gateway, screen
+  first; nothing leaves your home network.
+- **Hebrew**: pages right to left in every Hebrew encoding, and typing Hebrew (F10).
+- **Secure sites on the Atari itself**: TLS 1.2 with the DSP doing the maths, or through the
   Gateway.
-- **The browser you expect**: several windows, bookmarks, history, find in page, copy and paste,
-  saving and downloads, cookies and a disk cache.
+- **The Gateway's browser**: a page made by scripts, or a CAPTCHA, as a snapshot or live view.
+- **Search from the address bar** (FrogFind by default), several windows, bookmarks, history,
+  find in page, copy and paste, saving and downloads.
+- **A disk cache**: pages and pictures come back at once, and are shown even when their site
+  can't be reached.
 - **Every screen**: monochrome to the Falcon's true colour, with its own fonts on every Atari.
-- **One of the AERA family**: the same menus, shortcuts, dialogs and help as the other programs.
+- **One of the AERA family**: the same menus, shortcuts, dialogs and help as the other programs;
+  a mail link opens EMail.
 
 ## Getting started
 
@@ -53,7 +62,8 @@ ST, STE:     EWEBST.PRG -- HTTP, home network --> Gateway -- HTTPS --> the site
 
 `EWEB.PRG` connects directly (Options > Direct connection) and checks every certificate against
 Mozilla's list. It can also go through the Gateway, AERA-Gateway's web service on a Raspberry Pi,
-which makes the secure connection, shrinks pictures and translates pages. To set it up on the
+which makes the secure connection, shrinks pictures, translates pages (`aera-gateway install
+translate`) and opens script-made pages in its own browser (`--browser`). To set it up on the
 Raspberry Pi, with the Atari's address for `ATARI_IP`:
 
 ```
