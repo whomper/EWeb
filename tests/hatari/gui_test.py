@@ -1447,7 +1447,7 @@ def dialogs():
                     dx, dy = (int(v) for v in at.split()[2:4])
                     time.sleep(3)
                     im = Image.open(r.shot(n)).convert("RGB")
-                    return [im.getpixel((dx + 56 * 8 + 4, dy + 18 * 16 + 8)),
+                    return [im.getpixel((dx + 58 * 8 + 2, dy + 18 * 16 + 8)),
                             im.getpixel((dx + 55 * 8, dy + (4 + 9) * 16 + 2 + 9 * 6 + 8))]
 
                 white = lambda px: px and all(p == (255, 255, 255) for p in px)
@@ -1505,7 +1505,7 @@ def dialogs():
                 r.key(UNDO)
                 ev = r.wait(r"settings (kept|changed)$", 120)
                 check("dialogs: %s, Settings: a text size out of range refused by an alert, nothing changed" % name,
-                      ref is not None and ref.startswith("settings refused: page 1 ") and kept,
+                      ref is not None and ref == "settings refused: page 1" and kept,
                       "\n".join(r.events()[mark:]))
                 check("dialogs: %s, Settings: after the alert Undo cancels" % name,
                       kept and ev == "settings kept", "\n".join(r.events()[mark:]))
@@ -2597,13 +2597,15 @@ def translate_settings(log):
             r.mouse.click(dx + 4 * 8, dy + 8 * 16 + 3 * 8 + 8)
             time.sleep(2)
             r.shot(0)
-            # Translate into: the button at column 30, the page's third row
+            # Translate into: the button at column 31, the page's third row
             # (line 6, two gaps of 6 and 2)
             r.mouse.click(dx + 34 * 8, dy + 6 * 16 + 14 + 8)
             time.sleep(4)
             r.shot(1)
-            # the popup under it: its second line, Hebrew
-            r.mouse.click(dx + 34 * 8, dy + 7 * 16 + 14 + 16 + 8 + 4)
+            # the pop-up over it (5.7), the chosen row on the button (none
+            # chosen: the first, English); its second row, Hebrew, a row of
+            # 18 pixels lower
+            r.mouse.click(dx + 34 * 8, dy + 6 * 16 + 14 + 18 + 8)
             chosen = r.wait(r"translate into ", 60)
             time.sleep(2)
             # Languages...: two rows down; Esc closes it, nothing sent

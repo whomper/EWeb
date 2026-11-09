@@ -264,10 +264,10 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None):
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
-        # Cancel at its 30th column, 18th row, 8x16 characters)
+        # Cancel at its 38th column (in the old dialog and the family's), 18th row, 8x16 characters)
         at = re.findall(r"EWEB dialog at (\d+) (\d+)", r.console())
         dx, dy = (int(v) for v in at[-1]) if at else (0, 0)
-        r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.click(dx + 35 * 8, dy + 18 * 16 + 8))
+        r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.click(dx + 38 * 8, dy + 18 * 16 + 8))
         # (the Desk menu's first entry: its title at the bar's left, the
         # entry the first row under the bar, 8x16 characters)
         r.act("the About box opened", r.about, lambda: r.menu(20, 28))

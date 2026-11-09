@@ -2546,21 +2546,23 @@ static void choose(fctl *c, short mx, short my)
 			first = 0;
 		n = 0;
 		if (first > 0) {
-			items[n++] = "  \x01 Earlier";
+			items[n++] = "\x01 Earlier";
 		}
 		for (i = first; i < c->nopt && n < rows + (first > 0); i++) {
 			char t[200], a[60];
 			form_option_text(c->opt[i], t, sizeof t);
 			atari_text(t, a, sizeof a);
-			snprintf(lab[n], sizeof lab[n], "%s%s%s", dn_attr(c->opt[i], "disabled") ? "~" : "",
-				 c->sel[i] ? "\x08 " : "  ", a[0] ? a : " ");
+			/* (popup_m's labels: the words, greyed or ticked; the UI
+			   standards' D15) */
+			snprintf(lab[n], sizeof lab[n], "%s%s", dn_attr(c->opt[i], "disabled") ? "~" : c->sel[i] ? "\x08" : "",
+				 a[0] ? a : " ");
 			items[n] = lab[n];
 			n++;
 		}
 		k = n;
 		if (i < c->nopt)
-			items[n++] = "  \x02 Later";
-		r = popup(mx, my, items, n);
+			items[n++] = "\x02 Later";
+		r = popup_m(mx, my, items, n);
 		if (r < 0)
 			break;
 		if (first > 0 && r == 0) {
@@ -3340,7 +3342,7 @@ static void context_menu(short mx, short my)
 	if (l >= 0) {
 		static const char *const items[] = { "Open the link", "Open it in a new window  Ctrl-click",
 						     "Save the link's file...  Alt-click", "Copy the link's address" };
-		short r = popup(mx, my, items, 4);
+		short r = popup_m(mx, my, items, 4);
 		if (r == 0) {
 			follow(l);
 		} else if (r == 1) {
@@ -3367,7 +3369,7 @@ static void context_menu(short mx, short my)
 		items[3] = "-";
 		items[4] = sel_now() ? "Copy             ^C" : "Copy the text    ^C";
 		items[5] = "Select all       ^A";
-		r = popup(mx, my, items, 6);
+		r = popup_m(mx, my, items, 6);
 		switch (r) {
 		case 0: command(C_BACK); break;
 		case 1: command(C_FORWARD); break;
@@ -3626,7 +3628,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			short r;
 			if (!cur->a_focus)
 				win_address_focus(1);
-			r = popup(mx, my, items, 5);
+			r = popup_m(mx, my, items, 5);
 			if (r >= 0 && r <= 2)
 				win_clip(r == 0 ? CLIP_COPY : r == 1 ? CLIP_CUT : CLIP_PASTE);
 			else if (r == 4)

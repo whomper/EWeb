@@ -4247,9 +4247,21 @@ DECISIONS-2026-11-09.md). EWeb's part, the first round:
   1 to 65535.", "The disk cache can be at most 512 MB: type 512 or less."; `settings_bad` in
   `ui/dialogs.c`). The ST edition has it too: it is a fault the rule names, not a feature.
 
-Next: Settings on common's `settings.c` (its margins, C3; the Translate-into pop-up, 5.7), then
-what waits for the hub's shared code: the pop-ups' margin (D15), tooltips (D18), Insert opening
-the context menu (D17), an alert's padding (C19).
+The second round (the next release):
+
+- **Settings is the family's** (common's `settings.c`, 6.1; `dlg_settings` in `ui/dialogs.c` gives
+  its four pages, `page_general` to `page_translate`, their words as they were): the list 13 wide,
+  the margins and gap 2, Cancel at W - 24 and OK at W - 12 (C3), the keys and the long fields
+  settings.c's, the refusal of a number out of range its `check` (D30: the alert, the page shown;
+  the cursor where settings.c puts it). "Translate into" is a value button (5.7: a choice from
+  the Gateway's list, asked when it is pressed: its words end in "..."), its pop-up over it with
+  the language chosen ticked. The question (a page's prompt(), Find) and the quit box are on
+  common's builder (`dlgbuild.c`); `ui/dialogs.c`'s own copy of the builder is gone.
+- **Pop-ups** are `popup_m` (D15): the labels are their words, the box adds the margin and the
+  tick (the form lists, View > Encoding, the page's, a link's and the address's menus).
+
+Next: what waits for the hub's shared code or a decision: tooltips (D18, `tooltip.c` is in
+common), Insert opening the context menu (D17), an alert's padding (C19).
 
 ## Scripts kept compiled (26 Oct 2026)
 

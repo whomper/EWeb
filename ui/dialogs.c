@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * dialogs.c - EWeb's Settings dialog (^,), built in code with EMail's and
- * EFTP's builder: a black title band, the pages in a list on the left (the
- * chosen one in a black bar), that page's settings on the right: ticks,
- * framed fields. The Secure page is the family's: a Direct connection (TLS
- * on this Atari) or the Pi gateway's address and port (the guidelines, 6.1
- * and 7.4).
+ * dialogs.c - EWeb's dialogs: Settings (^,) on the family's Settings
+ * dialog (common's settings.c, the guidelines' 6.1: a black title band, the
+ * pages in a list on the left, the chosen one in a black bar, that page's
+ * settings on the right; the Secure page is the family's, a Direct
+ * connection or the Gateway's address and port, 7.4), a question and its
+ * answer (a page's prompt(), Find) and the box quitting shows, these two on
+ * common's builder (dlgbuild.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +16,8 @@
 #include "ui.h"
 #include "charset.h"
 #include "dialog.h"
+#include "dlgbuild.h"
+#include "settings.h"
 #include "field.h"
 #include "http.h"
 #include "tls.h"
@@ -28,154 +31,19 @@
 #include "translate.h"
 #endif
 
-#define DMAX 112	/* objects: Settings' four pages take about 70 */
-#define TMAX 16
-
+/* the question's and the quit box's tree (the Settings dialog has its own,
+   from the heap while it is open: settings.c) */
+#define DMAX 16
 static OBJECT tree[DMAX];
-static TEDINFO ted[TMAX];
-static char tmpl[TMAX][64], valid[TMAX][64];
-static short nobj, nted, last_child;
-/* the long fields (d_lfield), put on once the tree is fixed */
-static LFIELD *lf_pend[3];
-static char *lf_text[3];
-static short lf_obj[3], lf_cap[3], nlf;
+static TEDINFO ted[4];
+static LFIELD lfs[1];
+static DLGB db;
 
-/* ---------------------------------------------------------------- the builder */
-
-static void d_begin(short w, short h)
+static void db_start(short w, short h)
 {
-	lf_forget(tree);	/* the last dialog's long fields */
-	memset(tree, 0, sizeof tree);
-	nlf = 0;
-	nobj = 1;
-	nted = 0;
-	last_child = 0;
-	tree[0].ob_next = -1;
-	tree[0].ob_head = tree[0].ob_tail = -1;
-	tree[0].ob_type = G_BOX;
-	tree[0].ob_state = OUTLINED;
-	tree[0].ob_spec = 0x00021100L;
-	tree[0].ob_width = w;
-	tree[0].ob_height = h;
-}
-
-static short d_add(short type, short flags, short state, long spec, short x, short y, short w, short h)
-{
-	short i;
-	OBJECT *o;
-	if (nobj >= DMAX) {
-		/* (a dialog that has grown past the table: what is left out is
-		   missing, nothing else spoilt; the rigs see the log) */
-		log_event("dialog too big");
-		return 0;
-	}
-	i = nobj++;
-	o = &tree[i];
-	o->ob_next = 0;
-	o->ob_head = o->ob_tail = -1;
-	o->ob_type = type;
-	o->ob_flags = flags;
-	o->ob_state = state;
-	o->ob_spec = spec;
-	o->ob_x = x;
-	o->ob_y = y;
-	o->ob_width = w;
-	o->ob_height = h;
-	if (last_child)
-		tree[last_child].ob_next = i;
-	else
-		tree[0].ob_head = i;
-	tree[0].ob_tail = i;
-	last_child = i;
-	return i;
-}
-
-static short d_text(short x, short y, const char *s)
-{
-	return d_add(G_STRING, 0, 0, (long) s, x, y, (short) strlen(s), 1);
-}
-
-static TEDINFO *d_ted(const char *text, short just, short color)
-{
-	TEDINFO *t = &ted[nted < TMAX ? nted++ : TMAX - 1];
-	t->te_ptext = (char *) text;
-	t->te_ptmplt = "";
-	t->te_pvalid = "";
-	t->te_font = 3;
-	t->te_just = just;
-	t->te_color = color;
-	t->te_thickness = 0;
-	t->te_txtlen = (short) strlen(text) + 1;
-	t->te_tmplen = 1;
-	return t;
-}
-
-/* a field in a thin frame showing len characters of buf (buf holds len+1);
-   kind: 'X' any character, '9' digits */
-static short d_field(short x, short y, char *buf, short len, char kind)
-{
-	TEDINFO *t = &ted[nted];
-	short i;
-	if (nted >= TMAX) {
-		log_event("dialog too big");
-		return 0;
-	}
-	if (len > 60)
-		len = 60;
-	for (i = 0; i < len; i++) {
-		tmpl[nted][i] = '_';
-		valid[nted][i] = kind;
-	}
-	tmpl[nted][len] = valid[nted][len] = 0;
-	buf[len] = 0;
-	t->te_ptext = buf;
-	t->te_ptmplt = tmpl[nted];
-	t->te_pvalid = valid[nted];
-	t->te_font = 3;
-	t->te_just = 0;
-	t->te_color = 0x1180;
-	t->te_thickness = -1;
-	t->te_txtlen = len + 1;
-	t->te_tmplen = len + 1;
-	nted++;
-	return d_add(G_FBOXTEXT, EDITABLE, 0, (long) t, x, y, len, 1);
-}
-
-/* a field that holds more than it shows (the guidelines' 5.4): text
-   (cap + 1 bytes) scrolls in a window of len characters */
-static short d_lfield(short x, short y, LFIELD *f, char *text, short len, short cap)
-{
-	static char view[3][LF_VIEW + 1];
-	short obj = d_field(x, y, view[nlf], len, 'X');
-	lf_pend[nlf] = f;
-	lf_text[nlf] = text;
-	lf_obj[nlf] = obj;
-	lf_cap[nlf++] = cap;
-	return obj;
-}
-
-static short d_button(short x, short y, short w, const char *s, short flags)
-{
-	return d_add(G_BUTTON, SELECTABLE | flags, 0, (long) s, x, y, w, 1);
-}
-
-/* black band across the top, white title: its object (in a window the
-   window's title bar names the dialog instead: dlg_band, 3.5) */
-static short d_band(short w, const char *title)
-{
-	return d_add(G_BOXTEXT, 0, 0, (long) d_ted(title, 0, 0x1071), 0, 0, w, 1);
-}
-
-static void d_end(void)
-{
-	short i;
-	tree[last_child].ob_next = 0;
-	tree[nobj - 1].ob_flags |= LASTOB;
-	rsrc_obfix_all(tree, nobj);	/* (common's, no AES call each: 60 of them were most of Settings' making) */
-	for (i = 0; i < nlf; i++)
-		lf_init(lf_pend[i], tree, lf_obj[i], lf_text[i], lf_cap[i], 0);
-	nlf = 0;
-	dlg_3d(tree);		/* the AES's 3D look where it has one (5.6) */
+	db_free(&db);	/* (the last one's long field let go) */
+	db_init(&db, tree, DMAX, ted, 4, NULL, 0, lfs, 1);
+	db_begin(&db, w, h);
 }
 
 /* ---------------------------------------------------------------- the Hebrew keyboard's badge */
@@ -185,17 +53,18 @@ static void d_end(void)
    end, as the family's dialogs do (hebrew_badge_right, placed as the main
    window's info line has it); in a dialog window the title is the AES's,
    and the main window's info line shows it (Erez, 6 Nov 2026) */
+static OBJECT *badge_tree;
 static short badge_band = -1;
 
 static void badge_show(void)
 {
 #ifndef EW_ST
 	short bx, by, bw, bh, c[4];
-	if (badge_band < 0 || !hebrew_kbd || dlg_in_window())
+	if (badge_tree == NULL || badge_band <= 0 || !hebrew_kbd || dlg_in_window())
 		return;
-	objc_offset(tree, badge_band, &bx, &by);
-	bw = tree[badge_band].ob_width;
-	bh = tree[badge_band].ob_height;
+	objc_offset(badge_tree, badge_band, &bx, &by);
+	bw = badge_tree[badge_band].ob_width;
+	bh = badge_tree[badge_band].ob_height;
 	c[0] = bx;
 	c[1] = by;
 	c[2] = (short) (bx + bw - 1);
@@ -210,14 +79,16 @@ static void badge_show(void)
 #endif
 }
 
-static void badge_open(short band)
+static void badge_open(OBJECT *t, short band)
 {
+	badge_tree = t;
 	badge_band = band;
 	badge_show();
 }
 
 static void badge_close(void)
 {
+	badge_tree = NULL;
 	badge_band = -1;
 }
 
@@ -225,207 +96,93 @@ static void badge_close(void)
    with the badge or without */
 void dlg_hebrew_changed(void)
 {
-	if (badge_band < 0 || dlg_in_window())
+	if (badge_tree == NULL || badge_band <= 0 || dlg_in_window())
 		return;
-	dlg_draw(tree, badge_band);
+	dlg_draw(badge_tree, badge_band);
 	badge_show();
-}
-
-/* ---------------------------------------------------------------- ticks */
-
-/* a tick box, 16 pixels square, and the tick in it */
-static const char *const tick_art[16] = {
-	"................",
-	".##############.",
-	".#............#.",
-	".#..........#.#.",
-	".#.........##.#.",
-	".#........##..#.",
-	".#.......##...#.",
-	".#.##...##....#.",
-	".#.###.##.....#.",
-	".#..####......#.",
-	".#...##.......#.",
-	".#............#.",
-	".#............#.",
-	".#............#.",
-	".##############.",
-	"................",
-};
-static unsigned short tick_on[16], tick_off[16];
-static BITBLK tick_on_blk, tick_off_blk;
-
-static void make_ticks(void)
-{
-	/* half height on 8-pixel screens: every other line, and the frame */
-	short tall = gl_hchar >= 16, rows = tall ? 16 : 8, r, c;
-	for (r = 0; r < rows; r++) {
-		const char *src = tick_art[tall ? r : (r == rows - 1 ? 14 : r * 2 + (r ? 0 : 1))];
-		unsigned short v = 0;
-		for (c = 0; c < 16; c++)
-			v = (unsigned short) ((v << 1) | (src[c] == '#'));
-		tick_on[r] = v;
-		tick_off[r] = tall ? (r == 1 || r == 14 ? v : (r == 0 || r == 15 ? 0 : 0x4002)) :
-				     (r == 0 || r == rows - 1 ? v : 0x4002);
-	}
-	tick_on_blk.bi_pdata = (short *) tick_on;
-	tick_off_blk.bi_pdata = (short *) tick_off;
-	tick_on_blk.bi_wb = tick_off_blk.bi_wb = 2;
-	tick_on_blk.bi_hl = tick_off_blk.bi_hl = rows;
-	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
-}
-
-#define NTICK 10
-static short s_on[NTICK];
-static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE };
-
-static short d_tick(short x, short y, const char *label, short var)
-{
-	short k = nticks++;
-	tick_var[k] = var;
-	if (!tick_on_blk.bi_pdata)
-		make_ticks();
-	tick_box[k] = d_add(G_IMAGE, TOUCHEXIT, 0, (long) (s_on[var] ? &tick_on_blk : &tick_off_blk), x, y, 2, 1);
-	tick_lbl[k] = d_add(G_STRING, TOUCHEXIT, 0, (long) label, x + 3, y, (short) strlen(label), 1);
-	return k;
-}
-
-static void tick_draw(short k)
-{
-	OBJECT *o = &tree[tick_box[k]];
-	o->ob_spec = (long) (s_on[tick_var[k]] ? &tick_on_blk : &tick_off_blk);
-	dlg_draw(tree, tick_box[k]);
-}
-
-/* ---------------------------------------------------------------- pages */
-
-static short page_of[DMAX], npages, cur_page, page_tab[5], adding_page;
-static short pages_obj;		/* the box the pages are in */
-static short settings_band;	/* its title band */
-
-/* rows of a page, with some air between them: row n of a page starting
-   at line y is n lines and n gaps down */
-static short row_y0, row_gap;
-#define ROW(n) ((short) ((row_y0 + (n)) | ((2 + (n) * row_gap) << 8)))
-
-static void rows_at(short y)
-{
-	row_y0 = y;
-	row_gap = (short) (gl_hchar * 3 / 8);
-}
-
-static void page_mark(short from)
-{
-	short i;
-	for (i = from; i < nobj; i++)
-		page_of[i] = adding_page;
-}
-
-static void show_page(short p, int draw)
-{
-	short i;
-	cur_page = p;
-	for (i = 1; i < nobj; i++) {
-		if (!page_of[i])
-			continue;
-		if (page_of[i] == p) {
-			tree[i].ob_flags &= ~HIDETREE;
-			if (tree[i].ob_type == G_FBOXTEXT)
-				tree[i].ob_flags |= EDITABLE;
-		} else {
-			tree[i].ob_flags |= HIDETREE;
-			tree[i].ob_flags &= ~EDITABLE;
-		}
-	}
-	for (i = 1; i <= npages; i++)
-		/* the chosen page in a black bar, white words (its colours, not
-		   SELECTED, which the 3D look draws pressed in: 5.6) */
-		((TEDINFO *) tree[page_tab[i]].ob_spec)->te_color = i == p ? 0x1071 : 0x1180;
-	if (draw) {
-		/* (dlg_draw: where the dialog is now, with a framed field's
-		   frame a pixel or two outside it) */
-		short k;
-		for (k = 1; k <= npages; k++)
-			dlg_draw(tree, page_tab[k]);
-		dlg_draw(tree, pages_obj);
-	}
-}
-
-static short first_edit(void)
-{
-	short i;
-	for (i = 1; i < nobj; i++)
-		if ((tree[i].ob_flags & EDITABLE) && !(tree[i].ob_flags & HIDETREE))
-			return i;
-	return 0;
 }
 
 /* ---------------------------------------------------------------- the settings */
 
+/* the values as the dialog changes them: its ticks, fields and the
+   language; Cancel puts them back (settings.c) */
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE, NTICK };
+static short s_on[NTICK];
 /* the search address and the gateway hold as much as their settings,
-   more than their fields show */
+   more than their fields show (5.4) */
 static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
-static LFIELD f_search, f_gate;
-static short o_zoom, o_cache, o_gport;	/* their fields, for an alert's answer (D30) */
+static int set_open;	/* the dialog drawn once: its place told (for the rigs) */
 
-static void part_general(short x, short y)
+/* settings.c's hook: the dialog or its band drawn, the badge over it */
+static void settings_drawn_now(OBJECT *t, short band)
 {
-	rows_at(y);
-	d_tick(x, ROW(0), "Show pages' pictures", T_PICTURES);
-	d_text(x + 3, ROW(1), "(off: only their words, for a slow line)");
-	d_text(x, ROW(2), "Text size");
-	o_zoom = d_field(x + 12, ROW(2), s_zoom, 3, '9');
-	d_text(x + 16, ROW(2), "%  (50 to 200)");
-	d_text(x, ROW(3), "Words typed in the address go to:");
-	d_lfield(x, ROW(4), &f_search, s_search, 40, sizeof s_search - 1);
-	d_text(x, ROW(5), "(%s for the words; nothing: none)");
-	d_text(x, ROW(6), "Disk cache");
-	o_cache = d_field(x + 12, ROW(6), s_cache, 3, '9');
-	d_text(x + 16, ROW(6), "MB  (0: none, 512 at most)");
-	d_tick(x + 3, ROW(7), "Write it to the disk only at quit", T_CACHEQUIT);
+	if (!set_open) {
+		short x, y;
+		objc_offset(t, 0, &x, &y);
+		gap_tag("dialog: drawn");
+		log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
+		set_open = 1;
+	}
+	badge_open(t, band);
+}
+
+static void page_general(SETTINGS *s, short x, short y, void *user)
+{
+	(void) y, (void) user;
+	set_tick(s, x, set_y(s, 0), "Show pages' pictures", &s_on[T_PICTURES]);
+	set_text(s, x + 3, set_y(s, 1), "(off: only their words, for a slow line)");
+	set_text(s, x, set_y(s, 2), "Text size");
+	set_field(s, x + 12, set_y(s, 2), s_zoom, 3, '9');
+	set_text(s, x + 16, set_y(s, 2), "%  (50 to 200)");
+	set_text(s, x, set_y(s, 3), "Words typed in the address go to:");
+	set_long(s, x, set_y(s, 4), s_search, 40, sizeof s_search - 1, 0);
+	set_text(s, x, set_y(s, 5), "(%s for the words; nothing: none)");
+	set_text(s, x, set_y(s, 6), "Disk cache");
+	set_field(s, x + 12, set_y(s, 6), s_cache, 3, '9');
+	set_text(s, x + 16, set_y(s, 6), "MB  (0: none, 512 at most)");
+	set_tick(s, x + 3, set_y(s, 7), "Write it to the disk only at quit", &s_on[T_CACHEQUIT]);
 #ifndef EW_ST
-	d_tick(x, ROW(8), "Pictures on the DSP (a Falcon's)", T_PICDSP);
-	d_tick(x, ROW(9), "EWeb's own colours in 256 colours", T_PALETTE);
+	set_tick(s, x, set_y(s, 8), "Pictures on the DSP (a Falcon's)", &s_on[T_PICDSP]);
+	set_tick(s, x, set_y(s, 9), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
 #else
-	d_tick(x, ROW(8), "EWeb's own colours in 256 colours", T_PALETTE);
+	set_tick(s, x, set_y(s, 8), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
 #endif
 }
 
-/* the family's Secure page: TLS on this Atari, or the Pi gateway */
-static void part_secure(short x, short y)
+/* the family's Secure page: TLS on this Atari, or the Gateway */
+static void page_secure(SETTINGS *s, short x, short y, void *user)
 {
 	int can = tls_available && get_cookie(0x5F435055L) >= 20;	/* _CPU */
 	const char *note = can ? "Needs CACERT.PEM next to EWEB.PRG" :
 			   !tls_available ? "Not in the ST edition: EWEB.PRG has it" :
 			   "Needs a 68020 or better (TT, Falcon)";
-	rows_at(y);
-	d_tick(x, ROW(0), "Direct connection: TLS on this Atari", T_FALCON);
-	d_tick(x + 3, ROW(1), "Check certificates on the DSP", T_DSP);
-	d_text(x + 3, ROW(2), note);
-	d_text(x, ROW(3), "Gateway");
-	d_lfield(x + 11, ROW(3), &f_gate, s_gate, 18, sizeof s_gate - 1);
-	d_text(x + 31, ROW(3), "Port");
-	o_gport = d_field(x + 36, ROW(3), s_gport, 5, '9');
-	d_text(x + 3, ROW(4), "Pages go through the Gateway without");
-	d_text(x + 3, ROW(5), "a Direct connection (the ST: always).");
-	d_text(x + 3, ROW(6), "On the Gateway: aera-gateway install web");
+	(void) y, (void) user;
+	set_tick(s, x, set_y(s, 0), "Direct connection: TLS on this Atari", &s_on[T_FALCON]);
+	set_tick(s, x + 3, set_y(s, 1), "Check certificates on the DSP", &s_on[T_DSP]);
+	set_text(s, x + 3, set_y(s, 2), note);
+	set_text(s, x, set_y(s, 3), "Gateway");
+	set_long(s, x + 11, set_y(s, 3), s_gate, 18, sizeof s_gate - 1, 0);
+	set_text(s, x + 31, set_y(s, 3), "Port");
+	set_field(s, x + 36, set_y(s, 3), s_gport, 5, '9');
+	set_text(s, x + 3, set_y(s, 4), "Pages go through the Gateway without");
+	set_text(s, x + 3, set_y(s, 5), "a Direct connection (the ST: always).");
+	set_text(s, x + 3, set_y(s, 6), "On the Gateway: aera-gateway install web");
 }
 
 #ifndef EW_ST
 /* EWeb's Scripts page (EWEB.PRG): on no site, the sites chosen, every site */
-static void part_scripts(short x, short y)
+static void page_scripts(SETTINGS *s, short x, short y, void *user)
 {
-	rows_at(y);
-	d_tick(x, ROW(0), "Run pages' scripts (JavaScript)", T_SCRIPTS);
-	d_tick(x + 3, ROW(1), "On every site, not only those chosen", T_SCRIPTSALL);
-	d_text(x + 3, ROW(2), "Options > Run this site's scripts");
-	d_text(x + 3, ROW(3), "chooses a site, or leaves one out.");
-	d_text(x + 3, ROW(4), "On every site, one whose scripts are");
-	d_text(x + 3, ROW(5), "too much is left out until EWeb quits.");
+	(void) y, (void) user;
+	set_tick(s, x, set_y(s, 0), "Run pages' scripts (JavaScript)", &s_on[T_SCRIPTS]);
+	set_tick(s, x + 3, set_y(s, 1), "On every site, not only those chosen", &s_on[T_SCRIPTSALL]);
+	set_text(s, x + 3, set_y(s, 2), "Options > Run this site's scripts");
+	set_text(s, x + 3, set_y(s, 3), "chooses a site, or leaves one out.");
+	set_text(s, x + 3, set_y(s, 4), "On every site, one whose scripts are");
+	set_text(s, x + 3, set_y(s, 5), "too much is left out until EWeb quits.");
 	if (!br.scripts) {
-		d_text(x, ROW(7), "This Atari has no FPU (68881, 68882):");
-		d_text(x, ROW(8), "its pages are shown without scripts.");
+		set_text(s, x, set_y(s, 7), "This Atari has no FPU (68881, 68882):");
+		set_text(s, x, set_y(s, 8), "its pages are shown without scripts.");
 	}
 }
 
@@ -437,8 +194,8 @@ static void part_scripts(short x, short y)
    Gateway has installed (asked for when the button is pressed, never
    before: with Translate off nothing goes to the Gateway), and common's
    Languages dialog for what the Gateway installs */
-static char s_to[TR_LANG], to_label[28];
-static short to_btn, langs_btn;
+static char s_to[TR_LANG], to_label[17];
+static short to_btn;
 langs_job translate_job;
 int translate_job_on;
 
@@ -468,20 +225,6 @@ static void lang_label(const char *code, char *out, int size)
 	str_copy(out, code, size);
 }
 
-static void part_translate(short x, short y)
-{
-	rows_at(y);
-	d_tick(x, ROW(0), "Translate pages (as View > Translate)", T_TRANSLATE);
-	d_text(x, ROW(2), "Translate into");
-	lang_label(s_to, to_label, sizeof to_label);
-	to_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) to_label, x + 16, ROW(2), 16, 1);
-	langs_btn = d_add(G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long) "Languages...", x + 16, ROW(4), 16, 1);
-	d_text(x, ROW(6), "On the Gateway (Secure page's address):");
-	d_text(x, ROW(7), "aera-gateway install translate.");
-	d_text(x, ROW(8), "Pages are translated there and kept");
-	d_text(x, ROW(9), "in memory only.");
-}
-
 /* the Gateway's address as the Secure page has it now */
 static const char *gate_now(void)
 {
@@ -496,14 +239,29 @@ static void say_no_gateway(const char *why)
 	alert(1, "[1][The Gateway's languages|couldn't be had:|%.100s][ OK ]", why);
 }
 
-/* "Translate into": the installed languages in a popup under the button */
-static void choose_language(void)
+/* the button's words: a space, the language, "..." (a choice from the
+   Gateway's list, 5.7's value button), 16 characters */
+static void to_text(void)
+{
+	char n[LANGS_NAME];
+	lang_label(s_to, n, sizeof n);
+	snprintf(to_label, sizeof to_label, " %.11s...", n);
+	while (strlen(to_label) < sizeof to_label - 1)
+		strcat(to_label, " ");
+}
+
+/* "Translate into": the Gateway's installed languages (asked now, never
+   before: with Translate off nothing goes to the Gateway) in the family's
+   pop-up over the button, the one now chosen ticked (5.7) */
+static void choose_language(SETTINGS *s, void *user)
 {
 	SBUF list;
 	char err[160], *p, *e;
 	static char lab[TR_LANGS_MAX][LANGS_NAME + 2];
 	static const char *labp[TR_LANGS_MAX];
-	short bx, by, k, n = 0;
+	short bx, by, k, n = 0, sel = 0;
+	OBJECT *t = set_tree(s);
+	(void) user;
 	if (!gate_now()[0]) {
 		say_no_gateway("set its address on the Secure page");
 		return;
@@ -533,7 +291,11 @@ static void choose_language(void)
 			li.name[strlen(li.name) - 1] = 0;
 		str_copy(known_code[nknown], li.code, TR_LANG);
 		langs_name(&li, known_name[nknown]);
-		snprintf(lab[n], sizeof lab[n], "%s%s", strcmp(li.code, s_to) ? "  " : "\x08 ", known_name[nknown]);
+		if (!strcmp(li.code, s_to))
+			sel = n;
+		/* (popup_m's labels: the words, the chosen one with the check
+		   mark in front: popup.h) */
+		snprintf(lab[n], sizeof lab[n], "%s%s", strcmp(li.code, s_to) ? "" : "\x08", known_name[nknown]);
 		labp[n] = lab[n];
 		nknown++;
 		n++;
@@ -543,21 +305,24 @@ static void choose_language(void)
 		say_no_gateway("it has no language installed: Languages...");
 		return;
 	}
-	objc_offset(tree, to_btn, &bx, &by);
-	k = popup(bx, (short) (by + tree[to_btn].ob_height), labp, n);
+	/* over the button, its chosen row where the button is (settings.c's
+	   pop-ups open so) */
+	objc_offset(t, to_btn, &bx, &by);
+	k = popup_m(bx, (short) (by - 3 - sel * (gl_hchar + 2)), labp, n);
 	if (k >= 0 && k < nknown) {
 		str_copy(s_to, known_code[k], sizeof s_to);
-		lang_label(s_to, to_label, sizeof to_label);
+		to_text();
 		log_event("translate into %s", s_to);
 	}
 }
 
 /* Languages...: common's dialog; an install is a job on the Gateway that
    main.c follows on the status line (translate_job) */
-static void languages(void)
+static void languages(SETTINGS *s, void *user)
 {
 	static langs l;
 	int r;
+	(void) s, (void) user;
 	if (!gate_now()[0]) {
 		say_no_gateway("set its address on the Secure page");
 		return;
@@ -573,155 +338,63 @@ static void languages(void)
 	}
 }
 
-#define NPAGES 4
-#else
-#define NPAGES 2
-#endif
 
-#define SW 12			/* the list's width */
-#define SX (SW + 2)		/* where the settings start */
-#define PW 44			/* their width */
-
-static short settings_tree(short *ok)
+/* EWeb's Translate page (EWEB.PRG) */
+static void page_translate(SETTINGS *s, short x, short y, void *user)
 {
-	static const char *const names[] = { "  General", "  Secure", "  Scripts", "  Translate" };
-	short k, box, from, gap = (short) (gl_hchar / 2);
-	d_begin(SX + PW, 20);
-	nticks = 0;
-	npages = 0;
-	adding_page = 0;
-	memset(page_of, 0, sizeof page_of);
-	settings_band = d_band(SX + PW, " Settings");
-	/* the list: plain words on white, the chosen one in a black bar, a
-	   line between it and the settings */
-	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short) (0 | (1 << 8)), 19);
-	for (k = 0; k < NPAGES; k++) {
-		npages++;
-		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long) d_ted(names[k], 0, 0x1180),
-					 (short) (0 | (2 << 8)), (short) ((2 + k * 2) | ((k * gap) << 8)),
-					 (short) ((SW - 1) | (6 << 8)), 1);
-	}
-	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, PW, 16);
-	for (k = 1; k <= NPAGES; k++) {
-		from = nobj;
-		adding_page = k;
-		d_add(G_STRING, 0, 0, (long) (names[k - 1] + 2), SX, 2, (short) strlen(names[k - 1] + 2), 1);
-		d_add(G_BOX, 0, 0, 0x00001171L, SX, (short) (3 | (2 << 8)), PW - 2, (short) (0 | (1 << 8)));
-		if (k == 1)
-			part_general(SX, 4);
-		else if (k == 2)
-			part_secure(SX, 4);
-#ifndef EW_ST
-		else if (k == 3)
-			part_scripts(SX, 4);
-		else
-			part_translate(SX, 4);
-#endif
-		page_mark(from);
-	}
-	adding_page = 0;
-	d_button(SX + PW - 26, 18, 10, "Cancel", EXIT);
-	*ok = d_button(SX + PW - 13, 18, 10, "OK", EXIT | DEFAULT);
-	d_end();
-	show_page(1, 0);
-	return box;
+	(void) y, (void) user;
+	set_tick(s, x, set_y(s, 0), "Translate pages (as View > Translate)", &s_on[T_TRANSLATE]);
+	set_text(s, x, set_y(s, 2), "Translate into");
+	to_text();
+	to_btn = set_value(s, x + 16, set_y(s, 2), 16, to_label, choose_language, NULL);
+	set_button(s, x + 16, set_y(s, 4), 16, "Languages...", languages, NULL);
+	set_text(s, x, set_y(s, 6), "On the Gateway (Secure page's address):");
+	set_text(s, x, set_y(s, 7), "aera-gateway install translate.");
+	set_text(s, x, set_y(s, 8), "Pages are translated there and kept");
+	set_text(s, x, set_y(s, 9), "in memory only.");
 }
+#endif
 
 /* a number typed out of its range (the UI standards' D30, Erez's words of
-   9 Nov 2026): the alert that says what to type, and the field's page
-   and field, else 0; nothing is changed silently */
-static const char *settings_bad(short *page, short *field)
+   9 Nov 2026): the alert that says what to type, its page shown; OK
+   refused, nothing changed silently (settings.c's check) */
+static int settings_check(SETTINGS *s, void *user)
 {
+	const char *bad = NULL;
+	short page = 0;
 	long v;
+	(void) user;
 	v = atol(s_zoom);
-	if (!s_zoom[0] || v < 50 || v > 200) {
-		*page = 1, *field = o_zoom;
-		return "[1][The text size is a number|from 50 to 200 (per cent).][ OK ]";
+	if (!s_zoom[0] || v < 50 || v > 200)
+		bad = "[1][The text size is a number|from 50 to 200 (per cent).][ OK ]";
+	else if (s_cache[0] && atol(s_cache) > CACHE_MAX_MB)
+		bad = "[1][The disk cache can be at most|512 MB: type 512 or less.][ OK ]";
+	else if (!s_gport[0] || (v = atol(s_gport)) < 1 || v > 65535) {
+		bad = "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
+		page = 1;
 	}
-	v = atol(s_cache);
-	if (s_cache[0] && v > CACHE_MAX_MB) {
-		*page = 1, *field = o_cache;
-		return "[1][The disk cache can be at most|512 MB: type 512 or less.][ OK ]";
-	}
-	v = atol(s_gport);
-	if (!s_gport[0] || v < 1 || v > 65535) {
-		*page = 2, *field = o_gport;
-		return "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
-	}
+	if (bad == NULL)
+		return 1;
+	log_event("settings refused: page %d", page + 1);
+	alert(1, bad);
+	if (page != set_page_now(s))
+		set_show(s, page);
+	dlg_draw(set_tree(s), 0);	/* (what the alert covered) */
+	badge_show();
 	return 0;
-}
-
-/* the dialog stays open while ticks and pages change */
-static short settings_run(short pages_box, short ok)
-{
-	short x, y, w, h, r, k, start = 0;
-	const char *bad;
-	pages_obj = pages_box;
-	dlg_band(settings_band);	/* (in a window: its title bar, 3.5) */
-	gap_tag("dialog: opened");
-	dlg_open(tree, &x, &y, &w, &h);
-	badge_open(settings_band);
-	gap_tag("dialog: drawn");
-	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
-	for (;;) {
-		r = dlg_do(tree, start ? start : first_edit(), (short) (ok - 1));
-		start = 0;
-		if (r < 0)
-			break;
-		r &= 0x7fff;
-		if (r == ok && (bad = settings_bad(&k, &start)) != 0) {
-			tree[ok].ob_state &= ~SELECTED;
-			log_event("settings refused: page %d field %d", k, start);
-			alert(1, bad);
-			if (k != cur_page)
-				show_page(k, 0);
-			dlg_draw(tree, 0);	/* (what the alert covered) */
-			badge_show();
-			continue;	/* the cursor in that field */
-		}
-		for (k = 0; k < nticks; k++)
-			if (r == tick_box[k] || r == tick_lbl[k]) {
-				s_on[tick_var[k]] = !s_on[tick_var[k]];
-				tick_draw(k);
-				evnt_timer_(120);
-				break;
-			}
-		if (k < nticks)
-			continue;
-		for (k = 1; k <= npages; k++)
-			if (r == page_tab[k])
-				break;
-		if (k <= npages) {
-			if (k != cur_page)
-				show_page(k, 1);
-			continue;
-		}
-#ifndef EW_ST
-		if (r == to_btn || r == langs_btn) {
-			if (r == to_btn)
-				choose_language();
-			else
-				languages();
-			tree[r].ob_state &= ~SELECTED;
-			dlg_draw(tree, 0);	/* (what the popup or the dialog covered) */
-			badge_show();
-			continue;
-		}
-#endif
-		break;
-	}
-	badge_close();
-	dlg_close();
-	if (r >= 0)
-		tree[r].ob_state &= ~SELECTED;
-	return r;
 }
 
 /* 1 when the settings changed (they are in opt, and on the disk) */
 int dlg_settings(void)
 {
-	short ok, box, r;
-	int z, port;
+	static const SET_PAGE pages[] = {
+		{ "General", page_general }, { "Secure", page_secure },
+#ifndef EW_ST
+		{ "Scripts", page_scripts }, { "Translate", page_translate },
+#endif
+	};
+	SET_DEF d;
+	int r;
 	s_on[T_PICTURES] = opt.pictures;
 	s_on[T_FALCON] = (short) opt.falcon;
 	s_on[T_DSP] = (short) opt.dsp;
@@ -739,24 +412,31 @@ int dlg_settings(void)
 	str_copy(s_gate, opt.gate, sizeof s_gate);
 	snprintf(s_gport, sizeof s_gport, "%u", opt.gateport);
 	snprintf(s_cache, sizeof s_cache, "%ld", cache_mb());
+	memset(&d, 0, sizeof d);
+	d.title = "Settings";
+	d.pages = pages;
+	d.npages = (short) (sizeof pages / sizeof pages[0]);
+	d.page_w = 44;		/* (EWeb's long fields: settings.h) */
+	d.height = 20;
+	d.check = settings_check;
 	gap_tag("dialog: made");
-	box = settings_tree(&ok);
-	r = settings_run(box, ok);
-	if (r != ok)
+	set_open = 0;
+	settings_drawn = settings_drawn_now;
+	r = settings_dialog(&d);
+	settings_drawn = NULL;
+	badge_close();
+	if (!r)
 		return 0;
 	opt.pictures = s_on[T_PICTURES];
-	z = atoi(s_zoom);
-	if (z >= 50 && z <= 200)
-		opt.zoom = (short) z;
+	opt.zoom = (short) atoi(s_zoom);	/* (in range: settings_check) */
 	str_copy(opt.search, s_search, sizeof opt.search);
 	str_copy(opt.gate, s_gate, sizeof opt.gate);
 	str_trim(opt.gate);
-	port = atoi(s_gport);
-	opt.gateport = (unsigned short) (port > 0 && port < 65536 ? port : HTTP_GATEWAY_PORT);
+	opt.gateport = (unsigned short) atol(s_gport);
 	/* the size as it was unless it was changed (an INF without CACHE=
 	   keeps following the machine's memory) */
 	if (s_cache[0] && atol(s_cache) != cache_mb())
-		opt.cache = (short) (atol(s_cache) <= CACHE_MAX_MB ? atol(s_cache) : CACHE_MAX_MB);
+		opt.cache = (short) atol(s_cache);
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];
@@ -765,8 +445,6 @@ int dlg_settings(void)
 	opt.translate = s_on[T_TRANSLATE];
 	if (s_to[0])
 		str_copy(opt.translate_to, s_to, sizeof opt.translate_to);
-#endif
-#ifndef EW_ST
 	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
 #endif
 	if (s_on[T_FALCON] != opt.falcon)
@@ -777,7 +455,6 @@ int dlg_settings(void)
 /* ---------------------------------------------------------------- a question and its answer */
 
 static char p_lines[3][44], p_answer[256];
-static LFIELD f_answer;
 
 /* a question (UTF-8) under a title, its answer typed in a field (UTF-8,
    what it was first); 1 OK, 0 Cancel: a page's prompt(), Edit > Find */
@@ -803,20 +480,20 @@ static int ask(const char *title, const char *text, char *answer, int size)
 			s++;
 	}
 	atari_text(answer, p_answer, sizeof p_answer);
-	d_begin(44, 9);
-	nticks = 0;
-	memset(page_of, 0, sizeof page_of);
-	band = d_band(44, title);
+	/* (the family's geometry, 6.1: margins 2, Cancel at W - 24, OK at
+	   W - 12, 10 wide) */
+	db_start(44, 9);
+	band = db_band(&db, 44, title);
 	for (k = 0; k < 3; k++)
 		if (p_lines[k][0])
-			d_text(2, (short) (2 + k), p_lines[k]);
-	field = d_lfield(2, 5, &f_answer, p_answer, 40, sizeof p_answer - 1);
-	d_button(18, 7, 10, "Cancel", EXIT);
-	ok = d_button(31, 7, 10, "OK", EXIT | DEFAULT);
-	d_end();
+			db_text(&db, 2, (short) (2 + k), p_lines[k]);
+	field = db_framed(&db, db_long(&db, 2, 5, p_answer, 40, sizeof p_answer - 1, 0));
+	db_button(&db, 20, 7, 10, "Cancel", EXIT);
+	ok = db_button(&db, 32, 7, 10, "OK", EXIT | DEFAULT);
+	db_end(&db);
 	dlg_band(band);		/* (in a window: its title bar, 3.5) */
 	dlg_open(tree, &x, &y, &w, &h);
-	badge_open(band);
+	badge_open(tree, band);
 	r = dlg_do(tree, field, (short) (ok - 1));
 	badge_close();
 	dlg_close();
@@ -874,12 +551,12 @@ void quit_box(const char *what, int permille)
 	str_copy(q_what, what, sizeof q_what);
 	if (!q_open) {
 		short band;
-		d_begin(44, 6);
-		band = d_band(44, "Closing EWeb");
-		q_text = d_text(2, 2, q_what);
+		db_start(44, 6);
+		band = db_band(&db, 44, " Closing EWeb");
+		q_text = db_text(&db, 2, 2, q_what);
 		tree[q_text].ob_width = 40;	/* (the longest step's words) */
-		q_frame = d_add(G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
-		d_end();
+		q_frame = db_add(&db, G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
+		db_end(&db);
 		dlg_band(band);		/* (in a window: its title bar, 3.5) */
 		dlg_open(tree, &x, &y, &w, &h);
 		q_open = 1;

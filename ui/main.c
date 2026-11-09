@@ -1857,8 +1857,8 @@ static int can_open(void *ud, const char *url)
 
 /* View > Encoding: the encodings EWeb offers (br_encodings) in a popup
    at the mouse, by the menu item (TOS's AES has no submenus), the one
-   the page is read in ticked (its tick in place of the first of the two
-   spaces the others start with: popup()'s way); the page read again
+   the page is read in ticked (popup_m's labels: the words, the tick in
+   the box's margin, the UI standards' D15); the page read again
    from what came in the one chosen, until another page is loaded
    (br_encoding) */
 static void encoding_menu(void)
@@ -1870,18 +1870,18 @@ static void encoding_menu(void)
 	if (br.d == NULL)
 		return;
 	if (br.enc[0])
-		snprintf(lab[0], sizeof lab[0], "  Auto");
+		snprintf(lab[0], sizeof lab[0], "Auto");
 	else
-		snprintf(lab[0], sizeof lab[0], "\x08 Auto: %.35s", br_encoding_label(br.d->charset));
+		snprintf(lab[0], sizeof lab[0], "\x08" "Auto: %.35s", br_encoding_label(br.d->charset));
 	items[n++] = lab[0];
 	items[n++] = "-";
 	for (i = 0; i < br_nencodings && i < 20; i++) {
-		snprintf(lab[1 + i], sizeof lab[1 + i], "%s%s", strcmp(br.enc, br_encodings[i].name) == 0 ? "\x08 " : "  ",
+		snprintf(lab[1 + i], sizeof lab[1 + i], "%s%s", strcmp(br.enc, br_encodings[i].name) == 0 ? "\x08" : "",
 			 br_encodings[i].label);
 		items[n++] = lab[1 + i];
 	}
 	graf_mkstate(&mx, &my, &mb, &ks);
-	r = popup(mx, my, items, n);
+	r = popup_m(mx, my, items, n);
 	if (r < 0 || r == 1)
 		return;
 	{

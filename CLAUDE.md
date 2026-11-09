@@ -167,7 +167,8 @@ hub stay complete, with the evidence.
   accessory loaded, started or fetched (Erez, 8 Nov 2026, the guidelines' 1.2): the hub's family
   checks run them together.
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
-  called by `d_end` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
+  called by `db_end` in common's `dlgbuild.c`; Settings is the family's, common's `settings.c`, its pages
+  `page_*` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
   Undo cancels: 3.5): after changing them, `make hatarigui` (its `dialogs` group: TOS 4.04 and
   EmuTOS in 3D, the ST's TOS 1.04 flat). Where the AES runs several programs at once (MiNT, MagiC) alerts
   are the AES's and dialogs its windows (the guidelines' 3.5: `dlg_band`, `dlg_open`, `dlg_close`,
