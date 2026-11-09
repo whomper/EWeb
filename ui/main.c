@@ -966,6 +966,10 @@ static void say(void *ud, const char *what)
 	atari_text(what, a, sizeof a);
 	str_copy(said, a, sizeof said);
 	said_bytes = conn_bytes;
+#ifndef EW_ST
+	if (dl_box_up())
+		return;		/* (the download's box says it) */
+#endif
 	snprintf(a, sizeof a, "%s   (Esc stops)", said);
 	status(a);
 }
@@ -1063,6 +1067,37 @@ static void put_off(short which, const short *msg, const AEVENT *ev)
 	conn_stop = 1;
 }
 
+#ifndef EW_ST
+/* while the download's box is up: its Cancel, Esc, Undo and closer stop
+   the file; its bar and KB as the file comes (four times a second); on
+   TOS, where the box is over the screen, nothing else is drawn */
+static void dl_idle(void)
+{
+	static unsigned long stepped;
+	short msg[8], which;
+	AEVENT ev;
+	gap_stage("download");
+	which = dlg_evnt(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, pf_idle_quick ? 0 : 5, msg, &ev);
+	gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" : "download");
+	if (dl_box_event(which, &ev) && !conn_stop) {
+		conn_stop = 1;
+		log_event("download cancelled at %ld", br_saved);
+	}
+	if ((which & MU_MESAG) && msg[0] == AP_TERM) {
+		conn_stop = 1;
+		quit = 1;
+	}
+	if (dlg_in_window()) {
+		win_throb(1);
+		win_draw_due();
+	}
+	if ((long) (pf_ms() - stepped) >= 250) {
+		stepped = pf_ms();
+		dl_box_step(br_saved);
+	}
+}
+#endif
+
 /* while a page loads: the window redrawn, moved and topped; Esc, Undo
    and Stop stop the load; the menu bar waits. While its pictures come
    the window scrolls too, and what else comes stops the picture and is
@@ -1071,6 +1106,12 @@ static void idle(void)
 {
 	short msg[8], which;
 	AEVENT ev;
+#ifndef EW_ST
+	if (dl_box_up()) {
+		dl_idle();
+		return;
+	}
+#endif
 	gap_stage(br_building == BRB_PARSE ? "parse" : br_building == BRB_STYLE ? "style" :
 		  br_building == BRB_LAYOUT ? "layout" : br_building == BRB_SCRIPT ? "script" :
 		  pics ? "pictures" : "load");
@@ -1239,6 +1280,13 @@ static int save_where(void *ud, const char *name, char *path, int size)
 	graf_mouse(ARROW, 0);
 	r = ask_save("Save the link's file", name, path, size);
 	graf_mouse(BUSYBEE, 0);
+#ifndef EW_ST
+	if (r) {
+		/* the download's box, as it comes (Erez, 9 Nov 2026) */
+		const char *f = strrchr(path, '\\');
+		dl_box(f != NULL ? f + 1 : path, br_save_total);
+	}
+#endif
 	return r;
 }
 
@@ -1620,6 +1668,9 @@ static void br_setup(browser *b)
 	b->log = log_line;
 	b->can_open = can_open;
 	b->save_as = save_where;
+#ifndef EW_ST
+	b->stream_files = 1;	/* a file a link opens saved as it comes, in the download's box */
+#endif
 	b->snapshot = opt.snapshot;
 	b->translate = translate_to();
 	b->trackers = opt.trackers;
@@ -1952,6 +2003,11 @@ static void save_file(const char *url, const char *given)
 	full[0] = 0;
 	loading_on();
 	r = br_save_url(&br, url, given, full, sizeof full, err, sizeof err);
+#ifndef EW_ST
+	if (dl_box_up())
+		log_event("download box closed %d %ld of %ld", r, br_saved, br_save_total);
+	dl_box_close();
+#endif
 	loading = 0;
 	graf_mouse(ARROW, 0);
 	said[0] = 0;

@@ -348,6 +348,14 @@ void quit_box(const char *what, int permille);
 void quit_box_close(void);
 /* the bar alone, further on within a step (drawn only when it grows) */
 void quit_bar(int permille);
+/* the download's box (Erez, 9 Nov 2026): the file's name, total its size
+   (-1 unknown); dl_box_step with what has come; dl_box_event 1 when its
+   Cancel (or Esc, Undo, its closer) was used */
+void dl_box(const char *name, long total);
+int  dl_box_up(void);
+void dl_box_step(long got);
+int  dl_box_event(short which, const AEVENT *ev);
+void dl_box_close(void);
 /* a page's prompt(): its question (UTF-8), the answer in answer (UTF-8,
    the page's suggestion first); 1 OK, 0 Cancel */
 int  dlg_prompt(const char *text, char *answer, int size);

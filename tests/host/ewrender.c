@@ -532,6 +532,7 @@ static const char *save_to;
 static int click_saved;
 /* -Z: how long the file selector takes, ms (-1: none is shown) */
 static long selector_ms = -1;
+static int stream_files;
 
 /* browser.save_as with -Z: the file selector, MS ms, choosing -s's file */
 static int selector(void *ud, const char *name, char *path, int size)
@@ -557,6 +558,7 @@ static int save_url(browser *b, const char *url, const char *given)
 	r = br_save_url(b, url, given, path, sizeof path, err, sizeof err);
 	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
 	printf("saved link: %d %ld %s %s\n", r, br_saved, name, err);
+	printf("save size: %ld\n", br_save_total);
 	return r;
 }
 
@@ -1173,6 +1175,8 @@ int main(int argc, char **argv)
 			enc = argv[++i];	/* View > Encoding */
 		else if (!strcmp(argv[i], "-g") && i + 1 < argc)
 			save_link = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-stream"))
+			stream_files = 1;	/* a file a link opens: BR_SAVE, as EWEB.PRG has it */
 		else if (!strcmp(argv[i], "-Z") && i + 1 < argc)
 			selector_ms = atol(argv[++i]);	/* the file selector's time */
 		else if (!strcmp(argv[i], "--gwtranslate") && i + 1 < argc)
@@ -1228,6 +1232,7 @@ int main(int argc, char **argv)
 	net_init();
 	str_copy(conn_cacert, cacert, sizeof conn_cacert);
 	br_init(&b, width, zoom);
+	b.stream_files = stream_files;
 	b.translate = gw_to;	/* (--gwtranslate: NULL off, as EWEB.PRG with Translate off) */
 	b.height = height > 0 ? height : 400;	/* (the window's: a frameset is as tall) */
 	b.text = (int32_t) (1024L * text / 100);
@@ -1292,6 +1297,12 @@ int main(int argc, char **argv)
 		printf("shown on the way: %d \"%s\"\n", r, b.title);
 		click_file(&b, r);
 		r = BR_SHOWN;
+	}
+	if (r == BR_SAVE) {
+		/* a file opened, saved as it comes (-stream) */
+		click_file(&b, r);
+		br_free(&b);
+		return rc;
 	}
 	if (r == BR_DOWNLOAD) {
 		char name[16];

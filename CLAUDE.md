@@ -231,8 +231,9 @@ hub stay complete, with the evidence.
   brand files with `--assets`), filled in by `home_page` in `src/browse/browse.c`: after changing
   it, look at it with ewrender in 256 and 16 colours and 320 wide, and `make hatarigui` (browse:
   home). **Saving** (File > Save page as, a link's file streamed to
-  the disk, a download) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`) and
-  `make hatarigui` after changing it.
+  the disk, a download: a file a link opens streamed too, `browser.stream_files`, in the download
+  box `dl_box` of `ui/dialogs.c`) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`,
+  ewrender `-stream`) and `make hatarigui` after changing it, and XaAES for the box.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
   when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; in `cache\` next to `EWEB.PRG` a ring of
   pieces `ewebnn.pak` of 4 MB at most, each with its list `ewebnn.lst`, and the index `eweb.idx`

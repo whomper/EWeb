@@ -593,6 +593,175 @@ void quit_box_close(void)
 	q_open = 0;
 }
 
+#ifndef EW_ST	/* the ST edition stays as 1.0 has it (Erez, 4 Nov 2026) */
+/* ---------------------------------------------------------------- the download's box */
+
+/* a file saved as it comes (Erez, 9 Nov 2026): its name, a bar of how
+   much of it has come by its size (the family's progress bar, 5.9), the
+   KB so far and of how many, and Cancel (Esc and Undo too: 3.5). In a
+   window where the AES runs several programs (3.5), drawn over the screen
+   on TOS. Opened once the file is chosen, closed when it is saved,
+   stopped or failed */
+static char d_name[16], d_size[48];
+static short d_open, d_size_o, d_frame, d_cancel, d_at;
+static long d_kb = -2, d_total;
+
+/* n with commas for thousands: "12,345" */
+static void d_num(char *out, int size, long n)
+{
+	char t[16];
+	int len, k, o = 0;
+	snprintf(t, sizeof t, "%ld", n);
+	len = (int) strlen(t);
+	for (k = 0; k < len && o < size - 1; k++) {
+		if (k > 0 && (len - k) % 3 == 0 && o < size - 2)
+			out[o++] = ',';
+		out[o++] = t[k];
+	}
+	out[o] = 0;
+}
+
+/* the bar's part from..to (1024ths), through what shows of it */
+static void d_bar(short from, short to, short cx, short cy, short cw, short ch)
+{
+	short x, y;
+	GRECT r;
+	if (to <= from)
+		return;
+	objc_offset(tree, d_frame, &x, &y);
+	r.x = x + 1;
+	r.y = y + 1;
+	r.w = tree[d_frame].ob_width - 2;
+	r.h = tree[d_frame].ob_height - 2;
+	/* (within the piece asked for, and what of the window shows) */
+	if (cw > 0) {
+		short x2 = r.x + r.w, y2 = r.y + r.h;
+		if (r.x < cx)
+			r.x = cx;
+		if (r.y < cy)
+			r.y = cy;
+		if (x2 > cx + cw)
+			x2 = cx + cw;
+		if (y2 > cy + ch)
+			y2 = cy + ch;
+		if (x2 <= r.x || y2 <= r.y)
+			return;
+		r.w = x2 - r.x;
+		r.h = y2 - r.y;
+	}
+	if (!dlg_cut(&r.x, &r.y, &r.w, &r.h))
+		return;
+	graf_mouse(M_OFF, 0);
+	clip_on(&r);
+	objc_offset(tree, d_frame, &x, &y);
+	progbar_fill(vdi_h, x + 1, y + 1, tree[d_frame].ob_width - 2, tree[d_frame].ob_height - 2, from, to);
+	graf_mouse(M_ON, 0);
+}
+
+/* dlg_more's: a piece of the window drawn again, the bar in it */
+static void d_more(short x, short y, short w, short h)
+{
+	d_bar(0, d_at, x, y, w, h);
+}
+
+static void d_size_text(long got)
+{
+	char a[16], b[16];
+	d_num(a, sizeof a, got >> 10);
+	if (d_total > 0) {
+		d_num(b, sizeof b, (d_total + 1023) >> 10);
+		snprintf(d_size, sizeof d_size, "%s KB of %s KB", a, b);
+	} else {
+		snprintf(d_size, sizeof d_size, "%s KB", a);
+	}
+}
+
+void dl_box(const char *name, long total)
+{
+	short x, y, w, h, band;
+	if (d_open)
+		dl_box_close();
+	str_copy(d_name, name, sizeof d_name);
+	d_total = total;
+	d_at = 0;
+	d_kb = 0;
+	d_size_text(0);
+	/* (the family's geometry, 6.1: margins 2, the button at W - 12) */
+	db_start(44, 8);
+	band = db_band(&db, 44, " Downloading");
+	db_text(&db, 2, 2, d_name);
+	d_frame = db_add(&db, G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
+	d_size_o = db_text(&db, 2, 6, d_size);
+	tree[d_size_o].ob_width = 28;	/* (the longest: "99,999,999 KB of 99,999,999 KB" cut) */
+	d_cancel = db_button(&db, 32, 6, 10, "Cancel", EXIT);
+	db_end(&db);
+	dlg_band(band);		/* (in a window: its title bar, 3.5) */
+	dlg_open(tree, &x, &y, &w, &h);
+	dlg_more(d_more);
+	d_open = 1;
+	objc_offset(tree, d_cancel, &x, &y);
+	log_event("download box %s %ld cancel %d %d %d %d", d_name, total, x, y, tree[d_cancel].ob_width,
+		  tree[d_cancel].ob_height);
+}
+
+int dl_box_up(void)
+{
+	return d_open;
+}
+
+void dl_box_step(long got)
+{
+	short w;
+	if (!d_open)
+		return;
+	if (got >> 10 != d_kb) {
+		/* the KB: the line drawn again on its ground (a G_STRING
+		   leaves the last figures under the new ones) */
+		d_kb = got >> 10;
+		d_size_text(got);
+		dlg_draw_range(tree, d_size_o, d_size_o, (short) (d_size_o + 1), 1, 0);
+	}
+	if (d_total <= 0)
+		return;
+	{
+		long g = got, t = d_total;
+		while (t > 0x1fffffL) {	/* (no overflow: no float on the 68030 build) */
+			g >>= 1;
+			t >>= 1;
+		}
+		w = (short) (g >= t ? PB_FULL : g * PB_FULL / t);
+	}
+	if (w * (long) (tree[d_frame].ob_width - 2) / PB_FULL <= d_at * (long) (tree[d_frame].ob_width - 2) / PB_FULL)
+		return;		/* nothing more to show (a pixel or less) */
+	d_bar(d_at, w, 0, 0, 0, 0);	/* only what is new (the guidelines' Speed) */
+	d_at = w;
+}
+
+/* the box's own events: 1 Cancel (pressed, or Esc, Undo, its closer) */
+int dl_box_event(short which, const AEVENT *ev)
+{
+	if (!d_open)
+		return 0;
+	if ((which & MU_KEYBD) && (dlg_esc(ev->kreturn) || dlg_undo(ev->kreturn)))
+		return 1;
+	if ((which & MU_BUTTON) && dlg_find(tree, ev->mx, ev->my) == d_cancel) {
+		tree[d_cancel].ob_state |= SELECTED;
+		dlg_draw(tree, d_cancel);
+		return 1;
+	}
+	return 0;
+}
+
+void dl_box_close(void)
+{
+	if (!d_open)
+		return;
+	tree[d_cancel].ob_state &= ~SELECTED;
+	dlg_close();
+	d_open = 0;
+}
+#endif
+
 #ifndef EW_ST	/* the ST edition runs no scripts */
 int dlg_prompt(const char *text, char *answer, int size)
 {

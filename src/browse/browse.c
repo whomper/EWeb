@@ -727,6 +727,8 @@ typedef struct {
 	int tr;
 	char tr_why[160], tr_part[16];
 	int gwxl;		/* the answer says webgate translates (X-Gateway-Translate: 1) */
+	int to_save;		/* a file to save, cut off at its headers (page_stream):
+				   url where it came from, for br_save_url */
 } FETCH;
 
 /* a page drawn while it loads (its preview, below): the page's body as it
@@ -1136,6 +1138,13 @@ static int gzip_file(const HTTPRESP *rs, const char *name)
 	return ends_in(s, e, ".gz") || ends_in(s, e, ".tgz");
 }
 
+/* the page load's fetch only (load, browser.stream_files): a file to save
+   that comes (one its server says to save, or of a type EWeb shows
+   neither as a page nor as a picture) is cut off at its headers and saved
+   as it comes by br_save_url (BR_SAVE), with no limit to its size, not
+   gathered in memory first (Erez, 9 Nov 2026: the download dialog) */
+static int page_stream;
+
 /* fetch's HTTPREQ.head for a page: its Content-Disposition, and a gzip
    file that is to be saved (one it says to, or of a type EWeb doesn't
    show) kept as it came */
@@ -1153,6 +1162,12 @@ static int page_head(void *ud, HTTPRESP *rs)
 	   it says: attachment, or the name of a file to be saved ("inline"
 	   on a page is kept, as without the header) */
 	f->disposed = f->attach || (t == 0 && f->name[0] && !page);
+	if (page_stream && (f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) &&
+	    strlen(rs->url.href) < sizeof ((browser *) 0)->dl.url) {
+		f->to_save = 1;
+		str_copy(f->url, rs->url.href, sizeof f->url);
+		return 0;
+	}
 	if ((f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) && gzip_file(rs, f->name))
 		rs->packed = 1;
 	return 1;
@@ -1505,7 +1520,7 @@ static int fetch_raw(browser *b, const char *url, const char *site, int fresh, c
 			free(rs);
 			return 1;
 		}
-		if (!ok && cached && got.stale_ok && !conn_stop && post == NULL) {
+		if (!ok && cached && got.stale_ok && !conn_stop && post == NULL && !f->to_save) {
 			/* no answer: what is kept, said to be out of date (RFC 9111,
 			   4.2.4: a cache may when it is cut off) */
 			sb_free(&body);
@@ -3517,6 +3532,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	fetch_nav = 1;	/* (a page opened is fetched whatever its host) */
 	room_b = b;
 	room_gone = 0;
+	page_stream = b->stream_files && post == NULL && !b->snapshot && !has_scheme(url, "file");
 	r = fetch(b, url, b->typed ? NULL : b->url,
 		  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
 	room_b = NULL;
@@ -3534,7 +3550,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	}
 	fetch_nav = 0;
 	fetch_xl = NULL;
+	page_stream = 0;
 	b->ms_fetch = pf_ms() - b->ms_fetch;
+	if (!r && f->to_save) {
+		/* a file to save: fetched again by br_save_url, as it comes */
+		br_dl_free(b);
+		str_copy(b->dl.url, f->url, sizeof b->dl.url);
+		free(f);
+		return BR_SAVE;
+	}
 	if (!r) {
 		if (conn_stop && !gone) {
 			conn_stop = 0;
@@ -5059,7 +5083,7 @@ static int go_to(browser *b, int i)
 	fr_want = b->hist[i].frames;	/* (its frames as they were) */
 	r = load(b, b->hist[i].url, NAV_HISTORY);
 	fr_want = NULL;
-	if ((r == BR_STOPPED || r == BR_DOWNLOAD) && b->shows == shows)
+	if ((r == BR_STOPPED || r == BR_DOWNLOAD || r == BR_SAVE) && b->shows == shows)
 		b->cur = old;	/* (not when its page was shown, and its script went on) */
 	return r;
 }
@@ -6141,7 +6165,7 @@ int br_dl_save(browser *b, const char *path)
 	return r;
 }
 
-long br_save_buf = 256L << 10, br_saved;
+long br_save_buf = 256L << 10, br_saved, br_save_total;
 
 typedef struct {
 	browser *b;
@@ -6211,6 +6235,11 @@ static int save_head(void *ud, HTTPRESP *rs)
 	else
 		str_copy(b->dl.name, cd, sizeof b->dl.name);
 	br_file_name(b->dl.url, b->dl.name, b->dl.mime, name, sizeof name);
+	/* its size, where its server says (a body as it is sent, not packed) */
+	v = http_header_at(rs, "Content-Length");
+	br_save_total = v != NULL && rs->encoding == 0 ? strtol(v, NULL, 10) : -1;
+	if (br_save_total < 0)
+		br_save_total = -1;
 	if (s->path[0] == 0) {
 		if (b->save_as == NULL || !b->save_as(b->ud, name, s->path, s->pathsize)) {
 			s->cancelled = 1;
@@ -6236,6 +6265,7 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 	int ok, tries = 0, made = 0;
 
 	br_saved = 0;
+	br_save_total = -1;
 	err[0] = 0;
 	conn_stop = 0;
 	/* what is being saved, until the answer says more */

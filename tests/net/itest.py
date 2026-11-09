@@ -598,6 +598,19 @@ try:
         rc, data, out = save("-g", "0", files)
         check("the browser: a link's file saved", rc == 0 and data == server.BIG and
               "saved link: 0 %d CHUNKED \n" % len(server.BIG) in out, out)
+        # a file a link opens, saved as it comes (EWEB.PRG's download box,
+        # Erez 9 Nov 2026): cut off at its headers, fetched again into the
+        # file, its size as the server says (none for a chunked one)
+        rc, data, out = save("-stream", "http://localhost:%d/chunked" % HTTP)
+        check("the browser: a file opened, streamed (chunked: no size)", rc == 0 and data == server.BIG and
+              "saved link: 0 %d CHUNKED \n" % len(server.BIG) in out and "save size: -1\n" in out, out)
+        rc, data, out = save("-stream", "http://localhost:%d/site/small.zip" % HTTP)
+        check("the browser: a file opened, streamed, its size", rc == 0 and data == server.SMALL and
+              "saved link: 0 %d SMALL.ZIP \n" % len(server.SMALL) in out and
+              "save size: %d\n" % len(server.SMALL) in out, out)
+        rc, data, out = save("-stream", "http://localhost:%d/site/dl/report" % HTTP)
+        check("the browser: an attachment opened, streamed", rc == 0 and data == server.REPORT and
+              "saved link: 0 %d REPORT20.TXT \n" % len(server.REPORT) in out, out)
         rc, data, out = save("-g", "1", files)
         check("the browser: a link's file that isn't there", rc == 0 and data is None and
               "saved link: 1 0 NONE.ZIP The server answered 404" in out, out)

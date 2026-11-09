@@ -58,7 +58,8 @@ enum {
 				   save (Content-Disposition: attachment): br.dl holds it, to
 				   be saved (br_dl_save) or let go (br_dl_free) */
 	BR_SAVE,		/* a link to save, not to follow (<a download> to the page's
-				   own site): br.dl's url and name say which, for br_save_url
+				   own site), or with browser.stream_files a file a link
+				   opened: br.dl's url and name say which, for br_save_url
 				   to fetch */
 	BR_WINDOW		/* a link or a form for another window (its target _blank,
 				   or a name no frame has): br.elsewhere its address,
@@ -234,6 +235,10 @@ typedef struct browser {
 	   begun (its name is known then): name the TOS name to offer; 1 and
 	   path (size bytes) set, 0 cancelled. NULL: none is saved */
 	int (*save_as)(void *ud, const char *name, char *path, int size);
+	/* a link opened to a file to save comes back BR_SAVE (its address
+	   in br.dl.url), for br_save_url to save as it comes; 0: BR_DOWNLOAD,
+	   the file in memory */
+	int stream_files;
 	void *ud;
 } browser;
 
@@ -491,8 +496,9 @@ enum {
 };
 int br_save_url(browser *b, const char *url, const char *given, char *path, int size, char *err, int errlen);
 /* the bytes br_save_url gathers before each write (256 KB; the front
-   end may set less on a small machine), and how many the last brought */
-extern long br_save_buf, br_saved;
+   end may set less on a small machine), how many the last brought, and
+   how many its server said it has (Content-Length; -1 it didn't say) */
+extern long br_save_buf, br_saved, br_save_total;
 
 /* the memory cache's size (pages and stylesheets kept for Back and for
    the next page of a site), bytes */

@@ -550,16 +550,34 @@ def browse():
         check("browse: a secure page", ev is not None and ev.startswith("shown https://127.0.0.1:%d/site/ " % HTTPS),
               str(r.events()))
         r.shot(4)
-        # 2 MB that come slowly over the serial line: Esc stops them, and
-        # the page before stays
-        r.key(L, (CTRL,))
-        r.type("127.0.0.1:%d/chunked" % HTTP)
-        r.key(RETURN)
-        time.sleep(8)
-        r.key(0x01)
-        ev = r.wait(r"(stopped|shown )", 120)
-        check("browse: Esc stops a load", ev is not None and ev.startswith("stopped"), str(r.events()))
-        r.shot(5)
+        # 2 MB that come slowly over the serial line, a file EWeb doesn't
+        # show: the file selector, then the download's box (Erez, 9 Nov
+        # 2026: its name, a bar by its size, Cancel) as it comes; Esc stops
+        # it, nothing is left on the disk, and the page before stays; the
+        # box's Cancel stops it too
+        for how in ("Esc", "Cancel"):
+            r.key(L, (CTRL,))
+            r.type("127.0.0.1:%d/chunked" % HTTP)
+            r.key(RETURN)
+            sv = r.wait(r"save link", 120)
+            time.sleep(3)		# the file selector
+            r.key(RETURN)
+            box = r.wait(r"download box ", 60)
+            time.sleep(8)
+            if how == "Esc":
+                r.shot(5)
+                r.key(0x01)
+            elif box is not None:
+                bx, by, bw, bh = (int(v) for v in box.split()[-4:])
+                r.mouse.click(bx + bw // 2, by + bh // 2)
+            closed = r.wait(r"download box closed ", 120)
+            ev = r.wait(r"stopped", 30)
+            check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
+                  box.startswith("download box CHUNKED -1 cancel ") and ev is not None and
+                  closed is not None and closed.startswith("download box closed 2 ") and
+                  int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, "CHUNKED")) and
+                  not os.path.exists(os.path.join(hd, "chunked")) and
+                  (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
         # a page of pictures: shown first, its pictures after, the window
         # scrolled while they come (Down doesn't stop them)
         r.key(L, (CTRL,))
@@ -866,23 +884,26 @@ def browse():
             r.key(L, (CTRL,))
             r.type("127.0.0.1:%d/site/small.zip" % HTTP)
             r.key(RETURN)
-            dl = r.wait(r"download ", 120)
+            dl = r.wait(r"save link", 120)
             time.sleep(3)
             r.key(RETURN)
+            box = r.wait(r"download box ", 60)
             ev = r.wait(r"saved ", 60)
-            check("saving: a file EWeb doesn't show", dl == "download application/zip %d" % len(server.SMALL) and
+            check("saving: a file EWeb doesn't show, in the download's box, its size",
+                  dl is not None and box is not None and
+                  box.startswith("download box SMALL.ZIP %d cancel " % len(server.SMALL)) and
                   ev == "saved %d" % len(server.SMALL) and saved("SMALL.ZIP") == server.SMALL, str(r.events()))
             # a text file its server says to save (Content-Disposition:
             # attachment): the file selector offers its filename's name
             r.key(L, (CTRL,))
             r.type("127.0.0.1:%d/site/dl/report" % HTTP)
             r.key(RETURN)
-            dl = r.wait(r"download ", 120)
+            dl = r.wait(r"save link", 120)
             time.sleep(3)
             r.shot(17)
             r.key(RETURN)
             ev = r.wait(r"saved ", 60)
-            check("saving: attachment, its filename", dl == "download text/plain %d" % len(server.REPORT) and
+            check("saving: attachment, its filename", dl is not None and
                   ev == "saved %d" % len(server.REPORT) and saved("REPORT20.TXT") == server.REPORT,
                   str(r.events()))
             # a link with a download attribute, clicked: saved as it comes

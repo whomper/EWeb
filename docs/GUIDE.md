@@ -247,8 +247,9 @@ not yet followed.
 - **A link's file**: Alternate-click the link, or right-click it and
   choose Save the link's file. EWeb asks where to save it as soon as the
   site answers, then it goes straight to the disk as it comes, so it can
-  be bigger than your memory; the status bar counts it, and Esc stops it
-  (nothing is left behind). Sites wait about a minute for you to choose;
+  be bigger than your memory. The download box shows the file's name, a
+  bar of how much of it has come (when its site says its size) and the
+  KB so far; Cancel, Esc or Undo stops it (nothing is left behind). Sites wait about a minute for you to choose;
   if one gives up, EWeb asks it for the file once more. A link the page
   marks as a download (its site's own) is saved this way when you click
   it. Under MiNT with BGEM.NG, a file that finishes while another
@@ -256,8 +257,9 @@ not yet followed.
   brings EWeb's window to the front.
 - **A file EWeb doesn't show** (a ZIP, a program, a PDF), opened as a
   page, and one its site says to save rather than show (a text file it
-  sends as an attachment): EWeb asks where to save it, and the page you
-  were on stays.
+  sends as an attachment): EWeb asks where to save it and saves it as it
+  comes, in the download box, and the page you were on stays. (A file
+  sent back by a form is saved once it has all come, without the box.)
 
 The file selector offers a name: the one the site or the link gives the
 file when there is one (so `download.php?id=12` comes as `GAME.ZIP`),

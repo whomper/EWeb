@@ -78,10 +78,12 @@ The README's Highlights, at length (as the README had them until 9 Nov 2026). Th
   decoded for the screen (a page of pictures in a quarter of a second
   instead of twenty); a kept page shown when its site can't be reached;
   Settings > General for its size, Options > Empty the cache.
-- **Saving**: the page shown as it came (^S), a link's file (Alternate-click,
-  as Safari's Option-click, or a link marked as a download) straight to the
-  disk as it comes, and a file EWeb doesn't show (a ZIP, a program, a PDF),
-  or one its site says to save, saved where you say when you open its link;
+- **Downloads and saving**: the page shown as it came (^S); a link's file
+  (Alternate-click, as Safari's Option-click, or a link marked as a
+  download), a file EWeb doesn't show (a ZIP, a program, a PDF) or one its
+  site says to save, opened: saved where you say, straight to the disk as it
+  comes, of any size, in a download box with its name, a bar by its size and
+  Cancel;
   under the name the site gives it (RFC 6266), made to fit a TOS disk,
   archives as they came.
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
