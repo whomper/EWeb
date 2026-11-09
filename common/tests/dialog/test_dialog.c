@@ -246,6 +246,19 @@ short appl_write(short id, short len, const void *buf)
 	return 1;
 }
 
+/* the menu bar's title shown normal (MD17) */
+static int tnormal_calls;
+static short tnormal_title, tnormal_normal;
+static OBJECT *tnormal_tree;
+short menu_tnormal(OBJECT *t, short title, short normal)
+{
+	tnormal_calls++;
+	tnormal_tree = t;
+	tnormal_title = title;
+	tnormal_normal = normal;
+	return 1;
+}
+
 /* the app's drawing over the tree: what dlg_cut lets it draw */
 static short cut[4], cut_ok, more_calls;
 static void more(short x, short y, short w, short h)
@@ -800,10 +813,16 @@ void vq_color(short h, short index, short *rgb)
 	rgb[2] = tt_pal[index][2];
 }
 
+unsigned long tos_ms(void)
+{
+	return 0;
+}
+
 int main(void)
 {
 	short r;
 	setvbuf(stdout, 0, _IOLBF, 0);
+	dlg_find_own = 0;		/* this stand-in's objc_find answers from the script; dlg_find is tested in ../settings */
 
 	test_3d();
 
@@ -1274,6 +1293,46 @@ int main(void)
 		check(r == OK && posts == 2 && posted[0] == 50, "other messages kept and given back as they came when the dialog closes");
 		check(posts == 2, "... the dialog window's own WM_FULLED not given back");
 		tidy("kept messages");
+	}
+
+	/* MD17: a menu choice while a dialog window is open is dropped (not kept and run when the dialog closes), the title normal */
+	setup();
+	ap_count = -1;
+	{
+		static OBJECT bar[2];
+		static const STEP s[] = { MSG(MN_SELECTED, 3), MSG(0x4ae0, 0), MSG(MN_SELECTED, 5), KEY(KEY_RETURN), END };
+		script = s;
+		posts = 0;
+		tnormal_calls = 0;
+		dlg_menu = bar;
+		r = dlg_modal(tree, 0, CANCEL);
+		check(r == OK && tnormal_calls == 2 && tnormal_title == 5 && tnormal_normal == 1 && tnormal_tree == bar,
+		      "a menu choice while a dialog window waits: dropped, its title set normal again (menu_tnormal(bar, title, 1))");
+		check(posts == 1 && posted[0] == 0x4ae0,
+		      "... only the other message (a PEOPLE question) is given back when the dialog closes: the menu choices are not");
+		dlg_menu = 0;
+		tidy("menu choice dropped");
+	}
+	setup();
+	ap_count = -1;
+	{
+		static const STEP s[] = { MSG(MN_SELECTED, 3), KEY(KEY_RETURN), END };
+		script = s;
+		posts = 0;
+		tnormal_calls = 0;
+		dlg_menu = 0;
+		r = dlg_modal(tree, 0, CANCEL);
+		check(r == OK && posts == 0 && tnormal_calls == 0, "... with no menu bar known: dropped all the same, nothing given back");
+		tidy("menu choice dropped, no bar");
+	}
+	setup();
+	{
+		/* on TOS there is no such message: the stand-in sends one anyway and nothing of the window code runs */
+		static const STEP s[] = { KEY(KEY_RETURN), END };
+		script = s;
+		tnormal_calls = 0;
+		r = dlg_modal(tree, 0, CANCEL);
+		check(r == OK && tnormal_calls == 0, "over the screen (TOS): nothing to drop");
 	}
 
 	/* the app's own drawing in a dialog window */

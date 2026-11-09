@@ -152,6 +152,9 @@ static void reset(void)
 	pop_answer = -1;
 	pop_kept = 1;
 	updates = update_low = dial_start = dial_finish = draws = bells = timers = 0;
+	ndraw_log = 0;
+	fake_ms = 0;
+	draw_cost = 0;
 	win_made = win_open = 0;
 	win_name[0] = 0;
 	ap_count = 1;
@@ -296,6 +299,28 @@ static void geometry(short cw, short ch, short sw, short pw, short h, const char
 
 /* ---------------- the cases ---------------- */
 
+static void find_check(void)
+{
+	OBJECT *t = TREE;
+	short x0 = t[0].ob_x, y0 = t[0].ob_y;
+	short tab2 = ref_tab[2];
+	checkf(dlg_find(t, x0 + t[tab2].ob_x + 5, y0 + t[tab2].ob_y + 5) == tab2, "dlg_find: a click on page 2's name finds it");
+	checkf(dlg_find(t, x0 + t[o_num].ob_x + 4, y0 + t[o_num].ob_y + 4) == o_num, "dlg_find: a click on a field of the shown page finds it");
+	checkf(dlg_find(t, x0 + t[ref_ok].ob_x + 3, y0 + t[ref_ok].ob_y + 3) == ref_ok, "dlg_find: OK");
+	checkf(dlg_find(t, x0 + t[ref_cancel].ob_x + 3, y0 + t[ref_cancel].ob_y + 3) == ref_cancel, "dlg_find: Cancel (the one before OK)");
+	checkf(dlg_find(t, x0 + t[o_box1].ob_x + 3, y0 + t[o_box1].ob_y + 3) == o_box1, "dlg_find: a tick's box");
+	checkf(dlg_find(t, x0 + t[o_box1].ob_x + 3, y0 + t[o_box1].ob_y + 3) == objc_find(t, 0, 8, x0 + t[o_box1].ob_x + 3, y0 + t[o_box1].ob_y + 3),
+	       "dlg_find answers what the stand-in AES's objc_find does");
+	checkf(dlg_find(t, x0 + 2, y0 + t[0].ob_height - 3) == 0, "dlg_find: the box where nothing else is: the root (0)");
+	checkf(dlg_find(t, x0 - 1, y0 + 5) == -1 && dlg_find(t, x0 + t[0].ob_width, y0 + 5) == -1 && dlg_find(t, x0 + 5, y0 - 1) == -1,
+	       "dlg_find: outside the box: -1");
+	/* the hidden page's button is not found: page 2's button is at a place page 1 has a field */
+	checkf(dlg_find(t, x0 + t[o_btn].ob_x + 5, y0 + t[o_btn].ob_y + 5) != o_btn, "dlg_find: an object of a page not shown is passed over");
+	t[o_num].ob_flags |= HIDETREE;
+	checkf(dlg_find(t, x0 + t[o_num].ob_x + 4, y0 + t[o_num].ob_y + 4) != o_num, "dlg_find: HIDETREE objects are skipped");
+	t[o_num].ob_flags &= ~HIDETREE;
+}
+
 static void pg_after_tab2(void)
 {
 	short i;
@@ -367,6 +392,427 @@ static void test_pages_and_ticks(void)
 		static const STEP s[] = { TAB(2), OBJ(o_box2), OBJ(o_lbldis), OBJ(o_g2), CALL(pg_ticks2), OBJ(o_g2), CALL(pg_ticks3), CANCELB, END };
 		r = run(&d, s);
 		checkf(s_tick2 == 1 && s_group1 == 1 && s_group2 == 0, "Cancel puts the ticks back (%d %d %d)", s_tick2, s_group1, s_group2);
+	}
+}
+
+
+/* ---------------- the page switch draws only what changed (9 Nov 2026) ---------------- */
+
+static int log_at;
+static void sw_mark(void)
+{
+	log_at = ndraw_log;
+	timers = 0;
+}
+
+static int in_log(short obj, int from)
+{
+	int i, n = 0;
+	for (i = from; i < ndraw_log; i++)
+		n += draw_log[i] == obj;
+	return n;
+}
+
+static void sw_check(void)
+{
+	int i, deep = 0, ground = 0, once = 1, old_drawn = 0;
+	short k, missed = -1;
+	for (i = log_at; i < ndraw_log; i++) {
+		deep += draw_depth[i] != 0;		/* a walk through the tree is depth 8 */
+		ground += draw_log[i] == 0;
+	}
+	checkf(deep == 0 && ndraw_log > log_at, "a page switch: %d objc_draw calls, every one of a single object (depth 0), none a walk",
+	       ndraw_log - log_at);
+	checkf(ground == 1, "the root is drawn once, alone, as the page's ground (%d times)", ground);
+	checkf(in_log(ref_tab[1], log_at) == 1 && in_log(ref_tab[2], log_at) == 1 && in_log(ref_tab[3], log_at) == 0,
+	       "the two names that changed are drawn, once each, the third is not");
+	for (k = first[2]; k <= last[2]; k++)
+		if (!(TREE[k].ob_flags & HIDETREE) && in_log(k, log_at) != 1) {
+			once = 0;
+			missed = k;
+		}
+	checkf(once, "every object of the new page is drawn once (object %d is not)", missed);
+	for (k = first[1]; k <= last[1]; k++)
+		old_drawn += in_log(k, log_at);
+	checkf(old_drawn == 0, "none of the old page's objects (hidden) is drawn (%d)", old_drawn);
+	checkf(in_log(ref_cancel, log_at) == 1 && in_log(ref_ok, log_at) == 1,
+	       "Cancel and OK are drawn again, once: the area's 3 pixels reach their frames");
+	checkf(in_log(set_obj_pages(cur), log_at) == 0 && in_log(1, log_at) == 0, "neither the band nor the pages' own box is drawn");
+}
+
+static void sw_banded(void)
+{
+	checkf(timers >= 4, "at 15 ms an object and turns of 20 ms the switch made %d event calls between its parts", timers);
+	sw_check();
+}
+
+static void test_page_switch(void)
+{
+	SET_DEF d = def3(pages3, 3);
+	reset();
+	{
+		static const STEP s[] = { CALL(sw_mark), TAB(2), CALL(sw_check), CANCELB, END };
+		run(&d, s);
+	}
+	/* every object takes 15 ms: the page is drawn in turns, an event call between, each object once */
+	reset();
+	draw_cost = 15;
+	{
+		static const STEP s[] = { CALL(sw_mark), TAB(2), CALL(sw_banded), CANCELB, END };
+		run(&d, s);
+	}
+	draw_cost = 0;
+	/* dlg_find: the AES's hit test in C. A tab, a field, a hidden object's place, the box's gap, outside */
+	reset();
+	{
+		static const STEP s[] = { CALL(find_check), CANCELB, END };
+		run(&d, s);
+	}
+}
+
+
+/* ---------------- radio buttons and the keyboard's reach (D24, D25; 9 Nov 2026) ---------------- */
+
+static short r_sel, r_sel2, r_tick, r_tick2, r_pop, r_acts, r_big_n;
+static char r_text[6];
+static short o_rad, o_rad2, o_rtick, o_rpop, o_rfield, o_rbtn, o_rtick2, o_r0, o_r1, o_r2, o_r3, o_big;
+static const char *const rlab[] = { "Auto", "FDI", "DSP", "Both" };
+static const char *const rlab2[] = { "On", "Off" };
+static const char *const rpop[] = { "One", "Two", "Three" };
+static const char *const rbig[] = { "a", "b", "c", "d", "e", "f" };
+static short r_big_sel;
+
+/* choice 2 (DSP) applies while the tick is off: a choice that follows another setting */
+static int rwhen(SETTINGS *s, short obj, short c, void *user)
+{
+	(void)s, (void)obj, (void)user;
+	return c == 2 ? !r_tick : 1;
+}
+
+static void r_act(SETTINGS *s, void *user)
+{
+	(void)s, (void)user;
+	r_acts++;
+}
+
+static void page_r1(SETTINGS *s, short x, short y, void *user)
+{
+	short k;
+	(void)user;
+	cur = s;
+	stub_tree = set_tree(s);
+	o_rfield = set_field(s, x, y, r_text, 5, 'X');
+	k = set_tick(s, x, set_y(s, 1), "Use the DSP", &r_tick);
+	o_rtick = set_db(s)->tick[k].box;
+	o_rad = set_radio(s, x, set_y(s, 2), 9, rlab, 4, &r_sel);
+	set_choice_when(s, o_rad, rwhen, 0);
+	o_rad2 = set_radio(s, x, set_y(s, 3), 8, rlab2, 2, &r_sel2);
+	k = set_tick(s, x, set_y(s, 4), "Another", &r_tick2);
+	o_rtick2 = set_db(s)->tick[k].box;
+	o_rpop = set_popup(s, x + 2, set_y(s, 5), 23, rpop, 3, &r_pop);
+	set_popup_enable(s, o_rpop, 1, 0);
+	o_rbtn = set_button(s, x, set_y(s, 6), 14, "Languages...", r_act, 0);
+}
+
+static void page_r2(SETTINGS *s, short x, short y, void *user)
+{
+	short before = set_db(s)->nobj;
+	(void)user;
+	set_tick(s, x, y, "Alone on a page", &s_tick3);
+	before = set_db(s)->nobj;
+	o_big = set_radio(s, x, set_y(s, 2), 9, rbig, 6, &r_big_sel);
+	r_big_n = (short)(set_db(s)->nobj - before);
+}
+
+static const SET_PAGE pages_r[] = { { "Radios", page_r1 }, { "Plain", page_r2 } };
+
+static void refs_r(void)
+{
+	if (!cur || !stub_tree)
+		return;
+	ref_tab[1] = set_obj_tab(cur, 0);
+	ref_tab[2] = set_obj_tab(cur, 1);
+	ref_ok = set_obj_ok(cur);
+	ref_cancel = set_obj_cancel(cur);
+	o_r0 = o_rad, o_r1 = (short)(o_rad + 1), o_r2 = (short)(o_rad + 2), o_r3 = (short)(o_rad + 3);
+}
+
+static void r_reset(void)
+{
+	reset();
+	refs_hook = refs_r;
+	r_sel = 0, r_sel2 = 1, r_tick = 0, r_tick2 = 0, r_pop = 0, r_acts = 0, r_big_sel = 0;
+	strcpy(r_text, "ab");
+	ring_draws = 0;
+	ndraw_log = 0;
+	s_tick3 = 0;
+}
+
+static int st(short o)
+{
+	return TREE[o].ob_state;
+}
+
+/* the ring round object o as settings.c draws it: 2 pixels outside */
+static int ring_round(short o)
+{
+	short x, y;
+	objc_offset(TREE, o, &x, &y);
+	return ring_draws > 0 && ring_last.x == x - 2 && ring_last.y == y - 2 && ring_last.w == TREE[o].ob_width + 4 &&
+	       ring_last.h == TREE[o].ob_height + 4;
+}
+
+static void r_geom(void)
+{
+	OBJECT *t = TREE;
+	short k;
+	int ok = 1;
+	for (k = 0; k < 4; k++) {
+		OBJECT *o = &t[o_rad + k];
+		ok &= o->ob_type == G_BUTTON && (o->ob_flags & TOUCHEXIT) && (o->ob_flags & RBUTTON) && !(o->ob_flags & SELECTABLE) &&
+		      !(o->ob_flags & EXIT) && o->ob_width == 9 * cell_w && o->ob_height == cell_h &&
+		      o->ob_x == t[o_rad].ob_x + k * (10 * cell_w + 4) && o->ob_y == t[o_rad].ob_y;
+	}
+	check(ok, "a radio group: four G_BUTTONs, RBUTTON | TOUCHEXIT (not SELECTABLE: the AES would unchoose the other groups'), 9 wide, 10 characters and 4 pixels apart");
+	checkf(t[o_rad2].ob_width == 8 * cell_w && o_rad2 == o_rad + 4, "the second group follows the first, 8 wide (%d, %d)", o_rad, o_rad2);
+	checkf((st(o_rad) & SELECTED) && !(st(o_rad + 1) & SELECTED) && !(st(o_rad2) & SELECTED) && (st(o_rad2 + 1) & SELECTED),
+	       "the chosen button of each group is SELECTED (the variables are 0 and 1)");
+	checkf(!(st(o_rad + 2) & DISABLED) && !(st(o_rad + 1) & DISABLED),
+	       "the app's function answered as the dialog opened: DSP applies while the tick is off");
+	check(!strcmp((const char *)t[o_rad + 3].ob_spec, "Both"), "the labels are the app's text, not copied");
+	checkf(ring_draws == 0, "a page with a text field opens with the cursor in it and no ring (%d)", ring_draws);
+}
+
+static void r_greyed(void)
+{
+	checkf(r_tick == 1 && (st(o_rad + 2) & DISABLED) && !(st(o_rad + 1) & DISABLED),
+	       "the tick turned on: the app's function greys DSP (DISABLED) and no other (tick %d)", r_tick);
+}
+
+static void r_click_greyed(void)
+{
+	checkf(r_sel == 0 && !(st(o_rad + 2) & SELECTED), "a click on the greyed DSP chooses nothing (%d)", r_sel);
+}
+
+static void r_click_fdi(void)
+{
+	checkf(r_sel == 1 && (st(o_rad + 1) & SELECTED) && !(st(o_rad) & SELECTED),
+	       "a click on FDI: the variable is 1, FDI turned over, Auto not (%d)", r_sel);
+	checkf(r_sel2 == 1 && (st(o_rad2 + 1) & SELECTED), "the other group is as it was: not unchosen by the click (%d)", r_sel2);
+}
+
+static void r_drawn_two(void)
+{
+	checkf(in_log(o_rad, 0) == 1 && in_log(o_rad + 1, 0) == 1 && in_log(o_rad + 2, 0) == 0 && in_log(o_rad2, 0) == 0 &&
+	       in_log(o_rad2 + 1, 0) == 0,
+	       "a click on FDI draws the two buttons that changed, once each, and no other");
+}
+
+static void r_mark(void)
+{
+	ndraw_log = 0;
+}
+
+static void r_pop_check(void)
+{
+	checkf(popups == 1 && pop_n == 3 && pop_lab[1][0] == '~' && pop_lab[0][0] != '~' && pop_lab[2][0] != '~' &&
+	       strstr(pop_lab[1], "Two") && r_pop == 2,
+	       "a pop-up item greyed by the app: its label starts '~' (popup.h), the others don't; the choice taken is %d", r_pop);
+}
+
+static void test_radios(void)
+{
+	SET_DEF d = def3(pages_r, 2);
+	int r;
+	r_reset();
+	{
+		static const STEP s[] = { CALL(r_geom), CANCELB, END };
+		run(&d, s);
+	}
+	r_reset();
+	{
+		static const STEP s[] = { OBJ(o_rtick), CALL(r_greyed), OBJ(o_r2), CALL(r_click_greyed), CALL(r_mark), OBJ(o_r1),
+					  CALL(r_click_fdi), CALL(r_drawn_two), OBJ(o_r1), CANCELB, END };
+		run(&d, s);
+		checkf(r_sel == 0 && r_tick == 0 && r_sel2 == 1, "Cancel puts the group and the tick back (%d, %d)", r_sel, r_tick);
+	}
+	r_reset();
+	{
+		static const STEP s[] = { OBJ(o_r3), OBJ(o_r3), OKB, END };
+		r = run(&d, s);
+		checkf(r == 1 && r_sel == 3, "a click on Both and OK: the group keeps it (%d, %d)", r, r_sel);
+	}
+	r_reset();
+	pop_answer = 2;
+	{
+		static const STEP s[] = { OBJ(o_rpop), CALL(r_pop_check), CANCELB, END };
+		run(&d, s);
+	}
+	r_reset();
+	d.first = 1;
+	{
+		static const STEP s[] = { CANCELB, END };
+		run(&d, s);
+		checkf(r_big_n == 4, "set_radio with six choices makes four buttons (%d)", r_big_n);
+	}
+}
+
+static void k_tick(void)
+{
+	check(ring_round(o_rtick) && st(o_rpop) == 0, "Tab from the first field: the ring is round the first tick's box");
+}
+
+static void k_space1(void)
+{
+	checkf(r_tick == 0 && !(st(o_rad + 2) & DISABLED), "Space ticked the tick: off (%d), DSP applies again", r_tick);
+}
+
+static void k_radio_on(void)
+{
+	checkf(r_tick == 1 && (st(o_rad + 2) & DISABLED), "Space again: on (%d), DSP greyed", r_tick);
+}
+
+static void k_group(void)
+{
+	check(ring_round(o_rad), "Tab to the radio group: the ring is round its chosen button (Auto)");
+}
+
+static void k_right_end(void)
+{
+	checkf(r_sel == 3 && ring_round(o_rad + 3), "Right, Right, Right: 1, then 3 (the greyed DSP skipped), then the end holds (%d)", r_sel);
+}
+
+static void k_left_up(void)
+{
+	checkf(r_sel == 0 && (st(o_rad) & SELECTED) && !(st(o_rad + 1) & SELECTED) && !(st(o_rad + 3) & SELECTED) && ring_round(o_rad),
+	       "Left (1, skipping DSP), Up (0), Up: Auto, the start holds (%d), the ring went with it", r_sel);
+}
+
+static void k_down(void)
+{
+	checkf(r_sel == 1 && ring_round(o_rad + 1), "Down: FDI (%d), the ring on it", r_sel);
+}
+
+static void k_radio2(void)
+{
+	checkf(r_sel2 == 0 && ring_round(o_rad2), "Tab, Up: the second group chose its first button (%d)", r_sel2);
+}
+
+static void k_tick2(void)
+{
+	check(r_tick2 == 1 && ring_round(o_rtick2), "Tab, Space: the second tick is on, the ring on its box");
+}
+
+static void k_popup(void)
+{
+	checkf(popups == 1 && r_pop == 2 && ring_round(o_rpop), "Tab, Space: the pop-up opened, the choice taken (%d)", r_pop);
+}
+
+static void k_button(void)
+{
+	checkf(r_acts == 1 && ring_round(o_rbtn), "Tab, Space: the button did its work (%d)", r_acts);
+}
+
+static void k_list(void)
+{
+	check(ring_round(ref_tab[1]) && set_page_now(cur) == 0, "Tab from the last control: the list, the ring round the chosen name");
+}
+
+static void k_page2(void)
+{
+	checkf(set_page_now(cur) == 1 && ring_round(ref_tab[2]) && ((TEDINFO *)TREE[ref_tab[2]].ob_spec)->te_color == 0x1071,
+	       "Down in the list: page 2 shown (the black bar moved), the ring with it (page %d)", set_page_now(cur) + 1);
+}
+
+static void k_page2_hold(void)
+{
+	check(set_page_now(cur) == 1, "Down at the last page holds (no wrapping)");
+}
+
+static void k_page1(void)
+{
+	checkf(set_page_now(cur) == 0 && ring_round(ref_tab[1]), "Up: page 1 again, the ring on its name (page %d)", set_page_now(cur) + 1);
+}
+
+static void k_shift_tab(void)
+{
+	check(ring_round(o_rbtn), "Shift+Tab from the list: the last control (the button)");
+}
+
+static void k_wrap(void)
+{
+	check(!strcmp(r_text, "abx "), "Tab, Tab from the button: list, then round to the first field; 'x' and Space typed into it");
+}
+
+static void test_keys(void)
+{
+	SET_DEF d = def3(pages_r, 2);
+	int r;
+	r_reset();
+	r_tick = 1;
+	pop_answer = 2;
+	{
+		static const STEP s[] = {
+			KEY(KEY_TAB), CALL(k_tick), KEY(KEY_SPACE), CALL(k_space1), KEY(KEY_SPACE), CALL(k_radio_on),
+			KEY(KEY_TAB), CALL(k_group), KEY(KEY_RIGHT), KEY(KEY_RIGHT), KEY(KEY_RIGHT), CALL(k_right_end),
+			KEY(KEY_LEFT), KEY(KEY_UP), KEY(KEY_UP), CALL(k_left_up), KEY(KEY_DOWN), CALL(k_down),
+			KEY(KEY_TAB), KEY(KEY_UP), CALL(k_radio2),
+			KEY(KEY_TAB), KEY(KEY_SPACE), CALL(k_tick2),
+			KEY(KEY_TAB), KEY(KEY_SPACE), CALL(k_popup),
+			KEY(KEY_TAB), KEY(KEY_SPACE), CALL(k_button),
+			KEY(KEY_TAB), CALL(k_list), KEY(KEY_DOWN), CALL(k_page2), KEY(KEY_DOWN), CALL(k_page2_hold),
+			KEY(KEY_UP), CALL(k_page1),
+			KEYS(KEY_TAB, 1), CALL(k_shift_tab),
+			KEY(KEY_TAB), KEY(KEY_TAB), KEY(K('x')), KEY(KEY_SPACE), CALL(k_wrap),
+			KEY(KEY_RETURN), END
+		};
+		r = run(&d, s);
+		checkf(r == 1 && r_sel == 1 && r_sel2 == 0 && r_tick == 1 && r_tick2 == 1 && r_pop == 2 && !strcmp(r_text, "abx "),
+		       "Return is OK and keeps what the keys did (%d: %d %d %d %d %d '%s')", r, r_sel, r_sel2, r_tick, r_tick2, r_pop, r_text);
+	}
+}
+
+static void k_start_list(void)
+{
+	checkf(ring_draws == 0 && set_page_now(cur) == 1,
+	       "a page without a text field opens with the list in focus, and no ring: nothing on the screen differs from the old dialog (%d)", ring_draws);
+}
+
+static void k_esc_tick(void)
+{
+	check(ring_round(o_rtick), "Tab: the first tick");
+}
+
+static void test_keys2(void)
+{
+	SET_DEF d = def3(pages_r, 2);
+	int r;
+	r_reset();
+	d.first = 1;
+	{
+		static const STEP s[] = { CALL(k_start_list), KEY(KEY_UP), CALL(k_page1), KEY(KEY_ESC), END };
+		r = run(&d, s);
+		checkf(r == 0, "Esc with the focus on the list cancels (%d)", r);
+	}
+	d.first = 0;
+	r_reset();
+	{
+		static const STEP s[] = { KEY(KEY_TAB), CALL(k_esc_tick), KEY(KEY_SPACE), KEY(KEY_ESC), END };
+		r = run(&d, s);
+		checkf(r == 0 && r_tick == 0, "Esc with the focus on a tick cancels, and the tick Space turned is back (%d, %d)", r, r_tick);
+	}
+	r_reset();
+	{
+		static const STEP s[] = { KEY(KEY_TAB), KEY(KEY_TAB), KEY(KEY_SPACE), KEY(KEY_RETURN), END };
+		r = run(&d, s);
+		checkf(r == 1 && r_sel == 0, "Space on a radio group does nothing; Return is OK (%d, %d)", r, r_sel);
+	}
+	r_reset();
+	{
+		/* the mouse after the keys: the ring is gone, the first field has the cursor again */
+		static const STEP s[] = { KEY(KEY_TAB), OBJ(o_r1), KEY(K('q')), OKB, END };
+		r = run(&d, s);
+		checkf(r == 1 && r_sel == 1 && !strcmp(r_text, "abq"), "a click after Tab: the cursor is back in the first field ('%s')", r_text);
 	}
 }
 
@@ -969,6 +1415,10 @@ int main(void)
 	geometry(8, 16, 12, 44, 20, "EWeb: list 12, page 44, 20 rows");
 	geometry(8, 8, 0, 0, 17, "8x8 cells (ST medium)");
 	test_pages_and_ticks();
+	test_page_switch();
+	test_radios();
+	test_keys();
+	test_keys2();
 	test_keys_and_values();
 	test_check();
 	test_widgets();

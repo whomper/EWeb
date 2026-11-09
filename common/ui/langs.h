@@ -10,8 +10,9 @@
  * The user sees the languages the Gateway offers, each a tick box with its
  * size in MB and its name (English is always there, ticked, not to be
  * changed), a line "Installed 229 MB of 600 MB" (the Gateway's own numbers:
- * what the ticked set takes, and the room it has), a message line and OK and
- * Cancel. 48 by 18 cells of the system font (the Font dialog's 17 and a line
+ * what the ticked set takes, and the room it has), a message line and Cancel and
+ * OK (10 wide, OK at the right, under a black title band " Languages"; D22, D26,
+ * C1 of 9 Nov 2026). 48 by 18 cells of the system font (the Font dialog's 17 and a line
  * for the message). Ticking a language the room can't take is refused, with
  * the number that doesn't fit; the ones the Gateway has stay ticked until the
  * user unticks them.

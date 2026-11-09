@@ -11,6 +11,8 @@ the same way, and compares the dialog's pixels.
                                                Falcon:16 (TOS 4.04, 3D), Falcon-4:16 ... (Erez's TOS from ~/.aera/tos
                                                where it is there, else EmuTOS; the report names it)
     python3 run.py WORK MACHINE --speed        the demo's opening times only (the speed rig's AESGAP)
+    python3 run.py WORK MACHINE --speed --prg cpu   the same with the programs' own flags (make cpu: DLG_CPU, DLG_CLICK)
+    python3 run.py WORK MACHINE --keys         the radio buttons and the keyboard's reach (SETDEMO's third dialog), screenshots keys-*.png
     python3 run.py WORK MACHINE --again        compare the screenshots an earlier run left in WORK again
     python3 run.py WORK --xaaes TOS_IMAGE      the demo in a window under FreeMiNT and XaAES (../xaaes: make base)
 
@@ -410,6 +412,185 @@ def xaaes(a):
         shutil.copy(os.path.join(w2, "shots", f), os.path.join(out, "xaaes-%02d.png" % (i + 1)))
     print("     xaaes: %d screenshots in %s: open, Connection page, window moved, pop-up, pop-up closed, EHypView opened, closed"
           % (len(shots), out), flush=True)
+    # the radio buttons and the keyboard's reach in a window (the ring is drawn through dlg_more over the AES's own redraws):
+    # Tab to the group, Right Right (DSP), Tab to the tick, Space, Tab Tab Tab Tab to the list, Down (page Plain), Up, Return
+    w3 = os.path.join(a.work, "xaaes3")
+    steps = ("until SETDEMO ready 300; key 3; until SETDEMO box radios 90; wait 3; shot; key 0x0f; wait 2; shot; "
+             "key 0x4d; wait 2; key 0x4d; wait 2; shot; key 0x0f; wait 2; key 0x39; wait 2; shot; "
+             "key 0x0f; wait 2; key 0x0f; wait 2; key 0x0f; wait 2; key 0x0f; wait 2; key 0x50; wait 3; shot; key 0x48; wait 3; shot; "
+             "key 0x1c; until SETDEMO radios out 60; key q; until SETDEMO done 60")
+    rc, txt = go(w3, steps)
+    log = open(os.path.join(w3, "hatari.log"), errors="replace").read()
+    check(rc == 0, "xaaes: the keys' steps done (rc %d)" % rc)
+    check("SETDEMO radios out 2 nodsp 1 rate 1 log 0 tick2 0 acts 0" in log and "SETDEMO radios" in log,
+          "xaaes: in a window Tab, Space, Right, Right and Return did what they do on TOS (DSP chosen, 'no DSP' ticked, OK)")
+    shots = sorted(os.listdir(os.path.join(w3, "shots")))
+    for i, f in enumerate(shots):
+        shutil.copy(os.path.join(w3, "shots", f), os.path.join(out, "xaaes-keys-%02d.png" % (i + 1)))
+    print("     xaaes: %d screenshots of the keys in %s" % (len(shots), out), flush=True)
+    # the Font dialog in a window: the window's own title replaces the black band (D22), Cancel left of OK (C1), both 10 wide
+    w5 = os.path.join(a.work, "xaaes5")
+    rc, txt = go(w5, "until SETDEMO ready 300; key 4; wait 6; shot; key 0x61; until SETDEMO got font 60; key q; until SETDEMO done 60")
+    log = open(os.path.join(w5, "hatari.log"), errors="replace").read()
+    check(rc == 0 and "SETDEMO got font 0" in log, "xaaes: the Font dialog opened in a window and closed by Undo (rc %d)" % rc)
+    for i, f in enumerate(sorted(os.listdir(os.path.join(w5, "shots")))):
+        shutil.copy(os.path.join(w5, "shots", f), os.path.join(out, "xaaes-font-%02d.png" % (i + 1)))
+    # MD17: a menu title chosen while a dialog window is open (the bar is the demo's, built where the AES has windows): dlg_evnt
+    # drops the choice and sets the title normal; before, it was kept and run when the dialog closed ("SETDEMO menu T I")
+    w4 = os.path.join(a.work, "xaaes4")
+    steps = ("until SETDEMO ready 300; wait 2; key 1; until SETDEMO box email 90; wait 3; move 88 8; wait 2; shot; "
+             "drag 88 8 92 30; wait 3; shot; key 0x61; until SETDEMO got email 60; wait 3; shot; key q; until SETDEMO done 60")
+    rc, txt = go(w4, steps)
+    log = open(os.path.join(w4, "hatari.log"), errors="replace").read()
+    check(rc == 0 and "SETDEMO got email 0" in log, "xaaes: the dialog window open, a menu item chosen, the dialog closed by Undo (rc %d)" % rc)
+    check("SETDEMO menu" not in log, "xaaes: the menu choice made while the dialog window was open was dropped, not run when it closed (MD17)")
+    shots = sorted(os.listdir(os.path.join(w4, "shots")))
+    for i, f in enumerate(shots):
+        shutil.copy(os.path.join(w4, "shots", f), os.path.join(out, "xaaes-menu-%02d.png" % (i + 1)))
+    if len(shots) >= 2:
+        # the title shown normal again: the bar's pixels as before the menu was opened (the shot before the dropdown is the second)
+        a1 = Image.open(os.path.join(w4, "shots", shots[1])).convert("RGB").crop((0, 0, 200, 16))
+        a2 = Image.open(os.path.join(w4, "shots", shots[2])).convert("RGB").crop((0, 0, 200, 16))
+        check(ImageChops.difference(a1, a2).getbbox() is None, "xaaes: the menu title is shown normal again with the dialog still open (menu_tnormal)")
+
+
+def keys_run(a, machine):
+    """the radio buttons and the keyboard's reach (D24, D25) in SETDEMO's third dialog: Tab through the controls, Space,
+    the arrows, the list's Up and Down, Shift+Tab, Return; a screenshot after each step (SHOTS/keys-*.png); the AESGAP of
+    every key against the click rule; and a control's ring gone when the focus has moved on is the pixels of the dialog
+    as it opened: the region of the control it was round is compared with the first screenshot, pixel for pixel"""
+    tag = machine.replace(":", "_")
+    out = os.path.abspath(a.shots)
+    os.makedirs(out, exist_ok=True)
+    s = Session(os.path.join(a.work, "keys-" + tag), machine, a.display)
+    try:
+        s.r.put(PRG, "")
+        s.r.start("C:\\SETDEMO.PRG", ready="SETDEMO ready")
+        m = re.search(r"SETDEMO screen\s+(\d+) (\d+) (\d+) (\d+)", s.r.console())
+        chei = int(m.group(4)) if m else 16
+        pos = len(s.r.console())
+        s.r.act("Radios Settings opened (key 3)", speed.DIALOG, lambda: s.r.key("3"))
+        s.at("SETDEMO box radios", pos)
+        m = re.search(r"SETDEMO box radios (\d+) (\d+) (\d+) (\d+)", s.r.console()[pos:])
+        if not check(m is not None, "%s keys: the dialog opened" % tag):
+            return
+        bx, by, bw, bh = [int(v) for v in m.groups()]
+        gap = chei * 3 // 8
+        row = lambda n: by + (4 + n) * chei + 2 + n * gap          # set_y(s, n)
+        shots = []
+
+        def step(name, key, budget=speed.KEY):
+            s.r.act(name, budget, lambda: s.r.key(key))
+            time.sleep(0.8)
+            img = s.shot("keys-%02d" % (len(shots) + 1))
+            img.save(os.path.join(out, "keys-%s-%02d.png" % (tag, len(shots) + 1)))
+            shots.append(img)
+            return img
+
+        first = s.shot("keys-00")
+        first.save(os.path.join(out, "keys-%s-00.png" % tag))
+
+        def box(img, x0, y0, x1, y1):
+            return img.crop((x0, y0, x1, y1)).convert("RGB")
+
+        def same_as_opened(img, x0, y0, x1, y1, what):
+            d = ImageChops.difference(box(img, x0, y0, x1, y1), box(first, x0, y0, x1, y1)).getbbox()
+            check(d is None, "%s keys: %s" % (tag, what))
+
+        sx = bx + 15 * 8
+        radio_y, pop_y, btn_y = row(2), row(5), row(7)
+        # the dialog opens with the cursor in the first field; Tab goes to the group of radio buttons: a ring round Auto
+        img = step("Tab: to the radio group", "Tab")
+        d = ImageChops.difference(box(img, sx - 3, radio_y - 3, sx + 85, radio_y + chei + 3),
+                                  box(first, sx - 3, radio_y - 3, sx + 85, radio_y + chei + 3)).getbbox()
+        check(d is not None, "%s keys: Tab: a ring appeared round the chosen radio button" % tag)
+        step("Right: FDI", "Right")
+        step("Right: DSP", "Right")
+        step("Tab: to the 'no DSP' tick", "Tab")
+        img = step("Space: the tick on, DSP greyed", "space")
+        step("Tab: to the 'Write a log' tick", "Tab")
+        step("Space: the log on", "space")
+        step("Tab: to the pop-up button", "Tab")
+        pos2 = len(s.r.console())
+        s.r.act("Space: the pop-up opened", speed.DIALOG, lambda: s.r.key("space"))
+        time.sleep(1.5)
+        img = s.shot("keys-pop")
+        img.save(os.path.join(out, "keys-%s-pop.png" % tag))
+        s.r.key("Escape")
+        time.sleep(1.5)
+        img = step("Tab: to the Languages button", "Tab")
+        same_as_opened(img, sx + 14 * 8 - 3, pop_y - 3, sx + 28 * 8 + 3, pop_y + chei + 3,
+                       "the ring left the pop-up button clean: its pixels are the opened dialog's")
+        img = step("Tab: to the page list", "Tab")
+        same_as_opened(img, sx - 3, btn_y - 3, sx + 14 * 8 + 3, btn_y + chei + 3,
+                       "the ring left the Languages button clean")
+        step("Down: page Plain", "Down", speed.KEY)
+        step("Up: page Output", "Up", speed.KEY)
+        img = step("Shift+Tab: back to the button", "shift+Tab")
+        same_as_opened(img, bx + 2, by + 2 * chei - 3, bx + 13 * 8 + 8, by + 6 * chei,
+                       "the ring left the list clean (its line too): the names are the opened dialog's")
+        pos3 = len(s.r.console())
+        s.r.key("Return")
+        i = s.at("SETDEMO radios out", pos3)
+        got = s.r.console()[pos3:].split("SETDEMO radios", 1)[-1].split("\n", 1)[0] if i > 0 else ""
+        check(i > 0 and " out 2 nodsp 1 rate 1 log 1 " in got and "acts 0" in got,
+              "%s keys: Return is OK; Right, Right chose DSP, Space ticked 'no DSP' and the log (%s)" % (tag, got.strip()[:70]))
+        time.sleep(1)
+        s.r.key("q")
+        s.at("SETDEMO done", pos3, 20)
+        s.r.report()
+    finally:
+        s.r.stop()
+
+
+def font_run(a, machine):
+    """the shared Font dialog (ui/fontsel.c, SETDEMO's key 4): its black title band, Cancel left of OK, both 10 wide; a click on
+    the left button is Cancel (nothing applied), on the right one OK (applied); a screenshot to SHOTS (font-MACHINE-open.png)"""
+    tag = machine.replace(":", "_")
+    out = os.path.abspath(a.shots)
+    os.makedirs(out, exist_ok=True)
+    s = Session(os.path.join(a.work, "font-" + tag), machine, a.display)
+    try:
+        s.r.put(PRG, "")
+        s.r.start("C:\\SETDEMO.PRG", ready="SETDEMO ready")
+        m = re.search(r"SETDEMO screen\s+(\d+) (\d+) (\d+) (\d+)", s.r.console())
+        chei = int(m.group(4)) if m else 16
+        w_px, h_px = 48 * 8, 17 * chei + 14
+        pos = len(s.r.console())
+        s.r.act("Font dialog opened (key 4)", speed.DIALOG, lambda: s.r.key("4"))
+        time.sleep(4)
+        img = s.shot("font-open")
+        img.save(os.path.join(out, "font-%s-open.png" % tag))
+        box = find_box(img, w_px, h_px)
+        if not check(box is not None, "%s font: the dialog (48 x 17 cells) found on the screen" % tag):
+            return
+        bx, by = box
+        px = img.load()
+        # the title band: row 0 black from the left edge to the right (inside the 2-pixel frame), its text white
+        band_row = by + chei // 2
+        dark = sum(1 for x in range(bx + 4, bx + w_px - 4) if sum(px[x, band_row][:3]) < 150)
+        check(dark > (w_px - 8) * 0.7, "%s font: a black title band across the first row (%d of %d pixels dark)" % (tag, dark, w_px - 8))
+        by_ = by + 15 * chei + 12 + chei // 2
+        left = (bx + (24 + 5) * 8, by_)
+        right = (bx + (36 + 5) * 8, by_)
+        # a 10-wide button is 80 pixels: its frame at the two ends, none in the gap between them
+        row = [px[x, by_] for x in range(bx + 24 * 8 - 3, bx + 46 * 8 + 3)]
+        s.r.click(*left)
+        i = s.at("SETDEMO got font", pos)
+        got = s.r.console()[pos:].split("SETDEMO got font", 1)[-1].split("\n", 1)[0] if i > 0 else ""
+        check(i > 0 and got.strip().startswith("0") and "applied" not in s.r.console()[pos:], "%s font: the left button is Cancel: result 0, nothing applied (%s)" % (tag, got.strip()[:12]))
+        pos = len(s.r.console())
+        s.r.key("4")
+        time.sleep(4)
+        s.r.click(*right)
+        i = s.at("SETDEMO got font", pos)
+        got = s.r.console()[pos:].split("SETDEMO got font", 1)[-1].split("\n", 1)[0] if i > 0 else ""
+        check(i > 0 and got.strip().startswith("1") and "SETDEMO font applied" in s.r.console()[pos:],
+              "%s font: the right button is OK: result 1, applied (%s)" % (tag, got.strip()[:12]))
+        s.r.key("q")
+        s.at("SETDEMO done", pos, 20)
+    finally:
+        s.r.stop()
 
 
 def load_shots(a, tag):
@@ -474,15 +655,25 @@ def main():
     ap.add_argument("--rel", default=os.path.join(HERE, "build", "rel"))
     ap.add_argument("--display", default=":99")
     ap.add_argument("--speed", action="store_true")
+    ap.add_argument("--prg", metavar="DIR", help="build/DIR's SETDEMO.PRG instead of build/prof's (make cpu: the programs' own flags, -DDLG_CPU -DDLG_CLICK)")
+    ap.add_argument("--keys", action="store_true", help="the radio buttons and the keyboard's reach in SETDEMO's third dialog (screenshots keys-*.png)")
+    ap.add_argument("--font", action="store_true", help="the Font dialog (SETDEMO's key 4): its band and its Cancel and OK")
     ap.add_argument("--again", action="store_true", help="compare the screenshots an earlier run left in WORK again (no emulator)")
     ap.add_argument("--xaaes", nargs="?", const="", metavar="TOS_IMAGE", help="the demo under FreeMiNT and XaAES (EmuTOS 1.4 where no image is given)")
     a = ap.parse_args()
+    global PRG
+    if a.prg:
+        PRG = os.path.join(HERE, "build", a.prg, "SETDEMO.PRG")
     if not os.path.exists(PRG) and not a.again:
         sys.exit("no %s: make prof" % PRG)
     a.work = os.path.abspath(a.work)
     a.shots = a.shots or os.path.join(a.work, "shots")
     a.tos = a.xaaes or None
-    if a.xaaes is not None:
+    if a.keys:
+        keys_run(a, a.machine)
+    elif a.font:
+        font_run(a, a.machine)
+    elif a.xaaes is not None:
         xaaes(a)
     else:
         run_machine(a, a.machine)

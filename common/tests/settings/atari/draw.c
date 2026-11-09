@@ -181,3 +181,16 @@ int rc_intersect(const GRECT *a, GRECT *b)
 	b->h = y2 - y1;
 	return b->w > 0 && b->h > 0;
 }
+
+/* fontsel.c's NAME.FNT: the demo keeps none (the fonts are measured each time) */
+char *pf_load(const char *path, long *len)
+{
+	(void)path, (void)len;
+	return 0;
+}
+
+int pf_save(const char *path, const void *buf, long len)
+{
+	(void)path, (void)buf, (void)len;
+	return 0;
+}
