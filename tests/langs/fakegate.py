@@ -9,10 +9,26 @@ requests of the Languages page, answered as gateway/translategate.py (AERA-Gatew
                             it is the set already there, 400 a code that isn't one, 422 over the room,
                             503 while a job runs; refusals are one line "translategate: why"
     GET  /job               job N / running + bytes D of T | done | failed: why | none
+    POST /translate?to=CODE the text (UTF-8, paragraphs between blank lines) "translated": as many
+                            paragraphs back, each a fixed sentence in CODE, so an app's rig can look at
+                            how it draws the language. Hebrew (he) gets a right-to-left sentence with a
+                            Latin run and a number in it ("Atari 2.13"), the bidi cases; any other
+                            installed language gets "CODE: " and the text in capitals. 200 with
+                            X-Translate-From (he for a text with Hebrew letters, else en), 200 with
+                            X-Translate-Same: 1 and no body when it is already in CODE, 422 when CODE
+                            (or the pair) isn't installed. No engine: the stand-in's own words only.
 
 The table is gateway/translate-languages.tsv's (50 rows, the MB both models take to download). The job
 is played by the clock: RATE MB a second, then the set wanted is the set installed. Everything it was
 asked is kept in `log` (method, path, body), so a test can say "no POST was made" or "one POST, he,de".
+
+An app's own rig uses it as its translategate on the Atari's port 8480 (EMail's
+tests/hatari/langs_test.py, and translate_test.py for a right-to-left look):
+
+    sys.path.insert(0, os.path.join(ROOT, "common", "tests", "langs"))
+    import fakegate
+    g = fakegate.Gate(port=8480, installed=("he",))   (Hebrew installed: /translate?to=he answers in it)
+    g.start(); ... boot the app with FAKESTNG.PRG, translate into Hebrew, take the screenshot ...; g.stop()
 
     import fakegate
     g = fakegate.Gate(port=0, cap_mb=600)       (port 0: a free one, g.port)
@@ -79,6 +95,34 @@ ROWS = [
 ]
 CODE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]{2,4})?")
 
+# /translate's words, the stand-in's own (no engine): a long sentence where the
+# answer may be long, a short one for a word or two (the apps take at most 4 n + 64
+# bytes back for n sent)
+SAID = {
+    "he": ("\u05e9\u05dc\u05d5\u05dd \u05dc\u05db\u05d5\u05dc\u05dd, \u05d6\u05d4\u05d5 "
+           "\u05ea\u05e8\u05d2\u05d5\u05dd \u05dc\u05e2\u05d1\u05e8\u05d9\u05ea \u05e9\u05dc "
+           "Atari 2.13 \u05e2\u05dc \u05d4\u05de\u05e1\u05da.",
+           "\u05e9\u05dc\u05d5\u05dd, Atari 2.13"),
+}
+
+
+def said(code, text):
+    """text (paragraphs between blank lines) "translated" into code by the stand-in: as many
+    paragraphs, all the long sentence if the answer may be that long, else all the short one"""
+    paras = text.split("\n\n")
+    room = 4 * len(text.encode()) + 64
+    if code not in SAID:
+        return "\n\n".join("%s: %s" % (code, p.upper()) for p in paras)
+    for t in SAID[code]:
+        out = "\n\n".join([t] * len(paras))
+        if len(out.encode()) <= room:
+            return out
+    return "\n\n".join([SAID[code][1][:1]] * len(paras))
+
+
+def has_hebrew(text):
+    return any("\u05d0" <= ch <= "\u05ea" for ch in text)
+
 
 class Gate:
     def __init__(self, port=18480, cap_mb=600, installed=("he",), rate_mb=40.0, host="127.0.0.1"):
@@ -132,10 +176,31 @@ class Gate:
                 else:
                     self.reply(404, "no such page")
 
+            def translate(self, query, body):
+                args = dict(x.partition("=")[::2] for x in query.split("&") if x)
+                to = args.get("to", "")
+                text = body.decode("utf-8", "replace")
+                src = args.get("from") or ("he" if has_hebrew(text) else "en")
+                if not CODE.fullmatch(to):
+                    self.reply(400, "to= isn't a language code")
+                    return
+                if to not in gate.installed or src not in gate.installed:
+                    self.reply(422, "%s to %s isn't installed" % (src, to))
+                    return
+                if src == to:
+                    self.reply(200, headers=[("X-Translate-Same", "1")], body=b"")
+                    return
+                out = said(to, text)
+                self.reply(200, headers=[("X-Translate-From", src)], body=out.encode())
+
             def do_POST(self):
                 size = self.headers.get("Content-Length", "")
                 body = self.rfile.read(int(size)) if size.isdigit() else b""
                 gate.log.append(("POST", self.path, body))
+                path, _, query = self.path.partition("?")
+                if path == "/translate":
+                    self.translate(query, body)
+                    return
                 if self.path != "/languages":
                     self.reply(404, "no such page")
                     return

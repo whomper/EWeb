@@ -23,6 +23,26 @@ void pf_close(int h)
 {
 }
 
+long pf_size(const char *path)
+{
+	return -1;
+}
+
+int pf_remove(const char *path)
+{
+	return 0;
+}
+
+int pf_rename(const char *from, const char *to)
+{
+	return 0;
+}
+
+long pf_seek(int h, long off)
+{
+	return off;
+}
+
 void pf_now(PFTIME *t)
 {
 	u16 d = (u16)Tgetdate(), m = (u16)Tgettime();

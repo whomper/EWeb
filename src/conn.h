@@ -78,6 +78,18 @@ extern long net_sendbuf;
 /* add text (a crash report) at the end of the log, after what is still
    buffered: crash_report = conn_log_append (crash.h) */
 void conn_log_append(const char *text, long n);
+/* The log is capped (guidelines 6.5): a write that would take it over
+   conn_log_max (256 KB; 0 = no cap) moves it to NAME.OLD (the extension
+   replaced; an older NAME.OLD goes) and starts a new one. conn_log_size,
+   if the app sets it (to its pf_handle_size), gives the size of the open
+   file, so the check costs no look at the folder; without it the size is
+   looked at once a run and counted. */
+extern long conn_log_max;
+extern long (*conn_log_size)(int h);
+/* one line, "start -- APP VERSION, date time" (the date only where the clock
+   has one), for an app to call once at its start; conn.c never calls it.
+   app_version: "EMail 1.23" */
+void conn_log_start(const char *app_version);
 /* the shape of a login (lengths, '@', '-') without the login itself, so
    the log shows a cut-off or mistyped password without giving it away */
 void conn_log_login(const char *who, const char *user, const char *pass);
