@@ -2249,9 +2249,9 @@ void command(int cmd)
 	}
 	case C_HELP:
 		if (help_key(opt.workdir, "eweb.hyp", 0, "Keys"))
-			dlg_keys();
+			keys_dialog();
 		break;
-	case C_KEYS: dlg_keys(); break;
+	case C_KEYS: keys_dialog(); break;
 	case C_BMADD: {
 		int r = br_bookmark(&br);
 		log_event("bookmarked %d %d", r, bm_n);

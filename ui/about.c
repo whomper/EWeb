@@ -49,7 +49,7 @@ void dlg_about(void)
 	about_show(&a);
 }
 
-void dlg_keys(void)
+void keys_dialog(void)
 {
 	text_box("EWeb's keys",
 		 "^L       the address: type one, Return goes\n"

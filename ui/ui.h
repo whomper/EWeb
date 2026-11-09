@@ -352,7 +352,7 @@ void quit_bar(int permille);
    the page's suggestion first); 1 OK, 0 Cancel */
 int  dlg_prompt(const char *text, char *answer, int size);
 /* Edit > Find: the words to find (UTF-8, the last ones first); 1 OK */
-int  dlg_find(char *words, int size);
+int  find_dialog(char *words, int size);
 void go(const char *typed);		/* an address typed, a file dropped */
 void follow(int link);			/* a link clicked */
 void follow_window(int link);		/* its page in a new window (Control-click, the link's menu) */
@@ -385,7 +385,7 @@ int  settings_save(void);
 
 /* about.c */
 void dlg_about(void);
-void dlg_keys(void);
+void keys_dialog(void);
 void icon_window(const GRECT *area);	/* the iconified window (area NULL: all) */
 
 #include "alert.h"

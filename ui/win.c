@@ -3110,7 +3110,7 @@ void win_find(int how)
 	char line[80];
 	if (br.p == NULL)
 		return;
-	if ((how == 0 || f_words[0] == 0) && (!dlg_find(f_words, sizeof f_words) || f_words[0] == 0))
+	if ((how == 0 || f_words[0] == 0) && (!find_dialog(f_words, sizeof f_words) || f_words[0] == 0))
 		return;
 	if (how != 0 && sel_now()) {
 		/* on from the selection (the words found last): the next after

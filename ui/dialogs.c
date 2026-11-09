@@ -600,7 +600,7 @@ int dlg_prompt(const char *text, char *answer, int size)
 }
 #endif
 
-int dlg_find(char *words, int size)
+int find_dialog(char *words, int size)
 {
 	return ask(" Find on this page", "Words to find (Return; then ^G finds the next, Shift-^G the one before):",
 		   words, size);
