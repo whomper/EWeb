@@ -1318,7 +1318,10 @@ static void saved(const char *path, long len)
 	}
 }
 
-static void save_file(const char *url, const char *given);
+static void save_file(const char *url, const char *given, const char *to);
+#ifndef EW_ST
+static void save_opened(const char *url, const char *name, const char *mime, long len);
+#endif
 static void to_window(const char *url, const char *name);
 static void pictures_end(void);
 static void page_translate_begin(void);
@@ -1445,7 +1448,18 @@ static void loaded(int r)
 		win_address(br.url);
 		win_status("");
 		log_event("save link");
-		save_file(url, given);
+#ifndef EW_ST
+		if (br.dl.mime[0]) {
+			/* a file opened, its headers come: where it goes, then
+			   fetched again in the download's box */
+			char mime[64];
+			long len = br.dl.len;
+			str_copy(mime, br.dl.mime, sizeof mime);
+			save_opened(url, given, mime, len);
+			break;
+		}
+#endif
+		save_file(url, given, NULL);
 		break;
 	}
 	case BR_WINDOW:
@@ -1994,13 +2008,13 @@ static void save_page(void)
 }
 
 /* url's file saved as it comes (br_save_url), where the user says once
-   the answer has begun; given: the name its link gives (<a download>),
-   or NULL */
-static void save_file(const char *url, const char *given)
+   the answer has begun (or to, when given); given: the name its link
+   gives (<a download>), or NULL */
+static void save_file(const char *url, const char *given, const char *to)
 {
 	char full[320], err[200];
 	int r;
-	full[0] = 0;
+	str_copy(full, to != NULL ? to : "", sizeof full);
 	loading_on();
 	r = br_save_url(&br, url, given, full, sizeof full, err, sizeof err);
 #ifndef EW_ST
@@ -2033,6 +2047,27 @@ static void save_file(const char *url, const char *given)
 	menu_update();
 }
 
+#ifndef EW_ST
+/* a file a link opened (BR_SAVE with its headers: name, mime, len -1
+   unknown): where it goes asked now, the download's box up, then asked
+   for again into it, so the box shows through the second request's
+   connection (a second handshake on a secure site) */
+static void save_opened(const char *url, const char *name, const char *mime, long len)
+{
+	char tos[16], full[320];
+	const char *f;
+	br_file_name(url, name, mime, tos, sizeof tos);
+	if (!ask_save("Save the file", tos, full, sizeof full)) {
+		log_event("not saved");
+		win_toolbar();
+		return;
+	}
+	f = strrchr(full, '\\');
+	dl_box(f != NULL ? f + 1 : full, len);
+	save_file(url, NULL, full);
+}
+#endif
+
 void save_link(int link)
 {
 	char url[2048], given[256];
@@ -2046,7 +2081,7 @@ void save_link(int link)
 	g = br_link_download(&br, link);
 	if (g != NULL)
 		str_copy(given, g, sizeof given);
-	save_file(url, g != NULL ? given : NULL);
+	save_file(url, g != NULL ? given : NULL, NULL);
 }
 
 void command(int cmd)

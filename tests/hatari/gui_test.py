@@ -578,6 +578,36 @@ def browse():
                   int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, "CHUNKED")) and
                   not os.path.exists(os.path.join(hd, "chunked")) and
                   (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
+        # the same file from the secure site: the box is up before the
+        # second request (the first stopped at its headers), so through its
+        # handshake too; Esc then leaves no file and no connection open
+        # (the bridge's log: each one opened to the secure port since is
+        # closed by the Atari)
+        blog = os.path.join(OUT, "browse.bridge.log")
+        mark = len(open(blog).read().splitlines()) if os.path.exists(blog) else 0
+        r.key(L, (CTRL,))
+        r.type("https://127.0.0.1:%d/chunked" % HTTPS)
+        r.key(RETURN)
+        sv = r.wait(r"save link", 600)
+        time.sleep(3)		# the file selector
+        r.key(RETURN)
+        box = r.wait(r"download box ", 60)
+        r.key(0x01)		# at once: in the second request's handshake
+        closed = r.wait(r"download box closed ", 300)
+        time.sleep(3)
+        lines = open(blog).read().splitlines()[mark:] if os.path.exists(blog) else []
+        opened = [l.split()[2].rstrip(":") for l in lines if l.endswith(":%d" % HTTPS) and ": open " in l]
+        left = [c for c in opened
+                if not any(l.startswith("bridge: conn %s: closed by the Atari" % c) or
+                           l.startswith("bridge: conn %s closed by the server" % c)
+                           for l in lines[max(i for i, l in enumerate(lines)
+                                              if l.startswith("bridge: conn %s: open" % c)):])]
+        check("downloads: the box up through the second handshake, Esc there leaves nothing",
+              sv is not None and box is not None and box.startswith("download box CHUNKED ") and
+              closed is not None and closed.startswith("download box closed 2 0 ") and len(opened) >= 2 and
+              not left and not os.path.exists(os.path.join(hd, "CHUNKED")) and
+              not os.path.exists(os.path.join(hd, "chunked")),
+              str(r.events()[-8:]) + "\n" + "\n".join(lines))
         # a page of pictures: shown first, its pictures after, the window
         # scrolled while they come (Down doesn't stop them)
         r.key(L, (CTRL,))

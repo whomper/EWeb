@@ -728,7 +728,10 @@ typedef struct {
 	char tr_why[160], tr_part[16];
 	int gwxl;		/* the answer says webgate translates (X-Gateway-Translate: 1) */
 	int to_save;		/* a file to save, cut off at its headers (page_stream):
-				   url where it came from, for br_save_url */
+				   url where it came from, mime its type, name its
+				   Content-Disposition's, save_len its Content-Length
+				   (-1 none), for br_save_url */
+	long save_len;
 } FETCH;
 
 /* a page drawn while it loads (its preview, below): the page's body as it
@@ -1164,8 +1167,13 @@ static int page_head(void *ud, HTTPRESP *rs)
 	f->disposed = f->attach || (t == 0 && f->name[0] && !page);
 	if (page_stream && (f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) &&
 	    strlen(rs->url.href) < sizeof ((browser *) 0)->dl.url) {
+		const char *cl = http_header_at(rs, "Content-Length");
 		f->to_save = 1;
 		str_copy(f->url, rs->url.href, sizeof f->url);
+		str_copy(f->mime, rs->mime[0] ? rs->mime : "application/octet-stream", sizeof f->mime);
+		f->save_len = cl != NULL && rs->encoding == 0 ? strtol(cl, NULL, 10) : -1;
+		if (f->save_len < 0)
+			f->save_len = -1;
 		return 0;
 	}
 	if ((f->attach || !(page || strncmp(rs->mime, "image/", 6) == 0)) && gzip_file(rs, f->name))
@@ -3553,9 +3561,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	page_stream = 0;
 	b->ms_fetch = pf_ms() - b->ms_fetch;
 	if (!r && f->to_save) {
-		/* a file to save: fetched again by br_save_url, as it comes */
+		/* a file to save: fetched again by br_save_url, as it comes;
+		   what its headers said kept for the front end, which asks
+		   where it goes before asking for it again (its box up through
+		   that request's connection) */
 		br_dl_free(b);
 		str_copy(b->dl.url, f->url, sizeof b->dl.url);
+		str_copy(b->dl.mime, f->mime, sizeof b->dl.mime);
+		str_copy(b->dl.name, f->name, sizeof b->dl.name);
+		b->dl.len = f->save_len;
 		free(f);
 		return BR_SAVE;
 	}

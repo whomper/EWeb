@@ -60,7 +60,9 @@ enum {
 	BR_SAVE,		/* a link to save, not to follow (<a download> to the page's
 				   own site), or with browser.stream_files a file a link
 				   opened: br.dl's url and name say which, for br_save_url
-				   to fetch */
+				   to fetch; for a file opened, br.dl.mime its type and
+				   br.dl.len its size (-1 unknown) as its headers said
+				   (br.dl.mime "" for a link to save) */
 	BR_WINDOW		/* a link or a form for another window (its target _blank,
 				   or a name no frame has): br.elsewhere its address,
 				   br.window the window's name ("" a new one) */
