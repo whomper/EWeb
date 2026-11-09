@@ -756,9 +756,12 @@ static int click(browser *b, const char *id)
 			int32_t dx = 0, dy = 0;
 			const char *arg = id + strlen(verbs[v]);
 			str_copy(name, arg, sizeof name);
+			char to[128] = "";
 			if (v == 4 && (colon = strchr(name, ':')) != NULL) {
 				long a, c;
-				if (sscanf(colon + 1, "%ld,%ld", &a, &c) == 2) {
+				if (colon[1] == '@')
+					str_copy(to, colon + 2, sizeof to);	/* drag:ID:@TO, to TO's middle */
+				else if (sscanf(colon + 1, "%ld,%ld", &a, &c) == 2) {
 					dx = (int32_t) a;
 					dy = (int32_t) c;
 				}
@@ -775,6 +778,16 @@ static int click(browser *b, const char *id)
 				}
 				x += w / 2;
 				y += h / 2;
+			}
+			if (*to) {
+				int32_t tx, ty, tw, th;
+				n = b->d ? by_id(b->d->root, to) : NULL;
+				if (n == NULL || !page_node_rect(b->p, n, &tx, &ty, &tw, &th)) {
+					printf("drag to %s: not shown\n", to);
+					return 0;
+				}
+				dx = tx + tw / 2 - x;
+				dy = ty + th / 2 - y;
 			}
 			if (v == 5) {
 				/* tap:ID, EWeb's hover by a click (win.c's, before the
@@ -798,6 +811,30 @@ static int click(browser *b, const char *id)
 			} else {
 				int s;
 				r = br_js_mouse(b, "mousedown", x, y, 1, &cancelled, &load);
+				if (!cancelled && r != BRJ_LOAD && br_js_draggable(b, x, y)) {
+					/* HTML's drag and drop, as win.c's html_drag */
+					int over = 0, drawn;
+					r = br_js_mouse(b, "dragstart", x, y, 1, &cancelled, &load);
+					drawn = r == BRJ_DRAWN;
+					if (cancelled) {
+						printf("drag %s: its dragstart cancelled\n", name);
+						goto due;
+					}
+					for (s = 1; s <= 4 && r != BRJ_LOAD; s++) {
+						r = br_js_mouse(b, "dragover", x + dx * s / 4, y + dy * s / 4, 1, &cancelled, &load);
+						over = cancelled;
+						drawn |= r == BRJ_DRAWN;
+					}
+					if (r != BRJ_LOAD && over)
+						drawn |= (r = br_js_mouse(b, "drop", x + dx, y + dy, 1, &cancelled, &load)) == BRJ_DRAWN;
+					if (r != BRJ_LOAD)
+						drawn |= (r = br_js_mouse(b, "dragend", x + dx, y + dy, 1, &cancelled, &load)) == BRJ_DRAWN;
+					printf("HTML drag %s by %ld,%ld: %s%s\n", name, (long) dx, (long) dy, over ? "dropped, " : "not taken, ",
+					       r == BRJ_LOAD ? "a script loaded" : drawn ? "laid out again" : "nothing");
+					if (r == BRJ_LOAD)
+						click_file(b, load);
+					goto due;
+				}
 				if (!cancelled) {
 					printf("drag %s: its press not taken by a script (a selection)\n", name);
 					return 1;

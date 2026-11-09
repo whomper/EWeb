@@ -60,6 +60,8 @@ Pages:
   /site/blank.html  links whose targets are other windows (_blank, a name)
   /site/popup.html  a button whose script opens a window and writes its page
                  (window.open from a click)
+  /site/board.html  a card to drag to a column (HTML's drag and drop: its
+                 drop names the page "Dropped Card")
   /site/lazy.html  8 pictures, each LAZY seconds in coming (lazy/N.png)
   /site/gwpics.html  a page as superbooth.com's: big photos (bigphoto.jpg,
                  portrait.jpg, banner.jpg) held to their columns, for the Pi
@@ -492,6 +494,18 @@ POPUP_PAGE = (b"<!DOCTYPE html><title>Popup</title><p><button onclick=\"var w = 
               b"w.document.write('<title>Opened</title><p>A page its opener wrote.');w.document.close()\">"
               b"Open a window</button>\n")
 
+# HTML's drag and drop (/site/board.html): a draggable card, a column that
+# takes it, the page's title its answer
+BOARD_PAGE = (b"<!DOCTYPE html><title>Board</title><style>.col{display:inline-block;width:200px;"
+              b"min-height:120px;border:1px solid #888;vertical-align:top}</style>"
+              b"<div class=col>Backlog<p id=card draggable=true>The card to drag</p></div> "
+              b"<div class=col id=col>In Progress</div><script>var c=document.getElementById('card'),"
+              b"k=document.getElementById('col');c.addEventListener('dragstart',function(e){"
+              b"e.dataTransfer.setData('text',c.id)});k.addEventListener('dragover',function(e){"
+              b"e.preventDefault()});k.addEventListener('drop',function(e){e.preventDefault();"
+              b"k.appendChild(document.getElementById(e.dataTransfer.getData('text')));"
+              b"document.title='Dropped Card'})</script>\n")
+
 # the same as a secure page whose pictures come from another secure host
 # (Wikipedia's from upload.wikimedia.org): https://127.0.0.1/site/wikitls.html,
 # its pictures from the ECDSA server (an ECDSA certificate, as Wikipedia's:
@@ -717,6 +731,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, BLANK_PAGE)
         elif p == "/site/popup.html":
             self.send(200, POPUP_PAGE)
+        elif p == "/site/board.html":
+            self.send(200, BOARD_PAGE)
         elif p in ("/site/fs.html", "/site/fsmenu.html", "/site/fsmain.html", "/site/fsone.html"):
             self.send(200, {"fs": FS_PAGE, "fsmenu": FS_MENU, "fsmain": FS_MAIN, "fsone": FS_ONE}[p[6:-5]])
         elif p == "/site/wikitls.html":

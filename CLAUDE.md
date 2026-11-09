@@ -345,7 +345,7 @@ hub stay complete, with the evidence.
   `atari/ovl.ld` and `tools/mkovl.py`; DESIGN.md, One EWEB.PRG for every Falcon), so `EWEB.PRG`
   has no FPU instruction at all (`m68k-linux-gnu-objdump -d`); the ST edition has `js_none.c`. After changing them: `make test`
   (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers, `-u ID=TEXT` typed with its key events,
-  `-K hover:ID`, `dbl:ID`, `down:ID`, `up:ID`, `drag:ID:DX,DY` the mouse, `tap:ID` a click as the hover), `make itest`
+  `-K hover:ID`, `dbl:ID`, `down:ID`, `up:ID`, `drag:ID:DX,DY` (or `drag:ID:@TO`, an HTML drag when ID is `draggable`) the mouse, `tap:ID` a click as the hover), `make itest`
   (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882, with and without `EWEBJS.OVL`).
   `EWEB.PRG` runs on the stock 4 MB Falcon (Erez, 23 Oct 2026): `make hatarigui`'s `falcon4` group.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards

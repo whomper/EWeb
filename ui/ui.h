@@ -372,6 +372,7 @@ void status(const char *s);
    an event at a form control ("input", "change") */
 int  page_click(int32_t x, int32_t y, int detail);
 int  page_mouse(const char *type, int32_t x, int32_t y, int detail);
+int  page_draggable(int32_t x, int32_t y);	/* a press on a draggable="true" element (br_js_draggable) */
 void page_hover(int32_t x, int32_t y);
 /* a click at (x, y) (-1: off the page) as the page's hover (br_hover_click):
    1 if it was laid out again for it */

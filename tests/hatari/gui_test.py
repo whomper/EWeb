@@ -1148,6 +1148,28 @@ def scripts_run(site):
             r.wait(r"window closed", 30)
         else:
             check("scripts: the popup page shown", False, str(ev))
+        # HTML's drag and drop (webdriveruniversity.com's Priority Board):
+        # the card dragged to the column, its drop answered by the page
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/board.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        if m:
+            area = tuple(int(m.group(i)) for i in range(1, 5))
+            a = text_point(site + "board.html", area, int(m.group(5)), "The card to drag")
+            b = text_point(site + "board.html", area, int(m.group(5)), "In Progress")
+            if a and b:
+                r.mouse.drag(a[0] + 10, a[1], b[0] + 10, b[1] + 40)
+            dr = r.wait(r"dropped: ", 60)
+            ev2 = r.wait(r"scripted ", 60)
+            time.sleep(2)
+            r.shot(6)
+            check("scripts: a card dragged to a column (HTML's drag and drop), its drop taken",
+                  a is not None and b is not None and dr == "dropped: 1" and
+                  any(e.endswith("title Dropped Card") for e in r.events()), "\n".join(r.events()[-8:]))
+        else:
+            check("scripts: the board page shown", False, str(ev))
         r.key(Q, (CTRL,))
         check("scripts: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
     finally:

@@ -177,7 +177,9 @@ static short look_frame(int look, short w, short h, SCR_LINE *l)
 	if (look != LOOK_HOT && look != LOOK_DOWN)
 		return 0;
 	if (planes >= 4) {
-		short lt = down ? 9 : 0, rb = down ? 0 : 9;
+		/* (the dark grey by its colour, never pen 9: a TT's and NVDI's
+		   pen 9 is not TOS's dark grey; the guidelines' 5.2) */
+		short dk = dark_pen(), lt = down ? dk : 0, rb = down ? 0 : dk;
 		LN(0, 0, w - 1, 0, lt);
 		LN(0, 0, 0, h - 1, lt);
 		LN(0, h - 1, w - 1, h - 1, rb);
@@ -3532,6 +3534,63 @@ static int script_drag(short mx, short my)
 	return moved;
 }
 
+/* a press on an element the page made draggable (draggable="true"):
+   once the mouse moves, HTML's drag and drop (the HTML Standard's 6.11)
+   for its scripts: dragstart (cancelled: no drag), dragover where the
+   mouse goes (with dragenter and dragleave as the element under it
+   changes), and at the release a drop there if the last dragover was
+   cancelled (the page says it takes it), then dragend. No text is
+   selected. 1 if it was a drag (no click), 0 if let go where it was
+   pressed (a click, which goes on as one) */
+static int html_drag(short mx, short my)
+{
+	short x = mx, y = my, mb = 1, ks, lx = mx, ly = my;
+	int r, over = 0;
+	int32_t px, py;
+	for (;;) {
+		evnt_timer_(20);
+		graf_mkstate(&x, &y, &mb, &ks);
+		if (!(mb & 1))
+			return 0;
+		if (x - mx > 2 || mx - x > 2 || y - my > 2 || my - y > 2)
+			break;
+	}
+	log_event("an HTML drag");
+	sync_draw++;	/* (drawn now: the page follows the mouse) */
+	r = page_mouse("dragstart", mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, 1);
+	if (r != 0 || br.p == NULL) {
+		sync_draw--;
+		return 1;	/* (cancelled: no drag; or another page) */
+	}
+	lx = ly = -1;
+	for (;;) {
+		px = x - cur->r_page.x + cur->left;
+		py = y - cur->r_page.y + cur->top;
+		if (!(mb & 1))
+			break;
+		if (x != lx || y != ly) {
+			lx = x;
+			ly = y;
+			if ((r = page_mouse("dragover", px, py, 1)) == 2 || br.p == NULL) {
+				sync_draw--;
+				return 1;
+			}
+			over = r;
+		}
+		evnt_timer_(20);
+		graf_mkstate(&x, &y, &mb, &ks);
+	}
+	if (over && page_mouse("drop", px, py, 1) == 2) {
+		sync_draw--;
+		return 1;
+	}
+	if (br.p != NULL)
+		page_mouse("dragend", px, py, 1);
+	sync_draw--;
+	log_event("dropped: %d", over);
+	return 1;
+}
+
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
 {
 	int i, l;
@@ -3606,6 +3665,9 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 				return 1;	/* (a script loaded another page) */
 			if (down == 1) {
 				if (script_drag(mx, my))
+					return 1;
+			} else if ((button & 1) && page_draggable(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top)) {
+				if (html_drag(mx, my))
 					return 1;
 			} else if (page_ctl_at(br.p, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top, &it) == NULL &&
 				   select_text(mx, my, clicks, kstate))

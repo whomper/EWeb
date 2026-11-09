@@ -19,7 +19,7 @@ it, and how EWeb gets past CAPTCHAs.
 | DSP and 68030 | **The DSP for any work it does faster; code tuned for the 68030** (19 Oct 2026) | Beyond the TLS handshake's sums, the DSP takes whatever it does faster than the 68030 (decoding pictures, for one). EWeb's code is tuned for the 68030 (its 32-bit multiply and divide, longs at any address, its caches). So the releases are two: `EWEB.PRG`, 68030 code, and an ST edition, `EWEBST.PRG`, 68000 code (the plan, below). |
 | 256 colours | **EWeb's own palette, with a setting** (23 Oct 2026) | TOS's 256 colours have no pale tints, so pastel backgrounds, translucent colours and pictures come out grey or coarse. EWeb sets a palette of its own while it runs in 256 colours, and gives TOS's back when it quits, with a setting to keep TOS's (EWeb's own 256 colours, below). |
 | ST memory | **1 MB is no longer a target** (23 Oct 2026) | EWeb's ST edition only (the family's rule for the others stays) no longer has to fit a 1 MB ST (the hub's rule of 20 Oct 2026, kept up to 0.27). Its buffers are the Falcon's again and its rigs dropped the 1 MB machine (The ST edition, below); it is tested on the 1040 ST with 4 MB, with the family's accessories loaded too, and no 2 MB machine is added for now. |
-| 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces (done, 0.55); (2) dropped (31 Oct 2026, your decision): `EWEB.PRG` beside all four of the family's accessories on a stock 4 MB Falcon isn't a 1.0 goal, since the four together leave too little for any program there (with them loaded a program finds 1.61 MB, `EWEB.PRG` needs 1.74 MB to load); it still runs alone there (`make hatarigui`'s `falcon4`); (3) the guidelines' Speed rules met on `Falcon-4`, and on the `ST` its floor recorded (your choice of 31 Oct 2026, Speed on the stock machines; on 8 Nov 2026 you chose the stock Falcon's floor recorded too, 0.77's figures, the rule a goal after 1.0) (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi; and a run on your DFB1 of the release that has them all. A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
+| 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces (done, 0.55); (2) dropped (31 Oct 2026, your decision): `EWEB.PRG` beside all four of the family's accessories on a stock 4 MB Falcon isn't a 1.0 goal, since the four together leave too little for any program there (with them loaded a program finds 1.61 MB, `EWEB.PRG` needs 1.74 MB to load); it still runs alone there (`make hatarigui`'s `falcon4`); (3) the guidelines' Speed rules met on `Falcon-4`, and on the `ST` its floor recorded (your choice of 31 Oct 2026, Speed on the stock machines; on 8 Nov 2026 you chose the stock Falcon's floor recorded too, 0.77's figures, the rule a goal after 1.0) (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked: done, 9 Nov 2026, the toolbar's frame the last fixed pen); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi (done, 9 Nov 2026: Scripts, The last pass); and a run on your DFB1 of the release that has them all. A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
 | File names | **Lowercase** (2 Nov 2026; the guidelines' 6.6) | On MiNT's ext2 `EWEB.INF` and `eweb.inf` are two files, and a tester's programs missed their own. Every file EWeb opens or makes by a name of its own is lowercase (`eweb.inf`, `eweb.log`, `eweb.key`, `cookies.txt`, `history.txt`, `bookmark.htm`, `cache\` with `ewebnn.pak`, `ewebnn.lst` and `eweb.idx`, `eweb.fnt`, `ewebjs.ovl`, `tls.ovl`, `cacert.pem`, `roots.dat`, `seed.dat`, `sigs.dat`, `eweb.hyp`, common's `crash.log`), and so is every file of a release and its zip, `eweb-x.y.zip` (`make dist`), and the file selector's mask (`*.htm`, which a case-sensitive drive needs to show `bookmark.htm` and saved pages); a fresh start, so nothing looks for an earlier install's capital names (an ext2 user deletes the old folder and installs anew). Names shown to the user (`EWEB.INF` in texts and the help), AES names, and the names of pages saved or downloaded stay as they are. The measuring tools (`EWGET.TTP` and the others), not shipped, keep theirs. |
 | User experience | **The first measure of quality** (4 Nov 2026) | What the user feels comes before everything else, scrolling first: as smooth and as fast as each machine allows. Each change is measured by what is seen (the screen whole after a line, a page, a held key, a drag), not only by how soon EWeb answers. |
 | ST edition | **Frozen after 1.0** (4 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
@@ -4146,8 +4146,8 @@ page asks `../api/user.json`):
   "Confirmed!". Tests: `tests/js/popup.html`, `popup2.html`, `make hatarigui`'s `scripts`
   group (`/site/popup.html`).
 
-Left as they are: the Priority Board's drag and drop (HTML's drag events: a drag on EWeb's
-page selects its text), and the Shadow DOM widget's content (not drawn, as before).
+Left as they were on 7 Nov: the Priority Board's drag and drop and the Shadow DOM widget's
+content; both work since 9 Nov (below, The last pass).
 
 **The mouse (8 Nov 2026; webdriveruniversity.com's Actions and Scrolling).** A page's scripts had a
 click and nothing else of the mouse, and `:hover` never matched; Actions' drag and drop, double
@@ -4194,6 +4194,40 @@ Over Me First!" shows its links; and Scrolling's boxes count the mouse coming ov
 Tests: `tests/js/mouse.html` (ewrender `-K down:ID`, `up:ID`, `dbl:ID`, `hover:ID`,
 `drag:ID:DX,DY`), `tests/js/hover.html` (`-K tap:ID`, the click as the hover),
 `tests/js/offsetparent.html`.
+
+**webdriveruniversity.com, the last pass (9 Nov 2026; 1.0's sixth).** Its front page and 19
+pages (the 18 challenges and the AI Playground), live, Direct (EWeb's TLS) and through a
+webgate (`gateway/`, ewrender `-W`), scripts on: each page the same both ways (its height and
+its display list's items), the only script errors the site's own (its `script.js`,
+`html5shiv.js` and `respond.js` are HTML pages), and one through this machine's webgate alone:
+Login Portal's jQuery is `http://` on cdnjs, which webgate fetches itself, and the build
+machine's only way out is an HTTPS proxy (a 502 here; on the Gateway it comes). The two left on
+7 Nov now work:
+
+- **HTML's drag and drop** (the HTML Standard's 6.11; the Priority Board): a press on an
+  element of `draggable="true"` (or in one; `draggable="false"` stops the search) whose
+  mousedown the page doesn't cancel is, once the mouse moves 3 px, a drag for the page's
+  scripts and selects no text (`html_drag` in `ui/win.c`, `br_js_draggable` in `src/browse`):
+  dragstart at the element (cancelled: no drag), dragover where the mouse is at each move, with
+  dragenter and dragleave as the element under it changes, at the release a drop there if the
+  last dragover was cancelled (the page takes it), then dragend at the element. Each is a
+  MouseEvent with the drag's one `dataTransfer` (the prelude's `DataTransfer`: `setData`,
+  `getData`, `types`, `effectAllowed`, `dropEffect`; made at dragstart by `js_mouse`, so no new
+  entry in `EWEBJS.OVL`'s table). The board's cards go to In Progress and it says so, Direct and
+  through the Gateway. A page that doesn't listen costs an attribute's look up the tree at a
+  press.
+- **A shadow root drawn** (DOM 4.8; the Shadow DOM widget): `attachShadow` makes an element
+  `ew-shadow` of `display: contents`, first in its host, so its content is laid out as the
+  host's; the `<style>` that `innerHTML` puts in it is kept to it, each selector written within
+  it (`ew-shadow[data-ew-shadow="N"] p`) and `:host` as the host (`[data-ew-host="N"]`), in
+  `@media` too. The widget's field, button and green answer are drawn, and its button says
+  "Please enter a value." or "Echo: ..." as in Chromium. Left: the page's own styles reach into
+  a shadow root and the root is in the host's `children` (EWeb's sheets have no scope of their
+  own), the host's own children are drawn after it (no `<slot>`), a closed root's
+  `shadowRoot` is null as the standard has it.
+
+Tests: `tests/js/dragdrop.html` (ewrender `-K drag:ID:@TO`, a drag to another element's
+middle), `tests/js/shadow.html`.
 
 ## Scripts kept compiled (26 Oct 2026)
 
@@ -4461,8 +4495,8 @@ ten times, and the drawing has been tuned round by round: 20% more is not in sig
 page drawn in pieces while it loads would, which makes no load sooner, only Esc and clicks
 answered between its bands. On the DFB1 the same stretch is about a third as long (an estimate).
 The other option was the pieces made as fast as the window drawn whole and switched on for
-loads, before 1.0. 1.0 is now webdriveruniversity.com working, Direct and through the Gateway,
-and the DFB1 run.
+loads, before 1.0. 1.0 is now webdriveruniversity.com working, Direct and through the Gateway
+(done, 9 Nov 2026), and the DFB1 run.
 
 **The stock Falcon within its times (31 Oct 2026).** After 0.56 four actions were still over on
 `Falcon-4:16`: a line scrolled (75), the loads (275 to 340 ms) and Settings (155). Each stretch was

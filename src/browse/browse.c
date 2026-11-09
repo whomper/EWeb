@@ -4731,11 +4731,53 @@ int br_js_click(browser *b, int32_t x, int32_t y, int detail, int down, int *can
 	return BRJ_NONE;
 }
 
+int br_js_draggable(browser *b, int32_t x, int32_t y)
+{
+	dnode *n;
+	const char *v;
+	b->drag = b->drag_over = NULL;
+	b->drag_d = NULL;
+	if (b->d == NULL || b->d->js == NULL || b->p == NULL)
+		return 0;
+	for (n = mouse_node(b, x, y); n != NULL && n->type == DN_ELEMENT; n = n->parent)
+		if ((v = dn_attr(n, "draggable")) != NULL) {
+			if (strcmp(v, "true") != 0)
+				return 0;	/* (draggable="false": not this one, nor what it is in) */
+			b->drag = n;
+			b->drag_d = b->d;
+			return 1;
+		}
+	return 0;
+}
+
 int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, int *cancelled, int *load_r)
 {
 	*cancelled = 0;
 	if (b->d != NULL && b->d->js != NULL && b->p != NULL) {
 		dnode *n = mouse_node(b, x, y);
+		if (!strncmp(type, "drag", 4) || !strcmp(type, "drop")) {
+			/* HTML's drag and drop (the HTML Standard's 6.11): dragstart
+			   and dragend at the element dragged, dragenter and
+			   dragleave as the one under the mouse changes, dragover
+			   there at each move, drop there when the last dragover
+			   was cancelled (win.c asks for it only then) */
+			if (b->drag_d != b->d || b->drag == NULL)
+				return BRJ_NONE;
+			if (!strcmp(type, "dragstart") || !strcmp(type, "dragend")) {
+				*cancelled = js_mouse(b->d, b->drag, type, x, y, 0, 1, NULL);
+				if (type[4] == 'e')
+					b->drag = b->drag_over = NULL;
+			} else if (n != NULL) {
+				if (!strcmp(type, "dragover") && n != b->drag_over) {
+					if (b->drag_over != NULL)
+						js_mouse(b->d, b->drag_over, "dragleave", x, y, 0, 1, n);
+					js_mouse(b->d, n, "dragenter", x, y, 0, 1, b->drag_over);
+					b->drag_over = n;
+				}
+				*cancelled = js_mouse(b->d, n, type, x, y, 0, 1, NULL);
+			}
+			return js_after(b, load_r);
+		}
 		if (n != NULL)
 			*cancelled = js_mouse(b->d, n, type, x, y, 0, detail, NULL);
 		return js_after(b, load_r);
@@ -4897,6 +4939,12 @@ int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, 
 int br_js_moves(browser *b)
 {
 	(void) b;
+	return 0;
+}
+
+int br_js_draggable(browser *b, int32_t x, int32_t y)
+{
+	(void) b, (void) x, (void) y;
 	return 0;
 }
 

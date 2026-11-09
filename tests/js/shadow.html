@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- a shadow root drawn as its host's content (webdriveruniversity.com's AI
+     Playground's Shadow DOM widget): its field, button and paragraph on the
+     page, its <style> kept to it (a p outside stays as it is), :host the
+     host, its button's click answered inside it; a closed root not given
+     to the page's scripts -->
+<!-- args: -K go -->
+<!-- expect: "Submit" -->
+<!-- expect: "Echo: hello" -->
+<!-- expect: console: outside p margin 0px -->
+<!-- expect: console: root in host yes -->
+<!-- expect: 596x2 #ff0000 -->
+<!-- expect: #4caf50 sans13 link 0 "Echo: hello" -->
+<!-- absent: #4caf50 sans13 link 0 "outside" -->
+<!-- expect: console: closed null -->
+<html><head><title>Shadow DOM</title><style>p{margin:0}</style></head><body>
+<wdu-form id="host"></wdu-form>
+<wdu-closed id="cl"></wdu-closed>
+<p id="outside">outside</p>
+<script>
+class F extends HTMLElement {
+  connectedCallback() {
+    var s = this.attachShadow({ mode: 'open' });
+    s.innerHTML = '<style>:host{display:block;border:2px solid red} /* a comment */ p{margin-top:10px;color:#4caf50}' +
+      '@media screen{button{padding:9px}}</style>' +
+      '<input type="text" value="hello"><button id="go">Submit</button><p id="res"></p>';
+    s.querySelector('button').addEventListener('click', function () {
+      var v = s.querySelector('input').value.trim();
+      s.querySelector('p').textContent = v ? 'Echo: ' + v : 'Please enter a value.';
+    });
+  }
+}
+customElements.define('wdu-form', F);
+class C extends HTMLElement { connectedCallback() { this.attachShadow({ mode: 'closed' }).innerHTML = '<b>hidden</b>'; } }
+customElements.define('wdu-closed', C);
+console.log('outside p margin ' + getComputedStyle(document.getElementById('outside')).marginTop);
+var h = document.getElementById('host');
+console.log('root in host ' + (h.shadowRoot.parentNode === h ? 'yes' : 'no'));
+console.log('closed ' + document.getElementById('cl').shadowRoot);
+</script>
+</body></html>

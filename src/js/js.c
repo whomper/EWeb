@@ -4245,8 +4245,37 @@ static const char prelude[] =
 	"document:{open:function(){return this},close:function(){},"
 	"write:function(){ew(Array.prototype.join.call(arguments,''))},"
 	"writeln:function(){ew(Array.prototype.join.call(arguments,'')+'\\n')}}};w.window=w.self=w;return w};"
-	"Element.prototype.attachShadow=function(o){var r=d.createElement('div');if(!o||o.mode!=='closed')"
-	"Object.defineProperty(this,'shadowRoot',{value:r,configurable:true});r.host=this;return r}"
+	/* DataTransfer (the HTML Standard's 6.11.3): what a drag carries,
+	   by its type ("text" is "text/plain"), for its DragEvents */
+	"g.DataTransfer=function(){this._d={};this.types=[];this.files=[];this.items=[];"
+	"this.effectAllowed='uninitialized';this.dropEffect='none'};"
+	"DataTransfer.prototype={setData:function(t,v){t=String(t).toLowerCase();if(t=='text')t='text/plain';"
+	"if(!(t in this._d))this.types.push(t);this._d[t]=String(v)},getData:function(t){t=String(t)."
+	"toLowerCase();if(t=='text')t='text/plain';return t in this._d?this._d[t]:''},clearData:function(t){"
+	"if(t===undefined){this._d={};this.types.length=0;return}t=String(t).toLowerCase();if(t=='text')"
+	"t='text/plain';if(t in this._d){delete this._d[t];this.types.splice(this.types.indexOf(t),1)}},"
+	"setDragImage:function(){}};"
+	/* a shadow root (DOM 4.8): drawn as the host's content, an element
+	   ew-shadow of display: contents first in the host; the styles put
+	   in it by innerHTML kept to it, their selectors within it (:host
+	   the host), as EWeb's sheets have no scope of their own; the
+	   page's own styles reach in, and the host's children are drawn
+	   after it (no slots) */
+	"var shn=0;function shc(c,p,h){c=String(c).replace(/\\/\\*[\\s\\S]*?\\*\\//g,'');var o='',i=0,n=c.length;"
+	"while(i<n){var j=c.indexOf('{',i),k,e=1,q,b;if(j<0)break;q=c.slice(i,j).trim();for(k=j+1;k<n&&e;k++)"
+	"if(c[k]=='{')e++;else if(c[k]=='}')e--;b=c.slice(j+1,k-1);if(q[0]=='@')o+=q+'{'+"
+	"(/^@(media|supports|layer|container)/i.test(q)?shc(b,p,h):b)+'}';else o+=q.split(',').map("
+	"function(s){var m;s=s.trim();if(m=s.match(/^:host(?:\\(([^)]*)\\))?(.*)$/))return h+(m[1]||'')+m[2];"
+	"return p+' '+s}).join(',')+'{'+b+'}';i=k}return o}"
+	"var ihd=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');"
+	"Element.prototype.attachShadow=function(o){var r=d.createElement('ew-shadow'),h=this,id=++shn,"
+	"p='ew-shadow[data-ew-shadow=\"'+id+'\"]',hs='[data-ew-host=\"'+id+'\"]';"
+	"r.setAttribute('data-ew-shadow',id);h.setAttribute('data-ew-host',id);r.style.display='contents';"
+	"if(ihd)Object.defineProperty(r,'innerHTML',{configurable:true,get:function(){return ihd.get.call(r)},"
+	"set:function(v){ihd.set.call(r,v);var a=r.getElementsByTagName('style'),i;for(i=0;i<a.length;i++)"
+	"a[i].textContent=shc(a[i].textContent,p,hs)}});"
+	"h.insertBefore(r,h.firstChild);"
+	"Object.defineProperty(h,'shadowRoot',{value:o&&o.mode==='closed'?null:r,configurable:true});r.host=h;r.mode=o&&o.mode||'open';return r}"
 	"})(globalThis)";
 
 /* ---------------------------------------------------------------- location and history */
@@ -5104,7 +5133,26 @@ int js_mouse(doc *d, dnode *n, const char *type, long x, long y, int button, int
 	JS_SetPropertyStr(ctx, ev, "button", JS_NewInt32(ctx, button));
 	/* buttons: those held (a mousemove's detail says whether the button
 	   is: a drag); which, jQuery's: 1 the left, 3 the right */
-	held = !strcmp(type, "mousedown") || (!strcmp(type, "mousemove") && detail > 0);
+	held = !strcmp(type, "mousedown") || (!strcmp(type, "mousemove") && detail > 0) ||
+	       !strncmp(type, "drag", 4) || !strcmp(type, "drop");
+	if (!strncmp(type, "drag", 4) || !strcmp(type, "drop")) {
+		/* a DragEvent's dataTransfer: one for the whole drag, made
+		   at its dragstart (the prelude's DataTransfer) */
+		JSValue g = JS_GetGlobalObject(ctx), dt;
+		if (!strcmp(type, "dragstart")) {
+			JSValue c = JS_GetPropertyStr(ctx, g, "DataTransfer");
+			dt = JS_CallConstructor(ctx, c, 0, NULL);
+			JS_FreeValue(ctx, c);
+			if (JS_IsException(dt)) {
+				report(j);
+				dt = JS_NULL;
+			}
+			JS_SetPropertyStr(ctx, g, "__ewdt", JS_DupValue(ctx, dt));
+		} else
+			dt = JS_GetPropertyStr(ctx, g, "__ewdt");
+		JS_SetPropertyStr(ctx, ev, "dataTransfer", dt);
+		JS_FreeValue(ctx, g);
+	}
 	JS_SetPropertyStr(ctx, ev, "buttons", JS_NewInt32(ctx, held ? (button == 2 ? 2 : 1) : 0));
 	JS_SetPropertyStr(ctx, ev, "which", JS_NewInt32(ctx, button + 1));
 	JS_SetPropertyStr(ctx, ev, "detail", JS_NewInt32(ctx, strcmp(type, "mousemove") ? detail : 0));

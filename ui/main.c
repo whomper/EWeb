@@ -1492,6 +1492,11 @@ int page_mouse(const char *type, int32_t x, int32_t y, int detail)
 	return r == BRJ_LOAD ? 2 : cancelled;
 }
 
+int page_draggable(int32_t x, int32_t y)
+{
+	return !loading && br_js_draggable(&br, x, y);
+}
+
 int page_hover_click(int32_t x, int32_t y)
 {
 	if (loading || !br_hover_click(&br, x, y))
@@ -1550,6 +1555,12 @@ int page_mouse(const char *type, int32_t x, int32_t y, int detail)
 void page_hover(int32_t x, int32_t y)
 {
 	(void) x, (void) y;
+}
+
+int page_draggable(int32_t x, int32_t y)
+{
+	(void) x, (void) y;
+	return 0;
 }
 
 int page_hover_click(int32_t x, int32_t y)

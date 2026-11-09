@@ -84,6 +84,10 @@ typedef struct browser {
 	/* :hover's element, the one clicked last (br_hover_click), in hclick_d */
 	struct dnode *hclick;
 	doc *hclick_d;
+	/* an HTML drag (br_js_draggable): the element dragged and the one it
+	   is over, in the document drag_d */
+	struct dnode *drag, *drag_over;
+	doc *drag_d;
 	char url[4096];		/* its address, after redirects, fragment included */
 	char title[256];	/* UTF-8, "" for none */
 	char security[96];	/* how it came: "TLS 1.2, ..." or "" */
@@ -429,6 +433,10 @@ int br_js_click(browser *b, int32_t x, int32_t y, int detail, int down, int *can
 int br_js_mouse(browser *b, const char *type, int32_t x, int32_t y, int detail, int *cancelled, int *load);
 /* whether the page's scripts listen for the mouse moving over it */
 int br_js_moves(browser *b);
+/* whether a press at (x, y) is on an element the page made draggable
+   (draggable="true") for its scripts: the drag that follows is then
+   HTML's (br_js_mouse's dragstart, dragover, drop, dragend), 1 if so */
+int br_js_draggable(browser *b, int32_t x, int32_t y);
 /* a click at (x, y) (-1: none) as EWeb's hover (Erez, 8 Nov 2026): the
    element under it, and those it is in, are :hover's until the next
    click, so that what a page shows when the mouse is over an element (a

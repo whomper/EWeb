@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- HTML's drag and drop (the HTML Standard's 6.11), as webdriveruniversity.com's
+     AI Playground's Priority Board has it: a draggable="true" card dragged
+     to a column that cancels its dragover; dragstart and dragend at the
+     card, dragenter, dragover and drop at the column, one dataTransfer for
+     the drag; a column that doesn't cancel its dragover takes no drop; a
+     draggable="false" element's press is a selection -->
+<!-- args: -K drag:card1:@todo -K drag:card2:@nodrop -K drag:fixed:40,0 -->
+<!-- expect: HTML drag card1 by -->
+<!-- expect: dropped, laid out again -->
+<!-- expect: moved to In Progress" -->
+<!-- expect: console: order dragstart dragenter dragover drop dragend -->
+<!-- expect: console: data card1 text/plain -->
+<!-- expect: console: card2 not taken -->
+<!-- expect: drag fixed: its press not taken by a script (a selection) -->
+<html><head><title>Drag and drop</title>
+<style>.col{display:inline-block;width:150px;min-height:80px;border:1px solid #888;vertical-align:top}
+.card{margin:4px;padding:4px;background:#eee}</style></head><body>
+<div id="backlog" class="col">Backlog
+  <div id="card1" class="card" draggable="true">Fix login bug</div>
+  <div id="card2" class="card" draggable="true">Write unit tests</div>
+  <div draggable="false"><span id="fixed">Not draggable</span></div>
+</div>
+<div id="todo" class="col">In Progress</div>
+<div id="nodrop" class="col">Closed</div>
+<p id="result">-</p>
+<script>
+var dragging = null, order = [], n2 = 0;
+document.querySelectorAll('.card').forEach(function (c) {
+  c.addEventListener('dragstart', function (e) {
+    dragging = c; order = ['dragstart'];
+    e.dataTransfer.setData('text', c.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  c.addEventListener('dragend', function (e) {
+    order.push('dragend');
+    if (c.id === 'card1') console.log('order ' + order.filter(function (t, i) { return order.indexOf(t) === i; }).join(' '));
+    if (c.id === 'card2') console.log('card2 ' + (c.parentNode.id === 'backlog' ? 'not taken' : 'moved'));
+  });
+});
+var col = document.getElementById('todo');
+col.addEventListener('dragenter', function () { order.push('dragenter'); });
+col.addEventListener('dragover', function (e) { e.preventDefault(); order.push('dragover'); });
+col.addEventListener('drop', function (e) {
+  e.preventDefault(); order.push('drop');
+  console.log('data ' + e.dataTransfer.getData('text/plain') + ' ' + e.dataTransfer.types.join(','));
+  col.appendChild(dragging);
+  document.getElementById('result').textContent = '"' + dragging.textContent + '" moved to In Progress';
+});
+document.getElementById('nodrop').addEventListener('drop', function () { console.log('FAIL dropped where not taken'); });
+</script>
+</body></html>
