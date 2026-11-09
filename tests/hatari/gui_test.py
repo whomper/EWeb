@@ -490,6 +490,7 @@ def browse():
         elif box is not None:
             bx, by, bw, bh = (int(v) for v in box.split()[-4:])
             r.shot(6)		# (the bar part of the way, by the file's size)
+            r.mouse.move(0, 0)	# (the emulated mouse in step with the host's again: both at the corner)
             r.mouse.click(bx + bw // 2, by + bh // 2)
         closed = r.wait(r"download box closed ", 120)
         ev = r.wait(r"stopped", 30)
@@ -512,6 +513,7 @@ def browse():
         pt2 = link_point(site, tuple(int(m.group(i)) for i in range(1, 5)), int(m.group(5)),
                          "the second page") if m else None
         if pt2 is not None:
+            r.mouse.move(0, 0)
             r.mouse.click(*pt2)
         ev = r.wait(r"shown ", 120)
         check("downloads: a click taken after the box (%s)" % when, ev is not None and "two.html" in ev, str(r.events()[-6:]))

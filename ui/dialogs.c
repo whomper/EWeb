@@ -744,12 +744,27 @@ int dl_box_event(short which, const AEVENT *ev)
 		return 0;
 	if ((which & MU_KEYBD) && (dlg_esc(ev->kreturn) || dlg_undo(ev->kreturn)))
 		return 1;
-	if (which & MU_BUTTON)
-		log_event("download box click %d %d on %d", ev->mx, ev->my, dlg_find(tree, ev->mx, ev->my));
-	if ((which & MU_BUTTON) && dlg_find(tree, ev->mx, ev->my) == d_cancel) {
-		tree[d_cancel].ob_state |= SELECTED;
-		dlg_draw(tree, d_cancel);
-		return 1;
+	if (which & MU_BUTTON) {
+		short o = dlg_find(tree, ev->mx, ev->my), mx, my, mb, ks;
+		log_event("download box click %d %d on %d", ev->mx, ev->my, o);
+		graf_mkstate(&mx, &my, &mb, &ks);
+		if (o == d_cancel) {
+			/* Cancel as a dialog's button: shown pressed, taken when
+			   let go over it (5.8); a click already let go, at once */
+			if (!(mb & 1) || graf_watchbox(tree, d_cancel, SELECTED, 0)) {
+				tree[d_cancel].ob_state |= SELECTED;
+				dlg_draw(tree, d_cancel);
+				return 1;
+			}
+			return 0;
+		}
+		/* a press elsewhere: its release waited for here, or the AES
+		   keeps the button held and no later click comes */
+		if (mb & 1) {
+			short m[8];
+			AEVENT e;
+			evnt_multi_(MU_BUTTON, 1, 1, 0, 0, m, &e);
+		}
 	}
 	return 0;
 }
