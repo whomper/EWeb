@@ -1110,6 +1110,7 @@ def browse():
         ev = r.wait(r"shown ", 60)
         check("preview: a slow page's start shown before it has all come", pv is not None and ev is not None and
               ev.startswith("shown %sslow.html " % site), "%r %r" % (pv, ev))
+        downloads()		# (before View > Encoding's pop-up, whose press may linger)
         # a page in windows-1255 that names no encoding: windows-1252 here
         # (not under .il); View > Encoding... reads it again in windows-1255
         r.key(L, (CTRL,))
@@ -1133,7 +1134,6 @@ def browse():
               "encoding windows-1255" in evs and ev.startswith("shown %senc/w1255.html " % site) and
               ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
         r.shot(16)
-        downloads()		# (last: the serial line at full speed may unsettle the emulated mouse)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""
