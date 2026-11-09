@@ -474,6 +474,70 @@ def browse():
     # (the home page's search box: its words to the test site's echo)
     hd = hd_for("browse", site, "SEARCH=%secho?q=%%s\r\n" % site)
     shutil.copy(os.path.join(work, "CACERT.PEM"), os.path.join(hd, "cacert.pem"))      # the test authority
+    def downloads():
+        # 2 MB that come slowly over the serial line, a file EWeb doesn't
+        # show: the file selector, then the download's box (Erez, 9 Nov
+        # 2026: its name, a bar by its size, Cancel) as it comes; Esc stops
+        # it, nothing is left on the disk, and the page before stays; the
+        # box's Cancel stops it too
+        # (Cancel on /trickle, which comes slowly with its size: the
+        # emulated serial line at full speed loses the mouse's packets)
+        for how in ("Esc", "Cancel"):
+            name = "CHUNKED" if how == "Esc" else "TRICKLE.ZIP"
+            r.key(L, (CTRL,))
+            r.type("127.0.0.1:%d/%s" % (HTTP, "chunked" if how == "Esc" else "trickle"))
+            r.key(RETURN)
+            sv = r.wait(r"save link", 120)
+            time.sleep(3)		# the file selector
+            r.key(RETURN)
+            box = r.wait(r"download box ", 60)
+            time.sleep(8)
+            if how == "Esc":
+                r.shot(5)
+                r.key(0x01)
+            elif box is not None:
+                bx, by, bw, bh = (int(v) for v in box.split()[-4:])
+                r.shot(6)		# (the bar part of the way, by the file's size)
+                r.mouse.click(bx + bw // 2, by + bh // 2)
+            closed = r.wait(r"download box closed ", 120)
+            ev = r.wait(r"stopped", 30)
+            check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
+                  box.startswith("download box %s %s cancel " % (name, "-1" if how == "Esc" else len(server.BIG))) and
+                  ev is not None and closed is not None and closed.startswith("download box closed 2 ") and
+                  int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, name)) and
+                  not os.path.exists(os.path.join(hd, name.lower())) and
+                  (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
+        # the same file from the secure site: the box is up before the
+        # second request (the first stopped at its headers), so through its
+        # handshake too; Esc then leaves no file and no connection open
+        # (the bridge's log: each one opened to the secure port since is
+        # closed by the Atari)
+        blog = os.path.join(OUT, "browse.bridge.log")
+        mark = len(open(blog).read().splitlines()) if os.path.exists(blog) else 0
+        r.key(L, (CTRL,))
+        r.type("https://127.0.0.1:%d/trickle" % HTTPS)
+        r.key(RETURN)
+        sv = r.wait(r"save link", 600)
+        time.sleep(3)		# the file selector
+        r.key(RETURN)
+        box = r.wait(r"download box ", 60)
+        r.key(0x01)		# at once: in the second request's handshake
+        closed = r.wait(r"download box closed ", 300)
+        time.sleep(3)
+        lines = open(blog).read().splitlines()[mark:] if os.path.exists(blog) else []
+        opened = [l.split()[2].rstrip(":") for l in lines if l.endswith(":%d" % HTTPS) and ": open " in l]
+        left = [c for c in opened
+                if not any(l.startswith("bridge: conn %s: closed by the Atari" % c) or
+                           l.startswith("bridge: conn %s closed by the server" % c)
+                           for l in lines[max(i for i, l in enumerate(lines)
+                                              if l.startswith("bridge: conn %s: open" % c)):])]
+        check("downloads: the box up through the second handshake, Esc there leaves nothing",
+              sv is not None and box is not None and box.startswith("download box TRICKLE.ZIP %d " % len(server.BIG)) and
+              closed is not None and closed.startswith("download box closed 2 0 ") and len(opened) >= 2 and
+              not left and not os.path.exists(os.path.join(hd, "TRICKLE.ZIP")) and
+              not os.path.exists(os.path.join(hd, "trickle.zip")),
+              str(r.events()[-8:]) + "\n" + "\n".join(lines))
+
     r = Run("browse", "Falcon:16", hd, windowed=True, network=True)
     try:
         ev = r.wait(r"shown ", 300)
@@ -486,6 +550,14 @@ def browse():
         area = tuple(int(m.group(i)) for i in range(1, 5))
         pt = link_point(site, area, int(m.group(5)), "the second page")
         if not check("browse: the link found on the page", pt is not None):
+            return
+        if os.environ.get("GUI_DL_ONLY"):
+            # (the download box's cases alone, then a click still taken)
+            downloads()
+            r.mouse.click(*pt)
+            ev = r.wait(r"shown ", 120)
+            check("downloads: a click taken after the box", ev is not None and "two.html" in ev, str(r.events()[-6:]))
+            r.shot(69)
             return
         # the guidelines' 5.8: pressed, the link is drawn at once in
         # :active's red; moved off it while held and let go, nothing is
@@ -550,64 +622,7 @@ def browse():
         check("browse: a secure page", ev is not None and ev.startswith("shown https://127.0.0.1:%d/site/ " % HTTPS),
               str(r.events()))
         r.shot(4)
-        # 2 MB that come slowly over the serial line, a file EWeb doesn't
-        # show: the file selector, then the download's box (Erez, 9 Nov
-        # 2026: its name, a bar by its size, Cancel) as it comes; Esc stops
-        # it, nothing is left on the disk, and the page before stays; the
-        # box's Cancel stops it too
-        for how in ("Esc", "Cancel"):
-            r.key(L, (CTRL,))
-            r.type("127.0.0.1:%d/chunked" % HTTP)
-            r.key(RETURN)
-            sv = r.wait(r"save link", 120)
-            time.sleep(3)		# the file selector
-            r.key(RETURN)
-            box = r.wait(r"download box ", 60)
-            time.sleep(8)
-            if how == "Esc":
-                r.shot(5)
-                r.key(0x01)
-            elif box is not None:
-                bx, by, bw, bh = (int(v) for v in box.split()[-4:])
-                r.mouse.click(bx + bw // 2, by + bh // 2)
-            closed = r.wait(r"download box closed ", 120)
-            ev = r.wait(r"stopped", 30)
-            check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
-                  box.startswith("download box CHUNKED -1 cancel ") and ev is not None and
-                  closed is not None and closed.startswith("download box closed 2 ") and
-                  int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, "CHUNKED")) and
-                  not os.path.exists(os.path.join(hd, "chunked")) and
-                  (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
-        # the same file from the secure site: the box is up before the
-        # second request (the first stopped at its headers), so through its
-        # handshake too; Esc then leaves no file and no connection open
-        # (the bridge's log: each one opened to the secure port since is
-        # closed by the Atari)
-        blog = os.path.join(OUT, "browse.bridge.log")
-        mark = len(open(blog).read().splitlines()) if os.path.exists(blog) else 0
-        r.key(L, (CTRL,))
-        r.type("https://127.0.0.1:%d/chunked" % HTTPS)
-        r.key(RETURN)
-        sv = r.wait(r"save link", 600)
-        time.sleep(3)		# the file selector
-        r.key(RETURN)
-        box = r.wait(r"download box ", 60)
-        r.key(0x01)		# at once: in the second request's handshake
-        closed = r.wait(r"download box closed ", 300)
-        time.sleep(3)
-        lines = open(blog).read().splitlines()[mark:] if os.path.exists(blog) else []
-        opened = [l.split()[2].rstrip(":") for l in lines if l.endswith(":%d" % HTTPS) and ": open " in l]
-        left = [c for c in opened
-                if not any(l.startswith("bridge: conn %s: closed by the Atari" % c) or
-                           l.startswith("bridge: conn %s closed by the server" % c)
-                           for l in lines[max(i for i, l in enumerate(lines)
-                                              if l.startswith("bridge: conn %s: open" % c)):])]
-        check("downloads: the box up through the second handshake, Esc there leaves nothing",
-              sv is not None and box is not None and box.startswith("download box CHUNKED ") and
-              closed is not None and closed.startswith("download box closed 2 0 ") and len(opened) >= 2 and
-              not left and not os.path.exists(os.path.join(hd, "CHUNKED")) and
-              not os.path.exists(os.path.join(hd, "chunked")),
-              str(r.events()[-8:]) + "\n" + "\n".join(lines))
+        downloads()
         # a page of pictures: shown first, its pictures after, the window
         # scrolled while they come (Down doesn't stop them)
         r.key(L, (CTRL,))

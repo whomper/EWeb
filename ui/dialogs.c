@@ -744,6 +744,8 @@ int dl_box_event(short which, const AEVENT *ev)
 		return 0;
 	if ((which & MU_KEYBD) && (dlg_esc(ev->kreturn) || dlg_undo(ev->kreturn)))
 		return 1;
+	if (which & MU_BUTTON)
+		log_event("download box click %d %d on %d", ev->mx, ev->my, dlg_find(tree, ev->mx, ev->my));
 	if ((which & MU_BUTTON) && dlg_find(tree, ev->mx, ev->my) == d_cancel) {
 		tree[d_cancel].ob_state |= SELECTED;
 		dlg_draw(tree, d_cancel);

@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "ui.h"
+#include "fsel.h"
 #include "text.h"
 #ifndef EW_ST
 #include "tlsovl.h"
@@ -1271,6 +1272,27 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 	       alert(2, "[2][There is a file of that name.|Replace it?][Replace|Cancel]") == 1;
 }
 
+#ifndef EW_ST
+/* before the download's box: the button the file selector left let go
+   (fsel_settle), and what it covered drawn again now; on TOS the box is
+   over the screen and nothing is drawn under it while the file comes. A
+   message that isn't a redraw is put back for the loop */
+static void under_selector(void)
+{
+	short msg[8];
+	AEVENT ev;
+	int n = 0;
+	fsel_settle();
+	while (n++ < 16 && (evnt_multi_(MU_MESAG | MU_TIMER, 1, 1, 1, 0, msg, &ev) & MU_MESAG)) {
+		if (msg[0] != WM_REDRAW) {
+			appl_write(appl_id(), 16, msg);
+			break;
+		}
+		win_message(msg);
+	}
+}
+#endif
+
 /* br_save_url's: where a file goes, asked once its answer has begun (its
    server may name it) */
 static int save_where(void *ud, const char *name, char *path, int size)
@@ -1284,6 +1306,7 @@ static int save_where(void *ud, const char *name, char *path, int size)
 	if (r) {
 		/* the download's box, as it comes (Erez, 9 Nov 2026) */
 		const char *f = strrchr(path, '\\');
+		under_selector();
 		dl_box(f != NULL ? f + 1 : path, br_save_total);
 	}
 #endif
@@ -2063,6 +2086,7 @@ static void save_opened(const char *url, const char *name, const char *mime, lon
 		return;
 	}
 	f = strrchr(full, '\\');
+	under_selector();
 	dl_box(f != NULL ? f + 1 : full, len);
 	save_file(url, NULL, full);
 }

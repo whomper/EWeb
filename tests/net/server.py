@@ -16,6 +16,7 @@ Pages:
   /page          a page of text (gzip when it is asked for), keep-alive
   /close         the same, then the connection closes (for TLS resumption)
   /chunked       2 MB in chunks of 1 to 64 KB
+  /trickle       the same 2 MB with its size, 8 KB every 0.2 s (application/zip)
   /hebrew        a page in windows-1255, said in Content-Type
   /redirect      302 to /page; /secure 301 to the HTTPS server's /page (on
                  the host the request named)
@@ -952,6 +953,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif p == "/trickle":
+            # the download box's (EWEB.PRG's rig): 2 MB with its size, 8 KB
+            # every 0.2 s, so the serial line is quiet between pieces
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(BIG)))
+            self.end_headers()
+            try:
+                for k in range(0, len(BIG), 8192):
+                    self.wfile.write(BIG[k:k + 8192])
+                    self.wfile.flush()
+                    time.sleep(0.2)
+            except OSError:
+                pass
         elif p == "/chunked":
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
