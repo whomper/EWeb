@@ -1488,6 +1488,28 @@ def dialogs():
                 check("dialogs: %s, Settings: Esc empties a field and stays, Undo cancels" % name,
                       stayed and ev == "settings kept", "\n".join(r.events()[mark:]))
                 time.sleep(settle)
+                # an empty text size and OK: refused with an alert that
+                # says what to type (the UI standards' D30), the dialog
+                # stays; Return answers the alert, Undo cancels
+                mark = len(r.events())
+                settings(3)
+                r.key(ESC)
+                time.sleep(1)
+                r.key(RETURN)
+                ref = r.wait(r"settings refused: ", 60)
+                time.sleep(3)
+                r.shot(4)
+                r.key(RETURN)
+                time.sleep(2)
+                kept = not any(e == "settings changed" for e in r.events()[mark:])
+                r.key(UNDO)
+                ev = r.wait(r"settings (kept|changed)$", 120)
+                check("dialogs: %s, Settings: a text size out of range refused by an alert, nothing changed" % name,
+                      ref is not None and ref.startswith("settings refused: page 1 ") and kept,
+                      "\n".join(r.events()[mark:]))
+                check("dialogs: %s, Settings: after the alert Undo cancels" % name,
+                      kept and ev == "settings kept", "\n".join(r.events()[mark:]))
+                time.sleep(settle)
                 held_presses(r, "dialogs", name, os.path.join(ROOT, "tests/layout/text.html"),
                              1 if prg == "EWEB.PRG" else 4)
                 held_scroll(r, "dialogs", name, settle)

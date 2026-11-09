@@ -4229,6 +4229,28 @@ machine's only way out is an HTTPS proxy (a 502 here; on the Gateway it comes). 
 Tests: `tests/js/dragdrop.html` (ewrender `-K drag:ID:@TO`, a drag to another element's
 middle), `tests/js/shadow.html`.
 
+**The family's UI rules of 9 Nov 2026** (Erez's 54 decisions; AERA-Atari's `standards/ui`,
+DECISIONS-2026-11-09.md). EWeb's part, the first round:
+
+- The page's menu greys Back and Forward when they can't be used (`~`, popup.h's); it put a tick
+  there (MD22, a fault).
+- Every copy says so on the status line in the family's words: "Copied to the clipboard." or
+  "Couldn't write the clipboard." (D50; `clip_said` in `ui/win.c`), the address field's and a
+  form field's copies too, which said nothing.
+- Dialogs ask the AES for one click (`-DDLG_CLICK`, common's click.c; C16): a press comes at once.
+  `EWEB.PRG` only: the ST edition is frozen (Decisions).
+- The quit box's bar is the family's progress bar (common's `progbar_fill`, C22), drawn as it
+  grows, the new part only.
+- Settings refuses a number out of its range with an alert that says what to type, the dialog
+  open and the cursor in that field, nothing changed silently (D30; Erez's words, 9 Nov 2026:
+  "The text size is a number from 50 to 200 (per cent).", "The Gateway's port is a number from
+  1 to 65535.", "The disk cache can be at most 512 MB: type 512 or less."; `settings_bad` in
+  `ui/dialogs.c`). The ST edition has it too: it is a fault the rule names, not a feature.
+
+Next: Settings on common's `settings.c` (its margins, C3; the Translate-into pop-up, 5.7), then
+what waits for the hub's shared code: the pop-ups' margin (D15), tooltips (D18), Insert opening
+the context menu (D17), an alert's padding (C19).
+
 ## Scripts kept compiled (26 Oct 2026)
 
 Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when

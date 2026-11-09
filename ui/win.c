@@ -2897,6 +2897,13 @@ static char *page_text(long *n)
 	return a;
 }
 
+/* what a copy did, on the status line (the UI standards' D50: the
+   family's two sentences, never an alert) */
+static void clip_said(int ok)
+{
+	status(ok ? "Copied to the clipboard." : "Couldn't write the clipboard.");
+}
+
 void win_clip(int what)
 {
 	if (cur->f_focus != NULL && form_typed(cur->f_focus)) {
@@ -2908,7 +2915,7 @@ void win_clip(int what)
 				return;		/* a password stays where it is */
 			a = cs_to_atari(c->v, c->len, CS_UTF8, &n);
 			if (a != NULL) {
-				clip_put(a, n);
+				clip_said(clip_put(a, n));
 				free(a);
 			}
 			if (what == CLIP_CUT)
@@ -2922,7 +2929,7 @@ void win_clip(int what)
 	if (cur->a_focus) {
 		long len = (long) strlen(cur->addr);
 		if (what == CLIP_COPY || what == CLIP_CUT) {
-			clip_put(cur->addr, len);
+			clip_said(clip_put(cur->addr, len));
 			if (what == CLIP_CUT) {
 				cur->addr[0] = 0;
 				cur->a_cur = 0;
@@ -2945,8 +2952,7 @@ void win_clip(int what)
 		long n;
 		char *t = page_text(&n);
 		if (t != NULL) {
-			if (clip_put(t, n))
-				status(sel_now() ? "The text selected is on the clipboard." : "The page's text is on the clipboard.");
+			clip_said(clip_put(t, n));
 			log_event("copied %ld bytes", n);
 			free(t);
 		}
@@ -3345,14 +3351,16 @@ static void context_menu(short mx, short my)
 			char u[2048], a[2048];
 			br_link_url(&br, l, u, sizeof u);
 			atari_text(u, a, sizeof a);
-			clip_put(a, (long) strlen(a));
+			clip_said(clip_put(a, (long) strlen(a)));
 		}
 	} else if (rect_hit(&cur->r_page, mx, my)) {
 		const char *items[6];
 		static char back[40], fwd[40];
 		short r;
-		snprintf(back, sizeof back, "%sBack           Undo", br_can_back(&br) ? "" : "\x08");
-		snprintf(fwd, sizeof fwd, "%sForward      \x01^Z", br_can_forward(&br) ? "" : "\x08");
+		/* (greyed when they can't be used: popup.h's '~'; a tick
+		   there was a fault, the UI standards' MD22) */
+		snprintf(back, sizeof back, "%sBack           Undo", br_can_back(&br) ? "" : "~");
+		snprintf(fwd, sizeof fwd, "%sForward      \x01^Z", br_can_forward(&br) ? "" : "~");
 		items[0] = back;
 		items[1] = fwd;
 		items[2] = "Reload           ^R";

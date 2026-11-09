@@ -21,6 +21,7 @@
 #include "util.h"
 #include "alert.h"
 #include "plat.h"
+#include "progbar.h"
 #ifndef EW_ST
 #include "langs.h"
 #include "popup.h"
@@ -366,6 +367,7 @@ static short first_edit(void)
    more than their fields show */
 static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
 static LFIELD f_search, f_gate;
+static short o_zoom, o_cache, o_gport;	/* their fields, for an alert's answer (D30) */
 
 static void part_general(short x, short y)
 {
@@ -373,13 +375,13 @@ static void part_general(short x, short y)
 	d_tick(x, ROW(0), "Show pages' pictures", T_PICTURES);
 	d_text(x + 3, ROW(1), "(off: only their words, for a slow line)");
 	d_text(x, ROW(2), "Text size");
-	d_field(x + 12, ROW(2), s_zoom, 3, '9');
+	o_zoom = d_field(x + 12, ROW(2), s_zoom, 3, '9');
 	d_text(x + 16, ROW(2), "%  (50 to 200)");
 	d_text(x, ROW(3), "Words typed in the address go to:");
 	d_lfield(x, ROW(4), &f_search, s_search, 40, sizeof s_search - 1);
 	d_text(x, ROW(5), "(%s for the words; nothing: none)");
 	d_text(x, ROW(6), "Disk cache");
-	d_field(x + 12, ROW(6), s_cache, 3, '9');
+	o_cache = d_field(x + 12, ROW(6), s_cache, 3, '9');
 	d_text(x + 16, ROW(6), "MB  (0: none, 512 at most)");
 	d_tick(x + 3, ROW(7), "Write it to the disk only at quit", T_CACHEQUIT);
 #ifndef EW_ST
@@ -404,7 +406,7 @@ static void part_secure(short x, short y)
 	d_text(x, ROW(3), "Gateway");
 	d_lfield(x + 11, ROW(3), &f_gate, s_gate, 18, sizeof s_gate - 1);
 	d_text(x + 31, ROW(3), "Port");
-	d_field(x + 36, ROW(3), s_gport, 5, '9');
+	o_gport = d_field(x + 36, ROW(3), s_gport, 5, '9');
 	d_text(x + 3, ROW(4), "Pages go through the Gateway without");
 	d_text(x + 3, ROW(5), "a Direct connection (the ST: always).");
 	d_text(x + 3, ROW(6), "On the Gateway: aera-gateway install web");
@@ -625,10 +627,35 @@ static short settings_tree(short *ok)
 	return box;
 }
 
+/* a number typed out of its range (the UI standards' D30, Erez's words of
+   9 Nov 2026): the alert that says what to type, and the field's page
+   and field, else 0; nothing is changed silently */
+static const char *settings_bad(short *page, short *field)
+{
+	long v;
+	v = atol(s_zoom);
+	if (!s_zoom[0] || v < 50 || v > 200) {
+		*page = 1, *field = o_zoom;
+		return "[1][The text size is a number|from 50 to 200 (per cent).][ OK ]";
+	}
+	v = atol(s_cache);
+	if (s_cache[0] && v > CACHE_MAX_MB) {
+		*page = 1, *field = o_cache;
+		return "[1][The disk cache can be at most|512 MB: type 512 or less.][ OK ]";
+	}
+	v = atol(s_gport);
+	if (!s_gport[0] || v < 1 || v > 65535) {
+		*page = 2, *field = o_gport;
+		return "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
+	}
+	return 0;
+}
+
 /* the dialog stays open while ticks and pages change */
 static short settings_run(short pages_box, short ok)
 {
-	short x, y, w, h, r, k;
+	short x, y, w, h, r, k, start = 0;
+	const char *bad;
 	pages_obj = pages_box;
 	dlg_band(settings_band);	/* (in a window: its title bar, 3.5) */
 	gap_tag("dialog: opened");
@@ -637,10 +664,21 @@ static short settings_run(short pages_box, short ok)
 	gap_tag("dialog: drawn");
 	log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
 	for (;;) {
-		r = dlg_do(tree, first_edit(), (short) (ok - 1));
+		r = dlg_do(tree, start ? start : first_edit(), (short) (ok - 1));
+		start = 0;
 		if (r < 0)
 			break;
 		r &= 0x7fff;
+		if (r == ok && (bad = settings_bad(&k, &start)) != 0) {
+			tree[ok].ob_state &= ~SELECTED;
+			log_event("settings refused: page %d field %d", k, start);
+			alert(1, bad);
+			if (k != cur_page)
+				show_page(k, 0);
+			dlg_draw(tree, 0);	/* (what the alert covered) */
+			badge_show();
+			continue;	/* the cursor in that field */
+		}
 		for (k = 0; k < nticks; k++)
 			if (r == tick_box[k] || r == tick_lbl[k]) {
 				s_on[tick_var[k]] = !s_on[tick_var[k]];
@@ -800,7 +838,31 @@ static int ask(const char *title, const char *text, char *answer, int size)
    is (Erez, 29 Oct 2026: on a slow disk a quit took half a minute, the
    screen as it was). No buttons: it closes when the work is done */
 static char q_what[44];
-static short q_open, q_text, q_frame, q_fill, q_full;
+static short q_open, q_text, q_frame, q_at;
+
+/* the bar's part from..to (1024ths), the family's progress bar
+   (common's progbar, the guidelines' 5.9) inside its frame */
+static void q_bar(short from, short to)
+{
+	short x, y;
+	GRECT r;
+	if (to <= from)
+		return;
+	objc_offset(tree, q_frame, &x, &y);
+	r.x = x + 1;
+	r.y = y + 1;
+	r.w = tree[q_frame].ob_width - 2;
+	r.h = tree[q_frame].ob_height - 2;
+	graf_mouse(M_OFF, 0);
+	clip_on(&r);
+	progbar_fill(vdi_h, r.x, r.y, r.w, r.h, from, to);
+	graf_mouse(M_ON, 0);
+}
+
+static short q_part(int permille)
+{
+	return (short) ((long) permille * PB_FULL / 1000);
+}
 
 void quit_box(const char *what, int permille)
 {
@@ -817,18 +879,18 @@ void quit_box(const char *what, int permille)
 		q_text = d_text(2, 2, q_what);
 		tree[q_text].ob_width = 40;	/* (the longest step's words) */
 		q_frame = d_add(G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
-		q_fill = d_add(G_BOX, 0, 0, 0x00001171L, 2, 4, 1, 1);
 		d_end();
-		q_full = tree[q_frame].ob_width;
-		tree[q_fill].ob_width = (short) ((long) q_full * permille / 1000);
 		dlg_band(band);		/* (in a window: its title bar, 3.5) */
 		dlg_open(tree, &x, &y, &w, &h);
 		q_open = 1;
+		q_at = q_part(permille);
+		q_bar(0, q_at);
 		log_event("quit box %d %s", permille, q_what);
 		return;
 	}
-	tree[q_fill].ob_width = (short) ((long) q_full * permille / 1000);
 	dlg_draw(tree, 0);	/* the box whole: the last step's words gone */
+	q_at = q_part(permille);
+	q_bar(0, q_at);
 	log_event("quit box %d %s", permille, q_what);
 }
 
@@ -839,11 +901,11 @@ void quit_bar(int permille)
 		return;
 	if (permille > 1000)
 		permille = 1000;
-	w = (short) ((long) q_full * permille / 1000);
-	if (w <= tree[q_fill].ob_width)
+	w = q_part(permille);
+	if (w * (long) (tree[q_frame].ob_width - 2) / PB_FULL <= q_at * (long) (tree[q_frame].ob_width - 2) / PB_FULL)
 		return;		/* nothing more to show (a pixel or less) */
-	tree[q_fill].ob_width = w;
-	dlg_draw(tree, q_fill);
+	q_bar(q_at, w);	/* only what is new (the guidelines' Speed) */
+	q_at = w;
 	log_event("quit box %d %s", permille, q_what);
 }
 
