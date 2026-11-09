@@ -79,8 +79,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   - real addresses from the owner's network: use `192.168.1.x`, `PI_IP`, `ATARI_IP`
   - passwords, session keys, `.KEY` / `.INF` files from a test run
   - photos that still carry EXIF/GPS data
-- **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
-  servers, Building, Source, Tests, Licence, family footer). Use British English.
+- **README:** a front page, not the manual (the guidelines' 1.4, Erez, 9 Nov 2026): about 600 words and
+  100 lines, in the template's order (the sentence, up to ten one-line Highlights, the screenshot,
+  Getting started, The Gateway in one paragraph, Building, Source in a few lines, Tests in one line,
+  Licence, the family footer). The rest goes in `docs/` (FEATURES.md, GATEWAY.md, SOURCE.md, TESTS.md,
+  GUIDE.md, DESIGN.md), linked. Use British English.
 
 ## Talking with Erez
 
