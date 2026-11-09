@@ -490,8 +490,14 @@ def browse():
         elif box is not None:
             bx, by, bw, bh = (int(v) for v in box.split()[-4:])
             r.shot(6)		# (the bar part of the way, by the file's size)
-            r.mouse.move(0, 0)	# (the emulated mouse in step with the host's again: both at the corner)
-            r.mouse.click(bx + bw // 2, by + bh // 2)
+            # (while the file comes the emulated mouse lags the host's: the
+            # pointer put in step at the corner, moved, let settle, then
+            # the click)
+            r.mouse.move(0, 0)
+            time.sleep(2)
+            r.mouse.move(bx + bw // 2, by + bh // 2)
+            time.sleep(3)
+            r.mouse.xdo("click", "1")
         closed = r.wait(r"download box closed ", 120)
         ev = r.wait(r"stopped", 30)
         check("downloads: the box, %s stops the file" % how, sv is not None and box is not None and
@@ -500,6 +506,7 @@ def browse():
               int(closed.split()[4]) > 0 and not os.path.exists(os.path.join(hd, name)) and
               not os.path.exists(os.path.join(hd, name.lower())) and
               (how == "Esc" or "download cancelled at " in " ".join(r.events())), str(r.events()[-8:]))
+        time.sleep(3)		# (the machine at rest again before the next keys)
 
     def dl_click(when):
         # the mouse still the AES's after the box: a link on the start page
@@ -514,6 +521,7 @@ def browse():
                          "the second page") if m else None
         if pt2 is not None:
             r.mouse.move(0, 0)
+            time.sleep(1)
             r.mouse.click(*pt2)
         ev = r.wait(r"shown ", 120)
         check("downloads: a click taken after the box (%s)" % when, ev is not None and "two.html" in ev, str(r.events()[-6:]))
