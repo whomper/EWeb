@@ -1256,6 +1256,18 @@ static void idle(void)
 	}
 }
 
+/* a quit's step, said once it is done: into EWEB.LOG at once (LOG=1:
+   written out, not held), and to the rigs (the hub, 10 Nov 2026: quit
+   bombs in EFTP and EMail with no CRASH.LOG; EFTP's quit_step) */
+static void quit_step(const char *what)
+{
+	char line[200];
+	snprintf(line, sizeof line, "quit step: %s", what);
+	conn_log("EWeb", " -- ", line, (long) strlen(line));
+	conn_log_flush();
+	log_event("%s", line);
+}
+
 static unsigned long load_t0;		/* when the load started, for the log */
 
 static void loading_on(void)
@@ -3272,17 +3284,21 @@ int app_main(void)
 			win_use(front);
 			win_close();
 		}
+		quit_step("connections closed, windows closed");
 		tw = pf_ms();
 		QUIT_STEP("Saving the settings...", 1);
 		settings_save();
+		quit_step("settings written");
 		ts = pf_ms();
 		if (wck)
 			QUIT_STEP("Saving the cookies...", wck);
 		ck_save();	/* the cookies that last, once, if they changed */
+		quit_step("cookies written");
 		tc = pf_ms();
 		if (whg)
 			QUIT_STEP("Saving the history...", whg);
 		hg_save();	/* the pages shown, once, if they changed */
+		quit_step("history written");
 		th = pf_ms();
 		/* the bar moving as the cache's writes go on, not only between
 		   the steps (Erez, 30 Oct 2026: it stood still the whole save) */
@@ -3295,6 +3311,7 @@ int app_main(void)
 			QUIT_STEP("Saving the cache's list...", wix);
 		dc_close();	/* its index, once */
 		dc_progress = NULL;
+		quit_step("the cache written");
 		td = pf_ms();
 #undef QUIT_STEP
 		quit_box("Done.", 1000);
@@ -3315,7 +3332,15 @@ int app_main(void)
 	if (scr_exit())
 		log_event("colours given back");
 	v_clsvwk(vdi_h);
+	quit_step("colours, menu bar and VDI given back");
 	crash_remove();
+	{
+		char line[160];
+		const char *o = crash_over();
+		snprintf(line, sizeof line, "crash catcher off; hooked over it: %s", o[0] ? o : "none");
+		quit_step(line);
+	}
 	appl_exit();
+	quit_step("out of the AES");
 	return 0;
 }

@@ -482,7 +482,7 @@ def browse():
         sv = r.wait(r"save link", 120)
         time.sleep(3)		# the file selector
         r.key(RETURN)
-        box = r.wait(r"download box ", 60)
+        box = r.wait(r"download box [A-Z]", 60)
         closed = None
         time.sleep(8)
         if how == "Esc":
@@ -564,7 +564,7 @@ def browse():
         sv = r.wait(r"save link", 600)
         time.sleep(3)		# the file selector
         r.key(RETURN)
-        box = r.wait(r"download box ", 60)
+        box = r.wait(r"download box [A-Z]", 60)
         r.key(0x01)		# at once: in the second request's handshake
         closed = r.wait(r"download box closed ", 300)
         time.sleep(3)
@@ -973,7 +973,7 @@ def browse():
             dl = r.wait(r"save link", 120)
             time.sleep(3)
             r.key(RETURN)
-            box = r.wait(r"download box ", 60)
+            box = r.wait(r"download box [A-Z]", 60)
             ev = r.wait(r"saved ", 60)
             check("saving: a file EWeb doesn't show, in the download's box, its size",
                   dl is not None and box is not None and
