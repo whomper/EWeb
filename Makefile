@@ -242,7 +242,20 @@ build/tos/rt/%.o: atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
 
-build/tos/nsbench.elf: $(tos_RT) $(tos_BENCH) $(tos_EC) $(tos_NS)
+# the measuring tools' machine block, each read guarded (tests/fb: the
+# FireBee tester's runs, the hub, 10 Nov 2026)
+FB_OBJ := build/tos/fb/machine.o build/tos/fb/guard.o
+build/tos/fb/machine.o: tests/fb/machine.c tests/fb/machine.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
+build/tos/fb/guard.o: tests/fb/guard.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68000 -c $< -o $@
+ST_FB_OBJ := build/st/fb/machine.o build/tos/fb/guard.o
+build/st/fb/machine.o: tests/fb/machine.c tests/fb/machine.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
+build/tos/nsbench.elf: $(tos_RT) $(tos_BENCH) $(tos_EC) $(tos_NS) $(FB_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $^ -lgcc
 
 binary/NSBENCH.TTP: build/tos/nsbench.elf common/tools/elf2tos.py
@@ -392,7 +405,7 @@ build/tos/net/crash_s.o: common/atari/crash.S
 build/tos/ewget/%.o: tests/net/%.c $(NET_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
-build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ)
+build/tos/ewget.elf: $(tos_RT) build/tos/ewget/ewget.o build/tos/ewget/main_tos.o $(TOSNET_OBJ) $(FB_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWGET.TTP: build/tos/ewget.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -718,7 +731,7 @@ build/st/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBST"' -DBENCH_TITLE='"picbench"' \
 		-DBENCH_MAIN=picbench -Itests/bench -c $< -o $@
 build/st/picbench.elf: $(st_RT) build/st/bench/picbench.o build/st/bench/plat_pic.o $(STPIC_OBJ) \
-		build/st/net/util.o build/st/net/inflate.o
+		build/st/net/util.o build/st/net/inflate.o $(ST_FB_OBJ)
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/PICBST.TTP: build/st/picbench.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -731,7 +744,7 @@ build/tos/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	$(M68KCC) $(TOSNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \
 		-DBENCH_MAIN=picbench -Itests/bench -c $< -o $@
 build/tos/picbench.elf: $(tos_RT) build/tos/bench/picbench.o build/tos/bench/plat_pic.o $(TOSPIC_OBJ) \
-		build/tos/gem/common/dspjpeg.o build/tos/net/util.o build/tos/net/inflate.o
+		build/tos/gem/common/dspjpeg.o build/tos/net/util.o build/tos/net/inflate.o $(FB_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/PICBENCH.TTP: build/tos/picbench.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -1214,7 +1227,8 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
 dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
-		binary/CACERT.PEM binary/ROOTS.DAT
+		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
+		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	for f in EWEB.PRG EWEBJS.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT; do \
@@ -1223,6 +1237,18 @@ dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	cp dist/eweb.prg dist/ewebjs.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
 		dist/roots.dat dist/zip/
+	# (the FireBee tester's tools, in the zip only: tests/fb/README.TXT; the hub, 10 Nov 2026)
+	mkdir -p dist/zip/firebee
+	cp binary/NSBENCH.TTP dist/zip/firebee/nsbench.ttp
+	cp binary/EWGET.TTP dist/zip/firebee/ewget.ttp
+	cp build/news/NEWS.HTM dist/zip/firebee/news.htm
+	cp build/news/NEWS.CSS dist/zip/firebee/news.css
+	cp tests/fb/NSBENCH.CMD dist/zip/firebee/nsbench.cmd
+	cp tests/fb/EWGET.CMD dist/zip/firebee/ewget.cmd
+	cp tests/fb/README.TXT dist/zip/firebee/readme.txt
+	cp binary/TLS.OVL dist/zip/firebee/tls.ovl
+	cp binary/CACERT.PEM dist/zip/firebee/cacert.pem
+	cp binary/ROOTS.DAT dist/zip/firebee/roots.dat
 	cd dist/zip && zip -q -9 -r ../eweb-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

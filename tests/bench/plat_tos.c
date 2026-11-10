@@ -15,6 +15,7 @@
 #include <tos.h>
 
 #include "plat.h"
+#include "../fb/machine.h"
 
 #define MAXARG 40
 
@@ -88,35 +89,18 @@ static unsigned long read_rate(short mode)
 	return bytes / 1024 / t * 200;
 }
 
-static long cacr;
-
-static void sup_cacr(void)
-{
-	/* movec cacr,d0 as its words: a 68000 build's assembler has no movec
-	   (and machine_report doesn't call this on one) */
-	__asm__ volatile(".dc.w 0x4e7a,0x0002\n\tmove.l %%d0,%0" : "=g"(cacr) : : "d0");
-}
-
 static void machine_report(void)
 {
-	long cpu = get_cookie(0x5F435055L), fpu = get_cookie(0x5F465055L);	/* _CPU, _FPU */
-	long mch = get_cookie(0x5F4D4348L);					/* _MCH */
 	long st_free = (long) Mxalloc(-1, 0), tt_free = (long) Mxalloc(-1, 1);
+	unsigned long st, tt;
+
 	if (st_free == -32) {		/* TOS 1.x */
 		st_free = (long) Malloc(-1);
 		tt_free = 0;
 	}
-	unsigned long loops = loop_rate(), st, tt;
-
-	out("machine: _MCH %08lx, CPU 680%02ld, FPU %s\n", mch, cpu,
-		(fpu >> 16) ? "yes" : "none");
-	if (cpu >= 20) {		/* a 68000 has no CACR */
-		Supexec(sup_cacr);
-		out("caches: CACR %04lx: instructions %s%s, data %s%s\n", cacr & 0xffff,
-			cacr & 0x0001 ? "on" : "off", cacr & 0x0010 ? " with burst" : "",
-			cacr & 0x0100 ? "on" : "off", cacr & 0x1000 ? " with burst" : "");
-	}
-	out("loop: %lu rounds a second (6.2 to 8.3 million at 50 MHz)\n", loops);
+	/* (each read guarded, each line written as it comes: tests/fb) */
+	machine_block(out);
+	out("loop: %lu rounds a second (6.2 to 8.3 million at 50 MHz)\n", loop_rate());
 	/* where its text starts (the basepage's p_tbase), for a profiler's
 	   addresses */
 	out("program in %s at $%08lx; free ST-RAM %ld KB, TT-RAM %ld KB\n",

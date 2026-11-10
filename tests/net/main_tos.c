@@ -18,6 +18,7 @@
 #include "plat.h"
 #include "util.h"
 #include "crash.h"
+#include "../fb/machine.h"
 
 long pf_bounce_size(void);	/* plat_tos.c */
 int pf_direct(void);
@@ -25,13 +26,6 @@ int pf_direct(void);
 #define MAXARG 20
 
 static long logh = -1;		/* EWGET.LOG, appended to */
-static long cacr;
-
-static void sup_cacr(void)
-{
-	__asm__ volatile("movec %%cacr,%0" : "=d"(cacr));
-}
-
 void out(const char *fmt, ...)
 {
 	char buf[1024], crlf[1100];
@@ -105,7 +99,6 @@ int main(void)
 	unsigned char *bp = _BasePage;
 	const char *av = argv_env(bp);
 	int argc, len = bp[0x80], rc, k, from_cmd = 0, unread = 0, missing = 0;
-	long cpu = get_cookie(0x5F435055L);	/* _CPU */
 	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first (6.5) */
 	dir[0] = 0;
 	if (av) {
@@ -182,12 +175,8 @@ int main(void)
 	snprintf(http_user_agent, sizeof(http_user_agent), "Mozilla/5.0 (Atari Falcon030; 68030) EWeb/%s",
 		 EWEB_VERSION);
 	out("EWeb ewget %s\n", EWEB_VERSION);
-	if (cpu >= 20) {
-		Supexec(sup_cacr);
-		out("CPU 680%02ld, caches: instructions %s, data %s; program in %s\n", cpu,
-		    cacr & 0x0001 ? "on" : "off", cacr & 0x0100 ? "on" : "off",
-		    (unsigned long)&main >= 0x01000000UL ? "TT-RAM" : "ST-RAM");
-	}
+	machine_block(out);		/* (each read guarded, each line as it comes: tests/fb) */
+	out("program in %s\n", (unsigned long)&main >= 0x01000000UL ? "TT-RAM" : "ST-RAM");
 	if (pf_direct())
 		out("files: to and from TT-RAM as they are, 32 KB at a time (_FRB cookie set: the disk driver bounces them)\n");
 	else if (pf_bounce_size())
