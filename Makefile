@@ -689,6 +689,18 @@ build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+# EWEB.PRG with the download's box at start, fed with no network
+# (-DEW_TEST_DL: ui/main.c's test_dl), for the XaAES rig; never shipped
+build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DEW_TEST_DL -c $< -o $@
+build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(tos_RT) \
+		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o)) -lgcc
+build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+
 hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEB.FNT build/news/NEWS.HTM
 	python3 tests/hatari/speed.py build/speed $(if $(AERA_WITH_NVDI),--nvdi)
 .PHONY: hatarispeed

@@ -1099,6 +1099,35 @@ static void dl_idle(void)
 }
 #endif
 
+#ifdef EW_TEST_DL
+/* build/dltest's EWEB.PRG only (never a release's): the download's box
+   at start, twice, fed 40 KB a second for a 2 MB file with no network,
+   for the XaAES rig (common/tests/xaaes: moved by its title bar, its
+   closer and Esc as Cancel, the bar drawn again after a move; the hub,
+   10 Nov 2026) */
+static void test_dl(void)
+{
+	int round;
+	for (round = 0; round < 2 && !quit; round++) {
+		unsigned long t = pf_ms();
+		br_saved = 0;
+		conn_stop = 0;
+		log_event("download test round %d", round + 1);
+		dl_box("TEST.ZIP", 2097152L);
+		while (!conn_stop && !quit && br_saved < 2097152L) {
+			dl_idle();
+			if ((long) (pf_ms() - t) >= 200) {
+				t = pf_ms();
+				br_saved += 8192;
+			}
+		}
+		log_event("download box closed %d %ld of %ld", conn_stop ? 2 : 0, br_saved, 2097152L);
+		dl_box_close();
+		conn_stop = 0;
+	}
+}
+#endif
+
 /* while a page loads: the window redrawn, moved and topped; Esc, Undo
    and Stop stop the load; the menu bar waits. While its pictures come
    the window scrolls too, and what else comes stops the picture and is
@@ -3054,6 +3083,9 @@ int app_main(void)
 			handle(MU_MESAG, msg, &ev, &hover_x, &hover_y);
 		log_event("window drawn");	/* (the start's end: the speed rig) */
 	}
+#ifdef EW_TEST_DL
+	test_dl();
+#endif
 	command_line(first, sizeof first);
 	if (first[0])
 		go(first);

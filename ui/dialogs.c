@@ -702,6 +702,8 @@ void dl_box(const char *name, long total)
 	objc_offset(tree, d_cancel, &x, &y);
 	log_event("download box %s %ld cancel %d %d %d %d", d_name, total, x, y, tree[d_cancel].ob_width,
 		  tree[d_cancel].ob_height);
+	dlg_area(&x, &y, &w, &h);
+	log_event("download box area %d %d %d %d%s", x, y, w, h, dlg_in_window() ? " window" : "");
 }
 
 int dl_box_up(void)
