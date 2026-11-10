@@ -1756,7 +1756,7 @@ the DOM grows past "lean".
   (`JS_TOO_MUCH`) is left out until EWeb quits (the newest 16, `br_scripts_too_much`), so its
   pages aren't made twice; the menu item tries it again. A page with scripts pays for them even
   when it needs none: it shows once they have come and run, without a preview, and QuickJS's
-  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default. A page whose site isn't chosen is parsed as before; one
+  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default (Erez kept it on 10 Nov 2026, after the Gateway's dashboard showed him only empty boxes: a page made by its scripts looks empty and nothing said why). **Planned for the release after 1.0** (his choice): when a page's scripts didn't run and the page looks empty or says it needs JavaScript, the info line says so, with a one-click "Run this site's scripts"; nothing changes on other pages. A page whose site isn't chosen is parsed as before; one
   with no script and no `on...` attribute gets no runtime either (QuickJS's start costs 1.14
   million 68030 instructions).
 - **`<noscript>`** is shown when scripts don't run: the HTML Standard hides it only with scripting.
