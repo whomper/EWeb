@@ -557,7 +557,7 @@ build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
-GEM_UI     := main draw screen win about dialogs tcpix
+GEM_UI     := main draw screen win about dialogs
 GEM_COMMON := aboutbox aboutline alert notify popup dialog field help av iconify clip mbar dd panebar text offdraw click progbar hebkey fsel langs dlgbuild settings
 GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DDLG_CLICK -DEW_STACK=$(TOS_STACK) $(EWB_INC) $(NSINC)
 # (common's click.c keeps a static named cur, the name EWeb's ui.h gives
@@ -587,9 +587,15 @@ build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h 
 build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(subst -m68030,-m68000,$(GEM_CFLAGS)) $(COMMON_WARN) -c $< -o $@
+# a graphics card's screen (ui/tcpix.c, ui/deep.c) linked last, after
+# everything a Falcon runs: in the middle it moved the canvas and made it
+# 7% slower on the stock Falcon (the 68030's caches; DESIGN.md)
+DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o
+ST_DEEP_OBJ := build/st/gem/tcpix.o
 build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
-		build/tos/gem/common/cpucheck.o
+		build/tos/gem/common/cpucheck.o \
+		$(DEEP_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
@@ -667,7 +673,8 @@ build/st/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o
+build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o \
+		$(ST_DEEP_OBJ)
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
@@ -694,10 +701,10 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o))) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
-		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o))) -lgcc
+		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
@@ -710,7 +717,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(tos_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o)) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
