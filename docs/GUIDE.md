@@ -244,7 +244,9 @@ not yet followed.
 - **File > Save page as** (**^S**) saves the page shown as it came, in
   the file selector's folder, with a name made from its address
   (`INDEX.HTM` for a site's front page). Its pictures and stylesheets
-  stay on the server; open the file again with ^O.
+  stay on the server; open the file again with ^O. A page as big as the
+  memory left on a stock Falcon is shown without its source kept, and
+  Save page as is then greyed: save it as a link's file instead.
 - **A link's file**: Alternate-click the link, or right-click it and
   choose Save the link's file. EWeb asks where to save it as soon as the
   site answers, then it goes straight to the disk as it comes, so it can

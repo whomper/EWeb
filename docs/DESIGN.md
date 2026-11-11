@@ -28,7 +28,7 @@ it, and how EWeb gets past CAPTCHAs.
 | The mouse over a page | **Its scripts hear it; a click is the hover** (Erez, 8 Nov 2026: of hover as on a PC, a click as the hover, or none) | A page's scripts are told of the mouse as browsers tell them (mouseover, mouseout, mouseenter, mouseleave as it goes from element to element; mousedown, mouseup, click, dblclick; a drag whose press a script takes: mousemove with the button held), which costs nothing on a page that doesn't listen. What a page's CSS shows with the mouse over an element (`.menu:hover .submenu`, a hover menu) a click on that element shows, until the next click elsewhere, as on a phone: a page is laid out again only for a click that opens or closes such a thing, never as the mouse moves (on the stock Falcon a layout is 0.1 to 0.5 s on a small page, seconds on a big one). A :hover that only colours the element under the mouse is left out. (webdriveruniversity.com's Actions and Scrolling; DESIGN.md, The mouse.) |
 | Colours in 16 and 256 colours | **Solid steps, the page's own colours, softer mixing, the Gateway's palette** (Erez, 8 Nov 2026, from his photos of yaary.music in 256 colours) | A CSS gradient is painted in solid steps, each the screen's nearest colour, not as a 4 x 4 mix of pens (its dots, and the text on them dotted); a gradient that is partly transparent is mixed with what is under it. In 256 colours some of EWeb's own palette entries go to the page's own colours (its buttons, cards, gradients), the pictures using the rest. Pictures' error diffusion is softer (less grain, a little flatter), everywhere, Direct too. Through the Gateway, a page's 239 colours are chosen from all its pictures (lazy ones too: EWeb names them all to webgate at once) and its CSS before the first picture is sent, a second or two later than now; Direct keeps the fixed colours (it can't know the pictures in advance). |
 | TT-RAM | **All of it but a share left for other programs, a setting** (4 Nov 2026; Phase 2) | The program and its memory are already in TT-RAM without EWeb's code knowing (common's heap asks for TT-RAM first). Its fixed ceilings go (pages kept for Back and Forward a quarter of the free TT-RAM up to 24 MB, pictures an eighth up to 16 MB, eight windows): EWeb keeps pages and pictures until the free TT-RAM comes down to the share left for others, then lets the oldest go, and gives memory back when something needs it. The share is a setting, a percentage of the TT-RAM, 50 by default (Settings > General; `TTLEAVE=` in `eweb.inf`). A machine without TT-RAM (the stock Falcon, the ST) is as before. |
-| A 4 MB Falcon with NVDI | **Its memory diet after 1.0** (4 Nov 2026; Phase 2) | A stock 4 MB Falcon with NVDI leaves EWeb about 1.2 MB for a page (the heap stays near 880 KB, 318 KB of ST RAM free: the hub's rig), and the news test page needs about 1.5 MB at its peak (parsed 450 KB, styled 832 KB: its computed styles 192 KB, the sheet's rules 114 KB; laid out 1.17 MB, the layout's boxes 112 KB more while it works), so it says it hasn't the memory there (0.66 on). Without NVDI it fits. Cutting the 300 to 400 KB (styles shared in parts, smaller boxes, the rules given back after styling) is Phase 2's; until then a big page there says so. |
+| A 4 MB Falcon with NVDI | **Its memory diet** (4 Nov 2026; Phase 2; done 11 Nov 2026, A big page on a 4 MB Falcon under NVDI, below) | A stock 4 MB Falcon with NVDI left EWeb about 1.2 MB for a page (the heap stays near 880 KB, 318 KB of ST RAM free: the hub's rig), and the news test page needed about 1.5 MB at its peak (parsed 450 KB, styled 832 KB: its computed styles 192 KB, the sheet's rules 114 KB; laid out 1.17 MB, the layout's boxes 112 KB more while it works), so it said it hadn't the memory there (0.66 to 1.2). Without NVDI it fitted. Since 11 Nov 2026 the gui rig's 130 KB page shows there at the first try, 405 KB of the heap free after it: the stack taken from GEMDOS (96 KB on such a machine), the CSS engine's buffers taken while used, the text shared with the document, smaller boxes, the source given back. |
 | Downloads | **A download box** (Erez, 9 Nov 2026: the file's name, the option to cancel, progress by its size) | Every file saved as it comes is in a dialog of its own (`dl_box` in `ui/dialogs.c`, a window under MiNT and MagiC, 3.5): its name, the family's progress bar by its Content-Length (none for a chunked answer: the KB alone), the KB so far and of how many, and Cancel (Esc, Undo, its closer). A file a link opens (EWeb shows it neither as a page nor as a picture, or its server says attachment) is no longer gathered in memory first: the page's fetch stops at its headers and `br_save_url` asks for it again into the file chosen (`browser.stream_files`, `BR_SAVE`), so it can be bigger than the memory, at the cost of a second request (a second handshake on a secure site). A form's answer to save (POST) and a picture EWeb can't decode stay as before (in memory, then saved). For a file opened, where it goes is asked and the box opened before that second request, so the box shows through its connection and handshake, and Esc or Cancel there leaves no file and no connection open. A press on the box off Cancel waits for its release (or the AES keeps the button held); Cancel is taken when let go over it (5.8). The ST edition is as 1.0 has it. Tests: `make itest` (`ewrender -stream`); `make hatarigui` (browse: Cancel on `/trickle` with its size, Esc on `/chunked`, Esc in the second secure handshake with every connection closed, a link clicked after each, `/site/small.zip` with its size); under FreeMiNT + XaAES `tests/hatari/xaaes_dl.sh` with `build/dltest/EWEB.PRG` (`-DEW_TEST_DL`, the box fed with no network: FAKESTNG doesn't reach Hatari's serial line under FreeMiNT), moved by its title bar, its closer and Esc as Cancel. |
 | A FireBee edition | **After the family's UI rework and alignment, for EWeb and EPDF** (Erez, 9 Nov 2026, through the hub; AERA-Atari's standards/PARKED.md) | A question to Erez: can EWeb be built for the FireBee (ColdFire V4e)? It could be a third edition: the cross-compiler builds for it (`-mcpu=5475`) and QEMU's `cfv4e` could run its tests and counts; it would need C or ColdFire versions of common's assembly (`crt0.S`, `crash.S`, `inflate_fast.S`, `mont030.S`, `sting.S`, `nf.S`), no DSP (the ST edition's paths), scripts built for the ColdFire's FPU (doubles only, not the 68882's), a check of its screen modes, and a tester with a FireBee (Hatari has no ColdFire). Several days. Erez: decide after 1.0. A FireBee owner offered (9 Nov 2026) to test EWeb and the family's other programs built for the ColdFire and report back: most of the family runs on the FireBee as it is (in its 68000 emulation; EFTP "works really well"), and a ColdFire build would be faster and run natively under FireTOS. The hub plans common/'s part with EWeb when the time comes (ColdFire versions of its assembly, TLS without the DSP); EWeb's own open point is `EWEBJS.OVL` on the ColdFire's doubles-only FPU. It may not delay the UI work or 1.0. **Decided 10 Nov 2026 (Erez, through the hub; AERA-Atari 6891fc2, PARKED.md, a written exception to guideline 7.4):** the FireBee build ships in the same release as the others, a third file (ColdFire, `-mcpu=5475`; its name EWeb's to choose) beside `EWEB.PRG` and `EWEBST.PRG`; the release workflow builds all three and the zip carries them; each About box says which build it is; a build started on the wrong machine refuses with an alert, so the ColdFire build's first instructions must be ones a 68030 runs too (common's `cpucheck.c`, EWeb first, as it builds that layer); one Makefile target set: `make dist` makes all three, and with no ColdFire compiler still the other two. Starts after 1.0 and the family's UI rework. The FireBee's systems (firebee.org, through the hub; AERA-Atari 3a822e8): FireTOS (TOS 4.04 for the ColdFire, with a STinG-compatible network and cf68klib, which emulates the 68k instructions the ColdFire lacks: `EWEB.PRG` runs there today, slowly), FireTOS with FreeMiNT, and EmuTOS for the ColdFire (no cf68klib: only a ColdFire build runs there). So the third file is tested under all three, and has no 68k-only instruction anywhere, common's assembly included. **Numbers to beat** (the hub, 10 Nov 2026): 1.0's zip carries `firebee/` (`NSBENCH.TTP` on the news page with EWeb's CSS, `EWGET.TTP` fetching https://www.example.com/ twice, `README.TXT`) for the FireBee tester to run under FireTOS's cf68klib; each tool's log starts with the machine block (common's `atari/machine.c` and `guard.S` since 1.3; interrupts off while the guard holds the vectors since 1.2, after a FireBee tester's hang) (the cookies, TOS's version and date, MiNT, the CACR), each read guarded so a refusal says "no answer". |
 | The Gateway's name | **Gateway** (Erez, 7 Nov 2026; the guidelines' 7.3) | The user sees "Gateway", never "Pi" or "Pi gateway": the status line, Settings > Secure, View > Through the Gateway's browser, the alerts, EWeb's own pages, the help guide and the README. "Raspberry Pi" stays where the hardware is meant (setting it up). The INF keys (`GATE=`, `GATEPORT=`) and the code's names stay; this document keeps the old words where it records what was done then. |
@@ -1813,7 +1813,10 @@ What EWeb does now:
   `cascade_style`, a `var()` or `grid-template-areas` value) while its own recursion takes 176 bytes
   a level; the rest of the subtree takes the deepest element's style. The document's own walks
   (`finish`, the sheets, anchors) go without recursion.
-- **A larger stack for `EWEB.PRG`:** 256 KB. The ST edition kept 48 KB while the 1 MB ST had no more
+- **A larger stack for `EWEB.PRG`:** 256 KB (since 11 Nov 2026 taken from GEMDOS at the start,
+  `app_main` and `atari/onstack.S`: 256 KB where the largest block free is 4 MB or more, else 96 KB,
+  about 110 levels; crt0's in the BSS is 16 KB, and the floor is the taken stack's; QuickJS's limit
+  what it leaves. A stock 4 MB Falcon under NVDI lacked those 160 KB for a big page). The ST edition kept 48 KB while the 1 MB ST had no more
   to give (64 KB, or the big buffers made static, which take the same memory for good, left it
   unable to show a page); 256 KB too since 23 Oct 2026 (The ST edition, above). `grid_layout` is kept out of `layout_block` (it was inlined, and every level paid
   for its locals): 736 bytes a level instead of 944.
@@ -2912,7 +2915,8 @@ and data:
 | The network | 88 KB |
 | Browsing | 63 KB |
 
-and 576 KB of BSS (the stack 256 KB, the CSS engine's buffers 189 KB). `EWEBST.PRG` is 518 KB
+and 576 KB of BSS (the stack 256 KB, the CSS engine's buffers 189 KB; 218 KB since 11 Nov 2026, the
+stack taken from GEMDOS and the buffers taken while used). `EWEBST.PRG` is 518 KB
 (703 KB with its BSS): no JavaScript, no TLS.
 
 **Speed has gone the other way.** The two pages of the first timings (above), from the disk on the
@@ -5167,6 +5171,52 @@ the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee al
   pictures kept at 8-8-8 (`img.c`, and pens from the Gateway at that depth), and the rows then
   copied as they are (the form's tables for the byte order only). Measured first on ARAnyM and,
   for the FireBee, on its ColdFire.
+
+## A big page on a 4 MB Falcon under NVDI (11 Nov 2026)
+
+The hub's run of the 1.3 candidate with Erez's NVDI on the stock Falcon (`Falcon-4:16`) found the gui
+rig's big page (`big_page()`, 130 KB, 2,403 elements, 300 links) said "EWeb can't show this page", as
+1.2 did: EWEB.PRG started with 798 KB free there (1.2: 802 KB, common's new code 4 KB), and the
+page needed about 1.5 MB at its peak. Where the peak went (`drawbench -m` on the 68030 with an
+allocation log): the document 541 KB, the layout's boxes and the page's arena 475 KB (344 KB of it
+only while it works), the display list 135 KB, the source 131 KB, CSS 81 KB; and EWEB.PRG's BSS was
+625 KB, 256 KB of it the stack and 158 KB the CSS engine's buffers. What changed:
+
+- **The stack** taken from GEMDOS (The stack, above): 96 KB on such a machine, crt0's 16 KB.
+- **The CSS engine's buffers** taken while used: a sheet's prelude tokens and selector builders
+  (96 KB) while it is read, at the outermost level of `rules()`; the cascade's hits, cache and keys
+  (62 KB) in each `ec_select`, a nested one (a GEM turn's, another window's) keeping its own. A media
+  attribute's or sizes' tokens (512) and a script's selector's (1,024) are taken for each.
+- **The text shared**: a text node's words and spaces point at the document's own text for as long as
+  they are its bytes (`LAYOUT_OPT.share_text`; from the first difference, a space collapsed, the case
+  changed, a word cut in pieces, the copy's, those before moved into it so that a run stays one). The
+  page goes with its document; a frame's page doesn't share, as its document may go first; a text
+  past `DOC_BIG / 2` doesn't, as `doc_text_fit` may move it. The word loop doesn't copy while it
+  shares, so the layout's 68030 instructions are 1.2's (19.17 M for the page, 19.19 M now).
+- **Smaller boxes**: the layout box's flags are bits, 12 bytes a box.
+- **The document's last block** gives back its room left over after the parse (`doc_mem_fit`; the
+  Atari's heap shrinks a block in place, glibc's might not, so the host builds keep it).
+- **The page's block list** (`page.blocks`) sized from the elements and given back to what it holds,
+  not doubled (room for 4,096 for 2,400), and not asked again once it couldn't grow: each ask was
+  GEMDOS calls, 931 of them in one load where memory had run out.
+- **The source given back** once the page can't be parsed again (before the styling), where the
+  page's cost (`cost()`, 9 x its source and 64 KB) is more than all the ST RAM free at the start (8 x
+  `br_keep_max` where there is no TT RAM), or on the second try after a page didn't fit; and the room
+  made (the page shown, the kept pages, the pictures) before the first try where the page won't fit
+  beside the one shown. Save page as and Encoding are then greyed for that page, as for any page
+  without its source. The ST edition (frozen) has none of this.
+
+`drawbench -m` on the page: peak 1,495 KB to 1,282 KB (with the source's 131 KB, which EWEB.PRG now
+lets go), laid out 1,137 KB to 961 KB. EWEB.PRG's BSS 625 KB to 218 KB.
+
+| `Falcon-4:16`, the gui rig's falcon4 group | 1.2 | now |
+|---|---|---|
+| with NVDI: free at the start | 802,400 | 1,028,508 |
+| with NVDI: the big page | can't show it (peak 1,000,468, 4,336 free) | shown at the first try, 17.8 s (peak 1,247,836; heap 910,548 of 1,316,046 taken, 40,000 of GEMDOS's free) |
+| with NVDI: loaded again (^R) | can't show it | shown, 17.1 s |
+| without NVDI: free at the start | 1,486,644 | 1,769,620 |
+| without NVDI: the big page | 17.4 s | 17.9 s (the layout 12.0 and 12.5 s, before the word loop's copy went) |
+| without NVDI: loaded again | 19.5 s (made twice) | 17.5 s (the room made first) |
 
 ## The design
 
