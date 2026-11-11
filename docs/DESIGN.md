@@ -5210,14 +5210,21 @@ only while it works), the display list 135 KB, the source 131 KB, CSS 81 KB; and
 `drawbench -m` on the page: peak 1,495 KB to 1,282 KB (with the source's 131 KB, which EWEB.PRG now
 lets go), laid out 1,137 KB to 961 KB. EWEB.PRG's BSS 625 KB to 218 KB.
 
+The speed rig against 1.2 (`speed.py`, 11 Nov 2026): on `Falcon-4:16` without NVDI every row the
+same within 15 ms but Settings opened (140 to 165 ms) and the About box opened (105 to 155 ms), both
+now over their 150, put to Erez through the hub; under NVDI 1.2 couldn't load the rig's news page
+(its "can't show" page in 365 ms, nothing to scroll), so its rows there aren't a comparison. On
+`ST:mono` under NVDI the three rows of What follows 1.3 (above), and an arrow held down 2,160 to
+2,525 ms; 4 pages down 4,160 to 3,025, an arrow held up 4,380 to 4,220.
+
 | `Falcon-4:16`, the gui rig's falcon4 group | 1.2 | now |
 |---|---|---|
 | with NVDI: free at the start | 802,400 | 1,028,508 |
 | with NVDI: the big page | can't show it (peak 1,000,468, 4,336 free) | shown at the first try, 17.8 s (peak 1,247,836; heap 910,548 of 1,316,046 taken, 40,000 of GEMDOS's free) |
 | with NVDI: loaded again (^R) | can't show it | shown, 17.1 s |
 | without NVDI: free at the start | 1,486,644 | 1,769,620 |
-| without NVDI: the big page | 17.4 s | 17.9 s (the layout 12.0 and 12.5 s, before the word loop's copy went) |
-| without NVDI: loaded again | 19.5 s (made twice) | 17.5 s (the room made first) |
+| without NVDI: the big page | 17.4 s (the layout 12.0 s) | 17.8 s (the layout 12.3 s) |
+| without NVDI: loaded again | 19.5 s (made twice) | 17.4 s (the room made first) |
 
 ## The design
 
