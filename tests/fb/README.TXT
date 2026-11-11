@@ -6,7 +6,11 @@ FireTOS's 68k emulation (cf68klib), slowly; these two tools measure how
 slowly, so that the FireBee edition, built for the ColdFire itself, has
 numbers to beat.
 
-Please run both, under FireTOS (with or without MiNT):
+Please run both, under FireTOS (with or without MiNT). Not under EmuTOS
+built for the ColdFire: these are 68k programs, and with no 68k
+emulation there they stop at once with an illegal instruction.
+(The tools in EWeb 1.0 hung after their first line on the FireBee;
+fixed in 1.2.)
 
 1. NSBENCH.TTP: double-click it. It reads, styles and lays out a news
    page (news.htm, news.css) three times, as EWeb does. A minute or two.

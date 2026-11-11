@@ -11,6 +11,11 @@
 | all have (no movem with -(sp) or (sp)+, no memory-to-memory move), as
 | the vectors cf68klib would use are ours while it runs. The vectors are
 | taken at address 0 (VBR 0: TOS, EmuTOS and FireTOS's 68k mode).
+| Interrupts are off (IPL 7) while they are ours: on a FireBee, FireTOS's
+| 68k emulation (cf68klib) runs through the illegal instruction and line
+| A/F vectors, and an interrupt's 68k code in that time came to fault
+| here, which put back a stack not its own: 1.0's tools hung at the first
+| read, under FireTOS and FreeMiNT alike (a tester, 11 Nov 2026).
 |
 |   guard_what 0: guard_val = *(long *) guard_addr
 |              1: guard_val = the CACR (movec cacr,d0)
@@ -20,6 +25,9 @@
 	.globl	guard_addr, guard_what, guard_val, guard_ok
 
 guard_run:
+	move.w	%sr,%d0
+	move.w	%d0,saved_sr
+	move.w	#0x2700,%sr		| (no interrupt while the vectors are ours)
 	lea	old_vec,%a1
 	move.l	0x08.w,%d0
 	move.l	%d0,(%a1)+
@@ -73,6 +81,8 @@ back:
 	move.l	%d0,0x28.w
 	move.l	(%a1)+,%d0
 	move.l	%d0,0x2c.w
+	move.w	saved_sr,%d0
+	move.w	%d0,%sr
 	move.l	guard_ok,%d0
 	rts
 fault:
@@ -86,4 +96,6 @@ guard_what:	.space	4
 guard_val:	.space	4
 guard_ok:	.space	4
 saved_sp:	.space	4
+saved_sr:	.space	2
+	.even
 old_vec:	.space	24
