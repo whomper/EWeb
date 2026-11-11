@@ -39,7 +39,8 @@ NVDI: m.nvdi() installs Erez's own NVDI 5.03 (C:\\AUTO\\NVDI.PRG, NVDI.INF,
 ASSIGN.SYS, his GEMSYS drivers and his Bitstream fonts in C:\\BTFONTS) from
 the folder $AERA_NVDI (~/.aera/nvdi/x), as the TOS images: commercial,
 never in git nor sent anywhere. False when it isn't there (a rig that
-needs it says so and stops). AERA_WITH_NVDI=1 installs it on every Falcon
+needs it says so and stops). The rig's process takes NVDI out of the hd again when it ends (nvdi_remove, atexit): a kept work
+directory never holds it. AERA_WITH_NVDI=1 installs it on every Falcon
 a rig starts, so the hub runs an app's own rigs under NVDI unchanged. His GEMSYS\\STING (his network's settings)
 and his accessories are left out. NVDI 5.03 boots on the Falcon's TOS 4.04
 in about 30 s here, reading every font.
@@ -53,6 +54,7 @@ rig starts, so the hub runs an app's own rigs with the others loaded, as
 on Erez's machines. Name only the other programs, not the one under test.
 """
 import hashlib
+import atexit
 import os
 import shutil
 import socket
@@ -361,7 +363,21 @@ class Machine:
         fonts = os.path.join(self.hd, "BTFONTS")
         if not os.path.exists(fonts):
             shutil.copytree(os.path.join(src, "btfonts"), fonts)
+        if not getattr(self, "_nvdi_atexit", False):
+            self._nvdi_atexit = True
+            atexit.register(self.nvdi_remove)      # Erez's NVDI is never left in a hd a rig keeps
         return True
+
+    def nvdi_remove(self):
+        """Erez's NVDI taken out of the hd again (his rule: never in a kept hd, nor in git or a release):
+        called when the rig's process ends, so a run's kept work directory has none of it"""
+        for n in (os.path.join("AUTO", "NVDI.PRG"), "NVDI.INF", "ASSIGN.SYS"):
+            try:
+                os.remove(os.path.join(self.hd, n))
+            except OSError:
+                pass
+        for n in ("GEMSYS", "BTFONTS"):
+            shutil.rmtree(os.path.join(self.hd, n), ignore_errors=True)
 
     # the accessories, by program: (the Falcon's and TT's, the ST's); one
     # file for every Atari since TLS.OVL (the guidelines, 7.4: ECal 2.25,
