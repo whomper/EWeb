@@ -242,17 +242,17 @@ build/tos/rt/%.o: atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
 
-# the measuring tools' machine block, each read guarded (tests/fb: the
-# FireBee tester's runs, the hub, 10 Nov 2026)
+# the measuring tools' machine block, each read guarded (common's
+# atari/machine.c and guard.S: the FireBee tester's runs, the hub, 10 Nov 2026)
 FB_OBJ := build/tos/fb/machine.o build/tos/fb/guard.o
-build/tos/fb/machine.o: tests/fb/machine.c tests/fb/machine.h
+build/tos/fb/machine.o: common/atari/machine.c common/atari/machine.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
-build/tos/fb/guard.o: tests/fb/guard.S
+build/tos/fb/guard.o: common/atari/guard.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -c $< -o $@
 ST_FB_OBJ := build/st/fb/machine.o build/tos/fb/guard.o
-build/st/fb/machine.o: tests/fb/machine.c tests/fb/machine.h
+build/st/fb/machine.o: common/atari/machine.c common/atari/machine.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
 build/tos/nsbench.elf: $(tos_RT) $(tos_BENCH) $(tos_EC) $(tos_NS) $(FB_OBJ)

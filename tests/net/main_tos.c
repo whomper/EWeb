@@ -18,7 +18,7 @@
 #include "plat.h"
 #include "util.h"
 #include "crash.h"
-#include "../fb/machine.h"
+#include "../../common/atari/machine.h"
 
 long pf_bounce_size(void);	/* plat_tos.c */
 int pf_direct(void);

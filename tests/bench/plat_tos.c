@@ -15,7 +15,7 @@
 #include <tos.h>
 
 #include "plat.h"
-#include "../fb/machine.h"
+#include "../../common/atari/machine.h"
 
 #define MAXARG 40
 
