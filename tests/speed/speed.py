@@ -200,6 +200,13 @@ class Rig:
         time.sleep(0.4)
         self.xdo("click", button)
 
+    def dclick(self, x, y):
+        """a double click: two presses 80 ms apart (xdotool's own repeat)"""
+        g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
+        self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
+        time.sleep(0.4)
+        self.xdo("click", "--repeat", "2", "--delay", "80", "1")
+
     def menu(self, title_x, row_y):
         self.click(title_x, 8)
         time.sleep(1)

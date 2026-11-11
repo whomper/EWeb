@@ -385,30 +385,60 @@ static void icon256_draw(const unsigned char *px, const unsigned char *map, shor
    palette is TOS's, else the nearest (an app's theme may have taken pens
    16 and up: EMail's). Nothing is lent, so nothing else on the screen
    changes colour while the box is open. */
+/* the nearest of n colours c[] to want (a pen's rgb, 0 to 1000 a channel):
+   its pen, pens[i] where the colours are a list, else i */
+static short nearest_pen(const short (*c)[3], const short *pens, short n, const short *want)
+{
+	long best = -1;
+	short i, pen = 0;
+	for (i = 0; i < n; i++) {
+		long d = 0, e;
+		short k;
+		for (k = 0; k < 3; k++)
+			e = c[i][k] - want[k], d += e * e;
+		if (best < 0 || d < best)
+			best = d, pen = pens ? pens[i] : i;
+	}
+	return pen;
+}
+
+/* A few of the icon's pens changed (an app's theme.c takes pens 16 to 21):
+   each takes the nearest of the 16 system pens and the icon's own pens that
+   kept their colour (16 + about 20 vq_color calls). When many changed
+   (NVDI's palette) the whole palette is asked once (the guidelines' Speed,
+   not 256 times a colour). */
+#define FEW 8
+
 static void icon256_pens(const short (*rgb)[4], unsigned char *map)
 {
-	short i, p, have[3], (*pal)[3] = 0;
-	for (i = 0; rgb[i][0]; i++) {
-		long best = -1;
+	short i, n, nmiss = 0, have[32][3], cpen[48], cc[48][3], nc = 0;
+	short (*pal)[3] = 0;
+	char ok[32];
+	for (n = 0; n < 32 && rgb[n][0]; n++) {
+		vq_color(vdi_h, rgb[n][0], have[n]);
+		ok[n] = abs(have[n][0] - rgb[n][1]) + abs(have[n][1] - rgb[n][2]) + abs(have[n][2] - rgb[n][3]) <= 24;
+		nmiss += !ok[n];
+		if (ok[n] && nc < 32) {
+			cpen[nc] = rgb[n][0];
+			cc[nc][0] = have[n][0], cc[nc][1] = have[n][1], cc[nc][2] = have[n][2];
+			nc++;
+		}
+	}
+	if (nmiss && nmiss <= FEW) {
+		for (i = 0; i < 16; i++) {
+			cpen[nc] = i;
+			vq_color(vdi_h, i, cc[nc++]);
+		}
+	} else if (nmiss && (pal = malloc(256 * sizeof(*pal))) != 0)
+		for (i = 0; i < 256; i++)
+			vq_color(vdi_h, i, pal[i]);
+	for (i = 0; i < n; i++) {
 		short pen = rgb[i][0];
-		vq_color(vdi_h, pen, have);
-		if (abs(have[0] - rgb[i][1]) + abs(have[1] - rgb[i][2]) + abs(have[2] - rgb[i][3]) > 24) {
-			/* the palette asked once, not 256 times a colour (the
-			   guidelines' Speed) */
-			if (!pal && (pal = malloc(256 * sizeof(*pal))) != 0)
-				for (p = 0; p < 256; p++)
-					vq_color(vdi_h, p, pal[p]);
-			for (p = 0; pal && p < 256; p++) {
-				long d;
-				short *h = pal[p];
-				d = (long)(h[0] - rgb[i][1]) * (h[0] - rgb[i][1]) +
-				    (long)(h[1] - rgb[i][2]) * (h[1] - rgb[i][2]) +
-				    (long)(h[2] - rgb[i][3]) * (h[2] - rgb[i][3]);
-				if (best < 0 || d < best) {
-					best = d;
-					pen = p;
-				}
-			}
+		if (!ok[i]) {
+			if (pal)
+				pen = nearest_pen((const short (*)[3])pal, 0, 256, &rgb[i][1]);
+			else if (nc)
+				pen = nearest_pen((const short (*)[3])cc, cpen, nc, &rgb[i][1]);
 		}
 		map[rgb[i][0]] = (unsigned char)pen;
 	}

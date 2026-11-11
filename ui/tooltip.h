@@ -86,6 +86,16 @@ void tip_tick(short which, short x, short y, tip_text_fn text);
 /* takes the tip away now (the app is about to open a dialog, hide its window...) */
 void tip_hide(void);
 
+/* 1 with our box's rectangle in *r (its frame included; r may be 0) while the tip is up, 0 when there is
+   none, or it is BubbleGEM's (which keeps itself clear). For an app that draws by itself while a tip is up
+   (a clock, a progress bar, a position bar): it leaves that rectangle out of its drawing, else its
+   drawing runs through the box and nothing takes it away until the pointer moves (D18, EPlay's finding) */
+int tip_area(GRECT *r);
+/* BubbleGEM's bubble for text ('|' ends a line) at the pointer (mx, my), for an app that draws its own tip
+   box otherwise (ClaudeST's, which saves the screen under it): 1 when BubbleGEM took it, 0 when it
+   doesn't run (draw yours) */
+int tip_bubble(const char *text, short mx, short my);
+
 /* optional: 1 for a line that reads right to left (Hebrew): drawn right-aligned (TX_RIGHT, where the
    app's ui.h has it) */
 extern int (*tip_rtl)(const char *s, short n);

@@ -58,6 +58,7 @@ int main(void)
 	stub_reset();
 	tip_init(repaint);
 	check(tip_wait(1000) == 1000, "nothing pending: the app's own wait");
+	check(tip_area(0) == 0, "no tip up: tip_area says 0");
 
 	now_ms = 10000;
 	rest(300, 100);
@@ -80,8 +81,14 @@ int main(void)
 	tip_tick(MU_TIMER, 300, 100, text_for);
 	check(ntexts == 1 && calls == 1, "a timer alone does not draw it again, nor hide it");
 	check(tip_wait(1000) == 1000, "shown: no more wake-ups for it");
+	{
+		GRECT a = {0, 0, 0, 0};
+		check(tip_area(&a) == 1 && a.x == box.x && a.y == box.y && a.w >= box.w && a.h >= box.h, "tip_area gives the box's rectangle, frame included, while it is up");
+		check(tip_area(0) == 1, "and takes a null pointer");
+	}
 
 	tip_tick(MU_KEYBD, 300, 100, text_for);
+	check(tip_area(0) == 0, "a key took it away: tip_area says 0");
 	check(repaints == 1 && repainted.x == box.x && inside(&box, &repainted) && repainted.w >= box.w, "a key takes it away: the app repaints the box's area");
 	now_ms += 2000;
 	tip_tick(MU_TIMER, 300, 100, text_for);

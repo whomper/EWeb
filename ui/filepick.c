@@ -20,6 +20,7 @@
 #include "click.h"
 #include "dirlist.h"
 #include "filepick.h"
+#include "fsel.h"
 
 /* the tree: 42 by 24 cells */
 enum { O_ROOT, O_BAND, O_DRIVE, O_PATH, O_PATHT, O_UP, O_FOLDERS, O_TYPE, O_SORT, O_NAMEL, O_MASK, O_LIST, O_INFO,
@@ -141,20 +142,93 @@ static int top, cur = -1, anchor = -1;
 static GRECT lr;			/* the list's rows (inside the well) */
 static short rows, rh, sw;
 
+/* A folder's entries with their long names. TOS gives GEMDOS's 8+3, and on MiNT, in the TOS domain and in the MiNT
+   domain alike, Fsfirst and Fsnext leave out every name that doesn't fit the DTA's 14 bytes: on an ext2 or VFAT
+   drive a folder of long names looked empty or short (a tester, 9 Nov 2026; the hub's rig, FreeMiNT 1.17: of
+   six files, the two that fit 8+3). Where MiNT is (its cookie) the folder is read with Dopendir in its own mode 0
+   (the names as the file system has them, case kept) and Dxreaddir, which gives each entry's kind, size and
+   time in one call; no Pdomain: Fopen takes a long name in either domain (the same rig) and Fsfirst stays what
+   it was elsewhere (TOS, EmuTOS, MagiC). Hidden and system files and names that begin with a dot (hidden on
+   ext2) are left out, as Fsfirst with attribute 0x10 leaves them. 1: read; 0: no MiNT or no Dxreaddir */
+typedef struct {
+	unsigned short mode;
+	long index;
+	short dev, rdev, nlink, uid, gid;
+	long size, blksize, nblocks;
+	unsigned short mtime, mdate, atime, adate, ctime, cdate;
+	short attr, reserved2;
+	long reserved3[2];
+} XATTR;
+#define S_IFMT 0170000
+#define S_IFDIR 0040000
+#define S_IFREG 0100000
+#define S_IFLNK 0120000
+
+static int read_mint(void)
+{
+	static char buf[4 + DL_NAME + 4], full[FP_PATH + DL_NAME + 2];
+	XATTR xa;
+	long h, r, xr = 0;
+	size_t n = strlen(dir_now);
+	int first = 1;
+	snprintf(full, sizeof(full), "%s", dir_now);
+	h = Dopendir(dir_now, 0);
+	if (h < 0)
+		return 0;
+	while ((r = Dxreaddir((short)sizeof(buf), h, buf, &xa, &xr)) == 0) {
+		const char *name = buf + 4;
+		unsigned type = xa.mode & S_IFMT;
+		short at = xa.attr;
+		unsigned short date = xa.mdate, time = xa.mtime;
+		long size = xa.size;
+		first = 0;
+		if (xr < 0 || name[0] == '.' || strlen(name) + n + 1 >= sizeof(full))
+			continue;
+		if (type == S_IFLNK) {		/* a link: what it points to (Fxattr 0 follows it) */
+			snprintf(full + n, sizeof(full) - n, "%s", name);
+			if (Fxattr(0, full, &xa) != 0)
+				continue;
+			type = xa.mode & S_IFMT;
+			at = xa.attr;
+			date = xa.mdate;
+			time = xa.mtime;
+			size = xa.size;
+		}
+		if ((type != S_IFDIR && type != S_IFREG) || (at & 0x06))
+			continue;
+		if (!dl_add(&dl, name, size, date, time, type == S_IFDIR))
+			break;
+	}
+	Dclosedir(h);
+	return r == -49 || !first;	/* (ENMFILES: the end; the first call failing, -32: no Dxreaddir: Fsfirst) */
+}
+
+static int mint_here(void)
+{
+	static short k = -1;		/* worked out once: a cookie walk is a Supexec call */
+	if (k < 0)
+		k = get_cookie(0x4D694E54L) != 0;	/* MiNT */
+	return k;
+}
+
 static void read_folder(void)
 {
 	char mask[FP_PATH + 4];
-	DTA *old = Fgetdta(), dta;
+	DTA *old, dta;
 	graf_mouse(BUSYBEE, 0);
 	dl_clear(&dl);
-	snprintf(mask, sizeof(mask), "%s*.*", dir_now);
-	Fsetdta(&dta);
-	if (Fsfirst(mask, 0x10) == 0)
-		do {
-			if (!dl_add(&dl, dta.d_fname, dta.d_length, dta.d_date, dta.d_time, (dta.d_attrib & 0x10) != 0))
-				break;
-		} while (Fsnext() == 0);
-	Fsetdta(old);
+	if (!mint_here() || !read_mint()) {
+		dl_clear(&dl);
+		old = Fgetdta();
+		snprintf(mask, sizeof(mask), "%s*.*", dir_now);
+		Fsetdta(&dta);
+		if (Fsfirst(mask, 0x10) == 0)
+			do {
+				if (!dl_add(&dl, dta.d_fname, dta.d_length, dta.d_date, dta.d_time, (dta.d_attrib & 0x10) != 0))
+					break;
+			} while (Fsnext() == 0);
+		Fsetdta(old);
+	}
 	dl_sort(&dl);
 	top = 0;
 	cur = anchor = dl.nview ? 0 : -1;
@@ -232,6 +306,21 @@ static void draw_obj(short o)
 	dlg_draw(tree, o);
 }
 
+/* a name from x, in the room up to the column at `stop` (the size's or the date's, a cell between): an 8+3
+   name (12 cells) is never cut; a long name (MiNT) that doesn't fit ends in "..." */
+static void name_at(short x, short y, const char *name, short stop, short fl)
+{
+	long n = (long)strlen(name), room = (stop - x) / gl_wchar - 1;
+	if (room < 12)
+		room = 12;
+	if (n <= room) {
+		text_at(x, y, name, n, (short)n, fl);
+		return;
+	}
+	text_at(x, y, name, room - 3, (short)room, fl);
+	text_at(x + (short)(room - 3) * gl_wchar, y, "...", 3, 3, fl);
+}
+
 /* row r of the view, in its place (-1 rows past the end: blank) */
 static void row_at(int r, GRECT *clip)
 {
@@ -267,10 +356,10 @@ static void row_at(int r, GRECT *clip)
 		f.h = fh;
 		frame(&f, c);
 		line_col(f.x + 2, f.y - 2, f.x + 5, f.y - 2, c);
-		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
+		name_at(x + 2 * gl_wchar + 4, y, e->name, lr.x + w - 4 - 8 * gl_wchar, fl);
 	} else {
-		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
 		dl_size_text(e->size, sz);
+		name_at(x + 2 * gl_wchar + 4, y, e->name, lr.x + w - 4 - (short)(9 + strlen(sz)) * gl_wchar, fl);
 		text_at(lr.x + w - 4 - (short)(9 + strlen(sz)) * gl_wchar, y, sz, (long)strlen(sz), 6, fl);
 	}
 	dl_date_text(e->date, dt);
@@ -494,15 +583,14 @@ static void open_row(int r)
    button, the AES's own pop-ups' way and Settings' (settings.c
    over_button): rows are a line and 2 pixels high from 2 pixels down, their
    text a pixel in, so the top is `sel` rows and 3 pixels above the button.
-   popup() will learn "over this button" itself (hub item 6); then only this
-   function changes. The button is drawn again after: the pop-up covered it. */
+   popup_over() does it now (hub item 6). The button is drawn again after: the pop-up covered it. */
 static short pop_over(short o, const char *const *lab, short n, short sel)
 {
 	short x, y, r;
 	if (sel < 0 || sel >= n)
 		sel = 0;
 	objc_offset(tree, o, &x, &y);
-	r = popup_m(x, (short)(y - 3 - sel * (gl_hchar + 2)), lab, n);
+	r = popup_over(x, y, lab, n, sel);
 	tree[o].ob_state &= ~SELECTED;
 	if (dlg_in_window() || popup_put_back) {
 		draw_obj(o);		/* the screen under it is back, or the AES draws it */
@@ -775,11 +863,11 @@ static void log_geom(void)
 		const char *name;
 		short o;
 	} k[] = { { "drive", O_DRIVE }, { "folders", O_FOLDERS }, { "type", O_TYPE }, { "sort", O_SORT },
-		  { "mask", O_MASK }, { "cancel", O_CANCEL }, { "add", O_ADD } };
-	char b[200];
+		  { "mask", O_MASK }, { "cancel", O_CANCEL }, { "add", O_ADD }, { "list", O_LIST } };
+	char b[240];
 	int i, n;
 	n = snprintf(b, sizeof(b), "%s geom", spec->log);
-	for (i = 0; i < 7; i++) {
+	for (i = 0; i < 8; i++) {
 		short x, y;
 		objc_offset(tree, k[i].o, &x, &y);
 		n += snprintf(b + n, sizeof(b) - n, " %s=%d,%d,%d,%d", k[i].name, x, y, tree[k[i].o].ob_width,
@@ -800,9 +888,39 @@ static void mask_changed(void)
 	show_info();
 }
 
+short filepick_system;
+
+/* "Use the system file selector" (Erez, 9 Nov 2026): the AES's own, through fsel_exinput (titled where the AES is 1.4
+   or newer: gem.c), on the folder dir and its files whatever their type (the AES's mask is one, and the app's types
+   are several). One file, which plain TOS gives and nothing more; it goes to add() once, the folder it was
+   chosen in is left in dir with its '\\' and put first in recent[], as the dialog does. idle() isn't called while
+   the selector is open: it is the AES's, and the app is waiting in it. The click that closed it is settled
+   (fsel_settle: a double click's second press would reach the app's window as a click of its own). 1 or 0 on Cancel. */
+static int run_system(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path))
+{
+	static char path[FP_PATH + 4], folder[FP_PATH], name[DL_NAME], full[FP_PATH + DL_NAME];
+	short button = 0;
+	if (dir[0])
+		snprintf(path, sizeof(path), "%s*.*", dir);
+	else
+		snprintf(path, sizeof(path), "%c:\\*.*", (char)('A' + Dgetdrv()));
+	name[0] = 0;
+	fsel_exinput(path, name, &button, sp->title);
+	fsel_settle();
+	if (!button || !name[0] || !dl_folder_of(path, folder, sizeof(folder)) ||
+	    !dl_join(folder, name, full, sizeof(full)))
+		return 0;
+	snprintf(dir, FP_PATH, "%s", folder);
+	dl_recent_front(recent[0], FP_PATH, FP_RECENT, folder);
+	add(full);
+	return 1;
+}
+
 int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
 		 void (*idle)(void))
 {
+	if (filepick_system)
+		return run_system(sp, dir, recent, add);
 	short x, y, w, h, idx = 0, m[8];
 	int done = 0, added = 0, i;
 	AEVENT e;
@@ -940,7 +1058,7 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 		/* the selected files and folders in the list's order (a folder
 		   with its subfolders: its name ending in '\'); with none, the
 		   file at the keys' place */
-		char p[FP_PATH + 16];
+		static char p[FP_PATH + DL_NAME + 2];	/* (a long name and the folder before it: never cut) */
 		int any = dl_selected(&dl, 0);
 		for (i = 0; i < dl.nview; i++) {
 			DENT *f = dl_at(&dl, i);
@@ -950,15 +1068,8 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 			add(p);
 			added++;
 		}
-		if (added) {
-			/* the folder to the front of the Folders pop-up */
-			int k;
-			for (k = 0; k < FP_RECENT - 1 && strcmp(recent[k], dir_now); k++)
-				;
-			for (; k > 0; k--)
-				strcpy(recent[k], recent[k - 1]);
-			strcpy(recent[0], dir_now);
-		}
+		if (added)			/* the folder to the front of the Folders pop-up */
+			dl_recent_front(recent[0], FP_PATH, FP_RECENT, dir_now);
 	}
 	snprintf(dir, FP_PATH, "%s", dir_now);
 	dl_free(&dl);

@@ -197,6 +197,9 @@ short set_button(SETTINGS *s, short x, short y, short w, const char *label, SET_
 short set_value(SETTINGS *s, short x, short y, short w, char *label, SET_ACT act, void *user);
 /* page n (0 is the first) shown; the current page */
 void set_show(SETTINGS *s, short n);
+/* from check, after set_show: the text cursor goes to this field (the object set_field and set_long return) when the dialog
+   goes on, so a refused number is where the user types the new one */
+void set_focus(SETTINGS *s, short field);
 short set_page_now(const SETTINGS *s);
 /* the builder, for anything else (db_add adds to the page being built) */
 DLGB *set_db(SETTINGS *s);

@@ -63,6 +63,31 @@ import time
 import urllib.request
 import zipfile
 
+# Erez's configuration, the one every app's testing has once (his word, 10 Nov 2026): a Falcon with TOS 4.04,
+# 4 MB and NVDI, in the 256 colours his own screen uses. His Falcon has 14 MB, but 4 MB runs it as well, and 4 MB
+# is the stock Falcon (Falcon-4: 68030 at 16 MHz, no FPU). A rig takes it as machine ERZ_MACHINE with NVDI on
+# (AERA_WITH_NVDI=1, or erz_env()); a container with no TOS images or NVDI runs the same machine on EmuTOS
+# without NVDI and says so in describe(), and the hub runs it for real.
+ERZ_MACHINE = "Falcon-4:256"
+
+
+def nvdi_here(env=None):
+    """True when Erez's NVDI is on this computer (the folder Machine.nvdi() reads)"""
+    e = os.environ if env is None else env
+    src = e.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
+    return os.path.exists(os.path.join(src, "auto", "nvdi.prg"))
+
+
+def erz_env(env=None):
+    """the environment that makes a rig run Erez's configuration: NVDI on every Falcon it starts. Where this
+    computer has no NVDI it is left off (the stand-in: the same machine on EmuTOS, as describe() says), so a rig
+    can call this unconditionally; AERA_WITH_NVDI set by hand still stops with 'no NVDI here'."""
+    e = dict(os.environ if env is None else env)
+    if nvdi_here(e):
+        e["AERA_WITH_NVDI"] = "1"
+    return e
+
+
 # name: (what it is, Hatari's arguments, screens (the first is the default), real TOS file)
 MACHINES = {
     "ST": ("Erez's 1040 ST: 68000 at 8 MHz, 4 MB",
@@ -278,7 +303,10 @@ class Machine:
     def describe(self):
         return "%s:%s, %s" % (self.name, self.screen,
                               "TOS " + tos_version(self.tos) if self.real else "EmuTOS 1.4") + \
-            ("; with " + ", ".join(self.with_accs) if getattr(self, "with_accs", None) else "")
+            ("; with " + ", ".join(self.with_accs) if getattr(self, "with_accs", None) else "") + \
+            ("; NVDI" if os.path.exists(os.path.join(self.hd, "AUTO", "NVDI.PRG")) else "") + \
+            (" (Erez's configuration)" if "%s:%s" % (self.name, self.screen) == ERZ_MACHINE and self.real and
+             os.path.exists(os.path.join(self.hd, "AUTO", "NVDI.PRG")) else "")
 
     def args(self):
         """Hatari's arguments; also writes the machine's own settings"""

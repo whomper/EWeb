@@ -164,6 +164,30 @@ short popup_m_alt(short x, short y, short alt_y, const char *const *lab, short n
 	return run(x, y, alt_y, lab, n);
 }
 
+/* A choice pop-up over its button (D27, the AES's own pop-ups' way, 5.7): the ticked row `sel` is over the
+   button whose top-left is (x, y): the box's rows start 2 pixels down and their text a pixel in, so its row
+   `sel` begins a pixel above the button. Rows are those layout() makes (separators count), so the place is
+   right for a menu with lines and when the rows are squeezed to fit a short screen. Where that would put the
+   box off the desktop it is moved, not flipped above. The new contract (popup_m): labels are words. */
+short popup_over(short x, short y, const char *const *lab, short n, short sel)
+{
+	short bh, top;
+	font_sys_push();
+	if (n > MAXROWS)
+		n = MAXROWS;
+	if (sel < 0 || sel >= n)
+		sel = 0;
+	bh = layout(lab, n);
+	top = (short)(y - rowy[sel] - 1);
+	if (top + bh + 2 > desk_y + desk_h)
+		top = (short)(desk_y + desk_h - bh - 2);
+	if (top < desk_y)
+		top = desk_y;
+	font_sys_pop();
+	margin = 1;
+	return run(x, top, -1, lab, n);
+}
+
 static short run(short x, short y, short alt_y, const char *const *lab, short n)
 {
 	short i, w = 0, sel = -1, res = -1, held, moved = 0, bh;

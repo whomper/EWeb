@@ -57,6 +57,7 @@ struct SETTINGS {
 	short nf;
 	char *pool;			/* the fields' text when the dialog opened */
 	short line_obj;			/* the list's line (the ring round a page name reaches it) */
+	short want;			/* set_focus: the field the text cursor goes to when dlg_do is entered next (0 none) */
 	short focus;			/* the keyboard's: 0 the text cursor (or nothing), -1 the page list, else the control's object */
 	short kb;			/* a key has been used since the last click: only then is the focus shown (a ring) */
 	short ringed;			/* the ring is on the screen */
@@ -365,6 +366,14 @@ static void show_page(SETTINGS *s, short p, int draw)
 	}
 }
 
+void set_focus(SETTINGS *s, short field)
+{
+	if (field > 0 && field < s->b.nobj) {
+		s->want = field;
+		s->focus = 0;
+	}
+}
+
 void set_show(SETTINGS *s, short n)
 {
 	if (n >= 0 && n < s->npages && n + 1 != s->cur)
@@ -420,13 +429,6 @@ static void build(SETTINGS *s)
 }
 
 /* ---------------- the dialog ---------------- */
-
-/* where a pop-up goes to have its row `sel` over the button at y, as the AES's own pop-ups do (5.7): its
-   rows are a line and 2 pixels high, from 2 pixels down, their text a pixel in */
-static short over_button(const SETTINGS *s, short y, short sel)
-{
-	return (short)(y - 3 - sel * (s->b.hc + 2));
-}
 
 /* an object of the dialog drawn again, or all of it where the screen under a pop-up wasn't kept */
 static void drawn_again(SETTINGS *s)
@@ -752,7 +754,7 @@ static void pop_run(SETTINGS *s, SET_W *p)
 		lab[i] = name[i];
 	}
 	objc_offset(tree, p->obj, &x, &y);
-	r = popup_m(x, over_button(s, y, sel), lab, p->n);
+	r = popup_over(x, y, lab, p->n, sel);
 	tree[p->obj].ob_state &= ~SELECTED;
 	if (!popup_put_back && settings_uncover)
 		settings_uncover(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
@@ -917,7 +919,11 @@ int settings_dialog(const SET_DEF *d)
 		focus_default(s);
 		for (;;) {
 			SET_W *p;
-			r = dlg_do(s->b.tree, s->focus ? -1 : 0, s->cancel) & 0x7fff;
+			{
+				short start = s->want > 0 ? s->want : s->focus ? -1 : 0;
+				s->want = 0;
+				r = dlg_do(s->b.tree, start, s->cancel) & 0x7fff;
+			}
 			k = db_tick_hit(&s->b, r);
 			if (k >= 0) {
 				mouse_focus(s, 0);

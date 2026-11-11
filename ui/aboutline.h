@@ -26,7 +26,7 @@
 #define ABOUT_OFFLINE    "offline"		/* Work offline is ticked */
 
 /* line 1: stack is net_stack()'s ("none": No network), route one of the
-   above (ClaudeST: "Serial port, 19200 baud"), state one of the above or
+   above (an app's own words), state one of the above or
    0 for none */
 void about_net_line(char *out, int n, const char *stack, const char *route, const char *state);
 

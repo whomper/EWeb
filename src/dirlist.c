@@ -8,6 +8,41 @@
 #include <stdio.h>
 #include "dirlist.h"
 
+/* the names' memory: chunks that stay where they are while the folder grows (a name is pointed to) */
+#define POOL_CHUNK 2048
+struct dl_pool {
+	struct dl_pool *next;
+	int used;
+	char b[POOL_CHUNK];
+};
+
+static void pool_free(DLIST *d)
+{
+	while (d->pool) {
+		struct dl_pool *n = d->pool->next;
+		free(d->pool);
+		d->pool = n;
+	}
+}
+
+static char *pool_name(DLIST *d, const char *name)
+{
+	size_t n = strlen(name) + 1;
+	char *p;
+	if (!d->pool || POOL_CHUNK - d->pool->used < (int)n) {
+		struct dl_pool *c = malloc(sizeof(*c));
+		if (!c)
+			return 0;
+		c->next = d->pool;
+		c->used = 0;
+		d->pool = c;
+	}
+	p = d->pool->b + d->pool->used;
+	memcpy(p, name, n);
+	d->pool->used += (int)n;
+	return p;
+}
+
 static const DL_TYPE all_files[1] = { { "All files", "" } };
 
 void dl_init(DLIST *d)
@@ -33,6 +68,7 @@ void dl_types(DLIST *d, const DL_TYPE *t, int n)
 
 void dl_free(DLIST *d)
 {
+	pool_free(d);
 	free(d->e);
 	free(d->view);
 	d->e = 0;
@@ -42,6 +78,7 @@ void dl_free(DLIST *d)
 
 void dl_clear(DLIST *d)
 {
+	pool_free(d);
 	d->n = d->nview = 0;
 }
 
@@ -53,7 +90,8 @@ static int up(int c)
 int dl_add(DLIST *d, const char *name, long size, unsigned short date, unsigned short time, int dir)
 {
 	DENT *x;
-	if (!strcmp(name, ".") || !strcmp(name, ".."))
+	char *nm;
+	if (!strcmp(name, ".") || !strcmp(name, "..") || strlen(name) >= DL_NAME)
 		return 1;
 	if (d->n >= d->cap) {
 		int cap = d->cap ? d->cap * 2 : 64;
@@ -72,9 +110,12 @@ int dl_add(DLIST *d, const char *name, long size, unsigned short date, unsigned 
 		d->view = v;
 		d->cap = cap;
 	}
+	nm = pool_name(d, name);
+	if (!nm)
+		return 0;
 	x = &d->e[d->n++];
 	memset(x, 0, sizeof(*x));
-	snprintf(x->name, sizeof(x->name), "%s", name);
+	x->name = nm;
 	x->size = size;
 	x->date = date;
 	x->time = time;
@@ -129,22 +170,31 @@ void dl_sort(DLIST *d)
 
 int dl_match(const char *m, const char *s)
 {
-	/* (8.3 names: a backtracking match is enough) */
+	/* a long name (MiNT's, up to 255) and a mask with several stars: the usual walk with the last star's
+	   place kept, not a backtracking recursion (the time is name times mask at worst) */
+	const char *sm = 0, *ss = 0;
 	if (!*m)
 		return !*s;
-	if (*m == '*') {
-		for (;; s++) {
-			if (dl_match(m + 1, s))
-				return 1;
-			if (!*s)
-				return 0;
+	for (;;) {
+		if (*m == '*') {
+			sm = ++m;
+			ss = s;
+			continue;
 		}
+		if (*s && (*m == '?' || (*m && up(*m) == up(*s)))) {
+			m++;
+			s++;
+			continue;
+		}
+		if (!*s && !*m)
+			return 1;
+		if (sm && *ss) {
+			s = ++ss;
+			m = sm;
+			continue;
+		}
+		return 0;
 	}
-	if (!*s)
-		return 0;
-	if (*m != '?' && up(*m) != up(*s))
-		return 0;
-	return dl_match(m + 1, s + 1);
 }
 
 /* name's extension one of exts' (a space between each) */
@@ -289,4 +339,38 @@ void dl_size_text(long size, char *out)
 void dl_date_text(unsigned short date, char *out)
 {
 	sprintf(out, "%02u.%02u.%02u", date & 31, (date >> 5) & 15, (unsigned)((date >> 9) + 80) % 100);
+}
+
+int dl_folder_of(const char *path, char *dir, size_t n)
+{
+	const char *b = strrchr(path, '\\');
+	size_t len;
+	if (!b)
+		return 0;
+	len = (size_t)(b - path) + 1;
+	if (len >= n)
+		return 0;
+	memcpy(dir, path, len);
+	dir[len] = 0;
+	return 1;
+}
+
+int dl_join(const char *dir, const char *name, char *out, size_t n)
+{
+	size_t a = strlen(dir), b = strlen(name);
+	if (a + b >= n)
+		return 0;
+	memcpy(out, dir, a);
+	memcpy(out + a, name, b + 1);
+	return 1;
+}
+
+void dl_recent_front(char *recent, size_t stride, int n, const char *dir)
+{
+	int k;
+	for (k = 0; k < n - 1 && strcmp(recent + (size_t)k * stride, dir); k++)
+		;
+	for (; k > 0; k--)
+		strcpy(recent + (size_t)k * stride, recent + (size_t)(k - 1) * stride);
+	strcpy(recent, dir);
 }

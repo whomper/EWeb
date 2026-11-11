@@ -56,6 +56,11 @@ short popup_m(short x, short y, const char *const *labels, short n);	/* new cont
    row it is for) instead of above y (Claude ST's list menus) */
 short popup_alt(short x, short y, short alt_y, const char *const *labels, short n);
 short popup_m_alt(short x, short y, short alt_y, const char *const *labels, short n);
+/* a choice pop-up OVER its button (D27, 5.7): the row `sel` (the ticked one) lies over the button whose
+   top-left is (x, y), as the AES's own pop-ups and Settings do; popup_m's contract (labels are words). The
+   box is kept on the desktop, not flipped above. Settings and the Add files dialog use it; so should every
+   app's choice pop-up (EFTP, EContact, ECal, EHypView, EMail: C8) instead of working the place out */
+short popup_over(short x, short y, const char *const *labels, short n, short sel);
 extern GRECT popup_area;	/* where the last popup was: what the app repaints */
 extern short popup_put_back;	/* 1: the screen under it was put back as it closed
 				   (dlg_under): nothing to repaint; 0: the AES was asked to */
