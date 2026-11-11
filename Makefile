@@ -214,6 +214,9 @@ GCCINC     := $(shell $(M68KCC) -print-file-name=include)
 # edition's the same since its 1 MB ST was dropped.
 TOS_STACK := 262144
 ST_STACK  := $(TOS_STACK)
+# EWEB.PRG's crt0 has a small one: its app_main runs on TOS_STACK's taken
+# from GEMDOS, or on 96 KB where memory is short (ui/main.c, atari/onstack.S)
+EWEB_BSS_STACK := 16384
 # (crt0 and main.c are made again when they change: the two must agree)
 build/tos/gem/main.o build/st/gem/main.o: Makefile
 # (only what is called is linked: each function and datum a section of its
@@ -235,6 +238,12 @@ tos_RT     := build/tos/rt/crt0.o build/tos/rt/nf.o build/tos/rt/libc.o build/to
 build/tos/rt/%.o: common/atari/%.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DSTACK_SIZE=$(TOS_STACK) -c $< -o $@
+build/tos/rt/crt0_gem.o: common/atari/crt0.S Makefile
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -DSTACK_SIZE=$(EWEB_BSS_STACK) -c $< -o $@
+build/tos/rt/onstack.o: atari/onstack.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
@@ -559,7 +568,7 @@ build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
 # engine, Hubbub, and the network as EWGET.TTP has it
 GEM_UI     := main draw screen win about dialogs
 GEM_COMMON := aboutbox aboutline alert notify popup dialog field help av iconify clip mbar dd panebar text offdraw click progbar hebkey fsel langs dlgbuild settings tooltip arrowed
-GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DDLG_CLICK -DEW_STACK=$(TOS_STACK) $(EWB_INC) $(NSINC)
+GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DDLG_CLICK -DEW_STACK=$(TOS_STACK) -DEW_BSS_STACK=$(EWEB_BSS_STACK) $(EWB_INC) $(NSINC)
 # (common's click.c keeps a static named cur, the name EWeb's ui.h gives
 # the window worked on: ui.h leaves its own out of that file, until
 # AERA-Atari renames it)
@@ -590,9 +599,10 @@ build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 # a graphics card's screen (ui/tcpix.c, ui/deep.c) linked last, after
 # everything a Falcon runs: in the middle it moved the canvas and made it
 # 7% slower on the stock Falcon (the 68030's caches; DESIGN.md)
-DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o
+DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o
 ST_DEEP_OBJ := build/st/gem/tcpix.o
-build/tos/eweb.elf: $(tos_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
+GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
+build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ)
@@ -699,7 +709,7 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(tos_RT) \
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
@@ -715,7 +725,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DEW_TEST_DL -c $< -o $@
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(tos_RT) \
+	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py

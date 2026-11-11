@@ -196,6 +196,7 @@ int main(int argc, char **argv)
 	memset(&o, 0, sizeof o);
 	o.width = W;
 	o.zoom = 819;
+	o.share_text = 1;	/* (as EWEB.PRG lays a page out: src/browse's lay) */
 	p = layout_page(d, &o);
 	if (p == NULL)
 		return 1;

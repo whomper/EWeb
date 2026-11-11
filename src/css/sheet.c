@@ -13,8 +13,23 @@
 #define MAX_VALUE	512
 #define MAX_DECLS	512
 #define MAX_NEST	8	/* levels of :not() and :is() */
+#define MAX_SELECTOR	1024	/* a script's selector's tokens */
 
-static ec_tok prelude[MAX_PRELUDE];
+/* the tokens of a rule's prelude, and the selectors' builders (below):
+   taken while a sheet is read (rules(), the outermost level) and given
+   back after, not kept in the BSS (96 KB: a stock 4 MB Falcon under NVDI
+   lays a big page out in what they took) */
+static ec_tok *prelude;
+static struct sbuild *builders;		/* MAX_NEST: one per level of :not() and :is() */
+
+/* tokens for a short list read on its own (a media attribute, sizes, a
+   script's selector), max of them, taken for it and given back after:
+   not the prelude's, which a sheet being read may hold (a GEM turn in
+   its @import lays another window's page out) */
+static ec_tok *tok_take(int max)
+{
+	return malloc((size_t) max * sizeof *prelude);
+}
 
 /* ------------------------------------------------------------ token lists */
 
@@ -609,7 +624,6 @@ static int compound(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 }
 
 /* a complex selector from t[i] to n into an ec_sel (no block yet) */
-static sbuild builders[MAX_NEST];	/* one per level of :not() and :is() */
 
 static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 {
@@ -620,6 +634,8 @@ static ec_sel *complex(ec_ctx *c, const ec_tok *t, int i, int n)
 	int k, ns;
 
 	if (builder_depth == MAX_NEST)
+		return NULL;
+	if (builders == NULL && (builders = malloc(MAX_NEST * sizeof *builders)) == NULL)
 		return NULL;
 	b = &builders[builder_depth++];
 	b->ns = b->ncomp = 0;
@@ -1445,14 +1461,22 @@ static int media_list(ec_ctx *c, const ec_tok *t, int i, int n)
 	return empty || any;
 }
 
+/* (a media attribute's or a sizes': no more tokens than this) */
+#define MAX_SHORT 512
+
 int ec_media_ok(ec_ctx *c, const char *s, size_t len)
 {
 	ec_lex lx;
-	int n, stop;
+	int n, stop, r;
+	ec_tok *t = tok_take(MAX_SHORT);
 
+	if (t == NULL)
+		return 1;		/* (no memory to read it: shown, as one with none) */
 	ec_lex_init(&lx, s, len);
-	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
-	return n >= 0 && stop == T_EOF && media_list(c, prelude, 0, n);
+	n = read_prelude(&lx, t, MAX_SHORT, &stop, 0);
+	r = n >= 0 && stop == T_EOF && media_list(c, t, 0, n);
+	free(t);
+	return r;
 }
 
 /* a length in sizes, t[*i] on: a dimension, or calc(), min(), max() or
@@ -1580,13 +1604,13 @@ static int sz_sum(ec_ctx *c, const ec_tok *t, int *i, int n, int64_t *v, int *nu
 	}
 }
 
-int32_t ec_sizes(ec_ctx *c, const char *s, size_t len)
+static int32_t sizes_in(ec_ctx *c, ec_tok *prelude, int max, const char *s, size_t len)
 {
 	ec_lex lx;
 	int n, stop, a = 0;
 
 	ec_lex_init(&lx, s, len);
-	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
+	n = read_prelude(&lx, prelude, max, &stop, 0);
 	if (n < 0 || stop != T_EOF)
 		return -1;
 	while (a < n) {
@@ -1626,6 +1650,17 @@ int32_t ec_sizes(ec_ctx *c, const char *s, size_t len)
 		a = b + 1;
 	}
 	return -1;
+}
+
+int32_t ec_sizes(ec_ctx *c, const char *s, size_t len)
+{
+	ec_tok *t = tok_take(MAX_SHORT);
+	int32_t r;
+	if (t == NULL)
+		return -1;
+	r = sizes_in(c, t, MAX_SHORT, s, len);
+	free(t);
+	return r;
 }
 
 /* ------------------------------------------------------------ @supports */
@@ -1928,7 +1963,17 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 	   rules all here end, for the next piece to go on from (c->cut) */
 	int streaming = c->streaming && depth == 0;
 	const char *done = p;
+	/* the prelude's tokens taken at the outermost level, and given back
+	   with the builders at its end (an @import's sheet, an @media's
+	   rules read inside it: its) */
+	int mine = prelude == NULL;
 
+	if (mine && (prelude = malloc(MAX_PRELUDE * sizeof *prelude)) == NULL) {
+		c->rmem.nomem = 1;
+		if (streaming)
+			c->cut = done;
+		return;
+	}
 	ec_lex_init(&lx, p, end - p);
 	for (;;) {
 		const char *start = lx.p, *next;
@@ -1957,6 +2002,14 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 	}
 	if (streaming)
 		c->cut = done;
+	if (mine) {
+		free(prelude);
+		prelude = NULL;
+		if (builder_depth == 0) {
+			free(builders);
+			builders = NULL;
+		}
+	}
 }
 
 #ifndef EW_ST	/* scripts' selectors: the ST edition runs no scripts */
@@ -1969,18 +2022,28 @@ const ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len)
 	ec_arena *pm = c->pmem;
 	const ec_sellist *l;
 	ec_lex lx;
+	ec_tok *t;
 
 	if (copy == NULL)
 		return NULL;
 	memcpy(copy, s, len);
 	copy[len] = 0;
-	ec_lex_init(&lx, copy, len);
-	n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
-	if (n <= 0 || stop != T_EOF)
+	if ((t = tok_take(MAX_SELECTOR)) == NULL)
 		return NULL;
+	ec_lex_init(&lx, copy, len);
+	n = read_prelude(&lx, t, MAX_SELECTOR, &stop, 0);
+	if (n <= 0 || stop != T_EOF) {
+		free(t);
+		return NULL;
+	}
 	c->pmem = &c->mem;
-	l = sellist(c, prelude, 0, n, 0, &spec, &never);
+	l = sellist(c, t, 0, n, 0, &spec, &never);
 	c->pmem = pm;
+	free(t);
+	if (prelude == NULL && builder_depth == 0) {
+		free(builders);		/* (no sheet being read holds them) */
+		builders = NULL;
+	}
 	return l;
 }
 
@@ -2140,7 +2203,7 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 			continue;
 		if (type == T_AT) {
 			int stop;
-			read_prelude(&lx, prelude, 0, &stop, 1);
+			read_prelude(&lx, NULL, 0, &stop, 1);
 			if (stop == T_LBRACE)
 				lx.p = ec_skip_block(lx.p, lx.end, '{');
 			continue;

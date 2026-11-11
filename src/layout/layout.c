@@ -71,6 +71,15 @@ static void *amalloc(struct arena *a, size_t n)
 	return p;
 }
 
+/* p, the last n bytes amalloc gave, given back */
+static void aunalloc(struct arena *a, void *p, size_t n)
+{
+	struct achunk *c = a->head;
+	n = (n + AALIGN - 1) & ~(size_t) (AALIGN - 1);
+	if (c != NULL && c->used >= n && c->mem + c->used - n == (char *) p)
+		c->used -= n;
+}
+
 static void afree(struct arena *a)
 {
 	struct achunk *c = a->head, *n;
@@ -103,26 +112,32 @@ typedef struct box box;
 struct fcol;
 
 struct box {
+	/* (its flags in bits: a big page's 3,900 boxes 12 bytes each the
+	   less, the layout's peak on a stock 4 MB Falcon under NVDI) */
 	uint8_t kind;
-	uint8_t inl;			/* a block whose children are inline: lines */
-	uint8_t row;			/* a block whose children go side by side */
-	uint8_t wrap;			/* a flex row that wraps (flex-wrap) */
-	uint8_t flex;			/* a flex container: its children are flex items */
-	uint8_t grid;			/* a grid container: its children are grid items */
-	uint8_t list;			/* LB_*: a list item; a details' summary */
-	uint8_t anon;			/* an anonymous block: no box of its own */
 	uint8_t atom;			/* AT_* */
-	uint8_t tablerow;
-	uint8_t table;			/* a table: shrinks to fit, its rows share column widths */
-	uint8_t repl;			/* a picture as a block (floated, display: block): its one child the atom */
-	uint8_t ib;			/* an inline-level block (inline-block, -flex, -grid, -table):
+	unsigned inl : 1;		/* a block whose children are inline: lines */
+	unsigned row : 1;		/* a block whose children go side by side */
+	unsigned wrap : 1;		/* a flex row that wraps (flex-wrap) */
+	unsigned flex : 1;		/* a flex container: its children are flex items */
+	unsigned grid : 1;		/* a grid container: its children are grid items */
+	unsigned list : 2;		/* LB_*: a list item; a details' summary */
+	unsigned anon : 1;		/* an anonymous block: no box of its own */
+	unsigned tablerow : 1;
+	unsigned table : 1;		/* a table: shrinks to fit, its rows share column widths */
+	unsigned repl : 1;		/* a picture as a block (floated, display: block): its one child the atom */
+	unsigned ib : 1;		/* an inline-level block (inline-block, -flex, -grid, -table):
 					   an atom in its line, laid out as a block (ib_layout) */
-	uint8_t frame;			/* AT_IMAGE: an iframe's or a frame's, its img its frame's
+	unsigned frame : 2;		/* AT_IMAGE: an iframe's or a frame's, its img its frame's
 					   number (LAYOUT_OPT.frame); AT_CONTROL: one the page
 					   styles (styled_ctl), in a block of its own: as wide as
 					   that block's content; 2: given a ground, so that block
 					   is its frame, none of its own; 3: given a border and no
 					   ground: its own ground, no frame */
+	unsigned ratio : 1;		/* AT_IMAGE: proportions alone (an SVG of a viewBox): iw x
+					   ih where it has no place to be as wide as */
+	unsigned doctext : 1;		/* BX_TEXT: its text a text node's own, in the document's
+					   memory for as long as the document (text_items) */
 	uint16_t link;			/* 1 + link index, or 0 */
 	uint16_t ctl;			/* 1 + index into page.ctls, or 0 */
 	dnode *n;			/* the element, or NULL */
@@ -137,8 +152,6 @@ struct box {
 					   details element (dnode *) */
 	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
 	struct fcol *fc;		/* a flex column of no set height: its items (stretch_box) */
-	uint8_t ratio;			/* AT_IMAGE: proportions alone (an SVG of a viewBox): iw x
-					   ih where it has no place to be as wide as */
 };
 
 /* box.list: a list item (display: list-item); the summary a click opens
@@ -229,6 +242,8 @@ typedef struct {
 	dnode *bg_taken;		/* the element whose background colour the canvas took */
 	dnode *canvas_bg;		/* the element whose background picture the canvas has */
 	int fail;
+	uint8_t noblocks;		/* page.blocks couldn't grow: not asked again (each ask a
+					   GEMDOS call or more where memory is short) */
 	unsigned long polls;		/* boxes made and laid out (doc_poll) */
 	struct {
 		const ec_family *f;
@@ -1155,10 +1170,12 @@ static void block_rect(L *l, dnode *n, int32_t x, int32_t y, int32_t w, int32_t 
 {
 	page *p = l->p;
 	if (p->nblocks == p->blockcap) {
-		long cap = p->blockcap ? p->blockcap * 2 : 256;
-		struct pg_block *nb = realloc(p->blocks, cap * sizeof *nb);
-		if (nb == NULL)
+		long cap = p->blockcap ? p->blockcap + p->blockcap / 2 : 256;
+		struct pg_block *nb = l->noblocks ? NULL : realloc(p->blocks, cap * sizeof *nb);
+		if (nb == NULL) {
+			l->noblocks = 1;
 			return;
+		}
 		p->blocks = nb;
 		p->blockcap = cap;
 	}
@@ -1488,7 +1505,7 @@ static const char *icon_text(L *l, const char *s, uint32_t *n, int kind)
 	return out;
 }
 
-static void add_text_box(L *l, box *parent, const ec_style *st, const char *s, uint32_t n)
+static box *add_text_box(L *l, box *parent, const ec_style *st, const char *s, uint32_t n)
 {
 	box *t;
 	const ec_family *f = st->k[EP_FONT_FAMILY] == EK_PTR ? st->v[EP_FONT_FAMILY].p : NULL;
@@ -1496,20 +1513,21 @@ static void add_text_box(L *l, box *parent, const ec_style *st, const char *s, u
 	   floor is for the smallest size read, not for none: AtariAge's
 	   forum list hides "By name," so, its ::after shown instead) */
 	if (st->k[EP_FONT_SIZE] == EK_PX && st->v[EP_FONT_SIZE].i <= 0)
-		return;
+		return NULL;
 	if (f != NULL) {
 		if (f != l->icon_f) {	/* (a family list looked at once in a row) */
 			l->icon_f = f;
 			l->icon_k = (uint8_t) icon_kind(f);
 		}
 		if (l->icon_k != ICON_NONE && (s = icon_text(l, s, &n, l->icon_k)) != NULL && n == 0)
-			return;
+			return NULL;
 	}
 	t = new_box(l, BX_TEXT, NULL, st, parent);
 	if (t != NULL) {
 		t->text = s;
 		t->len = n;
 	}
+	return t;
 }
 
 static void atom(L *l, box *parent, dnode *n, const ec_style *st, int kind, const char *label, int32_t w, int32_t h)
@@ -2255,8 +2273,12 @@ static void build(L *l, box *parent, dnode *n)
 		if (c == sum)
 			continue;
 		if (c->type == DN_TEXT) {
-			if (c->len > 0)
-				add_text_box(l, parent, pst, c->text, c->len);
+			box *t;
+			/* (a text never moved: one in the document's arena, not
+			   one grown past DOC_BIG, which doc_text_fit may move) */
+			if (c->len > 0 && (t = add_text_box(l, parent, pst, c->text, c->len)) != NULL &&
+			    t->text == c->text && c->cap * 2 + 1 < DOC_BIG)
+				t->doctext = 1;
 		} else if (c->type == DN_ELEMENT) {
 			build_element(l, parent, c);
 		}
@@ -3082,9 +3104,22 @@ static __attribute__((noinline)) uint32_t word_pieces(L *l, const RUNSTATE *r, c
 	return o;
 }
 
+/* text_items' words and spaces, the document's own s up to o, put in its
+   copy t from the first difference (a node's words and spaces follow on
+   in one or the other: one run to draw): t */
+static const char *to_copy(L *l, const char *s, char *t, uint32_t o, long it0)
+{
+	long k;
+	memcpy(t, s, o);
+	for (k = it0; k < l->nit; k++)
+		if (l->it[k].text != NULL && l->it[k].text >= s && l->it[k].text <= s + o)
+			l->it[k].text = t + (l->it[k].text - s);
+	return t;
+}
+
 /* text into words and spaces, collapsed as its white-space says, copied
    so that a node's words and spaces follow on (one run to draw) */
-static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *line_start)
+static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *line_start, int share)
 {
 	int ws = kw(r->st, EP_WHITE_SPACE), tt = kw(r->st, EP_TEXT_TRANSFORM);
 	int keep = ws == KW_PRE || ws == KW_PRE_WRAP || ws == KW_BREAK_SPACES;
@@ -3096,6 +3131,14 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 	uint32_t i = 0, o = 0;
 	long k;
 	char *t = amalloc(l->a, n + 1);
+	/* while what is made is the document's text as it is (share): the
+	   words and spaces are the document's own, the copy given back at
+	   the end; from the first difference (white space collapsed or
+	   changed, case changed, a word made in pieces) the copy's (those
+	   before stay the document's, the same bytes) */
+	const char *ob = share && tt != KW_UPPERCASE && tt != KW_LOWERCASE ? s : t;
+	long it0 = l->nit;
+#define DIFFER() (ob == s ? (void) (ob = to_copy(l, s, t, o, it0)) : (void) 0)
 
 	if (t == NULL) {
 		l->fail = 1;
@@ -3105,17 +3148,21 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 		unsigned char c = (unsigned char) s[i];
 		ITEM *it;
 		if (c == '\n' && newlines) {
+			DIFFER();
 			put_item(l, r, IT_BREAK, NULL, 0, 0, 0);
 			*line_start = 1;
 			i++;
 			continue;
 		}
 		if (c == '\r' && newlines) {
+			DIFFER();
 			i++;
 			continue;
 		}
 		if (is_space(c)) {
 			if (keep) {
+				if (c != ' ')
+					DIFFER();
 				if (c == '\t' && sw > 0) {
 					/* to the next tab stop, every 8 spaces from the
 					   line's start (CSS Text 3, tab-size: 8; the line so
@@ -3134,7 +3181,7 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 					}
 				}
 				t[o] = ' ';
-				put_item(l, r, IT_SPACE, t + o, 1, sw, 0);
+				put_item(l, r, IT_SPACE, ob + o, 1, sw, 0);
 				o++;
 				i++;
 				it = &l->it[l->nit - 1];
@@ -3142,18 +3189,25 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				*line_start = 0;
 				continue;
 			}
-			while (i < n && is_space((unsigned char) s[i]) && !(s[i] == '\n' && newlines))
-				i++;
+			{
+				uint32_t w0 = i;
+				while (i < n && is_space((unsigned char) s[i]) && !(s[i] == '\n' && newlines))
+					i++;
+				if (i - w0 != 1 || c != ' ')
+					DIFFER();	/* (more than one, or not a space) */
+			}
 			/* one space for the white space either side of a float */
 			for (k = l->nit - 1; k >= 0 && l->it[k].kind == IT_FLOAT; k--)
 				;
 			if (!*line_start && !(k >= 0 && l->it[k].kind == IT_SPACE && l->it[k].collapse)) {
 				t[o] = ' ';
-				put_item(l, r, IT_SPACE, t + o, 1, sw, 0);
+				put_item(l, r, IT_SPACE, ob + o, 1, sw, 0);
 				o++;
 				it = &l->it[l->nit - 1];
 				it->canbreak = (uint8_t) wrap;
 				it->collapse = 1;
+			} else {
+				DIFFER();	/* (dropped) */
 			}
 			continue;
 		}
@@ -3170,10 +3224,20 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				   a letter's first, sets a bit of 4, 8 or 128 in seen,
 				   and font_width measures that word) */
 				ww = 0;
-				while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
-					seen |= k;
-					ww += wt[(unsigned char) s[j]];
-					t[o++] = s[j++];
+				if (ob == s) {
+					/* (the document's own: no copy made, t's bytes
+					   from here never read; o is j) */
+					while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
+						seen |= k;
+						ww += wt[(unsigned char) s[j++]];
+					}
+					o = j;
+				} else {
+					while (j < n && (k = lb_class[(unsigned char) s[j]]) != 1) {
+						seen |= k;
+						ww += wt[(unsigned char) s[j]];
+						t[o++] = s[j++];
+					}
 				}
 				if (seen & (4 | 8 | 128))
 					ww = -1;
@@ -3194,6 +3258,9 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				}
 			}
 			if (LB_SPLIT(seen, rtl)) {
+				if (ob == s)	/* (its pieces the copy's: the word in it) */
+					memcpy(t + start, s + i, j - i);
+				DIFFER();	/* (and those before it) */
 				o = word_pieces(l, r, s, i, j, t, start, tt, wrap, rtl, line_start);
 			} else {
 				/* (its direction from its bytes: only one with
@@ -3202,10 +3269,10 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 				   0xD7 in it, right to left as word_dir finds it,
 				   without its look at each character) */
 				int d = seen & 136 ? -1 : seen & 16 ? 1 : seen & 32 ? 3 : 0;
-				if (d < 0 && (seen & ~(8 | 64)) == 0 && memchr(t + start, 0xD7, o - start) != NULL)
+				if (d < 0 && (seen & ~(8 | 64)) == 0 && memchr(ob + start, 0xD7, o - start) != NULL)
 					d = l->visual ? 1 : 2;
-				put_item(l, r, IT_WORD, t + start, o - start,
-					 ww >= 0 ? ww : (int32_t) font_width(r->font, t + start, o - start), d);
+				put_item(l, r, IT_WORD, ob + start, o - start,
+					 ww >= 0 ? ww : (int32_t) font_width(r->font, ob + start, o - start), d);
 				if (!wrap && !l->fail)
 					l->it[l->nit - 1].canbreak = 2;	/* (no line ends before it, or in it) */
 				*line_start = 0;
@@ -3214,6 +3281,10 @@ static void text_items(L *l, const RUNSTATE *r, const char *s, uint32_t n, int *
 		}
 	}
 	t[o] = 0;
+	if (ob == s && !l->fail)
+		aunalloc(l->a, t, n + 1);	/* (all the document's: BIG.HTM's 101 KB of text on
+						   a stock 4 MB Falcon under NVDI; LAYOUT_OPT.share_text) */
+#undef DIFFER
 }
 
 /* a whole number from an attribute ("120", "120px"), 0 if none */
@@ -3474,7 +3545,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 		RUNSTATE r;
 		switch (c->kind) {
 		case BX_TEXT:
-			text_items(l, pr, c->text, c->len, line_start);
+			text_items(l, pr, c->text, c->len, line_start, c->doctext && l->p->opt.share_text);
 			break;
 		case BX_MARK:
 			mark_items(l, pr, c, line_start);
@@ -9200,6 +9271,14 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 		p->cap = (long) d->elements + (long) d->elements / 8;
 		if ((p->items = malloc((size_t) p->cap * sizeof *p->items)) == NULL)
 			p->cap = 0;
+#ifndef EW_ST
+		/* and the blocks' places, fewer than the elements: grown by
+		   doubling, a big page's were room for 4,096 for 2,400 (106 KB),
+		   and both lists there while it was copied */
+		p->blockcap = (long) d->elements;
+		if ((p->blocks = malloc((size_t) p->blockcap * sizeof *p->blocks)) == NULL)
+			p->blockcap = 0;
+#endif
 	}
 	/* the canvas: the root's background, else the body's; one less than
 	   solid on white, as browsers show what is under a canvas (CSS
@@ -9283,6 +9362,15 @@ laid:
 			p->cap = p->nitems;
 		}
 	}
+#ifndef EW_ST
+	if (p->blockcap > p->nblocks + 64) {
+		struct pg_block *n = realloc(p->blocks, (size_t) (p->nblocks > 0 ? p->nblocks : 1) * sizeof *n);
+		if (n != NULL) {
+			p->blocks = n;
+			p->blockcap = p->nblocks;
+		}
+	}
+#endif
 	end_turn();
 	scrollers_place(p);
 	index_items(p, !hides_x(html) && !hides_x(d->body), cbg);

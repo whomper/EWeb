@@ -2283,6 +2283,7 @@ static page *frame_page_cb(void *ud, int id, int32_t w, int32_t h)
 	o.width = w;
 	o.height = h;
 	o.was = NULL;		/* (its boxes' scrolling: the page's, which has them) */
+	o.share_text = 0;	/* (its document may go before the page it is spliced into) */
 	lay_base = base;
 	lay_doc = f->d;
 	lay_in = id - 1;
@@ -2315,6 +2316,9 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.frame_page = frame_page_cb;
 	o.ud = b;
 	o.was = b->p;		/* (the page shown: its boxes scrolled, when it is d's) */
+#ifndef EW_ST
+	o.share_text = 1;	/* (the page goes with its document: pg_free, then doc_free) */
+#endif
 	lay_base = base;
 	lay_doc = d;
 	lay_fr = d->frames;
@@ -2449,27 +2453,64 @@ static int gem_turn(void);
 static int build_turn(int what);
 static int turn_now;		/* gem_turn's next call a turn, however soon */
 
+/* the source build may give back once it is parsed (a fetched page's,
+   f->data, its caller's), and whether it did: on the second try, when the
+   page didn't fit, the page gives its source back once it can't be parsed
+   again, for the styling and the layout (BIG.HTM's 131 KB on a stock 4 MB
+   Falcon under NVDI); Save page as and Encoding are then greyed for it, as
+   for any page without its source */
+static const char *build_may_free;
+static int build_freed, build_dropping;
+static long cost(long src_len);
+static int make_room(browser *b);
+
 static int build(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		 doc **dout, page **pout)
 {
 	int r;
+	build_freed = 0;
 	/* (a long page: the window kept alive meanwhile, and Esc stops it) */
 	doc_poll = build_turn;
 	ec_poll = gem_turn;
 	font_poll = gem_turn;
+#ifndef EW_ST
+	/* a page that won't fit beside the one shown, by its cost, in all the
+	   ST RAM free at the start (8 x br_keep_max where there is no TT
+	   RAM): the room made before the first try, not after it failed (a
+	   stock 4 MB Falcon reloading BIG.HTM made it twice, 6 s more); and
+	   one bigger than all of it gives its source back on that try, which
+	   is then the only one (BIG.HTM under NVDI was laid out twice, 12 s) */
+	if (data != NULL && data == build_may_free &&
+	    cost(len) + (b->d != NULL ? 2 * doc_mem(b->d) : 0) > 8 * br_keep_max) {
+		make_room(b);
+		build_dropping = cost(len) > 8 * br_keep_max;
+	}
+#endif
 	r = build1(b, data, len, charset, url, fresh, dout, pout);
-	if (!r && !conn_stop) {
+	build_dropping = 0;
+	if (!r && !conn_stop && !build_freed) {
 		/* (a turn before and after what is given back: a page that
 		   didn't fit on a 4 MB Falcon under NVDI was 300 ms in one,
 		   its layout's freeing and this; the hub, 2 Nov 2026) */
 		turn_now = 1;
 		gem_turn();
+		/* (a second try too where nothing else went but the source
+		   can: the first page of a start, nothing shown before it) */
+#ifdef EW_ST
 		if (make_room(b)) {
+#else
+		if (make_room(b) | (data != NULL && data == build_may_free)) {
+#endif
 			turn_now = 1;
 			gem_turn();
+#ifndef EW_ST
+			build_dropping = data == build_may_free;
+#endif
 			r = build1(b, data, len, charset, url, fresh, dout, pout);
+			build_dropping = 0;
 		}
 	}
+	build_may_free = NULL;
 	doc_poll = NULL;
 	ec_poll = NULL;
 	font_poll = NULL;
@@ -2622,6 +2663,15 @@ parse:
 		t = pf_ms();
 	}
 #endif
+	if (build_dropping) {
+		/* parsed for the last time (a page is parsed again only above,
+		   for its scripts): its source given back for the styling and
+		   the layout (build_may_free: the caller's to forget) */
+		free((char *) data);
+		data = NULL;
+		build_freed = 1;
+		build_dropping = 0;
+	}
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	br_building = BRB_STYLE;
@@ -3613,7 +3663,12 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		} else {
 			lay_recheck = mode == NAV_REFRESH;
 			as_seen(f->url, url);
+			build_may_free = f->data;
 			r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+			if (build_freed) {
+				f->data = NULL;		/* (given back once parsed: build) */
+				f->len = 0;
+			}
 			lay_recheck = 0;
 			encodable = 1;
 		}
@@ -3665,6 +3720,14 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		conn_stop = 0;
 		free(f->data);
 		free(f);
+		if (b->p == NULL && b->d == NULL) {
+			/* stopped once the page shown had gone for the memory
+			   (build): it can't stay, so this says so in its place */
+			error_page(&src, url, "EWeb can't open this page", "Stopped.", NULL);
+			r = own_page(b, url, &src, mode);
+			sb_free(&src);
+			return r;
+		}
 		return BR_STOPPED;
 	}
 	{

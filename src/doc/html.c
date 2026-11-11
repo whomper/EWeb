@@ -5123,6 +5123,8 @@ int html_parse(doc *d, const char *data, size_t len, const html_opts *o)
 		doc_text_fit(d);
 		if (!ok)
 			return 0;
+		if (o->context == NULL)
+			doc_mem_fit(d);
 		d->root = p.root;
 		d->quirks = p.quirks;
 		if (p.changed && tries == 0) {

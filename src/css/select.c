@@ -449,7 +449,9 @@ static int counts(int only, int p)
 	return only == SV_VISITED ? colour_prop(p) : only == SV_LINK ? !colour_prop(p) : 0;
 }
 
-static hit hits[MAX_HITS];
+/* ec_select's while it runs (scratch, below): 62 KB with the cache's
+   that were in the BSS, given to the layout on a stock 4 MB Falcon */
+static hit *hits;
 static int nhits;
 static int link_hits;			/* the hits' SV_* together */
 
@@ -1259,8 +1261,8 @@ typedef struct centry {
 	const ec_style *style;
 } centry;
 
-static centry cache[CACHE_SIZE];
-static uintptr_t keybuf[2 * MAX_HITS];
+static centry *cache;			/* CACHE_SIZE of them */
+static uintptr_t *keybuf;		/* 2 * MAX_HITS */
 
 static int build_key(void)
 {
@@ -1645,9 +1647,23 @@ int (*ec_poll)(void);
 int ec_select(ec_ctx *c, ec_node *root)
 {
 	ec_arena *pm = c->pmem;
+	char *scratch;
+	/* (one called in a GEM turn of this one's, another window's: its
+	   own, and this one's again after) */
+	hit *was_hits = hits;
+	centry *was_cache = cache;
+	uintptr_t *was_keys = keybuf;
+	const ec_style **was_uniq = uniq;
 	c->smem.nomem = 0;
 	c->stopped = 0;
-	memset(cache, 0, sizeof cache);
+	/* the hits, the cache and its keys, taken while it runs (not in the
+	   BSS: a stock 4 MB Falcon under NVDI lays the page out in them) */
+	scratch = calloc(1, MAX_HITS * sizeof *hits + CACHE_SIZE * sizeof *cache + 2 * MAX_HITS * sizeof *keybuf);
+	if (scratch == NULL)
+		return -1;
+	hits = (hit *) scratch;
+	cache = (centry *) (hits + MAX_HITS);
+	keybuf = (uintptr_t *) (cache + CACHE_SIZE);
 	memset(icache, 0, sizeof icache);
 	/* (not in the BSS: EWEB.PRG's start on a stock Falcon) */
 	uniq = calloc(UNIQ_SIZE, sizeof *uniq);
@@ -1669,6 +1685,10 @@ int ec_select(ec_ctx *c, ec_node *root)
 	}
 	c->pmem = pm;
 	free(uniq);
-	uniq = NULL;
+	uniq = was_uniq;
+	free(scratch);
+	hits = was_hits;
+	cache = was_cache;
+	keybuf = was_keys;
 	return c->smem.nomem || c->stopped ? -1 : 0;
 }

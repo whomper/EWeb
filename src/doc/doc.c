@@ -69,6 +69,26 @@ char *doc_text_room(doc *d, dnode *n, size_t size)
 	return t;
 }
 
+void doc_mem_fit(doc *d)
+{
+#if defined(__mc68000__)
+	/* the Atari's heap (common's libc, the 68030 bench's atheap) gives
+	   a block's end back where it is: the newest block's room left over
+	   (up to 64 KB after a parse, a stock 4 MB Falcon's) goes; the next
+	   doc_alloc takes a block of its own */
+	struct dblk *b = d->mem, *q;
+	if (b != NULL && b->size - b->used >= 1024) {
+		size_t used = b->used;
+		uintptr_t was = (uintptr_t) b;
+		q = realloc(b, DHEAD + used);
+		if ((uintptr_t) q == was)
+			q->size = used;
+	}
+#else
+	(void) d;	/* (glibc's realloc may move it: kept as it is) */
+#endif
+}
+
 void doc_text_fit(doc *d)
 {
 	uint32_t i;

@@ -58,6 +58,20 @@ extern langs_job translate_job;
 #error "EW_STACK: the Makefile gives crt0's stack size"
 #endif
 #define EW_STACK_ROOM (16L * 1024)
+#ifndef EW_ST
+/* EWEB.PRG's: crt0's in the BSS is EW_BSS_STACK (the Makefile's), app_main
+   runs it on one of EW_STACK taken from GEMDOS, or of EW_STACK_SMALL where
+   the largest block free is under EW_STACK_AMPLE (a stock 4 MB Falcon:
+   under NVDI the 256 KB in the BSS were what a big page lacked) */
+#ifndef EW_BSS_STACK
+#error "EW_BSS_STACK: the Makefile gives crt0's stack size for EWEB.PRG"
+#endif
+#define EW_STACK_SMALL (96L * 1024)
+#define EW_STACK_AMPLE (4L << 20)
+int on_stack(int (*fn)(void), void *top);	/* atari/onstack.S */
+static char *stack_lo;				/* the stack's lowest byte */
+static long stack_size;				/* and its bytes */
+#endif
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -2867,7 +2881,28 @@ int main(void)
 const long cpu_need = 30;
 const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, run|EWEBST.PRG, the ST edition.][ Quit ]";
 
+static int app_run(void);
+
 int app_main(void)
+{
+	long most = (long) Mxalloc(-1L, 3);
+	long want = most >= EW_STACK_AMPLE ? EW_STACK : EW_STACK_SMALL;
+	char *s = most >= want + 64L * 1024 ? Mxalloc(want, 3) : NULL;
+	if ((long) s <= 0) {
+		/* none: crt0's (the cascade and the layout stop the sooner) */
+		stack_size = EW_BSS_STACK;
+		stack_lo = (char *)__builtin_frame_address(0) - EW_BSS_STACK + 1024 - EW_STACK_ROOM / 2;
+		return app_run();
+	}
+	/* (its top on a 16-byte line: GEMDOS gives an even address, and
+	   every long on a stack not long-aligned is two bus cycles on a
+	   68030, not one, as crt0's comment has it) */
+	stack_lo = (char *) (((long) s + 15) & ~15L);
+	stack_size = ((long) s + want - (long) stack_lo) & ~15L;
+	return on_stack(app_run, stack_lo + stack_size);
+}
+
+static int app_run(void)
 #endif
 {
 	short work_out[57], msg[8], d;
@@ -2882,7 +2917,11 @@ int app_main(void)
 	   1.5 KB, and 5 KB for a picture's address resolved in it; GCC's
 	   -fcallgraph-info=su) with some to spare; the cascade stops sooner
 	   (src/css/select.c) */
+#ifdef EW_ST
 	ec_stack_floor = (char *)__builtin_frame_address(0) - EW_STACK + EW_STACK_ROOM;
+#else
+	ec_stack_floor = stack_lo + EW_STACK_ROOM;
+#endif
 	{
 		extern int mem_unaligned_ok;
 		mem_unaligned_ok = get_cookie(0x5F435055L) >= 20;	/* _CPU */

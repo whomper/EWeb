@@ -53,6 +53,10 @@ typedef struct {
 	   (EWEB.PRG: the AES's slider column and row, panebar's pb_width and
 	   pb_height; the guidelines' 5.1); 0: SBAR_W */
 	int32_t sbar, sbar_h;
+	/* a text node's words drawn from the document's own text where they
+	   are the same, not a copy (the page mustn't outlive the document:
+	   not a frame's page, whose document may go first) */
+	uint8_t share_text;
 } LAYOUT_OPT;
 
 /* DL_SUM: a details element's summary (the HTML Standard, 4.11): its

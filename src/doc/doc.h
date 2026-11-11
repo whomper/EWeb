@@ -150,6 +150,8 @@ struct dbig {
 };
 char *doc_text_room(doc *d, dnode *n, size_t size);
 void doc_text_fit(doc *d);
+/* the newest block's room left over given back (after a parse) */
+void doc_mem_fit(doc *d);
 void doc_big_free(doc *d);
 
 /* n bytes of the document's memory, aligned for any node or pointer;

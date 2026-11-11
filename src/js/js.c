@@ -4510,7 +4510,17 @@ static int setup(ejs *j)
 	if ((j->rt = JS_NewRuntime()) == NULL)
 		return 0;
 	JS_SetMemoryLimit(j->rt, JS_MAX_MEMORY);
+#ifdef EW_TOS
+	{
+		/* no more than the stack leaves above its floor, less room for
+		   what is under QuickJS (EWEB.PRG's stack, ui/main.c: 96 KB on
+		   a small machine) */
+		long room = ec_stack_floor != NULL ? (long) ((char *)__builtin_frame_address(0) - ec_stack_floor) - 16384L : JS_STACK;
+		JS_SetMaxStackSize(j->rt, (size_t) (room < 16384L ? 16384L : room < JS_STACK ? room : JS_STACK));
+	}
+#else
 	JS_SetMaxStackSize(j->rt, JS_STACK);
+#endif
 	JS_SetInterruptHandler(j->rt, interrupt, j);
 	JS_SetParsePoll(j->rt, parse_poll, j);
 	if (JS_NewClass(j->rt, node_class, &node_def) < 0 || JS_NewClass(j->rt, style_class, &style_def) < 0 ||
