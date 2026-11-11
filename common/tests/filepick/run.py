@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 
+DISPLAY = os.environ.get("FP_DISPLAY", ":165")
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "speed"))
 import speed  # noqa: E402
@@ -250,6 +251,126 @@ def closing(work, machine, nvdi, prg, display, how):
     return fails
 
 
+def double_clicks(work, machine, nvdi, prg, display):
+    """a single click on a folder only selects it; a double click on a folder opens it (one more folder picture);
+    a double click on a file takes it at once (guidelines 5.8: select on press, the double click acts on its
+    release). Rows are found from the list's place on the console"""
+    scale_for(machine)
+    r = speed.Rig(work, machine, nvdi=nvdi, display=display)
+    fails = []
+    try:
+        music = os.path.join(r.hd, "MUSIC")
+        os.makedirs(os.path.join(music, "LIVE"))
+        os.makedirs(os.path.join(music, "BONUS"))
+        for n in ("LIVE\\X.MP3", "01_NIGHT.MP3"):
+            with open(os.path.join(music, *n.split("\\")), "wb") as f:
+                f.truncate(100)
+        shutil.copy(prg, os.path.join(r.hd, "FPTEST.PRG"))
+        r.start("C:\\FPTEST.PRG", ready="picture add", boot=900)
+        geom = geometry(r.console())
+        if "picture add" not in r.console() or "list" not in geom:
+            return ["double clicks: the dialog never came, or no list place on the console"]
+        lx, ly, lw, lh = geom["list"]
+        rh = geom["type"][3]
+
+        def row(k):		# the middle of row k, on the name
+            return (lx + 60) * SX, (ly + 1 + k * rh + rh // 2) * SY
+
+        def folders():
+            return r.console().count(" picture folder ")
+        move(r, 5, 5)
+        r.still(most=5)
+        s0 = r.shot("d0-open")
+        r.click(*row(1))			# LIVE: one click
+        r.still(most=10)
+        s1 = r.shot("d1-click")
+        if same(s0, s1):
+            fails.append("one click on a folder selected nothing")
+        if folders():
+            fails.append("one click on a folder opened it")
+        r.dclick(*row(1))			# LIVE: a double click
+        r.still(most=10)
+        r.shot("d2-dclick")
+        if folders() != 1:
+            fails.append("a double click on a folder: %d folder pictures, wanted 1" % folders())
+        r.dclick(*row(0))			# X.MP3: the file
+        t_end = time.time() + 20
+        while time.time() < t_end and "FPT dir" not in r.console():
+            time.sleep(1)
+        con = r.console()
+        took = [l[9:] for l in con.splitlines() if l.startswith("FPT took ")]
+        if took != ["C:\\MUSIC\\LIVE\\X.MP3"]:
+            fails.append("a double click on a file took %s" % took)
+        print("  double clicks on %s: folder opened %d time(s), took %s%s" %
+              (r.describe(), folders(), took, "  <- FAILED" if fails else ""))
+    finally:
+        r.stop()
+    return fails
+
+
+# "Use the system file selector" (Erez, 9 Nov 2026): the Cancel button's place in the AES's own selector, by TOS
+# (a screenshot of each; the selector is the AES's, not ours, and has no geometry on the console)
+SELECTOR_CANCEL = {"TOS 4.04": (373, 393), "EmuTOS": (325, 400)}
+
+
+def system_selector(work, machine, nvdi, prg, display):
+    """FPTEST.PRG with filepick_system set (C:\\FPSYS.TXT): the AES's selector opens, not our dialog; typing a name and
+    Return takes that one file (the folder as the selector gave it, left in dir and first in recent); Cancel takes
+    nothing and leaves dir and recent as they were; idle() isn't called meanwhile. Returns (fails, skipped)"""
+    scale_for(machine)
+    fails = []
+    for how in ("take", "cancel"):
+        r = speed.Rig(os.path.join(work, how), machine, nvdi=nvdi, display=display)
+        try:
+            tos = r.describe()
+            cancel = next((v for k, v in SELECTOR_CANCEL.items() if k in tos), None)
+            if how == "cancel" and not cancel:
+                return fails, ["the system selector's Cancel (no place known for %s)" % tos]
+            music = os.path.join(r.hd, "MUSIC")
+            os.makedirs(music)
+            for n in ("NIGHT01.MP3", "RAIN02.WAV", "README.TXT"):
+                with open(os.path.join(music, n), "wb") as f:
+                    f.truncate(100)
+            with open(os.path.join(r.hd, "FPSYS.TXT"), "w") as f:
+                f.write("1")
+            shutil.copy(prg, os.path.join(r.hd, "FPTEST.PRG"))
+            r.start("C:\\FPTEST.PRG", ready="FPT open", boot=900)
+            if "FPT open" not in r.console():
+                fails.append("system selector: the program never started")
+                continue
+            r.still(most=10)
+            shot = r.shot("sel-open")
+            if " picture add " in r.console():
+                fails.append("system selector, %s: our dialog opened" % how)
+            if how == "take":
+                r.type("NIGHT01.MP3")
+                r.key("Return")
+            else:
+                move(r, cancel[0] - 4, cancel[1] - 2)
+                move(r, cancel[0], cancel[1])
+                r.click(cancel[0] * SX, cancel[1] * SY)
+            t_end = time.time() + 30
+            while time.time() < t_end and "FPT dir" not in r.console():
+                time.sleep(1)
+            con = r.console()
+            took = [l[9:] for l in con.splitlines() if l.startswith("FPT took ")]
+            dirl = [l for l in con.splitlines() if l.startswith("FPT dir")]
+            if how == "take":
+                want = ["C:\\MUSIC\\NIGHT01.MP3"]
+                ok = took == want and "FPT done 1, idle never" in con and \
+                    dirl == ["FPT dir C:\\MUSIC\\; recent C:\\MUSIC\\"]
+            else:
+                ok = not took and "FPT done 0, idle never" in con and \
+                    dirl == ["FPT dir C:\\MUSIC\\; recent C:\\MUSIC\\LIVE\\"]
+            if not ok:
+                fails.append("system selector, %s: took %s, %s, %s" % (how, took, [l for l in con.splitlines()
+                                                                                  if l.startswith("FPT done")], dirl))
+            print("  system selector, %s on %s: took %s, %s%s" % (how, tos, took, dirl, "" if ok else "  <- FAILED"))
+        finally:
+            r.stop()
+    return fails, []
+
+
 def diff_box(a, b):
     """the box the two pictures differ in, (w, h, x, y), or None"""
     p = subprocess.run(["convert", a, b, "-compose", "difference", "-composite", "-trim", "info:"],
@@ -273,13 +394,20 @@ def main():
     work, machine, nvdi = os.path.abspath(a[0]), a[1], "--nvdi" in sys.argv
     print("the file dialog on %s%s" % (machine, " with NVDI" if nvdi else ""))
     fails, shots = session(os.path.join(work, "new"), machine, nvdi,
-                           os.path.join(HERE, "build", "atari", "FPTEST.PRG"), ":165")
+                           os.path.join(HERE, "build", "atari", "FPTEST.PRG"), DISPLAY)
     for how in ("cancel", "undo"):
         fails += closing(os.path.join(work, how), machine, nvdi,
-                         os.path.join(HERE, "build", "atari", "FPTEST.PRG"), ":165", how)
+                         os.path.join(HERE, "build", "atari", "FPTEST.PRG"), DISPLAY, how)
+    fails += double_clicks(os.path.join(work, "dbl"), machine, nvdi,
+                           os.path.join(HERE, "build", "atari", "FPTEST.PRG"), DISPLAY)
+    f3, skipped = system_selector(os.path.join(work, "sys"), machine, nvdi,
+                                  os.path.join(HERE, "build", "atari", "FPTEST.PRG"), DISPLAY)
+    fails += f3
+    for sk in skipped:
+        print("SKIPPED: " + sk)
     if "--old" in sys.argv:
         f2, old = session(os.path.join(work, "old"), machine, nvdi,
-                          os.path.join(HERE, "build", "old", "FPOLD.PRG"), ":165")
+                          os.path.join(HERE, "build", "old", "FPOLD.PRG"), DISPLAY)
         fails += ["EPlay's: " + f for f in f2 if not f.startswith("took")]
         small = machine.split(":")[-1] in ("med", "low")
         for name in shots:
@@ -296,7 +424,8 @@ def main():
                 fails.append("%s differs from EPlay's own (%s, %s; %s)" % (name, shots[name], old[name], box))
     for f in fails:
         print("FAIL  " + f)
-    print("all passed" if not fails else "%d failed" % len(fails))
+    print(("all passed" if not skipped else "passed, %d skipped" % len(skipped)) if not fails else
+          "%d failed" % len(fails))
     return 1 if fails else 0
 
 

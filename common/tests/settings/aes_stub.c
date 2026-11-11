@@ -70,6 +70,11 @@ short popup_m(short x, short y, const char *const *labels, short n)
 	pop_new = 1;
 	return pop_run(x, y, labels, n);
 }
+short popup_over(short x, short y, const char *const *labels, short n, short sel)
+{
+	pop_new = 1;	/* the real one puts row sel a pixel above the button: rows cell_h + 2 high from 2 down */
+	return pop_run(x, (short)(y - 3 - sel * (cell_h + 2)), labels, n);
+}
 
 short alert(short def, const char *fmt, ...)
 {

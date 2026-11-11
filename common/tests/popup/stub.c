@@ -66,7 +66,9 @@ void font_sys_push(void) {}
 void font_sys_pop(void) {}
 void *st_ram(long n) { (void)n; return 0; }
 
-short graf_mkstate(short *mx, short *my, short *mb, short *ks) { *mx = *my = *mb = *ks = 0; return 1; }
+short mouse_x, mouse_y;
+int mk_calls;
+short graf_mkstate(short *mx, short *my, short *mb, short *ks) { mk_calls++; *mx = mouse_x; *my = mouse_y; *mb = *ks = 0; return 1; }
 short graf_mouse(short n, void *f) { (void)n, (void)f; return 1; }
 short wind_update(short m) { (void)m; return 1; }
 short form_dial(short f, short x, short y, short w, short h) { (void)f, (void)x, (void)y, (void)w, (void)h; nforms++; return 1; }

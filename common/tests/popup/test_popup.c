@@ -99,6 +99,36 @@ int main(void)
 	check(popup_area.x + popup_area.w - 3 <= 640 && popup_area.y + popup_area.h <= 400, "popup_m_alt: on the desktop");
 	check(popup_area.y < 300, "popup_m_alt: above alt_y when there is no room below");
 
+	/* over its button (D27): the ticked row begins a pixel above the button, rows being ch + 2 high from 2 down */
+	{
+		static const char *const c[] = { "Alpha", "Beta", "\x08Gamma", "Delta" };
+		static const char *const lines[] = { "One", "-", "\x08Two", "Three" };
+		short ih;
+		stub_reset();
+		popup_over(200, 150, c, 4, 2);
+		ih = (short)(popup_area.h - 3 - 4) / 4;	/* the frame's 2 + 2, four rows */
+		check(popup_area.y == 150 - 2 - 2 * ih - 1 && popup_area.y + 2 + 2 * ih == 150 - 1,
+		      "popup_over: the ticked row (2 of 4) begins a pixel above the button");
+		check(popup_area.x == 200, "popup_over: x is the button's (on a byte)");
+		stub_reset();
+		popup_over(200, 150, c, 4, 0);
+		check(popup_area.y == 150 - 3, "popup_over: the first row over the button: 3 pixels above it");
+		stub_reset();
+		popup_over(200, 150, lines, 4, 2);
+		check(popup_area.y == 150 - 1 - (2 + 2 * ih),
+		      "popup_over: a separator before the row counts as a row (the place comes from the layout)");
+		stub_reset();
+		popup_over(200, 395, c, 4, 0);
+		check(popup_area.y + popup_area.h <= 401 && popup_area.y > 395 - 4 * 20,
+		      "popup_over: near the bottom it is moved up onto the desktop, not flipped above the button");
+		stub_reset();
+		popup_over(200, 4, c, 4, 3);
+		check(popup_area.y >= 0, "popup_over: near the top it is kept on the desktop");
+		stub_reset();
+		popup_over(200, 150, c, 4, 9);
+		check(popup_area.y == 150 - 3, "popup_over: a selection out of range is the first row");
+	}
+
 	printf("%d checks, %d failed\n", total, failed);
 	return failed != 0;
 }

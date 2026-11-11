@@ -15,6 +15,8 @@ extern TEXT_AT texts[MAXT];
 extern int ntexts, nfills, nframes, nclip_on, nclip_off, nforms;
 extern GRECT fills[MAXT], frames[MAXT], clip;
 extern unsigned long now_ms;
+extern short mouse_x, mouse_y;	/* what graf_mkstate says */
+extern int mk_calls;
 extern short key_next;			/* evnt_multi_'s answer: this key (0x011b Esc) */
 extern short bubble_id;			/* appl_find("BUBBLE  "): its id, -1 none */
 extern short sent[8];

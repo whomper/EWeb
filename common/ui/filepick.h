@@ -41,6 +41,16 @@ typedef struct {
 	int ntypes;		/* DL_TYPES at most */
 } FP_SPEC;
 
+/* The app's setting "Use the system file selector" (Erez, 9 Nov 2026; off by default: this dialog is the default):
+   when set (a global, not a field of FP_SPEC, which the apps keep const), filepick_run() doesn't open this dialog but
+   the AES's own file selector through fsel_exinput, titled with spec->title where the AES is 1.4 or newer. It gives
+   ONE file at a time on plain TOS (and on MiNT's and MagiC's, which are the same call): take() is called once, with
+   the folder and the name, and 1 is returned, or 0 on Cancel. The folder is left in dir and put first in recent[]
+   as the dialog does. The selector shows every file in the folder (the AES has one mask; the app's types are not
+   applied), and idle() is not called while it is open. A folder cannot be chosen. The app sets the flag from its
+   Settings before each call, or once at its start. */
+extern short filepick_system;
+
 /* the dialog, at folder dir (ending in '\'; "" for the current drive's
    root) and left in it; recent[] the last folders, the newest first, kept
    up to date (each FP_PATH long, "" where none). Each file chosen goes to

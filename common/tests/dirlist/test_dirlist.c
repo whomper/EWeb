@@ -143,6 +143,70 @@ int main(void)
 	dl_sort(&d);
 	check(ok && d.nview == 5000 && !strcmp(dl_at(&d, 0)->name, "T0000.MP3") &&
 	      !strcmp(dl_at(&d, 4999)->name, "T4999.MP3"), "5,000 files, sorted");
+	/* long names (MiNT, ext2 and VFAT: the folder read with Dopendir; the hub, 9 Nov 2026) */
+	{
+		static char big[300], want[300];
+		int j;
+		dl_clear(&d);
+		dl_types(&d, music, DT_N);
+		memset(big, 'a', 255);
+		strcpy(big + 251, ".mp3");		/* 255 characters */
+		check(dl_add(&d, "A long file name here.mp3", 5, 0, 0, 0) && dl_add(&d, big, 6, 0, 0, 0) &&
+		      dl_add(&d, "Mixed Case Folder With A Long Name", 0, 0, 0, 1) && dl_add(&d, "short.wav", 7, 0, 0, 0),
+		      "long names added");
+		memset(want, 'b', 256);
+		want[256] = 0;
+		check(dl_add(&d, want, 1, 0, 0, 0) && d.n == 4, "a name of 256 characters is left out, not an error");
+		dl_sort(&d);
+		check(d.nview == 4 && !strcmp(dl_at(&d, 0)->name, "Mixed Case Folder With A Long Name") &&
+		      dl_at(&d, 0)->dir && !strcmp(dl_at(&d, 1)->name, "A long file name here.mp3") &&
+		      !strcmp(dl_at(&d, 2)->name, big) && !strcmp(dl_at(&d, 3)->name, "short.wav"),
+		      "long names kept whole, sorted by name, case aside");
+		strcpy(d.mask, "*FILE*");
+		dl_filter(&d);
+		check(d.nview == 2 && !strcmp(dl_at(&d, 1)->name, "A long file name here.mp3"),
+		      "a mask finds a word inside a long name");
+		d.mask[0] = 0;
+		/* many long names: the pool's chunks, no name moves as the folder grows */
+		dl_clear(&d);
+		for (j = 0, ok = 1; j < 3000; j++) {
+			sprintf(big, "A file with a long name, number %05d, of the music.mp3", 2999 - j);
+			ok &= dl_add(&d, big, j, 0, 0, 0);
+		}
+		dl_sort(&d);
+		check(ok && d.nview == 3000 && !strcmp(dl_at(&d, 0)->name, "A file with a long name, number 00000, of the music.mp3") &&
+		      !strcmp(dl_at(&d, 2999)->name, "A file with a long name, number 02999, of the music.mp3"),
+		      "3,000 long names, sorted");
+		/* a mask of several stars against a name made to hurt a backtracking match */
+		memset(big, 'a', 250);
+		big[250] = 0;
+		check(!dl_match("*a*a*a*a*a*a*b", big) && dl_match("*a*a*a*a*a*a", big) && dl_match("a*a?a", big),
+		      "a mask with six stars on a 250 character name is quick");
+		dl_clear(&d);
+		check(d.pool == 0 && d.n == 0, "dl_clear gives the names' memory back");
+	}
+	/* what the system's file selector gives back */
+	{
+		char dir[20], full[40], rc[4][20];
+		check(dl_folder_of("C:\\MUSIC\\*.*", dir, sizeof(dir)) && !strcmp(dir, "C:\\MUSIC\\"), "the selector's folder");
+		check(dl_folder_of("D:\\*.MP3", dir, sizeof(dir)) && !strcmp(dir, "D:\\"), "the root");
+		check(!dl_folder_of("NOSLASH", dir, sizeof(dir)), "no folder in a path without a backslash");
+		check(!dl_folder_of("C:\\0123456789ABCDEF\\*.*", dir, sizeof(dir)), "a folder that doesn't fit is refused, not cut");
+		check(dl_join("C:\\MUSIC\\", "A long name.mp3", full, sizeof(full)) && !strcmp(full, "C:\\MUSIC\\A long name.mp3"),
+		      "folder and name joined");
+		check(!dl_join("C:\\MUSIC\\", "0123456789012345678901234567.mp3", full, sizeof(full)), "a path that doesn't fit is refused");
+		memset(rc, 0, sizeof(rc));
+		strcpy(rc[0], "C:\\A\\");
+		strcpy(rc[1], "C:\\B\\");
+		strcpy(rc[2], "C:\\C\\");
+		dl_recent_front(rc[0], sizeof(rc[0]), 4, "C:\\C\\");
+		check(!strcmp(rc[0], "C:\\C\\") && !strcmp(rc[1], "C:\\A\\") && !strcmp(rc[2], "C:\\B\\") && !rc[3][0],
+		      "a folder already there moves to the front");
+		dl_recent_front(rc[0], sizeof(rc[0]), 4, "C:\\D\\");
+		check(!strcmp(rc[0], "C:\\D\\") && !strcmp(rc[1], "C:\\C\\") && !strcmp(rc[3], "C:\\B\\"), "a new one goes first");
+		dl_recent_front(rc[0], sizeof(rc[0]), 4, "C:\\E\\");
+		check(!strcmp(rc[0], "C:\\E\\") && !strcmp(rc[3], "C:\\A\\") && !strcmp(rc[2], "C:\\C\\"), "the oldest goes when it is full");
+	}
 	dl_free(&d);
 	return bad != 0;
 }
