@@ -5212,7 +5212,10 @@ lets go), laid out 1,137 KB to 961 KB. EWEB.PRG's BSS 625 KB to 218 KB.
 
 The speed rig against 1.2 (`speed.py`, 11 Nov 2026): on `Falcon-4:16` without NVDI every row the
 same within 15 ms but Settings opened (140 to 165 ms) and the About box opened (105 to 155 ms), both
-now over their 150, put to Erez through the hub; under NVDI 1.2 couldn't load the rig's news page
+then over their 150; with common's About box of e130cbf synced in (1.3's head) 160 and 150 ms, and
+under NVDI (Erez's own setup) 95 and 70 (1.2: 120 and 135). **Accepted for 1.3** (Erez, 11 Nov 2026,
+through the hub: "approve"): Settings opened 160 ms and the About box 150 ms on `Falcon-4:16`
+without NVDI; under NVDI 1.2 couldn't load the rig's news page
 (its "can't show" page in 365 ms, nothing to scroll), so its rows there aren't a comparison. On
 `ST:mono` under NVDI the three rows of What follows 1.3 (above), and an arrow held down 2,160 to
 2,525 ms; 4 pages down 4,160 to 3,025, an arrow held up 4,380 to 4,220.
