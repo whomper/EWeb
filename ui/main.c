@@ -2932,7 +2932,7 @@ int app_main(void)
 	gap_tag("start: screen");
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
-		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or the Falcon's true|colour.][ Quit ]");
+		alert(1, "[3][EWeb can't draw pages on this|screen: it needs 2 to 256|colours, or true colour.][ Quit ]");
 		scr_exit();
 		v_clsvwk(vdi_h);
 		appl_exit();

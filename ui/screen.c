@@ -12,6 +12,10 @@
  *   (standard format) and vr_trnfm makes them the screen's.
  * - The Falcon's true colour: the canvas is the screen's pixels already,
  *   RRRRRGGG GGGBBBBB (bytes swapped where NVDI says the card has them so).
+ * - A card's true colour of another form (15, 24 or 32 bits: NVDI's,
+ *   fVDI's): the canvas is 5-6-5 rows of their own (tc_buf), each widened
+ *   to the screen's form (ui/tcpix.c) as it is copied (DESIGN.md, Screens
+ *   deeper than the Falcon's).
  *
  * The pens' colours are the screen's as they are, each pixel value's VDI
  * colour from vq_scrninfo where the VDI answers it, else TOS's standard
@@ -28,10 +32,14 @@
 #include "canvas.h"
 #include "img.h"
 #include "pagecol.h"
+#include "tcpix.h"
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
 static int truecolour, swapped;
+static TC_FORM tc;			/* in true colour, the screen's pixels */
+static int wide;			/* ... another form than the canvas's: widened from tc_buf */
+static unsigned short *tc_buf;		/* the canvas's 5-6-5 rows where wide (else dev_buf) */
 static short format;			/* the screen's: 0 interleaved planes (the Atari's own), 1 the
 					   VDI's standard, 2 packed pixels; -1 not known (vr_trnfm) */
 static short ncol;			/* 2, 4, 16, 256 */
@@ -85,8 +93,16 @@ static void free_bufs(void)
 		Mfree(std_buf);
 	if (dev_buf != NULL)
 		Mfree(dev_buf);
+	if (wide)
+		free(tc_buf);
 	chunky = NULL;
-	std_buf = dev_buf = NULL;
+	std_buf = dev_buf = tc_buf = NULL;
+}
+
+/* a row of words * 16 pixels in the screen's own form, bytes */
+static long dev_row(long words)
+{
+	return truecolour ? words * 16 * tc.bytes : words * 2 * planes;
 }
 
 /* the buffers for n rows: 1, or 0 (none taken) */
@@ -94,7 +110,7 @@ static int bufs(short n)
 {
 	/* the standard planes for vr_trnfm only where the screen has its own format */
 	int std = !truecolour && format != 0 && !(format == 2 && planes == 8);
-	long st = n > BAND ? (truecolour ? band_w * 2 * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
+	long st = n > BAND ? (truecolour ? dev_row(band_w / 16) * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
 	if (st > 0) {
 		/* ST RAM left for the rest of the system: 256 KB at least; and
 		   2 MB for the pages (a 4 MB Falcon draws in bands: the screen's
@@ -104,18 +120,20 @@ static int bufs(short n)
 			free_st = (long) Malloc(-1);
 		else if ((free_tt = (long) Mxalloc(-1, 1)) < 0)
 			free_tt = 0;
-		if (free_st < st + 262144L || free_st + free_tt < st + (truecolour ? 0 : band_w * n) + (2L << 20))
+		if (free_st < st + 262144L ||
+		    free_st + free_tt < st + (truecolour ? (wide ? band_w * 2 * n : 0) : band_w * n) + (2L << 20))
 			return 0;
 	}
 	rows = n;
 	if (truecolour) {
-		dev_buf = st_alloc(band_w * 2 * n);
+		dev_buf = st_alloc(dev_row(band_w / 16) * n);
+		tc_buf = wide ? malloc(band_w * 2 * n) : dev_buf;
 	} else {
 		chunky = malloc(band_w * n);
 		std_buf = std ? st_alloc(band_w / 8 * planes * n) : NULL;
 		dev_buf = st_alloc(band_w / 8 * planes * n);
 	}
-	if (dev_buf != NULL && (truecolour || (chunky != NULL && (std_buf != NULL || !std))))
+	if (dev_buf != NULL && (truecolour ? tc_buf != NULL : chunky != NULL && (std_buf != NULL || !std)))
 		return 1;
 	free_bufs();
 	return 0;
@@ -269,6 +287,54 @@ static short own_format(void)
 	return 0;
 }
 
+#ifndef EW_ST
+/* what the screen shows for pure red, green and blue: each drawn by the
+   VDI in its top left pixel and read back (vro_cpyfm, as fVDI's notes
+   ask a program to find a card's pixels: fVDI's vq_scrninfo in 24 bits
+   names red's bits where blue's are, 11 Nov 2026), the pixel and the
+   pen put back */
+static int seen_form(short *info)
+{
+	static const short pure[3][3] = { { 1000, 0, 0 }, { 0, 1000, 0 }, { 0, 0, 1000 } };
+	unsigned char keep[64], got[64], seen[3][4];
+	short pxy[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, was[3], c, ok;
+	MFDB scr, mem;
+	memset(&scr, 0, sizeof scr);
+	memset(&mem, 0, sizeof mem);
+	mem.fd_w = 16;
+	mem.fd_h = 1;
+	mem.fd_wdwidth = 1;
+	mem.fd_nplanes = planes;
+	wind_update(BEG_UPDATE);
+	v_hide_c(vdi_h);
+	vs_clip(vdi_h, 0, pxy);
+	mem.fd_addr = keep;
+	vro_cpyfm(vdi_h, 3, pxy, &scr, &mem);
+	vq_color(vdi_h, 2, was);
+	vswr_mode(vdi_h, 1);
+	vsf_interior(vdi_h, 1);
+	vsf_perimeter(vdi_h, 0);
+	vsf_color(vdi_h, 2);
+	mem.fd_addr = got;
+	for (c = 0; c < 3; c++) {
+		vs_color(vdi_h, 2, pure[c]);
+		vr_recfl(vdi_h, pxy);
+		vro_cpyfm(vdi_h, 3, pxy, &scr, &mem);
+		memcpy(seen[c], got, 4);
+	}
+	vs_color(vdi_h, 2, was);
+	mem.fd_addr = keep;
+	vro_cpyfm(vdi_h, 3, pxy, &mem, &scr);
+	v_show_c(vdi_h, 1);
+	wind_update(END_UPDATE);
+	ok = (short) tc_seen(info, planes, (const uint8_t (*)[4]) seen);
+	log_event("screen: red, green and blue read back %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x%s",
+		  seen[0][0], seen[0][1], seen[0][2], seen[0][3], seen[1][0], seen[1][1], seen[1][2], seen[1][3],
+		  seen[2][0], seen[2][1], seen[2][2], seen[2][3], ok ? "" : ": no form in them");
+	return ok;
+}
+#endif
+
 int scr_init(void)
 {
 	short *info = scr_info, have;
@@ -276,12 +342,32 @@ int scr_init(void)
 	band_w = (scr_w + 15) & ~15L;
 	have = scr_have = vq_scrninfo(vdi_h, info);
 	format = have ? info[0] : own_format();
-	if (planes == 16) {
+#ifdef EW_ST
+	if (planes == 16) {		/* (the ST edition is frozen: the Falcon's form only) */
+#else
+	if (planes == 15 || planes == 16 || planes == 24 || planes == 32) {
+#endif
 		truecolour = 1;
-		/* NVDI on a card with the bytes the other way round (Intel):
-		   vq_scrninfo's bit order, work_out[14], bit 7 (EdDI 1.1); bit 1
-		   is the Falcon's own order, the 5-6-5 drawn here as it is */
-		swapped = have && (info[14] & 0x80);
+		/* where each colour's bits go (vq_scrninfo's; without it the
+		   Falcon's 5-6-5, or for a card's 15, 24 or 32 bits the
+		   usual); on a card with the bytes the other way round (Intel)
+		   work_out[14]'s bit 7 (EdDI 1.1) */
+		tc_form(&tc, planes, have ? info : NULL);
+		log_event("screen: %s%s", tc_name(&tc), have ? "" : " (no vq_scrninfo)");
+#ifndef EW_ST
+		if (!tc.same) {
+			/* a card's: as the screen shows it (the Falcon's own 5-6-5
+			   left as it is) */
+			static short seen[272];
+			memcpy(seen, info, sizeof seen);
+			if (seen_form(seen)) {
+				tc_form(&tc, planes, seen);
+				log_event("screen: seen as %s", tc_name(&tc));
+			}
+		}
+#endif
+		swapped = tc.intel;
+		wide = !tc.same;
 		/* the screen's height when there is the ST RAM, keeping some for others */
 		return bufs((short) scr_h) || bufs(BAND);
 	}
@@ -304,8 +390,12 @@ int scr_band_rows(void)
 
 const char *scr_mode(void)
 {
-	if (truecolour)
+	if (truecolour) {
+		if (wide)
+			return planes == 32 ? "true colour (32 bits)" : planes == 24 ? "true colour (24 bits)" :
+			       "true colour (15 bits)";
 		return swapped ? "true colour (Intel order)" : "true colour";
+	}
 	switch (ncol) {
 	case 2: return "monochrome";
 	case 4: return "4 colours";
@@ -530,7 +620,11 @@ static void make(short h, long words)
 	dst.fd_wdwidth = (short) words;
 	dst.fd_nplanes = planes;
 	if (truecolour) {
-		if (swapped) {
+		if (wide) {
+			long r, row = dev_row(words);
+			for (r = 0; r < h; r++)
+				tc_row(&tc, tc_buf + r * words * 16, (uint8_t *) dev_buf + r * row, words * 16);
+		} else if (swapped) {
 			unsigned short *p = dev_buf;
 			long n = words * 16 * h;
 			while (n-- > 0) {
@@ -601,7 +695,7 @@ static void rgb_rows(const unsigned char *pix, const unsigned short *map, short 
 	for (r = 0; r < n; r++) {
 		const unsigned char *s = pix + (long) (y + r) * w;
 		if (truecolour) {
-			unsigned short *d = dev_buf + r * words * 16;
+			unsigned short *d = tc_buf + r * words * 16;
 			for (x = 0; x < w; x++)
 				d[x] = map[s[x]];
 		} else {
@@ -630,7 +724,7 @@ void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, sho
 
 long scr_dev_size(short w, short h)
 {
-	return (w + 15) / 16 * 2L * planes * h;
+	return dev_row((w + 15) / 16) * h;
 }
 
 void *scr_dev_alloc(long n)
@@ -647,7 +741,7 @@ void scr_dev_free(void *p)
 int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, void *dev)
 {
 	unsigned short map[256];
-	long words = (w + 15) / 16, row = words * 2 * planes;
+	long words = (w + 15) / 16, row = dev_row(words);
 	short y0;
 	if (words * 16 > band_w)
 		return 0;
@@ -663,7 +757,7 @@ int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, 
 
 void scr_blit_dev(void *dev, short w, short h, const GRECT *at, const GRECT *part)
 {
-	long words = (w + 15) / 16, row = words * 2 * planes;
+	long words = (w + 15) / 16, row = dev_row(words);
 	short sy = part->y - at->y;
 	if (part->w > 0 && part->h > 0)
 		blit((char *) dev + sy * row, part->h, words, part->x - at->x, part->w, part->x, part->y, 3);
@@ -686,7 +780,7 @@ static void hole_map(unsigned short *map, const unsigned long *col, short n, int
 int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, short w, short h, void *dev)
 {
 	unsigned short map[256];
-	long words = (w + 15) / 16, row = words * 2 * planes;
+	long words = (w + 15) / 16, row = dev_row(words);
 	short y0, k;
 	if (words * 16 > band_w)
 		return 0;
@@ -704,7 +798,7 @@ int scr_holes_dev(const unsigned char *pix, const unsigned long *col, short n, s
 
 void scr_blit_holes(void *dev, short w, short h, const GRECT *at, const GRECT *part)
 {
-	long words = (w + 15) / 16, row = words * 2 * planes;
+	long words = (w + 15) / 16, row = dev_row(words);
 	short sy = part->y - at->y, sx = part->x - at->x;
 	if (part->w <= 0 || part->h <= 0)
 		return;
@@ -749,7 +843,7 @@ int scr_button_dev(short w, short h, short bg, const SCR_LINE *ln, short nl, con
 		   const unsigned long *col, short n, short pw, short ph, short ix, short iy, void *dev)
 {
 	unsigned short map[256], ground = vdi_px(bg), lc[8];
-	long words = (w + 15) / 16, row = words * 2 * planes;
+	long words = (w + 15) / 16, row = dev_row(words);
 	short y0, r, x, k;
 	if (words * 16 > band_w || nl > 8)
 		return 0;
@@ -760,7 +854,7 @@ int scr_button_dev(short w, short h, short bg, const SCR_LINE *ln, short nl, con
 		short m = h - y0 > rows ? rows : h - y0;
 		for (r = 0; r < m; r++) {
 			short y = y0 + r;
-			unsigned short *d16 = dev_buf + r * words * 16;
+			unsigned short *d16 = tc_buf + r * words * 16;
 			unsigned char *d8 = chunky + r * words * 16;
 #define PUT(xx, v) (truecolour ? (void) (d16[xx] = (v)) : (void) (d8[xx] = (unsigned char) (v)))
 			for (x = 0; x < words * 16; x++)
@@ -815,7 +909,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		c.h = h;
 		c.oy = py + y0;
 		if (truecolour) {
-			c.pix = (uint8_t *) dev_buf;
+			c.pix = (uint8_t *) tc_buf;
 			c.stride = words * 16 * 2;
 			c.bpp = 16;
 		} else {
@@ -827,7 +921,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		if (p != NULL) {
 			cv_page(&c, p);
 		} else if (truecolour) {
-			memset(dev_buf, 0xff, words * 16 * 2 * h);
+			memset(tc_buf, 0xff, words * 16 * 2 * h);
 		} else {
 			memset(chunky, pen(NULL, 0xffffff), words * 16 * h);
 		}
@@ -901,7 +995,7 @@ int scr_store(short w, short n)
 	store_words = (short) ((w + 15) / 16);
 	if (store_words * 16L > band_w)
 		return 0;
-	row = truecolour ? store_words * 32L : format == 2 ? store_words * 16L : store_words * 2L * planes;
+	row = format == 2 && !truecolour ? store_words * 16L : dev_row(store_words);
 	size = row * n;
 	free_st = (long) Mxalloc(-1, 0);
 	store_row = row;
@@ -969,7 +1063,7 @@ int scr_store_ample(short w, short n)
 	scr_store(0, 0);
 	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))
 		return 0;
-	row = truecolour ? ((w + 15) / 16) * 32L : format == 2 ? ((w + 15) / 16) * 16L : ((w + 15) / 16) * 2L * planes;
+	row = format == 2 && !truecolour ? ((w + 15) / 16) * 16L : dev_row((w + 15) / 16);
 	size = row * n;
 	free_st = (long) Mxalloc(-1, 0);
 	if (free_st == -32 || free_st < 2 * size + (1L << 20))
@@ -1024,10 +1118,10 @@ static void store_canvas(canvas *c, int32_t px)
 
 int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n, int (*stop)(void *), void *ud)
 {
-	unsigned short *keep = dev_buf;
+	unsigned short *keep = dev_buf, *keep_tc = tc_buf;
 	unsigned char *was = chunky;
 	canvas c;
-	long pos;
+	long pos, need = store_words * 16L * n * (wide ? 2 : 1);
 	unsigned long t0, t1;
 	if (store == NULL || p == NULL || at < 0 || at + n > store_rows)
 		return 1;
@@ -1035,15 +1129,15 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 		scr_store_draw(p, px, py, at, n);
 		return 1;
 	}
-	if (!truecolour && part_size < store_words * 16L * n) {
+	if ((!truecolour || wide) && part_size < need) {
 		free(part_buf);
 		part_size = 0;
-		part_buf = malloc((size_t) (store_words * 16L * n));
+		part_buf = malloc((size_t) need);
 		if (part_buf == NULL) {
 			scr_store_draw(p, px, py, at, n);
 			return 1;
 		}
-		part_size = store_words * 16L * n;
+		part_size = need;
 	}
 	if (part.pos == 0 || part.p != p || part.px != px || part.py != py || part.at != at || part.n != n) {
 		part.p = p;
@@ -1063,7 +1157,7 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 	}
 	dev_buf = (unsigned short *) (void *) store_at(at);
 	if (truecolour) {
-		c.pix = (uint8_t *) dev_buf;
+		c.pix = wide ? part_buf : (uint8_t *) dev_buf;	/* (where wide, widened at the end) */
 		c.stride = store_words * 32L;
 		c.bpp = 16;
 	} else {
@@ -1082,8 +1176,11 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 	}
 	if (!truecolour)
 		chunky = part_buf;	/* (made from the part's own pixels) */
+	else if (wide)
+		tc_buf = (unsigned short *) (void *) part_buf;
 	make(n, store_words);	/* (in true colour its bytes turned, where the screen's are) */
 	chunky = was;
+	tc_buf = keep_tc;
 	dev_buf = keep;
 	scr_ms_put += pf_ms() - t1;
 	scr_store_part_drop();
@@ -1118,7 +1215,7 @@ void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 		c.oy = py + y0;
 		dev_buf = (unsigned short *) (void *) store_at(at + y0);
 		if (truecolour) {
-			c.pix = (uint8_t *) dev_buf;
+			c.pix = (uint8_t *) (wide ? tc_buf : dev_buf);
 			c.stride = store_words * 32L;
 			c.bpp = 16;
 		} else {

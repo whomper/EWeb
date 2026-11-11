@@ -5122,6 +5122,52 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
 
+## Screens deeper than the Falcon's (11 Nov 2026)
+
+Up to 1.0 EWeb drew on 2 to 256 colours and the Falcon's 16-bit true colour only, and any other
+screen got "EWeb can't draw pages on this screen". A graphics card's (a CT60's or CTPCI's Radeon,
+a SuperVidel, a Nova or ET4000 on a TT or Mega STE), a FireBee's and ARAnyM's with fVDI are 15,
+24 or 32 bits a pixel. Erez's decision (11 Nov 2026): **first EWeb works on those screens**,
+drawing in 16 bits and widening each pixel as it goes to the screen; **drawing in true 32 bits**
+(pictures and gradients at 8 bits a colour, no banding) comes with the FireBee work, and is for
+the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee alone.
+
+- **How.** The canvas stays 5-6-5, the Falcon's own (`src/gfx`, unchanged). On a screen of
+  another form its rows are drawn into rows of their own (`tc_buf`, in the heap: TT RAM where
+  there is some) and each row is widened as it is made the screen's (`make` in `ui/screen.c`,
+  `tc_row` in `ui/tcpix.c`: three tables, a colour's 5 or 6 bits to where the screen keeps its
+  8, ORed), into the ST RAM rows `vro_cpyfm` copies from, and into the kept page. On the Falcon's
+  own 5-6-5 (TOS's VDI, NVDI's) nothing changes: no table, no copy, the same code as 1.0.
+- **The screen's form.** NVDI's and fVDI's `vq_scrninfo` say where each colour's bits go (taken
+  sorted: the lowest place the least significant bit, whichever way a VDI lists them; bit 7 of
+  word 14 the bytes the other way round). It isn't enough: fVDI's in 24 bits names red's bits
+  where blue's are (ARAnyM: red read back as `0000ff`), and the page came out with red and blue
+  swapped. So on any screen but the Falcon's 5-6-5 EWeb draws pure red, green and blue with the
+  VDI in the screen's top left pixel and reads each back (`seen_form`; fVDI's own notes ask
+  programs to do so), puts the pixel back, and takes each colour's run of bits from what it read,
+  in the bytes' order or the other (`tc_seen`); `vq_scrninfo`, else the usual form for the
+  depth, only where that fails. Both are in the log (`screen:` lines).
+- **Memory.** The rows to the screen are 2, 3 or 4 bytes a pixel, and so is the kept page: a
+  window of 800 x 600 at 32 bits kept 4,410 KB of ST RAM in ARAnyM (`kept page`), twice the
+  Falcon's at 16 bits; a machine with such a card has the memory. `tc_buf` is the screen's
+  height of 5-6-5 rows besides (940 KB at 800 x 600).
+- **Tested.** `make test` has `tests/screen/tctest.c` (80 checks: the Falcon's form copied as it
+  is; 5-6-5 the other way round; 5-5-5 in 15 and 16 bits, either byte order; 24 bits R G B and
+  B G R; 32 bits ARGB, BGRA, RGBA and with no `vq_scrninfo`; an answer that makes no sense; and
+  each form seen as the VDI shows it made the same form again). `tests/aranym/deep.py` runs
+  `EWEB.PRG` in ARAnyM with fVDI's ARAnyM driver at 32, 24 and 16 bits under FreeMiNT 1.17 and
+  XaAES, on a page of swatches: each the colour EWeb draws (at 24 and 32 bits exactly), before
+  and after Edit > Find's dialog over the page. fVDI's ARAnyM driver has no 15-bit mode, so 15
+  bits are `tctest`'s only; NVDI on a card, MagiC and a real card are not run here. The About
+  box's drawing off the screen (common's `aboutbox.c`) checks that the VDI drew where it thinks
+  the screen is and draws on the screen when not; in ARAnyM the menus could not be clicked
+  (its mouse moves by steps from where it is), so the About box itself is not yet seen there.
+- **Next (true 32 bits).** A canvas of 8 bits a colour (`bpp` 32 in `src/gfx/canvas.c`: its own
+  loops for fills, glyphs' mixing, pictures, gradients and translucency, as each depth has now),
+  pictures kept at 8-8-8 (`img.c`, and pens from the Gateway at that depth), and the rows then
+  copied as they are (the form's tables for the byte order only). Measured first on ARAnyM and,
+  for the FireBee, on its ColdFire.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

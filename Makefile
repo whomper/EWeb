@@ -557,7 +557,7 @@ build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
-GEM_UI     := main draw screen win about dialogs
+GEM_UI     := main draw screen win about dialogs tcpix
 GEM_COMMON := aboutbox aboutline alert notify popup dialog field help av iconify clip mbar dd panebar text offdraw click progbar hebkey fsel langs dlgbuild settings
 GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DDLG_CLICK -DEW_STACK=$(TOS_STACK) $(EWB_INC) $(NSINC)
 # (common's click.c keeps a static named cur, the name EWeb's ui.h gives
@@ -798,6 +798,13 @@ build/asan/sitetest: $(SITE_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) b
 		build/asan/pic.a build/asan/js/js_none.o
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(SITE_SRC) \
 		$(asan_EWB) $(asan_EC) $(asan_PU) build/asan/js/js_none.o build/asan/pic.a build/host/libbearssl.a
+
+# a true-colour screen's form: the canvas's 5-6-5 made 15, 24 and 32 bits
+# (ui/tcpix.c, tests/screen/tctest.c)
+build/asan/tctest: tests/screen/tctest.c ui/tcpix.c ui/tcpix.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Iui -o $@ \
+		tests/screen/tctest.c ui/tcpix.c
 
 # downloads' names: Content-Disposition (RFC 6266's examples, tc2231's
 # cases) and the TOS names offered (tests/browse/dltest.c)
@@ -1105,7 +1112,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest binary/EWEB.FNT \
+		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
@@ -1120,6 +1127,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/enctest
 	build/asan/sitetest
 	build/asan/dltest
+	build/asan/tctest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null

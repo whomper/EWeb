@@ -11,7 +11,8 @@ and white.
 - A Falcon030 (best with an accelerator such as the DFB1 and TT RAM) or
   a TT, with its own TOS (4 on a Falcon, 3 on a TT), EmuTOS or MagiC; a
   screen 640 pixels wide in any mode: monochrome, 4, 16 or 256 colours, or
-  the Falcon's true colour.
+  true colour (the Falcon's, or a graphics card's 15, 24 or 32 bits under
+  NVDI or fVDI: pages are drawn in 65,536 colours there too).
   On an ST or STE (TOS 1.04 or newer) with 4 MB, use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Gateway,

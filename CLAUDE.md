@@ -169,6 +169,11 @@ hub stay complete, with the evidence.
   program that opens a link starts it). EWeb's tests run EWeb alone, with no other AERA program or
   accessory loaded, started or fetched (Erez, 8 Nov 2026, the guidelines' 1.2): the hub's family
   checks run them together.
+  **Screens deeper than the Falcon's** (a card's 15, 24 or 32 bits under NVDI or fVDI; DESIGN.md):
+  the page drawn in 5-6-5 and each row widened to the screen's form (`ui/tcpix.c`, `make` in
+  `ui/screen.c`), the form seen by drawing pure colours and reading them back (`seen_form`):
+  after changing them, `make test` (`tests/screen/tctest.c`) and `tests/aranym/deep.py`
+  (ARAnyM with fVDI at 32, 24 and 16 bits under FreeMiNT and XaAES; `apt install aranym`).
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
   called by `db_end` in common's `dlgbuild.c`; Settings is the family's, common's `settings.c`, its pages
   `page_*` in `ui/dialogs.c`; no setting for it, 27 Oct 2026; Esc empties a field,
