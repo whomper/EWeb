@@ -30,6 +30,9 @@ CFLAGS  := -m68030 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall -Wno-pointer-sign \
            -nostdinc -isystem $(GCCINC) -I$(C)/atari/include -Isrc -I$(C)/src -I$(C)/atari -I$(C)/ui \
            -I$(BSSL)/inc -DTLSOVL_BUILD -DTLS_030 -DLIBC_NO_HEAP -DTLSOVL_VERSION=\"$(VERSION)\"
+# a build that writes where its time goes into the program's log (src/trail.h):
+#   make B=build-trail TRAILFLAG=-DTLS_TRAIL
+CFLAGS  += $(TRAILFLAG)
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,ovl.ld \
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
