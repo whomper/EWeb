@@ -2892,7 +2892,7 @@ int app_main(void)
 		return 1;
 	key_state_init();	/* (Shift typed during a long start kept with its key: gem.h) */
 #ifndef EW_ST
-	tip_init(NULL);		/* the toolbar's tips (the UI standards' D18): the AES redraws under them */
+	tip_init(win_tip_repaint);	/* the toolbar's tips (the UI standards' D18) */
 #endif
 	vdi_h = graf_handle(&gl_wchar, &gl_hchar, &d, &d);
 	cw = gl_wchar;

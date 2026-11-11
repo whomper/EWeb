@@ -3208,6 +3208,24 @@ int win_tip(short mx, short my, char *out, int size)
 }
 #endif
 
+/* the screen under a tip that has gone (common's tooltip.c, tip_init's
+   repaint): EWeb's own window's part drawn again at once, as anything
+   EWeb draws; else the AES asked (form_dial). With form_dial alone, on
+   TOS 4.04 a press on the button under the tip came to nothing for a
+   second (the GUI rig's held press) */
+void win_tip_repaint(const GRECT *r)
+{
+	short x, y, w, h;
+	if (cur != NULL && cur->h > 0 && !cur->iconified) {
+		wind_get(cur->h, WF_CURRXYWH, &x, &y, &w, &h);
+		if (r->x >= x && r->y >= y && r->x + r->w <= x + w && r->y + r->h <= y + h) {
+			redraw(r, 3);
+			return;
+		}
+	}
+	form_dial(FMD_FINISH, r->x, r->y, r->w, r->h);
+}
+
 void win_hover(short mx, short my)
 {
 	short h = wind_find(mx, my), t, d, want = ARROW;

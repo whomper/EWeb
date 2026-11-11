@@ -297,6 +297,7 @@ int  win_throb_frames(void);		/* frames drawn since the last call, for the log *
 int  win_mouse(short mx, short my, short button, short clicks, short kstate);	/* 1: ours */
 void ui_press_idle(void);	/* a press held (common's press_track): main.c's work meanwhile */
 void ui_press_msg(short *m);	/* and a message that comes meanwhile */
+void win_tip_repaint(const GRECT *r);	/* under a tip gone */
 int  win_tip(short mx, short my, char *out, int size);	/* a toolbar button's tip (D18; common's tooltip.c) */
 void win_hover(short mx, short my);	/* a link's address on the info line, the pointing hand */
 int  win_key(short kstate, short key);	/* 1: taken (the address field, scrolling) */
