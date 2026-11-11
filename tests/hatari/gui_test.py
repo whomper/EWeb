@@ -393,6 +393,35 @@ def held_scroll(r, group, name, settle):
     time.sleep(settle)
 
 
+def family_ui(r, group, name, settle):
+    """the family's shared pieces (AERA-Atari's UI decisions of 9 and 10
+    Nov 2026): a toolbar button's tip after the pointer rests on it
+    (D18, common's tooltip.c: 0.7 s), and Insert opening the page's menu
+    (D17), closed with Esc"""
+    tb = [e for e in r.events() if e.startswith("toolbar ")]
+    if not check("%s: %s, the toolbar for the tip" % (group, name), tb, str(r.events()[-4:])):
+        return
+    bx, by, bw, bh, step = (int(v) for v in re.findall(r"-?\d+", tb[-1])[:5])
+    hx = bx + 3 * step     # (Home, the fourth)
+    mark = len(r.events())
+    r.mouse.move(hx + bw // 2, by + bh // 2)
+    time.sleep(3 + settle)
+    r.shot(80)
+    tips = [e for e in r.events()[mark:] if e.startswith("tip ")]
+    check("%s: %s, the pointer resting on Home shows its tip (D18)" % (group, name), "tip Home" in tips, str(tips))
+    r.mouse.move(hx + bw // 2, by + 200)
+    time.sleep(1 + settle)
+    mark = len(r.events())
+    r.key(0x52)                        # Insert
+    menu = r.wait(r"insert menu at ", 30)
+    time.sleep(2 + settle)
+    r.shot(81)
+    r.key(0x01)                        # (Esc: the menu closed, nothing chosen)
+    time.sleep(1 + settle)
+    check("%s: %s, Insert opens the page's menu (D17)" % (group, name), menu is not None,
+          "\n".join(r.events()[mark:]))
+
+
 def held_presses(r, group, name, page, settle):
     """the guidelines' 5.8 by the screen's pixels: a link and a toolbar
     button (Home) pressed and held still for a second show pressed before
@@ -1621,6 +1650,8 @@ def dialogs():
                 held_presses(r, "dialogs", name, os.path.join(ROOT, "tests/layout/text.html"),
                              1 if prg == "EWEB.PRG" else 4)
                 held_scroll(r, "dialogs", name, settle)
+                if prg == "EWEB.PRG":
+                    family_ui(r, "dialogs", name, settle)
                 r.key(Q, (CTRL,))
                 check("dialogs: %s quits" % name, r.wait(r"quit$", 120) is not None, str(r.events()[-4:]))
             finally:

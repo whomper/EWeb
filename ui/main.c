@@ -45,6 +45,7 @@ extern langs_job translate_job;
 #include "plat.h"
 #include "secret.h"
 #include "tls.h"
+#include "tooltip.h"
 #include "util.h"
 #ifndef EW_ST
 #include "dspjpeg.h"
@@ -1580,7 +1581,7 @@ static int js_ask(void *ud, int kind, const char *text, char *out, int size)
 		alert(1, "[1][%s][ OK ]", a);
 		return 1;
 	}
-	return alert(1, "[2][%s][ OK |Cancel]", a) == 1;
+	return alert(1, "[2][%s][OK|Cancel]", a) == 1;	/* (no padding but a lone OK: C19) */
 }
 
 /* what a script did, on the screen */
@@ -2873,6 +2874,7 @@ int app_main(void)
 	char path[256], first[256];
 	AEVENT ev;
 	short hover_x = -1, hover_y = -1;
+	int tipped = 0;		/* a toolbar tip waits for the pointer to rest (D18) */
 
 	/* the stack (crt0's, EW_STACK bytes) ends that far below main's frame:
 	   the cascade and the layout go no deeper into a page than EW_STACK_ROOM
@@ -2888,6 +2890,10 @@ int app_main(void)
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
+	key_state_init();	/* (Shift typed during a long start kept with its key: gem.h) */
+#ifndef EW_ST
+	tip_init(NULL);		/* the toolbar's tips (the UI standards' D18): the AES redraws under them */
+#endif
 	vdi_h = graf_handle(&gl_wchar, &gl_hchar, &d, &d);
 	cw = gl_wchar;
 	ch = gl_hchar;
@@ -3140,11 +3146,33 @@ int app_main(void)
 		wait = more || win_due() ? 0 : wr || ahead ? 1 : due >= 0 && due < 1000 ? (short) due : 1000;
 		if (rib && wait > 200)
 			wait = 200;
+#ifndef EW_ST
+		{
+			/* a toolbar tip due (D18): the timer for it, if sooner */
+			unsigned long tw = tip_wait(60000UL);
+			if (tw < 30000UL) {
+				tipped = 1;
+				if (!(more || due >= 0 || rib || wait <= 1) || (long) tw < wait)
+					wait = (short) tw;
+			} else {
+				tipped = 0;
+			}
+		}
+#endif
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
-				    (more || due >= 0 || rib || wait <= 1 ? MU_TIMER : 0),
+				    (more || due >= 0 || rib || wait <= 1 || tipped ? MU_TIMER : 0),
 				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, common's click.c) */
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
+#ifndef EW_ST
+		/* before the event's work: a key, a click or a message takes the
+		   tip away first (a dialog it opens is drawn without it) */
+		if (which & MU_M1) {
+			short k;
+			graf_mkstate(&hover_x, &hover_y, &k, &k);
+		}
+		tip_tick(which, hover_x, hover_y, win_tip);
+#endif
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
 		win_page_colours();	/* (a new page in front: its own colours, 256 colours) */
 		/* keys already waiting (an arrow held: the AES's repeats came

@@ -97,8 +97,8 @@ The README's Highlights, at length (as the README had them until 9 Nov 2026). Th
 - **Secure sites itself**: TLS 1.2 on the Atari, the arithmetic on the DSP
   (a Direct connection); or through the Gateway, AERA-Gateway's web service on a
   Raspberry Pi (TLS 1.3 sites too).
-- **The family's ways**: the About box, menus, shortcuts, right-click menus,
-  VA_START and drag and drop, the help file, iconify, the crash report; a
+- **The family's ways**: the About box, menus, shortcuts, right-click menus
+  (and Insert for them), the toolbar's tips, VA_START and drag and drop, the help file, iconify, the crash report; a
   mail address (`mailto:`) goes to EMail.
 - And measuring tools, made from the source (Building) for the tests and
   not in the release: `NSBENCH.TTP` times the HTML parsers and both CSS

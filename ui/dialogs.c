@@ -111,6 +111,7 @@ static short s_on[NTICK];
 /* the search address and the gateway hold as much as their settings,
    more than their fields show (5.4) */
 static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
+static short f_zoom, f_cache, f_gport;	/* their fields' objects (set_focus: a refused number's field) */
 static int set_open;	/* the dialog drawn once: its place told (for the rigs) */
 
 /* settings.c's hook: the dialog or its band drawn, the badge over it */
@@ -132,13 +133,13 @@ static void page_general(SETTINGS *s, short x, short y, void *user)
 	set_tick(s, x, set_y(s, 0), "Show pages' pictures", &s_on[T_PICTURES]);
 	set_text(s, x + 3, set_y(s, 1), "(off: only their words, for a slow line)");
 	set_text(s, x, set_y(s, 2), "Text size");
-	set_field(s, x + 12, set_y(s, 2), s_zoom, 3, '9');
+	f_zoom = set_field(s, x + 12, set_y(s, 2), s_zoom, 3, '9');
 	set_text(s, x + 16, set_y(s, 2), "%  (50 to 200)");
 	set_text(s, x, set_y(s, 3), "Words typed in the address go to:");
 	set_long(s, x, set_y(s, 4), s_search, 40, sizeof s_search - 1, 0);
 	set_text(s, x, set_y(s, 5), "(%s for the words; nothing: none)");
 	set_text(s, x, set_y(s, 6), "Disk cache");
-	set_field(s, x + 12, set_y(s, 6), s_cache, 3, '9');
+	f_cache = set_field(s, x + 12, set_y(s, 6), s_cache, 3, '9');
 	set_text(s, x + 16, set_y(s, 6), "MB  (0: none, 512 at most)");
 	set_tick(s, x + 3, set_y(s, 7), "Write it to the disk only at quit", &s_on[T_CACHEQUIT]);
 #ifndef EW_ST
@@ -163,7 +164,7 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 	set_text(s, x, set_y(s, 3), "Gateway");
 	set_long(s, x + 11, set_y(s, 3), s_gate, 18, sizeof s_gate - 1, 0);
 	set_text(s, x + 31, set_y(s, 3), "Port");
-	set_field(s, x + 36, set_y(s, 3), s_gport, 5, '9');
+	f_gport = set_field(s, x + 36, set_y(s, 3), s_gport, 5, '9');
 	set_text(s, x + 3, set_y(s, 4), "Pages go through the Gateway without");
 	set_text(s, x + 3, set_y(s, 5), "a Direct connection (the ST: always).");
 	set_text(s, x + 3, set_y(s, 6), "On the Gateway: aera-gateway install web");
@@ -361,17 +362,19 @@ static void page_translate(SETTINGS *s, short x, short y, void *user)
 static int settings_check(SETTINGS *s, void *user)
 {
 	const char *bad = NULL;
-	short page = 0;
+	short page = 0, field = f_zoom;
 	long v;
 	(void) user;
 	v = atol(s_zoom);
 	if (!s_zoom[0] || v < 50 || v > 200)
 		bad = "[1][The text size is a number|from 50 to 200 (per cent).][ OK ]";
-	else if (s_cache[0] && atol(s_cache) > CACHE_MAX_MB)
+	else if (s_cache[0] && atol(s_cache) > CACHE_MAX_MB) {
 		bad = "[1][The disk cache can be at most|512 MB: type 512 or less.][ OK ]";
-	else if (!s_gport[0] || (v = atol(s_gport)) < 1 || v > 65535) {
+		field = f_cache;
+	} else if (!s_gport[0] || (v = atol(s_gport)) < 1 || v > 65535) {
 		bad = "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
 		page = 1;
+		field = f_gport;
 	}
 	if (bad == NULL)
 		return 1;
@@ -379,6 +382,7 @@ static int settings_check(SETTINGS *s, void *user)
 	alert(1, bad);
 	if (page != set_page_now(s))
 		set_show(s, page);
+	set_focus(s, field);	/* (the cursor where the number is typed again: D30) */
 	dlg_draw(set_tree(s), 0);	/* (what the alert covered) */
 	badge_show();
 	return 0;

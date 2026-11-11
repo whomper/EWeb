@@ -30,6 +30,7 @@
 #include "iconify.h"
 #include "offdraw.h"
 #include "panebar.h"
+#include "arrowed.h"
 #include "fsel.h"
 #include "text.h"
 #include "util.h"
@@ -3181,6 +3182,32 @@ static void hot_button(int b)
 		redraw(&cur->but[b], 1);
 }
 
+#ifndef EW_ST
+/* the toolbar's tip for the pointer at (mx, my) (common's tooltip.c, the
+   UI standards' D18: 0.7 s, BubbleGEM where it runs; the status bar
+   says the button's name as before): its name and key, as the menus
+   have them; 0 off the buttons */
+int win_tip(short mx, short my, char *out, int size)
+{
+	static const char *const tips[NBUT] = { "Back (Undo)", "Forward (\x01^Z)", "Reload (^R)", "Home", "Search",
+					       "Stop (Esc)" };
+	short t, d;
+	int i;
+	if (mx < 0 || cur == NULL || cur->h <= 0 || cur->iconified || wind_find(mx, my) != cur->h)
+		return 0;
+	wind_get(0, WF_TOP, &t, &d, &d, &d);
+	if (t != cur->h)
+		return 0;
+	for (i = 0; i < NBUT; i++)
+		if (rect_hit(&cur->but[i], mx, my) && enabled(i)) {
+			snprintf(out, (size_t) size, "%s", tips[i]);
+			log_event("tip %s", tips[i]);
+			return 1;
+		}
+	return 0;
+}
+#endif
+
 void win_hover(short mx, short my)
 {
 	short h = wind_find(mx, my), t, d, want = ARROW;
@@ -3336,6 +3363,53 @@ static int box_bar(short mx, short my)
 
 /* right-click: the link's commands, or the page's (Back first, as
    EHypView's) */
+/* the address field's menu, at (mx, my) */
+static void addr_menu(short mx, short my)
+{
+	static const char *const items[] = { "Copy        ^C", "Cut         ^X", "Paste       ^V", "-",
+					     "Select all  ^A" };
+	short r;
+	if (!cur->a_focus)
+		win_address_focus(1);
+	r = popup_m(mx, my, items, 5);
+	if (r >= 0 && r <= 2)
+		win_clip(r == 0 ? CLIP_COPY : r == 1 ? CLIP_CUT : CLIP_PASTE);
+	else if (r == 4)
+		win_address_focus(1);
+}
+
+static void context_menu(short mx, short my);
+
+#ifndef EW_ST
+/* Insert: the menu a right-click opens, at the selection (the UI
+   standards' D17, Erez's place of 10 Nov 2026): the address's at its
+   text cursor when it has the keyboard; else the page's at the chosen
+   words' start, or at the page's top left when none are chosen or
+   they are out of sight */
+static void insert_menu(void)
+{
+	short x = cur->r_page.x + 1, y = cur->r_page.y + 1;
+	if (cur->a_focus) {
+		x = (short) (cur->r_addr.x + (cur->a_cur - cur->a_first) * gl_wchar);
+		y = cur->r_addr.y + cur->r_addr.h;
+		log_event("insert menu at %d %d (address)", x, y);
+		addr_menu(x, y);
+		return;
+	}
+	if (sel_now() && cur->sel.r.a.item >= 0 && cur->sel.r.a.item < br.p->nitems) {
+		const dl_item *d = &br.p->items[cur->sel.r.a.item];
+		int32_t sx = cur->r_page.x + d->x - cur->left, sy = cur->r_page.y + d->y - cur->top;
+		if (sx >= cur->r_page.x && sx < cur->r_page.x + cur->r_page.w && sy >= cur->r_page.y &&
+		    sy < cur->r_page.y + cur->r_page.h) {
+			x = (short) sx;
+			y = (short) sy;
+		}
+	}
+	log_event("insert menu at %d %d", x, y);
+	context_menu(x, y);
+}
+#endif
+
 static void context_menu(short mx, short my)
 {
 	int l = link_at(mx, my);
@@ -3623,16 +3697,7 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	}
 	if (rect_hit(&cur->r_addr, mx, my)) {
 		if (button & 2) {
-			static const char *const items[] = { "Copy        ^C", "Cut         ^X", "Paste       ^V",
-							     "-", "Select all  ^A" };
-			short r;
-			if (!cur->a_focus)
-				win_address_focus(1);
-			r = popup_m(mx, my, items, 5);
-			if (r >= 0 && r <= 2)
-				win_clip(r == 0 ? CLIP_COPY : r == 1 ? CLIP_CUT : CLIP_PASTE);
-			else if (r == 4)
-				win_address_focus(1);
+			addr_menu(mx, my);
 			return 1;
 		}
 		/* the second press of a double click selects it all
@@ -3774,6 +3839,38 @@ static int box_under_mouse(void)
 	return best;
 }
 
+#ifndef EW_ST
+/* the window's arrows, up and down (WA_UPPAGE to WA_DNLINE), to the box
+   that scrolls under the pointer, where there is one (the UI standards'
+   D37: common's arrow_target, the pane under the pointer, else the
+   slider's, the page); 1 when a box took them */
+static int arrowed_box(short action)
+{
+	ARROW_PANE pane;
+	short mx, my, mb, ks;
+	int k = box_under_mouse();
+	int32_t boxful;
+	const struct pg_scroll *sc;
+	if (k < 0)
+		return 0;
+	graf_mkstate(&mx, &my, &mb, &ks);
+	pane.r = cur->r_page;	/* (box_under_mouse found it under the pointer, in the page) */
+	pane.id = (short) k;
+	if (arrow_target_at(&pane, 1, -1, mx, my) != k)
+		return 0;
+	sc = &br.p->scr[k];
+	boxful = br.p->items[sc->clip].h - line_step();
+	switch (action) {
+	case WA_UPPAGE: box_to(k, 1, sc->sy - boxful); break;
+	case WA_DNPAGE: box_to(k, 1, sc->sy + boxful); break;
+	case WA_UPLINE: box_to(k, 1, sc->sy - line_step()); break;
+	case WA_DNLINE: box_to(k, 1, sc->sy + line_step()); break;
+	default: return 0;
+	}
+	return 1;
+}
+#endif
+
 /* Up, Down, Space, ClrHome on a page that doesn't scroll down itself (a
    frameset): the box under the mouse scrolls (by a line, a boxful, to its
    top or end). 1 if one did */
@@ -3802,6 +3899,12 @@ int win_key(short kstate, short key)
 	int32_t page = cur->r_page.h - line_step();
 	if (cur->h <= 0 || cur->iconified)
 		return 0;
+#ifndef EW_ST	/* (the ST edition is frozen: fixes only, Erez 4 Nov 2026) */
+	if (scan == 0x52 && !shift && !key_ctrl(kstate, key)) {	/* Insert: the context menu (D17) */
+		insert_menu();
+		return 1;
+	}
+#endif
 	if (cur->f_focus != NULL && cur->f_focus->kind == FC_TEXTAREA && (scan == 0x48 || scan == 0x50) && !shift)
 		return ctl_key(kstate, key);	/* a textarea's lines */
 	if ((scan == 0x48 || scan == 0x50 || ((scan == 0x39 || scan == 0x47) && !cur->a_focus && cur->f_focus == NULL &&
@@ -4252,6 +4355,10 @@ static void message(const short *msg)
 	case WM_ARROWED:
 		if (loading)
 			break;
+#ifndef EW_ST
+		if (msg[4] <= WA_DNLINE && arrowed_box(msg[4]))
+			break;	/* (a box under the pointer took it: D37) */
+#endif
 		switch (msg[4]) {
 		case WA_UPPAGE: win_scroll_by(-(cur->r_page.h - line_step())); break;
 		case WA_DNPAGE: win_scroll_by(cur->r_page.h - line_step()); break;

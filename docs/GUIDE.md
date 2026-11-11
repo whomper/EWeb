@@ -322,8 +322,9 @@ picture:
 
 They lie flat until the mouse is over one, which then wakes: it lights
 up, stands out in a frame and says its name on the status bar (one that
-can't be used is greyed); held down, it sinks, and works
-when you let go over it. Beside them is the address of the page shown,
+can't be used is greyed); left resting on it a moment, a tip gives its
+name and key (in BubbleGEM's bubble where BubbleGEM runs); held down, it
+sinks, and works when you let go over it. Beside them is the address of the page shown,
 which you can type into.
 
 At the right end is the AERA A. While a page or its pictures come, a star
@@ -339,6 +340,12 @@ Click a link to follow it (the pointer turns into a hand over one).
 Right-click a link for its commands (open it, open it in a new window,
 save its file, copy its address), the page for Back, Forward, Reload,
 Copy and Select all, or the address for Copy, Cut, Paste and Select all.
+The Insert key opens the same menus from the keyboard: the address's at
+its cursor while you type in it, else the page's, at the text you chose
+(or at the page's top left).
+
+The window's arrows scroll the box under the mouse when a box on the
+page has a scroll bar of its own, else the page.
 
 The window can be moved, sized, fulled and iconified as any other; EWeb
 lays the page out again for the new width.
