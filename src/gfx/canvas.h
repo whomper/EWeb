@@ -19,7 +19,7 @@ typedef struct canvas {
 	uint8_t *pix;
 	int32_t w, h;
 	long stride;			/* bytes from one row to the next */
-	int bpp;			/* 8 or 16 */
+	int bpp;			/* 8, 16 (5-6-5, the Falcon's) or 32 (0, R, G, B: a deeper screen's) */
 	int32_t ox, oy;			/* the page's point at pixel (0, 0) */
 	/* 8 bits: the pixel value for a colour (0xRRGGBB) */
 	uint8_t (*pen)(void *ud, uint32_t rgb);

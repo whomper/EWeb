@@ -29,7 +29,7 @@ folder of its own.
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
 | `EWEBST.PRG` | the ST edition, for an ST or STE |
-| `EWEBFB.PRG`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing: no scripts yet |
+| `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing |
 | `EWEB.FNT` | the fonts |
 | `EWEBJS.OVL` | JavaScript (needs an FPU) |
 | `TLS.OVL`, `CACERT.PEM`, `ROOTS.DAT` | secure connections made on the Atari |

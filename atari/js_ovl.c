@@ -44,6 +44,15 @@ static unsigned long be32(const unsigned char *p)
    68060's branch cache, CACR's CABC) */
 static long flush_caches(void)
 {
+#ifdef __mcoldfire__
+	/* (EWEBFB.PRG: the MCF5474's 512 sets of 4 ways, each line pushed
+	   and invalidated in both caches, as common's ovl.c) */
+	unsigned long set, way;
+	for (set = 0; set < 512; set++)
+		for (way = 0; way < 4; way++)
+			__asm__ volatile("cpushl %%bc,(%0)" : : "a"(set << 4 | way) : "memory");
+	return 0;
+#else
 	if (cpu >= 40) {
 		__asm__ volatile(".short 0xf4f8" ::: "memory");	/* cpusha bc */
 		if (cpu >= 60)
@@ -51,6 +60,7 @@ static long flush_caches(void)
 	} else if (cpu >= 20)
 		__asm__ volatile("movec %%cacr,%%d0\n\tori.w #0x0808,%%d0\n\tmovec %%d0,%%cacr" ::: "d0", "memory");
 	return 0;
+#endif
 }
 
 /* why it couldn't be loaded: for good (0), or only for now (-1: the
@@ -72,7 +82,11 @@ static int load(void)
 	char line[80];
 	int h = pf_open(ovl_path, PF_READ);
 	if (h < 0)
+#ifdef __mcoldfire__
+		return fail("is missing (it goes next to EWEBFB.PRG).", 0);
+#else
 		return fail("is missing (it goes next to EWEB.PRG).", 0);
+#endif
 	size = pf_open_size(h);
 	if (size < 28 || pf_read(h, hdr, 28) != 28 || hdr[0] != 0x60 || hdr[1] != 0x1A) {
 		pf_close(h);

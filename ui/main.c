@@ -81,8 +81,12 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
-	       1, "", 0, 1, 1, 0, "en", 8480 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-					   translate_to, translate_port) */
+	       1, "", 0, 1, 1, 0, "en", 8480
+#ifndef EW_ST
+	       , 50
+#endif
+};	/* (runscripts, noscripts, log, trackers, cachequit, translate,
+	   translate_to, translate_port, ttleave) */
 int loading;
 static short quit;
 
@@ -424,6 +428,52 @@ void menu_update(void)
 	}
 }
 
+#ifndef EW_ST
+/* the room for pages kept for Back and Forward and for pictures (their
+   files and decoded pixels; the heap takes TT RAM first), shared by the
+   windows. With TT RAM (Erez, 4 Nov 2026): all of what was free at the
+   start but TTLEAVE= per cent of it, left for other programs, half for
+   the pages and a quarter for the pictures (the rest for the page being
+   made); at the 50 per cent the setting starts at, a quarter and an
+   eighth, as before it, with no ceiling (24 and 16 MB were). Without:
+   an eighth of the free ST RAM up to 2 MB, and a sixteenth up to 1 MB, a
+   file of a million pixels at most (GIF and interlaced PNG decode whole,
+   four bytes a pixel). Again when the setting changes: what is kept
+   beyond it goes as the next page is kept */
+long tt_free = -2;
+
+void mem_limits(void)
+{
+	static long st;
+	long tt;
+	if (tt_free == -2) {		/* (what was free at the start) */
+		tt_free = (long) Mxalloc(-1L, 1);
+		st = (long) Mxalloc(-1L, 0);
+		if (st < 0) {		/* TOS 1.x has no Mxalloc: all is ST RAM */
+			tt_free = 0;
+			st = (long) Malloc(-1L);
+		}
+		if (tt_free < 0)
+			tt_free = 0;
+	}
+	tt = tt_free;
+	if (tt > 0) {
+		long room = tt / 100 * (100 - opt.ttleave);
+		br_keep_max = room / 2;
+		img_max = room / 4;
+	} else if (st > 0) {
+		br_keep_max = st / 8 < (2L << 20) ? st / 8 : (2L << 20);
+		img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
+		img_max_px = 1L << 20;
+	}
+	/* windows, each with a page laid out: eight beside TT RAM, four in 6
+	   MB of ST RAM, else two (a 4 MB Falcon) */
+	win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;
+	log_event("memory: TT RAM %ld KB, %d%% left, pages %ld KB, pictures %ld KB", tt > 0 ? tt >> 10 : 0L,
+		  tt > 0 ? opt.ttleave : 0, br_keep_max >> 10, img_max >> 10);
+}
+#endif
+
 /* ---------------------------------------------------------------- the settings */
 /* EWEB.INF next to the program (a program without an accessory keeps its
    settings there, the guidelines' 6.1): NAME=value lines, a ';' note
@@ -508,6 +558,10 @@ static void settings_load(void)
 			opt.cache = (short) atoi(eq);
 		else if (!strcmp(line, "CACHEQUIT"))
 			opt.cachequit = atoi(eq) != 0;
+#ifndef EW_ST
+		else if (!strcmp(line, "TTLEAVE"))
+			opt.ttleave = (short) (atoi(eq) < 0 ? 0 : atoi(eq) > 90 ? 90 : atoi(eq));
+#endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
 			win_whole_only = atoi(eq) != 0;	/* (the speed rig's comparison: never saved) */
@@ -755,6 +809,11 @@ int settings_save(void)
 		snprintf(v, sizeof v, "%u", opt.translate_port);
 		put(&s, "TRANSLATEPORT", v, "the Gateway's translation service's port (8480)");
 	}
+#endif
+#ifndef EW_ST
+	snprintf(v, sizeof v, "%d", opt.ttleave);
+	put(&s, "TTLEAVE", v, "per cent of the TT RAM left for other programs (Settings > General; 0 to 90): "
+	    "EWeb keeps pages for Back and pictures in the rest");
 #endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -3085,6 +3144,7 @@ static int app_run(void)
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 
+#ifdef EW_ST
 	{
 		/* pages kept for Back and Forward (the heap takes TT RAM first):
 		   a quarter of the free TT RAM up to 24 MB, else an eighth of
@@ -3112,9 +3172,17 @@ static int app_run(void)
 		   in 6 MB of ST RAM, else two (a 4 MB Falcon, a 1040 ST) */
 		win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;
 	}
+#else
+	mem_limits();
+#endif
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
 	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
-#if !defined(EW_ST) && !defined(__mcoldfire__)	/* (EWEBFB.PRG: no scripts until EWEBJS.OVL has a ColdFire build) */
+#if defined(__mcoldfire__)
+	/* (EWEBFB.PRG: its own, ColdFire code; the MCF5474's FPU is always there) */
+	path_join(path, sizeof path, opt.workdir, "ewebjsfb.ovl");
+	js_ovl_at(path);
+	scripts_ok = js_built;
+#elif !defined(EW_ST)
 	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;

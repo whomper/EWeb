@@ -2237,6 +2237,15 @@ def falcon():
     r = Run("falconwiki", "Falcon:256", hd, network=True)
     try:
         ev = r.wait(r"shown ", 1200)
+        # the TT RAM (Erez, 4 Nov 2026): all but TTLEAVE= per cent of what
+        # was free at the start (50 as it starts), half the rest for the
+        # pages kept, a quarter for the pictures, no ceiling
+        mem = [e for e in r.events() if e.startswith("memory: ")]
+        m = re.match(r"memory: TT RAM (\d+) KB, (\d+)% left, pages (\d+) KB, pictures (\d+) KB", mem[0] if mem else "")
+        check("falcon: the TT RAM but its share for others keeps pages and pictures",
+              m is not None and int(m.group(1)) > 100 * 1024 and m.group(2) == "50" and
+              abs(int(m.group(3)) - int(m.group(1)) // 4) < 64 and abs(int(m.group(4)) - int(m.group(1)) // 8) < 64,
+              str(mem))
         for _ in range(12):             # scrolled while the pictures come
             r.key(DOWN)
             time.sleep(1)

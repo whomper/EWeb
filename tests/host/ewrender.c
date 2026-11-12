@@ -21,7 +21,8 @@
  * it as EWEB.PRG does on a screen of that many colours (pens, a byte a
  * pixel: monochrome's greys patterned, translucent items mixed through
  * the palette), with the ST's and Falcon's standard colours (256: the 16,
- * a 6 x 6 x 6 cube and 24 greys), rather than in true colour. In -d's
+ * a 6 x 6 x 6 cube and 24 greys), rather than in true colour (5-6-5;
+ * --deep: 32 bits, a byte a part, as a 24- or 32-bit screen). In -d's
  * list a colour less than solid is #rrggbbaa, a picture's and a
  * control's opacity "alpha N" (0-255; a control's colour is its
  * text's), and an item a click goes through (pointer-events: none)
@@ -241,6 +242,8 @@ static int write_png(const char *path, const canvas *c)
 			r[2 + 3 * x] = (unsigned char) ((v >> 3 & 0xfc) | (v >> 9 & 3));
 			r[3 + 3 * x] = (unsigned char) ((v << 3 & 0xf8) | (v >> 2 & 7));
 		}
+		for (x = 0; c->bpp == 32 && x < c->w; x++)
+			memcpy(r + 1 + 3 * x, p + 4 * x + 1, 3);
 	}
 	zbuf[z++] = 0x78;
 	zbuf[z++] = 0x01;
@@ -448,7 +451,7 @@ static long bands(const page *p, int32_t width)
 	static const int32_t across[][2] = { { 0, 0 }, { 0, 100 }, { 37, 211 }, { 300, 0 }, { 599, 0 } };
 	int32_t y, k, bpp;
 	long n = 0;
-	for (bpp = 8; bpp <= 16; bpp += 8) {
+	for (bpp = 8; bpp <= 32; bpp *= 2) {
 		for (k = 0; k < (int32_t) (sizeof across / sizeof across[0]); k++) {
 			int32_t x = across[k][0], w = across[k][1] ? across[k][1] : width - across[k][0];
 			if (w <= 0 || x >= width)
@@ -459,7 +462,7 @@ static long bands(const page *p, int32_t width)
 				c.w = w;
 				c.h = 32;
 				c.bpp = (int) bpp;
-				c.stride = bpp == 16 ? 2L * w : w;
+				c.stride = (long) w * (bpp / 8);
 				c.ox = x;
 				c.oy = y;
 				c.pen = pen8;
@@ -1016,7 +1019,7 @@ int main(int argc, char **argv)
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
-	int colours = 0, own_pal = 0;
+	int colours = 0, own_pal = 0, deep = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL, *xl_arg = NULL, *gw_to = NULL;
 	char where[4096];
@@ -1075,6 +1078,8 @@ int main(int argc, char **argv)
 			parts = 1;
 		else if (!strcmp(argv[i], "-E"))
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
+		else if (!strcmp(argv[i], "--deep"))
+			deep = 1;	/* 32 bits a pixel */
 		else if (!strcmp(argv[i], "--own"))
 			own_pal = 1;	/* -p 256 with EWeb's own colours and the page's (pagecol.h) */
 		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
@@ -1198,7 +1203,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [--deep] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1733,8 +1738,8 @@ int main(int argc, char **argv)
 		c.h = height > 0 ? height : (p->height > 0 ? p->height : 1);
 		if (c.h > 30000)
 			c.h = 30000;
-		c.bpp = colours ? 8 : 16;
-		c.stride = colours ? c.w : 2L * c.w;
+		c.bpp = colours ? 8 : deep ? 32 : 16;
+		c.stride = (long) c.w * (c.bpp / 8);
 		c.oy = top;
 		c.pen = pen_n;
 		c.shade = shade_n;

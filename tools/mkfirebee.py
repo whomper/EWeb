@@ -13,10 +13,13 @@ and each cross-compiler command is run again for the ColdFire:
 - common's cpucheck.c (68000 code, which a ColdFire may not run) becomes
   cpucheck_cf.S, the same bytes for the 68000 and the ColdFire: the _CF_
   cookie, or ui/main.c's cpu_alert;
-- the scripts' overlay loader (atari/js_ovl.c, js_imports) becomes
-  src/js/js_none.c, as in the ST edition, until EWEBJS.OVL has a ColdFire
-  build;
-- -lgcc becomes common's atari/ll64.c (64-bit multiply and divide in C).
+- the scripts' overlay, EWEBJS.OVL, is made for the ColdFire as well
+  (EWEBJSFB.OVL beside OUT.PRG: QuickJS and musl's maths in the FPU's
+  doubles, -mcpu=5475 in -m68881's place), from its own rules in the same
+  output, with tools/mkovl.py, and EWEBFB.PRG's js_imports from it;
+- -lgcc becomes common's atari/ll64.c (64-bit multiply and divide in C),
+  and EWeb's atari/cfmath.c (64-bit integers to and from doubles, for
+  the overlay).
 
 The generated sources (build/gen) are the Falcon build's: run `make
 binary/EWEB.PRG` first (the Makefile's binary/EWEBFB.PRG does).
@@ -56,27 +59,28 @@ def main():
         sys.exit(__doc__)
     target = sys.argv[1]
     lines = run("make -n -B build/tos/eweb.elf").replace("\\\n", " ").splitlines()
-    compiles, link = [], None
+    compiles, link, ovl_link, imports = [], None, None, None
     for line in lines:
         if not line.startswith(CC + " "):
             continue
         words = shlex.split(line)
         if "-c" in words:
-            compiles.append(words)
+            if "js_imports" in words[words.index("-c") + 1]:
+                imports = words  # (made from the ColdFire's overlay, below)
+            else:
+                compiles.append(words)
         elif "-o" in words and words[words.index("-o") + 1] == "build/tos/eweb.elf":
             link = words
-    if link is None:
-        sys.exit("mkfirebee: make gave no link of build/tos/eweb.elf")
+        elif "-o" in words and words[words.index("-o") + 1] == "build/tos/ewebjs.elf":
+            ovl_link = words
+    if link is None or ovl_link is None or imports is None:
+        sys.exit("mkfirebee: make gave no link of build/tos/eweb.elf, of its overlay or its imports")
     objs = []
     for words in compiles:
         src = words[words.index("-c") + 1]
         obj = words[words.index("-o") + 1]
         if src == "common/atari/cpucheck.c":
             words = [CC, MCPU, "-c", "common/atari/cpucheck_cf.S", "-o", obj]
-        elif src == "atari/js_ovl.c":
-            words = [w if w != "atari/js_ovl.c" else "src/js/js_none.c" for w in words]
-        elif "js_imports" in src:
-            continue
         words = cpu(words)
         o = words[words.index("-o") + 1]
         os.makedirs(os.path.dirname(o), exist_ok=True)
@@ -86,9 +90,20 @@ def main():
     os.makedirs("build/cf/rt", exist_ok=True)
     run(" ".join([CC, MCPU, "-O2", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
                   "-fno-asynchronous-unwind-tables", "-c", "common/atari/ll64.c", "-o", "build/cf/rt/ll64.o"]))
+    # the scripts' overlay, EWEBJSFB.OVL, and what EWEBFB.PRG gives it
+    words = cpu([w for w in ovl_link if w != "-lgcc"]) + ["build/cf/rt/ll64.o"]
+    run(" ".join(shlex.quote(w) for w in words))
+    ovl = os.path.join(os.path.dirname(target) or ".", "EWEBJSFB.OVL")
+    os.makedirs("build/cf/gen", exist_ok=True)
+    run(" ".join(["python3", "tools/mkovl.py", "build/cf/ewebjs.elf", shlex.quote(ovl), "build/cf/gen/js_imports.c"]))
+    src = imports[imports.index("-c") + 1]
+    words = cpu([w if w != src else "build/cf/gen/js_imports.c" for w in imports])
+    run(" ".join(shlex.quote(w) for w in words))
+    # (and what EWEBJSFB.OVL takes from it beyond ll64.c: atari/cfmath.c)
+    run(" ".join([CC, MCPU, "-O2", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
+                  "-fno-asynchronous-unwind-tables", "-c", "atari/cfmath.c", "-o", "build/cf/rt/cfmath.o"]))
     words = cpu([w for w in link if w != "-lgcc"])
-    words = [w for w in words if not (w.endswith(".o") and "js_imports" in w)]
-    words.append("build/cf/rt/ll64.o")
+    words += ["build/cf/rt/ll64.o", "build/cf/rt/cfmath.o"]
     run(" ".join(shlex.quote(w) for w in words))
     elf = words[words.index("-o") + 1]
     env = dict(os.environ, PRGFLAGS="7")

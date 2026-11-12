@@ -2629,7 +2629,13 @@ parse:
 	if (scripts && !conn_stop && doc_has_scripts(d) && !js_available()) {
 		/* EWEBJS.OVL couldn't be loaded (only a page with scripts has it
 		   loaded): the page as with its scripts off, and the note says why */
-		snprintf(b->note, sizeof b->note, "Its scripts didn't run: EWEBJS.OVL %s", js_problem());
+		snprintf(b->note, sizeof b->note, "Its scripts didn't run: %s %s",
+#ifdef __mcoldfire__
+			 "EWEBJSFB.OVL",
+#else
+			 "EWEBJS.OVL",
+#endif
+			 js_problem());
 		doc_free(d);
 		scripts = 0;
 		again = 1;

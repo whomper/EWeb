@@ -112,6 +112,10 @@ static short s_on[NTICK];
    more than their fields show (5.4) */
 static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
 static short f_zoom, f_cache, f_gport;	/* their fields' objects (set_focus: a refused number's field) */
+#ifndef EW_ST
+static char s_tt[3];
+static short f_tt;
+#endif
 static int set_open;	/* the dialog drawn once: its place told (for the rigs) */
 
 /* settings.c's hook: the dialog or its band drawn, the badge over it */
@@ -145,6 +149,13 @@ static void page_general(SETTINGS *s, short x, short y, void *user)
 #ifndef EW_ST
 	set_tick(s, x, set_y(s, 8), "Pictures on the DSP (a Falcon's)", &s_on[T_PICDSP]);
 	set_tick(s, x, set_y(s, 9), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
+	/* (Erez, 4 Nov 2026: the rest of the TT RAM keeps pages and
+	   pictures; shown where there is TT RAM) */
+	if (tt_free > 0) {
+		set_text(s, x, set_y(s, 10), "TT RAM left for others");
+		f_tt = set_field(s, x + 23, set_y(s, 10), s_tt, 2, '9');
+		set_text(s, x + 26, set_y(s, 10), "%  (0 to 90)");
+	}
 #else
 	set_tick(s, x, set_y(s, 8), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
 #endif
@@ -371,6 +382,11 @@ static int settings_check(SETTINGS *s, void *user)
 	else if (s_cache[0] && atol(s_cache) > CACHE_MAX_MB) {
 		bad = "[1][The disk cache can be at most|512 MB: type 512 or less.][ OK ]";
 		field = f_cache;
+#ifndef EW_ST
+	} else if (!s_tt[0] || atol(s_tt) > 90) {
+		bad = "[1][The TT RAM left for other|programs is a number from|0 to 90 (per cent).][ OK ]";
+		field = f_tt;
+#endif
 	} else if (!s_gport[0] || (v = atol(s_gport)) < 1 || v > 65535) {
 		bad = "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
 		page = 1;
@@ -416,6 +432,9 @@ int dlg_settings(void)
 	str_copy(s_gate, opt.gate, sizeof s_gate);
 	snprintf(s_gport, sizeof s_gport, "%u", opt.gateport);
 	snprintf(s_cache, sizeof s_cache, "%ld", cache_mb());
+#ifndef EW_ST
+	snprintf(s_tt, sizeof s_tt, "%d", opt.ttleave);
+#endif
 	memset(&d, 0, sizeof d);
 	d.title = "Settings";
 	d.pages = pages;
@@ -441,6 +460,12 @@ int dlg_settings(void)
 	   keeps following the machine's memory) */
 	if (s_cache[0] && atol(s_cache) != cache_mb())
 		opt.cache = (short) atol(s_cache);
+#ifndef EW_ST
+	if (atoi(s_tt) != opt.ttleave) {
+		opt.ttleave = (short) atoi(s_tt);	/* (in range: settings_check) */
+		mem_limits();
+	}
+#endif
 	opt.dsp = s_on[T_DSP];
 	opt.picdsp = s_on[T_PICDSP];
 	opt.palette = s_on[T_PALETTE];

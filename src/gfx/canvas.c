@@ -8,6 +8,14 @@
 #include "canvas.h"
 #include "form.h"
 
+/* a canvas of 32 bits a pixel (a deeper screen's: DESIGN.md, Drawing in
+   32 bits); never the ST edition's (frozen: its code as it was) */
+#ifdef EW_ST
+#define DEEP(c) 0
+#else
+#define DEEP(c) ((c)->bpp == 32)
+#endif
+
 /* a control's text is drawn within its box: canvas px, x0 <= x < x1 */
 static int32_t clip_x0 = -0x7fffffff, clip_x1 = 0x7fffffff;
 
@@ -24,8 +32,20 @@ static unsigned drawn_a(const canvas *c, unsigned a)
 
 static uint32_t pixel(canvas *c, uint32_t rgb)
 {
-	return c->bpp == 8 ? c->pen(c->ud, rgb) : RGB565(rgb);
+	return c->bpp == 8 ? c->pen(c->ud, rgb) : DEEP(c) ? rgb & 0xffffff : RGB565(rgb);
 }
+
+/* 32 bits a pixel (a deeper screen's canvas: DESIGN.md, Drawing in 32
+   bits): the bytes 0, red, green, blue, as the machine stores them */
+static inline void put32(uint8_t *o, uint32_t rgb)
+{
+	o[0] = 0;
+	o[1] = (uint8_t) (rgb >> 16);
+	o[2] = (uint8_t) (rgb >> 8);
+	o[3] = (uint8_t) rgb;
+}
+
+static uint32_t mix_rgb(uint32_t rgb, const uint8_t *u, unsigned a);
 
 /* (x, y, w, h) in canvas pixels, clipped: 1 if anything is left */
 static inline int clip(canvas *c, int32_t *x, int32_t *y, int32_t *w, int32_t *h)
@@ -56,6 +76,17 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 		return;
 	/* a row's address stepped, not multiplied out each row (a call of
 	   libgcc's on the 68000) */
+#ifndef EW_ST
+	if (DEEP(c)) {
+		/* (32 bits: a loop of its own, the others' as they were) */
+		for (row = c->pix + y * c->stride + 4 * x, j = 0; j < h; j++, row += c->stride) {
+			uint8_t *p = row;
+			for (i = 0; i < w; i++, p += 4)
+				put32(p, pv);
+		}
+		return;
+	}
+#endif
 	row = c->pix + y * c->stride + (c->bpp == 8 ? x : 2 * x);
 	for (j = 0; j < h; j++, row += c->stride) {
 		if (c->bpp == 8) {
@@ -190,6 +221,10 @@ static struct {
 	unsigned a5;			/* a in 32nds */
 	uint32_t in;			/* and the last pixel mixed, and what it became */
 	uint16_t out;
+#ifndef EW_ST
+	uint32_t rgb;			/* 32 bits: the colour, and its alpha */
+	unsigned a8;
+#endif
 } mix;
 
 /* a 5-6-5 pixel spread out with room above each part for a multiply
@@ -206,6 +241,13 @@ static uint32_t mix_rgb(uint32_t rgb, const uint8_t *u, unsigned a)
 /* the mix of rgb at item_a ready; 0: nothing to draw (too little to show) */
 static int mix_init(canvas *c, uint32_t rgb, int kind)
 {
+#ifndef EW_ST
+	if (DEEP(c)) {
+		mix.rgb = rgb & 0xffffff;
+		mix.a8 = item_a;
+		return item_a > 0;
+	}
+#endif
 	if (c->bpp == 16) {
 		mix.a5 = (item_a * 32 + 127) / 255;
 		mix.n = SPREAD(RGB565(rgb)) * mix.a5;
@@ -312,6 +354,14 @@ static void mix_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h)
 	uint8_t *o, *p, *end;
 	if (!clip(c, &x, &y, &w, &h))
 		return;
+#ifndef EW_ST
+	if (DEEP(c)) {
+		for (j = y, o = c->pix + y * c->stride; j < y + h; j++, o += c->stride)
+			for (p = o + 4 * x, end = p + 4 * w; p < end; p += 4)
+				put32(p, mix_rgb(mix.rgb, p + 1, mix.a8));
+		return;
+	}
+#endif
 	/* (a row's address stepped) */
 	for (j = y, o = c->pix + y * c->stride; j < y + h; j++, o += c->stride) {
 		uint32_t last, to, *q, *qe;
@@ -480,6 +530,13 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 	   libgcc's on the 68000); the depth's own loop */
 	b0 = g->bits + r0 * stride;
 	o0 = c->pix + (gy + r0) * c->stride;
+	if (DEEP(c)) {
+		for (row = r0; row < r1; row++, b0 += stride, o0 += c->stride)
+			for (col = c0; col < c1; col++)
+				if (b0[col >> 3] & (0x80 >> (col & 7)))
+					put32(o0 + 4 * (gx + col), pv);
+		return;
+	}
 #if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
 	if (c->bpp == 8 && c0 == 0 && c1 <= 16) {
 		/* most of a page's letters: as wide as 16 pixels, whole across:
@@ -578,6 +635,17 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 	if (g->bits == NULL)
 		return;
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
+#ifndef EW_ST
+	if (DEEP(c)) {
+		const uint8_t *b = g->bits + r0 * stride;
+		uint8_t *o = c->pix + (gy + r0) * c->stride + 4 * gx;
+		for (row = r0; row < r1; row++, b += stride, o += c->stride)
+			for (col = c0; col < c1; col++)
+				if (b[col >> 3] & (0x80 >> (col & 7)))
+					put32(o + 4 * col, mix_rgb(mix.rgb, o + 4 * col + 1, mix.a8));
+		return;
+	}
+#endif
 	if (c->bpp == 8) {
 		/* (an int16_t tested for its sign: no extending on the 68030) */
 		const uint8_t *b = g->bits + r0 * stride;
@@ -719,6 +787,24 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 					if (a[i] >= 128)
 						o[i] = s[i];
 			}
+#ifndef EW_ST
+		} else if (DEEP(c)) {
+			/* (the picture's 5-6-5 widened, each part's top bits again
+			   below: 31 is 255; mixed at 8 bits) */
+			uint8_t *o = row + 4 * px;
+			const uint16_t *s = pic->px + k;
+			for (i = x0; i < x1; i++) {
+				unsigned v = s[i], r5 = v >> 11, g6 = (v >> 5) & 63, b5 = v & 31, al = a != NULL ? a[i] : 255;
+				uint32_t rgb = (uint32_t) (r5 << 3 | r5 >> 2) << 16 | (uint32_t) (g6 << 2 | g6 >> 4) << 8 |
+					       (b5 << 3 | b5 >> 2);
+				if (op != 255)
+					al = (al * (op + 1)) >> 8;
+				if (al == 255)
+					put32(o + 4 * i, rgb);
+				else if (al != 0)
+					put32(o + 4 * i, mix_rgb(rgb, o + 4 * i + 1, al));
+			}
+#endif
 		} else {
 			uint8_t *o = row + 2 * px;
 			const uint16_t *s = pic->px + k;
@@ -1995,6 +2081,10 @@ static void ramp_make(canvas *c, ramp *r, int k)
 		}
 		r->lvl[k] = (uint8_t) ((a * 32 + 127) / 255);
 		r->spread[k] = SPREAD(RGB565(rgb)) * r->lvl[k];
+	} else if (DEEP(c)) {
+		/* (no pattern: the colour itself, its alpha in 255ths) */
+		r->lvl[k] = (uint8_t) a;
+		r->spread[k] = (uint32_t) a << 24 | rgb;
 	} else {
 		uint8_t dark, light;
 		int level;
@@ -2066,7 +2156,7 @@ static ramp *ramp_get(canvas *c, const ramp *want)
 	memset(r->made, 0, n);
 	for (i = 0; i < r->n; i++)
 		r->lu[i] = 0x10000;
-	r->solid = r->a == 255;
+	r->solid = r->a == 255 && !DEEP(c);	/* (32 bits: every row through grad_row's loop) */
 	for (i = 0; i < r->s.ns; i++)
 		if (!r->s.hint[i] && (r->s.col[i] >> 24) != 255)
 			r->solid = 0;
@@ -2169,7 +2259,7 @@ static void grad_run(canvas *c, ramp *r, int k, int32_t x, int32_t y, int32_t n)
 {
 	const uint8_t *b = bayer[(y + c->oy) & 3];
 	const uint16_t *v;
-	uint8_t *o = c->pix + (long) y * c->stride + (c->bpp == 16 ? 2 * x : x);
+	uint8_t *o = c->pix + (long) y * c->stride + (long) x * (c->bpp / 8);
 	int32_t i;
 	if (n <= 0)
 		return;
@@ -2179,6 +2269,15 @@ static void grad_run(canvas *c, ramp *r, int k, int32_t x, int32_t y, int32_t n)
 	}
 	if (!r->made[k])
 		ramp_make(c, r, k);
+	if (DEEP(c)) {
+		uint32_t e = r->spread[k];
+		for (i = 0; i < n; i++)
+			if (e >> 24 == 255)
+				put32(o + 4 * i, e);
+			else if (e >> 24 != 0)
+				put32(o + 4 * i, mix_rgb(e & 0xffffff, o + 4 * i + 1, e >> 24));
+		return;
+	}
 	v = r->v + (k << 4);
 	if (r->solid || r->lvl[k] == (c->bpp == 16 ? 32 : 16)) {
 		uint16_t p[4];
@@ -2350,6 +2449,21 @@ static void grad_row(canvas *c, ramp *r, int32_t x, int32_t y, int32_t n, const 
 	unsigned b0 = b[ph], b1 = b[(ph + 1) & 3], b2 = b[(ph + 2) & 3], b3 = b[(ph + 3) & 3];
 	if (gmap != NULL) {
 		memcpy(gmap + y * gmap_w + x, idx, (size_t) n);
+		return;
+	}
+	if (DEEP(c)) {
+		/* each pixel its entry's colour, mixed at its alpha */
+		o += 4 * x;
+		for (i = 0; i < n; i++, o += 4) {
+			uint32_t e;
+			if (!r->made[idx[i]])
+				ramp_make(c, r, idx[i]);
+			e = r->spread[idx[i]];
+			if (e >> 24 == 255)
+				put32(o, e);
+			else if (e >> 24 != 0)
+				put32(o, mix_rgb(e & 0xffffff, o + 1, e >> 24));
+		}
 		return;
 	}
 	if (r->solid) {
@@ -3041,6 +3155,8 @@ static void grad(canvas *c, const dl_item *d)
 			   need; one when the colours change in less than a pixel (a
 			   sharp edge), the last colour's */
 			int32_t n = ramp_need(&want.s, span);
+			if (DEEP(c))
+				n *= 2;	/* (a level an entry: no pattern between) */
 			if (span < 256)
 				span = 256;
 			if (n > span >> 8)

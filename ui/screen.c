@@ -14,8 +14,10 @@
  *   RRRRRGGG GGGBBBBB (bytes swapped where NVDI says the card has them so).
  * - A card's true colour of another form (15, 24 or 32 bits: NVDI's,
  *   fVDI's): the canvas is 5-6-5 rows of their own (tc_buf), each widened
- *   to the screen's form (ui/tcpix.c) as it is copied (DESIGN.md, Screens
- *   deeper than the Falcon's).
+ *   to the screen's form (ui/tcpix.c) as it is copied; on a screen of 8
+ *   bits a colour (24 or 32: a card's, the FireBee's) the page is drawn
+ *   at 32 bits, a byte a colour, and only its pixels' bytes placed
+ *   (DESIGN.md, Screens deeper than the Falcon's).
  *
  * The pens' colours are the screen's as they are, each pixel value's VDI
  * colour from vq_scrninfo where the VDI answers it, else TOS's standard
@@ -40,6 +42,13 @@ static int truecolour, swapped;
 static TC_FORM tc;			/* in true colour, the screen's pixels */
 static int wide;			/* ... another form than the canvas's: widened from tc_buf */
 static unsigned short *tc_buf;		/* the canvas's 5-6-5 rows where wide (else dev_buf) */
+#ifndef EW_ST
+static int deep;			/* ... at 32 bits: the screen has 8 bits a colour */
+static int tc_bpp = 16;			/* what tc_buf holds for make(): 16, or the page's 32 */
+#else
+#define deep 0
+#define tc_bpp 16
+#endif
 static short format;			/* the screen's: 0 interleaved planes (the Atari's own), 1 the
 					   VDI's standard, 2 packed pixels; -1 not known (vr_trnfm) */
 static short ncol;			/* 2, 4, 16, 256 */
@@ -121,13 +130,13 @@ static int bufs(short n)
 		else if ((free_tt = (long) Mxalloc(-1, 1)) < 0)
 			free_tt = 0;
 		if (free_st < st + 262144L ||
-		    free_st + free_tt < st + (truecolour ? (wide ? band_w * 2 * n : 0) : band_w * n) + (2L << 20))
+		    free_st + free_tt < st + (truecolour ? (wide ? band_w * (deep ? 4 : 2) * n : 0) : band_w * n) + (2L << 20))
 			return 0;
 	}
 	rows = n;
 	if (truecolour) {
 		dev_buf = st_alloc(dev_row(band_w / 16) * n);
-		tc_buf = wide ? malloc(band_w * 2 * n) : dev_buf;
+		tc_buf = wide ? malloc(band_w * (deep ? 4 : 2) * n) : dev_buf;
 	} else {
 		chunky = malloc(band_w * n);
 		std_buf = std ? st_alloc(band_w / 8 * planes * n) : NULL;
@@ -321,6 +330,9 @@ int scr_init(void)
 #endif
 		swapped = tc.intel;
 		wide = !tc.same;
+#ifndef EW_ST
+		deep = wide && tc.deep;	/* (the page at 8 bits a colour: DESIGN.md) */
+#endif
 		/* the screen's height when there is the ST RAM, keeping some for others */
 		return bufs((short) scr_h) || bufs(BAND);
 	}
@@ -576,7 +588,13 @@ static void make(short h, long words)
 		if (wide) {
 			long r, row = dev_row(words);
 			for (r = 0; r < h; r++)
-				tc_row(&tc, tc_buf + r * words * 16, (uint8_t *) dev_buf + r * row, words * 16);
+#ifndef EW_ST
+				if (tc_bpp == 32)
+					tc_row32(&tc, (const uint8_t *) tc_buf + r * words * 64, (uint8_t *) dev_buf + r * row,
+						 words * 16);
+				else
+#endif
+					tc_row(&tc, tc_buf + r * words * 16, (uint8_t *) dev_buf + r * row, words * 16);
 		} else if (swapped) {
 			unsigned short *p = dev_buf;
 			long n = words * 16 * h;
@@ -863,8 +881,13 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		c.oy = py + y0;
 		if (truecolour) {
 			c.pix = (uint8_t *) tc_buf;
+#ifdef EW_ST
 			c.stride = words * 16 * 2;
 			c.bpp = 16;
+#else
+			c.bpp = deep ? 32 : 16;
+			c.stride = words * 16 * (c.bpp / 8);
+#endif
 		} else {
 			c.pix = chunky;
 			c.stride = words * 16;
@@ -874,12 +897,22 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 		if (p != NULL) {
 			cv_page(&c, p);
 		} else if (truecolour) {
+#ifdef EW_ST
 			memset(tc_buf, 0xff, words * 16 * 2 * h);
+#else
+			memset(tc_buf, 0xff, words * 16 * (c.bpp / 8) * h);
+#endif
 		} else {
 			memset(chunky, pen(NULL, 0xffffff), words * 16 * h);
 		}
 		t1 = pf_ms();
+#ifndef EW_ST
+		tc_bpp = c.bpp;
+#endif
 		put(h, words, 0, (short) c.w, area->x, area->y + y0);
+#ifndef EW_ST
+		tc_bpp = 16;
+#endif
 		scr_ms_canvas += t1 - t0;
 		scr_ms_put += pf_ms() - t1;
 	}
@@ -1074,7 +1107,7 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 	unsigned short *keep = dev_buf, *keep_tc = tc_buf;
 	unsigned char *was = chunky;
 	canvas c;
-	long pos, need = store_words * 16L * n * (wide ? 2 : 1);
+	long pos, need = store_words * 16L * n * (wide ? (deep ? 4 : 2) : 1);
 	unsigned long t0, t1;
 	if (store == NULL || p == NULL || at < 0 || at + n > store_rows)
 		return 1;
@@ -1111,8 +1144,13 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 	dev_buf = (unsigned short *) (void *) store_at(at);
 	if (truecolour) {
 		c.pix = wide ? part_buf : (uint8_t *) dev_buf;	/* (where wide, widened at the end) */
+#ifdef EW_ST
 		c.stride = store_words * 32L;
 		c.bpp = 16;
+#else
+		c.bpp = deep ? 32 : 16;
+		c.stride = store_words * 2L * c.bpp;
+#endif
 	} else {
 		c.pix = part_buf;
 		c.stride = store_words * 16L;
@@ -1131,7 +1169,13 @@ int scr_store_draw_part(const page *p, int32_t px, int32_t py, short at, short n
 		chunky = part_buf;	/* (made from the part's own pixels) */
 	else if (wide)
 		tc_buf = (unsigned short *) (void *) part_buf;
+#ifndef EW_ST
+	tc_bpp = c.bpp;
+#endif
 	make(n, store_words);	/* (in true colour its bytes turned, where the screen's are) */
+#ifndef EW_ST
+	tc_bpp = 16;
+#endif
 	chunky = was;
 	tc_buf = keep_tc;
 	dev_buf = keep;
@@ -1169,8 +1213,13 @@ void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 		dev_buf = (unsigned short *) (void *) store_at(at + y0);
 		if (truecolour) {
 			c.pix = (uint8_t *) (wide ? tc_buf : dev_buf);
+#ifdef EW_ST
 			c.stride = store_words * 32L;
 			c.bpp = 16;
+#else
+			c.bpp = deep ? 32 : 16;
+			c.stride = store_words * 2L * c.bpp;
+#endif
 		} else {
 			c.pix = chunky;
 			c.stride = store_words * 16L;
@@ -1179,7 +1228,13 @@ void scr_store_draw(const page *p, int32_t px, int32_t py, short at, short n)
 		t0 = pf_ms();
 		cv_page(&c, p);
 		t1 = pf_ms();
+#ifndef EW_ST
+		tc_bpp = c.bpp;
+#endif
 		make(h, store_words);	/* (into the kept rows: dev_buf points there) */
+#ifndef EW_ST
+		tc_bpp = 16;
+#endif
 		scr_ms_canvas += t1 - t0;
 		scr_ms_put += pf_ms() - t1;
 	}

@@ -41,7 +41,15 @@ typedef struct {
 	char translate_to[8];		/* TRANSLATETO=: into which language ("en") */
 	unsigned short translate_port;	/* TRANSLATEPORT=: translategate's port on the Gateway (8480;
 					   written only when another, as for the rigs) */
+#ifndef EW_ST
+	short ttleave;			/* TTLEAVE=: per cent of the TT RAM left for other programs
+					   (Erez, 4 Nov 2026: 50; 0 to 90) */
+#endif
 } EWOPT;
+#ifndef EW_ST
+void mem_limits(void);		/* the kept pages' and pictures' room, from TTLEAVE= (main.c) */
+extern long tt_free;		/* the TT RAM free at the start (0: none; mem_limits) */
+#endif
 extern EWOPT opt;
 /* the Hebrew keyboard (F10 alone, as the family's apps; no menu item:
    Erez, 7 Nov 2026): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */

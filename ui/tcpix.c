@@ -2,9 +2,11 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * tcpix.c - a true-colour screen's pixels. EWeb draws a page in 5-6-5
- * (the Falcon's own: ui/screen.c); a screen of another form (a card's
- * 15, 24 or 32 bits, NVDI's or fVDI's) has each row widened to it as it
- * is copied to the screen (DESIGN.md, Screens deeper than the Falcon's).
+ * (the Falcon's own: ui/screen.c), or at 32 bits on a screen of 8 bits
+ * a colour (a card's 24 or 32, the FireBee's); a screen of another form
+ * than the canvas's (a card's 15, 24 or 32 bits, NVDI's or fVDI's) has
+ * each row made its form as it is copied to the screen (DESIGN.md,
+ * Screens deeper than the Falcon's).
  *
  * vq_scrninfo says where each colour's bits go, a bit's place in the
  * pixel for each (work_out[16..], [32..], [48..], [64..]). Its documents
@@ -60,13 +62,13 @@ static int from_info(const short *info, short bytes, short n[4], short at[4][8])
 	return 1;
 }
 
-/* a part of src bits (5 or 6) at each value, widened to 8 bits, its top
+/* a part of src bits (5, 6 or 8) at each value, widened to 8 bits, its top
    n of them at the screen's places */
 static void table(uint32_t *t, short src, short n, const short *at)
 {
 	short v, j;
 	for (v = 0; v < 1 << src; v++) {
-		unsigned e = (unsigned) (v << (8 - src) | v >> (2 * src - 8));
+		unsigned e = src == 8 ? (unsigned) v : (unsigned) (v << (8 - src) | v >> (2 * src - 8));
 		unsigned d = e >> (8 - n);
 		uint32_t px = 0;
 		for (j = 0; j < n; j++)
@@ -96,6 +98,14 @@ int tc_form(TC_FORM *f, short planes, const short *info)
 		f->fill |= 1UL << at[3][j];
 	for (j = 0; j < 3; j++)
 		f->bits[j] = n[j];
+#ifndef EW_ST
+	if (f->bytes >= 3 && n[0] == 8 && n[1] == 8 && n[2] == 8) {
+		f->deep = 1;
+		table(f->r8, 8, 8, at[0]);
+		table(f->g8, 8, 8, at[1]);
+		table(f->b8, 8, 8, at[2]);
+	}
+#endif
 	/* the Falcon's 5-6-5 (red's top bit the pixel's: as NVDI has it,
 	   green's least bit sometimes the overlay's and not listed) */
 	f->same = f->bytes == 2 && n[0] == 5 && at[0][4] == 15 && at[0][0] == 11 && n[2] == 5 && at[2][0] == 0;
@@ -210,6 +220,42 @@ void tc_row(const TC_FORM *f, const uint16_t *src, uint8_t *dst, long n)
 	}
 }
 
+#ifndef EW_ST
+void tc_row32(const TC_FORM *f, const uint8_t *src, uint8_t *dst, long n)
+{
+	long i;
+	if (f->bytes == 4) {
+		for (i = 0; i < n; i++, src += 4, dst += 4) {
+			uint32_t px = f->r8[src[1]] | f->g8[src[2]] | f->b8[src[3]] | f->fill;
+			if (f->intel) {
+				dst[0] = (uint8_t) px;
+				dst[1] = (uint8_t) (px >> 8);
+				dst[2] = (uint8_t) (px >> 16);
+				dst[3] = (uint8_t) (px >> 24);
+			} else {
+				dst[0] = (uint8_t) (px >> 24);
+				dst[1] = (uint8_t) (px >> 16);
+				dst[2] = (uint8_t) (px >> 8);
+				dst[3] = (uint8_t) px;
+			}
+		}
+	} else {
+		for (i = 0; i < n; i++, src += 4, dst += 3) {
+			uint32_t px = f->r8[src[1]] | f->g8[src[2]] | f->b8[src[3]] | f->fill;
+			if (f->intel) {
+				dst[0] = (uint8_t) px;
+				dst[1] = (uint8_t) (px >> 8);
+				dst[2] = (uint8_t) (px >> 16);
+			} else {
+				dst[0] = (uint8_t) (px >> 16);
+				dst[1] = (uint8_t) (px >> 8);
+				dst[2] = (uint8_t) px;
+			}
+		}
+	}
+}
+#endif
+
 /* the lowest place a part's bits go (where it starts) */
 static short lowest(const uint32_t *t, short top)
 {
@@ -227,6 +273,10 @@ const char *tc_name(const TC_FORM *f)
 	static char s[128];
 	snprintf(s, sizeof s, "%d bits a pixel, red %d at %d, green %d at %d, blue %d at %d%s%s", f->bytes * 8,
 		 f->bits[0], lowest(f->r, 31), f->bits[1], lowest(f->g, 63), f->bits[2], lowest(f->b, 31),
-		 f->intel ? ", Intel order" : "", f->same ? " (5-6-5 as drawn)" : "");
+		 f->intel ? ", Intel order" : "", f->same ? " (5-6-5 as drawn)" :
+#ifndef EW_ST
+		 f->deep ? " (drawn at 32 bits)" :
+#endif
+		 "");
 	return s;
 }

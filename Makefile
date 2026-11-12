@@ -393,7 +393,8 @@ binary/TLS.OVL: common/tlsovl/tls.ovl
 # (common/tlsovl's make CPU=5475: no DSP), tlsfb.ovl beside it. CF_CC: the
 # cross compiler builds for a ColdFire (make dist leaves both out if not)
 CF_CC := $(shell $(M68KCC) -mcpu=5475 -E -x c /dev/null >/dev/null 2>&1 && echo yes)
-binary/EWEBFB.PRG: binary/EWEB.PRG tools/mkfirebee.py common/atari/cpucheck_cf.S common/atari/ll64.c
+binary/EWEBFB.PRG binary/EWEBJSFB.OVL &: binary/EWEB.PRG tools/mkfirebee.py common/atari/cpucheck_cf.S common/atari/ll64.c \
+		atari/cfmath.c
 	@mkdir -p binary
 	python3 tools/mkfirebee.py $@
 binary/TLSFB.OVL: $(wildcard common/tlsovl/*.c common/tlsovl/*.S common/src/tls.c common/atari/libc.c common/atari/ll64.c)
@@ -836,6 +837,11 @@ build/asan/tctest: tests/screen/tctest.c ui/tcpix.c ui/tcpix.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Iui -o $@ \
 		tests/screen/tctest.c ui/tcpix.c
+# EWEBFB.PRG's 64-bit integers to and from doubles (atari/cfmath.c, the
+# ColdFire's: tools/mkfirebee.py) against the host compiler's
+build/asan/cfmathtest: tests/host/cfmathtest.c atari/cfmath.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -o $@ $<
 
 # downloads' names: Content-Disposition (RFC 6266's examples, tc2231's
 # cases) and the TOS names offered (tests/browse/dltest.c)
@@ -1028,6 +1034,12 @@ build/m68k/h5/ewh5test.o: tests/html5lib/ewh5test.c $(EWB_HDRS)
 build/m68k/ewh5test: build/m68k/h5/ewh5test.o $(call EWH5_OBJ,m68k) $(m68k_EC) $(m68k_PU)
 	$(M68KCC) -m68030 -static -o $@ $^
 
+# EWEBJSFB.OVL's numbers as ColdFire code (musl's maths, atari/cfmath.c)
+# under qemu-m68k -cpu cfv4e against the host's: tests/coldfire/run.sh
+.PHONY: cftest
+cftest:
+	tests/coldfire/run.sh
+
 h5test: build/host/h5test build/m68k/h5test build/asan/ewh5test build/m68k/ewh5test
 	@test -n "$(H5DATA)" || { echo "no tests: run tests/html5lib/fetch.sh"; exit 1; }
 	@echo "Hubbub:"
@@ -1143,7 +1155,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest binary/EWEB.FNT \
+		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/cfmathtest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
@@ -1159,6 +1171,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/sitetest
 	build/asan/dltest
 	build/asan/tctest
+	build/asan/cfmathtest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
 	build/asan/nsbench -E both build/news/NEWS.HTM build/news/NEWS.CSS > /dev/null
@@ -1193,6 +1206,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/js/kept.py build/asan/ewrender binary/EWEB.FNT build/host/aerajsc
 	python3 tests/js/needs.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/svgcss.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/deep32.py build/asan/ewrender binary/EWEB.FNT
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the
@@ -1267,7 +1281,7 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
-FB_DIST := $(if $(CF_CC),EWEBFB.PRG TLSFB.OVL)
+FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
 dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
 		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT $(addprefix binary/,$(FB_DIST))

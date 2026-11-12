@@ -46,6 +46,22 @@ static void check(const char *what, const TC_FORM *f, uint16_t v, const char *wa
 		printf("FAIL %s: 5-6-5 %04x made %s, want %s (%s)\n", what, v, got, want, tc_name(f));
 		fails++;
 	}
+	if (f->deep) {
+		/* at 32 bits: the same colour widened (each part's top bits
+		   again below) made the same pixel */
+		unsigned r5 = v >> 11, g6 = v >> 5 & 63, b5 = v & 31;
+		uint8_t px[4], out32[8];
+		px[0] = 0;
+		px[1] = (uint8_t) (r5 << 3 | r5 >> 2);
+		px[2] = (uint8_t) (g6 << 2 | g6 >> 4);
+		px[3] = (uint8_t) (b5 << 3 | b5 >> 2);
+		tc_row32(f, px, out32, 1);
+		checks++;
+		if (memcmp(out, out32, (size_t) f->bytes) != 0) {
+			printf("FAIL %s: at 32 bits %04x made otherwise (%s)\n", what, v, tc_name(f));
+			fails++;
+		}
+	}
 }
 
 /* the form f seen as the VDI shows it (pure red, green and blue read
@@ -203,6 +219,27 @@ int main(void)
 		checks++;
 		if (memcmp(out, "\xff\x00\x00\x00\xff\x00\x00\x00\xff", 9) != 0)
 			printf("FAIL a row of 24\n"), fails++;
+	}
+	/* a row at 32 bits, 8 bits a colour as they are; 15 and 16 bits not drawn so */
+	{
+		static const uint8_t row[12] = { 0, 0x12, 0x34, 0x56, 0, 0xff, 0x01, 0x80, 0, 0, 0, 0 };
+		static const short at[4] = { 8, 16, 24, 0 }, n[4] = { 8, 8, 8, 8 };
+		uint8_t out[12];
+		tc_form(&f, 24, NULL);
+		tc_row32(&f, row, out, 3);
+		checks++;
+		if (!f.deep || memcmp(out, "\x12\x34\x56\xff\x01\x80\x00\x00\x00", 9) != 0)
+			printf("FAIL a row of 24 from 32 bits\n"), fails++;
+		info_of(info, 32, at, n, 0, 1);	/* (red at 8, alpha the lowest byte, Intel order: A R G B in memory) */
+		tc_form(&f, 32, info);
+		tc_row32(&f, row, out, 2);
+		checks++;
+		if (!f.deep || memcmp(out, "\xff\x12\x34\x56\xff\xff\x01\x80", 8) != 0)
+			printf("FAIL a row of Intel ARGB from 32 bits (%s)\n", tc_name(&f)), fails++;
+		tc_form(&f, 16, NULL);
+		checks++;
+		if (f.deep)
+			printf("FAIL 16 bits drawn at 32\n"), fails++;
 	}
 	checks++;
 	if (tc_form(&f, 8, NULL) || tc_form(&f, 12, NULL))

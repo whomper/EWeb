@@ -5135,6 +5135,24 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
 
+## The TT RAM left for others (12 Nov 2026)
+
+Erez's decision of 4 Nov 2026 (Decisions, TT-RAM), made: `mem_limits` in `ui/main.c` takes the TT
+RAM free as `EWEB.PRG` starts (the program is already in it), leaves `TTLEAVE=` per cent of it for
+other programs (Settings > General > TT RAM left for others, 0 to 90, 50 as it starts; the line is
+shown only with TT RAM), and gives half the rest to the pages kept for Back and Forward
+(`br_keep_max`, shared by the windows) and a quarter to the pictures' files and decoded pixels
+(`img_max`); the last quarter is the page being made. At 50 per cent that is a quarter and an
+eighth of the TT RAM, as before, without the 24 MB and 16 MB ceilings: on Erez's DFB1 (128 MB,
+about 125 free as EWeb starts) about 31 and 16 MB where they were 24 and 16; at 10 per cent, 56
+and 28 MB.
+What is kept past a smaller setting goes as the next page is kept (the oldest first), as it
+always has. A machine without TT RAM keeps its eighth and sixteenth of the ST RAM, and
+`EWEBST.PRG` is as it was. The free TT RAM is not asked again while EWeb runs (the heap takes it
+in 8 MB steps and gives them back: what GEMDOS says is free moves with EWeb's own use, not the
+others'). `make hatarigui`'s `falcon` group checks the log's `memory:` line on the Falcon with
+128 MB of TT RAM.
+
 ## The FireBee edition: EWEBFB.PRG (12 Nov 2026)
 
 The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code
@@ -5157,8 +5175,20 @@ release as `EWEB.PRG` and `EWEBST.PRG`.
   float is libgcc's), `build/cf/` for `build/tos/`, `cpucheck_cf.S` for `cpucheck.c` and `ll64.c`
   for `-lgcc`; `make binary/EWEBFB.PRG`, `make binary/TLSFB.OVL` (common's `tlsovl`, `make
   CPU=5475`: no DSP, BearSSL's own RSA and curves), and `make dist` takes both when the compiler
-  builds for a ColdFire. 1.29 MB (`EWEB.PRG` 1.21). Its About box says "for the FireBee". No
-  scripts yet: QuickJS for the ColdFire's FPU (doubles only) is `EWEBJS.OVL`'s next step.
+  builds for a ColdFire. 1.29 MB (`EWEB.PRG` 1.21). Its About box says "for the FireBee".
+- **Scripts (12 Nov 2026):** `EWEBJSFB.OVL`, the scripts' overlay as ColdFire code, made by
+  `mkfirebee.py` from `EWEBJS.OVL`'s own rules in the same output (`-m68881` becomes
+  `-mcpu=5475`: the MCF5474's FPU, doubles only, is QuickJS's numbers and musl's maths), packed
+  by `tools/mkovl.py`, and `EWEBFB.PRG`'s `js_imports` made from it; 945 KB (`EWEBJS.OVL` 932).
+  `EWEBFB.PRG` loads it as `EWEB.PRG` loads its own (`ewebjsfb.ovl` beside it; the caches
+  pushed with `cpushl`; no `_FPU` check, the FPU being always there), and gives it, beyond
+  `ll64.c`, `atari/cfmath.c`: 64-bit integers to and from doubles and `__clzdi2`, from the
+  double's bits (`tests/host/cfmathtest.c`: 3 million against the host's in `make test`).
+  `tests/coldfire/run.sh` (`make cftest`) runs musl's maths and cfmath.c as ColdFire code under
+  `qemu-m68k -cpu cfv4e` against the host's build of the same sources: 700,000 answers, every
+  bit alike. QuickJS itself on a ColdFire, and the FPU's handling of denormals (the V4e FPU
+  traps on them for software to finish: FireTOS's and MiNT's handlers), are the tester's
+  FireBee's to prove.
 - **Checked here:** `make hatarigui`'s `firebee` group starts `EWEBFB.PRG` on the 1040 ST and on a
   Falcon: each shows "EWEBFB.PRG is for the FireBee. On a Falcon or a TT: EWEB.PRG; on an ST or
   STE: EWEBST.PRG." and Return goes back to the desktop. The program's own run (GEM, STinG, the
@@ -5173,7 +5203,8 @@ a SuperVidel, a Nova or ET4000 on a TT or Mega STE), a FireBee's and ARAnyM's wi
 24 or 32 bits a pixel. Erez's decision (11 Nov 2026): **first EWeb works on those screens**,
 drawing in 16 bits and widening each pixel as it goes to the screen; **drawing in true 32 bits**
 (pictures and gradients at 8 bits a colour, no banding) comes with the FireBee work, and is for
-the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee alone.
+the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee alone: done on
+12 Nov 2026 (True 32 bits, below).
 
 - **How.** The canvas stays 5-6-5, the Falcon's own (`src/gfx`, unchanged). On a screen of
   another form its rows are drawn into rows of their own (`tc_buf`, in the heap: TT RAM where
@@ -5205,11 +5236,29 @@ the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee al
   box's drawing off the screen (common's `aboutbox.c`) checks that the VDI drew where it thinks
   the screen is and draws on the screen when not; in ARAnyM the menus could not be clicked
   (its mouse moves by steps from where it is), so the About box itself is not yet seen there.
-- **Next (true 32 bits).** A canvas of 8 bits a colour (`bpp` 32 in `src/gfx/canvas.c`: its own
-  loops for fills, glyphs' mixing, pictures, gradients and translucency, as each depth has now),
-  pictures kept at 8-8-8 (`img.c`, and pens from the Gateway at that depth), and the rows then
-  copied as they are (the form's tables for the byte order only). Measured first on ARAnyM and,
-  for the FireBee, on its ColdFire.
+- **True 32 bits (12 Nov 2026).** On a screen of 8 bits a colour (24 or 32: a card's, the
+  FireBee's, ARAnyM's) the page is drawn at 32 bits a pixel, the bytes 0, red, green, blue
+  (`bpp` 32 in `src/gfx/canvas.c`, the same on either end of the machine), and each row's bytes
+  only placed where the screen keeps them as it is made the screen's (`tc_row32` in
+  `ui/tcpix.c`: a table for each colour's 8 bits, ORed; `TC_FORM.deep`). Each of the canvas's
+  ways of drawing has its loop at 32 bits: fills, a glyph's pixels solid and mixed, translucency
+  at 8-bit alpha (`mix_rgb` on the pixel under it, as the 256-colour screen mixes through its
+  palette, without the pen after), pictures (still 5-6-5 as decoded, each part widened as it is
+  drawn, `31` to `255`, mixed at their alpha and opacity) and gradients (a ramp's entry is its
+  colour and alpha, `spread`, and no pattern: an entry a level, twice the 16-bit screen's, where
+  a gradient's span has the pixels; every row through `grad_row`'s 32-bit loop). A gradient
+  black to white across 256 px is 254 levels, each pixel within 2 of its place on the line
+  (5-6-5: 32 levels of grey, patterned). 15-bit screens and the Falcon's 5-6-5 are drawn as
+  before; `EWEBST.PRG` has none of it (the same bytes as 1.3's: `DEEP(c)` is 0 there, frozen).
+  `tc_buf` is then 4 bytes a pixel: 1,875 KB at 800 x 600, in TT RAM where there is some.
+- **Tested (32 bits).** `make test` has `tests/layout/deep32.py` (ewrender `--deep`: the grey and
+  alpha gradients level by level, white at 50% on black, opacity; the test pages at 32 bits
+  within the 16-bit screen's steps of the 16-bit drawing; every band of the window at 8, 16 and
+  32 bits under AddressSanitizer and UBSan) and `tctest`'s 99 checks (each form's pixel made at
+  32 bits the same as from 5-6-5 where the colour is one of 5-6-5's, a row of 24 bits and a row
+  of Intel ARGB from 32). Not yet: pictures decoded at 8-8-8 (`common/src/pic.c` and the
+  Gateway's pens at that depth: their banding in a smooth photo is the 16-bit screen's), and the
+  ARAnyM rig at 24 and 32 bits on this build.
 
 ## A big page on a 4 MB Falcon under NVDI (11 Nov 2026)
 

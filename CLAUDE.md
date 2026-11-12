@@ -171,8 +171,10 @@ hub stay complete, with the evidence.
   checks run them together.
   **Screens deeper than the Falcon's** (a card's 15, 24 or 32 bits under NVDI or fVDI; DESIGN.md):
   the page drawn in 5-6-5 and each row widened to the screen's form (`ui/tcpix.c`, `make` in
-  `ui/screen.c`), the form seen by drawing pure colours and reading them back (`seen_form`):
-  after changing them, `make test` (`tests/screen/tctest.c`) and `tests/aranym/deep.py`
+  `ui/screen.c`), or on 8 bits a colour (24 or 32) drawn at 32 bits (`bpp` 32 in
+  `src/gfx/canvas.c`, `DEEP(c)`, none in `EWEBST.PRG`; `tc_row32`), the form seen by drawing
+  pure colours and reading them back (`seen_form`): after changing them, `make test`
+  (`tests/screen/tctest.c`, `tests/layout/deep32.py`: ewrender `--deep`) and `tests/aranym/deep.py`
   (ARAnyM with fVDI at 32, 24 and 16 bits under FreeMiNT and XaAES; `apt install aranym`).
   **Dialogs** have the AES's 3D look where it has one (the guidelines' 5.6: common's `dlg_3d`,
   called by `db_end` in common's `dlgbuild.c`; Settings is the family's, common's `settings.c`, its pages
@@ -239,6 +241,10 @@ hub stay complete, with the evidence.
   the disk, a download: a file a link opens streamed too, `browser.stream_files`, in the download
   box `dl_box` of `ui/dialogs.c`) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`,
   ewrender `-stream`) and `make hatarigui` after changing it, and XaAES for the box.
+- **The TT RAM** (Erez, 4 Nov 2026): all but `TTLEAVE=` per cent (Settings > General, 50) keeps
+  pages and pictures (`mem_limits` in `ui/main.c`: `br_keep_max`, `img_max`; DESIGN.md, The TT
+  RAM left for others): after changing it, `make hatarigui` (its `falcon` group) and `make
+  hatarifiles`.
 - **The disk cache** is `src/browse/dcache.c` (RFC 9111's freshness and validation, stale pages
   when cut off, a POST forgetting; pictures kept decoded for the screen by `img.c`; in `cache\` next to `EWEB.PRG` a ring of
   pieces `ewebnn.pak` of 4 MB at most, each with its list `ewebnn.lst`, and the index `eweb.idx`
@@ -329,12 +335,15 @@ hub stay complete, with the evidence.
 - **The FireBee edition** is `EWEBFB.PRG` (`make binary/EWEBFB.PRG`: `tools/mkfirebee.py` runs
   `EWEB.PRG`'s own rules again as ColdFire code, `-mcpu=5475`, into `build/cf/`), with `tlsfb.ovl`
   (`make binary/TLSFB.OVL`: common's tlsovl, `CPU=5475`); its first code is common's
-  `cpucheck_cf.S` (`ui/main.c`'s `cpu_alert` under `__mcoldfire__`). After changing common's
+  `cpucheck_cf.S` (`ui/main.c`'s `cpu_alert` under `__mcoldfire__`); its scripts are
+  `EWEBJSFB.OVL` (`EWEBJS.OVL`'s rules again, made by `mkfirebee.py`), with `atari/cfmath.c` in
+  `EWEBFB.PRG` for what the overlay takes beyond `ll64.c`. After changing common's
   assembly, run common's `tests/coldfire` (`make test`, `make same`); after anything the FireBee
-  build takes, `make binary/EWEBFB.PRG` and `make hatarigui`'s `firebee` group. DESIGN.md, The FireBee
-  edition.
+  build takes, `make binary/EWEBFB.PRG` and `make hatarigui`'s `firebee` group, and after the
+  scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`).
+  DESIGN.md, The FireBee edition.
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
-  `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
+  `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
   dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his

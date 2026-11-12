@@ -11,8 +11,9 @@ For each depth EWeb starts by itself (XAAES.CNF's run line) on a page of
 colour swatches (HOME=), and the run passes when:
   - EWeb's log (NatFeats) names the screen's form (ui/tcpix.c) and says
     it is ready in true colour, with the page shown;
-  - each swatch on the screen is the colour EWeb draws it, its 5-6-5
-    widened as ui/tcpix.c widens it (at 15 and 16 bits, within the
+  - each swatch on the screen is the colour EWeb draws it: at 24 and 32
+    bits the page's own (drawn at 32 bits, DESIGN.md, True 32 bits), at
+    15 and 16 its 5-6-5 widened as ui/tcpix.c widens it (within the
     emulator's own widening of its 5-bit parts).
 Then Edit > Find's dialog is opened over the page (^F) and closed
 (Return), and the swatches are checked again (the page put back under
@@ -141,8 +142,12 @@ def config(path, kernel, img):
 
 
 def widened(c, depth):
-    """the colour EWeb's 5-6-5 for c is on a screen of depth bits"""
+    """the colour EWeb draws c on a screen of depth bits: at 24 and 32
+    bits its own (the page drawn at 32 bits, a byte a colour), else its
+    5-6-5 widened"""
     r, g, b = c >> 16, c >> 8 & 255, c & 255
+    if depth >= 24:
+        return (r, g, b)
     r5, g6, b5 = r >> 3, g >> 2, b >> 3
     return ((r5 << 3 | r5 >> 2), (g6 << 2 | g6 >> 4), (b5 << 3 | b5 >> 2))
 

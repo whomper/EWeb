@@ -306,6 +306,14 @@ is idle; quitting then writes only what came last. Either way, a
 picture EWeb has decoded is kept as the screen shows it, not as the
 file it came in.
 
+In memory, EWeb keeps the pages you have seen, for Back and Forward,
+and the pictures it has decoded. With TT RAM it uses all of it but a
+share it leaves for other programs: Settings > General > TT RAM left
+for others, half of it as EWeb starts (0 to 90 per cent; the line is
+there only with TT RAM). Of the rest, half keeps pages and a quarter
+pictures; when they fill it, the oldest go. Without TT RAM, as on a
+stock Falcon or an ST, EWeb keeps a little and leaves the rest.
+
 When you quit, a small box, Closing EWeb, says what EWeb is saving
 (the settings, the cookies, the history, the cache's pages and pictures
 and its list) with a bar of how far it has gone, moving as the cache is
@@ -676,7 +684,8 @@ and run for 5 seconds as it opens (2 seconds for each click or timer
 after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
-those, use the Gateway's browser (below). The ST edition runs no scripts and
+those, use the Gateway's browser (below). The FireBee edition runs them from
+`EWEBJSFB.OVL` beside `EWEBFB.PRG`. The ST edition runs no scripts and
 has no such menu item; on a Falcon without an FPU, picking it says
 "JavaScript needs an FPU (a 68881 or 68882)", and pages are shown as
 with scripts off.
