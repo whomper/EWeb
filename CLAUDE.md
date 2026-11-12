@@ -291,7 +291,9 @@ hub stay complete, with the evidence.
   anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a
   page's inline `<svg>` out as a file (`svg_markup`) for `img.c`, which keeps it as a picture
   (`svg_cb` in `src/browse`, `LAYOUT_OPT.svg`). NetSurf's libsvgtiny is the yardstick only
-  (`tests/svg/tiny.c`, `svgrender -T`). After changing it: `make test` (`tests/svg/run.py`: each
+  (`tests/svg/tiny.c`, `svgrender -T`). A page's rules for fill and stroke reach an inline `<svg>` through `ec_svg_decls`
+  (`src/css`) into `svg_markup`'s style, and its width and height are CSS's (`svg_hints` in
+  `src/doc/doc.c`). After changing it: `make test` (`tests/layout/svgcss.py`; `tests/svg/run.py`: each
   case in `tests/svg/cases` against librsvg's, kept in `tests/svg/expect.txt`; a new case's with
   `--update`, rsvg-convert and Pillow; `tests/layout/svg.html`), `make fuzz` for a while
   (`fuzz_svg`; keep what it finds in `tests/fuzz/found/svg`), and count it

@@ -29,8 +29,10 @@ PIC *svg_render(const dnode *svg, const dnode *top, int w, int h, uint32_t color
 /* a page's <svg> element written out as an SVG file (malloc'ed, *len
    long; NULL when out of memory): its markup, with color (0xRRGGBB) its
    currentColor, and the elements elsewhere in the page that it names
-   (<use href="#icon">, url(#gradient)) in a <defs> */
-char *svg_markup(const dnode *n, uint32_t color, size_t *len);
+   (<use href="#icon">, url(#gradient)) in a <defs>; css, when not NULL,
+   the page's sheets: its rules for fill, stroke and the like that match
+   an element written into its style (ec_svg_decls) */
+char *svg_markup(const dnode *n, uint32_t color, ec_ctx *css, size_t *len);
 /* an <svg> element's own size, as svg_size's */
 void svg_node_size(const dnode *n, long *w, long *h);
 

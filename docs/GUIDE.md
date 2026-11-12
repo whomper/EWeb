@@ -656,6 +656,11 @@ Scripts says where:
   again.
 - **On no site** (untick "Run pages' scripts").
 
+When a page whose site isn't chosen looks empty without its scripts, or
+says it needs JavaScript, the status line at the foot of the window says
+"This page needs its scripts: click here to run this site's scripts."
+A click on it does what Options > Run this site's scripts does.
+
 Scripts cost a Falcon time: a page with scripts shows once they have
 come and run, and EWeb starts its JavaScript for each such page (about
 a second on a 50 MHz 68030). On every site, pages that need no scripts

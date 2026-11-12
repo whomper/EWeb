@@ -1177,6 +1177,8 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/formtest tests/forms/cases.txt > /dev/null
 	python3 tests/js/run.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/js/kept.py build/asan/ewrender binary/EWEB.FNT build/host/aerajsc
+	python3 tests/js/needs.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/svgcss.py build/asan/ewrender binary/EWEB.FNT
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the

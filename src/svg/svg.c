@@ -256,6 +256,9 @@ typedef struct {
 	const dnode *top, *root;
 	const dnode *extra[32];		/* elements outside it that it names */
 	int nextra;
+	ec_ctx *css;			/* the page's sheets (ec_svg_decls), or NULL */
+	SBUF st;			/* an element's style from them */
+	int depth;			/* (the element's: 0 the root) */
 } MK;
 
 static void esc(MK *m, const char *s, size_t n, int attr)
@@ -319,6 +322,47 @@ static void named(MK *m, const char *v)
 	}
 }
 
+/* SVG's properties in a page rule's block (put by ec_svg_decls): only
+   they, so that what is meant for the box (display, width) isn't the
+   picture's; the root's colour and opacity are its box's already */
+static void page_decls(void *ud, const char *s, size_t n)
+{
+	static const char *const props[] = { "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width",
+					     "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit",
+					     "stop-color", "stop-opacity", "opacity", "color", "visibility" };
+	MK *m = ud;
+	const char *end = s + n;
+	while (s < end) {
+		const char *nm, *e;
+		size_t nl, k;
+		while (s < end && (is_space((unsigned char) *s) || *s == ';'))
+			s++;
+		nm = s;
+		while (s < end && *s != ';' && *s != '{' && *s != '}')
+			s++;
+		if (s < end && *s != ';')
+			return;		/* (a nested rule: not one of these) */
+		e = s;
+		for (nl = 0; nm + nl < e && nm[nl] != ':' && !is_space((unsigned char) nm[nl]); nl++)
+			;
+		if (nm + nl >= e)
+			continue;
+		for (k = 0; k < sizeof props / sizeof *props; k++) {
+			size_t j;
+			if (strlen(props[k]) != nl)
+				continue;
+			for (j = 0; j < nl && (nm[j] | 0x20) == props[k][j]; j++)
+				;
+			if (j == nl)
+				break;
+		}
+		if (k == sizeof props / sizeof *props || (m->depth == 0 && (k == 11 || k == 12)))
+			continue;
+		m->fail |= !sb_add(&m->st, nm, (long) (e - nm));
+		m->fail |= !sb_addc(&m->st, ';');
+	}
+}
+
 static void write_node(MK *m, const dnode *n, int depth, uint32_t color)
 {
 	const dnode *c;
@@ -334,11 +378,22 @@ static void write_node(MK *m, const dnode *n, int depth, uint32_t color)
 	nm = ec_atom_text(n->e.name, &l);
 	m->fail |= !sb_addc(&m->b, '<');
 	m->fail |= !sb_add(&m->b, nm, (long) l);
+	/* the page's rules for it, before its own style attribute's (which
+	   wins), as its style */
+	m->st.len = 0;
+	if (m->css != NULL) {
+		m->depth = depth;
+		ec_svg_decls(m->css, &n->e, page_decls, m);
+	}
 	for (i = 0; i < n->nattr; i++) {
 		size_t al;
 		const char *an = ec_atom_text(n->attrs[i].name, &al);
 		if (depth == 0 && al == 5 && !strncmp(an, "color", 5))
 			continue;	/* (the element's own colour, below) */
+		if (m->st.len > 0 && al == 5 && !strncmp(an, "style", 5)) {
+			m->fail |= !sb_add(&m->st, n->attrs[i].val, (long) n->attrs[i].len);
+			continue;	/* (with the page's, below) */
+		}
 		m->fail |= !sb_addc(&m->b, ' ');
 		m->fail |= !sb_add(&m->b, an, (long) al);
 		m->fail |= !sb_adds(&m->b, "=\"");
@@ -347,6 +402,11 @@ static void write_node(MK *m, const dnode *n, int depth, uint32_t color)
 		if ((al == 4 && !strncmp(an, "href", 4)) || (al == 10 && !strncmp(an, "xlink:href", 10)) ||
 		    memchr(n->attrs[i].val, '#', n->attrs[i].len) != NULL)
 			named(m, n->attrs[i].val);
+	}
+	if (m->st.len > 0) {
+		m->fail |= !sb_adds(&m->b, " style=\"");
+		esc(m, m->st.s, (size_t) m->st.len, 1);
+		m->fail |= !sb_addc(&m->b, '"');
 	}
 	if (depth == 0) {
 		char cb[24];
@@ -370,7 +430,7 @@ static void write_node(MK *m, const dnode *n, int depth, uint32_t color)
 	m->fail |= !sb_addc(&m->b, '>');
 }
 
-char *svg_markup(const dnode *n, uint32_t color, size_t *len)
+char *svg_markup(const dnode *n, uint32_t color, ec_ctx *css, size_t *len)
 {
 	MK m;
 	const dnode *top = n;
@@ -378,9 +438,12 @@ char *svg_markup(const dnode *n, uint32_t color, size_t *len)
 		top = top->parent;
 	memset(&m, 0, sizeof m);
 	sb_init(&m.b);
+	sb_init(&m.st);
 	m.top = top;
 	m.root = n;
+	m.css = css;
 	write_node(&m, n, 0, color);
+	sb_free(&m.st);
 	if (m.fail) {
 		sb_free(&m.b);
 		return NULL;

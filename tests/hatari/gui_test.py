@@ -1210,6 +1210,7 @@ def scripts():
         scripts_run(site)
         scripts_without(site)
         scripts_modes(site)
+        scripts_note(site)
     finally:
         if xvfb is not None:
             xvfb.terminate()
@@ -1330,6 +1331,35 @@ def scripts_without(site):
         r.shot(0)
         r.key(Q, (CTRL,))
         check("scripts: without EWEBJS.OVL, ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()[-5:]))
+    finally:
+        r.end()
+
+
+def scripts_note(site):
+    """a site not chosen, its page all but empty without its scripts: the
+    status line says the page needs them, and a click on it runs them"""
+    hd = hd_for("scriptsnote", site + "tabs.html", "RUNSCRIPTS=1\r\n")
+    r = Run("scriptsnote", "Falcon:16", hd, windowed=True, network=True)
+    try:
+        ev = r.wait(r"shown ", 300)
+        said = r.wait(r"note ", 60)
+        check("scripts: a page that needs them says so (%s)" % (said or "")[5:],
+              ev is not None and said is not None and "needs its scripts" in said and
+              not any(e.startswith("scripts ran") for e in r.events()), str(r.events()[-8:]))
+        time.sleep(2)
+        r.shot(0)
+        if ev is None or said is None:
+            return
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top", ev)
+        x, y, w, h = (int(m.group(i)) for i in range(1, 5))
+        r.mouse.click(x + 40, y + h + 7)
+        ran = r.wait(r"scripts ran ", 300)
+        ev = r.wait(r"shown ", 120)
+        check("scripts: the note clicked runs them", "scripts note clicked" in r.events() and ran is not None and
+              ev is not None and ev.endswith("title Tabs ready"), str(r.events()[-8:]))
+        r.shot(1)
+        r.key(Q, (CTRL,))
+        r.wait(r"quit$", 60)
     finally:
         r.end()
 

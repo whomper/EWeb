@@ -47,7 +47,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		for (k = doc != NULL ? doc->root : NULL; k != NULL && count < 4; ) {
 			if (k->type == DN_ELEMENT && k->ns == DN_NS_SVG && k->tag == T_SVG) {
 				size_t len;
-				char *mk = svg_markup(k, 0x123456, &len);
+				char *mk = svg_markup(k, 0x123456, doc->css, &len);
 				count++;
 				if (mk != NULL) {
 					if (strlen(mk) != len)

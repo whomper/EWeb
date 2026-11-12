@@ -725,6 +725,56 @@ static void details_inserted(doc *d, dnode *n)
 		groups.name[groups.n++] = name;
 }
 
+/* an inline <svg>'s width and height as CSS's (SVG 2, 5.1.1: they are
+   the outer <svg>'s presentation attributes), so that width="100%" fills
+   its box and 1em follows its font; a bare number is px, a value CSS
+   wouldn't take left to the picture's own size */
+static void svg_hints(dnode *n)
+{
+	static const char *const units[] = { "px", "%", "em", "rem", "ex", "ch", "pt", "pc", "mm", "cm", "in",
+					     "vw", "vh" };
+	HINT h;
+	int k;
+	h.n = 0;
+	h.s[0] = 0;
+	for (k = 0; k < 2; k++) {
+		const char *v = attr_atom(n, k ? ha.height : ha.width), *e;
+		char buf[24];
+		size_t l, u;
+		int digits = 0;
+		if (v == NULL)
+			continue;
+		while (*v == ' ' || *v == '\t' || *v == '\n')
+			v++;
+		for (e = v; *e >= '0' && *e <= '9'; e++)
+			digits++;
+		if (*e == '.')
+			for (e++; *e >= '0' && *e <= '9'; e++)
+				digits++;
+		if (!digits)
+			continue;
+		l = (size_t) (e - v);
+		for (u = 0; u < sizeof units / sizeof *units; u++)
+			if (is(e, units[u]))
+				break;
+		if (*e != 0 && u == sizeof units / sizeof *units)
+			continue;
+		if (l + 4 >= sizeof buf)
+			continue;
+		memcpy(buf, v, l);
+		strcpy(buf + l, *e != 0 ? units[u] : "px");
+		put(&h, k ? "height" : "width", buf);
+	}
+	if (h.n > 0) {
+		char *s = doc_alloc(bd_doc, h.n + 1);
+		if (s != NULL) {
+			memcpy(s, h.s, h.n + 1);
+			n->e.hint = s;
+			n->e.nhint = (uint32_t) h.n;
+		}
+	}
+}
+
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
@@ -743,6 +793,9 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 		n->e.flags |= EC_NODE_LINK;
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
+	else if (n->type == DN_ELEMENT && n->tag == T_SVG && n->ns == DN_NS_SVG && n->e.hint == NULL &&
+		 n->nattr > 0 && (n->parent == NULL || n->parent->ns != DN_NS_SVG))
+		svg_hints(n);
 	if (n->tag == T_DETAILS && n->ns == DN_NS_HTML && n->nattr >= 2)
 		details_inserted(d, n);
 	if (n->tag == T_HTML && d->html == NULL)

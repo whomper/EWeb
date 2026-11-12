@@ -1136,6 +1136,8 @@ int main(int argc, char **argv)
 			bookmark = 1;
 		else if (!strcmp(argv[i], "-J"))
 			scripts_on = 1;
+		else if (!strcmp(argv[i], "-Jn"))
+			scripts_on = 2;	/* (scripts could run, on no site: "needs its scripts") */
 		else if ((!strcmp(argv[i], "-K") || !strcmp(argv[i], "-M")) && i + 1 < argc && nclick < 16)
 			clicks[nclick++] = argv[++i];
 		else if (!strcmp(argv[i], "-u") && i + 1 < argc && nclick < 16) {
@@ -1196,7 +1198,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1241,8 +1243,8 @@ int main(int argc, char **argv)
 	b.say = said;
 	b.log = logged;
 	b.ud = &verbose;
-	b.scripts = scripts_on;
-	b.script_sites = "*";
+	b.scripts = scripts_on != 0;
+	b.script_sites = scripts_on == 2 ? "" : "*";
 	b.console = console_line;
 	b.ask = asked;
 	b.extra_css = extra.s;

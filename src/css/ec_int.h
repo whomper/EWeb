@@ -286,6 +286,9 @@ struct ec_ctx {
 	ec_vec universal_sib;		/* those of them that look at siblings */
 	ec_vec never;			/* rules for :hover and the like, kept for later */
 	uint32_t order;
+	struct ec_svgr *svg;		/* the author rules that colour SVG (ec_svg_decls) */
+	struct ec_svgr **svg_tail;
+	uint32_t nsvg;
 	uint8_t layer;			/* inside @layer: below unlayered rules */
 	uint8_t prune;			/* author rules for names the document hasn't
 					   left out (ec_prune) */
@@ -366,5 +369,16 @@ const ec_sellist *ec_parse_sellist(ec_ctx *c, ec_lex *lx, int forgiving, int *ok
 
 /* matching (select.c) */
 int ec_match_list(ec_ctx *c, const ec_sellist *l, const ec_node *e, int *flags);
+int ec_match_sel(ec_ctx *c, const ec_sel *s, const ec_node *e);
+
+/* a rule whose block says fill, stroke or stop-: kept for an inline SVG's
+   picture (in rmem, with the rules) */
+typedef struct ec_svgr {
+	struct ec_svgr *next;
+	const ec_sel *sel;
+	const char *decls;
+	uint32_t len;
+} ec_svgr;
+#define EC_SVG_RULES 512
 
 #endif

@@ -2149,6 +2149,10 @@ void win_status(const char *s)
 		snprintf(t, sizeof t, " %s", s);
 	else if (br_refresh_note(&br, t + 1, (int) sizeof t - 1))
 		t[0] = ' ';	/* "Going on to example.com in 5 s: Esc stays here." */
+#ifndef EW_ST
+	else if (br.needs_scripts)
+		snprintf(t, sizeof t, " %s", BR_SCRIPTS_NOTE);	/* (one click on it runs them: win_mouse) */
+#endif
 	else if (br.security[0])
 		snprintf(t, sizeof t, " Secure: %s", br.security);
 	else
@@ -3713,6 +3717,16 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		}
 		return 1;
 	}
+#ifndef EW_ST
+	if (rect_hit(&cur->r_stat, mx, my) && (button & 1) && br.needs_scripts &&
+	    strcmp(cur->info + (cur->info[0] == ' '), BR_SCRIPTS_NOTE) == 0) {
+		/* "This page needs its scripts: click here ..." (Erez, 10 Nov
+		   2026): as Options > Run this site's scripts */
+		log_event("scripts note clicked");
+		command(C_SCRIPTS);
+		return 1;
+	}
+#endif
 	if (rect_hit(&cur->r_addr, mx, my)) {
 		if (button & 2) {
 			addr_menu(mx, my);

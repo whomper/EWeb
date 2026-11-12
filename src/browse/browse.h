@@ -197,7 +197,13 @@ typedef struct browser {
 				   left out, the default (Erez, 1 Nov 2026) */
 	int scripts;
 	int script_mode;
+	/* the page shown needs its scripts, which didn't run (its site isn't
+	   chosen): it looks empty, or it says it needs JavaScript; its note
+	   (BR_SCRIPTS_NOTE) is on the status line, a click there runs them
+	   (Erez, 10 Nov 2026) */
+	int needs_scripts;
 	const char *script_sites, *noscript_sites;
+#define BR_SCRIPTS_NOTE "This page needs its scripts: click here to run this site's scripts."
 	char note[96];		/* about the page shown, for the status line ("" none): its
 				   scripts were too much, it came from the cache out of date,
 				   it goes on to another page in a while, it didn't fit when

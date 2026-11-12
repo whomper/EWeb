@@ -1768,6 +1768,23 @@ static int supports_cond(ec_ctx *c, const ec_tok *t, int i, int n)
 
 static void rules(ec_ctx *c, const char *p, const char *end, int origin, int depth);
 
+/* does a block say fill, stroke or stop-color (SVG's, which EWeb's CSS
+   doesn't compute: an inline SVG's picture reads them, ec_svg_decls)? */
+static int svg_block(const char *t)
+{
+	for (; (t = strpbrk(t, "fFsS")) != NULL; t++) {
+		if ((t[0] | 0x20) == 'f' && (t[1] | 0x20) == 'i' && (t[2] | 0x20) == 'l' && (t[3] | 0x20) == 'l')
+			return 1;
+		if ((t[0] | 0x20) == 's' && (t[1] | 0x20) == 't' && (t[2] | 0x20) == 'r' && (t[3] | 0x20) == 'o' &&
+		    (t[4] | 0x20) == 'k' && (t[5] | 0x20) == 'e')
+			return 1;
+		if ((t[0] | 0x20) == 's' && (t[1] | 0x20) == 't' && (t[2] | 0x20) == 'o' && (t[3] | 0x20) == 'p' &&
+		    t[4] == '-')
+			return 1;
+	}
+	return 0;
+}
+
 /* a qualified rule: its prelude in prelude[0..n), its block from p */
 static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, int origin)
 {
@@ -1824,6 +1841,23 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 		c->st.selectors++;
 		index_sel(c, l->sel[k], origin);
 	}
+	if (origin == EC_ORIGIN_AUTHOR && svg_block(text))
+		for (k = 0; k < l->n && c->nsvg < EC_SVG_RULES; k++) {
+			ec_svgr *v;
+			if (keep < l->n && pruned(c, l->sel[k]))
+				continue;
+			if ((v = ec_alloc(&c->rmem, sizeof *v)) == NULL)
+				break;
+			v->next = NULL;
+			v->sel = l->sel[k];
+			v->decls = text;
+			v->len = (uint32_t) blen;
+			if (c->svg_tail == NULL)
+				c->svg_tail = &c->svg;
+			*c->svg_tail = v;
+			c->svg_tail = &v->next;
+			c->nsvg++;
+		}
 	return bend;
 }
 

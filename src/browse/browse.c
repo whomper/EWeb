@@ -1963,7 +1963,7 @@ static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
 	size_t len;
 	char *m;
 	ew_img *im;
-	if (!b->pictures || (m = svg_markup(n, color, &len)) == NULL)
+	if (!b->pictures || (m = svg_markup(n, color, lay_doc != NULL ? lay_doc->css : NULL, &len)) == NULL)
 		return NULL;
 	/* (data:, so that the disk cache keeps none of it) */
 	snprintf(key, sizeof key, "data:image/svg+xml;eweb=%08lx-%lu", str_hash(m) & 0xffffffffUL, (unsigned long) len);
@@ -2541,6 +2541,38 @@ static page *lay_turns(browser *b, doc *d, const char *base)
 	return p;
 }
 
+#ifndef EW_ST
+/* a page made without its scripts that looks as though it needs them:
+   hardly any text shown (a page its scripts write), or its text says so
+   ("enable JavaScript", "JavaScript is required", a <noscript>'s) */
+static int wants_scripts(const page *p)
+{
+	static const char *const asks[] = { "enabl", "requir", "need", "turn on", "activat", "allow", "switch on" };
+	long i, shown = 0;
+	for (i = 0; i < p->nitems; i++) {
+		const dl_item *it = &p->items[i];
+		uint32_t k;
+		if (it->type != DL_TEXT || it->text == NULL)
+			continue;
+		shown += it->len;
+		for (k = 0; k + 10 <= it->len; k++) {
+			size_t j;
+			if ((it->text[k] | 0x20) != 'j' || strncasecmp(it->text + k, "javascript", 10) != 0)
+				continue;
+			/* a word asking for it in the same run */
+			for (j = 0; j < sizeof asks / sizeof asks[0]; j++) {
+				size_t al = strlen(asks[j]);
+				uint32_t m;
+				for (m = 0; m + al <= it->len; m++)
+					if (strncasecmp(it->text + m, asks[j], al) == 0)
+						return 1;
+			}
+		}
+	}
+	return shown < 200;
+}
+#endif
+
 static int build1(browser *b, const char *data, long len, const char *charset, const char *url, int fresh,
 		  doc **dout, page **pout)
 {
@@ -2556,6 +2588,7 @@ static int build1(browser *b, const char *data, long len, const char *charset, c
 	html_opts o;
 
 	b->note[0] = 0;
+	b->needs_scripts = 0;
 	if (b->pv_p != NULL && !pv_room(len))
 		preview_drop(b);	/* (made as it came: the whole page wouldn't fit beside it) */
 #ifndef EW_ST
@@ -2706,6 +2739,13 @@ parse:
 	gem_turn();
 	MARK("page: made");
 	js_set_page(d, p);
+#ifndef EW_ST
+	if (!scripts && b->scripts && !build_plain && doc_has_scripts(d) && wants_scripts(p)) {
+		b->needs_scripts = 1;
+		if (b->note[0] == 0)
+			snprintf(b->note, sizeof b->note, "%s", BR_SCRIPTS_NOTE);
+	}
+#endif
 	*dout = d;
 	*pout = p;
 	return 1;
@@ -5129,6 +5169,7 @@ static int go_to(browser *b, int i)
 		e->src = NULL;
 		unkeep(e);
 		show(b, d, p, e->url, security, status, 1);
+		b->needs_scripts = 0;	/* (the last page made's, not this one's) */
 		b->src_len = src_len;
 		b->src = src;
 		str_copy(b->mime, e->mime, sizeof b->mime);

@@ -387,6 +387,36 @@ int ec_match_list(ec_ctx *c, const ec_sellist *l, const ec_node *e, int *mf)
 	return 0;
 }
 
+int ec_match_sel(ec_ctx *c, const ec_sel *s, const ec_node *e)
+{
+	int mf = 0;
+	return match_from(c, s, 0, e, 0, &mf) == M_YES;
+}
+
+/* the declarations of the author rules that colour SVG and match e, the
+   least specific first (in the order they came where alike): written into
+   an inline SVG's picture as its elements' style, as a browser's page CSS
+   reaches into its SVG (DESIGN.md, SVG) */
+int ec_svg_decls(ec_ctx *c, const ec_node *e, void (*put)(void *ud, const char *decls, size_t len), void *ud)
+{
+	const ec_svgr *r, *m[16];
+	int n = 0, i, j;
+	for (r = c->svg; r != NULL; r = r->next) {
+		if (r->sel->never || !ec_match_sel(c, r->sel, e))
+			continue;
+		if (n == 16)
+			break;
+		/* (the list is in the order the rules came: a stable insertion) */
+		for (j = n; j > 0 && m[j - 1]->sel->spec > r->sel->spec; j--)
+			m[j] = m[j - 1];
+		m[j] = r;
+		n++;
+	}
+	for (i = 0; i < n; i++)
+		put(ud, m[i]->decls, m[i]->len);
+	return n;
+}
+
 /* ------------------------------------------------------------ the filter */
 
 static inline void bloom_add(ec_ctx *c, const ec_atom *a)

@@ -1757,7 +1757,7 @@ the DOM grows past "lean".
   (`JS_TOO_MUCH`) is left out until EWeb quits (the newest 16, `br_scripts_too_much`), so its
   pages aren't made twice; the menu item tries it again. A page with scripts pays for them even
   when it needs none: it shows once they have come and run, without a preview, and QuickJS's
-  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default (Erez kept it on 10 Nov 2026, after the Gateway's dashboard showed him only empty boxes: a page made by its scripts looks empty and nothing said why). **Planned for the release after 1.0** (his choice): when a page's scripts didn't run and the page looks empty or says it needs JavaScript, the info line says so, with a one-click "Run this site's scripts"; nothing changes on other pages. A page whose site isn't chosen is parsed as before; one
+  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default (Erez kept it on 10 Nov 2026, after the Gateway's dashboard showed him only empty boxes: a page made by its scripts looks empty and nothing said why). **Done after 1.3** (his choice of 10 Nov 2026): when a page's scripts didn't run because its site isn't chosen (a Falcon with an FPU) and the page looks empty (under 200 bytes of text shown) or its text asks for JavaScript ("enable", "required", "need", "turn on", ... with "JavaScript" in one run: a `<noscript>`'s), the status line says "This page needs its scripts: click here to run this site's scripts.", and a click on it is Options > Run this site's scripts (`wants_scripts` in `src/browse`, `browser.needs_scripts`; `win_mouse`; `tests/js/needs.py`, ewrender `-Jn`); nothing changes on other pages. A page whose site isn't chosen is parsed as before; one
   with no script and no `on...` attribute gets no runtime either (QuickJS's start costs 1.14
   million 68030 instructions).
 - **`<noscript>`** is shown when scripts don't run: the HTML Standard hides it only with scripting.
@@ -3784,8 +3784,16 @@ currentColor, the CSS `color` it has; the elements elsewhere in the page that it
 sheet's `<symbol>`, a gradient, in a `<defs>`) and keeps it as a picture under an address made from
 it, so it is sized, drawn, kept and dithered as an `<img>`'s, and an icon a page shows twenty times
 is one picture. Its size: its width and height, else its viewBox's proportions on 300 wide, else
-300 x 150, CSS's as for any picture. A page's CSS doesn't reach into an inline SVG (EWeb's CSS
-engine has no fill or stroke); its attributes and its own `<style>` do.
+300 x 150, CSS's as for any picture; its `width` and `height` attributes are CSS's too (SVG 2,
+5.1.1: `doc.c`'s `svg_hints`), so `width="100%"` fills its box, its height by its viewBox, and
+`2em` follows its font. A page's CSS reaches into it as a browser's does (12 Nov 2026): EWeb's
+CSS engine computes no fill or stroke, so it keeps the author rules whose block says `fill`,
+`stroke` or `stop-` (at most 512 a page, with the sheets' other rules, `ec_svgr`), and
+`svg_markup` writes into each element's style the SVG properties of those that match it in the
+page (`ec_svg_decls`: matched where it stands, so `.toolbar svg path` from outside the picture
+holds; the least specific first; its own style attribute after them). Only SVG's properties go in
+(fill, stroke and the like, `stop-`, and for an inner element `opacity` and `color`), so what is
+meant for its box (`display`, `width`) stays the box's. `tests/layout/svgcss.py` checks them.
 
 `EWEB.PRG` grew 55 KB, `EWEBST.PRG` 36 KB (both editions draw SVG). `make test` runs
 `tests/svg/run.py` (18 cases, one a feature, against librsvg's pictures kept as greys in

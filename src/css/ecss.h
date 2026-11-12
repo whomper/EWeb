@@ -386,6 +386,11 @@ struct ec_sellist;
 const struct ec_sellist *ec_selector(ec_ctx *c, const char *s, size_t len);
 int ec_matches(ec_ctx *c, const struct ec_sellist *l, const ec_node *e);
 
+/* an inline SVG's colours from the page's sheets: the blocks of the
+ * author rules that say fill, stroke or stop- and match e, least specific
+ * first, each given to put; how many */
+int ec_svg_decls(ec_ctx *c, const ec_node *e, void (*put)(void *ud, const char *decls, size_t len), void *ud);
+
 /* a custom property's computed value, or NULL */
 const char *ec_custom_value(const ec_style *s, const ec_atom *name, size_t *len);
 
