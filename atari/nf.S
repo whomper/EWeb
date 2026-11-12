@@ -9,6 +9,19 @@
 | leaves room for a return address (EHypView found that the earlier copy
 | missed it, so nf_debug() never printed).
 
+#ifdef __mcoldfire__
+| The ColdFire (the FireBee): no emulator, so no NatFeats; and NatFeats'
+| opcodes are no illegal instructions there (0x7300 is mvs.b %d0,%d1 on a
+| V4e), so nothing is tried and no vector touched: none found, and a call
+| does nothing
+	.text
+	.globl	nf_probe, nf_call2, nf_find
+nf_probe:
+nf_find:
+nf_call2:
+	moveq	#0,%d0
+	rts
+#else
 	.text
 	.globl	nf_probe
 nf_probe:
@@ -57,3 +70,4 @@ nf_find:
 	moveq	#0,%d0
 	move.l	%a1,0x10.w
 	rts
+#endif

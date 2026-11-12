@@ -85,6 +85,16 @@ void crash_note(const char *what)
 static long frame(const unsigned short *f, long vec, long *addr, short *has)
 {
 	long size;
+#ifdef __mcoldfire__
+	/* a ColdFire's frame: the format and vector, SR, PC, and as many bytes
+	   again as the stack was out of line (the format, 4 to 7, less 4); an
+	   access error's address is in the MMU's register, not the frame */
+	(void)vec;
+	(void)addr;
+	*has = 0;
+	size = f[0] >> 12;
+	return size >= 4 && size <= 7 ? 8 + size - 4 : 0;
+#endif
 	*has = 1;
 	if (!crash_cpu && vec <= 3) {	/* the 68000's long bus/address error frame */
 		*addr = (long)f[1] << 16 | f[2];
@@ -144,7 +154,11 @@ static int ours_running(void)
    TOS); notes what happened. Runs in the exception. */
 long crash_take(unsigned short *f, long vec)
 {
+#ifdef __mcoldfire__
+	const unsigned short *s = f + 1;	/* (a ColdFire's: SR and PC after the format word) */
+#else
 	const unsigned short *s = !crash_cpu && vec <= 3 ? f + 4 : f;
+#endif
 	long size;
 	u32 pc = (u32)s[1] << 16 | s[2], old = (u32)crash_old(vec);
 	/* a 68000 (and 68010) uses 24 bits of an address: TOS 1.x's own
@@ -600,6 +614,10 @@ void crash_install(const char *workdir, const char *name, const char *version)
 		path[n++] = '\\', path[n] = 0;
 	strncat(path, "crash.log", sizeof(path) - strlen(path) - 1);
 	crash_cpu = (short)get_cookie(0x5F435055L);	/* _CPU: 0 on a plain ST */
+#ifdef __mcoldfire__
+	if (crash_cpu < 20)
+		crash_cpu = 40;		/* (a ColdFire's addresses are 32 bits, whatever the cookie says) */
+#endif
 	text_lo = (u32)bp[2];
 	text_hi = text_lo + (u32)bp[3];
 	prog_hi = (u32)bp[6] + (u32)bp[7];		/* the end of the BSS */
