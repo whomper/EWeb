@@ -90,7 +90,7 @@ BUDGET = {
     # at once, eight of them (quit_step in ui/main.c: the hub, 10 Nov 2026,
     # for a quit's bombs with no CRASH.LOG; LOG=1 only)
     "quit again": (9, 2, 0),
-    "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
+    "EWGET 1 MB": (3, 3, 2),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once, its size looked up: conn.c's pf_size), the file; CRASH.LOG looked for
 }
 
 fails = 0
