@@ -340,7 +340,8 @@ hub stay complete, with the evidence.
   `EWEBFB.PRG` for what the overlay takes beyond `ll64.c`. After changing common's
   assembly, run common's `tests/coldfire` (`make test`, `make same`); after anything the FireBee
   build takes, `make binary/EWEBFB.PRG` and `make hatarigui`'s `firebee` group, and after the
-  scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`).
+  scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`, and the 68030's
+  overlay's numbers, at double precision, under `-cpu m68030`: `atari/js_fpu.h`).
   DESIGN.md, The FireBee edition.
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
   `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip

@@ -536,10 +536,13 @@ build/%/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(if $(filter asan,$*),$(SAN)) $(EWB_FLAGS) $(NSINC) -c $< -o $@
 
+# (TOSJS_FPU: the 68881 at double precision while the overlay runs, and
+# its C built as for sums in doubles; atari/js_fpu.h. Not the 68060's)
+TOSJS_FPU    := -DJS_FPU_DOUBLE -U__FLT_EVAL_METHOD__ -D__FLT_EVAL_METHOD__=0
 TOSJS_CFLAGS := -m68030 -m68881 -O2 -std=gnu99 -DNDEBUG -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
                 -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc -isystem $(GCCINC) \
                 -U__linux__ -U__gnu_linux__ -U__GLIBC__ -Iatari/include/js -I$(LIBM)/eweb -Iatari/include \
-                -Icommon/atari/include
+                -Icommon/atari/include $(TOSJS_FPU)
 tos_JS := build/tos/js/js.o build/tos/js/js_libc.o $(addprefix build/tos/qjs/,$(addsuffix .o,$(QJS_C))) \
           $(addprefix build/tos/libm/,$(addsuffix .o,$(LIBM_C) eweb_fpu))
 build/tos/qjs/%.o: $(QJS)/%.c $(QJS_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h $(LIBM)/eweb/*.h)
@@ -563,7 +566,7 @@ build/st/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
 # the same as 68060 code (EWEBJS60.OVL, loaded where the _CPU cookie says
 # 60: the 68030's 64-bit multiply and divide, which a 68060 does in
 # software through its traps, left out; the FPU the 68060's own)
-T060JS_CFLAGS := $(subst -m68030 -m68881,-m68060,$(TOSJS_CFLAGS))
+T060JS_CFLAGS := $(subst -m68030 -m68881,-m68060,$(filter-out $(TOSJS_FPU),$(TOSJS_CFLAGS)))
 t060_JS := $(subst build/tos/,build/t060/,$(tos_JS))
 build/t060/qjs/%.o: $(QJS)/%.c $(QJS_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h $(LIBM)/eweb/*.h)
 	@mkdir -p $(@D)
@@ -587,7 +590,7 @@ build/t060/js/js_libc.o: atari/js_libc.c $(NET_HDRS) $(wildcard atari/include/js
 # every Falcon). JS_ABI ties it to the EWEB.PRG made with it: the overlay
 # reads EWeb's structures, so both are made from the same headers.
 JS_ABI := $(shell cat VERSION $(sort $(EWB_HDRS)) atari/js_ovl.h | cksum | cut -d' ' -f1)UL
-JS_OVL_HDRS = $(EWB_HDRS) atari/js_ovl.h VERSION
+JS_OVL_HDRS = $(EWB_HDRS) atari/js_ovl.h atari/js_fpu.h VERSION
 build/tos/js/js_ovl_head.o: atari/js_ovl_head.c $(JS_OVL_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSJS_CFLAGS) $(JS_FLAGS) -Iatari -DJS_ABI=$(JS_ABI) -c $< -o $@

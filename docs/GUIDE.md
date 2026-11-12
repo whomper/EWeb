@@ -12,12 +12,13 @@ and white.
   a TT, with its own TOS (4 on a Falcon, 3 on a TT), EmuTOS or MagiC; a
   screen 640 pixels wide in any mode: monochrome, 4, 16 or 256 colours, or
   true colour (the Falcon's, or a graphics card's 15, 24 or 32 bits under
-  NVDI or fVDI: pages are drawn in 65,536 colours there too).
+  NVDI or fVDI: at 24 and 32 bits pages are drawn in every colour; a
+  graphics card is in testing).
   On an ST or STE (TOS 1.04 or newer) with 4 MB, use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Gateway,
   in [Settings](#settings)). With a 68060 (a CT60), use `EWEB60.PRG`,
-  the same browser made for that processor
+  the same browser made for that processor (in testing)
 - For `EWEB.PRG` about 3.5 MB of free memory (the program itself takes
   1.6 MB, and `TLS.OVL` 0.15 MB more at the first secure site of a Direct
   connection; a page up to about 11 times its size): a Falcon's own 4 MB is

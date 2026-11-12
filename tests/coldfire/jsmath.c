@@ -8,6 +8,9 @@
  * of the same sources (-DHOST). Every answer's bits are folded into one sum
  * that both must print alike: QuickJS's Math as the FireBee's FPU works it
  * out, the same as on any IEEE double machine (tests/coldfire/run.sh).
+ * Built for the 68030 with the 68881 (-DJS_FPU_DOUBLE, as EWEBJS.OVL), it
+ * is the 68030's overlay's numbers under qemu-m68k -cpu m68030, with the
+ * FPU at double precision as the overlay's calls set it (js_fpu.h).
  */
 #include <stdint.h>
 #ifdef HOST
@@ -15,6 +18,7 @@
 #else
 #include "rt.h"
 #endif
+#include "js_fpu.h"
 
 double sin(double), cos(double), tan(double), asin(double), acos(double), atan(double), atan2(double, double);
 double exp(double), expm1(double), log(double), log2(double), log10(double), log1p(double), pow(double, double);
@@ -67,6 +71,7 @@ static double num(void)
 int main(void)
 {
 	long i;
+	JS_FPU_IN;
 	for (i = 0; i < 20000; i++) {
 		volatile double a = num(), b = num(), s = (double) (int64_t) (rnd() % 2000001) / 1000.0 - 1000.0;
 		volatile int64_t v = (int64_t) (rnd() >> (rnd() & 63)) * ((rnd() & 1) ? -1 : 1);
@@ -87,5 +92,6 @@ int main(void)
 	out_hex(sum);
 	out("\n");
 #endif
+	JS_FPU_OUT;
 	return 0;
 }

@@ -15,7 +15,7 @@ accelerator; its ST edition runs on an ST or STE with 4 MB.
 - **Hebrew:** pages right to left in every Hebrew encoding, and typing Hebrew (F10).
 - **Browsing:** several windows, address-bar search, bookmarks, history, find, a disk cache.
 - **File downloads:** files of any size saved straight to disk as they come; pages saved too.
-- **Every screen:** monochrome to true colour (the Falcon's, or a graphics card's 24 and 32 bits), in EWeb's own fonts.
+- **Every screen:** monochrome to true colour (the Falcon's, or a graphics card's 24 and 32 bits, in testing), in EWeb's own fonts.
 - **AERA family:** the family's menus, shortcuts, dialogs and help; mail links open EMail.
 
 ![EWeb on a Falcon in 256 colours, showing yaary.music](docs/screenshot.png)
@@ -28,7 +28,7 @@ folder of its own.
 | File | What it is |
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
-| `EWEB60.PRG` | the browser for a 68060 (a CT60) |
+| `EWEB60.PRG` | the browser for a 68060 (a CT60), in testing |
 | `EWEBST.PRG` | the ST edition, for an ST or STE |
 | `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing |
 | `EWEB.FNT` | the fonts |

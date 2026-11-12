@@ -5174,6 +5174,24 @@ the most of on each processor, and QuickJS-ng measured against it before any cha
   `EWEBJS60.OVL`. `TLS.OVL` (common's) is 68030 code still: on a 68060 its 64-bit multiplies go
   to the support package, so a Direct secure connection needs one there until common has a
   68060 build of it.
+- **Scripts' numbers on the 68881/68882** (12 Nov 2026): JavaScript's numbers are IEEE doubles,
+  and the 68881 works in 80 bits; GCC keeps what it works out in the FPU's registers
+  (`__FLT_EVAL_METHOD__` 2), so the same script's sums came out other than a PC's (a test page
+  folding 20,000 sums: 612291332 in `EWEBJS.OVL`'s build under QEMU's 68030, 814125819 on the
+  host). The overlay's calls now set the FPCR's rounding precision to double and give it back
+  after (`atari/js_fpu.h`, `js_ovl_head.c`: nothing else that runs is changed), and its C is built
+  as for sums in doubles (the Makefile's `TOSJS_FPU`, `-D__FLT_EVAL_METHOD__=0`: musl's `floor`
+  adds 2^52, not the 80-bit build's 2^63, which at double precision was wrong); the same page
+  then gives the host's 814125819, and `make cftest` checks musl's maths and the sums so built
+  under `qemu-m68k -cpu m68030` against the host (every answer alike; without the change they
+  differ). The 68060's overlay needs none of it (GCC's `fdadd` and `fdmul` round to doubles),
+  nor the FireBee's (doubles only). As for speed: on the page set's scripts (258 pages,
+  `jsbench` with musl's maths, QEMU's hotblocks) the FPU's instructions were 1.9 million of 4,640
+  million (0.04%), the maths functions all but absent: the scripts' time is the compiler's and
+  the properties', in whole numbers, so the 68881's own `fsqrt`, `fint` or `fsin` in musl's place
+  would save nothing to measure. `EWEB.PRG` does no floating point (no soft-float call at all;
+  64-bit division 0.02% of the news page's layout and drawing), nor does `TLS.OVL`: an FPU speeds
+  up neither.
 - **QuickJS-ng**: to be measured against EWeb's QuickJS (2026-06-04) on the page set's scripts
   before anything changes.
 
