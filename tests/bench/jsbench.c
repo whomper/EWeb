@@ -22,6 +22,8 @@
 #include "html.h"
 #include "js.h"
 
+long js_max_memory = JS_MAX_MEMORY;	/* (EWEB.PRG's is browse.c's, set by mem_limits) */
+
 char http_user_agent[128] = "EWeb (Atari Falcon030)";
 
 static char *slurp(const char *path, size_t *n)
