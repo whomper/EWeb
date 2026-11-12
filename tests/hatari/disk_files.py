@@ -89,7 +89,7 @@ BUDGET = {
     # changed: 6.1 of 12 Nov 2026, though LOG=1 was added by hand); EWEB.LOG's rest, and each quit step written to it
     # at once, eight of them (quit_step in ui/main.c: the hub, 10 Nov 2026,
     # for a quit's bombs with no CRASH.LOG; LOG=1 only)
-    "quit again": (9, 2, 0),
+    "quit again": (9, 1, 0),
     "EWGET 1 MB": (3, 3, 2),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once, its size looked up: conn.c's pf_size), the file; CRASH.LOG looked for
 }
 
