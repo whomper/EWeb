@@ -15,7 +15,7 @@ BASE   ?= origin/main
 CF     := -mcpu=5475 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
           -fno-tree-loop-distribute-patterns -nostdinc -isystem $(GCCINC) -I. -I$(C)/src -Wall
 LD     := $(CC) -mcpu=5475 -nostdlib -static -no-pie -Wl,-z,noexecstack
-TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_rows_cf $(B)/test_rows_030
+TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_rows_cf $(B)/test_rows_030 $(B)/test_ll64 $(B)/test_ll64_host
 
 all: $(TESTS)
 
@@ -151,6 +151,13 @@ $(B)/test_cpucheck_030: test_cpucheck.c $(B)/cpucheck_cf.o gemdos.c libc.c rt.S
 	$(CC) -m68030 -nostdlib -static -no-pie -Wl,-z,noexecstack -o $@ $(B)/t030.o $(B)/cpucheck_cf.o \
 		$(B)/gemdos030.o $(B)/libc030.o $(B)/rt030.o -lgcc
 
+# atari/ll64.c: as ColdFire code against the host's own 64-bit arithmetic
+$(B)/test_ll64: test_ll64.c $(B)/ll64.o $(B)/libc.o $(B)/rt.o
+	$(CC) $(CF) -o $@.o -c test_ll64.c
+	$(LD) -o $@ $@.o $(B)/ll64.o $(B)/libc.o $(B)/rt.o
+$(B)/test_ll64_host: test_ll64.c | $(B)
+	cc -O2 -Wall -DHOST -o $@ test_ll64.c
+
 # ui/text.c's row loops: C on the ColdFire, the assembly on a 68030, one sum
 $(B)/rows.c: $(C)/ui/text.c | $(B)
 	sed -n '/^#ifdef __mcoldfire__$$/,/^static void rows_copy_mid(/p' $< | sed '$$d' > $@
@@ -187,6 +194,10 @@ test: $(TESTS)
 	$(QEMU) $(B)/test_mont > $(B)/mont_cf.txt
 	cat $(B)/mont_cf.txt
 	$(QEMU) $(B)/test_tls
+	./$(B)/test_ll64_host > $(B)/ll64_host.txt
+	$(QEMU) $(B)/test_ll64 > $(B)/ll64_cf.txt
+	cat $(B)/ll64_cf.txt
+	cmp $(B)/ll64_host.txt $(B)/ll64_cf.txt && echo "ll64: the ColdFire's 64-bit arithmetic gives the host's every answer"
 	$(QEMU) $(B)/test_rows_cf > $(B)/rows_cf.txt
 	qemu-m68k -cpu m68030 $(B)/test_rows_030 > $(B)/rows_030.txt
 	cat $(B)/rows_cf.txt
