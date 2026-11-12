@@ -77,17 +77,19 @@ BUDGET = {
     # pieces: its list one file more)
     "quit": (1, 6, 0),
     # the second time with LOG=1 (since 0.44): EWEB.LOG written once a page
-    # and its pictures have come (the home page's: tried, then made); the
-    # history's two slots
-    "start again": (6, 1, 0),
+    # and its pictures have come (the home page's: tried, then made, and
+    # its size looked up, conn.c's pf_size); the history's two slots
+    "start again": (6, 1, 1),
     # COOKIES.TXT (two slots) and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT;
     # SEED.DAT read, then written over; the cache's index (two slots);
     # SIGS.DAT read (since 0.40); TLS.OVL (since 0.43); EWEB.LOG, once
     "secure page again": (11, 0, 1),
     # the cookies as they were; the history (a page shown) in HISTORY.TXT,
     # its older slot, made at once; EWEB.INF in its own form again (LOG=1
-    # was added by hand); EWEB.LOG's rest
-    "quit again": (1, 2, 0),
+    # was added by hand); EWEB.LOG's rest, and each quit step written to it
+    # at once, eight of them (quit_step in ui/main.c: the hub, 10 Nov 2026,
+    # for a quit's bombs with no CRASH.LOG; LOG=1 only)
+    "quit again": (9, 2, 0),
     "EWGET 1 MB": (3, 3, 1),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once), the file; CRASH.LOG looked for
 }
 
