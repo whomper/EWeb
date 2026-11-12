@@ -23,7 +23,7 @@ const int js_built = 1;
 
 #define OVL_MAX (8L << 20)	/* the most a part of the file may be */
 
-static char ovl_path[256];
+static char ovl_path[256], else_path[256];
 static const js_exports *ovl;
 static int failed;		/* for good: missing, damaged, another version */
 static long cpu;		/* the _CPU cookie, for flush_caches */
@@ -32,6 +32,11 @@ static char problem[120];
 void js_ovl_at(const char *path)
 {
 	snprintf(ovl_path, sizeof ovl_path, "%s", path);
+}
+
+void js_ovl_else(const char *path)
+{
+	snprintf(else_path, sizeof else_path, "%s", path);
 }
 
 static unsigned long be32(const unsigned char *p)
@@ -80,7 +85,10 @@ static int load(void)
 	unsigned long tsize, dsize, bsize, n, i, base, top;
 	long size, restlen;
 	char line[80];
+	const char *used = ovl_path, *name;
 	int h = pf_open(ovl_path, PF_READ);
+	if (h < 0 && else_path[0])
+		h = pf_open(used = else_path, PF_READ);
 	if (h < 0)
 #ifdef __mcoldfire__
 		return fail("is missing (it goes next to EWEBFB.PRG).", 0);
@@ -170,7 +178,9 @@ static int load(void)
 	Supexec(flush_caches);
 	/* where, for a crash in it (CRASH.LOG's address less this, in
 	   build/tos/ewebjs.elf) */
-	snprintf(line, sizeof line, "EWEB js: EWEBJS.OVL loaded at %08lx\n", base);
+	for (name = used + strlen(used); name > used && name[-1] != '\\' && name[-1] != '/'; name--)
+		;
+	snprintf(line, sizeof line, "EWEB js: %s loaded at %08lx\n", name, base);
 	pf_debug(line);
 	return 1;
 other:

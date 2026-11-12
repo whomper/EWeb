@@ -4,7 +4,10 @@
 """EWEBJS.OVL from the overlay's ELF (atari/js_ovl.h, atari/ovl.ld), and
 the C file of the addresses EWEB.PRG gives it:
 
-    mkovl.py OVL.ELF EWEBJS.OVL JS_IMPORTS.C
+    mkovl.py OVL.ELF EWEBJS.OVL [OVL2.ELF EWEBJS2.OVL ...] JS_IMPORTS.C
+
+(more than one overlay: each one EWEB.PRG may load, the 68030's and the
+68060's, with one list of imports, all of theirs, in each)
 
 The ELF is linked at 0 with --emit-relocs and its imports left undefined.
 The file is a TOS program's: the header (flags 7: in TT RAM when there is
@@ -37,10 +40,10 @@ HEAD = """/* SPDX-License-Identifier: GPL-2.0-or-later
 """
 
 
-def main():
-    if len(sys.argv) != 4:
-        sys.exit(__doc__)
-    data, secs = read_elf(sys.argv[1])
+def load(elf):
+    """an overlay's ELF: its image, TOS's fixups, and the places that name
+    something of EWEB.PRG's (offset, name, kind)"""
+    data, secs = read_elf(elf)
     by = {s["name"]: s for s in secs}
     text, dat, bss = by[".text"], by.get(".data"), by.get(".bss")
     tsize = text["size"]
@@ -96,11 +99,11 @@ def main():
                     fixups.append(r_off)
             elif kind in (R_68K_16, R_68K_8):
                 sys.exit("%s: a 16- or 8-bit address at %x can't be moved" % (name, r_off))
-    names = sorted(set(n for _, n, _ in places))
-    index = {n: i for i, n in enumerate(names)}
-    crc = zlib.crc32("\n".join(names).encode()) & 0xFFFFFFFF
+    return image, fixups, places, tsize, dsize, bsize
 
-    fixups.sort()
+
+def reloc_of(fixups):
+    fixups = sorted(fixups)
     reloc = bytearray()
     if fixups:
         reloc += struct.pack(">I", fixups[0])
@@ -117,14 +120,29 @@ def main():
         reloc.append(0)
     else:
         reloc += b"\0\0\0\0"
-    imp = bytearray(b"EWJI" + struct.pack(">II", crc, len(places)))
-    for off, n, k in sorted(places):
-        imp += struct.pack(">IHH", off, index[n], k)
+    return reloc
 
-    hdr = struct.pack(">HIIIIIIH", 0x601A, tsize, dsize, bsize, 0, 0, 7, 0)
-    with open(sys.argv[2], "wb") as f:
-        f.write(hdr + image + reloc + imp)
-    with open(sys.argv[3], "w") as f:
+
+def main():
+    # ELF OVL [ELF OVL ...] JS_IMPORTS.C: overlays for one EWEB.PRG (the
+    # 68030's and the 68060's) share one list of imports, all theirs
+    args = sys.argv[1:]
+    if len(args) < 3 or len(args) % 2 != 1:
+        sys.exit(__doc__)
+    ovls = [(args[i], args[i + 1], load(args[i])) for i in range(0, len(args) - 1, 2)]
+    names = sorted(set(n for _, _, o in ovls for _, n, _ in o[2]))
+    index = {n: i for i, n in enumerate(names)}
+    crc = zlib.crc32("\n".join(names).encode()) & 0xFFFFFFFF
+    for elf, out, (image, fixups, places, tsize, dsize, bsize) in ovls:
+        imp = bytearray(b"EWJI" + struct.pack(">II", crc, len(places)))
+        for off, n, k in sorted(places):
+            imp += struct.pack(">IHH", off, index[n], k)
+        hdr = struct.pack(">HIIIIIIH", 0x601A, tsize, dsize, bsize, 0, 0, 7, 0)
+        with open(out, "wb") as f:
+            f.write(hdr + image + reloc_of(fixups) + imp)
+        print("%s: text %d, data %d, bss %d, %d fixups, %d imports at %d places" %
+              (out, tsize, dsize, bsize, len(fixups), len(set(n for _, n, _ in places)), len(places)))
+    with open(args[-1], "w") as f:
         f.write(HEAD + "\n")  # (no headers: each is named here as bytes, functions too)
         for n in names:
             f.write("extern char %s[];\n" % n)
@@ -132,8 +150,6 @@ def main():
         for n in names:
             f.write("\t%s,\n" % n)
         f.write("};\nconst unsigned long js_imports_n = %d, js_imports_crc = 0x%08xUL;\n" % (len(names), crc))
-    print("%s: text %d, data %d, bss %d, %d fixups, %d imports at %d places" %
-          (sys.argv[2], tsize, dsize, bsize, len(fixups), len(names), len(places)))
 
 
 if __name__ == "__main__":

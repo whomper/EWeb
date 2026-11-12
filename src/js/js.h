@@ -78,7 +78,12 @@ enum { JS_ALERT, JS_CONFIRM, JS_PROMPT };
 #define JS_PAGE_MS	15000		/* its scripts, DOMContentLoaded and load (not compiling them:
 					   jQuery UI's own start is 6 s of the DFB1's) */
 #define JS_EVENT_MS	2000		/* each event, timer or promise job after */
-#define JS_MAX_MEMORY	(8L << 20)	/* the runtime's heap */
+#define JS_MAX_MEMORY	(8L << 20)	/* the runtime's heap, at least */
+/* the runtime's heap: JS_MAX_MEMORY, or more where there is the memory
+   (a quarter of what EWeb takes of the TT RAM: ui/main.c's mem_limits;
+   a page's scripts' time is the clock's, so a faster CPU does more in it
+   already; DESIGN.md, Scripts on the 68060 and the FireBee) */
+extern long js_max_memory;
 
 /* what js_page came to */
 enum {

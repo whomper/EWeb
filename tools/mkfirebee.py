@@ -64,6 +64,8 @@ def main():
         if not line.startswith(CC + " "):
             continue
         words = shlex.split(line)
+        if "-o" in words and words[words.index("-o") + 1].startswith("build/t060/"):
+            continue  # (the 68060's overlay: not the FireBee's)
         if "-c" in words:
             if "js_imports" in words[words.index("-c") + 1]:
                 imports = words  # (made from the ColdFire's overlay, below)

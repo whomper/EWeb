@@ -103,7 +103,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("EWEB.PRG", "EWEBJS.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
+    for f in ("EWEB.PRG", "EWEBJS.OVL", "EWEBJS060.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
@@ -184,7 +184,8 @@ class Mouse:
 class Run:
     """Hatari with EWEB.PRG, its events and its command FIFO"""
 
-    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG"):
+    def __init__(self, name, spec, hd, windowed=False, network=False, truecolour=False, prg="EWEB.PRG",
+                 cpu060=False):
         self.name = name
         self.fifo = os.path.join(OUT, name + ".fifo")
         self.log = os.path.join(OUT, name + ".log")
@@ -195,7 +196,8 @@ class Run:
         # 8 Nov 2026, the guidelines' 1.2; the hub's family checks run them
         # together)
         self.m = machines.Machine(spec, hd)
-        args = ["hatari"] + self.m.args() + ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
+        args = ["hatari"] + self.m.args() + (["--cpulevel", "6", "--fpu", "internal"] if cpu060 else []) + \
+            ["--natfeats", "yes", "--statusbar", "no", "--log-level", "fatal",
                                              "--cmd-fifo", self.fifo, "--auto", "C:\\" + prg]
         if truecolour:
             # the Falcon on an RGB monitor, 640x200 in 16-bit colour: the
@@ -1211,11 +1213,38 @@ def scripts():
         scripts_without(site)
         scripts_modes(site)
         scripts_note(site)
+        scripts_060(site)
     finally:
         if xvfb is not None:
             xvfb.terminate()
         srv.stdin.close()
         srv.wait(10)
+
+
+def scripts_060(site):
+    """a page's scripts on a 68060 (a CT60's: Hatari's 68060 in a Falcon,
+    EmuTOS, as TOS 4.04 has no 68060's code), from its own EWEBJS060.OVL"""
+    hd = hd_for("scripts060", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
+    keep = os.environ.get("AERA_TOS")
+    os.environ["AERA_TOS"] = "emutos"
+    try:
+        r = Run("scripts060", "Falcon:16", hd, windowed=True, network=True, cpu060=True)
+    finally:
+        if keep is None:
+            del os.environ["AERA_TOS"]
+        else:
+            os.environ["AERA_TOS"] = keep
+    try:
+        ran = r.wait(r"scripts ran ", 300)
+        ev = r.wait(r"shown ", 120)
+        check("scripts: on a 68060, the page's ran", ran is not None and ev is not None and
+              ev.endswith("title Tabs ready"), str(r.events()[-8:]))
+        check("scripts: on a 68060, from EWEBJS060.OVL",
+              any(e.lower().startswith("js: ewebjs060.ovl loaded at ") for e in r.events()),
+              str([e for e in r.events() if e.startswith("js:")]))
+        r.shot(0)
+    finally:
+        r.end()
 
 
 def scripts_run(site):
@@ -1228,7 +1257,7 @@ def scripts_run(site):
         check("scripts: the page's ran (%s)" % (ran or "")[12:], ran is not None and ev is not None and
               ev.endswith("title Tabs ready"), str(r.events()))
         check("scripts: from EWEBJS.OVL, loaded for them",
-              any(e.startswith("js: EWEBJS.OVL loaded at ") for e in r.events()),
+              any(e.lower().startswith("js: ewebjs.ovl loaded at ") for e in r.events()),
               str(r.events()[:8]))
         r.shot(0)
         if ev is None:

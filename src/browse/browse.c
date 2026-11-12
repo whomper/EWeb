@@ -2922,6 +2922,9 @@ static int frame_load(browser *b, int k, const FSUBMIT *post, int fresh)
 /* ---------------------------------------------------------------- pages kept for Back */
 
 long br_keep_max = 16L << 20;
+#ifndef EW_ST
+long js_max_memory = JS_MAX_MEMORY;	/* (js.h: set by ui/main.c's mem_limits) */
+#endif
 
 static void unkeep(BR_ENTRY *e)
 {

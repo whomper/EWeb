@@ -4509,7 +4509,7 @@ static int setup(ejs *j)
 	}
 	if ((j->rt = JS_NewRuntime()) == NULL)
 		return 0;
-	JS_SetMemoryLimit(j->rt, JS_MAX_MEMORY);
+	JS_SetMemoryLimit(j->rt, (size_t) (js_max_memory > JS_MAX_MEMORY ? js_max_memory : JS_MAX_MEMORY));
 #ifdef EW_TOS
 	{
 		/* no more than the stack leaves above its floor, less room for

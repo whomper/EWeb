@@ -109,7 +109,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
+all: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBJS060.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
      binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
@@ -555,6 +555,27 @@ build/tos/js/js_libc.o: atari/js_libc.c $(NET_HDRS) $(wildcard atari/include/js/
 build/st/js/js_none.o: src/js/js_none.c src/js/js.h src/doc/doc.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) $(EWB_FLAGS) $(NSINC) -c $< -o $@
+# the same as 68060 code (EWEBJS060.OVL, loaded where the _CPU cookie says
+# 60: the 68030's 64-bit multiply and divide, which a 68060 does in
+# software through its traps, left out; the FPU the 68060's own)
+T060JS_CFLAGS := $(subst -m68030 -m68881,-m68060,$(TOSJS_CFLAGS))
+t060_JS := $(subst build/tos/,build/t060/,$(tos_JS))
+build/t060/qjs/%.o: $(QJS)/%.c $(QJS_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h $(LIBM)/eweb/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) $(QJS_DEF) -w -c $< -o $@
+build/t060/qjs/quickjs.o: $(QJS_SRCS)
+build/t060/libm/%.o: $(LIBM)/src/%.c $(wildcard $(LIBM)/src/*.h $(LIBM)/eweb/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) -include features.h -I$(LIBM)/src -w -c $< -o $@
+build/t060/libm/eweb_fpu.o: $(LIBM)/eweb/eweb_fpu.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) $(NET_WARN) -c $< -o $@
+build/t060/js/js.o: src/js/js.c $(EWB_HDRS) $(QJS_HDRS) VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) $(JS_FLAGS) -c $< -o $@
+build/t060/js/js_libc.o: atari/js_libc.c $(NET_HDRS) $(wildcard atari/include/js/*.h atari/include/js/sys/*.h)
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) $(NET_INC) $(NET_WARN) -c $< -o $@
 
 # EWEBJS.OVL: EWEB.PRG's JavaScript in a file of its own, loaded the first
 # time a site's scripts run (atari/js_ovl.h; DESIGN.md, One EWEB.PRG for
@@ -569,9 +590,24 @@ build/tos/ewebjs.elf: build/tos/js/js_ovl_head.o $(tos_JS) atari/ovl.ld
 	$(M68KCC) -m68030 -m68881 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/ovl.ld \
 		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--unresolved-symbols=ignore-all \
 		-o $@ $(filter %.o,$^) -lgcc
-binary/EWEBJS.OVL $(GEN)/js_imports.c &: build/tos/ewebjs.elf tools/mkovl.py common/tools/elf2tos.py
+build/t060/js/js_ovl_head.o: atari/js_ovl_head.c $(JS_OVL_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(T060JS_CFLAGS) $(JS_FLAGS) -Iatari -DJS_ABI=$(JS_ABI) -c $< -o $@
+# (common's ll64.c ahead of libgcc: libgcc's 64-bit multiply and divide are
+# the 68020's mulu.l and divu.l of 64 bits, which the 68060 traps on)
+build/t060/rt/ll64.o: common/atari/ll64.c
+	@mkdir -p $(@D)
+	$(M68KCC) -m68060 -O2 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-asynchronous-unwind-tables -c $< -o $@
+build/t060/ewebjs.elf: build/t060/js/js_ovl_head.o $(t060_JS) build/t060/rt/ll64.o atari/ovl.ld
+	$(M68KCC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/ovl.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--unresolved-symbols=ignore-all \
+		-o $@ $(filter %.o,$^) -lgcc
+# (both overlays with one list of what they take from EWEB.PRG)
+binary/EWEBJS.OVL binary/EWEBJS060.OVL $(GEN)/js_imports.c &: build/tos/ewebjs.elf build/t060/ewebjs.elf tools/mkovl.py \
+		common/tools/elf2tos.py
 	@mkdir -p binary $(GEN)
-	python3 tools/mkovl.py $< binary/EWEBJS.OVL $(GEN)/js_imports.c
+	python3 tools/mkovl.py build/tos/ewebjs.elf binary/EWEBJS.OVL build/t060/ewebjs.elf binary/EWEBJS060.OVL \
+		$(GEN)/js_imports.c
 build/tos/js/js_imports.o: $(GEN)/js_imports.c
 	$(M68KCC) $(TOS_CFLAGS) -fno-builtin -c $< -o $@
 build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
@@ -1282,16 +1318,16 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
 FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
-dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
+dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBJS060.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
 		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	for f in EWEB.PRG EWEBJS.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
+	for f in EWEB.PRG EWEBJS.OVL EWEBJS060.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
 		cp binary/$$f dist/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
-	cp dist/eweb.prg dist/ewebjs.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
+	cp dist/eweb.prg dist/ewebjs.ovl dist/ewebjs060.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
 		dist/roots.dat $(addprefix dist/,$(shell echo $(FB_DIST) | tr A-Z a-z)) dist/zip/
 	# (the FireBee tester's tools, in the zip only: tests/fb/README.TXT; the hub, 10 Nov 2026)
 	mkdir -p dist/zip/firebee

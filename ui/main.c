@@ -461,6 +461,7 @@ void mem_limits(void)
 		long room = tt / 100 * (100 - opt.ttleave);
 		br_keep_max = room / 2;
 		img_max = room / 4;
+		js_max_memory = room / 4;	/* (the page being made's quarter: its scripts') */
 	} else if (st > 0) {
 		br_keep_max = st / 8 < (2L << 20) ? st / 8 : (2L << 20);
 		img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
@@ -469,8 +470,9 @@ void mem_limits(void)
 	/* windows, each with a page laid out: eight beside TT RAM, four in 6
 	   MB of ST RAM, else two (a 4 MB Falcon) */
 	win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;
-	log_event("memory: TT RAM %ld KB, %d%% left, pages %ld KB, pictures %ld KB", tt > 0 ? tt >> 10 : 0L,
-		  tt > 0 ? opt.ttleave : 0, br_keep_max >> 10, img_max >> 10);
+	log_event("memory: TT RAM %ld KB, %d%% left, pages %ld KB, pictures %ld KB, scripts %ld KB",
+		  tt > 0 ? tt >> 10 : 0L, tt > 0 ? opt.ttleave : 0, br_keep_max >> 10, img_max >> 10,
+		  (js_max_memory > JS_MAX_MEMORY ? js_max_memory : JS_MAX_MEMORY) >> 10);
 }
 #endif
 
@@ -3183,7 +3185,13 @@ static int app_run(void)
 	js_ovl_at(path);
 	scripts_ok = js_built;
 #elif !defined(EW_ST)
+	/* (a 68060: its own build, EWEBJS060.OVL, with EWEBJS.OVL where it
+	   isn't there; DESIGN.md, Scripts on the 68060) */
 	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
+	if (get_cookie(0x5F435055L) >= 60) {	/* _CPU */
+		js_ovl_else(path);
+		path_join(path, sizeof path, opt.workdir, "ewebjs060.ovl");
+	}
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
 #endif
