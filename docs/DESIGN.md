@@ -5215,7 +5215,11 @@ same within 15 ms but Settings opened (140 to 165 ms) and the About box opened (
 then over their 150; with common's About box of e130cbf synced in (1.3's head) 160 and 150 ms, and
 under NVDI (Erez's own setup) 95 and 70 (1.2: 120 and 135). **Accepted for 1.3** (Erez, 11 Nov 2026,
 through the hub: "approve"): Settings opened 160 ms and the About box 150 ms on `Falcon-4:16`
-without NVDI; under NVDI 1.2 couldn't load the rig's news page
+without NVDI; and (Erez, 12 Nov 2026) under NVDI on the 4 MB Falcon, where 1.2 couldn't show the rig's news
+page at all: a line scrolled 155 ms and a page 810 ms, and what Settings or the About box uncovers
+430 to 470 ms, when the page's kept copy (`pic`) doesn't fit beside it (the page drawn afresh), 40,
+45 and about 50 ms when it does. The kept copy fitting there more often is the next release's
+(task 177); under NVDI 1.2 couldn't load the rig's news page
 (its "can't show" page in 365 ms, nothing to scroll), so its rows there aren't a comparison. On
 `ST:mono` under NVDI the three rows of What follows 1.3 (above), and an arrow held down 2,160 to
 2,525 ms; 4 pages down 4,160 to 3,025, an arrow held up 4,380 to 4,220.
