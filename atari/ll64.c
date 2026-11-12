@@ -101,3 +101,39 @@ s64 __moddi3(s64 n, s64 d)
 	udivmod(n < 0 ? -(u64) n : (u64) n, d < 0 ? -(u64) d : (u64) d, &r);
 	return n < 0 ? -(s64) r : (s64) r;
 }
+
+/* 64-bit shifts by n (0 to 63): libgcc's are 68020 code too */
+u64 __ashldi3(u64 a, int n);
+u64 __lshrdi3(u64 a, int n);
+s64 __ashrdi3(s64 a, int n);
+
+u64 __ashldi3(u64 a, int n)
+{
+	u32 lo = (u32) a, hi = (u32) (a >> 32);
+	if (n == 0)
+		return a;
+	if (n >= 32)
+		return (u64) (lo << (n - 32)) << 32;
+	return (u64) (hi << n | lo >> (32 - n)) << 32 | (u32) (lo << n);
+}
+
+u64 __lshrdi3(u64 a, int n)
+{
+	u32 lo = (u32) a, hi = (u32) (a >> 32);
+	if (n == 0)
+		return a;
+	if (n >= 32)
+		return hi >> (n - 32);
+	return (u64) (hi >> n) << 32 | (u32) (lo >> n | hi << (32 - n));
+}
+
+s64 __ashrdi3(s64 a, int n)
+{
+	u32 lo = (u32) a;
+	long hi = (long) (a >> 32);
+	if (n == 0)
+		return a;
+	if (n >= 32)
+		return (s64) (hi >> (n - 32));
+	return (s64) ((u64) (u32) (hi >> n) << 32 | (u32) (lo >> n | (u32) hi << (32 - n)));
+}
