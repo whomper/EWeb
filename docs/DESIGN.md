@@ -5135,6 +5135,36 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
 
+## The FireBee edition: EWEBFB.PRG (12 Nov 2026)
+
+The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code
+(`-mcpu=5475`, the FireBee's MCF5474 V4e), with its TLS as `tlsfb.ovl` beside it, in the same
+release as `EWEB.PRG` and `EWEBST.PRG`.
+
+- **common's part** (drafted by EWeb's session on AERA-Atari's `hub/firebee`, ten commits, synced
+  here before the hub merged it: ec0cf9ee): each of common's assembly files has a ColdFire path
+  under `#ifdef __mcoldfire__` (crt0, sting, nf, inflate_fast, mont030, the crash catcher,
+  tlsovl's mont31_030), as do gem.c, ovl.c (the caches pushed with `cpushl`), text.c and libc.c;
+  `ll64.c` gives the 64-bit arithmetic the cross compiler's libgcc (68020 code) would;
+  `cpucheck_cf.S` is the first code, the same bytes for a 68000 and a ColdFire: the `_CF_` cookie
+  (FireTOS's and EmuTOS's for the ColdFire), else the alert. The 68000 and 68030 builds are byte
+  for byte as they were (common's `tests/coldfire`, `make same`), and each part runs as ColdFire
+  code under `qemu-m68k -cpu cfv4e` (`make test` there: crt0 started as TOS starts it, inflate's
+  980 streams, RSA and the i31 loop against BearSSL's C, the crash catcher through a ColdFire
+  frame, ll64 against the host's 64-bit arithmetic).
+- **EWeb's part:** `tools/mkfirebee.py` makes `EWEBFB.PRG` from `EWEB.PRG`'s own rules (`make -n
+  -B build/tos/eweb.elf`), each command again with `-mcpu=5475` (the FireBee has an FPU; soft
+  float is libgcc's), `build/cf/` for `build/tos/`, `cpucheck_cf.S` for `cpucheck.c` and `ll64.c`
+  for `-lgcc`; `make binary/EWEBFB.PRG`, `make binary/TLSFB.OVL` (common's `tlsovl`, `make
+  CPU=5475`: no DSP, BearSSL's own RSA and curves), and `make dist` takes both when the compiler
+  builds for a ColdFire. 1.29 MB (`EWEB.PRG` 1.21). Its About box says "for the FireBee". No
+  scripts yet: QuickJS for the ColdFire's FPU (doubles only) is `EWEBJS.OVL`'s next step.
+- **Checked here:** `make hatarigui`'s `firebee` group starts `EWEBFB.PRG` on the 1040 ST and on a
+  Falcon: each shows "EWEBFB.PRG is for the FireBee. On a Falcon or a TT: EWEB.PRG; on an ST or
+  STE: EWEBST.PRG." and Return goes back to the desktop. The program's own run (GEM, STinG, the
+  screen, speed) is the tester's FireBee's, under FireTOS, FireTOS + MiNT and EmuTOS (common's
+  `tests/coldfire/README.md`, What only a real FireBee can prove).
+
 ## Screens deeper than the Falcon's (11 Nov 2026)
 
 Up to 1.0 EWeb drew on 2 to 256 colours and the Falcon's 16-bit true colour only, and any other
@@ -5226,8 +5256,14 @@ through the hub: "approve"): Settings opened 160 ms and the About box 150 ms on 
 without NVDI; and (Erez, 12 Nov 2026) under NVDI on the 4 MB Falcon, where 1.2 couldn't show the rig's news
 page at all: a line scrolled 155 ms and a page 810 ms, and what Settings or the About box uncovers
 430 to 470 ms, when the page's kept copy (`pic`) doesn't fit beside it (the page drawn afresh), 40,
-45 and about 50 ms when it does. The kept copy fitting there more often is the next release's
-(task 177); under NVDI 1.2 couldn't load the rig's news page
+45 and about 50 ms when it does. **Kept as it is (Erez, 12 Nov 2026, through the hub: option
+B):** the kept copy of the news page needs 331 KB, and 114 KB is what fits beside it on the 4 MB
+Falcon under NVDI after the page is made (218 KB free in the heap, 16 KB from GEMDOS). Smaller
+pieces and as many rows as fit (146 KB kept) made a page scrolled slower, 970 ms against 845, and
+were not kept. The lever is the page's stylesheet rules, 345 KB: given back after styling
+(option A), the copy would fit, but each restyle (a window sized, a font changed, a script's
+change) would read the sheets again, about 3.5 s. Erez kept 1.3's behaviour; not to be asked
+again unless the memory picture changes. Under NVDI 1.2 couldn't load the rig's news page
 (its "can't show" page in 365 ms, nothing to scroll), so its rows there aren't a comparison. On
 `ST:mono` under NVDI the three rows of What follows 1.3 (above), and an arrow held down 2,160 to
 2,525 ms; 4 pages down 4,160 to 3,025, an arrow held up 4,380 to 4,220.

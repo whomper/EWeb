@@ -2878,8 +2878,13 @@ int main(void)
 #else
 /* EWEB.PRG's main() is common's cpucheck.c, 68000 code: on an ST it shows
    this and goes, where the 68030 code from appl_init on would die */
+#ifdef __mcoldfire__
+/* (EWEBFB.PRG's main() is common's cpucheck_cf.S: the _CF_ cookie, else this) */
+const char cpu_alert[] = "[3][EWEBFB.PRG is for the FireBee.|On a Falcon or a TT: EWEB.PRG;|on an ST or STE: EWEBST.PRG.][ Quit ]";
+#else
 const long cpu_need = 30;
 const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, run|EWEBST.PRG, the ST edition.][ Quit ]";
+#endif
 
 static int app_run(void);
 
@@ -3004,7 +3009,11 @@ static int app_run(void)
 #ifndef EW_ST
 	/* the TLS code, the family's TLS.OVL beside it: read at the first
 	   Direct connection (never through the Pi) */
+#ifdef __mcoldfire__
+	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tlsfb.ovl");	/* (the ColdFire's: tlsovl's make CPU=5475) */
+#else
 	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tls.ovl");
+#endif
 #endif
 	{
 		/* the cookies that last: read when the first page needs them */
@@ -3105,7 +3114,7 @@ static int app_run(void)
 	}
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
 	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
-#ifndef EW_ST
+#if !defined(EW_ST) && !defined(__mcoldfire__)	/* (EWEBFB.PRG: no scripts until EWEBJS.OVL has a ColdFire build) */
 	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;

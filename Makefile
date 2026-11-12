@@ -386,6 +386,20 @@ TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
 binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
 	cp $< $@
+
+# EWEBFB.PRG, the FireBee's (ColdFire, -mcpu=5475; Erez, 10 Nov 2026): the
+# same sources as EWEB.PRG, made from its own rules by tools/mkfirebee.py
+# (DESIGN.md, A FireBee edition), and its TLS.OVL as ColdFire code
+# (common/tlsovl's make CPU=5475: no DSP), tlsfb.ovl beside it. CF_CC: the
+# cross compiler builds for a ColdFire (make dist leaves both out if not)
+CF_CC := $(shell $(M68KCC) -mcpu=5475 -E -x c /dev/null >/dev/null 2>&1 && echo yes)
+binary/EWEBFB.PRG: binary/EWEB.PRG tools/mkfirebee.py common/atari/cpucheck_cf.S common/atari/ll64.c
+	@mkdir -p binary
+	python3 tools/mkfirebee.py $@
+binary/TLSFB.OVL: $(wildcard common/tlsovl/*.c common/tlsovl/*.S common/src/tls.c common/atari/libc.c common/atari/ll64.c)
+	@mkdir -p binary
+	$(MAKE) -C common/tlsovl CPU=5475
+	cp common/tlsovl/build-5475/tls.ovl $@
 build/tos/net/mont030.o: common/atari/mont030.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
@@ -1253,17 +1267,18 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
+FB_DIST := $(if $(CF_CC),EWEBFB.PRG TLSFB.OVL)
 dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
-		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT
+		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	for f in EWEB.PRG EWEBJS.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT; do \
+	for f in EWEB.PRG EWEBJS.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
 		cp binary/$$f dist/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	cp dist/eweb.prg dist/ewebjs.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
-		dist/roots.dat dist/zip/
+		dist/roots.dat $(addprefix dist/,$(shell echo $(FB_DIST) | tr A-Z a-z)) dist/zip/
 	# (the FireBee tester's tools, in the zip only: tests/fb/README.TXT; the hub, 10 Nov 2026)
 	mkdir -p dist/zip/firebee
 	cp binary/NSBENCH.TTP dist/zip/firebee/nsbench.ttp

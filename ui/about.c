@@ -33,6 +33,13 @@ void dlg_about(void)
 		      "libparserutils, libnsgif. JPEG: TJpgDec",
 		      "(ChaN's licence)." },
 		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
+#elif defined(__mcoldfire__)
+	/* (EWEBFB.PRG, the FireBee's: no scripts yet, BearSSL's own RSA and curves) */
+	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the FireBee", { net, mode, mem },
+		    { "DejaVu fonts. MIT: BearSSL, NetSurf's",
+		      "libparserutils and libnsgif.",
+		      "JPEG: libjpeg-turbo (IJG's and BSD licences)." },
+		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 #else
 	ABOUT a = { "EWeb", EWEB_VERSION, "A web browser for the Atari Falcon", { net, mode, mem },
 		    { "DejaVu fonts. MIT: BearSSL, QuickJS, musl's",

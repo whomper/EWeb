@@ -4,6 +4,9 @@
 /build/
 binary/
 dist/
+# (common's TLS.OVL built here: the ColdFire's, tlsfb.ovl, by make binary/TLSFB.OVL)
+common/tlsovl/build/
+common/tlsovl/build-5475/
 *.o
 
 # Python

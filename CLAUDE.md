@@ -326,8 +326,15 @@ hub stay complete, with the evidence.
 - **File names are lowercase** (the guidelines' 6.6, DESIGN.md's Decisions): every file EWeb opens or makes by
   a name of its own, and every file of a release (`make dist`); the rigs put EWeb's files on Hatari's drive
   under those names and read what it writes in lowercase (common's `ci_path` where the case may vary).
+- **The FireBee edition** is `EWEBFB.PRG` (`make binary/EWEBFB.PRG`: `tools/mkfirebee.py` runs
+  `EWEB.PRG`'s own rules again as ColdFire code, `-mcpu=5475`, into `build/cf/`), with `tlsfb.ovl`
+  (`make binary/TLSFB.OVL`: common's tlsovl, `CPU=5475`); its first code is common's
+  `cpucheck_cf.S` (`ui/main.c`'s `cpu_alert` under `__mcoldfire__`). After changing common's
+  assembly, run common's `tests/coldfire` (`make test`, `make same`); after anything the FireBee
+  build takes, `make binary/EWEBFB.PRG` and `make hatarigui`'s `firebee` group. DESIGN.md, The FireBee
+  edition.
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
-  `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
+  `EWEBJS.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
   dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his

@@ -80,7 +80,7 @@ from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
 WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
-                         "details", "wide", "boxes", "dialogs", "translate"]
+                         "details", "wide", "boxes", "dialogs", "translate", "firebee"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
 # run them at once
@@ -103,7 +103,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("EWEB.PRG", "EWEBJS.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT"):   # named as a release has them (6.6)
+    for f in ("EWEB.PRG", "EWEBJS.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
@@ -1913,6 +1913,45 @@ def st_cpu():
         r.end()
 
 
+def fb_cpu(spec):
+    """EWEBFB.PRG (ColdFire code) started on an Atari: its main() is
+    common's cpucheck_cf.S, the same bytes for a 68000 and a ColdFire, which
+    finds no _CF_ cookie and says in an alert that this is the FireBee's;
+    Return goes back to the desktop. Seen in the screenshots as st_cpu's"""
+    r = Run("fbcpu-" + spec.replace(":", "-"), spec, hd_for("fbcpu", "about:start"), prg="EWEBFB.PRG")
+
+    def white(n):
+        im = Image.open(r.shot(n)).convert("L")
+        w, h = im.size
+        mid = im.crop((w // 2 - 120, h // 2 - 50, w // 2 + 120, h // 2 + 50)).histogram()
+        bar = im.crop((0, 0, 240, 18)).histogram()
+        # (the light pixels: the alert's grey and white; a Falcon's green
+        # desktop is darker, an ST's pattern half light)
+        return sum(mid[180:]) / sum(mid), sum(bar[:128])
+    try:
+        seen = None
+        for n in range(20):
+            time.sleep(2)
+            mid, _ = white(n)
+            if 0.75 < mid < 0.97:
+                seen = n
+                break
+        check("firebee: EWEBFB.PRG on %s says it is the FireBee's" % spec, seen is not None and not r.events(),
+              "no alert in %s-*.png; events %s" % (r.name, r.events()))
+        r.key(RETURN)
+        back = False
+        for n in range(20, 30):
+            time.sleep(2)
+            mid, bar = white(n)
+            if mid < 0.7 and bar > 100:
+                back = True
+                break
+        check("firebee: on %s, Return quits to the desktop" % spec, back and r.h.poll() is None and not r.events(),
+              "no desktop in %s-*.png; events %s" % (r.name, r.events()))
+    finally:
+        r.end()
+
+
 def st():
     """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, 4 MB,
     TOS 1.04): a page and its pictures from the disk in monochrome and in
@@ -2876,6 +2915,12 @@ if "screens" in WHICH:
 if "st" in WHICH:
     st_cpu()
     st()
+if "firebee" in WHICH:
+    if os.path.exists(os.path.join(ROOT, "binary", "EWEBFB.PRG")):
+        fb_cpu("ST:mono")
+        fb_cpu("Falcon:16")
+    else:
+        skip("firebee: no binary/EWEBFB.PRG (make binary/EWEBFB.PRG)")
 if "gateway" in WHICH:
     gateway()
 if "falcon" in WHICH:

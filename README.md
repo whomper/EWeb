@@ -29,13 +29,15 @@ folder of its own.
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
 | `EWEBST.PRG` | the ST edition, for an ST or STE |
+| `EWEBFB.PRG`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing: no scripts yet |
 | `EWEB.FNT` | the fonts |
 | `EWEBJS.OVL` | JavaScript (needs an FPU) |
 | `TLS.OVL`, `CACERT.PEM`, `ROOTS.DAT` | secure connections made on the Atari |
 | `EWEB.HYP` | the guide (the Help key) |
 | `icons/` | the desktop icon |
 
-1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST).
+1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST, `EWEBFB.PRG` on a
+   FireBee).
 2. Type an address and press Return, or pick a site from the home page.
 3. Press **Help** for the guide.
 
