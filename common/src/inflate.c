@@ -292,9 +292,10 @@ static int codes(ST *s, const HUFF *lc, const HUFF *dc)
 			ROOM(len);
 		{
 			/* the copy may overlap itself: byte by byte (on the 68000
-			   a dbra loop, 22 cycles a byte, where GCC's took 46) */
+			   a dbra loop, 22 cycles a byte, where GCC's took 46; a
+			   ColdFire, which GCC also calls __mc68000__, has no dbra) */
 			const char *q = w - dist;
-#ifdef __mc68000__
+#if defined(__mc68000__) && !defined(__mcoldfire__)
 			{
 				short k = (short) (len - 1);
 				__asm__ volatile ("1:\tmove.b (%1)+,(%0)+\n\tdbra %2,1b"

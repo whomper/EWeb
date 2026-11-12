@@ -171,6 +171,19 @@ bad:
 static long flush_super(void)
 {
 	long *jar = *(long **)0x5a0, cpu = 0;
+#ifdef __mcoldfire__
+	/* a ColdFire (the FireBee's MCF5474: 512 sets of 4 ways, each cache):
+	   each line pushed and invalidated in both caches, as EmuTOS does */
+	{
+		unsigned long set, way;
+		(void)jar;
+		(void)cpu;
+		for (set = 0; set < 512; set++)
+			for (way = 0; way < 4; way++)
+				__asm__ volatile("cpushl %%bc,(%0)" : : "a"(set << 4 | way) : "memory");
+		return 0;
+	}
+#endif
 	for (; jar && jar[0]; jar += 2)
 		if (jar[0] == 0x5F435055L) {	/* _CPU: 0, 10, 20, 30, 40, 60 */
 			cpu = jar[1];
@@ -194,6 +207,15 @@ static long flush_super(void)
 void ovl_flush(void)
 {
 	/* Supexec (XBIOS 38) */
+#ifdef __mcoldfire__
+	__asm__ volatile("move.l %0,-(%%sp)\n\t"
+			 "moveq #38,%%d0\n\t"
+			 "move.w %%d0,-(%%sp)\n\t"
+			 "trap #14\n\t"
+			 "addq.l #6,%%sp"
+			 :: "r"(flush_super) : "d0", "d1", "d2", "a0", "a1", "a2", "memory", "cc");
+	return;
+#endif
 	__asm__ volatile("move.l %0,-(%%sp)\n\t"
 			 "move.w #38,-(%%sp)\n\t"
 			 "trap #14\n\t"

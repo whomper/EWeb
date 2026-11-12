@@ -893,13 +893,21 @@ static void sup_kq_on(void)
 	unsigned char v;
 	__asm__ volatile("move.b 0x484.w,%0" : "=d"(v));
 	kq_old = v;
+#ifdef __mcoldfire__	/* (no or.b or and.b to memory on a ColdFire) */
+	__asm__ volatile("move.b 0x484.w,%%d0\n\tor.l #8,%%d0\n\tmove.b %%d0,0x484.w" : : : "d0", "cc", "memory");
+#else
 	__asm__ volatile("or.b #8,0x484.w" : : : "cc", "memory");
+#endif
 }
 
 static void sup_kq_off(void)
 {
 	if (!(kq_old & 8))
+#ifdef __mcoldfire__
+		__asm__ volatile("move.b 0x484.w,%%d0\n\tand.l #0xf7,%%d0\n\tmove.b %%d0,0x484.w" : : : "d0", "cc", "memory");
+#else
 		__asm__ volatile("and.b #0xf7,0x484.w" : : : "cc", "memory");
+#endif
 }
 
 static void kq_off(void)
