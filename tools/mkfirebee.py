@@ -46,7 +46,7 @@ def run(cmd):
 def cpu(words):
     out = []
     for w in words:
-        if w in ("-m68030", "-m68000", "-msoft-float", "-m68881", "-m68020"):
+        if w in ("-m68030", "-m68000", "-msoft-float", "-m68881", "-m68020", "-m68020-60"):
             if MCPU not in out:
                 out.append(MCPU)
             continue
@@ -105,7 +105,7 @@ def main():
     run(" ".join([CC, MCPU, "-O2", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
                   "-fno-asynchronous-unwind-tables", "-c", "atari/cfmath.c", "-o", "build/cf/rt/cfmath.o"]))
     words = cpu([w for w in link if w != "-lgcc"])
-    words += ["build/cf/rt/ll64.o", "build/cf/rt/cfmath.o"]
+    words += [o for o in ("build/cf/rt/ll64.o", "build/cf/rt/cfmath.o") if o not in words]
     run(" ".join(shlex.quote(w) for w in words))
     elf = words[words.index("-o") + 1]
     env = dict(os.environ, PRGFLAGS="7")

@@ -225,10 +225,15 @@ build/tos/gem/main.o build/st/gem/main.o: Makefile
 # cache: else a change anywhere before it moves its loops across lines, and
 # the stock Falcon's page loads go 3% slower or faster with it; 6 Nov 2026,
 # DESIGN.md, Code aligned to the 68030's cache. Not the ST edition's)
-TOS_CFLAGS := -m68030 -msoft-float -O2 -falign-functions=16 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
+# EWEB.PRG's CPU (Erez, 12 Nov 2026): code every one from the 68020 to the
+# 68060 runs as it is (-m68020-60: no 64-bit mulu.l/divu.l, which the 68060
+# traps on), as fast on the 68030 (the stock Falcon's NSBENCH 2% faster);
+# DESIGN.md, Scripts on the 68060 and the FireBee
+TOS_CPU := -m68020-60
+TOS_CFLAGS := $(TOS_CPU) -msoft-float -O2 -falign-functions=16 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -ffunction-sections -fdata-sections -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
-TOS_LDFLAGS := -m68030 -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+TOS_LDFLAGS := $(TOS_CPU) -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
               -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--gc-sections
 $(eval $(call target_rules,tos,$(M68KCC),$(TOS_CFLAGS)))
 tos_BENCH  := $(subst plat_posix,plat_tos,$(tos_BENCH))
@@ -370,7 +375,7 @@ build/host/mkroots: common/tools/mkroots.c $(HOSTNET_SRC) $(NET_HDRS) build/host
 	$(HOSTCC) -O2 -std=gnu99 -w $(NET_INC) -o $@ common/tools/mkroots.c $(HOSTNET_SRC) build/host/libbearssl.a
 
 # the Atari: 68030 code (no FPU instructions), on common/'s runtime
-TOSNET_CFLAGS := -m68030 -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
+TOSNET_CFLAGS := $(TOS_CPU) -msoft-float -O2 -std=gnu99 -DEW_TOS -ffreestanding -fno-builtin -fno-pic -fno-pie \
                  -ffunction-sections -fdata-sections \
                  -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc -isystem $(GCCINC) \
                  -Iatari/include -Icommon/atari/include $(NET_INC)
@@ -593,6 +598,10 @@ build/tos/ewebjs.elf: build/tos/js/js_ovl_head.o $(tos_JS) atari/ovl.ld
 build/t060/js/js_ovl_head.o: atari/js_ovl_head.c $(JS_OVL_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(T060JS_CFLAGS) $(JS_FLAGS) -Iatari -DJS_ABI=$(JS_ABI) -c $< -o $@
+# (EWEB.PRG's too: common's ll64.c ahead of libgcc's 64-bit division)
+build/tos/rt/ll64.o: common/atari/ll64.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOS_CPU) -O2 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-asynchronous-unwind-tables -c $< -o $@
 # (common's ll64.c ahead of libgcc: libgcc's 64-bit multiply and divide are
 # the 68020's mulu.l and divu.l of 64 bits, which the 68060 traps on)
 build/t060/rt/ll64.o: common/atari/ll64.c
@@ -646,7 +655,7 @@ build/tos/gem/common/dspjpeg.o: common/dsp/jpeg_prog.h common/dsp/dither_prog.h 
 # so instead of dying at appl_init (common's cpucheck.c; EWEBST.PRG has none)
 build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 	@mkdir -p $(@D)
-	$(M68KCC) $(subst -m68030,-m68000,$(GEM_CFLAGS)) $(COMMON_WARN) -c $< -o $@
+	$(M68KCC) $(subst $(TOS_CPU),-m68000,$(GEM_CFLAGS)) $(COMMON_WARN) -c $< -o $@
 # a graphics card's screen (ui/tcpix.c, ui/deep.c) linked last, after
 # everything a Falcon runs: in the middle it moved the canvas and made it
 # 7% slower on the stock Falcon (the 68030's caches; DESIGN.md)
@@ -656,7 +665,7 @@ GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
 build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
-		$(DEEP_OBJ)
+		$(DEEP_OBJ) build/tos/rt/ll64.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
@@ -666,9 +675,9 @@ binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 # (-fdisable-tree-bswap, as every 68000 build), no TLS (common's
 # tls_none.c: BearSSL's 150 KB left out) and no DSP; secure sites through
 # AERA-Gateway's webgate (GATEWAY=). The same sources as EWEB.PRG.
-ST_CFLAGS     := $(subst -O2,-Os,$(subst -m68030,-m68000,$(filter-out -falign-functions=16,$(TOS_CFLAGS)))) -fno-store-merging -fdisable-tree-bswap -DEW_ST
-ST_LDFLAGS    := $(subst -m68030,-m68000,$(TOS_LDFLAGS))
-STNET_CFLAGS  := $(subst -O2,-Os,$(subst -m68030,-m68000,$(TOSNET_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST \
+ST_CFLAGS     := $(subst -O2,-Os,$(subst $(TOS_CPU),-m68000,$(filter-out -falign-functions=16,$(TOS_CFLAGS)))) -fno-store-merging -fdisable-tree-bswap -DEW_ST
+ST_LDFLAGS    := $(subst $(TOS_CPU),-m68000,$(TOS_LDFLAGS))
+STNET_CFLAGS  := $(subst -O2,-Os,$(subst $(TOS_CPU),-m68000,$(TOSNET_CFLAGS))) -fno-store-merging -fdisable-tree-bswap -DEW_ST \
                  -DTLS_FULL_EDITION=\"EWEB.PRG\"
 $(eval $(call target_rules,st,$(M68KCC),$(ST_CFLAGS)))
 st_RT      := $(subst build/tos/,build/st/,$(tos_RT)) build/st/rt/ll68000.o
@@ -762,7 +771,8 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ) \
+		build/tos/rt/ll64.o))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
