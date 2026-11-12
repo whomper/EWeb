@@ -3,7 +3,8 @@
 <img src="docs/icon.png" width="96" align="right" alt="EWeb's icon: a globe, Europe, Africa and Arabia in green on a blue sea with a grid of lines, drawn pixel by pixel">
 
 A web browser for the Atari Falcon and TT, written for GEM and tuned for a Falcon with a DFB1
-accelerator; its ST edition runs on an ST or STE with 4 MB.
+accelerator; its ST edition runs on an ST or STE with 4 MB, and editions for the 68060 and the
+FireBee are in testing.
 
 **Highlights**
 
@@ -15,7 +16,7 @@ accelerator; its ST edition runs on an ST or STE with 4 MB.
 - **Hebrew:** pages right to left in every Hebrew encoding, and typing Hebrew (F10).
 - **Browsing:** several windows, address-bar search, bookmarks, history, find, a disk cache.
 - **File downloads:** files of any size saved straight to disk as they come; pages saved too.
-- **Every screen:** monochrome to true colour (the Falcon's, or a graphics card's 24 and 32 bits, in testing), in EWeb's own fonts.
+- **Every machine and screen:** ST, STE, Falcon and TT (a 68060 and the FireBee in testing); monochrome to true colour (a graphics card's 24 and 32 bits in testing), in EWeb's own fonts.
 - **AERA family:** the family's menus, shortcuts, dialogs and help; mail links open EMail.
 
 ![EWeb on a Falcon in 256 colours, showing yaary.music](docs/screenshot.png)
@@ -43,8 +44,9 @@ folder of its own.
 2. Type an address and press Return, or pick a site from the home page.
 3. Press **Help** for the guide.
 
-**Needs:** a Falcon or TT with about 3.5 MB free and a screen 640 pixels wide, under TOS, EmuTOS
-or MagiC; scripts need an FPU. The ST edition needs 4 MB and the Gateway for secure sites.
+**Needs:** a Falcon or TT with about 3.5 MB free and a screen 640 pixels wide, under TOS, EmuTOS,
+MagiC or FreeMiNT with XaAES; scripts need an FPU, and TT RAM is used when there is some. The ST
+edition needs 4 MB and the Gateway for secure sites; the FireBee's runs under FireTOS or EmuTOS.
 
 **Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`** (renamed `FOLDR400.PRG`), so TOS doesn't
 run out of folder memory. **With STinG, set the Delay in `STING.CPX`** to 10 on a Falcon or TT.
