@@ -5154,18 +5154,26 @@ the most of on each processor, and QuickJS-ng measured against it before any cha
   takes of the TT RAM, 8 MB at least (`JS_MAX_MEMORY`, all a page's scripts had). The time budget
   (`JS_PAGE_MS` 15 s, `JS_EVENT_MS` 2 s) is the clock's: a faster processor already does more in
   it, so it isn't changed.
-- **`EWEB.PRG` for every processor from the 68030 to the 68060** (Erez, 12 Nov 2026: one
-  `EWEB.PRG`, as long as the stock Falcon loses nothing). Built for the 68030 it had 625 of those
-  64-bit forms itself (`objdump -m m68k:68030`; the default 68000 decoding hides them): a CT60's
-  TOS loads the 68060's support package, which emulates them, slowly, and EmuTOS has none, so
-  `EWEB.PRG` stopped at the first (exception 61). Now its C is `-m68020-60` (`TOS_CPU` in the
-  Makefile) with common's `ll64.c` ahead of libgcc (whose 64-bit division has the 68060's
-  missing forms too): none left, and the ST edition's bytes as they were. NSBENCH's news page on
-  the emulated stock Falcon (16 MHz, no FPU): HTML 2,690 to 2,630 ms, CSS 21,090 to 20,710,
-  selecting 20,395 to 19,930, each about 2% faster; on the emulated 32 MHz Falcon with its
-  68882 HTML 1,200 to 1,160, CSS 9,460 to 9,765, selecting 9,650 to 9,430 (even). A scratch
-  build so ran on Hatari's 68060 under EmuTOS with no support package, loaded `EWEBJS60.OVL` and
-  ran the page's scripts, as `make hatarigui`'s 68060 case (`scripts_060`) does now.
+- **`EWEB60.PRG`, the 68060's EWeb** (Erez, 12 Nov 2026: one `EWEB.PRG` for every processor if
+  the stock Falcon loses no more than 3%, else a program of the 68060's own). Built for the 68030,
+  `EWEB.PRG` has 621 of those 64-bit forms itself (`objdump -m m68k:68030`; the default 68000
+  decoding hides them): a CT60's TOS loads the 68060's support package, which emulates them,
+  slowly, and EmuTOS has none, so `EWEB.PRG` stops at the first (exception 61). Built
+  `-m68020-60` with common's `ll64.c` ahead of libgcc it had none, and NSBENCH's news page on the
+  emulated stock Falcon (16 MHz, no FPU) was about 2% faster (HTML 2,690 to 2,630 ms, CSS 21,090
+  to 20,710, selecting 20,395 to 19,930), but the speed rig on Falcon-4:16 (the window whole, ms
+  from the key) was slower where it matters most: an arrow held 3 s up 1,170 to 1,210 (3.4%), its
+  longest stretch 1,055 to 1,100 (4.3%), the news page 945 to 970; `mix_rgb`'s three divisions
+  by 255, a multiply for the 68030 and a `divu.l` for the 68020-60, made exact shifts
+  (`DIV255`), took none of it back. So `EWEB.PRG` stays 68030 code, as in 1.4, and
+  `EWEB60.PRG` is the same sources made again by `tools/mkfirebee.py --68060` from `EWEB.PRG`'s
+  own rules (`-m68060`, `build/p060/`, `ll64.c` ahead of libgcc); the tool stops if any of those
+  forms is left. Its scripts' overlays are `EWEB.PRG`'s, so it loads `EWEBJS60.OVL` (one
+  `js_imports`). `make hatarigui`'s 68060 case (`scripts_060`, Hatari's 68060 in a Falcon under
+  EmuTOS, so with no support package) starts `EWEB60.PRG` and runs a page's scripts from
+  `EWEBJS60.OVL`. `TLS.OVL` (common's) is 68030 code still: on a 68060 its 64-bit multiplies go
+  to the support package, so a Direct secure connection needs one there until common has a
+  68060 build of it.
 - **QuickJS-ng**: to be measured against EWeb's QuickJS (2026-06-04) on the page set's scripts
   before anything changes.
 

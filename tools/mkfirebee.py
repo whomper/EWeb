@@ -24,7 +24,14 @@ and each cross-compiler command is run again for the ColdFire:
 The generated sources (build/gen) are the Falcon build's: run `make
 binary/EWEB.PRG` first (the Makefile's binary/EWEBFB.PRG does).
 
-    tools/mkfirebee.py OUT.PRG"""
+With --68060 it makes EWEB60.PRG, the 68060's EWeb (Erez, 12 Nov 2026: the
+68030's EWEB.PRG kept as it is for the stock Falcon) from the same rules:
+-m68030 becomes -m68060 (no 64-bit mulu.l/divu.l, which the 68060 hasn't),
+build/tos/ build/p060/, common's ll64.c goes ahead of libgcc (whose 64-bit
+division has them), and none is left (objdump); the scripts' overlays and
+their js_imports are EWEB.PRG's (EWEBJS60.OVL, EWEBJS.OVL).
+
+    tools/mkfirebee.py [--68060] OUT.PRG"""
 import os
 import re
 import shlex
@@ -33,6 +40,11 @@ import sys
 
 CC = "m68k-linux-gnu-gcc"
 MCPU = "-mcpu=5475"
+OUT = "build/cf/"
+# what the 68060 hasn't: a 64-bit multiply or divide, which objdump -m
+# m68k:68030 writes with three operands (the 32-bit divull with two
+# registers is the 68060's)
+WIDE = re.compile(r"\s(mulul|mulsl|divul|divsl)\s+.*,%d[0-7],%d[0-7]\s*$")
 
 
 def run(cmd):
@@ -46,18 +58,52 @@ def run(cmd):
 def cpu(words):
     out = []
     for w in words:
-        if w in ("-m68030", "-m68000", "-msoft-float", "-m68881", "-m68020", "-m68020-60"):
+        if MCPU == "-m68060":
+            if w in ("-m68030", "-m68020", "-m68020-60"):
+                w = MCPU
+        elif w in ("-m68030", "-m68000", "-msoft-float", "-m68881", "-m68020", "-m68020-60"):
             if MCPU not in out:
                 out.append(MCPU)
             continue
-        out.append(w.replace("build/tos/", "build/cf/"))
+        out.append(w.replace("build/tos/", OUT))
     return out
 
 
+def m68060(target, compiles, link):
+    """EWEB60.PRG: EWEB.PRG's objects (not its overlays') for the 68060"""
+    objs = set(w for w in link if w.endswith(".o"))
+    n = 0
+    for words in compiles:
+        if words[words.index("-o") + 1] not in objs:
+            continue
+        words = cpu(words)
+        os.makedirs(os.path.dirname(words[words.index("-o") + 1]), exist_ok=True)
+        run(" ".join(shlex.quote(w) for w in words))
+        n += 1
+    os.makedirs(OUT + "rt", exist_ok=True)
+    run(" ".join([CC, MCPU, "-O2", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",
+                  "-fno-asynchronous-unwind-tables", "-c", "common/atari/ll64.c", "-o", OUT + "rt/ll64.o"]))
+    words = cpu(link)
+    words.insert(words.index("-lgcc"), OUT + "rt/ll64.o")
+    run(" ".join(shlex.quote(w) for w in words))
+    elf = words[words.index("-o") + 1]
+    wide = [l for l in run("m68k-linux-gnu-objdump -d -m m68k:68030 " + elf).splitlines() if WIDE.search(l)]
+    if wide:
+        sys.exit("mkfirebee: %d of the 68060's missing forms in %s, as\n%s" % (len(wide), elf, "\n".join(wide[:5])))
+    env = dict(os.environ, PRGFLAGS="7")
+    subprocess.run(["python3", "common/tools/elf2tos.py", elf, target], env=env, check=True)
+    print("mkfirebee: %s, %d objects, %d bytes, no 64-bit multiply or divide" % (target, n, os.path.getsize(target)))
+
+
 def main():
-    if len(sys.argv) != 2:
+    global MCPU, OUT
+    args = sys.argv[1:]
+    if args[:1] == ["--68060"]:
+        MCPU, OUT = "-m68060", "build/p060/"
+        args = args[1:]
+    if len(args) != 1:
         sys.exit(__doc__)
-    target = sys.argv[1]
+    target = args[0]
     lines = run("make -n -B build/tos/eweb.elf").replace("\\\n", " ").splitlines()
     compiles, link, ovl_link, imports = [], None, None, None
     for line in lines:
@@ -77,6 +123,8 @@ def main():
             ovl_link = words
     if link is None or ovl_link is None or imports is None:
         sys.exit("mkfirebee: make gave no link of build/tos/eweb.elf, of its overlay or its imports")
+    if MCPU == "-m68060":
+        return m68060(target, compiles + [imports], link)
     objs = []
     for words in compiles:
         src = words[words.index("-c") + 1]

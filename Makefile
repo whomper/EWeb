@@ -109,7 +109,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
+all: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
      binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
@@ -225,11 +225,11 @@ build/tos/gem/main.o build/st/gem/main.o: Makefile
 # cache: else a change anywhere before it moves its loops across lines, and
 # the stock Falcon's page loads go 3% slower or faster with it; 6 Nov 2026,
 # DESIGN.md, Code aligned to the 68030's cache. Not the ST edition's)
-# EWEB.PRG's CPU (Erez, 12 Nov 2026): code every one from the 68020 to the
-# 68060 runs as it is (-m68020-60: no 64-bit mulu.l/divu.l, which the 68060
-# traps on), as fast on the 68030 (the stock Falcon's NSBENCH 2% faster);
-# DESIGN.md, Scripts on the 68060 and the FireBee
-TOS_CPU := -m68020-60
+# EWEB.PRG's CPU: the 68030 (-m68020-60 made the stock Falcon's held arrow
+# 3.4% slower, more than Erez's 3%: 12 Nov 2026); the 68060 has its own
+# EWEB60.PRG (tools/mkfirebee.py --68060; DESIGN.md, Scripts on the 68060
+# and the FireBee)
+TOS_CPU := -m68030
 TOS_CFLAGS := $(TOS_CPU) -msoft-float -O2 -falign-functions=16 -std=gnu99 -DNDEBUG -DNSBENCH_TOS -ffreestanding \
               -ffunction-sections -fdata-sections -fno-pic -fno-pie -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
               -nostdinc -isystem $(GCCINC) -Iatari/include -Icommon/atari/include -w
@@ -598,10 +598,6 @@ build/tos/ewebjs.elf: build/tos/js/js_ovl_head.o $(tos_JS) atari/ovl.ld
 build/t060/js/js_ovl_head.o: atari/js_ovl_head.c $(JS_OVL_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(T060JS_CFLAGS) $(JS_FLAGS) -Iatari -DJS_ABI=$(JS_ABI) -c $< -o $@
-# (EWEB.PRG's too: common's ll64.c ahead of libgcc's 64-bit division)
-build/tos/rt/ll64.o: common/atari/ll64.c
-	@mkdir -p $(@D)
-	$(M68KCC) $(TOS_CPU) -O2 -ffreestanding -fno-builtin -fno-pic -fno-pie -fno-asynchronous-unwind-tables -c $< -o $@
 # (common's ll64.c ahead of libgcc: libgcc's 64-bit multiply and divide are
 # the 68020's mulu.l and divu.l of 64 bits, which the 68060 traps on)
 build/t060/rt/ll64.o: common/atari/ll64.c
@@ -665,11 +661,17 @@ GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
 build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
-		$(DEEP_OBJ) build/tos/rt/ll64.o
+		$(DEEP_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+# EWEB60.PRG, the 68060's (a CT60's; Erez, 12 Nov 2026): EWEB.PRG's objects
+# made again with -m68060 by tools/mkfirebee.py --68060, common's ll64.c
+# ahead of libgcc, none of the 64-bit multiplies and divides the 68060
+# hasn't left; the scripts' overlays are EWEB.PRG's
+binary/EWEB60.PRG: binary/EWEB.PRG tools/mkfirebee.py common/atari/ll64.c
+	python3 tools/mkfirebee.py --68060 $@
 
 # EWEBST.PRG, the ST edition (the guidelines' NAMEST.PRG): 68000 code
 # (-fdisable-tree-bswap, as every 68000 build), no TLS (common's
@@ -771,8 +773,7 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ) \
-		build/tos/rt/ll64.o))) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
@@ -1000,7 +1001,7 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
-hatarigui: binary/EWEB.PRG binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
+hatarigui: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
 
@@ -1328,16 +1329,16 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped
 FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
-dist: binary/EWEB.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
+dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
 		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	for f in EWEB.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
+	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
 		cp binary/$$f dist/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
-	cp dist/eweb.prg dist/ewebjs.ovl dist/ewebjs60.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
+	cp dist/eweb.prg dist/eweb60.prg dist/ewebjs.ovl dist/ewebjs60.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
 		dist/roots.dat $(addprefix dist/,$(shell echo $(FB_DIST) | tr A-Z a-z)) dist/zip/
 	# (the FireBee tester's tools, in the zip only: tests/fb/README.TXT; the hub, 10 Nov 2026)
 	mkdir -p dist/zip/firebee

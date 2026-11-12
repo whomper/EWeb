@@ -28,6 +28,7 @@ folder of its own.
 | File | What it is |
 |---|---|
 | `EWEB.PRG` | the browser, for the Falcon and TT |
+| `EWEB60.PRG` | the browser for a 68060 (a CT60) |
 | `EWEBST.PRG` | the ST edition, for an ST or STE |
 | `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing |
 | `EWEB.FNT` | the fonts |
@@ -37,8 +38,8 @@ folder of its own.
 | `EWEB.HYP` | the guide (the Help key) |
 | `icons/` | the desktop icon |
 
-1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEBST.PRG` on an ST, `EWEBFB.PRG` on a
-   FireBee).
+1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEB60.PRG` with a 68060, `EWEBST.PRG` on an ST,
+   `EWEBFB.PRG` on a FireBee).
 2. Type an address and press Return, or pick a site from the home page.
 3. Press **Help** for the guide.
 

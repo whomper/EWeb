@@ -103,7 +103,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("EWEB.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
+    for f in ("EWEB.PRG", "EWEB60.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
@@ -1213,7 +1213,7 @@ def scripts():
         scripts_without(site)
         scripts_modes(site)
         scripts_note(site)
-        scripts_060(site)   # (EWEB.PRG is -m68020-60: no 68060 support package needed)
+        scripts_060(site)
     finally:
         if xvfb is not None:
             xvfb.terminate()
@@ -1223,12 +1223,13 @@ def scripts():
 
 def scripts_060(site):
     """a page's scripts on a 68060 (a CT60's: Hatari's 68060 in a Falcon,
-    EmuTOS, as TOS 4.04 has no 68060's code), from its own EWEBJS60.OVL"""
+    EmuTOS, as TOS 4.04 has no 68060's code, and with it no support package
+    for what the 68060 hasn't), in EWEB60.PRG, from its own EWEBJS60.OVL"""
     hd = hd_for("scripts060", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
     keep = os.environ.get("AERA_TOS")
     os.environ["AERA_TOS"] = "emutos"
     try:
-        r = Run("scripts060", "Falcon:16", hd, windowed=True, network=True, cpu060=True)
+        r = Run("scripts060", "Falcon:16", hd, windowed=True, network=True, prg="EWEB60.PRG", cpu060=True)
     finally:
         if keep is None:
             del os.environ["AERA_TOS"]

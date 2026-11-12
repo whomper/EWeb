@@ -16,7 +16,8 @@ and white.
   On an ST or STE (TOS 1.04 or newer) with 4 MB, use `EWEBST.PRG`, the
   ST edition: it has no secure connections of its own and reaches secure
   sites through AERA-Gateway's web service on a Raspberry Pi (the Gateway,
-  in [Settings](#settings))
+  in [Settings](#settings)). With a 68060 (a CT60), use `EWEB60.PRG`,
+  the same browser made for that processor
 - For `EWEB.PRG` about 3.5 MB of free memory (the program itself takes
   1.6 MB, and `TLS.OVL` 0.15 MB more at the first secure site of a Direct
   connection; a page up to about 11 times its size): a Falcon's own 4 MB is
@@ -44,8 +45,11 @@ The files are in the latest release on EWeb's GitHub page
 
 ```
 EWEB.PRG      the program (Falcon, TT)
+EWEB60.PRG    the program for a 68060 (a CT60)
 EWEBST.PRG    the ST edition (ST, STE: secure sites through the gateway)
 EWEB.FNT      its fonts (needed: EWeb draws pages with them)
+EWEBJS.OVL    a page's scripts (with an FPU)
+EWEBJS60.OVL  a page's scripts on a 68060
 TLS.OVL       secure sites in a Direct connection: the code (the family's)
 EWEB.HYP      this guide, for EHypView or ST-Guide (the Help key opens it)
 CACERT.PEM    secure sites: the root certificates
@@ -684,8 +688,9 @@ and run for 5 seconds as it opens (2 seconds for each click or timer
 after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
-those, use the Gateway's browser (below). The FireBee edition runs them from
-`EWEBJSFB.OVL` beside `EWEBFB.PRG`. The ST edition runs no scripts and
+those, use the Gateway's browser (below). On a 68060 they run from
+`EWEBJS60.OVL`, and the FireBee edition runs them from `EWEBJSFB.OVL`
+beside `EWEBFB.PRG`. The ST edition runs no scripts and
 has no such menu item; on a Falcon without an FPU, picking it says
 "JavaScript needs an FPU (a 68881 or 68882)", and pages are shown as
 with scripts off.

@@ -343,7 +343,7 @@ hub stay complete, with the evidence.
   scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`).
   DESIGN.md, The FireBee edition.
 - **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
-  `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
+  `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
   dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his
@@ -379,9 +379,13 @@ hub stay complete, with the evidence.
   `-K hover:ID`, `dbl:ID`, `down:ID`, `up:ID`, `drag:ID:DX,DY` (or `drag:ID:@TO`, an HTML drag when ID is `draggable`) the mouse, `tap:ID` a click as the hover), `make itest`
   (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882, with and without `EWEBJS.OVL`).
   `EWEB.PRG` runs on the stock 4 MB Falcon (Erez, 23 Oct 2026): `make hatarigui`'s `falcon4` group.
-  On a 68060 `EWEB.PRG` loads `EWEBJS60.OVL` (the overlay as `-m68060` code, `build/t060/`; one
+  On a 68060 EWeb loads `EWEBJS60.OVL` (the overlay as `-m68060` code, `build/t060/`; one
   `js_imports` for both, `tools/mkovl.py`), `EWEBJS.OVL` where it isn't there; the scripts' heap
-  is `js_max_memory` (`mem_limits`). DESIGN.md, Scripts on the 68060 and the FireBee.
+  is `js_max_memory` (`mem_limits`). The 68060 has its own program, `EWEB60.PRG` (`make
+  binary/EWEB60.PRG`: `tools/mkfirebee.py --68060`, `EWEB.PRG`'s objects as `-m68060` code with
+  `ll64.c`; it stops on any 64-bit `mulu.l`/`divu.l`), so that `EWEB.PRG` stays the stock
+  Falcon's 68030 code; after changing the build, `make hatarigui`'s `scripts` group (its 68060
+  case). DESIGN.md, Scripts on the 68060 and the FireBee.
 - **EWeb's CSS engine** is `src/css/` (`docs/CSS.md`): it replaced LibCSS on speed and standards
   (DESIGN.md). A big sheet is read as it comes (`ec_sheet_feed`, from `sheet_stream` in
   `src/browse`), and a page whose scripts don't run leaves out rules for names it hasn't
