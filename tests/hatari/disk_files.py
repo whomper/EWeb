@@ -85,8 +85,8 @@ BUDGET = {
     # SIGS.DAT read (since 0.40); TLS.OVL (since 0.43); EWEB.LOG, once
     "secure page again": (11, 0, 1),
     # the cookies as they were; the history (a page shown) in HISTORY.TXT,
-    # its older slot, made at once; EWEB.INF in its own form again (LOG=1
-    # was added by hand); EWEB.LOG's rest, and each quit step written to it
+    # its older slot, made at once; EWEB.INF not written (no setting
+    # changed: 6.1 of 12 Nov 2026, though LOG=1 was added by hand); EWEB.LOG's rest, and each quit step written to it
     # at once, eight of them (quit_step in ui/main.c: the hub, 10 Nov 2026,
     # for a quit's bombs with no CRASH.LOG; LOG=1 only)
     "quit again": (9, 2, 0),
@@ -327,8 +327,14 @@ def eweb(hd):
         r.end()
     # the second time with the connections' log (LOG=1): held in memory,
     # written once a page and its pictures have come, and at the end
-    with open(os.path.join(hd, "eweb.inf"), "ab") as f:
+    inf = os.path.join(hd, "eweb.inf")
+    with open(inf, "ab") as f:
         f.write(b"LOG=1\r\n")
+    # the guidelines' 6.1 of 12 Nov 2026: a run that changes no setting
+    # leaves EWEB.INF as it was, even in a form not EWeb's (the line added
+    # by hand); the first run's ^+ and ^0 changed one and wrote it
+    inf_before = open(inf, "rb").read()
+    os.utime(inf, (1000000000, 1000000000))
     r = Run("eweb2", hd, "EWEB.PRG")
     try:
         if not check("  EWEB.PRG ready again", r.wait(r"shown ", 300) is not None):
@@ -341,6 +347,9 @@ def eweb(hd):
         r.case("quit again")
     finally:
         r.end()
+    check("  EWEB.INF untouched by a run that changed no setting (6.1)",
+          open(inf, "rb").read() == inf_before and int(os.stat(inf).st_mtime) == 1000000000,
+          "mtime %d" % os.stat(inf).st_mtime)
     log = os.path.join(hd, "eweb.log")
     text = open(log, errors="replace").read() if os.path.exists(log) else ""
     check("  EWEB.LOG: the start, the secure page's handshake, the slowest, no cookie",

@@ -486,6 +486,10 @@ void mem_limits(void)
 static const char inf_head[] = "; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n";
 static char *inf_text;		/* EWEB.INF as it is on the disk; NULL: none */
 static long inf_len;
+/* the settings as they were read or last written: quitting with the same
+   writes nothing, not even a file in another form (a line added by hand,
+   an INF from before 0.27): the guidelines' 6.1 of 12 Nov 2026 */
+static EWOPT opt_kept;
 
 static void inf_path(char *out, int size)
 {
@@ -594,6 +598,7 @@ static void settings_load(void)
 		opt.gateport = HTTP_GATEWAY_PORT;
 	if (!tls_available)
 		opt.falcon = 0;		/* the ST edition: through the Pi gateway */
+	memcpy(&opt_kept, &opt, sizeof opt);
 }
 
 /* the disk cache: CACHE next to the program, read the first time a page
@@ -838,6 +843,7 @@ int settings_save(void)
 	put(&s, "WINDOW", v, "where the window was: x, y, width, height");
 	if (inf_text != NULL && s.len == inf_len && !memcmp(s.s, inf_text, s.len)) {
 		sb_free(&s);
+		memcpy(&opt_kept, &opt, sizeof opt);
 		return 1;
 	}
 	ok = pf_save(path, s.s, s.len) == 0;
@@ -845,6 +851,7 @@ int settings_save(void)
 		free(inf_text);
 		inf_text = s.s;		/* what is on the disk now */
 		inf_len = s.len;
+		memcpy(&opt_kept, &opt, sizeof opt);
 	} else {
 		sb_free(&s);
 	}
@@ -3439,7 +3446,8 @@ static int app_run(void)
 		quit_step("connections closed, windows closed");
 		tw = pf_ms();
 		QUIT_STEP("Saving the settings...", 1);
-		settings_save();
+		if (memcmp(&opt, &opt_kept, sizeof opt))
+			settings_save();	/* only a setting changed (6.1) */
 		quit_step("settings written");
 		ts = pf_ms();
 		if (wck)
