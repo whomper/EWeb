@@ -1330,11 +1330,11 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 	python3 tests/bench/mkphoto.py build/photo
 # the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
-# are made by make and used by the tests, not shipped
+# are made by make and used by the tests, not shipped (the zip's firebee/
+# folder of them, 1.0 to 1.5, dropped: it confused testers; Erez, 12 Nov 2026)
 FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
 dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
-		binary/CACERT.PEM binary/ROOTS.DAT binary/NSBENCH.TTP binary/EWGET.TTP build/news/NEWS.HTM \
-		tests/fb/NSBENCH.CMD tests/fb/EWGET.CMD tests/fb/README.TXT $(addprefix binary/,$(FB_DIST))
+		binary/CACERT.PEM binary/ROOTS.DAT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
@@ -1343,18 +1343,6 @@ dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL bi
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	cp dist/eweb.prg dist/eweb60.prg dist/ewebjs.ovl dist/ewebjs60.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
 		dist/roots.dat $(addprefix dist/,$(shell echo $(FB_DIST) | tr A-Z a-z)) dist/zip/
-	# (the FireBee tester's tools, in the zip only: tests/fb/README.TXT; the hub, 10 Nov 2026)
-	mkdir -p dist/zip/firebee
-	cp binary/NSBENCH.TTP dist/zip/firebee/nsbench.ttp
-	cp binary/EWGET.TTP dist/zip/firebee/ewget.ttp
-	cp build/news/NEWS.HTM dist/zip/firebee/news.htm
-	cp build/news/NEWS.CSS dist/zip/firebee/news.css
-	cp tests/fb/NSBENCH.CMD dist/zip/firebee/nsbench.cmd
-	cp tests/fb/EWGET.CMD dist/zip/firebee/ewget.cmd
-	cp tests/fb/README.TXT dist/zip/firebee/readme.txt
-	cp binary/TLS.OVL dist/zip/firebee/tls.ovl
-	cp binary/CACERT.PEM dist/zip/firebee/cacert.pem
-	cp binary/ROOTS.DAT dist/zip/firebee/roots.dat
 	cd dist/zip && zip -q -9 -r ../eweb-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist

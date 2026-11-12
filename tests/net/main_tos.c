@@ -175,7 +175,7 @@ int main(void)
 	snprintf(http_user_agent, sizeof(http_user_agent), "Mozilla/5.0 (Atari Falcon030; 68030) EWeb/%s",
 		 EWEB_VERSION);
 	out("EWeb ewget %s\n", EWEB_VERSION);
-	machine_block(out);		/* (each read guarded, each line as it comes: tests/fb) */
+	machine_block(out);		/* (each read guarded, each line as it comes) */
 	out("program in %s\n", (unsigned long)&main >= 0x01000000UL ? "TT-RAM" : "ST-RAM");
 	if (pf_direct())
 		out("files: to and from TT-RAM as they are, 32 KB at a time (_FRB cookie set: the disk driver bounces them)\n");

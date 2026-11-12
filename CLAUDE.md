@@ -348,10 +348,9 @@ hub stay complete, with the evidence.
   the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
   dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his
-  Atari, it goes in that release, and its notes say so). From 1.0 the zip has a `firebee/` folder for
-  the FireBee tester (the hub, 10 Nov 2026): `NSBENCH.TTP` and `EWGET.TTP` with their `.CMD` presets,
-  the news page and `tests/fb/README.TXT`; their first log lines are common's machine block (`common/atari/machine.c`, `guard.S`), each
-  read guarded (`guard.S`: vectors 2, 3, 4, 8, 10, 11), each line written before the next read. `tests/bench/mkpage.py` makes the
+  Atari, it goes in that release, and its notes say so). The zip's `firebee/` folder of them (1.0 to 1.5, for a FireBee tester) is
+  gone: it confused testers (Erez, 12 Nov 2026). Their first log lines are still common's machine
+  block (`common/atari/machine.c`, `guard.S`: each read guarded, each line written before the next). `tests/bench/mkpage.py` makes the
   news page and `tests/bench/mkphoto.py` the photo, the same bytes every time; when they change,
   measure them again and change their figures in DESIGN.md.
 - **EWeb's HTML parser** is `src/doc/html.c` (fresh, after the HTML Standard's 13.2; DESIGN.md): it

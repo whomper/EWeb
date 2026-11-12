@@ -98,7 +98,7 @@ static void machine_report(void)
 		st_free = (long) Malloc(-1);
 		tt_free = 0;
 	}
-	/* (each read guarded, each line written as it comes: tests/fb) */
+	/* (each read guarded, each line written as it comes) */
 	machine_block(out);
 	out("loop: %lu rounds a second (6.2 to 8.3 million at 50 MHz)\n", loop_rate());
 	/* where its text starts (the basepage's p_tbase), for a profiler's

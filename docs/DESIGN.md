@@ -5219,6 +5219,10 @@ The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.
 (`-mcpu=5475`, the FireBee's MCF5474 V4e), with its TLS as `tlsfb.ovl` beside it, in the same
 release as `EWEB.PRG` and `EWEBST.PRG`.
 
+The zip's `firebee/` folder (1.0 to 1.5: `NSBENCH.TTP` and `EWGET.TTP` with their presets, the news
+page and a note asking a FireBee owner to measure `EWEB.PRG` under FireTOS's 68k emulation) is
+dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Erez, 12 Nov 2026).
+
 - **common's part** (drafted by EWeb's session on AERA-Atari's `hub/firebee`, ten commits, synced
   here before the hub merged it: ec0cf9ee): each of common's assembly files has a ColdFire path
   under `#ifdef __mcoldfire__` (crt0, sting, nf, inflate_fast, mont030, the crash catcher,
