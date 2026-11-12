@@ -5143,7 +5143,7 @@ at run time, which none does for a 68k or a ColdFire, and without it they are la
 interpreters; Duktape, JerryScript and MuJS are weaker. So, his go of the same day: QuickJS made
 the most of on each processor, and QuickJS-ng measured against it before any change.
 
-- **`EWEBJS060.OVL`**, the scripts' overlay as 68060 code (`-m68060`, common's `ll64.c` ahead of
+- **`EWEBJS60.OVL`**, the scripts' overlay as 68060 code (`-m68060`, common's `ll64.c` ahead of
   libgcc, whose 64-bit multiply and divide are the 68020's). The 68030's overlay has 192 of the
   64-bit `mulu.l`/`divu.l` forms (a division by a constant, mostly), which the 68060 doesn't have:
   each traps to its support package. The 68060's has none. `EWEB.PRG` loads it where the `_CPU`
@@ -5161,7 +5161,7 @@ the most of on each processor, and QuickJS-ng measured against it before any cha
   `EW_060=1` and an `EWEB.PRG` built `-m68020-60` with common's `ll64.c` ahead of libgcc (whose
   64-bit division has the other 22: `__divdi3` stopped the first try, once the window was open).
   Built so (12 Nov 2026, a scratch build), `EWEB.PRG` ran on Hatari's 68060 under EmuTOS with no
-  support package, loaded `EWEBJS060.OVL` and ran the page's scripts; and on the emulated 32 MHz Falcon NSBENCH's news page took HTML 1,200 to
+  support package, loaded `EWEBJS60.OVL` and ran the page's scripts; and on the emulated 32 MHz Falcon NSBENCH's news page took HTML 1,200 to
   1,160 ms, CSS 9,460 to 9,765, selecting 9,650 to 9,430: even, with the CSS 3% slower. Whether
   `EWEB.PRG` is built so is Erez's to decide (the speed rule): a 68060 then runs it without traps,
   a 68030 about as fast.

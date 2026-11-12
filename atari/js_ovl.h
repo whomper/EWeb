@@ -52,7 +52,7 @@ extern const unsigned long js_imports_n, js_imports_crc;
 /* where EWEBJS.OVL is (next to EWEB.PRG), set at start */
 void js_ovl_at(const char *path);
 /* and the one to load instead where that one isn't there (a 68060's
-   EWEBJS060.OVL left out: EWEBJS.OVL) */
+   EWEBJS60.OVL left out: EWEBJS.OVL) */
 void js_ovl_else(const char *path);
 
 #endif

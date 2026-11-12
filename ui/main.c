@@ -3185,12 +3185,12 @@ static int app_run(void)
 	js_ovl_at(path);
 	scripts_ok = js_built;
 #elif !defined(EW_ST)
-	/* (a 68060: its own build, EWEBJS060.OVL, with EWEBJS.OVL where it
+	/* (a 68060: its own build, EWEBJS60.OVL, with EWEBJS.OVL where it
 	   isn't there; DESIGN.md, Scripts on the 68060) */
 	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
 	if (get_cookie(0x5F435055L) >= 60) {	/* _CPU */
 		js_ovl_else(path);
-		path_join(path, sizeof path, opt.workdir, "ewebjs060.ovl");
+		path_join(path, sizeof path, opt.workdir, "ewebjs60.ovl");
 	}
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;

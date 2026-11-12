@@ -103,7 +103,7 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
-    for f in ("EWEB.PRG", "EWEBJS.OVL", "EWEBJS060.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
+    for f in ("EWEB.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
@@ -1231,7 +1231,7 @@ def scripts():
 
 def scripts_060(site):
     """a page's scripts on a 68060 (a CT60's: Hatari's 68060 in a Falcon,
-    EmuTOS, as TOS 4.04 has no 68060's code), from its own EWEBJS060.OVL"""
+    EmuTOS, as TOS 4.04 has no 68060's code), from its own EWEBJS60.OVL"""
     hd = hd_for("scripts060", site + "tabs.html", "SCRIPTS=127.0.0.1\r\n")
     keep = os.environ.get("AERA_TOS")
     os.environ["AERA_TOS"] = "emutos"
@@ -1247,8 +1247,8 @@ def scripts_060(site):
         ev = r.wait(r"shown ", 120)
         check("scripts: on a 68060, the page's ran", ran is not None and ev is not None and
               ev.endswith("title Tabs ready"), str(r.events()[-8:]))
-        check("scripts: on a 68060, from EWEBJS060.OVL",
-              any(e.lower().startswith("js: ewebjs060.ovl loaded at ") for e in r.events()),
+        check("scripts: on a 68060, from EWEBJS60.OVL",
+              any(e.lower().startswith("js: ewebjs60.ovl loaded at ") for e in r.events()),
               str([e for e in r.events() if e.startswith("js:")]))
         r.shot(0)
     finally:
