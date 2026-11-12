@@ -231,11 +231,21 @@ static struct {
    by 32: 00000GGG GGG00000 RRRRR000 000BBBBB */
 #define SPREAD(v) (((uint32_t) (v) | (uint32_t) (v) << 16) & 0x07E0F81FUL)
 
+/* x / 255 for x below 65535, without a divide (a real one on the 68030
+   since EWEB.PRG is -m68020-60: GCC no longer multiplies by the inverse) */
+#define DIV255(x) (((x) + 1 + ((x) >> 8)) >> 8)
+
 static uint32_t mix_rgb(uint32_t rgb, const uint8_t *u, unsigned a)
 {
+#ifdef EW_ST
 	unsigned b = 255 - a;
 	return (((rgb >> 16 & 255) * a + u[0] * b + 127) / 255) << 16 |
 	       (((rgb >> 8 & 255) * a + u[1] * b + 127) / 255) << 8 | ((rgb & 255) * a + u[2] * b + 127) / 255;
+#else
+	unsigned b = 255 - a, r = (rgb >> 16 & 255) * a + u[0] * b + 127, g = (rgb >> 8 & 255) * a + u[1] * b + 127,
+		 l = (rgb & 255) * a + u[2] * b + 127;
+	return (uint32_t) DIV255(r) << 16 | (uint32_t) DIV255(g) << 8 | DIV255(l);
+#endif
 }
 
 /* the mix of rgb at item_a ready; 0: nothing to draw (too little to show) */
