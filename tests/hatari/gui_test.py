@@ -1213,7 +1213,15 @@ def scripts():
         scripts_without(site)
         scripts_modes(site)
         scripts_note(site)
-        scripts_060(site)
+        if os.environ.get("EW_060"):
+            scripts_060(site)
+        else:
+            # (EWEB.PRG is 68030 code: its 64-bit mulu.l/divu.l are the
+            # 68060's support package's to emulate, as a CT60's TOS loads it;
+            # EmuTOS has none, and stops at the first, exception 61. EW_060=1
+            # with an EWEB.PRG built -m68020-60 runs it)
+            skip("scripts: on a 68060 (EmuTOS has no 68060 support package; EW_060=1 for an EWEB.PRG "
+                 "built -m68020-60)")
     finally:
         if xvfb is not None:
             xvfb.terminate()

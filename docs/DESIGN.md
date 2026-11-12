@@ -5135,6 +5135,39 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
   kept copy is gone. A refusal (422/503/504) leaves the original on screen, the reason on the status
   line.
 
+## Scripts on the 68060 and the FireBee (12 Nov 2026)
+
+Erez asked (12 Nov 2026) for a stronger JavaScript engine on the 68060 and the FireBee. No engine
+stronger than QuickJS fits: the browsers' engines get their speed from compiling to machine code
+at run time, which none does for a 68k or a ColdFire, and without it they are larger, slower
+interpreters; Duktape, JerryScript and MuJS are weaker. So, his go of the same day: QuickJS made
+the most of on each processor, and QuickJS-ng measured against it before any change.
+
+- **`EWEBJS060.OVL`**, the scripts' overlay as 68060 code (`-m68060`, common's `ll64.c` ahead of
+  libgcc, whose 64-bit multiply and divide are the 68020's). The 68030's overlay has 192 of the
+  64-bit `mulu.l`/`divu.l` forms (a division by a constant, mostly), which the 68060 doesn't have:
+  each traps to its support package. The 68060's has none. `EWEB.PRG` loads it where the `_CPU`
+  cookie says 60 (`js_ovl_else`: `EWEBJS.OVL` where it isn't there); `tools/mkovl.py` makes both
+  overlays with one list of what they take from `EWEB.PRG` (both lists' names), so one
+  `js_imports` serves either. The log names the overlay loaded.
+- **The scripts' heap by the memory** (`js_max_memory`, set by `mem_limits`): a quarter of what EWeb
+  takes of the TT RAM, 8 MB at least (`JS_MAX_MEMORY`, all a page's scripts had). The time budget
+  (`JS_PAGE_MS` 15 s, `JS_EVENT_MS` 2 s) is the clock's: a faster processor already does more in
+  it, so it isn't changed.
+- **`EWEB.PRG` on a 68060** has 625 of those 64-bit forms itself (`objdump -m m68k:68030`; the
+  default 68000 decoding hides them). A CT60's TOS loads the 68060's support package, which
+  emulates them, slowly; EmuTOS has none, and `EWEB.PRG` stops at the first (exception 61), so
+  `make hatarigui`'s 68060 case (`scripts_060`, Hatari's 68060 under EmuTOS) runs only with
+  `EW_060=1` and an `EWEB.PRG` built `-m68020-60` with common's `ll64.c` ahead of libgcc (whose
+  64-bit division has the other 22: `__divdi3` stopped the first try, once the window was open).
+  Built so (12 Nov 2026, a scratch build), `EWEB.PRG` ran on Hatari's 68060 under EmuTOS with no
+  support package, loaded `EWEBJS060.OVL` and ran the page's scripts; and on the emulated 32 MHz Falcon NSBENCH's news page took HTML 1,200 to
+  1,160 ms, CSS 9,460 to 9,765, selecting 9,650 to 9,430: even, with the CSS 3% slower. Whether
+  `EWEB.PRG` is built so is Erez's to decide (the speed rule): a 68060 then runs it without traps,
+  a 68030 about as fast.
+- **QuickJS-ng**: to be measured against EWeb's QuickJS (2026-06-04) on the page set's scripts
+  before anything changes.
+
 ## The TT RAM left for others (12 Nov 2026)
 
 Erez's decision of 4 Nov 2026 (Decisions, TT-RAM), made: `mem_limits` in `ui/main.c` takes the TT

@@ -32,6 +32,7 @@ folder of its own.
 | `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL` | the FireBee's (ColdFire), in testing |
 | `EWEB.FNT` | the fonts |
 | `EWEBJS.OVL` | JavaScript (needs an FPU) |
+| `EWEBJS060.OVL` | JavaScript on a 68060 (a CT60), used there in `EWEBJS.OVL`'s place |
 | `TLS.OVL`, `CACERT.PEM`, `ROOTS.DAT` | secure connections made on the Atari |
 | `EWEB.HYP` | the guide (the Help key) |
 | `icons/` | the desktop icon |
