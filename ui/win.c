@@ -704,6 +704,11 @@ static void draw_page(GRECT *clip)
 #define SLICE_BIG 40
 #define BAND_MIN 16	/* (the news page's window: an 8 MHz ST draws it in 3.9 s so, 3.3 in
 			   bands of 32, whose slices are 450 ms; 3.5 s in one, before) */
+#define BAND_MAX 32	/* and at most this: a piece's rows are guessed from the rows before,
+			   and where the page turns slower (pictures, controls) one band of
+			   72 rows was 790 ms, the piece over its 280 (the speed rig, 13 Nov
+			   2026, once the plane made most rows quicker); its time is looked
+			   at after each band */
 #else
 #define SLICE_MS 30	/* (a line scrolled is 50 ms at most: the rows it brings in are slices) */
 #define SLICE_BIG 55	/* a due over half the window (a page shown, uncovered): longer
@@ -1355,6 +1360,10 @@ static void draw_due(void)
 			break;
 		if (n < (piece ? PIECE_BAND : BAND_MIN))
 			n = piece ? PIECE_BAND : BAND_MIN;
+#ifdef BAND_MAX
+		if (n > BAND_MAX)
+			n = BAND_MAX;
+#endif
 		if (whole)
 			n = cur->due.h;
 		band.x = (short) (cur->r_page.x + cur->due.x);
