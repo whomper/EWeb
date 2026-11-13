@@ -858,7 +858,13 @@ releases.
   iconify and crash report. The page is drawn into memory a band of 32 rows at a time and copied
   to the screen from ST-RAM: in the planar modes each colour is the screen's nearest (EWeb sets no
   pens), the bytes made planes and `vr_trnfm`'d; on a monochrome screen fills are greys dithered
-  from black and white; in true colour the canvas is the screen's own pixels. Scrolling moves what
+  from black and white, and text is black or white by the solid box behind it, not by its own
+  brightness (`backdrops` in `src/gfx/canvas.c`, 13 Nov 2026: a light blue link, an orange title,
+  a grey caption, anything from about half bright, came out white on a white page and was gone,
+  forum.atari-home.de's board names among them; text that hardly differs from its box, white on
+  white, stays hidden as a screen of colours shows it; on a picture it keeps its own pen; worked
+  out once a page, about 125 ms on the 8 MHz ST for the news page; `tests/layout/contrast.py`);
+  in true colour the canvas is the screen's own pixels. Scrolling moves what
   is on the screen and draws only the new rows. While a page loads, the network's waits keep the
   window alive, and Esc, Undo or Stop stop the load, the page before staying.
 - **Dialogs** (the guidelines' 5.6, your decision of 24 Oct 2026: the family's look, with a

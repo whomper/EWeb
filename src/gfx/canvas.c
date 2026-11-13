@@ -3754,6 +3754,99 @@ static void sbar(canvas *c, const page *p, const dl_item *d)
 	}
 }
 
+/* a screen of two pens (monochrome): a page's text drawn in the pen
+   that stands out from what is behind it, not by its own brightness, by
+   which a mid-tone (a light blue link, an orange title, a grey caption:
+   from about half bright) came out white on a white page and was gone
+   (forum.atari-home.de, 13 Nov 2026). What is behind a text item is the
+   last solid fill before it whose box holds the item's middle (one
+   partly see-through is passed by: its grey depends on what is under it), the boxes
+   that hold one another kept on a stack as the items come (a box's fill
+   comes before what is in it); a picture or a gradient behind it, or none
+   but the page's, leave the text its own pen (DLF_BDKNOWN not set). Made
+   once a page, when it is first drawn on such a screen. */
+#define BD_DEPTH 48
+
+/* brightness, 0 to 4080: 5/16 red, 9/16 green, 2/16 blue, in shifts (a
+   long multiply is libgcc's call on the 68000) */
+static int bright(uint32_t rgb)
+{
+	int r = (int) (rgb >> 16 & 255), g = (int) (rgb >> 8 & 255), b = (int) (rgb & 255);
+	return (r << 2) + r + (g << 3) + g + (b << 1);
+}
+
+/* text of brightness t on a backdrop of brightness b: 1 dark backdrop, 0
+   light; -1 where the two hardly differ (white on white: the page hides
+   it, or a picture meant to be behind it hasn't come), the text left its
+   own pen as on a screen of colours */
+static int backdrop_of(int t, int b)
+{
+	if (t - b < 612 && b - t < 612)	/* (15%) */
+		return -1;
+	return b < 2040;
+}
+
+/* a box on the stack: its edges, its brightness, whether it is a solid
+   fill (else a picture: what is on it keeps its own pen) */
+typedef struct bdbox {
+	int32_t x0, y0, x1, y1;
+	int16_t lum;
+	uint8_t solid;
+} bdbox;
+
+static void __attribute__((noinline)) backdrops(page *p)
+{
+	bdbox st[BD_DEPTH];
+	int top = 0, k, pb = bright(p->bg);
+	long i, n = p->nitems;
+	dl_item *d = p->items;
+	for (i = 0; i < n; i++, d++) {
+		int32_t mx, my;
+		if (d->type == DL_TEXT) {
+			int v = -1;
+			mx = d->x + (d->w >> 1);
+			my = d->y + (d->h >> 1);
+			for (k = top - 1; k >= 0; k--)
+				if (mx >= st[k].x0 && mx < st[k].x1 && my >= st[k].y0 && my < st[k].y1)
+					break;
+			top = k + 1;	/* (those above it are done with: they don't hold it) */
+			if (k >= 0) {
+				if (st[k].solid)
+					v = backdrop_of(bright(d->rgb), st[k].lum);
+			} else {
+				v = backdrop_of(bright(d->rgb), pb);
+			}
+			d->flags &= (uint8_t) ~(DLF_BDKNOWN | DLF_BDDARK);
+			if (v >= 0)
+				d->flags |= (uint8_t) (v ? DLF_BDKNOWN | DLF_BDDARK : DLF_BDKNOWN);
+			continue;
+		}
+		/* (a fill whose picture or gradient follows it, DLF_TILE, is
+		   as a picture: the text on it keeps its own pen) */
+		if (!((d->type == DL_FILL && ((d->rgb >> 24) == 255 || (d->flags & DLF_TILE))) ||
+		      ((d->type == DL_IMAGE || d->type == DL_GRAD) && (d->rgb >> 24) != 0)) ||
+		    d->w <= 0 || d->h <= 0)
+			continue;
+		/* the boxes that don't hold it are done with (a sibling's) */
+		mx = d->x + (d->w >> 1);
+		my = d->y + (d->h >> 1);
+		while (top > 0 && !(mx >= st[top - 1].x0 && mx < st[top - 1].x1 &&
+				    my >= st[top - 1].y0 && my < st[top - 1].y1))
+			top--;
+		if (top == BD_DEPTH) {
+			memmove(st, st + 1, (BD_DEPTH - 1) * sizeof st[0]);
+			top--;
+		}
+		st[top].x0 = d->x;
+		st[top].y0 = d->y;
+		st[top].x1 = d->x + d->w;
+		st[top].y1 = d->y + d->h;
+		st[top].solid = d->type == DL_FILL && !(d->flags & DLF_TILE);
+		st[top].lum = (int16_t) (st[top].solid ? bright(d->rgb) : 0);
+		top++;
+	}
+}
+
 /* the marked part of a text run, filled behind it: from the byte the
    mark starts at (its first run) to the one it ends at (its last), the
    letters of a right-to-left run from its right */
@@ -3812,6 +3905,8 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 				rgb = 0xffffff;
 			}
 		}
+		if ((d->flags & DLF_BDKNOWN) && rgb == (d->rgb & 0xffffff) && p->backdrops == 1)
+			rgb = (d->flags & DLF_BDDARK) ? 0xffffff : 0x000000;	/* (two pens: backdrops) */
 		cv_text(c, d->font, d->x, d->y + d->base, d->text, d->len, rgb, d->flags);
 	}
 }
@@ -3982,7 +4077,9 @@ static __attribute__((noinline)) uint32_t mix_bytes(uint32_t h, const void *b, u
 static uint32_t item_sum(const page *p, const dl_item *d, const void *(*pic)(void *img, int32_t w, int32_t h))
 {
 	uint32_t h = 0x811c9dc5UL;
-	h = mix32(h, (uint32_t) d->type | (uint32_t) d->flags << 8 | (uint32_t) (uint16_t) d->base << 16);
+	h = mix32(h, (uint32_t) d->type |
+		  (uint32_t) (d->type == DL_TEXT ? d->flags & ~(DLF_BDKNOWN | DLF_BDDARK) : d->flags) << 8 |
+		  (uint32_t) (uint16_t) d->base << 16);
 	h = mix32(h, (uint32_t) d->x);
 	h = mix32(h, (uint32_t) d->y);
 	h = mix32(h, (uint32_t) d->w);
@@ -4113,6 +4210,17 @@ void cv_page(canvas *c, const page *p)
 {
 	long i, s0, s1, cbg = p->cbg >= 0 && p->cbg < p->nitems ? p->cbg : -1;
 
+	if (!p->backdrops) {
+		/* (a page's own, made once: the same on every band; asked
+		   once on a screen of colours too) */
+		uint8_t dk, lt;
+		if (c->shade != NULL && c->shade(c->ud, 0, &dk, &lt) >= 0) {
+			backdrops((page *) p);
+			((page *) p)->backdrops = 1;
+		} else {
+			((page *) p)->backdrops = 2;
+		}
+	}
 	if (!probing) {
 		cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
 		if (cbg >= 0)

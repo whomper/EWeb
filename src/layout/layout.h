@@ -84,6 +84,10 @@ enum { DL_FILL, DL_TEXT, DL_IMAGE, DL_CTL, DL_GRAD, DL_SUM, DL_CLIP, DL_SBAR };
 #define DLF_RIGHT 64			/* DL_CTL: its text at the right (text-align: right, end) */
 #define DLF_NOHIT 128			/* pointer-events: none: a click goes through it to what
 					   is under it (its link, its control) */
+#define DLF_BDKNOWN 32			/* DL_TEXT: on a screen of two pens, what is behind it is
+					   known (canvas.c's backdrops, made when the page is first
+					   drawn there; not in its bands' sums) */
+#define DLF_BDDARK 64			/* DL_TEXT: and it is dark: the text drawn white */
 
 /* a background picture's or gradient's tiles: one at (item's x + dx,
    y + dy), w x h device px, and the others on from it across (rx) and
@@ -198,6 +202,8 @@ typedef struct page {
 	int nkids, kidcap;
 	uint16_t *lfr;
 	int fno;			/* a frame's page: its number in the page it is in */
+	uint8_t backdrops;		/* 1: its text's DLF_BDKNOWN and DLF_BDDARK made (canvas.c,
+					   on a screen of two pens); 2: drawn on one of colours */
 	uint8_t frameset;		/* a frameset's: as tall as the window */
 	uint8_t bg_set;			/* its canvas has a colour of its own (bg) */
 	struct arena *mem;
