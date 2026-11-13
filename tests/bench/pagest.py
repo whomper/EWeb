@@ -66,11 +66,18 @@ def main():
     raw = os.path.join(work, "profile.txt")
     if profile:
         with open(os.path.join(work, "save.ini"), "w") as f:
-            f.write("profile save %s\nquit\n" % raw)
+            f.write("profile save %s\n" % raw)
+            if os.environ.get("PAGEST_SYMS"):
+                # (with the program's symbols at its address: who called
+                # each function, PAGEST_SYMS a file of nm's lines)
+                f.write("profile callers\n")
+            f.write("quit\n")
         with open(os.path.join(work, "on.ini"), "w") as f:
             f.write("profile on\n")
         with open(os.path.join(work, "prof.ini"), "w") as f:
             # the whole run, or from the drawing's start (pagebench's Tgettime)
+            if os.environ.get("PAGEST_SYMS"):
+                f.write("symbols %s\n" % os.environ["PAGEST_SYMS"])
             f.write("b GemdosOpcode = 0x2C :once :trace :file %s\n" % os.path.join(work, "on.ini") if draw else "profile on\n")
             f.write("b GemdosOpcode = 0x4C :file %s\n" % os.path.join(work, "save.ini"))
         cmd += ["--parse", os.path.join(work, "prof.ini")]
