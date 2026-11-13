@@ -17,10 +17,12 @@ jobs:
       - name: Tools
         run: |
           # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
-          # kernel.org's mirror, over https (EPlay's finding, AERA-Atari's template 47a627e), and apt retries
-          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y gperf fonts-dejavu-core fonts-dejavu-extra
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries; on 13 Nov kernel.org was
+          # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
+          # (AERA-Atari's template fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gperf fonts-dejavu-core fonts-dejavu-extra
           python3 -m pip install --break-system-packages -r tools/requirements.txt
       - name: make test
         run: make test
@@ -33,10 +35,12 @@ jobs:
       - name: The m68k cross compiler
         run: |
           # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or archive.ubuntu.com:
-          # kernel.org's mirror, over https (EPlay's finding, AERA-Atari's template 47a627e), and apt retries
-          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu gperf fonts-dejavu-core fonts-dejavu-extra
+          # kernel.org's mirror, over https (EPlay's finding), and apt retries; on 13 Nov kernel.org was
+          # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
+          # (AERA-Atari's template fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu gperf fonts-dejavu-core fonts-dejavu-extra
           python3 -m pip install --break-system-packages -r tools/requirements.txt
       - name: Build the programs
         run: make
