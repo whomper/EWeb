@@ -1185,6 +1185,12 @@ static void apply_var(cascade *k, const ec_decl *d, ec_custom *cu)
 	}
 }
 
+/* k's four bytes at a time here and in same_style are one move each
+   (GCC makes a four-byte __builtin_memcpy a move.l even for the 68000),
+   so k must start at an even place, or the ST edition bombs (as html.c
+   did, 1.10) */
+_Static_assert(__builtin_offsetof(ec_style, k) % 2 == 0, "ec_style.k at an odd place");
+
 /* for uniq_style: all of a style, a word at a time, each a rotate and an
    add on the 68030 */
 static uint32_t style_hash(const ec_style *st)
