@@ -24,18 +24,22 @@ the guidelines' time:
   on an 8 MHz ST in low or medium, else a dialog's 150; Erez, 2 Nov
   2026), and closed by Esc (what it uncovers drawn).
 
-    tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR]
+    tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR] [--profile]
 
 MACHINE is Falcon-4:16, ST:mono or ST:med (the first two when none is
 named), or Falcon-14:16 (Falcon-4 with 14 MB of ST RAM, as Erez runs his
 with its DFB1X and TT-RAM off); --nvdi runs each under Erez's NVDI with its GDOS font (machines.py,
 AERA_NVDI; on the ST too, Erez, 2 Nov 2026); --prg the folder
 the programs are taken from (build/prof; another for a build before a
-change, to time both). Each machine's
+change, to time both); --profile has Hatari's profiler count the whole
+session's cycles, written at the quit as OUT/MACHINE/profile.txt by
+function (the speed build logs where its log_event is). Each machine's
 table is printed; 1 when any action is over its time.
 """
+import bisect
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -177,7 +181,41 @@ def eater(kb):
     return bytes.fromhex("3F3C0000" "2F3C%08X" % (kb * 1024) + "3F3C0031" "4E41")
 
 
-def run(out, machine, nvdi, prgdir, eat=0, whole=None):
+def name_profile(raw, log, elf, out):
+    """Hatari's profile, the program's addresses as its functions: the
+    cycles of each, most first"""
+    at = re.search(r"EWEB log_event at ([0-9a-f]+)", open(log, errors="replace").read())
+    syms = []
+    for line in subprocess.run(["m68k-linux-gnu-nm", "-n", elf], capture_output=True, text=True).stdout.splitlines():
+        f = line.split()
+        if len(f) == 3 and f[1] in "tTwW":
+            syms.append((int(f[0], 16), f[2]))
+    if not at or not syms or not os.path.exists(raw):
+        print("NOTE  no profile (%s)" % ("no address logged" if not at else raw), flush=True)
+        return
+    shift = int(at.group(1), 16) - dict((n, a) for a, n in syms)["log_event"]
+    lo_text, hi_text = syms[0][0], syms[-1][0] + 0x10000
+    cycles, total = {}, 0
+    for line in open(raw, errors="replace"):
+        m = re.match(r"([0-9a-f]{8}) .*% \((\d+), (\d+),", line)
+        if not m:
+            continue
+        addr, cyc = int(m.group(1), 16), int(m.group(3))
+        total += cyc
+        off = addr - shift
+        name = "(TOS, at $%06x)" % (addr & ~0xff) if addr >= 0xe00000 else "(outside the program)"
+        if lo_text <= off < hi_text:
+            i = bisect.bisect_right([a for a, _ in syms], off) - 1
+            name = syms[i][1]
+        cycles[name] = cycles.get(name, 0) + cyc
+    with open(out, "w") as f:
+        f.write("%d cycles in all\n" % total)
+        for name, cyc in sorted(cycles.items(), key=lambda x: -x[1]):
+            f.write("%12d %5.1f%%  %s\n" % (cyc, 100.0 * cyc / max(total, 1), name))
+    print("profile: %s" % out, flush=True)
+
+
+def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
     st = machine.startswith("ST")
     prg = "EWEBST.PRG" if st else "EWEB.PRG"
     # Falcon-14: a stock Falcon (16 MHz, no FPU, no TT-RAM) with 14 MB of
@@ -186,8 +224,17 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None):
     base, extra = machine, ()
     if machine.startswith("Falcon-14"):
         base, extra = "Falcon-4" + machine[len("Falcon-14"):], ("--memsize", "14")
-    r = speed.Rig(os.path.join(out, re.sub(r"[^a-z0-9]+", "-", machine.lower()) + ("-nvdi" if nvdi else "")),
-                  base, nvdi=nvdi, display=":93" if st else ":92", extra=extra)
+    work = os.path.abspath(os.path.join(out, re.sub(r"[^a-z0-9]+", "-", machine.lower()) + ("-nvdi" if nvdi else "")))
+    raw = os.path.join(work, "profile.raw")
+    if profile:
+        # the profiler on from the boot, saved at EWeb's Pterm (^Q)
+        os.makedirs(work, exist_ok=True)
+        with open(os.path.join(work, "save.ini"), "w") as f:
+            f.write("profile save %s\n" % raw)
+        with open(os.path.join(work, "prof.ini"), "w") as f:
+            f.write("profile on\nb GemdosOpcode = 0x4C :once :file %s\n" % os.path.join(work, "save.ini"))
+        extra = tuple(extra) + ("--parse", os.path.join(work, "prof.ini"))
+    r = speed.Rig(work, base, nvdi=nvdi, display=":93" if st else ":92", extra=extra)
     if extra:
         print("NOTE  %s: %s with %s" % (machine, base, " ".join(extra)), flush=True)
     if eat:
@@ -278,6 +325,14 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None):
         fin.append(("the pictures' page loaded", max(w) if w else None))
         r.key("ctrl+q")
         time.sleep(3)
+        if profile:
+            for _ in range(120):
+                if os.path.exists(raw) and os.path.getsize(raw) > 0:
+                    break
+                time.sleep(1)
+            time.sleep(2)
+            name_profile(raw, r.log, os.path.join(prgdir, "ewebst.elf" if st else "eweb.elf"),
+                         os.path.join(work, "profile.txt"))
         bad = r.report()
         # what the user sees (Erez, 4 Nov 2026: the user's experience
         # first), recorded, not held to a time: the window whole after
@@ -302,7 +357,8 @@ def main():
         sys.exit(__doc__)
     nvdi = "--nvdi" in a
     whole = True if "--whole" in a else False if "--pieces" in a else None
-    a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces")]
+    profile = "--profile" in a
+    a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces", "--profile")]
     eat = 0
     if "--eat" in a:
         i = a.index("--eat")
@@ -316,7 +372,7 @@ def main():
     out, machines = a[0], a[1:] or ["Falcon-4:16", "ST:mono"]
     bad = 0
     for m in machines:
-        bad |= run(out, m, nvdi, prgdir, eat, whole)
+        bad |= run(out, m, nvdi, prgdir, eat, whole, profile)
     sys.exit(bad)
 
 

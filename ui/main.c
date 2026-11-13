@@ -3105,6 +3105,8 @@ static int app_run(void)
 	pf_idle = idle;
 #ifdef AES_PROFILE
 	br_mark = gap_tag;
+	/* (where the code is: speed.py --profile names Hatari's addresses) */
+	log_event("EWEB log_event at %lx", (unsigned long) log_event);
 #endif
 #ifndef EW_ST
 	/* (in every build, not the speed rig's alone: from 0.62 to 0.70 only
