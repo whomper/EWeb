@@ -27,12 +27,12 @@ static unsigned item_a = 255;
    with, solid or not at all */
 static unsigned drawn_a(const canvas *c, unsigned a)
 {
-	return c->bpp == 8 && c->pal == NULL ? (a >= 128 ? 255 : 0) : a;
+	return c->bpp <= 8 && c->pal == NULL ? (a >= 128 ? 255 : 0) : a;
 }
 
 static uint32_t pixel(canvas *c, uint32_t rgb)
 {
-	return c->bpp == 8 ? c->pen(c->ud, rgb) : DEEP(c) ? rgb & 0xffffff : RGB565(rgb);
+	return c->bpp <= 8 ? c->pen(c->ud, rgb) : DEEP(c) ? rgb & 0xffffff : RGB565(rgb);
 }
 
 /* 32 bits a pixel (a deeper screen's canvas: DESIGN.md, Drawing in 32
@@ -67,6 +67,128 @@ static inline int clip(canvas *c, int32_t *x, int32_t *y, int32_t *w, int32_t *h
 
 static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4]);
 
+/* ---------------------------------------------------------------- one plane
+
+   bpp 1, the ST edition's monochrome screen (Erez, 13 Nov 2026: the ST
+   edition made as fast as it can be): a band whose items are all fills,
+   solid text and pictures' pens is drawn straight into the screen's own
+   plane, a bit a pixel, not a byte a pixel turned into the plane after
+   (to_planes: 37 cycles a pixel of an 8 MHz ST's, the byte a pixel's
+   drawing 51). The words are big-endian, as the screen's; the same bits
+   as a byte a pixel's low bits (make test: tests/layout/planes.py,
+   ewrender -1). Not EWEB.PRG's (CV_PLANES: the host's tools and the ST
+   edition) */
+#if !defined(EW_TOS) || defined(EW_ST)
+#define CV_PLANES 1
+#if defined(__m68k__) || defined(__mc68000__)
+#define LD16(p) (*(const uint16_t *) (const void *) (p))
+#define ST16(p, v) (*(uint16_t *) (void *) (p) = (uint16_t) (v))
+#else
+#define LD16(p) ((uint16_t) ((unsigned) ((const uint8_t *) (p))[0] << 8 | ((const uint8_t *) (p))[1]))
+#define ST16(p, v) (((uint8_t *) (p))[0] = (uint8_t) ((v) >> 8), ((uint8_t *) (p))[1] = (uint8_t) (v))
+#endif
+
+/* a row's pixels x0 to x1 (bits from its start, x1 past the last) set to
+   the pattern word w (the first pixel its top bit) */
+static void row1(uint8_t *row, int32_t x0, int32_t x1, unsigned w)
+{
+	uint8_t *o = row + (x0 >> 4) * 2;
+	int32_t n = (x1 >> 4) - (x0 >> 4);
+	unsigned m0 = 0xffffU >> (x0 & 15), m1 = ~(0xffffU >> (x1 & 15)) & 0xffffU;
+	if (x0 >= x1)
+		return;
+	if (n == 0) {
+		unsigned m = m0 & m1;
+		ST16(o, (LD16(o) & ~m) | (w & m));
+		return;
+	}
+	ST16(o, (LD16(o) & ~m0) | (w & m0));
+	o += 2;
+#if defined(__m68k__) || defined(__mc68000__)
+	{
+		uint32_t ww = (uint32_t) (w & 0xffffU) << 16 | (w & 0xffffU);
+		for (; n > 2; n -= 2, o += 4)
+			*(uint32_t *) (void *) o = ww;	/* (the 68000's longs: even addresses do) */
+	}
+#endif
+	for (; n > 1; n--, o += 2)
+		ST16(o, w);
+	if (m1)
+		ST16(o, (LD16(o) & ~m1) | (w & m1));
+}
+
+/* (x, y, w, h) clipped, in pen pv's bit */
+static void fill1(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
+{
+	uint8_t *row = c->pix + y * c->stride;
+	unsigned v = (pv & 1) ? 0xffffU : 0;
+	int32_t j;
+	for (j = 0; j < h; j++, row += c->stride)
+		row1(row, c->bx + x, c->bx + x + w, v);
+}
+
+/* a pattern's row (q's four pens, q[i] at x0 + i and every fourth after)
+   as the words of a row of the plane: pixel k of a word is at a column
+   whose place in the four is k - bx - x0 (the words start on a multiple
+   of 16, of 4) */
+static unsigned pattern1(const canvas *c, int32_t x0, const uint8_t q[4])
+{
+	unsigned w = 0;
+	int k;
+	for (k = 0; k < 16; k++)
+		if (q[(k - c->bx - x0) & 3] & 1)
+			w |= 0x8000U >> k;
+	return w;
+}
+
+/* a glyph's set bits, columns c0..c1 and rows r0..r1 of it, at canvas
+   (gx, gy): set in pen pv's bit (1: or'ed in; 0: cleared) */
+static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, int32_t gy, int32_t c0, int32_t c1,
+		   int32_t r0, int32_t r1, uint32_t pv)
+{
+	int32_t row, b0 = c0 >> 3, b1 = (c1 - 1) >> 3, bi;
+	const uint8_t *b = bits + r0 * stride;
+	uint8_t *o = c->pix + (gy + r0) * c->stride;
+	int on = (int) (pv & 1);
+	unsigned first = 0xffU >> (c0 & 7), last = (0xff00U >> (((c1 - 1) & 7) + 1)) & 0xffU;
+	for (row = r0; row < r1; row++, b += stride, o += c->stride)
+		for (bi = b0; bi <= b1; bi++) {
+			unsigned v = b[bi];
+			int32_t at;
+			uint32_t s;
+			uint8_t *w;
+			if (bi == b0)
+				v &= first;
+			if (bi == b1)
+				v &= last;
+			if (v == 0)
+				continue;
+			at = c->bx + gx + bi * 8;
+			w = o + (at >> 4) * 2;
+			s = (uint32_t) v << (24 - (at & 15));
+			if (on) {
+				ST16(w, LD16(w) | (unsigned) (s >> 16));
+				if (s & 0xffffU)
+					ST16(w + 2, LD16(w + 2) | (unsigned) (s & 0xffffU));
+			} else {
+				ST16(w, LD16(w) & ~(unsigned) (s >> 16));
+				if (s & 0xffffU)
+					ST16(w + 2, LD16(w + 2) & ~(unsigned) (s & 0xffffU));
+			}
+		}
+}
+
+/* a pixel's bit: set (on) or cleared */
+static inline void bit1(uint8_t *row, int32_t at, int on)
+{
+	uint8_t *w = row + (at >> 4) * 2;
+	unsigned m = 0x8000U >> (at & 15);
+	ST16(w, on ? LD16(w) | m : LD16(w) & ~m);
+}
+#else
+#define CV_PLANES 0
+#endif
+
 /* (x, y, w, h) in canvas pixels, clipped */
 static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
 {
@@ -74,6 +196,12 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 	uint8_t *row;
 	if (!clip(c, &x, &y, &w, &h))
 		return;
+#if CV_PLANES
+	if (c->bpp == 1) {
+		fill1(c, x, y, w, h, pv);
+		return;
+	}
+#endif
 	/* a row's address stepped, not multiplied out each row (a call of
 	   libgcc's on the 68000) */
 #ifndef EW_ST
@@ -434,7 +562,7 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 	int level;
 	if (item_a == 0)
 		return;
-	if (c->bpp == 8 && c->shade != NULL && (level = c->shade(c->ud, rgb, &dark, &light)) >= 0) {
+	if (c->bpp <= 8 && c->shade != NULL && (level = c->shade(c->ud, rgb, &dark, &light)) >= 0) {
 		/* a pattern fixed to the page, so that it doesn't move as it scrolls */
 		int32_t i, j, x0 = x - c->ox, y0 = y - c->oy, x1, y1;
 		uint8_t *o, q[4][4];
@@ -456,6 +584,18 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 		for (j = 0; j < 4; j++)
 			for (i = 0; i < 4; i++)
 				q[j][i] = bayer[(y0 + j + c->oy) & 3][(x0 + i + c->ox) & 3] < level ? light : dark;
+#if CV_PLANES
+		if (c->bpp == 1) {
+			unsigned pw[4];
+			if (x0 >= x1)
+				return;
+			for (j = 0; j < 4; j++)
+				pw[j] = pattern1(c, x0, q[j]);
+			for (j = y0, o = c->pix + y0 * c->stride; j < y1; j++, o += c->stride)
+				row1(o, c->bx + x0, c->bx + x1, pw[(j - y0) & 3]);
+			return;
+		}
+#endif
 		for (j = y0, o = c->pix + y0 * c->stride + x0; j < y1; j++, o += c->stride)
 			fill_pattern(o, x1 - x0, q[(j - y0) & 3]);
 		return;
@@ -536,6 +676,13 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
 	if (c0 >= c1)
 		return;
+#if CV_PLANES
+	if (c->bpp == 1) {
+		if (r0 < r1)
+			glyph1(c, g->bits, stride, gx, gy, c0, c1, r0, r1, pv);
+		return;
+	}
+#endif
 	/* a row's address once, stepped (a multiply each row was a call of
 	   libgcc's on the 68000); the depth's own loop */
 	b0 = g->bits + r0 * stride;
@@ -755,7 +902,7 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 	/* what there is to draw with: its pens in the modes with a palette,
 	   its pixels in true colour (one read from the disk cache for a
 	   palette has no pixels) */
-	if (c->bpp == 8 ? pens == NULL : pic->px == NULL)
+	if (c->bpp <= 8 ? pens == NULL : pic->px == NULL)
 		return;
 	if (px < 0)
 		x0 = -px;
@@ -775,6 +922,17 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 	row = c->pix + (py + y0) * c->stride;
 	for (j = y0; j < y1; j++, k += pic->w, row += c->stride) {
 		const uint8_t *a = pic->alpha != NULL ? pic->alpha + k : NULL;
+#if CV_PLANES
+		if (c->bpp == 1) {
+			/* (each pen's bit; less than opaque as at 8 bits below) */
+			const uint8_t *s = pens + k, *b = bayer[(py + j + c->oy) & 3];
+			int32_t at = c->bx + px;
+			for (i = x0; i < x1; i++)
+				if ((op == 255 || op > b[(px + i + c->ox) & 3] * 16u + 8) && (a == NULL || a[i] >= 128))
+					bit1(row, at + i, s[i] & 1);
+			continue;
+		}
+#endif
 		if (c->bpp == 8) {
 			uint8_t *o = row + px;
 			const uint8_t *s = pens + k;
@@ -3337,7 +3495,7 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 			return;
 		}
 		if (c->picture != NULL && c->picture(c->ud, d->img, d->w, d->h, &pic, &pens) && pic != NULL &&
-		    (c->bpp != 8 || pens != NULL))
+		    (c->bpp > 8 || pens != NULL))
 			cv_picture(c, pic, pens, d->x, d->y);
 		else
 			placeholder(c, d);
@@ -3365,6 +3523,10 @@ static void draw_item(canvas *c, const page *p, const dl_item *d)
 	}
 }
 
+/* cv_page_planes: cv_page's walk with nothing drawn, each item looked at
+   (probing), probe_bad set at one a canvas of one plane can't draw */
+static int probing, probe_bad;
+
 /* one item, if it falls on the canvas */
 static void item(canvas *c, const page *p, const dl_item *d)
 {
@@ -3373,6 +3535,15 @@ static void item(canvas *c, const page *p, const dl_item *d)
 	canvas sub;
 	if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
 		return;
+	if (probing) {
+		/* (solid, or not drawn at all: fills, text, a picture or its
+		   frame; not tiles, gradients, controls or bars) */
+		a = drawn_a(c, d->rgb >> 24);
+		if (a != 0 && (a != 255 || !(d->type == DL_FILL || d->type == DL_TEXT ||
+					     (d->type == DL_IMAGE && !(d->flags & DLF_TILE)))))
+			probe_bad = 1;
+		return;
+	}
 	/* no alpha: nothing drawn (a transparent colour, opacity 0), the item
 	   there for clicks only; with no palette to mix with, solid or not
 	   at all */
@@ -3393,6 +3564,8 @@ static void item(canvas *c, const page *p, const dl_item *d)
 		}
 		sub = *c;
 		sub.pix = c->pix + (long) (y0 - c->oy) * c->stride + (long) (x0 - c->ox) * (c->bpp / 8);
+		if (c->bpp == 1)
+			sub.bx = c->bx + (x0 - c->ox);	/* (a bit a pixel: the row's start kept) */
 		sub.ox = x0;
 		sub.oy = y0;
 		sub.w = x1 - x0;
@@ -3622,13 +3795,32 @@ void cv_bands_sum(const page *p, int32_t y0, int nb, int32_t band, int32_t x0, i
 		}
 }
 
+int cv_page_planes(canvas *c, const page *p)
+{
+#if CV_PLANES
+	if (p->cbg >= 0 && p->cbg < p->nitems)
+		return 0;		/* (a picture or a gradient behind it all) */
+	probing = 1;
+	probe_bad = 0;
+	cv_page(c, p);
+	probing = 0;
+	return !probe_bad;
+#else
+	(void) c;
+	(void) p;
+	return 0;
+#endif
+}
+
 void cv_page(canvas *c, const page *p)
 {
 	long i, s0, s1, cbg = p->cbg >= 0 && p->cbg < p->nitems ? p->cbg : -1;
 
-	cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
-	if (cbg >= 0)
-		canvas_bg(c, p);	/* (the first of the items) */
+	if (!probing) {
+		cv_fill(c, c->ox, c->oy, c->w, c->h, p->bg);
+		if (cbg >= 0)
+			canvas_bg(c, p);	/* (the first of the items) */
+	}
 	if (p->strip == NULL || c->h > 60 * PAGE_STRIP) {	/* (a whole long page: all of them) */
 		for (i = 0; i < p->nitems; i++) {
 			long k = p->seg != NULL ? page_drawn(p, i) : i;

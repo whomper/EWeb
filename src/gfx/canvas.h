@@ -19,7 +19,12 @@ typedef struct canvas {
 	uint8_t *pix;
 	int32_t w, h;
 	long stride;			/* bytes from one row to the next */
-	int bpp;			/* 8, 16 (5-6-5, the Falcon's) or 32 (0, R, G, B: a deeper screen's) */
+	int bpp;			/* 8, 16 (5-6-5, the Falcon's) or 32 (0, R, G, B: a deeper screen's);
+					   1: the ST's monochrome screen's own plane, pen() 0 or 1
+					   a pixel, rows of 16-bit words, the first pixel in a
+					   word's top bit (cv_page_planes says which bands) */
+	int32_t bx;			/* bpp 1: the pixel of pix's row where column 0 is (a
+					   box's part of the canvas), else 0 */
 	int32_t ox, oy;			/* the page's point at pixel (0, 0) */
 	/* 8 bits: the pixel value for a colour (0xRRGGBB) */
 	uint8_t (*pen)(void *ud, uint32_t rgb);
@@ -62,6 +67,12 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32_t y);
 /* the page's background, then every item that falls on the canvas */
 void cv_page(canvas *c, const page *p);
+/* 1 if every item of the page cv_page would draw on c can be drawn on a
+   canvas of one plane (bpp 1): fills, solid text, a picture's pens and
+   its frame; not translucency, gradients, controls, tiles or a canvas's
+   background picture. The ST edition draws such a band of its
+   monochrome screen straight into the screen's form (ui/screen.c) */
+int cv_page_planes(canvas *c, const page *p);
 /* the same in parts, for a canvas within one of the page's strips:
    from 0 (the background first), stopping between items when stop(ud)
    says (asked every 4 items); the place to go on from (the same canvas,
