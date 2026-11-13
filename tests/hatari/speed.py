@@ -314,7 +314,11 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         # Cancel at its 38th column (in the old dialog and the family's), 18th row, 8x16 characters)
         at = re.findall(r"EWEB dialog at (\d+) (\d+)", r.console())
         dx, dy = (int(v) for v in at[-1]) if at else (0, 0)
-        r.act("Settings closed (what it uncovers)", speed.WINDOW, lambda: r.click(dx + 38 * 8, dy + 18 * 16 + 8))
+        # (in medium resolution the characters are 8 rows high, and Hatari
+        # shows each row twice: 640 x 400)
+        ch, ys = (8, 2) if r.m.screen == "med" else (16, 1)
+        r.act("Settings closed (what it uncovers)", speed.WINDOW,
+              lambda: r.click(dx + 38 * 8, (dy + 18 * ch + ch // 2) * ys))
         # (the Desk menu's first entry: its title at the bar's left, the
         # entry the first row under the bar, 8x16 characters)
         r.act("the About box opened", r.about, lambda: r.menu(20, 28))
