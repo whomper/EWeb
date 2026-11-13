@@ -4834,8 +4834,19 @@ static uint8_t *decode(const uint8_t *s, size_t len, uint16_t enc, size_t *n, in
 				}
 				*o++ = ch;
 			} else {
+#ifdef ANY_ADDRESS
 				__builtin_memcpy(o, tab[ch - 0x80], 4);
 				o += tl[ch - 0x80];
+#else
+				/* a byte at a time: o may be odd, and a long
+				   moved there is an address error on the 68000
+				   (the ST edition's bombs on atari-home.de,
+				   13 Nov 2026) */
+				const uint8_t *t = tab[ch - 0x80];
+				unsigned k = tl[ch - 0x80];
+				while (k--)
+					*o++ = *t++;
+#endif
 			}
 		}
 	}

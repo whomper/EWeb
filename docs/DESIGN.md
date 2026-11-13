@@ -326,7 +326,10 @@ and an append to a buffer). Three changes to NetSurf's code (`third_party/netsur
 - **Single-byte charsets through a table:** a page in Windows-1252, ISO-8859-8, Windows-1255 and
   the like went through two codecs a character at a time, a third of its parse. Its bytes 0x80-0xFF
   are now looked up in a table of their UTF-8, made from the charset's codec, and its ASCII is
-  copied as UTF-8's is.
+  copied as UTF-8's is. Each entry is one four-byte move where longs may be at any address; the
+  68000 copies its bytes one by one, since a long moved to an odd place is an address error there
+  (13 Nov 2026: `EWEBST.PRG` bombed on any such page with a letter past ASCII at an odd place,
+  atari-home.de over http among them; the ST rig's `LATIN.HTM`).
 
 The parse is now measured as `EWEB.PRG` does it: `build/m68k/docparse` makes EWeb's own document
 (`doc_parse`) on the Atari's heap (`common/atari/libc.c`, through `tests/bench/atheap.c`), not on

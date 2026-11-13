@@ -115,6 +115,14 @@ def hd_for(name, home, inf=""):
     with open(os.path.join(hd, "SWAP.HTM"), "w") as f:
         f.write("<!DOCTYPE html><title>swap</title><body style='margin:0;background:#dddddd'>"
                 "<div style='height:60px;background:#2060c0'></div></body>\n")
+    # a page in Windows-1252, its accented letters two bytes each in UTF-8
+    # after runs of ASCII of every length: at odd places in the parser's
+    # copy too (atari-home.de, 13 Nov 2026: a long move there was an
+    # address error on the 68000, the ST edition's bombs on any such page)
+    with open(os.path.join(hd, "LATIN.HTM"), "wb") as f:
+        f.write(b"<!DOCTYPE html><meta charset=windows-1252><title>Latin</title><p>" +
+                b" ".join(b"x" * n + b"\xe4\xf6\xfc" for n in range(8)) +
+                b" Gr\xfc\xdfe aus M\xfcnchen, \x93Anf\xfchrung\x94 \x80 \xe9t\xe9.</p>\n")
     with open(os.path.join(ROOT, "tests/layout/svg.html"), "rb") as f:
         page = f.read().replace(b"img/star.svg", b"IMG/STAR.SVG").replace(b"img/missing.svg", b"IMG/MISSING.SVG")
     with open(os.path.join(hd, "SVG.HTM"), "wb") as f:
@@ -2040,6 +2048,15 @@ def st():
                   ev is not None and ev.startswith("shown file:///C:/GRAD.HTM "), str(r.events()[-5:]))
             time.sleep(3)
             r.shot(5)
+            # a page in a charset of a byte a character, its accented
+            # letters at odd places in the parser's copy (LATIN.HTM)
+            r.key(L, (CTRL,))
+            r.type("file:///C:/LATIN.HTM")
+            r.key(RETURN)
+            ev = r.wait(r"shown |crashed", 300)
+            check("st: %s a Windows-1252 page" % name,
+                  ev is not None and ev.startswith("shown file:///C:/LATIN.HTM ") and
+                  not os.path.exists(os.path.join(r.m.hd, "crash.log")), str(r.events()[-5:]))
             svg_page(r, "st", name, 6)
             if name == "stmono":
                 # a secure page with no gateway set: said plainly, the page
