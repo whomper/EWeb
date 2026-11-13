@@ -348,6 +348,11 @@ int scr_init(void)
 	return bufs((short) scr_h) || bufs(BAND);
 }
 
+int scr_planar(void)
+{
+	return !truecolour;
+}
+
 int scr_band_rows(void)
 {
 	return rows;

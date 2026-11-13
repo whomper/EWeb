@@ -243,6 +243,19 @@ static void bm_items(void)
    menu_update runs at every key and click, and asks the AES only for
    what changed (its 45 calls were most of a letter typed on an ST) */
 static unsigned char menu_was[2][512];
+/* each command's object in the bar, found once a bar (common's
+   mbar_object walks the whole tree: 40 of them after every key and click
+   were 10 ms of an 8 MHz ST's); 0: not looked for yet, else object + 1 */
+static short menu_obj[C_BM];
+
+static short obj_of(int cmd)
+{
+	if (cmd <= 0 || cmd >= C_BM)
+		return mbar_object(&mb, cmd);
+	if (menu_obj[cmd] == 0)
+		menu_obj[cmd] = (short) (mbar_object(&mb, cmd) + 1);
+	return (short) (menu_obj[cmd] - 1);
+}
 
 /* the menu bar made again when the bookmarks changed */
 static void bm_menu(void)
@@ -259,6 +272,7 @@ static void bm_menu(void)
 	menu_bar(mb.tree, 1);
 	mbar_free(&old);
 	memset(menu_was, 0, sizeof menu_was);	/* (a new tree, as made) */
+	memset(menu_obj, 0, sizeof menu_obj);
 }
 
 static void menu_set(int check, short i, int on)
@@ -278,7 +292,7 @@ static void menu_set(int check, short i, int on)
 
 static void enable(int cmd, int on)
 {
-	menu_set(0, mbar_object(&mb, cmd), on);
+	menu_set(0, obj_of(cmd), on);
 }
 
 #ifndef EW_ST
@@ -417,13 +431,13 @@ void menu_update(void)
 	enable(C_SCRIPTS, !loading && site_of(br.url, NULL, 0));	/* without an FPU: it says why */
 #endif
 	{
-		menu_set(1, mbar_object(&mb, C_PICTURES), opt.pictures);
-		menu_set(1, mbar_object(&mb, C_FALCON), opt.falcon);
-		menu_set(1, mbar_object(&mb, C_LOG), opt.log);
-		menu_set(1, mbar_object(&mb, C_SNAPSHOT), opt.snapshot && http_gateway[0]);
+		menu_set(1, obj_of(C_PICTURES), opt.pictures);
+		menu_set(1, obj_of(C_FALCON), opt.falcon);
+		menu_set(1, obj_of(C_LOG), opt.log);
+		menu_set(1, obj_of(C_SNAPSHOT), opt.snapshot && http_gateway[0]);
 #ifndef EW_ST
-		menu_set(1, mbar_object(&mb, C_TRANSLATE), opt.translate);
-		menu_set(1, mbar_object(&mb, C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
+		menu_set(1, obj_of(C_TRANSLATE), opt.translate);
+		menu_set(1, obj_of(C_SCRIPTS), br.scripts && br_scripts_for(&br, br.url));
 #endif
 	}
 }
@@ -2236,6 +2250,15 @@ void command(int cmd)
 {
 	if (loading && cmd != C_STOP && cmd != C_ABOUT && cmd != C_KEYS && cmd != C_HELP && cmd != C_COPY)
 		return;
+	/* what is due drawn first, whole: the part of the page a menu covered
+	   (XaAES and MyAES draw menus over the window and ask for it back)
+	   would else wait under a dialog or an alert the command opens until
+	   it closed, a FireBee tester's screenshot, 13 Nov 2026 */
+	if (win_due()) {
+		win_sync(1);
+		win_draw_due();
+		win_sync(0);
+	}
 	switch (cmd) {
 	case C_ABOUT: dlg_about(); break;
 	case C_NEWWIN:

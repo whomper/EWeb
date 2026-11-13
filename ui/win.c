@@ -4088,7 +4088,13 @@ static void resized(void)
    the left edge goes 7 pixels right) */
 static void on_grid(short *x, short y, short *w, short h)
 {
-	short nx = wind_x8(icon_kind(KIND), *x, y, *w, h);
+	short nx;
+	/* (in true colour a byte is no boundary of a pixel's: no faster on
+	   one, and a full window there kept a strip of the desk at its left,
+	   a FireBee tester's screenshot under XaAES, 13 Nov 2026) */
+	if (!scr_planar())
+		return;
+	nx = wind_x8(icon_kind(KIND), *x, y, *w, h);
 	if (nx > *x && *x + *w <= desk_x + desk_w && nx + *w > desk_x + desk_w)
 		*w -= nx + *w - (desk_x + desk_w);
 	*x = nx;

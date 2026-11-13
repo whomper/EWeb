@@ -440,7 +440,13 @@ int dlg_settings(void)
 	d.pages = pages;
 	d.npages = (short) (sizeof pages / sizeof pages[0]);
 	d.page_w = 44;		/* (EWeb's long fields: settings.h) */
+	/* (two rows more for the TT RAM's line, shown only with TT RAM: under
+	   the buttons it was, a FireBee tester's screenshot, 13 Nov 2026) */
 	d.height = 20;
+#ifndef EW_ST
+	if (tt_free > 0)
+		d.height = 22;
+#endif
 	d.check = settings_check;
 	gap_tag("dialog: made");
 	set_open = 0;

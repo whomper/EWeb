@@ -194,6 +194,7 @@ int scr_exit(void);			/* TOS's colours back (at the end): 1 if EWeb's were on */
    vq_scrninfo's words of it in info; 0 if they made none */
 int scr_seen_form(short *info);
 const char *scr_mode(void);		/* "16 colours", "true colour", for the log */
+int scr_planar(void);			/* 1: planes (a palette), 0: true colour */
 int scr_band_rows(void);			/* rows drawn at a time: the screen's, else 32 */
 /* the page's part that falls on area (on the screen), the page's point
    (px, py) at area's top left; area must be within the clip set */
