@@ -69,6 +69,22 @@ def cpu(words):
     return out
 
 
+def rodata_start(path):
+    """where the first read-only data goes in .text, from the link's map"""
+    seen = False
+    for line in open(path):
+        if "*(.rodata .rodata.*)" in line:
+            seen = True
+        elif seen:
+            m = re.match(r"\s*\.rodata\S*\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)", line)
+            if m and int(m.group(2), 16):
+                return int(m.group(1), 16)
+            m = re.match(r"\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)\s", line)	# (a long name: its address on the next line)
+            if m and int(m.group(2), 16):
+                return int(m.group(1), 16)
+    sys.exit("mkfirebee: no read-only data in " + path)
+
+
 def m68060(target, compiles, link):
     """EWEB60.PRG: EWEB.PRG's objects (not its overlays') for the 68060"""
     objs = set(w for w in link if w.endswith(".o"))
@@ -85,9 +101,16 @@ def m68060(target, compiles, link):
                   "-fno-asynchronous-unwind-tables", "-c", "common/atari/ll64.c", "-o", OUT + "rt/ll64.o"]))
     words = cpu(link)
     words.insert(words.index("-lgcc"), OUT + "rt/ll64.o")
-    run(" ".join(shlex.quote(w) for w in words))
     elf = words[words.index("-o") + 1]
-    wide = [l for l in run("m68k-linux-gnu-objdump -d -m m68k:68030 " + elf).splitlines() if WIDE.search(l)]
+    words.insert(words.index("-lgcc"), "-Wl,-Map=" + elf + ".map")
+    run(" ".join(shlex.quote(w) for w in words))
+    # the code only: common's link.ld puts the read-only data in .text after
+    # it, and a string's bytes can read as a divu.l (1.10's first build:
+    # "LED\0WM_" of the window messages' names, there since the version's
+    # name grew a byte)
+    stop = rodata_start(elf + ".map")
+    wide = [l for l in run("m68k-linux-gnu-objdump -d -m m68k:68030 --stop-address=0x%x %s" % (stop, elf)).splitlines()
+            if WIDE.search(l)]
     if wide:
         sys.exit("mkfirebee: %d of the 68060's missing forms in %s, as\n%s" % (len(wide), elf, "\n".join(wide[:5])))
     env = dict(os.environ, PRGFLAGS="7")
