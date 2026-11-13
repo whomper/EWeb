@@ -877,11 +877,28 @@ int settings_save(void)
 /* what happened, for the Hatari rigs (tests/hatari/gui_test.py): "EWEB
    ..." lines on the emulator's console through NatFeats; nothing on a
    real Atari */
+/* NatFeats (an emulator's console, where the rigs read EWeb's events):
+   found once (common's nf_probe, as its nf_debug finds it); on a real
+   machine there is none, and log_event formats nothing (its vsnprintf was
+   1.2% of an 8 MHz ST's session) */
+long nf_probe(void);
+static long nf_found = -1;
+
+static void sup_nf(void)
+{
+	nf_found = nf_probe();
+}
+
 void log_event(const char *fmt, ...)
 {
 	char buf[600];
 	va_list ap;
-	int n = snprintf(buf, sizeof buf, "EWEB ");
+	int n;
+	if (nf_found < 0)
+		Supexec(sup_nf);
+	if (nf_found <= 0)
+		return;
+	n = snprintf(buf, sizeof buf, "EWEB ");
 	va_start(ap, fmt);
 	vsnprintf(buf + n, sizeof buf - n - 1, fmt, ap);
 	va_end(ap);

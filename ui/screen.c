@@ -899,6 +899,27 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 			c.bpp = 8;
 		}
 		t0 = pf_ms();
+#ifdef EW_ST
+		if (p != NULL && planes == 1 && format == 0 && !truecolour) {
+			/* the ST's monochrome screen: a band of fills, text and
+			   pictures' pens drawn straight into the screen's plane
+			   (canvas.c's one plane, the same bits), no byte a pixel
+			   turned into it after (DESIGN.md, The ST edition's speed) */
+			canvas b = c;
+			b.pix = (uint8_t *) dev_buf;
+			b.stride = words * 2;
+			b.bpp = 1;
+			b.bx = 0;
+			if (cv_page_planes(&b, p)) {
+				cv_page(&b, p);
+				t1 = pf_ms();
+				blit(dev_buf, h, words, 0, (short) c.w, area->x, area->y + y0, 3);
+				scr_ms_canvas += t1 - t0;
+				scr_ms_put += pf_ms() - t1;
+				continue;
+			}
+		}
+#endif
 		if (p != NULL) {
 			cv_page(&c, p);
 		} else if (truecolour) {

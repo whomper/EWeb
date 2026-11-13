@@ -187,12 +187,12 @@ build/$(1)/bench/%.o: tests/bench/%.c tests/bench/*.h src/css/*.h src/doc/*.h VE
 	$(2) $(3) -Wall -Wextra -Wno-unused-parameter -DEWEB_VERSION='"$$(VERSION_STR)"' $$(NSINC) -Isrc/css -Isrc/doc -c $$< -o $$@
 build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	@mkdir -p $$(@D)
-	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) -c $$< -o $$@
+	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) $$(ST_O2) -c $$< -o $$@
 build/$(1)/ewb/doc/html.o: $(GEN)/entities.h
 build/$(1)/ewb/browse/browse.o: $(GEN)/home.h
 build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
 	@mkdir -p $$(@D)
-	$(2) $$(filter-out -w,$(3)) $(if $(filter tos st,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) -c $$< -o $$@
+	$(2) $$(filter-out -w,$(3)) $(if $(filter tos st,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) $$(ST_O2) -c $$< -o $$@
 endef
 
 HOST_CFLAGS := -O2 -g -std=gnu99 -DNDEBUG -w
@@ -693,6 +693,18 @@ STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
 # libjpeg-turbo, 100 KB less for the 1 MB ST
 STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
+# the ST edition is -Os (its code was for a 1 MB ST), but the files a
+# page's making and drawing spend their time in are -O2 (Erez, 13 Nov
+# 2026: the ST edition as fast as it can be): 8 to 12% faster on every
+# row of the speed rig with all of it -O2, 227 KB more; these about 115 KB
+# of it (the layout, the HTML parser and the document, the CSS engine,
+# the canvas and the fonts, the screen, the pictures' common code, libc's
+# copies). The last -O on GCC's line is the one it takes
+ST_HOT := build/st/ewb/layout/layout.o build/st/ewb/layout/find.o build/st/ewb/doc/html.o \
+          build/st/ewb/doc/doc.o build/st/ewb/gfx/canvas.o build/st/ewb/gfx/font.o \
+          $(patsubst src/css/%.c,build/st/ec/%.o,$(EC_SRC)) \
+          build/st/gem/screen.o build/st/pic/pic.o build/st/pic/png.o build/st/rt/libc.o
+$(ST_HOT): ST_O2 := -O2
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
 # (-DDLG_CPU: common's dialogs drawn partly by the CPU, for the 68000 only:
 # EWEB.PRG runs on a 68030 and leaves it out)
@@ -702,7 +714,7 @@ build/st/rt/%.o: common/atari/%.S Makefile
 	$(M68KCC) -m68000 -DSTACK_SIZE=$(ST_STACK) -c $< -o $@
 build/st/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
-	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
+	$(M68KCC) $(ST_CFLAGS) $(ST_O2) -c $< -o $@
 build/st/rt/%.o: atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(ST_CFLAGS) -c $< -o $@
@@ -729,7 +741,7 @@ build/st/net/crash_s.o: common/atari/crash.S
 	$(M68KCC) -m68000 -c $< -o $@
 build/st/pic/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) $(COMMON_WARN) -c $< -o $@
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) $(COMMON_WARN) $(ST_O2) -c $< -o $@
 build/st/pic/%.o: common/third_party/tjpgd/%.c common/third_party/tjpgd/*.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -w -c $< -o $@
@@ -738,7 +750,7 @@ build/st/pic/%.o: common/third_party/nsgif/src/%.c common/third_party/nsgif/incl
 	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNDEBUG -w -c $< -o $@
 build/st/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
-	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
+	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) $(ST_O2) -c $< -o $@
 build/st/gem/common/%.o: common/ui/%.c ui/*.h $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
@@ -1257,6 +1269,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/js/needs.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/svgcss.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/deep32.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/planes.py build/asan/ewrender binary/EWEB.FNT
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the

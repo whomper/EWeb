@@ -481,6 +481,70 @@ static long bands(const page *p, int32_t width)
 	return n;
 }
 
+/* -1 (with -p 2): the page as the ST edition draws its monochrome screen,
+   each band of 16 rows at many scroll places and parts across, both a
+   byte a pixel (its pens' low bit, as ui/screen.c's to_planes takes it)
+   and, where cv_page_planes says it can, straight into one plane (bpp
+   1): the same bits, or the band's place said. *planar: how many bands
+   were drawn in one plane; the bands that differ */
+static long planes_check(const page *p, int32_t width, long *planar)
+{
+	static const int32_t across[][2] = { { 0, 0 }, { 3, 200 }, { 37, 211 }, { 300, 0 }, { 599, 0 } };
+	int32_t y, k;
+	long bad = 0, n = 0;
+	*planar = 0;
+	for (k = 0; k < (int32_t) (sizeof across / sizeof across[0]); k++) {
+		int32_t x = across[k][0], w = across[k][1] ? across[k][1] : width - across[k][0];
+		long words = (w + 15) / 16;
+		if (w <= 0 || x >= width)
+			continue;
+		for (y = -8; y < p->height + 8; y += k ? 23 : 7) {
+			canvas a, b;
+			int32_t i, j;
+			memset(&a, 0, sizeof a);
+			a.w = w;
+			a.h = 16;
+			a.bpp = 8;
+			a.stride = w;
+			a.ox = x;
+			a.oy = y;
+			a.pen = pen_n;
+			a.shade = shade_n;
+			a.pal = (const uint8_t (*)[3]) scr_pal;
+			a.picture = picture;
+			b = a;
+			b.bpp = 1;
+			b.stride = words * 2;
+			n++;
+			if (!cv_page_planes(&b, p))
+				continue;
+			(*planar)++;
+			a.pix = malloc((size_t) (a.stride * a.h));
+			b.pix = calloc(1, (size_t) (b.stride * b.h));
+			if (a.pix == NULL || b.pix == NULL)
+				return -1;
+			cv_page(&a, p);
+			cv_page(&b, p);
+			for (j = 0; j < a.h; j++) {
+				for (i = 0; i < w; i++)
+					if ((a.pix[j * a.stride + i] & 1) != (b.pix[j * b.stride + i / 8] >> (7 - i % 8) & 1))
+						break;
+				if (i < w) {
+					if (bad < 10)
+						printf("planes: band at x %d y %d (width %d): row %d differs from column %d\n",
+						       (int) x, (int) y, (int) w, (int) j, (int) i);
+					bad++;
+					break;
+				}
+			}
+			free(a.pix);
+			free(b.pix);
+		}
+	}
+	printf("planes: %ld bands, %ld in one plane, %ld differ\n", n, *planar, bad);
+	return bad;
+}
+
 /* -k's: every part as short as cv_page_part allows */
 static int stop_now(void *ud)
 {
@@ -1019,7 +1083,7 @@ int main(int argc, char **argv)
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
-	int colours = 0, own_pal = 0, deep = 0;
+	int colours = 0, own_pal = 0, deep = 0, planes = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL, *xl_arg = NULL, *gw_to = NULL;
 	char where[4096];
@@ -1074,6 +1138,8 @@ int main(int argc, char **argv)
 			dump = 1;
 		else if (!strcmp(argv[i], "-B"))
 			band = 1;
+		else if (!strcmp(argv[i], "-1"))
+			planes = 1;	/* each band in one plane and a byte a pixel alike (with -p 2) */
 		else if (!strcmp(argv[i], "-i"))
 			parts = 1;
 		else if (!strcmp(argv[i], "-E"))
@@ -1597,7 +1663,10 @@ int main(int argc, char **argv)
 			printf("pens %s %dx%d %08lx\n", img_url(it->img), pic->w, pic->h, h);
 		}
 	}
-	if (band) {
+	if (planes) {
+		long planar;
+		rc = planes_check(p, width, &planar) != 0;
+	} else if (band) {
 		long n = bands(p, width);
 		printf("bands: %ld drawn, page %d x %d\n", n, (int) p->width, (int) p->height);
 		rc = n < 0;
