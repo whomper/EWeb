@@ -6,12 +6,14 @@ machines.py: Erez's TOS when ~/.aera/tos has it, else EmuTOS), cycle-exact:
 a page parsed, styled, laid out and drawn on the monochrome screen as
 EWEBST.PRG does it, each step timed (DESIGN.md, The ST edition's speed).
 PAGEST.TTP is `make binary/PAGEST.TTP`.
-    tests/bench/pagest.py [--machine ST:mono] [--profile OUT [--draw]] [PAGE.HTM [SHEET.CSS...] [-w WIDTH] [-r ROWS] [-n TIMES]]
+    tests/bench/pagest.py [--machine ST:mono] [--profile OUT [--draw]] [PAGE.HTM [SHEET.CSS...] [-w WIDTH] [-r ROWS] [-n TIMES] [-m STAGE] [-s STAGE]]
 Without a page, the news page (build/news/NEWS.HTM and NEWS.CSS, as make
 hatarispeed loads it; tests/bench/mkpage.py makes them). -w and -r go to
 pagebench. --profile has Hatari's profiler count the CPU's cycles from the
 start to the end and names them, the program's functions, in OUT; with
---draw, from the drawing's start only.
+--draw, from the drawing's start only (or the stage -m names: 1 the parse,
+2 the styling, 3 the layout; -s the last stage made, -m 2 -s 2 the styling
+alone).
 """
 import os
 import shutil

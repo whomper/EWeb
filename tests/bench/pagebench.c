@@ -15,8 +15,10 @@
  * the sheets named are the page's linked ones (EWeb fetches them; here
  * they are read from the disk, as the news page's NEWS.CSS).
  * -r draws only the page's first ROWS rows (all of it, 8000 at most, by
- * default); -n draws it N times. Just before it draws, it asks GEMDOS the
- * time (Tgettime), where pagest.py --draw turns Hatari's profiler on.
+ * default); -n draws it N times. Just before stage -m (1 the parse, 2
+ * the styling, 3 the layout, 4 the drawing: the default) it asks GEMDOS the
+ * time (Tgettime), where pagest.py --draw turns Hatari's profiler on; -s
+ * stops after stage S (each stage alone: -m 2 -s 2, the styling).
  */
 #include <stdlib.h>
 #include <string.h>
@@ -84,6 +86,7 @@ int pagebench(int argc, char **argv)
 	const char *fnt = "EWEB.FNT";
 	int i = 1;
 	long width = 608, rows = 8000, y, planar = 0, bands = 0, times = 1, k;
+	int mark = 4, stop = 4;
 	unsigned long t0, t_parse, t_style, t_layout, t_draw;
 	size_t n;
 	char *data;
@@ -103,6 +106,10 @@ int pagebench(int argc, char **argv)
 			rows = atol(argv[++i]);
 		else if (!strcmp(argv[i], "-n") && i + 1 < argc)
 			times = atol(argv[++i]);
+		else if (!strcmp(argv[i], "-m") && i + 1 < argc)
+			mark = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "-s") && i + 1 < argc)
+			stop = atoi(argv[++i]);
 	}
 	if (i >= argc) {
 		out("pagebench [-f EWEB.FNT] [-w WIDTH] [-r ROWS] PAGE.HTM [SHEET.CSS...]\n");
@@ -119,6 +126,8 @@ int pagebench(int argc, char **argv)
 	}
 	memset(&ho, 0, sizeof ho);
 	ho.drop_scripts = 1;		/* (as EWEBST.PRG: it runs no scripts) */
+	if (mark == 1)
+		(void) Tgettime();
 	t0 = ticks();
 	d = doc_parse_opts(data, n, &ho, &m);
 	t_parse = ticks() - t0;
@@ -127,6 +136,10 @@ int pagebench(int argc, char **argv)
 		return 1;
 	}
 	out("parsed: %lu elements in %lu ms\n", (unsigned long) d->elements, ms(t_parse));
+	if (stop == 1)
+		return 0;
+	if (mark == 2)
+		(void) Tgettime();
 	t0 = ticks();
 	doc_add_ua(d);
 	ec_prune(d->css, 1);
@@ -144,6 +157,10 @@ int pagebench(int argc, char **argv)
 	doc_select(d);
 	t_style = ticks() - t0;
 	out("styled: %lu ms\n", ms(t_style));
+	if (stop == 2)
+		return 0;
+	if (mark == 3)
+		(void) Tgettime();
 	memset(&o, 0, sizeof o);
 	o.width = (int32_t) width;
 	o.zoom = 1024;
@@ -156,6 +173,8 @@ int pagebench(int argc, char **argv)
 		return 1;
 	}
 	out("laid out: %d x %d, %ld items in %lu ms\n", (int) p->width, (int) p->height, p->nitems, ms(t_layout));
+	if (stop == 3)
+		return 0;
 
 	chunky = malloc((size_t) BAND_W * BAND);
 	plane = malloc((size_t) BAND_W / 8 * BAND);
@@ -163,7 +182,8 @@ int pagebench(int argc, char **argv)
 		return 1;
 	if (rows > p->height)
 		rows = p->height;
-	(void) Tgettime();	/* (pagest.py --draw: the profiler from here) */
+	if (mark == 4)
+		(void) Tgettime();	/* (pagest.py --draw: the profiler from here) */
 	t0 = ticks();
 	for (k = 0; k < times; k++)
 	for (y = 0; y < rows; y += BAND) {
