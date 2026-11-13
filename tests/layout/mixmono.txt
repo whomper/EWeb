@@ -1,0 +1,18 @@
+page 608 x 271, background cccccc, 17 items, 0 links, title ""
+fill 6,6 596x28 #000000
+text 12,25 127x17 #ffffff99 sans13 link 0 "white at .6 on black "
+text 139,25 67x17 #ffffff99 sans13 link 0 "underlined"
+fill 6,34 596x28 #888888
+text 12,53 118x17 #00000080 sans13 link 0 "black at .5 on grey"
+gradient 6,62 596x16 tile 0,0 596x16 across down linear 180deg, #ffffff, #000000
+text 6,75 53x17 #000000 sans13 link 0 "gradient"
+fill 6,78 596x68 #0000004c
+text 14,99 175x17 #000000 sans13 link 0 "a translucent box over grey"
+fill 19,107 570x26 #ffffff80
+text 24,125 164x17 #800000cc sans13 link 0 "nested, with red text at .8"
+fill 6,146 596x48 #000000
+fill 14,154 580x32 #ffffff40
+text 22,175 191x17 #ffffff4c sans13 link 0 "light at .25 on black, text at .3"
+text 6,220 194x17 #00000033 sans13 link 0 "faint text at .2, almost nothing"
+fill 6,236 596x16 #44444480
+text 6,249 207x17 #ffffff80 sans13 link 0 "opacity .5: a dark box, white text"

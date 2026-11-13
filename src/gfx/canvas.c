@@ -78,6 +78,23 @@ static void fill_pattern(uint8_t *p, int32_t n, const uint8_t q[4]);
    as a byte a pixel's low bits (make test: tests/layout/planes.py,
    ewrender -1). Not EWEB.PRG's (CV_PLANES: the host's tools and the ST
    edition) */
+/* MUL16(a, b): a by b where both are from 0 to 65,535 (a row and a
+   stride, a canvas's): on the 68000 its mulu.w (GCC 13 makes even
+   (uint32_t) (uint16_t) a * (uint16_t) b a call of libgcc's __mulsi3,
+   about 200 cycles of an 8 MHz ST's, not 70); elsewhere the long
+   multiply as it was */
+#if defined(EW_ST) && defined(__mc68000__)
+static inline uint32_t mulu16(uint16_t a, uint16_t b)
+{
+	uint32_t r = a;
+	__asm__("mulu.w %1,%0" : "+d" (r) : "dm" (b) : "cc");
+	return r;
+}
+#define MUL16(a, b) ((long) mulu16((uint16_t) (a), (uint16_t) (b)))
+#else
+#define MUL16(a, b) ((long) (a) * (long) (b))
+#endif
+
 #if !defined(EW_TOS) || defined(EW_ST)
 #define CV_PLANES 1
 #if defined(__m68k__) || defined(__mc68000__)
@@ -147,18 +164,67 @@ static unsigned pattern1(const canvas *c, int32_t x0, const uint8_t q[4])
    16 by 16 multiply (the 68000's mulu.w), not libgcc's 32-bit call */
 static inline uint8_t *row_at(const canvas *c, int32_t y)
 {
-	return c->pix + (uint32_t) (uint16_t) y * (uint16_t) c->stride;
+	return c->pix + MUL16(y, c->stride);
+}
+
+/* what glyph1 and mix1 do to a bit: clear it, set it, invert it */
+enum { OP1_CLEAR, OP1_SET, OP1_INVERT };
+
+/* the bits of t (the high word's at w, the low's in the word after,
+   that one only when there are any) as op says */
+static inline void bits1(uint8_t *w, uint32_t t, int op)
+{
+	unsigned h = (unsigned) (t >> 16), l = (unsigned) (t & 0xffffU);
+	if (op == OP1_SET) {
+		ST16(w, LD16(w) | h);
+		if (l)
+			ST16(w + 2, LD16(w + 2) | l);
+	} else if (op == OP1_CLEAR) {
+		ST16(w, LD16(w) & ~h);
+		if (l)
+			ST16(w + 2, LD16(w + 2) & ~l);
+	} else {
+		ST16(w, LD16(w) ^ h);
+		if (l)
+			ST16(w + 2, LD16(w + 2) ^ l);
+	}
+}
+
+/* a translucent item's row x0..x1 (bits from the row's start): each
+   pixel becomes p0's bit where it is 0 now, p1's where it is 1 (the
+   two pens' mixes with the item: words of their patterns, or all one
+   or the other) */
+static void mix1(uint8_t *row, int32_t x0, int32_t x1, unsigned p0, unsigned p1)
+{
+	uint8_t *o = row + (x0 >> 4) * 2;
+	int32_t n = (x1 >> 4) - (x0 >> 4);
+	unsigned m0 = 0xffffU >> (x0 & 15), m1 = ~(0xffffU >> (x1 & 15)) & 0xffffU, d = (p0 ^ p1) & 0xffffU, v;
+	if (x0 >= x1)
+		return;
+	if (n == 0)
+		m0 &= m1;
+	v = LD16(o);
+	ST16(o, (v & ~m0) | ((p0 ^ (v & d)) & m0));
+	if (n == 0)
+		return;
+	for (o += 2; n > 1; n--, o += 2)
+		ST16(o, p0 ^ (LD16(o) & d));
+	if (m1) {
+		v = LD16(o);
+		ST16(o, (v & ~m1) | ((p0 ^ (v & d)) & m1));
+	}
 }
 
 /* a glyph's set bits, columns c0..c1 and rows r0..r1 of it, at canvas
-   (gx, gy): set in pen pv's bit (1: or'ed in; 0: cleared) */
+   (gx, gy): op's (OP1_SET: or'ed in, OP1_CLEAR: cleared, OP1_INVERT:
+   exclusive or'ed, a translucent letter's that turns each pen into the
+   other) */
 static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, int32_t gy, int32_t c0, int32_t c1,
-		   int32_t r0, int32_t r1, uint32_t pv)
+		   int32_t r0, int32_t r1, int on)
 {
 	int32_t row, b0 = c0 >> 3, b1 = (c1 - 1) >> 3, bi;
-	const uint8_t *b = bits + (uint32_t) (uint16_t) r0 * (uint16_t) stride;
+	const uint8_t *b = bits + MUL16(r0, stride);
 	uint8_t *o = row_at(c, gy + r0);
-	int on = (int) (pv & 1);
 	unsigned first = 0xffU >> (c0 & 7), last = (0xff00U >> (((c1 - 1) & 7) + 1)) & 0xffU;
 	int32_t at0 = c->bx + gx, words = c->stride >> 1;
 	if (stride <= 2 && at0 >= 0) {
@@ -178,22 +244,16 @@ static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, i
 			t = (uint32_t) v << (16 - sh);
 #if defined(__m68k__) || defined(__mc68000__)
 			if (two) {
-				if (on)
+				if (on == OP1_SET)
 					*(uint32_t *) (void *) w0 |= t;
-				else
+				else if (on == OP1_CLEAR)
 					*(uint32_t *) (void *) w0 &= ~t;
+				else
+					*(uint32_t *) (void *) w0 ^= t;
 				continue;
 			}
 #endif
-			if (on) {
-				ST16(w0, LD16(w0) | (unsigned) (t >> 16));
-				if (t & 0xffffU)
-					ST16(w0 + 2, LD16(w0 + 2) | (unsigned) (t & 0xffffU));
-			} else {
-				ST16(w0, LD16(w0) & ~(unsigned) (t >> 16));
-				if (t & 0xffffU)
-					ST16(w0 + 2, LD16(w0 + 2) & ~(unsigned) (t & 0xffffU));
-			}
+			bits1(w0, t, on);
 		}
 		return;
 	}
@@ -218,15 +278,7 @@ static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, i
 			}
 			w = o + (at >> 4) * 2;
 			s = (uint32_t) v << (24 - (at & 15));
-			if (on) {
-				ST16(w, LD16(w) | (unsigned) (s >> 16));
-				if (s & 0xffffU)
-					ST16(w + 2, LD16(w + 2) | (unsigned) (s & 0xffffU));
-			} else {
-				ST16(w, LD16(w) & ~(unsigned) (s >> 16));
-				if (s & 0xffffU)
-					ST16(w + 2, LD16(w + 2) & ~(unsigned) (s & 0xffffU));
-			}
+			bits1(w, s, on);
 		}
 }
 
@@ -236,6 +288,77 @@ static inline void bit1(uint8_t *row, int32_t at, int on)
 	uint8_t *w = row + (at >> 4) * 2;
 	unsigned m = 0x8000U >> (at & 15);
 	ST16(w, on ? LD16(w) | m : LD16(w) & ~m);
+}
+
+static inline void glyph_clip(const canvas *c, const GLYPH *g, int32_t gx, int32_t gy, int32_t *c0, int32_t *c1,
+			      int32_t *r0, int32_t *r1);
+
+/* a letter of cv_text's on the plane, op's: one up to 16 pixels wide,
+   whole across (most of a page's) drawn here, a row one shift and one
+   long or'ed in; any other through glyph1 (glyph1's setup for each
+   letter was most of its time: 4.8 of a letter's rows fall in a band
+   of the news page's, on average) */
+static inline void letter1(canvas *c, const GLYPH *g, int32_t px, int32_t py, int op)
+{
+	int32_t gx = px + g->x, gy = py + g->y, r0 = 0, r1 = g->h, at, n;
+	const uint8_t *b;
+	uint8_t *w;
+	unsigned keep;
+	int sh;
+	if (gy < 0)
+		r0 = -gy;
+	if (gy + r1 > c->h)
+		r1 = c->h - gy;
+	if (r0 >= r1)
+		return;
+	if (g->w > 16 || gx < 0 || gx + g->w > c->w || gx < clip_x0 || gx + g->w > clip_x1) {
+		int32_t c0, c1;
+		glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
+		if (c0 < c1 && r0 < r1)
+			glyph1(c, g->bits, (g->w + 7) / 8, gx, gy, c0, c1, r0, r1, op);
+		return;
+	}
+	at = c->bx + gx;
+	w = row_at(c, gy + r0) + (at >> 4) * 2;
+	sh = 16 - (int) (at & 15);
+	keep = (unsigned) (0xffff0000UL >> g->w) & 0xffffU;
+	n = r1 - r0;
+#if defined(__m68k__) || defined(__mc68000__)
+	if ((at >> 4) + 1 < c->stride >> 1) {
+		/* (a long: the word after is the row's own) */
+		long stride = c->stride;
+		if (g->w <= 8) {
+			b = g->bits + r0;
+			if (op == OP1_SET) {
+				for (; n > 0; n--, w += stride) {
+					unsigned v = (unsigned) *b++ << 8;
+					if (v)
+						*(uint32_t *) (void *) w |= (uint32_t) v << sh;
+				}
+				return;
+			}
+		} else {
+			b = g->bits + 2 * r0;
+			if (op == OP1_SET) {
+				for (; n > 0; n--, w += stride, b += 2) {
+					unsigned v = ((unsigned) b[0] << 8 | b[1]) & keep;
+					if (v)
+						*(uint32_t *) (void *) w |= (uint32_t) v << sh;
+				}
+				return;
+			}
+		}
+	}
+#endif
+	{
+		int wide = g->w > 8;
+		b = g->bits + (wide ? 2 * r0 : r0);
+		for (; n > 0; n--, w += c->stride, b += wide ? 2 : 1) {
+			unsigned v = ((unsigned) b[0] << 8 | (wide ? b[1] : 0)) & keep;
+			if (v)
+				bits1(w, (uint32_t) v << sh, op);
+		}
+	}
 }
 #else
 #define CV_PLANES 0
@@ -267,7 +390,7 @@ static void fill_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint3
 		return;
 	}
 #endif
-	row = c->pix + y * c->stride + (c->bpp == 8 ? x : 2 * x);
+	row = c->pix + MUL16(y, c->stride) + (c->bpp == 8 ? x : 2 * x);
 	for (j = 0; j < h; j++, row += c->stride) {
 		if (c->bpp == 8) {
 #ifdef EW_ST
@@ -552,8 +675,34 @@ static void mix_px(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h)
 		return;
 	}
 #endif
+#if CV_PLANES
+	if (c->bpp == 1) {
+		/* what each pen becomes (a pen, or a level of the shade's
+		   pattern fixed to the page), as a pattern's words */
+		int v0 = mix_to[0] >= 0 ? mix_to[0] : mix_new(c, 0), v1 = mix_to[1] >= 0 ? mix_to[1] : mix_new(c, 1), k;
+		unsigned p0[4], p1[4];
+		for (k = 0; k < 4; k++) {
+			if (mix.t->kind == MIX_SHADE) {
+				const uint8_t *b = bayer[(y + k + c->oy) & 3];
+				uint8_t q0[4], q1[4];
+				for (i = 0; i < 4; i++) {
+					q0[i] = b[(x + i + c->ox) & 3] < v0 ? mix.light : mix.dark;
+					q1[i] = b[(x + i + c->ox) & 3] < v1 ? mix.light : mix.dark;
+				}
+				p0[k] = pattern1(c, x, q0);
+				p1[k] = pattern1(c, x, q1);
+			} else {
+				p0[k] = (v0 & 1) ? 0xffffU : 0;
+				p1[k] = (v1 & 1) ? 0xffffU : 0;
+			}
+		}
+		for (j = 0, o = row_at(c, y); j < h; j++, o += c->stride)
+			mix1(o, c->bx + x, c->bx + x + w, p0[j & 3], p1[j & 3]);
+		return;
+	}
+#endif
 	/* (a row's address stepped) */
-	for (j = y, o = c->pix + y * c->stride; j < y + h; j++, o += c->stride) {
+	for (j = y, o = c->pix + MUL16(y, c->stride); j < y + h; j++, o += c->stride) {
 		uint32_t last, to, *q, *qe;
 		if (c->bpp == 16) {
 			p = o + 2 * x;
@@ -626,6 +775,11 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 			}
 			return;
 		}
+		if (level <= 0 || level >= 16) {
+			/* (no pattern: all the dark pen, or all the light) */
+			fill_px(c, x0, y0, w, h, level <= 0 ? dark : light);
+			return;
+		}
 		x1 = x0 + w > c->w ? c->w : x0 + w;
 		y1 = y0 + h > c->h ? c->h : y0 + h;
 		if (x0 < 0)
@@ -648,7 +802,7 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 			return;
 		}
 #endif
-		for (j = y0, o = c->pix + y0 * c->stride + x0; j < y1; j++, o += c->stride)
+		for (j = y0, o = c->pix + MUL16(y0, c->stride) + x0; j < y1; j++, o += c->stride)
 			fill_pattern(o, x1 - x0, q[(j - y0) & 3]);
 		return;
 	}
@@ -731,14 +885,14 @@ static void glyph(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t pv)
 #if CV_PLANES
 	if (c->bpp == 1) {
 		if (r0 < r1)
-			glyph1(c, g->bits, stride, gx, gy, c0, c1, r0, r1, pv);
+			glyph1(c, g->bits, stride, gx, gy, c0, c1, r0, r1, (pv & 1) ? OP1_SET : OP1_CLEAR);
 		return;
 	}
 #endif
 	/* a row's address once, stepped (a multiply each row was a call of
 	   libgcc's on the 68000); the depth's own loop */
-	b0 = g->bits + r0 * stride;
-	o0 = c->pix + (gy + r0) * c->stride;
+	b0 = g->bits + MUL16(r0, stride);
+	o0 = c->pix + MUL16(gy + r0, c->stride);
 	if (DEEP(c)) {
 		for (row = r0; row < r1; row++, b0 += stride, o0 += c->stride)
 			for (col = c0; col < c1; col++)
@@ -844,9 +998,27 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 	if (g->bits == NULL)
 		return;
 	glyph_clip(c, g, gx, gy, &c0, &c1, &r0, &r1);
+#if CV_PLANES
+	if (c->bpp == 1) {
+		/* each pen's mix is a pen: the letter's bits set, cleared or
+		   inverted, or nothing at all */
+		int t0, t1;
+		if (c0 >= c1 || r0 >= r1)
+			return;
+		t0 = mix_to[0] >= 0 ? mix_to[0] : mix_new(c, 0);
+		t1 = mix_to[1] >= 0 ? mix_to[1] : mix_new(c, 1);
+		t0 &= 1;
+		t1 &= 1;
+		if (t0 == 0 && t1 == 1)
+			return;
+		glyph1(c, g->bits, stride, gx, gy, c0, c1, r0, r1,
+		       t0 == t1 ? (t0 ? OP1_SET : OP1_CLEAR) : OP1_INVERT);
+		return;
+	}
+#endif
 #ifndef EW_ST
 	if (DEEP(c)) {
-		const uint8_t *b = g->bits + r0 * stride;
+		const uint8_t *b = g->bits + MUL16(r0, stride);
 		uint8_t *o = c->pix + (gy + r0) * c->stride + 4 * gx;
 		for (row = r0; row < r1; row++, b += stride, o += c->stride)
 			for (col = c0; col < c1; col++)
@@ -857,8 +1029,8 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 #endif
 	if (c->bpp == 8) {
 		/* (an int16_t tested for its sign: no extending on the 68030) */
-		const uint8_t *b = g->bits + r0 * stride;
-		uint8_t *o = c->pix + (gy + r0) * c->stride + gx;
+		const uint8_t *b = g->bits + MUL16(r0, stride);
+		uint8_t *o = c->pix + MUL16(gy + r0, c->stride) + gx;
 		for (row = r0; row < r1; row++, b += stride, o += c->stride) {
 			for (col = c0; col < c1; col++)
 				if (b[col >> 3] & (0x80 >> (col & 7))) {
@@ -871,7 +1043,7 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 		return;
 	}
 	{
-		const uint8_t *b = g->bits + r0 * stride;
+		const uint8_t *b = g->bits + MUL16(r0, stride);
 		uint8_t *o = c->pix + (gy + r0) * c->stride + 2 * gx;
 		for (row = r0; row < r1; row++, b += stride, o += c->stride) {
 			for (col = c0; col < c1; col++)
@@ -881,6 +1053,19 @@ static void glyph_mix(canvas *c, const GLYPH *g, int32_t x, int32_t y, uint32_t 
 	}
 }
 
+/* cv_text's letter g at (px, py): straight into the plane, or drawn by
+   the depth's own */
+#if CV_PLANES
+#define DRAW_LETTER(g) do { \
+		if (op1 >= 0) \
+			letter1(c, (g), px, py, op1); \
+		else if (op1 == -2) \
+			draw(c, (g), px, py, pv); \
+	} while (0)
+#else
+#define DRAW_LETTER(g) draw(c, (g), px, py, pv)
+#endif
+
 void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint32_t n,
 	     uint32_t rgb, int flags)
 {
@@ -888,6 +1073,9 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 	uint32_t pv;
 	int32_t px = x - c->ox, py = base - c->oy, x0 = px;
 	int mixing = item_a != 255;
+#if CV_PLANES
+	int op1 = -2;			/* (one plane's letters: -2 not one plane, -1 none drawn) */
+#endif
 	/* solid or mixed: chosen once a run */
 	void (*draw)(canvas *, const GLYPH *, int32_t, int32_t, uint32_t) = mixing ? glyph_mix : glyph;
 	GLYPH g;
@@ -897,6 +1085,19 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 	if (mixing && !mix_init(c, rgb, MIX_PEN))
 		return;
 	pv = mixing ? 0 : pixel(c, rgb);
+#if CV_PLANES
+	if (c->bpp == 1) {
+		/* one plane: what the letters do to its bits, once a run (a
+		   translucent one's: each pen's mix a pen, the bits set,
+		   cleared or inverted, or nothing done) */
+		op1 = (pv & 1) ? OP1_SET : OP1_CLEAR;
+		if (mixing) {
+			int t0 = (mix_to[0] >= 0 ? mix_to[0] : mix_new(c, 0)) & 1,
+			    t1 = (mix_to[1] >= 0 ? mix_to[1] : mix_new(c, 1)) & 1;
+			op1 = t0 == t1 ? (t0 ? OP1_SET : OP1_CLEAR) : t0 ? OP1_INVERT : -1;
+		}
+	}
+#endif
 	if (flags & DLF_RTL) {
 		/* letters last to first: Hebrew words read right to left, the
 		   text read back from its end (a document's text is UTF-8 as
@@ -917,15 +1118,25 @@ void cv_text(canvas *c, ew_font *f, int32_t x, int32_t base, const char *s, uint
 			q = b;
 			font_glyph(f, mirrored(cp), &g);
 			if (px + g.adv + 8 > 0)
-				draw(c, &g, px, py, pv);
+				DRAW_LETTER(&g);
 			px += g.adv;
 		}
 	} else {
+		/* ASCII's glyphs from the face's table (font_ascii), no look-up
+		   each; a blank one (a space) not drawn at all */
+		const GLYPH *asc = font_ascii(f), *gp;
 		while (p < e && px < c->w) {
-			font_glyph(f, utf8_next(&p, e), &g);
-			if (px + g.adv + 8 > 0)
-				draw(c, &g, px, py, pv);
-			px += g.adv;
+			unsigned ch = (unsigned char) *p - 0x20;
+			if (ch < 96 && asc != NULL) {
+				gp = &asc[ch];
+				p++;
+			} else {
+				font_glyph(f, utf8_next(&p, e), &g);
+				gp = &g;
+			}
+			if (gp->bits != NULL && px + gp->adv + 8 > 0)
+				DRAW_LETTER(gp);
+			px += gp->adv;
 		}
 	}
 	if (flags & (DLF_UNDER | DLF_OVER | DLF_STRIKE)) {
@@ -2042,7 +2253,7 @@ static void grad(canvas *c, const dl_item *d)
 		grad_fill(c, d->x, d->y, d->w, d->h, grad_average(g, 0));
 		return;
 	}
-	mono = c->bpp == 8 && c->shade != NULL && c->shade(c->ud, 0, &dk, &lt) >= 0;
+	mono = (c->bpp == 8 || c->bpp == 1) && c->shade != NULL && c->shade(c->ud, 0, &dk, &lt) >= 0;
 	for (i = run = a0; i <= a1; i++) {
 		uint32_t key = 0;
 		if (i < a1) {
@@ -3588,11 +3799,15 @@ static void item(canvas *c, const page *p, const dl_item *d)
 	if (d->y >= bottom || d->y + d->h <= top || d->x >= right || d->x + d->w <= left)
 		return;
 	if (probing) {
-		/* (solid, or not drawn at all: fills, text, a picture or its
-		   frame; not tiles, gradients, controls or bars) */
+		/* (fills and text, solid or translucent, a picture or its
+		   frame, solid; the ST's gradients, runs of fills; not tiles,
+		   controls or bars) */
 		a = drawn_a(c, d->rgb >> 24);
-		if (a != 0 && (a != 255 || !(d->type == DL_FILL || d->type == DL_TEXT ||
-					     (d->type == DL_IMAGE && !(d->flags & DLF_TILE)))))
+		if (a != 0 && !(d->type == DL_FILL || d->type == DL_TEXT ||
+#ifdef EW_ST
+				d->type == DL_GRAD ||
+#endif
+				(d->type == DL_IMAGE && !(d->flags & DLF_TILE) && a == 255)))
 			probe_bad = 1;
 		return;
 	}
@@ -3615,7 +3830,7 @@ static void item(canvas *c, const page *p, const dl_item *d)
 			return;
 		}
 		sub = *c;
-		sub.pix = c->pix + (long) (y0 - c->oy) * c->stride + (long) (x0 - c->ox) * (c->bpp / 8);
+		sub.pix = c->pix + MUL16(y0 - c->oy, c->stride) + (long) (x0 - c->ox) * (c->bpp / 8);
 		if (c->bpp == 1)
 			sub.bx = c->bx + (x0 - c->ox);	/* (a bit a pixel: the row's start kept) */
 		sub.ox = x0;

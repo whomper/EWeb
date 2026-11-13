@@ -91,6 +91,8 @@ void font_drop(void)
 		faces[i].data = NULL;
 		free(faces[i].wt);
 		faces[i].wt = NULL;
+		free(faces[i].asc);
+		faces[i].asc = NULL;
 		for (b = 0; b < FONT_BLOCKS - 1; b++) {
 			free(faces[i].more[b]);
 			faces[i].more[b] = NULL;
@@ -578,6 +580,18 @@ const uint8_t *font_widths(ew_font *f)
 		f->wt[c] = (uint8_t) (a < 0 ? 0 : a > 255 ? 255 : a);	/* (a face under 64 px: none wider) */
 	}
 	return f->wt;
+}
+
+const GLYPH *font_ascii(ew_font *f)
+{
+	int c;
+	if (f == NULL || f->asc != NULL)
+		return f != NULL ? f->asc : NULL;
+	if (!ready(f) || (f->asc = malloc(96 * sizeof *f->asc)) == NULL)
+		return NULL;
+	for (c = 0; c < 96; c++)
+		font_glyph(f, (uint32_t) c + 0x20, &f->asc[c]);
+	return f->asc;
 }
 
 long font_width(ew_font *f, const char *s, size_t n)

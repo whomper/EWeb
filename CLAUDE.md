@@ -319,7 +319,10 @@ hub stay complete, with the evidence.
   yaary.music now), kept as a palette PNG of the screen's exact colours.
 - **The ST edition** is frozen after 1.0 (Erez, 4 Nov 2026; DESIGN.md, Decisions): bug fixes only,
   no new features; its rigs run for a release, not for each change, and a new feature stays out of
-  it (`EW_ST`). It is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
+  it (`EW_ST`). Its speed is worked on again (Erez, 13 Nov 2026: as fast as it can be; DESIGN.md, The
+  ST edition's speed): `PAGEST.TTP` and `speed.py ST:mono` before and after, and the monochrome
+  screen drawn straight into its plane (`canvas.bpp` 1, `cv_page_planes`; after changing it, `make
+  test`'s `tests/layout/planes.py`). It is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
   of libjpeg-turbo, `atari/ll68000.c`'s 64-bit arithmetic (libgcc's is 68020 code); check a build
   with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. `make test` runs common's

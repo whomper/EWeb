@@ -22,7 +22,7 @@ it, and how EWeb gets past CAPTCHAs.
 | 1.0 | **What 1.0 is** (31 Oct 2026) | No new features: (1) the disk cache in 4 MB pieces (done, 0.55); (2) dropped (31 Oct 2026, your decision): `EWEB.PRG` beside all four of the family's accessories on a stock 4 MB Falcon isn't a 1.0 goal, since the four together leave too little for any program there (with them loaded a program finds 1.61 MB, `EWEB.PRG` needs 1.74 MB to load); it still runs alone there (`make hatarigui`'s `falcon4`); (3) the guidelines' Speed rules met on `Falcon-4`, and on the `ST` its floor recorded (your choice of 31 Oct 2026, Speed on the stock machines; on 8 Nov 2026 you chose the stock Falcon's floor recorded too, 0.77's figures, the rule a goal after 1.0) (the speed rig within its times, text through common's `text_n`/`text_fx`, the colour rule 5.2 checked: done, 9 Nov 2026, the toolbar's frame the last fixed pen); (4) the layout's text measured faster than glyph by glyph; (6) webdriveruniversity.com shown and working, Direct and through the Pi (done, 9 Nov 2026: Scripts, The last pass); and a run on your DFB1 of the release that has them all. (9 Nov 2026, your decision: the release after 0.84 is 1.0, made with `tools/bump.py major`; the hub's family checks run on it as on any release, then your DFB1 run.) A smaller start (one overlay loader, the big tables taken when needed) only where (2) or (3) need it. |
 | File names | **Lowercase** (2 Nov 2026; the guidelines' 6.6) | On MiNT's ext2 `EWEB.INF` and `eweb.inf` are two files, and a tester's programs missed their own. Every file EWeb opens or makes by a name of its own is lowercase (`eweb.inf`, `eweb.log`, `eweb.key`, `cookies.txt`, `history.txt`, `bookmark.htm`, `cache\` with `ewebnn.pak`, `ewebnn.lst` and `eweb.idx`, `eweb.fnt`, `ewebjs.ovl`, `tls.ovl`, `cacert.pem`, `roots.dat`, `seed.dat`, `sigs.dat`, `eweb.hyp`, common's `crash.log`), and so is every file of a release and its zip, `eweb-x.y.zip` (`make dist`), and the file selector's mask (`*.htm`, which a case-sensitive drive needs to show `bookmark.htm` and saved pages); a fresh start, so nothing looks for an earlier install's capital names (an ext2 user deletes the old folder and installs anew). Names shown to the user (`EWEB.INF` in texts and the help), AES names, and the names of pages saved or downloaded stay as they are. The measuring tools (`EWGET.TTP` and the others), not shipped, keep theirs. |
 | User experience | **The first measure of quality** (4 Nov 2026) | What the user feels comes before everything else, scrolling first: as smooth and as fast as each machine allows. Each change is measured by what is seen (the screen whole after a line, a page, a held key, a drag), not only by how soon EWeb answers. |
-| ST edition | **Frozen after 1.0** (4 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
+| ST edition | **Frozen after 1.0** (4 Nov 2026); **its speed worked on again** (13 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. Since 13 Nov 2026 it is also made as fast as it can be ("reasonable for people to use instead of the other options out there": The ST edition's speed). Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
 | A long draw | **Whole on the Falcon and TT, as 0.69; in pieces on the ST** (Erez, 4 and 7 Nov 2026) | On 7 Nov 2026, after a day's work to make pieces as fast as whole (full-height runs, bands ending between lines, pieces one after another while no key waits: none closed the gap; per piece the screen taken, the mouse hidden and the window's rectangles walked again, about 10 ms of a stock Falcon's), Erez: "lets do this only for the ST". The 8 MHz ST draws a long page in pieces (its window answered after 0.76 s on the news page, against 3.3 s whole; the page done 12 to 17 % later); `EWEB.PRG` draws whole (`win_whole_only`: 0 in the ST edition). Before that: | Performance never goes backwards (Erez: "Performance must not go backwards or bad, just for the better always"). The family's rule of 4 Nov (a draw over 300 ms in pieces of at most 100 ms, keys answered between) made EWeb's pages finish later than 0.69's whole draw: on the stock Falcon (Falcon-4:16) 5 to 14 % (home 610 ms against 569, news 1090 against 954), on an 8 MHz ST in 300 ms pieces (Erez's choice for the ST) 9 to 18 %, in 100 ms ones 58 to 105 %. So EWeb draws whole, and the drawing is made faster until a page in pieces finishes no later than 0.69's whole; then the pieces are switched on (`win_whole_only` in `ui/win.c`). The pieces' code stays, measured by the speed build's `DRAWPIECES=1` (`tests/hatari/speed.py --pieces`; `AESWHOLE`, the time to the finished picture): whole or pieces told before the draw by the dearest rows lately, an ST's pieces up to 300 ms in bands of 32 rows. |
 | A window a page's script opens | **From a click or a key of the user's** (Erez, 7 Nov 2026: "yes, allow window.open from a click") | As browsers: `window.open` opens a window while the user's click or key is handled; at other times (as the page loads, from a timer) it is null, as a blocker of pop-ups answers. What the script writes into the `about:blank` it opened is that window's page, with its opener's site. (webdriveruniversity.com's AI Playground, New Tab; DESIGN.md, The AI Playground in use.) |
 | The mouse over a page | **Its scripts hear it; a click is the hover** (Erez, 8 Nov 2026: of hover as on a PC, a click as the hover, or none) | A page's scripts are told of the mouse as browsers tell them (mouseover, mouseout, mouseenter, mouseleave as it goes from element to element; mousedown, mouseup, click, dblclick; a drag whose press a script takes: mousemove with the button held), which costs nothing on a page that doesn't listen. What a page's CSS shows with the mouse over an element (`.menu:hover .submenu`, a hover menu) a click on that element shows, until the next click elsewhere, as on a phone: a page is laid out again only for a click that opens or closes such a thing, never as the mouse moves (on the stock Falcon a layout is 0.1 to 0.5 s on a small page, seconds on a big one). A :hover that only colours the element under the mouse is left out. (webdriveruniversity.com's Actions and Scrolling; DESIGN.md, The mouse.) |
@@ -5389,6 +5389,65 @@ again unless the memory picture changes. Under NVDI 1.2 couldn't load the rig's 
 | without NVDI: free at the start | 1,486,644 | 1,769,620 |
 | without NVDI: the big page | 17.4 s (the layout 12.0 s) | 17.8 s (the layout 12.3 s) |
 | without NVDI: loaded again | 19.5 s (made twice) | 17.4 s (the room made first) |
+
+## The ST edition's speed (13 Nov 2026)
+
+Erez, 13 Nov 2026: "Focus on the ST version and optimize it as best as you can. I want the ST edition
+to be reasonable for people to use instead of the other options out there." The freeze after 1.0
+(Decisions) stays for features; the ST edition's speed is worked on again. Measured on the
+cycle-exact 8 MHz ST in Hatari (TOS 1.04, monochrome) with the speed rig (`speed.py ST:mono`) and,
+for each part of making a page, `PAGEST.TTP` (`tests/bench/pagebench.c`: the news page parsed,
+styled, laid out and drawn as `EWEBST.PRG` does, each step timed; `tests/bench/pagest.py`, with
+`--profile` Hatari's profiler naming each function's cycles, `--draw` the drawing's alone).
+
+**The hot files -O2.** The ST edition is `-Os` (its code was for a 1 MB ST); the files a page's making
+and drawing spend their time in are `-O2` (`ST_HOT` in the Makefile: the layout, the HTML parser and
+the document, the CSS engine, the canvas and the fonts, the screen, the pictures' common code, libc's
+copies), 100 KB more code (all of it `-O2`, 227 KB more, was 8 to 12% faster on every row of the
+rig; these files are where that came from).
+
+**One plane.** The monochrome screen was drawn as every planar screen is: a byte a pixel, then
+`to_planes` made the plane (37 cycles a pixel) before `vro_cpyfm`. A band whose items `cv_page_planes`
+takes is drawn straight into a buffer of the screen's own plane (`canvas.bpp` 1, `bx` the band's
+first bit; `ui/screen.c`'s `scr_page`): fills and their 4 x 4 patterns a word at a time, letters a
+row at a time, pictures' pens a bit at a time. A translucent fill or letter is drawn there too: on two
+pens each pen's mix is a pen or a level of the shade's pattern, so the new bit is
+`p0 ^ (old & (p0 ^ p1))` with `p0` and `p1` the words of what pen 0 and pen 1 become (`mix1`), and a
+letter's bits are set, cleared or inverted (`OP1_*`); the ST's gradients are runs of fills. Left to
+the byte a pixel: tiled pictures, controls, a box's scroll bars, a picture behind the whole canvas. On
+the news page 3,081 of its 3,123 bands (16 rows, every place and part across of `planes.py`) are drawn
+in the plane, and `make test`'s `tests/layout/planes.py` checks every band of every test page both
+ways, the same bits (the host's ewrender and the ST's, `-DEW_ST`, under ASan and UBSan;
+`tests/layout/mixmono.html` the translucent ones).
+
+**The 68000's slow operations out of the letters' loops.** Drawing a letter was about 3,500 cycles,
+4.8 of its rows in a band on average: the font's look-up for each (now a table of a face's ASCII
+glyphs, `font_ascii`), libgcc's 32-bit multiply for a row's place (GCC 13 makes even a 16 by 16
+multiply a call of `__mulsi3`: `mulu16`, the 68000's `mulu.w`, for the canvas's rows) and `glyph1`'s
+setup for any clipping (`letter1`: a letter whole across and up to 16 pixels wide, most of them, a row
+one shift and one long or'ed in, its operation once a run). The screen's shade for a colour (nine long
+multiplies and a divide each fill) is kept for the last few colours, and a fill of a shade with no
+pattern (all dark or all light) is a plain fill.
+
+**A sheet's scan for SVG's properties** (`svg_block` in `src/css/sheet.c`) looked at each byte through
+libc's `strpbrk` and `strchr`: one look now.
+
+| `ST:mono`, ms | before (1.6) | -O2 and one plane | now |
+|---|---|---|---|
+| the program started, window drawn | 1,740 | 1,550 | 1,550 |
+| a line scrolled, the window whole | 875 | 755 | 555 |
+| a page scrolled, the window whole | 2,945 | 2,380 | 1,785 |
+| an arrow held 3 s, down | 2,275 | 1,190 | 990 |
+| an arrow held 3 s, up | 4,485 | 3,405 | 2,525 |
+| the page's end | 1,725 | 1,485 | 625 |
+| 3 pages up | 1,815 | 895 | 810 |
+| 4 pages down after 10 s | 3,095 | 2,720 | 1,650 |
+| the news page loaded, its picture finished | 3,664 | 3,204 | 2,409 |
+| the longest stretch, a line scrolled | 460 | 445 | 265 |
+
+`PAGEST.TTP`, the news page (816 elements, 1,000 rules, 2,873 rows): drawn 23.2 s (8.1 ms a row) to
+14.0 s (4.9 ms a row, the byte a pixel's `to_planes` not counted in either); parsed 6.6 s, styled
+16.3 s, laid out 16.5 s. Making a page is next: the styling and the layout.
 
 ## The design
 

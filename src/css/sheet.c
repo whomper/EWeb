@@ -1772,15 +1772,20 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
    doesn't compute: an inline SVG's picture reads them, ec_svg_decls)? */
 static int svg_block(const char *t)
 {
-	for (; (t = strpbrk(t, "fFsS")) != NULL; t++) {
-		if ((t[0] | 0x20) == 'f' && (t[1] | 0x20) == 'i' && (t[2] | 0x20) == 'l' && (t[3] | 0x20) == 'l')
-			return 1;
-		if ((t[0] | 0x20) == 's' && (t[1] | 0x20) == 't' && (t[2] | 0x20) == 'r' && (t[3] | 0x20) == 'o' &&
-		    (t[4] | 0x20) == 'k' && (t[5] | 0x20) == 'e')
-			return 1;
-		if ((t[0] | 0x20) == 's' && (t[1] | 0x20) == 't' && (t[2] | 0x20) == 'o' && (t[3] | 0x20) == 'p' &&
-		    t[4] == '-')
-			return 1;
+	/* (each byte looked at once: libc's strpbrk asks strchr of each, a
+	   tenth of an 8 MHz ST's styling of the news page's sheet) */
+	unsigned ch;
+	for (; (ch = (unsigned char) *t) != 0; t++) {
+		ch |= 0x20;
+		if (ch == 'f') {
+			if ((t[1] | 0x20) == 'i' && (t[2] | 0x20) == 'l' && (t[3] | 0x20) == 'l')
+				return 1;
+		} else if (ch == 's' && (t[1] | 0x20) == 't') {
+			if ((t[2] | 0x20) == 'r' && (t[3] | 0x20) == 'o' && (t[4] | 0x20) == 'k' && (t[5] | 0x20) == 'e')
+				return 1;
+			if ((t[2] | 0x20) == 'o' && (t[3] | 0x20) == 'p' && t[4] == '-')
+				return 1;
+		}
 	}
 	return 0;
 }

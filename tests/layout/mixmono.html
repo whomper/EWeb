@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- translucent fills and letters on the ST's monochrome screen, drawn straight
+     into its plane (tests/layout/planes.py): pens mixed to a pen, set, cleared or
+     inverted, and to a shade's pattern chosen by the pen under it -->
+<html><body style="background:#ccc">
+<div style="background:#000;color:rgba(255,255,255,.6);padding:8px">white at .6 on black <u>underlined</u></div>
+<div style="background:#888;color:rgba(0,0,0,.5);padding:8px">black at .5 on grey</div>
+<div style="background:linear-gradient(#fff,#000)">gradient</div>
+<div style="background:rgba(0,0,0,.3);padding:10px">a translucent box over grey<div style="background:rgba(255,255,255,.5);margin:6px;padding:6px;color:rgba(128,0,0,.8)">nested, with red text at .8</div></div>
+<div style="background:#000;padding:10px"><div style="background:rgba(255,255,255,.25);padding:10px;color:rgba(255,255,255,.3)">light at .25 on black, text at .3</div></div>
+<p style="color:rgba(0,0,0,.2)">faint text at .2, almost nothing</p>
+<p style="opacity:.5;background:#444;color:#fff">opacity .5: a dark box, white text</p>
+</body></html>

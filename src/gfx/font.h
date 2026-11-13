@@ -34,6 +34,7 @@ typedef struct ew_font {
 	uint8_t *more[FONT_BLOCKS - 1];	/* its other blocks, each read when a page first needs one
 					   of their characters (Greek, Cyrillic...) */
 	uint8_t *wt;			/* font_widths' table, made when first asked for */
+	GLYPH *asc;			/* font_ascii's, made when first asked for */
 	int failed;
 } ew_font;
 
@@ -58,6 +59,10 @@ long font_width(ew_font *f, const char *s, size_t n);
    entries, 0 from 0x80 on): a word of them measured as it is read (the
    layout's words). NULL when the face can't be read */
 const uint8_t *font_widths(ew_font *f);
+/* the glyphs of ' ' to 0x7F, as font_glyph gives them, by the character
+   less 0x20 (96): a page's letters drawn without a look-up each. NULL
+   when the face can't be read */
+const GLYPH *font_ascii(ew_font *f);
 
 /* the next character of UTF-8 text at *p (before end); bad bytes come
    out as U+FFFD, one at a time */

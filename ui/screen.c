@@ -411,15 +411,34 @@ static uint8_t pen(void *ud, uint32_t rgb)
    its brightness (pure white and black stay solid) */
 static int shade(void *ud, uint32_t rgb, uint8_t *dark, uint8_t *light)
 {
-	long y = 299L * (rgb >> 16 & 255) + 587L * (rgb >> 8 & 255) + 114L * (rgb & 255);
-	long y0 = 299L * pal[0][0] + 587L * pal[0][1] + 114L * pal[0][2];
-	long y1 = 299L * pal[1][0] + 587L * pal[1][1] + 114L * pal[1][2];
-	int white = y0 >= y1 ? 0 : 1;
+	/* (each item's colour asks: the last few colours' levels kept, and
+	   which pen is white while the two pens are as they were; nine long
+	   multiplies and a divide each time were libgcc's calls on the ST,
+	   a tenth of its drawing of a page) */
+	static uint32_t key[8] = { 0xffffffffUL, 0xffffffffUL, 0xffffffffUL, 0xffffffffUL,
+				   0xffffffffUL, 0xffffffffUL, 0xffffffffUL, 0xffffffffUL };
+	static int8_t lev[8];
+	static uint8_t was[2][3];
+	static int white = -1;
+	unsigned k;
 	if (ncol != 2)
 		return -1;
+	if (white < 0 || memcmp(was, pal, sizeof was) != 0) {
+		long y0 = 299L * pal[0][0] + 587L * pal[0][1] + 114L * pal[0][2];
+		long y1 = 299L * pal[1][0] + 587L * pal[1][1] + 114L * pal[1][2];
+		memcpy(was, pal, sizeof was);
+		white = y0 >= y1 ? 0 : 1;
+	}
 	*light = (uint8_t) white;
 	*dark = (uint8_t) !white;
-	return (int) ((y * 16 + 127500L) / 255000L);
+	rgb &= 0xffffff;
+	k = (unsigned) (rgb ^ rgb >> 9 ^ rgb >> 17) & 7;
+	if (key[k] != rgb) {
+		long y = 299L * (rgb >> 16 & 255) + 587L * (rgb >> 8 & 255) + 114L * (rgb & 255);
+		key[k] = rgb;
+		lev[k] = (int8_t) ((y * 16 + 127500L) / 255000L);
+	}
+	return lev[k];
 }
 
 /* a picture as decoded at its size (img.c), and its pens in the modes
