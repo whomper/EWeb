@@ -32,13 +32,14 @@ with its DFB1X and TT-RAM off); --nvdi runs each under Erez's NVDI with its GDOS
 AERA_NVDI; on the ST too, Erez, 2 Nov 2026); --prg the folder
 the programs are taken from (build/prof; another for a build before a
 change, to time both); --profile has Hatari's profiler count the whole
-session's cycles, written at the quit as OUT/MACHINE/profile.txt by
+session's cycles, written at the quit as OUT/MACHINE-profile/profile.txt by
 function (the speed build logs where its log_event is). Each machine's
 table is printed; 1 when any action is over its time.
 """
 import bisect
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -225,15 +226,18 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
     if machine.startswith("Falcon-14"):
         base, extra = "Falcon-4" + machine[len("Falcon-14"):], ("--memsize", "14")
     work = os.path.abspath(os.path.join(out, re.sub(r"[^a-z0-9]+", "-", machine.lower()) + ("-nvdi" if nvdi else "")))
-    raw = os.path.join(work, "profile.raw")
+    # (beside the rig's folder, which the rig empties as it starts)
+    pdir = work + "-profile"
+    raw = os.path.join(pdir, "profile.raw")
     if profile:
         # the profiler on from the boot, saved at EWeb's Pterm (^Q)
-        os.makedirs(work, exist_ok=True)
-        with open(os.path.join(work, "save.ini"), "w") as f:
+        shutil.rmtree(pdir, ignore_errors=True)
+        os.makedirs(pdir)
+        with open(os.path.join(pdir, "save.ini"), "w") as f:
             f.write("profile save %s\n" % raw)
-        with open(os.path.join(work, "prof.ini"), "w") as f:
-            f.write("profile on\nb GemdosOpcode = 0x4C :once :file %s\n" % os.path.join(work, "save.ini"))
-        extra = tuple(extra) + ("--parse", os.path.join(work, "prof.ini"))
+        with open(os.path.join(pdir, "prof.ini"), "w") as f:
+            f.write("profile on\nb GemdosOpcode = 0x4C :once :file %s\n" % os.path.join(pdir, "save.ini"))
+        extra = tuple(extra) + ("--parse", os.path.join(pdir, "prof.ini"))
     r = speed.Rig(work, base, nvdi=nvdi, display=":93" if st else ":92", extra=extra)
     if extra:
         print("NOTE  %s: %s with %s" % (machine, base, " ".join(extra)), flush=True)
@@ -336,7 +340,7 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
                 time.sleep(1)
             time.sleep(2)
             name_profile(raw, r.log, os.path.join(prgdir, "ewebst.elf" if st else "eweb.elf"),
-                         os.path.join(work, "profile.txt"))
+                         os.path.join(pdir, "profile.txt"))
         bad = r.report()
         # what the user sees (Erez, 4 Nov 2026: the user's experience
         # first), recorded, not held to a time: the window whole after
