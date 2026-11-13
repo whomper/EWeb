@@ -293,6 +293,32 @@ static inline void bit1(uint8_t *row, int32_t at, int on)
 static inline void glyph_clip(const canvas *c, const GLYPH *g, int32_t gx, int32_t gy, int32_t *c0, int32_t *c1,
 			      int32_t *r0, int32_t *r1);
 
+/* a row of a solid picture's pens (s[0] at bit b0, to b1): each pen's
+   low bit, 16 of them made into a word at a time (bit1's for each pixel
+   was about 80 cycles of an 8 MHz ST's, more than the byte a pixel and
+   to_planes it replaced) */
+static void pens1(uint8_t *row, int32_t b0, int32_t b1, const uint8_t *s)
+{
+	uint8_t *o = row + (b0 >> 4) * 2;
+	while (b0 < b1) {
+		int at = (int) (b0 & 15), n = 16 - at, k;
+		unsigned w = 0, m;
+		if (n > b1 - b0)
+			n = (int) (b1 - b0);
+		for (k = 0; k < n; k++)
+			w = w << 1 | (*s++ & 1);
+		if (n == 16) {
+			ST16(o, w);
+		} else {
+			int lo = 16 - at - n;
+			m = ((1U << n) - 1) << lo;
+			ST16(o, (LD16(o) & ~m) | (w << lo));
+		}
+		o += 2;
+		b0 += n;
+	}
+}
+
 /* a letter of cv_text's on the plane, op's: one up to 16 pixels wide,
    whole across (most of a page's) drawn here, a row one shift and one
    long or'ed in; any other through glyph1 (glyph1's setup for each
@@ -1190,6 +1216,10 @@ void cv_picture(canvas *c, const PIC *pic, const uint8_t *pens, int32_t x, int32
 			/* (each pen's bit; less than opaque as at 8 bits below) */
 			const uint8_t *s = pens + k, *b = bayer[(py + j + c->oy) & 3];
 			int32_t at = c->bx + px;
+			if (op == 255 && a == NULL) {
+				pens1(row, at + x0, at + x1, s + x0);
+				continue;
+			}
 			for (i = x0; i < x1; i++)
 				if ((op == 255 || op > b[(px + i + c->ox) & 3] * 16u + 8) && (a == NULL || a[i] >= 128))
 					bit1(row, at + i, s[i] & 1);
