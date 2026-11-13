@@ -164,6 +164,12 @@ static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, i
 			if (v == 0)
 				continue;
 			at = c->bx + gx + bi * 8;
+			if (at < 0) {
+				/* (a glyph begun left of the canvas: the columns there
+				   are masked off, its byte from column 0) */
+				v = (v << -at) & 0xffU;
+				at = 0;
+			}
 			w = o + (at >> 4) * 2;
 			s = (uint32_t) v << (24 - (at & 15));
 			if (on) {
