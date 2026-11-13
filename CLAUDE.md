@@ -119,7 +119,10 @@ hub stay complete, with the evidence.
   `build/m68k/docparse` is the HTML parse as `EWEB.PRG` does it (on the Atari's heap); `tests/bench/measure.py` does the whole set; `drawbench -m` prints the heap (the Atari's allocator) after parsing, styling and layout, and its peak; `tests/bench/hatari.py` times
   `NSBENCH.TTP` on an emulated 32 MHz Falcon; `tests/bench/picbench.py` times a picture decoded
   and dithered as EWeb does it: `PICBENCH.TTP` (as `EWEB.PRG`, on the 68030 and with the DSP) on
-  the Falcon, `PICBST.TTP` (as `EWEBST.PRG`) on the cycle-exact 8 MHz ST.
+  the Falcon, `PICBST.TTP` (as `EWEBST.PRG`) on the cycle-exact 8 MHz ST; `tests/bench/pagest.py` times
+  `PAGEST.TTP` (`tests/bench/pagebench.c`: a page parsed, styled, laid out and drawn on the monochrome
+  screen as `EWEBST.PRG` does it; the news page by default) there too, `--profile OUT` naming where its
+  cycles go and `--draw` from the drawing's start only.
   **The stock machines' speed** (the bullet above): `make hatarispeed` (`tests/hatari/speed.py` on
   common's `tests/speed`) does the user's actions on the stock Falcon (`Falcon-4:16`, `--nvdi` under
   Erez's NVDI) and the 8 MHz ST (`ST:mono`) and prints each one's longest stretch between event

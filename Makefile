@@ -830,6 +830,25 @@ build/st/picbench.elf: $(st_RT) build/st/bench/picbench.o build/st/bench/plat_pi
 binary/PICBST.TTP: build/st/picbench.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+# PAGEST.TTP: a page parsed, styled, laid out and drawn as EWEBST.PRG
+# does on the ST's monochrome screen (the same objects, -O2 where they
+# are), each step timed; tests/bench/pagest.py runs it on the emulated
+# 8 MHz ST, --profile for where its cycles go
+PAGEST_OBJ := $(addprefix build/st/ewb/,doc/doc.o doc/form.o doc/html.o doc/ua.o layout/layout.o layout/find.o \
+	gfx/canvas.o gfx/font.o)
+build/st/bench/pagebench.o: tests/bench/pagebench.c tests/bench/plat.h $(EWB_HDRS)
+	@mkdir -p $(@D)
+	$(M68KCC) $(ST_CFLAGS) $(EWB_FLAGS) $(NSINC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+build/st/bench/plat_page.o: tests/bench/plat_tos.c tests/bench/plat.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PAGEST"' -DBENCH_TITLE='"pagebench"' \
+		-DBENCH_MAIN=pagebench -Itests/bench -c $< -o $@
+build/st/pagebench.elf: $(st_RT) build/st/bench/pagebench.o build/st/bench/plat_page.o $(PAGEST_OBJ) $(st_EC) $(st_PU) \
+		build/st/net/util.o build/st/net/inflate.o build/st/net/plat_tos.o build/st/net/bigbuf.o $(ST_FB_OBJ)
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+binary/PAGEST.TTP: build/st/pagebench.elf common/tools/elf2tos.py
+	@mkdir -p binary
+	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
@@ -1269,7 +1288,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/js/needs.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/svgcss.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/deep32.py build/asan/ewrender binary/EWEB.FNT
-	python3 tests/layout/planes.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/planes.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the

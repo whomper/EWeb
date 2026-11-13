@@ -86,17 +86,23 @@ def main():
     sys.exit(0 if "done (0)" in text else 1)
 
 
-def name_profile(raw, log, prog, out):
+def name_profile(raw, log, prog, out, elf=None):
     """Hatari's profile, the program's addresses as its functions: the
     cycles of each, most first"""
     import re
     base = int(re.search(r"program in \S+ at \$([0-9a-f]+)", log).group(1), 16)
-    elf = os.path.join(ROOT, "build", "st" if prog == "PICBST" else "tos", "picbench.elf")
+    if elf is None:
+        elf = os.path.join(ROOT, "build", "st" if prog == "PICBST" else "tos", "picbench.elf")
     syms = []
     for line in subprocess.run(["m68k-linux-gnu-nm", "-n", elf], capture_output=True, text=True).stdout.splitlines():
         f = line.split()
         if len(f) == 3 and f[1] in "tT":
             syms.append((int(f[0], 16), f[2]))
+    # (two static functions of one name, in two files: each by its address)
+    seen = {}
+    for _, n in syms:
+        seen[n] = seen.get(n, 0) + 1
+    syms = [(a, n if seen[n] == 1 else "%s@%x" % (n, a)) for a, n in syms]
     text0 = min(a for a, _ in syms)
     text1 = text0
     for line in subprocess.run(["m68k-linux-gnu-size", "-A", elf], capture_output=True, text=True).stdout.splitlines():

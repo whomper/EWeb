@@ -18,6 +18,8 @@ void plat_init(void);
 int nsbench(int argc, char **argv);
 /* picbench.c: a picture decoded, each step timed (PICBENCH.TTP) */
 int picbench(int argc, char **argv);
+/* pagebench.c: a page made and drawn as EWEBST.PRG does (PAGEST.TTP) */
+int pagebench(int argc, char **argv);
 /* the whole file, with a 0 after it, or NULL */
 char *load(const char *path, size_t *len);
 void out(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
