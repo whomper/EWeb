@@ -709,7 +709,11 @@ static int32_t font_px(L *l, const ec_style *s)
 }
 
 /* the face's family for a list of names: the first EWeb knows the kind
-   of, else the generic family */
+   of, else the generic family. Sans faces as wide as Arial and the generic
+   sans-serif (Arial or Helvetica where most pages are made) are DejaVu
+   Sans Condensed, of Arial's widths; DejaVu Sans itself, and Verdana's
+   kind as wide as it, DejaVu Sans (Erez's choice C, 13 Nov 2026: pages made
+   for Arial lay out as made; EWeb's own pages name DejaVu Sans) */
 static int family_of(const ec_family *f)
 {
 	int fam = -1, i;
@@ -722,13 +726,16 @@ static int family_of(const ec_family *f)
 			    contains_ci(nm, n, "consol") || contains_ci(nm, n, "menlo") ||
 			    contains_ci(nm, n, "code") || contains_ci(nm, n, "typewriter"))
 				fam = FF_MONO;
+			else if (contains_ci(nm, n, "dejavu") || contains_ci(nm, n, "vera") ||
+				 contains_ci(nm, n, "verdana") || contains_ci(nm, n, "tahoma") ||
+				 contains_ci(nm, n, "geneva"))
+				fam = contains_ci(nm, n, "serif") && !contains_ci(nm, n, "sans") ? FF_SERIF : FF_SANS;
 			else if (contains_ci(nm, n, "sans") || contains_ci(nm, n, "arial") ||
-				 contains_ci(nm, n, "helvetica") || contains_ci(nm, n, "verdana") ||
-				 contains_ci(nm, n, "roboto") || contains_ci(nm, n, "segoe") ||
-				 contains_ci(nm, n, "system") || contains_ci(nm, n, "tahoma") ||
+				 contains_ci(nm, n, "helvetica") || contains_ci(nm, n, "roboto") ||
+				 contains_ci(nm, n, "segoe") || contains_ci(nm, n, "system") ||
 				 contains_ci(nm, n, "open") || contains_ci(nm, n, "lato") ||
 				 contains_ci(nm, n, "inter") || contains_ci(nm, n, "noto"))
-				fam = FF_SANS;
+				fam = FF_COND;
 			else if (contains_ci(nm, n, "serif") || contains_ci(nm, n, "times") ||
 				 contains_ci(nm, n, "georgia") || contains_ci(nm, n, "garamond") ||
 				 contains_ci(nm, n, "palatino") || contains_ci(nm, n, "book") ||
@@ -740,6 +747,9 @@ static int family_of(const ec_family *f)
 				fam = FF_MONO;
 			else if (f->generic == KW_SERIF || f->generic == KW_UI_SERIF)
 				fam = FF_SERIF;
+			else if (f->generic == KW_SANS_SERIF || f->generic == KW_UI_SANS_SERIF ||
+				 f->generic == KW_SYSTEM_UI)
+				fam = FF_COND;
 		}
 	}
 	if (fam < 0)

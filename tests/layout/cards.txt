@@ -1,64 +1,64 @@
 page 608 x 580, background ffffff, 64 items, 3 links, title "Cards and dots"
 drawn: 0-55 58-63 57-57 56-56
-text 12,22 14x13 #000000 sans10 bold link 1 "01"
-text 12,34 181x13 #000000 sans10 link 1 "A long title that takes three lines in its"
-text 12,46 46x13 #000000 sans10 link 1 "card here"
+text 12,22 12x13 #000000 cond10 bold link 1 "01"
+text 12,34 172x13 #000000 cond10 link 1 "A long title that takes three lines in"
+text 12,46 61x13 #000000 cond10 link 1 "its card here"
 fill 12,48 181x18 #cc3333
-text 90,61 24x13 #ffffff sans10 link 1 "Grab"
+text 91,61 23x13 #ffffff cond10 link 1 "Grab"
 fill 6,6 193x1 #888888
 fill 6,71 193x1 #888888
 fill 6,7 1x64 #888888
 fill 198,7 1x64 #888888
 fill 6,6 193x66 #00000000 link 1
-text 213,22 14x13 #000000 sans10 bold link 2 "02"
-text 213,34 27x13 #000000 sans10 link 2 "Short"
+text 213,22 12x13 #000000 cond10 bold link 2 "02"
+text 213,34 26x13 #000000 cond10 link 2 "Short"
 fill 213,48 181x18 #cc3333
-text 291,61 24x13 #ffffff sans10 link 2 "Grab"
+text 292,61 23x13 #ffffff cond10 link 2 "Grab"
 fill 207,6 193x1 #888888
 fill 207,71 193x1 #888888
 fill 207,7 1x64 #888888
 fill 399,7 1x64 #888888
 fill 207,6 193x66 #00000000 link 2
-text 414,22 14x13 #000000 sans10 bold link 3 "03"
-text 414,34 46x13 #000000 sans10 link 3 "Short too"
+text 414,22 12x13 #000000 cond10 bold link 3 "03"
+text 414,34 45x13 #000000 cond10 link 3 "Short too"
 fill 414,48 181x18 #cc3333
-text 492,61 24x13 #ffffff sans10 link 3 "Grab"
+text 493,61 23x13 #ffffff cond10 link 3 "Grab"
 fill 408,6 193x1 #888888
 fill 408,71 193x1 #888888
 fill 408,7 1x64 #888888
 fill 600,7 1x64 #888888
 fill 408,6 193x66 #00000000 link 3
-text 12,98 26x13 #000000 sans10 link 0 "Head"
+text 12,98 25x13 #000000 cond10 link 0 "Head"
 fill 12,100 120x24 #eeeeff
-text 12,110 29x13 #000000 sans10 link 0 "grows"
+text 12,110 28x13 #000000 cond10 link 0 "grows"
 fill 12,124 120x12 #cceecc
-text 12,134 20x13 #000000 sans10 link 0 "foot"
+text 12,134 19x13 #000000 cond10 link 0 "foot"
 fill 6,82 132x1 #3366cc
 fill 6,141 132x1 #3366cc
 fill 6,83 1x58 #3366cc
 fill 137,83 1x58 #3366cc
-text 152,116 37x13 #000000 sans10 link 0 "centred"
+text 152,116 37x13 #000000 cond10 link 0 "centred"
 fill 146,82 132x1 #3366cc
 fill 146,141 132x1 #3366cc
 fill 146,83 1x58 #3366cc
 fill 277,83 1x58 #3366cc
-text 292,98 112x13 #000000 sans10 link 0 "A taller column, its text"
-text 292,110 104x13 #000000 sans10 link 0 "going on over several"
-text 292,122 104x13 #000000 sans10 link 0 "lines to make the row"
-text 292,134 14x13 #000000 sans10 link 0 "tall"
+text 292,98 113x13 #000000 cond10 link 0 "A taller column, its text"
+text 292,110 104x13 #000000 cond10 link 0 "going on over several"
+text 292,122 104x13 #000000 cond10 link 0 "lines to make the row"
+text 292,134 16x13 #000000 cond10 link 0 "tall"
 fill 286,82 132x1 #3366cc
 fill 286,141 132x1 #3366cc
 fill 286,83 1x58 #3366cc
 fill 417,83 1x58 #3366cc
 fill 6,154 8x8 #cc3333
-text 22,162 33x13 #000000 sans10 bold link 0 "Brand"
+text 22,162 29x13 #000000 cond10 bold link 0 "Brand"
 fill 6,178 6x6 #33aa33
-text 15,184 148x13 #000000 sans10 link 0 "An inline-block before the text."
+text 15,184 148x13 #000000 cond10 link 0 "An inline-block before the text."
 fill 6,196 10x10 #3333cc
-text 21,206 130x13 #000000 sans10 link 0 "A flex item before the text"
+text 21,206 126x13 #000000 cond10 link 0 "A flex item before the text"
 fill 6,220 3x8 #cc9900
-text 17,228 135x13 #000000 sans10 link 0 "A bar at the left, positioned."
-text 6,250 163x13 #000000 sans10 link 0 "Empty content and inline: no box."
+text 17,228 136x13 #000000 cond10 link 0 "A bar at the left, positioned."
+text 6,250 162x13 #000000 cond10 link 0 "Empty content and inline: no box."
 fill 6,262 320x194 #eeeeee
 image 6,262 192x96 link 0 "block 60%" data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mM4Y2w8IIhh1OJRi0ctHrV41OJRi0ctHrV45FgMALcKvG66qgnAAAAAAElFTkSuQmCC
 image 6,358 192x96 link 0 "inline 60%" data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAIAAABwJOjsAAAAJElEQVR42mM4Y2w8IIhh1OJRi0ctHrV41OJRi0ctHrV45FgMALcKvG66qgnAAAAAAElFTkSuQmCC

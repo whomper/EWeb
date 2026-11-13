@@ -1,40 +1,40 @@
 page 608 x 495, background ffffff, 42 items, 2 links, title "Bottoms, % tops and styled controls"
 drawn: 21-41 0-20
 fill 6,6 596x96 #eeeeff
-text 6,16 91x13 #000000 sans10 link 0 "a box of set height"
+text 6,16 90x13 #000000 cond10 link 0 "a box of set height"
 fill 6,86 596x16 #003366
-text 6,96 63x13 #ffffff sans10 link 0 "at its bottom"
-fill 555,82 39x12 #cc6600
-text 555,92 39x13 #ffffff sans10 link 0 "10px up"
+text 6,96 63x13 #ffffff cond10 link 0 "at its bottom"
+fill 556,82 38x12 #cc6600
+text 556,92 38x13 #ffffff cond10 link 0 "10px up"
 fill 6,6 48x48 #cc3333
 fill 6,108 596x51 #eeffee
-text 6,128 567x13 #000000 sans10 link 0 "a box as tall as its text, which is two lines long here because it has quite a lot of words in it, so that the bottom moves"
+text 6,128 571x13 #000000 cond10 link 0 "a box as tall as its text, which is two lines long here because it has quite a lot of words in it, so that the bottom moves"
 fill 6,143 596x16 #003366
-text 6,153 63x13 #ffffff sans10 link 0 "at its bottom"
+text 6,153 63x13 #ffffff cond10 link 0 "at its bottom"
 fill 6,165 596x96 #eeeeff
 fill 255,196 96x32 #339933
-text 255,206 37x13 #000000 sans10 link 0 "centred"
+text 255,206 37x13 #000000 cond10 link 0 "centred"
 fill 6,267 596x80 #cccccc
-text 6,277 26x13 #000000 sans10 link 0 "slides"
+text 6,277 28x13 #000000 cond10 link 0 "slides"
 fill 6,267 89x80 #ff00004c
 fill 43,300 13x13 #0000ff
 fill 9,338 6x6 #000000
 fill 513,267 89x80 #ff00004c
 fill 550,300 13x13 #0000ff
 fill 6,353 240x34 #ffffee
-text 89,368 80x13 #000000 sans10 link 0 "one radio button"
-text 96,385 65x13 #000000 sans10 link 0 "another radio"
+text 89,368 81x13 #000000 cond10 link 0 "one radio button"
+text 95,385 66x13 #000000 cond10 link 0 "another radio"
 fill 6,397 172x28 #ffffff
 fill 6,397 172x1 #999999
 fill 6,424 172x1 #999999
 fill 6,398 1x26 #999999
 fill 177,398 1x26 #999999
-fill 181,400 158x22 #ddeeff
+fill 181,400 138x22 #ddeeff
 fill 6,435 596x28 #ffffff
 fill 6,435 596x1 #808080
 fill 6,462 596x1 #808080
 fill 6,435 1x28 #808080
 fill 601,435 1x28 #808080
-fill 6,463 71x26 #003366
+fill 6,463 66x26 #003366
 link 1 file://./tests/layout/absbottom.html#p
 link 2 file://./tests/layout/absbottom.html#n

@@ -420,7 +420,7 @@ static void esc(SBUF *s, const char *t)
 }
 
 static const char own_style[] =
-	"<style>body{font-family:sans-serif;margin:24px 32px;color:#222;background:#fff}"
+	"<style>body{font-family:\"DejaVu Sans\",sans-serif;margin:24px 32px;color:#222;background:#fff}"
 	"h1{font-size:22px;margin:0 0 12px}p{margin:8px 0}.addr{color:#555}"
 	"ul{margin:8px 0}li{margin:3px 0}.small{font-size:13px;color:#555}</style>";
 

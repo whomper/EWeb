@@ -1,21 +1,21 @@
 page 608 x 157, background ffffff, 19 items, 1 links, title "forumrow"
 fill 6,6 596x32 #003366
 image 6,6 64x32 link 0 "logo" file://./tests/layout/img/four.png
-text 9,68 19x17 #000000 sans13 link 0 "[A]"
-text 34,60 80x17 #000000 sans13 bold link 0 "Atari News"
-text 34,76 231x17 #000000 sans13 link 0 "Please post Atari-related news here."
-text 441,68 74x17 #000000 sans13 link 0 "14.3k posts"
-text 521,54 47x17 #000000 sans13 link 0 "Atari at"
-text 521,70 44x17 #000000 sans13 link 0 "Costco"
-fill 521,73 78x1 #cccccc
-text 521,83 19x12 #000000 sans9 link 0 "1 hr"
-fill 521,85 78x1 #cccccc
+text 9,68 18x17 #000000 cond13 link 0 "[A]"
+text 33,60 73x17 #000000 cond13 bold link 0 "Atari News"
+text 33,76 211x17 #000000 cond13 link 0 "Please post Atari-related news here."
+text 454,68 67x17 #000000 cond13 link 0 "14.3k posts"
+text 527,54 44x17 #000000 cond13 link 0 "Atari at"
+text 527,70 39x17 #000000 cond13 link 0 "Costco"
+fill 527,73 72x1 #cccccc
+text 527,83 16x12 #000000 cond9 link 0 "1 hr"
+fill 527,85 72x1 #cccccc
 fill 6,89 596x1 #cccccc
-text 9,106 19x17 #000000 sans13 link 0 "[B]"
-text 34,106 97x17 #000000 sans13 bold link 0 "Atari General"
-text 525,106 74x17 #000000 sans13 link 0 "28.2k posts"
+text 9,106 18x17 #000000 cond13 link 0 "[B]"
+text 33,106 89x17 #000000 cond13 bold link 0 "Atari General"
+text 532,106 67x17 #000000 cond13 link 0 "28.2k posts"
 fill 6,112 596x1 #cccccc
-text 9,137 89x17 #000000 sans13 link 0 "a cell of 100%"
-text 546,129 42x17 #000000 sans13 link 0 "beside"
-text 546,145 8x17 #000000 sans13 link 0 "it"
+text 9,137 81x17 #000000 cond13 link 0 "a cell of 100%"
+text 551,129 37x17 #000000 cond13 link 0 "beside"
+text 551,145 8x17 #000000 cond13 link 0 "it"
 link 1 file://./tests/layout/forumrow.html#

@@ -29,4 +29,4 @@ fill 6,1674 596x1 #884400
 fill 6,2469 596x1 #884400
 fill 6,1675 1x794 #884400
 fill 601,1675 1x794 #884400
-text 6,2490 41x13 #000000 sans10 link 0 "The end."
+text 6,2490 41x13 #000000 cond10 link 0 "The end."

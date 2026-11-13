@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { FF_SANS, FF_SERIF, FF_MONO };
+enum { FF_SANS, FF_SERIF, FF_MONO, FF_COND };	/* (FF_COND: DejaVu Sans Condensed, Arial's widths) */
 #define FS_BOLD   1
 #define FS_ITALIC 2
 

@@ -130,9 +130,9 @@ def edition(ewr, fnt, label):
     one = texts(run(ewr, fnt, ["-x", at(first, 0.33) + "," + at(caps, 0.83)]))
     t = one[0] if one else None
     check(label + "a drag: from a place in a run to one in another", t is not None and
-          t.startswith("lcon came in 1992. An Atari in two runs.") and t.endswith("Atari on the next line, AT"), repr(t))
+          t.startswith("alcon came in 1992. An Atari in two runs.") and t.endswith("ATARI in ca"), repr(t))
     check(label + "an empty line between paragraphs, a line break between lines",
-          t is not None and "two runs.\n\nA line" in t and "amet, the\nend of" in t, repr(t))
+          t is not None and "two runs.\n\nA line" in t and "amet,\nthe end of" in t, repr(t))
     back = texts(run(ewr, fnt, ["-x", at(caps, 0.83) + "," + at(first, 0.33)]))
     check(label + "the same dragged the other way", back == one, repr(back))
 

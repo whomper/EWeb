@@ -1,34 +1,34 @@
 page 608 x 1248, background ffffff, 177 items, 1 links, title "details and summary"
-text 10,26 7x17 #000000 sans13 link 0 "▸"
-text 21,26 173x17 #000000 sans13 link 0 "Closed: only this line shows"
+text 10,26 6x17 #000000 cond13 link 0 "▸"
+text 20,26 159x17 #000000 cond13 link 0 "Closed: only this line shows"
 summary 10,13 588x16 closed c1
 fill 6,9 596x1 #888888
 fill 6,32 596x1 #888888
 fill 6,10 1x22 #888888
 fill 601,10 1x22 #888888
-text 10,53 7x17 #000000 sans13 link 0 "▾"
-text 21,53 135x17 #000000 sans13 link 0 "Open: the rest shows"
+text 10,53 6x17 #000000 cond13 link 0 "▾"
+text 20,53 124x17 #000000 cond13 link 0 "Open: the rest shows"
 summary 10,40 588x16 open o1
-text 10,69 170x17 #000000 sans13 link 0 "Text straight in the details."
-text 10,98 136x17 #000000 sans13 link 0 "A paragraph under it."
+text 10,69 158x17 #000000 cond13 link 0 "Text straight in the details."
+text 10,98 124x17 #000000 cond13 link 0 "A paragraph under it."
 fill 6,36 596x1 #888888
 fill 6,117 596x1 #888888
 fill 6,37 1x80 #888888
 fill 601,37 1x80 #888888
-text 10,138 7x17 #000000 sans13 link 0 "▾"
-text 21,138 76x17 #000000 sans13 link 0 "Outer, open"
+text 10,138 6x17 #000000 cond13 link 0 "▾"
+text 20,138 69x17 #000000 cond13 link 0 "Outer, open"
 summary 10,125 588x16 open outer
-text 14,161 7x17 #000000 sans13 link 0 "▸"
-text 25,161 81x17 #000000 sans13 link 0 "Inner, closed"
+text 14,161 6x17 #000000 cond13 link 0 "▸"
+text 24,161 73x17 #000000 cond13 link 0 "Inner, closed"
 summary 14,148 580x16 closed inner
 fill 10,144 588x1 #888888
 fill 10,167 588x1 #888888
 fill 10,145 1x22 #888888
 fill 597,145 1x22 #888888
-text 14,188 7x17 #000000 sans13 link 0 "▾"
-text 25,188 72x17 #000000 sans13 link 0 "Inner, open"
+text 14,188 6x17 #000000 cond13 link 0 "▾"
+text 24,188 65x17 #000000 cond13 link 0 "Inner, open"
 summary 14,175 580x16 open inner2
-text 14,217 109x17 #000000 sans13 link 0 "Inner text shown."
+text 14,217 102x17 #000000 cond13 link 0 "Inner text shown."
 fill 10,171 588x1 #888888
 fill 10,236 588x1 #888888
 fill 10,172 1x64 #888888
@@ -37,143 +37,143 @@ fill 6,121 596x1 #888888
 fill 6,243 596x1 #888888
 fill 6,122 1x121 #888888
 fill 601,122 1x121 #888888
-text 10,264 7x17 #000000 sans13 link 0 "▸"
-text 21,264 44x17 #000000 sans13 link 0 "Details"
+text 10,264 6x17 #000000 cond13 link 0 "▸"
+text 20,264 40x17 #000000 cond13 link 0 "Details"
 summary 10,251 588x16 closed nosum
 fill 6,247 596x1 #888888
 fill 6,270 596x1 #888888
 fill 6,248 1x22 #888888
 fill 601,248 1x22 #888888
-text 10,291 7x17 #000000 sans13 link 0 "▾"
-text 21,291 44x17 #000000 sans13 link 0 "Details"
+text 10,291 6x17 #000000 cond13 link 0 "▾"
+text 20,291 40x17 #000000 cond13 link 0 "Details"
 summary 10,278 588x16 open nosumo
-text 10,320 274x17 #000000 sans13 link 0 "No summary, open: shown under "Details"."
+text 10,320 250x17 #000000 cond13 link 0 "No summary, open: shown under "Details"."
 fill 6,274 596x1 #888888
 fill 6,339 596x1 #888888
 fill 6,275 1x64 #888888
 fill 601,275 1x64 #888888
-text 10,360 7x17 #000000 sans13 link 0 "▸"
-text 21,360 162x17 #000000 sans13 link 0 "A summary that isn't first"
+text 10,360 6x17 #000000 cond13 link 0 "▸"
+text 20,360 149x17 #000000 cond13 link 0 "A summary that isn't first"
 summary 10,347 588x16 closed -
 fill 6,343 596x1 #888888
 fill 6,366 596x1 #888888
 fill 6,344 1x22 #888888
 fill 601,344 1x22 #888888
-text 10,387 7x17 #000000 sans13 link 0 "▾"
-text 10,403 206x17 #000000 sans14 bold link 0 "A heading in the summary"
+text 10,387 6x17 #000000 cond13 link 0 "▾"
+text 10,403 187x17 #000000 cond14 bold link 0 "A heading in the summary"
 summary 10,374 588x34 open -
-text 10,434 300x17 #000000 sans13 link 0 "The triangle on a line of its own, as in browsers."
+text 10,434 279x17 #000000 cond13 link 0 "The triangle on a line of its own, as in browsers."
 fill 6,370 596x1 #888888
 fill 6,453 596x1 #888888
 fill 6,371 1x82 #888888
 fill 601,371 1x82 #888888
-text 10,474 175x17 #000000 sans13 link 0 "No marker (list-style: none)"
+text 10,474 161x17 #000000 cond13 link 0 "No marker (list-style: none)"
 summary 10,461 588x16 closed -
 fill 6,457 596x1 #888888
 fill 6,480 596x1 #888888
 fill 6,458 1x22 #888888
 fill 601,458 1x22 #888888
 fill 10,488 588x16 #eeeeff
-text 10,501 100x17 #000000 sans13 link 0 "A flex summary"
-text 532,501 66x17 #000000 sans13 link 0 "no marker"
+text 10,501 91x17 #000000 cond13 link 0 "A flex summary"
+text 538,501 60x17 #000000 cond13 link 0 "no marker"
 summary 10,488 588x16 open -
-text 10,530 40x17 #000000 sans13 link 0 "shown"
+text 10,530 37x17 #000000 cond13 link 0 "shown"
 fill 6,484 596x1 #888888
 fill 6,549 596x1 #888888
 fill 6,485 1x64 #888888
 fill 601,485 1x64 #888888
-text 591,570 7x17 #000000 sans13 rtl link 0 "◂"
-text 428,570 159x17 #000000 sans13 rtl link 0 "סגור: המשולש מצביע שמאלה"
+text 592,570 6x17 #000000 cond13 rtl link 0 "◂"
+text 436,570 152x17 #000000 cond13 rtl link 0 "סגור: המשולש מצביע שמאלה"
 summary 10,557 588x16 closed -
 fill 6,553 596x1 #888888
 fill 6,576 596x1 #888888
 fill 6,554 1x22 #888888
 fill 601,554 1x22 #888888
-text 591,597 7x17 #000000 sans13 rtl link 0 "▾"
-text 560,597 27x17 #000000 sans13 rtl link 0 "פתוח"
+text 592,597 6x17 #000000 cond13 rtl link 0 "▾"
+text 562,597 26x17 #000000 cond13 rtl link 0 "פתוח"
 summary 10,584 588x16 open -
-text 573,626 25x17 #000000 sans13 rtl link 0 "מוצג"
+text 575,626 23x17 #000000 cond13 rtl link 0 "מוצג"
 fill 6,580 596x1 #888888
 fill 6,645 596x1 #888888
 fill 6,581 1x64 #888888
 fill 601,581 1x64 #888888
-text 10,666 7x17 #000000 sans13 link 0 "▾"
-text 21,666 91x17 #000000 sans13 link 0 "Group g, open"
+text 10,666 6x17 #000000 cond13 link 0 "▾"
+text 20,666 82x17 #000000 cond13 link 0 "Group g, open"
 summary 10,653 588x16 open gd1
-text 10,695 241x17 #000000 sans13 link 0 "The first of its group open stays open."
+text 10,695 221x17 #000000 cond13 link 0 "The first of its group open stays open."
 fill 6,649 596x1 #888888
 fill 6,714 596x1 #888888
 fill 6,650 1x64 #888888
 fill 601,650 1x64 #888888
-text 10,735 7x17 #000000 sans13 link 0 "▸"
-text 21,735 222x17 #000000 sans13 link 0 "Group g, opened too: starts closed"
+text 10,735 6x17 #000000 cond13 link 0 "▸"
+text 20,735 201x17 #000000 cond13 link 0 "Group g, opened too: starts closed"
 summary 10,722 588x16 closed gd2
 fill 6,718 596x1 #888888
 fill 6,741 596x1 #888888
 fill 6,719 1x22 #888888
 fill 601,719 1x22 #888888
-text 6,768 12x17 #000000 sans13 link 0 "1."
-text 22,768 126x17 #000000 sans13 link 0 "Inside markers: one"
-text 6,784 12x17 #000000 sans13 link 0 "7."
-text 22,784 38x17 #000000 sans13 link 0 "seven"
-text 6,800 12x17 #000000 sans13 link 0 "8."
-text 22,800 579x17 #000000 sans13 link 0 "eight, a long item that wraps on to the next line to show where its second line starts: under"
-text 6,816 252x17 #000000 sans13 link 0 "the marker, as the marker is in the text"
-text 6,845 9x17 #000000 sans13 link 0 "▪"
-text 19,845 97x17 #000000 sans13 link 0 "a square inside"
-text 6,861 15x17 #000000 sans13 link 0 "→ "
-text 21,861 98x17 #000000 sans13 link 0 "a string marker"
-text 38,890 149x17 #000000 sans13 link 0 "a string marker outside"
-text 17,890 15x17 #000000 sans13 link 0 "→ "
-text 10,923 7x17 #000000 sans13 link 0 "▾"
-text 21,923 192x17 #000000 sans13 link 0 "Open: its summary drawn first"
+text 6,768 11x17 #000000 cond13 link 0 "1."
+text 21,768 114x17 #000000 cond13 link 0 "Inside markers: one"
+text 6,784 11x17 #000000 cond13 link 0 "7."
+text 21,784 34x17 #000000 cond13 link 0 "seven"
+text 6,800 11x17 #000000 cond13 link 0 "8."
+text 21,800 558x17 #000000 cond13 link 0 "eight, a long item that wraps on to the next line to show where its second line starts: under the"
+text 6,816 210x17 #000000 cond13 link 0 "marker, as the marker is in the text"
+text 6,845 8x17 #000000 cond13 link 0 "▪"
+text 18,845 87x17 #000000 cond13 link 0 "a square inside"
+text 6,861 14x17 #000000 cond13 link 0 "→ "
+text 20,861 90x17 #000000 cond13 link 0 "a string marker"
+text 38,890 136x17 #000000 cond13 link 0 "a string marker outside"
+text 18,890 14x17 #000000 cond13 link 0 "→ "
+text 10,923 6x17 #000000 cond13 link 0 "▾"
+text 20,923 177x17 #000000 cond13 link 0 "Open: its summary drawn first"
 summary 10,910 588x16 open ob
-text 10,952 228x17 #000000 sans13 link 0 "Before the summary, drawn after it."
-text 10,981 47x17 #000000 sans13 link 0 "After it."
+text 10,952 211x17 #000000 cond13 link 0 "Before the summary, drawn after it."
+text 10,981 45x17 #000000 cond13 link 0 "After it."
 fill 6,906 596x1 #888888
 fill 6,1000 596x1 #888888
 fill 6,907 1x93 #888888
 fill 601,907 1x93 #888888
-text 17,1024 225x17 #000000 sans13 link 0 "An inline-block summary (a button)"
-fill 10,1008 239x1 #888888
-fill 10,1029 239x1 #888888
+text 17,1024 204x17 #000000 cond13 link 0 "An inline-block summary (a button)"
+fill 10,1008 218x1 #888888
+fill 10,1029 218x1 #888888
 fill 10,1009 1x20 #888888
-fill 248,1009 1x20 #888888
-summary 10,1008 239x22 closed ib
+fill 227,1009 1x20 #888888
+summary 10,1008 218x22 closed ib
 fill 6,1004 596x1 #888888
 fill 6,1033 596x1 #888888
 fill 6,1005 1x28 #888888
 fill 601,1005 1x28 #888888
-summary 10,1041 119x16 closed il
-text 10,1054 119x17 #000000 sans13 link 0 "An inline summary"
+summary 10,1041 107x16 closed il
+text 10,1054 107x17 #000000 cond13 link 0 "An inline summary"
 fill 6,1037 596x1 #888888
 fill 6,1060 596x1 #888888
 fill 6,1038 1x22 #888888
 fill 601,1038 1x22 #888888
-summary 10,1068 215x16 closed dc
-text 10,1081 215x17 #000000 sans13 link 0 "A summary with display: contents"
+summary 10,1068 197x16 closed dc
+text 10,1081 197x17 #000000 cond13 link 0 "A summary with display: contents"
 fill 6,1064 596x1 #888888
 fill 6,1087 596x1 #888888
 fill 6,1065 1x22 #888888
 fill 601,1065 1x22 #888888
-text 10,1108 7x17 #000000 sans13 link 0 "▸"
-text 21,1108 188x17 #000000 sans13 link 0 "A summary with a details in it"
-text 10,1124 7x17 #000000 sans13 link 0 "▸"
-text 21,1124 174x17 #000000 sans13 link 0 "The details in the summary"
+text 10,1108 6x17 #000000 cond13 link 0 "▸"
+text 20,1108 174x17 #000000 cond13 link 0 "A summary with a details in it"
+text 10,1124 6x17 #000000 cond13 link 0 "▸"
+text 20,1124 158x17 #000000 cond13 link 0 "The details in the summary"
 summary 10,1111 588x16 closed din
 summary 10,1095 588x32 closed dout
 fill 6,1091 596x1 #888888
 fill 6,1130 596x1 #888888
 fill 6,1092 1x38 #888888
 fill 601,1092 1x38 #888888
-text 10,1151 7x17 #000000 sans13 link 0 "▾"
-text 21,1151 276x17 #000000 sans13 link 0 "Group h, open: one in a template is no rival"
+text 10,1151 6x17 #000000 cond13 link 0 "▾"
+text 20,1151 252x17 #000000 cond13 link 0 "Group h, open: one in a template is no rival"
 summary 10,1138 588x16 open h1
-text 10,1180 46x17 #000000 sans13 link 0 "Shown."
+text 10,1180 42x17 #000000 cond13 link 0 "Shown."
 fill 6,1134 596x1 #888888
 fill 6,1199 596x1 #888888
 fill 6,1135 1x64 #888888
 fill 601,1135 1x64 #888888
-text 6,1226 224x17 #0000ee sans13 link 1 "To the paragraph in the first details"
-text 230,1226 102x17 #000000 sans13 link 0 ", which opens it."
+text 6,1226 206x17 #0000ee cond13 link 1 "To the paragraph in the first details"
+text 212,1226 95x17 #000000 cond13 link 0 ", which opens it."
 link 1 file://./tests/layout/details.html#c1p

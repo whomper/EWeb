@@ -1,129 +1,129 @@
-page 608 x 947, background fff2bf, 128 items, 4 links, title "Translucent colours and opacity"
-drawn: 0-66 70-104 112-118 122-127 67-69 105-111 119-121
-text 6,32 581x17 #000000 sans13 link 0 "Translucent backgrounds, borders and text: rgba, hsla, #rrggbbaa, #rgba and transparent."
-fill 6,48 202x42 #ff000080
-text 11,66 160x17 #000000 sans13 link 0 "rgba(255, 0, 0, .5) on the"
-text 11,82 32x17 #000000 sans13 link 0 "page"
+page 608 x 931, background fff2bf, 128 items, 4 links, title "Translucent colours and opacity"
+drawn: 0-65 69-104 112-118 122-127 66-68 105-111 119-121
+text 6,32 529x17 #000000 cond13 link 0 "Translucent backgrounds, borders and text: rgba, hsla, #rrggbbaa, #rgba and transparent."
+fill 6,48 202x26 #ff000080
+text 11,66 179x17 #000000 cond13 link 0 "rgba(255, 0, 0, .5) on the page"
 fill 6,48 202x2 #00008080
-fill 6,88 202x2 #00008080
-fill 6,50 2x38 #00008080
-fill 206,50 2x38 #00008080
-fill 6,93 202x42 #00800040
-text 11,111 172x17 #00000088 sans13 link 0 "hsla(120, 100%, 25%, .25),"
-text 11,127 72x17 #00000088 sans13 link 0 "text #0008"
-fill 6,93 202x2 #00008080
-fill 6,133 202x2 #00008080
-fill 6,95 2x38 #00008080
-fill 206,95 2x38 #00008080
-fill 6,138 202x42 #0000ff40
-text 11,156 175x17 #ff0000bf sans13 link 0 "#0000ff40, text hsl(0 100%"
-text 11,172 73x17 #ff0000bf sans13 link 0 "50% / 75%)"
-fill 6,138 202x2 #00008080
-fill 6,178 202x2 #00008080
-fill 6,140 2x38 #00008080
-fill 206,140 2x38 #00008080
-text 11,201 182x17 #000000 sans13 link 0 "transparent background and"
-text 11,217 42x17 #000000 sans13 link 0 "border"
-fill 6,228 202x42 #00000008
-text 11,246 173x17 #000000 sans13 link 0 "a tint of 3%, as Bootstrap's"
-text 11,262 62x17 #000000 sans13 link 0 "card caps"
-fill 6,228 202x2 #00008080
-fill 6,268 202x2 #00008080
-fill 6,230 2x38 #00008080
-fill 206,230 2x38 #00008080
-fill 6,273 596x36 #003366
-fill 9,278 202x26 #ff000080
-text 14,296 131x17 #ffffff sans13 link 0 "half red on dark blue"
-fill 9,278 202x2 #00008080
-fill 9,302 202x2 #00008080
-fill 9,280 2x22 #00008080
-fill 209,280 2x22 #00008080
-text 6,335 280x17 #000000 sans13 link 0 "Opacity: none at all (still taking its room, its "
-text 286,335 21x17 #0000ee sans13 link 1 "link"
-text 311,335 261x17 #000000 sans13 link 0 "still there), half, half in half, and a child of"
-text 6,351 235x17 #000000 sans13 link 0 "opacity 1 in a half (still half: a group)."
-text 11,385 62x17 #00000000 sans13 link 0 "opacity 0 "
-text 73,385 33x17 #0000ee00 sans13 link 2 "a link"
-fill 6,396 202x74 #cc000080
-text 11,414 62x17 #ffffff80 sans13 link 0 "opacity .5"
-fill 11,420 202x26 #0000cc40
-text 16,438 65x17 #ffffff40 sans13 link 0 "in another"
-fill 11,420 202x2 #00000040
-fill 11,444 202x2 #00000040
-fill 11,422 2x22 #00000040
-fill 211,422 2x22 #00000040
-text 11,462 89x17 #ffffff80 sans13 link 0 "opacity 1 in .5"
-fill 6,396 202x2 #00000080
-fill 6,468 202x2 #00000080
-fill 6,398 2x70 #00000080
-fill 206,398 2x70 #00000080
-fill 199,483 83x16 #ffff00
-fill 282,483 92x16 #ff7f00
-text 6,496 35x17 #000000 sans13 link 0 "Text: "
-text 41,496 150x17 #00000000 sans13 link 0 "transparent, underlined"
-text 191,496 8x17 #000000 sans13 link 0 "; "
-text 199,496 83x17 #000000 sans13 link 0 "yellow under "
-text 282,496 92x17 #000000 sans13 link 0 "half red over it"
-text 374,496 8x17 #000000 sans13 link 0 "; "
-text 382,496 99x17 #0000004c sans13 link 0 "opacity .3 inline"
-text 481,496 4x17 #000000 sans13 link 0 "."
-text 6,538 185x17 #000000 sans13 link 0 "Text under a cover of rgba(0,"
-text 6,554 49x17 #000000 sans13 link 0 "0, 0, .5)"
-fill 6,512 192x48 #00000080
-fill 156,560 41x18 #e0e0e080
-fill 156,560 41x1 #80808080
-fill 156,577 41x1 #80808080
-fill 156,560 1x18 #80808080
-fill 196,560 1x18 #80808080
-text 38,604 29x17 #000000 sans13 link 0 "solid"
-text 24,604 8x17 #000000 sans13 link 0 "•"
-text 38,620 121x17 #00000080 sans13 link 0 "half, its marker too"
-text 24,620 8x17 #00000080 sans13 link 0 "•"
-image 6,636 48x24 link 0 "opaque" file://./tests/layout/img/one.png
-image 58,636 48x24 link 0 "half" file://./tests/layout/img/one.png alpha 128
-text 6,689 311x17 #000000 sans13 link 0 "Text of a transparent colour shown another way: "
-text 317,689 131x17 #cc00cc sans13 link 0 "a gradient through it"
-text 448,689 8x17 #000000 sans13 link 0 ", "
-text 456,689 67x17 #cc0000 sans13 link 0 "its shadow"
-text 523,689 8x17 #000000 sans13 link 0 ", "
-text 531,689 62x17 #006600 sans13 link 0 "its outline"
-text 593,689 4x17 #000000 sans13 link 0 ","
-text 6,705 202x17 #cc00cc sans13 link 0 "a gradient under a faint shadow"
-text 208,705 8x17 #000000 sans13 link 0 ", "
-text 216,705 132x17 #006600 sans13 link 0 "an outline under one"
-text 348,705 8x17 #000000 sans13 link 0 ", "
-text 356,705 200x17 #000000 sans13 link 0 "a gradient EWeb can't compute"
-text 556,705 33x17 #000000 sans13 link 0 "; not "
-text 589,705 8x17 #00000000 sans13 link 0 "a"
-text 6,721 116x17 #00000000 sans13 link 0 "picture in its place"
-text 122,721 8x17 #000000 sans13 link 0 "; "
-text 130,721 175x17 #000000 sans13 link 0 "a font colour of transparent"
-text 309,721 202x17 #000000 sans13 link 0 "(no colour: HTML turns it down)."
-text 6,750 242x17 #000000 sans13 link 0 "Of opacity 0, faded in by an animation"
-text 6,779 124x17 #000000 sans13 link 0 "and by AOS's script"
-image 6,795 48x24 link 0 "lazy" file://./tests/layout/img/one.png
-text 58,819 217x17 #000000 sans13 link 0 "a picture a lazy loader would show"
-fill 25,835 16x16 #ffffff
-fill 25,835 16x1 #808080
-fill 25,850 16x1 #808080
-fill 25,835 1x16 #808080
-fill 40,835 1x16 #808080
-text 41,850 246x17 #000000 sans13 link 0 "a box of opacity 0 for a custom control"
-fill 6,853 16x16 #ffffff
-fill 6,853 16x1 #808080
-fill 6,868 16x1 #808080
-fill 6,853 1x16 #808080
-fill 21,853 1x16 #808080
-text 26,868 183x17 #00000000 sans13 link 0 "a tick in a transparent colour"
-text 6,884 74x17 #0000ee sans13 link 3 "under a veil"
-text 6,884 189x17 #0000ee00 sans13 nohit link 4 "a veil of opacity 0 a click goes"
-text 6,900 50x17 #0000ee00 sans13 nohit link 4 "through"
-fill 11,911 198x22 #0000ff40
-text 14,927 188x17 #000000 sans13 link 0 "background-clip: padding-box"
-fill 6,906 208x5 #00000040
-fill 6,933 208x5 #00000040
-fill 6,911 5x22 #00000040
-fill 209,911 5x22 #00000040
+fill 6,72 202x2 #00008080
+fill 6,50 2x22 #00008080
+fill 206,50 2x22 #00008080
+fill 6,77 202x42 #00800040
+text 11,95 185x17 #00000088 cond13 link 0 "hsla(120, 100%, 25%, .25), text"
+text 11,111 38x17 #00000088 cond13 link 0 "#0008"
+fill 6,77 202x2 #00008080
+fill 6,117 202x2 #00008080
+fill 6,79 2x38 #00008080
+fill 206,79 2x38 #00008080
+fill 6,122 202x42 #0000ff40
+text 11,140 189x17 #ff0000bf cond13 link 0 "#0000ff40, text hsl(0 100% 50%"
+text 11,156 38x17 #ff0000bf cond13 link 0 "/ 75%)"
+fill 6,122 202x2 #00008080
+fill 6,162 202x2 #00008080
+fill 6,124 2x38 #00008080
+fill 206,124 2x38 #00008080
+text 11,185 164x17 #000000 cond13 link 0 "transparent background and"
+text 11,201 38x17 #000000 cond13 link 0 "border"
+fill 6,212 202x42 #00000008
+text 11,230 188x17 #000000 cond13 link 0 "a tint of 3%, as Bootstrap's card"
+text 11,246 26x17 #000000 cond13 link 0 "caps"
+fill 6,212 202x2 #00008080
+fill 6,252 202x2 #00008080
+fill 6,214 2x38 #00008080
+fill 206,214 2x38 #00008080
+fill 6,257 596x36 #003366
+fill 9,262 202x26 #ff000080
+text 14,280 120x17 #ffffff cond13 link 0 "half red on dark blue"
+fill 9,262 202x2 #00008080
+fill 9,286 202x2 #00008080
+fill 9,264 2x22 #00008080
+fill 209,264 2x22 #00008080
+text 6,319 260x17 #000000 cond13 link 0 "Opacity: none at all (still taking its room, its "
+text 266,319 20x17 #0000ee cond13 link 1 "link"
+text 290,319 299x17 #000000 cond13 link 0 "still there), half, half in half, and a child of opacity 1"
+text 6,335 161x17 #000000 cond13 link 0 "in a half (still half: a group)."
+text 11,369 57x17 #00000000 cond13 link 0 "opacity 0 "
+text 68,369 31x17 #0000ee00 cond13 link 2 "a link"
+fill 6,380 202x74 #cc000080
+text 11,398 57x17 #ffffff80 cond13 link 0 "opacity .5"
+fill 11,404 202x26 #0000cc40
+text 16,422 59x17 #ffffff40 cond13 link 0 "in another"
+fill 11,404 202x2 #00000040
+fill 11,428 202x2 #00000040
+fill 11,406 2x22 #00000040
+fill 211,406 2x22 #00000040
+text 11,446 82x17 #ffffff80 cond13 link 0 "opacity 1 in .5"
+fill 6,380 202x2 #00000080
+fill 6,452 202x2 #00000080
+fill 6,382 2x70 #00000080
+fill 206,382 2x70 #00000080
+fill 184,467 78x16 #ffff00
+fill 262,467 86x16 #ff7f00
+text 6,480 34x17 #000000 cond13 link 0 "Text: "
+text 40,480 136x17 #00000000 cond13 link 0 "transparent, underlined"
+text 176,480 8x17 #000000 cond13 link 0 "; "
+text 184,480 78x17 #000000 cond13 link 0 "yellow under "
+text 262,480 86x17 #000000 cond13 link 0 "half red over it"
+text 348,480 8x17 #000000 cond13 link 0 "; "
+text 356,480 91x17 #0000004c cond13 link 0 "opacity .3 inline"
+text 447,480 4x17 #000000 cond13 link 0 "."
+text 6,522 186x17 #000000 cond13 link 0 "Text under a cover of rgba(0, 0,"
+text 6,538 31x17 #000000 cond13 link 0 "0, .5)"
+fill 6,496 192x48 #00000080
+fill 136,544 36x18 #e0e0e080
+fill 136,544 36x1 #80808080
+fill 136,561 36x1 #80808080
+fill 136,544 1x18 #80808080
+fill 171,544 1x18 #80808080
+text 38,588 26x17 #000000 cond13 link 0 "solid"
+text 25,588 7x17 #000000 cond13 link 0 "•"
+text 38,604 112x17 #00000080 cond13 link 0 "half, its marker too"
+text 25,604 7x17 #00000080 cond13 link 0 "•"
+image 6,620 48x24 link 0 "opaque" file://./tests/layout/img/one.png
+image 58,620 48x24 link 0 "half" file://./tests/layout/img/one.png alpha 128
+text 6,673 289x17 #000000 cond13 link 0 "Text of a transparent colour shown another way: "
+text 295,673 120x17 #cc00cc cond13 link 0 "a gradient through it"
+text 415,673 8x17 #000000 cond13 link 0 ", "
+text 423,673 62x17 #cc0000 cond13 link 0 "its shadow"
+text 485,673 8x17 #000000 cond13 link 0 ", "
+text 493,673 57x17 #006600 cond13 link 0 "its outline"
+text 550,673 8x17 #000000 cond13 link 0 ", "
+text 558,673 7x17 #cc00cc cond13 link 0 "a"
+text 6,689 174x17 #cc00cc cond13 link 0 "gradient under a faint shadow"
+text 180,689 8x17 #000000 cond13 link 0 ", "
+text 188,689 119x17 #006600 cond13 link 0 "an outline under one"
+text 307,689 8x17 #000000 cond13 link 0 ", "
+text 315,689 182x17 #000000 cond13 link 0 "a gradient EWeb can't compute"
+text 497,689 31x17 #000000 cond13 link 0 "; not "
+text 528,689 65x17 #00000000 cond13 link 0 "a picture in"
+text 6,705 48x17 #00000000 cond13 link 0 "its place"
+text 54,705 8x17 #000000 cond13 link 0 "; "
+text 62,705 160x17 #000000 cond13 link 0 "a font colour of transparent"
+text 226,705 189x17 #000000 cond13 link 0 "(no colour: HTML turns it down)."
+text 6,734 221x17 #000000 cond13 link 0 "Of opacity 0, faded in by an animation"
+text 6,763 112x17 #000000 cond13 link 0 "and by AOS's script"
+image 6,779 48x24 link 0 "lazy" file://./tests/layout/img/one.png
+text 58,803 201x17 #000000 cond13 link 0 "a picture a lazy loader would show"
+fill 25,819 16x16 #ffffff
+fill 25,819 16x1 #808080
+fill 25,834 16x1 #808080
+fill 25,819 1x16 #808080
+fill 40,819 1x16 #808080
+text 41,834 225x17 #000000 cond13 link 0 "a box of opacity 0 for a custom control"
+fill 6,837 16x16 #ffffff
+fill 6,837 16x1 #808080
+fill 6,852 16x1 #808080
+fill 6,837 1x16 #808080
+fill 21,837 1x16 #808080
+text 26,852 168x17 #00000000 cond13 link 0 "a tick in a transparent colour"
+text 6,868 68x17 #0000ee cond13 link 3 "under a veil"
+text 6,868 174x17 #0000ee00 cond13 nohit link 4 "a veil of opacity 0 a click goes"
+text 6,884 45x17 #0000ee00 cond13 nohit link 4 "through"
+fill 11,895 198x22 #0000ff40
+text 14,911 168x17 #000000 cond13 link 0 "background-clip: padding-box"
+fill 6,890 208x5 #00000040
+fill 6,917 208x5 #00000040
+fill 6,895 5x22 #00000040
+fill 209,895 5x22 #00000040
 link 1 file://./tests/layout/alpha.html#gone
 link 2 file://./tests/layout/alpha.html#gone
 link 3 file://./tests/layout/alpha.html#under

@@ -1,22 +1,21 @@
-page 608 x 196, background ffffff, 21 items, 0 links, title "anontable"
-fill 6,9 107x16 #eeeeee
-text 6,22 107x17 #000000 sans13 link 0 "popularity helper"
-fill 192,28 224x36 #ddeeff
-fill 194,30 220x16 #224488
-text 194,43 127x17 #ffffff sans13 bold link 0 "popularity helper"
-text 193,60 222x17 #000000 sans13 link 0 "increase the popularity of this prod"
+page 608 x 180, background ffffff, 20 items, 0 links, title "anontable"
+fill 6,9 98x16 #eeeeee
+text 6,22 98x17 #000000 cond13 link 0 "popularity helper"
+fill 201,28 205x36 #ddeeff
+fill 203,30 201x16 #224488
+text 203,43 114x17 #ffffff cond13 bold link 0 "popularity helper"
+text 202,60 203x17 #000000 cond13 link 0 "increase the popularity of this prod"
 fill 184,67 240x22 #cccccc
-text 187,83 32x17 #000000 sans13 link 0 "main"
-fill 184,92 240x68 #ddeeff
+text 187,83 28x17 #000000 cond13 link 0 "main"
+fill 184,92 240x52 #ddeeff
 fill 186,94 236x16 #224488
-text 186,107 77x17 #ffffff sans13 bold link 0 "comments"
-text 185,124 208x17 #000000 sans13 link 0 "a comment long enough to wrap"
-text 185,140 200x17 #000000 sans13 link 0 "inside the box of three hundred"
-text 185,156 36x17 #000000 sans13 link 0 "pixels"
-fill 6,166 1x0 #eeeeee
-fill 6,169 118x18 #eeeeee
-text 7,183 116x17 #000000 sans13 link 0 "a row in a wrapper"
-fill 6,169 118x1 #999999
-fill 6,186 118x1 #999999
-fill 6,170 1x16 #999999
-fill 123,170 1x16 #999999
+text 186,107 68x17 #ffffff cond13 bold link 0 "comments"
+text 185,124 225x17 #000000 cond13 link 0 "a comment long enough to wrap inside"
+text 185,140 182x17 #000000 cond13 link 0 "the box of three hundred pixels"
+fill 6,150 1x0 #eeeeee
+fill 6,153 112x18 #eeeeee
+text 7,167 110x17 #000000 cond13 link 0 "a row in a wrapper"
+fill 6,153 112x1 #999999
+fill 6,170 112x1 #999999
+fill 6,154 1x16 #999999
+fill 117,154 1x16 #999999

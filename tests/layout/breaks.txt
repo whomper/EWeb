@@ -1,114 +1,110 @@
-page 608 x 796, background ffffff, 112 items, 1 links, title "Line breaks inside words"
-text 7,20 81x17 #000000 sans13 link 0 "A well-known"
-text 7,36 99x17 #000000 sans13 link 0 "state-of-the-art"
-text 7,52 32x17 #000000 sans13 link 0 "thing"
+page 608 x 716, background ffffff, 108 items, 1 links, title "Line breaks inside words"
+text 7,20 77x17 #000000 cond13 link 0 "A well-known"
+text 7,36 89x17 #000000 cond13 link 0 "state-of-the-art"
+text 7,52 29x17 #000000 cond13 link 0 "thing"
 fill 6,6 114x1 #888888
 fill 6,55 114x1 #888888
 fill 6,7 1x48 #888888
 fill 119,7 1x48 #888888
-text 7,76 105x17 #000000 sans13 link 0 "http://www.exam"
-text 7,92 98x17 #000000 sans13 link 0 "ple.com/a/long/"
-text 7,108 50x17 #000000 sans13 link 0 "path/to/"
-text 7,124 74x17 #000000 sans13 link 0 "somewhere"
+text 7,76 112x17 #000000 cond13 link 0 "http://www.exampl"
+text 7,92 108x17 #000000 cond13 link 0 "e.com/a/long/path/"
+text 7,108 83x17 #000000 cond13 link 0 "to/somewhere"
 fill 6,62 114x1 #888888
-fill 6,127 114x1 #888888
-fill 6,63 1x64 #888888
-fill 119,63 1x64 #888888
-text 7,148 41x17 #000000 sans13 link 0 "and/or"
-text 7,164 54x17 #000000 sans13 link 0 "either/or"
-text 7,180 20x17 #000000 sans13 link 0 "1/2"
-text 7,196 69x17 #000000 sans13 link 0 "2020-2021"
-text 7,212 52x17 #000000 sans13 link 0 "-5 -word"
-fill 6,134 74x1 #888888
-fill 6,215 74x1 #888888
-fill 6,135 1x80 #888888
-fill 79,135 1x80 #888888
-text 7,236 107x17 #000000 sans13 link 0 "The international"
-text 114,236 5x17 #000000 sans13 link 0 "-"
-text 7,252 97x17 #000000 sans13 link 0 "isation of every"
-text 104,252 5x17 #000000 sans13 link 0 "-"
-text 7,268 91x17 #000000 sans13 link 0 "thing happens"
-fill 6,222 114x1 #888888
-fill 6,271 114x1 #888888
-fill 6,223 1x48 #888888
-fill 119,223 1x48 #888888
-text 7,292 107x17 #000000 sans13 link 0 "The international"
-text 114,292 5x17 #000000 sans13 link 0 "-"
-text 17,308 97x17 #000000 sans13 link 0 "isation of every"
-text 114,308 5x17 #000000 sans13 link 0 "-"
-text 87,324 32x17 #000000 sans13 link 0 "thing"
-fill 6,278 114x1 #888888
-fill 6,327 114x1 #888888
-fill 6,279 1x48 #888888
-fill 119,279 1x48 #888888
-text 13,348 94x17 #000000 sans13 link 0 "Electromagnet"
-text 107,348 5x17 #000000 sans13 link 0 "-"
-text 51,364 23x17 #000000 sans13 link 0 "ism"
-fill 6,334 114x1 #888888
-fill 6,367 114x1 #888888
-fill 6,335 1x32 #888888
-fill 119,335 1x32 #888888
-text 7,388 29x17 #000000 sans13 link 0 "See "
-text 36,388 69x17 #0000ee sans13 link 1 "internation"
-text 105,388 5x17 #0000ee sans13 link 1 "-"
-text 7,404 53x17 #0000ee sans13 link 1 "alisation"
-text 64,404 29x17 #000000 sans13 link 0 "here"
-fill 6,374 114x1 #888888
-fill 6,407 114x1 #888888
-fill 6,375 1x32 #888888
-fill 119,375 1x32 #888888
-text 7,428 108x17 #000000 sans13 link 0 "Supercalifragilisti"
-text 7,444 96x17 #000000 sans13 link 0 "cexpialidocious"
-text 103,444 5x17 #000000 sans13 link 0 "-"
-text 7,460 30x17 #000000 sans13 link 0 "ness"
-fill 6,414 114x1 #888888
-fill 6,463 114x1 #888888
-fill 6,415 1x48 #888888
-fill 119,415 1x48 #888888
-text 7,484 90x17 #000000 sans13 link 0 "wordwordword"
-text 7,500 90x17 #000000 sans13 link 0 "wordwordword"
-fill 6,470 114x1 #888888
-fill 6,503 114x1 #888888
-fill 6,471 1x32 #888888
-fill 119,471 1x32 #888888
-text 7,524 66x17 #000000 sans13 link 0 "pages 10–"
-text 7,540 71x17 #000000 sans13 link 0 "20 and 30–"
-text 7,556 49x17 #000000 sans13 link 0 "40 in all"
-fill 6,510 74x1 #888888
-fill 6,559 74x1 #888888
-fill 6,511 1x48 #888888
-fill 79,511 1x48 #888888
-text 7,580 84x17 #000000 sans13 link 0 "long—dash—"
-text 7,596 104x17 #000000 sans13 link 0 "between—words"
-text 7,612 48x17 #000000 sans13 link 0 "——two"
-fill 6,566 114x1 #888888
+fill 6,111 114x1 #888888
+fill 6,63 1x48 #888888
+fill 119,63 1x48 #888888
+text 7,132 37x17 #000000 cond13 link 0 "and/or"
+text 7,148 72x17 #000000 cond13 link 0 "either/or 1/2"
+text 7,164 60x17 #000000 cond13 link 0 "2020-2021"
+text 7,180 48x17 #000000 cond13 link 0 "-5 -word"
+fill 6,118 74x1 #888888
+fill 6,183 74x1 #888888
+fill 6,119 1x64 #888888
+fill 79,119 1x64 #888888
+text 7,204 98x17 #000000 cond13 link 0 "The international"
+text 105,204 4x17 #000000 cond13 link 0 "-"
+text 7,220 90x17 #000000 cond13 link 0 "isation of every"
+text 97,220 4x17 #000000 cond13 link 0 "-"
+text 7,236 81x17 #000000 cond13 link 0 "thing happens"
+fill 6,190 114x1 #888888
+fill 6,239 114x1 #888888
+fill 6,191 1x48 #888888
+fill 119,191 1x48 #888888
+text 17,260 98x17 #000000 cond13 link 0 "The international"
+text 115,260 4x17 #000000 cond13 link 0 "-"
+text 25,276 90x17 #000000 cond13 link 0 "isation of every"
+text 115,276 4x17 #000000 cond13 link 0 "-"
+text 90,292 29x17 #000000 cond13 link 0 "thing"
+fill 6,246 114x1 #888888
+fill 6,295 114x1 #888888
+fill 6,247 1x48 #888888
+fill 119,247 1x48 #888888
+text 11,316 104x17 #000000 cond13 link 0 "Electromagnetism"
+fill 6,302 114x1 #888888
+fill 6,319 114x1 #888888
+fill 6,303 1x16 #888888
+fill 119,303 1x16 #888888
+text 7,340 25x17 #000000 cond13 link 0 "See "
+text 32,340 73x17 #0000ee cond13 link 1 "international"
+text 105,340 4x17 #0000ee cond13 link 1 "-"
+text 7,356 38x17 #0000ee cond13 link 1 "isation"
+text 49,356 26x17 #000000 cond13 link 0 "here"
+fill 6,326 114x1 #888888
+fill 6,359 114x1 #888888
+fill 6,327 1x32 #888888
+fill 119,327 1x32 #888888
+text 7,380 104x17 #000000 cond13 link 0 "Supercalifragilistic"
+text 111,380 4x17 #000000 cond13 link 0 "-"
+text 7,396 106x17 #000000 cond13 link 0 "expialidociousness"
+fill 6,366 114x1 #888888
+fill 6,399 114x1 #888888
+fill 6,367 1x32 #888888
+fill 119,367 1x32 #888888
+text 7,420 87x17 #000000 cond13 link 0 "wordwordword"
+text 7,436 87x17 #000000 cond13 link 0 "wordwordword"
+fill 6,406 114x1 #888888
+fill 6,439 114x1 #888888
+fill 6,407 1x32 #888888
+fill 119,407 1x32 #888888
+text 7,460 72x17 #000000 cond13 link 0 "pages 10–20"
+text 7,476 59x17 #000000 cond13 link 0 "and 30–40"
+text 7,492 27x17 #000000 cond13 link 0 "in all"
+fill 6,446 74x1 #888888
+fill 6,495 74x1 #888888
+fill 6,447 1x48 #888888
+fill 79,447 1x48 #888888
+text 7,516 75x17 #000000 cond13 link 0 "long—dash—"
+text 7,532 97x17 #000000 cond13 link 0 "between—words"
+text 7,548 46x17 #000000 cond13 link 0 "——two"
+fill 6,502 114x1 #888888
+fill 6,551 114x1 #888888
+fill 6,503 1x48 #888888
+fill 119,503 1x48 #888888
+text 7,572 72x17 #000000 cond13 link 0 "日本語の文章は、空白がな"
+text 7,588 60x17 #000000 cond13 link 0 "い。「括弧」もある。"
+fill 6,558 74x1 #888888
+fill 6,591 74x1 #888888
+fill 6,559 1x32 #888888
+fill 79,559 1x32 #888888
+text 7,612 137x17 #000000 cond13 link 0 "no-wrap-here/pleasenot"
+fill 6,598 114x1 #888888
 fill 6,615 114x1 #888888
-fill 6,567 1x48 #888888
-fill 119,567 1x48 #888888
-text 7,636 70x17 #000000 sans13 link 0 "日本語の文章は、空白"
-text 7,652 70x17 #000000 sans13 link 0 "がない。「括弧」もあ"
-text 7,668 14x17 #000000 sans13 link 0 "る。"
-fill 6,622 74x1 #888888
-fill 6,671 74x1 #888888
-fill 6,623 1x48 #888888
-fill 79,623 1x48 #888888
-text 7,692 152x17 #000000 sans13 link 0 "no-wrap-here/pleasenot"
-fill 6,678 114x1 #888888
-fill 6,695 114x1 #888888
-fill 6,679 1x16 #888888
-fill 119,679 1x16 #888888
-text 7,716 49x17 #000000 sans13 link 0 "Justified"
-text 67,716 47x17 #000000 sans13 link 0 "hyphen"
-text 114,716 5x17 #000000 sans13 link 0 "-"
-text 7,732 32x17 #000000 sans13 link 0 "ation"
-text 54,732 25x17 #000000 sans13 link 0 "text"
-text 94,732 25x17 #000000 sans13 link 0 "with"
-text 7,748 36x17 #000000 sans13 link 0 "some"
-text 85,748 34x17 #000000 sans13 link 0 "more"
-text 7,764 76x17 #000000 sans13 link 0 "hyphenated"
-text 7,780 64x17 #000000 sans13 link 0 "words in it"
-fill 6,702 114x1 #888888
-fill 6,783 114x1 #888888
-fill 6,703 1x80 #888888
-fill 119,703 1x80 #888888
+fill 6,599 1x16 #888888
+fill 119,599 1x16 #888888
+text 7,636 45x17 #000000 cond13 link 0 "Justified"
+text 73,636 42x17 #000000 cond13 link 0 "hyphen"
+text 115,636 4x17 #000000 cond13 link 0 "-"
+text 7,652 29x17 #000000 cond13 link 0 "ation"
+text 53,652 24x17 #000000 cond13 link 0 "text"
+text 94,652 25x17 #000000 cond13 link 0 "with"
+text 7,668 31x17 #000000 cond13 link 0 "some"
+text 89,668 30x17 #000000 cond13 link 0 "more"
+text 7,684 42x17 #000000 cond13 link 0 "hyphen"
+text 49,684 26x17 #000000 cond13 link 0 "ated"
+text 84,684 35x17 #000000 cond13 link 0 "words"
+text 7,700 22x17 #000000 cond13 link 0 "in it"
+fill 6,622 114x1 #888888
+fill 6,703 114x1 #888888
+fill 6,623 1x80 #888888
+fill 119,623 1x80 #888888
 link 1 file://./tests/layout/breaks.html#x

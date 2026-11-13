@@ -367,6 +367,8 @@ ew_font *font_get(int family, int style, int px)
 				best = &faces[i];
 			}
 		}
+		if (best == NULL && family == FF_COND)
+			best = font_get(FF_SANS, style, px);	/* (an EWEB.FNT before it had them) */
 		if (best == NULL && nfaces > 0)
 			best = &faces[0];
 		if (pk != NULL && best != NULL && best - faces < 255)

@@ -1,85 +1,85 @@
 page 608 x 254, background ffffff, 85 items, 0 links, title "Tables"
-text 11,24 43x17 #000000 sans13 bold link 0 "Name"
-fill 9,9 47x1 #808080
-fill 9,28 47x1 #808080
+text 11,24 38x17 #000000 cond13 bold link 0 "Name"
+fill 9,9 42x1 #808080
+fill 9,28 42x1 #808080
 fill 9,10 1x18 #808080
-fill 55,10 1x18 #808080
-text 60,24 41x17 #000000 sans13 bold link 0 "Score"
-fill 58,9 45x1 #808080
-fill 58,28 45x1 #808080
-fill 58,10 1x18 #808080
-fill 102,10 1x18 #808080
-text 198,24 43x17 #000000 sans13 bold link 0 "Notes"
-fill 105,9 229x1 #808080
-fill 105,28 229x1 #808080
-fill 105,10 1x18 #808080
-fill 333,10 1x18 #808080
-text 11,46 41x17 #000000 sans13 link 0 "Falcon"
-fill 9,31 47x1 #808080
-fill 9,50 47x1 #808080
+fill 50,10 1x18 #808080
+text 55,24 37x17 #000000 cond13 bold link 0 "Score"
+fill 53,9 41x1 #808080
+fill 53,28 41x1 #808080
+fill 53,10 1x18 #808080
+fill 93,10 1x18 #808080
+text 182,24 39x17 #000000 cond13 bold link 0 "Notes"
+fill 96,9 211x1 #808080
+fill 96,28 211x1 #808080
+fill 96,10 1x18 #808080
+fill 306,10 1x18 #808080
+text 11,46 37x17 #000000 cond13 link 0 "Falcon"
+fill 9,31 42x1 #808080
+fill 9,50 42x1 #808080
 fill 9,32 1x18 #808080
-fill 55,32 1x18 #808080
-text 60,46 24x17 #000000 sans13 link 0 "030"
-fill 58,31 45x1 #808080
-fill 58,50 45x1 #808080
-fill 58,32 1x18 #808080
-fill 102,32 1x18 #808080
-text 107,46 225x17 #000000 sans13 link 0 "a long note that goes on for a while"
-fill 105,31 229x1 #808080
-fill 105,50 229x1 #808080
-fill 105,32 1x18 #808080
-fill 333,32 1x18 #808080
-text 11,68 84x17 #000000 sans13 link 0 "spanning two"
-fill 9,53 94x1 #808080
-fill 9,72 94x1 #808080
+fill 50,32 1x18 #808080
+text 55,46 21x17 #000000 cond13 link 0 "030"
+fill 53,31 41x1 #808080
+fill 53,50 41x1 #808080
+fill 53,32 1x18 #808080
+fill 93,32 1x18 #808080
+text 98,46 207x17 #000000 cond13 link 0 "a long note that goes on for a while"
+fill 96,31 211x1 #808080
+fill 96,50 211x1 #808080
+fill 96,32 1x18 #808080
+fill 306,32 1x18 #808080
+text 11,68 77x17 #000000 cond13 link 0 "spanning two"
+fill 9,53 85x1 #808080
+fill 9,72 85x1 #808080
 fill 9,54 1x18 #808080
-fill 102,54 1x18 #808080
-text 107,68 7x17 #000000 sans13 link 0 "x"
-fill 105,53 229x1 #808080
-fill 105,72 229x1 #808080
-fill 105,54 1x18 #808080
-fill 333,54 1x18 #808080
-fill 6,6 331x1 #808080
-fill 6,75 331x1 #808080
+fill 93,54 1x18 #808080
+text 98,68 7x17 #000000 cond13 link 0 "x"
+fill 96,53 211x1 #808080
+fill 96,72 211x1 #808080
+fill 96,54 1x18 #808080
+fill 306,54 1x18 #808080
+fill 6,6 304x1 #808080
+fill 6,75 304x1 #808080
 fill 6,7 1x68 #808080
-fill 336,7 1x68 #808080
-text 6,102 214x17 #000000 sans13 link 0 "Then a table as wide as the page:"
+fill 309,7 1x68 #808080
+text 6,102 196x17 #000000 cond13 link 0 "Then a table as wide as the page:"
 fill 6,118 596x26 #eeeeee
-text 11,136 20x17 #000000 sans13 link 0 "left"
-text 568,136 29x17 #000000 sans13 link 0 "right"
-fill 261,144 51x18 #ccddee
-text 262,158 49x17 #000000 sans13 link 0 "centred"
-text 313,158 32x17 #000000 sans13 link 0 "table"
-text 9,183 34x17 #000000 sans13 link 0 "outer"
-text 52,183 32x17 #000000 sans13 link 0 "inner"
-fill 50,168 36x1 #808080
-fill 50,187 36x1 #808080
-fill 50,169 1x18 #808080
-fill 85,169 1x18 #808080
-text 90,183 28x17 #000000 sans13 link 0 "cells"
-fill 88,168 32x1 #808080
-fill 88,187 32x1 #808080
-fill 88,169 1x18 #808080
-fill 119,169 1x18 #808080
-fill 47,165 76x1 #808080
-fill 47,190 76x1 #808080
-fill 47,166 1x24 #808080
-fill 122,166 1x24 #808080
-fill 6,197 113x21 #ffffff
-fill 6,197 113x1 #999999
-fill 6,217 113x1 #999999
+text 11,136 19x17 #000000 cond13 link 0 "left"
+text 570,136 27x17 #000000 cond13 link 0 "right"
+fill 265,144 46x18 #ccddee
+text 266,158 44x17 #000000 cond13 link 0 "centred"
+text 312,158 29x17 #000000 cond13 link 0 "table"
+text 9,183 31x17 #000000 cond13 link 0 "outer"
+text 49,183 29x17 #000000 cond13 link 0 "inner"
+fill 47,168 33x1 #808080
+fill 47,187 33x1 #808080
+fill 47,169 1x18 #808080
+fill 79,169 1x18 #808080
+text 84,183 25x17 #000000 cond13 link 0 "cells"
+fill 82,168 29x1 #808080
+fill 82,187 29x1 #808080
+fill 82,169 1x18 #808080
+fill 110,169 1x18 #808080
+fill 44,165 70x1 #808080
+fill 44,190 70x1 #808080
+fill 44,166 1x24 #808080
+fill 113,166 1x24 #808080
+fill 6,197 114x21 #ffffff
+fill 6,197 114x1 #999999
+fill 6,217 114x1 #999999
 fill 6,198 1x19 #999999
-fill 118,198 1x19 #999999
-fill 119,197 31x22 #dddddd
-text 126,213 17x17 #000000 sans13 link 0 "[c]"
-fill 119,197 31x1 #999999
-fill 119,218 31x1 #999999
-fill 119,198 1x20 #999999
+fill 119,198 1x19 #999999
+fill 120,197 30x22 #dddddd
+text 127,213 16x17 #000000 cond13 link 0 "[c]"
+fill 120,197 30x1 #999999
+fill 120,218 30x1 #999999
+fill 120,198 1x20 #999999
 fill 149,198 1x20 #999999
-fill 6,222 104x26 #eeeeee
-fill 9,225 28x20 #ccddee
-text 11,240 24x17 #000000 sans13 link 0 "one"
-fill 40,225 26x20 #ccddee
-text 42,240 22x17 #000000 sans13 link 0 "two"
-fill 69,225 38x20 #ccddee
-text 71,240 34x17 #000000 sans13 link 0 "three"
+fill 6,222 98x26 #eeeeee
+fill 9,225 25x20 #ccddee
+text 11,240 21x17 #000000 cond13 link 0 "one"
+fill 37,225 26x20 #ccddee
+text 39,240 22x17 #000000 cond13 link 0 "two"
+fill 66,225 35x20 #ccddee
+text 68,240 31x17 #000000 cond13 link 0 "three"

@@ -1,152 +1,152 @@
-page 608 x 787, background ffffff, 151 items, 1 links, title "Floats, positions, rows"
-drawn: 3-28 30-150 0-2 29-29
+page 608 x 774, background ffffff, 151 items, 1 links, title "Floats, positions, rows"
+drawn: 3-27 29-150 0-2 28-28
 fill 6,6 596x24 #003366
-text 11,24 24x17 #ffffff sans13 link 0 "Left"
-text 565,24 32x17 #ffffff sans13 link 0 "Right"
-text 6,56 109x17 #000000 sans13 link 0 "After the header."
+text 11,24 23x17 #ffffff cond13 link 0 "Left"
+text 567,24 30x17 #ffffff cond13 link 0 "Right"
+text 6,56 100x17 #000000 cond13 link 0 "After the header."
 fill 466,72 136x56 #eeeeee
-text 470,89 121x17 #000000 sans13 link 0 "A box floated right,"
-text 470,105 118x17 #000000 sans13 link 0 "with words enough"
-text 470,121 120x17 #000000 sans13 link 0 "for three lines of it."
+text 470,89 112x17 #000000 cond13 link 0 "A box floated right,"
+text 470,105 110x17 #000000 cond13 link 0 "with words enough"
+text 470,121 112x17 #000000 cond13 link 0 "for three lines of it."
 fill 466,72 136x1 #888888
 fill 466,127 136x1 #888888
 fill 466,73 1x54 #888888
 fill 601,73 1x54 #888888
-text 6,85 436x17 #000000 sans13 link 0 "A paragraph beside the box on the right: its lines are shortened until"
-text 6,101 433x17 #000000 sans13 link 0 "the box ends, then they take the whole width again, as browsers do."
+text 6,85 446x17 #000000 cond13 link 0 "A paragraph beside the box on the right: its lines are shortened until the box"
+text 6,101 353x17 #000000 cond13 link 0 "ends, then they take the whole width again, as browsers do."
 fill 6,117 72x48 #ffdddd
-text 6,130 24x17 #000000 sans13 link 0 "Left"
-text 84,130 353x17 #000000 sans13 link 0 "This one starts beside a float on the left and the box on"
-text 84,146 513x17 #000000 sans13 link 0 "the right, lines shortened on both sides, words going on long enough to pass the"
-text 84,162 39x17 #000000 sans13 link 0 "floats."
-text 6,193 112x17 #000000 sans13 link 0 "Below every float."
-fill 6,178 596x2 #000080
-fill 6,209 596x58 #eeeeff
-clip x 6+596 y 209+58 in 0
-fill 6,209 178x16 #ffeedd
-text 6,222 71x17 #000000 sans13 link 0 "Floated left"
-fill 424,209 178x16 #ddffee
-text 424,222 80x17 #000000 sans13 link 0 "Floated right"
-text 184,235 204x17 #000000 sans13 link 0 "Between two floats in a box that"
-text 6,251 76x17 #000000 sans13 link 0 "holds them."
-text 16,295 174x17 #000000 sans13 link 0 "Moved by position: relative."
-text 520,327 45x17 #000000 sans13 link 0 "A table"
-fill 518,312 81x1 #888888
-fill 518,331 81x1 #888888
-fill 518,313 1x18 #888888
-fill 598,313 1x18 #888888
-text 520,349 77x17 #000000 sans13 link 0 "floated right"
-fill 518,334 81x1 #888888
-fill 518,353 81x1 #888888
-fill 518,335 1x18 #888888
-fill 598,335 1x18 #888888
-fill 515,309 87x1 #808080
-fill 515,356 87x1 #808080
-fill 515,310 1x46 #808080
-fill 601,310 1x46 #808080
-text 6,322 268x17 #000000 sans13 link 0 "Text beside a table that align=right floats."
-text 11,380 81x17 #000000 sans13 bold link 0 "Three rows"
-fill 8,340 87x1 #888888
-fill 8,409 87x1 #888888
-fill 8,341 1x68 #888888
-fill 94,341 1x68 #888888
-text 100,356 26x17 #000000 sans13 link 0 "One"
-fill 97,340 307x1 #888888
-fill 97,361 307x1 #888888
-fill 97,341 1x20 #888888
-fill 403,341 1x20 #888888
-fill 406,340 41x22 #ffeedd
-text 409,356 35x17 #000000 sans13 link 0 "Short"
-fill 406,340 41x1 #888888
-fill 406,361 41x1 #888888
-fill 406,341 1x20 #888888
-fill 446,341 1x20 #888888
-text 100,380 301x17 #000000 sans13 link 0 "Two, with more words in it than the others have"
-fill 97,364 307x1 #888888
-fill 97,385 307x1 #888888
-fill 97,365 1x20 #888888
-fill 403,365 1x20 #888888
-text 409,380 35x17 #000000 sans13 link 0 "Down"
-fill 406,364 41x1 #888888
-fill 406,385 41x1 #888888
-fill 406,365 1x20 #888888
-fill 446,365 1x20 #888888
-text 100,404 112x17 #000000 sans13 link 0 "Three, across two"
-fill 97,388 350x1 #888888
-fill 97,409 350x1 #888888
-fill 97,389 1x20 #888888
-fill 446,389 1x20 #888888
-text 11,428 28x17 #000000 sans13 link 0 "Four"
-fill 8,412 87x1 #888888
-fill 8,433 87x1 #888888
-fill 8,413 1x20 #888888
-fill 94,413 1x20 #888888
-text 100,428 25x17 #000000 sans13 link 0 "Five"
-fill 97,412 307x1 #888888
-fill 97,433 307x1 #888888
-fill 97,413 1x20 #888888
-fill 403,413 1x20 #888888
-text 409,428 18x17 #000000 sans13 link 0 "Up"
-fill 406,412 41x1 #888888
-fill 406,433 41x1 #888888
-fill 406,413 1x20 #888888
-fill 446,413 1x20 #888888
-image 199,443 48x24 link 0 "fits" file://./tests/layout/img/one.png
-text 7,456 88x17 #000000 sans13 link 0 "Words before "
-text 95,456 86x17 #000000 sans13 link 0 "a picture that"
-text 7,472 187x17 #000000 sans13 link 0 "fits on this line, which goes at"
-text 7,488 44x17 #000000 sans13 link 0 "its top."
-text 7,504 234x17 #000000 sans13 link 0 "Here are words enough to fill the line"
-image 151,507 96x48 link 0 "too wide" file://./tests/layout/img/two.png
-text 7,520 132x17 #000000 sans13 link 0 "and the picture goes"
-text 7,536 52x17 #000000 sans13 link 0 "below it."
-text 7,552 127x17 #000000 sans13 link 0 "Posted by someone"
-image 7,555 48x24 link 1 "in a link" file://./tests/layout/img/one.png
-text 55,568 104x17 #000000 sans13 link 0 "with text after it."
-fill 55,571 48x32 #ffeedd
-text 55,584 44x17 #000000 sans13 link 0 "floated"
-text 55,600 31x17 #000000 sans13 link 0 "span"
-text 103,584 40x17 #000000 sans13 link 0 "A box "
-text 143,584 99x17 #000000 sans13 link 0 "met in the text."
-fill 6,442 242x1 #888888
-fill 6,587 242x1 #888888
-fill 6,443 1x144 #888888
-fill 247,443 1x144 #888888
-image 108,596 48x24 link 0 "cell" file://./tests/layout/img/one.png
-text 156,609 54x17 #000000 sans13 link 0 "beside it"
-fill 106,594 106x1 #888888
-fill 106,621 106x1 #888888
-fill 106,595 1x26 #888888
-fill 211,595 1x26 #888888
-text 216,613 28x17 #000000 sans13 link 0 "next"
-fill 214,594 32x1 #888888
-fill 214,621 32x1 #888888
-fill 214,595 1x26 #888888
-fill 245,595 1x26 #888888
-fill 103,591 146x1 #808080
-fill 103,624 146x1 #808080
-fill 103,592 1x32 #808080
-fill 248,592 1x32 #808080
-fill 6,625 96x24 #eeeeff
-image 6,625 48x24 link 0 "a" file://./tests/layout/img/one.png
-image 54,625 48x24 link 0 "b" file://./tests/layout/img/one.png
-text 38,662 116x17 #000000 sans13 link 0 "a radio floated left"
-fill 504,667 98x18 #ffffff
-fill 504,667 98x1 #888888
-fill 504,684 98x1 #888888
-fill 504,668 1x16 #888888
-fill 601,668 1x16 #888888
-text 6,680 148x17 #000000 sans13 link 0 "a text field floated right"
-text 7,713 180x17 #000000 sans13 link 0 "Words before a wide picture "
-text 187,713 36x17 #000000 sans13 link 0 "and a"
-image 151,716 96x48 link 0 "pushed" file://./tests/layout/img/two.png
-image 103,716 48x24 link 0 "after it" file://./tests/layout/img/one.png
-text 7,729 71x17 #000000 sans13 link 0 "narrow one"
-text 7,745 86x17 #000000 sans13 link 0 "that would fit:"
-text 7,761 124x17 #000000 sans13 link 0 "both below the line,"
-text 7,777 236x17 #000000 sans13 link 0 "the narrow one at the wide one's left."
-fill 6,699 242x1 #888888
-fill 6,780 242x1 #888888
-fill 6,700 1x80 #888888
-fill 247,700 1x80 #888888
+text 6,130 23x17 #000000 cond13 link 0 "Left"
+text 84,130 346x17 #000000 cond13 link 0 "This one starts beside a float on the left and the box on the"
+text 84,146 483x17 #000000 cond13 link 0 "right, lines shortened on both sides, words going on long enough to pass the floats."
+text 6,180 106x17 #000000 cond13 link 0 "Below every float."
+fill 6,165 596x2 #000080
+fill 6,196 596x58 #eeeeff
+clip x 6+596 y 196+58 in 0
+fill 6,196 178x16 #ffeedd
+text 6,209 66x17 #000000 cond13 link 0 "Floated left"
+fill 424,196 178x16 #ddffee
+text 424,209 74x17 #000000 cond13 link 0 "Floated right"
+text 184,222 225x17 #000000 cond13 link 0 "Between two floats in a box that holds"
+text 6,238 34x17 #000000 cond13 link 0 "them."
+text 16,282 161x17 #000000 cond13 link 0 "Moved by position: relative."
+text 526,314 41x17 #000000 cond13 link 0 "A table"
+fill 524,299 75x1 #888888
+fill 524,318 75x1 #888888
+fill 524,300 1x18 #888888
+fill 598,300 1x18 #888888
+text 526,336 71x17 #000000 cond13 link 0 "floated right"
+fill 524,321 75x1 #888888
+fill 524,340 75x1 #888888
+fill 524,322 1x18 #888888
+fill 598,322 1x18 #888888
+fill 521,296 81x1 #808080
+fill 521,343 81x1 #808080
+fill 521,297 1x46 #808080
+fill 601,297 1x46 #808080
+text 6,309 247x17 #000000 cond13 link 0 "Text beside a table that align=right floats."
+text 11,367 74x17 #000000 cond13 bold link 0 "Three rows"
+fill 8,327 80x1 #888888
+fill 8,396 80x1 #888888
+fill 8,328 1x68 #888888
+fill 87,328 1x68 #888888
+text 93,343 23x17 #000000 cond13 link 0 "One"
+fill 90,327 288x1 #888888
+fill 90,348 288x1 #888888
+fill 90,328 1x20 #888888
+fill 377,328 1x20 #888888
+fill 380,327 39x22 #ffeedd
+text 383,343 31x17 #000000 cond13 link 0 "Short"
+fill 380,327 39x1 #888888
+fill 380,348 39x1 #888888
+fill 380,328 1x20 #888888
+fill 418,328 1x20 #888888
+text 93,367 282x17 #000000 cond13 link 0 "Two, with more words in it than the others have"
+fill 90,351 288x1 #888888
+fill 90,372 288x1 #888888
+fill 90,352 1x20 #888888
+fill 377,352 1x20 #888888
+text 383,367 33x17 #000000 cond13 link 0 "Down"
+fill 380,351 39x1 #888888
+fill 380,372 39x1 #888888
+fill 380,352 1x20 #888888
+fill 418,352 1x20 #888888
+text 93,391 104x17 #000000 cond13 link 0 "Three, across two"
+fill 90,375 329x1 #888888
+fill 90,396 329x1 #888888
+fill 90,376 1x20 #888888
+fill 418,376 1x20 #888888
+text 11,415 26x17 #000000 cond13 link 0 "Four"
+fill 8,399 80x1 #888888
+fill 8,420 80x1 #888888
+fill 8,400 1x20 #888888
+fill 87,400 1x20 #888888
+text 93,415 24x17 #000000 cond13 link 0 "Five"
+fill 90,399 288x1 #888888
+fill 90,420 288x1 #888888
+fill 90,400 1x20 #888888
+fill 377,400 1x20 #888888
+text 383,415 16x17 #000000 cond13 link 0 "Up"
+fill 380,399 39x1 #888888
+fill 380,420 39x1 #888888
+fill 380,400 1x20 #888888
+fill 418,400 1x20 #888888
+image 199,430 48x24 link 0 "fits" file://./tests/layout/img/one.png
+text 7,443 82x17 #000000 cond13 link 0 "Words before "
+text 89,443 101x17 #000000 cond13 link 0 "a picture that fits"
+text 7,459 169x17 #000000 cond13 link 0 "on this line, which goes at its"
+text 7,475 23x17 #000000 cond13 link 0 "top."
+text 7,491 216x17 #000000 cond13 link 0 "Here are words enough to fill the line"
+image 151,494 96x48 link 0 "too wide" file://./tests/layout/img/two.png
+text 7,507 119x17 #000000 cond13 link 0 "and the picture goes"
+text 7,523 50x17 #000000 cond13 link 0 "below it."
+text 7,539 117x17 #000000 cond13 link 0 "Posted by someone "
+text 124,539 25x17 #000000 cond13 link 0 "with"
+image 7,542 48x24 link 1 "in a link" file://./tests/layout/img/one.png
+text 55,555 72x17 #000000 cond13 link 0 "text after it."
+fill 55,558 48x32 #ffeedd
+text 55,571 40x17 #000000 cond13 link 0 "floated"
+text 55,587 27x17 #000000 cond13 link 0 "span"
+text 103,571 37x17 #000000 cond13 link 0 "A box "
+text 140,571 92x17 #000000 cond13 link 0 "met in the text."
+fill 6,429 242x1 #888888
+fill 6,574 242x1 #888888
+fill 6,430 1x144 #888888
+fill 247,430 1x144 #888888
+image 108,583 48x24 link 0 "cell" file://./tests/layout/img/one.png
+text 156,596 49x17 #000000 cond13 link 0 "beside it"
+fill 106,581 101x1 #888888
+fill 106,608 101x1 #888888
+fill 106,582 1x26 #888888
+fill 206,582 1x26 #888888
+text 211,600 26x17 #000000 cond13 link 0 "next"
+fill 209,581 30x1 #888888
+fill 209,608 30x1 #888888
+fill 209,582 1x26 #888888
+fill 238,582 1x26 #888888
+fill 103,578 139x1 #808080
+fill 103,611 139x1 #808080
+fill 103,579 1x32 #808080
+fill 241,579 1x32 #808080
+fill 6,612 96x24 #eeeeff
+image 6,612 48x24 link 0 "a" file://./tests/layout/img/one.png
+image 54,612 48x24 link 0 "b" file://./tests/layout/img/one.png
+text 38,649 107x17 #000000 cond13 link 0 "a radio floated left"
+fill 504,654 98x18 #ffffff
+fill 504,654 98x1 #888888
+fill 504,671 98x1 #888888
+fill 504,655 1x16 #888888
+fill 601,655 1x16 #888888
+text 6,667 138x17 #000000 cond13 link 0 "a text field floated right"
+text 7,700 168x17 #000000 cond13 link 0 "Words before a wide picture "
+text 175,700 32x17 #000000 cond13 link 0 "and a"
+image 151,703 96x48 link 0 "pushed" file://./tests/layout/img/two.png
+image 103,703 48x24 link 0 "after it" file://./tests/layout/img/one.png
+text 7,716 94x17 #000000 cond13 link 0 "narrow one that"
+text 7,732 84x17 #000000 cond13 link 0 "would fit: both"
+text 7,748 108x17 #000000 cond13 link 0 "below the line, the"
+text 7,764 197x17 #000000 cond13 link 0 "narrow one at the wide one's left."
+fill 6,686 242x1 #888888
+fill 6,767 242x1 #888888
+fill 6,687 1x80 #888888
+fill 247,687 1x80 #888888
 link 1 file://./tests/layout/floats.html#x

@@ -1,322 +1,322 @@
 page 608 x 711, background ffffff, 322 items, 0 links, title "Grid"
-text 6,25 171x14 #000000 sans11 bold link 0 "Fixed, fr and auto columns"
+text 6,25 148x14 #000000 cond11 bold link 0 "Fixed, fr and auto columns"
 fill 6,33 596x31 #dddddd
 fill 6,33 80x14 #88ccff
-text 7,44 30x13 #000000 sans10 link 0 "100px"
+text 7,44 29x13 #000000 cond10 link 0 "100px"
 fill 6,33 80x1 #003366
 fill 6,46 80x1 #003366
 fill 6,34 1x12 #003366
 fill 85,34 1x12 #003366
 fill 89,33 170x14 #ffcc88
-text 90,44 14x13 #000000 sans10 link 0 "1fr"
+text 90,44 13x13 #000000 cond10 link 0 "1fr"
 fill 89,33 170x1 #003366
 fill 89,46 170x1 #003366
 fill 89,34 1x12 #003366
 fill 258,34 1x12 #003366
 fill 262,33 340x14 #88ff88
-text 263,44 14x13 #000000 sans10 link 0 "2fr"
+text 263,44 13x13 #000000 cond10 link 0 "2fr"
 fill 262,33 340x1 #003366
 fill 262,46 340x1 #003366
 fill 262,34 1x12 #003366
 fill 601,34 1x12 #003366
 fill 6,50 80x14 #ffcc88
-text 7,61 43x13 #000000 sans10 link 0 "next row"
+text 7,61 41x13 #000000 cond10 link 0 "next row"
 fill 6,50 80x1 #003366
 fill 6,63 80x1 #003366
 fill 6,51 1x12 #003366
 fill 85,51 1x12 #003366
 fill 89,50 170x14 #88ccff
-text 90,61 6x13 #000000 sans10 link 0 "b"
+text 90,61 6x13 #000000 cond10 link 0 "b"
 fill 89,50 170x1 #003366
 fill 89,63 170x1 #003366
 fill 89,51 1x12 #003366
 fill 258,51 1x12 #003366
 fill 262,50 340x14 #88ff88
-text 263,61 5x13 #000000 sans10 link 0 "c"
+text 263,61 5x13 #000000 cond10 link 0 "c"
 fill 262,50 340x1 #003366
 fill 262,63 340x1 #003366
 fill 262,51 1x12 #003366
 fill 601,51 1x12 #003366
 fill 6,69 596x14 #dddddd
 fill 6,69 24x14 #88ccff
-text 7,80 22x13 #000000 sans10 link 0 "auto"
+text 7,80 22x13 #000000 cond10 link 0 "auto"
 fill 6,69 24x1 #003366
 fill 6,82 24x1 #003366
 fill 6,70 1x12 #003366
 fill 29,70 1x12 #003366
-fill 33,69 66x14 #ffcc88
-text 34,80 64x13 #000000 sans10 link 0 "a longer auto"
-fill 33,69 66x1 #003366
-fill 33,82 66x1 #003366
+fill 33,69 67x14 #ffcc88
+text 34,80 65x13 #000000 cond10 link 0 "a longer auto"
+fill 33,69 67x1 #003366
+fill 33,82 67x1 #003366
 fill 33,70 1x12 #003366
-fill 98,70 1x12 #003366
-fill 102,69 500x14 #88ff88
-text 103,80 58x13 #000000 sans10 link 0 "the rest, 1fr"
-fill 102,69 500x1 #003366
-fill 102,82 500x1 #003366
-fill 102,70 1x12 #003366
+fill 99,70 1x12 #003366
+fill 103,69 499x14 #88ff88
+text 104,80 57x13 #000000 cond10 link 0 "the rest, 1fr"
+fill 103,69 499x1 #003366
+fill 103,82 499x1 #003366
+fill 103,70 1x12 #003366
 fill 601,70 1x12 #003366
 fill 6,88 596x36 #dddddd
 fill 6,88 196x14 #88ccff
-text 7,99 18x13 #000000 sans10 link 0 "one"
+text 7,99 18x13 #000000 cond10 link 0 "one"
 fill 6,88 196x1 #003366
 fill 6,101 196x1 #003366
 fill 6,89 1x12 #003366
 fill 201,89 1x12 #003366
 fill 205,88 196x14 #ffcc88
-text 206,99 18x13 #000000 sans10 link 0 "two"
+text 206,99 17x13 #000000 cond10 link 0 "two"
 fill 205,88 196x1 #003366
 fill 205,101 196x1 #003366
 fill 205,89 1x12 #003366
 fill 400,89 1x12 #003366
 fill 404,88 196x14 #88ff88
-text 405,99 26x13 #000000 sans10 link 0 "three"
+text 405,99 26x13 #000000 cond10 link 0 "three"
 fill 404,88 196x1 #003366
 fill 404,101 196x1 #003366
 fill 404,89 1x12 #003366
 fill 599,89 1x12 #003366
 fill 6,110 196x14 #ffcc88
-text 7,121 20x13 #000000 sans10 link 0 "four"
+text 7,121 19x13 #000000 cond10 link 0 "four"
 fill 6,110 196x1 #003366
 fill 6,123 196x1 #003366
 fill 6,111 1x12 #003366
 fill 201,111 1x12 #003366
 fill 205,110 196x14 #88ccff
-text 206,121 18x13 #000000 sans10 link 0 "five"
+text 206,121 17x13 #000000 cond10 link 0 "five"
 fill 205,110 196x1 #003366
 fill 205,123 196x1 #003366
 fill 205,111 1x12 #003366
 fill 400,111 1x12 #003366
 fill 6,129 596x50 #dddddd
 fill 6,129 160x50 #88ccff
-text 7,140 85x13 #000000 sans10 link 0 "minmax 100..200"
+text 7,140 83x13 #000000 cond10 link 0 "minmax 100..200"
 fill 6,129 160x1 #003366
 fill 6,178 160x1 #003366
 fill 6,130 1x48 #003366
 fill 165,130 1x48 #003366
-fill 169,129 359x50 #ffcc88
-text 170,140 14x13 #000000 sans10 link 0 "1fr"
-fill 169,129 359x1 #003366
-fill 169,178 359x1 #003366
+fill 169,129 360x50 #ffcc88
+text 170,140 13x13 #000000 cond10 link 0 "1fr"
+fill 169,129 360x1 #003366
+fill 169,178 360x1 #003366
 fill 169,130 1x48 #003366
-fill 527,130 1x48 #003366
-fill 531,129 71x50 #88ff88
-text 532,140 14x13 #000000 sans10 link 0 "fit-"
-text 532,152 69x13 #000000 sans10 link 0 "content(80px)"
-text 532,164 49x13 #000000 sans10 link 0 "with more"
-text 532,176 29x13 #000000 sans10 link 0 "words"
-fill 531,129 71x1 #003366
-fill 531,178 71x1 #003366
-fill 531,130 1x48 #003366
+fill 528,130 1x48 #003366
+fill 532,129 70x50 #88ff88
+text 533,140 13x13 #000000 cond10 link 0 "fit-"
+text 533,152 68x13 #000000 cond10 link 0 "content(80px)"
+text 533,164 48x13 #000000 cond10 link 0 "with more"
+text 533,176 28x13 #000000 cond10 link 0 "words"
+fill 532,129 70x1 #003366
+fill 532,178 70x1 #003366
+fill 532,130 1x48 #003366
 fill 601,130 1x48 #003366
-text 6,198 171x14 #000000 sans11 bold link 0 "Placing by lines and spans"
+text 6,198 145x14 #000000 cond11 bold link 0 "Placing by lines and spans"
 fill 6,206 596x48 #dddddd
 fill 6,206 295x14 #88ccff
-text 7,217 71x13 #000000 sans10 link 0 "columns 1 to 3"
+text 7,217 71x13 #000000 cond10 link 0 "columns 1 to 3"
 fill 6,206 295x1 #003366
 fill 6,219 295x1 #003366
 fill 6,207 1x12 #003366
 fill 300,207 1x12 #003366
 fill 304,206 295x14 #ffcc88
-text 305,217 32x13 #000000 sans10 link 0 "span 2"
+text 305,217 32x13 #000000 cond10 link 0 "span 2"
 fill 304,206 295x1 #003366
 fill 304,219 295x1 #003366
 fill 304,207 1x12 #003366
 fill 598,207 1x12 #003366
 fill 155,223 444x14 #88ff88
-text 156,234 92x13 #000000 sans10 link 0 "2 to the end, row 2"
+text 156,234 91x13 #000000 cond10 link 0 "2 to the end, row 2"
 fill 155,223 444x1 #003366
 fill 155,236 444x1 #003366
 fill 155,224 1x12 #003366
 fill 598,224 1x12 #003366
 fill 6,223 146x31 #ffcc88
-text 7,234 54x13 #000000 sans10 link 0 "rows 2 to 4"
+text 7,234 53x13 #000000 cond10 link 0 "rows 2 to 4"
 fill 6,223 146x1 #003366
 fill 6,253 146x1 #003366
 fill 6,224 1x29 #003366
 fill 151,224 1x29 #003366
 fill 155,240 146x14 #88ccff
-text 156,251 22x13 #000000 sans10 link 0 "auto"
+text 156,251 22x13 #000000 cond10 link 0 "auto"
 fill 155,240 146x1 #003366
 fill 155,253 146x1 #003366
 fill 155,241 1x12 #003366
 fill 300,241 1x12 #003366
 fill 304,240 146x14 #88ff88
-text 305,251 22x13 #000000 sans10 link 0 "auto"
+text 305,251 22x13 #000000 cond10 link 0 "auto"
 fill 304,240 146x1 #003366
 fill 304,253 146x1 #003366
 fill 304,241 1x12 #003366
 fill 449,241 1x12 #003366
 fill 453,240 146x14 #88ccff
-text 454,251 22x13 #000000 sans10 link 0 "auto"
+text 454,251 22x13 #000000 cond10 link 0 "auto"
 fill 453,240 146x1 #003366
 fill 453,253 146x1 #003366
 fill 453,241 1x12 #003366
 fill 598,241 1x12 #003366
-text 6,273 36x14 #000000 sans11 bold link 0 "Areas"
+text 6,273 33x14 #000000 cond11 bold link 0 "Areas"
 fill 6,281 596x60 #dddddd
 fill 6,281 596x14 #88ccff
-text 7,292 36x13 #000000 sans10 link 0 "Header"
+text 7,292 35x13 #000000 cond10 link 0 "Header"
 fill 6,281 596x1 #003366
 fill 6,294 596x1 #003366
 fill 6,282 1x12 #003366
 fill 601,282 1x12 #003366
 fill 6,298 96x26 #ffcc88
-text 7,309 52x13 #000000 sans10 link 0 "Navigation"
-text 7,321 20x13 #000000 sans10 link 0 "links"
+text 7,309 52x13 #000000 cond10 link 0 "Navigation"
+text 7,321 22x13 #000000 cond10 link 0 "links"
 fill 6,298 96x1 #003366
 fill 6,323 96x1 #003366
 fill 6,299 1x24 #003366
 fill 101,299 1x24 #003366
 fill 105,298 497x26 #88ff88
-text 106,309 457x13 #000000 sans10 link 0 "The main part, as wide as the rest of the grid, its text going on to show how the column grows."
+text 106,309 455x13 #000000 cond10 link 0 "The main part, as wide as the rest of the grid, its text going on to show how the column grows."
 fill 105,298 497x1 #003366
 fill 105,323 497x1 #003366
 fill 105,299 1x24 #003366
 fill 601,299 1x24 #003366
 fill 6,327 596x14 #ffcc88
-text 7,338 32x13 #000000 sans10 link 0 "Footer"
+text 7,338 31x13 #000000 cond10 link 0 "Footer"
 fill 6,327 596x1 #003366
 fill 6,340 596x1 #003366
 fill 6,328 1x12 #003366
 fill 601,328 1x12 #003366
-text 6,360 280x14 #000000 sans11 bold link 0 "Cards: repeat(auto-fill, minmax(140px, 1fr))"
+text 6,360 247x14 #000000 cond11 bold link 0 "Cards: repeat(auto-fill, minmax(140px, 1fr))"
 fill 6,368 596x14 #dddddd
 fill 6,368 116x14 #88ccff
-text 7,379 30x13 #000000 sans10 link 0 "card 1"
+text 7,379 30x13 #000000 cond10 link 0 "card 1"
 fill 6,368 116x1 #003366
 fill 6,381 116x1 #003366
 fill 6,369 1x12 #003366
 fill 121,369 1x12 #003366
 fill 125,368 116x14 #ffcc88
-text 126,379 30x13 #000000 sans10 link 0 "card 2"
+text 126,379 30x13 #000000 cond10 link 0 "card 2"
 fill 125,368 116x1 #003366
 fill 125,381 116x1 #003366
 fill 125,369 1x12 #003366
 fill 240,369 1x12 #003366
 fill 244,368 116x14 #88ff88
-text 245,379 30x13 #000000 sans10 link 0 "card 3"
+text 245,379 30x13 #000000 cond10 link 0 "card 3"
 fill 244,368 116x1 #003366
 fill 244,381 116x1 #003366
 fill 244,369 1x12 #003366
 fill 359,369 1x12 #003366
 fill 363,368 116x14 #ffcc88
-text 364,379 30x13 #000000 sans10 link 0 "card 4"
+text 364,379 30x13 #000000 cond10 link 0 "card 4"
 fill 363,368 116x1 #003366
 fill 363,381 116x1 #003366
 fill 363,369 1x12 #003366
 fill 478,369 1x12 #003366
 fill 482,368 116x14 #88ccff
-text 483,379 30x13 #000000 sans10 link 0 "card 5"
+text 483,379 30x13 #000000 cond10 link 0 "card 5"
 fill 482,368 116x1 #003366
 fill 482,381 116x1 #003366
 fill 482,369 1x12 #003366
 fill 597,369 1x12 #003366
-text 6,401 64x14 #000000 sans11 bold link 0 "Alignment"
+text 6,401 57x14 #000000 cond11 bold link 0 "Alignment"
 fill 6,409 596x40 #dddddd
 fill 84,409 39x40 #88ccff
-text 85,420 37x13 #000000 sans10 link 0 "centred"
+text 85,420 37x13 #000000 cond10 link 0 "centred"
 fill 84,409 39x1 #003366
 fill 84,448 39x1 #003366
 fill 84,410 1x38 #003366
 fill 122,410 1x38 #003366
 fill 205,435 49x14 #ffcc88
-text 206,446 47x13 #000000 sans10 link 0 "start, end"
+text 206,446 47x13 #000000 cond10 link 0 "start, end"
 fill 205,435 49x1 #003366
 fill 205,448 49x1 #003366
 fill 205,436 1x12 #003366
 fill 253,436 1x12 #003366
 fill 404,422 196x14 #88ff88
-text 405,433 71x13 #000000 sans10 link 0 "stretch, centre"
+text 405,433 71x13 #000000 cond10 link 0 "stretch, centre"
 fill 404,422 196x1 #003366
 fill 404,435 196x1 #003366
 fill 404,423 1x12 #003366
 fill 599,423 1x12 #003366
 fill 6,454 596x14 #dddddd
 fill 238,454 64x14 #88ccff
-text 239,465 6x13 #000000 sans10 link 0 "a"
+text 239,465 6x13 #000000 cond10 link 0 "a"
 fill 238,454 64x1 #003366
 fill 238,467 64x1 #003366
 fill 238,455 1x12 #003366
 fill 301,455 1x12 #003366
 fill 305,454 64x14 #ffcc88
-text 306,465 6x13 #000000 sans10 link 0 "b"
+text 306,465 6x13 #000000 cond10 link 0 "b"
 fill 305,454 64x1 #003366
 fill 305,467 64x1 #003366
 fill 305,455 1x12 #003366
 fill 368,455 1x12 #003366
-text 6,487 170x14 #000000 sans11 bold link 0 "Rows and columns by flow"
+text 6,487 145x14 #000000 cond11 bold link 0 "Rows and columns by flow"
 fill 6,495 596x68 #dddddd
 fill 6,495 596x24 #88ccff
-text 7,506 24x13 #000000 sans10 link 0 "30px"
+text 7,506 23x13 #000000 cond10 link 0 "30px"
 fill 6,495 596x1 #003366
 fill 6,518 596x1 #003366
 fill 6,496 1x22 #003366
 fill 601,496 1x22 #003366
 fill 6,522 596x14 #ffcc88
-text 7,533 62x13 #000000 sans10 link 0 "auto, its text"
+text 7,533 62x13 #000000 cond10 link 0 "auto, its text"
 fill 6,522 596x1 #003366
 fill 6,535 596x1 #003366
 fill 6,523 1x12 #003366
 fill 601,523 1x12 #003366
 fill 6,539 596x24 #88ff88
-text 7,550 24x13 #000000 sans10 link 0 "30px"
+text 7,550 23x13 #000000 cond10 link 0 "30px"
 fill 6,539 596x1 #003366
 fill 6,562 596x1 #003366
 fill 6,540 1x22 #003366
 fill 601,540 1x22 #003366
 fill 6,568 596x31 #dddddd
 fill 6,568 196x14 #88ccff
-text 7,579 6x13 #000000 sans10 link 0 "1"
+text 7,579 6x13 #000000 cond10 link 0 "1"
 fill 6,568 196x1 #003366
 fill 6,581 196x1 #003366
 fill 6,569 1x12 #003366
 fill 201,569 1x12 #003366
 fill 205,568 197x14 #88ff88
-text 206,579 6x13 #000000 sans10 link 0 "3"
+text 206,579 6x13 #000000 cond10 link 0 "3"
 fill 205,568 197x1 #003366
 fill 205,581 197x1 #003366
 fill 205,569 1x12 #003366
 fill 401,569 1x12 #003366
 fill 405,568 197x14 #88ccff
-text 406,579 6x13 #000000 sans10 link 0 "5"
+text 406,579 6x13 #000000 cond10 link 0 "5"
 fill 405,568 197x1 #003366
 fill 405,581 197x1 #003366
 fill 405,569 1x12 #003366
 fill 601,569 1x12 #003366
 fill 6,585 196x14 #ffcc88
-text 7,596 6x13 #000000 sans10 link 0 "2"
+text 7,596 6x13 #000000 cond10 link 0 "2"
 fill 6,585 196x1 #003366
 fill 6,598 196x1 #003366
 fill 6,586 1x12 #003366
 fill 201,586 1x12 #003366
 fill 205,585 197x14 #ffcc88
-text 206,596 6x13 #000000 sans10 link 0 "4"
+text 206,596 6x13 #000000 cond10 link 0 "4"
 fill 205,585 197x1 #003366
 fill 205,598 197x1 #003366
 fill 205,586 1x12 #003366
 fill 401,586 1x12 #003366
 fill 6,604 596x96 #dddddd
 fill 6,604 296x35 #88ccff
-text 7,615 35x13 #000000 sans10 link 0 "1fr row"
+text 7,615 33x13 #000000 cond10 link 0 "1fr row"
 fill 6,604 296x1 #003366
 fill 6,638 296x1 #003366
 fill 6,605 1x33 #003366
 fill 301,605 1x33 #003366
 fill 305,604 296x35 #ffcc88
-text 306,615 6x13 #000000 sans10 link 0 "b"
+text 306,615 6x13 #000000 cond10 link 0 "b"
 fill 305,604 296x1 #003366
 fill 305,638 296x1 #003366
 fill 305,605 1x33 #003366
 fill 600,605 1x33 #003366
 fill 6,642 296x57 #88ff88
-text 7,653 35x13 #000000 sans10 link 0 "2fr row"
+text 7,653 33x13 #000000 cond10 link 0 "2fr row"
 fill 6,642 296x1 #003366
 fill 6,698 296x1 #003366
 fill 6,643 1x55 #003366
 fill 301,643 1x55 #003366
 fill 305,642 296x57 #ffcc88
-text 306,653 6x13 #000000 sans10 link 0 "d"
+text 306,653 6x13 #000000 cond10 link 0 "d"
 fill 305,642 296x1 #003366
 fill 305,698 296x1 #003366
 fill 305,643 1x55 #003366

@@ -5,7 +5,9 @@
 
 EWeb draws its pages' text itself, the same on every Falcon whether or not
 a GDOS is installed (Erez's decision, 18 Oct 2026). The faces are DejaVu
-Sans, Serif and Sans Mono, each in regular, bold, italic and bold italic,
+Sans, Serif and Sans Mono, and Sans Condensed (Arial's widths: the pages
+that ask for Arial and its kind, Erez's choice of 13 Nov 2026), each in
+regular, bold, italic and bold italic,
 drawn by FreeType (through Pillow) without smoothing at a set of pixel
 sizes, for the Latin-1 and Latin Extended-A letters, Hebrew, and the
 punctuation and signs pages use most, and in blocks of their own more
@@ -57,6 +59,10 @@ FAMILIES = [  # family number, file stems for regular, bold, italic, bold italic
     (1, ["DejaVuSerif", "DejaVuSerif-Bold", "DejaVuSerif-Italic", "DejaVuSerif-BoldItalic"]),
     (2, ["DejaVuSansMono", "DejaVuSansMono-Bold", "DejaVuSansMono-Oblique",
          "DejaVuSansMono-BoldOblique"]),
+    # Arial's widths, for the pages that ask for Arial, Helvetica and their
+    # kind (Erez's choice C, 13 Nov 2026: layout.c's family_of)
+    (3, ["DejaVuSansCondensed", "DejaVuSansCondensed-Bold", "DejaVuSansCondensed-Oblique",
+         "DejaVuSansCondensed-BoldOblique"]),
 ]
 SIZES = [9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32]
 

@@ -7,55 +7,55 @@ fill 554,12 36x1 #2a2a2a
 fill 554,39 36x1 #2a2a2a
 fill 554,13 1x26 #2a2a2a
 fill 589,13 1x26 #2a2a2a
-fill 6,16 104x22 #e0e0e0
-text 10,31 96x14 #000000 sans11 bold link 0 "Find Out More!"
-fill 6,16 104x1 #ff3333
-fill 6,37 104x1 #ff3333
+fill 6,16 92x22 #e0e0e0
+text 10,31 84x14 #000000 cond11 bold link 0 "Find Out More!"
+fill 6,16 92x1 #ff3333
+fill 6,37 92x1 #ff3333
 fill 6,17 1x20 #ff3333
-fill 109,17 1x20 #ff3333
-fill 113,19 31x18 #e0e0e0
-fill 113,19 31x1 #2a2a2a
-fill 113,36 31x1 #2a2a2a
-fill 113,20 1x16 #2a2a2a
-fill 143,20 1x16 #2a2a2a
-fill 147,16 147x22 #3366cc
-text 151,31 51x14 #ffffff sans11 italic link 0 "a ground"
-text 206,31 84x14 #ffffff sans11 bold link 0 "of the page's"
-fill 147,16 147x1 #ff3333
-fill 147,37 147x1 #ff3333
-fill 147,17 1x20 #ff3333
-fill 293,17 1x20 #ff3333
-fill 245,38 118x26 #333333
-text 256,55 96x14 #ffffff sans11 bold link 0 "Find Out More!"
-fill 245,38 118x1 #888888
-fill 245,63 118x1 #888888
-fill 245,39 1x24 #888888
-fill 362,39 1x24 #888888
-text 187,99 55x13 #eeeeee sans10 link 0 "CLICK ME!"
+fill 97,17 1x20 #ff3333
+fill 101,19 28x18 #e0e0e0
+fill 101,19 28x1 #2a2a2a
+fill 101,36 28x1 #2a2a2a
+fill 101,20 1x16 #2a2a2a
+fill 128,20 1x16 #2a2a2a
+fill 132,16 127x22 #3366cc
+text 136,31 43x14 #ffffff cond11 italic link 0 "a ground"
+text 182,31 73x14 #ffffff cond11 bold link 0 "of the page's"
+fill 132,16 127x1 #ff3333
+fill 132,37 127x1 #ff3333
+fill 132,17 1x20 #ff3333
+fill 258,17 1x20 #ff3333
+fill 251,38 106x26 #333333
+text 262,55 84x14 #ffffff cond11 bold link 0 "Find Out More!"
+fill 251,38 106x1 #888888
+fill 251,63 106x1 #888888
+fill 251,39 1x24 #888888
+fill 356,39 1x24 #888888
+text 191,99 47x13 #eeeeee cond10 link 0 "CLICK ME!"
 fill 6,74 417x1 #f45950
 fill 6,115 417x1 #f45950
 fill 6,75 1x40 #f45950
 fill 422,75 1x40 #f45950
-text 24,138 18x13 #eeeeee sans10 link 0 "min"
+text 24,138 18x13 #eeeeee cond10 link 0 "min"
 fill 6,126 96x2 #888888
 fill 6,140 96x2 #888888
 fill 6,128 2x12 #888888
 fill 100,128 2x12 #888888
 fill 6,142 596x44 #2a2a2a
-text 578,168 10x15 #9a9a9a sans12 bold link 0 "+"
-text 20,168 109x15 #ededed sans12 bold link 0 "Manual Testing"
+text 579,168 9x15 #9a9a9a cond12 bold link 0 "+"
+text 20,168 94x15 #ededed cond12 bold link 0 "Manual Testing"
 fill 6,185 596x1 #3a3a3a
-fill 6,196 118x28 #2a2a2a
-fill 6,235 148x1 #888888
-fill 6,252 148x1 #888888
+fill 6,196 101x28 #2a2a2a
+fill 6,235 128x1 #888888
+fill 6,252 128x1 #888888
 fill 6,236 1x16 #888888
-fill 153,236 1x16 #888888
-fill 306,236 146x1 #808080
-fill 306,251 146x1 #808080
-fill 306,236 1x16 #808080
-fill 451,236 1x16 #808080
-fill 157,234 146x18 #ffffff
-fill 157,234 146x1 #808080
-fill 157,251 146x1 #808080
-fill 157,234 1x18 #808080
-fill 302,234 1x18 #808080
+fill 133,236 1x16 #888888
+fill 266,236 126x1 #808080
+fill 266,251 126x1 #808080
+fill 266,236 1x16 #808080
+fill 391,236 1x16 #808080
+fill 137,234 126x18 #ffffff
+fill 137,234 126x1 #808080
+fill 137,251 126x1 #808080
+fill 137,234 1x18 #808080
+fill 262,234 1x18 #808080

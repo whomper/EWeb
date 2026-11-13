@@ -1778,7 +1778,7 @@ int main(int argc, char **argv)
 			} else
 				printf("text %d,%d %dx%d %s %s%d%s%s%s%s link %d \"%.*s\"\n", (int) it->x,
 				       (int) (it->y + it->base), (int) it->w, (int) it->h, col,
-				       it->font->family == FF_SANS ? "sans" : it->font->family == FF_SERIF ? "serif" : "mono",
+				       it->font->family == FF_SANS ? "sans" : it->font->family == FF_SERIF ? "serif" : it->font->family == FF_COND ? "cond" : "mono",
 				       it->font->px, it->font->style & FS_BOLD ? " bold" : "",
 				       it->font->style & FS_ITALIC ? " italic" : "", it->flags & DLF_RTL ? " rtl" : "", nohit,
 				       it->link, (int) it->len, it->text);

@@ -309,7 +309,9 @@ hub stay complete, with the evidence.
   (`build/m68k/svgrender -n`, `tools/count68k.sh`, soft float as `EWEB.PRG`) when the change is
   meant for speed.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
-  (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them).
+  (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them): Sans, Serif,
+  Sans Mono and Sans Condensed, the last for pages that ask for Arial's kind (Erez, 13 Nov 2026:
+  `family_of` in `src/layout/layout.c`; EWeb's own pages name DejaVu Sans).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page
   (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
   `docs/help/WINDOW.IMG` is a Hatari capture of the start page in 16 colours (`helpfront.py
@@ -319,8 +321,9 @@ hub stay complete, with the evidence.
   yaary.music now), kept as a palette PNG of the screen's exact colours.
 - **The ST edition** is frozen after 1.0 (Erez, 4 Nov 2026; DESIGN.md, Decisions): bug fixes only,
   no new features; its rigs run for a release, not for each change, and a new feature stays out of
-  it (`EW_ST`). Its speed is worked on again (Erez, 13 Nov 2026: as fast as it can be; DESIGN.md, The
-  ST edition's speed): `PAGEST.TTP` and `speed.py ST:mono` before and after, and the monochrome
+  it (`EW_ST`). Its speed was worked on (Erez, 13 Nov 2026; released in 1.7; DESIGN.md, The ST
+  edition's speed), then the performance work stopped (Erez, 13 Nov 2026): a speed change ships only
+  if no row is slower beyond one tick; for one, `PAGEST.TTP` and `speed.py ST:mono` before and after, and the monochrome
   screen drawn straight into its plane (`canvas.bpp` 1, `cv_page_planes`; after changing it, `make
   test`'s `tests/layout/planes.py`). It is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
   (`-Os -fno-store-merging -fdisable-tree-bswap`, `-DEW_ST`), `tls_none.c`, no DSP, TJpgDec in place
