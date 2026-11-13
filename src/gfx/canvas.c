@@ -118,9 +118,11 @@ static void row1(uint8_t *row, int32_t x0, int32_t x1, unsigned w)
 }
 
 /* (x, y, w, h) clipped, in pen pv's bit */
+static inline uint8_t *row_at(const canvas *c, int32_t y);
+
 static void fill1(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t pv)
 {
-	uint8_t *row = c->pix + y * c->stride;
+	uint8_t *row = row_at(c, y);
 	unsigned v = (pv & 1) ? 0xffffU : 0;
 	int32_t j;
 	for (j = 0; j < h; j++, row += c->stride)
@@ -133,12 +135,19 @@ static void fill1(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_
    of 16, of 4) */
 static unsigned pattern1(const canvas *c, int32_t x0, const uint8_t q[4])
 {
-	unsigned w = 0;
-	int k;
-	for (k = 0; k < 16; k++)
-		if (q[(k - c->bx - x0) & 3] & 1)
-			w |= 0x8000U >> k;
-	return w;
+	/* (four pixels' bits, then four times over: a shift by a count
+	   for each of 16 was 2,500 cycles of an 8 MHz ST's a fill) */
+	int i = (int) ((-c->bx - x0) & 3);
+	unsigned n = (unsigned) (q[i] & 1) << 3 | (unsigned) (q[(i + 1) & 3] & 1) << 2 |
+		     (unsigned) (q[(i + 2) & 3] & 1) << 1 | (unsigned) (q[(i + 3) & 3] & 1);
+	return n * 0x1111U;
+}
+
+/* a row's place: rows and their strides are under 65,536 bytes, so a
+   16 by 16 multiply (the 68000's mulu.w), not libgcc's 32-bit call */
+static inline uint8_t *row_at(const canvas *c, int32_t y)
+{
+	return c->pix + (uint32_t) (uint16_t) y * (uint16_t) c->stride;
 }
 
 /* a glyph's set bits, columns c0..c1 and rows r0..r1 of it, at canvas
@@ -147,10 +156,47 @@ static void glyph1(canvas *c, const uint8_t *bits, int32_t stride, int32_t gx, i
 		   int32_t r0, int32_t r1, uint32_t pv)
 {
 	int32_t row, b0 = c0 >> 3, b1 = (c1 - 1) >> 3, bi;
-	const uint8_t *b = bits + r0 * stride;
-	uint8_t *o = c->pix + (gy + r0) * c->stride;
+	const uint8_t *b = bits + (uint32_t) (uint16_t) r0 * (uint16_t) stride;
+	uint8_t *o = row_at(c, gy + r0);
 	int on = (int) (pv & 1);
 	unsigned first = 0xffU >> (c0 & 7), last = (0xff00U >> (((c1 - 1) & 7) + 1)) & 0xffU;
+	int32_t at0 = c->bx + gx, words = c->stride >> 1;
+	if (stride <= 2 && at0 >= 0) {
+		/* most of a page's letters: as wide as 16 pixels, at or right
+		   of the canvas's start: each row's bits one word, shifted
+		   once into the two words it falls on (or'ed in, or cleared) */
+		unsigned keep = (0xffffU >> c0) & (0xffffU << (16 - c1)) & 0xffffU;
+		int sh = (int) (at0 & 15);
+		uint8_t *w0 = o + (at0 >> 4) * 2;
+		int two = (at0 >> 4) + 1 < words;	/* (a long there: the next word is the row's) */
+		(void) two;
+		for (row = r0; row < r1; row++, b += stride, w0 += c->stride) {
+			unsigned v = ((unsigned) b[0] << 8 | (stride == 2 ? b[1] : 0)) & keep;
+			uint32_t t;
+			if (v == 0)
+				continue;
+			t = (uint32_t) v << (16 - sh);
+#if defined(__m68k__) || defined(__mc68000__)
+			if (two) {
+				if (on)
+					*(uint32_t *) (void *) w0 |= t;
+				else
+					*(uint32_t *) (void *) w0 &= ~t;
+				continue;
+			}
+#endif
+			if (on) {
+				ST16(w0, LD16(w0) | (unsigned) (t >> 16));
+				if (t & 0xffffU)
+					ST16(w0 + 2, LD16(w0 + 2) | (unsigned) (t & 0xffffU));
+			} else {
+				ST16(w0, LD16(w0) & ~(unsigned) (t >> 16));
+				if (t & 0xffffU)
+					ST16(w0 + 2, LD16(w0 + 2) & ~(unsigned) (t & 0xffffU));
+			}
+		}
+		return;
+	}
 	for (row = r0; row < r1; row++, b += stride, o += c->stride)
 		for (bi = b0; bi <= b1; bi++) {
 			unsigned v = b[bi];
@@ -597,7 +643,7 @@ void cv_fill(canvas *c, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t rgb
 				return;
 			for (j = 0; j < 4; j++)
 				pw[j] = pattern1(c, x0, q[j]);
-			for (j = y0, o = c->pix + y0 * c->stride; j < y1; j++, o += c->stride)
+			for (j = y0, o = row_at(c, y0); j < y1; j++, o += c->stride)
 				row1(o, c->bx + x0, c->bx + x1, pw[(j - y0) & 3]);
 			return;
 		}
