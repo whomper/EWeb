@@ -58,6 +58,15 @@ def gaps_since(r, start):
         return [int(g) for g in re.findall(r"AESGAP (\d+) ms", f.read())]
 
 
+def settled(r, what):
+    """the screen still (common's still(), 30 s at most): False, said, if
+    it never was, and the row is then no time"""
+    if r.still():
+        return True
+    print("FAIL  %s: the screen not still in 30 s" % what, flush=True)
+    return False
+
+
 def load(r, what, url, most=900):
     """the address typed after ^L and Return: the stretches until EWeb says
     it showed the page and its pictures, and the screen is still"""
@@ -73,14 +82,26 @@ def load(r, what, url, most=900):
     t_end = time.time() + most
     while time.time() < t_end and r.console().count("EWEB shown ") == n:
         time.sleep(2)
-    if r.console().count("EWEB shown ") == n:
-        print("NOTE  %s: not shown in %d s" % (what, most), flush=True)
-    while time.time() < t_end and not r.still():
-        pass
+    shown = r.console().count("EWEB shown ") > n
+    if not shown:
+        print("FAIL  %s: not shown in %d s" % (what, most), flush=True)
+    else:
+        # (and it is the page typed: EWeb's log names what it showed)
+        got = re.findall(r"EWEB shown (\S+)", r.console())[n]
+        if got.lower() != url.lower():
+            print("FAIL  %s: %s shown, not %s" % (what, got, url), flush=True)
+            shown = False
+    still = False
+    while time.time() < t_end and not still:
+        still = r.still()
+    if shown and not still:
+        print("FAIL  %s: the screen not still in %d s" % (what, most), flush=True)
     g = gaps_since(r, start)
     r.n += 1
     r.shot("%02d-%s" % (r.n, re.sub(r"[^a-z0-9]+", "-", what.lower()).strip("-")))
-    r.results.append((what, max(g) if g else 0, LOAD))
+    # (a wait that timed out is no time: the row is "?", the run fails;
+    # 1.6's ST:med pictures' page once said 120 ms, never shown)
+    r.results.append((what, (max(g) if g else 0) if shown and still else None, LOAD))
     return typed
 
 
@@ -113,13 +134,13 @@ def held(r, key, what, secs=3):
     time.sleep(secs)
     r.xdo("keyup", key)
     time.sleep(1)
-    r.still()
+    ok = settled(r, what)
     s = scrolls_since(r, start)
     gaps = gaps_since(r, start)
     r.n += 1
     r.shot("%02d-%s" % (r.n, re.sub(r"[^a-z0-9]+", "-", what.lower()).strip("-")))
-    if not s:
-        return (what, None, "no scroll came whole")
+    if not s or not ok:
+        return (what, None, "no scroll came whole" if ok else "the screen not still")
     rows = abs(s[-1][1] - top0)
     return (what, max(ms for ms, _ in s),
             "%d rows a second, whole %d times, longest stretch %d ms" % (rows // secs, len(s), max(gaps) if gaps else 0))
@@ -134,20 +155,20 @@ def pages_fresh(r, n=3):
     start = os.path.getsize(r.log)
     r.key("shift+Home")
     time.sleep(1)
-    r.still()
+    ok = settled(r, "the page's end")
     s = scrolls_since(r, start)
-    out.append(("the page's end (nothing kept there)", s[-1][0] if s else None, ""))
+    out.append(("the page's end (nothing kept there)", s[-1][0] if s and ok else None, ""))
     start = os.path.getsize(r.log)
     for _ in range(n):
         r.key("shift+Up")
         time.sleep(0.33)
     time.sleep(1)
-    r.still()
+    ok = settled(r, "pages up")
     s = scrolls_since(r, start)
     gaps = gaps_since(r, start)
     r.n += 1
     r.shot("%02d-pages-up" % r.n)
-    out.append(("%d pages up, one after another" % n, max(ms for ms, _ in s) if s else None,
+    out.append(("%d pages up, one after another" % n, max(ms for ms, _ in s) if s and ok else None,
                 "whole %d times, longest stretch %d ms" % (len(s), max(gaps) if gaps else 0)))
     return out
 
@@ -158,19 +179,19 @@ def pages_read(r, n=4, rest=10):
     window whole, from its key (Erez, 4 Nov 2026)"""
     r.key("Home")
     time.sleep(1)
-    r.still()
+    ok = settled(r, "the page's top")
     time.sleep(rest)
     start = os.path.getsize(r.log)
     for _ in range(n):
         r.key("shift+Down")
         time.sleep(0.33)
     time.sleep(1)
-    r.still()
+    ok = settled(r, "pages down") and ok
     s = scrolls_since(r, start)
     gaps = gaps_since(r, start)
     r.n += 1
     r.shot("%02d-pages-read" % r.n)
-    return ("%d pages down after %d s at the top" % (n, rest), max(ms for ms, _ in s) if s else None,
+    return ("%d pages down after %d s at the top" % (n, rest), max(ms for ms, _ in s) if s and ok else None,
             "whole %d times, longest stretch %d ms" % (len(s), max(gaps) if gaps else 0))
 
 
@@ -281,7 +302,12 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         else:
             print("NOTE  no 'EWEB window drawn': the start counts until the home page", flush=True)
         g = gaps_since(r, drawn if drawn >= 0 else 0)
-        r.results.append(("the home page shown", max(g) if g else 0, LOAD))
+        # (common's start() waits without failing: the home page must have
+        # been shown, EWeb's own page, for its row to be a time)
+        home = "EWEB shown about:start " in con
+        if not home:
+            print("FAIL  the home page shown: no 'EWEB shown about:start' in the log", flush=True)
+        r.results.append(("the home page shown", (max(g) if g else 0) if home else None, LOAD))
         r.shot("00-home")
         fin = []
         w = re.findall(r"AESWHOLE (\d+) ms", con[drawn if drawn >= 0 else 0:])
