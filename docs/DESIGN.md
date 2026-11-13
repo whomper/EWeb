@@ -5432,22 +5432,51 @@ pattern (all dark or all light) is a plain fill.
 **A sheet's scan for SVG's properties** (`svg_block` in `src/css/sheet.c`) looked at each byte through
 libc's `strpbrk` and `strchr`: one look now.
 
-| `ST:mono`, ms | before (1.6) | -O2 and one plane | now |
-|---|---|---|---|
-| the program started, window drawn | 1,740 | 1,550 | 1,550 |
-| a line scrolled, the window whole | 875 | 755 | 555 |
-| a page scrolled, the window whole | 2,945 | 2,380 | 1,785 |
-| an arrow held 3 s, down | 2,275 | 1,190 | 990 |
-| an arrow held 3 s, up | 4,485 | 3,405 | 2,525 |
-| the page's end | 1,725 | 1,485 | 625 |
-| 3 pages up | 1,815 | 895 | 810 |
-| 4 pages down after 10 s | 3,095 | 2,720 | 1,650 |
-| the news page loaded, its picture finished | 3,664 | 3,204 | 2,409 |
-| the longest stretch, a line scrolled | 460 | 445 | 265 |
+**Pictures' pens a word at a time** (`pens1`): a picture shown whole in the plane (no translucency)
+puts 16 of its pens in each word of the plane, not a bit at a time; the news page's picture, and so
+the page's end, was the one row the plane made slower.
+
+**The styling and the layout's copies.** A style's hash copied its values with `memcpy`, which
+`-ffreestanding` never makes inline (a call of libc's for each 4 bytes: `__builtin_memcpy` now), and
+two styles were compared with libc's `memcmp`, a byte at a time (`same_style` compares them a word at a
+time where a value is a word); the layout's `put_item` cleared each item with `memset` before setting
+it (`item_raw`: each field set once).
+
+**Smaller bands where a band is slow** (`BAND_MAX` 32 in `ui/win.c`, the ST edition only): `draw_due`
+sizes a slice of the window by how long its rows took; on the ST a slice is now at most 32 rows, so a
+scroll's first rows are on the screen sooner and the AES gets its turn between them.
+
+Paired, the same rig run with 1.6's `EWEBST.PRG` and with this one, one after the other (13 Nov
+2026; TOS 1.04, a real image; no NVDI: the ST has none in the rig):
+
+| ms, 1.6 → now | `ST:mono` | `ST:med` |
+|---|---|---|
+| the program started, window drawn | 1,730 → 1,550 | 1,525 → 1,385 |
+| the news page loaded (longest) | 785 → 445 | 555 → 445 |
+| a line scrolled (longest) | 460 → 265 | 280 → 265 |
+| a page scrolled (longest) | 455 → 270 | 665 → 570 |
+| a line scrolled, the window whole | 880 → 555 | 350 → 320 |
+| a page scrolled, the window whole | 2,940 → 1,715 | 2,355 → 1,975 |
+| an arrow held 3 s, down | 2,555 → 1,040 | 1,885 → 1,290 |
+| an arrow held 3 s, up | 4,055 → 2,340 | 3,080 → 2,475 |
+| the page's end | 1,695 → 595 | 790 → 715 |
+| 3 pages up | 1,815 → 1,130 | 995 → 935 |
+| 3 pages up, its longest stretch | **300 → 310** | **355 → 385** |
+| 4 pages down after 10 s | 3,095 → 1,600 | 2,305 → 1,540 |
+| the news page loaded, finished | 3,680 → 2,275 | 1,144 → 1,090 |
+
+Every other row of both is the same or faster. On the Falcon (`Falcon-4:16`, TOS 4.04, `EWEB.PRG`:
+only the font's ASCII table and the styling's and layout's copies reach it) every row is the same or
+faster but three: an arrow held up 930 → 965 ms (its longest stretch 825 → 905; a second run gave
+980 and 920, the row's noise) and a page scrolled's longest 50 → 55. The pixels are 1.6's:
+ewrender's of every test page, the sample and the news page, host and ST builds, in 2, 4, 16 and 256
+colours (400 pictures, the same bytes), and the rigs' screenshots. The cost is memory: the `-O2`
+files are about 100 KB more code (text 716,516 to 821,184 bytes), so the About box in the rig's
+`ST:mono` shows 665 KB free where 1.6's showed 774 KB.
 
 `PAGEST.TTP`, the news page (816 elements, 1,000 rules, 2,873 rows): drawn 23.2 s (8.1 ms a row) to
 14.0 s (4.9 ms a row, the byte a pixel's `to_planes` not counted in either); parsed 6.6 s, styled
-16.3 s, laid out 16.5 s. Making a page is next: the styling and the layout.
+16.3 s to 13.9 s, laid out 16.4 s to 15.8 s. Making a page is next: the styling and the layout.
 
 ## The design
 
