@@ -2668,10 +2668,9 @@ static __attribute__((noinline)) int item_grow(L *l)
 /* a new item, cleared (in line, a word at a time, not a call to memset:
    one is made for every word and space, and the call cost five times the
    stores) */
-static inline __attribute__((always_inline, optimize("no-tree-loop-distribute-patterns"))) ITEM *item(L *l)
+/* the next item, its fields as they were (put_item sets each) */
+static inline __attribute__((always_inline)) ITEM *item_raw(L *l)
 {
-	u32a *p;
-	unsigned k;
 	if (l->nit == l->itcap && !item_grow(l))
 		return NULL;
 	/* (a turn every 64 words and spaces too: a long text in one box,
@@ -2679,11 +2678,21 @@ static inline __attribute__((always_inline, optimize("no-tree-loop-distribute-pa
 	   stopped, as when out of memory) */
 	if ((l->nit & 63) == 63 && stopped(l))
 		return NULL;
-	p = (u32a *) &l->it[l->nit];
+	return &l->it[l->nit++];
+}
+
+static inline __attribute__((always_inline, optimize("no-tree-loop-distribute-patterns"))) ITEM *item(L *l)
+{
+	u32a *p;
+	unsigned k;
+	ITEM *it = item_raw(l);
+	if (it == NULL)
+		return NULL;
+	p = (u32a *) it;
 #pragma GCC unroll 32
 	for (k = 0; k < sizeof l->it[0] / 4; k++)
 		*p++ = 0;
-	return &l->it[l->nit++];
+	return it;
 }
 
 static int is_space(unsigned char c)
@@ -2803,9 +2812,17 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 /* dir: a word's (word_dir), -1 to work it out */
 static void put_item(L *l, const RUNSTATE *r, int kind, const char *s, uint32_t n, int32_t w, int dir)
 {
-	ITEM *it = item(l);
+	/* (each field set here, not the whole cleared first: 15,000 of a
+	   news page's, a clear of 60 bytes each on an 8 MHz ST) */
+	ITEM *it = item_raw(l);
 	if (it == NULL)
 		return;
+	it->canbreak = 0;
+	it->collapse = 0;
+	it->ib = 0;
+	it->atom = NULL;
+	it->x = 0;
+	it->dir = 0;
 	it->kind = (uint8_t) kind;
 	it->font = r->font;
 	it->color = r->color;
