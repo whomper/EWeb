@@ -254,7 +254,7 @@ build/tos/rt/onstack.o: atari/onstack.S
 build/tos/rt/connpad.o: atari/connpad.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
-CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,textpad_text -Wl,-u,cspad030_text
+CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,connpad_bss -Wl,-u,textpad_text -Wl,-u,cspad030_text
 build/tos/rt/textpad.o build/tos/rt/cspad030.o: build/tos/rt/%.o: atari/%.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
@@ -719,12 +719,6 @@ STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
 # (-DDLG_CPU: common's dialogs drawn partly by the CPU, for the 68000 only:
 # EWEB.PRG runs on a 68030 and leaves it out)
 STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) -DNO_ICON256 -DDLG_CPU $(EWB_INC) $(NSINC)
-# room after charset.o in EWEBST.PRG, kept by --gc-sections through -u
-# (atari/charsetpad.S: what follows it where 1.11 had it, modulo 256)
-build/st/rt/charsetpad.o: atari/charsetpad.S
-	@mkdir -p $(@D)
-	$(M68KCC) -m68000 -c $< -o $@
-CHARSETPAD_LD := -Wl,-u,charsetpad_text
 build/st/rt/%.o: common/atari/%.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DSTACK_SIZE=$(ST_STACK) -c $< -o $@
@@ -776,9 +770,9 @@ build/st/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) build/st/rt/charsetpad.o $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o \
+build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o \
 		$(ST_DEEP_OBJ)
-	$(M68KCC) $(ST_LDFLAGS) $(CHARSETPAD_LD) -o $@ $(filter %.o,$^) -lgcc
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -806,8 +800,8 @@ build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main
 		$(TOSGEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
-	$(M68KCC) $(ST_LDFLAGS) $(CHARSETPAD_LD) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
-		$(STGEM_OBJ) build/st/rt/charsetpad.o $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
+	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
+		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
