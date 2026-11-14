@@ -20,10 +20,3 @@ connpad_text:
 	.globl	connpad_ro
 connpad_ro:
 	.space	214		/* 934 + 132 + 214 = 1280 */
-
-	.section .bss.connpad,"aw",@nobits
-	.globl	connpad_bss
-connpad_bss:
-	.space	92		/* 5284 + 92 = 5376 = 21 * 256: what follows conn.o's
-				   host lists (the AES's and VDI's arrays) back at 1.11's
-				   places modulo 256 */

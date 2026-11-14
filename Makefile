@@ -254,7 +254,7 @@ build/tos/rt/onstack.o: atari/onstack.S
 build/tos/rt/connpad.o: atari/connpad.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
-CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,connpad_bss -Wl,-u,textpad_text -Wl,-u,cspad030_text
+CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,textpad_text -Wl,-u,cspad030_text
 build/tos/rt/textpad.o build/tos/rt/cspad030.o: build/tos/rt/%.o: atari/%.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
