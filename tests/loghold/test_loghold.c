@@ -44,6 +44,7 @@ void __wrap_free(void *p)
 	__real_free(p);
 }
 
+long pf_read(int h, void *buf, long n) { (void)h; (void)buf; (void)n; return -1; }
 int pf_open(const char *path, int mode)
 {
 	opens++;

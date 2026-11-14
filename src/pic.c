@@ -2317,10 +2317,12 @@ const char *pic_dsp_state(void)
 }
 #endif
 
+#ifndef PIC_OVL_BUILD		/* (PIC.OVL's says DSP or 68030: below) */
 const char *pic_dither_state(void)
 {
 	return "68000";
 }
+#endif
 
 /* TJpgDec (third_party/tjpgd), for the family's programs on a 68000:
    small, and quick at 1/8 (no IDCT); the kinds it won't take from their
@@ -3378,7 +3380,7 @@ static int dither_whole(const PIC *p, PIC_PAL *pal, unsigned char *out)
 }
 #define dither_many dither_whole
 
-#ifdef PIC_LIBJPEG
+#if defined(PIC_LIBJPEG) || defined(PIC_OVL_BUILD)
 /* ---------------------------------------------------------------- the dither on the DSP */
 
 /* dsp/dither.a56 does dither_many's work to the bit: the 68030 sends the
@@ -3591,11 +3593,39 @@ static int dither_on_dsp(const PIC *p, PIC_PAL *pal, unsigned char *out)
 		dd_state = -1;		/* it stopped answering: the 68030 from now on */
 	return r > 0;
 }
+
+#ifdef PIC_OVL_BUILD
+/* PIC.OVL's (common/picovl): the DSP's dither alone, 1 done; 0: the
+   caller does it on the 68030 (no DSP, busy, a palette of 2, the check
+   failed, or it stopped answering) */
+int pic_dither_dsp(const PIC *p, PIC_PAL *pal, unsigned char *out)
+{
+	return pal->n != 2 && dither_on_dsp(p, pal, out);
+}
+
+/* the check made now (dither_on_dsp's first time), in a turn of its own:
+   1 the DSP will dither, 0 not */
+int pic_dither_dsp_prepare(PIC_PAL *pal)
+{
+	int r;
+	if (pic_dsp == NULL || !pic_dsp_dither || pal->n == 2 || dd_state < 0)
+		return 0;
+	if (dd_state == 0) {
+		r = dd_check(pal);
+		if (r <= 0) {
+			dd_state = r < 0 ? 0 : -1;
+			return 0;
+		}
+		dd_state = 1;
+	}
+	return 1;
+}
+#endif
 #endif
 
 int pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out)
 {
-#ifdef PIC_LIBJPEG
+#if defined(PIC_LIBJPEG) || defined(PIC_OVL_BUILD)
 	if (pal->n != 2 && dither_on_dsp(p, pal, out))
 		return 1;
 #endif

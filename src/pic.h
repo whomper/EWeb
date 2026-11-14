@@ -146,6 +146,9 @@ int pic_pal_nearest(PIC_PAL *pal, int r, int g, int b);
    0 (they aren't drawn) and carry no error. pic_poll is called every 16
    rows (pic_dither's own; the scaler's is pic_scale_poll_rows): 1 done, 0 when it stopped it (out then partly made) */
 int pic_dither(const PIC *p, PIC_PAL *pal, unsigned char *out);
+/* the DSP's alone (PIC_OVL_BUILD: PIC.OVL's build): 1 done, 0 the 68030 must */
+int pic_dither_dsp(const PIC *p, PIC_PAL *pal, unsigned char *out);
+int pic_dither_dsp_prepare(PIC_PAL *pal);	/* its check now: 1 the DSP will */
 /* the same a row at a time, for a picture that isn't whole in memory: rows
    of w pixels (5-6-5, alpha or NULL) given top to bottom, each one's pens
    to out (w bytes); the same pens as pic_dither's for the same rows (not

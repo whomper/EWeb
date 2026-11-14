@@ -704,14 +704,20 @@ static void cache_stamp(int ver, long size, unsigned long sum, unsigned long sta
 	b[2] = (unsigned char)(stamp >> 8);
 	b[3] = (unsigned char)stamp;
 	if ((h = pf_open(tls_roots_cache, PF_UPDATE)) >= 0) {
-		if (pf_seek(h, 18) == 18)
-			pf_write(h, b, 4);
+		int ok = pf_seek(h, 18) == 18 && pf_write(h, b, 4) == 4;
 		pf_close(h);
+		if (ok)
+			return;
 	}
 #else
 	(void)b;
 	(void)h;
 #endif
+	/* no update in place (a program whose pf_open has no PF_UPDATE opens
+	   the file read-only: EUpdate, whose every session checksummed the
+	   186 KB CACERT.PEM again, 860 ms on a stock Falcon, 13 Nov 2026):
+	   the cache written whole, once */
+	save_cache(size, sum, stamp);
 }
 
 static int load_anchors(const char *path, char *err, int errlen)
