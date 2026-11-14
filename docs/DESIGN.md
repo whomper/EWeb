@@ -689,7 +689,32 @@ its columns.
 session of the program that made it (common's `tls.c`, in memory); its master secret is never
 written out, though a resumed handshake to atari-home.de took 1.2 s against 7.4 s for a full one on
 the emulated stock Falcon. What may be kept between sessions is what isn't secret: signatures
-already checked (`SIGS.DAT`), the root certificates (`ROOTS.DAT`), the seed (`SEED.DAT`).
+already checked (`SIGS.DAT`), the root certificates (`ROOTS.DAT`), the seed (`SEED.DAT`), and
+which hello a server takes (`tlshosts.dat`, below).
+
+**The hello a server takes, kept** (TLS.OVL 1.16, EWeb 1.12, 14 Nov 2026): the first hello offers RSA
+and ChaCha20 alone, so a server that wants ECDSA or every cipher refuses once or twice before the
+hello that works. Common's `conn.c` keeps those servers (32 of each kind, by name) in
+`tlshosts.dat` beside `SIGS.DAT`, read at the first handshake and written only when one is added,
+so from the second session on such a server takes one hello: atari-home.de 1.0 to 3.3 s sooner on the
+emulated stock Falcon (Direct; 5.58 to 4.61 s from the connect to secure in 1.12's last run). Tests
+that share a host start without the file (`tests/hatari/ewget_test.py`). Session caches beyond 4
+(NSESS 16) gained nothing: most servers resume by tickets, which BearSSL's client hasn't.
+
+**Code layout and the 68030's caches** (14 Nov 2026): with 256 bytes of instruction cache and 256 of
+data cache, where code sits moves the speed rig's rows by a tick or two with nothing of it run.
+TLS.OVL 1.16's `conn.c` grew by 892 bytes of code and 42 of strings, and the sample page's
+longest stretch under NVDI went from 605 to 615 ms; `atari/connpad.S` (room linked after `conn.o`,
+never run) puts what follows back at 1.11's places modulo 256, and every row on the Falcon under
+NVDI came back within a tick. Two rows of 1.12 stayed two ticks over 1.11 and were released so
+(Erez, 14 Nov 2026): the ST's About box opened 155 to 165 ms and the stock Falcon's home page 520 to
+530 ms. Both follow placement rather than work: 1.11's `charset.c` padded to the new one's size is
+165 ms too, its loop the same instructions. Pads to put them back failed: after `charset.o` on the
+ST (the About box unchanged, three rows 15 to 50 ms slower); after `text.o` and `charset.o` on the
+Falcon (the home page back, but 180 ms of redraw moved from the About box's closing to the
+Settings'); BSS after `conn.o` (no change). The stock Falcon's arrow held up read 985 ms for 1.11
+in one session and 1020 in another, the same for 1.12: it varies between sessions, so pairs are
+compared within one.
 
 ## Showing pages: fonts, layout, drawing (18 Oct 2026)
 
