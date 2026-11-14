@@ -249,6 +249,12 @@ build/tos/rt/crt0_gem.o: common/atari/crt0.S Makefile
 build/tos/rt/onstack.o: atari/onstack.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
+# room after conn.o, kept by --gc-sections through -u (atari/connpad.S:
+# the code after it where 1.11 had it, modulo the 68030's caches)
+build/tos/rt/connpad.o: atari/connpad.S
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -c $< -o $@
+CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
@@ -386,7 +392,7 @@ COMMON_WARN   := -Wall -Wno-pointer-sign
 # Direct connection is made (common/atari/tls_ovl.c, ui/dsp_ovl.c), so
 # EWEB.PRG starts 133 KB smaller and a page through the Pi never needs it
 TOSNET_OBJ := $(patsubst src/net/%.c,build/tos/net/%.o,$(NET_SRC)) \
-              $(addprefix build/tos/net/,conn.o tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o translate.o secret.o net_tos.o \
+              $(addprefix build/tos/net/,conn.o) build/tos/rt/connpad.o $(addprefix build/tos/net/,tls_ovl.o ovl.o dsp_ovl.o util.o futil.o inflate.o translate.o secret.o net_tos.o \
               sting.o sting_s.o plat_tos.o crash.o crash_s.o bigbuf.o)
 binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
@@ -665,7 +671,7 @@ build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ)
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -786,7 +792,7 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
+	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
@@ -802,7 +808,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DEW_TEST_DL -c $< -o $@
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
-	$(M68KCC) $(TOS_LDFLAGS) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT) \
+	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
