@@ -254,10 +254,7 @@ build/tos/rt/onstack.o: atari/onstack.S
 build/tos/rt/connpad.o: atari/connpad.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
-CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,textpad_text -Wl,-u,cspad030_text
-build/tos/rt/textpad.o build/tos/rt/cspad030.o: build/tos/rt/%.o: atari/%.S
-	@mkdir -p $(@D)
-	$(M68KCC) -m68030 -c $< -o $@
+CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
@@ -646,7 +643,6 @@ build/tos/gem/common/langs.o: GEM_CFLAGS += -DEW_NO_CUR
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
-TOSGEM_OBJ := $(patsubst build/tos/gem/common/text.o,build/tos/gem/common/text.o build/tos/rt/textpad.o,$(GEM_OBJ)) build/tos/rt/cspad030.o
 build/tos/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@
@@ -671,7 +667,7 @@ build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o
 ST_DEEP_OBJ := build/st/gem/tcpix.o
 GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
-build/tos/eweb.elf: $(GEM_RT) $(TOSGEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
+build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ)
@@ -797,7 +793,7 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
-		$(TOSGEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
 	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
@@ -813,7 +809,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DEW_TEST_DL -c $< -o $@
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT) \
-		$(TOSGEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		$(GEM_OBJ) $(tos_EWB) $(tos_EC) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
