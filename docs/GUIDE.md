@@ -384,8 +384,11 @@ time: while it does, the other windows can be moved, topped and
 redrawn but wait for it. Pictures come for the window in front first,
 then for the others; a page's timers and its refresh wait while its
 window is behind. **^W** (File > Next window) brings EWeb's next window
-to the front, each in turn. **^U** (File > Close window) closes the
-window in front, and closing the last one quits EWeb.
+to the front, each in turn. The **Window** menu lists EWeb's windows,
+the oldest first, by their pages' titles, with a tick on the one in
+front: choose one to bring it to the front. **^U** (File > Close
+window) closes the window in front, and closing the last one quits
+EWeb. (The ST edition has no Window menu: ^W goes through them.)
 
 How many windows there may be depends on the memory: eight beside TT
 RAM, four with 6 MB of ST RAM free, else two (a 4 MB Falcon, a 1040 ST).

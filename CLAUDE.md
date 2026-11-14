@@ -294,7 +294,8 @@ hub stay complete, with the evidence.
   `new_window` (^N, `to_window` for `BR_WINDOW`: a link's or a form's target `_blank` or a name no
   frame has, `frame_target`), as many as `win_max`; `src/browse` keeps every browser's pictures
   (`br_register`, `shown_imgs`) and shares the kept pages. After changing them: `make test`
-  (`tests/layout/frames.py`: `frames/targets.html`), `make hatarigui` (browse: ^N, ^W, ^U, `/site/blank.html`).
+  (`tests/layout/frames.py`: `frames/targets.html`), `make hatarigui` (browse: ^N, ^W, ^U, the
+  Window menu's list, `win_items` in `ui/main.c`, `/site/blank.html`).
 - **SVG** is `src/svg` (fresh, in whole numbers; DESIGN.md, SVG): `svgread.c` reads an `<svg>` from
   EWeb's document (a file parsed by EWeb's HTML parser), `raster.c` fills and strokes its paths,
   anti-aliased, `fixmath.c` the 16.16 maths, `svg.c` sizes a file, draws it as a `PIC` and writes a

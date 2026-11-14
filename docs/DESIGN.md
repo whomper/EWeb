@@ -3901,7 +3901,14 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
   no more to be had, in the window itself. A form that posts to another window is answered in
   its own. ^U (File > Close window) closes the window in front; the last one quits; ^W (File >
   Next window, `win_next`) tops EWeb's next window, in turn (the guidelines' 3.2 of 27 Oct
-  2026). The window in front is the one whose place `WINDOW=` keeps.
+  2026). The window in front is the one whose place `WINDOW=` keeps. **The Window menu** (Erez,
+  14 Nov 2026: "the open windows list also accessible in menu just like any multi window
+  applications"), a title of EWeb's own after Bookmarks (the guidelines' 3.1), lists the windows,
+  the oldest first, by their pages' titles (else the address's host, else "New window"), cut to
+  30 characters, the one in front ticked; choosing another tops it as ^W does. Close window and
+  Next window stay in File. The bar is made again only when the list's words change (`win_items`
+  from `menu_update`, through `bm_menu`), and the menu's objects are remembered for the bookmarks
+  and windows as for the rest, until the next bar. The ST edition is frozen and has none.
 - **Memory:** a window costs its state (14 KB, most of it its history and addresses) and its
   page. There may be eight beside TT RAM, four with 6 MB of ST RAM free at the start, else two
   (`win_max`: a 4 MB Falcon, a 1040 ST). The pages kept for Back share `br_keep_max` (each window's history its share), and
@@ -3910,7 +3917,7 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
 `EWEB.PRG` grew 4 KB (1,216,504 bytes) and `EWEBST.PRG` 4 KB (642,548). Tests:
 `tests/layout/frames.py` (`frames/targets.html`: `_blank`, a name, `_top`, a form's target;
 ewrender shows another window's page in its stead, a `window` line), `make hatarigui` (browse:
-^N, ^W, `/site/blank.html`'s `_blank` link and a named window).
+^N, ^W, the Window menu, `/site/blank.html`'s `_blank` link and a named window).
 
 ## Pictures fetched at once (25 Oct 2026)
 
