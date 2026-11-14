@@ -51,15 +51,19 @@ RUNS = [
     # a P-256 signature), ECDSA on the retry, the elliptic curves on the DSP
     ("ECDSA", "-l EC.LOG -o EC.HTM https://127.0.0.1:%d/page" % EC),
     # again: the certificate's signature remembered in SIGS.DAT, so the
-    # DSP does only the key exchange and its signature
+    # DSP does only the key exchange and its signature; and the host
+    # remembered in tlshosts.dat beside it as one that wants ECDSA, so
+    # ECDSA in one hello (common's conn.c, TLS.OVL 1.16)
     ("ECDSA again", "-l EC2.LOG https://127.0.0.1:%d/page" % EC),
     # ECDSA only, and the server hangs up on an RSA-only hello with no
     # alert (www.atari.org.pl, 7 Nov 2026: "the connection was lost during
     # the TLS handshake"): ChaCha20 and RSA, every cipher and RSA, both
     # reset; ECDSA on the third try (common's tls.c, TLS.OVL 1.13). Its
-    # signatures checked anew (SIGS.DAT removed first), on the DSP
+    # signatures checked anew (SIGS.DAT removed first, and tlshosts.dat,
+    # where 127.0.0.1 is remembered as an ECDSA host), on the DSP
     ("ECDSA, no answer to RSA", "-l SIL.LOG -o SIL.HTM https://127.0.0.1:%d/page" % SILENT),
-    # both kinds: the RSA one taken, in one try
+    # both kinds: the RSA one taken, in one try (tlshosts.dat removed
+    # first, where the last case left 127.0.0.1 as an ECDSA host)
     ("RSA and ECDSA", "-l BOTH.LOG https://127.0.0.1:%d/page" % BOTH),
     # the release's certificates (Mozilla's list, and ROOTS.DAT made from
     # it on this computer): read from the cache, and the test authority
@@ -137,9 +141,10 @@ def main():
             if name == "Mozilla's list":
                 for f in ("CACERT.PEM", "ROOTS.DAT"):
                     shutil.copy(os.path.join(ROOT, "binary", f), hd)
-            if name == "ECDSA, no answer to RSA":
+            if name in ("ECDSA, no answer to RSA", "RSA and ECDSA"):
+                gone = ("sigs.dat", "tlshosts.dat") if name == "ECDSA, no answer to RSA" else ("tlshosts.dat",)
                 for f in os.listdir(hd):
-                    if f.lower() == "sigs.dat":
+                    if f.lower() in gone:
                         os.remove(os.path.join(hd, f))
             if name == "on a TT":	# the test authority again
                 shutil.copy(os.path.join(srv_dir, "CACERT.PEM"), hd)
@@ -178,8 +183,9 @@ def main():
                         print("---- " + l.strip())
             elif name == "ECDSA again":
                 net = open(os.path.join(hd, "EC2.LOG"), errors="replace").read()
+                hosts = [f for f in os.listdir(hd) if f.lower() == "tlshosts.dat"]
                 ok = ok and "1 of 1 ECDSA signatures checked before" in net and "ECDSA P-384" not in net \
-                     and "ECDSA P-256 on the DSP" in net
+                     and "ECDSA P-256 on the DSP" in net and " tries)" not in text and hosts != []
                 for l in net.splitlines():
                     if "TLS --" in l:
                         print("---- " + l.strip())
