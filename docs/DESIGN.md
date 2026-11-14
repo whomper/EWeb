@@ -685,6 +685,12 @@ leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 
 first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around
 its columns.
 
+**Session secrets stay off the disk** (Erez, 14 Nov 2026): a TLS session is resumed only within the
+session of the program that made it (common's `tls.c`, in memory); its master secret is never
+written out, though a resumed handshake to atari-home.de took 1.2 s against 7.4 s for a full one on
+the emulated stock Falcon. What may be kept between sessions is what isn't secret: signatures
+already checked (`SIGS.DAT`), the root certificates (`ROOTS.DAT`), the seed (`SEED.DAT`).
+
 ## Showing pages: fonts, layout, drawing (18 Oct 2026)
 
 Your decisions (18 Oct 2026): **fresh layout code** (NetSurf's core is GPL-2.0-only and reorders no
