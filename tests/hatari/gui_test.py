@@ -811,6 +811,23 @@ def browse():
         time.sleep(2)
         nexts = [e for e in r.events()[mark:] if e == "next window"]
         check("windows: ^W tops the next window, in turn", len(nexts) == 2, "\n".join(r.events()[mark:]))
+        # the Window menu (Erez, 14 Nov 2026): EWeb's windows, the oldest
+        # first, the one in front ticked (the newest, after two ^W);
+        # choosing one brings it to the front
+        mark = len(r.events())
+        r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Win"), 5)	# the Window menu, dropped
+        time.sleep(1)
+        r.shot(71)
+        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Window"), 20 + 0 * 16 + 8)	# the first window
+        time.sleep(2)
+        r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Win"), 5)
+        time.sleep(1)
+        r.shot(72)
+        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Window"), 20 + 1 * 16 + 8)	# the second
+        time.sleep(2)
+        picks = [e for e in r.events()[mark:] if " from the Window menu" in e]
+        check("windows: the Window menu lists them, each brought to the front",
+              picks == ["window 1 from the Window menu", "window 2 from the Window menu"], "\n".join(r.events()[mark:]))
         r.key(U, (CTRL,))
         cl = r.wait(r"window closed", 30)
         check("windows: ^U closes the window in front", cl is not None, "\n".join(r.events()[-6:]))
@@ -1523,10 +1540,10 @@ def falcon4():
             check("falcon4: one click on the window's down arrow, one line down", False, ev or "no page")
         # Options > Write a log (the family's, as ECal's and EContact's):
         # the log begins at once, LOG=1 kept in EWEB.INF (Erez, 29 Oct 2026)
-        r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Opt"), 5)	# the Options menu
+        r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Opt"), 5)	# the Options menu
         time.sleep(1)
         r.shot(2)
-        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Options"), 20 + 3 * 16 + 8)	# its 4th item
+        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Options"), 20 + 3 * 16 + 8)	# its 4th item
         time.sleep(2)
         inf = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
         check("falcon4: Options > Write a log, LOG=1 kept", "\nLOG=1\r\n" in inf,

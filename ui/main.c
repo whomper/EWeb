@@ -174,6 +174,20 @@ static const MBAR_ITEM m_view[] = {
 static MBAR_ITEM m_bm[3 + BM_MENU + 1];
 static char bm_text[BM_MENU][40];
 static unsigned bm_seen;
+#ifndef EW_ST
+/* Window: EWeb's open windows, the oldest first, by their pages' titles,
+   the one in front ticked; choosing one brings it to the front (Erez,
+   14 Nov 2026: "the open windows list also accessible in menu just like
+   any multi window applications"). Close window and Next window stay in
+   File (the guidelines' 3.1). Made again when the list's words change
+   (win_items, bm_menu); the ST edition is frozen (DESIGN.md) */
+#define WIN_MENU 8		/* (win_max's most) */
+#define C_WIN (C_BM + BM_MENU)	/* C_WIN + i: the Window menu's ith window */
+static MBAR_ITEM m_win[WIN_MENU + 1];
+static char win_text[WIN_MENU][40];
+static ewin *win_listed[WIN_MENU];
+static int win_n;
+#endif
 static const MBAR_ITEM m_opts[] = {
 	{ "Settings...", "^,", C_SETTINGS },
 	{ "Direct connection", 0, C_FALCON },
@@ -202,6 +216,9 @@ static const MBAR_TITLE bar[] = {
 	{ " Edit ", m_edit },
 	{ " View ", m_view },
 	{ " Bookmarks ", m_bm },
+#ifndef EW_ST
+	{ " Window ", m_win },
+#endif
 	{ " Options ", m_opts },
 	{ " Help ", m_help },
 	{ 0, 0 }
@@ -239,6 +256,59 @@ static void bm_items(void)
 	bm_seen = bm_changes;
 }
 
+#ifndef EW_ST
+/* the Window menu's items from EWeb's windows, the oldest first: each its
+   page's title (the window's name without " EWeb - "), else its address's
+   host, else "New window", in the system font's characters, cut to fit;
+   1 if the words changed since the menu was last made */
+static int win_items(void)
+{
+	ewin *all[WIN_MENU], *w;
+	int n = 0, i, changed = 0;
+	for (w = wins; w != NULL && n < WIN_MENU; w = w->next)
+		if (w->h > 0)
+			all[n++] = w;		/* (the newest first: listed backwards) */
+	if (n != win_n)
+		changed = 1;
+	for (i = 0; i < n; i++) {
+		char t[160];
+		const char *s;
+		w = all[n - 1 - i];
+		s = w->title;
+		if (strncmp(s, " EWeb - ", 8) == 0)
+			str_copy(t, s + 8, sizeof t);
+		else if (w->b.url[0] && (s = strstr(w->b.url, "://")) != NULL)
+			atari_text(s + 3, t, sizeof t);
+		else
+			str_copy(t, "New window", sizeof t);
+		{
+			size_t l = strlen(t);
+			while (l > 0 && t[l - 1] == ' ')
+				t[--l] = 0;
+			if (l > 30)
+				strcpy(t + 27, "...");
+		}
+		if (win_listed[i] != w || strcmp(win_text[i], t) != 0)
+			changed = 1;
+		str_copy(win_text[i], t, sizeof win_text[i]);
+		win_listed[i] = w;
+		m_win[i].text = win_text[i];
+		m_win[i].key = 0;
+		m_win[i].cmd = C_WIN + i;
+	}
+	if (n == 0) {		/* (before the first window: one greyed line) */
+		m_win[0].text = "No window";
+		m_win[0].key = 0;
+		m_win[0].cmd = C_WIN;
+		n = 1;
+		win_listed[0] = NULL;
+	}
+	memset(&m_win[n], 0, sizeof m_win[n]);
+	win_n = n;
+	return changed;
+}
+#endif
+
 /* each menu entry's state as the AES has it (1 off, 2 on; 0 not set yet):
    menu_update runs at every key and click, and asks the AES only for
    what changed (its 45 calls were most of a letter typed on an ST) */
@@ -246,22 +316,30 @@ static unsigned char menu_was[2][512];
 /* each command's object in the bar, found once a bar (common's
    mbar_object walks the whole tree: 40 of them after every key and click
    were 10 ms of an 8 MHz ST's); 0: not looked for yet, else object + 1 */
-static short menu_obj[C_BM];
+#define MENU_OBJS (C_BM + BM_MENU + 8)	/* (the bookmarks' and the windows' too: made again with the bar) */
+static short menu_obj[MENU_OBJS];
 
 static short obj_of(int cmd)
 {
-	if (cmd <= 0 || cmd >= C_BM)
+	if (cmd <= 0 || cmd >= MENU_OBJS)
 		return mbar_object(&mb, cmd);
 	if (menu_obj[cmd] == 0)
 		menu_obj[cmd] = (short) (mbar_object(&mb, cmd) + 1);
 	return (short) (menu_obj[cmd] - 1);
 }
 
-/* the menu bar made again when the bookmarks changed */
+/* the menu bar made again when the bookmarks or the windows' list
+   changed */
 static void bm_menu(void)
 {
 	MBAR old = mb;
-	if (bm_seen == bm_changes)
+	int wchanged = 0;
+	if (mb.tree == NULL)
+		return;		/* (not made yet: start-up makes it with these) */
+#ifndef EW_ST
+	wchanged = win_items();
+#endif
+	if (bm_seen == bm_changes && !wchanged)
 		return;
 	bm_items();
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
@@ -387,6 +465,16 @@ static void scripts_toggle(void)
 void menu_update(void)
 {
 	int addr = win_address_has_focus();
+#ifndef EW_ST
+	bm_menu();		/* (a window opened, closed or its page's title changed: the Window menu) */
+	{
+		int i;
+		for (i = 0; i < win_n; i++) {
+			enable(C_WIN + i, !loading && win_listed[i] != NULL);
+			menu_set(1, obj_of(C_WIN + i), win_listed[i] != NULL && win_listed[i] == cur);
+		}
+	}
+#endif
 	enable(C_RELOAD, !loading && br.cur >= 0);
 	enable(C_STOP, loading || br_pictures_pending(&br) || br_refresh_due(&br) >= 0 ||
 	       br_translate_pending(&br, 0, 0, 0));
@@ -2551,6 +2639,14 @@ void command(int cmd)
 	default:
 		if (cmd >= C_BM && cmd < C_BM + BM_MENU && cmd - C_BM < bm_n)
 			go(bm_list[cmd - C_BM].url);
+#ifndef EW_ST
+		else if (cmd >= C_WIN && cmd < C_WIN + win_n && win_listed[cmd - C_WIN] != NULL &&
+			 win_listed[cmd - C_WIN] != cur && win_listed[cmd - C_WIN]->h > 0) {
+			log_event("window %d from the Window menu", cmd - C_WIN + 1);
+			wind_set(win_listed[cmd - C_WIN]->h, WF_TOP, 0, 0, 0, 0);
+			win_front();
+		}
+#endif
 	}
 	menu_update();
 }
@@ -3185,6 +3281,9 @@ static int app_run(void)
 		hg_file(bm);
 	}
 	gap_tag("start: menus");
+#ifndef EW_ST
+	win_items();
+#endif
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EWeb: not enough memory.][ Quit ]");
 		scr_exit();
