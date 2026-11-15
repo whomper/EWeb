@@ -2303,6 +2303,7 @@ static page *lay(browser *b, doc *d, const char *base)
 {
 	LAYOUT_OPT o;
 	page *p;
+	font_retry();	/* (a face short of memory at the last page's peak) */
 	memset(&o, 0, sizeof o);
 	o.width = b->width;
 	o.zoom = b->zoom;
@@ -2393,6 +2394,18 @@ static int make_room(browser *b)
 		freed = 1;
 	}
 	return shed(b) || freed;
+}
+
+/* font_room: a face short of memory as a page is laid out or drawn: the
+   pages kept for Back in every window and the pictures not in use given
+   back (not the fonts' glyphs or the kept screen: in use as it draws) */
+static int font_room_cb(void)
+{
+	int i, freed = 0;
+	for (i = 0; i < br_n; i++)
+		freed |= unkeep_all(br_all[i]);
+	img_clear();
+	return freed;
 }
 
 /* http_room while a page is opened: room made in its browser (the page
@@ -4025,6 +4038,7 @@ void br_init(browser *b, int32_t width, int32_t zoom)
 	http_cookie_in = cookie_in;
 	http_cookie_out = cookie_out;
 	http_room = room_cb;
+	font_room = font_room_cb;
 	img_svg_size = svg_size;	/* SVG pictures: src/svg's */
 	img_svg_late = svg_late;
 	img_svg_decode = svg_decode;

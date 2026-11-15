@@ -1659,6 +1659,13 @@ static void loaded(int r)
 		}
 		if (br.p && br.p->deep)
 			log_event("deep %.400s: nested deeper than the stack holds, the rest left out", shown);
+		{
+			static long short_said;
+			if (font_short_n != short_said) {
+				short_said = font_short_n;
+				log_event("fonts short %ld: faces left without glyphs for want of memory", font_short_n);
+			}
+		}
 		if (br.note[0]) {
 			char t[96];
 			/* a refresh's (or that refreshes at once were stopped) is

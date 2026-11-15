@@ -30,12 +30,13 @@ typedef struct ew_font {
 	uint8_t family, style, px;
 	uint8_t ascent, descent;	/* above and below the baseline */
 	uint8_t bad;			/* its blocks that can't be read, a bit each */
+	uint8_t shortb;			/* its blocks not read for want of memory (font_retry) */
 	uint8_t *data;			/* the face's first block of characters, read on first use */
 	uint8_t *more[FONT_BLOCKS - 1];	/* its other blocks, each read when a page first needs one
 					   of their characters (Greek, Cyrillic...) */
 	uint8_t *wt;			/* font_widths' table, made when first asked for */
 	GLYPH *asc;			/* font_ascii's, made when first asked for */
-	int failed;
+	int failed;			/* 1 can't be read, 2 not for want of memory (font_retry) */
 } ew_font;
 
 /* reads the file's table of faces: 0 if it can't */
@@ -45,6 +46,17 @@ void font_drop(void);		/* the glyphs given back, read again when used */
 /* called between the pieces of a face as it is unpacked (a turn for GEM
    while a page is made: src/browse sets it); NULL: unpacked in one go */
 extern int (*font_poll)(void);
+/* called when a face or a block of it can't be read for want of memory:
+   room made (pages kept for Back, pictures not in use; never what is
+   being laid out or drawn) and 1 when some was, to try once more; NULL:
+   none. A face still short is tried again at the next page's layout
+   (font_retry), not left without glyphs for good */
+extern int (*font_room)(void);
+void font_retry(void);
+/* the faces and blocks left without their glyphs for want of memory since
+   the start (EWEB.PRG's log says so after a page: the speed rig fails a
+   run that has any, its rows measured on text not drawn) */
+extern long font_short_n;
 
 /* the face nearest to px of that family and style; never NULL once
    font_init succeeded (a face that can't be read draws nothing) */

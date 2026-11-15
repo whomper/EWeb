@@ -91,6 +91,16 @@ def load(r, what, url, most=900):
         if got.lower() != url.lower():
             print("FAIL  %s: %s shown, not %s" % (what, got, url), flush=True)
             shown = False
+        # (and whole: a page that didn't fit, or a face of EWEB.FNT short
+        # of memory at its peak, draws less, and its rows are no measure:
+        # 1.14's news page on Falcon-4:256 under NVDI had no text, 15 Nov 2026)
+        line = re.findall(r"EWEB shown .*", r.console())[n]
+        if "title EWeb can't show this page" in line:
+            print("FAIL  %s: EWeb couldn't show it (%s)" % (what, line[:160]), flush=True)
+            shown = False
+        if "EWEB fonts short" in r.console():
+            print("FAIL  %s: %s" % (what, re.findall(r"EWEB (fonts short .*)", r.console())[-1]), flush=True)
+            shown = False
     still = False
     while time.time() < t_end and not still:
         still = r.still()
