@@ -1,0 +1,22 @@
+page 608 x 846, background ffffff, 21 items, 0 links, title "pictures that give way"
+fill 3,3 240x139 #eeeeee
+fill 3,3 240x139 #ccddee
+text 3,16 85x17 #000000 cond13 link 0 "row flex, inline"
+image 3,19 240x120 guessed link 0 "a" file://./tests/layout/img/two.png
+fill 3,145 240x136 #eeeeee
+fill 3,145 240x136 #ccddee
+text 3,158 85x17 #000000 cond13 link 0 "row flex, block"
+image 3,161 240x120 guessed link 0 "b" file://./tests/layout/img/two.png
+fill 3,284 240x136 #eeeeee
+text 3,297 104x17 #000000 cond13 link 0 "column flex, block"
+image 3,300 240x120 guessed link 0 "c" file://./tests/layout/img/two.png
+fill 3,423 240x136 #eeeeee
+text 3,436 80x17 #000000 cond13 link 0 "grid 1fr, block"
+image 3,439 240x120 guessed link 0 "d" file://./tests/layout/img/two.png
+fill 3,562 240x136 #eeeeee
+fill 3,562 240x136 #ccddee
+text 3,575 92x17 #000000 cond13 link 0 "column in a row"
+image 3,578 240x120 guessed link 0 "e" file://./tests/layout/img/two.png
+fill 3,701 240x142 #eeeeee
+text 6,717 52x17 #000000 cond13 link 0 "table cell"
+image 6,720 234x117 guessed link 0 "f" file://./tests/layout/img/two.png

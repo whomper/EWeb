@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- A picture whose width and height are its attributes' (1200 x 600)
+     and whose max-width is 100% takes nothing at a box's narrowest (CSS
+     Sizing 3, 5.2.2, compressible replaced elements): a flex item or a
+     grid track around it is no wider than its place, and the picture is
+     scaled down to it at its proportions (atariscne.org, 15 Nov 2026:
+     Joomla's img{max-width:100%;height:auto} in flex boxes, the page
+     1212 px wide in a window of 608). In a table cell it keeps its width,
+     as browsers have it. -->
+<html><head><title>pictures that give way</title><style>
+body { margin: 0; font: 16px sans-serif; }
+img { max-width: 100%; height: auto; }
+.w { width: 300px; margin: 4px; background: #eee; }
+.row { display: flex; }
+.row > div { flex: 1 0 60%; background: #cde; }
+.col { display: flex; flex-direction: column; }
+.grid { display: grid; grid-template-columns: 1fr; }
+.b { display: block; margin: 0 auto; }
+p { margin: 0; }
+</style></head><body>
+<div class="w row"><div><p>row flex, inline</p><img src="img/two.png" width="1200" height="600" alt="a"></div></div>
+<div class="w row"><div><p>row flex, block</p><img class="b" src="img/two.png" width="1200" height="600" alt="b"></div></div>
+<div class="w col"><div><p>column flex, block</p><img class="b" src="img/two.png" width="1200" height="600" alt="c"></div></div>
+<div class="w grid"><div><p>grid 1fr, block</p><img class="b" src="img/two.png" width="1200" height="600" alt="d"></div></div>
+<div class="w row"><div class="col"><p>column in a row</p><div><img class="b" src="img/two.png" width="1200" height="600" alt="e"></div></div></div>
+<div class="w"><table><tr><td>table cell<br><img src="img/two.png" width="1200" height="600" alt="f"></td></tr></table></div>
+</body></html>

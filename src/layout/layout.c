@@ -254,6 +254,7 @@ typedef struct {
 	uint8_t icon_k;
 	int32_t cw;			/* the width lines are broken in (AUTO: measuring) */
 	int minw;			/* measuring the narrowest a box goes (its longest word), not its widest */
+	int squeezed;			/* a picture took none at its narrowest (compressible) */
 	struct mcache {
 		const box *b;
 		int32_t min, max;
@@ -3348,12 +3349,16 @@ static int has_pct(const ec_style *s, int p)
    one from the other by its proportions (its file's, or the attributes'
    before it has come), within max-width and max-height. 0: not known
    until its file comes */
-/* a picture measured at its narrowest whose width (or max-width) is a
-   percentage: it takes none (image_size) */
+/* a picture measured at its narrowest whose width or max-width is a
+   percentage: it takes none (image_size; CSS Sizing 3, 5.2.2: the
+   percentage resolved against zero). A width in px with it too, as the
+   width and height attributes give one: Joomla's img{max-width:100%} with
+   <img width=1280> made atariscne.org's flex boxes 1212 px wide in a window
+   of 608 (15 Nov 2026); browsers give way in table cells as well */
 static int compressible(const L *l, const box *b)
 {
 	return l->minw && l->cw == AUTO && !b->frame &&
-	       (has_pct(b->st, EP_WIDTH) || (b->st->k[EP_WIDTH] != EK_PX && has_pct(b->st, EP_MAX_WIDTH)));
+	       (has_pct(b->st, EP_WIDTH) || has_pct(b->st, EP_MAX_WIDTH));
 }
 
 static int image_size(L *l, box *b, int32_t *w, int32_t *h)
@@ -3366,6 +3371,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 	int32_t hb = l->rhb_on ? l->rhb : l->defh;
 	int guess;
 	if (compressible(l, b)) {
+		l->squeezed = 1;
 		/* measured at its narrowest, a picture whose width (or
 		   max-width) is a percentage takes none: the percentage of
 		   nothing (CSS Sizing 3, 5.2.2, compressible replaced
@@ -5647,7 +5653,7 @@ static int32_t inline_measure(L *l, box *b)
 			return l->minw ? m->min : m->max;
 	}
 	l->nit = 0;
-	l->floats = l->ibs = 0;
+	l->floats = l->ibs = l->squeezed = 0;
 	l->cw = AUTO;
 	runstate(l, &r, b->st, NULL, NULL, b->link);
 	collect(l, b, &r, &line_start);
@@ -5683,8 +5689,11 @@ static int32_t inline_measure(L *l, box *b)
 	} else {
 		min = max;
 	}
-	if (l->floats || l->ibs)
-		return l->minw ? min : max;	/* (their widths are the one asked for's) */
+	if (l->floats || l->ibs || l->squeezed)
+		return l->minw ? min : max;	/* (their widths are the one asked for's; a picture
+						   that gives way, none at the narrowest: a table's
+						   cell kept that for its widest too, and was as
+						   narrow as its words) */
 	if (m != NULL && !l->fail && !l->p->deep) {
 		m->b = b;
 		m->min = min;
@@ -5733,6 +5742,14 @@ static int32_t measure(L *l, box *b)
 		   its padding and borders (CSS Sizing 3, 5.2.2: compressible),
 		   so that a table shares out what is left round it (Bootstrap's
 		   input group: the field and the button beside it in 180px) */
+		return extras(l, b);
+	}
+	if (l->minw && b->repl && !b->anon && (has_pct(b->st, EP_WIDTH) || has_pct(b->st, EP_MAX_WIDTH))) {
+		/* a picture in a box of its own (display: block) whose width or
+		   max-width is a percentage: at its narrowest only its padding,
+		   borders and margins, its width in px or not (compressible,
+		   above: atariscne.org's centred pictures came here, never to
+		   the picture's own measure) */
 		return extras(l, b);
 	}
 	if (w != AUTO) {
