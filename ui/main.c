@@ -970,10 +970,26 @@ int settings_save(void)
    machine there is none, and log_event formats nothing (its vsnprintf was
    1.2% of an 8 MHz ST's session) */
 long nf_probe(void);
+extern long nf_vec;		/* common's nf.S: where the illegal-instruction vector is */
 static long nf_found = -1;
+static int nf_vbr;
 
+/* the probe's handler goes on the illegal-instruction vector, at VBR +
+   0x10 on a 68010 or later, as common's nf_debug finds it: at 0x10 a
+   Vampire V4SA's Atari core, its VBR moved, sent the probe to the
+   system's own handler and EWeb hung at the start (15 Nov 2026). A
+   ColdFire's nf.S tries nothing (and its VBR can't be read) */
 static void sup_nf(void)
 {
+#ifndef __mcoldfire__
+	if (nf_vbr) {
+		register long vbr __asm__("d0");
+		/* movec vbr,d0, as words: the ST edition is 68000 code, and a
+		   .chip there would hold for the rest of a 68030 build's file */
+		__asm__ volatile(".short 0x4e7a,0x0801" : "=r"(vbr));
+		nf_vec = vbr + 0x10;
+	}
+#endif
 	nf_found = nf_probe();
 }
 
@@ -982,8 +998,10 @@ void log_event(const char *fmt, ...)
 	char buf[600];
 	va_list ap;
 	int n;
-	if (nf_found < 0)
+	if (nf_found < 0) {
+		nf_vbr = get_cookie(0x5F435055L) >= 10;	/* _CPU */
 		Supexec(sup_nf);
+	}
 	if (nf_found <= 0)
 		return;
 	n = snprintf(buf, sizeof buf, "EWEB ");

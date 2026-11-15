@@ -15,29 +15,37 @@
 | V4e), so nothing is tried and no vector touched: none found, and a call
 | does nothing
 	.text
-	.globl	nf_probe, nf_call2, nf_find
+	.globl	nf_probe, nf_call2, nf_find, nf_vec
 nf_probe:
 nf_find:
 nf_call2:
 	moveq	#0,%d0
 	rts
+	.data
+nf_vec:
+	.long	0x10
+	.text
 #else
 	.text
 	.globl	nf_probe
 nf_probe:
-	move.l	0x10.w,%a1		| illegal instruction vector
+	move.l	%a2,-(%sp)
+	movea.l	nf_vec,%a2		| the illegal instruction vector (VBR + 0x10)
+	move.l	(%a2),%a1
 	move.l	%sp,%a0
-	move.l	#1f,0x10.w
+	move.l	#1f,(%a2)
 	pea	nf_name
 	subq.l	#4,%sp			| NatFeats read the argument at 4(sp),
 	moveq	#0,%d0			| as in a C call: leave room for the
 	.dc.w	0x7300			| return address (nf_id)
 	addq.l	#8,%sp
-	move.l	%a1,0x10.w
+	move.l	%a1,(%a2)
+	movea.l	(%sp)+,%a2
 	rts
 1:	move.l	%a0,%sp			| no NatFeats: illegal instruction
 	moveq	#0,%d0
-	move.l	%a1,0x10.w
+	move.l	%a1,(%a2)
+	movea.l	(%sp)+,%a2
 	rts
 
 	.globl	nf_call2
@@ -56,18 +64,30 @@ nf_name:
 	.globl	nf_find
 nf_find:
 	move.l	4(%sp),%d1
-	move.l	0x10.w,%a1
+	move.l	%a2,-(%sp)
+	movea.l	nf_vec,%a2
+	move.l	(%a2),%a1
 	move.l	%sp,%a0
-	move.l	#2f,0x10.w
+	move.l	#2f,(%a2)
 	move.l	%d1,-(%sp)
 	subq.l	#4,%sp			| argument at 4(sp), as in a C call
 	moveq	#0,%d0
 	.dc.w	0x7300			| nf_id
 	addq.l	#8,%sp
-	move.l	%a1,0x10.w
+	move.l	%a1,(%a2)
+	movea.l	(%sp)+,%a2
 	rts
 2:	move.l	%a0,%sp
 	moveq	#0,%d0
-	move.l	%a1,0x10.w
+	move.l	%a1,(%a2)
+	movea.l	(%sp)+,%a2
 	rts
+
+| where the illegal-instruction vector is: 0x10, or VBR + 0x10 as tos.c's
+| nf_debug sets it on a 68010 or later before the first probe
+	.data
+	.globl	nf_vec
+nf_vec:
+	.long	0x10
+	.text
 #endif
