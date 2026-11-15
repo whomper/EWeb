@@ -259,13 +259,16 @@ static int nf_vbr;
    illegal instruction, EWeb, EPDF and EPlay hung, 15 Nov 2026) */
 static void sup_nf_probe(void)
 {
+#ifndef __mcoldfire__		/* (its movec only writes; nf.S probes nothing there) */
 	if (nf_vbr) {
-		register long vbr __asm__("d0");
-		/* movec vbr,d0, as words: a .chip here would hold for the rest
-		   of the file, and a 68030 build's later code then failed */
-		__asm__ volatile(".short 0x4e7a,0x0801" : "=r"(vbr));
+		long vbr;
+		/* movec %vbr,%d0 as words: no .chip, which would leave the
+		   assembler in one CPU's mode for the rest of the file (EPlay's
+		   68020-60 and ColdFire builds refused tos.c's code after it) */
+		__asm__ volatile(".dc.w 0x4e7a,0x0801\n\tmove.l %%d0,%0" : "=r"(vbr) : : "d0");
 		nf_vec = vbr + 0x10;
 	}
+#endif
 	nf_id = nf_probe();
 }
 
