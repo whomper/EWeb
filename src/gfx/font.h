@@ -30,13 +30,13 @@ typedef struct ew_font {
 	uint8_t family, style, px;
 	uint8_t ascent, descent;	/* above and below the baseline */
 	uint8_t bad;			/* its blocks that can't be read, a bit each */
-	uint8_t shortb;			/* its blocks not read for want of memory (font_retry) */
 	uint8_t *data;			/* the face's first block of characters, read on first use */
 	uint8_t *more[FONT_BLOCKS - 1];	/* its other blocks, each read when a page first needs one
 					   of their characters (Greek, Cyrillic...) */
 	uint8_t *wt;			/* font_widths' table, made when first asked for */
 	GLYPH *asc;			/* font_ascii's, made when first asked for */
 	int failed;			/* 1 can't be read, 2 not for want of memory (font_retry) */
+	uint8_t shortb;			/* its blocks not read for want of memory (font_retry) */
 } ew_font;
 
 /* reads the file's table of faces: 0 if it can't */

@@ -81,23 +81,11 @@ void font_free(void)
 	fh = -1;
 }
 
-/* the faces not read for want of memory tried again when next used */
-void font_retry(void)
-{
-	int i;
-	for (i = 0; faces != NULL && i < nfaces; i++) {
-		if (faces[i].failed == 2)
-			faces[i].failed = 0;
-		faces[i].shortb = 0;
-	}
-}
-
 /* the faces' glyphs given back (a small machine short of memory for a page);
    each is read again when next used */
 void font_drop(void)
 {
 	int i, b;
-	font_retry();
 	for (i = 0; faces != NULL && i < nfaces; i++) {
 		free(faces[i].data);
 		faces[i].data = NULL;
@@ -254,7 +242,7 @@ done:
 int (*font_poll)(void);
 int (*font_room)(void);
 long font_short_n;
-static int nomem;			/* read_block's last NULL was for want of memory */
+static uint8_t *read_again(ew_font *f, int b);
 
 /* unpacking a block in pieces: the packed bytes read whole first */
 struct packed_src {
@@ -327,7 +315,6 @@ static uint8_t *read_block(int face, int b)
 	packed = malloc(stored ? stored : 1);
 	/* the block's room at its exact size: no doubling while it unpacks */
 	data = malloc(size ? size : 1);
-	nomem = packed == NULL || data == NULL;
 	if (packed && data && fh >= 0 && read_at(fh, off, packed, stored) && (long) size >= 4 + 10L * bcount[b] &&
 	    unpack_block(packed, (long) stored, data, (long) size)) {
 		free(packed);
@@ -345,16 +332,9 @@ static int load(ew_font *f)
 		return f->data != NULL;
 	loading = f;
 	f->data = read_block((int) (f - faces), 0);
-	/* (short of memory on a 4 MB Falcon at a big page's peak: the
-	   faces left without glyphs drew no text for the rest of the
-	   session, 1.14's news page on Falcon-4:256 under NVDI) */
-	if (f->data == NULL && nomem && font_room != NULL && font_room())
-		f->data = read_block((int) (f - faces), 0);
+	if (f->data == NULL)
+		f->data = read_again(f, 0);	/* (it says why: f->failed) */
 	loading = NULL;
-	if (f->data == NULL) {
-		f->failed = nomem ? 2 : 1;
-		font_short_n += nomem;
-	}
 	if (f->data) {
 		f->ascent = f->data[0];
 		f->descent = f->data[1];
@@ -487,16 +467,10 @@ static const uint8_t *block_of(ew_font *f, int b)
 {
 	if (f->more[b - 1] == NULL && !((f->bad | f->shortb) & 1 << b)) {
 		uint8_t *d = read_block((int) (f - faces), b);
-		if (d == NULL && nomem && f->more[b - 1] == NULL && font_room != NULL && font_room())
-			d = read_block((int) (f - faces), b);
+		if (d == NULL)
+			d = read_again(f, b);	/* (it says why: f->bad or f->shortb) */
 		if (f->more[b - 1] != NULL)
 			free(d);	/* (read meanwhile, in a turn as it unpacked) */
-		else if (d == NULL && nomem) {
-			f->shortb |= (uint8_t) (1 << b);
-			font_short_n++;
-		}
-		else if (d == NULL)
-			f->bad |= (uint8_t) (1 << b);
 		else
 			f->more[b - 1] = d;
 	}
@@ -649,4 +623,45 @@ long font_width(ew_font *f, const char *s, size_t n)
 		}
 	}
 	return w;
+}
+
+/* A face or a block that couldn't be read: for want of memory (a trial
+   allocation of its size fails: on a 4 MB Falcon at a big page's peak,
+   1.14's news page under NVDI drew a face's text not at all for the rest
+   of the session), room made (font_room) and read once more; still
+   short, marked so (failed 2, shortb) and tried again at the next layout
+   (font_retry). Else it can't be read: failed 1, bad. Kept here, out of
+   the drawing's way: load(), block_of() and font_glyph() stay where they
+   were in the 68030's caches (1.16, Falcon-4:16) */
+static __attribute__((noinline)) uint8_t *read_again(ew_font *f, int b)
+{
+	int face = (int) (f - faces);
+	uint8_t *d = NULL;
+	void *probe = malloc(b == 0 ? (size_t) fsize[face] + fstored[face] : 32768);
+	int nomem = probe == NULL;
+	free(probe);
+	if (nomem && font_room != NULL && font_room())
+		d = read_block(face, b);
+	if (d != NULL || (b > 0 && f->more[b - 1] != NULL))
+		return d;
+	if (nomem)
+		font_short_n++;
+	if (b == 0)
+		f->failed = nomem ? 2 : 1;
+	else if (nomem)
+		f->shortb |= (uint8_t) (1 << b);
+	else
+		f->bad |= (uint8_t) (1 << b);
+	return NULL;
+}
+
+/* the faces not read for want of memory tried again when next used */
+void font_retry(void)
+{
+	int i;
+	for (i = 0; faces != NULL && i < nfaces; i++) {
+		if (faces[i].failed == 2)
+			faces[i].failed = 0;
+		faces[i].shortb = 0;
+	}
 }

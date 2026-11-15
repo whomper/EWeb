@@ -392,7 +392,9 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         seen.append(pages_read(r))
         if not news_whole:
             # (the rows on the news page: measured on a page that isn't it)
-            on_news = ("the news page loaded", "a line scrolled", "a page scrolled")
+            # (and what the dialogs uncover: the news page drawn again)
+            on_news = ("the news page loaded", "a line scrolled", "a page scrolled",
+                       "Settings closed (what it uncovers)", "the About box closed (what it uncovers)")
             r.results = [(w + NOT_MEASURABLE if w in on_news else w, v, b) for w, v, b in r.results]
             seen = [(w + NOT_MEASURABLE, v, m) for w, v, m in seen]
             fin = [(w + NOT_MEASURABLE if w in on_news else w, v) for w, v in fin]

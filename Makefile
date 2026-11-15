@@ -256,7 +256,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 	$(M68KCC) -m68030 -c $< -o $@
 # room after main.o, browse.o and font.o (atari/codepad.S): 1.16's
 # ui/main.c grew 16 bytes of code, 62 of strings and 4 of BSS,
-# src/browse/browse.c 672, 68 and 8, src/gfx/font.c 576, 0 and 12, and on
+# src/browse/browse.c 672, 68 and 8, src/gfx/font.c 352, 0 and 8, and on
 # Falcon-4:16 memset and the canvas's fill_px and cv_fill then met in the
 # 68030's instruction cache (twice their misses: the news page's first draw
 # 820 -> 855 ms, an arrow held up 875 -> 1000); each pad puts what follows
@@ -270,8 +270,8 @@ PAD_BSS_main := 252
 PAD_browse := 96
 PAD_RO_browse := 188
 PAD_BSS_browse := 248
-PAD_font := 192
-PAD_BSS_font := 244
+PAD_font := 160
+PAD_BSS_font := 248
 build/tos/rt/pad_%.o: atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \

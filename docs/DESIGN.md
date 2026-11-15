@@ -5538,7 +5538,13 @@ about it:
   good, even when only memory was short at a page's peak, and the face drew no text for the rest of
   the session. Now it calls `font_room` (`src/browse`: the pages kept for Back and the pictures not in
   use given back, never what is laid out or drawn), is read once more, and if still short is tried
-  again at the next layout (`font_retry`). EWEB.PRG's log says `fonts short N`.
+  again at the next layout (`font_retry`). EWEB.PRG's log says `fonts short N`. That code is
+  `read_again`, out of line at the end of `font.c`, so that `load`, `block_of` and `font_glyph` stay
+  where they were in the 68030's caches; with it inline, and `browse.c` and `main.c` grown, memset and
+  the canvas's `fill_px` and `cv_fill` met in the instruction cache on `Falcon-4:16` (twice their
+  misses; the news page's first draw 820 to 855 ms, an arrow held up 875 to 1,000). Room linked after
+  `main.o`, `browse.o` and `font.o` (`atari/codepad.S`, the Makefile's `PAD_*`) puts the code, strings
+  and BSS after each back at 1.15's places modulo 256.
 - **A sheet short of memory on a page's first load** (`build1`): the pages kept for Back given back
   and the sheets added once more, as `readd_sheets` did; still short, the page is shown and the
   status bar says "Not enough memory for all of this page's styles." (Erez's words to approve).
