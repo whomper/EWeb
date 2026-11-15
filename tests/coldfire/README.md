@@ -16,12 +16,18 @@ builds (the ColdFire's code is its own `#ifdef __mcoldfire__` path).
 | `test_inflate` | `inflate_fast.S`'s ColdFire loop, and the C, give the host's C every byte and answer of 980 streams |
 | `test_mont` | `mont030` and `dbl030`, and `rsa030.c`'s RSA on them, against the host's 64-bit C (one sum of every word) |
 | `test_tls` | `tests/tls030`'s checks with BearSSL, `mont31_030.S` and `ll64.c` all ColdFire code, no libgcc |
+| `test_tlsfb` | the shipped `tlsovl/tlsfb.ovl` loaded and relocated by `src/ovl.c` (ColdFire code), its `TLS_OVL` checked (magic, major, version, every entry in its text), `init` given a `TLS_HOST` of Linux calls; `CACERT.PEM` and two test authorities decoded, then read again from the `ROOTS.DAT` it made; TLS 1.2 to `tlsfb_run.py`'s servers on 127.0.0.1 (openssl's certificates): RSA and ECDSA (P-256, P-384) keys, X25519, P-256 and P-384, ChaCha20, AES-GCM, AES-CBC and the RSA key exchange, a session resumed and forgotten, 40,000 bytes each checked; refused: a wrong name, an authority not loaded, ECDSA to an RSA-only hello |
 | `test_crash` | `crash.S` entered through a ColdFire frame: a fault not ours goes on untouched; one taken reaches `rte` with a ColdFire frame into `crash_landing` |
 | `test_cpucheck` | `cpucheck_cf.S`: the same bytes for the 68000 and the ColdFire; `app_main` with `_CF_` in the cookie jar, the alert without |
 
 `gemdos.c` stands in for GEMDOS, Supexec and the AES: Linux gives `trap #1`, `#2` and `#14` as SIGILL,
 and the handler (in and out through `rt.S`'s ColdFire code, as QEMU's own signal return has a `not.b`)
 does what TOS would.
+
+`test_tlsfb` needs `python3` and `openssl`. What qemu-user can't do is the test's own: `ovl_flush` isn't
+called (`cpushl` is supervisor-only; QEMU keeps its translations right by itself), Supexec calls its
+function in user mode, and the program is linked with `-N` so that the heap the overlay is loaded into
+may run code, as all of TOS's memory may.
 
 ## What only a real FireBee can prove
 

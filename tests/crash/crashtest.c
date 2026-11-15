@@ -39,6 +39,8 @@
 #include "tos.h"
 #include "crash.h"
 
+long nf_on = 1;		/* a test program: NatFeats always (nf.S's is 0) */
+
 static char kind;
 
 static void put(const char *path, const char *s, long n)

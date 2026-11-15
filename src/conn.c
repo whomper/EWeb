@@ -271,7 +271,9 @@ long net_sendbuf = 4096;
 
 void conn_log_hold(int on)
 {
-	if (on && !job_hold && conn_logfile[0] && !logbig &&
+	/* (kept for the apps that call it; conn_log writes each line at
+	   once now, so nothing is held: the big buffer is never taken) */
+	if (0 && on && !job_hold && conn_logfile[0] && !logbig &&
 	    conn_log_hold_bytes > conn_log_small) {
 		char *b = malloc(conn_log_hold_bytes);
 		if (b) {
@@ -479,8 +481,12 @@ void conn_log(const char *who, const char *dir, const char *text, long n)
 		log_add(text, n);
 	}
 	log_add("\r\n", 2);
-	if (dir[1] == '!' || (dir[1] == '-' && !log_hold && !job_hold))
-		conn_log_flush();
+	/* every line on the disk at once (Erez, 15 Nov 2026: "apps should
+	   write log at once as otherwise it may be ineffective to trace
+	   errors"): a crash or a freeze leaves the log up to its last line.
+	   conn_log_hold no longer holds; the log costs a write a line, but
+	   only while Write a log is on */
+	conn_log_flush();
 }
 
 /* the receive buffer when conn_open is given 0: 16 KB, or less where

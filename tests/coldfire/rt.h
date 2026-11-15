@@ -22,4 +22,5 @@ int strcmp(const char *a, const char *b);
 void *malloc(size_t n);
 void *calloc(size_t a, size_t b);
 void free(void *p);
+void *realloc(void *p, size_t n);
 #endif

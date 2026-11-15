@@ -12,18 +12,21 @@ CROSS   ?= m68k-linux-gnu-
 CC      := $(CROSS)gcc
 GCCINC  := $(shell $(CC) -print-file-name=include 2>/dev/null)
 C       := ..
-# CPU=5475: TLS.OVL for the ColdFire (the FireBee) in build-5475/: ColdFire
+# CPU=5475: TLS.OVL for the ColdFire (the FireBee) in build-5475/, committed
+# as tlsfb.ovl (every app with TLS ships it: tls_ovl.c loads it on a FireBee): ColdFire
 # code throughout, no DSP (a FireBee has none: BearSSL's curves, rsa030 and
 # the i31 loop in ColdFire assembly), and ll64.c for the 64-bit arithmetic
 # the 68020 libgcc would give
 CPU     ?= 68030
 ifeq ($(CPU),5475)
 B       := build-5475
+OUT     := tlsfb.ovl
 MCPU    := -mcpu=5475
 LIBGCC  := $(B)/ll64.o
 DSPSRC  :=
 else
 B       := build
+OUT     := tls.ovl
 MCPU    := -m68030
 LIBGCC  := -lgcc
 DSPSRC  := $(C)/src/ecdsp.c $(C)/ui/dsp.c $(C)/ui/dsp_ec.c $(C)/atari/dsprsa.c $(C)/atari/dspec.c
@@ -93,13 +96,13 @@ $(B):
 	mkdir -p $@
 
 check: $(B)/tls.ovl
-	@cmp $(B)/tls.ovl tls.ovl && echo "TLS.OVL $(VERSION): the committed file is its sources' build"
+	@cmp $(B)/tls.ovl $(OUT) && echo "$(OUT) $(VERSION): the committed file is its sources' build"
 
 release: $(B)/tls.ovl
-	@if cmp -s $(B)/tls.ovl tls.ovl; then echo "TLS.OVL unchanged"; else \
-	  if [ -f tls.ovl ] && [ "$$(dd if=tls.ovl bs=1 skip=36 count=7 2>/dev/null | tr -d '\0')" = "$(VERSION)" ]; then \
+	@if cmp -s $(B)/tls.ovl $(OUT); then echo "TLS.OVL unchanged"; else \
+	  if [ -f $(OUT) ] && [ "$$(dd if=$(OUT) bs=1 skip=36 count=7 2>/dev/null | tr -d '\0')" = "$(VERSION)" ]; then \
 	    echo "raise VERSION first: TLS.OVL $(VERSION) is out already"; exit 1; fi; \
-	  cp $(B)/tls.ovl tls.ovl; echo "TLS.OVL $(VERSION) made: commit it with VERSION"; fi
+	  cp $(B)/tls.ovl $(OUT); echo "TLS.OVL $(VERSION) made: commit it with VERSION"; fi
 
 test:
 	$(MAKE) -C $(C)/tests/tlsovl test

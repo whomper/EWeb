@@ -15,7 +15,7 @@ BASE   ?= origin/main
 CF     := -mcpu=5475 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
           -fno-tree-loop-distribute-patterns -nostdinc -isystem $(GCCINC) -I. -I$(C)/src -Wall
 LD     := $(CC) -mcpu=5475 -nostdlib -static -no-pie -Wl,-z,noexecstack
-TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_rows_cf $(B)/test_rows_030 $(B)/test_ll64 $(B)/test_ll64_host
+TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_rows_cf $(B)/test_rows_030 $(B)/test_ll64 $(B)/test_ll64_host $(B)/test_tlsfb
 
 all: $(TESTS)
 
@@ -170,6 +170,18 @@ $(B)/test_rows_030: test_rows.c $(B)/rows.c libc.c rt.S
 	$(CC) -m68030 -c -o $(B)/rt030r.o rt.S
 	$(CC) -m68030 -nostdlib -static -no-pie -Wl,-z,noexecstack -o $@ $@.o $(B)/libc030r.o $(B)/rt030r.o -lgcc
 
+# tlsovl/tlsfb.ovl, the shipped file: loaded by src/ovl.c (ColdFire code),
+# its table checked, init() given a TLS_HOST of Linux calls, then TLS 1.2
+# to tlsfb_run.py's servers on 127.0.0.1 (certificates made by openssl)
+TLSVER := $(shell cat $(C)/tlsovl/VERSION)
+$(B)/ovl_cf.o: $(C)/src/ovl.c $(C)/src/ovl.h | $(B)
+	$(CC) $(CF) -Iinc -I$(C)/tlsovl/src -c -o $@ $<
+$(B)/test_tlsfb.o: test_tlsfb.c rt.h $(C)/src/tlsovl.h $(C)/tlsovl/VERSION | $(B)
+	$(CC) $(CF) -Iinc -DWANT_VERSION=\"$(TLSVER)\" -c -o $@ $<
+# (-N: the heap the overlay is loaded into executable, as all of TOS's memory is)
+$(B)/test_tlsfb: $(B)/test_tlsfb.o $(B)/ovl_cf.o $(B)/libc.o $(B)/rt.o
+	$(LD) -Wl,-N -Wl,--no-warn-rwx-segments -o $@ $^
+
 # the C files given a ColdFire path, for the 68000 and the 68030 against
 # BASE's (make same)
 CSAME  := atari/gem.c src/ovl.c ui/text.c atari/libc.c src/inflate.c atari/crash.c tlsovl/head.c
@@ -194,6 +206,7 @@ test: $(TESTS)
 	$(QEMU) $(B)/test_mont > $(B)/mont_cf.txt
 	cat $(B)/mont_cf.txt
 	$(QEMU) $(B)/test_tls
+	python3 tlsfb_run.py $(B)/tlsfb $(C)/tlsovl/tlsfb.ovl $(C)/certs/CACERT.PEM $(QEMU) $(B)/test_tlsfb
 	./$(B)/test_ll64_host > $(B)/ll64_host.txt
 	$(QEMU) $(B)/test_ll64 > $(B)/ll64_cf.txt
 	cat $(B)/ll64_cf.txt
