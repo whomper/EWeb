@@ -35,6 +35,7 @@
 #include "img.h"
 #include "pagecol.h"
 #include "tcpix.h"
+#include "c2p.h"
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
@@ -457,8 +458,12 @@ static unsigned long c2p_lo[8][256], (*c2p_hi)[256];	/* hi: planes 4-7, made for
 static int c2p_init(void)
 {
 	int i, v, k;
+#ifdef EW_ST
+	/* (EWEB.PRG makes 2, 4 and 8 planes with ui/c2p.h: the tables for
+	   one plane only, and none of the 8 KB for 256 colours) */
 	if (planes > 4 && c2p_hi == NULL && (c2p_hi = malloc(8 * sizeof *c2p_hi)) == NULL)
 		return 0;
+#endif
 	for (i = 0; i < 8; i++)
 		for (v = 0; v < 256; v++) {
 			unsigned long lo = 0, hi = 0;
@@ -502,46 +507,6 @@ static inline __attribute__((always_inline)) void sixteen(const unsigned char *s
 		return;
 	}
 #endif
-#ifndef EW_ST
-	if (np >= 2) {
-		/* the 68030's: two 8 by 8 bit transposes in registers (Hacker's
-		   Delight 7-3), no tables: their 16 KB missed its 256-byte data
-		   cache at most looks, and a window of a page in 256 colours was
-		   650 ms of a stock Falcon's to convert (its drawing 700, the
-		   speed rig's Falcon-14); the same words as the tables', 2
-		   million random runs */
-		const unsigned long *q = (const unsigned long *) (const void *) src;
-		unsigned long x0 = q[0], y0 = q[1], x1 = q[2], y1 = q[3], t, x, y;
-#define C2P_T8(x, y) do { \
-		t = (x ^ (x >> 7)) & 0x00AA00AAUL; x ^= t ^ (t << 7); \
-		t = (y ^ (y >> 7)) & 0x00AA00AAUL; y ^= t ^ (t << 7); \
-		t = (x ^ (x >> 14)) & 0x0000CCCCUL; x ^= t ^ (t << 14); \
-		t = (y ^ (y >> 14)) & 0x0000CCCCUL; y ^= t ^ (t << 14); \
-		t = (x & 0xF0F0F0F0UL) | ((y >> 4) & 0x0F0F0F0FUL); \
-		y = ((x << 4) & 0xF0F0F0F0UL) | (y & 0x0F0F0F0FUL); x = t; } while (0)
-		if (np <= 4) {
-			/* 4 planes or 2: two pixels a byte (pixel i's in its high
-			   half, i + 8's in its low), one transpose for the 16:
-			   plane k's in x's byte k, pixels 0-7, and y's, 8-15 (the
-			   same words, 2 million random runs) */
-			x = (x0 & 0x0f0f0f0fUL) << 4 | (x1 & 0x0f0f0f0fUL);
-			y = (y0 & 0x0f0f0f0fUL) << 4 | (y1 & 0x0f0f0f0fUL);
-			C2P_T8(x, y);
-			for (k = 0; k < np; k++)
-				to[k] = (unsigned short) ((x >> (8 * k) & 0xff) << 8 | (y >> (8 * k) & 0xff));
-			return;
-		}
-		C2P_T8(x0, y0);
-		C2P_T8(x1, y1);
-#undef C2P_T8
-		/* (planes 0-3 in y's bytes from its low end, 4-7 in x's) */
-		for (k = 0; k < 4 && k < np; k++)
-			to[k] = (unsigned short) ((y0 >> (8 * k) & 0xff) << 8 | (y1 >> (8 * k) & 0xff));
-		for (; k < np; k++)
-			to[k] = (unsigned short) ((x0 >> (8 * (k - 4)) & 0xff) << 8 | (x1 >> (8 * (k - 4)) & 0xff));
-		return;
-	}
-#endif
 	a = eight(c2p_lo, src);
 	b = eight(c2p_lo, src + 8);
 	for (k = 0; k < 4 && k < np; k++)
@@ -563,6 +528,56 @@ static inline __attribute__((always_inline)) void sixteen(const unsigned char *s
 static void to_planes(short h, long words, int interleaved)
 {
 	const short np = planes;
+#ifndef EW_ST
+	if (np == 8 || np == 4 || np == 2) {
+		/* the 68030's (ui/c2p.h): merges between registers, the words
+		   made two a long and stored as they come; a window of the news
+		   page's planes in 256 colours was 0.81 ms a row of a stock
+		   Falcon's under NVDI (13,000 cycles), most of a scroll's time
+		   where no kept page fits (15 Nov 2026) */
+		long plane = words * h, r, g;
+		const long nl = np / 2;
+		uint32_t last = 0, fill[4], w[4];
+		int have = 0;
+		for (r = 0; r < h; r++) {
+			const uint32_t *q = (const uint32_t *) (const void *) (chunky + r * words * 16);
+			uint32_t *lo = interleaved ? (uint32_t *) (void *) (dev_buf + r * words * np) : NULL;
+			unsigned short *out = interleaved ? NULL : std_buf + r * words;
+			for (g = 0; g < words; g++, q += 4) {
+				const uint32_t *from = w;
+				uint32_t q0 = q[0];
+				if (q0 == q[1] && q0 == q[2] && q0 == q[3]) {
+					if (!have || q0 != last) {
+						if (np == 8)
+							c2p8(q, fill);
+						else
+							c2p4(q, fill);
+						last = q0;
+						have = 1;
+					}
+					from = fill;
+				} else if (np == 8) {
+					c2p8(q, w);
+				} else {
+					c2p4(q, w);
+				}
+				if (interleaved) {
+					long k;
+					for (k = 0; k < nl; k++)
+						*lo++ = from[k];
+				} else {
+					unsigned short *o = out++;
+					long k;
+					for (k = 0; k < nl; k++, o += 2 * plane) {
+						o[0] = (unsigned short) (from[k] >> 16);
+						o[plane] = (unsigned short) from[k];
+					}
+				}
+			}
+		}
+		return;
+	}
+#endif
 	long plane = words * h, r, g;
 	short k;
 	unsigned long last = 0;

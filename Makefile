@@ -924,6 +924,15 @@ build/asan/tctest: tests/screen/tctest.c ui/tcpix.c ui/tcpix.h
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Iui -o $@ \
 		tests/screen/tctest.c ui/tcpix.c
+# the canvas's pixels made the interleaved planes' words (ui/c2p.h,
+# tests/screen/c2ptest.c), here and as the 68030's code
+build/asan/c2ptest: tests/screen/c2ptest.c ui/c2p.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Iui -o $@ \
+		tests/screen/c2ptest.c
+build/m68k/c2ptest: tests/screen/c2ptest.c ui/c2p.h
+	@mkdir -p $(@D)
+	$(M68KCC) -m68030 -O2 -std=gnu99 -static -Wall -Wextra -Werror -Iui -o $@ tests/screen/c2ptest.c
 # EWEBFB.PRG's 64-bit integers to and from doubles (atari/cfmath.c, the
 # ColdFire's: tools/mkfirebee.py) against the host compiler's
 build/asan/cfmathtest: tests/host/cfmathtest.c atari/cfmath.c
@@ -1242,7 +1251,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
-		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/cfmathtest binary/EWEB.FNT \
+		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/c2ptest build/m68k/c2ptest build/asan/cfmathtest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
@@ -1258,6 +1267,8 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/sitetest
 	build/asan/dltest
 	build/asan/tctest
+	build/asan/c2ptest
+	qemu-m68k -cpu m68030 build/m68k/c2ptest
 	build/asan/cfmathtest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
