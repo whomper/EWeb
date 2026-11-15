@@ -15,7 +15,7 @@ BASE   ?= origin/main
 CF     := -mcpu=5475 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
           -fno-tree-loop-distribute-patterns -nostdinc -isystem $(GCCINC) -I. -I$(C)/src -Wall
 LD     := $(CC) -mcpu=5475 -nostdlib -static -no-pie -Wl,-z,noexecstack
-TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_rows_cf $(B)/test_rows_030 $(B)/test_ll64 $(B)/test_ll64_host $(B)/test_tlsfb
+TESTS  := $(B)/test_crt0 $(B)/test_crt0_acc $(B)/test_sting $(B)/test_nf $(B)/test_inflate $(B)/test_inflate_c $(B)/test_mont $(B)/test_mont_host $(B)/test_crash $(B)/test_tls $(B)/test_cpucheck_cf $(B)/test_cpucheck_030 $(B)/test_cpucheck_c_cf $(B)/test_cpucheck_c_none $(B)/test_rows_cf $(B)/test_rows_030 $(B)/test_ll64 $(B)/test_ll64_host $(B)/test_tlsfb
 
 all: $(TESTS)
 
@@ -151,6 +151,16 @@ $(B)/test_cpucheck_030: test_cpucheck.c $(B)/cpucheck_cf.o gemdos.c libc.c rt.S
 	$(CC) -m68030 -nostdlib -static -no-pie -Wl,-z,noexecstack -o $@ $(B)/t030.o $(B)/cpucheck_cf.o \
 		$(B)/gemdos030.o $(B)/libc030.o $(B)/rt030.o -lgcc
 
+# cpucheck.c: as an app builds it (68000 code, its main renamed), run in a
+# 68030 harness with and without cpu_cf_alert
+$(B)/cpucheck_c.o: $(C)/atari/cpucheck.c | $(B)
+	$(CC) $(subst -mcpu=5475,-m68000,$(CF)) -Os -c -o $@ $<
+	$(CROSS)objcopy --redefine-sym main=main_check $@
+$(B)/test_cpucheck_c_%: test_cpucheck_c.c $(B)/cpucheck_c.o $(B)/test_cpucheck_030
+	$(CC) $(subst -mcpu=5475,-m68030,$(CF)) $(if $(filter cf,$*),-DCF_ALERT) -c -o $@.o test_cpucheck_c.c
+	$(CC) -m68030 -nostdlib -static -no-pie -Wl,-z,noexecstack -o $@ $@.o $(B)/cpucheck_c.o \
+		$(B)/gemdos030.o $(B)/libc030.o $(B)/rt030.o -lgcc
+
 # atari/ll64.c: as ColdFire code against the host's own 64-bit arithmetic
 $(B)/test_ll64: test_ll64.c $(B)/ll64.o $(B)/libc.o $(B)/rt.o
 	$(CC) $(CF) -o $@.o -c test_ll64.c
@@ -217,6 +227,8 @@ test: $(TESTS)
 	cmp $(B)/rows_cf.txt $(B)/rows_030.txt && echo "rows: text.c's C rows on the ColdFire give its assembly's every byte"
 	$(QEMU) $(B)/test_cpucheck_cf
 	qemu-m68k -cpu m68030 $(B)/test_cpucheck_030
+	qemu-m68k -cpu m68030 $(B)/test_cpucheck_c_cf
+	qemu-m68k -cpu m68030 $(B)/test_cpucheck_c_none
 	$(QEMU) $(B)/test_crash
 	$(QEMU) $(B)/test_crash take
 	$(QEMU) $(B)/test_crash linef

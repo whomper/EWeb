@@ -19,6 +19,7 @@ builds (the ColdFire's code is its own `#ifdef __mcoldfire__` path).
 | `test_tlsfb` | the shipped `tlsovl/tlsfb.ovl` loaded and relocated by `src/ovl.c` (ColdFire code), its `TLS_OVL` checked (magic, major, version, every entry in its text), `init` given a `TLS_HOST` of Linux calls; `CACERT.PEM` and two test authorities decoded, then read again from the `ROOTS.DAT` it made; TLS 1.2 to `tlsfb_run.py`'s servers on 127.0.0.1 (openssl's certificates): RSA and ECDSA (P-256, P-384) keys, X25519, P-256 and P-384, ChaCha20, AES-GCM, AES-CBC and the RSA key exchange, a session resumed and forgotten, 40,000 bytes each checked; refused: a wrong name, an authority not loaded, ECDSA to an RSA-only hello |
 | `test_crash` | `crash.S` entered through a ColdFire frame: a fault not ours goes on untouched; one taken reaches `rte` with a ColdFire frame into `crash_landing` |
 | `test_cpucheck` | `cpucheck_cf.S`: the same bytes for the 68000 and the ColdFire; `app_main` with `_CF_` in the cookie jar, the alert without |
+| `test_cpucheck_c` | `atari/cpucheck.c` as 68000 code in a 68030 harness: `cpu_alert` below `cpu_need`; `app_main` with no `_CF_`; with `_CF_` (whatever its value) `cpu_cf_alert` where the program defines it, else `app_main` |
 
 `gemdos.c` stands in for GEMDOS, Supexec and the AES: Linux gives `trap #1`, `#2` and `#14` as SIGILL,
 and the handler (in and out through `rt.S`'s ColdFire code, as QEMU's own signal return has a `not.b`)
