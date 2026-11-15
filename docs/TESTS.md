@@ -99,7 +99,11 @@ for the parts they name (CLAUDE.md says which to run after which change).
   lost Hatari's X window at its first click (`RuntimeError: no Hatari
   window`, nothing from EWeb in Hatari's log); the group run alone
   passed. If it comes back, look at the Xvfb and xdotool timing in
-  `Mouse.window`.
+  `Mouse.window`. And once (15 Nov 2026, the 1.16 round) the `browse`
+  group's download box took the press on Cancel and logged nothing more,
+  as the AES does waiting for a release the emulated mouse lost; the
+  cases after it in that run failed with it, and the group run alone
+  passed all 65.
 - `make itest` also loads a page of pictures (`tests/net/server.py`'s
   `/site/pics.html`): each decoded at the size shown, the page laid out
   again for the one whose size it didn't give, the missing one failed; a
