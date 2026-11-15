@@ -95,6 +95,7 @@ def load(r, what, url, most=900):
         # of memory at its peak, draws less, and its rows are no measure:
         # 1.14's news page on Falcon-4:256 under NVDI had no text, 15 Nov 2026)
         line = re.findall(r"EWEB shown .*", r.console())[n]
+        r.shown_line = line
         if "title EWeb can't show this page" in line:
             print("FAIL  %s: EWeb couldn't show it (%s)" % (what, line[:160]), flush=True)
             shown = False
@@ -113,6 +114,44 @@ def load(r, what, url, most=900):
     # 1.6's ST:med pictures' page once said 120 ms, never shown)
     r.results.append((what, (max(g) if g else 0) if shown and still else None, LOAD))
     return typed
+
+
+# The news page (tests/bench/mkpage.py) whole, at the 640-wide screen's
+# window (its area 609 wide), as ewrender and every machine where it fits
+# lay it out: its height. Where it doesn't fit whole with its sheet (the
+# stock 4 MB Falcon under NVDI at 256 colours: 1.16, 15 Nov 2026) EWeb
+# shows it with its sheet short or none, and says so: its rows are marked
+# not measurable there, and fail anywhere else. When the page or the
+# layout changes on purpose, its height here changes with it.
+NEWS_HEIGHT = 9829
+NEWS_NOT_WHOLE = {("Falcon-4:256", True)}
+NOT_MEASURABLE = " (not measurable)"
+SHORT_NOTE = "EWEB note Not enough memory for all of this page's styles."
+
+
+def news_check(r, machine, nvdi, start):
+    """the news page as it should be: 1, else 0 (a NOTE where it isn't
+    expected to fit whole, a FAIL anywhere else)"""
+    line = getattr(r, "shown_line", "")
+    with open(r.log, errors="replace") as f:
+        f.seek(start)
+        since = f.read()
+    m = re.search(r" height (\d+) .* area \d+ \d+ (\d+) ", line)
+    why = []
+    if not line:
+        why.append("not shown")
+    if SHORT_NOTE in since:
+        why.append("shown with its sheet short")
+    if m and int(m.group(2)) == 609 and int(m.group(1)) != NEWS_HEIGHT:
+        why.append("%s high, not %d" % (m.group(1), NEWS_HEIGHT))
+    if not why:
+        return 1
+    if (machine, nvdi) in NEWS_NOT_WHOLE:
+        print("NOTE  the news page doesn't fit whole on %s%s (%s): its rows not measurable"
+              % (machine, " under NVDI" if nvdi else "", ", ".join(why)), flush=True)
+    else:
+        print("FAIL  the news page: %s" % ", ".join(why), flush=True)
+    return 0
 
 
 def scrolls_since(r, start):
@@ -328,7 +367,9 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         w = wholes_since(r, start)
         fin.append(("the sample page loaded", max(w) if w else None))
         start = os.path.getsize(r.log)
+        r.shown_line = ""
         typed = load(r, "the news page loaded", "file:///C:/NEWS.HTM")
+        news_whole = news_check(r, machine, nvdi, start)
         w = wholes_since(r, start)
         fin.append(("the news page loaded", max(w) if w else None))
         r.results.append(("the address typed (each letter)", max(typed) if typed else 0, speed.KEY))
@@ -349,6 +390,12 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         seen.append(held(r, "Up", "an arrow held 3 s, up"))
         seen.extend(pages_fresh(r))
         seen.append(pages_read(r))
+        if not news_whole:
+            # (the rows on the news page: measured on a page that isn't it)
+            on_news = ("the news page loaded", "a line scrolled", "a page scrolled")
+            r.results = [(w + NOT_MEASURABLE if w in on_news else w, v, b) for w, v, b in r.results]
+            seen = [(w + NOT_MEASURABLE, v, m) for w, v, m in seen]
+            fin = [(w + NOT_MEASURABLE if w in on_news else w, v) for w, v in fin]
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,

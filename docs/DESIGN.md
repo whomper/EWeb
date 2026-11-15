@@ -5502,9 +5502,56 @@ row; ms):
 | `ST:mono` (EWEBST.PRG, its code unchanged) | | every row within 5 ms or faster |
 
 No row slower beyond a tick (the one `Falcon-4:16` row 6 ms over, a page scrolled's finished
-picture, was 44 and 50 in 1.13's own two runs). On `ST:mono` 1.13's "3 pages up" was 780 ms
+picture, was 44 and 50 in 1.13's own two runs).
+
+**A correction (15 Nov 2026):** the `Falcon-4:256 --nvdi` rows on the news page and the scrolls on
+it above are no measure. On the stock 4 MB Falcon under NVDI at 256 colours the news page doesn't fit
+whole: 1.13's run showed it with its sheet short (17,601 pixels high), and this one, by a few hundred
+bytes less, with its sheet short and a face of `EWEB.FNT` left without glyphs, its menu's text not
+drawn (14,577 high). Its right height is 9,829 (ewrender, `Falcon-4:16`, `ST:mono`). The `Falcon-4:16`
+and `ST:mono` rows stand. See "A big page on the 4 MB Falcon" below. On `ST:mono` 1.13's "3 pages up" was 780 ms
 here and 1,140 in the round before (both of its runs), the draws the same to 5 ms: where the
 rig's three keys, a third of a second apart, land in the ST's draw in pieces.
+
+## A big page on the 4 MB Falcon (15 Nov 2026)
+
+The speed rig's news page (`tests/bench/mkpage.py`: 72 KB of HTML and an 82 KB sheet) needs about
+1.1 MB at its peak laid out whole (drawbench `-m`, the Atari's allocator). Under NVDI at 256 colours a
+stock 4 MB Falcon has about 818 KB free at EWeb's start, so it has never been shown whole there.
+EWEB.PRG's heap at each step (an experiment logging `heap_use` at each `MARK`), its first try and
+build()'s second, after `make_room`:
+
+| step | first try | second try |
+|---|---|---|
+| before the parse | 444 KB | 260 KB |
+| the parse (the tree 278 KB, and the parser's scratch) | +311 | +311 |
+| the sheets | +3, short (`ec_sheets_short`) | +132, whole |
+| the source given back (`build_dropping`) | | -72 |
+| the styles | | +213 |
+| the layout | | +213 when it ran out, the peak 980 KB |
+
+Which way it fell turned on a few hundred bytes free at the start: 1.12 couldn't show it, 1.13 and 1.15
+showed it with its sheet short, 1.14 with its sheet short and a face without glyphs. What 1.16 does
+about it:
+
+- **A face short of memory** (`src/gfx/font.c`): `load()` marked a face it couldn't read failed for
+  good, even when only memory was short at a page's peak, and the face drew no text for the rest of
+  the session. Now it calls `font_room` (`src/browse`: the pages kept for Back and the pictures not in
+  use given back, never what is laid out or drawn), is read once more, and if still short is tried
+  again at the next layout (`font_retry`). EWEB.PRG's log says `fonts short N`.
+- **A sheet short of memory on a page's first load** (`build1`): the pages kept for Back given back
+  and the sheets added once more, as `readd_sheets` did; still short, the page is shown and the
+  status bar says "Not enough memory for all of this page's styles." (Erez's words to approve).
+- **A page that doesn't fit with its sheets at all**: on build()'s last try, styled again without
+  them and laid out plain, with the same note, rather than "EWeb can't show this page".
+- **The speed rig** (`tests/hatari/speed.py`) fails a run whose page couldn't be shown, left a face
+  short, or whose news page isn't 9,829 high in the 640-wide window, or was shown with its sheet
+  short; on `Falcon-4:256 --nvdi`, where it can't fit whole, it marks the rows on the news page "(not
+  measurable)" instead.
+
+To show the page whole there with room to spare means about 350 KB less at its peak (the tree, the
+styles: `ec_style` is 538 bytes on the 68030, a value for every property, and the layout): a phase of
+its own, put to Erez.
 
 ## The ST edition's speed (13 Nov 2026)
 

@@ -1733,11 +1733,19 @@ static void sheet_pieces(SHEETS *sh, const char *data, long len, const char *url
 	ec_sheet_end(s);
 }
 
+/* build()'s last try: the page without its own sheets (a page that
+   doesn't fit with them, on a 4 MB Falcon: shown plain, the note says so,
+   rather than not at all) */
+static int build_plain_css;
+static int build_last;		/* build()'s second try, its last */
+
 static void sheet_cb(void *ud, int is_link, const char *s, size_t len)
 {
 	SHEETS *sh = ud;
 	char href[1024], url[2048];
 	FETCH *f;
+	if (build_plain_css)
+		return;
 	if (!is_link) {
 		ec_sheet(sh->d->css, s, len, EC_ORIGIN_AUTHOR);
 		return;
@@ -2519,7 +2527,9 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 #ifndef EW_ST
 			build_dropping = data == build_may_free;
 #endif
+			build_last = 1;
 			r = build1(b, data, len, charset, url, fresh, dout, pout);
+			build_last = 0;
 			build_dropping = 0;
 		}
 	}
@@ -2633,6 +2643,15 @@ parse:
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
 	   rendering: hidden only with scripting): d->scripting */
 	add_sheets(b, d, base, again ? 0 : fresh, 0);
+	if (ec_sheets_short(d->css) && !conn_stop && unkeep_all(b)) {
+		/* (rules of its sheets left out for want of memory: the pages
+		   kept for Back given back and the sheets added once more, as
+		   readd_sheets does; from the cache) */
+		ec_drop_sheets(d->css);
+		add_sheets(b, d, base, 0, 1);
+	}
+	if (ec_sheets_short(d->css))
+		snprintf(b->note, sizeof b->note, "%s", "Not enough memory for all of this page's styles.");
 	t = pf_ms();
 	b->ms_fetch += t - t_sheets;		/* the stylesheets came meanwhile */
 	/* a long page: its start shown while the whole is styled and laid out */
@@ -2730,24 +2749,39 @@ parse:
 	turn_now = 1;		/* (the parse's end and the styling's start were one stretch: 120 ms of a stock Falcon for the news page) */
 	gem_turn();
 	MARK("page: style");
-	if (select_doc(d, base) < 0) {
-		/* out of memory styling it (a small machine): as when laying it out,
-		   not a page with no styles, which lays out to nothing */
-		doc_free(d);
-		return 0;
+	p = NULL;
+	for (;;) {
+		int styled = select_doc(d, base) >= 0;
+		b->ms_style = pf_ms() - t;
+		t = pf_ms();
+		br_building = BRB_LAYOUT;
+		MARK("page: layout");
+		p = styled ? lay(b, d, base) : NULL;
+		while (p != NULL && p->opt.width != b->width && !conn_stop) {
+			/* (the window sized meanwhile: br_relayout left it for this) */
+			pg_free(p);
+			p = lay(b, d, base);
+		}
+		b->ms_layout = pf_ms() - t;
+		if (p != NULL || conn_stop || !build_last || build_plain_css)
+			break;
+		/* out of memory styling or laying it out with its sheets, on the
+		   last try (the news page on a 4 MB Falcon under NVDI at 256
+		   colours): styled again without them, a plain page and the note
+		   (Erez's words), never "EWeb can't show this page" for a page
+		   that fits so; parsed once, its source may be gone */
+		build_plain_css = 1;
+		ec_drop_sheets(d->css);
+		add_sheets(b, d, base, 0, 1);
+		snprintf(b->note, sizeof b->note, "%s", "Not enough memory for all of this page's styles.");
+		br_building = BRB_STYLE;
+		MARK("page: style, plain");
+		t = pf_ms();
 	}
-	b->ms_style = pf_ms() - t;
-	t = pf_ms();
-	br_building = BRB_LAYOUT;
-	MARK("page: layout");
-	p = lay(b, d, base);
-	while (p != NULL && p->opt.width != b->width && !conn_stop) {
-		/* (the window sized meanwhile: br_relayout left it for this) */
-		pg_free(p);
-		p = lay(b, d, base);
-	}
-	b->ms_layout = pf_ms() - t;
+	build_plain_css = 0;
 	if (p == NULL) {
+		/* out of memory styling it or laying it out (a small machine):
+		   not a page with no styles, which lays out to nothing */
 		doc_free(d);
 		return 0;
 	}
