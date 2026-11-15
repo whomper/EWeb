@@ -5457,6 +5457,46 @@ again unless the memory picture changes. Under NVDI 1.2 couldn't load the rig's 
 | without NVDI: the big page | 17.4 s (the layout 12.0 s) | 17.8 s (the layout 12.3 s) |
 | without NVDI: loaded again | 19.5 s (made twice) | 17.4 s (the room made first) |
 
+## The planes on the 68030 (15 Nov 2026)
+
+1.13's round on Erez's TOS and NVDI (the speed rig's `Falcon-4:256 --nvdi`): 1.12 couldn't show
+the rig's news page there (both runs: "can't show this page", peak 967,996, 6,960 free); 1.13
+shows it (17,601 high, peak 880,564, 38,564 free), its first layout failing sooner and the retry
+fitting. `drawbench -m` gives both the same heap (laid out 1,128,580, peak 1,344,624), so it is
+the machine's ST RAM, not the layout's own memory; not pinned down further. Its scrolls are slow
+for the reason of the section above: 37 KB of ST RAM left with the page, the kept copy's smallest
+229 KB, so each scroll draws its rows from the display list. Of a page scrolled (410 ms) the
+canvas was 80 ms and putting the 308 rows on the screen 310: 1.08 ms a row, of which `to_planes`
+0.81 ms (13,000 cycles, Hatari's profile over the session) and NVDI's `vro_cpyfm` the rest.
+
+`to_planes` in EWEB.PRG now makes 2, 4 and 8 planes with `ui/c2p.h`: 16 pixels in four longs and
+five stages of merges between registers (`t = ((a >> s) ^ b) & m`, seven instructions a pair; two
+pairs a stage for 8 planes, one pair for 4 and 2 after packing two pixels a byte), the stages found
+by a search over the bits' places; the planes' words come out two to a long and are stored as they
+come. The register transposes and the words cut out of them one at a time through a copy on the
+stack (1.13's) are gone, and so is the 8 KB table for 256 colours. `tests/screen/c2ptest.c`
+checks both against the words made a bit at a time (6,024,576 checks, host and qemu-m68k). The ST
+edition keeps its tables and its monochrome loop.
+
+The speed rig, 1.13 against this (Erez's TOS 4.04 and 1.04, NVDI 5.03; A B B A, the least of each
+row; ms):
+
+| | 1.13 | now |
+|---|---|---|
+| `Falcon-4:256 --nvdi`: putting a row on the screen | 1.08 | 0.91 |
+| a page scrolled | 415 | 360 |
+| an arrow held 3 s, down / up (seen) | 635 / 675 | 520 / 545 |
+| 4 pages down after 10 s at the top (seen) | 525 | 380 |
+| the news page loaded / the home page shown | 555 / 790 | 495 / 735 |
+| `Falcon-4:16`: the home page shown / the news page loaded | 510 / 850 | 470 / 820 |
+| an arrow held 3 s, up (seen) | 990 | 875 |
+| `ST:mono` (EWEBST.PRG, its code unchanged) | | every row within 5 ms or faster |
+
+No row slower beyond a tick (the one `Falcon-4:16` row 6 ms over, a page scrolled's finished
+picture, was 44 and 50 in 1.13's own two runs). On `ST:mono` 1.13's "3 pages up" was 780 ms
+here and 1,140 in the round before (both of its runs), the draws the same to 5 ms: where the
+rig's three keys, a third of a second apart, land in the ST's draw in pieces.
+
 ## The ST edition's speed (13 Nov 2026)
 
 Erez, 13 Nov 2026: "Focus on the ST version and optimize it as best as you can. I want the ST edition
