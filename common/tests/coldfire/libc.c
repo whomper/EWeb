@@ -88,6 +88,21 @@ void free(void *p)
 	b->next = freed;
 	freed = b;
 }
+void *realloc(void *p, size_t n)
+{
+	BLK *b;
+	void *q;
+	if (p == NULL)
+		return malloc(n);
+	b = (BLK *)p - 1;
+	if (b->size >= n)
+		return p;
+	if ((q = malloc(n)) != NULL) {
+		memcpy(q, p, b->size);
+		free(p);
+	}
+	return q;
+}
 
 /* util.c's growing buffer (inflate.c's codes use it), without its stdio */
 #include "util.h"

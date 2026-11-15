@@ -185,10 +185,20 @@ static long flush_super(void)
 	}
 #endif
 	for (; jar && jar[0]; jar += 2)
-		if (jar[0] == 0x5F435055L) {	/* _CPU: 0, 10, 20, 30, 40, 60 */
+		if (jar[0] == 0x5F43465FL) {	/* _CF_: a 68000 program on a FireBee */
+			/* FireTOS says _CPU 60, but a ColdFire has neither cpusha
+			   nor a CACR to read: its own push of each line, as the
+			   ColdFire build above (cpushl %bc,(%a0) as words). TLSFB.OVL
+			   is loaded so (Erez, 15 Nov 2026) */
+			unsigned long set, way;
+			for (set = 0; set < 512; set++)
+				for (way = 0; way < 4; way++) {
+					register unsigned long a __asm__("a0") = set << 4 | way;
+					__asm__ volatile(".short 0xf4e8" : : "a"(a) : "memory");
+				}
+			return 0;
+		} else if (jar[0] == 0x5F435055L)	/* _CPU: 0, 10, 20, 30, 40, 60 */
 			cpu = jar[1];
-			break;
-		}
 	if (cpu >= 40)
 		__asm__ volatile(".short 0xf4f8" ::: "memory");		/* cpusha bc */
 	if (cpu >= 60)

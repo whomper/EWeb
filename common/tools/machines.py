@@ -28,6 +28,22 @@ there), unless the rig brought its own. An ST or an STE, which has no clock, get
 C:\\AUTO\\CLOCK.PRG, setting this computer's date and time. Standard Python
 only.
 
+FireBee is a stand-in (15 Nov 2026), not a FireBee: on a FireBee (ColdFire
+MCF5474, FireTOS) the family's 68000 programs run, FireTOS says _CPU 60 and
+_CF_, and there is no DSP; twice a fault shipped because no rig looked like
+that (PIC.OVL loaded for _CPU >= 20, ovl.c's movec cacr). The stand-in is a
+Hatari Falcon with a 68060 and its FPU, no DSP, 14 MB ST RAM and 128 MB TT
+RAM, always on EmuTOS (TOS 4.04 runs no 68060; describe() says "a
+stand-in"), and C:\\AUTO\\FBSTAND.PRG gives it FireTOS's cookies: _CPU 60,
+_CF_, _SND's bit 3 (the DSP) cleared (EmuTOS leaves it set under Hatari's
+--dsp none). It catches what a 68000 build does when it finds a FireBee
+(the _CF_ paths: tls_ovl.c's tlsfb.ovl, pic_ovl.c without PIC.OVL, ovl.c's
+cpushl), not ColdFire code (TLSFB.OVL, EWEBFB.PRG; common/tests/coldfire
+runs common's under qemu-m68k -cpu cfv4e), FireTOS's own 68000 emulation (an instruction the
+ColdFire lacks still runs here, a 68060's set) nor the FireBee's hardware.
+No NVDI on it (AERA_WITH_NVDI is for the Falcons). common/tests/firebee
+checks it from inside.
+
 The network: m.network() puts FAKESTNG.PRG (made again with make in
 tools/fakesting whenever its source changed) in C:\\AUTO, starts serial_bridge.py
 on the other end of the serial port and gives Hatari's serial arguments;
@@ -112,6 +128,13 @@ MACHINES = {
                  ["--machine", "falcon", "--cpuclock", "16", "--memsize", "4", "--ttram", "0",
                   "--addr24", "on", "--dsp", "emu", "--monitor", "vga"],
                  ["16", "256", "65536"], "tos404.img"),
+    "FireBee": ("a stand-in for the FireBee (ColdFire MCF5474, FireTOS), as the family's 68000 programs "
+                "see one: a Falcon with a 68060 and its FPU, 14 MB ST RAM, 128 MB TT RAM, no DSP, VGA, "
+                "on EmuTOS (TOS 4.04 runs no 68060), C:\\AUTO\\FBSTAND.PRG setting FireTOS's cookies "
+                "(_CF_, _CPU 60, _SND without the DSP)",
+                ["--machine", "falcon", "--cpulevel", "6", "--cpuclock", "32", "--fpu", "internal",
+                 "--memsize", "14", "--ttram", "128", "--addr24", "off", "--dsp", "none", "--monitor", "vga"],
+                ["16", "256", "65536"], None),
 }
 
 SCREENS = {
@@ -139,6 +162,120 @@ EMUTOS = ("https://downloads.sourceforge.net/project/emutos/emutos/1.4/emutos-51
 #   clr.w -(sp); trap #1                                          Pterm0
 #   setboot: move.w #2,$446.w; rts
 BOOTC = bytes.fromhex("487A000E" "3F3C0026" "4E4E" "5C8F" "4267" "4E41" "31FC00020446" "4E75")
+
+
+# C:\AUTO\FBSTAND.PRG, for the FireBee stand-in: what FireTOS says that
+# TOS on a Falcon doesn't, in the cookie jar (Supexec): _CPU 60 (added if
+# missing), _CF_ (0x00010000; any value: the family's programs look only
+# whether it is there), and _SND's bit 3 (the DSP) cleared. With no free
+# slot (or no jar) it makes one of 128 in its BSS, copies the old one,
+# puts it at 0x5A0 and stays resident (Ptermres keeping its basepage,
+# text and BSS); else it ends with Pterm0. Made from FBSTAND_S with
+# m68k-linux-gnu-as -m68000 and objcopy -O binary (tests/machines checks
+# the bytes when the assembler is there).
+FBSTAND_S = r"""
+start:	move.l	4(%sp),%a0		| the basepage
+	lea	bp(%pc),%a1
+	move.l	%a0,(%a1)
+	pea	super(%pc)
+	move.w	#38,-(%sp)
+	trap	#14			| Supexec
+	addq.l	#6,%sp
+	tst.l	%d0
+	bne.s	keep
+	clr.w	-(%sp)
+	trap	#1			| Pterm0
+keep:	clr.w	-(%sp)
+	move.l	%d0,-(%sp)
+	move.w	#49,-(%sp)
+	trap	#1			| Ptermres(d0, 0)
+
+| d6: bit 0 _CPU to add, bit 1 _CF_ to add; d5 the jar's slots;
+| d0: the bytes to keep (0: none)
+super:	movem.l	%d2-%d7/%a2-%a6,-(%sp)
+	moveq	#0,%d7
+	moveq	#3,%d6
+	moveq	#0,%d5
+	move.l	0x5a0.w,%a0
+	move.l	%a0,%a1
+	move.l	%a0,%d0
+	beq.s	atend0			| no jar (TOS 1.04): a new one
+scan:	move.l	(%a1),%d0
+	beq.s	atend
+	cmp.l	#0x5F435055,%d0		| _CPU: 60
+	bne.s	1f
+	moveq	#60,%d1
+	move.l	%d1,4(%a1)
+	bclr	#0,%d6
+1:	cmp.l	#0x5F43465F,%d0		| _CF_ there already
+	bne.s	2f
+	bclr	#1,%d6
+2:	cmp.l	#0x5F534E44,%d0		| _SND: no DSP
+	bne.s	3f
+	bclr	#3,7(%a1)
+3:	addq.l	#8,%a1
+	bra.s	scan
+atend:	move.l	4(%a1),%d5
+atend0:	move.l	%a1,%d4			| d4: the entries needed, the end's too
+	sub.l	%a0,%d4
+	lsr.l	#3,%d4
+	addq.l	#1,%d4
+	btst	#0,%d6
+	beq.s	4f
+	addq.l	#1,%d4
+4:	btst	#1,%d6
+	beq.s	5f
+	addq.l	#1,%d4
+5:	sub.l	%a3,%a3			| a3: the new jar (0: none)
+	move.l	%a1,%a2			| a2: where the next entry goes
+	cmp.l	%d5,%d4
+	bls.s	add			| room in the jar
+	moveq	#127,%d5		| a jar of 128 in the BSS
+	addq.l	#1,%d5
+	cmp.l	%d5,%d4
+	bhi.s	done			| (never: more than 125 cookies)
+	move.l	bp(%pc),%a4
+	move.l	0x18(%a4),%a3		| p_bbase
+	move.l	#0x100,%d7		| keep the basepage, text, data, BSS
+	add.l	0x0c(%a4),%d7
+	add.l	0x14(%a4),%d7
+	add.l	0x1c(%a4),%d7
+	move.l	%a3,%a2
+	move.l	%a0,%a4
+copy:	cmp.l	%a1,%a4
+	beq.s	add
+	move.l	(%a4)+,(%a2)+
+	move.l	(%a4)+,(%a2)+
+	bra.s	copy
+add:	btst	#0,%d6
+	beq.s	6f
+	move.l	#0x5F435055,(%a2)+	| _CPU 60
+	moveq	#60,%d0
+	move.l	%d0,(%a2)+
+6:	btst	#1,%d6
+	beq.s	7f
+	move.l	#0x5F43465F,(%a2)+	| _CF_
+	move.l	#0x00010000,(%a2)+
+7:	clr.l	(%a2)+
+	move.l	%d5,(%a2)
+	move.l	%a3,%d0
+	beq.s	done
+	move.l	%a3,0x5a0.w		| the new jar, once it is whole
+done:	move.l	%d7,%d0
+	movem.l	(%sp)+,%d2-%d7/%a2-%a6
+	rts
+bp:	.long	0
+"""
+FBSTAND = bytes.fromhex(
+    "206F000443FA00F42288487A001C3F3C00264E4E5C8F4A80660442674E414267"
+    "2F003F3C00314E4148E73F3E7E007C037A00207805A022482008673820116730"
+    "0C805F435055660A723C23410004088600000C805F43465F6604088600010C80"
+    "5F534E44660608A900030007508960CC2A29000428099888E68C528408060000"
+    "67025284080600016702528497CB2449B88563307A7F5285B8856256287A005C"
+    "266C00182E3C00000100DEAC000CDEAC0014DEAC001C244B2848B9C9670624DC"
+    "24DC60F608060000670A24FC5F435055703C24C008060001670C24FC5F43465F"
+    "24FC00010000429A2485200B670421CB05A020074CDF7CFC4E7500000000")
+FBSTAND_BSS = 128 * 8
 
 
 def ci_path(folder, name):
@@ -175,11 +312,11 @@ def clock():
             struct.pack(">HH", 0x4267, 0x4E41))
 
 
-def write_prg(path, code):
-    """a TOS program of code alone (no data, no relocation)"""
+def write_prg(path, code, bss=0):
+    """a TOS program of code alone (no data, no relocation), with bss bytes of BSS"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
-        f.write(struct.pack(">HIIIIIIH", 0x601A, len(code), 0, 0, 0, 0, 0, 0) + code + bytes(4))
+        f.write(struct.pack(">HIIIIIIH", 0x601A, len(code), 0, bss, 0, 0, 0, 0) + code + bytes(4))
 
 # TOS 4's desktop file with the screen mode in the #E line's 5th and 6th
 # values (Hatari's own TOS 2+ NEWDESK.INF otherwise)
@@ -297,14 +434,16 @@ class Machine:
         if self.screen not in screens:
             sys.exit("machines.py: %s has no screen %r (%s)" % (name, screen, ", ".join(screens)))
         tosdir = os.environ.get("AERA_TOS", os.path.join(os.path.expanduser("~"), ".aera", "tos"))
-        path = os.path.join(tosdir, real)
-        self.real = tosdir != "emutos" and os.path.exists(path)
+        path = os.path.join(tosdir, real) if real else ""
+        self.real = bool(real) and tosdir != "emutos" and os.path.exists(path)
         self.tos = path if self.real else emutos()
         self.home = self.hd.rstrip("/") + ".home"
 
     def describe(self):
         return "%s:%s, %s" % (self.name, self.screen,
                               "TOS " + tos_version(self.tos) if self.real else "EmuTOS 1.4") + \
+            (", a stand-in (a 68060 Falcon with FireTOS's cookies), not a FireBee"
+             if self.name == "FireBee" else "") + \
             ("; with " + ", ".join(self.with_accs) if getattr(self, "with_accs", None) else "") + \
             ("; NVDI" if os.path.exists(os.path.join(self.hd, "AUTO", "NVDI.PRG")) else "") + \
             (" (Erez's configuration)" if "%s:%s" % (self.name, self.screen) == ERZ_MACHINE and self.real and
@@ -320,7 +459,7 @@ class Machine:
         cfg = os.path.join(self.home, ".config", "hatari")
         os.makedirs(cfg, exist_ok=True)
         nv = bytearray(50)                  # the TT's and Falcon's NVRAM, past the clock
-        if self.name.startswith("Falcon"):
+        if self.name.startswith("Falcon") or self.name == "FireBee":
             mode = FALCON_MODE[self.screen]
             nv[14:16] = struct.pack(">H", mode)
             inf = os.path.join(self.hd, "NEWDESK.INF")
@@ -331,6 +470,8 @@ class Machine:
             write_prg(os.path.join(self.hd, "AUTO", "CLOCK.PRG"), clock())
         if self.real:
             write_prg(os.path.join(self.hd, "AUTO", "BOOTC.PRG"), BOOTC)
+        if self.name == "FireBee":
+            write_prg(os.path.join(self.hd, "AUTO", "FBSTAND.PRG"), FBSTAND, FBSTAND_BSS)
         s = sum(nv[:48]) & 0xFF
         nv[48], nv[49] = ~s & 0xFF, s
         with open(os.path.join(cfg, "hatari.nvram"), "wb") as f:
@@ -454,7 +595,8 @@ def main(argv):
         sys.exit(__doc__)
     if argv[1] == "list":
         for name, (what, _, screens, real) in MACHINES.items():
-            print("%-7s %s\n        screens: %s; Erez's TOS: %s" % (name, what, ", ".join(screens), real))
+            print("%-7s %s\n        screens: %s; Erez's TOS: %s" % (name, what, ", ".join(screens),
+                                                                  real or "none, EmuTOS always"))
         return
     m = Machine(argv[2], argv[3])
     a = m.args()

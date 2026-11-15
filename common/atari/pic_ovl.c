@@ -48,8 +48,13 @@ static void load(void)
 	while (p > path && p[-1] != '\\' && p[-1] != '/')
 		p--;
 	strcpy(p, "pic.ovl");
-	if (get_cookie(0x5F435055L) < 20 || !(image = ovl_load(path, &taken, err, sizeof(err))))
-		return;			/* (_CPU: an ST never loads it) */
+	/* (_CPU: an ST never loads it; nor a FireBee, _CF_, whose FireTOS
+	   says _CPU 60: PIC.OVL is 68030 code with a DSP part, and a ColdFire
+	   has no DSP and not all of the 68030's set; the 68000 path draws the
+	   same pictures there, as on an ST. EContact, 15 Nov 2026) */
+	if (get_cookie(0x5F435055L) < 20 || get_cookie(0x5F43465FL) ||
+	    !(image = ovl_load(path, &taken, err, sizeof(err))))
+		return;
 	ovl_flush();			/* its code was written as data */
 	o = image;
 	if (o->magic != PICOVL_MAGIC || o->major != PICOVL_MAJOR ||
