@@ -95,6 +95,11 @@ for the parts they name (CLAUDE.md says which to run after which change).
   `screens` and `st` also type a search address longer than its field
   into the Settings (on the ST with Shift+arrows at its ends) and check
   that it is saved whole.
+  Known rig fault (15 Nov 2026): once, in a full round, the `boxes` group
+  lost Hatari's X window at its first click (`RuntimeError: no Hatari
+  window`, nothing from EWeb in Hatari's log); the group run alone
+  passed. If it comes back, look at the Xvfb and xdotool timing in
+  `Mouse.window`.
 - `make itest` also loads a page of pictures (`tests/net/server.py`'s
   `/site/pics.html`): each decoded at the size shown, the page laid out
   again for the one whose size it didn't give, the missing one failed; a
