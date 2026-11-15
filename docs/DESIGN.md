@@ -1670,6 +1670,15 @@ else it calls `app_main` (`ui/main.c`). Before, the 68030 code died at `appl_ini
 instruction: a white screen, then the desktop. `make hatarigui`'s `st` group starts `EWEB.PRG` on
 the 1040 ST, sees the alert and presses Return.
 
+**`EWEB.PRG` started on a FireBee says so** (15 Nov 2026; the decision of 10 Nov that a build
+started on the wrong machine refuses with an alert): FireTOS says `_CPU` 60, so `cpucheck.c` let
+it through, and on the hub's FireBee stand-in (common's `machines.py`: a 68060 Falcon with
+FireTOS's cookies) the 68030's code stopped at its first 64-bit `mulu.l` (exception 61, in
+`read_pens`). Common's `cpucheck.c` now shows a program's `cpu_cf_alert` where the jar has `_CF_`:
+`ui/main.c` gives "EWEB.PRG is for the Falcon and the TT. On the FireBee, run EWEBFB.PRG." and
+`EWEB60.PRG` its own. `make hatarigui`'s `firebee` group starts both on `FireBee:16`, sees the
+alert and presses Return.
+
 **It ran on a 1 MB ST up to 0.27** (the hub's rule for ST editions, 20 Oct 2026; no longer a target
 since 23 Oct 2026, Decisions). TOS 1.04 there leaves a
 program 940,906 bytes (919 KB, measured with a probe in Hatari); the first build needed 1015 KB to

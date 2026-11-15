@@ -3097,6 +3097,14 @@ const char cpu_alert[] = "[3][EWEBFB.PRG is for the FireBee.|On a Falcon or a TT
 #else
 const long cpu_need = 30;
 const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, run|EWEBST.PRG, the ST edition.][ Quit ]";
+/* on a FireBee (the _CF_ cookie; FireTOS says _CPU 60) this one: the
+   68030's code would stop at its first 64-bit mulu.l (the guidelines,
+   Machines; the hub's FireBee stand-in, 15 Nov 2026) */
+#ifdef __mc68060__
+const char cpu_cf_alert[] = "[3][EWEB60.PRG is for a 68060|Falcon or TT. On the FireBee,|run EWEBFB.PRG.][ Quit ]";
+#else
+const char cpu_cf_alert[] = "[3][EWEB.PRG is for the Falcon and|the TT. On the FireBee, run|EWEBFB.PRG.][ Quit ]";
+#endif
 #endif
 
 static int app_run(void);

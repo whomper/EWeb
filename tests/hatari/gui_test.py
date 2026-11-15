@@ -1970,12 +1970,17 @@ def st_cpu():
         r.end()
 
 
-def fb_cpu(spec):
+def fb_cpu(spec, prg="EWEBFB.PRG", says="says it is the FireBee's"):
     """EWEBFB.PRG (ColdFire code) started on an Atari: its main() is
     common's cpucheck_cf.S, the same bytes for a 68000 and a ColdFire, which
     finds no _CF_ cookie and says in an alert that this is the FireBee's;
-    Return goes back to the desktop. Seen in the screenshots as st_cpu's"""
-    r = Run("fbcpu-" + spec.replace(":", "-"), spec, hd_for("fbcpu", "about:start"), prg="EWEBFB.PRG")
+    Return goes back to the desktop. Seen in the screenshots as st_cpu's.
+    And the other way: EWEB.PRG or EWEB60.PRG on the FireBee stand-in (the
+    _CF_ cookie): common's cpucheck.c says to run EWEBFB.PRG (cpu_cf_alert
+    in ui/main.c), where the 68030's code stopped at its first 64-bit
+    mulu.l (the hub, 15 Nov 2026)"""
+    r = Run("fbcpu-" + prg.split(".")[0].lower() + "-" + spec.replace(":", "-"), spec,
+            hd_for("fbcpu", "about:start"), prg=prg)
 
     def white(n):
         im = Image.open(r.shot(n)).convert("L")
@@ -1993,7 +1998,7 @@ def fb_cpu(spec):
             if 0.75 < mid < 0.97:
                 seen = n
                 break
-        check("firebee: EWEBFB.PRG on %s says it is the FireBee's" % spec, seen is not None and not r.events(),
+        check("firebee: %s on %s %s" % (prg, spec, says), seen is not None and not r.events(),
               "no alert in %s-*.png; events %s" % (r.name, r.events()))
         r.key(RETURN)
         back = False
@@ -2003,7 +2008,7 @@ def fb_cpu(spec):
             if mid < 0.7 and bar > 100:
                 back = True
                 break
-        check("firebee: on %s, Return quits to the desktop" % spec, back and r.h.poll() is None and not r.events(),
+        check("firebee: %s on %s, Return quits to the desktop" % (prg, spec), back and r.h.poll() is None and not r.events(),
               "no desktop in %s-*.png; events %s" % (r.name, r.events()))
     finally:
         r.end()
@@ -2996,6 +3001,9 @@ if "firebee" in WHICH:
         fb_cpu("Falcon:16")
     else:
         skip("firebee: no binary/EWEBFB.PRG (make binary/EWEBFB.PRG)")
+    fb_cpu("FireBee:16", "EWEB.PRG", "says to run EWEBFB.PRG")
+    if os.path.exists(os.path.join(ROOT, "binary", "EWEB60.PRG")):
+        fb_cpu("FireBee:16", "EWEB60.PRG", "says to run EWEBFB.PRG")
 if "gateway" in WHICH:
     gateway()
 if "falcon" in WHICH:
