@@ -1521,6 +1521,15 @@ static const ec_style *pseudo_style(ec_ctx *c, const ec_style *parent, int pseud
 	const ec_chunk *chunks = c->smem.chunks;
 	uint32_t h;
 	ec_style *st = cascade_style(c, parent, pseudo, &h);
+	if (st != NULL && st->k[EP_CONTENT] != EK_PTR) {
+		/* content normal or none: no box made (CSS Pseudo 4, 3.1), so
+		   no style kept; a page's *::before, *::after { box-sizing:
+		   border-box } otherwise kept two for every element (the news
+		   page's 143, 77 KB) */
+		if (c->smem.chunks == chunks)
+			c->smem.p = mark;
+		return NULL;
+	}
 	return st == NULL ? NULL : uniq_style(c, st, h, mark, chunks);
 }
 

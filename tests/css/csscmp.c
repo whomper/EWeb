@@ -718,6 +718,14 @@ static void compare(const node *n, const css_computed_style *ls, const ec_style 
 
 static unsigned long pseudo_diff, elements;
 
+/* a ::before or ::after LibCSS styled that makes a box: EWeb keeps none
+   whose content is none or normal (CSS Pseudo 4, 3.1) */
+static int made(const css_computed_style *s)
+{
+	const css_computed_content_item *ci;
+	return s != NULL && css_computed_content(s, &ci) == CSS_CONTENT_SET;
+}
+
 /* each element's style from the last ecs_select(), in walk()'s order */
 static void collect(const node *n, const ec_style **out, unsigned long *k)
 {
@@ -740,6 +748,32 @@ static unsigned long count_elements(const node *n)
 	return k;
 }
 
+/* a ::before or ::after (which 1 or 2): made by one engine only, or
+   explained by a switch with which EWeb makes it as LibCSS does (a box
+   from a Selectors 4 rule: none at all with the switch on), or
+   compared */
+static void pseudo_cmp(const node *n, const css_computed_style *ls, const ec_style *es, int which)
+{
+	int lm = made(ls), r;
+
+	if (lm == (es != NULL)) {
+		if (es != NULL)
+			compare(n, ls, es, 0, which == 1 ? " (::before)" : " (::after)");
+		return;
+	}
+	for (r = R_V_CALC; r < R_N; r++) {
+		const ec_style *v;
+		if (!reasons[r].opt || vstyles[r] == NULL || (v = vstyles[r][elem_index]) == NULL)
+			continue;
+		v = which == 1 ? v->before : v->after;
+		if ((v != NULL) == lm) {
+			reasons[r].n++;
+			return;
+		}
+	}
+	pseudo_diff++;
+}
+
 static void walk(const node *n, int root)
 {
 	const node *c;
@@ -750,13 +784,8 @@ static void walk(const node *n, int root)
 		elements++;
 		elem_index++;
 		compare(n, r->styles[CSS_PSEUDO_ELEMENT_NONE], e->style, root, "");
-		if ((r->styles[CSS_PSEUDO_ELEMENT_BEFORE] != NULL) != (e->style->before != NULL) ||
-				(r->styles[CSS_PSEUDO_ELEMENT_AFTER] != NULL) != (e->style->after != NULL))
-			pseudo_diff++;
-		if (r->styles[CSS_PSEUDO_ELEMENT_BEFORE] && e->style->before)
-			compare(n, r->styles[CSS_PSEUDO_ELEMENT_BEFORE], e->style->before, 0, " (::before)");
-		if (r->styles[CSS_PSEUDO_ELEMENT_AFTER] && e->style->after)
-			compare(n, r->styles[CSS_PSEUDO_ELEMENT_AFTER], e->style->after, 0, " (::after)");
+		pseudo_cmp(n, r->styles[CSS_PSEUDO_ELEMENT_BEFORE], e->style->before, 1);
+		pseudo_cmp(n, r->styles[CSS_PSEUDO_ELEMENT_AFTER], e->style->after, 2);
 		root = 0;
 	}
 	for (c = n->first; c != NULL; c = c->next)

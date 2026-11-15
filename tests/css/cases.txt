@@ -910,7 +910,7 @@ p { padding-left: 3px !ie }
 #n display none
 #n float left
 
-=== ::before and ::after
+=== ::before and ::after (content none or normal: no box, no style kept, CSS Pseudo 4, 3.1)
 --- css
 p::before { content: "a" }
 p.x::after { content: none; color: red }
@@ -921,9 +921,7 @@ p:hover::before { color: blue }
 #a::before exists yes
 #a::before content set
 #a::after exists no
-#b::after exists yes
-#b::after color #ff0000
-#b::after content none
+#b::after exists no
 #a::before color #000000
 #c::before exists no
 
