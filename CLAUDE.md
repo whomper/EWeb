@@ -129,6 +129,10 @@ hub stay complete, with the evidence.
   calls against the guidelines' time, from `build/prof`'s `EWEB.PRG` and `EWEBST.PRG` (common's
   `gem.c` with `AES_PROFILE=20`; `--prg DIR` times another build, the one before a change). Its
   `AESGAP` lines in the Hatari log name each stretch (`gap_event`, `gap_tag`, `gap_stage` in `ui/`).
+  The rigs read EWeb's events through NatFeats, which EWEB.PRG probes only where `EWEB.INF` has
+  `NATFEATS=1` (Erez, 15 Nov 2026: common's `nf.S`): every rig that reads them writes that line;
+  the measuring tools (`tests/bench/plat_tos.c`, `tests/net/main_tos.c`) and the speed build have
+  `nf_on` 1.
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
   Hebrew pages in every Hebrew encoding, `tests/hebrew`, and the input stream, `tests/input`); after a
   change to the parser or its build, `tests/html5lib/fetch.sh` and `make h5test` (EWeb's parser and

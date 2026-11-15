@@ -22,13 +22,48 @@ nf_call2:
 	moveq	#0,%d0
 	rts
 	.data
+	.weak	nf_on
 nf_vec:
 	.long	0x10
+nf_on:
+	.long	0
 	.text
 #else
 	.text
+| nf_vec from the CPU: VBR + 0x10 on a 68010 or later (the _CPU cookie),
+| 0x10 on a 68000. In nf.S itself, so every caller of nf_probe and nf_find
+| is safe, also those that call them through their own Supexec (EWeb's
+| log_event). A Vampire V4SA's Atari core keeps VBR away from 0: the
+| handler put on 0x10 wasn't used, 0x7300 went to the system's own
+| handler, and EMail and EHypView were ended, EWeb, EPDF and EPlay hung
+| (15 Nov 2026). Uses d0, a0
+nf_none:
+	moveq	#0,%d0
+	rts
+
+nf_setvec:
+	move.l	0x5a0.w,%a0		| the cookie jar
+	move.l	%a0,%d0
+	beq.s	9f
+1:	move.l	(%a0)+,%d0
+	beq.s	9f
+	cmp.l	#0x5F435055,%d0		| '_CPU'
+	beq.s	2f
+	addq.l	#4,%a0
+	bra.s	1b
+2:	moveq	#10,%d0
+	cmp.l	(%a0),%d0
+	bgt.s	9f			| a 68000: no VBR
+	.dc.w	0x4e7a,0x0801		| movec %vbr,%d0 (as words: no .chip)
+	add.l	#0x10,%d0
+	move.l	%d0,nf_vec
+9:	rts
+
 	.globl	nf_probe
 nf_probe:
+	tst.l	nf_on			| only where the app's INF asked for them
+	beq.s	nf_none
+	bsr.s	nf_setvec
 	move.l	%a2,-(%sp)
 	movea.l	nf_vec,%a2		| the illegal instruction vector (VBR + 0x10)
 	move.l	(%a2),%a1
@@ -63,6 +98,9 @@ nf_name:
 	.text
 	.globl	nf_find
 nf_find:
+	tst.l	nf_on
+	beq	nf_none
+	bsr	nf_setvec
 	move.l	4(%sp),%d1
 	move.l	%a2,-(%sp)
 	movea.l	nf_vec,%a2
@@ -83,11 +121,18 @@ nf_find:
 	movea.l	(%sp)+,%a2
 	rts
 
-| where the illegal-instruction vector is: 0x10, or VBR + 0x10 as tos.c's
-| nf_debug sets it on a 68010 or later before the first probe
+| where the illegal-instruction vector is: 0x10, or VBR + 0x10 as
+| nf_setvec finds it
 	.data
 	.globl	nf_vec
+	.weak	nf_on			| a test program defines its own, set to 1
 nf_vec:
 	.long	0x10
+| NatFeats are looked for only when the app sets nf_on, from its INF's
+| NATFEATS=1, which only the test rigs write (Erez, 15 Nov 2026: "make it a
+| .INF setting so that it can be added in our testing but have no bearing
+| outside"): a real machine never runs the probe's illegal instruction
+nf_on:
+	.long	0
 	.text
 #endif

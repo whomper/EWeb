@@ -116,7 +116,7 @@ if not os.path.exists(small):
                     % (os.path.join(ROOT, "tools"), small)], check=True)
 inf = os.path.join(work, "eweb.inf")
 with open(inf, "w", newline="") as f:
-    f.write("HOME=about:bookmarks\r\n")
+    f.write("HOME=about:bookmarks\r\nNATFEATS=1\r\n")	# (the events the rig reads)
 
 for spec in specs:
     w = os.path.join(work, spec.replace(":", "-"))

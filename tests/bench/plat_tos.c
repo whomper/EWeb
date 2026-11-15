@@ -17,6 +17,10 @@
 #include "plat.h"
 #include "../../common/atari/machine.h"
 
+/* a measuring tool (NSBENCH, PICBENCH, PICBST, PAGEST): NatFeats always,
+   where the rigs read its lines (common's nf.S has 0: only where asked) */
+long nf_on = 1;
+
 #define MAXARG 40
 
 #ifndef BENCH_NAME

@@ -64,8 +64,9 @@ BUDGET = {
     # (tried first) and SEED.DAT made (the release brings a ROOTS.DAT);
     # SIGS.DAT, the server signatures already checked (common's tls.c since
     # EWeb 0.40), looked for, read and made in a safe save; TLS.OVL, the
-    # TLS code, read once (since 0.43)
-    "first secure page": (6, 3, 4),
+    # TLS code, read once (since 0.43); TLSHOSTS.DAT, the hello each host
+    # takes, read once (TLS.OVL 1.16, EWeb 1.12)
+    "first secure page": (7, 3, 4),
     "secure page": (0, 0, 0),
     "idle": (0, 0, 0),
     # the cookies, once (p5.html's cookie), its value encrypted: EWEB.KEY
@@ -76,21 +77,20 @@ BUDGET = {
     # list, known not to be there: made at once; 31 Oct 2026, the cache in
     # pieces: its list one file more)
     "quit": (1, 6, 0),
-    # the second time with LOG=1 (since 0.44): EWEB.LOG written once a page
-    # and its pictures have come (the home page's: tried, then made, and
-    # its size looked up, conn.c's pf_size); the history's two slots
-    "start again": (6, 1, 1),
+    # the second time with LOG=1 (since 0.44): EWEB.LOG is apart (LOGS),
+    # written a line at a time; the history's two slots
+    "start again": (5, 0, 0),
     # COOKIES.TXT (two slots) and EWEB.KEY; CACERT.PEM's date; ROOTS.DAT;
     # SEED.DAT read, then written over; the cache's index (two slots);
-    # SIGS.DAT read (since 0.40); TLS.OVL (since 0.43); EWEB.LOG, once
+    # SIGS.DAT read (since 0.40); TLS.OVL (since 0.43); TLSHOSTS.DAT (1.12)
     "secure page again": (11, 0, 1),
     # the cookies as they were; the history (a page shown) in HISTORY.TXT,
     # its older slot, made at once; EWEB.INF not written (no setting
-    # changed: 6.1 of 12 Nov 2026, though LOG=1 was added by hand); EWEB.LOG's rest, and each quit step written to it
-    # at once, eight of them (quit_step in ui/main.c: the hub, 10 Nov 2026,
-    # for a quit's bombs with no CRASH.LOG; LOG=1 only)
-    "quit again": (9, 1, 0),
-    "EWGET 1 MB": (3, 3, 2),        # EWGET.CMD, EWGET.LOG, NET.LOG (-l: once, its size looked up: conn.c's pf_size), the file; CRASH.LOG looked for
+    # changed: 6.1 of 12 Nov 2026, though LOG=1 was added by hand); each
+    # quit step goes to EWEB.LOG at once (quit_step in ui/main.c: the hub,
+    # 10 Nov 2026), apart (LOGS)
+    "quit again": (0, 1, 0),
+    "EWGET 1 MB": (2, 2, 1),        # EWGET.CMD, EWGET.LOG, the file; CRASH.LOG looked for; NET.LOG (-l) apart (LOGS)
 }
 
 fails = 0
@@ -99,7 +99,9 @@ fails = 0
 # an EWEB.INF from before 0.27: no empty line after each setting
 OLD_INF = ("; EWeb's settings (EWeb writes them; lines it doesn't know are kept)\r\n"
            "; the start page: an address, or nothing for EWeb's own\r\nHOME=\r\n"
-           "; the size of the text, per cent (Larger text, Smaller text)\r\nZOOM=100\r\n")
+           "; the size of the text, per cent (Larger text, Smaller text)\r\nZOOM=100\r\n"
+           # (added by the rig: the events it counts between, through NatFeats)
+           "NATFEATS=1\r\n\r\n")
 
 
 def inf_check(hd):
@@ -184,24 +186,37 @@ def tpa(lines, prog):
     raise RuntimeError("no Mshrink for " + prog)
 
 
+# the connections' logs: written a line at a time while Write a log is on
+# (Erez, 15 Nov 2026: "apps should write log at once as otherwise it may
+# be ineffective to trace errors"), so not counted against a case's
+# budget, which is the program's own use of the disk; listed apart
+LOGS = ("eweb.log", "net.log")
+
+
 def counts(lines, where):
     """GEMDOS calls by name and by file, those the program itself made (at a
-    PC in its TPA): not the desktop's, before and after it"""
-    c, files = collections.Counter(), collections.Counter()
+    PC in its TPA): not the desktop's, before and after it; a log's apart"""
+    c, files, logs = collections.Counter(), collections.Counter(), collections.Counter()
     for l in lines:
         m = re.match(r'GEMDOS 0x\w+ (\w+)\("([^"]*)".* at PC=? ?0x([0-9A-F]+)', l)
         if m and m.group(1) in CALLS and where[0] <= int(m.group(3), 16) < where[1]:
+            if re.split(r"[\\/:]", m.group(2))[-1].lower() in LOGS:
+                logs["%s %s" % (m.group(1), m.group(2))] += 1
+                continue
             c[m.group(1)] += 1
             files["%s %s" % (m.group(1), m.group(2))] += 1
-    return c, files
+    return c, files, logs
 
 
 def judge(case, lines, where):
-    c, files = counts(lines, where)
+    c, files, logs = counts(lines, where)
     got = tuple(c[k] for k in CALLS)
     over = [k for k, g, b in zip(CALLS, got, BUDGET[case]) if g > b]
     check("%-18s Fopen %d, Fcreate %d, Fsfirst %d (at most %d, %d, %d)" % ((case,) + got + BUDGET[case]),
           not over, ", ".join("%s %d" % (f, n) for f, n in sorted(files.items())))
+    if logs:
+        print("    (the log, not counted: %s)" % ", ".join("%s %d" % (f, n) for f, n in sorted(logs.items())),
+              flush=True)
 
 
 class Run:
@@ -325,8 +340,8 @@ def eweb(hd):
         r.case("quit")
     finally:
         r.end()
-    # the second time with the connections' log (LOG=1): held in memory,
-    # written once a page and its pictures have come, and at the end
+    # the second time with the connections' log (LOG=1): each line written
+    # as it comes (Erez, 15 Nov 2026), its opens apart from the budget
     inf = os.path.join(hd, "eweb.inf")
     with open(inf, "ab") as f:
         f.write(b"LOG=1\r\n")

@@ -15,7 +15,7 @@ W=${3:-build/xaaes_dl}
 make build/dltest/EWEB.PRG binary/EWEB.FNT
 mkdir -p "$W.files"
 cp binary/EWEB.FNT "$W.files/EWEB.FNT"
-printf 'HOME=about:blank\r\n' > "$W.files/EWEB.INF"
+printf 'HOME=about:blank\r\nNATFEATS=1\r\n' > "$W.files/EWEB.INF"
 python3 "$X/run.py" "$W" "$TOS" build/dltest/EWEB.PRG --copy "$W.files/EWEB.FNT" "$W.files/EWEB.INF" \
 	--steps "until download test round 1 300;wait 4;shot;drag 320 174 320 104;wait 4;shot;click 152 104;until download test round 2 60;wait 4;shot;key 0x01;wait 4;shot;wait 3"
 n=$(grep -ac "download box closed 2 " "$W/hatari.log" || true)

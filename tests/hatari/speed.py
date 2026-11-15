@@ -286,7 +286,8 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         # (EWEB.PRG draws whole, the ST edition in pieces: Erez, 4 and 7
         # Nov 2026; --whole and --pieces make every machine draw one way,
         # the speed build's DRAWWHOLE=1 and DRAWPIECES=1, to compare them)
-        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\n" +
+        # (NATFEATS=1: EWeb's events through NatFeats, never on a real Atari)
+        r.write(os.path.join("EWEB", "eweb.inf"), "HOME=\nNATFEATS=1\n" +
                 ("DRAWWHOLE=1\n" if whole is True else "DRAWPIECES=1\n" if whole is False else ""))
         if whole is None:
             whole = not st

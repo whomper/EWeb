@@ -110,7 +110,7 @@ def tree(depth, prg, root):
     with open(os.path.join(root, "deep.htm"), "w") as f:
         f.write(page())
     with open(os.path.join(root, "eweb.inf"), "w", newline="") as f:
-        f.write("HOME=C:\\DEEP.HTM\r\n")
+        f.write("HOME=C:\\DEEP.HTM\r\nNATFEATS=1\r\n")	# (its log through NatFeats)
     return z
 
 

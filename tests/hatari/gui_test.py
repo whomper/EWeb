@@ -138,7 +138,9 @@ def hd_for(name, home, inf=""):
         with open(os.path.join(hd, k.upper()), "wb") as f:
             f.write(data)
     with open(os.path.join(hd, "eweb.inf"), "w") as f:
-        f.write("HOME=%s\r\n%s" % (home, inf))
+        # (NATFEATS=1: EWeb's events on the emulator's console, where the rig
+        # reads them; never on a real Atari: common's nf.S, 15 Nov 2026)
+        f.write("HOME=%s\r\nNATFEATS=1\r\n%s" % (home, inf))
     return hd
 
 

@@ -248,36 +248,20 @@ const char *tos_clock(void)
 
 long nf_probe(void);
 long nf_call2(long id, long arg);
-extern long nf_vec;		/* nf.S: where the illegal-instruction vector is */
 static long nf_id = -1;
-static int nf_vbr;
 
-/* NatFeats are found by an instruction that is illegal on real hardware,
-   with our handler on the illegal-instruction vector meanwhile: that
-   vector is at VBR + 0x10 on a 68010 or later, not always at 0x10 (a
-   Vampire V4SA's Atari core moved it: EMail and EHypView were ended for an
-   illegal instruction, EWeb, EPDF and EPlay hung, 15 Nov 2026) */
+/* nf.S finds the illegal-instruction vector itself (VBR + 0x10 on a 68010
+   or later: a Vampire V4SA's Atari core keeps VBR away from 0, 15 Nov
+   2026) */
 static void sup_nf_probe(void)
 {
-#ifndef __mcoldfire__		/* (its movec only writes; nf.S probes nothing there) */
-	if (nf_vbr) {
-		long vbr;
-		/* movec %vbr,%d0 as words: no .chip, which would leave the
-		   assembler in one CPU's mode for the rest of the file (EPlay's
-		   68020-60 and ColdFire builds refused tos.c's code after it) */
-		__asm__ volatile(".dc.w 0x4e7a,0x0801\n\tmove.l %%d0,%0" : "=r"(vbr) : : "d0");
-		nf_vec = vbr + 0x10;
-	}
-#endif
 	nf_id = nf_probe();
 }
 
 void nf_debug(const char *s)
 {
-	if (nf_id < 0) {
-		nf_vbr = get_cookie(0x5F435055L) >= 10;	/* '_CPU' */
+	if (nf_id < 0)
 		Supexec(sup_nf_probe);
-	}
 	if (nf_id > 0)
 		nf_call2(nf_id, (long)s);
 }

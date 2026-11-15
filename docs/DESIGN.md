@@ -5038,8 +5038,15 @@ CSS parse 0.3% less. `ectest -p` gives every case the page's names first and pru
 and a case of its own counts what is left out.
 
 The family's `EWEB.LOG` (`LOG=1`, 0 as it starts): `conn.c`'s log of each connection, a secure
-one's handshake step by step, held in memory for a page and its pictures and written once then,
-and at the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. No
+one's handshake step by step, each line written as it comes (Erez, 15 Nov 2026: "apps should
+write log at once as otherwise it may be ineffective to trace errors"; until 1.12 a page's lines
+were held in memory and written once it and its pictures had come, so a hang lost them), and at
+the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. It costs an
+open and a write a line, only while it is on (`make hatarifiles` counts the log's opens apart).
+NatFeats, EWeb's events on an emulator's console for the rigs, are probed only where `EWEB.INF`
+has `NATFEATS=1`, which only the rigs write (Erez, 15 Nov 2026: common's `nf.S`): on a real
+Atari the probe's illegal instruction never runs. A Vampire V4SA's Atari core, its VBR away
+from 0, hung EWeb at the start on it (nf.S now takes the vector at VBR + 0x10 too). No
 address's query, cookie or form field (7.3). Erez's demozoo.org failure (the connection lost in
 the handshake, Direct, 0.43) didn't happen on the emulated stock Falcon, whose disk costs
 nothing: common's `conn.c` now reads TLS.OVL, the roots, the seed and SIGS.DAT before it opens a

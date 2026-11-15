@@ -17,6 +17,10 @@
 #include "http.h"
 #include "plat.h"
 #include "util.h"
+
+/* a test tool (EWGET.TTP): NatFeats always, where ewget_test reads its
+   lines (common's nf.S has 0: only where asked) */
+long nf_on = 1;
 #include "crash.h"
 #include "../../common/atari/machine.h"
 
