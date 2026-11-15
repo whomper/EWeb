@@ -1268,7 +1268,9 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/dltest
 	build/asan/tctest
 	build/asan/c2ptest
-	qemu-m68k -cpu m68030 build/m68k/c2ptest
+	@# (the same as 68030 code where qemu-m68k is there: not on the release's runner)
+	@if command -v qemu-m68k > /dev/null; then echo qemu-m68k -cpu m68030 build/m68k/c2ptest; \
+	    qemu-m68k -cpu m68030 build/m68k/c2ptest; else echo "c2ptest as 68030 code: no qemu-m68k, left out"; fi
 	build/asan/cfmathtest
 	@for f in $(FUZZERS); do build/asan/replay_$$f tests/fuzz/seeds/$$f $$(ls -d tests/fuzz/found/$$f 2>/dev/null) || exit 1; done
 	build/asan/nsbench -E both tests/bench/sample.html > /dev/null
