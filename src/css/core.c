@@ -80,7 +80,58 @@ void ec_trim(ec_ctx *c)
 		return;
 	arena_trim(&c->mem);
 	arena_trim(&c->rmem);
+	arena_trim(&c->tmem);
 	arena_trim(&c->smem);
+}
+
+/* The sheets' text that is still needed (blocks not yet parsed, and those
+ * an SVG rule reads: ec_svg_decls) copied into one piece, and the rest
+ * given back: once a page is styled most of its blocks are parsed, and
+ * their text is never read again (the news page's: 26 KB of 43). When
+ * 4 KB or more is dead; out of memory, left as it is. */
+void ec_text_compact(ec_ctx *c)
+{
+	ec_block *b;
+	const ec_svgr *v;
+	size_t need = 0;
+	ec_chunk *ch;
+	char *p;
+
+	if (c->tdead < 4096)
+		return;
+	for (v = c->svg; v != NULL; v = v->next)
+		if (v->sel != NULL && v->sel->block != NULL)
+			((ec_block *) v->sel->block)->svg = 1;
+	for (b = c->blocks; b != NULL; b = b->next)
+		if (b->src != NULL && (!b->parsed || b->svg))
+			need += (b->len + 1 + EC_ALIGN - 1) & ~(size_t) (EC_ALIGN - 1);
+	ch = NULL;
+	if (need > 0 && (ch = malloc(sizeof(ec_chunk) + EC_ALIGN + need)) == NULL)
+		return;
+	p = ch != NULL ? (char *) ch + ((sizeof(ec_chunk) + EC_ALIGN - 1) & ~(size_t) (EC_ALIGN - 1)) : NULL;
+	for (b = c->blocks; b != NULL; b = b->next) {
+		if (b->src == NULL)
+			continue;
+		if (b->parsed && !b->svg) {
+			b->src = NULL;		/* (never read again) */
+			continue;
+		}
+		memcpy(p, b->src, b->len + 1);
+		b->src = p;
+		p += (b->len + 1 + EC_ALIGN - 1) & ~(size_t) (EC_ALIGN - 1);
+	}
+	for (v = c->svg; v != NULL; v = v->next)
+		if (v->sel != NULL && v->sel->block != NULL)
+			((ec_svgr *) v)->decls = v->sel->block->src;
+	ec_arena_free(&c->tmem);
+	c->tmem.chunk_size = ec_chunk_max;
+	if (ch != NULL) {
+		ch->next = NULL;
+		c->tmem.chunks = ch;
+		c->tmem.size = sizeof(ec_chunk) + EC_ALIGN + need;
+		c->tmem.p = c->tmem.end = p;	/* (full: what comes next takes a piece of its own) */
+	}
+	c->tdead = 0;
 }
 
 void ec_arena_free(ec_arena *a)
@@ -442,6 +493,7 @@ ec_ctx *ec_create_on(const ec_media *media, unsigned opts, const ec_ctx *base)
 	c->mem.chunk_size = ec_chunk_max;
 	c->rmem.chunk_size = ec_chunk_max;
 	c->smem.chunk_size = ec_chunk_max;
+	c->tmem.chunk_size = ec_chunk_max;
 	c->pmem = &c->rmem;
 	if (atoms_grow(c) != 0) {
 		free(c);
@@ -475,6 +527,7 @@ void ec_destroy(ec_ctx *c)
 		return;
 	ec_arena_free(&c->smem);
 	ec_arena_free(&c->rmem);
+	ec_arena_free(&c->tmem);
 	ec_arena_free(&c->mem);
 	free(c->atoms);
 	free(c->shadow);
@@ -512,6 +565,7 @@ void ec_share(ec_ctx *c)
 				(void) ec_poll();
 		}
 	}
+	ec_text_compact(c);	/* (all parsed now: the UA sheet's text not kept) */
 }
 
 ec_shadow *ec_shadow_of(ec_ctx *c, const ec_atom *a, int make)
@@ -573,6 +627,9 @@ void ec_drop_sheets(ec_ctx *c)
 	/* and what they were: their text, rules and declarations (a page's
 	   sheets added again as often as its window is sized take no more) */
 	ec_arena_free(&c->rmem);
+	ec_arena_free(&c->tmem);
+	c->blocks = NULL;
+	c->tdead = 0;
 	c->mem.nomem = 0;	/* (its names stay; the sheets' shortage is read again) */
 	c->pmem = &c->rmem;
 	c->svg = NULL;
@@ -611,7 +668,7 @@ static size_t arena_used(const ec_arena *a)
 
 size_t ec_mem(const ec_ctx *c)
 {
-	return arena_used(&c->mem) + arena_used(&c->rmem) + arena_used(&c->smem);
+	return arena_used(&c->mem) + arena_used(&c->rmem) + arena_used(&c->tmem) + arena_used(&c->smem);
 }
 
 const ec_stats *ec_get_stats(const ec_ctx *c)

@@ -49,6 +49,8 @@ typedef struct ec_arena {
 
 void *ec_alloc_slow(ec_arena *a, size_t n);
 void ec_arena_free(ec_arena *a);
+struct ec_ctx;
+void ec_text_compact(struct ec_ctx *c);
 
 static inline void *ec_alloc(ec_arena *a, size_t n)
 {
@@ -184,7 +186,9 @@ typedef struct ec_calcx {
 } ec_calcx;
 
 typedef struct ec_block {
-	const char *src;		/* the declarations' text, parsed when first needed */
+	const char *src;		/* the declarations' text, parsed when first needed
+					   (a sheet's: in tmem, NULL once parsed and compacted) */
+	struct ec_block *next;		/* a sheet's: the context's blocks (ec_ctx.blocks) */
 	const char *base;		/* its sheet's address (ec_sheet_at), or NULL */
 	uint32_t len;
 	ec_decl *d;
@@ -192,6 +196,7 @@ typedef struct ec_block {
 	uint8_t parsed;
 	uint8_t custom;			/* it has custom properties */
 	uint8_t imp;			/* it has !important declarations */
+	uint8_t svg;			/* a sheet's whose text an SVG rule keeps (ec_svgr) */
 } ec_block;
 
 /* ------------------------------------------------------------ selectors */
@@ -276,6 +281,10 @@ struct ec_ctx {
 	ec_arena mem;			/* atoms, scripts' selectors */
 	ec_arena rmem;			/* the sheets: their text, rules and declarations
 					   (given back by ec_drop_sheets) */
+	ec_arena tmem;			/* the sheets' declarations' text, until parsed: what
+					   no longer needs it given back (text_compact) */
+	ec_block *blocks;		/* the sheets' blocks, the newest first */
+	size_t tdead;			/* tmem's bytes of blocks parsed since */
 	ec_arena smem;			/* styles, and what is parsed as they are made:
 					   style attributes, var()'s values */
 	ec_arena *pmem;			/* where what is parsed goes: rmem, smem while

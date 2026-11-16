@@ -1834,7 +1834,7 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 		}
 	}
 	b = ec_alloc(&c->rmem, sizeof *b);
-	text = ec_alloc(&c->rmem, blen + 1);
+	text = ec_alloc(&c->tmem, blen + 1);
 	if (b == NULL || text == NULL)
 		return bend;
 	/* its declarations' text, parsed when first needed (the sheet's
@@ -1843,6 +1843,8 @@ static const char *style_rule(ec_ctx *c, int n, const char *p, const char *end, 
 	text[blen] = 0;
 	memset(b, 0, sizeof *b);
 	b->src = text;
+	b->next = c->blocks;
+	c->blocks = b;
 	b->base = c->sheet_base;
 	b->len = blen;
 	c->st.blocks++;
@@ -2366,6 +2368,7 @@ void ec_parse_block(ec_ctx *c, ec_block *b, ec_arena *a)
 	c->parse_base = b->base;
 	c->pmem = a;
 	b->n = ec_parse_decls(c, b->src, b->len, &b->d, &custom);
+	c->tdead += b->len + 1;		/* (an inline block's isn't in tmem: tdead a little high) */
 	c->pmem = pm;
 	c->parse_base = NULL;
 	b->custom = custom;
