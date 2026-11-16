@@ -254,7 +254,9 @@ try:
 
     # ECDSA only: RSA asked for first (no DSP here), so the third try takes
     # it, and the report counts the tries the server turned down as TLS
-    for f in ("SIGS.DAT", "ec.log", "ec2.log"):
+    # (with no tlshosts.dat from a run before: common's conn.c keeps there,
+    # beside SIGS.DAT, the kind each host took, and asks it first)
+    for f in ("SIGS.DAT", "tlshosts.dat", "ec.log", "ec2.log"):
         try:
             os.remove(os.path.join(work, f))
         except OSError:
