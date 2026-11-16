@@ -71,18 +71,21 @@ def settled(r, what):
     return False
 
 
-def load(r, what, url, most=900):
-    """the address typed after ^L and Return: the stretches until EWeb says
-    it showed the page and its pictures, and the screen is still"""
-    r.key("ctrl+l")
-    time.sleep(1)
-    start = os.path.getsize(r.log)
-    r.type(url)
-    time.sleep(0.5)
-    typed = gaps_since(r, start)
+def load(r, what, url, most=900, back=False):
+    """the address typed after ^L and Return (back: ^Z, Back to url): the
+    stretches until EWeb says it showed the page and its pictures, and the
+    screen is still"""
+    typed = []
+    if not back:
+        r.key("ctrl+l")
+        time.sleep(1)
+        start = os.path.getsize(r.log)
+        r.type(url)
+        time.sleep(0.5)
+        typed = gaps_since(r, start)
     start = os.path.getsize(r.log)
     n = r.console().count("EWEB shown ")
-    r.key("Return")
+    r.key("ctrl+z" if back else "Return")
     t_end = time.time() + most
     while time.time() < t_end and r.console().count("EWEB shown ") == n:
         time.sleep(2)
@@ -428,6 +431,14 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
             r.results = [(w + NOT_MEASURABLE if w in on_news else w, v, b) for w, v, b in r.results]
             seen = [(w + NOT_MEASURABLE, v, m) for w, v, m in seen]
             fin = [(w + NOT_MEASURABLE if w in on_news else w, v) for w, v in fin]
+        # Back to the page before the news page (the hub, 16 Nov 2026: where
+        # there is no TT RAM the kept page goes before a big page is built,
+        # and Back's cost is on record)
+        start = os.path.getsize(r.log)
+        before = "about:start" if NEWS_FIRST else "file:///C:/SAMPLE.HTM"
+        load(r, "Back to the page before", before, back=True)
+        w = wholes_since(r, start)
+        fin.append(("Back to the page before", max(w) if w else None))
         start = os.path.getsize(r.log)
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
         w = wholes_since(r, start)

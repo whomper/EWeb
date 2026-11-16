@@ -310,6 +310,10 @@ extern void (*br_mark)(const char *what);
 /* memory given back when a page doesn't fit (shed): the front end's too
    (EWEB.PRG's page kept off the screen, in ST RAM); NULL none */
 extern void (*br_shed)(void);
+/* where there is no TT RAM: the front end's page kept off the screen
+   given back before a big page is built (its ST RAM, in pieces, was all
+   the news page lacked under NVDI on a stock Falcon: 1.17); NULL none */
+extern void (*br_shed_big)(void);
 /* the page shown about to be laid out again, its old page still there
    (ui/win.c notes what the window shows of it, to draw again only what
    changes); NULL: none */

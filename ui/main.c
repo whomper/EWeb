@@ -544,6 +544,14 @@ void menu_update(void)
    beyond it goes as the next page is kept */
 long tt_free = -2;
 
+/* br_shed_big: the page kept off the screen given back, said in the log */
+static void shed_big(void)
+{
+	log_event("kept page given back for a big page, ST RAM free %ld KB", (long) Mxalloc(-1L, 0) >> 10);
+	win_pic_drop();
+	log_event("ST RAM free %ld KB", (long) Mxalloc(-1L, 0) >> 10);
+}
+
 void mem_limits(void)
 {
 	static long st;
@@ -569,6 +577,9 @@ void mem_limits(void)
 		img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
 		img_max_px = 1L << 20;
 	}
+	/* the page kept off the screen given back before a big page is built
+	   where there is no TT RAM (browse.c's build) */
+	br_shed_big = tt > 0 ? NULL : shed_big;
 	/* windows, each with a page laid out: eight beside TT RAM, four in 6
 	   MB of ST RAM, else two (a 4 MB Falcon) */
 	win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;

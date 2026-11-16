@@ -640,6 +640,7 @@ static void home_yours(SBUF *s)
 
 /* EWeb's home page: home.html, with what EWeb knows put in */
 void (*br_shed)(void);
+void (*br_shed_big)(void);
 void (*br_relaying)(browser *b, const page *old);
 void (*br_mark)(const char *what);	/* the speed build's names for a page's steps (main.c's gap_tag) */
 #define MARK(what) (br_mark != NULL ? br_mark(what) : (void) 0)
@@ -2495,6 +2496,15 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	ec_poll = gem_turn;
 	font_poll = gem_turn;
 #ifndef EW_ST
+	/* a big page where there is no TT RAM (its cost over half of what all
+	   the ST RAM free at the start is reckoned to hold): the page kept off
+	   the screen given back first, not once the page has come short (the
+	   news page, the first after the start on a stock Falcon under NVDI:
+	   its 229 KB of ST RAM in six blocks, given back after the first try
+	   ran out, and the second try came short in a heap in pieces). The
+	   pages kept for Back stay */
+	if (br_shed_big != NULL && data != NULL && cost(len) > 4 * br_keep_max)
+		br_shed_big();
 	/* a page that won't fit beside the one shown, by its cost, in all the
 	   ST RAM free at the start (8 x br_keep_max where there is no TT
 	   RAM): the room made before the first try, not after it failed (a

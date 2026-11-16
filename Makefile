@@ -271,12 +271,12 @@ build/tos/rt/connpad.o: atari/connpad.S
 # When one of them grows again, work the sizes out again from the objects
 # (size -A) and the symbols (nm -n) against the release before (DESIGN.md,
 # Code layout and the 68030's caches)
-PAD_main := 118
+PAD_main := 76
 PAD_RO_main := 194
 PAD_BSS_main := 252
-PAD_browse := 256
+PAD_browse := 208
 PAD_RO_browse := 188
-PAD_BSS_browse := 248
+PAD_BSS_browse := 244
 PAD_font := 144
 PAD_BSS_font := 252
 PAD_doc := 194
