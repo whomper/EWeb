@@ -261,33 +261,44 @@ build/tos/rt/connpad.o: atari/connpad.S
 # 68030's instruction cache (twice their misses: the news page's first draw
 # 820 -> 855 ms, an arrow held up 875 -> 1000); each pad puts what follows
 # its object back at 1.15's places modulo 256, its code, strings and BSS.
-# 1.17's memory steps grew main.o's code 42 bytes more, doc.o's 78,
-# layout.o's 24, core.o's 140 (and 4 of BSS) and select.o's 24: the pads
-# after doc.o, layout.o, core.o and select.o, and main's smaller, put what
-# follows each back at 1.16's places.
+# 1.17's memory steps grew main.o's code 42 bytes, doc.o's 78, font.o's
+# 310, layout.o's 2540 (420 of strings, 24 of BSS), core.o's 704,
+# select.o's 326 (427 of strings), sheet.o's 156, and browse.o's shrank
+# 124: the pads after each (worked out with nm -n against 1.16's ELF,
+# one at a time in link order, until what follows each is at 1.16's
+# place modulo 256: code and BSS; the strings', which have no symbols to
+# check, by their growth) put the code that follows each back.
 # When one of them grows again, work the sizes out again from the objects
 # (size -A) and the symbols (nm -n) against the release before (DESIGN.md,
 # Code layout and the 68030's caches)
 PAD_main := 198
 PAD_RO_main := 194
-PAD_BSS_main := 252
-PAD_browse := 96
+PAD_BSS_main := 172
+PAD_browse := 224
 PAD_RO_browse := 188
 PAD_BSS_browse := 248
-PAD_font := 160
-PAD_BSS_font := 248
+PAD_font := 96
+PAD_BSS_font := 244
 PAD_doc := 194
-PAD_layout := 232
-PAD_core := 100
+PAD_layout := 200
+PAD_core := 36
 PAD_BSS_core := 252
-PAD_select := 216
+PAD_select := 168
+PAD_RO_select := 85
+PAD_BSS_select := 252
+PAD_sheet := 96
+PAD_BSS_sheet := 252
+PAD_RO_layout := 92
+PAD_BSS_layout := 232
 build/tos/rt/pad_%.o: atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
 		-DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
 CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_main_ro -Wl,-u,pad_main_bss \
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
-		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select
+		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
+		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
+		-Wl,-u,pad_layout_bss
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOS_CFLAGS) -c $< -o $@
@@ -681,8 +692,9 @@ tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/to
               build/tos/ewb/browse/browse.o,build/tos/ewb/browse/browse.o build/tos/rt/pad_browse.o,$(subst \
               build/tos/ewb/doc/doc.o,build/tos/ewb/doc/doc.o build/tos/rt/pad_doc.o,$(subst \
               build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o,$(tos_EWB)))))
-tos_EC_PAD = $(subst build/tos/ec/select.o,build/tos/ec/select.o build/tos/rt/pad_select.o,$(subst \
-             build/tos/ec/core.o,build/tos/ec/core.o build/tos/rt/pad_core.o,$(tos_EC)))
+tos_EC_PAD = $(subst build/tos/ec/sheet.o,build/tos/ec/sheet.o build/tos/rt/pad_sheet.o,$(subst \
+             build/tos/ec/select.o,build/tos/ec/select.o build/tos/rt/pad_select.o,$(subst \
+             build/tos/ec/core.o,build/tos/ec/core.o build/tos/rt/pad_core.o,$(tos_EC))))
 build/tos/gem/%.o: ui/%.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -c $< -o $@

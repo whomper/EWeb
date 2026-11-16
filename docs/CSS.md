@@ -166,9 +166,17 @@ ec_sheet(c, ua_css, ua_len, EC_ORIGIN_UA);
 ec_sheet(c, page_css, page_len, EC_ORIGIN_AUTHOR);
 /* the document: ec_nodes with atoms from ec_intern(c, ...) */
 ec_select(c, root);                     /* every node's style is set (-1: out of memory, not all) */
-/* node->style->v[EP_COLOR].i, node->style->k[EP_WIDTH], ... */
+/* EC_V(node->style, EP_COLOR).i, EC_K(node->style, EP_WIDTH), ... */
 ec_destroy(c);
 ```
+
+A computed style is kept in six groups (the inherited properties, the
+box, the borders, the background, the rest of CSS 2's, flex and grid),
+each shared by the styles whose values in it are the same; `EC_V` and
+`EC_K` read a value and its kind (`ec_vk` both), a load for a property
+named when compiled. The ST edition keeps every property's value in one
+style (`EC_FLAT`). A sheet's declarations are kept as text until parsed,
+in an arena of their own whose dead text `ec_text_compact` gives back.
 
 A stylesheet every document shares (EWeb's UA sheet) can be parsed once
 and kept: `ec_share(ua)` finishes parsing a context's sheets and marks its

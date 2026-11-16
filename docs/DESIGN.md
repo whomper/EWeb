@@ -5559,6 +5559,54 @@ To show the page whole there with room to spare means about 350 KB less at its p
 styles: `ec_style` is 538 bytes on the 68030, a value for every property, and the layout): a phase of
 its own, put to Erez.
 
+## A big page's memory, 1.17 (16 Nov 2026)
+
+The phase Erez approved on 15 Nov 2026: the news page whole on `Falcon-4:256` under NVDI with 64 KB to
+spare at its peak. Each step measured with drawbench `-m -4` (68030, the Atari's allocator, the CSS
+arenas' 16 KB pieces of a stock 4 MB Falcon), the news page with its sheet; the page laid out the
+same at every step (608 x 9,574, 1,593 items, drawn the same to the pixel):
+
+| step | the peak after it |
+|---|---|
+| 1.16's way | 1,312 KB |
+| no style kept for a `::before` or `::after` whose content is none or normal (CSS Pseudo 4: no box; a page's `*::before, *::after` kept two such for every element, the news page's 143, 77 KB) | -65 KB |
+| the document's and the CSS arenas' last pieces cut to what they hold once parsed and styled (`ec_trim`; `ec_shrink` is common's realloc, which shrinks a block in place; EWEB.PRG only) | -95 KB |
+| the display list grown by a quarter, not a half (the copy as it grew was at the layout's peak; the ST edition keeps half) | -76 KB |
+| a computed style in six shared groups (the inherited properties, the box, the borders, the background, the rest of CSS 2's, flex and grid: the news page's 186 styles had 89, 88, 5, 21, 14 and 50 different ones; read through `EC_V`/`EC_K`; the ST edition keeps the whole style, `EC_FLAT`) | -64 KB |
+| `EWEB.FNT`'s first block split: ASCII and the common signs (178 characters), the Latin-1 and Latin Extended-A letters (190) and Hebrew (30), each read the first time a page shows one, as Greek and Cyrillic are; the advance cache keeps a block with its place | -73.5 KB |
+| a box keeps an atom's, a list item's and a summary's fields aside (`struct bxt`: 20 bytes a box the less) | -16.4 KB |
+| the sheets' declaration text in an arena of its own, given back once parsed (`ec_text_compact`: 277 of the news page's 457 blocks parsed by its first styling) | -42 KB |
+| **1.17** | **879 KB** (-433 KB) |
+
+The 68030's instructions for the news page, styled and laid out (`tools/count68k.sh`): 25.24 M in
+1.16's way, 23.27 M in 1.17 (the groups' styling as fast as before, less of each face unpacked,
+less of each box cleared); drawn whole 44.09 M, 41.68 M. On `Falcon-4:16`, where it fits, EWEB.PRG's
+peak for the whole page went from 1,614 KB to about 1,250 KB.
+
+Faults the phase found, each fixed in it:
+
+- **A name short of memory in a selector** (`src/css/sheet.c`): a tag's, an id's or a class's
+  `ec_intern` that found no memory left the selector a NULL name, which `ec_prune`'s `pruned()` read
+  through: the news page under NVDI bombed as its sheet was read once the trims left no room to
+  spare. Such a selector is dropped now and the sheet counts as short.
+- **The prelude buffer** (`rules()`): a sheet's every piece took 80 KB in one block for a rule's
+  prelude tokens (4,096 of 20 bytes). Under NVDI the heap was in pieces of 72 KB at most when the news
+  page's sheet came (313 KB free in 30), so the sheet came short before a rule was read. The buffer
+  starts at 256 tokens and grows for a prelude that needs it (`read_prelude_in`).
+- **The layout's arena** took 16 KB pieces only, and failed while smaller ones were free; it halves
+  to 1 KB now, as the CSS arenas and the document did. And a page whose sheets come short now makes
+  the room a page that didn't fit makes (`make_room`), not only the pages kept for Back.
+
+Where it stands: on the speed rig's way (the home page, the sample page, then the news page), the
+news page under NVDI still comes with its sheet short (47 KB of its styles, 12.6 KB before the
+prelude's fix), laid out twice (22.5 s). Its peak is 963 KB, all the heap can have there after the
+two pages before it: the heap took 1,018 KB from GEMDOS and 14 KB of ST RAM is left. Once, with no
+sample page before it, it fitted whole with 544 bytes left (peak 997 KB). Giving the source back
+after its first parse didn't make it fit (the first try ran out at 972 KB, with no second try). What
+is left, put to the hub: the display list in pieces rather than one array (100 KB in one block for
+the news page, in a heap of 72 KB pieces), a finer pruning of the sheets, and the tree's duplicated
+fields (`dnode` and `ec_node` each keep the attributes and classes, about 10 KB).
+
 ## The ST edition's speed (13 Nov 2026)
 
 Erez, 13 Nov 2026: "Focus on the ST version and optimize it as best as you can. I want the ST edition
