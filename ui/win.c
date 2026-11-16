@@ -1350,24 +1350,24 @@ static void draw_due(void)
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
 		long left = (long) (end - b0), n;
+		long full;
 		if (left < 4)
 			left = 4;
-		n = left * 256 / rcost();
-		/* (a piece's band that would finish the draw: sized by the
-		   dearest rows lately if by them it wouldn't, rows a little
-		   dearer than the average after lighter ones made it one past
-		   its slice, the ST's home page 155 + 150 ms drawn as one of 305,
-		   1.17. Only that band: sized so, or every band for nine tenths
-		   of the time left, the ST's scrolls came in more pieces, the
-		   page's end +15 to +110 ms) */
-		if (piece && n >= cur->due.h && left * 256 / rcost_hi() < cur->due.h)
-			n = left * 256 / rcost_hi();
+		full = left * 256 / rcost();
+		/* (a piece's band sized for nine tenths of the time left: rows
+		   a little dearer than the average, after lighter ones, made
+		   the last band one past its slice, the ST's home page
+		   155 + 150 ms drawn as one of 305, 1.17. Whether another band
+		   begins is told by all the time left, as before: told by the
+		   nine tenths, each piece of the ST's page's end left 45 ms of
+		   its slice and the page came a piece later, +15 to +35 ms) */
+		n = piece ? full * 9 / 10 : full;
 		/* (16 rows at least, a line of text: thinner bands each went
 		   through every line they crossed again, its letters looked up
 		   and clipped, eight times over at 2 rows; a piece's 8, and none
 		   begun after the first that its time hasn't room for: an ST's 16
 		   rows were 100 to 150 ms) */
-		if (piece && band_n > 0 && n < PIECE_BAND)
+		if (piece && band_n > 0 && full < PIECE_BAND)
 			break;
 		if (n < (piece ? PIECE_BAND : BAND_MIN))
 			n = piece ? PIECE_BAND : BAND_MIN;
