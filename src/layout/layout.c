@@ -59,6 +59,14 @@ static void *amalloc(struct arena *a, size_t n)
 	if (c == NULL || c->used + n > c->size) {
 		size_t size = n > ACHUNK ? n : ACHUNK;
 		c = malloc(sizeof *c + size);
+		while (c == NULL && size > 1024 && size / 2 >= n) {
+			/* short of memory (a small machine's last free pieces, the
+			   heap in pieces: the news page on a stock 4 MB Falcon
+			   under NVDI, 1.17): a smaller piece rather than none, as
+			   long as it holds n (as the CSS arenas and the document) */
+			size /= 2;
+			c = malloc(sizeof *c + size);
+		}
 		if (c == NULL)
 			return NULL;
 		c->used = 0;
