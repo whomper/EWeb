@@ -1,0 +1,26 @@
+page 608 x 177, background 3366cc, 27 items, 0 links, title "Tables in a table, an absolute body"
+fill 159,12 291x40 #000000
+fill 163,16 240x32 #cc6633
+text 408,37 37x17 #ffffff cond13 link 0 "beside"
+fill 159,12 291x1 #000000
+fill 159,51 291x1 #000000
+fill 159,13 1x38 #000000
+fill 449,13 1x38 #000000
+fill 159,60 291x34 #000000
+text 160,72 96x14 #ffffff cond11 bold link 0 "popularity helper"
+fill 160,75 289x18 #ffffff
+fill 194,77 96x16 #ffffff
+fill 194,77 96x1 #808080
+fill 194,92 96x1 #808080
+fill 194,77 1x16 #808080
+fill 289,77 1x16 #808080
+text 160,88 34x17 #000000 cond13 link 0 "short "
+fill 159,110 291x32 #000000
+text 160,122 58x14 #ffffff cond11 bold link 0 "comments"
+fill 160,125 289x16 #ffffff
+text 160,138 66x17 #000000 cond13 link 0 "A comment"
+fill 159,158 291x19 #000000
+fill 160,159 289x17 #ffffff
+fill 208,159 36x14 #cc6633
+clip x 208+36 y 159+14 in 0
+text 160,173 48x17 #000000 cond13 link 0 "Send it: "

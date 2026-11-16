@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<title>Tables in a table, an absolute body</title>
+<!-- pouet.net's prod page (Erez, 16 Nov 2026): the body absolute with
+     min-width: 100% (centring needs its width), a display: table column
+     holding a <table> of width 100% and boxes of display: table and
+     width 100%: the column as wide as its widest, centred, every box as
+     wide as it; a field's max-width; a picture Submit with its label
+     put out of sight by text-indent, in its own place -->
+<style>
+body { margin: 0; background: #36c; position: absolute; min-width: 100%; }
+#content { margin: 5px; text-align: center; }
+#column { margin: 0 auto; max-width: 900px; display: table; }
+.box { background: #000; margin: 0 auto 20px; padding: 1px; display: table; text-align: left; width: 100%; }
+.box h2 { margin: 0; color: #fff; font-size: 14px; }
+#main { width: 100%; margin: 10px auto; background: #000; border: 1px solid black; }
+.content { background: #fff; }
+#helper input { max-width: 120px; width: 100%; }
+/* pouet.net's Submit: a picture, its label put out of sight by
+   text-indent; the button stays in its place (a click must find it) */
+input[type="submit"] { background: #c63; width: 45px; height: 18px; overflow: hidden; text-indent: -90px;
+  border: 0px; color: transparent; }
+</style>
+<div id="content"><div id="column">
+<table id="main"><tr><td><div style="width:300px;height:40px;background:#c63"></div></td><td style="color:#fff">beside</td></tr></table>
+<div class="box" id="helper"><h2>popularity helper</h2><div class="content">short <input value="a field"></div></div>
+<div class="box"><h2>comments</h2><div class="content">A comment</div></div>
+<form class="box" action="#"><div class="content">Send it: <input type="submit" value="Submit"></div></form>
+</div></div>

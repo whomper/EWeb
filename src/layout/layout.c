@@ -2513,7 +2513,12 @@ static void table_anon(L *l, box *b)
 			if (!(end->kind == BX_TEXT && blank(end->text, end->len) && !keeps_space(end->st)) &&
 			    !out_of_flow(end))
 				content = 1;
-			if (end->first != NULL) {
+			if (end->first != NULL && !end->table) {
+				/* (a block round rows; a table in the table is
+				   content, its rows its own: pouet.net's prod page,
+				   a display: table of a <table> and boxes of
+				   display: table, was 1px wide, the boxes beside
+				   the table narrower, and centred by their width) */
 				box *k;
 				for (k = end->first; k != NULL; k = k->next)
 					if (is_rowish(k))
@@ -5310,6 +5315,14 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 	long i = 0, n = l->nit, *ord;
 	int firstline = 1;
 
+	/* a styled control's own block (box.frame): its text-indent is its
+	   label's, inside it, not the control's place on the line (pouet.net's
+	   Submit, a picture with its label put out of sight by text-indent:
+	   -90px, was put 72 px out of its own box, cut away by its overflow:
+	   hidden, and no click found it) */
+	if (b->first != NULL && b->first->kind == BX_ATOM && b->first->atom == AT_CONTROL && b->first->frame)
+		indent = 0;
+
 	/* HTML's legacy values align the lines as the plain ones do; the
 	   blocks inside are layout_block's */
 	if (ta >= KW_WEBKIT_LEFT && ta <= KW_WEBKIT_CENTER)
@@ -6069,6 +6082,20 @@ static int32_t cell_min(L *l, box *c)
 }
 
 /* a cell's widest, or the width it asks for */
+/* v (a margin box's width) no wider than c's max-width allows (CSS 2.1,
+   10.4), but a cell's, which a table ignores (17.5.2: browsers do):
+   pouet.net's field of width 100% and max-width 360px, an inline-block,
+   was as wide as its box */
+static int32_t cap_max(L *l, box *c, int32_t v, int32_t w)
+{
+	int32_t mx;
+	if (c->anon || kw(c->st, EP_DISPLAY) == KW_TABLE_CELL || (mx = len(l, c->st, EP_MAX_WIDTH, w)) == AUTO || mx < 0)
+		return v;
+	mx += kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX ?
+	      len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w) : extras(l, c);
+	return v > mx ? mx : v;
+}
+
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
 	int32_t cw = c->anon ? AUTO : len(l, c->st, EP_WIDTH, w);
@@ -6080,12 +6107,13 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 					    EC_K(c->st, EP_MARGIN_RIGHT) == EK_PCT || EC_K(c->st, EP_MARGIN_RIGHT) == EK_CALC))
 			m += len0(l, c->st, EP_MARGIN_LEFT, w) - len0(l, c->st, EP_MARGIN_LEFT, AUTO) +
 			     len0(l, c->st, EP_MARGIN_RIGHT, w) - len0(l, c->st, EP_MARGIN_RIGHT, AUTO);
-		return m;
+		return cap_max(l, c, m, w);
 	}
 	if (kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX)
 		cw += len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w);
 	else
 		cw += extras(l, c);
+	cw = cap_max(l, c, cw, w);
 	if (kw(c->st, EP_DISPLAY) == KW_TABLE_CELL) {
 		/* a cell's width is the least it takes, not the most: no
 		   narrower than its narrowest content (CSS 2.1, 17.5.2.2: a
@@ -7012,6 +7040,19 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 				l->minw = was;
 				wf = avail > mn ? avail : mn;
 			}
+		}
+	}
+	{
+		/* its min-width, which wins (CSS 2.1, 10.4), as a float's: the
+		   border box's under border-box, else its content's. pouet.net's
+		   body, absolute with min-width: 100%, shrank to its content,
+		   and nothing could be centred in it */
+		int32_t mn;
+		if (!c->anon && (mn = len(l, c->st, EP_MIN_WIDTH, cbw)) != AUTO) {
+			mn += kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX ?
+			      len0(l, c->st, EP_MARGIN_LEFT, cbw) + len0(l, c->st, EP_MARGIN_RIGHT, cbw) : extras(l, c);
+			if (wf < mn)
+				wf = mn;
 		}
 	}
 	if (wf > cbw)
