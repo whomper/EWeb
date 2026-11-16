@@ -6,7 +6,7 @@
  * ui/screen.c draws them), for counting the 68030 instructions that takes
  * (tools/count68k.sh, tools/prof68k.py):
  *
- *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] PAGE.HTM [SHEET.CSS...]
+ *   drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m [-4]] PAGE.HTM [SHEET.CSS...]
  *
  * -P stops after a phase: 1 the document styled (its <style>s and the
  * sheets named), 2 laid out (608 px wide, a CSS px 0.8 of the screen's),
@@ -23,6 +23,11 @@
  * the first to the last kept and placed again (page_text_index,
  * page_text_place: when the page is laid out again) and its text copied
  * (page_copy_text, ^C); its length printed.
+ * -m prints the heap after each stage and its peak; -4 gives the CSS
+ * arenas 16 KB pieces, as EWEB.PRG does on a stock 4 MB Falcon (ui/main.c).
+ * The document's and the CSS engine's last pieces are cut to what they
+ * hold as EWEB.PRG cuts them (ec_shrink: atheap's realloc is the Atari's,
+ * which shrinks a block in place).
  * -R ROWS draws ROWS at a time (400 at most; 8 is the kept page's band on
  * a stock Falcon, ui/win.c), -y FROM,TO only the page's rows FROM to TO.
  * Prints the page's height and items.
@@ -100,6 +105,11 @@ static uint8_t pen(void *ud, uint32_t rgb)
 
 extern long heap_use, heap_peak;	/* (atheap's: the Atari's heap, as EWEB.PRG's) */
 
+static int shrink_in_place(void *p, size_t n)
+{
+	return realloc(p, n) == p;
+}
+
 int main(int argc, char **argv)
 {
 	ec_media m = { W, ROWS, 16 };
@@ -133,6 +143,8 @@ int main(int argc, char **argv)
 			drags = atol(argv[++i]);
 		else if (!strcmp(argv[i], "-m"))
 			mem = 1;
+		else if (!strcmp(argv[i], "-4"))
+			ec_chunk_max = 16384;
 		else if (!strcmp(argv[i], "-S"))
 			sum = 1;	/* the pixels drawn summed (a canvas change checked as 68030 code) */
 		else if (!strcmp(argv[i], "-R") && i + 1 < argc)
@@ -143,13 +155,14 @@ int main(int argc, char **argv)
 	if (rows < 1 || rows > ROWS)
 		rows = ROWS;
 	if (i >= argc) {
-		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m] [-R ROWS] [-y FROM,TO] PAGE.HTM [SHEET.CSS...]\n");
+		fprintf(stderr, "drawbench [-P 1|2|3] [-b 8|16] [-f EWEB.FNT] [-V N [-M]] [-F WORDS] [-X N] [-m [-4]] [-R ROWS] [-y FROM,TO] PAGE.HTM [SHEET.CSS...]\n");
 		return 2;
 	}
 	if (!font_init(fnt)) {
 		fprintf(stderr, "drawbench: can't read %s\n", fnt);
 		return 1;
 	}
+	ec_shrink = shrink_in_place;
 	data = slurp(argv[i], &n);
 	memset(&ho, 0, sizeof ho);
 	ho.drop_scripts = 1;		/* as EWEB.PRG on a page whose scripts don't run */

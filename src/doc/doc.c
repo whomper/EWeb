@@ -914,6 +914,7 @@ static int ua_base(const ec_media *media)
 			return 0;
 		}
 		ec_share(c);
+		ec_trim(c);	/* (made once, kept for every page: 41 KB of its pieces unused) */
 		ua = c;
 		if (ec_poll != NULL)
 			ec_poll();	/* (kept now, a stop seen by the parse after) */
@@ -1608,8 +1609,15 @@ long doc_mark_links(doc *d, int (*visited)(void *ud, const char *href), void *ud
 int doc_select(doc *d)
 {
 	dnode *c;
+	struct dblk *b = d->mem;
 	if (d->root == NULL)
 		return 0;
+	/* the document as parsed: what its last block didn't use the heap's
+	   again (the news page's: 46 KB), through the CSS engine's
+	   ec_shrink; what is made later takes a new block */
+	if (b != NULL && ec_shrink != NULL && b->size - b->used >= 1024 &&
+			ec_shrink(b, DHEAD + b->used))
+		b->size = b->used;
 	for (c = d->root->first; c != NULL; c = c->next)
 		if (c->type == DN_ELEMENT)
 			return ec_select(d->css, &c->e);

@@ -1758,5 +1758,6 @@ int ec_select(ec_ctx *c, ec_node *root)
 	hits = was_hits;
 	cache = was_cache;
 	keybuf = was_keys;
+	ec_trim(c);	/* (the news page's styles: 97 KB its pieces left unused) */
 	return c->smem.nomem || c->stopped ? -1 : 0;
 }

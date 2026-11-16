@@ -3116,6 +3116,13 @@ const char cpu_cf_alert[] = "[3][EWEB.PRG is for the Falcon and|the TT. On the F
 
 static int app_run(void);
 
+#ifndef EW_ST
+static int shrink_in_place(void *p, size_t n)
+{
+	return realloc(p, n) == p;
+}
+#endif
+
 int app_main(void)
 {
 	long most = (long) Mxalloc(-1L, 3);
@@ -3285,6 +3292,9 @@ static int app_run(void)
 	   against 35 and 50) */
 	if ((long) Mxalloc(-1L, 1) <= 0 && (long) Mxalloc(-1L, 0) < (6L << 20))
 		ec_chunk_max = 16384;
+	/* a page's document and CSS arenas cut to what they hold once it is
+	   parsed and styled (common's realloc shrinks a block in place) */
+	ec_shrink = shrink_in_place;
 #endif
 #ifdef EW_ST
 	snprintf(http_user_agent, sizeof http_user_agent, "EWeb/%s (Atari ST)", EWEB_VERSION);

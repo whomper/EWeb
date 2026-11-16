@@ -350,6 +350,11 @@ int ec_hover_may(ec_ctx *c, const ec_node *e);
 /* the bytes c's memory takes: its atoms, sheets and styles (the pieces
  * they are in, but what is left of the last of each) */
 size_t ec_mem(const ec_ctx *c);
+/* What c's arenas didn't use of their last pieces given back (ec_select
+ * does it when it is done): through ec_shrink, which the host sets where
+ * its heap shrinks a block in place (the Atari's); with none, nothing */
+void ec_trim(ec_ctx *c);
+extern int (*ec_shrink)(void *p, size_t n);
 /* the most a context's arenas grow by at a time (64 KB; the ST edition 4
    KB): set before a context is made, smaller where memory is short */
 extern size_t ec_chunk_max;

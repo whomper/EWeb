@@ -52,6 +52,37 @@ void *ec_alloc_slow(ec_arena *a, size_t n)
 	return ec_alloc(a, n);
 }
 
+/* the host's: shrinks the block at p to its first n bytes where it is,
+   and says 1; or 0, leaving it as it was (NULL: none, as where realloc
+   may move a block) */
+int (*ec_shrink)(void *p, size_t n);
+
+/* an arena's last piece cut to what it holds, so that what it didn't
+   use is the heap's again (the next allocation takes a new piece) */
+static void arena_trim(ec_arena *a)
+{
+	char *base = (char *) a->chunks;
+	size_t used, had;
+
+	if (base == NULL || a->p == NULL)
+		return;
+	used = (size_t) (a->p - base);
+	had = (size_t) (a->end - base);
+	if (had - used < 1024 || !ec_shrink(base, used))
+		return;
+	a->size -= had - used;
+	a->end = a->p;
+}
+
+void ec_trim(ec_ctx *c)
+{
+	if (ec_shrink == NULL)
+		return;
+	arena_trim(&c->mem);
+	arena_trim(&c->rmem);
+	arena_trim(&c->smem);
+}
+
 void ec_arena_free(ec_arena *a)
 {
 	ec_chunk *ch, *next;
