@@ -9,8 +9,8 @@ Sans, Serif and Sans Mono, and Sans Condensed (Arial's widths: the pages
 that ask for Arial and its kind, Erez's choice of 13 Nov 2026), each in
 regular, bold, italic and bold italic,
 drawn by FreeType (through Pillow) without smoothing at a set of pixel
-sizes, for the Latin-1 and Latin Extended-A letters, Hebrew, and the
-punctuation and signs pages use most, and in blocks of their own more
+sizes, for ASCII and the punctuation and signs pages use most, and in
+blocks of their own the Latin-1 and Latin Extended-A letters, Hebrew, more
 Latin letters, Greek, Cyrillic and the common symbols (Erez's choice, 24
 Oct 2026: not Armenian, Georgian or the rarer symbols).
 
@@ -25,11 +25,12 @@ with them. Glyphs a face lacks (DejaVu Serif has no
 Hebrew) are DejaVu Sans's in the same style.
 
 The characters come in blocks, each unpacked the first time a page needs
-one of its characters: the first (Latin-1, Latin Extended-A, Hebrew and
-the signs pages use most, BLOCKS[0]) holds what nearly every page shows;
-the others (BLOCKS) more Latin letters and the combining accents, Greek,
-Cyrillic, and symbols, so that a page that shows none costs no more than
-before.
+one of its characters: the first (ASCII and the signs pages use most)
+holds what nearly every page shows; the others (BLOCKS) the letters of
+Latin-1 and Latin Extended-A, Hebrew, more Latin letters and the combining
+accents, Greek, Cyrillic, and symbols, so that a page that shows none
+costs no more (an English page: each face's first block 60% smaller,
+1.17).
 
 The file (big-endian, as the 68030 reads it):
     "EWFNT3\\0\\0", u16 faces, u16 blocks, u16 codes[blocks] (how many each),
@@ -67,15 +68,21 @@ FAMILIES = [  # family number, file stems for regular, bold, italic, bold italic
 SIZES = [9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32]
 
 
+# the first block: ASCII, Latin-1's signs and the signs pages use most;
+# the letters of Latin-1 and Latin Extended-A, and Hebrew, each a block of
+# its own (LETTERS, HEBREW: an English page reads neither, 1.17)
+LETTERS = [cp for cp in range(0xC0, 0x180) if cp not in (0xD7, 0xF7)]
+HEBREW = sorted(set(range(0x5D0, 0x5EB)) | {0x5BE, 0x5F3, 0x5F4})  # letters, maqaf, geresh
+
+
 def codes():
-    c = set(range(0x20, 0x7F)) | set(range(0xA0, 0x180))
-    c |= set(range(0x5D0, 0x5EB)) | {0x5BE, 0x5F3, 0x5F4}          # Hebrew letters, maqaf, geresh
+    c = set(range(0x20, 0x7F)) | set(range(0xA0, 0xC0)) | {0xD7, 0xF7}
     c |= {0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2018, 0x2019, 0x201A, 0x201C,
           0x201D, 0x201E, 0x2020, 0x2021, 0x2022, 0x2026, 0x2030, 0x2032, 0x2033, 0x2039,
           0x203A, 0x2044, 0x20AA, 0x20AC, 0x2116, 0x2122, 0x2190, 0x2191, 0x2192, 0x2193,
           0x2212, 0x25A0, 0x25AA, 0x25B2, 0x25B6, 0x25B8, 0x25BC, 0x25BE, 0x25C0, 0x25C2,
           0x25CB, 0x25CF, 0x25E6, 0x2713, 0x2715, 0xFFFD}             # ▸ ▾ ◂: summaries' triangles
-    c |= {0x152, 0x153, 0x160, 0x161, 0x178, 0x17D, 0x17E, 0x192, 0x2C6, 0x2DC}
+    c |= {0x192, 0x2C6, 0x2DC}                                       # windows-1252's signs
     return sorted(c)
 
 
@@ -102,6 +109,8 @@ SYMBOLS = (  # the common ones (B, not taken, had about 540)
      0x2718, 0x271A, 0x2726, 0x2727, 0x2729, 0x272A, 0x272F, 0x2730, 0x2744, 0x2756, 0x2764, 0x2765, 0x2766,
      0x2794, 0x279C, 0x279D, 0x279E, 0x27A1, 0x27A4])                                            # ☀ ★ ☎ ☑ ♥ ⚠ ✈ ✉ ✔ ✖ ❤ ➔ ➜
 BLOCKS = [
+    ("letters", [(cp, cp + 1) for cp in LETTERS]),
+    ("hebrew", [(cp, cp + 1) for cp in HEBREW]),
     ("latin", [(0x180, 0x250), (0x2B9, 0x2DE), (0x300, 0x334), (0x1E80, 0x1E86), (0x1E9E, 0x1E9F),
                (0x1EA0, 0x1EFA), (0xFB00, 0xFB07)]),                       # Romanian, pinyin, accents, Welsh, Vietnamese
     ("greek", [(0x370, 0x400)]),

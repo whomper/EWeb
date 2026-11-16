@@ -39,15 +39,19 @@ static int qmark;			/* the index of '?' */
 /* where the advance of U+0080 to U+07FF (Latin-1 and Latin, Greek,
    Cyrillic, Hebrew: two bytes of UTF-8) and of U+2000 to U+206F (the
    typographic quotes, dashes and spaces) is in a face, as aoff's: 0 not
-   looked up yet, 1 for none (Hebrew points, format characters), 2 for a
-   character of another block (font_glyph's), else its place. A Hebrew
+   looked up yet, 1 for none (Hebrew points, format characters), else its
+   place in its block, the block (0 the first) in the top three bits
+   (NEAR_BLOCK: Latin-1's letters and Hebrew are blocks of their own since
+   1.17, and their text's advances and glyphs stay at hand). A Hebrew
    page's text through font_glyph (index_of's search, glyph_at) took over
    half its layout. Each entry is found the first time it is asked for
    (near_place): the whole table at the start was 45 ms of the 8 MHz ST's,
    the speed rig, 1 Nov 2026 */
 #define NEAR_N (0x800 - 0x80)
 #define PUNCT_N 0x70
-#define NEAR_OTHER 2
+#define NEAR_OTHER 2		/* (no longer made: a block's characters have their place) */
+#define NEAR_BLOCK(o) ((o) >> 13)
+#define NEAR_AT(o) ((o) & 0x1FFF)
 static uint16_t noff[NEAR_N + PUNCT_N];	/* (not in the heap: the pages' own places stay
 						   as they were) */
 
@@ -453,8 +457,8 @@ static uint16_t near_find(uint32_t cp)
 	int i = index_of(cp);
 	if (i >= 0)
 		return (uint16_t) (4 + 10 * i);
-	if (xindex_of(cp) >= 0)
-		return NEAR_OTHER;
+	if ((i = xindex_of(cp)) >= 0)
+		return (uint16_t) (xblk[i] << 13 | (4 + 10 * xidx[i]));
 	if (blank(cp))
 		return (uint16_t) (4 + 10 * (ascii[0] >= 0 ? ascii[0] : qmark));
 	if (zero_width(cp))
@@ -477,6 +481,22 @@ static const uint8_t *block_of(ew_font *f, int b)
 	return f->more[b - 1];
 }
 
+static unsigned near_place(uint32_t cp);
+
+/* the block that noff's entry o is in: the first, or one read when first
+   needed (NULL if it can't be) */
+static const uint8_t *near_data(ew_font *f, unsigned o)
+{
+	return NEAR_BLOCK(o) == 0 ? f->data : block_of(f, (int) NEAR_BLOCK(o));
+}
+
+/* the advance at noff's entry o (>= 4), '?'s where its block can't be read */
+static int near_adv(ew_font *f, unsigned o)
+{
+	const uint8_t *d = near_data(f, o);
+	return d != NULL ? d[NEAR_AT(o)] : f->data[4 + 10 * qmark];
+}
+
 /* the glyph at place i in a block (data) */
 static void glyph_at(const uint8_t *data, int i, GLYPH *g)
 {
@@ -496,6 +516,21 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 
 	if (!ready(f)) {
 		memset(g, 0, sizeof *g);
+		return;
+	}
+	if (cp >= 0x80 && near_slot(cp) >= 0) {
+		/* (Latin-1, Hebrew, the quotes and dashes: their place at hand) */
+		unsigned o = near_place(cp);
+		const uint8_t *d;
+		if (o == 1) {
+			memset(g, 0, sizeof *g);
+			return;
+		}
+		if (o != 0 && (d = near_data(f, o)) != NULL) {
+			glyph_at(d, (int) (NEAR_AT(o) - 4) / 10, g);
+			return;
+		}
+		glyph_at(f->data, qmark, g);
 		return;
 	}
 	i = index_of(cp);
@@ -539,7 +574,7 @@ int font_advance(ew_font *f, uint32_t cp)
 	if (cp - 0x20 < 96)
 		return ready(f) ? f->data[aoff[cp - 0x20]] : 0;
 	if ((o = near_place(cp)) != 0)
-		return o == 1 || !ready(f) ? 0 : f->data[o];
+		return o == 1 || !ready(f) ? 0 : near_adv(f, o);
 	font_glyph(f, cp, &g);
 	return g.adv;
 }
@@ -616,7 +651,7 @@ long font_width(ew_font *f, const char *s, size_t n)
 			/* two bytes of UTF-8 (Hebrew, Latin-1...) with its advance at
 			   hand (else font_advance, which looks it up the first time) */
 			if (o != 1)
-				w += f->data[o];
+				w += NEAR_BLOCK(o) == 0 ? f->data[o] : near_adv(f, o);
 			s += 2;
 		} else {
 			w += font_advance(f, utf8_next(&s, e));

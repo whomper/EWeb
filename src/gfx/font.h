@@ -24,7 +24,7 @@ typedef struct {
 	const uint8_t *bits;		/* h rows of (w + 7) / 8 bytes, left pixel in bit 7; NULL: blank */
 } GLYPH;
 
-#define FONT_BLOCKS	6	/* blocks of characters a face may have */
+#define FONT_BLOCKS	8	/* blocks of characters a face may have (bad and shortb: a bit each) */
 
 typedef struct ew_font {
 	uint8_t family, style, px;
