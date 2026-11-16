@@ -454,10 +454,11 @@ static int near_adv(ew_font *f, unsigned o)
 	return d != NULL ? d[NEAR_AT(o)] : f->data[4 + 10 * qmark];
 }
 
-/* the glyph at place i in a block (data) */
-static void glyph_at(const uint8_t *data, int i, GLYPH *g)
+/* the glyph whose entry is at place at in a block (data): noff's places,
+   with no division (the 68000's was a libgcc call a letter, 1.17) */
+static void glyph_place(const uint8_t *data, unsigned at, GLYPH *g)
 {
-	const uint8_t *m = data + 4 + 10 * i;
+	const uint8_t *m = data + at;
 	uint32_t off = be32(m + 6);
 	g->adv = m[0];
 	g->x = (int8_t) m[1];
@@ -465,6 +466,12 @@ static void glyph_at(const uint8_t *data, int i, GLYPH *g)
 	g->w = m[3];
 	g->h = m[4];
 	g->bits = off ? data + off : NULL;
+}
+
+/* the glyph at place i in a block (data) */
+static void glyph_at(const uint8_t *data, int i, GLYPH *g)
+{
+	glyph_place(data, 4 + 10 * (unsigned) i, g);
 }
 
 void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
@@ -484,7 +491,7 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 			return;
 		}
 		if (o != 0 && (d = near_data(f, o)) != NULL) {
-			glyph_at(d, (int) (NEAR_AT(o) - 4) / 10, g);
+			glyph_place(d, NEAR_AT(o), g);
 			return;
 		}
 		glyph_at(f->data, qmark, g);
