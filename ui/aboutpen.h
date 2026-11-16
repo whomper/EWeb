@@ -17,13 +17,27 @@
 #ifndef AERA_ABOUTPEN_H
 #define AERA_ABOUTPEN_H
 
+/* v * v, 16 x 16: muls.w on a 68000 (GCC took (long)mid * mid, mid a
+   short, for a 32-bit __mulsi3: 5 of the 256-colour box's 195 ms on a
+   stock Falcon under NVDI, 16 Nov 2026) */
+static inline long about_sq(short v)
+{
+#if defined(__mc68000__) && !defined(__mcoldfire__)
+	long r = v;
+	__asm__("muls.w %1,%0" : "+d"(r) : "d"(v));
+	return r;
+#else
+	return (long)v * v;
+#endif
+}
+
 /* the whole part of the square root of d (0 to 3,000,000), no multiply wider than 16 x 16 */
 static inline short about_isqrt(long d)
 {
 	short lo = 0, hi = 1733, mid;
 	while (lo < hi) {
 		mid = (short)((lo + hi + 1) >> 1);
-		if ((long)mid * mid <= d)
+		if (about_sq(mid) <= d)
 			lo = mid;
 		else
 			hi = (short)(mid - 1);

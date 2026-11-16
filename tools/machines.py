@@ -117,7 +117,7 @@ MACHINES = {
             ["--machine", "ste", "--memsize", "4"], ["mono", "med", "low"], "tos162.img"),
     "TT": ("a TT030: 68030 at 32 MHz, 68882, 4 MB ST RAM and 16 MB TT RAM (68030 code in fast RAM)",
            ["--machine", "tt", "--cpuclock", "32", "--fpu", "68882", "--memsize", "4",
-            "--ttram", "16", "--addr24", "off"], ["ttmed", "mono", "med"], "tos306.img"),
+            "--ttram", "16", "--addr24", "off"], ["ttmed", "mono", "med", "ttlow"], "tos306.img"),
     "Falcon": ("Erez's Falcon030 with a DFB1: 68030 and 68882 (Hatari's most, 32 MHz), "
                "14 MB ST RAM, 128 MB TT RAM, the DSP, VGA",
                ["--machine", "falcon", "--cpuclock", "32", "--fpu", "68882", "--memsize", "14",
@@ -142,6 +142,7 @@ SCREENS = {
     "med": ["--monitor", "rgb", "--tos-res", "med"],     # 640x200, 4 colours
     "low": ["--monitor", "rgb", "--tos-res", "low"],     # 320x200, 16 colours
     "ttmed": ["--monitor", "vga", "--tos-res", "ttmed"],  # TT 640x480, 16 colours
+    "ttlow": ["--monitor", "vga", "--tos-res", "ttlow"],  # TT 320x480, 256 colours (8 planes)
     "16": [],                                           # Falcon 640x480, 16 colours
     "256": [],                                          # Falcon 640x480, 256 colours
     "65536": [],                                        # Falcon 640x480, true colour (16 bits)
