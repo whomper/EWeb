@@ -5600,12 +5600,42 @@ Faults the phase found, each fixed in it:
 Where it stands: on the speed rig's way (the home page, the sample page, then the news page), the
 news page under NVDI still comes with its sheet short (47 KB of its styles, 12.6 KB before the
 prelude's fix), laid out twice (22.5 s). Its peak is 963 KB, all the heap can have there after the
-two pages before it: the heap took 1,018 KB from GEMDOS and 14 KB of ST RAM is left. Once, with no
-sample page before it, it fitted whole with 544 bytes left (peak 997 KB). Giving the source back
-after its first parse didn't make it fit (the first try ran out at 972 KB, with no second try). What
-is left, put to the hub: the display list in pieces rather than one array (100 KB in one block for
-the news page, in a heap of 72 KB pieces), a finer pruning of the sheets, and the tree's duplicated
-fields (`dnode` and `ec_node` each keep the attributes and classes, about 10 KB).
+two pages before it: the heap took 1,018 KB from GEMDOS and 14 KB of ST RAM is left.
+
+**The target restated** (Erez, 16 Nov 2026, through the hub): the news page whole as the first page
+after the start, measured on `Falcon-4:256` under NVDI (`speed.py --news-first`). 1.17 doesn't reach
+it: the page comes 9,332 rows high of 9,829, laid out twice, its peak 965 KB with 15 KB of ST RAM
+left (the heap took 1,035 KB from GEMDOS). After the home page the page kept off the screen took
+the last 229 KB of ST RAM in six blocks; the news page gave it back only once it had come short, and
+its second try had the heap in pieces. (Once, before the kept page was made there, it fitted whole
+with 544 bytes left, peak 997 KB.) What is left, put to the hub: the display list in pieces rather
+than one array (100 KB in one block for the news page, in a heap of 72 KB pieces), a finer pruning of
+the sheets, the tree's duplicated fields (`dnode` and `ec_node` each keep the attributes and classes,
+about 10 KB), and the kept page given back before a big page is built where there is no TT RAM.
+
+**Speed** (`speed.py`, paired against 1.16 A B B A, the minimum of each): no row slower beyond a tick on
+`Falcon-4:256` under NVDI; on `Falcon-4:16` and `ST:mono` (two sets, four runs a side) one each, and
+neither is the code's:
+
+- *An arrow held 3 s, down* on `Falcon-4:16`, 640 -> 685 ms: the held key's steps land where the
+  draws before them let them, and 1.17's are faster (1028: 545 ms against 555; 1700 against 1748:
+  595 against 625), so its third step lands at row 2420, not 2468. A window drawn from 2420 is
+  670 to 690 ms in every build that has landed there since 1.14; from the same rows 1.17 draws as
+  fast or faster (3236: 605 and 605; 3668: 570 against 635).
+- *3 pages up, one after another* on the ST, 780 -> 1135 ms: the rig's three keys, a third of a
+  second apart in the host's time, come in one draw or in three; 1.16 gave 780 in 4 of its 16 runs
+  this day and 1140 in the rest, 1.17's builds 780 in 8 of 18. The draws are the same (1.16 and 1.17
+  both 1140 ms to row 8837, band for band).
+
+Rows on `Falcon-4:256` under NVDI where the news page isn't whole are not measurable (they time a
+smaller page) and are left out.
+
+The ST's drawing found on the way: a near glyph's place in the font was divided by 10 for every
+accented letter or typographic sign drawn, a libgcc call on the 68000 (`glyph_place` reads it at its
+place now): the news page drawn by `PAGEST.TTP` on the 8 MHz ST, 114,247,544 cycles in 1.16,
+114,364,616 before the fix, 113,795,144 after. And the ST edition sizes its bands as 1.16 did: the
+nine tenths that kept the ST's home page in two pieces (it overshot by that division's cost) only
+moved where its scrolls' pieces end; `EWEB.PRG` keeps them.
 
 ## The ST edition's speed (13 Nov 2026)
 
