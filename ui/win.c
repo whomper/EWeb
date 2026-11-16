@@ -1361,7 +1361,14 @@ static void draw_due(void)
 		   begins is told by all the time left, as before: told by the
 		   nine tenths, each piece of the ST's page's end left 45 ms of
 		   its slice and the page came a piece later, +15 to +35 ms) */
+#ifdef EW_ST
+		n = full;	/* (the ST's as 1.16's: its pieces are 280 ms, and the
+				   nine tenths moved where they end, its scrolls' rows
+				   +15 to +65 ms; its home page's overshoot was the
+				   division a letter, gone) */
+#else
 		n = piece ? full * 9 / 10 : full;
+#endif
 		/* (16 rows at least, a line of text: thinner bands each went
 		   through every line they crossed again, its letters looked up
 		   and clipped, eight times over at 2 rows; a piece's 8, and none
