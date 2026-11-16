@@ -1,0 +1,6 @@
+page 608 x 170, background ffffff, 5 items, 0 links, title "Narrow letters"
+text 6,32 81x17 #000000 cond13 link 0 "Made for Arial"
+text 6,61 126x17 #000000 cond13 link 0 "The generic sans-serif"
+text 6,90 114x17 #000000 sans13 link 0 "Made for Verdana"
+text 6,119 131x17 #000000 sans13 link 0 "DejaVu Sans named"
+text 6,148 76x17 #000000 serif13 link 0 "A serif page"

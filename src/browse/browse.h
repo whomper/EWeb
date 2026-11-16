@@ -114,6 +114,7 @@ typedef struct browser {
 				   not known) */
 	int32_t zoom;		/* device px per CSS px, x1024 */
 	int32_t text;		/* the text's size, x1024 (LAYOUT_OPT.text) */
+	int wide_sans;		/* Arial's kind in DejaVu Sans, not Condensed (LAYOUT_OPT) */
 	int32_t sbar, sbar_h;	/* a box's scroll bars' width down, height across (LAYOUT_OPT) */
 
 	BR_ENTRY hist[BR_HISTORY];
@@ -310,10 +311,6 @@ extern void (*br_mark)(const char *what);
 /* memory given back when a page doesn't fit (shed): the front end's too
    (EWEB.PRG's page kept off the screen, in ST RAM); NULL none */
 extern void (*br_shed)(void);
-/* where there is no TT RAM: the front end's page kept off the screen
-   given back before a big page is built (its ST RAM, in pieces, was all
-   the news page lacked under NVDI on a stock Falcon: 1.17); NULL none */
-extern void (*br_shed_big)(void);
 /* the page shown about to be laid out again, its old page still there
    (ui/win.c notes what the window shows of it, to draw again only what
    changes); NULL: none */

@@ -57,6 +57,10 @@ typedef struct {
 	   are the same, not a copy (the page mustn't outlive the document:
 	   not a frame's page, whose document may go first) */
 	uint8_t share_text;
+	/* pages that ask for Arial's kind (and the generic sans-serif) in
+	   DejaVu Sans, not DejaVu Sans Condensed (0, the default): EWEB.INF's
+	   NARROW=0 (Erez, 16 Nov 2026) */
+	uint8_t wide_sans;
 } LAYOUT_OPT;
 
 /* DL_SUM: a details element's summary (the HTML Standard, 4.11): its

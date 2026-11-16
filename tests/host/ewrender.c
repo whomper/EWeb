@@ -22,7 +22,8 @@
  * pixel: monochrome's greys patterned, translucent items mixed through
  * the palette), with the ST's and Falcon's standard colours (256: the 16,
  * a 6 x 6 x 6 cube and 24 greys), rather than in true colour (5-6-5;
- * --deep: 32 bits, a byte a part, as a 24- or 32-bit screen). In -d's
+ * --deep: 32 bits, a byte a part, as a 24- or 32-bit screen; --wide-sans:
+ * a page made for Arial in DejaVu Sans, EWEB.INF's NARROW=0). In -d's
  * list a colour less than solid is #rrggbbaa, a picture's and a
  * control's opacity "alpha N" (0-255; a control's colour is its
  * text's), and an item a click goes through (pointer-events: none)
@@ -1083,7 +1084,7 @@ int main(int argc, char **argv)
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
-	int colours = 0, own_pal = 0, deep = 0, planes = 0;
+	int colours = 0, own_pal = 0, deep = 0, planes = 0, wide_sans = 0;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL, *xl_arg = NULL, *gw_to = NULL;
 	char where[4096];
@@ -1146,6 +1147,8 @@ int main(int argc, char **argv)
 			penlist = 1;	/* each picture's pens for 16 colours, summed */
 		else if (!strcmp(argv[i], "--deep"))
 			deep = 1;	/* 32 bits a pixel */
+		else if (!strcmp(argv[i], "--wide-sans"))
+			wide_sans = 1;	/* Arial's kind in DejaVu Sans (EWEB.INF's NARROW=0) */
 		else if (!strcmp(argv[i], "--own"))
 			own_pal = 1;	/* -p 256 with EWeb's own colours and the page's (pagecol.h) */
 		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
@@ -1269,7 +1272,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [--deep] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [--deep] [--wide-sans] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1309,6 +1312,7 @@ int main(int argc, char **argv)
 	b.translate = gw_to;	/* (--gwtranslate: NULL off, as EWEB.PRG with Translate off) */
 	b.height = height > 0 ? height : 400;	/* (the window's: a frameset is as tall) */
 	b.text = (int32_t) (1024L * text / 100);
+	b.wide_sans = wide_sans;
 	b.sbar = sbar;
 	b.sbar_h = sbar_h;
 	b.say = said;

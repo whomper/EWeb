@@ -83,10 +83,10 @@ short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
-	       , 50
+	       , 50, 1
 #endif
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-	   translate_to, translate_port, ttleave) */
+	   translate_to, translate_port, ttleave, narrow) */
 int loading;
 static short quit;
 
@@ -544,14 +544,6 @@ void menu_update(void)
    beyond it goes as the next page is kept */
 long tt_free = -2;
 
-/* br_shed_big: the page kept off the screen given back, said in the log */
-static void shed_big(void)
-{
-	log_event("kept page given back for a big page, ST RAM free %ld KB", (long) Mxalloc(-1L, 0) >> 10);
-	win_pic_drop();
-	log_event("ST RAM free %ld KB", (long) Mxalloc(-1L, 0) >> 10);
-}
-
 void mem_limits(void)
 {
 	static long st;
@@ -577,9 +569,6 @@ void mem_limits(void)
 		img_max = st / 16 < (1L << 20) ? st / 16 : (1L << 20);
 		img_max_px = 1L << 20;
 	}
-	/* the page kept off the screen given back before a big page is built
-	   where there is no TT RAM (browse.c's build) */
-	br_shed_big = tt > 0 ? NULL : shed_big;
 	/* windows, each with a page laid out: eight beside TT RAM, four in 6
 	   MB of ST RAM, else two (a 4 MB Falcon) */
 	win_max = tt > 0 ? 8 : st >= (6L << 20) ? 4 : 2;
@@ -682,6 +671,8 @@ static void settings_load(void)
 #ifndef EW_ST
 		else if (!strcmp(line, "TTLEAVE"))
 			opt.ttleave = (short) (atoi(eq) < 0 ? 0 : atoi(eq) > 90 ? 90 : atoi(eq));
+		else if (!strcmp(line, "NARROW"))
+			opt.narrow = atoi(eq) != 0;
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -937,6 +928,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.ttleave);
 	put(&s, "TTLEAVE", v, "per cent of the TT RAM left for other programs (Settings > General; 0 to 90): "
 	    "EWeb keeps pages for Back and pictures in the rest");
+	snprintf(v, sizeof v, "%d", opt.narrow);
+	put(&s, "NARROW", v, "1 = pages that ask for Arial or Helvetica in narrow letters of their widths "
+	    "(DejaVu Sans Condensed), 0 = in DejaVu Sans");
 #endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -1965,6 +1959,9 @@ static void br_setup(browser *b)
 	b->sbar = pb_width();		/* a box's bars as wide and high as the AES's (5.1) */
 	b->sbar_h = pb_height();
 	b->text = (int32_t) (1024L * opt.zoom / 100);
+#ifndef EW_ST
+	b->wide_sans = !opt.narrow;
+#endif
 	b->search = opt.search;
 	b->pictures = opt.pictures;
 	b->pens = opt.pens;
@@ -2057,6 +2054,9 @@ static void each_window(int relayout, int redraw)
 		win_use(w);
 		br.pictures = opt.pictures;
 		br.text = (int32_t) (1024L * opt.zoom / 100);
+#ifndef EW_ST
+		br.wide_sans = !opt.narrow;
+#endif
 		br.snapshot = opt.snapshot;
 		br.translate = translate_to();
 #ifndef EW_ST
@@ -2541,6 +2541,9 @@ void command(int cmd)
 		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed,
 		    cachequit = opt.cachequit;
 #ifndef EW_ST
+		int narrow = opt.narrow;
+#endif
+#ifndef EW_ST
 		int scripted = br_scripts_for(&br, br.url), translated = opt.translate;
 		char to_was[sizeof opt.translate_to];
 		str_copy(to_was, opt.translate_to, sizeof to_was);
@@ -2568,7 +2571,11 @@ void command(int cmd)
 				cache_when();	/* (what is held now: written as the new way says) */
 			}
 			/* each window's page laid out again or drawn again */
-			each_window(pics != opt.pictures || zoom != opt.zoom, palette != opt.palette);
+			each_window(pics != opt.pictures || zoom != opt.zoom
+#ifndef EW_ST
+				    || narrow != opt.narrow
+#endif
+				    , palette != opt.palette);
 #ifndef EW_ST
 			if (br.cur >= 0 && br_scripts_for(&br, br.url) != scripted) {
 				/* the page again, with its scripts or without */

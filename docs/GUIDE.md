@@ -457,6 +457,12 @@ their size and stay as they were decoded, so nothing is fetched or
 decoded again (a page's pixel is 0.8 of the screen's, so that pages
 made for wider screens fit the Falcon's 640).
 
+Pages made for Arial or Helvetica are shown in narrow letters of
+Arial's widths (DejaVu Sans Condensed), so that they lay out as they
+were made. Settings > General > Narrow letters for pages made for Arial
+turns them off: those pages are then in DejaVu Sans, wider (not in the
+ST edition).
+
 ## Encodings
 
 Most pages say which encoding their text is in (UTF-8, Windows-1255
@@ -827,6 +833,8 @@ there at once; where the window was, when you quit:
 - `PICDSP=` 1 to let a Falcon's DSP decode JPEGs and dither pictures
   to the screen's colours (each about eight times as quick on a stock
   Falcon), 0 for the 68030 alone
+- `NARROW=` 1 to show pages made for Arial in narrow letters of its
+  widths (DejaVu Sans Condensed), 0 for DejaVu Sans (Settings > General)
 - `PALETTE=` in 256 colours, 1 for EWeb's own colours while it runs
   (a colour cube and greys, with the pale tints pages' backgrounds and
   pictures need; the system's first 16 stay, and its own come back when

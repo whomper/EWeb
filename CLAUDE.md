@@ -316,7 +316,9 @@ hub stay complete, with the evidence.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them): Sans, Serif,
   Sans Mono and Sans Condensed, the last for pages that ask for Arial's kind (Erez, 13 Nov 2026:
-  `family_of` in `src/layout/layout.c`; EWeb's own pages name DejaVu Sans).
+  `family_of` in `src/layout/layout.c`; EWeb's own pages name DejaVu Sans), unless `NARROW=0`
+  (Settings > General, EWEB.PRG; Erez, 16 Nov 2026: `LAYOUT_OPT.wide_sans`, ewrender `--wide-sans`;
+  after changing it, `make test`'s `tests/layout/narrow.py`).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page
   (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
   `docs/help/WINDOW.IMG` is a Hatari capture of the start page in 16 colours (`helpfront.py

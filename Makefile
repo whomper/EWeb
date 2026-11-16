@@ -271,16 +271,16 @@ build/tos/rt/connpad.o: atari/connpad.S
 # When one of them grows again, work the sizes out again from the objects
 # (size -A) and the symbols (nm -n) against the release before (DESIGN.md,
 # Code layout and the 68030's caches)
-PAD_main := 76
+PAD_main := 166
 PAD_RO_main := 194
-PAD_BSS_main := 252
-PAD_browse := 208
+PAD_BSS_main := 82
+PAD_browse := 176
 PAD_RO_browse := 188
-PAD_BSS_browse := 244
+PAD_BSS_browse := 248
 PAD_font := 144
 PAD_BSS_font := 252
 PAD_doc := 194
-PAD_layout := 200
+PAD_layout := 152
 PAD_core := 36
 PAD_BSS_core := 252
 PAD_select := 168
@@ -1361,6 +1361,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	python3 tests/layout/deep32.py build/asan/ewrender binary/EWEB.FNT
 	python3 tests/layout/planes.py build/asan/ewrender binary/EWEB.FNT build/asanst/ewrender
 	python3 tests/layout/contrast.py build/asan/ewrender binary/EWEB.FNT
+	python3 tests/layout/narrow.py build/asan/ewrender binary/EWEB.FNT
 
 # SVG (src/svg, EWeb's own reader and rasteriser): tests/svg/svgrender
 # draws a file as EWEB.PRG does, or (-T) with NetSurf's libsvgtiny, the

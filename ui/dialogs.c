@@ -106,7 +106,8 @@ void dlg_hebrew_changed(void)
 
 /* the values as the dialog changes them: its ticks, fields and the
    language; Cancel puts them back (settings.c) */
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE, NTICK };
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE, T_NARROW,
+       NTICK };
 static short s_on[NTICK];
 /* the search address and the gateway hold as much as their settings,
    more than their fields show (5.4) */
@@ -149,12 +150,15 @@ static void page_general(SETTINGS *s, short x, short y, void *user)
 #ifndef EW_ST
 	set_tick(s, x, set_y(s, 8), "Pictures on the DSP (a Falcon's)", &s_on[T_PICDSP]);
 	set_tick(s, x, set_y(s, 9), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
+	/* (off: pages made for Arial in DejaVu Sans, not its narrow face:
+	   some testers didn't like the narrow letters, Erez, 16 Nov 2026) */
+	set_tick(s, x, set_y(s, 10), "Narrow letters for pages made for Arial", &s_on[T_NARROW]);
 	/* (Erez, 4 Nov 2026: the rest of the TT RAM keeps pages and
 	   pictures; shown where there is TT RAM) */
 	if (tt_free > 0) {
-		set_text(s, x, set_y(s, 10), "TT RAM left for others");
-		f_tt = set_field(s, x + 23, set_y(s, 10), s_tt, 2, '9');
-		set_text(s, x + 26, set_y(s, 10), "%  (0 to 90)");
+		set_text(s, x, set_y(s, 11), "TT RAM left for others");
+		f_tt = set_field(s, x + 23, set_y(s, 11), s_tt, 2, '9');
+		set_text(s, x + 26, set_y(s, 11), "%  (0 to 90)");
 	}
 #else
 	set_tick(s, x, set_y(s, 8), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
@@ -424,6 +428,7 @@ int dlg_settings(void)
 	s_on[T_SCRIPTS] = opt.runscripts != 0;
 	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
 #ifndef EW_ST
+	s_on[T_NARROW] = opt.narrow;
 	s_on[T_TRANSLATE] = opt.translate;
 	str_copy(s_to, opt.translate_to, sizeof s_to);
 #endif
@@ -441,11 +446,13 @@ int dlg_settings(void)
 	d.npages = (short) (sizeof pages / sizeof pages[0]);
 	d.page_w = 44;		/* (EWeb's long fields: settings.h) */
 	/* (two rows more for the TT RAM's line, shown only with TT RAM: under
-	   the buttons it was, a FireBee tester's screenshot, 13 Nov 2026) */
+	   the buttons it was, a FireBee tester's screenshot, 13 Nov 2026; and
+	   two for EWEB.PRG's narrow letters' tick) */
 	d.height = 20;
 #ifndef EW_ST
+	d.height = 22;
 	if (tt_free > 0)
-		d.height = 22;
+		d.height = 24;
 #endif
 	d.check = settings_check;
 	gap_tag("dialog: made");
@@ -477,6 +484,7 @@ int dlg_settings(void)
 	opt.palette = s_on[T_PALETTE];
 	opt.cachequit = s_on[T_CACHEQUIT];
 #ifndef EW_ST
+	opt.narrow = s_on[T_NARROW];
 	opt.translate = s_on[T_TRANSLATE];
 	if (s_to[0])
 		str_copy(opt.translate_to, s_to, sizeof opt.translate_to);
