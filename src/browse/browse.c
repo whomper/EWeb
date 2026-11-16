@@ -2643,10 +2643,14 @@ parse:
 	/* <noscript> is shown when scripts aren't run (the HTML Standard's
 	   rendering: hidden only with scripting): d->scripting */
 	add_sheets(b, d, base, again ? 0 : fresh, 0);
-	if (ec_sheets_short(d->css) && !conn_stop && unkeep_all(b)) {
-		/* (rules of its sheets left out for want of memory: the pages
-		   kept for Back given back and the sheets added once more, as
-		   readd_sheets does; from the cache) */
+	if (ec_sheets_short(d->css) && !conn_stop && make_room(b)) {
+		/* (rules of its sheets left out for want of memory: room made
+		   as for a page that didn't fit, the page shown, the pages
+		   kept for Back, the pictures not in use and the fonts' glyphs
+		   given back (only the first two, 1.16: the news page under
+		   NVDI on a stock 4 MB Falcon came with its sheet short), and
+		   the sheets added once more, as readd_sheets does; from the
+		   cache) */
 		ec_drop_sheets(d->css);
 		add_sheets(b, d, base, 0, 1);
 	}

@@ -20,6 +20,12 @@
    back after, not kept in the BSS (96 KB: a stock 4 MB Falcon under NVDI
    lays a big page out in what they took) */
 static ec_tok *prelude;
+/* its room: PRELUDE_FIRST, grown to MAX_PRELUDE only for a prelude that
+   needs it (read_prelude_in). It was MAX_PRELUDE at once, 80 KB in one
+   piece, and on a stock 4 MB Falcon, the heap in pieces of 72 KB at
+   most, a big page's every sheet came short: none of it read (1.17) */
+#define PRELUDE_FIRST 256
+static int prelude_cap;
 static struct sbuild *builders;		/* MAX_NEST: one per level of :not() and :is() */
 
 /* tokens for a short list read on its own (a media attribute, sizes, a
@@ -1957,6 +1963,28 @@ void ec_set_importer(ec_ctx *c, int (*import)(void *ud, const char *base, const 
 	c->import_ud = ud;
 }
 
+/* read_prelude into prelude, its room grown where a prelude needs more
+   (read again from where it began); -1 for one longer than MAX_PRELUDE,
+   or when no room for it can be had (the sheet short) */
+static int read_prelude_in(ec_ctx *c, ec_lex *lx, int *stop, int at)
+{
+	ec_lex from = *lx;
+	for (;;) {
+		int n = read_prelude(lx, prelude, prelude_cap, stop, at), cap;
+		ec_tok *t;
+		if (n >= 0 || prelude_cap >= MAX_PRELUDE)
+			return n;
+		cap = prelude_cap * 4 < MAX_PRELUDE ? prelude_cap * 4 : MAX_PRELUDE;
+		if ((t = realloc(prelude, cap * sizeof *t)) == NULL) {
+			c->rmem.nomem = 1;
+			return n;
+		}
+		prelude = t;
+		prelude_cap = cap;
+		*lx = from;
+	}
+}
+
 /* an at-rule whose name is at; returns where parsing goes on */
 static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, int depth)
 {
@@ -1965,7 +1993,7 @@ static const char *at_rule(ec_ctx *c, const ec_tok *at, ec_lex *lx, int origin, 
 	const char *bstart, *bend;
 
 	ident_lower(at, name, sizeof name);
-	n = read_prelude(lx, prelude, MAX_PRELUDE, &stop, 1);
+	n = read_prelude_in(c, lx, &stop, 1);
 	/* a sheet read as it comes: not all of it here yet (NULL) */
 	if (c->streaming && depth == 0 && stop == T_EOF)
 		return NULL;
@@ -2016,7 +2044,7 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 	   rules read inside it: its) */
 	int mine = prelude == NULL;
 
-	if (mine && (prelude = malloc(MAX_PRELUDE * sizeof *prelude)) == NULL) {
+	if (mine && (prelude = malloc((prelude_cap = PRELUDE_FIRST) * sizeof *prelude)) == NULL) {
 		c->rmem.nomem = 1;
 		if (streaming)
 			c->cut = done;
@@ -2040,7 +2068,7 @@ static void rules(ec_ctx *c, const char *p, const char *end, int origin, int dep
 			continue;
 		}
 		lx.p = start;
-		n = read_prelude(&lx, prelude, MAX_PRELUDE, &stop, 0);
+		n = read_prelude_in(c, &lx, &stop, 0);
 		if (stop != T_LBRACE)
 			break;			/* the end, in the middle of a rule */
 		if (streaming && (ec_skip_block_closed(lx.p, lx.end, '{', &closed), !closed))
