@@ -21,10 +21,8 @@
 static int fh = -1;			/* EWEB.FNT, open while the fonts are */
 static uint16_t ncodes, nfaces, nblocks;
 static uint16_t *codes;			/* the first block's, sorted */
-static uint16_t nx, *xcodes, *xidx;	/* the other blocks' codes, sorted together, and each
-					   one's place in its block */
-static uint8_t *xblk;			/* and its block */
-static int xready;			/* 1 once x_build has put them in order */
+static uint16_t nx, *xcodes;		/* the other blocks' codes, block by block, each
+					   block's in order (xindex_of) */
 static uint16_t bcount[FONT_BLOCKS];	/* each block's codes */
 static ew_font *faces;
 static uint32_t *foff, *fstored, *fsize;	/* each face's first block: where, its packed and
@@ -68,10 +66,7 @@ void font_free(void)
 	free(faces);
 	free(codes);
 	free(xcodes);
-	free(xidx);
-	free(xblk);
-	xcodes = xidx = NULL;
-	xblk = NULL;
+	xcodes = NULL;
 	nx = 0;
 	free(foff);
 	free(fstored);
@@ -110,12 +105,6 @@ static int read_at(int h, long off, void *buf, long n)
 	return pf_seek(h, off) == off && pf_read(h, buf, n) == n;
 }
 
-/* the other blocks' codes in one sorted list (each block's is sorted) */
-static int by_code(const void *a, const void *b)
-{
-	uint32_t x = *(const uint32_t *) a, y = *(const uint32_t *) b;
-	return x < y ? -1 : x > y;
-}
 
 int font_init(const char *path)
 {
@@ -165,12 +154,9 @@ int font_init(const char *path)
 		goto done;
 	for (i = 0; i < ncodes; i++)
 		codes[i] = be16(dir + 2 * i);
-	/* the other blocks' codes as they come, in block order: put in
-	   order together the first time a page wants one (x_build), not at
-	   the start (the 8 MHz ST's start, 1.17's seven blocks) */
+	/* the other blocks' codes as they come, block by block (xindex_of) */
 	for (i = 0; i < nx; i++)
 		xcodes[i] = (uint16_t) be16(dir + 2 * (ncodes + i));
-	xready = 0;
 	for (i = 0; i < nfaces; i++) {
 		const uint8_t *d = dir + 2L * (ncodes + nx) + per * i;
 		faces[i].family = d[0];
@@ -365,84 +351,30 @@ static int index_of(uint32_t cp)
 }
 
 /* where cp is among the other blocks' codes, -1 if it isn't */
-/* the other blocks' codes, as font_init read them (each block's in order),
-   put in order together, with each one's block and place (xblk, xidx): the
-   first time a page wants a character past the first block. 0 when there
-   is no memory for it (then none of them is found, and tried again) */
-static int x_build(void)
-{
-	uint32_t *all, *m;
-	long k, at = 0, n;
-	int b, i, sorted = 1;
-	if (xready)
-		return 1;
-	all = malloc(nx * sizeof *all);
-	m = malloc(nx * sizeof *m);
-	xidx = xidx != NULL ? xidx : malloc(nx * sizeof *xidx);
-	xblk = xblk != NULL ? xblk : malloc(nx);
-	if (all == NULL || m == NULL || xidx == NULL || xblk == NULL) {
-		free(all);
-		free(m);
-		return 0;
-	}
-	/* each: code << 16 | block << 12 | place (a block holds fewer than 4096) */
-	for (b = 1, k = 0; b < nblocks; b++)
-		for (i = 0; i < bcount[b]; i++, at++) {
-			all[k] = (uint32_t) xcodes[at] << 16 | (uint32_t) b << 12 | (uint32_t) i;
-			if (i > 0 && all[k] >> 16 <= all[k - 1] >> 16)
-				sorted = 0;
-			k++;
-		}
-	if (sorted) {
-		/* each block's codes in order (mkfont.py's): in order of their
-		   codes by a radix sort, a byte at a time, the low then the high
-		   (each a pass over them, stable: the block's place kept).
-		   qsort's 9000 calls were most of an 8 MHz ST's 0.73 s in
-		   font_init; merging the blocks, each code looking at every
-		   block, was 60 ms of its start with 1.17's seven */
-		unsigned short cnt[256];
-		int pass;
-		for (pass = 16; pass <= 24; pass += 8) {
-			uint32_t *src = pass == 16 ? all : m, *dst = pass == 16 ? m : all;
-			unsigned short sum = 0, c;
-			memset(cnt, 0, sizeof cnt);
-			for (n = 0; n < nx; n++)
-				cnt[src[n] >> pass & 255]++;
-			for (k = 0; k < 256; k++) {
-				c = cnt[k];
-				cnt[k] = sum;
-				sum = (unsigned short) (sum + c);
-			}
-			for (n = 0; n < nx; n++)
-				dst[cnt[src[n] >> pass & 255]++] = src[n];
-		}
-	} else {
-		qsort(all, nx, sizeof *all, by_code);
-	}
-	for (k = 0; k < nx; k++) {
-		xcodes[k] = (uint16_t) (all[k] >> 16);
-		xblk[k] = (uint8_t) (all[k] >> 12 & 15);
-		xidx[k] = (uint16_t) (all[k] & 4095);
-	}
-	free(all);
-	free(m);
-	xready = 1;
-	return 1;
-}
-
+/* cp among the other blocks' codes, as font_init read them (each block's
+   in order): its block << 12 | its place there, or -1. A search in each
+   block's own list: nothing put in order together, at the start or later
+   (with 1.17's seven blocks, the merged list's making was 60 ms of an
+   8 MHz ST's start, or of its first page with an accented letter); the
+   characters a page shows most are found once each (noff) */
 static int xindex_of(uint32_t cp)
 {
-	int lo = 0, hi = nx - 1;
-	if (!xready && !x_build())
-		return -1;
-	while (lo <= hi) {
-		int mid = (lo + hi) >> 1;
-		if (xcodes[mid] == cp)
-			return mid;
-		if (xcodes[mid] < cp)
-			lo = mid + 1;
-		else
-			hi = mid - 1;
+	int b;
+	long at = 0;
+	for (b = 1; b < nblocks; at += bcount[b], b++) {
+		int lo = 0, hi = bcount[b] - 1;
+		const uint16_t *c = xcodes + at;
+		if (hi < 0 || cp < c[0] || cp > c[hi])
+			continue;
+		while (lo <= hi) {
+			int mid = (lo + hi) >> 1;
+			if (c[mid] == cp)
+				return b << 12 | mid;
+			if (c[mid] < cp)
+				lo = mid + 1;
+			else
+				hi = mid - 1;
+		}
 	}
 	return -1;
 }
@@ -483,7 +415,7 @@ static uint16_t near_find(uint32_t cp)
 	if (i >= 0)
 		return (uint16_t) (4 + 10 * i);
 	if ((i = xindex_of(cp)) >= 0)
-		return (uint16_t) (xblk[i] << 13 | (4 + 10 * xidx[i]));
+		return (uint16_t) ((i >> 12) << 13 | (4 + 10 * (i & 4095)));
 	if (blank(cp))
 		return (uint16_t) (4 + 10 * (ascii[0] >= 0 ? ascii[0] : qmark));
 	if (zero_width(cp))
@@ -560,9 +492,9 @@ void font_glyph(ew_font *f, uint32_t cp, GLYPH *g)
 	}
 	i = index_of(cp);
 	if (i < 0 && nx > 0 && cp >= 0x80 && (i = xindex_of(cp)) >= 0) {
-		const uint8_t *data = block_of(f, xblk[i]);
+		const uint8_t *data = block_of(f, i >> 12);
 		if (data != NULL) {
-			glyph_at(data, xidx[i], g);
+			glyph_at(data, i & 4095, g);
 			return;
 		}
 		i = -1;		/* (its block can't be read: as a character the fonts haven't got) */
