@@ -145,14 +145,23 @@ struct box {
 	box *parent, *first, *last, *next;
 	const char *text;		/* text, or an atom's label */
 	uint32_t len;
+	struct bxt *x;			/* an atom's, a list item's, a marker's or a summary's
+					   own (bxw makes it; BX reads it, or bxt0) */
+	struct fcol *fc;		/* a flex column of no set height: its items (stretch_box) */
+};
+
+/* what few boxes have (the news page's 1,360 boxes 20 bytes each the
+   less, the layout's peak on a stock 4 MB Falcon, 1.17) */
+struct bxt {
 	int32_t aw, ah;			/* an atom's size, device px (AUTO: from its label) */
 	int32_t num;			/* a list item's number; a marker's counter
 					   style when it has one of its own (KW_*) */
 	void *img;			/* AT_IMAGE: the picture's handle; LB_SUM: the
 					   details element (dnode *) */
 	int32_t iw, ih;			/* and its size, CSS px (0: not known yet) */
-	struct fcol *fc;		/* a flex column of no set height: its items (stretch_box) */
 };
+static const struct bxt bxt0 = { AUTO, AUTO, 0, NULL, 0, 0 };
+#define BX(b) ((b)->x != NULL ? (const struct bxt *) (b)->x : &bxt0)
 
 /* box.list: a list item (display: list-item); the summary a click opens
    and closes a details by (the HTML Standard, 4.11), whatever its display */
@@ -1281,7 +1290,7 @@ static void sum_rect(L *l, dnode *det, int32_t x, int32_t y, int32_t w, int32_t 
 static void sum_item(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_t h)
 {
 	if (!no_hit(b->st) && kw(b->st, EP_VISIBILITY) != KW_HIDDEN)
-		sum_rect(l, b->img, x, y, w, h);
+		sum_rect(l, BX(b)->img, x, y, w, h);
 }
 
 static void text(L *l, int32_t x, int32_t base, ITEM *it, const char *s, uint32_t n, int32_t w)
@@ -1401,6 +1410,24 @@ static int stopped(L *l)
 	return l->fail;
 }
 
+/* b's own (struct bxt), made the first time one of its fields is set (in
+   the boxes' arena, given back with them); out of memory, a place to
+   write that nothing reads, and the layout fails */
+static struct bxt *bxw(L *l, box *b)
+{
+	static struct bxt lost;
+	if (b->x == NULL) {
+		struct bxt *x = amalloc(&l->ba, sizeof *x);
+		if (x == NULL) {
+			l->fail = 1;
+			return &lost;
+		}
+		*x = bxt0;
+		b->x = x;
+	}
+	return b->x;
+}
+
 static box *new_box(L *l, int kind, dnode *n, const ec_style *st, box *parent)
 {
 	box *b;
@@ -1415,7 +1442,6 @@ static box *new_box(L *l, int kind, dnode *n, const ec_style *st, box *parent)
 	b->kind = (uint8_t) kind;
 	b->n = n;
 	b->st = st;
-	b->aw = b->ah = AUTO;
 	if (parent != NULL) {
 		b->parent = parent;
 		b->link = parent->link;
@@ -1570,8 +1596,8 @@ static void atom(L *l, box *parent, dnode *n, const ec_style *st, int kind, cons
 	b->atom = (uint8_t) kind;
 	b->text = label ? label : "";
 	b->len = (uint32_t) strlen(b->text);
-	b->aw = w;
-	b->ah = h;
+	bxw(l, b)->aw = w;
+	bxw(l, b)->ah = h;
 }
 
 static int32_t char_w(L *l, const ec_style *st)
@@ -1750,9 +1776,9 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 			form_label(c, lab, sizeof lab);
 			atom(l, parent, n, st, AT_IMAGE, astrdup(l->a, lab, strlen(lab)), AUTO, AUTO);
 			if (parent->last != NULL && parent->last->n == n) {
-				parent->last->img = im;
-				parent->last->iw = iw;
-				parent->last->ih = ih;
+				bxw(l, parent->last)->img = im;
+				bxw(l, parent->last)->iw = iw;
+				bxw(l, parent->last)->ih = ih;
 				parent->last->ratio = (uint8_t) ratio;
 				parent->last->ctl = add_ctl(l, c);
 			}
@@ -2073,9 +2099,9 @@ static void build_element(L *l, box *parent, dnode *c)
 		}
 		atom(l, in, c, st, AT_IMAGE, NULL, AUTO, AUTO);
 		if (in->last != NULL && in->last->n == c) {
-			in->last->img = h;
-			in->last->iw = iw;
-			in->last->ih = ih;
+			bxw(l, in->last)->img = h;
+			bxw(l, in->last)->iw = iw;
+			bxw(l, in->last)->ih = ih;
 		}
 		return;
 	}
@@ -2094,10 +2120,10 @@ static void build_element(L *l, box *parent, dnode *c)
 				    kw(st, EP_POSITION) != KW_ABSOLUTE && kw(st, EP_POSITION) != KW_FIXED);
 		atom(l, in, c, st, AT_IMAGE, NULL, AUTO, AUTO);
 		if (in->last != NULL && in->last->n == c) {
-			in->last->img = (void *) (intptr_t) id;
+			bxw(l, in->last)->img = (void *) (intptr_t) id;
 			in->last->frame = 1;
-			in->last->iw = 300;
-			in->last->ih = 150;
+			bxw(l, in->last)->iw = 300;
+			bxw(l, in->last)->ih = 150;
 		}
 		return;
 	}
@@ -2140,9 +2166,9 @@ static void build_element(L *l, box *parent, dnode *c)
 			}
 			atom(l, in, c, st, AT_IMAGE, alt, AUTO, AUTO);
 			if (in->last != NULL && in->last->n == c) {
-				in->last->img = h;
-				in->last->iw = iw;
-				in->last->ih = ih;
+				bxw(l, in->last)->img = h;
+				bxw(l, in->last)->iw = iw;
+				bxw(l, in->last)->ih = ih;
 				in->last->ratio = (uint8_t) ratio;
 			}
 		} else if (alt != NULL && *alt != 0) {
@@ -2211,10 +2237,10 @@ static int details_start(L *l, box *parent, dnode *n, const ec_style *pst, dnode
 		if (b != NULL) {
 			b->anon = 1;
 			b->list = LB_SUM;
-			b->img = n;
+			bxw(l, b)->img = n;
 			m = new_box(l, BX_MARK, NULL, pst, b);
 			if (m != NULL)
-				m->num = open ? KW_DISCLOSURE_OPEN : KW_DISCLOSURE_CLOSED;
+				bxw(l, m)->num = open ? KW_DISCLOSURE_OPEN : KW_DISCLOSURE_CLOSED;
 			add_text_box(l, b, pst, "Details", 7);
 		}
 	}
@@ -2237,7 +2263,7 @@ static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
 		for (; b != NULL; b = b->next)
 			if (b->n == sum) {	/* (none when display: none) */
 				b->list |= LB_SUM;
-				b->img = det;
+				bxw(l, b)->img = det;
 				break;
 			}
 		return;
@@ -2246,7 +2272,7 @@ static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
 		box *w, *end, *k;
 		if (b->kind == BX_BLOCK) {
 			b->list |= LB_SUM;
-			b->img = det;
+			bxw(l, b)->img = det;
 			continue;
 		}
 		for (end = b; end->next != NULL && end->next->kind != BX_BLOCK; end = end->next)
@@ -2260,11 +2286,11 @@ static void build_summary(L *l, box *parent, dnode *sum, dnode *det)
 		w->kind = BX_INLINE;
 		w->anon = 1;
 		w->list = LB_SUM;
-		w->img = det;
+		bxw(l, w)->img = det;
 		w->st = parent->st;
 		w->parent = parent;
 		w->link = parent->link;
-		w->aw = w->ah = AUTO;
+		if (w->x != NULL) w->x->aw = w->x->ah = AUTO;
 		w->first = b;
 		w->last = end;
 		for (k = b; ; k = k->next) {
@@ -2394,7 +2420,7 @@ static box *anon_round(L *l, box *b, box *prev, box *first, box *end, int rows)
 	a->st = b->st;
 	a->parent = b;
 	a->link = b->link;
-	a->aw = a->ah = AUTO;
+	if (a->x != NULL) a->x->aw = a->x->ah = AUTO;
 	a->tablerow = (uint8_t) rows;
 	a->row = (uint8_t) rows;
 	a->first = first;
@@ -2658,7 +2684,7 @@ static void fixup(L *l, box *b)
 		a->st = b->st;
 		a->parent = b;
 		a->link = b->link;
-		a->aw = a->ah = AUTO;
+		if (a->x != NULL) a->x->aw = a->x->ah = AUTO;
 		a->first = c;
 		a->last = end;
 		for (k = c; k != NULL; k = k->next) {
@@ -3384,7 +3410,7 @@ static int compressible(const L *l, const box *b)
 
 static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 {
-	int32_t iw = b->iw, ih = b->ih, mw, mh;
+	int32_t iw = BX(b)->iw, ih = BX(b)->ih, mw, mh;
 	/* what its height's percentages are of: the block it is in, when
 	   that block's height is set (CSS 2.1, 10.5, 10.7: forums.atariage.com's
 	   logo, max-height 100% of a header 55px high, was drawn at its file's
@@ -3504,7 +3530,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 
 static int32_t atom_w(L *l, box *b, ew_font *f)
 {
-	int32_t w = b->aw;
+	int32_t w = BX(b)->aw;
 	if (b->atom == AT_IMAGE) {
 		int32_t h;
 		image_size(l, b, &w, &h);
@@ -3568,9 +3594,9 @@ static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
 	ITEM *it;
 	uint32_t n;
 
-	while (li != NULL && !(li->list & LB_ITEM) && !m->num)
+	while (li != NULL && !(li->list & LB_ITEM) && !BX(m)->num)
 		li = li->parent;
-	if (li == NULL || (s = marker_text(li->st, m->num, li->num, buf)) == NULL || *s == 0)
+	if (li == NULL || (s = marker_text(li->st, BX(m)->num, BX(li)->num, buf)) == NULL || *s == 0)
 		return;
 	n = (uint32_t) strlen(s);
 	if (s == buf && (s = astrdup(l->a, buf, n)) == NULL) {
@@ -3578,7 +3604,7 @@ static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
 		return;
 	}
 	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n), -1);
-	if (!m->num && EC_K(li->st, EP_LIST_STYLE_TYPE) == EK_PTR)
+	if (!BX(m)->num && EC_K(li->st, EP_LIST_STYLE_TYPE) == EK_PTR)
 		return;		/* a string: as it is, the white space after it dropped */
 	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '), 0);
 	if (l->fail)
@@ -3695,8 +3721,8 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 					}
 					it->dir = 0;
 				}
-			} else if (c->ah != AUTO || c->atom != AT_LABEL) {
-				int32_t h = c->ah != AUTO ? c->ah : r.font->ascent + r.font->descent + 4;
+			} else if (BX(c)->ah != AUTO || c->atom != AT_LABEL) {
+				int32_t h = BX(c)->ah != AUTO ? BX(c)->ah : r.font->ascent + r.font->descent + 4;
 				fctl *k = c->ctl ? l->p->ctls[c->ctl - 1] : NULL;
 				if (k != NULL && (k->kind == FC_CHECKBOX || k->kind == FC_RADIO)) {
 					/* a box or a button as tall as it is, on
@@ -3730,9 +3756,9 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 				   where a click opens and closes its details; its
 				   text is the summary's, for scripts */
 				r = *pr;
-				r.det = c->img;
+				r.det = BX(c)->img;
 #ifndef EW_ST
-				r.node = dn_summary(c->img);
+				r.node = dn_summary(BX(c)->img);
 #endif
 				l->sums = 1;
 				collect(l, c, &r, line_start);
@@ -3763,7 +3789,7 @@ static void collect(L *l, box *b, const RUNSTATE *pr, int *line_start)
 			if (c->list & LB_SUM) {
 				/* a summary laid out inline (inline-block too): its
 				   click areas are its parts on the lines */
-				r.det = c->img;
+				r.det = BX(c)->img;
 				l->sums = 1;
 			}
 			gl = len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_PADDING_LEFT, AUTO) +
@@ -4317,7 +4343,7 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 	d->w = w;
 	d->h = h;
 	d->link = link;
-	d->img = b->img;
+	d->img = BX(b)->img;
 	d->ctl = b->ctl;
 	d->flags = (uint8_t) flags;
 	d->text = b->text;	/* its alt text, while it comes */
@@ -4535,7 +4561,7 @@ static void frame_box(L *l, box *b, dnode *n, int id, int32_t x, int32_t y, int3
 
 static void frame_items(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h)
 {
-	frame_box(l, b, b->n, (int) (intptr_t) b->img, x, y, w, h);
+	frame_box(l, b, b->n, (int) (intptr_t) BX(b)->img, x, y, w, h);
 }
 
 #define FS_MAX 32		/* rows or columns a frameset has at most */
@@ -5963,7 +5989,7 @@ static void marker(L *l, box *b, int32_t x, int32_t cw, int32_t base)
 {
 	const ec_style *st = b->st;
 	char buf[24];
-	const char *s = marker_text(st, 0, b->num, buf);
+	const char *s = marker_text(st, 0, BX(b)->num, buf);
 	ITEM it;
 	RUNSTATE r;
 	int32_t w;
@@ -8483,8 +8509,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 	}
 	if (wauto && !fixed_w && !b->ib && b->first != NULL && b->first->atom == AT_CONTROL && b->first->frame &&
-	    b->first->aw > 0 && b->first->aw < w)
-		w = b->first->aw;	/* a styled control as a block: its own width (as a replaced one) */
+	    BX(b->first)->aw > 0 && BX(b->first)->aw < w)
+		w = BX(b->first)->aw;	/* a styled control as a block: its own width (as a replaced one) */
 	if (b->repl && wauto && !fixed_w) {
 		/* a picture: its own width, not its container's */
 		int32_t iw, ih;
@@ -8669,7 +8695,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (hd != AUTO && kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 			hd -= bt + bb + pt + pb;
 		if (hd != AUTO && hd > 8)
-			b->first->ah = hd;
+			bxw(l, b->first)->ah = hd;
 	}
 	if (!b->anon) {
 		/* what its children's percentages are of: its content height,
@@ -8757,7 +8783,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				   list-item 0, 15.5.4) */
 				const char *v = c->n ? dn_attr(c->n, "value") : NULL;
 				num = v ? atoi(v) : (reversed ? num - 1 : num + 1);
-				c->num = num;
+				bxw(l, c)->num = num;
 			}
 			if (!c->anon && kw(c->st, EP_FLOAT) != KW_NONE) {
 				/* out of the flow: beside what follows */
