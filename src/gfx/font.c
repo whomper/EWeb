@@ -24,6 +24,7 @@ static uint16_t *codes;			/* the first block's, sorted */
 static uint16_t nx, *xcodes, *xidx;	/* the other blocks' codes, sorted together, and each
 					   one's place in its block */
 static uint8_t *xblk;			/* and its block */
+static int xready;			/* 1 once x_build has put them in order */
 static uint16_t bcount[FONT_BLOCKS];	/* each block's codes */
 static ew_font *faces;
 static uint32_t *foff, *fstored, *fsize;	/* each face's first block: where, its packed and
@@ -119,7 +120,6 @@ static int by_code(const void *a, const void *b)
 int font_init(const char *path)
 {
 	uint8_t head[12], *dir = NULL;
-	uint32_t *all = NULL;
 	long dsize, per;
 	int h, i, b, v3, ok = 0;
 
@@ -156,69 +156,21 @@ int font_init(const char *path)
 	foff = malloc(nfaces * sizeof *foff);
 	fstored = malloc(nfaces * sizeof *fstored);
 	fsize = malloc(nfaces * sizeof *fsize);
-	if (nx) {
+	if (nx)
 		xcodes = malloc(nx * sizeof *xcodes);
-		xidx = malloc(nx * sizeof *xidx);
-		xblk = malloc(nx);
-		all = malloc(nx * sizeof *all);
-	}
 	if (!codes || !dir || !faces || !foff || !fstored || !fsize || nfaces == 0 || ncodes == 0 ||
-	    (nx && (!xcodes || !xidx || !xblk || !all)))
+	    (nx && !xcodes))
 		goto done;
 	if (!read_at(h, v3 ? 12 + 2L * nblocks : 12, dir, dsize))
 		goto done;
 	for (i = 0; i < ncodes; i++)
 		codes[i] = be16(dir + 2 * i);
-	{
-		/* each: code << 16 | block << 12 | place (a block holds fewer than 4096) */
-		long k = 0, at = ncodes;
-		int sorted = 1;
-		for (b = 1; b < nblocks; b++)
-			for (i = 0; i < bcount[b]; i++, at++) {
-				all[k] = (uint32_t) be16(dir + 2 * at) << 16 | (uint32_t) b << 12 | (uint32_t) i;
-				if (i > 0 && all[k] >> 16 <= all[k - 1] >> 16)
-					sorted = 0;
-				k++;
-			}
-		if (nx && sorted) {
-			/* each block's codes in order (mkfont.py's): in order of
-			   their codes by a radix sort, a byte at a time, the low
-			   then the high (each a pass over them, stable: the block's
-			   place kept). qsort's 9000 calls were most of an 8 MHz ST's
-			   0.73 s in font_init; merging the blocks, each code looking
-			   at every block, was 60 ms of its start with 1.17's seven */
-			uint32_t *m = malloc(nx * sizeof *m);
-			if (m == NULL) {
-				qsort(all, nx, sizeof *all, by_code);
-			} else {
-				unsigned short cnt[256];
-				int pass;
-				long n;
-				for (pass = 16; pass <= 24; pass += 8) {
-					uint32_t *src = pass == 16 ? all : m, *dst = pass == 16 ? m : all;
-					unsigned short sum = 0, c;
-					memset(cnt, 0, sizeof cnt);
-					for (n = 0; n < nx; n++)
-						cnt[src[n] >> pass & 255]++;
-					for (k = 0; k < 256; k++) {
-						c = cnt[k];
-						cnt[k] = sum;
-						sum = (unsigned short) (sum + c);
-					}
-					for (n = 0; n < nx; n++)
-						dst[cnt[src[n] >> pass & 255]++] = src[n];
-				}
-				free(m);
-			}
-		} else if (nx) {
-			qsort(all, nx, sizeof *all, by_code);
-		}
-		for (k = 0; k < nx; k++) {
-			xcodes[k] = (uint16_t) (all[k] >> 16);
-			xblk[k] = (uint8_t) (all[k] >> 12 & 15);
-			xidx[k] = (uint16_t) (all[k] & 4095);
-		}
-	}
+	/* the other blocks' codes as they come, in block order: put in
+	   order together the first time a page wants one (x_build), not at
+	   the start (the 8 MHz ST's start, 1.17's seven blocks) */
+	for (i = 0; i < nx; i++)
+		xcodes[i] = (uint16_t) be16(dir + 2 * (ncodes + i));
+	xready = 0;
 	for (i = 0; i < nfaces; i++) {
 		const uint8_t *d = dir + 2L * (ncodes + nx) + per * i;
 		faces[i].family = d[0];
@@ -243,7 +195,6 @@ int font_init(const char *path)
 	ok = 1;
 done:
 	free(dir);
-	free(all);
 	fh = h;
 	if (!ok)
 		font_free();
@@ -414,9 +365,76 @@ static int index_of(uint32_t cp)
 }
 
 /* where cp is among the other blocks' codes, -1 if it isn't */
+/* the other blocks' codes, as font_init read them (each block's in order),
+   put in order together, with each one's block and place (xblk, xidx): the
+   first time a page wants a character past the first block. 0 when there
+   is no memory for it (then none of them is found, and tried again) */
+static int x_build(void)
+{
+	uint32_t *all, *m;
+	long k, at = 0, n;
+	int b, i, sorted = 1;
+	if (xready)
+		return 1;
+	all = malloc(nx * sizeof *all);
+	m = malloc(nx * sizeof *m);
+	xidx = xidx != NULL ? xidx : malloc(nx * sizeof *xidx);
+	xblk = xblk != NULL ? xblk : malloc(nx);
+	if (all == NULL || m == NULL || xidx == NULL || xblk == NULL) {
+		free(all);
+		free(m);
+		return 0;
+	}
+	/* each: code << 16 | block << 12 | place (a block holds fewer than 4096) */
+	for (b = 1, k = 0; b < nblocks; b++)
+		for (i = 0; i < bcount[b]; i++, at++) {
+			all[k] = (uint32_t) xcodes[at] << 16 | (uint32_t) b << 12 | (uint32_t) i;
+			if (i > 0 && all[k] >> 16 <= all[k - 1] >> 16)
+				sorted = 0;
+			k++;
+		}
+	if (sorted) {
+		/* each block's codes in order (mkfont.py's): in order of their
+		   codes by a radix sort, a byte at a time, the low then the high
+		   (each a pass over them, stable: the block's place kept).
+		   qsort's 9000 calls were most of an 8 MHz ST's 0.73 s in
+		   font_init; merging the blocks, each code looking at every
+		   block, was 60 ms of its start with 1.17's seven */
+		unsigned short cnt[256];
+		int pass;
+		for (pass = 16; pass <= 24; pass += 8) {
+			uint32_t *src = pass == 16 ? all : m, *dst = pass == 16 ? m : all;
+			unsigned short sum = 0, c;
+			memset(cnt, 0, sizeof cnt);
+			for (n = 0; n < nx; n++)
+				cnt[src[n] >> pass & 255]++;
+			for (k = 0; k < 256; k++) {
+				c = cnt[k];
+				cnt[k] = sum;
+				sum = (unsigned short) (sum + c);
+			}
+			for (n = 0; n < nx; n++)
+				dst[cnt[src[n] >> pass & 255]++] = src[n];
+		}
+	} else {
+		qsort(all, nx, sizeof *all, by_code);
+	}
+	for (k = 0; k < nx; k++) {
+		xcodes[k] = (uint16_t) (all[k] >> 16);
+		xblk[k] = (uint8_t) (all[k] >> 12 & 15);
+		xidx[k] = (uint16_t) (all[k] & 4095);
+	}
+	free(all);
+	free(m);
+	xready = 1;
+	return 1;
+}
+
 static int xindex_of(uint32_t cp)
 {
 	int lo = 0, hi = nx - 1;
+	if (!xready && !x_build())
+		return -1;
 	while (lo <= hi) {
 		int mid = (lo + hi) >> 1;
 		if (xcodes[mid] == cp)
