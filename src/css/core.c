@@ -157,8 +157,10 @@ const ec_atom *ec_intern(ec_ctx *c, const char *s, size_t len)
 	for (a = c->atoms[h & c->atom_mask]; a != NULL; a = a->next)
 		if (a->hash == h && a->len == len && memcmp(a->s, s, len) == 0)
 			return a;
-	if (c->natoms >= c->atom_mask && atoms_grow(c) != 0)
+	if (c->natoms >= c->atom_mask && atoms_grow(c) != 0) {
+		c->mem.nomem = 1;
 		return NULL;
+	}
 	a = ec_alloc(&c->mem, sizeof(ec_atom) + len + 1);
 	if (a == NULL)
 		return NULL;
@@ -571,6 +573,7 @@ void ec_drop_sheets(ec_ctx *c)
 	/* and what they were: their text, rules and declarations (a page's
 	   sheets added again as often as its window is sized take no more) */
 	ec_arena_free(&c->rmem);
+	c->mem.nomem = 0;	/* (its names stay; the sheets' shortage is read again) */
 	c->pmem = &c->rmem;
 	c->svg = NULL;
 	c->svg_tail = NULL;
@@ -591,7 +594,8 @@ void ec_drop_sheets(ec_ctx *c)
 
 int ec_sheets_short(const ec_ctx *c)
 {
-	return c->rmem.nomem;
+	/* (a selector whose name found no memory is short too: mem) */
+	return c->rmem.nomem || c->mem.nomem;
 }
 
 int ec_hover_reveal(const ec_ctx *c)

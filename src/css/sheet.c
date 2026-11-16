@@ -567,7 +567,12 @@ static int compound(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 			ec_simple *s = add_simple(b, S_TAG);
 			if (s == NULL)
 				return 0;
-			s->atom = ec_intern(c, name, len);
+			/* (NULL: no memory for a new name, as a stock 4 MB
+			   Falcon's last bytes go: the selector dropped, the sheet
+			   short, not a name read through NULL later, ec_prune's
+			   pruned(): 1.17's news page under NVDI bombed so) */
+			if ((s->atom = ec_intern(c, name, len)) == NULL)
+				return 0;
 			b->cc++;
 		}
 		(*i)++;
@@ -586,7 +591,8 @@ static int compound(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 			sp = add_simple(b, S_ID);
 			if (sp == NULL)
 				return 0;
-			sp->atom = ec_intern(c, s, len);
+			if ((sp->atom = ec_intern(c, s, len)) == NULL)
+				return 0;
 			b->a++;
 			(*i)++;
 		} else if (delim(k, '.')) {
@@ -600,7 +606,8 @@ static int compound(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 			sp = add_simple(b, S_CLASS);
 			if (sp == NULL)
 				return 0;
-			sp->atom = ec_intern(c, s, len);
+			if ((sp->atom = ec_intern(c, s, len)) == NULL)
+				return 0;
 			b->b++;
 			*i += 2;
 		} else if (k->type == T_LBRACK) {
@@ -2285,7 +2292,8 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 			cd = ec_alloc(c->pmem, sizeof *cd);
 			if (cd == NULL)
 				continue;
-			cd->name = ec_intern(c, ns, nl);
+			if ((cd->name = ec_intern(c, ns, nl)) == NULL)
+				continue;	/* (no memory for its name: left out) */
 			cd->val = vs ? vs : "";
 			cd->len = vs ? (uint32_t) (ve - vs) : 0;
 			cd->hasvar = hasvar;

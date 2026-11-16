@@ -663,7 +663,10 @@ static int substitute(ec_ctx *c, ec_custom *cu, const char *s, size_t len, char 
 			} else if (t.type != T_EOF) {
 				return -1;
 			}
-			v = is_env ? NULL : custom_find(cu, ec_intern(c, ns, nl), &own, cu);
+			{
+				const ec_atom *na = is_env ? NULL : ec_intern(c, ns, nl);
+				v = na == NULL ? NULL : custom_find(cu, na, &own, cu);
+			}
 			if (v != NULL && own && v->state != 2 && v->state != 3)
 				resolve_custom(c, cu, v, depth + 1);
 			if (v != NULL && v->state != 3 && (v->len > 0 || fb == NULL)) {
