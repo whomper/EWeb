@@ -350,7 +350,7 @@ static void tree(const dnode *n, int depth)
 			const char *name = ec_atom_text(c->e.name, &len);
 			const ec_style *st = c->e.style;
 			printf("%*s<%.*s> %s\n", 2 * depth, "", (int) len, name,
-			       st == NULL ? "(no style)" : ec_kw_name(st->v[EP_DISPLAY].i));
+			       st == NULL ? "(no style)" : ec_kw_name(EC_V(st, EP_DISPLAY).i));
 			tree(c, depth + 1);
 		} else if (c->type == DN_TEXT) {
 			printf("%*s\"%.*s\"\n", 2 * depth, "", (int) (c->len > 40 ? 40 : c->len), c->text);

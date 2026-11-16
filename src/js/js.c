@@ -2767,7 +2767,7 @@ static void restyle_now(ejs *j);
 /* a style's keyword (0: not one) */
 static int style_kw(const ec_style *s, int p)
 {
-	return s != NULL && s->k[p] == EK_KW ? s->v[p].i : 0;
+	return s != NULL && EC_K(s, p) == EK_KW ? EC_V(s, p).i : 0;
 }
 
 /* offsetParent (CSSOM View, 7.1): null for the body, the root, an element
@@ -2887,9 +2887,9 @@ static void restyle_now(ejs *j)
 
 static void computed_text(const ec_style *s, int p, char *out, size_t size)
 {
-	int32_t v = s->v[p].i;
+	int32_t v = EC_V(s, p).i;
 	out[0] = 0;
-	switch (s->k[p]) {
+	switch (EC_K(s, p)) {
 	case EK_KW:
 		snprintf(out, size, "%s", ec_kw_name(v) ? ec_kw_name(v) : "");
 		break;
@@ -2912,7 +2912,7 @@ static void computed_text(const ec_style *s, int p, char *out, size_t size)
 		snprintf(out, size, "%ld", (long) v);
 		break;
 	case EK_CURCOLOR:
-		v = s->v[EP_COLOR].i;
+		v = EC_V(s, EP_COLOR).i;
 		/* fall through */
 	case EK_COLOR: {
 		unsigned long c = (unsigned long) (uint32_t) v;

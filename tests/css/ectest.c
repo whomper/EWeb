@@ -187,11 +187,11 @@ static void grad_str(char *buf, size_t cap, const ec_grad *g)
 
 static void value(const ec_style *s, int p, char *buf, size_t cap)
 {
-	ec_v v = s->v[p];
+	ec_v v = EC_V(s, p);
 	char a[64], b[64];
 	int i;
 
-	switch (s->k[p]) {
+	switch (EC_K(s, p)) {
 	case EK_KW: snprintf(buf, cap, "%s", ec_kw_name(v.i)); return;
 	case EK_PX: fx_str(buf, cap, v.i, "px"); return;
 	case EK_PCT: fx_str(buf, cap, v.i, "%"); return;
@@ -263,7 +263,7 @@ static void value(const ec_style *s, int p, char *buf, size_t cap)
 		}
 		return;
 	default:
-		snprintf(buf, cap, "(kind %d)", s->k[p]);
+		snprintf(buf, cap, "(kind %d)", EC_K(s, p));
 	}
 }
 

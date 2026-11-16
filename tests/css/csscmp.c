@@ -326,23 +326,23 @@ static void lc_get(int p, const css_computed_style *s, int root, nv *o)
 static void ec_get(int p, const ec_style *s, nv *o)
 {
 	memset(o, 0, sizeof *o);
-	switch (s->k[p]) {
+	switch (EC_K(s, p)) {
 	case EK_KW:
-		kw(o, ec_kw_name(s->v[p].i));
+		kw(o, ec_kw_name(EC_V(s, p).i));
 		if (p == EP_CONTENT)
-			kw(o, s->v[p].i == KW_NONE ? "none" : "normal");
+			kw(o, EC_V(s, p).i == KW_NONE ? "none" : "normal");
 		return;
-	case EK_PX: o->k = 'p'; o->v = s->v[p].i; return;
-	case EK_PCT: o->k = '%'; o->v = s->v[p].i; return;
-	case EK_NUM: o->k = 'n'; o->v = s->v[p].i; return;
-	case EK_INT: o->k = 'i'; o->v = s->v[p].i; return;
-	case EK_COLOR: o->k = 'c'; o->v = s->v[p].i; return;
+	case EK_PX: o->k = 'p'; o->v = EC_V(s, p).i; return;
+	case EK_PCT: o->k = '%'; o->v = EC_V(s, p).i; return;
+	case EK_NUM: o->k = 'n'; o->v = EC_V(s, p).i; return;
+	case EK_INT: o->k = 'i'; o->v = EC_V(s, p).i; return;
+	case EK_COLOR: o->k = 'c'; o->v = EC_V(s, p).i; return;
 	case EK_CURCOLOR: o->k = 'C'; return;
 	case EK_CALC: kw(o, "(calc)"); o->k = 'x'; return;
 	case EK_IMAGE: kw(o, "(gradient)"); o->k = 'g'; return;
 	case EK_PTR:
 		if (p == EP_FONT_FAMILY) {
-			const ec_family *f = s->v[p].p;
+			const ec_family *f = EC_V(s, p).p;
 			int i;
 			o->k = 'f';
 			for (i = 0; i < f->n; i++) {
@@ -371,7 +371,7 @@ static void ec_get(int p, const ec_style *s, nv *o)
 			kw(o, "(string)");
 		} else {
 			o->k = 'u';
-			snprintf(o->s, sizeof o->s, "%s", ((const ec_str *) s->v[p].p)->s);
+			snprintf(o->s, sizeof o->s, "%s", ((const ec_str *) EC_V(s, p).p)->s);
 		}
 		return;
 	}
@@ -557,12 +557,12 @@ static int explain(const node *n, int p, const css_computed_style *ls, const ec_
 	if (a->k == 'p' && b->k == 'p' && a->ru != CSS_UNIT_PX) {
 		const ec_node *e = n->ecn;
 		int32_t fs = p == EP_FONT_SIZE && n->parent && n->parent->type == N_ELEMENT ?
-			((const ec_node *) n->parent->ecn)->style->v[EP_FONT_SIZE].i :
-			es->v[EP_FONT_SIZE].i;
+			EC_V(((const ec_node *) n->parent->ecn)->style, EP_FONT_SIZE).i :
+			EC_V(es, EP_FONT_SIZE).i;
 		const ec_node *rt = e;
 		while (rt->parent != NULL)
 			rt = rt->parent;
-		if (exact_px(a, fs, rt->style->v[EP_FONT_SIZE].i, &px)) {
+		if (exact_px(a, fs, EC_V(rt->style, EP_FONT_SIZE).i, &px)) {
 			double d = px * 1024 - b->v;
 			if (d < 0)
 				d = -d;
@@ -576,7 +576,7 @@ static int explain(const node *n, int p, const css_computed_style *ls, const ec_
 			return R_WEIGHT;
 		break;
 	case EP_FLOAT:
-		if (es->v[EP_DISPLAY].i == KW_NONE && a->k == 'k' && !strcmp(a->s, "none"))
+		if (EC_V(es, EP_DISPLAY).i == KW_NONE && a->k == 'k' && !strcmp(a->s, "none"))
 			return R_FLOAT;
 		break;
 	case EP_MIN_WIDTH: case EP_MIN_HEIGHT:
@@ -585,7 +585,7 @@ static int explain(const node *n, int p, const css_computed_style *ls, const ec_
 		break;
 	case EP_BORDER_TOP_WIDTH: case EP_BORDER_RIGHT_WIDTH:
 	case EP_BORDER_BOTTOM_WIDTH: case EP_BORDER_LEFT_WIDTH: {
-		int st = es->v[p - EP_BORDER_TOP_WIDTH + EP_BORDER_TOP_STYLE].i;
+		int st = EC_V(es, p - EP_BORDER_TOP_WIDTH + EP_BORDER_TOP_STYLE).i;
 		if (b->k == 'p' && b->v == 0 && (st == KW_NONE || st == KW_HIDDEN))
 			return R_BORDER_NONE;
 		if (a->k == 'p' && a->v == EC_FX(2) && b->k == 'p' && b->v == EC_FX(3))
@@ -595,10 +595,10 @@ static int explain(const node *n, int p, const css_computed_style *ls, const ec_
 	case EP_DISPLAY: {
 		const node *pn = n->parent;
 		const ec_node *pe = pn != NULL && pn->type == N_ELEMENT ? pn->ecn : NULL;
-		int pd = pseudo ? es->v[EP_DISPLAY].i : pe != NULL ? pe->style->v[EP_DISPLAY].i : 0;
+		int pd = pseudo ? EC_V(es, EP_DISPLAY).i : pe != NULL ? EC_V(pe->style, EP_DISPLAY).i : 0;
 		if (pseudo) {
 			const ec_node *self = n->ecn;
-			pd = self->style->v[EP_DISPLAY].i;
+			pd = EC_V(self->style, EP_DISPLAY).i;
 		}
 		if ((pd == KW_FLEX || pd == KW_INLINE_FLEX || pd == KW_GRID || pd == KW_INLINE_GRID) &&
 				b->k == 'k' && blockified(b->s))
@@ -627,7 +627,7 @@ static int explain(const node *n, int p, const css_computed_style *ls, const ec_
 			return R_EM_INHERIT;
 		break;
 	case EP_TOP: case EP_RIGHT: case EP_BOTTOM: case EP_LEFT: {
-		int pos = es->v[EP_POSITION].i;
+		int pos = EC_V(es, EP_POSITION).i;
 		if (pos == KW_STATIC || pos == KW_RELATIVE || pos == KW_STICKY)
 			return R_USED_OFFSET;
 		break;

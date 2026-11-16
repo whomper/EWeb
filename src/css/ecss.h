@@ -170,12 +170,99 @@ typedef struct ec_areas {
 #define EC_FLOW_COLUMN	1
 #define EC_FLOW_DENSE	2
 
+/* A computed style. The cascade makes every property's value (ec_full);
+ * what is kept is in six groups, each shared by the styles that have the
+ * same values in it (the inherited properties, the box, the borders, the
+ * background, the rest of CSS 2's and the flex and grid ones): the news
+ * page's 186 styles of 538 bytes had 89, 88, 5, 21, 14 and 50 different
+ * groups. The ST edition, frozen, keeps the whole style (EC_FLAT). Read
+ * one through EC_V and EC_K. */
+#ifdef EW_ST
+#define EC_FLAT 1
+#endif
+
+#define EC_NGROUPS 6
+/* the group of property p, its first property, and its number of them */
+#define EC_GROUP(p) ((p) >= EP_FLEX_DIRECTION ? 5 : (p) >= EP_OVERFLOW_X ? 4 : \
+		     (p) >= EP_BACKGROUND_COLOR ? 3 : (p) >= EP_BORDER_TOP_WIDTH ? 2 : (p) >= EP_DISPLAY ? 1 : 0)
+#define EC_GBASE(p) ((p) >= EP_FLEX_DIRECTION ? EP_FLEX_DIRECTION : (p) >= EP_OVERFLOW_X ? EP_OVERFLOW_X : \
+		     (p) >= EP_BACKGROUND_COLOR ? EP_BACKGROUND_COLOR : (p) >= EP_BORDER_TOP_WIDTH ? \
+		     EP_BORDER_TOP_WIDTH : (p) >= EP_DISPLAY ? EP_DISPLAY : 0)
+#define EC_GEND(p) ((p) >= EP_FLEX_DIRECTION ? EC_NPROP : (p) >= EP_OVERFLOW_X ? EP_FLEX_DIRECTION : \
+		    (p) >= EP_BACKGROUND_COLOR ? EP_OVERFLOW_X : (p) >= EP_BORDER_TOP_WIDTH ? \
+		    EP_BACKGROUND_COLOR : (p) >= EP_DISPLAY ? EP_BORDER_TOP_WIDTH : EP_DISPLAY)
+
+#ifdef EC_FLAT
 typedef struct ec_style {
 	ec_v v[EC_NPROP];
 	uint8_t k[EC_NPROP];
 	const struct ec_custom *custom;		/* custom properties (--name) */
 	const struct ec_style *before, *after;	/* ::before and ::after, if any rule made them */
 } ec_style;
+typedef ec_style ec_full;
+#define EC_V(s, p) ((s)->v[p])
+#define EC_K(s, p) ((s)->k[p])
+#else
+typedef struct ec_full {
+	ec_v v[EC_NPROP];
+	uint8_t k[EC_NPROP];
+	const struct ec_custom *custom;		/* custom properties (--name) */
+	const struct ec_style *before, *after;	/* ::before and ::after, if any rule made them */
+} ec_full;
+typedef struct ec_style {
+	const ec_v *g[EC_NGROUPS];		/* each group: its values, then their kinds */
+	const struct ec_custom *custom;
+	const struct ec_style *before, *after;
+} ec_style;
+/* a computed value of style s, property p (EP_*), and its kind (EK_*):
+   for a constant p, a load from the group's place (GCC folds the rest) */
+/* (for a p not known when compiled: each property's group, its value's
+   place in it, and its kind's byte; three loads, not the comparisons) */
+#define EC_PG_(id, name, parser, flags, kind, val) EC_GROUP(EP_##id),
+#define EC_PO_(id, name, parser, flags, kind, val) EP_##id - EC_GBASE(EP_##id),
+#define EC_PK_(id, name, parser, flags, kind, val) \
+	(EC_GEND(EP_##id) - EC_GBASE(EP_##id)) * sizeof(ec_v) + EP_##id - EC_GBASE(EP_##id),
+static const uint8_t ec_pgroup[EC_NPROP] = { EC_PROPS_INHERITED(EC_PG_) EC_PROPS_OTHER(EC_PG_) };
+static const uint8_t ec_pvat[EC_NPROP] = { EC_PROPS_INHERITED(EC_PO_) EC_PROPS_OTHER(EC_PO_) };
+static const uint16_t ec_pkat[EC_NPROP] = { EC_PROPS_INHERITED(EC_PK_) EC_PROPS_OTHER(EC_PK_) };
+#undef EC_PG_
+#undef EC_PO_
+#undef EC_PK_
+static inline const ec_v *ec_vp(const ec_style *s, int p)
+{
+	if (__builtin_constant_p(p))
+		return &s->g[EC_GROUP(p)][p - EC_GBASE(p)];
+	return &s->g[ec_pgroup[p]][ec_pvat[p]];
+}
+static inline uint8_t ec_kp(const ec_style *s, int p)
+{
+	if (__builtin_constant_p(p))
+		return ((const uint8_t *) (s->g[EC_GROUP(p)] + (EC_GEND(p) - EC_GBASE(p))))[p - EC_GBASE(p)];
+	return ((const uint8_t *) s->g[ec_pgroup[p]])[ec_pkat[p]];
+}
+#define EC_V(s, p) (*ec_vp((s), (p)))
+#define EC_K(s, p) (ec_kp((s), (p)))
+#endif
+
+/* p's value and (in *k) its kind together: its group found once (for the
+   layout's helpers that read both of a p not known when compiled) */
+static inline const ec_v *ec_vk(const ec_style *s, int p, uint8_t *k)
+{
+#ifdef EC_FLAT
+	*k = s->k[p];
+	return &s->v[p];
+#else
+	const ec_v *g;
+	if (__builtin_constant_p(p)) {
+		g = s->g[EC_GROUP(p)];
+		*k = ((const uint8_t *) (g + (EC_GEND(p) - EC_GBASE(p))))[p - EC_GBASE(p)];
+		return g + (p - EC_GBASE(p));
+	}
+	g = s->g[ec_pgroup[p]];
+	*k = ((const uint8_t *) g)[ec_pkat[p]];
+	return g + ec_pvat[p];
+#endif
+}
 
 /* ------------------------------------------------------------ the document */
 

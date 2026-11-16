@@ -326,7 +326,7 @@ struct ec_ctx {
 	const ec_atom *t_a, *t_area, *t_input, *t_button, *t_select, *t_textarea,
 		*t_option, *t_optgroup, *t_fieldset, *t_html, *t_details, *t_dialog;
 
-	ec_style initial;		/* every property's initial value */
+	ec_full initial;		/* every property's initial value */
 	const ec_style *root_style;	/* for rem */
 	uint8_t bloom[EC_BLOOM_SIZE];	/* the ancestors' atoms, counted */
 	uint32_t stamp;			/* one per element styled */

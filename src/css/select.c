@@ -731,7 +731,7 @@ static const ec_fx size_kw[] = {	/* xx-small to xxx-large, as LibCSS and browser
 
 typedef struct cascade {
 	ec_ctx *c;
-	ec_style *st;
+	ec_full *st;
 	const ec_style *parent;
 	uint32_t set[(EC_NPROP + 31) / 32];
 	uint8_t todo[EC_NPROP];
@@ -751,8 +751,8 @@ static inline int is_set(cascade *k, int p)
 static void parent_value(cascade *k, int p)
 {
 	if (k->parent != NULL) {
-		k->st->v[p] = k->parent->v[p];
-		k->st->k[p] = k->parent->k[p];
+		k->st->v[p] = EC_V(k->parent, p);
+		k->st->k[p] = EC_K(k->parent, p);
 	} else {
 		k->st->v[p] = k->c->initial.v[p];
 		k->st->k[p] = k->c->initial.k[p];
@@ -763,7 +763,7 @@ static void parent_value(cascade *k, int p)
 static void apply(cascade *k, const ec_decl *d)
 {
 	int p = d->prop;
-	ec_style *st = k->st;
+	ec_full *st = k->st;
 
 	if (d->kind == EK_KW) {
 		int kw = d->v.i;
@@ -871,14 +871,14 @@ static ec_fx calc_fold(int op, const ec_fx *v, int n)
 
 static ec_fx root_font(const ec_ctx *c)
 {
-	return c->root_style ? c->root_style->v[EP_FONT_SIZE].i : EC_FX(c->media.font_size);
+	return c->root_style ? EC_V(c->root_style, EP_FONT_SIZE).i : EC_FX(c->media.font_size);
 }
 
 /* a length in v (kind) in px with font size fs, or an ec_calc */
 static void compute_length(cascade *k, int p, ec_fx fs)
 {
 	ec_ctx *c = k->c;
-	ec_style *st = k->st;
+	ec_full *st = k->st;
 	ec_fx v = st->v[p].i, rfs = root_font(c);
 	int32_t w = c->media.width, h = c->media.height;
 
@@ -1012,9 +1012,9 @@ static int blockify(int d)
 static void compute(cascade *k)
 {
 	ec_ctx *c = k->c;
-	ec_style *st = k->st;
+	ec_full *st = k->st;
 	const ec_style *ps = k->parent;
-	ec_fx pfs = ps ? ps->v[EP_FONT_SIZE].i : EC_FX(c->media.font_size), fs;
+	ec_fx pfs = ps ? EC_V(ps, EP_FONT_SIZE).i : EC_FX(c->media.font_size), fs;
 	int i, side;
 
 	/* the font size first: the other lengths need it */
@@ -1064,7 +1064,7 @@ static void compute(cascade *k)
 		switch (p) {
 		case EP_FONT_WEIGHT:
 			if (st->k[p] == EK_KW) {
-				int pw = ps ? ps->v[EP_FONT_WEIGHT].i : 400;
+				int pw = ps ? EC_V(ps, EP_FONT_WEIGHT).i : 400;
 				st->v[p].i = st->v[p].i == KW_BOLDER ? bolder(pw) : lighter(pw);
 				st->k[p] = EK_INT;
 			}
@@ -1074,7 +1074,7 @@ static void compute(cascade *k)
 			   isn't the initial start (the HTML Standard, 15.3.8):
 			   the parent's; else th's is center */
 			if (st->v[p].i == KW_MATCH_PARENT ||
-			    (st->v[p].i == KW_EC_CENTER_OR_INHERIT && ps != NULL && ps->v[p].i != KW_START))
+			    (st->v[p].i == KW_EC_CENTER_OR_INHERIT && ps != NULL && EC_V(ps, p).i != KW_START))
 				parent_value(k, p);
 			else if (st->v[p].i == KW_EC_CENTER_OR_INHERIT)
 				st->v[p].i = KW_CENTER;
@@ -1114,7 +1114,7 @@ static void compute(cascade *k)
 	{
 		int d = st->v[EP_DISPLAY].i, pos = st->v[EP_POSITION].i;
 		if (d != KW_NONE) {
-			int pd = ps ? ps->v[EP_DISPLAY].i : 0;
+			int pd = ps ? EC_V(ps, EP_DISPLAY).i : 0;
 			if (pos == KW_ABSOLUTE || pos == KW_FIXED) {
 				st->v[EP_FLOAT].i = KW_NONE;
 				d = blockify(d);
@@ -1189,8 +1189,12 @@ static void apply_var(cascade *k, const ec_decl *d, ec_custom *cu)
    (GCC makes a four-byte __builtin_memcpy a move.l even for the 68000),
    so k must start at an even place, or the ST edition bombs (as html.c
    did, 1.10) */
-_Static_assert(__builtin_offsetof(ec_style, k) % 2 == 0, "ec_style.k at an odd place");
+_Static_assert(__builtin_offsetof(ec_full, k) % 2 == 0, "ec_style.k at an odd place");
+/* (the inherited properties are the first group: a style's start is its
+   parent's group 0) */
+_Static_assert((int) EP_DISPLAY == (int) EC_NINHERITED, "the first group is the inherited properties");
 
+#ifdef EC_FLAT
 /* for uniq_style: all of a style, a word at a time, each a rotate and an
    add on the 68030 */
 static uint32_t style_hash(const ec_style *st)
@@ -1212,13 +1216,22 @@ static uint32_t style_hash(const ec_style *st)
 		h = ((h << 5) | (h >> 27)) + kb[i];
 	return h ^ (h >> 15);
 }
+#endif
 
-/* the cascade for one pseudo-element (PE_NONE: the element itself), and
-   its hash for uniq_style */
-static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo, uint32_t *hash)
+/* the cascade for one pseudo-element (PE_NONE: the element itself): the
+   ST edition's in its arena, kept as it is, and its hash for uniq_style;
+   EWEB.PRG's into f, which freeze() then shares out in groups */
+static ec_full *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo, uint32_t *hash,
+		ec_full *f)
 {
 	cascade k;
+#ifdef EC_FLAT
 	ec_style *st = ec_alloc(&c->smem, sizeof *st);
+	(void) f;
+#else
+	ec_full *st = f;
+	(void) hash;
+#endif
 	int i, o;
 	ec_custom *cu = NULL;
 
@@ -1231,8 +1244,13 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo, ui
 	k.parent = parent;
 	k.ntodo = k.nvar = k.ncust = 0;
 	if (parent != NULL) {
+#ifdef EC_FLAT
 		memcpy(st->v, parent->v, EC_NINHERITED * sizeof st->v[0]);
 		memcpy(st->k, parent->k, EC_NINHERITED);
+#else
+		memcpy(st->v, parent->g[0], EC_NINHERITED * sizeof st->v[0]);
+		memcpy(st->k, parent->g[0] + EC_NINHERITED, EC_NINHERITED);
+#endif
 	} else {
 		memcpy(st->v, c->initial.v, EC_NINHERITED * sizeof st->v[0]);
 		memcpy(st->k, c->initial.k, EC_NINHERITED);
@@ -1286,7 +1304,9 @@ static ec_style *cascade_style(ec_ctx *c, const ec_style *parent, int pseudo, ui
 	for (i = 0; i < k.nvar; i++)
 		apply_var(&k, k.var[i], (ec_custom *) st->custom);
 	compute(&k);
+#ifdef EC_FLAT
 	*hash = style_hash(st);
+#endif
 	return st;
 }
 
@@ -1338,6 +1358,7 @@ static uint32_t key_hash(const ec_style *parent, int n)
 
 static const ec_style **uniq;	/* ec_select's, while it runs (or NULL) */
 
+#ifdef EC_FLAT
 static int same_style(const ec_style *a, const ec_style *b)
 {
 	/* a word at a time (libc's memcmp is a byte at a time: 16,800 cycles
@@ -1385,6 +1406,98 @@ static const ec_style *uniq_style(ec_ctx *c, ec_style *st, uint32_t hash, char *
 	*u = st;
 	return st;
 }
+#else
+/* each group's last made (EC_NGROUPS of GU_SIZE), while ec_select runs */
+#define GU_SIZE 256
+static const ec_v **gu;
+static const uint8_t gbase[EC_NGROUPS + 1] = {
+	0, EP_DISPLAY, EP_BORDER_TOP_WIDTH, EP_BACKGROUND_COLOR, EP_OVERFLOW_X, EP_FLEX_DIRECTION, EC_NPROP
+};
+
+/* n values then n kinds the same: a word at a time on the Atari (libc's
+   memcmp is a byte at a time), whole values where pointers are 8 bytes */
+static int same_group(const ec_v *a, const ec_v *v, const uint8_t *k, int n)
+{
+	const uint8_t *ak = (const uint8_t *) (a + n);
+	int i;
+	if (sizeof a[0] != sizeof a[0].i)
+		return memcmp(a, v, n * sizeof *v) == 0 && memcmp(ak, k, n) == 0;
+	for (i = 0; i < n; i++)
+		if (a[i].i != v[i].i)
+			return 0;
+	for (i = 0; i < n; i++)
+		if (ak[i] != k[i])
+			return 0;
+	return 1;
+}
+
+/* group g of f, the one made already when it is the same */
+static const ec_v *uniq_group(ec_ctx *c, int g, const ec_full *f)
+{
+	int b = gbase[g], n = gbase[g + 1] - b, i;
+	const ec_v *v = f->v + b;
+	const uint8_t *k = f->k + b;
+	uint32_t h = (uint32_t) g;
+	const ec_v **u = NULL;
+	ec_v *r;
+
+	for (i = 0; i < n; i++)
+		h = ((h << 5) | (h >> 27)) + (uint32_t) v[i].i + k[i];
+	h ^= h >> 15;
+	if (gu != NULL) {
+		u = &gu[g * GU_SIZE + (h & (GU_SIZE - 1))];
+		if (*u != NULL && same_group(*u, v, k, n))
+			return *u;
+	}
+	r = ec_alloc(&c->smem, n * sizeof *v + n);
+	if (r == NULL)
+		return NULL;
+	memcpy(r, v, n * sizeof *v);
+	memcpy(r + n, k, n);
+	if (u != NULL)
+		*u = r;
+	return r;
+}
+
+/* f's groups into s, each shared (its ::before and ::after not yet) */
+static ec_style *freeze(ec_ctx *c, const ec_full *f, ec_style *s)
+{
+	int g;
+	for (g = 0; g < EC_NGROUPS; g++)
+		if ((s->g[g] = uniq_group(c, g, f)) == NULL)
+			return NULL;
+	s->custom = f->custom;
+	s->before = s->after = NULL;
+	return s;
+}
+
+/* s kept: the one made already when it is the same (its groups, custom
+   properties, ::before and ::after all the same ones) */
+static const ec_style *uniq_style(ec_ctx *c, const ec_style *s)
+{
+	uint32_t h = (uint32_t) (uintptr_t) s->custom * 7 + (uint32_t) (uintptr_t) s->before * 3 +
+		     (uint32_t) (uintptr_t) s->after * 5;
+	const ec_style **u = NULL;
+	ec_style *r;
+	int g;
+
+	for (g = 0; g < EC_NGROUPS; g++)
+		h = ((h << 5) | (h >> 27)) + (uint32_t) (uintptr_t) s->g[g];
+	h ^= h >> 15;
+	if (uniq != NULL) {
+		u = &uniq[h & (UNIQ_SIZE - 1)];
+		if (*u != NULL && memcmp(*u, s, sizeof *s) == 0)
+			return *u;
+	}
+	r = ec_alloc(&c->smem, sizeof *r);
+	if (r == NULL)
+		return NULL;
+	*r = *s;
+	if (u != NULL)
+		*u = r;
+	return r;
+}
+#endif
 
 /* ------------------------------------------------------------ the tree */
 
@@ -1515,12 +1628,13 @@ static const ec_style *shared_from(ec_ctx *c, const ec_node *e, uint32_t sig, co
 }
 
 /* ::before or ::after's style, made once too */
+#ifdef EC_FLAT
 static const ec_style *pseudo_style(ec_ctx *c, const ec_style *parent, int pseudo)
 {
 	char *mark = c->smem.p;
 	const ec_chunk *chunks = c->smem.chunks;
 	uint32_t h;
-	ec_style *st = cascade_style(c, parent, pseudo, &h);
+	ec_style *st = cascade_style(c, parent, pseudo, &h, NULL);
 	if (st != NULL && st->k[EP_CONTENT] != EK_PTR) {
 		/* content normal or none: no box made (CSS Pseudo 4, 3.1), so
 		   no style kept; a page's *::before, *::after { box-sizing:
@@ -1532,6 +1646,20 @@ static const ec_style *pseudo_style(ec_ctx *c, const ec_style *parent, int pseud
 	}
 	return st == NULL ? NULL : uniq_style(c, st, h, mark, chunks);
 }
+#else
+static const ec_style *pseudo_style(ec_ctx *c, const ec_style *parent, int pseudo)
+{
+	ec_full f;
+	ec_style s;
+	if (cascade_style(c, parent, pseudo, NULL, &f) == NULL)
+		return NULL;
+	/* content normal or none: no box made (CSS Pseudo 4, 3.1), so no
+	   style kept (the news page's *::before, *::after: 143 of them) */
+	if (f.k[EP_CONTENT] != EK_PTR || freeze(c, &f, &s) == NULL)
+		return NULL;
+	return uniq_style(c, &s);
+}
+#endif
 
 static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *parent, int *mf)
 {
@@ -1541,9 +1669,11 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	centry *ce;
 	ec_style *st;
 	const ec_attr *sa;
+#ifdef EC_FLAT
 	char *mark;
 	const ec_chunk *chunks;
 	uint32_t sh;
+#endif
 
 	nhits = link_hits = 0;
 	*mf = 0;
@@ -1614,9 +1744,10 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 		c->st.cached++;
 		return ce->style;
 	}
+#ifdef EC_FLAT
 	mark = c->smem.p;
 	chunks = c->smem.chunks;
-	st = cascade_style(c, parent, PE_NONE, &sh);
+	st = cascade_style(c, parent, PE_NONE, &sh, NULL);
 	if (st == NULL)
 		return parent;
 	if (any_before)
@@ -1624,6 +1755,23 @@ static const ec_style *style_element(ec_ctx *c, ec_node *e, const ec_style *pare
 	if (any_after)
 		st->after = pseudo_style(c, st, PE_AFTER);
 	st = (ec_style *) uniq_style(c, st, sh, mark, chunks);
+#else
+	{
+		ec_full f;
+		ec_style s;
+		if (cascade_style(c, parent, PE_NONE, NULL, &f) == NULL || freeze(c, &f, &s) == NULL)
+			return parent;
+		/* (their parent the element's groups: the pseudo-elements'
+		   cascade reads it alone, and keeps no pointer to it) */
+		if (any_before)
+			s.before = pseudo_style(c, &s, PE_BEFORE);
+		if (any_after)
+			s.after = pseudo_style(c, &s, PE_AFTER);
+		st = (ec_style *) uniq_style(c, &s);
+		if (st == NULL)
+			return parent;
+	}
+#endif
 	{
 		uintptr_t *key = ec_alloc(&c->smem, n * sizeof *key + 1);
 		if (key != NULL) {
@@ -1694,8 +1842,8 @@ static void style_list(ec_ctx *c, ec_node *e, const ec_style *parent, int one)
 			c->root_style = st;
 		if (e->first != NULL && EC_DEEP_BY(EC_CASCADE_ROOM)) {
 			style_flat(e, st);
-		} else if (e->first != NULL && c->prune && st->k[EP_DISPLAY] == EK_KW &&
-			   st->v[EP_DISPLAY].i == KW_NONE) {
+		} else if (e->first != NULL && c->prune && EC_K(st, EP_DISPLAY) == EK_KW &&
+			   EC_V(st, EP_DISPLAY).i == KW_NONE) {
 			/* display: none, on a page that stays as it was parsed
 			   (ec_prune: no scripts): nothing under it is drawn, so
 			   its style for all of them, none made (the speed rig's
@@ -1722,6 +1870,9 @@ int ec_select(ec_ctx *c, ec_node *root)
 	centry *was_cache = cache;
 	uintptr_t *was_keys = keybuf;
 	const ec_style **was_uniq = uniq;
+#ifndef EC_FLAT
+	const ec_v **was_gu = gu;
+#endif
 	c->smem.nomem = 0;
 	c->stopped = 0;
 	/* the hits, the cache and its keys, taken while it runs (not in the
@@ -1735,6 +1886,9 @@ int ec_select(ec_ctx *c, ec_node *root)
 	memset(icache, 0, sizeof icache);
 	/* (not in the BSS: EWEB.PRG's start on a stock Falcon) */
 	uniq = calloc(UNIQ_SIZE, sizeof *uniq);
+#ifndef EC_FLAT
+	gu = calloc(EC_NGROUPS * GU_SIZE, sizeof *gu);
+#endif
 	memset(c->bloom, 0, sizeof c->bloom);
 	/* what var() makes parsed goes with the styles (ec_unstyle gives
 	   it back), not with the sheets */
@@ -1754,6 +1908,10 @@ int ec_select(ec_ctx *c, ec_node *root)
 	c->pmem = pm;
 	free(uniq);
 	uniq = was_uniq;
+#ifndef EC_FLAT
+	free(gu);
+	gu = was_gu;
+#endif
 	free(scratch);
 	hits = was_hits;
 	cache = was_cache;

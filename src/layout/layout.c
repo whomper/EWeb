@@ -441,9 +441,11 @@ static int32_t dev(L *l, ec_fx v)
 	}
 }
 
-static int kw(const ec_style *s, int p)
+static inline int kw(const ec_style *s, int p)
 {
-	return s->k[p] == EK_KW ? s->v[p].i : 0;
+	uint8_t k;
+	const ec_v *v = ec_vk(s, p, &k);
+	return k == EK_KW ? v->i : 0;
 }
 
 /* a length in device px: base is what a percentage is of (AUTO: none,
@@ -488,18 +490,27 @@ static __attribute__((noinline)) int32_t len_pct(int32_t base, int32_t pct)
 	return (int32_t) ((int64_t) base * pct / (100 * 1024));
 }
 
-static int32_t len(L *l, const ec_style *s, int p, int32_t base)
+static __attribute__((noinline)) int32_t len_kv(L *l, int k, const ec_v *v, int32_t base, int p)
 {
-	switch (s->k[p]) {
+	switch (k) {
 	case EK_PX:
-		return s->v[p].i != 0 ? dev(l, s->v[p].i) : 0;	/* (most margins and padding) */
+		return v->i != 0 ? dev(l, v->i) : 0;	/* (most margins and padding) */
 	case EK_PCT:
-		return base == AUTO ? AUTO : len_pct(base, s->v[p].i);
+		return base == AUTO ? AUTO : len_pct(base, v->i);
 	case EK_CALC:
-		return len_calc(l, s->v[p].p, base, p);
+		return len_calc(l, v->p, base, p);
 	default:
 		return AUTO;
 	}
+}
+
+/* (inline: most callers name p, and its value's place is then known
+   when compiled, not looked up) */
+static inline int32_t len(L *l, const ec_style *s, int p, int32_t base)
+{
+	uint8_t k;
+	const ec_v *v = ec_vk(s, p, &k);
+	return len_kv(l, k, v, base, p);
 }
 
 static int32_t len0(L *l, const ec_style *s, int p, int32_t base)
@@ -510,10 +521,12 @@ static int32_t len0(L *l, const ec_style *s, int p, int32_t base)
 
 static uint32_t color(const ec_style *s, int p)
 {
-	if (s->k[p] == EK_COLOR)
-		return (uint32_t) s->v[p].i;
-	if (s->k[p] == EK_CURCOLOR)
-		return (uint32_t) s->v[EP_COLOR].i;
+	uint8_t k;
+	const ec_v *v = ec_vk(s, p, &k);
+	if (k == EK_COLOR)
+		return (uint32_t) v->i;
+	if (k == EK_CURCOLOR)
+		return (uint32_t) EC_V(s, EP_COLOR).i;
 	return 0;
 }
 
@@ -525,7 +538,7 @@ static uint32_t color(const ec_style *s, int p)
    its room and its clicks */
 static unsigned opacity(const ec_style *s)
 {
-	int32_t v = s->k[EP_OPACITY] == EK_NUM ? s->v[EP_OPACITY].i : 1024;
+	int32_t v = EC_K(s, EP_OPACITY) == EK_NUM ? EC_V(s, EP_OPACITY).i : 1024;
 	return v >= 1024 ? 255 : v <= 0 ? 0 : (unsigned) ((v * 255 + 512) >> 10);
 }
 
@@ -551,7 +564,7 @@ static int is_data(const char *u)
 static unsigned own_opacity(const ec_style *s, const dnode *n)
 {
 	unsigned a = opacity(s);
-	if (a == 255 || s->k[EP_ANIMATION_NAME] != EK_KW)
+	if (a == 255 || EC_K(s, EP_ANIMATION_NAME) != EK_KW)
 		return 255;
 	if (n == NULL || n->type != DN_ELEMENT || n->ns != DN_NS_HTML)
 		return a;
@@ -585,7 +598,7 @@ static uint32_t text_paint(const ec_style *s, uint32_t clip)
 	uint32_t c;
 	if (clip != 0)
 		return clip;
-	if (s->k[EP_TEXT_STROKE_WIDTH] == EK_PX && s->v[EP_TEXT_STROKE_WIDTH].i > 0 &&
+	if (EC_K(s, EP_TEXT_STROKE_WIDTH) == EK_PX && EC_V(s, EP_TEXT_STROKE_WIDTH).i > 0 &&
 	    ((c = color(s, EP_TEXT_STROKE_COLOR)) >> 24) != 0)
 		return c;
 	return color(s, EP_TEXT_SHADOW);
@@ -635,8 +648,8 @@ static uint32_t clip_paint(const ec_style *s)
 	uint32_t c;
 	if (kw(s, EP_BACKGROUND_CLIP) != KW_TEXT)
 		return 0;
-	if (s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE &&
-	    (c = grad_first(s->v[EP_BACKGROUND_IMAGE].p, color(s, EP_COLOR))) != 0)
+	if (EC_K(s, EP_BACKGROUND_IMAGE) == EK_IMAGE &&
+	    (c = grad_first(EC_V(s, EP_BACKGROUND_IMAGE).p, color(s, EP_COLOR))) != 0)
 		return c;
 	if (((c = color(s, EP_BACKGROUND_COLOR)) >> 24) != 0)
 		return c;
@@ -705,7 +718,7 @@ static int32_t text_px(L *l, int32_t px)
 
 static int32_t font_px(L *l, const ec_style *s)
 {
-	int32_t px = text_px(l, s->k[EP_FONT_SIZE] == EK_PX ? dev(l, s->v[EP_FONT_SIZE].i) : dev(l, 16 << 10));
+	int32_t px = text_px(l, EC_K(s, EP_FONT_SIZE) == EK_PX ? dev(l, EC_V(s, EP_FONT_SIZE).i) : dev(l, 16 << 10));
 	return px < 6 ? 6 : px;
 }
 
@@ -761,7 +774,7 @@ static int family_of(const ec_family *f)
 static ew_font *font_of(L *l, const ec_style *s)
 {
 	int fam, sty = 0, i;
-	const ec_family *f = s->k[EP_FONT_FAMILY] == EK_PTR ? s->v[EP_FONT_FAMILY].p : NULL;
+	const ec_family *f = EC_K(s, EP_FONT_FAMILY) == EK_PTR ? EC_V(s, EP_FONT_FAMILY).p : NULL;
 
 	/* (a page has a few lists of names, each asked for at every run of
 	   text: each looked through once a layout) */
@@ -775,7 +788,7 @@ static ew_font *font_of(L *l, const ec_style *s)
 		l->fams[l->nfams % 8].fam = fam;
 		l->nfams++;
 	}
-	if (s->k[EP_FONT_WEIGHT] == EK_INT && s->v[EP_FONT_WEIGHT].i >= 600)
+	if (EC_K(s, EP_FONT_WEIGHT) == EK_INT && EC_V(s, EP_FONT_WEIGHT).i >= 600)
 		sty |= FS_BOLD;
 	if (kw(s, EP_FONT_STYLE) == KW_ITALIC || kw(s, EP_FONT_STYLE) == KW_OBLIQUE)
 		sty |= FS_ITALIC;
@@ -786,22 +799,22 @@ static ew_font *font_of(L *l, const ec_style *s)
 static int32_t line_height(L *l, const ec_style *s, ew_font *f)
 {
 	int32_t px = font_px(l, s);
-	switch (s->k[EP_LINE_HEIGHT]) {
+	switch (EC_K(s, EP_LINE_HEIGHT)) {
 	case EK_NUM:
 #ifdef EW_ST
 		/* (one muls.w, not libgcc's 64-bit multiply, as in dev) */
-		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
-			return (muls16(px, s->v[EP_LINE_HEIGHT].i) + 512) >> 10;
+		if ((uint32_t) px < 32768 && (uint32_t) EC_V(s, EP_LINE_HEIGHT).i < 32768)
+			return (muls16(px, EC_V(s, EP_LINE_HEIGHT).i) + 512) >> 10;
 #endif
-		return (int32_t) (((int64_t) px * s->v[EP_LINE_HEIGHT].i + 512) >> 10);
+		return (int32_t) (((int64_t) px * EC_V(s, EP_LINE_HEIGHT).i + 512) >> 10);
 	case EK_PX:
-		return text_px(l, dev(l, s->v[EP_LINE_HEIGHT].i));
+		return text_px(l, dev(l, EC_V(s, EP_LINE_HEIGHT).i));
 	case EK_PCT:
 #ifdef EW_ST
-		if ((uint32_t) px < 32768 && (uint32_t) s->v[EP_LINE_HEIGHT].i < 32768)
-			return muls16(px, s->v[EP_LINE_HEIGHT].i) / (100 * 1024);
+		if ((uint32_t) px < 32768 && (uint32_t) EC_V(s, EP_LINE_HEIGHT).i < 32768)
+			return muls16(px, EC_V(s, EP_LINE_HEIGHT).i) / (100 * 1024);
 #endif
-		return (int32_t) ((int64_t) px * s->v[EP_LINE_HEIGHT].i / (100 * 1024));
+		return (int32_t) ((int64_t) px * EC_V(s, EP_LINE_HEIGHT).i / (100 * 1024));
 	default: {
 		int32_t h = (px * 6 + 4) / 5;		/* normal: 1.2 */
 		(void) f;
@@ -879,7 +892,7 @@ static long lay_open(L *l, const ec_style *s)
 	y = &l->lay[l->nlay];
 	y->k0 = l->p->nitems;
 	y->k1 = -1;
-	y->z = s->k[EP_Z_INDEX] == EK_INT ? s->v[EP_Z_INDEX].i : LAY_AUTO;
+	y->z = EC_K(s, EP_Z_INDEX) == EK_INT ? EC_V(s, EP_Z_INDEX).i : LAY_AUTO;
 	return l->nlay++;
 }
 
@@ -1519,11 +1532,11 @@ static const char *icon_text(L *l, const char *s, uint32_t *n, int kind)
 static box *add_text_box(L *l, box *parent, const ec_style *st, const char *s, uint32_t n)
 {
 	box *t;
-	const ec_family *f = st->k[EP_FONT_FAMILY] == EK_PTR ? st->v[EP_FONT_FAMILY].p : NULL;
+	const ec_family *f = EC_K(st, EP_FONT_FAMILY) == EK_PTR ? EC_V(st, EP_FONT_FAMILY).p : NULL;
 	/* text of font-size 0 takes no room and shows nothing (font_px's
 	   floor is for the smallest size read, not for none: AtariAge's
 	   forum list hides "By name," so, its ::after shown instead) */
-	if (st->k[EP_FONT_SIZE] == EK_PX && st->v[EP_FONT_SIZE].i <= 0)
+	if (EC_K(st, EP_FONT_SIZE) == EK_PX && EC_V(st, EP_FONT_SIZE).i <= 0)
 		return NULL;
 	if (f != NULL) {
 		if (f != l->icon_f) {	/* (a family list looked at once in a row) */
@@ -1572,17 +1585,17 @@ static int styled_ctl(const ec_style *st, const fctl *c)
 	uint32_t bg = color(st, EP_BACKGROUND_COLOR);
 	if (c->kind == FC_CHECKBOX || c->kind == FC_RADIO || c->kind == FC_IMAGE)
 		return 0;
-	if (((bg >> 24) != 0 && bg != UA_CTL_BG) || st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE ||
-	    st->k[EP_BACKGROUND_IMAGE] == EK_PTR)
+	if (((bg >> 24) != 0 && bg != UA_CTL_BG) || EC_K(st, EP_BACKGROUND_IMAGE) == EK_IMAGE ||
+	    EC_K(st, EP_BACKGROUND_IMAGE) == EK_PTR)
 		return 2;
 	if (kw(st, EP_BORDER_TOP_STYLE) > KW_HIDDEN || kw(st, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN ||
 	    kw(st, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN || kw(st, EP_BORDER_LEFT_STYLE) > KW_HIDDEN)
 		return 3;
 	if (bg == 0 && c->kind != FC_SELECT)
 		return 1;	/* made transparent by the page: its frame, no ground */
-	return st->k[EP_PADDING_TOP] != EK_PX || st->v[EP_PADDING_TOP].i != 0 ||
-	       st->k[EP_PADDING_LEFT] != EK_PX || st->v[EP_PADDING_LEFT].i != 0 ||
-	       st->k[EP_WIDTH] != EK_KW || st->k[EP_HEIGHT] != EK_KW;
+	return EC_K(st, EP_PADDING_TOP) != EK_PX || EC_V(st, EP_PADDING_TOP).i != 0 ||
+	       EC_K(st, EP_PADDING_LEFT) != EK_PX || EC_V(st, EP_PADDING_LEFT).i != 0 ||
+	       EC_K(st, EP_WIDTH) != EK_KW || EC_K(st, EP_HEIGHT) != EK_KW;
 }
 
 /* a form control: an atom of its size, drawn from its state (form.h),
@@ -1599,7 +1612,7 @@ static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps);
 /* 1: a ::before or ::after style that makes a box */
 static int pseudo_shown(const ec_style *ps)
 {
-	return ps != NULL && ps->k[EP_CONTENT] == EK_PTR && kw(ps, EP_DISPLAY) != KW_NONE;
+	return ps != NULL && EC_K(ps, EP_CONTENT) == EK_PTR && kw(ps, EP_DISPLAY) != KW_NONE;
 }
 
 /* 1: n has an element among its children (not text alone) */
@@ -1686,7 +1699,7 @@ static void control(L *l, box *parent, dnode *n, const ec_style *st)
 		   were a line high and more): the font's height for 13 of its
 		   CSS px, square, never under 7 device px */
 		{
-			int32_t css = st->k[EP_FONT_SIZE] == EK_PX ? st->v[EP_FONT_SIZE].i >> 10 : 16;
+			int32_t css = EC_K(st, EP_FONT_SIZE) == EK_PX ? EC_V(st, EP_FONT_SIZE).i >> 10 : 16;
 			w = (f->ascent + f->descent) * 13 / (css < 8 ? 8 : css) + 2;
 			if (w < 7)
 				w = 7;
@@ -1976,9 +1989,9 @@ static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps)
 	size_t o = 0;
 	int i;
 
-	if (ps == NULL || ps->k[EP_CONTENT] != EK_PTR || kw(ps, EP_DISPLAY) == KW_NONE)
+	if (ps == NULL || EC_K(ps, EP_CONTENT) != EK_PTR || kw(ps, EP_DISPLAY) == KW_NONE)
 		return;
-	ct = ps->v[EP_CONTENT].p;
+	ct = EC_V(ps, EP_CONTENT).p;
 	for (i = 0; i < ct->n; i++) {
 		const char *s = NULL;
 		if (ct->item[i].type == EC_CONTENT_STRING && ct->item[i].s != NULL)
@@ -2789,8 +2802,8 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 	r->bg = parent ? parent->bg : 0;
 	r->shift = parent ? parent->shift : 0;
 	r->hidden = kw(st, EP_VISIBILITY) == KW_HIDDEN || kw(st, EP_VISIBILITY) == KW_COLLAPSE;
-	if (st->k[EP_TEXT_DECORATION_LINE] == EK_INT) {
-		d = st->v[EP_TEXT_DECORATION_LINE].i;
+	if (EC_K(st, EP_TEXT_DECORATION_LINE) == EK_INT) {
+		d = EC_V(st, EP_TEXT_DECORATION_LINE).i;
 		if (d & EC_DECO_UNDERLINE)
 			r->deco |= DLF_UNDER;
 		if (d & EC_DECO_OVERLINE)
@@ -2801,10 +2814,10 @@ static void runstate(L *l, RUNSTATE *r, const ec_style *st, const dnode *n, cons
 	bg = color(st, EP_BACKGROUND_COLOR);
 	if (bg == UA_CTL_BG)
 		bg = 0;		/* (a control's own: it draws its ground itself) */
-	if (parent != NULL && st->k[EP_BACKGROUND_IMAGE] == EK_IMAGE)
+	if (parent != NULL && EC_K(st, EP_BACKGROUND_IMAGE) == EK_IMAGE)
 		/* an inline's gradient: its colours' average over its colour
 		   (a run is one fill) */
-		bg = over(grad_average(st->v[EP_BACKGROUND_IMAGE].p, color(st, EP_COLOR)), bg);
+		bg = over(grad_average(EC_V(st, EP_BACKGROUND_IMAGE).p, color(st, EP_COLOR)), bg);
 	if (parent != NULL && (bg >> 24) != 0 && kw(st, EP_BACKGROUND_CLIP) != KW_TEXT)
 		r->bg = over(fade(bg, r->alpha), r->bg);	/* one fill for both, as solid as they are together */
 	va = kw(st, EP_VERTICAL_ALIGN);
@@ -3333,10 +3346,10 @@ static int32_t attr_px(dnode *n, const char *name)
 static int has_pct(const ec_style *s, int p)
 {
 	int i;
-	if (s->k[p] == EK_PCT)
+	if (EC_K(s, p) == EK_PCT)
 		return 1;
-	if (s->k[p] == EK_CALC) {
-		const ec_calc *c = s->v[p].p;
+	if (EC_K(s, p) == EK_CALC) {
+		const ec_calc *c = EC_V(s, p).p;
 		for (i = 0; i < c->n; i++)
 			if (c->a[i].pct != 0)
 				return 1;
@@ -3382,7 +3395,7 @@ static int image_size(L *l, box *b, int32_t *w, int32_t *h)
 		*w = *h = 0;
 		return 0;
 	}
-	*w = l->repl && b->st->k[EP_WIDTH] != EK_KW && l->cw != AUTO ? l->cw : len(l, b->st, EP_WIDTH, l->cw);
+	*w = l->repl && EC_K(b->st, EP_WIDTH) != EK_KW && l->cw != AUTO ? l->cw : len(l, b->st, EP_WIDTH, l->cw);
 	*h = len(l, b->st, EP_HEIGHT, hb);
 	if (b->ratio && *w == AUTO && *h == AUTO && !l->minw && l->cw != AUTO && iw > 0 && ih > 0) {
 		/* proportions and no size of its own (an SVG of a viewBox
@@ -3557,7 +3570,7 @@ static void mark_items(L *l, const RUNSTATE *r, const box *m, int *line_start)
 		return;
 	}
 	put_item(l, r, IT_WORD, s, n, (int32_t) font_width(r->font, s, n), -1);
-	if (!m->num && li->st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
+	if (!m->num && EC_K(li->st, EP_LIST_STYLE_TYPE) == EK_PTR)
 		return;		/* a string: as it is, the white space after it dropped */
 	put_item(l, r, IT_SPACE, " ", 1, font_advance(r->font, ' '), 0);
 	if (l->fail)
@@ -4687,8 +4700,8 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 	void *h;
 	int32_t iw = 0, ih = 0;
 	dl_item *d;
-	if (s != NULL && s->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
-		const ec_grad *g = grad_dev(l, s, s->v[EP_BACKGROUND_IMAGE].p);
+	if (s != NULL && EC_K(s, EP_BACKGROUND_IMAGE) == EK_IMAGE) {
+		const ec_grad *g = grad_dev(l, s, EC_V(s, EP_BACKGROUND_IMAGE).p);
 		if (g == NULL || (d = dl_add(l)) == NULL)
 			return -1;
 		d->type = DL_GRAD;
@@ -4700,9 +4713,9 @@ static long bg_item(L *l, const ec_style *s, dnode *n)
 #endif
 		return l->p->nitems - 1;
 	}
-	if (s == NULL || s->k[EP_BACKGROUND_IMAGE] != EK_PTR || l->p->opt.image == NULL)
+	if (s == NULL || EC_K(s, EP_BACKGROUND_IMAGE) != EK_PTR || l->p->opt.image == NULL)
 		return -1;
-	u = s->v[EP_BACKGROUND_IMAGE].p;
+	u = EC_V(s, EP_BACKGROUND_IMAGE).p;
 	if (u == NULL || u->len == 0)
 		return -1;
 	h = l->p->opt.image(l->p->opt.ud, u->s, 1, &iw, &ih);
@@ -4765,7 +4778,7 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 		iw = 1;
 	if (ih <= 0)
 		ih = 1;
-	sw = s->k[EP_BACKGROUND_SIZE_W] == EK_KW ? s->v[EP_BACKGROUND_SIZE_W].i : 0;
+	sw = EC_K(s, EP_BACKGROUND_SIZE_W) == EK_KW ? EC_V(s, EP_BACKGROUND_SIZE_W).i : 0;
 	if (grad) {
 		/* no size of its own: the area's, in each way the size doesn't
 		   give (CSS Images 3, 5.3, the default sizing algorithm; cover
@@ -5736,7 +5749,7 @@ static int32_t measure(L *l, box *b)
 		return 0;	/* (a table's or a flexbox's sizing measures every box under it: polls too) */
 	if (!b->anon)
 		w = len(l, b->st, EP_WIDTH, AUTO);
-	if (l->minw && w == AUTO && !b->anon && b->n != NULL && b->st->k[EP_WIDTH] == EK_PCT &&
+	if (l->minw && w == AUTO && !b->anon && b->n != NULL && EC_K(b->st, EP_WIDTH) == EK_PCT &&
 	    (b->n->tag == T_INPUT || b->n->tag == T_SELECT || b->n->tag == T_TEXTAREA)) {
 		/* a field of a width in percent: at its narrowest, no wider than
 		   its padding and borders (CSS Sizing 3, 5.2.2: compressible),
@@ -5772,9 +5785,9 @@ static int32_t measure(L *l, box *b)
 			inner = 0;
 	} else if (b->inl) {
 		inner = inline_measure(l, b);
-	} else if (b->grid && b->st->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR) {
+	} else if (b->grid && EC_K(b->st, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR) {
 		/* its columns' lengths, the others as wide as its widest item */
-		const ec_tracks *t = b->st->v[EP_GRID_TEMPLATE_COLUMNS].p;
+		const ec_tracks *t = EC_V(b->st, EP_GRID_TEMPLATE_COLUMNS).p;
 		int32_t widest = 0, g = gap(l, b->st, EP_COLUMN_GAP, AUTO);
 		int k;
 		for (c = b->first; c != NULL; c = c->next) {
@@ -5873,8 +5886,8 @@ static const char *marker_text(const ec_style *st, int fixed, int n, char *buf)
 {
 	int t = fixed ? fixed : kw(st, EP_LIST_STYLE_TYPE);
 
-	if (!fixed && st->k[EP_LIST_STYLE_TYPE] == EK_PTR)
-		return ((const ec_str *) st->v[EP_LIST_STYLE_TYPE].p)->s;
+	if (!fixed && EC_K(st, EP_LIST_STYLE_TYPE) == EK_PTR)
+		return ((const ec_str *) EC_V(st, EP_LIST_STYLE_TYPE).p)->s;
 	switch (t) {
 	case KW_NONE: return NULL;
 	case KW_CIRCLE: return "\xe2\x97\xa6";	/* ◦ */
@@ -5975,9 +5988,9 @@ static int colspan(const box *c)
 static int32_t spacing(L *l, const ec_style *s, int vertical)
 {
 	int k = vertical ? EP_BORDER_SPACING_V : EP_BORDER_SPACING_H;
-	if (kw(s, EP_BORDER_COLLAPSE) == KW_COLLAPSE || s->k[k] != EK_PX)
+	if (kw(s, EP_BORDER_COLLAPSE) == KW_COLLAPSE || EC_K(s, k) != EK_PX)
 		return 0;
-	return dev(l, s->v[k].i);
+	return dev(l, EC_V(s, k).i);
 }
 
 /* a cell's narrowest content, its padding and borders round it (its
@@ -6009,8 +6022,8 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		/* its widest, and what of its margins is a share of w (a
 		   percentage, which measure can't know: margin: 0 20%) */
 		int32_t m = measure(l, c);
-		if (!c->anon && w != AUTO && (c->st->k[EP_MARGIN_LEFT] == EK_PCT || c->st->k[EP_MARGIN_LEFT] == EK_CALC ||
-					    c->st->k[EP_MARGIN_RIGHT] == EK_PCT || c->st->k[EP_MARGIN_RIGHT] == EK_CALC))
+		if (!c->anon && w != AUTO && (EC_K(c->st, EP_MARGIN_LEFT) == EK_PCT || EC_K(c->st, EP_MARGIN_LEFT) == EK_CALC ||
+					    EC_K(c->st, EP_MARGIN_RIGHT) == EK_PCT || EC_K(c->st, EP_MARGIN_RIGHT) == EK_CALC))
 			m += len0(l, c->st, EP_MARGIN_LEFT, w) - len0(l, c->st, EP_MARGIN_LEFT, AUTO) +
 			     len0(l, c->st, EP_MARGIN_RIGHT, w) - len0(l, c->st, EP_MARGIN_RIGHT, AUTO);
 		return m;
@@ -6032,7 +6045,7 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		   narrowest it goes is its content's (AtariAge's forum list,
 		   its middle cell 100%, the cells beside it pushed off the
 		   page) */
-		if (l->minw && c->st->k[EP_WIDTH] == EK_PCT)
+		if (l->minw && EC_K(c->st, EP_WIDTH) == EK_PCT)
 			return m;
 		return m > cw ? m : cw;
 	}
@@ -6360,7 +6373,7 @@ static void bedge(L *l, const box *b, int side, BEDGE *e)
 	e->st = kw(b->st, st[side]);
 	if (e->st > KW_HIDDEN) {
 		e->w = len0(l, b->st, wd[side], AUTO);
-		if (e->w == 0 && b->st->v[wd[side]].i > 0)
+		if (e->w == 0 && EC_V(b->st, wd[side]).i > 0)
 			e->w = 1;	/* a thin one: a pixel, not nothing */
 		e->c = color(b->st, co[side]);
 	}
@@ -6964,8 +6977,8 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 		/* (as by_top 2 below: stretched once its containing block's
 		   height is known, what is in it placed by that height then) */
 		const box *saved_defer = l->defer_box;
-		int will = !fixed && l->cbh == AUTO && top != AUTO && c->st->k[EP_TOP] != EK_PCT &&
-			   c->st->k[EP_TOP] != EK_CALC && c->st->k[EP_BOTTOM] == EK_PX &&
+		int will = !fixed && l->cbh == AUTO && top != AUTO && EC_K(c->st, EP_TOP) != EK_PCT &&
+			   EC_K(c->st, EP_TOP) != EK_CALC && EC_K(c->st, EP_BOTTOM) == EK_PX &&
 			   len(l, c->st, EP_HEIGHT, AUTO) == AUTO;
 		l->defer_box = will ? c : NULL;
 		l->defer_n = 0;
@@ -6987,9 +7000,9 @@ static void place_abs(L *l, box *c, int32_t sx, int32_t sy)
 	ay = top != AUTO ? cby + top : sy;
 	/* placed when the containing block's height is known: by bottom
 	   (top auto), or by a top that is a share of that height */
-	by_top = !fixed && l->cbh == AUTO && (c->st->k[EP_TOP] == EK_PCT || c->st->k[EP_TOP] == EK_CALC);
+	by_top = !fixed && l->cbh == AUTO && (EC_K(c->st, EP_TOP) == EK_PCT || EC_K(c->st, EP_TOP) == EK_CALC);
 	bottom = top == AUTO && !fixed ? len(l, c->st, EP_BOTTOM, AUTO) : AUTO;
-	if (!fixed && !by_top && l->cbh == AUTO && top != AUTO && c->st->k[EP_BOTTOM] == EK_PX &&
+	if (!fixed && !by_top && l->cbh == AUTO && top != AUTO && EC_K(c->st, EP_BOTTOM) == EK_PX &&
 	    len(l, c->st, EP_HEIGHT, AUTO) == AUTO)
 		by_top = 2;	/* (as tall as its top and bottom leave: a bar beside a block) */
 	{
@@ -7345,7 +7358,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 		}
 		memset(&t, 0, sizeof t);
 		t.b = c;
-		t.order = c->anon || c->st->k[EP_ORDER] != EK_INT ? 0 : c->st->v[EP_ORDER].i;
+		t.order = c->anon || EC_K(c->st, EP_ORDER) != EK_INT ? 0 : EC_V(c->st, EP_ORDER).i;
 		for (j = n; j > 0 && it[j - 1].order > t.order; j--)
 			it[j] = it[j - 1];
 		it[j] = t;
@@ -7362,7 +7375,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			int32_t ex = extras(l, it[i].b), bw = AUTO, v;
 			int bbox = !anon && kw(cs, EP_BOX_SIZING) == KW_BORDER_BOX;
 			int32_t mex = anon ? 0 : len0(l, cs, EP_MARGIN_LEFT, w) + len0(l, cs, EP_MARGIN_RIGHT, w);
-			if (!anon && cs->k[EP_FLEX_BASIS] != EK_KW)
+			if (!anon && EC_K(cs, EP_FLEX_BASIS) != EK_KW)
 				bw = len(l, cs, EP_FLEX_BASIS, w);
 			if (bw != AUTO)
 				it[i].base = bw + (bbox ? mex : ex);
@@ -7389,11 +7402,11 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 					it[i].mn = it[i].mx;
 			}
 			it[i].hyp = it[i].base < it[i].mn ? it[i].mn : it[i].base > it[i].mx ? it[i].mx : it[i].base;
-			it[i].grow = anon || cs->k[EP_FLEX_GROW] != EK_NUM ? 0 : cs->v[EP_FLEX_GROW].i;
-			it[i].shrink = anon ? 1024 : cs->k[EP_FLEX_SHRINK] != EK_NUM ? 1024 : cs->v[EP_FLEX_SHRINK].i;
+			it[i].grow = anon || EC_K(cs, EP_FLEX_GROW) != EK_NUM ? 0 : EC_V(cs, EP_FLEX_GROW).i;
+			it[i].shrink = anon ? 1024 : EC_K(cs, EP_FLEX_SHRINK) != EK_NUM ? 1024 : EC_V(cs, EP_FLEX_SHRINK).i;
 			it[i].align = fl_align(&it[i], ai);
-			it[i].autos = !anon && ((cs->k[EP_MARGIN_LEFT] == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO) +
-						(cs->k[EP_MARGIN_RIGHT] == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO));
+			it[i].autos = !anon && ((EC_K(cs, EP_MARGIN_LEFT) == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO) +
+						(EC_K(cs, EP_MARGIN_RIGHT) == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO));
 		}
 		/* lines: as many items as go in the width (one, when it doesn't wrap) */
 		for (i = 0; i < n; ) {
@@ -7428,11 +7441,11 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 				pos = 0;
 				for (k = a; k < e; k++) {
 					const ec_style *cs = it[k].b->st;
-					if (!it[k].b->anon && cs->k[EP_MARGIN_LEFT] == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO)
+					if (!it[k].b->anon && EC_K(cs, EP_MARGIN_LEFT) == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO)
 						pos += each;
 					it[k].pos = pos;
 					pos += it[k].size + cgap;
-					if (!it[k].b->anon && cs->k[EP_MARGIN_RIGHT] == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO)
+					if (!it[k].b->anon && EC_K(cs, EP_MARGIN_RIGHT) == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO)
 						pos += each;
 				}
 			} else {
@@ -7505,7 +7518,7 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 					shift_range(l, it[i].k0, it[i].k1, 0, d);
 					if (it[i].f != AUTO)
 						it[i].f += d;
-					if (it[i].align == KW_STRETCH && (it[i].b->anon || it[i].b->st->k[EP_HEIGHT] == EK_KW))
+					if (it[i].align == KW_STRETCH && (it[i].b->anon || EC_K(it[i].b->st, EP_HEIGHT) == EK_KW))
 						stretch_box(l, it[i].b, it[i].bg, it[i].bd, room2);
 				}
 				at += lh[j] + rgap + between;
@@ -7527,8 +7540,8 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			int anon = it[i].b->anon;
 			int32_t iw = w, mb, f = AUTO, ox = 0, bh;
 			it[i].align = fl_align(&it[i], ai);
-			it[i].grow = anon || cs->k[EP_FLEX_GROW] != EK_NUM ? 0 : cs->v[EP_FLEX_GROW].i;
-			if (!(it[i].align == KW_STRETCH && (anon || cs->k[EP_WIDTH] == EK_KW))) {
+			it[i].grow = anon || EC_K(cs, EP_FLEX_GROW) != EK_NUM ? 0 : EC_V(cs, EP_FLEX_GROW).i;
+			if (!(it[i].align == KW_STRETCH && (anon || EC_K(cs, EP_WIDTH) == EK_KW))) {
 				iw = cell_pref(l, it[i].b, w);
 				if (iw > w)
 					iw = w;
@@ -7543,8 +7556,8 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			it[i].bg = l->last_bg;
 			memcpy(it[i].bd, l->last_bd, sizeof it[i].bd);
 			/* a flex-basis of a length makes it at least that tall */
-			if (!anon && cs->k[EP_FLEX_BASIS] == EK_PX && cs->k[EP_HEIGHT] == EK_KW) {
-				int32_t want = dev(l, cs->v[EP_FLEX_BASIS].i) + len0(l, cs, EP_MARGIN_TOP, w) +
+			if (!anon && EC_K(cs, EP_FLEX_BASIS) == EK_PX && EC_K(cs, EP_HEIGHT) == EK_KW) {
+				int32_t want = dev(l, EC_V(cs, EP_FLEX_BASIS).i) + len0(l, cs, EP_MARGIN_TOP, w) +
 					       len0(l, cs, EP_MARGIN_BOTTOM, w) + len0(l, cs, EP_PADDING_TOP, w) +
 					       len0(l, cs, EP_PADDING_BOTTOM, w) +
 					       (kw(cs, EP_BORDER_TOP_STYLE) > KW_HIDDEN ? len0(l, cs, EP_BORDER_TOP_WIDTH, AUTO) : 0) +
@@ -7654,7 +7667,7 @@ typedef struct {
    auto repeat expanded nrep times), else the auto tracks' in turn */
 static void gtrack_def(const ec_style *s, int tp, int ap, int i, int nrep, ec_tsize *mn, ec_tsize *mx)
 {
-	const ec_tracks *t = s->k[tp] == EK_PTR ? s->v[tp].p : NULL, *a = s->k[ap] == EK_PTR ? s->v[ap].p : NULL;
+	const ec_tracks *t = EC_K(s, tp) == EK_PTR ? EC_V(s, tp).p : NULL, *a = EC_K(s, ap) == EK_PTR ? EC_V(s, ap).p : NULL;
 	int n = 0, k;
 	if (t != NULL) {
 		n = t->rep ? t->n - t->rep_n + t->rep_n * nrep : t->n;
@@ -7731,8 +7744,8 @@ static void grid_lines_of(const ec_style *s, int ps, int pe, const ec_areas *ar,
 	*span = 1;
 	for (k = 0; k < 2; k++) {
 		int p = k ? pe : ps, v, at = -1;
-		if (s->k[p] == EK_INT) {
-			v = s->v[p].i;
+		if (EC_K(s, p) == EK_INT) {
+			v = EC_V(s, p).i;
 			if (v >= EC_GRID_SPAN) {
 				*span = v - EC_GRID_SPAN;
 				continue;
@@ -7740,9 +7753,9 @@ static void grid_lines_of(const ec_style *s, int ps, int pe, const ec_areas *ar,
 			at = v > 0 ? v - 1 : nexp + 1 + v;
 			if (at < 0)
 				at = 0;
-		} else if (s->k[p] == EK_PTR && ar != NULL) {
+		} else if (EC_K(s, p) == EK_PTR && ar != NULL) {
 			/* an area's name: its first line, or for the end its last */
-			const ec_str *nm = s->v[p].p;
+			const ec_str *nm = EC_V(s, p).p;
 			int lo = -1, hi = -1;
 			for (i = 0; i < ar->rows * ar->cols; i++)
 				if (ar->name[i] != NULL && ar->name[i]->len == nm->len &&
@@ -7922,10 +7935,10 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 						     int32_t *first)
 {
 	const ec_style *s = b->st;
-	const ec_tracks *tc = s->k[EP_GRID_TEMPLATE_COLUMNS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_COLUMNS].p : NULL;
-	const ec_tracks *tr = s->k[EP_GRID_TEMPLATE_ROWS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_ROWS].p : NULL;
-	const ec_areas *ar = s->k[EP_GRID_TEMPLATE_AREAS] == EK_PTR ? s->v[EP_GRID_TEMPLATE_AREAS].p : NULL;
-	int flow = s->k[EP_GRID_AUTO_FLOW] == EK_INT ? s->v[EP_GRID_AUTO_FLOW].i : 0;
+	const ec_tracks *tc = EC_K(s, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_COLUMNS).p : NULL;
+	const ec_tracks *tr = EC_K(s, EP_GRID_TEMPLATE_ROWS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_ROWS).p : NULL;
+	const ec_areas *ar = EC_K(s, EP_GRID_TEMPLATE_AREAS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_AREAS).p : NULL;
+	int flow = EC_K(s, EP_GRID_AUTO_FLOW) == EK_INT ? EC_V(s, EP_GRID_AUTO_FLOW).i : 0;
 	int32_t cg = gap(l, s, EP_COLUMN_GAP, w), rg = gap(l, s, EP_ROW_GAP, hdef), total = 0;
 	int crep = grid_repeats(l, tc, w, cg), rrep = grid_repeats(l, tr, hdef, rg);
 	int ncx = grid_explicit(tc, crep), nrx = grid_explicit(tr, rrep), ncols, nrows, n = 0, i, j, k;
@@ -8187,7 +8200,7 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 			/* right to left: the columns from the right, an item's
 			   start its area's right */
 			ix = rtl ? 2 * x + w - cx[g->c0] - aw : cx[g->c0];
-			if (g->ja != KW_STRETCH || (!g->b->anon && g->b->st->k[EP_WIDTH] != EK_KW)) {
+			if (g->ja != KW_STRETCH || (!g->b->anon && EC_K(g->b->st, EP_WIDTH) != EK_KW)) {
 				iw = cell_pref(l, g->b, aw);
 				if (iw > aw)
 					iw = aw;
@@ -8261,7 +8274,7 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 		room = ah - (g->top - ry[g->r0]) - g->h;
 		if (room <= 0)
 			continue;
-		if (g->aa == KW_STRETCH && (g->b->anon || g->b->st->k[EP_HEIGHT] == EK_KW))
+		if (g->aa == KW_STRETCH && (g->b->anon || EC_K(g->b->st, EP_HEIGHT) == EK_KW))
 			stretch_box(l, g->b, g->bg, g->bd, room);
 		else if (g->aa == KW_CENTER || g->aa == KW_FLEX_END) {
 			int32_t d = g->aa == KW_CENTER ? room / 2 : room;
@@ -8392,10 +8405,10 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (kw(s, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN)
 			bb = len0(l, s, EP_BORDER_BOTTOM_WIDTH, AUTO);
 		/* a width of a thin border rounds to a pixel, not to nothing */
-		if (kw(s, EP_BORDER_LEFT_STYLE) > KW_HIDDEN && bl == 0 && s->v[EP_BORDER_LEFT_WIDTH].i > 0) bl = 1;
-		if (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN && br == 0 && s->v[EP_BORDER_RIGHT_WIDTH].i > 0) br = 1;
-		if (kw(s, EP_BORDER_TOP_STYLE) > KW_HIDDEN && bt == 0 && s->v[EP_BORDER_TOP_WIDTH].i > 0) bt = 1;
-		if (kw(s, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN && bb == 0 && s->v[EP_BORDER_BOTTOM_WIDTH].i > 0) bb = 1;
+		if (kw(s, EP_BORDER_LEFT_STYLE) > KW_HIDDEN && bl == 0 && EC_V(s, EP_BORDER_LEFT_WIDTH).i > 0) bl = 1;
+		if (kw(s, EP_BORDER_RIGHT_STYLE) > KW_HIDDEN && br == 0 && EC_V(s, EP_BORDER_RIGHT_WIDTH).i > 0) br = 1;
+		if (kw(s, EP_BORDER_TOP_STYLE) > KW_HIDDEN && bt == 0 && EC_V(s, EP_BORDER_TOP_WIDTH).i > 0) bt = 1;
+		if (kw(s, EP_BORDER_BOTTOM_STYLE) > KW_HIDDEN && bb == 0 && EC_V(s, EP_BORDER_BOTTOM_WIDTH).i > 0) bb = 1;
 		if (b->n != NULL && b->n->ctl != NULL && !b->repl && !(b->first != NULL && b->first->frame) &&
 		    !(b->ctl && b->n->tag == T_BUTTON)) {
 			/* a floated form control's block (control): the control
@@ -8902,7 +8915,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			shift_blocks(l, bstart, dx, dy);
 		}
 	}
-	if (s->v[EP_TRANSLATE_X].i != 0 || s->v[EP_TRANSLATE_Y].i != 0) {
+	if (EC_V(s, EP_TRANSLATE_X).i != 0 || EC_V(s, EP_TRANSLATE_Y).i != 0) {
 		/* transform's translations (the rest of it isn't drawn): moved
 		   as a relative box is, a percentage of its own border box
 		   (CSS Transforms 1, 3: the reference box). A drawer kept off
@@ -9329,8 +9342,8 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	   Backgrounds 3, The Canvas Background, leaves it to them) */
 	{
 		uint32_t hb = color(html->e.style, EP_BACKGROUND_COLOR);
-		if ((hb >> 24) != 0 || html->e.style->k[EP_BACKGROUND_IMAGE] == EK_PTR ||
-		    html->e.style->k[EP_BACKGROUND_IMAGE] == EK_IMAGE) {
+		if ((hb >> 24) != 0 || EC_K(html->e.style, EP_BACKGROUND_IMAGE) == EK_PTR ||
+		    EC_K(html->e.style, EP_BACKGROUND_IMAGE) == EK_IMAGE) {
 			if ((hb >> 24) != 0) {
 				p->bg = over(hb, 0xffffffff) & 0xffffff;
 				p->bg_set = 1;
