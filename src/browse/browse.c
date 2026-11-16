@@ -2316,7 +2316,9 @@ static page *lay(browser *b, doc *d, const char *base)
 	o.width = b->width;
 	o.zoom = b->zoom;
 	o.text = b->text;
+#ifndef EW_ST
 	o.wide_sans = (uint8_t) (b->wide_sans != 0);
+#endif
 	o.sbar = b->sbar;
 	o.sbar_h = b->sbar_h;
 	o.height = b->height;
@@ -5215,8 +5217,11 @@ static int go_to(browser *b, int i)
 		}
 		return BR_SAME;
 	}
-	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom && b->hist[i].p->opt.text == b->text &&
-	    b->hist[i].p->opt.wide_sans == (b->wide_sans != 0)) {
+	if (b->hist[i].p != NULL && b->hist[i].p->opt.zoom == b->zoom && b->hist[i].p->opt.text == b->text
+#ifndef EW_ST
+	    && b->hist[i].p->opt.wide_sans == (b->wide_sans != 0)
+#endif
+	    ) {
 		/* kept: shown at once, laid out again only for another width */
 		BR_ENTRY *e = &b->hist[i];
 		doc *d = e->d;

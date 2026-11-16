@@ -1312,7 +1312,11 @@ int main(int argc, char **argv)
 	b.translate = gw_to;	/* (--gwtranslate: NULL off, as EWEB.PRG with Translate off) */
 	b.height = height > 0 ? height : 400;	/* (the window's: a frameset is as tall) */
 	b.text = (int32_t) (1024L * text / 100);
+#ifndef EW_ST
 	b.wide_sans = wide_sans;
+#else
+	(void) wide_sans;
+#endif
 	b.sbar = sbar;
 	b.sbar_h = sbar_h;
 	b.say = said;

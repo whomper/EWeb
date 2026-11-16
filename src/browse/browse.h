@@ -114,7 +114,6 @@ typedef struct browser {
 				   not known) */
 	int32_t zoom;		/* device px per CSS px, x1024 */
 	int32_t text;		/* the text's size, x1024 (LAYOUT_OPT.text) */
-	int wide_sans;		/* Arial's kind in DejaVu Sans, not Condensed (LAYOUT_OPT) */
 	int32_t sbar, sbar_h;	/* a box's scroll bars' width down, height across (LAYOUT_OPT) */
 
 	BR_ENTRY hist[BR_HISTORY];
@@ -249,6 +248,12 @@ typedef struct browser {
 	   the file in memory */
 	int stream_files;
 	void *ud;
+#ifndef EW_ST
+	/* pages made for Arial's kind in DejaVu Sans, not Condensed
+	   (LAYOUT_OPT.wide_sans; at the end: the fields before it where 1.17
+	   had them) */
+	int wide_sans;
+#endif
 } browser;
 
 void br_init(browser *b, int32_t width, int32_t zoom);

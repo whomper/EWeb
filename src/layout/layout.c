@@ -747,7 +747,13 @@ static int32_t font_px(L *l, const ec_style *s)
    for Arial lay out as made; EWeb's own pages name DejaVu Sans). DejaVu
    Sans for them too with wide (LAYOUT_OPT.wide_sans: EWEB.INF's NARROW=0,
    Settings > General; Erez, 16 Nov 2026) */
+#ifdef EW_ST
+#define FAM_ARIAL(wide) FF_COND	/* (frozen: 1.17's, Arial's kind narrow) */
+static int family_of(const ec_family *f)
+#else
+#define FAM_ARIAL(wide) ((wide) ? FF_SANS : FF_COND)
 static int family_of(const ec_family *f, int wide)
+#endif
 {
 	int fam = -1, i;
 
@@ -768,7 +774,7 @@ static int family_of(const ec_family *f, int wide)
 				 contains_ci(nm, n, "segoe") || contains_ci(nm, n, "system") ||
 				 contains_ci(nm, n, "open") || contains_ci(nm, n, "lato") ||
 				 contains_ci(nm, n, "inter") || contains_ci(nm, n, "noto"))
-				fam = wide ? FF_SANS : FF_COND;
+				fam = FAM_ARIAL(wide);
 			else if (contains_ci(nm, n, "serif") || contains_ci(nm, n, "times") ||
 				 contains_ci(nm, n, "georgia") || contains_ci(nm, n, "garamond") ||
 				 contains_ci(nm, n, "palatino") || contains_ci(nm, n, "book") ||
@@ -782,7 +788,7 @@ static int family_of(const ec_family *f, int wide)
 				fam = FF_SERIF;
 			else if (f->generic == KW_SANS_SERIF || f->generic == KW_UI_SANS_SERIF ||
 				 f->generic == KW_SYSTEM_UI)
-				fam = wide ? FF_SANS : FF_COND;
+				fam = FAM_ARIAL(wide);
 		}
 	}
 	if (fam < 0)
@@ -802,7 +808,11 @@ static ew_font *font_of(L *l, const ec_style *s)
 	if (i < l->nfams && i < 8) {
 		fam = l->fams[i].fam;
 	} else {
+#ifdef EW_ST
+		fam = family_of(f);
+#else
 		fam = family_of(f, l->p->opt.wide_sans);
+#endif
 		l->fams[l->nfams % 8].f = f;
 		l->fams[l->nfams % 8].fam = fam;
 		l->nfams++;

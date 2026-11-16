@@ -106,7 +106,10 @@ void dlg_hebrew_changed(void)
 
 /* the values as the dialog changes them: its ticks, fields and the
    language; Cancel puts them back (settings.c) */
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE, T_NARROW,
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE,
+#ifndef EW_ST
+       T_NARROW,
+#endif
        NTICK };
 static short s_on[NTICK];
 /* the search address and the gateway hold as much as their settings,
@@ -128,7 +131,11 @@ static void settings_drawn_now(OBJECT *t, short band)
 		gap_tag("dialog: drawn");
 		/* (for the rigs: where its pages' list is, and its size, which
 		   puts its buttons in their row: H - 2) */
+#ifdef EW_ST
+		log_event("dialog at %d %d", x, y);	/* (frozen; the rigs: row 18 of 20) */
+#else
 		log_event("dialog at %d %d size %d %d", x, y, t[0].ob_width, t[0].ob_height);
+#endif
 		set_open = 1;
 	}
 	badge_open(t, band);
