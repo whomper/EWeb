@@ -767,6 +767,9 @@ static long row_cost = 0;	/* a row's ms, times 256: how many rows a slice takes 
    gone through again in each band they cross, were 20 ms a row of the
    canvas against 8 drawn whole, and its pieces 45 % over whole) */
 #define PIECE_BAND 32
+/* (a piece may finish the draw's last rows in this much more: Erez's
+   300 ms) */
+#define PIECE_TAIL 20
 #else
 #define PIECE_MS 85
 #define PIECE_BAND 8
@@ -1367,8 +1370,19 @@ static void draw_due(void)
 		   and clipped, eight times over at 2 rows; a piece's 8, and none
 		   begun after the first that its time hasn't room for: an ST's 16
 		   rows were 100 to 150 ms) */
-		if (piece && band_n > 0 && full < PIECE_BAND)
-			break;
+		if (piece && band_n > 0 && full < PIECE_BAND) {
+			/* (the draw's last rows, fewer than a band, finished in
+			   this piece where they fit in its PIECE_TAIL more: left
+			   for a piece of their own, the ST's page's end came 45 ms
+			   and a turn later than 1.16's, 5 ms short of room) */
+#ifdef EW_ST
+			if (cur->due.h <= PIECE_BAND &&
+			    (left + PIECE_TAIL) * 256 / rcost() >= cur->due.h)
+				n = cur->due.h;
+			else
+#endif
+				break;
+		}
 		if (n < (piece ? PIECE_BAND : BAND_MIN))
 			n = piece ? PIECE_BAND : BAND_MIN;
 #ifdef BAND_MAX
