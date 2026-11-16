@@ -24,7 +24,7 @@ the guidelines' time:
   on an 8 MHz ST in low or medium, else a dialog's 150; Erez, 2 Nov
   2026), and closed by Esc (what it uncovers drawn).
 
-    tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR] [--profile]
+    tests/hatari/speed.py OUT [MACHINE...] [--nvdi] [--prg DIR] [--profile] [--news-first]
 
 MACHINE is Falcon-4:16, ST:mono or ST:med (the first two when none is
 named), or Falcon-14:16 (Falcon-4 with 14 MB of ST RAM, as Erez runs his
@@ -34,7 +34,11 @@ the programs are taken from (build/prof; another for a build before a
 change, to time both); --profile has Hatari's profiler count the whole
 session's cycles, written at the quit as OUT/MACHINE-profile/profile.txt by
 function (the speed build logs where its log_event is). Each machine's
-table is printed; 1 when any action is over its time.
+table is printed; 1 when any action is over its time. --news-first loads
+the news page as the first page after the start (the sample page left
+out): the phase target of 1.17 (Erez, 16 Nov 2026), the news page whole
+there on every machine, Falcon-4:256 under NVDI too, and its peak and
+the memory left printed.
 """
 import bisect
 import os
@@ -129,6 +133,9 @@ NOT_MEASURABLE = " (not measurable)"
 SHORT_NOTE = "EWEB note Not enough memory for all of this page's styles."
 
 
+NEWS_FIRST = False
+
+
 def news_check(r, machine, nvdi, start):
     """the news page as it should be: 1, else 0 (a NOTE where it isn't
     expected to fit whole, a FAIL anywhere else)"""
@@ -146,7 +153,7 @@ def news_check(r, machine, nvdi, start):
         why.append("%s high, not %d" % (m.group(1), NEWS_HEIGHT))
     if not why:
         return 1
-    if (machine, nvdi) in NEWS_NOT_WHOLE:
+    if (machine, nvdi) in NEWS_NOT_WHOLE and not NEWS_FIRST:
         print("NOTE  the news page doesn't fit whole on %s%s (%s): its rows not measurable"
               % (machine, " under NVDI" if nvdi else "", ", ".join(why)), flush=True)
     else:
@@ -362,14 +369,20 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         fin = []
         w = re.findall(r"AESWHOLE (\d+) ms", con[drawn if drawn >= 0 else 0:])
         fin.append(("the home page shown", max(int(x) for x in w) if w else None))
-        start = os.path.getsize(r.log)
-        load(r, "the sample page loaded", "file:///C:/SAMPLE.HTM")
-        w = wholes_since(r, start)
-        fin.append(("the sample page loaded", max(w) if w else None))
+        if not NEWS_FIRST:
+            start = os.path.getsize(r.log)
+            load(r, "the sample page loaded", "file:///C:/SAMPLE.HTM")
+            w = wholes_since(r, start)
+            fin.append(("the sample page loaded", max(w) if w else None))
         start = os.path.getsize(r.log)
         r.shown_line = ""
         typed = load(r, "the news page loaded", "file:///C:/NEWS.HTM")
         news_whole = news_check(r, machine, nvdi, start)
+        if NEWS_FIRST:
+            m = re.search(r"heap (\d+) peak (\d+) free (\d+)", r.shown_line or "")
+            print("NEWS  the news page first on %s%s: %s, heap %s, peak %s, free %s" % (
+                machine, " under NVDI" if nvdi else "", "whole" if news_whole else "not whole",
+                *(m.groups() if m else ("?", "?", "?"))), flush=True)
         w = wholes_since(r, start)
         fin.append(("the news page loaded", max(w) if w else None))
         r.results.append(("the address typed (each letter)", max(typed) if typed else 0, speed.KEY))
@@ -454,7 +467,9 @@ def main():
     nvdi = "--nvdi" in a
     whole = True if "--whole" in a else False if "--pieces" in a else None
     profile = "--profile" in a
-    a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces", "--profile")]
+    global NEWS_FIRST
+    NEWS_FIRST = "--news-first" in a
+    a = [x for x in a if x not in ("--nvdi", "--whole", "--pieces", "--profile", "--news-first")]
     eat = 0
     if "--eat" in a:
         i = a.index("--eat")
