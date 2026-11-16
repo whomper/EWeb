@@ -181,26 +181,33 @@ int font_init(const char *path)
 				k++;
 			}
 		if (nx && sorted) {
-			/* each block's codes in order (mkfont.py's): merged, not
-			   sorted (qsort's 9000 calls were most of an 8 MHz ST's
-			   0.73 s in font_init) */
+			/* each block's codes in order (mkfont.py's): in order of
+			   their codes by a radix sort, a byte at a time, the low
+			   then the high (each a pass over them, stable: the block's
+			   place kept). qsort's 9000 calls were most of an 8 MHz ST's
+			   0.73 s in font_init; merging the blocks, each code looking
+			   at every block, was 60 ms of its start with 1.17's seven */
 			uint32_t *m = malloc(nx * sizeof *m);
-			long from[FONT_BLOCKS], to[FONT_BLOCKS], n;
 			if (m == NULL) {
 				qsort(all, nx, sizeof *all, by_code);
 			} else {
-				for (b = 1, at = 0; b < nblocks; b++) {
-					from[b] = at;
-					to[b] = at += bcount[b];
+				unsigned short cnt[256];
+				int pass;
+				long n;
+				for (pass = 16; pass <= 24; pass += 8) {
+					uint32_t *src = pass == 16 ? all : m, *dst = pass == 16 ? m : all;
+					unsigned short sum = 0, c;
+					memset(cnt, 0, sizeof cnt);
+					for (n = 0; n < nx; n++)
+						cnt[src[n] >> pass & 255]++;
+					for (k = 0; k < 256; k++) {
+						c = cnt[k];
+						cnt[k] = sum;
+						sum = (unsigned short) (sum + c);
+					}
+					for (n = 0; n < nx; n++)
+						dst[cnt[src[n] >> pass & 255]++] = src[n];
 				}
-				for (n = 0; n < nx; n++) {
-					int best = 0;
-					for (b = 1; b < nblocks; b++)
-						if (from[b] < to[b] && (best == 0 || all[from[b]] < all[from[best]]))
-							best = b;
-					m[n] = all[from[best]++];
-				}
-				memcpy(all, m, nx * sizeof *m);
 				free(m);
 			}
 		} else if (nx) {

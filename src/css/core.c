@@ -97,6 +97,11 @@ void ec_text_compact(ec_ctx *c)
 	ec_chunk *ch;
 	char *p;
 
+#ifdef EW_ST
+	(void) c;	/* (the ST edition, frozen, keeps its sheets' text: the copy is
+			   the 68000's at every styling) */
+	return;
+#endif
 	if (c->tdead < 4096)
 		return;
 	for (v = c->svg; v != NULL; v = v->next)
