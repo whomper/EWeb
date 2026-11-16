@@ -1445,9 +1445,22 @@ static const ec_v *uniq_group(ec_ctx *c, int g, const ec_full *f)
 		h = ((h << 5) | (h >> 27)) + (uint32_t) v[i].i + k[i];
 	h ^= h >> 15;
 	if (gu != NULL) {
-		u = &gu[g * GU_SIZE + (h & (GU_SIZE - 1))];
-		if (*u != NULL && same_group(*u, v, k, n))
-			return *u;
+		/* (four places from the hash's: one alone lost a group to
+		   another of the same hash, and the same values made again
+		   were a new parent for the style cache's keys) */
+		const ec_v **row = &gu[g * GU_SIZE];
+		for (i = 0; i < 4; i++) {
+			const ec_v **q = &row[(h + i) & (GU_SIZE - 1)];
+			if (*q == NULL) {
+				if (u == NULL)
+					u = q;
+				break;
+			}
+			if (same_group(*q, v, k, n))
+				return *q;
+		}
+		if (u == NULL)
+			u = &row[h & (GU_SIZE - 1)];
 	}
 	r = ec_alloc(&c->smem, n * sizeof *v + n);
 	if (r == NULL)
@@ -1485,9 +1498,17 @@ static const ec_style *uniq_style(ec_ctx *c, const ec_style *s)
 		h = ((h << 5) | (h >> 27)) + (uint32_t) (uintptr_t) s->g[g];
 	h ^= h >> 15;
 	if (uniq != NULL) {
-		u = &uniq[h & (UNIQ_SIZE - 1)];
-		if (*u != NULL && memcmp(*u, s, sizeof *s) == 0)
-			return *u;
+		for (g = 0; g < 4; g++) {
+			const ec_style **q = &uniq[(h + (uint32_t) g) & (UNIQ_SIZE - 1)];
+			if (*q == NULL) {
+				u = q;
+				break;
+			}
+			if (memcmp(*q, s, sizeof *s) == 0)
+				return *q;
+		}
+		if (u == NULL)
+			u = &uniq[h & (UNIQ_SIZE - 1)];
 	}
 	r = ec_alloc(&c->smem, sizeof *r);
 	if (r == NULL)
