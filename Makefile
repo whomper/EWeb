@@ -273,13 +273,13 @@ build/tos/rt/connpad.o: atari/connpad.S
 # Code layout and the 68030's caches)
 PAD_main := 166
 PAD_RO_main := 194
-PAD_BSS_main := 70
-PAD_browse := 160
+PAD_BSS_main := 66
+PAD_browse := 128
 PAD_RO_browse := 188
 PAD_BSS_browse := 248
 PAD_font := 144
-PAD_BSS_font := 252
-PAD_doc := 194
+PAD_BSS_font := 52
+PAD_doc := 130
 PAD_layout := 104
 PAD_core := 36
 PAD_BSS_core := 252
