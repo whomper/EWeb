@@ -106,6 +106,10 @@ extern const PIC_DSP *pic_dsp;
 /* put and the gets set it when the DSP stops answering, and then do
    nothing */
 extern int pic_dsp_failed;
+/* atari/dspjpeg.c: the DSP given back where a picture's decode holds it,
+   for a terminate or crash handler; weak, so a program without the DSP
+   tests it first: if (pic_dsp_give_back) pic_dsp_give_back(); */
+extern void pic_dsp_give_back(void) __attribute__((weak));
 extern unsigned long pic_dsp_bad;	/* dspjpeg.c: the refused destination of a DSP picture (0: none) */
 /* 1 (as it starts): the DSP shrinks a JPEG shown smaller too, sending
    only the pixels shown; 0: it sends them all, for the scaler (the tests

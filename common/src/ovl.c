@@ -91,14 +91,58 @@ static const char *name_of(const char *path)
 	return s;
 }
 
+/* the header's sizes: text, data, BSS and symbols, from an open file;
+   0 when it isn't one */
+static int header(int h, long *tsize, long *dsize, long *bsize, long *ssize)
+{
+	unsigned char hdr[28];
+
+	if (pf_read(h, hdr, sizeof(hdr)) != (long)sizeof(hdr) || hdr[0] != 0x60 || hdr[1] != 0x1A)
+		return 0;
+	*tsize = (long)be32(hdr + 2);
+	*dsize = (long)be32(hdr + 6);
+	*bsize = (long)be32(hdr + 10);
+	*ssize = (long)be32(hdr + 14);
+	return !(*tsize < 64 || *dsize < 0 || *bsize < 0 || *ssize < 0 || *tsize + *dsize + *bsize > MOST ||
+		 (*tsize | *dsize) & 1);
+}
+
+long ovl_need(const char *path)
+{
+	long tsize, dsize, bsize, ssize;
+	int h, ok;
+
+	if ((h = pf_open(path, PF_READ)) < 0)
+		return -1;
+	ok = header(h, &tsize, &dsize, &bsize, &ssize);
+	pf_close(h);
+	return ok ? tsize + dsize + bsize : -1;
+}
+
+/* the one loader: into the block given (mem, size), else into one from
+   malloc */
+static void *load(const char *path, void *mem, long size, long *taken, char *err, int errlen, OVL_TAIL tail, void *ud,
+		  int *later);
+
 void *ovl_load(const char *path, long *taken, char *err, int errlen)
 {
-	return ovl_load_tail(path, taken, err, errlen, 0, 0, 0);
+	return load(path, 0, 0, taken, err, errlen, 0, 0, 0);
 }
 
 void *ovl_load_tail(const char *path, long *taken, char *err, int errlen, OVL_TAIL tail, void *ud, int *later)
 {
-	unsigned char hdr[28], fx[512];
+	return load(path, 0, 0, taken, err, errlen, tail, ud, later);
+}
+
+void *ovl_load_into(const char *path, void *mem, long size, long *taken, char *err, int errlen)
+{
+	return load(path, mem, size, taken, err, errlen, 0, 0, 0);
+}
+
+static void *load(const char *path, void *mem, long size, long *taken, char *err, int errlen, OVL_TAIL tail, void *ud,
+		  int *later)
+{
+	unsigned char fx[512];
 	unsigned char *m = 0;
 	long tsize, dsize, bsize, ssize, done, n;
 	OVL_FIX f;
@@ -112,16 +156,9 @@ void *ovl_load_tail(const char *path, long *taken, char *err, int errlen, OVL_TA
 		snprintf(err, errlen, "%s is missing", name);
 		return 0;
 	}
-	if (pf_read(h, hdr, sizeof(hdr)) != (long)sizeof(hdr) || hdr[0] != 0x60 || hdr[1] != 0x1A)
+	if (!header(h, &tsize, &dsize, &bsize, &ssize))
 		goto bad;
-	tsize = (long)be32(hdr + 2);
-	dsize = (long)be32(hdr + 6);
-	bsize = (long)be32(hdr + 10);
-	ssize = (long)be32(hdr + 14);
-	if (tsize < 64 || dsize < 0 || bsize < 0 || ssize < 0 || tsize + dsize + bsize > MOST ||
-	    (tsize | dsize) & 1)
-		goto bad;
-	if (!(m = malloc(tsize + dsize + bsize))) {
+	if (!(m = mem ? (tsize + dsize + bsize <= size ? mem : 0) : malloc(tsize + dsize + bsize))) {
 		pf_close(h);
 		snprintf(err, errlen, "no memory for %s (%ld KB)", name, (tsize + dsize + bsize + 1023) / 1024);
 		if (later)
@@ -135,7 +172,7 @@ void *ovl_load_tail(const char *path, long *taken, char *err, int errlen, OVL_TA
 		if (pf_read(h, m + done, n) != n)
 			goto bad;
 	}
-	if (ssize && pf_seek(h, (long)sizeof(hdr) + tsize + dsize + ssize) != (long)sizeof(hdr) + tsize + dsize + ssize)
+	if (ssize && pf_seek(h, 28L + tsize + dsize + ssize) != 28L + tsize + dsize + ssize)
 		goto bad;
 	ovl_fix_start(&f, m, tsize + dsize);
 	while (r == 1) {
@@ -160,7 +197,8 @@ void *ovl_load_tail(const char *path, long *taken, char *err, int errlen, OVL_TA
 	return m;
 bad:
 	pf_close(h);
-	free(m);
+	if (!mem)
+		free(m);
 	snprintf(err, errlen, "%s is damaged: copy it again from the release", name);
 	return 0;
 }

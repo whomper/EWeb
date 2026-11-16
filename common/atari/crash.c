@@ -133,6 +133,19 @@ static volatile long *low(long a);
    (Super(0) read it steady over the ten on all four) */
 static long savptr_user, savptr_nested;
 
+/* savptr inside a Supexec made from user mode (one block below
+   savptr_user), and the interrupt level user mode runs at: a fault in the
+   program's code in supervisor mode is landed (GEMDOS, the AES, Pterm)
+   only from there, a Supexec or Super() of its own. Taken at interrupt
+   time (an interrupt routine of the program's: a sound tick, the DSP's
+   host port, a VBL), the main program may be inside GEMDOS, which isn't
+   re-entrant: the landing's Fopen/Fwrite then wrote GEMDOS's half-done
+   FAT and directory buffers to that drive (a tester's CT60, 16 Nov 2026:
+   the partition EPlay loaded an MP3 from damaged after each crash). Such
+   a fault goes on to TOS, as one outside the program does */
+static long savptr_one = -1;
+static unsigned short ipl_user = 0x0700;
+
 static void sup_nested(void)
 {
 	savptr_nested = *low(0x4A2L);
@@ -172,6 +185,16 @@ long crash_take(unsigned short *f, long vec)
 		   record of the bombs for the next start */
 		if (pc < text_lo || pc >= text_hi)
 			return 0;
+		/* not at interrupt time (the level above user mode's), and not
+		   inside another BIOS or XBIOS call (savptr neither user mode's
+		   nor one Supexec's): see ipl_user */
+		if ((s[0] & 0x0700) > ipl_user)
+			return 0;
+		if (savptr_user) {
+			long sp = *low(0x4A2L);
+			if (sp != savptr_user && sp != savptr_one)
+				return 0;
+		}
 	} else if (pc < text_lo || pc >= prog_hi) {
 		/* in someone else's code, with a handler of theirs before ours:
 		   theirs. STinG gets into supervisor mode by running "or.w #0,sr"
@@ -374,6 +397,12 @@ static void sup_install(void)
 	Supexec(sup_nested);
 	block = in - savptr_nested;
 	savptr_user = block > 0 && block <= 128 ? in + block : 0;
+	savptr_one = in;
+	{
+		unsigned short sr;
+		__asm__ volatile("move.w %%sr,%0" : "=d"(sr));
+		ipl_user = sr & 0x0700;		/* (a Supexec keeps its caller's level) */
+	}
 	for (i = 2; i <= 11; i++) {
 		if (i == 11 && tos1)
 			continue;

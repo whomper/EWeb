@@ -1380,8 +1380,13 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 	if (dj->on != NULL)
 		*dj->on = 1;
 	pic_dsp_failed = 0;
-	if (pic_poll != NULL)
-		pic_poll();	/* (its program loaded, 30 to 45 ms of a stock Falcon: a turn; a stop is seen at the rows) */
+	/* (its program loaded, 30 to 45 ms of a stock Falcon: a turn; a stop
+	   there is taken at once, not left to the rows: a poll that said stop
+	   once needn't say it again, tests/pic's slices) */
+	if (pic_poll != NULL && !pic_poll()) {
+		*why = PIC_STOPPED;
+		goto out;
+	}
 
 	/* the setup: the variables (jpeg.a56's V_M to V_TB) */
 	memset(w, 0, sizeof w);
