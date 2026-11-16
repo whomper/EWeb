@@ -187,6 +187,7 @@ static void own_pens(int on)
 	own = on;
 	page_n = 0;
 	memset(page_rgb, 0, sizeof page_rgb);
+	img_page_colours(NULL, 0, 0);	/* (none until a page sets them) */
 }
 
 /* each pixel value's colour, and the pictures' pens from them */
@@ -242,6 +243,8 @@ int scr_page_colours(const struct page *p)
 	memcpy(page_rgb, want, sizeof want);
 	page_n = n;
 	memset(nearest_of, 0, sizeof nearest_of);	/* (pen(): the new colours) */
+	/* and the pictures' pixels near them in them (img.c) */
+	img_page_colours((const uint8_t (*)[3]) &pal[EW_PIC_PENS], n, EW_PIC_PENS);
 	return 1;
 #endif
 }

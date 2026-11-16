@@ -48,6 +48,9 @@ struct var {
 	PIC *pic;			/* NULL: it couldn't be decoded */
 	uint8_t *pens;			/* for img_pal, made when first drawn */
 	long serial;			/* img_pal's when the pens were made */
+	uint8_t *spens;			/* those pens with the page's own colours where the
+					   picture has them (img_page_colours), NULL: none */
+	long sserial;			/* page_serial's when spens was made (0: not yet) */
 	unsigned long used;
 };
 
@@ -109,6 +112,8 @@ static long var_bytes(const var *v)
 	if (v->pic != NULL)
 		n += (long) v->pic->w * v->pic->h * ((v->pic->px != NULL ? 2 : 0) + (v->pic->alpha != NULL ? 1 : 0));
 	if (v->pens != NULL)
+		n += (long) v->pic->w * v->pic->h;
+	if (v->spens != NULL)
 		n += (long) v->pic->w * v->pic->h;
 	return n;
 }
@@ -329,6 +334,7 @@ static void var_free(ew_img *im, var *v)
 	img_used -= var_bytes(v);
 	pic_free(v->pic);
 	free(v->pens);
+	free(v->spens);
 	free(v);
 }
 
@@ -833,6 +839,134 @@ const void *img_have(ew_img *im, int32_t w, int32_t h)
 	return v != NULL ? (const void *) v->pic : NULL;
 }
 
+/* ---------------------------------------------------------------- the page's own colours */
+
+/* Pictures are dithered to the fixed pens alone, so that their pens stay
+   whatever page is in front; the page's own colours (pagecol.h, 256
+   colours with EWeb's) are others. A picture's pixel within SNAP of one
+   of them, in each part, takes it (Erez, 16 Nov 2026: pouet.net's
+   background, a tile of nearly the page's blue, dithered to a cloud of
+   dots beside the page's own blue drawn solid). Its own pens are kept as
+   they were (the disk cache keeps them, every page shares them): the
+   page's are a copy, spens, made when the picture is drawn for a page,
+   from its pixels where they are kept, else from its pens in blocks of
+   2 x 2 (their mean: a flat colour's dither averages to it; the disk
+   cache's and the Pi's pictures are pens alone) */
+#define SNAP 8
+#define SNAP_PENS 12	/* (a 2 x 2 block's mean of a flat colour's dither: within 10 of it) */
+static uint8_t page_rgb[64][3];
+static int page_n, page_first;
+static long page_serial = 1;
+static uint8_t snap_cell[4096];	/* a colour's 4-4-4 cell: 1 + a page colour near it, 0 none */
+
+void img_page_colours(const uint8_t (*rgb)[3], int n, int first)
+{
+	int k, dr, dg, db;
+	if (n > 64)
+		n = 64;
+	if (n == page_n && first == page_first && (n == 0 || !memcmp(page_rgb, rgb, (size_t) n * 3)))
+		return;
+	if (n > 0)
+		memcpy(page_rgb, rgb, (size_t) n * 3);
+	page_n = n;
+	page_first = first;
+	page_serial++;
+	memset(snap_cell, 0, sizeof snap_cell);
+	/* each page colour in the cells SNAP round it reaches (the last
+	   chosen, the least wanted, first: the most wanted wins a cell) */
+	for (k = n; k-- > 0;)
+		for (dr = -SNAP_PENS; dr <= SNAP_PENS; dr += SNAP_PENS)
+			for (dg = -SNAP_PENS; dg <= SNAP_PENS; dg += SNAP_PENS)
+				for (db = -SNAP_PENS; db <= SNAP_PENS; db += SNAP_PENS) {
+					int r = rgb[k][0] + dr, g = rgb[k][1] + dg, b = rgb[k][2] + db;
+					if (r < 0 || g < 0 || b < 0 || r > 255 || g > 255 || b > 255)
+						continue;
+					snap_cell[(r >> 4) << 8 | (g >> 4) << 4 | (b >> 4)] = (uint8_t) (k + 1);
+				}
+}
+
+/* the page pen within d of r, g, b, or -1 (the cells reach SNAP_PENS:
+   each within 16 of a corner of the cube round its colour) */
+static int snap_to(int r, int g, int b, int d)
+{
+	int k = snap_cell[(r >> 4) << 8 | (g >> 4) << 4 | (b >> 4)] - 1;
+	if (k < 0)
+		return -1;
+	if (r - page_rgb[k][0] > d || page_rgb[k][0] - r > d || g - page_rgb[k][1] > d ||
+	    page_rgb[k][1] - g > d || b - page_rgb[k][2] > d || page_rgb[k][2] - b > d)
+		return -1;
+	return page_first + k;
+}
+
+static void var_snap(var *v)
+{
+	long w = v->pic->w, h = v->pic->h, n = w * h, i, got = 0;
+	const unsigned char *al = v->pic->alpha;
+	uint8_t *s = v->spens;
+	v->sserial = page_serial;
+	if (s == NULL) {
+		if ((s = malloc((size_t) n)) == NULL)
+			return;
+	}
+	memcpy(s, v->pens, (size_t) n);
+	if (v->pic->px != NULL) {
+		const unsigned short *px = v->pic->px;
+		unsigned short last = 0;
+		int lastk = -1, lastset = 0;
+		for (i = 0; i < n; i++) {
+			unsigned c = px[i];
+			int k;
+			if (al != NULL && al[i] < 128)
+				continue;
+			if (lastset && c == last) {
+				k = lastk;	/* (a flat area: the same as the pixel before) */
+			} else {
+				k = snap_to((int) (((c >> 11) & 31) << 3 | ((c >> 11) & 31) >> 2),
+					    (int) (((c >> 5) & 63) << 2 | ((c >> 5) & 63) >> 4),
+					    (int) ((c & 31) << 3 | (c & 31) >> 2), SNAP);
+				last = (unsigned short) c;
+				lastk = k;
+				lastset = 1;
+			}
+			if (k >= 0) {
+				s[i] = (uint8_t) k;
+				got++;
+			}
+		}
+	} else {
+		/* pens alone: each 2 x 2 block by its pens' mean (a block on an
+		   edge, or partly clear, left as it is) */
+		const uint8_t (*pal)[3] = (const uint8_t (*)[3]) img_pal->rgb;
+		long x, y;
+		for (y = 0; y + 1 < h; y += 2)
+			for (x = 0; x + 1 < w; x += 2) {
+				long a = y * w + x, b = a + 1, c = a + w, d = c + 1;
+				int k;
+				if (al != NULL && (al[a] < 128 || al[b] < 128 || al[c] < 128 || al[d] < 128))
+					continue;
+				k = snap_to((pal[v->pens[a]][0] + pal[v->pens[b]][0] + pal[v->pens[c]][0] + pal[v->pens[d]][0] + 2) >> 2,
+					    (pal[v->pens[a]][1] + pal[v->pens[b]][1] + pal[v->pens[c]][1] + pal[v->pens[d]][1] + 2) >> 2,
+					    (pal[v->pens[a]][2] + pal[v->pens[b]][2] + pal[v->pens[c]][2] + pal[v->pens[d]][2] + 2) >> 2,
+					    SNAP_PENS);
+				if (k >= 0) {
+					s[a] = s[b] = s[c] = s[d] = (uint8_t) k;
+					got++;
+				}
+			}
+	}
+	if (got == 0) {
+		/* none of the page's colours: its own pens, no copy kept */
+		if (v->spens != NULL)
+			img_used -= n;
+		free(s);
+		v->spens = NULL;
+		return;
+	}
+	if (v->spens == NULL)
+		img_used += n;
+	v->spens = s;
+}
+
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
 {
 	var *v = find(im, w, h);
@@ -859,6 +993,12 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 	}
 	*pic = v->pic;
 	*pens = v->pens;
+	if (img_pal != NULL && v->pens != NULL && page_n > 0) {
+		if (v->sserial != page_serial)
+			var_snap(v);
+		if (v->spens != NULL)
+			*pens = v->spens;
+	}
 	return 1;
 }
 
@@ -876,6 +1016,7 @@ const char *img_why(const ew_img *im)
 void img_pal_changed(void)
 {
 	pal_serial++;
+	page_serial++;	/* (the page's colours' snap made again on the new pens) */
 }
 
 static void img_free(ew_img *im)

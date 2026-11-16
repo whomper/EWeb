@@ -103,6 +103,10 @@ extern PIC *(*img_svg_decode)(const char *data, long len, int w, int h, int *why
 extern PIC_PAL *img_pal;
 /* the screen's colours changed: every picture's pens made again */
 void img_pal_changed(void);
+/* the page's own colours (pagecol.h: n of them, from pen first; n 0
+   none), which a picture's pixels near them take when it is drawn
+   (img_picture) */
+void img_page_colours(const uint8_t (*rgb)[3], int n, int first);
 
 /* the memory pictures may take (their files and their decoded pixels),
    roughly; past it, those no page shows go first, then the decoded
