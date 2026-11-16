@@ -126,7 +126,9 @@ static void settings_drawn_now(OBJECT *t, short band)
 		short x, y;
 		objc_offset(t, 0, &x, &y);
 		gap_tag("dialog: drawn");
-		log_event("dialog at %d %d", x, y);	/* (for the rigs: where its pages' list is) */
+		/* (for the rigs: where its pages' list is, and its size, which
+		   puts its buttons in their row: H - 2) */
+		log_event("dialog at %d %d size %d %d", x, y, t[0].ob_width, t[0].ob_height);
 		set_open = 1;
 	}
 	badge_open(t, band);

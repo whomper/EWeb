@@ -410,13 +410,17 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
         # Cancel at its 38th column (in the old dialog and the family's), 18th row, 8x16 characters)
-        at = re.findall(r"EWEB dialog at (\d+) (\d+)", r.console())
-        dx, dy = (int(v) for v in at[-1]) if at else (0, 0)
+        at = re.findall(r"EWEB dialog at (\d+) (\d+)(?: size \d+ (\d+))?", r.console())
+        dx, dy = (int(v) for v in at[-1][:2]) if at else (0, 0)
         # (in medium resolution the characters are 8 rows high, and Hatari
         # shows each row twice: 640 x 400)
         ch, ys = (8, 2) if r.m.screen == "med" else (16, 1)
+        # (the buttons' row: the dialog's last but two, H - 2, where EWeb
+        # says how high it is (1.18: two rows more for a tick); row 18 of
+        # the 20 before)
+        cy = dy + int(at[-1][2]) - 2 * ch if at and at[-1][2] else dy + 18 * ch
         r.act("Settings closed (what it uncovers)", speed.WINDOW,
-              lambda: r.click(dx + 38 * 8, (dy + 18 * ch + ch // 2) * ys))
+              lambda: r.click(dx + 38 * 8, (cy + ch // 2) * ys))
         # (the Desk menu's first entry: its title at the bar's left, the
         # entry the first row under the bar, 8x16 characters)
         r.act("the About box opened", r.about, lambda: r.menu(20, 28))
