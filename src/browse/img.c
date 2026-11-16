@@ -48,9 +48,11 @@ struct var {
 	PIC *pic;			/* NULL: it couldn't be decoded */
 	uint8_t *pens;			/* for img_pal, made when first drawn */
 	long serial;			/* img_pal's when the pens were made */
+#ifndef EW_ST
 	uint8_t *spens;			/* those pens with the page's own colours where the
 					   picture has them (img_page_colours), NULL: none */
 	long sserial;			/* page_serial's when spens was made (0: not yet) */
+#endif
 	unsigned long used;
 };
 
@@ -113,8 +115,10 @@ static long var_bytes(const var *v)
 		n += (long) v->pic->w * v->pic->h * ((v->pic->px != NULL ? 2 : 0) + (v->pic->alpha != NULL ? 1 : 0));
 	if (v->pens != NULL)
 		n += (long) v->pic->w * v->pic->h;
+#ifndef EW_ST
 	if (v->spens != NULL)
 		n += (long) v->pic->w * v->pic->h;
+#endif
 	return n;
 }
 
@@ -334,7 +338,9 @@ static void var_free(ew_img *im, var *v)
 	img_used -= var_bytes(v);
 	pic_free(v->pic);
 	free(v->pens);
+#ifndef EW_ST
 	free(v->spens);
+#endif
 	free(v);
 }
 
@@ -839,6 +845,7 @@ const void *img_have(ew_img *im, int32_t w, int32_t h)
 	return v != NULL ? (const void *) v->pic : NULL;
 }
 
+#ifndef EW_ST	/* (256 colours with EWeb's own: EWEB.PRG's) */
 /* ---------------------------------------------------------------- the page's own colours */
 
 /* Pictures are dithered to the fixed pens alone, so that their pens stay
@@ -967,6 +974,8 @@ static void var_snap(var *v)
 	v->spens = s;
 }
 
+#endif
+
 int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t **pens)
 {
 	var *v = find(im, w, h);
@@ -993,12 +1002,14 @@ int img_picture(ew_img *im, int32_t w, int32_t h, const PIC **pic, const uint8_t
 	}
 	*pic = v->pic;
 	*pens = v->pens;
+#ifndef EW_ST
 	if (img_pal != NULL && v->pens != NULL && page_n > 0) {
 		if (v->sserial != page_serial)
 			var_snap(v);
 		if (v->spens != NULL)
 			*pens = v->spens;
 	}
+#endif
 	return 1;
 }
 
@@ -1016,7 +1027,9 @@ const char *img_why(const ew_img *im)
 void img_pal_changed(void)
 {
 	pal_serial++;
+#ifndef EW_ST
 	page_serial++;	/* (the page's colours' snap made again on the new pens) */
+#endif
 }
 
 static void img_free(ew_img *im)

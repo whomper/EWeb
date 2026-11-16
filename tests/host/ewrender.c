@@ -1811,7 +1811,9 @@ int main(int argc, char **argv)
 			fprintf(stderr, "page colours: %d\n", np);
 			/* and the pictures' pixels near them in them, as
 			   EWEB.PRG's screen.c tells img.c */
+#ifndef EW_ST
 			img_page_colours((const uint8_t (*)[3]) &scr_pal[EW_PIC_PENS], np, EW_PIC_PENS);
+#endif
 		}
 		memset(&c, 0, sizeof c);
 		c.w = width;

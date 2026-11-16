@@ -187,7 +187,9 @@ static void own_pens(int on)
 	own = on;
 	page_n = 0;
 	memset(page_rgb, 0, sizeof page_rgb);
+#ifndef EW_ST
 	img_page_colours(NULL, 0, 0);	/* (none until a page sets them) */
+#endif
 }
 
 /* each pixel value's colour, and the pictures' pens from them */
