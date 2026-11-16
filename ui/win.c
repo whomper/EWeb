@@ -1350,7 +1350,12 @@ static void draw_due(void)
 		GRECT band, r;
 		unsigned long b0 = pf_ms(), dt;
 		long left = (long) (end - b0), n;
-		n = (left > 4 ? left : 4) * 256 / rcost();
+		/* (a piece of a long draw sized for nine tenths of the time
+		   left: rows a little dearer than the average, after lighter
+		   ones, made the last band one past its slice, the ST's home
+		   page 155 + 150 ms drawn as one of 305, 1.17; more bands follow
+		   while the slice has time) */
+		n = (piece ? (left > 4 ? left : 4) * 9 / 10 : (left > 4 ? left : 4)) * 256 / rcost();
 		/* (16 rows at least, a line of text: thinner bands each went
 		   through every line they crossed again, its letters looked up
 		   and clipped, eight times over at 2 rows; a piece's 8, and none

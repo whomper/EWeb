@@ -390,14 +390,6 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         seen.append(held(r, "Up", "an arrow held 3 s, up"))
         seen.extend(pages_fresh(r))
         seen.append(pages_read(r))
-        if not news_whole:
-            # (the rows on the news page: measured on a page that isn't it)
-            # (and what the dialogs uncover: the news page drawn again)
-            on_news = ("the news page loaded", "a line scrolled", "a page scrolled",
-                       "Settings closed (what it uncovers)", "the About box closed (what it uncovers)")
-            r.results = [(w + NOT_MEASURABLE if w in on_news else w, v, b) for w, v, b in r.results]
-            seen = [(w + NOT_MEASURABLE, v, m) for w, v, m in seen]
-            fin = [(w + NOT_MEASURABLE if w in on_news else w, v) for w, v in fin]
         r.act("Settings opened", speed.DIALOG, lambda: r.key("ctrl+comma"))
         # (closed by its Cancel: Esc empties its text size field, the
         # guidelines' 3.5 of 27 Oct 2026; EWeb logs where the dialog is,
@@ -413,6 +405,16 @@ def run(out, machine, nvdi, prgdir, eat=0, whole=None, profile=False):
         # entry the first row under the bar, 8x16 characters)
         r.act("the About box opened", r.about, lambda: r.menu(20, 28))
         r.act("the About box closed (what it uncovers)", speed.WINDOW, lambda: r.key("Escape"))
+        if not news_whole:
+            # (the rows on the news page: measured on a page that isn't it)
+            # (and what the dialogs uncover: the news page drawn again; marked
+            # once they are measured: 1.16 marked before them, and their
+            # rows compared one release's page with another's)
+            on_news = ("the news page loaded", "a line scrolled", "a page scrolled",
+                       "Settings closed (what it uncovers)", "the About box closed (what it uncovers)")
+            r.results = [(w + NOT_MEASURABLE if w in on_news else w, v, b) for w, v, b in r.results]
+            seen = [(w + NOT_MEASURABLE, v, m) for w, v, m in seen]
+            fin = [(w + NOT_MEASURABLE if w in on_news else w, v) for w, v in fin]
         start = os.path.getsize(r.log)
         load(r, "the pictures' page loaded", "file:///C:/PICS.HTM", most=1800)
         w = wholes_since(r, start)

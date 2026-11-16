@@ -274,7 +274,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 PAD_main := 198
 PAD_RO_main := 194
 PAD_BSS_main := 252
-PAD_browse := 224
+PAD_browse := 80
 PAD_RO_browse := 188
 PAD_BSS_browse := 248
 PAD_font := 80
