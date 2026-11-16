@@ -818,7 +818,7 @@ static dl_item *dl_add(L *l)
 	if (p->nitems == p->cap) {
 		/* (half again, not twice: a big page's list has less room
 		   left over, and the stock 4 MB Falcon has none to waste) */
-		long cap = p->cap ? p->cap + p->cap / 2 : DL_FIRST;
+		long cap = p->cap ? p->cap + p->cap / 4 : DL_FIRST;
 		dl_item *n = realloc(p->items, cap * sizeof *n);
 		if (n == NULL) {
 			l->fail = 1;
