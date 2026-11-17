@@ -15,8 +15,10 @@ read). Where it looks elsewhere it alerts "fonts are missing" or shows its
 own home page (EWeb 0.48 on the ST's TOS 1.04). Two cases on each machine:
 
   floppy  EWeb in A:\\APP, with a small EWEB.FNT (DejaVu Sans at 13 pixels,
-          as a floppy holds): EWEBST.PRG on an 800 KB floppy (10 sectors a
-          track), on a Falcon EWEB.PRG on a 1.44 MB one.
+          as a floppy holds), on a 1.44 MB floppy (18 sectors a track): an
+          800 KB one no longer holds EWEBST.PRG (877 KB in 1.21), and
+          Hatari's ST and STE read the bigger one (what is tested is where
+          EWeb looks, not the drive).
   C:      EWeb in C:\\APP with the whole EWEB.FNT (the launcher made to
           start C:\\APP\\PROBE.PRG), A:\\APP still the current folder: EWeb
           started on C:, whose folder (the root) isn't EWeb's.
@@ -74,7 +76,7 @@ def run(w, spec, prg, fnt, on_c):
     files = [(prg, "PROBE.PRG"), (fnt, "EWEB.FNT"), (inf, "EWEB.INF")]
     fifo = os.path.join(w, "hatari.fifo")
     args = ["hatari", "--fast-boot", "yes", "--natfeats", "yes", "--log-level", "warn", "--cmd-fifo", fifo] + m.args()
-    big = not on_c and m.name.startswith("Falcon")
+    big = not on_c
     img = os.path.join(w, "a.st")
     mtools("mformat", "-i", img, "-t", "80", "-h", "2", "-s", "18" if big else "10", "-C", "::")
     mtools("mmd", "-i", img, "::/APP")
