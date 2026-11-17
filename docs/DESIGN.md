@@ -732,6 +732,11 @@ its shipped place modulo 256. Those two functions are last in `win.c`, where the
 code doesn't move when they are left out. The strings inside the merged block are in the linker's
 order, the timed build's among them; only where the block ends is put back. Pairs since compare
 timed builds of each release made this way (1.19's too).
+1.20's MiNTnet connect (178 bytes of code in `net_tos.o`, 24 of strings) moved what follows by those
+amounts. The first pairs made this way had the stock Falcon's home page under NVDI at 630 -> 640 ms,
+and the ST's news page and a line scrolled 10 ms slower. Pads after `net_tos.o` and `libc.o` (the
+string block's) put both programs back at 1.19's places; the same tool worked them out against
+1.19's ELF and map.
 
 ## Showing pages: fonts, layout, drawing (18 Oct 2026)
 
