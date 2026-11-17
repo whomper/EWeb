@@ -127,7 +127,7 @@ hub stay complete, with the evidence.
   common's `tests/speed`) does the user's actions on the stock Falcon (`Falcon-4:16`, `--nvdi` under
   Erez's NVDI) and the 8 MHz ST (`ST:mono`) and prints each one's longest stretch between event
   calls against the guidelines' time, from `build/prof`'s `EWEB.PRG` and `EWEBST.PRG` (common's
-  `gem.c` with `AES_PROFILE=20`, linked at the shipped programs' places modulo 256 by `tools/profpad.py`,
+  `gem.c` with `AES_PROFILE=20`, linked at the shipped programs' places modulo 256 by `common/tools/profpad.py`,
   which fails the build where it can't; `--prg DIR` times another build, the one before a change). Its
   `AESGAP` lines in the Hatari log name each stretch (`gap_event`, `gap_tag`, `gap_stage` in `ui/`).
   The rigs read EWeb's events through NatFeats, which EWEB.PRG probes only where `EWEB.INF` has

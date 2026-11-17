@@ -254,7 +254,7 @@ build/tos/rt/onstack.o: atari/onstack.S
 build/tos/rt/connpad.o: atari/connpad.S
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -c $< -o $@
-# room after main.o, browse.o and font.o (atari/codepad.S): 1.16's
+# room after main.o, browse.o and font.o (common/atari/codepad.S): 1.16's
 # ui/main.c grew 16 bytes of code, 62 of strings and 4 of BSS,
 # src/browse/browse.c 672, 68 and 8, src/gfx/font.c 352, 0 and 8, and on
 # Falcon-4:16 memset and the canvas's fill_px and cv_fill then met in the
@@ -290,7 +290,7 @@ PAD_sheet := 96
 PAD_BSS_sheet := 252
 PAD_RO_layout := 92
 PAD_BSS_layout := 232
-build/tos/rt/pad_%.o: atari/codepad.S Makefile
+build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
 		-DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
@@ -843,21 +843,21 @@ build/prof/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
-# linked at the shipped build's places modulo 256 (tools/profpad.py: pads
+# linked at the shipped build's places modulo 256 (common/tools/profpad.py: pads
 # after the objects whose code moved, worked out at each link; the link
 # fails where one can't be put back), so that the rig times the layout
 # that ships (the hub, from EPlay 1.45, 17 Nov 2026)
-PROFPAD_TOS := python3 tools/profpad.py --ship build/tos/eweb.elf --out build/prof/eweb.elf --cpu=-m68030 \
+PROFPAD_TOS := python3 common/tools/profpad.py --ship build/tos/eweb.elf --out build/prof/eweb.elf --cpu=-m68030 \
 		--dir build/prof/tos/pads --exclude build/tos/gem/main.o --exclude build/prof/tos/main.o \
 		--exclude build/tos/gem/common/gem.o --exclude build/prof/tos/gem.o --
-PROFPAD_ST := python3 tools/profpad.py --ship build/st/ewebst.elf --out build/prof/ewebst.elf --cpu=-m68000 \
+PROFPAD_ST := python3 common/tools/profpad.py --ship build/st/ewebst.elf --out build/prof/ewebst.elf --cpu=-m68000 \
 		--dir build/prof/st/pads --exclude build/st/gem/main.o --exclude build/prof/st/main.o \
 		--exclude build/st/gem/common/gem.o --exclude build/prof/st/gem.o --
-build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o tools/profpad.py atari/codepad.S
+build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_TOS) $(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
-build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o tools/profpad.py atari/codepad.S
+build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_ST) $(M68KCC) $(ST_LDFLAGS) $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
@@ -1311,7 +1311,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
 # (build/prof's programs: their link checks they are at the shipped
-# places modulo 256, tools/profpad.py)
+# places modulo 256, common/tools/profpad.py)
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \

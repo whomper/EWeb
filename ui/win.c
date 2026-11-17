@@ -4435,7 +4435,7 @@ static void message(const short *msg)
 /* the last whole draw's time, and the last scroll's, once each (the speed
    build's AESDRAW and AESSCROLL lines, their only caller): last in the
    file, so that the timed build, which keeps them, has win.o's other code
-   where the shipped one has it (tools/profpad.py) */
+   where the shipped one has it (common/tools/profpad.py) */
 int win_scroll_whole(long *ms, int32_t *top)
 {
 	if (scroll_w == NULL || (scroll_w->due.w > 0 && scroll_w->due.h > 0) || scroll_w->due_bars)

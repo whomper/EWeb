@@ -726,7 +726,7 @@ So from `main.o` on, most of its code (1,668 of the symbols) sat 240 bytes off t
 modulo 256, its data and BSS too. The rows of 1.16 to 1.19, and the pads above (worked out against
 the timed build before), timed a layout that wasn't shipped.
 
-Since 1.20 its link (`tools/profpad.py`) puts pads after the objects whose code moved and works them
+Since 1.20 its link (`common/tools/profpad.py`) puts pads after the objects whose code moved and works them
 out at each link. It fails the build (and `make test`) when a symbol both builds have is not at
 its shipped place modulo 256. Those two functions are last in `win.c`, where the shipped build's
 code doesn't move when they are left out. The strings inside the merged block are in the linker's
@@ -5560,7 +5560,7 @@ about it:
   where they were in the 68030's caches; with it inline, and `browse.c` and `main.c` grown, memset and
   the canvas's `fill_px` and `cv_fill` met in the instruction cache on `Falcon-4:16` (twice their
   misses; the news page's first draw 820 to 855 ms, an arrow held up 875 to 1,000). Room linked after
-  `main.o`, `browse.o` and `font.o` (`atari/codepad.S`, the Makefile's `PAD_*`) puts the code, strings
+  `main.o`, `browse.o` and `font.o` (`common/atari/codepad.S`, the Makefile's `PAD_*`) puts the code, strings
   and BSS after each back at 1.15's places modulo 256.
 - **A sheet short of memory on a page's first load** (`build1`): the pages kept for Back given back
   and the sheets added once more, as `readd_sheets` did; still short, the page is shown and the
