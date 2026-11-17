@@ -737,6 +737,15 @@ amounts. The first pairs made this way had the stock Falcon's home page under NV
 and the ST's news page and a line scrolled 10 ms slower. Pads after `net_tos.o` and `libc.o` (the
 string block's) put both programs back at 1.19's places; the same tool worked them out against
 1.19's ELF and map.
+1.21's changes (common's log hold in `conn.c` and `gem.c`, `nf.S`, `tos.c`, `inflate.c`, Settings'
+and `av.c`'s; `ui/dialogs.c`, `ui/main.c`) moved what follows each. Paired against 1.20, the stock
+Falcon's pages loaded 10 to 20 ms slower (the sample page 410 -> 430, the pictures' 385 -> 405) and
+Back under NVDI 585 -> 605; the ST was level. Linked at 1.20's places the same code was level, so
+twelve pads (Falcon only) put the 3,058 symbols of the objects that didn't change back there.
+Profpad's own sizes are kept, 256 for a kind that needed none: with those left out (the same
+places modulo 256) the home page under NVDI read 720 against 1.20's 700 to 710, with them 705.
+The stock Falcon's arrow held up reads either about 865 or about 915 ms, for 1.20 too, run to run
+in one session; a pair is read on it only when the two agree.
 
 ## Showing pages: fonts, layout, drawing (18 Oct 2026)
 
