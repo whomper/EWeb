@@ -668,16 +668,16 @@ its fields stays.
 Falcon or TT with an FPU (a 68881 or 68882, as on the DFB1). Settings >
 Scripts says where, by three buttons under "Run pages' scripts":
 
-- **Chosen**, the sites you choose (as it starts): open one of a site's
+- **Chosen sites**, the sites you choose (as it starts): open one of a site's
   pages and pick Options > Run this site's scripts (ticked while they
   run); the page comes again with its scripts. Pick it again to turn
   them off.
-- **All sites**:
+- **Every site**:
   Options > Run this site's scripts, unticked, leaves a site out. A site
   whose scripts are too much for EWeb (below) is left out until you quit
   EWeb, so its pages aren't made twice; picking the menu item tries it
   again.
-- **No site**.
+- **Off**: on no site.
 
 When a page whose site isn't chosen looks empty without its scripts, or
 says it needs JavaScript, the status line at the foot of the window says
@@ -809,8 +809,8 @@ dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, the Gateway's address and port (8280), and Write
   a log (as Options > Write a log: `EWEB.LOG` beside the program).
-- **Scripts** (`EWEB.PRG`): on which sites pages' scripts run: No site,
-  Chosen (the sites you choose) or All sites (see
+- **Scripts** (`EWEB.PRG`): on which sites pages' scripts run: Off,
+  Chosen sites (the sites you choose) or Every site (see
   [Pages made by scripts](#pages-made-by-scripts)).
 
 The search address, the gateway's address and the answer to a page's

@@ -208,9 +208,10 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 static void page_scripts(SETTINGS *s, short x, short y, void *user)
 {
 	(void) y, (void) user;
-	static const char *const which[] = { "No site", "Chosen", "All sites" };
+	/* (Erez's words, 17 Nov 2026: D24, three of 13 wide) */
+	static const char *const which[] = { "Off", "Chosen sites", "Every site" };
 	set_text(s, x, set_y(s, 0), "Run pages' scripts (JavaScript)");
-	set_radio(s, x, set_y(s, 1), 9, which, 3, &s_scripts);
+	set_radio(s, x, set_y(s, 1), 13, which, 3, &s_scripts);
 	set_text(s, x + 3, set_y(s, 2), "Options > Run this site's scripts");
 	set_text(s, x + 3, set_y(s, 3), "chooses a site, or leaves one out.");
 	set_text(s, x + 3, set_y(s, 4), "On every site, one whose scripts are");
