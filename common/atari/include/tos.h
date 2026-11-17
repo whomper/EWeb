@@ -221,8 +221,12 @@ static inline long trap14_wl(short fn, long a)
 #define SIG_IGN   1L
 #define Fsocket(d, t, p)   trap1_wlll(0x160, (long)(d), (long)(t), (long)(p))
 #define Fconnect(h, a, l)  trap1_wwll(0x163, (h), (long)(a), (long)(l))
+#define Fgetsockopt(h, l, n, v, s) trap1_wwllll(0x16b, (h), (long)(l), (long)(n), (long)(v), (long)(s))
+#define SOL_SOCKET 0xffff
+#define SO_ERROR  4
 #define FIONREAD  0x4601
 #define FIONWRITE 0x4602
+#define F_GETFL   3
 #define F_SETFL   4
 #define O_NDELAY  0x100
 
