@@ -12,7 +12,9 @@
 	.section .text.PAD_NAME,"ax"
 	.globl	PAD_NAME
 PAD_NAME:
+#if PAD_TEXT > 0
 	.space	PAD_TEXT
+#endif
 #if PAD_RO > 0
 #define RO_(n) n ## _ro
 #define RO(n) RO_(n)

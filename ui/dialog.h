@@ -25,16 +25,43 @@
    (drawn deselected), the field's text as it was. A dialog with no button
    that does nothing (EFTP's Skip|Resume|Replace while a transfer runs,
    where Esc stops the transfer) passes -1: Esc and Undo then give -1,
-   told apart from every button, and no object is drawn or changed. */
+   told apart from every button, and no object is drawn or changed.
+   cancel 0: Esc and Undo take the tree's "Cancel" exit button, else its only exit button (OK in a box that only
+   says something), else do nothing. In a short field ^C ^X ^V go to clip_edit, where the app has clip.c and
+   clipedit.c; a long field's are lf_key's (a password, LFIELD.secret, is never copied or cut out). */
 short dlg_do(OBJECT *tree, short start, short cancel);
 /* start < 0: no text field gets the cursor (the focus is on a control: settings.c's keyboard reach, D25) */
 
 /* The app's own key, offered to dlg_do before its own (after F10): key as evnt_multi gives it, kstate, edit the object whose
    text field has the cursor (0: none), *field set by the function: > 0 the text field that gets the cursor, < 0 the
-   cursor leaves its field, 0 as it is. It returns 1 when it took the key (dlg_do does nothing else with it), 0 to leave it
-   to dlg_do. NULL by default; settings.c sets it while its dialog is up (Tab, Space, arrows: the keyboard reach, 5.10).
+   cursor leaves its field, 0 as it is. It returns:
+     0  the key isn't the app's: dlg_do handles it as its own;
+     1  the app took the key (the focus moved, a radio turned): dlg_do does nothing else with it, the text cursor
+        going where *field says;
+     2  the key acts on the object *field (> 0; Space on a button, a tick, a choice: the keyboard reach, D25): dlg_do
+        ends and returns it, as a click on it would. An EXIT button is drawn selected first, for the caller to
+        deselect, as after a click; any other state (a tick's cross, a radio's dot) is the app's to set, here or once
+        dlg_do has returned it. A text field's cursor ends as on an exit. There is no press to wait for, so a
+        DLG_CLICK build's dlg_touch_up returns at once, and the double click's bit (0x8000) is never set.
+        *field 0 or less with 2: as 1.
+   NULL by default; settings.c sets it while its dialog is up (Tab, Space, arrows: the keyboard reach, 5.10).
    A function that serves one tree checks `tree` and takes nothing of another dialog's (a button's own dialog) */
 extern int (*dlg_keys)(OBJECT *tree, short key, short kstate, short edit, short *field);
+
+/* Objects a dialog's own loop changed, drawn a slice at a time by dlg_do (EFTP's form_loop, 11 Nov 2026): a loop
+   that changes many objects at once (a list's row chosen fills ten fields: 200 ms of an 8 MHz ST) calls dlg_later
+   for each instead of drawing them, then dlg_do again. dlg_do draws the queue 30 ms a turn, between looks at the
+   mouse and keys: a key draws the rest first, a press is taken at once (a quick double click's second press counts).
+   In a dialog window, for the root, or when more than half the tree waits, dlg_later draws at once (dlg_draw).
+   dlg_close drops what is still queued; dlg_later_drop does too (the caller draws the whole itself). A tree of more
+   than 256 objects is drawn at once. */
+void dlg_later(OBJECT *tree, short obj);
+void dlg_later_drop(void);
+int dlg_later_waiting(void);		/* 1 while objects wait */
+
+/* The band's badge (the Hebrew keyboard's, the guidelines 5.3), drawn by the app over the dialog's title band from
+   dlg_band, on TOS where the band shows: when dlg_do starts and after F10 (the band drawn again first). NULL: none */
+extern void (*dlg_badge)(OBJECT *tree, short band);
 
 /* the whole of it: the screen and mouse kept (wind_update), the tree
    centred (form_center) on a multiple of 16 pixels across (its text on a

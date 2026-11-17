@@ -170,6 +170,14 @@ if prg:
         shutil.copy(use.get(pf.upper(), os.path.join(rel, pf)), os.path.join(hd, prg.upper(), pf))
         for f in more:
             shutil.copy(use.get(f.upper(), os.path.join(rel, f)), os.path.join(hd, prg.upper(), f))
+        # NatFeats only where the INF asks (guidelines 6.5, 15 Nov 2026): the
+        # program's INF holds NATFEATS=1 alone at its first start, so the
+        # check below reads the line it says (EMail 2.21's family check)
+        inf = os.path.join(hd, prg.upper(), prg.lower() + ".inf")
+        if not os.path.exists(inf):
+            with open(inf, "w", newline="") as f:
+                # (EMail reads its keys in [OPTIONS], as its own rigs write it)
+                f.write(("[OPTIONS]\r\n" if prg.upper() == "EMAIL" else "") + "NATFEATS=1\r\n")
     auto = ["--auto", "C:\\%s\\%s" % (prg.upper(), pf)]
 versions = ", ".join("%s %s" % (a, use[f] if f in use else
                                  open(os.path.join(rel, repo.get(a, a).upper() + ".VERSION")).read().strip())
