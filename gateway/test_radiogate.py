@@ -163,7 +163,8 @@ class Tests(unittest.TestCase):
             print("SKIPPED: mp3_titles (no ffmpeg to make the tone)")
             return
         st = Station({"/live": ("ICY 200 OK\r\nicy-name: Test FM\r\nicy-br: 128\r\nicy-metaint: 4000\r\n"
-                                "Content-Type: audio/mpeg\r\n\r\n", self.mp3, 4000, "Artist - Song")})
+                                "Content-Type: audio/mpeg\r\n\r\n", self.mp3, 4000,
+                                "Artist - Song';StreamUrl='http://127.0.0.1/cover.jpg")})
         g = Gate()
         status, heads, body = g.ask("http://127.0.0.1:%d/live" % st.port)
         g.stop()
@@ -173,6 +174,7 @@ class Tests(unittest.TestCase):
         audio, titles = strip_icy(body, radiogate.METAINT)
         self.assertIn("Artist - Song", titles)
         self.assertGreater(mp3_frames(audio), 20)
+        self.assertIn(b"StreamUrl='http://127.0.0.1/cover.jpg';", body)   # (the station's, passed on)
 
     def test_redirect_pls(self):
         if not HAVE_FFMPEG:
@@ -262,6 +264,165 @@ class Tests(unittest.TestCase):
         g.stop()
         self.assertIn("502", status)
         self.assertIn(b"doesn't answer", body)
+
+    def test_art(self):
+        """/art: a JPEG and a PNG as 64 x 64 JPEGs (red stays left, blue
+        right); a page that isn't a picture refused; kept for the next ask"""
+        if not HAVE_FFMPEG:
+            print("SKIPPED: art (no ffmpeg)")
+            return
+        pics = {}
+        for ext in ("jpg", "png"):
+            path = os.path.join(TMP, "rb." + ext)
+            subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                            "color=red:s=200x300[a];color=blue:s=200x300[b];[a][b]hstack", "-frames:v", "1",
+                            path], check=True)
+            pics[ext] = open(path, "rb").read()
+        st = Station({"/c.jpg": ("HTTP/1.0 200 OK\r\nContent-Type: image/jpeg\r\n\r\n", pics["jpg"], 0, ""),
+                      "/l.png": ("HTTP/1.0 200 OK\r\nContent-Type: image/png\r\n\r\n", pics["png"], 0, ""),
+                      "/page": ("HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n", b"<html>hi</html>", 0, "")})
+        g = Gate()
+        for name in ("c.jpg", "l.png"):
+            status, heads, body = g.ask("", path="/art?url=" + urllib.parse.quote(
+                "http://127.0.0.1:%d/%s" % (st.port, name), safe=""), meta=False)
+            self.assertIn("200", status, name)
+            self.assertEqual(heads.get("content-type"), "image/jpeg")
+            out = os.path.join(TMP, "out.jpg")
+            open(out, "wb").write(body)
+            probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0",
+                                    out], capture_output=True, text=True).stdout.strip()
+            self.assertEqual(probe, "64,64", name)
+            raw = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", out, "-f", "rawvideo",
+                                  "-pix_fmt", "rgb24", "pipe:1"], capture_output=True).stdout
+            left, right = raw[(32 * 64 + 8) * 3:(32 * 64 + 8) * 3 + 3], raw[(32 * 64 + 56) * 3:(32 * 64 + 56) * 3 + 3]
+            self.assertTrue(left[0] > 200 and left[2] < 60 and right[2] > 200 and right[0] < 60, (left, right))
+        st.routes.pop("/c.jpg")             # (gone from the station: the Gateway's copy answers)
+        status, _, _ = g.ask("", path="/art?url=" + urllib.parse.quote(
+            "http://127.0.0.1:%d/c.jpg" % st.port, safe=""), meta=False)
+        self.assertIn("200", status)
+        status, _, body = g.ask("", path="/art?url=" + urllib.parse.quote(
+            "http://127.0.0.1:%d/page" % st.port, safe=""), meta=False)
+        self.assertIn("502", status)
+        status, _, _ = g.ask("", path="/art?url=javascript%3A1", meta=False)
+        self.assertIn("400", status)
+        # (two pictures made at once at most: a third waits for neither, 503)
+        radiogate.ART_JOBS.acquire()
+        radiogate.ART_JOBS.acquire()
+        try:
+            status, _, _ = g.ask("", path="/art?url=" + urllib.parse.quote(
+                "http://127.0.0.1:%d/l.png?x" % st.port, safe=""), meta=False)
+            self.assertIn("503", status)
+        finally:
+            radiogate.ART_JOBS.release()
+            radiogate.ART_JOBS.release()
+        g.stop()
+
+    def test_logo(self):
+        """/logo: radio-browser.info's answer (a stand-in here): found by the
+        station's address, else by its exact name; none (404, kept); the
+        directory down (502)"""
+        if not HAVE_FFMPEG:
+            print("SKIPPED: logo (no ffmpeg)")
+            return
+        import json
+        path = os.path.join(TMP, "logo.png")
+        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "color=green:s=128x128", "-frames:v", "1", path], check=True)
+        png = open(path, "rb").read()
+        st = Station({})
+        base = "http://127.0.0.1:%d" % st.port
+        asked = []
+
+        def api(p):
+            asked.append(p)
+            if p.startswith("/json/stations/byurl"):
+                hit = "radio.example%2Fknown" in p
+                body = json.dumps([{"name": "Known FM", "favicon": base + "/logo.png"}] if hit else [])
+            elif "nameExact=true" in p:
+                hit = "name=Named%20FM" in p
+                body = json.dumps([{"name": "Named FM", "favicon": ""},
+                                   {"name": "Named FM", "favicon": base + "/logo.png"}] if hit else [])
+            else:
+                # (by the first words: Other FM's logo, its stream elsewhere, passed over; Wide FM's taken)
+                body = json.dumps([{"name": "Wide FM Live", "favicon": base + "/nope.png",
+                                    "url": "http://elsewhere.example/x"},
+                                   {"name": "Wide FM (MP3)", "favicon": base + "/logo.png",
+                                    "url": "http://stream.wide.example/live"}] if "name=Wide%20FM" in p else [])
+            return ("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n", body.encode(), 0, "")
+
+        class Routes(dict):
+            def __getitem__(self, p):
+                if p == "/logo.png":
+                    return ("HTTP/1.0 200 OK\r\nContent-Type: image/png\r\n\r\n", png, 0, "")
+                return api(p)
+        st.routes = Routes()
+        radiogate.Config.rb_api = ["http://127.0.0.1:1", base]    # (the first mirror down: the next asked)
+        radiogate.LOGOS.d.clear()
+        g = Gate()
+
+        def ask(station, name):
+            q = "/logo?station=%s&name=%s" % (urllib.parse.quote(station, safe=""), urllib.parse.quote(name, safe=""))
+            return g.ask("", path=q, meta=False)
+        status, heads, body = ask("http://radio.example/known", "")
+        self.assertIn("200", status)
+        self.assertEqual(heads.get("content-type"), "image/jpeg")
+        status, _, _ = ask("http://radio.example/other", "Named FM")
+        self.assertIn("200", status)                 # (by its name: the first with a logo)
+        status, _, _ = ask("http://cdn.wide.example/x", "Wide FM - the best")
+        self.assertIn("200", status)                 # (its own domain's entry)
+        self.assertNotIn("/nope.png", asked)
+        n = len(asked)
+        status, _, _ = ask("http://radio.example/none", "Nobody FM")
+        self.assertIn("404", status)
+        status, _, _ = ask("http://radio.example/none", "Nobody FM")
+        self.assertIn("404", status)
+        self.assertEqual(len(asked), n + 3)          # (asked three ways; the second time from what was kept)
+        status, _, _ = ask("ftp://x/y", "")
+        self.assertIn("400", status)
+        radiogate.Config.rb_api = ["http://127.0.0.1:1"]
+        status, _, _ = ask("http://radio.example/down", "Down FM")
+        self.assertIn("502", status)
+        g.stop()
+
+    def test_search(self):
+        """/search: radio-browser.info's stations (a stand-in here) as lines
+        of text, the criteria passed on, the bad ones left out, the
+        directory down (502)"""
+        import json
+        st = Station({})
+        base = "http://127.0.0.1:%d" % st.port
+        asked = []
+
+        class Routes(dict):
+            def __getitem__(self, p):
+                asked.append(p)
+                body = json.dumps([
+                    {"name": "Jazz\tFM", "countrycode": "DE", "codec": "MP3", "bitrate": 128,
+                     "url_resolved": "http://jazz.example/live"},
+                    {"name": "No address", "countrycode": "FR", "codec": "AAC", "bitrate": 64, "url": ""},
+                    {"name": "Ogg Jazz", "countrycode": "NL", "codec": "OGG", "bitrate": "x",
+                     "url": "https://ogg.example/s"}])
+                return ("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n", body.encode(), 0, "")
+        st.routes = Routes()
+        radiogate.Config.rb_api = ["http://127.0.0.1:1", base]
+        g = Gate()
+        status, heads, body = g.ask("", path="/search?q=jazz&tag=smooth%20jazz&country=DE&language=german&sort=clicks&n=20",
+                                    meta=False)
+        self.assertIn("200", status)
+        self.assertTrue(heads.get("content-type", "").startswith("text/plain"))
+        lines = body.decode("utf-8").splitlines()
+        self.assertEqual(lines, ["Jazz FM\tDE\tMP3\t128\thttp://jazz.example/live",
+                                 "Ogg Jazz\tNL\tOGG\t0\thttps://ogg.example/s"])
+        p = asked[-1]
+        for want in ("name=jazz", "tag=smooth%20jazz", "countrycode=DE", "language=german", "order=clickcount",
+                     "reverse=true", "limit=20", "hidebroken=true"):
+            self.assertIn(want, p)
+        status, _, _ = g.ask("", path="/search?q=" + "x" * 101, meta=False)
+        self.assertIn("400", status)
+        radiogate.Config.rb_api = ["http://127.0.0.1:1"]
+        status, _, _ = g.ask("", path="/search?q=jazz", meta=False)
+        self.assertIn("502", status)
+        g.stop()
 
     def test_icy_in_out(self):
         """the metadata taken out at every cut, and put back"""

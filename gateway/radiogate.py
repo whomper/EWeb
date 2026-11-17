@@ -21,7 +21,31 @@ of its own:
   with one line "radiogate: why" (400 a URL it doesn't take, 403 not from
   the home network, 502 the station doesn't answer, 503 too many at once).
 
-    GET /version   ->  "radiogate 1.0, ffmpeg 6.1"
+    GET /art?url=<a picture's URL, %-encoded> HTTP/1.0   (radiogate 1.1)
+
+  answered by the picture (a station's StreamUrl: a song's cover or its
+  logo; JPEG, PNG, GIF, WebP...) as a 64 x 64 baseline JPEG, its middle
+  square, made by ffmpeg ("Content-Type: image/jpeg"), the last 64 kept;
+  or by an error as above (502 too: not a picture).
+
+    GET /logo?station=<the station's URL>&name=<its name>   (radiogate 1.2)
+
+  answered by the station's logo from radio-browser.info (found by its
+  address, else by its exact name), as a 64 x 64 JPEG as /art's; 404 when
+  the directory has none (asked again a day on), 502 when it doesn't
+  answer.
+
+    GET /search?q=<words>&tag=<genre>&country=<code>&language=<name>&sort=votes|clicks|name&n=<1-100>
+                                                   (radiogate 1.3)
+
+  answered by radio-browser.info's stations that match (Erez, 9 Nov 2026:
+  Find station, through the Gateway): text/plain, UTF-8, one station a
+  line, "name<TAB>country code<TAB>codec<TAB>kbit/s<TAB>its URL", the
+  broken ones left out, most votes first by default; any codec (what
+  isn't MP3 is converted on /stream); 502 when the directory doesn't
+  answer.
+
+    GET /version   ->  "radiogate 1.3, ffmpeg 6.1"
 
 What the station sends:
   - MP3 (audio/mpeg): passed on as it comes, over HTTP or HTTPS, its ICY
@@ -58,7 +82,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qsl, urljoin, urlsplit
+from urllib.parse import parse_qsl, quote, urljoin, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 for d in (HERE, os.path.join(HERE, "..", "gateway")):
@@ -67,10 +91,12 @@ for d in (HERE, os.path.join(HERE, "..", "gateway")):
         break
 import aeragate  # noqa: E402
 
-VERSION = "1.0"
+VERSION = "1.3"
 METAINT = 8192                      # the Atari's: a title block every 8 KB of MP3
 HEAD_MAX = 16384                    # a station's answer head, at most
 LIST_MAX = 65536                    # a station list or an HLS playlist, at most
+PIC_MAX = 4 << 20                   # a station's picture, at most
+ART_SIDE = 64                       # /art's pictures: 64 x 64, EPlay's art square
 PIECE_MAX = 16 << 20                # an HLS piece, at most
 URL_MAX = 2048
 REDIRECTS = 5
@@ -86,6 +112,10 @@ class Config:
     memory = 256 << 20
     timeout = 20
     verbose = False
+    # radio-browser.info, /logo's station directory: its mirrors, each tried in turn (one often
+    # refuses a connection)
+    rb_api = ["https://de1.api.radio-browser.info", "https://fi1.api.radio-browser.info",
+              "https://nl1.api.radio-browser.info", "https://de2.api.radio-browser.info"]
 
 
 class Refused(Exception):
@@ -227,11 +257,12 @@ def first_station(text, base):
 
 class IcyIn:
     """the station's metadata taken out (metaint bytes of audio, then a
-    length byte and 16 times it of 'StreamTitle=...;')"""
+    length byte and 16 times it of 'StreamTitle=...;StreamUrl=...;'): its
+    title, and its StreamUrl (a picture's address on some stations)"""
 
     def __init__(self, metaint):
         self.metaint, self.left, self.meta, self.need = metaint, metaint, b"", -1
-        self.title = None
+        self.title = self.url = None
 
     def feed(self, data):
         if not self.metaint:
@@ -256,6 +287,9 @@ class IcyIn:
                     m = re.search(rb"StreamTitle='(.*?)';", self.meta, re.S)
                     if m:
                         self.title = m.group(1).decode("utf-8", "replace")[:200]
+                    m = re.search(rb"StreamUrl='(.*?)';", self.meta, re.S)
+                    if m:
+                        self.url = m.group(1).decode("latin-1")[:255]
                     self.need, self.left = -1, self.metaint
         return bytes(out)
 
@@ -267,7 +301,7 @@ class IcyOut:
     def __init__(self):
         self.left, self.sent = METAINT, None
 
-    def wrap(self, data, title):
+    def wrap(self, data, title, url=None):
         out, i = bytearray(), 0
         while i < len(data):
             k = min(self.left, len(data) - i)
@@ -275,11 +309,14 @@ class IcyOut:
             i += k
             self.left -= k
             if not self.left:
-                if title is not None and title != self.sent:
-                    t = ("StreamTitle='%s';" % title.replace("'", "")).encode("utf-8", "replace")[:16 * 255]
+                if title is not None and (title, url) != self.sent:
+                    t = ("StreamTitle='%s';" % title.replace("'", "")).encode("utf-8", "replace")
+                    if url and "'" not in url and all(32 < ord(c) < 127 for c in url):
+                        t += ("StreamUrl='%s';" % url).encode()     # (the station's own, for its picture)
+                    t = t[:16 * 255]
                     t += b"\0" * (-len(t) % 16)
                     out += bytes([len(t) // 16]) + t
-                    self.sent = title
+                    self.sent = (title, url)
                 else:
                     out += b"\0"
                 self.left = METAINT
@@ -298,10 +335,16 @@ def ffmpeg_version():
 
 
 def start_ffmpeg(informat=None):
-    args = [Config.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"]
+    # (-protocol_whitelist pipe: what the station sends can't make ffmpeg
+    # open addresses or files of its own, past aeragate's checks: 6.1 and
+    # 7 refuse that already, an older one may not; the Gateway's review)
+    # (one thread: a single audio stream gains nothing from more, and each
+    # thread's stack counts toward RLIMIT_DATA: the Gateway's CI)
+    args = [Config.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-protocol_whitelist", "pipe",
+            "-threads", "1"]
     if informat:
         args += ["-f", informat]
-    args += ["-i", "pipe:0", "-vn", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "%dk" % KBPS,
+    args += ["-i", "pipe:0", "-threads", "1", "-vn", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "%dk" % KBPS,
              "-ar", "44100", "-ac", "2", "-f", "mp3", "pipe:1"]
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
@@ -313,6 +356,57 @@ def start_ffmpeg(informat=None):
     except (OSError, ValueError):
         pass
     return p
+
+
+def shrink(data):
+    """a picture (JPEG, PNG, GIF, WebP...) as a 64 x 64 baseline JPEG, its
+    middle square, by ffmpeg; None if it isn't one ffmpeg reads"""
+    # (one thread each, decoder, filters and encoder: a 64 x 64 picture
+    # needs none, and the thread pools' stacks took ffmpeg 6.1 over 256 MB
+    # of RLIMIT_DATA on a 4-core runner: the Gateway's CI, 8 Nov 2026)
+    args = [Config.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-protocol_whitelist", "pipe",
+            "-threads", "1", "-i", "pipe:0", "-filter_threads", "1", "-threads", "1", "-frames:v", "1",
+            "-vf", "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d" % ((ART_SIDE,) * 4),
+            "-pix_fmt", "yuvj420p", "-q:v", "3", "-f", "mjpeg", "pipe:1"]
+    try:
+        p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            resource.prlimit(p.pid, resource.RLIMIT_DATA, (Config.memory, Config.memory))
+            resource.prlimit(p.pid, resource.RLIMIT_CORE, (0, 0))
+        except (OSError, ValueError):
+            pass
+        out, _ = p.communicate(data, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out if p.returncode == 0 and out[:2] == b"\xff\xd8" else None
+
+
+class ArtCache:
+    """the last pictures made, by their address (a song's cover comes again)"""
+    keep = 64
+
+    def __init__(self):
+        self.d, self.lock = {}, threading.Lock()
+
+    def get(self, url):
+        with self.lock:
+            v = self.d.pop(url, None)
+            if v is not None:
+                self.d[url] = v
+            return v
+
+    def put(self, url, jpg):
+        with self.lock:
+            self.d[url] = jpg
+            while len(self.d) > self.keep:
+                self.d.pop(next(iter(self.d)))
+
+
+ART = ArtCache()
+LOGOS = ArtCache()                  # /logo's, by station: a JPEG, or b"" for none (asked again a day on)
+LOGOS.keep = 256
+LOGO_NONE_S = 24 * 3600
+ART_JOBS = threading.BoundedSemaphore(2)    # pictures made at once (an ffmpeg each), else 503
 
 
 # ---- the Atari's side ----
@@ -352,6 +446,16 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if u.path == "/logo":
+            q = dict(parse_qsl(u.query, keep_blank_values=True))
+            self.logo(q.get("station", ""), q.get("name", ""))
+            return
+        if u.path == "/search":
+            self.search(dict(parse_qsl(u.query, keep_blank_values=True)))
+            return
+        if u.path == "/art":
+            self.art(dict(parse_qsl(u.query, keep_blank_values=True)).get("url", ""))
+            return
         if u.path != "/stream":
             self.reply(404, "no such page")
             return
@@ -362,9 +466,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         t0, sent = time.time(), [0]
         host = urlsplit(url).hostname or "?"
+        self.fault = None               # (the feed thread's, when it failed)
         try:
             self.stream(url, self.headers.get("Icy-MetaData", "") == "1", sent)
-            why = "ended"
+            why = self.fault or "ended"
         except Refused as e:
             if sent[0]:
                 why = e.words
@@ -447,7 +552,7 @@ class Handler(BaseHTTPRequestHandler):
             while True:
                 if data:
                     audio = icy_in.feed(data)
-                    self.out(icy_out.wrap(audio, icy_in.title) if icy_out else audio, sent)
+                    self.out(icy_out.wrap(audio, icy_in.title, icy_in.url) if icy_out else audio, sent)
                 try:
                     data = s.recv(16384)
                 except socket.timeout:
@@ -456,6 +561,188 @@ class Handler(BaseHTTPRequestHandler):
                     return
         finally:
             s.close()  # (the station's too, when the Atari went first)
+
+    def logo(self, station, name):
+        """GET /logo?station=<the station's URL>&name=<its icy-name> (EPlay,
+        when a Gateway is set, for a station that names no picture of its
+        own: Erez, 8 Nov 2026): its logo from radio-browser.info, found by
+        the station's address, else by its exact name (the most voted), as
+        a 64 x 64 JPEG; 404 when there is none"""
+        try:
+            checked_url(station)
+        except Refused as e:
+            self.reply(e.status, e.words)
+            return
+        name = name.strip()[:120]
+        key = station + "\n" + name.lower()
+        got = LOGOS.get(key)
+        if got is not None and (got[0] or time.time() - got[1] < LOGO_NONE_S):
+            jpg = got[0]
+        else:
+            if not ffmpeg_version():
+                self.reply(502, "pictures need ffmpeg on the Gateway")
+                return
+            if not ART_JOBS.acquire(blocking=False):
+                self.reply(503, "too many pictures at once")
+                return
+            try:
+                jpg = self.find_logo(station, name)
+            finally:
+                ART_JOBS.release()
+            if jpg is None:
+                return                  # (a reply made: the directory didn't answer)
+            LOGOS.put(key, (jpg, time.time()))
+        if not jpg:
+            self.reply(404, "no logo for this station")
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(jpg)))
+            self.end_headers()
+            self.wfile.write(jpg)
+        except OSError:
+            pass
+
+    def search(self, q):
+        """GET /search: radio-browser.info's stations as lines of text"""
+        import json
+        order = {"votes": ("votes", "true"), "clicks": ("clickcount", "true"),
+                 "name": ("name", "false")}.get(q.get("sort", "votes"), ("votes", "true"))
+        try:
+            n = max(1, min(100, int(q.get("n", "50"))))
+        except ValueError:
+            n = 50
+        args = [("hidebroken", "true"), ("order", order[0]), ("reverse", order[1]), ("limit", str(n))]
+        for k, rb in (("q", "name"), ("tag", "tag"), ("country", "countrycode"), ("language", "language")):
+            v = q.get(k, "").strip()
+            if len(v) > 100:
+                self.reply(400, "too long a search")
+                return
+            if v:
+                args.append((rb, v))
+        path = "/json/stations/search?" + "&".join("%s=%s" % (k, quote(v, safe="")) for k, v in args)
+        found = None
+        for api in Config.rb_api:
+            try:
+                _, data = fetch(api + path, 4 << 20)
+                found = json.loads(data.decode("utf-8", "replace"))
+                break
+            except (Refused, ValueError):
+                continue
+        if not isinstance(found, list):
+            self.reply(502, "the station directory doesn't answer")
+            return
+
+        def field(v):
+            return re.sub(r"[\t\r\n]+", " ", str(v if v is not None else "")).strip()
+        lines = []
+        for st in found:
+            if not isinstance(st, dict):
+                continue
+            url = field(st.get("url_resolved") or st.get("url"))
+            if not url.startswith(("http://", "https://")) or len(url) > URL_MAX:
+                continue
+            try:
+                kbps = int(st.get("bitrate") or 0)
+            except (TypeError, ValueError):
+                kbps = 0
+            lines.append("%s\t%s\t%s\t%d\t%s\n" % (field(st.get("name"))[:80], field(st.get("countrycode"))[:2],
+                                                    field(st.get("codec"))[:8], kbps, url))
+        body = "".join(lines).encode("utf-8")
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            pass
+        aeragate.say("radiogate: %s searched, %d stations" % (self.client_address[0], len(lines)))
+
+    def find_logo(self, station, name):
+        """the logo's JPEG, b"" when the directory has none, None (a reply
+        made) when it doesn't answer. Asked in turn: by the station's
+        address; by its exact name; by its name's first words, taken only
+        from an entry whose stream is on the station's own domain (no other
+        station's logo)"""
+        import json
+
+        def domain(u):
+            return ".".join((urlsplit(u).hostname or "").split(".")[-2:])
+
+        words = re.split(r" - |[,:(|\[]", name)[0].strip() if name else ""
+        asks = [("/json/stations/byurl?url=" + quote(station, safe=""), False)]
+        if name:
+            asks.append(("/json/stations/search?name=%s&nameExact=true&hidebroken=true&order=votes&reverse=true"
+                         "&limit=5" % quote(name, safe=""), False))
+        if words:
+            asks.append(("/json/stations/search?name=%s&hidebroken=true&order=votes&reverse=true&limit=30" %
+                         quote(words, safe=""), True))
+        answered, mine = False, domain(station)
+        for a, same_domain in asks:
+            found = None
+            for api in Config.rb_api:
+                try:
+                    _, data = fetch(api + a, 1 << 20)
+                    found = json.loads(data.decode("utf-8", "replace"))
+                    answered = True
+                    break
+                except (Refused, ValueError):
+                    continue
+            for st in found if isinstance(found, list) else []:
+                fav = st.get("favicon") if isinstance(st, dict) else None
+                if not isinstance(fav, str) or not fav.startswith(("http://", "https://")):
+                    continue
+                if same_domain and mine not in (domain(str(st.get("url", ""))), domain(str(st.get("url_resolved", "")))):
+                    continue
+                try:
+                    _, pic = fetch(fav, PIC_MAX)
+                except Refused:
+                    continue
+                jpg = shrink(pic)
+                if jpg:
+                    return jpg
+        if not answered:
+            self.reply(502, "the station directory doesn't answer")
+            return None
+        return b""
+
+    def art(self, url):
+        """GET /art?url=<a picture's address> (EPlay through the Gateway, a
+        station's StreamUrl): the picture fetched (the same checks as a
+        station's), as a 64 x 64 JPEG"""
+        host = urlsplit(url).hostname or "?"
+        jpg = ART.get(url)
+        if jpg is None:
+            if not ffmpeg_version():
+                self.reply(502, "pictures need ffmpeg on the Gateway")
+                return
+            if not ART_JOBS.acquire(blocking=False):
+                self.reply(503, "too many pictures at once")
+                return
+            try:
+                _, data = fetch(url, PIC_MAX)
+                jpg = shrink(data)
+            except Refused as e:
+                self.reply(e.status, e.words)
+                return
+            finally:
+                ART_JOBS.release()
+            if jpg is None:
+                self.reply(502, "not a picture this reads")
+                return
+            ART.put(url, jpg)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(jpg)))
+            self.end_headers()
+            self.wfile.write(jpg)
+        except OSError:
+            return
+        if Config.verbose:
+            aeragate.say("radiogate: %s a picture from %s, %d bytes" % (self.client_address[0], host, len(jpg)))
 
     def convert(self, s, have, name, metaint, meta, sent):
         """AAC, Ogg and the like through ffmpeg; the station's titles kept"""
@@ -477,14 +764,15 @@ class Handler(BaseHTTPRequestHandler):
                     if not data:
                         break
             except (OSError, ValueError, ssl.SSLError):
-                pass
+                if not stop.is_set():
+                    self.fault = "the station's feed failed"
             finally:
                 try:
                     p.stdin.close()
                 except OSError:
                     pass
 
-        return self.run_ffmpeg(p, feed, stop, s, name, meta, sent, lambda: icy_in.title)
+        return self.run_ffmpeg(p, feed, stop, s, name, meta, sent, lambda: (icy_in.title, icy_in.url))
 
     def run_ffmpeg(self, p, feed, stop, s, name, meta, sent, title):
         t = threading.Thread(target=feed, daemon=True)
@@ -497,7 +785,7 @@ class Handler(BaseHTTPRequestHandler):
             self.begin(name, KBPS, meta)
             data = first
             while data:
-                self.out(icy_out.wrap(data, title()) if icy_out else data, sent)
+                self.out(icy_out.wrap(data, *title()) if icy_out else data, sent)
                 data = p.stdout.read1(16384) if hasattr(p.stdout, "read1") else p.stdout.read(16384)
         finally:
             stop.set()
@@ -566,15 +854,19 @@ class Handler(BaseHTTPRequestHandler):
                     stop.wait(target / 2)
                     u, t = fetch(state["url"], LIST_MAX)
                     state["text"] = t.decode("utf-8", "replace")
-            except (Refused, OSError, ValueError, ssl.SSLError):
-                pass
+            except Refused as e:
+                if not stop.is_set():
+                    self.fault = "a piece: " + e.words
+            except (OSError, ValueError, ssl.SSLError):
+                if not stop.is_set():
+                    self.fault = "the station's feed failed"
             finally:
                 try:
                     p.stdin.close()
                 except OSError:
                     pass
 
-        return self.run_ffmpeg(p, feed, stop, None, "", meta, sent, lambda: None)
+        return self.run_ffmpeg(p, feed, stop, None, "", meta, sent, lambda: (None, None))
 
 
 def parser():
