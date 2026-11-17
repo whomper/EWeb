@@ -1493,15 +1493,6 @@ int win_whole_only = 1;
 #endif
 static long whole_ms = -1;
 
-int win_whole(long *ms)
-{
-	if (whole_ms < 0)
-		return 0;
-	*ms = whole_ms;
-	whole_ms = -1;
-	return 1;
-}
-
 void win_draw_due(void)
 {
 	/* each window's in this turn: its title and bars, its page's rows, a
@@ -1724,16 +1715,6 @@ static void redraw_now(void)
 /* the last scroll: its window and when its key, click or message came */
 static ewin *scroll_w;
 static unsigned long scroll_t0;
-
-int win_scroll_whole(long *ms, int32_t *top)
-{
-	if (scroll_w == NULL || (scroll_w->due.w > 0 && scroll_w->due.h > 0) || scroll_w->due_bars)
-		return 0;
-	*ms = (long) (pf_ms() - scroll_t0);
-	*top = scroll_w->top;
-	scroll_w = NULL;
-	return 1;
-}
 
 /* keys already waiting taken together (main.c, an arrow held): their
    scrolls only move the window's place, and one scroll from where it was
@@ -4449,4 +4430,27 @@ static void message(const short *msg)
 		scroll_x_to((int32_t) ((int64_t) max_left() * msg[4] / 1000));
 		break;
 	}
+}
+
+/* the last whole draw's time, and the last scroll's, once each (the speed
+   build's AESDRAW and AESSCROLL lines, their only caller): last in the
+   file, so that the timed build, which keeps them, has win.o's other code
+   where the shipped one has it (tools/profpad.py) */
+int win_scroll_whole(long *ms, int32_t *top)
+{
+	if (scroll_w == NULL || (scroll_w->due.w > 0 && scroll_w->due.h > 0) || scroll_w->due_bars)
+		return 0;
+	*ms = (long) (pf_ms() - scroll_t0);
+	*top = scroll_w->top;
+	scroll_w = NULL;
+	return 1;
+}
+
+int win_whole(long *ms)
+{
+	if (whole_ms < 0)
+		return 0;
+	*ms = whole_ms;
+	whole_ms = -1;
+	return 1;
 }

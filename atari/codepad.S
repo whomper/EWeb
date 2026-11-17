@@ -5,8 +5,8 @@
    its places of the release before modulo 256, as the 68030's caches see
    them (DESIGN.md, Code layout and the 68030's caches). Made once for
    each place, PAD_NAME, PAD_TEXT, PAD_RO and PAD_BSS (its read-only data's and
-   BSS's, or 0) from the Makefile, which says where
-   each goes and why */
+   BSS's, or 0) and PAD_DATA (its data's: tools/profpad.py's) from the
+   Makefile, which says where each goes and why */
 	.section .text.PAD_NAME,"ax"
 	.globl	PAD_NAME
 PAD_NAME:
@@ -18,6 +18,14 @@ PAD_NAME:
 	.globl	RO(PAD_NAME)
 RO(PAD_NAME):
 	.space	PAD_RO
+#endif
+#if defined(PAD_DATA) && PAD_DATA > 0
+#define DATA_(n) n ## _data
+#define DATA(n) DATA_(n)
+	.section .data.PAD_NAME,"aw"
+	.globl	DATA(PAD_NAME)
+DATA(PAD_NAME):
+	.space	PAD_DATA
 #endif
 #if PAD_BSS > 0
 #define BSS_(n) n ## _bss

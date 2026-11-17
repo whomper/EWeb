@@ -716,6 +716,23 @@ Settings'); BSS after `conn.o` (no change). The stock Falcon's arrow held up rea
 in one session and 1020 in another, the same for 1.12: it varies between sessions, so pairs are
 compared within one.
 
+The timed build sits where the shipped one does (17 Nov 2026, the hub, from EPlay 1.45). The speed
+rig times `build/prof` (common's `gem.c` and `ui/main.c` with `AES_PROFILE`), and until 1.19 that
+build was not laid out like `EWEB.PRG`:
+- its two objects are bigger;
+- so is the one block the linker merges every string into, at the read-only data's start;
+- it keeps the two functions of `win.c` that only it calls.
+So from `main.o` on, most of its code (1,668 of the symbols) sat 240 bytes off the shipped places
+modulo 256, its data and BSS too. The rows of 1.16 to 1.19, and the pads above (worked out against
+the timed build before), timed a layout that wasn't shipped.
+
+Since 1.20 its link (`tools/profpad.py`) puts pads after the objects whose code moved and works them
+out at each link. It fails the build (and `make test`) when a symbol both builds have is not at
+its shipped place modulo 256. Those two functions are last in `win.c`, where the shipped build's
+code doesn't move when they are left out. The strings inside the merged block are in the linker's
+order, the timed build's among them; only where the block ends is put back. Pairs since compare
+timed builds of each release made this way (1.19's too).
+
 ## Showing pages: fonts, layout, drawing (18 Oct 2026)
 
 Your decisions (18 Oct 2026): **fresh layout code** (NetSurf's core is GPL-2.0-only and reorders no

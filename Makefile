@@ -723,7 +723,7 @@ build/tos/eweb.elf: $(GEM_RT) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ)
-	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(filter %.o,$^) -lgcc
+	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -Wl,-Map,$@.map -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -820,7 +820,7 @@ build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
 build/st/ewebst.elf: $(st_RT) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o \
 		$(ST_DEEP_OBJ)
-	$(M68KCC) $(ST_LDFLAGS) -o $@ $(filter %.o,$^) -lgcc
+	$(M68KCC) $(ST_LDFLAGS) -Wl,-Map,$@.map -o $@ $(filter %.o,$^) -lgcc
 binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -843,12 +843,22 @@ build/prof/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(NET_WARN) $(NET_VER) -DAES_PROFILE=20 -c $< -o $@
-build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o
-	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
+# linked at the shipped build's places modulo 256 (tools/profpad.py: pads
+# after the objects whose code moved, worked out at each link; the link
+# fails where one can't be put back), so that the rig times the layout
+# that ships (the hub, from EPlay 1.45, 17 Nov 2026)
+PROFPAD_TOS := python3 tools/profpad.py --ship build/tos/eweb.elf --out build/prof/eweb.elf --cpu=-m68030 \
+		--dir build/prof/tos/pads --exclude build/tos/gem/main.o --exclude build/prof/tos/main.o \
+		--exclude build/tos/gem/common/gem.o --exclude build/prof/tos/gem.o --
+PROFPAD_ST := python3 tools/profpad.py --ship build/st/ewebst.elf --out build/prof/ewebst.elf --cpu=-m68000 \
+		--dir build/prof/st/pads --exclude build/st/gem/main.o --exclude build/prof/st/main.o \
+		--exclude build/st/gem/common/gem.o --exclude build/prof/st/gem.o --
+build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o tools/profpad.py atari/codepad.S
+	$(PROFPAD_TOS) $(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT) \
 		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
-build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o
-	$(M68KCC) $(ST_LDFLAGS) -o $@ $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
+build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o tools/profpad.py atari/codepad.S
+	$(PROFPAD_ST) $(M68KCC) $(ST_LDFLAGS) $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT) \
 		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -1300,11 +1310,14 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 	python3 tests/bench/mkpage.py build/news
 
 # (Hubbub prints its tree builder's states when NDEBUG is off: they go)
+# (build/prof's programs: their link checks they are at the shipped
+# places modulo 256, tools/profpad.py)
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
 		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
 		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/c2ptest build/m68k/c2ptest build/asan/cfmathtest binary/EWEB.FNT \
-		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
+		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o \
+		build/prof/EWEB.PRG build/prof/EWEBST.PRG
 	python3 common/tools/oddaccess.py build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o
 	build/asan/streamtest
 	build/asan/nettest
