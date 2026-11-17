@@ -42,14 +42,27 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `main`, nothing else: no test builds, no CI artifacts, no builds from a branch.
   Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, fix
   forward: a new release with the next number, before any other work; never a rollback (Erez, 7 Nov 2026).
-- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2). Release when
-  work on `main` is ready:
-  - this repo's checks pass;
-  - the rigs this file asks for pass (on EmuTOS where the session has nothing else).
+- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), through the
+  regression gate (Erez, 17 Nov 2026: "we need to be extra careful with regression issues as there are
+  users of our software. This means testing across all configurations" and "make sure we don't loose
+  performance"; guidelines 1.2, AERA-Atari's standards/TEST-MATRIX.md gate table). Every code
+  candidate, in this order:
+  1. this repo's checks pass;
+  2. the rigs this file asks for pass on every row of the gate table EWeb runs on, on Erez's TOS
+     images and NVDI (EmuTOS is no evidence for a release): Erez's configuration, Falcon-4:16 without
+     NVDI, Falcon true colour, TT, MiNT+XaAES (plain, ct60, ext2), a 68060, the FireBee stand-in, ST
+     mono and colour (and ST-1), STE, each network path (Direct, the Gateway, MiNTnet), and one boot
+     with NatFeats off; each row named in the report with `describe()`, and why for a row not run;
+  3. the paired speed run against the last release (A B B A, the minimum of each), at the shipped
+     layout (`build/prof`, common's `profpad.py`), on Erez's configuration, `Falcon-4:16` and
+     `ST:mono`: no row slower beyond a tick; fix it first, and only Erez accepts one;
+  4. the candidate commit and the results sent to the hub, whose family check (the real programs
+     together) answers go or the faults it found;
+  5. only then the release. Then give Erez the link in one line, with anything he has to do, and
+     send the hub the link.
 
-  Then give Erez the link in one line, with anything he has to do, and send the hub the link. The
-  hub's checks (Erez's TOS and NVDI, the configurations of AERA-Atari's standards/TEST-MATRIX.md) follow
-  the release; a fault they find is fixed forward by a new release that comes before any other work.
+  A fault a user reports becomes a case in the rigs, in the release that fixes it (as
+  `tests/aranym/mintnet.py` for 1.20's).
 - **Who decides what** (Erez, 31 Oct 2026; the guidelines' "Who decides what"). Erez's part, put
   to him before the work as a decision with a short context:
   - new programs and ideas, their core capabilities, and how they work with the other programs;
@@ -159,8 +172,8 @@ hub stay complete, with the evidence.
   Its `--browser` (snapshots: View > Through the Pi's browser, `SNAPSHOT=`, ewrender `-R`; live view:
   `http://webgate/live`) is tested by `make itest` with a stand-in for webgate-ext.
   Every Hatari rig boots the family's machines (`common/tools/machines.py`): Erez's TOS 4.04 from
-  `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4; before asking
-  Erez for a release, run the GEM rigs on his TOS and say so (the hub, 19 Oct 2026).
+  `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4, which is no
+  evidence for a release: the regression gate (above) runs them on his TOS images and NVDI.
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
   `win.c` with the throbber (`ui/throbber.h` from `tools/mkthrobber.py`) and the icons (`ui/tbicons.h`
   from `tools/mktbicons.py`: each as it is, greyed and lit under the mouse), the page on the screen in every mode through ST RAM in `screen.c`, `main.c`'s menus, keys,
