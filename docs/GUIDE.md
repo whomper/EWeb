@@ -257,7 +257,8 @@ not yet followed.
   site answers, then it goes straight to the disk as it comes, so it can
   be bigger than your memory. The download box shows the file's name, a
   bar of how much of it has come (when its site says its size) and the
-  KB so far; Cancel, Esc or Undo stops it (nothing is left behind). Sites wait about a minute for you to choose;
+  size so far ("12 KB of 3.4 MB"); Stop (as soon as it is pressed), Esc or
+  Undo stops it (nothing is left behind). Sites wait about a minute for you to choose;
   if one gives up, EWeb asks it for the file once more. A link the page
   marks as a download (its site's own) is saved this way when you click
   it. Under MiNT with BGEM.NG, a file that finishes while another
@@ -665,18 +666,18 @@ its fields stays.
 
 **On the Falcon itself:** `EWEB.PRG` runs a little JavaScript, on a
 Falcon or TT with an FPU (a 68881 or 68882, as on the DFB1). Settings >
-Scripts says where:
+Scripts says where, by three buttons under "Run pages' scripts":
 
-- **On the sites you choose** (as it starts): open one of a site's
+- **Chosen**, the sites you choose (as it starts): open one of a site's
   pages and pick Options > Run this site's scripts (ticked while they
   run); the page comes again with its scripts. Pick it again to turn
   them off.
-- **On every site** (tick "On every site, not only those chosen"):
+- **All sites**:
   Options > Run this site's scripts, unticked, leaves a site out. A site
   whose scripts are too much for EWeb (below) is left out until you quit
   EWeb, so its pages aren't made twice; picking the menu item tries it
   again.
-- **On no site** (untick "Run pages' scripts").
+- **No site**.
 
 When a page whose site isn't chosen looks empty without its scripts, or
 says it needs JavaScript, the status line at the foot of the window says
@@ -806,9 +807,10 @@ dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
   colours. Dialogs and alerts have the 3D look wherever the system has
   one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon).
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
-  checks certificates, and the Gateway's address and port (8280).
-- **Scripts** (`EWEB.PRG`): whether pages' scripts run, and on every site
-  or only on those you choose (see
+  checks certificates, the Gateway's address and port (8280), and Write
+  a log (as Options > Write a log: `EWEB.LOG` beside the program).
+- **Scripts** (`EWEB.PRG`): on which sites pages' scripts run: No site,
+  Chosen (the sites you choose) or All sites (see
   [Pages made by scripts](#pages-made-by-scripts)).
 
 The search address, the gateway's address and the answer to a page's

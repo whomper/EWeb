@@ -106,12 +106,17 @@ void dlg_hebrew_changed(void)
 
 /* the values as the dialog changes them: its ticks, fields and the
    language; Cancel puts them back (settings.c) */
-enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_SCRIPTS, T_SCRIPTSALL, T_CACHEQUIT, T_TRANSLATE,
+enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_CACHEQUIT, T_TRANSLATE, T_LOG,
 #ifndef EW_ST
        T_NARROW,
 #endif
        NTICK };
 static short s_on[NTICK];
+#ifndef EW_ST
+/* scripts: on no site, the sites chosen, every site (RUNSCRIPTS= 0, 1, 2;
+   three radio buttons, Erez, 17 Nov 2026: D24) */
+static short s_scripts;
+#endif
 /* the search address and the gateway hold as much as their settings,
    more than their fields show (5.4) */
 static char s_zoom[4], s_search[sizeof opt.search], s_gate[sizeof opt.gate], s_gport[6], s_cache[5];
@@ -182,7 +187,8 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 			   !tls_available ? "Not in the ST edition: EWEB.PRG has it" :
 			   "Needs a 68020 or better (TT, Falcon)";
 	(void) y, (void) user;
-	set_tick(s, x, set_y(s, 0), "Direct connection: TLS on this Atari", &s_on[T_FALCON]);
+	/* (plain, as the menu's: Erez, 17 Nov 2026, D9) */
+	set_tick(s, x, set_y(s, 0), "Direct connection", &s_on[T_FALCON]);
 	set_tick(s, x + 3, set_y(s, 1), "Check certificates on the DSP", &s_on[T_DSP]);
 	set_text(s, x + 3, set_y(s, 2), note);
 	set_text(s, x, set_y(s, 3), "Gateway");
@@ -192,6 +198,9 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 	set_text(s, x + 3, set_y(s, 4), "Pages go through the Gateway without");
 	set_text(s, x + 3, set_y(s, 5), "a Direct connection (the ST: always).");
 	set_text(s, x + 3, set_y(s, 6), "On the Gateway: aera-gateway install web");
+	/* in the menu and here, as every app has it (D8) */
+	set_tick(s, x, set_y(s, 7), "Write a log", &s_on[T_LOG]);
+	set_text(s, x + 3, set_y(s, 8), "EWEB.LOG: each connection, step by step");
 }
 
 #ifndef EW_ST
@@ -199,8 +208,9 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 static void page_scripts(SETTINGS *s, short x, short y, void *user)
 {
 	(void) y, (void) user;
-	set_tick(s, x, set_y(s, 0), "Run pages' scripts (JavaScript)", &s_on[T_SCRIPTS]);
-	set_tick(s, x + 3, set_y(s, 1), "On every site, not only those chosen", &s_on[T_SCRIPTSALL]);
+	static const char *const which[] = { "No site", "Chosen", "All sites" };
+	set_text(s, x, set_y(s, 0), "Run pages' scripts (JavaScript)");
+	set_radio(s, x, set_y(s, 1), 9, which, 3, &s_scripts);
 	set_text(s, x + 3, set_y(s, 2), "Options > Run this site's scripts");
 	set_text(s, x + 3, set_y(s, 3), "chooses a site, or leaves one out.");
 	set_text(s, x + 3, set_y(s, 4), "On every site, one whose scripts are");
@@ -434,9 +444,9 @@ int dlg_settings(void)
 	s_on[T_PICDSP] = opt.picdsp;
 	s_on[T_PALETTE] = opt.palette;
 	s_on[T_CACHEQUIT] = opt.cachequit;
-	s_on[T_SCRIPTS] = opt.runscripts != 0;
-	s_on[T_SCRIPTSALL] = opt.runscripts == 2;
+	s_on[T_LOG] = opt.log;
 #ifndef EW_ST
+	s_scripts = opt.runscripts;
 	s_on[T_NARROW] = opt.narrow;
 	s_on[T_TRANSLATE] = opt.translate;
 	str_copy(s_to, opt.translate_to, sizeof s_to);
@@ -497,8 +507,9 @@ int dlg_settings(void)
 	opt.translate = s_on[T_TRANSLATE];
 	if (s_to[0])
 		str_copy(opt.translate_to, s_to, sizeof opt.translate_to);
-	opt.runscripts = (short) (!s_on[T_SCRIPTS] ? 0 : s_on[T_SCRIPTSALL] ? 2 : 1);
+	opt.runscripts = s_scripts;
 #endif
+	opt.log = s_on[T_LOG];
 	if (s_on[T_FALCON] != opt.falcon)
 		falcon_mode_set(s_on[T_FALCON]);	/* says why when it can't */
 	return 1;
@@ -716,15 +727,31 @@ static void d_more(short x, short y, short w, short h)
 	d_bar(0, d_at, x, y, w, h);
 }
 
+/* bytes as "512 KB" or "3.4 MB" (one decimal, no floating point: the
+   family's job formats, D35) */
+static void d_bytes(char *out, int size, long n)
+{
+	long tenths;
+	char t[16];
+	if (n < 1024L * 1024) {
+		d_num(t, sizeof t, n >> 10);
+		snprintf(out, size, "%s KB", t);
+		return;
+	}
+	tenths = ((n >> 10) * 10 + 512) >> 10;
+	d_num(t, sizeof t, tenths / 10);
+	snprintf(out, size, "%s.%ld MB", t, tenths % 10);
+}
+
 static void d_size_text(long got)
 {
 	char a[16], b[16];
-	d_num(a, sizeof a, got >> 10);
+	d_bytes(a, sizeof a, got);
 	if (d_total > 0) {
-		d_num(b, sizeof b, (d_total + 1023) >> 10);
-		snprintf(d_size, sizeof d_size, "%s KB of %s KB", a, b);
+		d_bytes(b, sizeof b, d_total);
+		snprintf(d_size, sizeof d_size, "%s of %s", a, b);	/* "12 KB of 3.4 MB" */
 	} else {
-		snprintf(d_size, sizeof d_size, "%s KB", a);
+		snprintf(d_size, sizeof d_size, "%s", a);
 	}
 }
 
@@ -744,8 +771,9 @@ void dl_box(const char *name, long total)
 	db_text(&db, 2, 2, d_name);
 	d_frame = db_add(&db, G_BOX, 0, 0, 0x00011100L, 2, 4, 40, 1);
 	d_size_o = db_text(&db, 2, 6, d_size);
-	tree[d_size_o].ob_width = 28;	/* (the longest: "99,999,999 KB of 99,999,999 KB" cut) */
-	d_cancel = db_button(&db, 32, 6, 10, "Cancel", EXIT);
+	tree[d_size_o].ob_width = 28;	/* (the longest: "1,023 KB of 99,999.9 MB") */
+	/* Stop: a job's, not a dialog's Cancel (D31) */
+	d_cancel = db_button(&db, 32, 6, 10, "Stop", EXIT);
 	db_end(&db);
 	dlg_band(band);		/* (in a window: its title bar, 3.5) */
 	dlg_open(tree, &x, &y, &w, &h);
@@ -791,7 +819,7 @@ void dl_box_step(long got)
 	d_at = w;
 }
 
-/* the box's own events: 1 Cancel (pressed, or Esc, Undo, its closer) */
+/* the box's own events: 1 Stop (pressed, or Esc, Undo, its closer) */
 int dl_box_event(short which, const AEVENT *ev)
 {
 	if (!d_open)
@@ -803,14 +831,18 @@ int dl_box_event(short which, const AEVENT *ev)
 		log_event("download box click %d %d on %d", ev->mx, ev->my, o);
 		graf_mkstate(&mx, &my, &mb, &ks);
 		if (o == d_cancel) {
-			/* Cancel as a dialog's button: shown pressed, taken when
-			   let go over it (5.8); a click already let go, at once */
-			if (!(mb & 1) || graf_watchbox(tree, d_cancel, SELECTED, 0)) {
-				tree[d_cancel].ob_state |= SELECTED;
-				dlg_draw(tree, d_cancel);
-				return 1;
+			/* Stop in a job acts on the press (D32, the written
+			   exception to 5.8's release): shown pressed, the
+			   release waited for so that the AES isn't left with
+			   the button held */
+			tree[d_cancel].ob_state |= SELECTED;
+			dlg_draw(tree, d_cancel);
+			if (mb & 1) {
+				short m[8];
+				AEVENT e;
+				evnt_multi_(MU_BUTTON, 1, 1, 0, 0, m, &e);
 			}
-			return 0;
+			return 1;
 		}
 		/* a press elsewhere: its release waited for here, or the AES
 		   keeps the button held and no later click comes */

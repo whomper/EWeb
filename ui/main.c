@@ -190,6 +190,7 @@ static int win_n;
 #endif
 static const MBAR_ITEM m_opts[] = {
 	{ "Settings...", "^,", C_SETTINGS },
+	{ "-", 0, 0 },		/* (Settings, a line, the ticks: D6, D13) */
 	{ "Direct connection", 0, C_FALCON },
 #ifndef EW_ST
 	{ "Run this site's scripts", 0, C_SCRIPTS },
@@ -2539,7 +2540,7 @@ void command(int cmd)
 #endif
 	case C_SETTINGS: {
 		int pics = opt.pictures, zoom = opt.zoom, cache = opt.cache, palette = opt.palette, changed,
-		    cachequit = opt.cachequit;
+		    cachequit = opt.cachequit, logged = opt.log;
 #ifndef EW_ST
 		int narrow = opt.narrow;
 #endif
@@ -2563,6 +2564,8 @@ void command(int cmd)
 			falcon_dsp_init();
 			falcon_dsp_ec_init();
 			pictures_dsp_init();
+			if (logged != opt.log)
+				log_start(opt.log ? 2 : 0);	/* (Write a log, as the menu's) */
 			settings_save();
 			if (cache != opt.cache) {
 				dc_close();	/* what it holds kept; made smaller at the next quit */
@@ -3256,6 +3259,9 @@ static int app_run(void)
 	   kept next to the program, as EWGET.TTP keeps them */
 	gap_tag("start: net");
 	net_init();
+	/* the log's size from its open file, no look at the folder (6.5's
+	   cap: common's conn.c) */
+	conn_log_size = pf_open_size;
 	if (opt.log)
 		log_start(1);
 	path_join(conn_cacert, sizeof conn_cacert, opt.workdir, "cacert.pem");
