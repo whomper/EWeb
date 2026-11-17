@@ -1545,7 +1545,7 @@ def falcon4():
         r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Opt"), 5)	# the Options menu
         time.sleep(1)
         r.shot(2)
-        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Options"), 20 + 3 * 16 + 8)	# its 4th item
+        r.mouse.click(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Options"), 20 + 4 * 16 + 8)	# its 5th row (Settings, a line, Direct, Run scripts, Write a log: D6, D13)
         time.sleep(2)
         inf = open(os.path.join(hd, "eweb.inf"), "rb").read().decode("latin-1")
         check("falcon4: Options > Write a log, LOG=1 kept", "\nLOG=1\r\n" in inf,
