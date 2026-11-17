@@ -350,12 +350,12 @@ static int resolve(const char *host, u32 *ip)
 
 /* MiNTnet's connect, without waiting in the kernel: a blocking
    Fconnect to a host that never answers held the program until MiNT gave
-   up (a tester's V4SA, 17 Nov 2026: a page's counter picture on
-   reporting.swiftconsult.de, whose SYNs go nowhere; GEM stood still and
-   Esc did nothing). Started with O_NDELAY instead and waited for here,
-   a tenth of a second at a time, as net_open waits for STinG's: GEM goes
-   on, Esc stops it, and it gives up after CONNECT_WAIT. Where O_NDELAY
-   isn't taken the Fconnect blocks as before. 0, or a negative error */
+   up (a tester's V4SA, 17 Nov 2026: a page's counter picture on a host
+   whose SYNs go nowhere; GEM stood still and Esc did nothing). Started
+   with O_NDELAY instead and waited for here, a tenth of a second at a
+   time, as net_open waits for STinG's: GEM goes on, Esc stops it, and it
+   gives up after CONNECT_WAIT. Where O_NDELAY isn't taken the Fconnect
+   blocks as before. 0, or a negative error */
 #define CONNECT_WAIT 20000	/* ms, as STinG's 20 tries of a second */
 #define MINT_STOPPED (-1000L)
 #define MINT_TIMEDOUT (-1001L)
