@@ -10,6 +10,7 @@ build/ftp-cli when it is built) talking to eftpgate as the Atari does.
     (pip install paramiko pyftpdlib pyopenssl; openssl on the PATH)
 """
 import argparse
+import contextlib
 import ftplib
 import io
 import os
@@ -317,6 +318,22 @@ class SFTPTests(Base):
         f.retrlines("LIST /pub", lines.append)
         self.assertTrue(any(l.startswith("-rw") and l.endswith(" demo.bin") for l in lines), lines)
         f.quit()
+
+    def test_verbose_log_never_a_path(self):
+        """-v: the commands and the reply codes, never a path or a user (7.3)"""
+        eftpgate.VERBOSE = True
+        self.addCleanup(setattr, eftpgate, "VERBOSE", False)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            f = self.atari(self.port, self.user)
+            f.retrlines("LIST /pub", lambda l: None)
+            self.get(f, "/pub/demo.bin")
+            f.quit()
+        log = err.getvalue()
+        for secret in ("demo.bin", "/pub", "atari@", "falcon"):
+            self.assertNotIn(secret, log)
+        self.assertIn("> RETR", log)
+        self.assertIn("< 226", log)
 
     def test_one_look_up_and_the_answer_is_used(self):
         # the server's name is looked up once, checked, and connected to

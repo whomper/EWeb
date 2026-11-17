@@ -834,6 +834,14 @@ class TranslateTest(ProxyTest):
         self.assertIn("translategate: local de>en 200,", self.log.getvalue())
         self.assertNotIn("katze", self.log.getvalue().lower())  # no word of it logged
 
+    def test_translate_no(self):
+        """translate="no" (HTML's attribute): the element and what is in it
+        as they were, as EWeb's Direct path keeps them"""
+        page = ('<p>Die Katze ist da, <span translate="no">EWeb <b>bleibt</b> <span>so</span></span> und hier.</p>'
+                '<img alt="Ein Bild" translate=no><p translate="no" title="Kein Titel">Das bleibt</p><p>Ende ist gut</p>')
+        sl = webgate.html_slots(page, "en")
+        self.assertEqual(sl.parts(), ["Die Katze ist da,", "und hier.", "Ende ist gut"])
+
     def test_rtl(self):
         r, data = self.doc("de.html", "he")
         self.assertEqual(r.status, 200)
@@ -1633,6 +1641,25 @@ class TlsTest(unittest.TestCase):
         fake = type("C", (), {})()
         fake.sock = None
         self.assertEqual(webgate.tls_of(fake), "")
+
+
+
+class LogTest(ProxyTest):
+    """what -v writes"""
+
+    def test_verbose_log_never_the_request_line(self):
+        """-v: a malformed request's line (with what a form sent) never in the log (7.3)"""
+        webgate.Config.verbose = True
+        self.addCleanup(setattr, webgate.Config, "verbose", False)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            s = socket.create_connection(self.gw.server_address, timeout=10)
+            s.sendall(b"GET http://example.com/login?password= Wilhelmina\r\n\r\n")
+            s.recv(1000)
+            s.close()
+            time.sleep(0.2)
+        self.assertNotIn("Wilhelmina", err.getvalue())
+        self.assertIn("refused: 400", err.getvalue())
 
 
 if __name__ == "__main__":

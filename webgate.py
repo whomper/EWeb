@@ -288,9 +288,12 @@ class Slots:
 
 def html_slots(doc, to):
     """a page's Slots: the text shown, the title, alt, placeholder, title and
-    button labels; <html lang dir> for to, the charset UTF-8"""
+    button labels; <html lang dir> for to, the charset UTF-8. An element
+    marked translate="no" (HTML's attribute) is kept as it is, as EWeb's
+    Direct path keeps it"""
     sl = Slots()
     i, n, keep, seen_html, look = 0, len(doc), 0, False, 0
+    no = []                             # the translate="no" elements open: [name, depth]
     while i < n:
         j = doc.find("<", max(i, look))
         if j < 0:
@@ -320,7 +323,12 @@ def html_slots(doc, to):
         i = m.end()
         if end:
             sl.raw(m.group())
-            if low in KEEP_TEXT and low not in RAW_TEXT and keep:
+            if no and no[-1][0] == low:
+                no[-1][1] -= 1
+                if not no[-1][1]:
+                    no.pop()
+                    keep -= 1
+            elif low in KEEP_TEXT and low not in RAW_TEXT and keep:
                 keep -= 1
             continue
         if low == "html":
@@ -328,7 +336,14 @@ def html_slots(doc, to):
             attrs = ATTR.sub(lambda a: "" if a.group(1).lower() in ("lang", "dir") else a.group(), attrs).rstrip()
             sl.raw("<%s%s lang=\"%s\" dir=\"%s\">" % (name, attrs, to, "rtl" if to in RTL else "ltr"))
             continue
-        tag_attrs(sl, m, low, keep)
+        if no and no[-1][0] == low and not m.group(4):
+            no[-1][1] += 1
+        elif not m.group(4) and low not in VOID and translate_no(attrs):
+            no.append([low, 1])
+            keep += 1
+            tag_attrs(sl, m, low, keep)
+            continue
+        tag_attrs(sl, m, low, keep or translate_no(attrs))
         if low in RAW_TEXT:
             k = re.compile(r"</%s\s*>" % low, re.I).search(doc, i)
             k = k.start() if k else n
@@ -344,6 +359,14 @@ def html_slots(doc, to):
         sl.out.insert(0, "<html lang=\"%s\" dir=\"%s\">" % (to, "rtl" if to in RTL else "ltr"))
         sl.slots = [(k + 1,) + tuple(rest) for k, *rest in sl.slots]
     return sl
+
+
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+
+def translate_no(attrs):
+    return any(a.group(1).lower() == "translate" and (a.group(3) or "").strip("\"'").strip().lower() == "no"
+               for a in ATTR.finditer(attrs))
 
 
 def tag_attrs(sl, m, low, keep):
@@ -1078,8 +1101,15 @@ class Handler(BaseHTTPRequestHandler):
     for_browser = False     # ExtHandler: the Pi's own browser, not an Atari
 
     def log_message(self, fmt, *args):
+        # only http.server's own errors come here (log_request is quiet), and
+        # their text can hold the request line, with what a form sent in it: the
+        # status alone (7.3: never a path)
         if Config.verbose:
-            aeragate.say("%s %s" % (self.address_string(), fmt % args))
+            if fmt.startswith("Request timed out"):
+                aeragate.say("%s timed out" % self.address_string())
+            else:
+                code = int(args[0]) if args and isinstance(args[0], int) else "-"   # (3.9: an HTTPStatus)
+                aeragate.say("%s refused: %s" % (self.address_string(), code))
 
     def log_request(self, code="-", size="-"):
         # the request line has the whole address, with what a form sent

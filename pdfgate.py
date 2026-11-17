@@ -21,7 +21,11 @@ back the converted PDF, the same file EConvert would have written
   and then by 200 with the converted PDF (Content-Length), or by an error
   with one line "pdfgate: why". The options are all optional (name: the
   PDF's own name, as the result records it; "in.pdf"); anything else is
-  refused (400).
+  refused (400). thumbs=1 (the only value) gives each page a preview, a
+  /Thumb (EPDF 2.33; Erez, 15 Nov 2026: off unless asked). pages is none,
+  mono, colour or colouronly (EPDF 2.8,
+  Erez, 10 Nov 2026: only the pages with colour get /Colour, the others
+  keep their /Mono; needs EPDF 2.8's aerapdf or later).
 
     GET /version   ->  "aerapdf EPDF-COMMIT"   (which converter answers)
 
@@ -82,7 +86,7 @@ class Config:
 
 # the options EConvert has, each as aerapdf's flag; values checked
 OPTIONS = {
-    "pages": ("--pages", ("none", "mono", "colour")),
+    "pages": ("--pages", ("none", "mono", "colour", "colouronly")),
     "photos": ("--photos", ("indexed", "jpeg")),
     "pictures": ("--pictures", ("page", "screen")),
     "page_width": ("--page-width", (160, 4096)),
@@ -90,6 +94,7 @@ OPTIONS = {
     "double": (None, ("0", "1")),
     "name": (None, None),               # the PDF's own name, kept in the result's AERA entry
     "translate": ("--translate", None),     # a language, ISO 639-1
+    "thumbs": ("--thumbs", ("1",)),         # each page's preview (EPDF 2.33; Erez, 15 Nov 2026)
 }
 LAST_SECONDS = 60                       # of a conversion's time, kept for converting after translating
 NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}")
@@ -124,6 +129,8 @@ def flags(query):
         if k == "double":
             if v == "0":
                 out.append("--normal-pages")
+        elif k == "thumbs":
+            out.append(flag)
         else:
             out += [flag, v]
     return (out, name), None

@@ -576,7 +576,7 @@ class Session(socketserver.StreamRequestHandler):
     def reply(self, code, text):
         lines = str(text).split("\n")
         out = "".join("%d-%s\r\n" % (code, l) for l in lines[:-1]) + "%d %s\r\n" % (code, lines[-1])
-        vlog(self.peer, "<", out.strip())
+        vlog(self.peer, "<", code)          # (the text can name a path: 7.3)
         self.wfile.write(out.encode("utf-8", "replace"))
 
     def handle(self):
@@ -594,7 +594,7 @@ class Session(socketserver.StreamRequestHandler):
                 line = raw.decode("utf-8", "replace").rstrip("\r\n")
                 cmd, _, arg = line.partition(" ")
                 cmd = cmd.upper()
-                vlog(self.peer, ">", "PASS ****" if cmd == "PASS" else line)
+                vlog(self.peer, ">", cmd[:8])       # the command alone: its argument can be a path (7.3)
                 fn = getattr(self, "do_" + cmd, None)
                 if fn is None:
                     self.reply(502, "%s isn't something eftpgate does" % cmd)
