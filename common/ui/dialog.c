@@ -1475,6 +1475,27 @@ void dlg_touch(OBJECT *tree, short *next, short x, short y)
 }
 #endif
 
+/* a press taken by a loop's own look between turns of its drawing (settings.c's page), given to the next wait that
+   asks for the mouse as its own event: TOS 1.04 drops a press made while the program draws, and a quick second
+   click on a page's name was lost (EHypView's gui-test on ST-1, 17 Nov 2026) */
+static struct {
+	int on;
+	short x, y, ks;
+} pend;
+
+void dlg_press_later(short x, short y, short kstate)
+{
+	pend.on = 1;
+	pend.x = x;
+	pend.y = y;
+	pend.ks = kstate;
+}
+
+int dlg_press_waiting(void)
+{
+	return pend.on;
+}
+
 static short dlg_evnt_(short flags, short clicks, short mask, short state,
 		       unsigned long timer, short *msg, AEVENT *e)
 {
@@ -1482,6 +1503,16 @@ static short dlg_evnt_(short flags, short clicks, short mask, short state,
 #ifdef DLG_CLICK
 	dlg_touch_up();
 #endif
+	if (pend.on && (flags & MU_BUTTON)) {
+		memset(e, 0, sizeof(*e));
+		e->which = MU_BUTTON;
+		e->mx = pend.x;
+		e->my = pend.y;
+		e->kstate = pend.ks;
+		e->breturn = 1;
+		pend.on = 0;
+		return MU_BUTTON;
+	}
 	if (!dlg_in_window())
 		return evnt_multi_(flags, clicks, mask, state, timer, msg, e);
 	i = ndw - 1;
@@ -1574,11 +1605,22 @@ short dlg_evnt(short flags, short clicks, short mask, short state,
 /* objc_find(tree, 0, 8, mx, my) in C: the last (topmost) object that shows and holds the point, children
    after their parent, -1 outside the root. The AES's walk through a Settings dialog's hundred objects took
    an 8 MHz ST 45 to 50 ms a click (TOS 1.04, 9 Nov 2026); this is under a millisecond */
+static short find_near;		/* the point is just outside a 3D button: the AES decides (dlg_find) */
+
+#define FIND_3D 3			/* how far the AES's 3D look may draw a button outside its box */
+
 static short find_in(OBJECT *tree, short i, short ox, short oy, short depth, short mx, short my)
 {
 	short x = (short)(ox + tree[i].ob_x), y = (short)(oy + tree[i].ob_y), found = i, k;
-	if ((tree[i].ob_flags & HIDETREE) || mx < x || my < y || mx >= x + tree[i].ob_width || my >= y + tree[i].ob_height)
+	if (tree[i].ob_flags & HIDETREE)
 		return -1;
+	if (mx < x || my < y || mx >= x + tree[i].ob_width || my >= y + tree[i].ob_height) {
+		/* an indicator's or activator's 3D border (FL3DIND, part of FL3DACT) is part of it in AES 4's objc_find */
+		if ((tree[i].ob_flags & 0x0200) && mx >= x - FIND_3D && my >= y - FIND_3D &&
+		    mx < x + tree[i].ob_width + FIND_3D && my < y + tree[i].ob_height + FIND_3D)
+			find_near = 1;
+		return -1;
+	}
 	if (depth > 0 && tree[i].ob_head >= 0) {
 		for (k = tree[i].ob_head;; k = tree[k].ob_next) {	/* the last child's next is the parent */
 			short r = find_in(tree, k, x, y, (short)(depth - 1), mx, my);
@@ -1593,13 +1635,19 @@ static short find_in(OBJECT *tree, short i, short ox, short oy, short depth, sho
 
 int dlg_find_own = 1;
 
-/* the AES's own where it draws 3D (an indicator's or activator's border is part of the object: AES 4 reckons it
-   in objc_find), ours where it doesn't */
+/* ours; where the AES draws 3D, the AES's own for a point within FIND_3D pixels outside a raised button or
+   indicator, whose border AES 4 reckons part of it in objc_find. Asked for every click, the AES's walk took a
+   Falcon 20-30 ms a press in EFTP's Site Manager (17 Nov 2026), where EFTP's own loop had taken none */
 short dlg_find(OBJECT *tree, short mx, short my)
 {
-	if (!dlg_find_own || (tree[0].ob_flags & 0x0600))		/* FL3DMASK */
+	short r;
+	if (!dlg_find_own)
 		return objc_find(tree, 0, 8, mx, my);
-	return find_in(tree, 0, 0, 0, 8, mx, my);
+	find_near = 0;
+	r = find_in(tree, 0, 0, 0, 8, mx, my);
+	if (find_near && (tree[0].ob_flags & 0x0600))		/* FL3DMASK */
+		return objc_find(tree, 0, 8, mx, my);
+	return r;
 }
 
 int (*dlg_keys)(OBJECT *tree, short key, short kstate, short edit, short *field);

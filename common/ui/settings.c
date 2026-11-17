@@ -337,6 +337,24 @@ short set_page_now(const SETTINGS *s)
 
 /* page p (from 1): its objects shown, the others hidden (and not editable, so Tab skips them), the
    chosen name in a black bar, white words (never SELECTED: the 3D look draws that pressed in, 5.6) */
+/* between two turns of a page's drawing: an event call, and a look at the mouse. A press there (a quick second click
+   on a name, a control) is kept for the next dlg_do, and the rest of the page is drawn at once: TOS 1.04 drops a
+   press made while we draw (EHypView's gui-test on ST-1: the page switch is 300-400 ms there). Returns 1 once a
+   press is kept: no more turns */
+static int turn(void)
+{
+	short m[8];
+	AEVENT e;
+	if (dlg_press_waiting())
+		return 1;
+	evnt_multi_(MU_BUTTON | MU_TIMER, 1, 1, 1, 0, m, &e);
+	if (e.which & MU_BUTTON) {
+		dlg_press_later(e.mx, e.my, e.kstate);
+		return 1;
+	}
+	return 0;
+}
+
 static void show_page(SETTINGS *s, short p, int draw)
 {
 	OBJECT *tree = s->b.tree;
@@ -362,21 +380,23 @@ static void show_page(SETTINGS *s, short p, int draw)
 		/* the two names that changed (the bar's old place and new) and the page's area, each object by itself
 		   (dlg_draw_one, dlg_draw_range): the AES's walk through a hundred objects cost an 8 MHz ST 35 ms a name
 		   and most of the page's. The other names are as they were */
+		int hurry = 0;			/* a press came: the rest at once, no more turns */
 		if (old >= 1 && old <= s->npages && old != p) {
 			dlg_draw_one(tree, s->tab[old]);
-			evnt_timer_(0);
+			hurry = turn();
 		}
 		dlg_draw_one(tree, s->tab[p]);
-		evnt_timer_(0);
+		hurry = hurry || turn();
 		/* the page in turns of 20 ms, an event call between, so no stretch is long */
 		for (n = s->pfirst[p], ground = 1; n < s->pfirst[p + 1]; ground = 0) {
-			n = dlg_draw_range(tree, s->pages_obj, n, s->pfirst[p + 1], ground, SET_TURN_MS);
+			n = dlg_draw_range(tree, s->pages_obj, n, s->pfirst[p + 1], ground, hurry ? 0 : SET_TURN_MS);
 			if (n < s->pfirst[p + 1])
-				evnt_timer_(0);
+				hurry = hurry || turn();
 		}
 		/* the area's 3 pixels below reach the frames of Cancel and OK (the ground filled over them): drawn again,
 		   what shows of them in that piece, a turn of their own */
-		evnt_timer_(0);
+		if (!hurry)
+			turn();
 		dlg_draw_range(tree, s->pages_obj, s->cancel, (short)(s->ok + 1), 0, 0);
 	}
 }

@@ -12,7 +12,8 @@ Not on a 4 MB machine, ST or Falcon-4 (Erez, 4 Nov 2026: the accessories are not
 
 MACHINE is Falcon (the DFB1: 14 MB + TT RAM, TOS 4.04, ECAL.ACC and ECONTACT.ACC),
 Falcon by default, or another machine with more than 4 MB (TT); ST-1 (1 MB, TOS 1.04) takes
-ECALST.ACC and ECONTST.ACC, the ST editions, while a release has them. --nvdi boots
+ECALST.ACC and ECONTST.ACC, the ST editions, while a release has them; there each accessory
+has a run of its own (WORK/NAME), as 1 MB holds a program and one accessory, not four. --nvdi boots
 with Erez's NVDI (machines.py, m.nvdi()); --font gives EHypView one of
 his Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
 candidate's accessory (ECAL.ACC, say) or --prg's program (EMAIL.PRG) in place of the release's
@@ -80,6 +81,23 @@ if machine.split(":")[0] in ("ST", "Falcon-4"):
     sys.exit("acc_all: the accessories are not run on a 4 MB machine (%s): Erez, 4 Nov 2026. "
              "Run it on Falcon (TT RAM)." % machine)
 st = machine.startswith("ST")
+if machine.split(":")[0] == "ST-1" and len(accs) > 1:
+    # 1 MB holds a program and one accessory, not four (Hatari: "Program too large", 17 Nov 2026): each
+    # accessory in a run of its own, in WORK/NAME, the same arguments otherwise
+    import subprocess
+    bad = []
+    for a in accs:
+        argv = [x for x in sys.argv[1:]]
+        argv[argv.index(rest[0])] = os.path.join(work, a)
+        if "--accs" in argv:
+            argv[argv.index("--accs") + 1] = a
+        else:
+            argv += ["--accs", a]
+        print("== ST-1: %s alone" % a, flush=True)
+        if subprocess.call([sys.executable, os.path.abspath(__file__)] + argv):
+            bad.append(a)
+    print("ST-1, one accessory a run: " + ("all passed" if not bad else "failed: " + ", ".join(bad)), flush=True)
+    sys.exit(1 if bad else 0)
 
 fails = 0
 
