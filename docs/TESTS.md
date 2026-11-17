@@ -48,6 +48,13 @@ for the parts they name (CLAUDE.md says which to run after which change).
   file dropped on it, with the release's `CACERT.PEM` and `ROOTS.DAT`
   (twice: the second time `ROOTS.DAT` knows `CACERT.PEM`'s date), and
   through AERA-Gateway's webgate (TLS 1.3 from the Gateway to the server).
+- `tests/aranym/mintnet.py` (root, ARAnyM, `aratapif`, iptables): common's
+  connections over MiNTnet, FreeMiNT 1.17.0's own TCP/IP on ARAnyM's network
+  card. `EWGET.TTP` fetches from a port that answers, one that refuses and
+  one whose packets are dropped (given up in 20 s). Then `EWEB.PRG` under
+  XaAES shows a page whose first picture's host never answers: the page is
+  there at once, the picture is given up in 20 s and the next one comes, and
+  Esc stops the wait.
 - `common/tests/ec`: the DSP's elliptic curves against BearSSL (AERA-Atari's
   test, run there).
 - `make test` also sends forms (`tests/forms/cases.txt`, worked out from the

@@ -142,7 +142,8 @@ hub stay complete, with the evidence.
 - **EWeb's network code** is `src/net/` (URL parser, HTTP client, gzip) on `common/`'s connections and TLS,
   with `src/plat.h` (`atari/plat_tos.c`, `tests/host/plat_posix.c`); `tests/net/ewget.c` is `EWGET.TTP`.
   After changing it: `make test` (nettest, the fuzz seeds and finds), `make itest`, `make urltest`
-  (`tests/url/fetch.sh` first) after a change to `url.c`, and `make hatarinet` for the Atari side; run
+  (`tests/url/fetch.sh` first) after a change to `url.c`, and `make hatarinet` for the Atari side
+  (`tests/aranym/mintnet.py` too after a change to common's MiNTnet side, `net_tos.c`); run
   `make fuzz` for a while after a change to a parser, and keep what it finds in `tests/fuzz/found`.
   On the Atari the TLS code (common's `tls.c`, BearSSL, the DSP's RSA and elliptic curves, the
   68030 assembly) is the family's `TLS.OVL` (`common/tlsovl`, copied to `binary/` and shipped beside
