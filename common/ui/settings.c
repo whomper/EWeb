@@ -65,6 +65,14 @@ struct SETTINGS {
 };
 
 void (*settings_drawn)(OBJECT *tree, short band);
+void (*settings_changed)(SETTINGS *s, short obj);
+
+/* the app told what changed, while the dialog runs (a rig's events, EHypView's page lines) */
+static void note(SETTINGS *s, short obj)
+{
+	if (settings_changed && s->live)
+		settings_changed(s, obj);
+}
 void (*settings_uncover)(short x, short y, short w, short h);
 
 /* ---------------- what a page's builder calls ---------------- */
@@ -606,14 +614,17 @@ static void focus_act(SETTINGS *s)
 		evnt_timer_(0);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, s->focus);
 	} else if (w && w->kind == W_POPUP) {
 		pop_run(s, w);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, w->obj);
 	} else if (w && (w->kind == W_ACT || w->kind == W_VALUE)) {
 		act_run(s, w);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, w->obj);
 	}
 }
 
@@ -648,6 +659,7 @@ static void page_key(SETTINGS *s, short d)
 	show_page(s, np, 1);
 	s->focus = -1;
 	ring_draw(s);
+	note(s, s->tab[np]);
 }
 
 /* a radio button chosen (by a click or an arrow key): the variable, the buttons, the ring */
@@ -668,6 +680,7 @@ static void radio_hit(SETTINGS *s, SET_W *p, short c, int by_key)
 		evnt_timer_(0);
 		dlg_draw_range(s->b.tree, ob, ob, (short)(ob + 1), 1, 0);	/* the old one, and the ring round it gone */
 		ring_draw(s);
+		note(s, (short)(p->obj + c));
 	}
 }
 
@@ -931,6 +944,12 @@ int settings_dialog(const SET_DEF *d)
 				s->want = 0;
 				r = dlg_do(s->b.tree, start, s->cancel) & 0x7fff;
 			}
+#ifdef DLG_CLICK
+			/* a tab's or a control's press comes back while the button is down: its release first, then
+			   the drawing, or an ST reads a quick second press as this one's release (dialog.h, dlg_touch_up;
+			   EHypView's let_go_over, gui-test's 70/150 ms clicks) */
+			dlg_touch_up();
+#endif
 			k = db_tick_hit(&s->b, r);
 			if (k >= 0) {
 				mouse_focus(s, 0);
@@ -938,6 +957,7 @@ int settings_dialog(const SET_DEF *d)
 					db_tick_flip(&s->b, k);
 					evnt_timer_(120);
 					choices_refresh(s);
+					note(s, r);
 				}
 				focus_default(s);
 				continue;
@@ -947,8 +967,10 @@ int settings_dialog(const SET_DEF *d)
 					break;
 			if (k <= s->npages) {
 				mouse_focus(s, 1);
-				if (k != s->cur)
+				if (k != s->cur) {
 					show_page(s, k, 1);
+					note(s, r);
+				}
 				focus_default(s);
 				continue;
 			}
@@ -963,6 +985,7 @@ int settings_dialog(const SET_DEF *d)
 					act_run(s, p);
 				choices_refresh(s);
 				focus_default(s);
+				note(s, r);
 				continue;
 			}
 			if (r == s->ok) {

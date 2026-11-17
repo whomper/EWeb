@@ -446,14 +446,28 @@ static void sw_banded(void)
 	sw_check();
 }
 
+static int nchanged;
+static short changed_obj, changed_page;
+static void on_changed(SETTINGS *st, short obj)
+{
+	nchanged++;
+	changed_obj = obj;
+	changed_page = set_page_now(st);
+}
+
 static void test_page_switch(void)
 {
 	SET_DEF d = def3(pages3, 3);
 	reset();
+	nchanged = 0;
+	settings_changed = on_changed;
 	{
 		static const STEP s[] = { CALL(sw_mark), TAB(2), CALL(sw_check), CANCELB, END };
 		run(&d, s);
 	}
+	settings_changed = 0;
+	checkf(nchanged == 1 && changed_obj == ref_tab[2] && changed_page == 1,
+	       "settings_changed: once for the page switch, with its tab, page 2 shown (%d calls)", nchanged);
 	/* every object takes 15 ms: the page is drawn in turns, an event call between, each object once */
 	reset();
 	draw_cost = 15;
