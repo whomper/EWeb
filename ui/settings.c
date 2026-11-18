@@ -946,7 +946,20 @@ int settings_dialog(const SET_DEF *d)
 
 	dlg_name(d->title ? d->title : "Settings");
 	dlg_band(s->b.band);		/* in a window its title says it (3.5) */
-	dlg_open(s->b.tree, &x, &y, &w, &h);
+	{
+		/* On TOS the frame, the list and the buttons first, then the page in turns as a page switch draws it:
+		   the whole tree in one objc_draw was 100 ms of a Falcon's 150 under NVDI and 210 of an ST's 280 (ECal's
+		   step 2, 17 Nov 2026). In a window the AES asks for it piece by piece anyway */
+		int turns = !dlg_windowed();
+		short p = s->cur, i;
+		if (turns)
+			for (i = 1; i < s->b.nobj; i++)
+				if (s->page[i] == p)
+					s->b.tree[i].ob_flags |= HIDETREE;
+		dlg_open(s->b.tree, &x, &y, &w, &h);
+		if (turns)
+			show_page(s, p, 1);	/* s->cur is p: only its name and the page drawn, the flags set again */
+	}
 	drawn_again(s);
 	{
 		int (*was_keys)(OBJECT *, short, short, short, short *) = dlg_keys;

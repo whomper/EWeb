@@ -1259,6 +1259,8 @@ static short open_any(OBJECT *tree, void (*draw)(short, short, short, short),
 	dw[i].w = *w;
 	dw[i].h_ = *h;
 	dw[i].under = dlg_under(*x, *y, *w, *h);
+	if (dw[i].under)
+		evnt_timer_(0);		/* a turn between the screen's save (48 ms of a Falcon's under NVDI) and the drawing */
 	form_dial(FMD_START, *x, *y, *w, *h);
 	graf_mouse(M_OFF, 0);
 	if (tree)
