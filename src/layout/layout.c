@@ -6123,11 +6123,16 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		   box's width is its width, its content overflowing it
 		   (10.2), and costs no second measure */
 		int32_t m = cell_min(l, c);
-		/* a percentage is a share of the table, not a least: the
-		   narrowest it goes is its content's (AtariAge's forum list,
-		   its middle cell 100%, the cells beside it pushed off the
-		   page) */
-		if (l->minw && EC_K(c->st, EP_WIDTH) == EK_PCT)
+		/* at its narrowest a cell is its content's narrowest, its width
+		   in px or in percent what its column would have, not a least:
+		   a table narrower than its cells' widths takes from each, as
+		   browsers do (Chromium: width 300 with two cells of 200, 150
+		   each), not grown past its own (apollo-computer.com's 980px
+		   tables with cells asking 1180, their text past the grey box
+		   round them, a V4SA tester, 18 Nov 2026); a percentage the
+		   same (AtariAge's forum list, its middle cell 100%, the cells
+		   beside it pushed off the page) */
+		if (l->minw)
 			return m;
 		return m > cw ? m : cw;
 	}

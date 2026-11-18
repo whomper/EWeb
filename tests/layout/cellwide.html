@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- Cells whose widths ask more than their table's: the table keeps its
+     width and each column gives up a share, down to its content's narrowest
+     (CSS 2.1, 17.5.2.2; Chromium: width 300 with two cells of 200, 150
+     each). apollo-computer.com (a V4SA tester, 18 Nov 2026): 980px tables
+     whose cells of 490px and 100px of padding asked 1180, their text ran
+     past the grey box round them; and its menu's cells, 1150 in 980. -->
+<html><head><title>cellwide</title></head>
+<body style="background:#000;color:#ccc">
+<center>
+<table width="300" cellspacing="0" cellpadding="0"><tr><td bgcolor="#800000" height="8"></td></tr></table>
+<table width="300" cellspacing="0" cellpadding="0"><tr><td width="200" bgcolor="#000080">a</td><td width="200" bgcolor="#008000">b</td></tr></table>
+<table width="300" cellspacing="0" cellpadding="0" style="background:#444"><tr><td>
+<table style="width:300px; cellpadding=0px; padding:0" cellspacing="0" cellpadding="0">
+<tr><td colspan="2" style="padding:6px">The Atari ST, STe, and Falcon were iconic computers of the 1980s and 1990s.</td></tr>
+<tr><td style="width:150px; padding-left:30px">left</td>
+<td style="width:150px; padding-right:30px">These 16-bit and 32-bit Atari systems were powered by Motorola's 68K CPU family.</td></tr>
+</table></td></tr></table>
+<table style="width:200px" cellspacing="0" cellpadding="0"><tr><td style="width:200px;padding-left:50px" bgcolor="#000080">a</td><td style="width:200px" bgcolor="#008000">b</td></tr></table>
+<table width="300" cellspacing="0" cellpadding="0"><tr><td width="200" bgcolor="#000080">Wednesdays_and_Thursdays</td><td width="200" bgcolor="#008000">b</td></tr></table>
+</center>
+</body></html>

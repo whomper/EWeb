@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 <!-- Copyright (C) 2026 AERA | Erez Yaary -->
-<!-- A cell's width is the least it takes (CSS 2.1, 17.5.2.2): a column is
-     no narrower than its cells' narrowest content. webdriveruniversity's
-     Datepicker: cells of 20px, at EWeb's zoom 18 device px, its bold "Su"
-     wider: it broke in two. Each word below stays whole. -->
+<!-- A column is no narrower than its cells' narrowest content (CSS 2.1,
+     17.5.2.2). webdriveruniversity's Datepicker: cells of 20px, at EWeb's
+     zoom 18 device px, its bold "Su" wider: it broke in two. Each word
+     below stays whole. A cell's width is what its column would have, not
+     a least (18 Nov 2026, as Chromium): in the table of 100px "x" takes
+     what "Wednesday" leaves, here nothing past its own width. -->
 <html><head><title>cellmin</title>
 <style>td,th{width:20px;height:20px;text-align:center;padding:0;border:1px solid #999}
 .box{position:absolute;left:300px;top:8px;border:1px solid red;padding:4px}</style>

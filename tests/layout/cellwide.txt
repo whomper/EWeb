@@ -1,0 +1,25 @@
+page 608 x 220, background 000000, 24 items, 0 links, title "cellwide"
+fill 184,6 240x6 #800000
+fill 184,12 120x16 #000080
+text 240,25 7x17 #cccccc cond13 link 0 "a"
+fill 304,12 120x16 #008000
+text 360,25 7x17 #cccccc cond13 link 0 "b"
+fill 184,28 240x154 #444444
+text 202,46 203x17 #cccccc cond13 link 0 "The Atari ST, STe, and Falcon were"
+text 205,62 198x17 #cccccc cond13 link 0 "iconic computers of the 1980s and"
+text 285,78 38x17 #cccccc cond13 link 0 "1990s."
+text 239,139 19x17 #cccccc cond13 link 0 "left"
+text 297,99 96x17 #cccccc cond13 link 0 "These 16-bit and"
+text 312,115 65x17 #cccccc cond13 link 0 "32-bit Atari"
+text 304,131 81x17 #cccccc cond13 link 0 "systems were"
+text 311,147 68x17 #cccccc cond13 link 0 "powered by"
+text 302,163 86x17 #cccccc cond13 link 0 "Motorola's 68K"
+text 311,179 67x17 #cccccc cond13 link 0 "CPU family."
+fill 224,182 100x16 #000080
+text 290,195 7x17 #cccccc cond13 link 0 "a"
+fill 324,182 60x16 #008000
+text 350,195 7x17 #cccccc cond13 link 0 "b"
+fill 184,198 165x16 #000080
+text 184,211 165x17 #cccccc cond13 link 0 "Wednesdays_and_Thursdays"
+fill 349,198 75x16 #008000
+text 383,211 7x17 #cccccc cond13 link 0 "b"
