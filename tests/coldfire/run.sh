@@ -52,3 +52,20 @@ cmp $B/host.txt $B/cf.txt && echo "jsmath: the ColdFire's maths give the host's 
 qemu-m68k -cpu m68030 $B/jsmath030 > $B/030.txt
 cat $B/030.txt
 cmp $B/host.txt $B/030.txt && echo "jsmath: the 68030's with its 68881 give the host's every answer"
+# EWEB.FNT through font.c and inflate.c as EWEBFB.PRG has them (build/cf's
+# objects: make binary/EWEBFB.PRG first) against the host's build: every
+# face, every block, every glyph (a FireBee tester's crash on scrolling
+# from 1.17, 18 Nov 2026; tests/coldfire/fonttest.c)
+if [ -f build/cf/ewb/gfx/font.o ] && [ -f binary/EWEB.FNT ]; then
+	$CC $CF -I$RT -Isrc -Isrc/gfx -Icommon/src -c -o $B/cf/fonttest.o tests/coldfire/fonttest.c
+	$CC -mcpu=5475 -nostdlib -static -no-pie -Wl,-z,noexecstack -o $B/fonttest $B/cf/rt.o $B/cf/libc.o \
+		$B/cf/fonttest.o build/cf/ewb/gfx/font.o build/cf/net/inflate.o
+	cc -O2 -std=gnu99 -Isrc -Isrc/gfx -Icommon/src -o $B/fonttest_host tests/coldfire/fonttest.c \
+		src/gfx/font.c common/src/inflate.c common/src/util.c
+	./$B/fonttest_host binary/EWEB.FNT > $B/font_host.txt
+	qemu-m68k -cpu cfv4e $B/fonttest binary/EWEB.FNT > $B/font_cf.txt
+	tail -n 1 $B/font_cf.txt
+	cmp $B/font_host.txt $B/font_cf.txt && echo "fonttest: EWEBFB.PRG's fonts give the host's every glyph"
+else
+	echo "fonttest: no build/cf objects (make binary/EWEBFB.PRG) or binary/EWEB.FNT: not run"
+fi
