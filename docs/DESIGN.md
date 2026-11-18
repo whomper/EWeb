@@ -1182,8 +1182,12 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 
   | The photo dithered | 68030 | with the DSP |
   |---|---|---|
-  | at its size (480 x 320), 16 colours | 9.6 s | 1.14 s |
-  | shown at 192 x 128, 256 colours | 1.74 s | 0.23 s |
+  | at its size (480 x 320), 16 colours | 9.6 s (6.0 s since 1.22) | 1.14 s |
+  | shown at 192 x 128, 256 colours | 1.74 s (1.11 s since 1.22) | 0.23 s |
+
+  Since 1.22 (common 2b95810, 18 Nov 2026) the 68030's row dither is a loop its instruction cache
+  holds, with a table for 3 or 4 pens, its pens byte for byte the old ones (so the Pi's `aerapens`
+  still agrees): 9.24 -> 5.98 s and 1.69 -> 1.11 s on `Falcon-4:16` and `Falcon-4:256` alike.
 
   Pictures under 1024 pixels or wider than 1280 stay on the 68030 (loading the program and the
   tables costs more than it saves). `PICDSP=0` leaves it to the 68030 too.
