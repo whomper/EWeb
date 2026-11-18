@@ -970,6 +970,14 @@ void vq_color(short h, short index, short *rgb)
 
 /* the clock: still, unless a case steps it (dlg_later's 30 ms slices) */
 static unsigned long fake_ms, ms_step;
+static int dlg_turns;		/* dlg_open's turn between the save and the drawing */
+short evnt_timer_(unsigned long ms)
+{
+	(void)ms;
+	dlg_turns++;
+	return 1;
+}
+
 unsigned long tos_ms(void)
 {
 	fake_ms += ms_step;
