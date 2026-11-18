@@ -1,0 +1,11 @@
+page 608 x 87, background ffffff, 10 items, 0 links, title "legacybg"
+background 6,6 80x30 tile 0,0 6x6 across down file://./tests/layout/img/tile.png
+background 86,6 64x30 tile 0,0 3x19 across down file://./tests/layout/img/stripe.png
+text 107,26 21x17 #000000 cond13 link 0 "Tab"
+background 150,6 64x30 tile 0,0 3x19 across down file://./tests/layout/img/stripe.png
+text 170,26 24x17 #000000 cond13 link 0 "Two"
+text 231,26 30x17 #000000 cond13 link 0 "None"
+background 6,36 87x45 tile 0,0 6x6 across down file://./tests/layout/img/tile.png
+text 10,53 79x17 #000000 cond13 link 0 "on the table's"
+background 6,57 87x21 tile 0,0 3x19 across down file://./tests/layout/img/stripe.png
+text 10,74 72x17 #000000 cond13 link 0 "on the row's"

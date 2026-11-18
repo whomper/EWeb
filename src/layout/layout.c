@@ -4825,8 +4825,10 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 		return;
 	if (!grad)
 		d->flags = DLF_TILE | DLF_ALT;	/* (nothing to draw) */
-	if (w <= 0 || (h <= 0 && !grad))
-		return;		/* (a gradient of no height yet may grow with its box) */
+	if (w <= 0)
+		return;		/* (a box of no height yet may grow: a row stretches its
+				   cells, apollo-computer.com's empty first cell of its
+				   menu under its start picture, a V4SA tester, 18 Nov 2026) */
 	if (pw <= 0)
 		pw = 1;
 	if (ph <= 0)
@@ -4912,7 +4914,7 @@ static void bg_place(L *l, long i, const ec_style *s, int32_t x, int32_t y, int3
 		if (oy + th < y1)
 			y1 = oy + th;
 	}
-	if (x1 <= x || (y1 <= y && !grow))
+	if (x1 <= x || (y1 < y && !grow))
 		return;
 	if (y1 < y)
 		y1 = y;
@@ -6872,6 +6874,15 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 				sp->va = kids[i]->anon ? 0 : kw(kids[i]->st, EP_VERTICAL_ALIGN);
 			}
 		}
+	}
+	if (b->tablerow && !b->anon && b->st != NULL) {
+		/* a row's height is its least (CSS 2.1, 17.5.3: the row as
+		   tall as its height and its tallest cell): apollo-computer.com's
+		   menu, <tr height="37"> under 30 device px of tab pictures, was
+		   a line of text tall (a V4SA tester, 18 Nov 2026) */
+		int32_t rh = len(l, b->st, EP_HEIGHT, AUTO);
+		if (rh != AUTO && rh > lineh)
+			lineh = rh;
 	}
 	/* each cell as tall as its row (a flex row's items too: they
 	   stretch), its content where vertical-align puts it */

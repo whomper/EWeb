@@ -231,6 +231,46 @@ static void put(HINT *h, const char *prop, const char *val)
 	h->s[h->n] = 0;
 }
 
+/* a legacy background attribute's URL as CSS's url("..."), in out (size
+   bytes): its quotes, backslashes and line breaks escaped; NULL for none,
+   an empty one or one too long (the HTML Standard, 15.3.4 and 15.3.8: the
+   element's background-image, the URL parsed against the document's) */
+static const char *bg_url(const char *v, char *out, size_t size)
+{
+	size_t k = 0;
+	const char *e;
+	if (v == NULL)
+		return NULL;
+	while (*v == ' ' || *v == '\t' || *v == '\n' || *v == '\r' || *v == '\f')
+		v++;
+	for (e = v + strlen(v); e > v && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\n' || e[-1] == '\r' || e[-1] == '\f'); e--)
+		;
+	if (e == v || size < 8)
+		return NULL;
+	memcpy(out, "url(\"", 5);
+	k = 5;
+	for (; v < e; v++) {
+		unsigned char c = (unsigned char) *v;
+		if (k + 5 >= size)
+			return NULL;
+		if (c == '"' || c == '\\') {
+			out[k++] = '\\';
+			out[k++] = (char) c;
+		} else if (c < 0x20 || c == 0x7f) {
+			out[k++] = '\\';
+			out[k++] = "0123456789abcdef"[c >> 4];
+			out[k++] = "0123456789abcdef"[c & 15];
+			out[k++] = ' ';
+		} else {
+			out[k++] = (char) c;
+		}
+	}
+	out[k++] = '"';
+	out[k++] = ')';
+	out[k] = 0;
+	return out;
+}
+
 /* a dimension: "120" is 120px, "50%" half; NULL unless a number above zero */
 static const char *dimension(const char *v, char *out)
 {
@@ -328,7 +368,7 @@ static const char *list_type(const char *v, int ol)
 /* the attributes the hints and links look at, as atoms of the document
    being finished: compared as pointers, not as text */
 static struct {
-	const ec_atom *align, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
+	const ec_atom *align, *background, *bgcolor, *border, *cellpadding, *cellspacing, *color, *face, *height, *href, *hspace, *leftmargin, *marginheight, *marginwidth, *nowrap, *size, *text, *topmargin, *type, *valign, *vspace, *width;
 	const ec_atom *col, *font, *name, *open, *dir, *bdi, *target;
 } ha;
 
@@ -347,6 +387,7 @@ static void hint_atoms(doc *d)
 {
 #define A(x) ha.x = ec_intern(d->css, #x, sizeof #x - 1)
 	A(align);
+	A(background);
 	A(bgcolor);
 	A(border);
 	A(cellpadding);
@@ -489,6 +530,15 @@ static void hints(dnode *n)
 		    is(v, "bottom") ? "bottom" : "baseline");
 	if ((v = colour(HA(n, bgcolor), buf)) != NULL)
 		put(&h, "background-color", v);
+	if (n->tag == T_BODY || n->tag == T_TABLE || cell || n->tag == T_TR || n->tag == T_THEAD ||
+	    n->tag == T_TBODY || n->tag == T_TFOOT) {
+		/* a picture behind it (apollo-computer.com's menu: its tabs and
+		   their start on cells' background pictures, a V4SA tester, 18
+		   Nov 2026) */
+		char url[300];
+		if ((v = bg_url(HA(n, background), url, sizeof url)) != NULL)
+			put(&h, "background-image", v);
+	}
 	if (n->tag == T_BODY) {
 		if ((v = colour(HA(n, text), buf)) != NULL)
 			put(&h, "color", v);

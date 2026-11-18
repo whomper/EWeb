@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- The legacy background attribute (the HTML Standard, 15.3.4 and 15.3.8:
+     the element's background-image, its URL the document's) on a table, a
+     row and cells; a row's height its least (CSS 2.1, 17.5.3); and a cell
+     with nothing in it under its picture, made as tall as its row.
+     apollo-computer.com's menu (a V4SA tester, 18 Nov 2026): its tabs and
+     their start were cells' background pictures in a <tr height="37">. -->
+<html><head><title>legacybg</title></head>
+<body>
+<table cellspacing="0" cellpadding="0" border="0">
+<tr height="37"><td width="100" background="img/tile.png"> </td>
+<td width="80" background="img/stripe.png" align="center">Tab</td>
+<td width="80" background=" img/stripe.png " align="center">Two</td>
+<td width="80" background="" align="center">None</td></tr>
+</table>
+<table background="img/tile.png" cellspacing="4"><tr><td>on the table's</td></tr>
+<tr background="img/stripe.png"><td>on the row's</td></tr></table>
+</body></html>
