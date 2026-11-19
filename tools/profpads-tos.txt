@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 AERA | Erez Yaary
+# build/prof/eweb.elf's pads (common/tools/profpad.py's pads.txt) as 1.22 was
+# timed: the Makefile starts a clean build's from these. From nothing profpad
+# finds no read-only pad after libc.o and the link fails (the 1.22 Release
+# run on a clean checkout, 19 Nov 2026); each line an object, then its pad's
+# text, read-only, data and BSS sizes and the merged strings'.
+build/tos/rt/libc.o 256 250 256 256 0
+build/prof/tos/main.o 220 256 256 252 0
+build/tos/rt/pad_main.o 256 256 248 256 0
+build/tos/gem/draw.o 256 256 256 256 0
+build/tos/gem/win.o 152 256 256 256 0
+build/prof/tos/gem.o 150 256 256 256 0

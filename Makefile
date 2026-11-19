@@ -1007,13 +1007,16 @@ build/prof/st/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 # after the objects whose code moved, worked out at each link; the link
 # fails where one can't be put back), so that the rig times the layout
 # that ships (the hub, from EPlay 1.45, 17 Nov 2026)
+# (EWEB.PRG's from tools/profpads-tos.txt in a clean build: from nothing
+# profpad finds no read-only pad after libc.o, 19 Nov 2026)
 PROFPAD_TOS := python3 common/tools/profpad.py --ship build/tos/eweb.elf --out build/prof/eweb.elf --cpu=-m68030 \
 		--dir build/prof/tos/pads --exclude build/tos/gem/main.o --exclude build/prof/tos/main.o \
 		--exclude build/tos/gem/common/gem.o --exclude build/prof/tos/gem.o --
 PROFPAD_ST := python3 common/tools/profpad.py --ship build/st/ewebst.elf --out build/prof/ewebst.elf --cpu=-m68000 \
 		--dir build/prof/st/pads --exclude build/st/gem/main.o --exclude build/prof/st/main.o \
 		--exclude build/st/gem/common/gem.o --exclude build/prof/st/gem.o --
-build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o common/tools/profpad.py common/atari/codepad.S
+build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o common/tools/profpad.py common/atari/codepad.S tools/profpads-tos.txt
+	@mkdir -p build/prof/tos/pads; test -f build/prof/tos/pads/pads.txt || cp tools/profpads-tos.txt build/prof/tos/pads/pads.txt
 	$(PROFPAD_TOS) $(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT_PAD) \
 		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
