@@ -50,7 +50,10 @@ WIDE = re.compile(r"\s(mulul|mulsl|divul|divsl)\s+.*,%d[0-7],%d[0-7]\s*$")
 # aboutbox.c and badge.c ran 0xa000 as macw there, which swallowed the next
 # instruction's first word; a FireBee tester's EWeb was killed by FreeMiNT
 # at the first scroll, 19 Nov 2026)
-EMAC = re.compile(r"\t(mac[wl]?|msac[wl]?|movclr[l]?)\s|%acc[0-3]|%macsr|%mask")
+# Line-A's own words, 0xa000 to 0xa00f, at an instruction's start (not any
+# EMAC mnemonic: objdump reads a switch's table inline in the code as
+# instructions and falls out of step, html.c's m_in_table giving a0d0)
+EMAC = re.compile(r":\ta00[0-9a-f] ")
 
 
 def run(cmd):
@@ -185,7 +188,7 @@ def main():
     words += [o for o in ("build/cf/rt/ll64.o", "build/cf/rt/cfmath.o") if o not in words]
     run(" ".join(shlex.quote(w) for w in words))
     elf = words[words.index("-o") + 1]
-    # no EMAC instruction in the code (above: no Line-A on the ColdFire),
+    # no Line-A word in the code (above: the EMAC's on the ColdFire),
     # the code being what comes before the read-only data
     stop = rodata_start(elf + ".map")
     func, emac = "?", []
@@ -196,13 +199,13 @@ def main():
         elif EMAC.search(l):
             emac.append("%s: %s" % (func, l.strip()))
     if emac:
-        sys.exit("mkfirebee: %d EMAC instructions in %s's code (a Line-A call?), as\n%s" %
+        sys.exit("mkfirebee: %d Line-A words (EMAC instructions here) in %s's code, as\n%s" %
                  (len(emac), elf, "\n".join(emac[:5])))
     env = dict(os.environ, PRGFLAGS="7")
     subprocess.run(["python3", "common/tools/elf2tos.py", elf, target], env=env, check=True)
     # no 68k-only instruction in the code: disassembled as the ColdFire's,
     # nothing undecodable inside a function but its own tables
-    print("mkfirebee: %s, %d objects, %d bytes, no EMAC instruction" % (target, len(objs), os.path.getsize(target)))
+    print("mkfirebee: %s, %d objects, %d bytes, no Line-A word" % (target, len(objs), os.path.getsize(target)))
 
 
 if __name__ == "__main__":
