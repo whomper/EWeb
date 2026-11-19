@@ -956,6 +956,14 @@ static long screen_bpl(void)
 	   up on the zeros and take the VDI's way */
 	return 0;
 #else
+	/* a 68000 program on a FireBee (_CF_): 0xa000 reaches the EMAC there
+	   too, never FireTOS's Line-A, so the same zeros */
+	static signed char cf = -1;
+	if (cf < 0)
+		cf = get_cookie(0x5F43465FL) != 0;	/* '_CF_' */
+	if (cf) {
+		return 0;
+	}
 	register const short *la __asm__("a0");
 	__asm__ volatile(".dc.w 0xa000" : "=r"(la) : : "d0", "d1", "d2", "a1", "a2", "memory", "cc");
 	return la[1];		/* v_lin_wr */

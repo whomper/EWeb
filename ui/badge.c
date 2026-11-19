@@ -8,6 +8,7 @@
 #include "badge.h"
 #ifndef BADGE_HOST
 #include "gem.h"
+#include "tos.h"
 #endif
 
 int badge_vdi;
@@ -77,6 +78,15 @@ static const unsigned char *const *line_a_fonts(void)
 	static const unsigned char *const no_fonts[3];
 	return no_fonts;
 #else
+	/* a 68000 program on a FireBee (_CF_): 0xa000 reaches the EMAC there
+	   too, never FireTOS's Line-A, so the same zeros */
+	static signed char cf = -1;
+	if (cf < 0)
+		cf = get_cookie(0x5F43465FL) != 0;	/* '_CF_' */
+	if (cf) {
+		static const unsigned char *const no_fonts[3];
+		return no_fonts;
+	}
 	register const unsigned char *const *f __asm__("a1");
 	__asm__ volatile(".dc.w 0xa000" : "=r"(f) : : "d0", "d1", "d2", "a0", "a2", "memory", "cc");
 	return f;
