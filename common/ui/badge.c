@@ -68,9 +68,19 @@ static short vh, back_h, scw, sch, gen = 1;
 
 static const unsigned char *const *line_a_fonts(void)
 {
+#ifdef __mcoldfire__
+	/* no Line-A on a ColdFire: 0xa000 is the EMAC's macw there, four bytes
+	   that swallow the next instruction's first word, a0 and a1 left as
+	   they were (EWEBFB.PRG killed by FreeMiNT's memory protection at the
+	   first scroll on a tester's FireBee, 19 Nov 2026). The callers give
+	   up on the zeros and take the VDI's way */
+	static const unsigned char *const no_fonts[3];
+	return no_fonts;
+#else
 	register const unsigned char *const *f __asm__("a1");
 	__asm__ volatile(".dc.w 0xa000" : "=r"(f) : : "d0", "d1", "d2", "a0", "a2", "memory", "cc");
 	return f;
+#endif
 }
 
 void badge_init(short vdi_h, short text_h)
