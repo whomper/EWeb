@@ -409,6 +409,20 @@ PAD_RO_onstack := 256
 PAD_DATA_onstack := 256
 PAD_BSS_onstack := 256
 PAD_STR_onstack := 252
+# (and three more once common's c0fa029 put libc.o back as 1.21's and changed
+# the About box: profpad's sizes again, after the pads before them)
+PAD_libc4 := 256
+PAD_RO_libc4 := 256
+PAD_DATA_libc4 := 256
+PAD_BSS_libc4 := 8
+PAD_aboutbox2 := 12
+PAD_RO_aboutbox2 := 256
+PAD_DATA_aboutbox2 := 256
+PAD_BSS_aboutbox2 := 256
+PAD_alert2 := 256
+PAD_RO_alert2 := 256
+PAD_DATA_alert2 := 254
+PAD_BSS_alert2 := 256
 build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
@@ -423,7 +437,7 @@ CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_m
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
 		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
-		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack,\
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -818,14 +832,14 @@ GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad
               build/tos/gem/common/av.o,build/tos/gem/common/av.o build/tos/rt/pad_av.o,$(subst \
               build/tos/gem/common/clip.o,build/tos/gem/common/clip.o build/tos/rt/pad_clip.o,$(subst \
               build/tos/gem/common/settings.o,build/tos/gem/common/settings.o build/tos/rt/pad_settings.o build/tos/rt/pad_settings2.o,$(subst \
-              build/tos/gem/common/aboutbox.o,build/tos/gem/common/aboutbox.o build/tos/rt/pad_aboutbox.o,$(subst \
-              build/tos/gem/common/alert.o,build/tos/gem/common/alert.o build/tos/rt/pad_alert.o,$(subst \
+              build/tos/gem/common/aboutbox.o,build/tos/gem/common/aboutbox.o build/tos/rt/pad_aboutbox.o build/tos/rt/pad_aboutbox2.o,$(subst \
+              build/tos/gem/common/alert.o,build/tos/gem/common/alert.o build/tos/rt/pad_alert.o build/tos/rt/pad_alert2.o,$(subst \
               build/tos/gem/common/dialog.o,build/tos/gem/common/dialog.o build/tos/rt/pad_dialog.o,$(subst \
               build/tos/gem/common/offdraw.o,build/tos/gem/common/offdraw.o build/tos/rt/pad_offdraw.o,$(subst \
               build/tos/gem/common/click.o,build/tos/gem/common/click.o build/tos/rt/pad_click.o,$(subst \
               build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(GEM_OBJ))))))))))))
 GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$(subst \
-             build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o,$(subst \
+             build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o build/tos/rt/pad_libc4.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
 TOSNET_OBJ_PAD = $(subst build/tos/net/net_tos.o,build/tos/net/net_tos.o build/tos/rt/pad_net.o,$(subst \
                  build/tos/net/conn.o,build/tos/net/conn.o build/tos/rt/pad_conn.o,$(subst \
