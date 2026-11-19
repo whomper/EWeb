@@ -356,10 +356,63 @@ PAD_inflate := 220
 PAD_RO_inflate := 256
 PAD_DATA_inflate := 256
 PAD_BSS_inflate := 256
+# 1.22's changes (common's Line-A fix in text.c, offdraw.c, aboutbox.c and
+# badge.c, dialog.c's and Settings' turns, popup.c, pic.c's dither loop and
+# libc.c's heap zones; src/doc's background attribute, src/layout's cell
+# widths and row heights) moved what follows each. These pads, profpad's
+# own sizes (common/tools/profpad.py against 1.21's ELF and map, the
+# read-only data's by hand where it stopped: text.o's 128 bytes of zeros,
+# pic.c's tables), put the 2779 symbols of the objects that didn't change
+# back at 1.21's places modulo 256 (Falcon only: EWEBST.PRG's pads stay)
+PAD_libc3 := 256
+PAD_RO_libc3 := 256
+PAD_DATA_libc3 := 256
+PAD_BSS_libc3 := 248
+PAD_aboutbox := 178
+PAD_RO_aboutbox := 256
+PAD_DATA_aboutbox := 256
+PAD_BSS_aboutbox := 256
+PAD_alert := 256
+PAD_RO_alert := 256
+PAD_DATA_alert := 254
+PAD_BSS_alert := 256
+PAD_dialog := 168
+PAD_RO_dialog := 256
+PAD_DATA_dialog := 256
+PAD_BSS_dialog := 216
+PAD_offdraw := 224
+PAD_RO_offdraw := 128
+PAD_DATA_offdraw := 256
+PAD_BSS_offdraw := 4
+PAD_click := 256
+PAD_RO_click := 256
+PAD_DATA_click := 254
+PAD_BSS_click := 256
+PAD_settings2 := 48
+PAD_RO_settings2 := 256
+PAD_DATA_settings2 := 256
+PAD_BSS_settings2 := 252
+PAD_doc2 := 112
+PAD_RO_doc2 := 256
+PAD_DATA_doc2 := 256
+PAD_BSS_doc2 := 252
+PAD_layout2 := 32
+PAD_RO_layout2 := 256
+PAD_DATA_layout2 := 256
+PAD_BSS_layout2 := 256
+PAD_pic := 106
+PAD_RO_pic := 64
+PAD_DATA_pic := 256
+PAD_BSS_pic := 256
+PAD_onstack := 256
+PAD_RO_onstack := 256
+PAD_DATA_onstack := 256
+PAD_BSS_onstack := 256
+PAD_STR_onstack := 252
 build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
-		-DPAD_DATA=$(or $(PAD_DATA_$*),0) -DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
+		-DPAD_DATA=$(or $(PAD_DATA_$*),0) -DPAD_BSS=$(or $(PAD_BSS_$*),0) -DPAD_STR=$(or $(PAD_STR_$*),0) -c $< -o $@
 build/st/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
@@ -369,7 +422,8 @@ CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_m
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
-		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate,\
+		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -763,10 +817,15 @@ GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
               build/tos/gem/common/av.o,build/tos/gem/common/av.o build/tos/rt/pad_av.o,$(subst \
               build/tos/gem/common/clip.o,build/tos/gem/common/clip.o build/tos/rt/pad_clip.o,$(subst \
-              build/tos/gem/common/settings.o,build/tos/gem/common/settings.o build/tos/rt/pad_settings.o,$(subst \
-              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(GEM_OBJ)))))))
+              build/tos/gem/common/settings.o,build/tos/gem/common/settings.o build/tos/rt/pad_settings.o build/tos/rt/pad_settings2.o,$(subst \
+              build/tos/gem/common/aboutbox.o,build/tos/gem/common/aboutbox.o build/tos/rt/pad_aboutbox.o,$(subst \
+              build/tos/gem/common/alert.o,build/tos/gem/common/alert.o build/tos/rt/pad_alert.o,$(subst \
+              build/tos/gem/common/dialog.o,build/tos/gem/common/dialog.o build/tos/rt/pad_dialog.o,$(subst \
+              build/tos/gem/common/offdraw.o,build/tos/gem/common/offdraw.o build/tos/rt/pad_offdraw.o,$(subst \
+              build/tos/gem/common/click.o,build/tos/gem/common/click.o build/tos/rt/pad_click.o,$(subst \
+              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(GEM_OBJ))))))))))))
 GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$(subst \
-             build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o,$(subst \
+             build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
 TOSNET_OBJ_PAD = $(subst build/tos/net/net_tos.o,build/tos/net/net_tos.o build/tos/rt/pad_net.o,$(subst \
                  build/tos/net/conn.o,build/tos/net/conn.o build/tos/rt/pad_conn.o,$(subst \
@@ -776,8 +835,8 @@ st_RT_PAD = $(subst build/st/rt/libc.o,build/st/rt/libc.o build/st/rt/pad_libc.o
 STNET_OBJ_PAD = $(subst build/st/net/net_tos.o,build/st/net/net_tos.o build/st/rt/pad_net.o,$(STNET_OBJ))
 tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/tos/rt/pad_font.o,$(subst \
               build/tos/ewb/browse/browse.o,build/tos/ewb/browse/browse.o build/tos/rt/pad_browse.o,$(subst \
-              build/tos/ewb/doc/doc.o,build/tos/ewb/doc/doc.o build/tos/rt/pad_doc.o,$(subst \
-              build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o,$(tos_EWB)))))
+              build/tos/ewb/doc/doc.o,build/tos/ewb/doc/doc.o build/tos/rt/pad_doc.o build/tos/rt/pad_doc2.o,$(subst \
+              build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o build/tos/rt/pad_layout2.o,$(tos_EWB)))))
 tos_EC_PAD = $(subst build/tos/ec/sheet.o,build/tos/ec/sheet.o build/tos/rt/pad_sheet.o,$(subst \
              build/tos/ec/select.o,build/tos/ec/select.o build/tos/rt/pad_select.o,$(subst \
              build/tos/ec/core.o,build/tos/ec/core.o build/tos/rt/pad_core.o,$(tos_EC))))
@@ -802,10 +861,11 @@ build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 # a graphics card's screen (ui/tcpix.c, ui/deep.c) linked last, after
 # everything a Falcon runs: in the middle it moved the canvas and made it
 # 7% slower on the stock Falcon (the 68030's caches; DESIGN.md)
-DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o
+DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o build/tos/rt/pad_onstack.o
+TOSPIC_OBJ_PAD = $(subst build/tos/pic/pic.o,build/tos/pic/pic.o build/tos/rt/pad_pic.o,$(TOSPIC_OBJ))
 ST_DEEP_OBJ := build/st/gem/tcpix.o
 GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
-build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ) \
+build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ)
@@ -941,7 +1001,7 @@ PROFPAD_ST := python3 common/tools/profpad.py --ship build/st/ewebst.elf --out b
 		--exclude build/st/gem/common/gem.o --exclude build/prof/st/gem.o --
 build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_TOS) $(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT_PAD) \
-		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_ST) $(M68KCC) $(ST_LDFLAGS) $(ST_PAD_LD) $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT_PAD) \
@@ -957,7 +1017,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 	$(M68KCC) $(GEM_CFLAGS) $(NET_WARN) $(NET_VER) -DEW_TEST_DL -c $< -o $@
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT_PAD) \
-		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ) build/tos/js/js_ovl.o \
+		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) build/tos/js/js_ovl.o \
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
