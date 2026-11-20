@@ -889,8 +889,11 @@ def browse():
             r.mouse.click(x0 + int(im.group(1)) + 40, y0 + int(im.group(2)) - int(m.group(5)) + 30)
             ev = r.wait(r"shown ", 120)
             got = re.search(r"at\.x=(\d+)&at\.y=(\d+)$", ev or "")
+            # (in the picture's own pixels: 40 and 30 on the screen are
+            # 50 and 37 at the rig's zoom of 80; the button's end is 1500)
+            gx, gy = (int(got.group(1)), int(got.group(2))) if got else (0, 0)
             check("forms: a picture button three screens tall, clicked near its top, sends where",
-                  got is not None and abs(int(got.group(1)) - 40) <= 3 and abs(int(got.group(2)) - 30) <= 3,
+                  got is not None and 35 <= gx <= 60 and gy < 100 and abs(gy * 40 - gx * 30) <= 4 * 40,
                   str(ev))
             r.key(UNDO)
             r.wait(r"shown ", 120)
