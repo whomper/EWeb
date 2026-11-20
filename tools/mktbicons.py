@@ -9,7 +9,7 @@ the screens with the 16-pixel font (TB_TALL), 30 x 12 for the 200-line
 ones (TB_SHORT, their pixels twice as tall).
 
 Three editions, as the throbber's: 256 colours (true colour too) shaded
-and kept smooth; the 16 system colours (white, the two greys, black, red
+and kept smooth, each pixel one of EWeb's fixed pens (own256, snap256); the 16 system colours (white, the two greys, black, red
 and dark red), so that 16 colours look the same; and black and white
 (monochrome, 4 colours): a white fill and a black edge. Each has the six
 icons and the six greyed (a button that can't be used), each pixel a
@@ -40,14 +40,15 @@ SYS16 = [(255, 255, 255), (0xbb, 0xbb, 0xbb), (0x88, 0x88, 0x88), (0, 0, 0), (25
 
 
 def own256():
-    """EWeb's own palette (ui/screen.c, own_colour) after the 16 system colours"""
+    """the pens that keep their colours with EWeb's colours on: the 16
+    system colours, then src/gfx/pagecol.c's fixed ones (a cube of 6 reds,
+    6 greens and 5 blues, and 23 greys); the page's own 36 after them change
+    with each page, and the icons take none of them (ui/screen.c, fixed_pen)"""
     grey = [13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191, 212, 220, 226, 231, 235, 238, 241, 244, 247, 250, 253]
     out = list(PAL256[:16])
-    for k in range(239):
-        if k < 216:
-            out.append((k // 36 * 51, k // 6 % 6 * 51, k % 6 * 51))
-        else:
-            out.append((grey[k - 216],) * 3)
+    for k in range(180):
+        out.append((k // 30 * 51, k // 5 % 6 * 51, k % 5 * 255 // 4))
+    out += [(g, g, g) for g in grey]
     return out
 
 
@@ -298,18 +299,59 @@ def edition(name, h):
     return pics
 
 
-def reduce256(pics, n=64):
-    """the colours of the 256-colour edition, at most n of them: the
-    screen's nearest is taken for each when the toolbar is first drawn"""
-    cols = [c for p in pics for row in p for c in row if c is not None]
-    strip = Image.new("RGB", (len(cols), 1))
-    strip.putdata(cols)
-    q = strip.quantize(colors=n, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-    pal = q.getpalette()[:3 * n]
-    idx = list(q.get_flattened_data() if hasattr(q, 'get_flattened_data') else q.getdata())
-    it = iter(idx)
-    out = [[[tuple(pal[3 * k:3 * k + 3]) if c is not None else None for c, k in
-             ((c, next(it) if c is not None else 0) for c in row)] for row in p] for p in pics]
+BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
+
+
+def dist(a, b):
+    return (a[0] - b[0]) ** 2 * 2 + (a[1] - b[1]) ** 2 * 4 + (a[2] - b[2]) ** 2 * 3
+
+
+def neighbours(a, b):
+    """two pens a mix of which reads as one colour between them: greys at
+    most 16 apart"""
+    if a[0] == a[1] == a[2] and b[0] == b[1] == b[2]:
+        return abs(a[0] - b[0]) <= 16
+    return False	# (the cube's colours: a mix of two showed as a checker)
+
+
+def snap256(pics):
+    """each pixel one of the pens it will be drawn with (own256: no second
+    rounding on the screen, where the old 64 colours were each taken to the
+    nearest pen again and the shading fell into bands), a shade between two
+    pens shown as a fine mix of them (ordered, 4 x 4): the pen nearest, and
+    the one on the far side of the colour from it, by how far between them
+    it lies"""
+    pens = own256()
+    memo = {}
+
+    def near(c):
+        c = tuple(max(0, min(255, int(round(v)))) for v in c)
+        if c not in memo:
+            memo[c] = min(pens, key=lambda p: dist(c, p))
+        return memo[c]
+    out = []
+    for p in pics:
+        q = []
+        for y, row in enumerate(p):
+            r = []
+            for x, c in enumerate(row):
+                if c is None:
+                    r.append(None)
+                    continue
+                p1 = near(c)
+                p2 = near(tuple(2 * c[i] - p1[i] for i in range(3)))
+                # (only pens near each other in brightness and colour: the
+                # cube's colours are 51 apart, and a mix of two of them
+                # showed as a checker in the reds and the copper)
+                if p2 == p1 or dist(c, p1) < 40 or not neighbours(p1, p2):
+                    r.append(p1)
+                    continue
+                d = [p2[i] - p1[i] for i in range(3)]
+                n2 = d[0] * d[0] * 2 + d[1] * d[1] * 4 + d[2] * d[2] * 3
+                t = ((c[0] - p1[0]) * d[0] * 2 + (c[1] - p1[1]) * d[1] * 4 + (c[2] - p1[2]) * d[2] * 3) / n2
+                r.append(p2 if t * 16 > BAYER4[y % 4][x % 4] + 0.5 else p1)
+            q.append(r)
+        out.append(q)
     return out
 
 
@@ -354,7 +396,7 @@ def main(argv):
     for name, h, tag in EDITIONS:
         pics = edition(name, h)
         if name == "256":
-            pics = reduce256(pics)
+            pics = snap256(pics)
         cols = colours_of(pics)
         assert len(cols) < 256
         raw = b"".join(bytes(cols.index(c) + 1 if c is not None else 0 for row in p for c in row) for p in pics)
