@@ -2573,6 +2573,12 @@ static void loose_cells(L *l, box *b)
 	}
 }
 
+/* fixup_block's bytes that never run, so that the code after fixup stays
+   where it was in 1.22 modulo 256 (the Makefile sets them for the Atari's
+   builds; the speed pairs time the change, not where it moved code) */
+#ifndef LAYOUT_PAD
+#define LAYOUT_PAD "0"
+#endif
 static void fixup_block(L *l, box *b);
 
 static void fixup(L *l, box *b)
@@ -2615,6 +2621,8 @@ static void fixup_block(L *l, box *b)
 	int has_block = 0, has_inline = 0, has_float = 0, tf;
 	if (b->kind != BX_BLOCK)
 		return;
+	if (b->first == b)	/* (never: bytes that keep the code after fixup at 1.22's places, LAYOUT_PAD) */
+		__asm__ __volatile__(".skip " LAYOUT_PAD);
 	if (b->table || row_group(b)) {
 		table_anon(l, b);
 		if (l->fail)

@@ -56,6 +56,14 @@ static short ncol;			/* 2, 4, 16, 256 */
 static unsigned char pal[256][3];	/* each pixel value's colour */
 static unsigned char nearest_of[4096];	/* 12-bit colour -> pixel value + 1, 0 not worked out */
 #define FIXED_N 512
+/* fixed_pen's bytes that never run, so that it is a whole number of 256s
+   and screen.o's code after it stays at 1.22's places modulo 256, as the
+   release pads keep the objects after it, so that the speed pairs time the
+   change and not where it moved the code (Makefile) */
+#ifndef FIXED_PEN_PAD
+#define FIXED_PEN_PAD "0"
+#endif
+static unsigned short fixed_gen, fixed_had;	/* read_pens' count, and the one the table is for */
 static unsigned long *fixed_rgb;	/* fixed_pen's: a colour asked (+ 1 << 24), 0 none (FIXED_N; */
 static unsigned char *fixed_px;		/* and its pixel value; made in 256 colours alone: 2.5 KB less
 					   in BSS cost the stock Falcon's NVDI the big page's reload) */
@@ -213,8 +221,7 @@ static void read_pens(void)
 		pal[px][2] = from1000(rgb[2]);
 	}
 	memset(nearest_of, 0, sizeof nearest_of);
-	if (fixed_rgb != NULL)
-		memset(fixed_rgb, 0, FIXED_N * sizeof *fixed_rgb);
+	fixed_gen++;			/* (fixed_pen's table emptied when next asked) */
 	/* the pictures are made of these pens (img.c, Floyd-Steinberg); with
 	   EWeb's colours the fixed ones alone, so that a picture's pens stay
 	   when the page's colours change (pagecol.h) */
@@ -419,49 +426,8 @@ static uint8_t pen(void *ud, uint32_t rgb)
 	return (uint8_t) pick;
 }
 
-/* the nearest of the pens whose colours stay, as a pixel value: EWeb's own
-   pictures (the toolbar's icons, the throbber) are made once and kept, so
-   with EWeb's colours on they take none of the page's pens, which each
-   page sets again (as a page's pictures, pic_pal_init). pen() took them:
-   the Stop icon's dark reds drew on a pen the page had, then black when
-   the next page set it (Erez, 20 Nov 2026). Each colour is kept whole
-   (pen()'s 4 bits a part made greys 12 apart one pen, and the icons'
-   are drawn on the very pens: tools/mktbicons.py) */
-static uint8_t fixed_pen(uint32_t rgb)
-{
-	unsigned long key = (rgb & 0xffffffUL) | 1UL << 24;
-	unsigned h = (unsigned) ((rgb ^ rgb >> 9 ^ rgb >> 17) & (FIXED_N - 1));
-	long best = 0x7fffffffL;
-	short i, pick = 0, n, probe;
-	int r, g, b;
-	if (!own || ncol != 256)
-		return pen(NULL, rgb);
-	if (fixed_rgb == NULL && (fixed_rgb = malloc(FIXED_N * (sizeof *fixed_rgb + 1))) != NULL) {
-		memset(fixed_rgb, 0, FIXED_N * sizeof *fixed_rgb);
-		fixed_px = (unsigned char *) (fixed_rgb + FIXED_N);
-	}
-	for (probe = 0; fixed_rgb != NULL && probe < FIXED_N && fixed_rgb[h] != 0; probe++) {
-		if (fixed_rgb[h] == key)
-			return fixed_px[h];
-		h = (h + 1) & (FIXED_N - 1);
-	}
-	r = (int) (rgb >> 16 & 255);
-	g = (int) (rgb >> 8 & 255);
-	b = (int) (rgb & 255);
-	for (i = 0, n = EW_PIC_PENS; i < n; i++) {
-		long dr = r - pal[i][0], dg = g - pal[i][1], db = b - pal[i][2];
-		long d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
-		if (d < best) {
-			best = d;
-			pick = i;
-		}
-	}
-	if (fixed_rgb != NULL && probe < FIXED_N) {	/* (full, or none: worked out each time) */
-		fixed_rgb[h] = key;
-		fixed_px[h] = (unsigned char) pick;
-	}
-	return (uint8_t) pick;
-}
+static uint8_t fixed_pen(uint32_t rgb) __attribute__((noinline));
+	/* (at the file's end and called, not copied in: the code after it at 1.22's places, the pairs) */
 
 /* a monochrome screen's fills: grey as a pattern of black and white by
    its brightness (pure white and black stay solid) */
@@ -1387,3 +1353,53 @@ void scr_store_put(short at, short n, short sx, short w, short x, short y)
 	}
 }
 #endif
+
+/* the nearest of the pens whose colours stay, as a pixel value: EWeb's own
+   pictures (the toolbar's icons, the throbber) are made once and kept, so
+   with EWeb's colours on they take none of the page's pens, which each
+   page sets again (as a page's pictures, pic_pal_init). pen() took them:
+   the Stop icon's dark reds drew on a pen the page had, then black when
+   the next page set it (Erez, 20 Nov 2026). Each colour is kept whole
+   (pen()'s 4 bits a part made greys 12 apart one pen, and the icons'
+   are drawn on the very pens: tools/mktbicons.py) */
+static uint8_t fixed_pen(uint32_t rgb)
+{
+	unsigned long key = (rgb & 0xffffffUL) | 1UL << 24;
+	unsigned h = (unsigned) ((rgb ^ rgb >> 9 ^ rgb >> 17) & (FIXED_N - 1));
+	long best = 0x7fffffffL;
+	short i, pick = 0, n, probe;
+	int r, g, b;
+	if (!own || ncol != 256)
+		return pen(NULL, rgb);
+	if (rgb == 0xffffffffUL)	/* (never: bytes that make the function whole 256s, below) */
+		__asm__ __volatile__(".skip " FIXED_PEN_PAD);
+	if (fixed_rgb == NULL && (fixed_rgb = malloc(FIXED_N * (sizeof *fixed_rgb + 1))) != NULL) {
+		fixed_px = (unsigned char *) (fixed_rgb + FIXED_N);
+		fixed_had = (unsigned short) (fixed_gen + 1);
+	}
+	if (fixed_rgb != NULL && fixed_had != fixed_gen) {	/* (the screen's colours read again) */
+		memset(fixed_rgb, 0, FIXED_N * sizeof *fixed_rgb);
+		fixed_had = fixed_gen;
+	}
+	for (probe = 0; fixed_rgb != NULL && probe < FIXED_N && fixed_rgb[h] != 0; probe++) {
+		if (fixed_rgb[h] == key)
+			return fixed_px[h];
+		h = (h + 1) & (FIXED_N - 1);
+	}
+	r = (int) (rgb >> 16 & 255);
+	g = (int) (rgb >> 8 & 255);
+	b = (int) (rgb & 255);
+	for (i = 0, n = EW_PIC_PENS; i < n; i++) {
+		long dr = r - pal[i][0], dg = g - pal[i][1], db = b - pal[i][2];
+		long d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+		if (d < best) {
+			best = d;
+			pick = i;
+		}
+	}
+	if (fixed_rgb != NULL && probe < FIXED_N) {	/* (full, or none: worked out each time) */
+		fixed_rgb[h] = key;
+		fixed_px[h] = (unsigned char) pick;
+	}
+	return (uint8_t) pick;
+}
