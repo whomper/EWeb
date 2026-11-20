@@ -70,6 +70,9 @@ Pages:
                  the Pi's pens from the disk cache, by the pens asked for;
                  freshpics.html pics.html with its pictures kept the same
                  way, from /site/freshpics/ (hits of their own)
+  /site/tall.html  a picture button three screens tall, as live view's
+                 (make hatarigui: clicked near its top, the place sent is
+                 there, and the page didn't scroll to its end first)
   /site/form.html  forms: a search sent with GET, a login sent with POST,
                  a multipart one with a file field, one whose POST is
                  answered with 303; /site/echo answers each with a page
@@ -365,6 +368,12 @@ CF_ABOUT = (b"<!DOCTYPE html><title>About the check</title><p>Cloudflare's page 
 SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back to "
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
+# a picture button three screens tall, as webgate's live view's (/site/tall.html):
+# a click near its top is sent from there (Erez, 20 Nov 2026: the page went to
+# the button's end first, and the place was worked out after it)
+TALL_PAGE = (b"<!DOCTYPE html><html><head><title>Tall</title></head><body style='margin:4px'>"
+             b"<form action=/site/echo><input type=image name=at width=400 height=1500 src=logo.png "
+             b"alt='the picture button'></form><p>after</p></body></html>\n")
 FORM_PAGE = ("<!DOCTYPE html><html><head><meta charset=utf-8><title>Forms</title></head><body>"
              "<form action=/site/echo><p><input name=q value=atari> <input type=submit name=go value=Find></p></form>"
              "<form action=/site/echo method=post><p><input name=user> <input type=password name=pw> "
@@ -789,6 +798,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send(200, " ".join(sorted(ENC_SEEN)).encode(), "text/plain", extra=[("Cache-Control", "no-store")])
         elif p == "/site/form.html":
             self.send(200, FORM_PAGE)
+        elif p == "/site/tall.html":
+            self.send(200, TALL_PAGE)
         elif p == "/site/files.html":
             self.send(200, FILES_PAGE)
         elif p == "/site/tabs.html":

@@ -2499,7 +2499,7 @@ static void ctl_blur(void)
 
 static void addr_blur(void);
 
-static void ctl_focus(fctl *c)
+static void ctl_focus_how(fctl *c, int show)
 {
 	if (cur->f_focus == c)
 		return;
@@ -2508,8 +2508,25 @@ static void ctl_focus(fctl *c)
 	cur->f_focus = c;
 	cur->typed = 0;
 	c->focus = 1;
-	ctl_show(c);
+	if (show)
+		ctl_show(c);
 	ctl_redraw(c);
+}
+
+/* c has the keyboard (Tab to it, a script's focus()): scrolled into view */
+static void ctl_focus(fctl *c)
+{
+	ctl_focus_how(c, 1);
+}
+
+/* c has the keyboard by a click on it: where it was clicked is in view, so
+   the page stays where it is. Scrolled into view, live view's picture, three
+   screens tall, went to its end, and the place clicked was worked out after
+   the scroll: the Pi's browser was clicked far below it, on the page's
+   foot (Erez, 20 Nov 2026) */
+static void ctl_focus_click(fctl *c)
+{
+	ctl_focus_how(c, 0);
 }
 
 /* a new page: nothing of it has the keyboard (the page before may be
@@ -3821,11 +3838,17 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			if (c->disabled || (label && (it = page_ctl_item(br.p, c)) == NULL))
 				return 1;
 			if (form_typed(c)) {
-				ctl_focus(c);
+				if (label)
+					ctl_focus(c);	/* (its label clicked: the field may be elsewhere) */
+				else
+					ctl_focus_click(c);
 				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);
 				ctl_redraw(c);
 			} else {
-				ctl_focus(c);
+				if (label)
+					ctl_focus(c);
+				else
+					ctl_focus_click(c);
 				if (label && c->kind == FC_SELECT)
 					ctl_press(c, it, (short) (cur->r_page.x + it->x - cur->left + 4), (short) (cur->r_page.y + it->y - cur->top + it->h));
 				else

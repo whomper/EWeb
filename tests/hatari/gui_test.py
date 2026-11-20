@@ -870,6 +870,33 @@ def browse():
             r.wait(r"window closed", 30)
         else:
             check("windows: the page of links shown", False, str(ev))
+        # a picture button three screens tall (webgate's live view's):
+        # clicked near its top, the place sent is there. The page went to
+        # the button's end first, and the place was worked out after it
+        # (Erez, 20 Nov 2026: the Pi's browser was clicked on the page's foot)
+        r.key(L, (CTRL,))
+        r.type("127.0.0.1:%d/site/tall.html" % HTTP)
+        r.key(RETURN)
+        ev = r.wait(r"shown ", 120)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        im = None
+        if m and ev.startswith("shown %stall.html " % site):
+            x0, y0, w, _ = (int(m.group(i)) for i in range(1, 5))
+            p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
+                                "-w", str(w), "-d", site + "tall.html"], capture_output=True, text=True, timeout=60)
+            im = re.search(r"^image (\d+),(\d+) (\d+)x(\d+) .*the picture button", p.stdout, re.M)
+        if im:
+            r.mouse.click(x0 + int(im.group(1)) + 40, y0 + int(im.group(2)) - int(m.group(5)) + 30)
+            ev = r.wait(r"shown ", 120)
+            got = re.search(r"at\.x=(\d+)&at\.y=(\d+)$", ev or "")
+            check("forms: a picture button three screens tall, clicked near its top, sends where",
+                  got is not None and abs(int(got.group(1)) - 40) <= 3 and abs(int(got.group(2)) - 30) <= 3,
+                  str(ev))
+            r.key(UNDO)
+            r.wait(r"shown ", 120)
+        else:
+            check("forms: a picture button three screens tall, clicked near its top, sends where", False,
+                  "page or button not found: %s" % ev)
         # forms: the search field clicked at its end, typed into, Return
         # sends it with GET; Back shows it as it was left
         r.key(L, (CTRL,))
