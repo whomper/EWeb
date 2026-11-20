@@ -55,6 +55,7 @@ static short format;			/* the screen's: 0 interleaved planes (the Atari's own), 
 static short ncol;			/* 2, 4, 16, 256 */
 static unsigned char pal[256][3];	/* each pixel value's colour */
 static unsigned char nearest_of[4096];	/* 12-bit colour -> pixel value + 1, 0 not worked out */
+static unsigned char fixed_of[4096];	/* the same for EWeb's own pictures (fixed_pen) */
 static PIC_PAL pic_pal;			/* the same colours, for the pictures' pens */
 static long band_w;			/* pixels, a multiple of 16 */
 static short rows;			/* rows the buffers hold: the screen's, or BAND */
@@ -209,6 +210,7 @@ static void read_pens(void)
 		pal[px][2] = from1000(rgb[2]);
 	}
 	memset(nearest_of, 0, sizeof nearest_of);
+	memset(fixed_of, 0, sizeof fixed_of);
 	/* the pictures are made of these pens (img.c, Floyd-Steinberg); with
 	   EWeb's colours the fixed ones alone, so that a picture's pens stay
 	   when the page's colours change (pagecol.h) */
@@ -410,6 +412,37 @@ static uint8_t pen(void *ud, uint32_t rgb)
 		}
 	}
 	nearest_of[key] = (unsigned char) (pick + 1);
+	return (uint8_t) pick;
+}
+
+/* the nearest of the pens whose colours stay, as a pixel value: EWeb's own
+   pictures (the toolbar's icons, the throbber) are made once and kept, so
+   with EWeb's colours on they take none of the page's pens, which each
+   page sets again (as a page's pictures, pic_pal_init). pen() took them:
+   the Stop icon's dark reds drew on a pen the page had, then black when
+   the next page set it (Erez, 20 Nov 2026) */
+static uint8_t fixed_pen(uint32_t rgb)
+{
+	unsigned key = (unsigned) ((rgb >> 12 & 0xf00) | (rgb >> 8 & 0xf0) | (rgb >> 4 & 0xf));
+	long best = 0x7fffffffL;
+	short i, pick = 0, n;
+	int r, g, b;
+	if (!own || ncol != 256)
+		return pen(NULL, rgb);
+	if (fixed_of[key])
+		return (uint8_t) (fixed_of[key] - 1);
+	r = (int) (rgb >> 16 & 255);
+	g = (int) (rgb >> 8 & 255);
+	b = (int) (rgb & 255);
+	for (i = 0, n = EW_PIC_PENS; i < n; i++) {
+		long dr = r - pal[i][0], dg = g - pal[i][1], db = b - pal[i][2];
+		long d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+		if (d < best) {
+			best = d;
+			pick = i;
+		}
+	}
+	fixed_of[key] = (unsigned char) (pick + 1);
 	return (uint8_t) pick;
 }
 
@@ -699,7 +732,7 @@ static void rgb_map(unsigned short *map, const unsigned long *col, short ncol)
 	for (i = 0; i < ncol; i++) {
 		unsigned long c = col[i];
 		map[i] = truecolour ? (unsigned short) ((c >> 8 & 0xf800) | (c >> 5 & 0x07e0) | (c >> 3 & 0x001f)) :
-			 pen(NULL, (uint32_t) c);
+			 fixed_pen((uint32_t) c);
 	}
 }
 
