@@ -223,6 +223,10 @@ void scr_store_put(short at, short n, short sx, short w, short x, short y);
 #endif
 /* a picture of w x h, each pixel a byte into col (0xRRGGBB, ncol of them),
    at at; the part of it on part (within at and the clip set) */
+/* the nearest to rgb of the pens whose colours stay with EWeb's colours
+   on (pixel values 0 to EW_PIC_PENS - 1), pal the screen's colours
+   (ui/fixpen.c) */
+unsigned char scr_fixed_pen(unsigned long rgb, const unsigned char (*pal)[3]);
 void scr_rgb(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, const GRECT *at,
 	     const GRECT *part);
 /* the same made once into the screen's own form (dev: scr_dev_size bytes

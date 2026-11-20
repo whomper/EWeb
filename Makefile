@@ -423,22 +423,19 @@ PAD_alert2 := 256
 PAD_RO_alert2 := 256
 PAD_DATA_alert2 := 254
 PAD_BSS_alert2 := 256
-# 1.23's changes moved what follows them: screen.o's fixed_pen and
-# layout.o's fixup_block each carry bytes that never run (FIXED_PEN_PAD,
+# 1.23's changes moved what follows them: rgb_map in screen.o and
+# fixup_block in layout.o carry bytes that never run (RGB_MAP_PAD,
 # LAYOUT_PAD, below) so that the code after them in their objects stays at
-# 1.22's places modulo 256; win.o's 256-colour icon tables shrank. This pad,
-# profpad's sizes against 1.22's ELF and map, puts the 3323 symbols of the
-# objects that didn't change back at 1.22's places too. Its text and data
-# parts are 0, not profpad's 256 (the same modulo 256): EWEB.PRG no bigger
-# than 1.22's, whose stock Falcon under NVDI had a few KB to spare for the
-# big page's reload (gui_test's falcon4)
+# 1.22's places modulo 256, and ui/fixpen.c is linked last; win.o's
+# 256-colour icon tables shrank. These pads, profpad's sizes against 1.22's
+# ELF and map, put the 3322 symbols of the objects that didn't change back
+# at 1.22's places too (EWEBST.PRG's 2440 need none). Parts that profpad
+# makes 256 are 0 (the same modulo 256): EWEB.PRG no bigger than it must be,
+# 1.22's stock Falcon under NVDI having had a few KB to spare for the big
+# page's reload (gui_test's falcon4)
 PAD_win := 0
 PAD_RO_win := 4
-PAD_DATA_win := 0
-PAD_BSS_win := 244
-# (and EWEBST.PRG's, against 1.22's ST ELF: 2440 symbols back at its places)
-PAD_stwin := 0
-PAD_BSS_stwin := 244
+PAD_fixpen := 156
 build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68030 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
@@ -447,13 +444,13 @@ build/st/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
 		-DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
-ST_PAD_LD := -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_stwin -Wl,-u,pad_stwin_bss
+ST_PAD_LD := -Wl,-u,pad_libc_ro -Wl,-u,pad_net
 CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_main_ro -Wl,-u,pad_main_bss \
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
 		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
-		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win,\
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -840,12 +837,12 @@ GEM_CFLAGS  = $(TOSNET_CFLAGS) -DEW_GEM -DDLG_CLICK -DEW_STACK=$(TOS_STACK) -DEW
 build/tos/gem/common/click.o: GEM_CFLAGS += -DEW_NO_CUR
 build/st/gem/common/click.o: STGEM_CFLAGS += -DEW_NO_CUR
 build/tos/gem/common/langs.o: GEM_CFLAGS += -DEW_NO_CUR
-# fixed_pen's never-run bytes (ui/screen.c): it a whole number of 256s, so
-# screen.o's code after it stays at 1.22's places (1.23)
-build/tos/gem/screen.o: GEM_CFLAGS += -DFIXED_PEN_PAD='"62"'
-build/st/gem/screen.o: STGEM_CFLAGS += -DFIXED_PEN_PAD='"204"'
-# and fixup_block's (src/layout/layout.c): the code after fixup at 1.22's places
+# fixup_block's never-run bytes (src/layout/layout.c): the code after fixup
+# in layout.o at 1.22's places (1.23)
 build/tos/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"32"'
+# and rgb_map's (ui/screen.c): screen.o's drawing code after it at 1.22's
+# places (it moved by 40 bytes, and the stock Falcon's home page took 10 ms more)
+build/tos/gem/screen.o: GEM_CFLAGS += -DRGB_MAP_PAD='"204"'
 build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
@@ -899,7 +896,8 @@ build/tos/gem/common/cpucheck.o: common/atari/cpucheck.c
 # a graphics card's screen (ui/tcpix.c, ui/deep.c) linked last, after
 # everything a Falcon runs: in the middle it moved the canvas and made it
 # 7% slower on the stock Falcon (the 68030's caches; DESIGN.md)
-DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o build/tos/rt/pad_onstack.o
+DEEP_OBJ   := build/tos/gem/tcpix.o build/tos/gem/deep.o build/tos/rt/onstack.o build/tos/rt/pad_onstack.o \
+              build/tos/gem/fixpen.o build/tos/rt/pad_fixpen.o
 TOSPIC_OBJ_PAD = $(subst build/tos/pic/pic.o,build/tos/pic/pic.o build/tos/rt/pad_pic.o,$(TOSPIC_OBJ))
 ST_DEEP_OBJ := build/st/gem/tcpix.o
 GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
@@ -948,7 +946,6 @@ ST_HOT := build/st/ewb/layout/layout.o build/st/ewb/layout/find.o build/st/ewb/d
           build/st/gem/screen.o build/st/pic/pic.o build/st/pic/png.o build/st/rt/libc.o
 $(ST_HOT): ST_O2 := -O2
 STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
-STGEM_OBJ_PAD = $(subst build/st/gem/win.o,build/st/gem/win.o build/st/rt/pad_stwin.o,$(STGEM_OBJ))
 # (-DDLG_CPU: common's dialogs drawn partly by the CPU, for the 68000 only:
 # EWEB.PRG runs on a 68030 and leaves it out)
 STGEM_CFLAGS = $(STNET_CFLAGS) -DEW_GEM -DEW_STACK=$(ST_STACK) -DNO_ICON256 -DDLG_CPU $(EWB_INC) $(NSINC)
@@ -1003,7 +1000,7 @@ build/st/gem/common/%.o: common/atari/%.c $(NET_HDRS)
 build/st/gem/common/%.o: common/src/%.c $(NET_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(STGEM_CFLAGS) $(COMMON_WARN) -c $< -o $@
-build/st/ewebst.elf: $(st_RT_PAD) $(STGEM_OBJ_PAD) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ_PAD) $(STPIC_OBJ) build/st/js/js_none.o \
+build/st/ewebst.elf: $(st_RT_PAD) $(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ_PAD) $(STPIC_OBJ) build/st/js/js_none.o \
 		$(ST_DEEP_OBJ)
 	$(M68KCC) $(ST_LDFLAGS) $(ST_PAD_LD) -Wl,-Map,$@.map -o $@ $(filter %.o,$^) -lgcc
 binary/EWEBST.PRG: build/st/ewebst.elf common/tools/elf2tos.py
@@ -1047,7 +1044,7 @@ build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main
 		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_ST) $(M68KCC) $(ST_LDFLAGS) $(ST_PAD_LD) $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT_PAD) \
-		$(STGEM_OBJ_PAD) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ_PAD) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
+		$(STGEM_OBJ) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ_PAD) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
 build/prof/EWEB.PRG: build/prof/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 build/prof/EWEBST.PRG: build/prof/ewebst.elf common/tools/elf2tos.py
