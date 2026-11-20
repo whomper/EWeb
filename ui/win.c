@@ -2499,34 +2499,38 @@ static void ctl_blur(void)
 
 static void addr_blur(void);
 
-static void ctl_focus_how(fctl *c, int show)
+/* a click gave it the keyboard (focus_click): where it was clicked is in
+   view, so the page stays where it is. Scrolled into view, live view's
+   picture, three screens tall, went to its end, and the place clicked was
+   worked out after the scroll: the Pi's browser was clicked far below it,
+   on the page's foot (Erez, 20 Nov 2026). Tab, a script's focus() and a
+   label's text scroll it into view */
+static char focus_click;
+
+/* bytes that never run in ctl_focus and win_mouse, so that win.o's code
+   after them stays at 1.22's places modulo 256 (the Makefile sets them;
+   the speed pairs time the change, not where it moved the code) */
+#ifndef CTL_FOCUS_PAD
+#define CTL_FOCUS_PAD "0"
+#endif
+#ifndef WIN_MOUSE_PAD
+#define WIN_MOUSE_PAD "0"
+#endif
+
+static void ctl_focus(fctl *c)
 {
 	if (cur->f_focus == c)
 		return;
+	if (c->kind > 200)	/* (never: CTL_FOCUS_PAD) */
+		__asm__ __volatile__(".skip " CTL_FOCUS_PAD);
 	ctl_blur();
 	addr_blur();
 	cur->f_focus = c;
 	cur->typed = 0;
 	c->focus = 1;
-	if (show)
+	if (!focus_click)
 		ctl_show(c);
 	ctl_redraw(c);
-}
-
-/* c has the keyboard (Tab to it, a script's focus()): scrolled into view */
-static void ctl_focus(fctl *c)
-{
-	ctl_focus_how(c, 1);
-}
-
-/* c has the keyboard by a click on it: where it was clicked is in view, so
-   the page stays where it is. Scrolled into view, live view's picture, three
-   screens tall, went to its end, and the place clicked was worked out after
-   the scroll: the Pi's browser was clicked far below it, on the page's
-   foot (Erez, 20 Nov 2026) */
-static void ctl_focus_click(fctl *c)
-{
-	ctl_focus_how(c, 0);
 }
 
 /* a new page: nothing of it has the keyboard (the page before may be
@@ -3727,6 +3731,8 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 	int i, l;
 	if (cur->h <= 0 || wind_find(mx, my) != cur->h || cur->iconified)
 		return 0;
+	if (mx < -30000)	/* (never: WIN_MOUSE_PAD) */
+		__asm__ __volatile__(".skip " WIN_MOUSE_PAD);
 	for (i = 0; i < NBUT; i++) {
 		if (!rect_hit(&cur->but[i], mx, my))
 			continue;
@@ -3837,18 +3843,13 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 			int label = it->type == DL_TEXT;
 			if (c->disabled || (label && (it = page_ctl_item(br.p, c)) == NULL))
 				return 1;
+			focus_click = !label;	/* (its label clicked: the field may be elsewhere) */
+			ctl_focus(c);
+			focus_click = 0;
 			if (form_typed(c)) {
-				if (label)
-					ctl_focus(c);	/* (its label clicked: the field may be elsewhere) */
-				else
-					ctl_focus_click(c);
 				c->cur = label ? c->len : cv_ctl_hit(it, c, mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);
 				ctl_redraw(c);
 			} else {
-				if (label)
-					ctl_focus(c);
-				else
-					ctl_focus_click(c);
 				if (label && c->kind == FC_SELECT)
 					ctl_press(c, it, (short) (cur->r_page.x + it->x - cur->left + 4), (short) (cur->r_page.y + it->y - cur->top + it->h));
 				else
