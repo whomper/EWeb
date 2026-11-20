@@ -55,7 +55,9 @@ static short format;			/* the screen's: 0 interleaved planes (the Atari's own), 
 static short ncol;			/* 2, 4, 16, 256 */
 static unsigned char pal[256][3];	/* each pixel value's colour */
 static unsigned char nearest_of[4096];	/* 12-bit colour -> pixel value + 1, 0 not worked out */
-static unsigned char fixed_of[4096];	/* the same for EWeb's own pictures (fixed_pen) */
+#define FIXED_N 512
+static unsigned long fixed_rgb[FIXED_N];	/* fixed_pen's: a colour asked (+ 1 << 24), 0 none */
+static unsigned char fixed_px[FIXED_N];	/* and its pixel value */
 static PIC_PAL pic_pal;			/* the same colours, for the pictures' pens */
 static long band_w;			/* pixels, a multiple of 16 */
 static short rows;			/* rows the buffers hold: the screen's, or BAND */
@@ -210,7 +212,7 @@ static void read_pens(void)
 		pal[px][2] = from1000(rgb[2]);
 	}
 	memset(nearest_of, 0, sizeof nearest_of);
-	memset(fixed_of, 0, sizeof fixed_of);
+	memset(fixed_rgb, 0, sizeof fixed_rgb);
 	/* the pictures are made of these pens (img.c, Floyd-Steinberg); with
 	   EWeb's colours the fixed ones alone, so that a picture's pens stay
 	   when the page's colours change (pagecol.h) */
@@ -420,17 +422,23 @@ static uint8_t pen(void *ud, uint32_t rgb)
    with EWeb's colours on they take none of the page's pens, which each
    page sets again (as a page's pictures, pic_pal_init). pen() took them:
    the Stop icon's dark reds drew on a pen the page had, then black when
-   the next page set it (Erez, 20 Nov 2026) */
+   the next page set it (Erez, 20 Nov 2026). Each colour is kept whole
+   (pen()'s 4 bits a part made greys 12 apart one pen, and the icons'
+   are drawn on the very pens: tools/mktbicons.py) */
 static uint8_t fixed_pen(uint32_t rgb)
 {
-	unsigned key = (unsigned) ((rgb >> 12 & 0xf00) | (rgb >> 8 & 0xf0) | (rgb >> 4 & 0xf));
+	unsigned long key = (rgb & 0xffffffUL) | 1UL << 24;
+	unsigned h = (unsigned) ((rgb ^ rgb >> 9 ^ rgb >> 17) & (FIXED_N - 1));
 	long best = 0x7fffffffL;
-	short i, pick = 0, n;
+	short i, pick = 0, n, probe;
 	int r, g, b;
 	if (!own || ncol != 256)
 		return pen(NULL, rgb);
-	if (fixed_of[key])
-		return (uint8_t) (fixed_of[key] - 1);
+	for (probe = 0; probe < FIXED_N && fixed_rgb[h] != 0; probe++) {
+		if (fixed_rgb[h] == key)
+			return fixed_px[h];
+		h = (h + 1) & (FIXED_N - 1);
+	}
 	r = (int) (rgb >> 16 & 255);
 	g = (int) (rgb >> 8 & 255);
 	b = (int) (rgb & 255);
@@ -442,7 +450,10 @@ static uint8_t fixed_pen(uint32_t rgb)
 			pick = i;
 		}
 	}
-	fixed_of[key] = (unsigned char) (pick + 1);
+	if (probe < FIXED_N) {		/* (full: worked out each time) */
+		fixed_rgb[h] = key;
+		fixed_px[h] = (unsigned char) pick;
+	}
 	return (uint8_t) pick;
 }
 

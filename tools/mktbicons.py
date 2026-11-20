@@ -324,10 +324,15 @@ def snap256(pics):
     pens = own256()
     memo = {}
 
+    greys = [p for p in pens if p[0] == p[1] == p[2]]
+
     def near(c):
         c = tuple(max(0, min(255, int(round(v)))) for v in c)
         if c not in memo:
-            memo[c] = min(pens, key=lambda p: dist(c, p))
+            # a grey (its parts at most 12 apart) on a grey pen: the cube's
+            # near-greys are tinted ((204, 204, 191) for a light grey drew
+            # a yellow band on the greyed Stop, 20 Nov 2026)
+            memo[c] = min(greys if max(c) - min(c) <= 12 else pens, key=lambda p: dist(c, p))
         return memo[c]
     out = []
     for p in pics:

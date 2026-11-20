@@ -423,13 +423,13 @@ PAD_alert2 := 256
 PAD_RO_alert2 := 256
 PAD_DATA_alert2 := 254
 PAD_BSS_alert2 := 256
-# 1.23's changes (win.o's toolbar icons, 256-colour tables on EWeb's own
-# pens; layout.o's fixup_block) moved what follows them: profpad's sizes
+# 1.23's changes (screen.o's fixed_pen; win.o's toolbar icons, 256-colour
+# tables on EWeb's own pens; layout.o's fixup_block) moved what follows them: profpad's sizes
 # against 1.22's ELF and map put the 3323 symbols of the objects that didn't
-# change back at 1.22's places modulo 256 (screen.o's new 4 KB cache moves
+# change back at 1.22's places modulo 256 (screen.o's new 2.5 KB table moves
 # nothing)
-PAD_win := 26
-PAD_RO_win := 184
+PAD_win := 216
+PAD_RO_win := 4
 PAD_DATA_win := 256
 PAD_BSS_win := 256
 PAD_layout3 := 48
@@ -437,9 +437,9 @@ PAD_RO_layout3 := 256
 PAD_DATA_layout3 := 256
 PAD_BSS_layout3 := 256
 # (and EWEBST.PRG's: layout.o's fixup_block and win.o moved what follows
-# them; profpad's sizes against 1.22's ST ELF, 2440 symbols back at 1.22's
-# places modulo 256)
-PAD_stwin := 216
+# them, and screen.o's fixed_pen before win.o; profpad's sizes against
+# 1.22's ST ELF, 2440 symbols back at 1.22's places modulo 256)
+PAD_stwin := 118
 PAD_stlayout := 206
 build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
