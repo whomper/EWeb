@@ -1,0 +1,43 @@
+page 608 x 177, background 336699, 40 items, 2 links, title "blockinline"
+text 6,26 31x13 #ccccee cond10 link 0 "before"
+text 6,38 34x13 #ccccee cond10 link 0 "a block"
+text 6,50 23x13 #ccccee cond10 link 0 "after"
+text 6,72 6x13 #ccccee cond10 bold link 0 "x"
+text 6,84 27x13 #ccccee cond10 bold italic link 0 "name"
+text 6,96 41x13 #ccccee cond10 bold italic link 0 "its block"
+fill 7,109 238x30 #446688
+fill 9,112 13x13 #cc3333
+clip x 9+13 y 112+13 in 0
+text 9,155 9x13 #ccccee cond10 link 0 "m"
+text 9,235 11x13 #ccccee cond10 link 0 "us"
+text 9,315 8x13 #ccccee cond10 link 0 "ic"
+text 9,395 9x13 #ccccee cond10 link 0 "di"
+text 9,475 10x13 #ccccee cond10 link 0 "sk"
+fill 230,111 13x13 #33cc33
+clip x 230+13 y 111+13 in 0
+text 230,154 12x13 #ccccee cond10 link 0 "Co"
+text 230,234 9x13 #ccccee cond10 link 0 "m"
+text 230,314 9x13 #ccccee cond10 link 0 "m"
+text 230,394 12x13 #ccccee cond10 link 0 "od"
+text 230,474 10x13 #ccccee cond10 link 0 "or"
+text 230,554 6x13 #ccccee cond10 link 0 "e"
+text 230,634 12x13 #ccccee cond10 link 0 "64"
+text 25,121 166x13 #0000ee cond10 bold link 1 "Eyvind's Extended Jukebox Vol 01"
+text 9,135 29x13 #ccccee cond10 link 0 ":: void"
+fill 7,140 238x30 #446688
+fill 9,143 13x13 #cc3333
+clip x 9+13 y 143+13 in 0
+text 9,186 12x13 #ccccee cond10 link 0 "ga"
+text 9,266 9x13 #ccccee cond10 link 0 "m"
+text 9,346 6x13 #ccccee cond10 link 0 "e"
+fill 230,142 13x13 #33cc33
+clip x 230+13 y 142+13 in 0
+text 230,185 10x13 #ccccee cond10 link 0 "At"
+text 230,265 13x13 #ccccee cond10 link 0 "ari"
+text 230,345 11x13 #ccccee cond10 link 0 "XL"
+text 230,425 3x13 #ccccee cond10 link 0 "/"
+text 230,505 12x13 #ccccee cond10 link 0 "XE"
+text 25,152 91x13 #0000ee cond10 bold link 2 "Canyon Bomber AI"
+text 9,166 58x13 #ccccee cond10 link 0 ":: ataribdsm"
+link 1 file://./tests/layout/blockinline.html#
+link 2 file://./tests/layout/blockinline.html#

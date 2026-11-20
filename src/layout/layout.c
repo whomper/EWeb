@@ -2573,10 +2573,11 @@ static void loose_cells(L *l, box *b)
 	}
 }
 
+static void fixup_block(L *l, box *b);
+
 static void fixup(L *l, box *b)
 {
-	box *c, *prev, *next;
-	int has_block = 0, has_inline = 0, has_float = 0, tf;
+	box *c;
 	if (EC_DEEP()) {
 		l->p->deep = 1;		/* the stack's floor: what is in it left out */
 		b->first = b->last = NULL;
@@ -2591,8 +2592,27 @@ static void fixup(L *l, box *b)
 			for (k = c->first; k != NULL; k = k->next)
 				if (k->kind == BX_BLOCK && !k->ib && !text_float(c, k))
 					c->kind = BX_BLOCK;
+			/* an inline with a block in it, a block now: its text in
+			   anonymous blocks as any block's (its own fixup was done
+			   as an inline's, so its text beside the block was left
+			   loose and not laid out: pouet.net's prod names beside
+			   their group's block, 20 Nov 2026) */
+			if (c->kind == BX_BLOCK) {
+				fixup_block(l, c);
+				if (l->fail)
+					return;
+			}
 		}
 	}
+	fixup_block(l, b);
+}
+
+/* fixup's part for b itself, its children done: a block's runs of inline
+   boxes in anonymous blocks, a table's parts, a flex or grid's items */
+static void fixup_block(L *l, box *b)
+{
+	box *c, *prev, *next;
+	int has_block = 0, has_inline = 0, has_float = 0, tf;
 	if (b->kind != BX_BLOCK)
 		return;
 	if (b->table || row_group(b)) {

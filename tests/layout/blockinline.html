@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- An inline with a block in it (CSS 2.1, 9.2.1.1): the text before and
+     after the block is laid out on lines of its own round it. EWeb drew
+     only the block: pouet.net's "latest added prods" (Erez, 20 Nov 2026),
+     each prod's name in a span whose group is display: block, after the
+     icons floated left and right. (EWeb makes the whole inline a block,
+     so "x" and "name" in the second case take a line each, where a
+     browser keeps them on one.) -->
+<html><head><title>blockinline</title>
+<style>
+body { background: #336699; color: #cce; font: 13px sans-serif }
+.box { width: 300px }
+.list { display: table; width: 100%; border-spacing: 1px; margin: 0; padding: 0; list-style: none }
+.list > li { display: table-row }
+.list > li > span { display: table-cell; padding: 2px; vertical-align: top; background: #446688 }
+.icons { display: inline-block; margin-right: 4px; vertical-align: middle }
+.right { display: inline-block; float: right; margin-left: 4px; vertical-align: middle }
+.icon { width: 16px; height: 16px; display: inline-block; vertical-align: middle; overflow: hidden;
+        line-height: 100px; background: #c33; float: left }
+.right .icon { float: right; background: #3c3 }
+.prod { font-weight: bold; vertical-align: middle }
+.group { display: block; clear: both }
+</style></head>
+<body>
+<p><span>before <span style="display:block">a block</span> after</span></p>
+<p><b>x <i>name <span style="display:block">its block</span></i></b></p>
+<div class="box"><ul class="list">
+<li><span><span><span class="icons"><span class="icon">musicdisk</span>
+</span><span class="right"><span class="icon">Commodore 64</span>
+</span><span class="prod"><a href="#">Eyvind's Extended Jukebox Vol 01</a></span>
+<span class="group">:: void</span>
+</span></span></li>
+<li><span><span><span class="icons"><span class="icon">game</span>
+</span><span class="right"><span class="icon">Atari XL/XE</span>
+</span><span class="prod"><a href="#">Canyon Bomber AI</a></span>
+<span class="group">:: ataribdsm</span>
+</span></span></li>
+</ul></div>
+</body></html>
