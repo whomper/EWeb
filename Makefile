@@ -424,22 +424,25 @@ PAD_RO_alert2 := 256
 PAD_DATA_alert2 := 254
 PAD_BSS_alert2 := 256
 # 1.23's changes (screen.o's fixed_pen; win.o's toolbar icons, 256-colour
-# tables on EWeb's own pens; layout.o's fixup_block) moved what follows them: profpad's sizes
-# against 1.22's ELF and map put the 3323 symbols of the objects that didn't
-# change back at 1.22's places modulo 256 (screen.o's new 2.5 KB table moves
-# nothing)
-PAD_win := 216
+# tables on EWeb's own pens; layout.o's fixup_block) moved what follows them:
+# profpad's sizes against 1.22's ELF and map put the 3323 symbols of the
+# objects that didn't change back at 1.22's places modulo 256. Their data,
+# BSS and layout3's read-only parts are 0, not profpad's 256 (the same
+# modulo 256): EWEB.PRG as big as 1.22's, whose stock Falcon under NVDI had
+# a few KB to spare for the big page's reload (gui_test's falcon4)
+PAD_win := 68
 PAD_RO_win := 4
-PAD_DATA_win := 256
-PAD_BSS_win := 256
+PAD_DATA_win := 0
+PAD_BSS_win := 248
 PAD_layout3 := 48
-PAD_RO_layout3 := 256
-PAD_DATA_layout3 := 256
-PAD_BSS_layout3 := 256
+PAD_RO_layout3 := 0
+PAD_DATA_layout3 := 0
+PAD_BSS_layout3 := 0
 # (and EWEBST.PRG's: layout.o's fixup_block and win.o moved what follows
 # them, and screen.o's fixed_pen before win.o; profpad's sizes against
 # 1.22's ST ELF, 2440 symbols back at 1.22's places modulo 256)
-PAD_stwin := 118
+PAD_stwin := 218
+PAD_BSS_stwin := 248
 PAD_stlayout := 206
 build/tos/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
@@ -449,7 +452,7 @@ build/st/rt/pad_%.o: common/atari/codepad.S Makefile
 	@mkdir -p $(@D)
 	$(M68KCC) -m68000 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
 		-DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
-ST_PAD_LD := -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_stwin -Wl,-u,pad_stlayout
+ST_PAD_LD := -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_stwin -Wl,-u,pad_stwin_bss -Wl,-u,pad_stlayout
 CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_main_ro -Wl,-u,pad_main_bss \
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
