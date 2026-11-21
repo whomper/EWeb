@@ -970,10 +970,15 @@ void br_live_size(int32_t width, int32_t height, int32_t zoom)
 	live_h = (int32_t) ((int64_t) height * 1024 / zoom);
 }
 
+#ifndef EW_ST	/* (live view's typing: not in the frozen ST edition) */
 int br_live_typing(const browser *b)
 {
 	const dnode *h, *m;
 	const char *v;
+#ifdef BR_LIVE_PAD	/* (never: the Makefile's, browse.o's code after it at the last release's places) */
+	if (b == (const browser *) 1)
+		__asm__ __volatile__(".skip " BR_LIVE_PAD);
+#endif
 	if (b->p == NULL || b->p->d == NULL || b->p->d->html == NULL || strncmp(b->url, "http://webgate/live", 19) != 0)
 		return 0;
 	for (h = b->p->d->html->first; h != NULL; h = h->next)
@@ -986,20 +991,40 @@ int br_live_typing(const browser *b)
 	return 0;
 }
 
+#endif
+
 void br_live_url(const char *url, char *out, int size)
 {
 	static const char hex[] = "0123456789ABCDEF";
+#if !defined EW_ST && defined BR_URL_PAD
+	if (size < -30000)	/* (never: BR_URL_PAD, the Makefile) */
+		__asm__ __volatile__(".skip " BR_URL_PAD);
+#endif
 	int n = snprintf(out, size, "http://webgate/live");
+#ifndef EW_ST
 	char wh[40];
+#else
+	char wh[32];			/* (1.23's: the ST edition's code as it was) */
+#endif
 	/* the picture as wide as the window, three of its screens tall: the
 	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026);
 	   pic=1: the page made with its picture, its links over it and whether
 	   a field there has the keyboard (webgate's live_shot; Erez, 21 Nov 2026) */
+#ifndef EW_ST
 	if (live_w > 0 && live_h > 0)
 		snprintf(wh, sizeof wh, "w=%ld&h=%ld&pic=1", (long) live_w, (long) live_h);
 	else
 		snprintf(wh, sizeof wh, "pic=1");
+#else
+	wh[0] = 0;
+	if (live_w > 0 && live_h > 0)
+		snprintf(wh, sizeof wh, "w=%ld&h=%ld", (long) live_w, (long) live_h);
+#endif
+#ifndef EW_ST
 	int room = (int) strlen(wh) + 2;	/* (the size kept when the address is cut) */
+#else
+	int room = 32;
+#endif
 	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 + room >= size) {
 		if (wh[0] && n + 1 + (int) strlen(wh) < size)
 			snprintf(out + n, size - n, "?%s", wh);

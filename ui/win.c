@@ -3263,14 +3263,20 @@ void win_hover(short mx, short my)
 {
 	short h = wind_find(mx, my), t, d, want = ARROW;
 	int l = -1, b = -1, i;
+#if !defined EW_ST && defined WIN_HOVER_PAD
+	if (mx < -30000)	/* (never: WIN_HOVER_PAD, the Makefile) */
+		__asm__ __volatile__(".skip " WIN_HOVER_PAD);
+#endif
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
 	if (h == cur->h && t == cur->h && !cur->iconified)
 		for (i = 0; i < NBUT; i++)
 			if (rect_hit(&cur->but[i], mx, my) && enabled(i))
 				b = i;
 	hot_button(b);
+#ifndef EW_ST
 	if (live_hold)
 		return;		/* (the busy pointer, until live view's next page is shown) */
+#endif
 	if (h == cur->h && t == cur->h && !cur->iconified && !loading && br.p != NULL && rect_hit(&cur->r_page, mx, my)) {
 		page_hover(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);	/* (the page's scripts: mouseover...) */
 		cur->hov_page = 1;
@@ -3787,8 +3793,10 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		const dl_item *it = NULL;
 		fctl *c;
 		dnode *det;
+#ifndef EW_ST
 		if (live_hold)
 			return 1;	/* (live view's next page on its way: what is shown is the one before) */
+#endif
 		addr_blur();
 		if (button & 2) {
 			context_menu(mx, my);

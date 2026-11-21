@@ -1380,10 +1380,45 @@ static uint16_t add_link(L *l, const char *href, const char *download, const cha
 
 /* an <a>'s href, download and target attributes, found in one pass (a
    look for each went through its attributes again) */
+/* bytes that never run (cond is never true), n of them: a function made
+   the size that keeps the code after it at the last release's places
+   modulo 256, so that the speed pairs time a change, not where it moved
+   the code (the Makefile sets each for EWEB.PRG; "0" elsewhere) */
+#if defined EW_TOS && !defined EW_ST
+#define NEVER_PAD(cond, n) do { if (__builtin_expect(cond, 0)) __asm__ __volatile__(".skip " n); } while (0)
+#else
+#define NEVER_PAD(cond, n) do { } while (0)
+#endif
+#ifndef PAD_IMAGE_ITEM
+#define PAD_IMAGE_ITEM "0"
+#endif
+#ifndef PAD_CTL_AT
+#define PAD_CTL_AT "0"
+#endif
+#ifndef PAD_MAP_ITEMS
+#define PAD_MAP_ITEMS "0"
+#endif
+#ifndef PAD_MAP_NAMED
+#define PAD_MAP_NAMED "0"
+#endif
+#ifndef PAD_AREA_COORDS
+#define PAD_AREA_COORDS "0"
+#endif
+#ifndef PAD_BUILD_EL
+#define PAD_BUILD_EL "0"
+#endif
+#ifndef PAD_LINK_ATTRS
+#define PAD_LINK_ATTRS "0"
+#endif
+#ifndef PAD_NAMED
+#define PAD_NAMED "0"
+#endif
+
 static const char *link_attrs(const dnode *n, const char **download, const char **target)
 {
 	const char *href = NULL;
 	uint16_t i;
+	NEVER_PAD(n == (const dnode *) 1, PAD_LINK_ATTRS);
 	*download = *target = NULL;
 	for (i = 0; i < n->nattr; i++) {
 		size_t al;
@@ -2090,6 +2125,7 @@ static void build_element(L *l, box *parent, dnode *c)
 	const ec_style *st = c->e.style;
 	int d;
 	box *b;
+	NEVER_PAD(parent == (box *) 1, PAD_BUILD_EL);
 
 	if (st == NULL)
 		return;
@@ -4378,12 +4414,15 @@ static void visual_order(L *l, long i, long j, int bidi, long *ord)
 
 /* a picture's item in the display list */
 static void frame_items(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h);
+#ifndef EW_ST	/* (image maps: a new feature, not in the frozen ST edition) */
 static void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int32_t h);
+#endif
 
 static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
 		       int flags, unsigned alpha)
 {
 	dl_item *d;
+	NEVER_PAD(w < -100000, PAD_IMAGE_ITEM);
 	if (b->frame) {
 		frame_items(l, b, x, y, w, h);
 		return;
@@ -4407,13 +4446,16 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 #ifndef EW_ST
 	d->node = b->n;
 #endif
+#ifndef EW_ST
 	if (b->n != NULL && b->n->nattr > 0)
 		map_items(l, b->n, x, y, w, h);
+#endif
 }
 
+#ifndef EW_ST
 /* an image map (the HTML Standard, 4.8.13): the <map> whose name (or id)
    usemap names after its '#', or NULL */
-static int named(const dnode *n, const char *name, size_t len)
+static inline __attribute__((always_inline)) int named(const dnode *n, const char *name, size_t len)
 {
 	size_t nl;
 	const char *t = n->type == DN_ELEMENT && n->e.name != NULL ? ec_atom_text(n->e.name, &nl) : NULL;
@@ -4422,6 +4464,7 @@ static int named(const dnode *n, const char *name, size_t len)
 
 static dnode *map_named(dnode *n, const char *name)
 {
+	NEVER_PAD(name == (const char *) 1, PAD_MAP_NAMED);
 	for (; n != NULL; n = n->next) {
 		if (n->type == DN_ELEMENT) {
 			const char *v;
@@ -4439,9 +4482,10 @@ static dnode *map_named(dnode *n, const char *name)
 
 /* an area's coords: up to max numbers (CSS px), separated by commas or
    spaces; how many */
-static int area_coords(const char *s, int32_t *v, int max)
+static __attribute__((noinline)) int area_coords(const char *s, int32_t *v, int max)
 {
 	int n = 0;
+	NEVER_PAD(s == (const char *) 1, PAD_AREA_COORDS);
 	while (s != NULL && *s && n < max) {
 		char *e;
 		long x;
@@ -4465,11 +4509,12 @@ static int area_coords(const char *s, int32_t *v, int max)
    box of its shape (a circle's square, a polygon's bounding box); the
    first in the document is the one a click takes where two meet, so they
    go in last to first (page_link_at asks the last first) */
-static void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int32_t h)
+static __attribute__((noinline)) void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int32_t h)
 {
 	const char *u = n != NULL ? dn_attr(n, "usemap") : NULL;
 	dnode *m, *a, *list[64];
 	int k = 0;
+	NEVER_PAD(w < -100000, PAD_MAP_ITEMS);
 	if (u == NULL || *u != '#' || u[1] == 0 || (m = map_named(l->p->d->html, u + 1)) == NULL)
 		return;
 	/* (its areas, in the document's order, inside other elements too) */
@@ -4532,6 +4577,8 @@ static void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int
 #endif
 	}
 }
+
+#endif
 
 /* ---------------------------------------------------------------- frames */
 
@@ -9933,12 +9980,15 @@ int page_link_at(const page *p, int32_t x, int32_t y)
 fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 {
 	long i, s;
+	NEVER_PAD(x < -2000000000L, PAD_CTL_AT);
 	for (s = nsegs(p) - 1; s >= 0; s--)
 		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
 			const dl_item *d = &p->items[i];
+#ifndef EW_ST
 			if (d->type == DL_FILL && (d->flags & DLF_AREA) && x >= d->x && x < d->x + d->w && y >= d->y &&
 			    y < d->y + d->h && in_clips(p, d, x, y))
 				return NULL;	/* (an image map's area over a picture button: its link's) */
+#endif
 			if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
 			    y < d->y + d->h && in_clips(p, d, x, y)) {
 				if (it != NULL)

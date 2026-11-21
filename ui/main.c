@@ -94,6 +94,7 @@ int loading;
    before kept on the screen meanwhile with the busy pointer: shown at
    once, it was white with the picture's alt text until the picture came
    (Erez, 21 Nov 2026) */
+#ifndef EW_ST	/* (live view's hold and typing: not in the frozen ST edition) */
 int live_hold;
 static int live_shown;		/* the page on the screen is live view's */
 
@@ -108,6 +109,7 @@ static void live_release(void)
 	win_page_changed();
 	graf_mouse(ARROW, 0);
 }
+#endif
 static short quit;
 
 /* the language pages are translated into, NULL with Translate off (the ST
@@ -1649,13 +1651,22 @@ static void loaded(int r)
 	   (the file selector for a file, EMail for a mail address) */
 	int fresh = r == BR_SHOWN || br.shows != cur->drawn, pv = br.pv_p != NULL;
 	int32_t pv_top = win_top();
+#ifndef EW_ST
 	int hold = fresh && r == BR_SHOWN && live_shown && !pv && is_live(br.url) && br_pictures_pending(&br);
+#else
+	int hold = 0;
+#endif
 	/* the load's preview goes: the page in its place, where it was
 	   scrolled to (unless the page goes to an anchor), or the page shown
 	   before again */
 	br_preview_free(&br);
 	loading = 0;
+#ifndef EW_ST
 	graf_mouse(hold ? BUSYBEE : ARROW, 0);
+#else
+	(void) hold;
+	graf_mouse(ARROW, 0);
+#endif
 	said[0] = 0;
 	if (fresh || r == BR_SAME)
 		ph_pictures();		/* full, or on to the pictures */
@@ -1667,10 +1678,14 @@ static void loaded(int r)
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
 		cur->drawn = br.shows;
+#ifndef EW_ST
 		live_hold = hold;
 		if (!hold)
 			win_page_changed();
 		live_shown = is_live(br.url);
+#else
+		win_page_changed();
+#endif
 		if (pv && br.scroll_to <= 0 && pv_top > 0)
 			win_scroll_to(pv_top);
 		ms_drawn = pf_ms() - ms_drawn;
@@ -2164,6 +2179,7 @@ static void live_view(void)
 	go(u);
 }
 
+#ifndef EW_ST
 /* live view, a field of the Pi's browser with the keyboard (its page's
    br_live_typing): what is typed goes there, straight in (Erez, 21 Nov
    2026). Letters are gathered and sent once the keys pause (LIVE_PAUSE)
@@ -2249,6 +2265,8 @@ static int live_key(short kstate, short key)
 	}
 	return 1;
 }
+
+#endif
 
 /* the search engine's own page: the search address up to its question
    (FrogFind's http://frogfind.com/?q=%s: http://frogfind.com/) */
@@ -2958,8 +2976,13 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 	if (which & MU_KEYBD) {
 		if (KEY_SCAN(ev.kreturn) == 0x01 && br_refresh_due(&br) >= 0)
 			refresh_stop(1);	/* Esc: the page's refresh first */
+#ifndef EW_ST
 		else if (!shortcut(ev.kstate, ev.kreturn) && !live_key(ev.kstate, ev.kreturn))
 			win_key(ev.kstate, ev.kreturn);
+#else
+		else if (!shortcut(ev.kstate, ev.kreturn))
+			win_key(ev.kstate, ev.kreturn);
+#endif
 		menu_update();
 	}
 	if (which & MU_BUTTON) {
@@ -3111,7 +3134,11 @@ static void pictures(void)
 		pic_dsp_bad = 0;
 	}
 #endif
+#ifndef EW_ST
 	switch (live_hold ? -1 : r) {
+#else
+	switch (r) {
+#endif
 	case BRP_DRAWN:
 		if (y1 > y0)
 			win_page_drawn(y0, y1);
@@ -3126,10 +3153,12 @@ static void pictures(void)
 	}
 	conn_stop = 0;
 	said[0] = 0;
+#ifndef EW_ST
 	if (live_hold && !br_pictures_pending(&br)) {
 		live_release();	/* (its picture in, or stopped: the page in one go) */
 		log_event("live shown");
 	}
+#endif
 	ph_pictures();
 	if (!br_pictures_pending(&br))
 		pictures_end();
@@ -3603,6 +3632,7 @@ static int app_run(void)
 			}
 		}
 #endif
+#ifndef EW_ST
 		if (live_n > 0) {
 			/* live view's letters typed: sent once the keys pause */
 			unsigned long gone = pf_ms() - live_t;
@@ -3612,6 +3642,10 @@ static int app_run(void)
 		}
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
 				    (more || due >= 0 || rib || wait <= 1 || tipped || live_n > 0 ? MU_TIMER : 0),
+#else
+		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
+				    (more || due >= 0 || rib || wait <= 1 || tipped ? MU_TIMER : 0),
+#endif
 				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, common's click.c) */
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
@@ -3674,8 +3708,10 @@ static int app_run(void)
 			}
 		}
 #endif
+#ifndef EW_ST
 		if ((which & MU_TIMER) && !quit && live_n > 0 && !loading && pf_ms() - live_t >= LIVE_PAUSE)
 			live_flush(0);	/* (live view: the keys paused, what was typed sent) */
+#endif
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {
 				refreshed();	/* before the page's pictures: it is going */

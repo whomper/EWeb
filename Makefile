@@ -408,7 +408,7 @@ PAD_onstack := 256
 PAD_RO_onstack := 256
 PAD_DATA_onstack := 256
 PAD_BSS_onstack := 256
-PAD_STR_onstack := 252
+PAD_STR_onstack := 53
 # (and three more once common's c0fa029 put libc.o back as 1.21's and changed
 # the About box: profpad's sizes again, after the pads before them)
 PAD_libc4 := 256
@@ -437,6 +437,13 @@ PAD_win := 0
 PAD_RO_win := 4
 PAD_BSS_win := 252
 PAD_fixpen := 156
+# 1.24's: main.o's live view (its typing, its hold) moved what follows it
+# (profpad's size against 1.23's ELF and map; the other changed objects
+# carry their own never-run bytes, below)
+PAD_main3 := 64
+PAD_RO_main3 := 0
+PAD_DATA_main3 := 0
+PAD_BSS_main3 := 36
 # (EWEBST.PRG: win.o's BSS, its click flag)
 PAD_stwin := 0
 PAD_BSS_stwin := 254
@@ -454,7 +461,7 @@ CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_m
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
 		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
-		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen,\
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -848,13 +855,18 @@ build/tos/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"32"'
 # places (it moved by 40 bytes, and the stock Falcon's home page took 10 ms more)
 build/tos/gem/screen.o: GEM_CFLAGS += -DRGB_MAP_PAD='"204"'
 # and ctl_focus's and win_mouse's (ui/win.c): win.o's code after each
-build/tos/gem/win.o: GEM_CFLAGS += -DCTL_FOCUS_PAD='"20"' -DWIN_MOUSE_PAD='"244"'
+build/tos/gem/win.o: GEM_CFLAGS += -DCTL_FOCUS_PAD='"20"' -DWIN_MOUSE_PAD='"226"' -DWIN_HOVER_PAD='"38"'
 build/st/gem/win.o: STGEM_CFLAGS += -DCTL_FOCUS_PAD='"236"' -DWIN_MOUSE_PAD='"242"'
 build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
+# 1.24's never-run pads (EWEB.PRG): each changed function the size that keeps
+# its object's code after it at 1.23's places modulo 256, each new one a
+# whole number of 256s (src/layout/layout.c NEVER_PAD, ui/win.c, src/browse)
+build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"'
+build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"'
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
-GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
+GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
               build/tos/gem/common/av.o,build/tos/gem/common/av.o build/tos/rt/pad_av.o,$(subst \

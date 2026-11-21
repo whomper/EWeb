@@ -400,8 +400,15 @@ typedef struct {
 } BODY;
 
 /* a sink's pieces, and the most one read copies into memory (what comes
-   is in the connection's own buffer: this sizes only the copies) */
+   is in the connection's own buffer: this sizes only the copies; the
+   one sink keeps its own, so a smaller one costs no write: 4 KB back
+   for the 4 MB Falcon's pages, 12 KB, which moves nothing after it
+   modulo 256) */
+#ifdef EW_ST
 static char rbuf[16384];
+#else
+static char rbuf[4096];
+#endif
 
 /* n bytes of the body (or, n < 0, up to the close); 1 ok, 0 failed */
 static int read_body(CONN *c, BODY *b, long n, HTTPRESP *rs)
