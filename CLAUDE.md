@@ -153,6 +153,17 @@ hub stay complete, with the evidence.
   Hubbub against the Web Platform Tests' tree-construction tests, here and as 68030 code: EWeb's
   must keep all but the six scripted ones), and after one to libparserutils' input, `make hebtest68k`
   too.
+- **Every page Erez sends to be fixed becomes a test** (Erez, 21 Nov 2026: "all web pages I am
+  sending you to fix are also added to a test scenario ... that will verify we are not screwing
+  HTMLs"), in the same commit as the fix: a small fresh page that shows the fault, in `tests/layout`
+  (or the test of the part it is in), and the site itself, a line in `tests/sites/sites.txt` recorded
+  with `tests/sites/run.py ... --record NAME` (`tests/sites/replay.py`: every answer kept, replayed
+  with nothing fetched) into the private EWeb-sites repository (`SITES=`, `../eweb-sites/sites`;
+  the pages are their authors', never in this repo), its display list kept with it. `make sites`
+  lays out each one from its recording, holds it to its list and draws it under AddressSanitizer:
+  run it after any change to the parser, the CSS, the document, the layout or the drawing, and
+  for every release (the gate's first step); a list changed on purpose is looked at, then kept with
+  `--update` and committed in EWeb-sites.
 - **EWeb's network code** is `src/net/` (URL parser, HTTP client, gzip) on `common/`'s connections and TLS,
   with `src/plat.h` (`atari/plat_tos.c`, `tests/host/plat_posix.c`); `tests/net/ewget.c` is `EWGET.TTP`.
   After changing it: `make test` (nettest, the fuzz seeds and finds), `make itest`, `make urltest`

@@ -1403,6 +1403,13 @@ build/m68k/ewh5test: build/m68k/h5/ewh5test.o $(call EWH5_OBJ,m68k) $(m68k_EC) $
 cftest:
 	tests/coldfire/run.sh
 
+# the sites Erez sent to be fixed, laid out from their recordings in the
+# private EWeb-sites repository (tests/sites; Erez, 21 Nov 2026)
+SITES ?= ../eweb-sites/sites
+.PHONY: sites
+sites: build/host/ewrender build/asan/ewrender binary/EWEB.FNT
+	python3 tests/sites/run.py build/host/ewrender build/asan/ewrender binary/EWEB.FNT $(SITES)
+
 h5test: build/host/h5test build/m68k/h5test build/asan/ewh5test build/m68k/ewh5test
 	@test -n "$(H5DATA)" || { echo "no tests: run tests/html5lib/fetch.sh"; exit 1; }
 	@echo "Hubbub:"

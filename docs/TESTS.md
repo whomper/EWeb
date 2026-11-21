@@ -14,6 +14,11 @@ for the parts they name (CLAUDE.md says which to run after which change).
   input stream as 68030 code.
 - `make csscmp`: EWeb's CSS engine against LibCSS on the whole page set: every
   difference must be one of LibCSS's known gaps.
+- `make sites`: every site Erez sent to be fixed (`tests/sites/sites.txt`), laid out from
+  its recording (every answer kept by `tests/sites/replay.py`, nothing fetched) in the private
+  EWeb-sites repository (`SITES=`), held to the display list kept with it and drawn under
+  AddressSanitizer; `tests/sites/run.py ... --record NAME` records a new one, `--update` keeps
+  the lists as they are after a change on purpose. Skipped where the recordings aren't there.
 - `make h5test`: EWeb's HTML parser and Hubbub against the Web Platform Tests'
   tree-construction tests, here (EWeb's with AddressSanitizer and UBSan) and
   as 68030 code under QEMU: EWeb's passes all but the six that need scripts.
