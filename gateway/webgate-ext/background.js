@@ -56,16 +56,21 @@ async function next() {
         const [tab] = await chrome.tabs.query({active: true, lastFocusedWindow: true});
         if (w.shot) {
           // live view: a picture of what the browser shows now
-          let pic = new Uint8Array(0), full = 0, why = "", at = [0, 0];
+          let pic = new Uint8Array(0), full = 0, why = "", at = [0, 0], seen = {};
           try {
             if (tab && w.w && w.h)
               at = await fit(tab, w.w, w.h);
             [pic, full] = await shot(w.shot, w.quality || 0.7);
+            // the page's links and fields in the view, and whether a field
+            // has the keyboard (content.js: none from a page it isn't in)
+            if (tab)
+              seen = await chrome.tabs.sendMessage(tab.id, {areas: true}).catch(() => ({})) || {};
           } catch (e) {
             why = "&why=" + encodeURIComponent(String(e).slice(0, 200));
           }
           await fetch(WEBGATE + "/shot?id=" + encodeURIComponent(w.id) + "&w=" + full + "&ox=" + at[0] +
-                      "&oy=" + at[1] + why, {method: "POST", body: pic});
+                      "&oy=" + at[1] + why, {method: "POST", body: pic,
+                                             headers: {"X-Live-Areas": JSON.stringify(seen)}});
         } else if (w.snap) {
           // the page shown now, as a snapshot (live view's "as a page")
           wanted = w;

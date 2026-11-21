@@ -25,7 +25,12 @@ back the converted PDF, the same file EConvert would have written
   /Thumb (EPDF 2.33; Erez, 15 Nov 2026: off unless asked). pages is none,
   mono, colour or colouronly (EPDF 2.8,
   Erez, 10 Nov 2026: only the pages with colour get /Colour, the others
-  keep their /Mono; needs EPDF 2.8's aerapdf or later).
+  keep their /Mono; needs EPDF 2.8's aerapdf or later). pens=HEX (6 lower-case
+  hex digits a pen, 2 to 256 pens, by the Atari's hardware register),
+  column=N (64-4096) and aspect=N (4-64): Faster display (EPDF 2.41), each
+  picture also as a copy in those pens at the size EPDF shows it in a column
+  of N pixels (aspect: a pixel's height to its width x 16); needs EPDF
+  2.41's aerapdf. EPDF asks a pdfgate without them again without.
 
     GET /version   ->  "aerapdf EPDF-COMMIT"   (which converter answers)
 
@@ -95,7 +100,15 @@ OPTIONS = {
     "name": (None, None),               # the PDF's own name, kept in the result's AERA entry
     "translate": ("--translate", None),     # a language, ISO 639-1
     "thumbs": ("--thumbs", ("1",)),         # each page's preview (EPDF 2.33; Erez, 15 Nov 2026)
+    # Faster display (EPDF 2.41; Erez, 17 Nov 2026): the Atari's screen's
+    # pens by hardware register (2 to 256, 6 hex digits each), EPDF's text
+    # column in pixels and a pixel's height to its width x 16; each picture
+    # also comes in those pens at the size EPDF shows it
+    "pens": ("--pens-hex", None),
+    "column": ("--column", (64, 4096)),
+    "aspect": ("--aspect", (4, 64)),
 }
+PENS = re.compile(r"(?:[0-9a-f]{6}){2,256}")
 LAST_SECONDS = 60                       # of a conversion's time, kept for converting after translating
 NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}")
 
@@ -115,6 +128,11 @@ def flags(query):
             if not NAME.fullmatch(v):
                 return None, "name?"
             name = v
+            continue
+        if k == "pens":
+            if not PENS.fullmatch(v):
+                return None, "pens?"
+            out += [flag, v]
             continue
         if k == "translate":
             if not re.fullmatch(r"[a-z]{2}", v):
