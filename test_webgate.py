@@ -8,6 +8,7 @@ import http.client
 import io
 import json
 import os
+import re
 import shutil
 import socket
 import sys
@@ -940,12 +941,13 @@ class LiveTest(unittest.TestCase):
 
     shot_q = "w=1216"       # what the stand-in extension says of its picture
     shot_body = None        # and the picture (None: JPEG)
+    shot_areas = None       # and the page's links and fields (X-Live-Areas), or none
 
     def setUp(self):
         if os.path.exists(self.log):
             os.remove(self.log)
         webgate.LIVE.clear()
-        self.shot_q, self.shot_body = LiveTest.shot_q, LiveTest.shot_body
+        self.shot_q, self.shot_body, self.shot_areas = LiveTest.shot_q, LiveTest.shot_body, LiveTest.shot_areas
 
     def extension(self):
         """one turn of webgate-ext, as background.js answers each kind"""
@@ -953,7 +955,9 @@ class LiveTest(unittest.TestCase):
         c.request("GET", "/next")
         w = json.loads(c.getresponse().read())
         if w.get("shot"):
-            c.request("POST", "/shot?id=%s&%s" % (w["id"], self.shot_q), body=self.shot_body or JPEG)
+            c.request("POST", "/shot?id=%s&%s" % (w["id"], self.shot_q), body=self.shot_body or JPEG,
+                      headers={"X-Live-Areas": self.shot_areas if isinstance(self.shot_areas, str)
+                               else json.dumps(self.shot_areas)} if self.shot_areas else {})
         else:
             body = json.dumps({"url": w["url"] or "https://example.com/now", "title": "Now",
                                "html": "<!DOCTYPE html><title>Now</title><p>shown"}).encode()
@@ -1106,6 +1110,46 @@ class LiveTest(unittest.TestCase):
         self.assertIn("width=790", data.decode("utf-8"))
         r, data, w = self.ask("http://webgate/live/shot.jpg?n=5")
         self.assertEqual((w["w"], w["h"]), (790, 1650))
+
+    def test_links_and_typing(self):
+        # pic=1 (EWeb's live view, the 303 after a click): the page made
+        # with its picture, the browser's links over it as an image map (a
+        # click on one at its middle) and a field with the keyboard said, so
+        # that EWeb shows the pointing hand and sends what is typed there;
+        # the picture the page was made with is the one shot.jpg gives
+        # (Erez, 21 Nov 2026)
+        webgate.BRIDGE.shown = "https://example.com/"
+        self.shot_areas = {"areas": [[100, 50, 300, 60], [0, 0, 1, 1]], "typing": True, "dpr": 2}
+        r, data, w = self.ask("http://webgate/live?pic=1")
+        self.assertTrue(w["shot"])
+        page = data.decode("utf-8")
+        # the view 1216 px wide at 2 px a CSS px (608 CSS px), made 608 wide: 1 to 1
+        self.assertIn('<area shape=rect coords="100,50,400,110" '
+                      'href="http://webgate/live/click?at.x=250&amp;at.y=80" alt="">', page)
+        self.assertNotIn('coords="0,0,1,1"', page)      # (too small to point at)
+        self.assertIn('usemap="#live"', page)
+        self.assertIn('<meta name="aera-live" content="typing">', page)
+        n = re.search(r"shot\.jpg\?n=(\d+)", page).group(1)
+        r, data, w = self.ask("http://webgate/live/shot.jpg?n=%s" % n, turn=False)
+        self.assertEqual((r.status, data), (200, JPEG))  # (kept: not taken again)
+        # without pic=1, as before: no picture taken, no map, nothing said
+        r, data, _ = self.ask("http://webgate/live", turn=False)
+        self.assertNotIn("<area", data.decode("utf-8"))
+        self.assertNotIn("aera-live", data.decode("utf-8"))
+        # a click's 303 asks for the next page made so
+        r, data, _ = self.ask("http://webgate/live/click?at.x=250&at.y=80", turn=False)
+        self.assertIn("&pic=1", r.getheader("Location"))
+
+    def test_areas_bounded(self):
+        # X-Live-Areas from the extension, checked: a pixel ratio out of all
+        # reason (1e400 is inf to JSON) or boxes that aren't boxes give the
+        # page without them, never an error
+        webgate.BRIDGE.shown = "https://example.com/"
+        for more in ('{"areas": [[1, 1, 50, 50]], "dpr": 1e400}', '{"areas": [["a", 1, 2, 3], 5], "dpr": "x"}',
+                     '[1, 2]', '{"areas": 7}', 'not json'):
+            self.shot_areas = more
+            r, data, w = self.ask("http://webgate/live?pic=1")
+            self.assertEqual(r.status, 200, more)
 
     def test_picture_height(self):
         # the picture button's height as well: EWeb knows the size it shows

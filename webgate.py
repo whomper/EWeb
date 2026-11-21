@@ -1442,7 +1442,7 @@ class Handler(BaseHTTPRequestHandler):
     def again(self):
         """after a click or keys: the live page again, with a new picture"""
         time.sleep(Config.live_settle)
-        self.send_body(303, b"", "text/plain", [("Location", "http://webgate/live?n=%d" % int(time.time() * 10))])
+        self.send_body(303, b"", "text/plain", [("Location", "http://webgate/live?n=%d&pic=1" % int(time.time() * 10))])
 
     def xdo(self, *args):
         """real input on the browser's screen"""
@@ -1467,14 +1467,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_body(409, b"webgate: send the colours first\n", "text/plain", [("X-Gateway-Palette", "need")])
                 self.note(409, 0, " (no colours %08x)" % want["pal"])
                 return
-            vw, vh, pw = live_size()
-            r = BRIDGE.ask("", 20, shot=pw, w=vw, h=vh, quality=Config.live_quality)
+            r = LIVE.get("shot") if a.get("n", [""])[0] == str(LIVE.get("shot_n")) else None
+            if r is None:
+                r = live_shot()     # (an older page's picture asked for: the screen as it is now)
             if not r or not r.get("pic"):
                 why = (r or {}).get("why") or BRIDGE.why()
                 self.reply(504, "webgate: the browser's screen didn't come: %s\n" % why[:200])
                 return
-            # where the picture is on the X screen, and how much smaller
-            LIVE.update(full=r.get("w") or pw, pic=min(pw, r.get("w") or pw), ox=r.get("ox", 0), oy=r.get("oy", 0))
             pens = make_pens(r["pic"], want) if want["pens"] else None
             if pens:
                 self.send_body(200, pens[0], "application/x-aera-pens",
@@ -1524,6 +1523,7 @@ class Handler(BaseHTTPRequestHandler):
         if url and "://" not in url:
             url = "https://" + url          # (Go to's "www.example.com")
         title = "the Gateway's browser"
+        typing = False
         if url and not self.browser_may_open(url):
             return
         if url:
@@ -1543,11 +1543,22 @@ class Handler(BaseHTTPRequestHandler):
             screen = LIVE_NONE
         else:
             vw, vh, pw = live_size()
+            # the picture first, kept for shot.jpg: the page then has its
+            # links (an image map: EWeb shows the pointing hand over them)
+            # and says when a field there has the keyboard (EWeb sends what
+            # is typed there); and it comes once the browser's screen is
+            # there to show (Erez, 21 Nov 2026)
+            # (pic=1: EWeb's live view and the 303 after a click or keys)
+            shot = live_shot() if a.get("pic") else None
+            if shot and shot.get("pic"):
+                LIVE.update(shot=shot, shot_n=n)
+            typing = bool(shot and shot.get("typing"))
             # its height too, so that EWeb knows the size it shows it at
             # and asks for its pens at that size once
-            screen = LIVE_SCREEN % {"n": n, "w": pw, "h": vh * pw // vw}
+            screen = LIVE_SCREEN % {"n": n, "w": pw, "h": vh * pw // vw, "map": live_map(shot)}
         page = LIVE_PAGE % {"title": html.escape(title), "screen": screen,
-                            "url": html.escape(BRIDGE.shown or "", quote=True), "n": n}
+                            "url": html.escape(BRIDGE.shown or "", quote=True), "n": n,
+                            "meta": LIVE_TYPING if typing else ""}
         self.send_body(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def browser_may_open(self, url, quiet=False):
@@ -1676,6 +1687,43 @@ LIVE_VIEW = (1024, 768)     # the browser's view when EWeb gives no size (as the
 LIVE_ROW = 30               # the Go to row above the picture, in EWeb's first screen
 
 
+def live_shot():
+    """the browser's screen now ({"pic", "w", "ox", "oy", "areas", "typing"}),
+    its place and scale kept for the clicks on it, or None"""
+    vw, vh, pw = live_size()
+    r = BRIDGE.ask("", 20, shot=pw, w=vw, h=vh, quality=Config.live_quality)
+    if r and r.get("pic"):
+        # where the picture is on the X screen, and how much smaller
+        LIVE.update(full=r.get("w") or pw, pic=min(pw, r.get("w") or pw), ox=r.get("ox", 0), oy=r.get("oy", 0))
+    return r
+
+
+def live_map(shot):
+    """the picture's links as <area>s (the extension's boxes, in the page's
+    CSS px from the view's corner, made the picture's px): a click on one is
+    a click at its middle, as a click on the picture is a click where it is"""
+    if not shot or not shot.get("areas"):
+        return ""
+    full = shot.get("w") or 0
+    pic = LIVE.get("pic") or full
+    dpr = shot.get("dpr") or 1
+    if not full or not pic:
+        return ""
+    k = dpr * pic / float(full)         # CSS px to the picture's px
+    out = []
+    for b in shot["areas"][:400]:
+        try:
+            x0, y0 = int(b[0] * k), int(b[1] * k)
+            x1, y1 = int((b[0] + b[2]) * k), int((b[1] + b[3]) * k)
+        except (TypeError, ValueError, IndexError):
+            continue
+        if x1 - x0 < 2 or y1 - y0 < 2:
+            continue
+        out.append('<area shape=rect coords="%d,%d,%d,%d" href="http://webgate/live/click?at.x=%d&amp;at.y=%d" alt="">'
+                   % (x0, y0, x1, y1, (x0 + x1) // 2, (y0 + y1) // 2))
+    return "\n".join(out)
+
+
 def live_size():
     """(the browser's view width and height, the picture's width): EWeb's
     page (LIVE["page"]: W, H) as the view at 1:1, PW = W less the body's
@@ -1694,14 +1742,19 @@ LIVE_KEYS = {"enter": "Return", "tab": "Tab", "backspace": "BackSpace", "esc": "
              "up": "Page_Up", "down": "Page_Down", "back": "alt+Left", "reload": "F5"}
 
 LIVE_SCREEN = """<form action="http://webgate/live/click"><input type=image name=at width=%(w)d
- height=%(h)d src="http://webgate/live/shot.jpg?n=%(n)d" alt="the Gateway's browser"></form>"""
+ height=%(h)d src="http://webgate/live/shot.jpg?n=%(n)d" alt="the Gateway's browser" usemap="#live"></form>
+<map name=live>%(map)s</map>"""
+
+# a field of the browser's page has the keyboard: EWeb sends what is typed
+# there (/live/type)
+LIVE_TYPING = '<meta name="aera-live" content="typing">'
 
 LIVE_NONE = """<p><b>The Gateway's browser has no page open yet.</b> Put an address in the field above and
  choose Go to; then its screen shows here, and a click on it is a click there.</p>"""
 
 LIVE_GONE = """<p><b>%(why)s.</b></p>"""
 
-LIVE_PAGE = """<!DOCTYPE html><html><head><meta charset=utf-8><title>Live: %(title)s</title>
+LIVE_PAGE = """<!DOCTYPE html><html><head><meta charset=utf-8>%(meta)s<title>Live: %(title)s</title>
 <style>body{margin:4px;font-family:sans-serif;background:#fff}form{display:inline;margin:0}
 p{margin:4px 0}input[type=image]{border:1px solid #888}</style></head><body>
 <p><form action="http://webgate/live"><input name=url size=40 value="%(url)s">
@@ -1786,8 +1839,18 @@ class ExtHandler(Handler):
             def num(k):
                 v = a.get(k, ["0"])[0]
                 return int(v) if v.lstrip("-").isdigit() else 0
-            BRIDGE.give(a.get("id", [""])[0], {"pic": data, "w": num("w"), "ox": max(0, num("ox")),
-                                               "oy": max(0, num("oy")), "why": a.get("why", [""])[0]})
+            shot = {"pic": data, "w": num("w"), "ox": max(0, num("ox")), "oy": max(0, num("oy")),
+                    "why": a.get("why", [""])[0]}
+            try:
+                # the page's links and fields in the view (CSS px), and
+                # whether a field has the keyboard (X-Live-Areas, JSON)
+                more = json.loads(self.headers.get("X-Live-Areas") or "{}")
+                if isinstance(more, dict):
+                    shot.update(areas=[b for b in more.get("areas") or [] if isinstance(b, list) and len(b) == 4],
+                                typing=bool(more.get("typing")), dpr=min(16.0, max(0.25, float(more.get("dpr") or 1))))
+            except (ValueError, TypeError):
+                pass
+            BRIDGE.give(a.get("id", [""])[0], shot)
             self.answer(200, b"{}")
             return
         if q.path != "/snapshot" or not q.query.startswith("id="):
