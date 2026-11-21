@@ -103,6 +103,12 @@ def hd_for(name, home, inf=""):
     hd = os.path.join(OUT, name)
     shutil.rmtree(hd, ignore_errors=True)
     os.makedirs(hd)
+    if os.environ.get("EAT_KB"):
+        # the margin (the hub, 21 Nov 2026): EAT_KB=N keeps N KB resident
+        # from C:\AUTO\EAT.PRG at the boot, as speed.py's --eat, the
+        # memory the run has that much less
+        machines.write_prg(os.path.join(hd, "AUTO", "EAT.PRG"), bytes.fromhex(
+            "3F3C0000" "2F3C%08X" % (int(os.environ["EAT_KB"]) * 1024) + "3F3C0031" "4E41"))
     for f in ("EWEB.PRG", "EWEB60.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
