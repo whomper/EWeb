@@ -2537,6 +2537,10 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 		 doc **dout, page **pout)
 {
 	int r;
+#if !defined EW_ST && defined BR_BUILD_PAD
+	if (len < -30000)	/* (never: BR_BUILD_PAD, the Makefile) */
+		__asm__ __volatile__(".skip " BR_BUILD_PAD);
+#endif
 	build_freed = 0;
 	/* (a long page: the window kept alive meanwhile, and Esc stops it) */
 	doc_poll = build_turn;
@@ -2551,7 +2555,12 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 	   is then the only one (BIG.HTM under NVDI was laid out twice, 12 s) */
 	if (data != NULL && data == build_may_free &&
 	    cost(len) + (b->d != NULL ? 2 * doc_mem(b->d) : 0) > 8 * br_keep_max) {
+		/* (as big a display list as the page shown's taken in its place,
+		   for this one's: BIG.HTM loaded again found none in one block
+		   once the parse had cut into it) */
+		long kept = b->p != NULL ? b->p->cap : 0;
 		make_room(b);
+		layout_keep_list(kept);
 		build_dropping = cost(len) > 8 * br_keep_max;
 	}
 #endif
@@ -2563,6 +2572,9 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 		   its layout's freeing and this; the hub, 2 Nov 2026) */
 		turn_now = 1;
 		gem_turn();
+#ifndef EW_ST
+		layout_fit_list(0);
+#endif
 		/* (a second try too where nothing else went but the source
 		   can: the first page of a start, nothing shown before it) */
 #ifdef EW_ST
@@ -2582,6 +2594,9 @@ static int build(browser *b, const char *data, long len, const char *charset, co
 		}
 	}
 	build_may_free = NULL;
+#ifndef EW_ST
+	layout_fit_list(0);
+#endif
 	doc_poll = NULL;
 	ec_poll = NULL;
 	font_poll = NULL;
@@ -2795,6 +2810,9 @@ parse:
 		build_freed = 1;
 		build_dropping = 0;
 	}
+#ifndef EW_ST
+	layout_fit_list((long) d->elements);
+#endif
 	phase(b, BRPH_BUILD);
 	say(b, "%s", "Laying the page out...");
 	br_building = BRB_STYLE;

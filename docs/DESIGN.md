@@ -3082,7 +3082,13 @@ thing to make faster. A page takes about 11 times its size in memory (2 MB for t
 about 1 KB an element), and that varies by a few per cent from one build to the next, as the
 cascade's cache of styles is keyed by addresses in the heap: the 151 KB page loaded again in one
 build and not in the next (128 KB more for its styles), so 150 KB is where a 4 MB Falcon's pages
-end, and the rig's is smaller. With the family's
+end, and the rig's is smaller. Loaded again under NVDI, the rig's page wants its display list in
+one block (135 KB), and once the page shown had given its own back, the parse's pieces cut into
+that room: a candidate for 1.24 said "EWeb can't show this page" with 173 KB free in the heap, none
+of it in one block, and 1.23 did in one build of the five tried. Since 1.24 a page that goes for a
+big one leaves as big a list behind, taken at once in its place (`layout_keep_list` and
+`layout_fit_list` in `src/layout/layout.c`, from `build` in `src/browse`): the rig's page loads
+again with 24 KB less memory too (21 Nov 2026). With the family's
 three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and `EWEB.PRG` needs
 1.5 MB to load: there it takes 14 MB or TT RAM (or `EWEBST.PRG`).
 

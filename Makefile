@@ -299,7 +299,7 @@ PAD_RO_layout := 92
 PAD_libc := 0
 PAD_RO_libc := 232
 PAD_net := 78
-PAD_BSS_layout := 232
+PAD_BSS_layout := 224
 # 1.21's changes (common's log hold in conn.c and gem.c, nf.S, tos.c,
 # inflate.c's inline z_take, Settings' and av.c's, ui/dialogs.c and
 # ui/main.c) moved what follows each; the stock Falcon's and Erez's pages
@@ -861,8 +861,8 @@ build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
 # 1.24's never-run pads (EWEB.PRG): each changed function the size that keeps
 # its object's code after it at 1.23's places modulo 256, each new one a
 # whole number of 256s (src/layout/layout.c NEVER_PAD, ui/win.c, src/browse)
-build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"'
-build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"'
+build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"' -DPAD_FIT_LIST='"20"'
+build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"' -DBR_BUILD_PAD='"144"'
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))

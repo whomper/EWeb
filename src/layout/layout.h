@@ -244,6 +244,14 @@ long page_drawn(const page *p, long r);
 /* lays the document out; NULL only if out of memory */
 page *layout_page(doc *d, const LAYOUT_OPT *o);
 void page_free(page *p);
+#ifndef EW_ST
+/* a display list of cap items kept for the next layout_page where memory
+   is short (src/browse's build, at once when the page shown has gone for a
+   big one: in its list's place), then made the size of a page of so many
+   elements once that is parsed, or given back (0) */
+void layout_keep_list(long cap);
+void layout_fit_list(long elements);
+#endif
 
 #define SBAR_W 10			/* a box's scroll bar's width (device px) where
 					   LAYOUT_OPT.sbar doesn't say */

@@ -1392,6 +1392,9 @@ static uint16_t add_link(L *l, const char *href, const char *download, const cha
 #ifndef PAD_IMAGE_ITEM
 #define PAD_IMAGE_ITEM "0"
 #endif
+#ifndef PAD_FIT_LIST
+#define PAD_FIT_LIST "0"
+#endif
 #ifndef PAD_CTL_AT
 #define PAD_CTL_AT "0"
 #endif
@@ -9593,6 +9596,11 @@ static void end_turn(void)
 		doc_poll(DOC_POLL_LAYOUT);
 }
 
+#ifndef EW_ST
+static dl_item *dl_kept;	/* (layout_keep_list) */
+static long dl_kept_cap;
+#endif
+
 page *layout_page(doc *d, const LAYOUT_OPT *o)
 {
 	L l;
@@ -9637,6 +9645,13 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 	   on the stock 4 MB Falcon's 130 KB test page) */
 	if ((long) d->elements > DL_FIRST) {
 		p->cap = (long) d->elements + (long) d->elements / 8;
+#ifndef EW_ST
+		if (dl_kept != NULL) {
+			p->items = dl_kept;
+			p->cap = dl_kept_cap;
+			dl_kept = NULL;
+		} else
+#endif
 		if ((p->items = malloc((size_t) p->cap * sizeof *p->items)) == NULL)
 			p->cap = 0;
 #ifndef EW_ST
@@ -9648,6 +9663,9 @@ page *layout_page(doc *d, const LAYOUT_OPT *o)
 			p->blockcap = 0;
 #endif
 	}
+#ifndef EW_ST
+	layout_fit_list(0);	/* (one this page didn't take: given back) */
+#endif
 	/* the canvas: the root's background, else the body's; one less than
 	   solid on white, as browsers show what is under a canvas (CSS
 	   Backgrounds 3, The Canvas Background, leaves it to them) */
@@ -10089,3 +10107,39 @@ int32_t page_anchor(page *p, const char *id)
 		page_reveal(p, n, n->y - scrolled_y(p, n), 1, 1);
 	return n->y - scrolled_y(p, n);
 }
+
+#ifndef EW_ST
+/* a display list as big as the page's that went for a big one, taken at
+   once in its place: a reload of the stock 4 MB Falcon's 130 KB test page under NVDI
+   wanted 135 KB in one block, and with the old one's freed the parse's
+   pieces had cut into it, and it was "EWeb can't show this page" with 173
+   KB free in the heap but none of it in one block (21 Nov 2026) */
+void layout_keep_list(long cap)
+{
+	layout_fit_list(0);
+	if (cap > DL_FIRST && (dl_kept = malloc((size_t) cap * sizeof *dl_kept)) != NULL)
+		dl_kept_cap = cap;
+}
+
+void layout_fit_list(long elements)
+{
+	long cap = elements + elements / 8;
+	dl_item *n;
+	NEVER_PAD(elements < -100000, PAD_FIT_LIST);
+	if (dl_kept == NULL)
+		return;
+	if (elements > DL_FIRST) {
+		/* (cut to it in place, or grown; else as it is, which held as
+		   many items as the page before had: a page loaded again needs
+		   no more, and it grows as a list does where it must) */
+		if ((n = realloc(dl_kept, (size_t) cap * sizeof *dl_kept)) != NULL) {
+			dl_kept = n;
+			dl_kept_cap = cap;
+		}
+		return;
+	}
+	free(dl_kept);
+	dl_kept = NULL;
+	dl_kept_cap = 0;
+}
+#endif
