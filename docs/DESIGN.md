@@ -3088,7 +3088,10 @@ that room: a candidate for 1.24 said "EWeb can't show this page" with 173 KB fre
 of it in one block, and 1.23 did in one build of the five tried. Since 1.24 a page that goes for a
 big one leaves as big a list behind, taken at once in its place (`layout_keep_list` and
 `layout_fit_list` in `src/layout/layout.c`, from `build` in `src/browse`): the rig's page loads
-again with 24 KB less memory too (21 Nov 2026). With the family's
+again with up to 80 KB less memory (`EAT_KB=80` in `tests/hatari/gui_test.py`; not at 96 KB, and at
+112 KB the page doesn't load the first time either), five runs of five under NVDI (21 Nov 2026).
+Freeing a list and taking a bigger one afresh, to save realloc's copy, lost that room: five of five
+failed. With the family's
 three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and `EWEB.PRG` needs
 1.5 MB to load: there it takes 14 MB or TT RAM (or `EWEBST.PRG`).
 
