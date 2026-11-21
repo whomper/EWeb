@@ -10129,13 +10129,16 @@ void layout_fit_list(long elements)
 	if (dl_kept == NULL)
 		return;
 	if (elements > DL_FIRST) {
-		/* (cut to it in place, or grown; else as it is, which held as
-		   many items as the page before had: a page loaded again needs
-		   no more, and it grows as a list does where it must) */
-		if ((n = realloc(dl_kept, (size_t) cap * sizeof *dl_kept)) != NULL) {
-			dl_kept = n;
-			dl_kept_cap = cap;
-		}
+		/* (cut to it in place; a bigger one taken afresh, as a list
+		   is without one kept, for realloc would copy what it holds,
+		   up to 135 KB of nothing; a page loaded again needs no more) */
+		if (cap > dl_kept_cap) {
+			free(dl_kept);
+			n = malloc((size_t) cap * sizeof *dl_kept);
+		} else if ((n = realloc(dl_kept, (size_t) cap * sizeof *dl_kept)) == NULL)
+			return;
+		dl_kept = n;
+		dl_kept_cap = n != NULL ? cap : 0;
 		return;
 	}
 	free(dl_kept);
