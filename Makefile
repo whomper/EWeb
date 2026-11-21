@@ -861,7 +861,7 @@ build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
 # 1.24's never-run pads (EWEB.PRG): each changed function the size that keeps
 # its object's code after it at 1.23's places modulo 256, each new one a
 # whole number of 256s (src/layout/layout.c NEVER_PAD, ui/win.c, src/browse)
-build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"' -DPAD_FIT_LIST='"0"'
+build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"' -DPAD_FIT_LIST='"20"'
 build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"' -DBR_BUILD_PAD='"144"'
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
