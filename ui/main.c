@@ -89,6 +89,27 @@ EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "",
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
 	   translate_to, translate_port, ttleave, narrow) */
 int loading;
+/* 1.24's never-run pads: each function 1.24 changed made the size that
+   keeps main.o's code after it at 1.23's places modulo 256, the shipped
+   build's and the speed build's (AES_PROFILE) each its own, so that the
+   paired speed run times the change, not where the code fell (loading is
+   never so low: a test the compiler can't take out) */
+#if defined EW_TOS && !defined EW_ST
+#define MAIN_PAD(n) do { if (__builtin_expect(loading < -30000, 0)) __asm__ __volatile__(".skip " n); } while (0)
+#else
+#define MAIN_PAD(n) do { } while (0)
+#endif
+#ifdef AES_PROFILE
+#define PAD_LOADED "118"
+#define PAD_LIVE "32"
+#define PAD_HANDLE "230"
+#define PAD_APP_RUN "210"
+#else
+#define PAD_LOADED "118"
+#define PAD_LIVE "32"
+#define PAD_HANDLE "226"
+#define PAD_APP_RUN "218"
+#endif
 /* live view (webgate's own page, http://webgate/live): the next page is
    shown once its picture (the Pi's browser's screen) is in, the one
    before kept on the screen meanwhile with the busy pointer: shown at
@@ -1651,6 +1672,7 @@ static void loaded(int r)
 	   (the file selector for a file, EMail for a mail address) */
 	int fresh = r == BR_SHOWN || br.shows != cur->drawn, pv = br.pv_p != NULL;
 	int32_t pv_top = win_top();
+	MAIN_PAD(PAD_LOADED);
 #ifndef EW_ST
 	int hold = fresh && r == BR_SHOWN && live_shown && !pv && is_live(br.url) && br_pictures_pending(&br);
 #else
@@ -2213,6 +2235,7 @@ static void live_flush(int enter)
 {
 	char *u8;
 	long n;
+	MAIN_PAD(PAD_LIVE);
 	if (live_n == 0 && !enter)
 		return;
 	u8 = atari_to_utf8(live_buf, live_n, &n);
@@ -2933,6 +2956,7 @@ void ui_press_msg(short *m)
 static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *hover_y)
 {
 	AEVENT ev = *pev;
+	MAIN_PAD(PAD_HANDLE);
 	if (win_front())
 		menu_update();	/* (another window in front: its page's commands) */
 	if (which & MU_M1) {
@@ -3314,6 +3338,8 @@ static int app_run(void)
 	AEVENT ev;
 	short hover_x = -1, hover_y = -1;
 	int tipped = 0;		/* a toolbar tip waits for the pointer to rest (D18) */
+
+	MAIN_PAD(PAD_APP_RUN);
 
 	/* the stack (crt0's, EW_STACK bytes) ends that far below main's frame:
 	   the cascade and the layout go no deeper into a page than EW_STACK_ROOM

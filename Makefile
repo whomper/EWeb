@@ -437,10 +437,10 @@ PAD_win := 0
 PAD_RO_win := 4
 PAD_BSS_win := 252
 PAD_fixpen := 156
-# 1.24's: main.o's live view (its typing, its hold) moved what follows it
+# 1.24's: none now (main.c pads its own changed functions, MAIN_PAD)
 # (profpad's size against 1.23's ELF and map; the other changed objects
 # carry their own never-run bytes, below)
-PAD_main3 := 64
+PAD_main3 := 0
 PAD_RO_main3 := 0
 PAD_DATA_main3 := 0
 PAD_BSS_main3 := 36

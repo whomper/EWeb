@@ -56,6 +56,27 @@ WIDE = re.compile(r"\s(mulul|mulsl|divul|divsl)\s+.*,%d[0-7],%d[0-7]\s*$")
 EMAC = re.compile(r":\ta00[0-9a-f] ")
 
 
+def wide_forms(dump):
+    """the 64-bit multiplies and divides in objdump -d -r's lines, but for
+    a match a relocation runs into: objdump reads a switch's table in the
+    code as instructions and falls out of step, and the word after it is
+    then an address's (1.24: ctl_press's table, then a movea.l of an
+    address whose low word read as a divsl). A real one, registers only,
+    holds no address."""
+    relocs, found = set(), []
+    for l in dump.splitlines():
+        m = re.match(r"\s*([0-9a-f]+): R_68K_(32|16|8|PC32|PC16|PC8)\b", l)
+        if m:
+            n = {"32": 4, "PC32": 4, "16": 2, "PC16": 2, "8": 1, "PC8": 1}[m.group(2)]
+            relocs.update(range(int(m.group(1), 16), int(m.group(1), 16) + n))
+            continue
+        m = re.match(r"\s*([0-9a-f]+):\t((?:[0-9a-f]{4} )+)", l)
+        if m and WIDE.search(l):
+            a = int(m.group(1), 16)
+            found.append((a, a + 2 * len(m.group(2).split()), l))
+    return [l for a, b, l in found if not any(x in relocs for x in range(a, b))]
+
+
 def run(cmd):
     p = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if p.returncode != 0:
@@ -118,8 +139,7 @@ def m68060(target, compiles, link):
     # "LED\0WM_" of the window messages' names, there since the version's
     # name grew a byte)
     stop = rodata_start(elf + ".map")
-    wide = [l for l in run("m68k-linux-gnu-objdump -d -m m68k:68030 --stop-address=0x%x %s" % (stop, elf)).splitlines()
-            if WIDE.search(l)]
+    wide = wide_forms(run("m68k-linux-gnu-objdump -d -r -m m68k:68030 --stop-address=0x%x %s" % (stop, elf)))
     if wide:
         sys.exit("mkfirebee: %d of the 68060's missing forms in %s, as\n%s" % (len(wide), elf, "\n".join(wide[:5])))
     env = dict(os.environ, PRGFLAGS="7")
