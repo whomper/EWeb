@@ -1,0 +1,16 @@
+page 608 x 265, background ffffff, 9 items, 6 links, title "imagemap"
+image 6,19 160x80 link 0 "the map" file://./tests/layout/nothing.png
+fill 22,35 16x8 #00000000 link 1
+fill 126,27 32x64 #00000000 link 2
+fill 70,43 32x32 #00000000 link 3
+fill 14,27 40x24 #00000000 link 4
+image 6,128 64x32 link 0 "all of it" file://./tests/layout/nothing.png
+fill 6,128 64x32 #00000000 link 5
+image 6,176 160x80 link 0 "a picture button" file://./tests/layout/nothing.png
+fill 126,176 40x24 #00000000 link 6
+link 1 file://./tests/layout/hidden.html
+link 2 file://./tests/layout/three.html
+link 3 file://./tests/layout/two.html
+link 4 file://./tests/layout/one.html
+link 5 file://./tests/layout/whole.html
+link 6 file://./tests/layout/corner.html

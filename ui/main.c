@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "charset.h"
 #include "ui.h"
 #include "fsel.h"
 #include "text.h"
@@ -88,6 +89,25 @@ EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "",
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
 	   translate_to, translate_port, ttleave, narrow) */
 int loading;
+/* live view (webgate's own page, http://webgate/live): the next page is
+   shown once its picture (the Pi's browser's screen) is in, the one
+   before kept on the screen meanwhile with the busy pointer: shown at
+   once, it was white with the picture's alt text until the picture came
+   (Erez, 21 Nov 2026) */
+int live_hold;
+static int live_shown;		/* the page on the screen is live view's */
+
+static int is_live(const char *url)
+{
+	return url != NULL && strncmp(url, "http://webgate/live", 19) == 0;
+}
+
+static void live_release(void)
+{
+	live_hold = 0;
+	win_page_changed();
+	graf_mouse(ARROW, 0);
+}
 static short quit;
 
 /* the language pages are translated into, NULL with Translate off (the ST
@@ -1629,12 +1649,13 @@ static void loaded(int r)
 	   (the file selector for a file, EMail for a mail address) */
 	int fresh = r == BR_SHOWN || br.shows != cur->drawn, pv = br.pv_p != NULL;
 	int32_t pv_top = win_top();
+	int hold = fresh && r == BR_SHOWN && live_shown && !pv && is_live(br.url) && br_pictures_pending(&br);
 	/* the load's preview goes: the page in its place, where it was
 	   scrolled to (unless the page goes to an anchor), or the page shown
 	   before again */
 	br_preview_free(&br);
 	loading = 0;
-	graf_mouse(ARROW, 0);
+	graf_mouse(hold ? BUSYBEE : ARROW, 0);
 	said[0] = 0;
 	if (fresh || r == BR_SAME)
 		ph_pictures();		/* full, or on to the pictures */
@@ -1646,7 +1667,10 @@ static void loaded(int r)
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
 		cur->drawn = br.shows;
-		win_page_changed();
+		live_hold = hold;
+		if (!hold)
+			win_page_changed();
+		live_shown = is_live(br.url);
 		if (pv && br.scroll_to <= 0 && pv_top > 0)
 			win_scroll_to(pv_top);
 		ms_drawn = pf_ms() - ms_drawn;
@@ -2138,6 +2162,92 @@ static void live_view(void)
 	br_live_size(br.width, br.height, br.zoom);
 	br_live_url(br.cur >= 0 ? br.url : NULL, u, sizeof u);
 	go(u);
+}
+
+/* live view, a field of the Pi's browser with the keyboard (its page's
+   br_live_typing): what is typed goes there, straight in (Erez, 21 Nov
+   2026). Letters are gathered and sent once the keys pause (LIVE_PAUSE)
+   or Return comes, each send a new picture; Backspace takes back a letter
+   not sent yet, else goes there, as Tab does; Esc ends it for the page */
+#define LIVE_PAUSE 700		/* ms */
+static char live_buf[200];
+static int live_n;
+static unsigned long live_t;
+static unsigned long live_off;	/* 1 + the page (br.shows) Esc ended it on, 0 none */
+
+/* webgate's live view at path, then t (percent-encoded) and tail */
+static void live_send(const char *path, const char *t, const char *tail)
+{
+	char u[700], *o = u + snprintf(u, sizeof u, "http://webgate/live/%s", path);
+	const char *s;
+	for (s = t; s != NULL && *s && o < u + sizeof u - 16; s++) {
+		unsigned char c = (unsigned char) *s;
+		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+		    c == '.' || c == '~')
+			*o++ = (char) c;
+		else
+			o += sprintf(o, "%%%02X", c);
+	}
+	snprintf(o, (size_t) (u + sizeof u - o), "%s", tail);
+	go(u);
+}
+
+/* the letters gathered so far, sent ("Type", and Enter with Return) */
+static void live_flush(int enter)
+{
+	char *u8;
+	long n;
+	if (live_n == 0 && !enter)
+		return;
+	u8 = atari_to_utf8(live_buf, live_n, &n);
+	live_n = 0;
+	live_send("type?t=", u8 != NULL ? u8 : "", enter ? "&enter=1" : "");
+	free(u8);
+}
+
+/* a key for live view's field: 1 taken */
+static int live_key(short kstate, short key)
+{
+	short scan = KEY_SCAN(key);
+	unsigned char ch = (unsigned char) (key & 0xff);
+	if (loading || live_hold || cur->a_focus || cur->f_focus != NULL || (kstate & (K_CTRL | K_ALT)) ||
+	    live_off == br.shows + 1 || !br_live_typing(&br))
+		return 0;
+	if (scan == 0x01) {		/* Esc: typing there ends, for this page */
+		live_n = 0;
+		live_off = br.shows + 1;
+		win_status("Typing into the Gateway's browser ended.");
+		return 1;
+	}
+	if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
+		live_flush(1);
+		return 1;
+	}
+	if (scan == 0x0e) {		/* Backspace */
+		if (live_n > 0)
+			live_n--;
+		else
+			live_send("key?k=backspace", NULL, "");
+		return 1;
+	}
+	if (scan == 0x0f) {		/* Tab: the Pi's next field (typed as a tab, after the letters) */
+		if (live_n < (int) sizeof live_buf - 1)
+			live_buf[live_n++] = '\t';
+		live_flush(0);
+		return 1;
+	}
+	if (ch < 32 || ch == 127)
+		return 0;
+	if (live_n < (int) sizeof live_buf - 1)
+		live_buf[live_n++] = (char) ch;
+	live_t = pf_ms();
+	{
+		char s[sizeof live_buf + 40];
+		live_buf[live_n] = 0;
+		snprintf(s, sizeof s, "Typing into the Gateway's browser: %s", live_buf);
+		win_status(s);
+	}
+	return 1;
 }
 
 /* the search engine's own page: the search address up to its question
@@ -2848,7 +2958,7 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 	if (which & MU_KEYBD) {
 		if (KEY_SCAN(ev.kreturn) == 0x01 && br_refresh_due(&br) >= 0)
 			refresh_stop(1);	/* Esc: the page's refresh first */
-		else if (!shortcut(ev.kstate, ev.kreturn))
+		else if (!shortcut(ev.kstate, ev.kreturn) && !live_key(ev.kstate, ev.kreturn))
 			win_key(ev.kstate, ev.kreturn);
 		menu_update();
 	}
@@ -3001,7 +3111,7 @@ static void pictures(void)
 		pic_dsp_bad = 0;
 	}
 #endif
-	switch (r) {
+	switch (live_hold ? -1 : r) {
 	case BRP_DRAWN:
 		if (y1 > y0)
 			win_page_drawn(y0, y1);
@@ -3016,6 +3126,10 @@ static void pictures(void)
 	}
 	conn_stop = 0;
 	said[0] = 0;
+	if (live_hold && !br_pictures_pending(&br)) {
+		live_release();	/* (its picture in, or stopped: the page in one go) */
+		log_event("live shown");
+	}
 	ph_pictures();
 	if (!br_pictures_pending(&br))
 		pictures_end();
@@ -3489,8 +3603,15 @@ static int app_run(void)
 			}
 		}
 #endif
+		if (live_n > 0) {
+			/* live view's letters typed: sent once the keys pause */
+			unsigned long gone = pf_ms() - live_t;
+			short lw = gone >= LIVE_PAUSE ? 0 : (short) (LIVE_PAUSE - gone);
+			if (!(more || due >= 0 || rib || wait <= 1 || tipped) || lw < wait)
+				wait = lw;
+		}
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
-				    (more || due >= 0 || rib || wait <= 1 || tipped ? MU_TIMER : 0),
+				    (more || due >= 0 || rib || wait <= 1 || tipped || live_n > 0 ? MU_TIMER : 0),
 				    0x101, 3, 0, wait, msg, &ev);	/* (one click, pressed: 5.8, common's click.c) */
 		gap_event(which & MU_KEYBD ? "key" : which & MU_BUTTON ? "click" : which & MU_MESAG ? "message" :
 			  which & MU_M1 ? "mouse" : "timer");
@@ -3553,6 +3674,8 @@ static int app_run(void)
 			}
 		}
 #endif
+		if ((which & MU_TIMER) && !quit && live_n > 0 && !loading && pf_ms() - live_t >= LIVE_PAUSE)
+			live_flush(0);	/* (live view: the keys paused, what was typed sent) */
 		if ((which & MU_TIMER) && !quit && rdue >= 0) {
 			if (refresh_due() == 0) {
 				refreshed();	/* before the page's pictures: it is going */

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- Image maps (the HTML Standard, 4.8.13): each <area> with an href a
+     link over its picture (an item drawn not at all), at its shape's box:
+     a rectangle, a circle's square, a polygon's bounding box; an area with
+     no href is none; "default" the whole picture. The first area in the
+     document is taken where two meet. On a picture button (live view's
+     picture, webgate: the Pi's browser's links) an area is its link's, and
+     a click elsewhere the button's (Erez, 21 Nov 2026: live view's links
+     showed no pointing hand). -->
+<html><head><title>imagemap</title></head>
+<body style="margin:8px">
+<p><img src="nothing.png" width="200" height="100" alt="the map" usemap="#m"></p>
+<map name="m">
+<area shape="rect" coords="10,10,60,40" href="one.html" alt="one">
+<area shape="circle" coords="100,50,20" href="two.html" alt="two">
+<area shape="poly" coords="150,10,190,30,160,90" href="three.html" alt="three">
+<area shape="rect" coords="0,0,200,100" alt="no href: nothing">
+<area shape="rect" coords="20,20,40,30" href="hidden.html" alt="under one: one is taken">
+</map>
+<p><img src="nothing.png" width="80" height="40" alt="all of it" usemap="#all"></p>
+<map id="all"><area shape="default" href="whole.html" alt="whole"></map>
+<form action="sent.html"><input type="image" name="at" src="nothing.png" width="200" height="100"
+ alt="a picture button" usemap="#b"></form>
+<map name="b"><div><area shape="rect" coords="150,0,200,30" href="corner.html" alt="corner"></div></map>
+</body></html>

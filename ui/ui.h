@@ -142,6 +142,8 @@ extern ewin *cur;		/* the window worked on: the one in front, or the one a page 
 #define br (cur->b)		/* its page shown, its history */
 #endif
 extern int loading;		/* a page is on its way: Esc and Stop stop it */
+extern int live_hold;		/* live view's next page made, the one before still shown
+				   until its picture is in (main.c): the page takes no clicks */
 /* what happened, for the Hatari rigs (main.c): an "EWEB ..." line through NatFeats */
 void log_event(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 /* the speed rig's names for the stretches between event calls (main.c;

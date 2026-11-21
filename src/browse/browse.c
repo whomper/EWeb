@@ -970,23 +970,43 @@ void br_live_size(int32_t width, int32_t height, int32_t zoom)
 	live_h = (int32_t) ((int64_t) height * 1024 / zoom);
 }
 
+int br_live_typing(const browser *b)
+{
+	const dnode *h, *m;
+	const char *v;
+	if (b->p == NULL || b->p->d == NULL || b->p->d->html == NULL || strncmp(b->url, "http://webgate/live", 19) != 0)
+		return 0;
+	for (h = b->p->d->html->first; h != NULL; h = h->next)
+		if (h->type == DN_ELEMENT && h->tag == T_HEAD)
+			for (m = h->first; m != NULL; m = m->next)
+				if (m->type == DN_ELEMENT && m->tag == T_META && (v = dn_attr(m, "name")) != NULL &&
+				    strcmp(v, "aera-live") == 0 && (v = dn_attr(m, "content")) != NULL &&
+				    strcmp(v, "typing") == 0)
+					return 1;
+	return 0;
+}
+
 void br_live_url(const char *url, char *out, int size)
 {
 	static const char hex[] = "0123456789ABCDEF";
 	int n = snprintf(out, size, "http://webgate/live");
-	char wh[32];
+	char wh[40];
 	/* the picture as wide as the window, three of its screens tall: the
-	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026) */
-	wh[0] = 0;
+	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026);
+	   pic=1: the page made with its picture, its links over it and whether
+	   a field there has the keyboard (webgate's live_shot; Erez, 21 Nov 2026) */
 	if (live_w > 0 && live_h > 0)
-		snprintf(wh, sizeof wh, "w=%ld&h=%ld", (long) live_w, (long) live_h);
-	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 + 32 >= size) {
+		snprintf(wh, sizeof wh, "w=%ld&h=%ld&pic=1", (long) live_w, (long) live_h);
+	else
+		snprintf(wh, sizeof wh, "pic=1");
+	int room = (int) strlen(wh) + 2;	/* (the size kept when the address is cut) */
+	if (url == NULL || (!has_scheme(url, "http") && !has_scheme(url, "https")) || n + 6 + room >= size) {
 		if (wh[0] && n + 1 + (int) strlen(wh) < size)
 			snprintf(out + n, size - n, "?%s", wh);
 		return;
 	}
 	n += snprintf(out + n, size - n, "?url=");
-	for (; *url && *url != '#' && n < size - 4 - 32; url++) {
+	for (; *url && *url != '#' && n < size - 4 - room; url++) {
 		unsigned char c = (unsigned char) *url;
 		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 		    c == '-' || c == '.' || c == '_' || c == '~') {

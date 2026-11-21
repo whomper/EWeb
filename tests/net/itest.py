@@ -104,7 +104,9 @@ def snapshots():
                 w = json.loads(body)
                 if w.get("shot"):
                     shots.append((w.get("shot"), w.get("w"), w.get("h")))
-                    c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg)
+                    # (one link in the view, and a field with the keyboard)
+                    c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg, headers={
+                        "X-Live-Areas": json.dumps({"areas": [[100, 50, 200, 40]], "typing": True, "dpr": 1})})
                 elif "/site/cf/" in w["url"]:
                     # Cloudflare's check: passed, the page it goes on to;
                     # or one that wants a click
@@ -150,6 +152,24 @@ def snapshots():
         check("the Pi's browser: live view, its screen a picture button", p.returncode == 0
               and 'title "Live: Made by script"' in out
               and re.search(r"^picture http://webgate/live/shot\.jpg\S* decoded", out, re.M) is not None, out)
+        if "X-Live-Areas" in open(WEBGATE).read():
+            # the browser's links over its picture, an image map (EWeb's
+            # pointing hand over them; a click on one, at its middle), and
+            # a field there with the keyboard said in the page (what is
+            # typed in EWeb goes there): Erez, 21 Nov 2026
+            prox = urllib.request.build_opener(urllib.request.ProxyHandler({"http": "http://" + g}))
+            src = prox.open(live + "&pic=1").read().decode("utf-8", "replace")
+            area = re.search(r'<area shape=rect coords="(\d+),(\d+),(\d+),(\d+)" href="http://webgate/live/click'
+                             r'\?at\.x=(\d+)&amp;at\.y=(\d+)"', src)
+            check("the Pi's browser: live view's links an image map, a field's keyboard said", area is not None
+                  and '<meta name="aera-live" content="typing">' in src and 'usemap="#live"' in src, src)
+            p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", live + "&pic=1"], cwd=work,
+                               capture_output=True, text=True, timeout=120)
+            out = p.stdout + p.stderr
+            m = re.search(r"^fill \d+,\d+ \d+x\d+ #00000000 link (\d+)$", out, re.M)
+            check("the Pi's browser: live view's link a link over the picture in EWeb", p.returncode == 0 and m is not None
+                  and re.search(r"^link %s http://webgate/live/click\?at\.x=\d+&at\.y=\d+$" % m.group(1), out, re.M)
+                  is not None, out)
         if "LIVE_ROW" in open(WEBGATE).read():
             # the window's size named (EWeb's br_live_url): the picture as
             # wide as its page, three of its screens tall (Erez, 30 Oct 2026)

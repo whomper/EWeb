@@ -3269,6 +3269,8 @@ void win_hover(short mx, short my)
 			if (rect_hit(&cur->but[i], mx, my) && enabled(i))
 				b = i;
 	hot_button(b);
+	if (live_hold)
+		return;		/* (the busy pointer, until live view's next page is shown) */
 	if (h == cur->h && t == cur->h && !cur->iconified && !loading && br.p != NULL && rect_hit(&cur->r_page, mx, my)) {
 		page_hover(mx - cur->r_page.x + cur->left, my - cur->r_page.y + cur->top);	/* (the page's scripts: mouseover...) */
 		cur->hov_page = 1;
@@ -3785,6 +3787,8 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		const dl_item *it = NULL;
 		fctl *c;
 		dnode *det;
+		if (live_hold)
+			return 1;	/* (live view's next page on its way: what is shown is the one before) */
 		addr_blur();
 		if (button & 2) {
 			context_menu(mx, my);

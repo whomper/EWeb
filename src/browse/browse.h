@@ -430,6 +430,10 @@ void br_live_url(const char *url, char *out, int size);
 /* the window's page area in device px at zoom (br_init's), which live
    view's address names in CSS px */
 void br_live_size(int32_t width, int32_t height, int32_t zoom);
+/* live view's page says a field of the Pi's browser has the keyboard
+   (webgate's <meta name=aera-live content=typing>): what is typed goes
+   there (ui/main.c) */
+int br_live_typing(const browser *b);
 /* ms until its next timer, -1 for none */
 long br_js_due(const browser *b);
 /* what a script did (after br_js_step, br_js_event, br_js_click) */

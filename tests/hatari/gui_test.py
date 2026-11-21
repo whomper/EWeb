@@ -79,7 +79,7 @@ import slots  # noqa: E402  (HISTORY.TXT in two slots: src/net/slots.c)
 from PIL import Image  # noqa: E402
 
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build/gui")
-WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "falcon", "falcon4", "deep", "refresh",
+WHICH = sys.argv[2:] or ["browse", "scripts", "screens", "st", "gateway", "live", "falcon", "falcon4", "deep", "refresh",
                          "details", "wide", "boxes", "dialogs", "translate", "firebee"]
 # GUI_SLOT=N gives the rigs their own ports (the test server's untrusted
 # and ECDSA ones are HTTPS + 1 and + 2) and X display, so two trees can
@@ -2318,6 +2318,131 @@ def gateway():
         srv.wait(10)
 
 
+def live():
+    """live view (webgate --browser, its extension a stand-in here: a
+    picture, one link in its view, a field with the keyboard), EWEB.PRG on
+    the Falcon in 256 colours through the Gateway (Erez, 21 Nov 2026): the
+    link is a link over the picture (the status line names it as the
+    pointer comes over it, the pointing hand); what is typed goes to the
+    Pi's browser (xdotool, a stand-in that writes down what it is told);
+    the next page is shown once its picture is in, the one before kept
+    meanwhile ("live shown"); a click on the link is a click there"""
+    import http.client
+    import json
+    import threading
+    import urllib.request
+    webgate = os.environ.get("WEBGATE") or os.path.join(ROOT, "gateway", "webgate.py")
+    if not os.path.exists(webgate) or "X-Live-Areas" not in open(webgate).read():
+        skip("live: no webgate with live view's links at %s" % webgate)
+        return
+    work = os.path.join(OUT, "server")
+    os.makedirs(work, exist_ok=True)
+    srv = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/net/server.py"), work, "--http", str(HTTP),
+                            "--https", str(HTTPS),
+                            "--untrusted", str(HTTPS + 1), "--ecdsa", str(HTTPS + 2)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    if srv.stdout.readline().strip() != "ready":
+        return check("live: the test server", False)
+    lgate, lext = GATE + 30, GATE + 31
+    # xdotool for webgate: a stand-in that writes down what it is told (the
+    # rig's own xdotool drives Hatari's window)
+    tools = os.path.join(work, "livebin")
+    os.makedirs(tools, exist_ok=True)
+    told = os.path.join(work, "xdotool.log")
+    open(told, "w").close()
+    with open(os.path.join(tools, "xdotool"), "w") as f:
+        f.write("#!/bin/sh\necho \"$*\" >> %s\n" % told)
+    os.chmod(os.path.join(tools, "xdotool"), 0o755)
+    env = {k: v for k, v in os.environ.items() if k.lower() not in ("https_proxy", "http_proxy")}
+    env["PATH"] = tools + os.pathsep + env.get("PATH", "")
+    gate = subprocess.Popen([sys.executable, webgate, "--port", str(lgate), "--bind", "127.0.0.1", "--allow-local",
+                             "--cafile", os.path.join(work, "CACERT.PEM"), "--browser", "--browser-port", str(lext)],
+                            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    stop = []
+    jpeg = urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+        "http://127.0.0.1:%d/site/photo.jpg" % HTTP).read()
+
+    def extension():
+        while not stop:
+            try:
+                c = http.client.HTTPConnection("127.0.0.1", lext, timeout=30)
+                c.request("GET", "/next")
+                rr = c.getresponse()
+                body = rr.read()
+                if rr.status != 200:
+                    c.close()
+                    continue
+                w = json.loads(body)
+                if w.get("shot"):
+                    c.request("POST", "/shot?id=%s&w=1024" % w["id"], body=jpeg, headers={
+                        "X-Live-Areas": json.dumps({"areas": [[100, 50, 300, 60]], "typing": True, "dpr": 1})})
+                else:
+                    url = w["url"] or "http://127.0.0.1:%d/site/two.html" % HTTP
+                    c.request("POST", "/snapshot?id=" + w["id"], body=json.dumps(
+                        {"url": url, "title": "Made by script", "html": "<!DOCTYPE html><title>Made by script</title>"}).encode())
+                c.getresponse().read()
+                c.close()
+            except OSError:
+                time.sleep(0.2)
+
+    t = threading.Thread(target=extension, daemon=True)
+    t.start()
+    live_url = "http://webgate/live?url=" + urllib.request.quote("http://127.0.0.1:%d/site/two.html" % HTTP, safe="") + "&pic=1"
+    inf = "FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\nPENS=0\r\n" % lgate
+    hd = hd_for("live", live_url, inf)
+    xvfb = machines.xvfb(DISPLAY)
+    r = Run("live", "Falcon:256", hd, windowed=True, network=True)
+    try:
+        ev = r.wait(r"shown http://webgate/live", 600)
+        r.wait(r"pictures ", 600)
+        time.sleep(2)
+        r.shot(0)
+        m = re.search(r"area (\d+) (\d+) (\d+) (\d+) top (\d+)", ev or "")
+        area = None
+        if m:
+            x0, y0, w, _ = (int(m.group(i)) for i in range(1, 5))
+            top = int(m.group(5))
+            p = subprocess.run([os.path.join(ROOT, "build/host/ewrender"), "-f", os.path.join(ROOT, "binary/EWEB.FNT"),
+                                "-w", str(w), "-W", "127.0.0.1:%d" % lgate, "-d", live_url],
+                               capture_output=True, text=True, timeout=120, env=env)
+            area = re.search(r"^fill (\d+),(\d+) (\d+)x(\d+) #00000000 link \d+$", p.stdout, re.M)
+        if area:
+            ax = x0 + int(area.group(1)) + int(area.group(3)) // 2
+            ay = y0 + int(area.group(2)) + int(area.group(4)) // 2 - top
+            r.mouse.move(ax, ay)
+            seen = r.wait(r"status http://webgate/live/click", 30)	# (the log has no query: 7.3)
+            check("live: the Pi's link a link over its picture (the pointer over it names it)", seen is not None,
+                  "\n".join(r.events()[-10:]))
+            # typed: to the Pi's field once the keys pause, the next page
+            # shown in one go once its picture is in
+            r.mouse.move(x0 + 4, y0 + 4)
+            r.type("ab")
+            shown = r.wait(r"live shown", 300)
+            time.sleep(1)
+            log = open(told).read()
+            check("live: typed letters go to the Pi's field, the next page shown once its picture is in",
+                  "type --delay 40 -- ab" in log and shown is not None, log + "\n".join(r.events()[-12:]))
+            r.shot(1)
+            open(told, "w").close()
+            r.mouse.click(ax, ay)
+            r.wait(r"live shown", 300)
+            log = open(told).read()
+            check("live: a click on the Pi's link is a click there", "click 1" in log, log)
+        else:
+            check("live: the Pi's link a link over its picture (the pointer over it names it)", False,
+                  "no page or area: %s" % ev)
+        r.key(Q, (CTRL,))
+        r.wait(r"quit$", 300)
+    finally:
+        r.end()
+        if xvfb is not None:
+            xvfb.terminate()
+        stop.append(1)
+        gate.terminate()
+        gate.wait(10)
+        srv.stdin.close()
+        srv.wait(10)
+
+
 def falcon():
     """EWEB.PRG on Erez's Falcon in 256 colours with a Direct connection (TLS on the
     68030 and the DSP, no gateway), a secure page as a Wikipedia
@@ -3036,6 +3161,8 @@ if "firebee" in WHICH:
         fb_cpu("FireBee:16", "EWEB60.PRG", "says to run EWEBFB.PRG")
 if "gateway" in WHICH:
     gateway()
+if "live" in WHICH:
+    live()
 if "falcon" in WHICH:
     falcon()
 if "falcon4" in WHICH:

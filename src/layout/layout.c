@@ -4378,6 +4378,7 @@ static void visual_order(L *l, long i, long j, int bidi, long *ord)
 
 /* a picture's item in the display list */
 static void frame_items(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h);
+static void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int32_t h);
 
 static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t link, ew_font *f,
 		       int flags, unsigned alpha)
@@ -4406,6 +4407,130 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 #ifndef EW_ST
 	d->node = b->n;
 #endif
+	if (b->n != NULL && b->n->nattr > 0)
+		map_items(l, b->n, x, y, w, h);
+}
+
+/* an image map (the HTML Standard, 4.8.13): the <map> whose name (or id)
+   usemap names after its '#', or NULL */
+static int named(const dnode *n, const char *name, size_t len)
+{
+	size_t nl;
+	const char *t = n->type == DN_ELEMENT && n->e.name != NULL ? ec_atom_text(n->e.name, &nl) : NULL;
+	return t != NULL && nl == len && memcmp(t, name, len) == 0;
+}
+
+static dnode *map_named(dnode *n, const char *name)
+{
+	for (; n != NULL; n = n->next) {
+		if (n->type == DN_ELEMENT) {
+			const char *v;
+			dnode *m;
+			if (named(n, "map", 3) &&
+			    (((v = dn_attr(n, "name")) != NULL && strcmp(v, name) == 0) ||
+			     ((v = dn_attr(n, "id")) != NULL && strcmp(v, name) == 0)))
+				return n;
+			if (n->first != NULL && (m = map_named(n->first, name)) != NULL)
+				return m;
+		}
+	}
+	return NULL;
+}
+
+/* an area's coords: up to max numbers (CSS px), separated by commas or
+   spaces; how many */
+static int area_coords(const char *s, int32_t *v, int max)
+{
+	int n = 0;
+	while (s != NULL && *s && n < max) {
+		char *e;
+		long x;
+		while (*s == ',' || *s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == ';')
+			s++;
+		if (!*s)
+			break;
+		x = strtol(s, &e, 10);
+		if (e == s)
+			break;
+		v[n++] = (int32_t) (x < -100000 ? -100000 : x > 100000 ? 100000 : x);
+		while (*e && *e != ',' && *e != ' ' && *e != '\t' && *e != '\n' && *e != '\r' && *e != ';')
+			e++;	/* (a number's fraction or units: its whole part taken) */
+		s = e;
+	}
+	return n;
+}
+
+/* the areas of the map n's usemap names, over its picture at (x, y),
+   w x h: each with an href an item drawn not at all, its link's, at the
+   box of its shape (a circle's square, a polygon's bounding box); the
+   first in the document is the one a click takes where two meet, so they
+   go in last to first (page_link_at asks the last first) */
+static void map_items(L *l, const dnode *n, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+	const char *u = n != NULL ? dn_attr(n, "usemap") : NULL;
+	dnode *m, *a, *list[64];
+	int k = 0;
+	if (u == NULL || *u != '#' || u[1] == 0 || (m = map_named(l->p->d->html, u + 1)) == NULL)
+		return;
+	/* (its areas, in the document's order, inside other elements too) */
+	for (a = m->first; a != NULL && k < (int) (sizeof list / sizeof *list);) {
+		int area = named(a, "area", 4);
+		if (area)
+			list[k++] = a;
+		if (a->first != NULL && a->type == DN_ELEMENT && !area)
+			a = a->first;
+		else {
+			while (a != NULL && a->next == NULL && a != m)
+				a = a->parent;
+			if (a == NULL || a == m)
+				break;
+			a = a->next;
+		}
+	}
+	while (k-- > 0) {
+		const char *dl, *tg, *href = link_attrs(list[k], &dl, &tg), *shape = dn_attr(list[k], "shape");
+		int32_t c[64], ax, ay, ax1, ay1;
+		int nc = area_coords(dn_attr(list[k], "coords"), c, 64), i;
+		dl_item *d;
+		if (href == NULL)
+			continue;	/* (no href: a hole in the map, nothing to follow) */
+		if (shape != NULL && (strcasecmp(shape, "default") == 0)) {
+			ax = 0, ay = 0, ax1 = w, ay1 = h;
+		} else if (shape != NULL && (strcasecmp(shape, "circle") == 0 || strcasecmp(shape, "circ") == 0)) {
+			if (nc < 3)
+				continue;
+			ax = dev(l, EC_FX(c[0] - c[2])), ay = dev(l, EC_FX(c[1] - c[2]));
+			ax1 = dev(l, EC_FX(c[0] + c[2])), ay1 = dev(l, EC_FX(c[1] + c[2]));
+		} else if (shape != NULL && (strcasecmp(shape, "poly") == 0 || strcasecmp(shape, "polygon") == 0)) {
+			if (nc < 6)
+				continue;
+			ax = ax1 = c[0], ay = ay1 = c[1];
+			for (i = 2; i + 1 < nc; i += 2) {
+				ax = c[i] < ax ? c[i] : ax, ax1 = c[i] > ax1 ? c[i] : ax1;
+				ay = c[i + 1] < ay ? c[i + 1] : ay, ay1 = c[i + 1] > ay1 ? c[i + 1] : ay1;
+			}
+			ax = dev(l, EC_FX(ax)), ay = dev(l, EC_FX(ay)), ax1 = dev(l, EC_FX(ax1)), ay1 = dev(l, EC_FX(ay1));
+		} else {	/* rect, rectangle, or none named */
+			if (nc < 4)
+				continue;
+			ax = dev(l, EC_FX(c[0] < c[2] ? c[0] : c[2])), ay = dev(l, EC_FX(c[1] < c[3] ? c[1] : c[3]));
+			ax1 = dev(l, EC_FX(c[0] < c[2] ? c[2] : c[0])), ay1 = dev(l, EC_FX(c[1] < c[3] ? c[3] : c[1]));
+		}
+		ax = ax < 0 ? 0 : ax, ay = ay < 0 ? 0 : ay, ax1 = ax1 > w ? w : ax1, ay1 = ay1 > h ? h : ay1;
+		if (ax1 <= ax || ay1 <= ay || (d = dl_add(l)) == NULL)
+			continue;
+		d->type = DL_FILL;
+		d->x = x + ax;
+		d->y = y + ay;
+		d->w = ax1 - ax;
+		d->h = ay1 - ay;
+		d->rgb = 0;	/* (drawn not at all: there for the pointer and clicks) */
+		d->flags = DLF_AREA;
+		d->link = add_link(l, href, dl, tg);
+#ifndef EW_ST
+		d->node = list[k];
+#endif
+	}
 }
 
 /* ---------------------------------------------------------------- frames */
@@ -9811,6 +9936,9 @@ fctl *page_ctl_at(const page *p, int32_t x, int32_t y, const dl_item **it)
 	for (s = nsegs(p) - 1; s >= 0; s--)
 		for (i = SEG_K1(p, s) - 1; i >= SEG_K0(p, s); i--) {
 			const dl_item *d = &p->items[i];
+			if (d->type == DL_FILL && (d->flags & DLF_AREA) && x >= d->x && x < d->x + d->w && y >= d->y &&
+			    y < d->y + d->h && in_clips(p, d, x, y))
+				return NULL;	/* (an image map's area over a picture button: its link's) */
 			if (d->ctl && !(d->flags & DLF_NOHIT) && x >= d->x && x < d->x + d->w && y >= d->y &&
 			    y < d->y + d->h && in_clips(p, d, x, y)) {
 				if (it != NULL)
