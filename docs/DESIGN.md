@@ -3208,7 +3208,11 @@ keyboard (there they move the cursor, as before). The page's column at the windo
 and back (links, controls, a field's cursor, summaries, a script's click); what stays on the
 screen is moved with `vro_cpyfm` and only the new columns are drawn, as up and down; a control
 given the keyboard is brought into view sideways too. A new page starts at its left; one laid
-out again keeps its place, within its new width.
+out again keeps its place, within its new width. The canvas's picture (the root's or the body's
+background), placed in the window's width, is painted on to the page's right where its tiles go
+(CSS Backgrounds 3, 2.11.2; `index_items`): until 1.26 it stopped at the window's first width,
+so forum.atari-home.de's wrapper of 925 CSS pixels showed its last column on the plain colour
+(Erez, 22 Nov 2026; `tests/layout/widecanvas.html`).
 
 Tested by `make hatarigui`'s `wide` group (the Falcon in 16 colours, TOS 4.04): a table 1400
 pixels wide; Right moves it sideways (the log's `sideways LEFT of MAX`), Shift+Right to its end,

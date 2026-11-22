@@ -9527,6 +9527,20 @@ static void index_items(page *p, int wide, long cbg)
 	/* (no further than something put far off to the right; not for the
 	   few pixels a width rounded up goes past the window) */
 	p->right = right > RIGHT_MAX ? RIGHT_MAX : right <= p->width + RIGHT_SLACK ? p->width : right;
+	if (cbg >= 0 && p->right > p->width) {
+		/* the canvas's picture is placed in the window's width but
+		   painted over the whole canvas (CSS Backgrounds 3, 2.11.2):
+		   on to the page's right where its tiles go (forum.atari-home.de's
+		   925 px, sideways; Erez, 22 Nov 2026) */
+		dl_item *d = &p->items[cbg];
+		if (d->flags == DLF_TILE && d->tile != NULL && d->x + d->w >= p->width) {
+			int32_t x1 = d->tile->rx ? p->right : d->x + d->tile->dx + d->tile->w;
+			if (x1 > p->right)
+				x1 = p->right;
+			if (x1 > d->x + d->w)
+				d->w = x1 - d->x;
+		}
+	}
 	p->nstrips = bottom / PAGE_STRIP + 1;
 	p->strip = calloc((size_t) p->nstrips + 1, sizeof *p->strip);
 	if (p->strip == NULL)
