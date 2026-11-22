@@ -464,6 +464,18 @@ were made. Settings > General > Narrow letters for pages made for Arial
 turns them off: those pages are then in DejaVu Sans, wider (not in the
 ST edition).
 
+## A page's source
+
+**View > Page source** shows the page as it came from the server, its
+HTML before any script ran. EWeb writes it to `source.htm` in the
+`cache` folder next to `EWEB.PRG` and asks the desktop to open it in
+the editor it names for that kind of file (a desktop that speaks the AV
+protocol, such as Thing, Jinnee or Teradesk). Where there is no such
+desktop, or it can't open the file, EWeb shows the source itself in a
+window of its own, as plain lines (`source.txt`), where **Edit >
+Find...** works. The file is written over each time. The ST edition
+has no such menu item.
+
 ## Encodings
 
 Most pages say which encoding their text is in (UTF-8, Windows-1255

@@ -1242,6 +1242,25 @@ def browse():
               "encoding windows-1255" in evs and ev.startswith("shown %senc/w1255.html " % site) and
               ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
         r.shot(16)
+        # View > Page source (Erez, 21 Nov 2026): TOS's desktop speaks no
+        # AV, so EWeb shows it itself: cache\source.txt, the bytes as they
+        # came (windows-1255's, not the page's text), in a window of its own
+        n = len(r.events())
+        r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
+        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 9 * 16 + 8)	# Page source
+        ev = r.wait(r"shown .*source\.txt ", 120)
+        r.shot(17)
+        src = b""
+        for root, _, files in os.walk(hd):
+            for f in files:
+                if f.lower() == "source.txt":
+                    src = open(os.path.join(root, f), "rb").read()
+        check("source: View > Page source, the page as it came in a window of EWeb's own",
+              ev is not None and "source shown here" in r.events()[n:] and b"\xf9\xec\xe5\xed" in src and
+              b"<" in src and len([e for e in r.events() if e.startswith("window ")]) >= 1,
+              "%r %r %r" % (ev, r.events()[n:][-6:], src[:80]))
+        r.key(U, (CTRL,))		# (that window closed: the page's again in front)
+        time.sleep(2)
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""

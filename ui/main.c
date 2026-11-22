@@ -201,6 +201,9 @@ static const MBAR_ITEM m_view[] = {
 	{ "Smaller text", "^-", C_SMALLER },
 	{ "Actual size", "^0", C_ACTUAL },
 	{ "Encoding...", 0, C_ENCODING },
+#ifndef EW_ST
+	{ "Page source", 0, C_SOURCE },	/* (Erez, 21 Nov 2026; the ST edition is frozen) */
+#endif
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
 #ifndef EW_ST
@@ -544,6 +547,9 @@ void menu_update(void)
 	enable(C_ACTUAL, !loading && opt.zoom != 100);
 	enable(C_SETHOME, !loading && br.cur >= 0);
 	enable(C_ENCODING, !loading && br.encodable && br.src != NULL);
+#ifndef EW_ST
+	enable(C_SOURCE, !loading && br.src != NULL);
+#endif
 	enable(C_PICTURES, !loading);
 #ifndef EW_ST
 	enable(C_TRANSLATE, !loading);
@@ -2452,6 +2458,81 @@ static void save_page(void)
 		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
 }
 
+#ifndef EW_ST
+/* View > Page source (Erez, 21 Nov 2026): the page as it came, written to
+   cache\source.htm and opened by the desktop (AV_STARTPROG) in the editor
+   it names for it; where there is no desktop to ask, or it couldn't, the
+   file made cache\source.txt and shown in a window of EWeb's own as its
+   lines (a .txt is text: fetch), where Find works. Not after scripts: the
+   bytes the server sent. One file, written over each time */
+static char source_path[320];
+static int source_asked;	/* asked of the desktop, its answer not come */
+
+static void source_window(void)
+{
+	char txt[320];
+	size_t n = strlen(source_path);
+	source_asked = 0;
+	if (n < 4)
+		return;
+	str_copy(txt, source_path, sizeof txt);
+	strcpy(txt + n - 3, "txt");
+	Fdelete(txt);
+	if (pf_rename(source_path, txt) != 0) {
+		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+		return;
+	}
+	log_event("source shown here");
+	to_window(txt, "");
+}
+
+/* the desktop's answer: "1" its editor started, "0" it couldn't */
+static void source_answer(const char *s)
+{
+	if (!source_asked)
+		return;
+	log_event("source: the desktop says %s", s);
+	if (s[0] == '1')
+		source_asked = 0;
+	else
+		source_window();
+}
+
+/* the desktop gave our own file back to EWeb (an .htm's program is EWeb):
+   shown as its lines, not as a page */
+static int source_ours(const char *what)
+{
+	const char *a = what, *b = source_path;
+	if (!source_path[0])
+		return 0;
+	if (strncmp(a, "file:///", 8) == 0)
+		a += 8;
+	for (; *a && *b; a++, b++)
+		if (((*a | 32) != (*b | 32)) && !((*a == '/' || *a == '\\') && (*b == '/' || *b == '\\')))
+			return 0;
+	return *a == 0 && *b == 0;
+}
+
+static void view_source(void)
+{
+	char dir[256];
+	if (br.src == NULL)
+		return;
+	path_join(dir, sizeof dir, opt.workdir, "cache");
+	pf_mkdir(dir);
+	path_join(source_path, sizeof source_path, dir, "source.htm");
+	if (!br_save_page(&br, source_path)) {
+		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
+		return;
+	}
+	log_event("source %ld", br.src_len);
+	if (av_startprog(source_path, NULL) == 0)
+		source_asked = 1;
+	else
+		source_window();
+}
+#endif
+
 /* url's file saved as it comes (br_save_url), where the user says once
    the answer has begun (or to, when given); given: the name its link
    gives (<a download>), or NULL */
@@ -2631,6 +2712,9 @@ void command(int cmd)
 	case C_SMALLER: set_zoom(opt.zoom - 10); break;
 	case C_ACTUAL: set_zoom(100); break;
 	case C_ENCODING: encoding_menu(); break;
+#ifndef EW_ST
+	case C_SOURCE: view_source(); break;
+#endif
 	case C_PICTURES:
 		/* a setting: on the disk at once (6.5); the page laid out again
 		   with its pictures or without */
@@ -2982,8 +3066,13 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 			switch (dd_message(msg, DD_WANT_FILES, &dr)) {
 			case DD_FILES: av_start(dr.data); break;
 			case DD_NONE:
-				if (av_message(msg, &va) == AV_START)
+				int k = av_message(msg, &va);
+				if (k == AV_START)
 					av_start(va);
+#ifndef EW_ST
+				else if (k == AV_PROGSTARTED)
+					source_answer(va);
+#endif
 				else
 					win_message(msg);
 			}
@@ -3277,8 +3366,15 @@ static void av_start(const char *s)
 		win_message(m);
 	}
 	win_open();
-	if (av_arg(s, what, sizeof what) != 0 && what[0])
+	if (av_arg(s, what, sizeof what) != 0 && what[0]) {
+#ifndef EW_ST
+		if (source_ours(what)) {
+			source_window();
+			return;
+		}
+#endif
 		go(what);
+	}
 }
 
 #ifdef EW_ST

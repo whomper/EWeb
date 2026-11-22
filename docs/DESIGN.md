@@ -5333,6 +5333,19 @@ in 8 MB steps and gives them back: what GEMDOS says is free moves with EWeb's ow
 others'). `make hatarigui`'s `falcon` group checks the log's `memory:` line on the Falcon with
 128 MB of TT RAM.
 
+## A page's source (21 Nov 2026)
+
+A tester missed it (through the hub, 21 Nov 2026), and Erez chose as proposed: **View > Page
+source**, no new key; the source as it came (`br.src`, the bytes the server sent, before scripts)
+written to `cache\source.htm` and handed to the desktop with AV_STARTPROG (common's
+`av_startprog`, the hub's 7158a13), which opens it in the editor it names; where there is no AV
+server, or its VA_PROGSTART says no, the file is renamed `source.txt` and shown in a window of
+EWeb's own (`to_window`: a `.txt` is text, Find works). A desktop that gives the `.htm` back to
+EWeb itself (EWeb its program for HTML) gets the text window too (`source_ours`). One file,
+written over (the SD card: a file each time costs seconds). Not in the ST edition (frozen).
+`view_source`, `source_answer` and `source_window` in `ui/main.c`; `make hatarigui`'s browse
+group checks the window and the file's bytes (windows-1255's, not the page's text).
+
 ## The FireBee edition: EWEBFB.PRG (12 Nov 2026)
 
 The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code
