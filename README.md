@@ -38,8 +38,8 @@ folder of its own.
 | `EWEB.HYP` | the guide (the Help key) |
 | `icons/` | the desktop icon |
 
-The FireBee has its own package, `eweb-x.y-firebee.zip` (in testing): the same names, its
-`EWEB.PRG` and `EWEBJS.OVL` built for the ColdFire, with `TLSFB.OVL` for secure connections.
+A release is two zips: `eweb-x.y.zip`, these files, and `eweb-x.y-firebee.zip` for the FireBee
+(in testing), with the same names, its `EWEB.PRG`, `EWEBJS.OVL` and `TLS.OVL` built for the ColdFire.
 
 1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEB60.PRG` with a 68060, `EWEBST.PRG` on an ST;
    on a FireBee, `EWEB.PRG` from its own package).

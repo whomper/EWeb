@@ -5394,10 +5394,13 @@ dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Er
 - **Its own package (22 Nov 2026):** the guidelines' 7.4 (Erez: "Shall we just create two
   packages, one for FireBee and the other for standard ST? ... EUpdate can then download the right
   package based on the running platform", the same names in both). `make dist` makes
-  `eweb-x.y.zip` for the ST, TT and Falcon (its files the release's loose ones) and
-  `eweb-x.y-firebee.zip`: `EWEBFB.PRG` as `eweb.prg`, `EWEBJSFB.OVL` as `ewebjs.ovl`, `tlsfb.ovl`
-  (common's `tls_ovl.c` loads it where `_CF_` is set), the fonts, the guide, the certificates and
-  the icons. As both overlays are `ewebjs.ovl` now, the ColdFire's says another ABI
+  `eweb-x.y.zip` for the ST, TT and Falcon and `eweb-x.y-firebee.zip`, and a release publishes those
+  two and nothing else (Erez: "Remove all files from root and just have two ZIP files, one for each
+  platform"); the FireBee's holds the same names (Erez: "rename all other FB files into their
+  standard filename"): `EWEBFB.PRG` as `eweb.prg`, `EWEBJSFB.OVL` as `ewebjs.ovl`, `TLSFB.OVL` as
+  `tls.ovl` (common's `tls_ovl.c` in a ColdFire build takes the name as it is; a 68000 program on a
+  FireBee, from before the packages, still looks for `tlsfb.ovl`), the fonts, the guide, the
+  certificates and the icons. As both overlays are `ewebjs.ovl` now, the ColdFire's says another ABI
   (`JS_ABI_OF` in `atari/js_ovl.h`): one copied to the other machine is refused ("is from another
   version of EWeb"), not run. Each program on the wrong machine names the other package: "EWEB.PRG
   is for the Falcon and the TT. On the FireBee, install EWeb's FireBee package." and "EWEB.PRG is

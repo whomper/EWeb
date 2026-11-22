@@ -385,10 +385,12 @@ hub stay complete, with the evidence.
   scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`, and the 68030's
   overlay's numbers, at double precision, under `-cpu m68030`: `atari/js_fpu.h`).
   DESIGN.md, The FireBee edition.
-- **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026): `EWEB.PRG`,
-  `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`, `EWEB.FNT`, `EWEB.HYP`, `CACERT.PEM` and `ROOTS.DAT`, and in the zip
-  the icon (`icons/`: `make icons`, from the family's drawing `common/icons/EWEB.txt`), from `make
-  dist`. The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
+- **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026), as two zips and no
+  loose files (the guidelines' 7.4; Erez, 22 Nov 2026), from `make dist`: `eweb-x.y.zip` with
+  `EWEB.PRG`, `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`,
+  `EWEB.HYP`, `CACERT.PEM`, `ROOTS.DAT` and the icon (`icons/`: `make icons`, from the family's
+  drawing `common/icons/EWEB.txt`), and `eweb-x.y-firebee.zip` with the same names, its `EWEB.PRG`,
+  `EWEBJS.OVL` and `TLS.OVL` the ColdFire builds (`EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`). The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his
   Atari, it goes in that release, and its notes say so). The zip's `firebee/` folder of them (1.0 to 1.5, for a FireBee tester) is
   gone: it confused testers (Erez, 12 Nov 2026). Their first log lines are still common's machine

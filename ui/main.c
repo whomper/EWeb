@@ -3535,11 +3535,9 @@ static int app_run(void)
 #ifndef EW_ST
 	/* the TLS code, the family's TLS.OVL beside it: read at the first
 	   Direct connection (never through the Pi) */
-#ifdef __mcoldfire__
-	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tlsfb.ovl");	/* (the ColdFire's: tlsovl's make CPU=5475) */
-#else
+	/* (the FireBee's package has the ColdFire's TLS.OVL as tls.ovl too:
+	   the guidelines' 7.4, Erez, 22 Nov 2026) */
 	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tls.ovl");
-#endif
 #endif
 	{
 		/* the cookies that last: read when the first page needs them */
