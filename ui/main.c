@@ -2562,6 +2562,15 @@ static void view_source(void)
 	char dir[256];
 	if (br.src == NULL)
 		return;
+	source_from = cur;
+	source_shows = br.shows;
+	if (!av_has_server()) {
+		/* no desktop to open it: no file, the page in memory (common's
+		   av_has_server, the hub's 727146e) */
+		log_event("source %ld", br.src_len);
+		source_window();
+		return;
+	}
 	path_join(dir, sizeof dir, opt.workdir, "cache");
 	pf_mkdir(dir);
 	path_join(source_path, sizeof source_path, dir, "source.htm");
@@ -2571,8 +2580,6 @@ static void view_source(void)
 	}
 	/* (UTF-8's text is found as such: not read twice) */
 	str_copy(source_enc, br.d != NULL && (br.d->charset[0] | 32) != 'u' ? br.d->charset : "", sizeof source_enc);
-	source_from = cur;
-	source_shows = br.shows;
 	log_event("source %ld", br.src_len);
 	if (av_startprog(source_path, NULL) == 0)
 		source_asked = 1;

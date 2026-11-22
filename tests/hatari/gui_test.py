@@ -1259,6 +1259,8 @@ def browse():
               "window 2 of" in " ".join(evs) and
               not [e for e in evs if e.startswith("status Reading the file") or e.startswith("status Opening")],
               "%r %r" % (ev, evs[-8:]))
+        written = [f for _, _, fs in os.walk(hd) for f in fs if f.lower().startswith("source.")]
+        check("source: TOS's desktop answers no AV, so no file is written", not written, str(written))
         check("source: its text read in the page's encoding (windows-1255), once",
               "source shown here, from memory, in windows-1255" in evs and
               len([e for e in evs if e.startswith("shown ")]) == 1, str(evs[-8:]))

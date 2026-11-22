@@ -5358,9 +5358,9 @@ a copy of `br.src` as a text file is built (`build_plain`), in the encoding the 
 once, at the address `view-source:URL`; `load_post` loads such an address again (Back and
 Forward: the cache's of any age; Reload: anew) as the text of URL's answer (`as_source`), and
 leaves it out of the history list. Only when the window's page has changed while the desktop
-answered does the file come into it. The file is still written before the desktop is asked
-(AV_STARTPROG needs it there, and common's AV has no way to ask whether a desktop is listening
-without asking it: asked of the hub). `make hatarigui`'s browse group: the window
+answered does the file come into it. The file is written only where a desktop answers (common's
+`av_has_server`, the hub's 727146e, which sends it nothing): on TOS's own desktop nothing goes
+to the SD card. `make hatarigui`'s browse group: the window
 `view-source:`, `window 2 of`, no "Reading the file" or "Opening", one page built, read in
 windows-1255, and Reload shows it again.
 
