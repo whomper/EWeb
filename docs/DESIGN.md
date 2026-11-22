@@ -5824,6 +5824,11 @@ on the CPUs fast enough (the FireBee, a 68040, 68060 or 68080: `_CPU` 40 or more
 The DSP's is no slower (a little faster); the 68030's takes nearly twice as long, which is why a
 68030 alone keeps the whole dither until common's soft rows are faster there (asked of the hub).
 
+The speed rig on `Falcon-4:16` (A B B A against 1.25, the minimum of each): every row within a tick
+but two. The home page shown is 460 to 470 ms in each run, but its drawing is the same (375 ms) and
+so is the whole (455 ms): one 5 ms part more counted in the stretch. An arrow held 3 s, up, is 900
+against 1.25's own 920 and 865. `ST:mono` is unchanged: `EWEBST.PRG` has no soft dither.
+
 **Through the Gateway** (Pens from the Pi): EWeb names its share in `X-Gateway-Picture`
 (`soft=N`), and the disk cache keeps the pens by it (`s12`); a webgate whose aerapens takes it
 answers `X-Gateway-Soft: N`. Until AERA-Gateway's webgate and common's aerapens have it, the Pi's
