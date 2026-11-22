@@ -5378,6 +5378,19 @@ dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Er
   STE: EWEBST.PRG." and Return goes back to the desktop. The program's own run (GEM, STinG, the
   screen, speed) is the tester's FireBee's, under FireTOS, FireTOS + MiNT and EmuTOS (common's
   `tests/coldfire/README.md`, What only a real FireBee can prove).
+- **Its own package (22 Nov 2026):** the guidelines' 7.4 (Erez: "Shall we just create two
+  packages, one for FireBee and the other for standard ST? ... EUpdate can then download the right
+  package based on the running platform", the same names in both). `make dist` makes
+  `eweb-x.y.zip` for the ST, TT and Falcon (its files the release's loose ones) and
+  `eweb-x.y-firebee.zip`: `EWEBFB.PRG` as `eweb.prg`, `EWEBJSFB.OVL` as `ewebjs.ovl`, `tlsfb.ovl`
+  (common's `tls_ovl.c` loads it where `_CF_` is set), the fonts, the guide, the certificates and
+  the icons. As both overlays are `ewebjs.ovl` now, the ColdFire's says another ABI
+  (`JS_ABI_OF` in `atari/js_ovl.h`): one copied to the other machine is refused ("is from another
+  version of EWeb"), not run. Each program on the wrong machine names the other package: "EWEB.PRG
+  is for the Falcon and the TT. On the FireBee, install EWeb's FireBee package." and "EWEB.PRG is
+  for the FireBee. On an ST, a TT or a Falcon, install EWeb's standard package." (`cpu_cf_alert`,
+  `cpu_alert` in `ui/main.c`). The scripts' loader pushes the ColdFire's caches between two
+  `nop`s, as common's `ovl.c` since aa30896 (a tester's FireBee crash in EUpdate).
 
 ## Screens deeper than the Falcon's (11 Nov 2026)
 

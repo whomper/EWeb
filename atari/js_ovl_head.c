@@ -44,7 +44,7 @@ R(int, moves, (doc *d), (d))
 #endif
 
 const js_exports js_ovl_head __attribute__((section(".ovlhead"), used)) = {
-	JS_OVL_MAGIC, JS_ABI,
+	JS_OVL_MAGIC, JS_ABI_OF,
 	E(page), E(changed), E(navigation), E(navigation_download), E(navigation_done),
 	E(due), E(run_timers), E(event), E(run), E(toggled), E(set_page), E(stats), E(key),
 	E(navigation_window), E(mouse), E(moves)

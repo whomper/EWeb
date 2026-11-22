@@ -2012,9 +2012,14 @@ def fb_cpu(spec, prg="EWEBFB.PRG", says="says it is the FireBee's"):
     finds no _CF_ cookie and says in an alert that this is the FireBee's;
     Return goes back to the desktop. Seen in the screenshots as st_cpu's.
     And the other way: EWEB.PRG or EWEB60.PRG on the FireBee stand-in (the
-    _CF_ cookie): common's cpucheck.c says to run EWEBFB.PRG (cpu_cf_alert
-    in ui/main.c), where the 68030's code stopped at its first 64-bit
-    mulu.l (the hub, 15 Nov 2026)"""
+    _CF_ cookie): common's cpucheck.c says to install EWeb's FireBee
+    package (cpu_cf_alert in ui/main.c), where the 68030's code stopped at
+    its first 64-bit mulu.l (the hub, 15 Nov 2026). Each names the other
+    package (the guidelines' 7.4, 22 Nov 2026: the FireBee's EWEB.PRG is
+    in a package of its own), its words read from the program itself"""
+    words = b"install EWeb's standard" if prg == "EWEBFB.PRG" else b"install EWeb's FireBee"
+    check("firebee: %s names the other package" % prg,
+          words in open(os.path.join(ROOT, "binary", prg), "rb").read(), words.decode())
     r = Run("fbcpu-" + prg.split(".")[0].lower() + "-" + spec.replace(":", "-"), spec,
             hd_for("fbcpu", "about:start"), prg=prg)
 
@@ -3162,9 +3167,9 @@ if "firebee" in WHICH:
         fb_cpu("Falcon:16")
     else:
         skip("firebee: no binary/EWEBFB.PRG (make binary/EWEBFB.PRG)")
-    fb_cpu("FireBee:16", "EWEB.PRG", "says to run EWEBFB.PRG")
+    fb_cpu("FireBee:16", "EWEB.PRG", "says to install the FireBee's package")
     if os.path.exists(os.path.join(ROOT, "binary", "EWEB60.PRG")):
-        fb_cpu("FireBee:16", "EWEB60.PRG", "says to run EWEBFB.PRG")
+        fb_cpu("FireBee:16", "EWEB60.PRG", "says to install the FireBee's package")
 if "gateway" in WHICH:
     gateway()
 if "live" in WHICH:

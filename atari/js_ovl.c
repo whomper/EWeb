@@ -53,9 +53,14 @@ static long flush_caches(void)
 	/* (EWEBFB.PRG: the MCF5474's 512 sets of 4 ways, each line pushed
 	   and invalidated in both caches, as common's ovl.c) */
 	unsigned long set, way;
+	/* (a nop before: the store buffer drained, the overlay's last
+	   bytes in memory; and after: the pipeline synchronised before the
+	   new code runs; common's aa30896, a tester's FireBee crash) */
+	__asm__ volatile("nop" ::: "memory");
 	for (set = 0; set < 512; set++)
 		for (way = 0; way < 4; way++)
 			__asm__ volatile("cpushl %%bc,(%0)" : : "a"(set << 4 | way) : "memory");
+	__asm__ volatile("nop" ::: "memory");
 	return 0;
 #else
 	if (cpu >= 40) {
@@ -169,7 +174,7 @@ static int load(void)
 	}
 	free(rest);
 	ovl = (const js_exports *) p;
-	if (ovl->magic != JS_OVL_MAGIC || ovl->abi != JS_ABI) {
+	if (ovl->magic != JS_OVL_MAGIC || ovl->abi != JS_ABI_OF) {
 		ovl = NULL;
 		free(img);
 		return fail("is from another version of EWeb.", 0);

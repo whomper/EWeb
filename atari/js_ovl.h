@@ -21,6 +21,14 @@
 #include "js.h"
 
 #define JS_OVL_MAGIC	0x45574A53L	/* "EWJS" */
+/* the ABI as an overlay says it: the ColdFire's other than the 68030's
+   and 68060's, as both are EWEBJS.OVL in their packages (the guidelines'
+   7.4), so one copied to the other machine is refused, not run */
+#ifdef __mcoldfire__
+#define JS_ABI_OF	(JS_ABI ^ 0x43460000UL)	/* "CF" */
+#else
+#define JS_ABI_OF	JS_ABI
+#endif
 #define JS_OVL_IMPORTS	0x45574A49L	/* "EWJI", the imports' part */
 
 typedef struct js_exports {

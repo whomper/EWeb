@@ -700,8 +700,8 @@ after); a page whose scripts take more is shown as if they were off,
 with its `<noscript>` parts, and the status line says so. Big sites
 built of scripts (web apps, frameworks) are too much for a 68030: for
 those, use the Gateway's browser (below). On a 68060 they run from
-`EWEBJS60.OVL`, and the FireBee edition runs them from `EWEBJSFB.OVL`
-beside `EWEBFB.PRG`. The ST edition runs no scripts and
+`EWEBJS60.OVL`, and the FireBee's package has its own `EWEB.PRG` and
+`EWEBJS.OVL`, built for the ColdFire. The ST edition runs no scripts and
 has no such menu item; on a Falcon without an FPU, picking it says
 "JavaScript needs an FPU (a 68881 or 68882)", and pages are shown as
 with scripts off.

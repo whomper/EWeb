@@ -3288,7 +3288,9 @@ int main(void)
    this and goes, where the 68030 code from appl_init on would die */
 #ifdef __mcoldfire__
 /* (EWEBFB.PRG's main() is common's cpucheck_cf.S: the _CF_ cookie, else this) */
-const char cpu_alert[] = "[3][EWEBFB.PRG is for the FireBee.|On a Falcon or a TT: EWEB.PRG;|on an ST or STE: EWEBST.PRG.][ Quit ]";
+/* (the guidelines' 7.4, Erez, 22 Nov 2026: the FireBee's EWEB.PRG is in a
+   package of its own, the same names inside, so each names the other) */
+const char cpu_alert[] = "[3][EWEB.PRG is for the FireBee.|On an ST, a TT or a Falcon,|install EWeb's standard|package.][ Quit ]";
 #else
 const long cpu_need = 30;
 const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, run|EWEBST.PRG, the ST edition.][ Quit ]";
@@ -3296,9 +3298,9 @@ const char cpu_alert[] = "[3][EWEB.PRG needs a Falcon or|a TT. On an ST or STE, 
    68030's code would stop at its first 64-bit mulu.l (the guidelines,
    Machines; the hub's FireBee stand-in, 15 Nov 2026) */
 #ifdef __mc68060__
-const char cpu_cf_alert[] = "[3][EWEB60.PRG is for a 68060|Falcon or TT. On the FireBee,|run EWEBFB.PRG.][ Quit ]";
+const char cpu_cf_alert[] = "[3][EWEB60.PRG is for a 68060|Falcon or TT. On the FireBee,|install EWeb's FireBee|package.][ Quit ]";
 #else
-const char cpu_cf_alert[] = "[3][EWEB.PRG is for the Falcon and|the TT. On the FireBee, run|EWEBFB.PRG.][ Quit ]";
+const char cpu_cf_alert[] = "[3][EWEB.PRG is for the Falcon|and the TT. On the FireBee,|install EWeb's FireBee|package.][ Quit ]";
 #endif
 #endif
 
@@ -3555,8 +3557,10 @@ static int app_run(void)
 	/* scripts: EWEB.PRG with an FPU (the _FPU cookie), on the sites chosen;
 	   QuickJS is EWEBJS.OVL next to the program, loaded when first needed */
 #if defined(__mcoldfire__)
-	/* (EWEBFB.PRG: its own, ColdFire code; the MCF5474's FPU is always there) */
-	path_join(path, sizeof path, opt.workdir, "ewebjsfb.ovl");
+	/* (the FireBee's EWEB.PRG: its own, ColdFire code, named as the
+	   standard package's in the FireBee's (the guidelines' 7.4); the
+	   MCF5474's FPU is always there) */
+	path_join(path, sizeof path, opt.workdir, "ewebjs.ovl");
 	js_ovl_at(path);
 	scripts_ok = js_built;
 #elif !defined(EW_ST)

@@ -1663,17 +1663,30 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped (the zip's firebee/
 # folder of them, 1.0 to 1.5, dropped: it confused testers; Erez, 12 Nov 2026)
+# Two packages (the guidelines' 7.4, Erez, 22 Nov 2026), the same names in
+# both: eweb-x.y.zip for the ST, TT and Falcon, its files the release's
+# loose ones too, and eweb-x.y-firebee.zip, the FireBee's: EWEBFB.PRG as
+# eweb.prg, EWEBJSFB.OVL as ewebjs.ovl and tlsfb.ovl (common's tls_ovl.c
+# loads it where _CF_ is set), with the fonts, the guide, the certificates
+# and the icons. EUpdate fetches the one for the machine it runs on.
 FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
+SHARED_DIST := eweb.fnt eweb.hyp cacert.pem roots.dat
 dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT $(FB_DIST); do \
+	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT; do \
 		cp binary/$$f dist/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
-	cp dist/eweb.prg dist/eweb60.prg dist/ewebjs.ovl dist/ewebjs60.ovl dist/tls.ovl dist/ewebst.prg dist/eweb.fnt dist/eweb.hyp dist/cacert.pem \
-		dist/roots.dat $(addprefix dist/,$(shell echo $(FB_DIST) | tr A-Z a-z)) dist/zip/
+	$(if $(CF_CC),mkdir -p dist/fb && cp -r dist/zip/icons dist/fb/ && \
+		cp $(addprefix dist/,$(SHARED_DIST)) dist/fb/ && \
+		cp binary/EWEBFB.PRG dist/fb/eweb.prg && cp binary/EWEBJSFB.OVL dist/fb/ewebjs.ovl && \
+		cp binary/TLSFB.OVL dist/fb/tlsfb.ovl && \
+		(cd dist/fb && zip -q -9 -r ../eweb-$(VERSION_STR)-firebee.zip .))
+	rm -rf dist/fb
+	cp dist/eweb.prg dist/eweb60.prg dist/ewebjs.ovl dist/ewebjs60.ovl dist/tls.ovl dist/ewebst.prg \
+		$(addprefix dist/,$(SHARED_DIST)) dist/zip/
 	cd dist/zip && zip -q -9 -r ../eweb-$(VERSION_STR).zip .
 	rm -rf dist/zip
 .PHONY: dist
