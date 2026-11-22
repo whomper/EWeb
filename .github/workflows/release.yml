@@ -1,7 +1,7 @@
 name: Release
 
 # Builds EWeb (make dist: what it needs, nothing else) and publishes it as a
-# GitHub Release: each file on its own, and all of them in eweb-x.y.zip. Two ways to start it:
+# GitHub Release: its two packages, eweb-x.y.zip and eweb-x.y-firebee.zip. Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;
 # - push a tag vX.Y that matches VERSION: the tag's message
@@ -75,9 +75,8 @@ jobs:
           else
             printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
           fi
-          # the two packages (the guidelines' 7.4), the FireBee's first and
-          # the standard one last: EUpdate up to 2.14 unpacks every zip of a
-          # release, and the last one wins
+          # the two packages (the guidelines' 7.4): the FireBee's uploaded
+          # first, the standard one last (GitHub lists them by name, below)
           v=$(cat VERSION)
           std="dist/eweb-$v.zip" fb="dist/eweb-$v-firebee.zip"
           test -f "$std"
@@ -89,9 +88,12 @@ jobs:
             gh release create "$TAG" "$std" --target "$GITHUB_SHA" --title "${GITHUB_REPOSITORY#*/} $v" \
               --notes-file "$RUNNER_TEMP/notes.md"
           fi
-          # the order as GitHub gives it, before the release is announced
-          order=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '[.assets | sort_by(.id) | .[].name] | join(" ")')
+          # the list as GitHub's API gives it, unsorted: an EUpdate up to 2.14
+          # unpacks the zips in that order and the last one wins; GitHub lists
+          # them by name (the guidelines' 7.4, AERA-Atari b539163), so the
+          # standard package must come last, before the release is announced
+          order=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '[.assets[].name] | join(" ")')
           echo "assets: $order"
           want="eweb-$v.zip"
           [ -f "$fb" ] && want="eweb-$v-firebee.zip eweb-$v.zip"
-          test "$order" = "$want" || { echo "the assets aren't as they must be: $want"; exit 1; }
+          test "$order" = "$want" || { echo "the assets aren't as they must be, the standard zip last: $want"; exit 1; }
