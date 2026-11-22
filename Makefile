@@ -1090,9 +1090,9 @@ hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/
 # PICBENCH.TTP as EWEB.PRG does (libjpeg-turbo; on the 68030, then with
 # the DSP). tests/bench/picbench.py runs them on the family's machines in
 # Hatari
-build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h
+build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h src/browse/img.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -Isrc/browse -c $< -o $@
 build/st/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBST"' -DBENCH_TITLE='"picbench"' \
@@ -1122,9 +1122,9 @@ build/st/pagebench.elf: $(st_RT) build/st/bench/pagebench.o build/st/bench/plat_
 binary/PAGEST.TTP: build/st/pagebench.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
-build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h
+build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h src/browse/img.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -Isrc/browse -c $< -o $@
 build/tos/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \

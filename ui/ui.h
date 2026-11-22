@@ -67,7 +67,8 @@ void falcon_dsp_init(void);
 const char *falcon_dsp_state(void);	/* "DSP" or "68030" */
 void falcon_dsp_ec_init(void);
 const char *falcon_dsp_ec_state(void);
-void pictures_dsp_init(void);		/* main.c: pic_dsp, from PICDSP= */
+void pictures_dsp_init(void);		/* main.c: pic_dsp, from PICDSP=, and pictures_soft */
+extern int pictures_soft;		/* main.c: the pictures' softer dither (IMG_SOFT) used */
 
 #ifdef EW_GEM
 /* ---------------------------------------------------------------- the GEM program, EWEB.PRG */

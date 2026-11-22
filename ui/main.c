@@ -2326,10 +2326,23 @@ static void gate_apply(void)
 /* JPEGs decoded and pictures dithered on a Falcon's DSP
    (common/atari/dspjpeg.c) unless PICDSP=0; the 68030 does them if the DSP
    can't be had, or gets pic.c's checks wrong */
+int pictures_soft;
+
 void pictures_dsp_init(void)
 {
 #ifndef EW_ST
 	pic_dsp = opt.picdsp && dspjpeg_present() ? &dspjpeg_port : NULL;
+	/* the softer colours (IMG_SOFT; Erez, 22 Nov 2026) where the DSP
+	   dithers, at no cost, and on a CPU that does them fast (the
+	   FireBee, a 68040, 68060 or 68080); not on a 68030 alone (a TT), where
+	   a photo's dither took twice as long (picbench: 5.3 s to 10 s) */
+#ifdef __mcoldfire__
+	pictures_soft = 1;
+#else
+	pictures_soft = pic_dsp != NULL || get_cookie(0x5F435055L) >= 40;	/* _CPU */
+#endif
+	if (img_pal != NULL)
+		pic_pal_soft(img_pal, pictures_soft ? IMG_SOFT(img_pal->n) : 0);
 #endif
 }
 

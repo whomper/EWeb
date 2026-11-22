@@ -298,7 +298,8 @@ hub stay complete, with the evidence.
   (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;
   `PICDSP=`), and so is the dither to 3 pens or more (`common/dsp/dither.a56`, the very pens of
   the 68030's: `make testdsp` there compares them), made fast for the stock Falcon (the owner's
-  rule, 20 Oct 2026): after changing them,
+  rule, 20 Oct 2026); softer (`IMG_SOFT`, `pictures_soft`: the DSP and the fast CPUs, Erez 22 Nov
+  2026; DESIGN.md, Softer picture colours): after changing them,
   `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the emulated stock Falcon
   (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make test` has `tests/browse/trim.py` (a picture at two sizes
   in little memory, ewrender `-D`); `make itest` loads

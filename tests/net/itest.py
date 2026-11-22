@@ -1272,7 +1272,12 @@ try:
                     # the size shown); then from the disk cache
                     shown = {"photo.jpg": "192x128", "logo.png": "120x48", "anim.gif": "38x38",
                              "prog.jpg": "128x96", "big.png": "596x447"}
-                    rc0, out0, png0 = drawn("pens0.png")
+                    # (the softer dither, IMG_SOFT, is asked for with soft=N;
+                    # a webgate whose aerapens doesn't know it sends whole
+                    # Floyd-Steinberg, so the page without it is drawn so too)
+                    with open(WEBGATE, encoding="utf-8", errors="replace") as f:
+                        soft = [] if "X-Gateway-Soft" in f.read() else ["--soft", "0"]
+                    rc0, out0, png0 = drawn("pens0.png", *soft)
                     rc1, out1, png1 = drawn("pens1.png", "-W", g, "-Q", "1")
                     from_pi = re.findall(r"^picture \S+/(\S+) pens from the Gateway at (\d+x\d+)", out1, re.M)
                     check("the gateway: pictures as the Pi's pens, the same to the pixel", rc0 == 0 and rc1 == 0

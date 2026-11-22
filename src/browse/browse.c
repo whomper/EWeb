@@ -5848,18 +5848,24 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 			snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
 	}
 	if (pens) {
-		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
+		/* soft=N: the dither's share (pic_pal_soft), so the Pi's pens are
+		   the screen's own; a webgate that doesn't know it leaves it out */
+		char soft[12] = "";
+		if (img_pal->soft)
+			snprintf(soft, sizeof soft, "; soft=%d", img_pal->soft);
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s%s\r\n",
 			 (long) page, size, img_pal->n, img_pal_crc(),
 #ifdef EW_ST
-			 "tj"
+			 "tj",
 #else
-			 "lj"
+			 "lj",
 #endif
-			 );
+			 soft);
 		if (size[0])
-			snprintf(variant, vsize, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
+			snprintf(variant, vsize, "pens=%d,%08lx,s%d,%s", img_pal->n, img_pal_crc(), img_pal->soft, size + 5);
 		else
-			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(), (long) page);
+			snprintf(variant, vsize, "pens=%d,%08lx,s%d,fit%ld", img_pal->n, img_pal_crc(), img_pal->soft,
+				 (long) page);
 		variant[strcspn(variant, ";")] = 0;
 	} else {
 		/* deep=1: a screen of no palette (true colour) shows every colour

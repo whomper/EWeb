@@ -213,6 +213,7 @@ static void read_pens(void)
 	   EWeb's colours the fixed ones alone, so that a picture's pens stay
 	   when the page's colours change (pagecol.h) */
 	pic_pal_init(&pic_pal, own ? EW_PIC_PENS : ncol, (const unsigned char (*)[3]) pal);
+	pic_pal_soft(&pic_pal, pictures_soft ? IMG_SOFT(pic_pal.n) : 0);	/* (pictures_dsp_init) */
 }
 
 int scr_page_colours(const struct page *p)

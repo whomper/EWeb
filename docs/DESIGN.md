@@ -5802,6 +5802,34 @@ files are about 100 KB more code (text 716,516 to 821,184 bytes), so the About b
 14.0 s (4.9 ms a row, the byte a pixel's `to_planes` not counted in either); parsed 6.6 s, styled
 16.3 s to 13.9 s, laid out 16.4 s to 15.8 s. The styling and the layout were to be next; the performance work stopped there (Erez, 13 Nov 2026).
 
+## Softer picture colours (22 Nov 2026)
+
+Erez's choice of 22 Nov 2026: pictures dithered softer, common's `pic_pal_soft` (EContact's
+photos, 21 Nov): each pixel passes on 12 sixteenths of its error on 16 pens or fewer, 8 on more
+(`IMG_SOFT` in `src/browse/img.h`), so a colour the screen has no near pen for is a little off
+instead of grainy. Where (his second answer, the same day): where the Falcon's DSP dithers, and
+on the CPUs fast enough (the FireBee, a 68040, 68060 or 68080: `_CPU` 40 or more), by
+`pictures_dsp_init` in `ui/main.c` (`pictures_soft`); not on a 68030 alone (a TT, a Falcon with
+`PICDSP=0`), and not in `EWEBST.PRG`, which is frozen. ewrender draws as the DSP's Falcon does
+(`--soft N` for another share, 0 the whole dither).
+
+**Measured** (`PICBENCH.TTP` on the stock Falcon, `Falcon-4:256`; the photo, `tests/bench/mkphoto.py`,
+480 x 320 in 16 colours and 192 x 128 in 256; its new SOFT argument, 16 the whole dither):
+
+| | 16 colours, whole | 16, soft 12 | 256 colours, whole | 256, soft 8 |
+|---|---|---|---|---|
+| the DSP's dither | 1,135 ms | 1,100 ms | 225 ms | 215 ms |
+| the 68030's dither | 5,345 ms | 9,960 ms | 820 ms | 1,555 ms |
+
+The DSP's is no slower (a little faster); the 68030's takes nearly twice as long, which is why a
+68030 alone keeps the whole dither until common's soft rows are faster there (asked of the hub).
+
+**Through the Gateway** (Pens from the Pi): EWeb names its share in `X-Gateway-Picture`
+(`soft=N`), and the disk cache keeps the pens by it (`s12`); a webgate whose aerapens takes it
+answers `X-Gateway-Soft: N`. Until AERA-Gateway's webgate and common's aerapens have it, the Pi's
+pens are the whole dither's and are shown as they come, and `make itest` holds them to a page drawn
+so (`--soft 0`) where the webgate in use doesn't name `X-Gateway-Soft`.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one

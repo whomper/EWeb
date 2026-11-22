@@ -7,7 +7,7 @@ EmuTOS), cycle-exact: a picture decoded as EWeb decodes it, and dithered,
 each step timed. On an ST, PICBST.TTP (`make binary/PICBST.TTP`: as
 EWEBST.PRG); on a Falcon, PICBENCH.TTP (`make binary/PICBENCH.TTP`: as
 EWEB.PRG, on the 68030 and then with the DSP).
-    tests/bench/picbench.py [--machine ST:mono] [--profile OUT] [PICTURE WIDTH HEIGHT [COLOURS [TIMES [WHICH]]]]
+    tests/bench/picbench.py [--machine ST:mono] [--profile OUT] [PICTURE WIDTH HEIGHT [COLOURS [TIMES [WHICH [SOFT]]]]]
 Without a picture, the release's run: PHOTO.JPG (tests/bench/mkphoto.py) at
 its size and at 192 x 128. It prints what picbench printed (its times are
 the emulated machine's). --profile has Hatari's profiler count the CPU's
@@ -38,7 +38,7 @@ def main():
         else:
             profile = os.path.abspath(args[1])
         args = args[2:]
-    if len(args) not in (0, 3, 4, 5, 6):
+    if len(args) not in (0, 3, 4, 5, 6, 7):
         sys.exit(__doc__)
     work = os.path.join(ROOT, "build", "picbench")
     shutil.rmtree(work, ignore_errors=True)
