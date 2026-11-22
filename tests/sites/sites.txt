@@ -10,6 +10,7 @@
 atariscne        https://atariscne.org/news/                   # 21 Nov 2026
 atariscne-home   https://atariscne.org/
 atari-home       https://www.atari-home.de/                    # the V4SA tester's (reporting.swiftconsult.de times out)
+atari-home-forum https://forum.atari-home.de/                  # Erez, 22 Nov 2026 (atari-home.de/forum: its /forum/ is a blog post)
 pouet-prod       https://www.pouet.net/prod.php?which=93080    # the background tile near the page's blue (16 Nov 2026)
 pouet-prodlist   https://www.pouet.net/prodlist.php
 apollo           https://www.apollo-computer.com/              # table cells at their narrowest
