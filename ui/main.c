@@ -2474,19 +2474,42 @@ static void save_page(void)
 #ifndef EW_ST
 /* View > Page source (Erez, 21 Nov 2026): the page as it came, written to
    cache\source.htm and opened by the desktop (AV_STARTPROG) in the editor
-   it names for it; where there is no desktop to ask, or it couldn't, the
-   file made cache\source.txt and shown in a window of EWeb's own as its
-   lines (a .txt is text: fetch), where Find works. Not after scripts: the
-   bytes the server sent. One file, written over each time */
+   it names for it; where there is no desktop to ask, or it couldn't, shown
+   in a new window of EWeb's own as its lines, where Find works: from the
+   page in memory (br_source, view-source:URL; Erez, 22 Nov 2026: "Can't it
+   just present the page from memory?"), else, the page gone from its
+   window meanwhile, the file made cache\source.txt. Not after scripts:
+   the bytes the server sent. One file, written over each time */
 static char source_path[320];
 static int source_asked;	/* asked of the desktop, its answer not come */
 static char source_enc[24];	/* the page's encoding, its text read in it */
+static ewin *source_from;	/* the window whose page it is */
+static unsigned long source_shows;	/* and its page then (browser.shows) */
 
 static void source_window(void)
 {
 	char txt[320];
 	size_t n = strlen(source_path);
+	ewin *w, *from;
 	source_asked = 0;
+	for (from = wins; from != NULL && from != source_from; from = from->next)
+		;
+	if (from != NULL && from->b.shows == source_shows && from->b.src != NULL) {
+		/* from memory: nothing written, read or fetched */
+		w = new_window();
+		if (w == NULL)
+			log_event("no window for it: here");
+		else {
+			win_use(w);
+			win_open();	/* (in front) */
+			menu_update();
+		}
+		log_event("source shown here, from memory, in %s",
+			  from->b.d != NULL && from->b.d->charset[0] ? from->b.d->charset : from->b.charset);
+		loading_on();
+		loaded(br_source(&br, &from->b));
+		return;
+	}
 	if (n < 4)
 		return;
 	str_copy(txt, source_path, sizeof txt);
@@ -2548,6 +2571,8 @@ static void view_source(void)
 	}
 	/* (UTF-8's text is found as such: not read twice) */
 	str_copy(source_enc, br.d != NULL && (br.d->charset[0] | 32) != 'u' ? br.d->charset : "", sizeof source_enc);
+	source_from = cur;
+	source_shows = br.shows;
 	log_event("source %ld", br.src_len);
 	if (av_startprog(source_path, NULL) == 0)
 		source_asked = 1;

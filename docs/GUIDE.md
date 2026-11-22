@@ -472,9 +472,10 @@ HTML before any script ran. EWeb writes it to `source.htm` in the
 the editor it names for that kind of file (a desktop that speaks the AV
 protocol, such as Thing, Jinnee or Teradesk). Where there is no such
 desktop, or it can't open the file, EWeb shows the source itself in a
-window of its own, as plain lines (`source.txt`), where **Edit >
-Find...** works. The file is written over each time. The ST edition
-has no such menu item.
+new window, as plain lines, straight from the page it already has: it
+reads nothing again and fetches nothing. Its address is `view-source:`
+and the page's, and **Edit > Find...** works there. The file is written
+over each time. The ST edition has no such menu item.
 
 ## Encodings
 

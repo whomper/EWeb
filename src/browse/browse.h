@@ -346,6 +346,9 @@ const char *br_link_download(const browser *b, int link);
    BR_STOPPED when it can't be (not encodable, a name not offered) and
    the page stays */
 int br_encoding(browser *b, const char *name);
+/* View > Page source: from's page as it came, shown as its text in b
+   (view-source:URL), from memory: BR_SHOWN, or BR_STOPPED */
+int br_source(browser *b, const browser *from);
 /* the encodings View > Encoding offers: those EWeb decodes whose
    letters EWEB.FNT has (no Greek, Cyrillic, Arabic or Thai), each by
    its name as html_encoding gives it and as d->charset has it */

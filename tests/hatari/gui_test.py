@@ -89,7 +89,7 @@ HTTP, HTTPS, GATE, XLATE = (p + 1000 * SLOT for p in (18280, 18643, 18289, 18480
 DISPLAY = ":%d" % (98 - SLOT)
 CTRL, SHIFT = 0x1D, 0x2A
 L, Q, C, S, D, B, ALT = 0x26, 0x10, 0x2E, 0x1F, 0x20, 0x30, 0x38
-Y, F, G, A, N, W, U = 0x15, 0x21, 0x22, 0x1E, 0x31, 0x11, 0x16
+Y, F, G, A, N, W, U, R = 0x15, 0x21, 0x22, 0x1E, 0x31, 0x11, 0x16, 0x13
 COMMA, ESC = 0x33, 0x01
 RETURN, UNDO, DOWN, SPACE, TAB = 0x1C, 0x61, 0x50, 0x39, 0x0F
 BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
@@ -1243,25 +1243,31 @@ def browse():
               ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
         r.shot(16)
         # View > Page source (Erez, 21 Nov 2026): TOS's desktop speaks no
-        # AV, so EWeb shows it itself: cache\source.txt, the bytes as they
-        # came (windows-1255's, not the page's text), in a window of its own
+        # AV, so EWeb shows it itself, in a window of its own, from the page
+        # in memory (Erez, 22 Nov 2026: "Can't it just present the page from
+        # memory?"): view-source:URL, read in the page's encoding
+        # (windows-1255, chosen above), nothing read back or fetched
         n = len(r.events())
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
         r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 9 * 16 + 8)	# Page source
-        ev = r.wait(r"shown .*source\.txt ", 120)
-        time.sleep(3)		# (read again in the page's encoding)
+        ev = r.wait(r"shown view-source:", 120)
+        time.sleep(2)
         r.shot(17)
-        src = b""
-        for root, _, files in os.walk(hd):
-            for f in files:
-                if f.lower() == "source.txt":
-                    src = open(os.path.join(root, f), "rb").read()
-        check("source: View > Page source, the page as it came in a window of EWeb's own",
-              ev is not None and "source shown here" in r.events()[n:] and b"\xf9\xec\xe5\xed" in src and
-              b"<" in src and len([e for e in r.events() if e.startswith("window ")]) >= 1,
-              "%r %r %r" % (ev, r.events()[n:][-6:], src[:80]))
-        check("source: its text read in the page's encoding (windows-1255)",
-              "encoding windows-1255" in r.events()[n:], str(r.events()[n:][-8:]))
+        evs = r.events()[n:]
+        check("source: View > Page source, the page as it came in a window of EWeb's own, from memory",
+              ev is not None and ev.startswith("shown view-source:%senc/w1255.html " % site) and
+              "window 2 of" in " ".join(evs) and
+              not [e for e in evs if e.startswith("status Reading the file") or e.startswith("status Opening")],
+              "%r %r" % (ev, evs[-8:]))
+        check("source: its text read in the page's encoding (windows-1255), once",
+              "source shown here, from memory, in windows-1255" in evs and
+              len([e for e in evs if e.startswith("shown ")]) == 1, str(evs[-8:]))
+        # Reload: view-source: loaded again, the page fetched and shown as its text
+        n = len(r.events())
+        r.key(R, (CTRL,))
+        ev = r.wait(r"shown view-source:", 120)
+        check("source: Reload shows it again as its text",
+              ev is not None and ev.startswith("shown view-source:%senc/w1255.html " % site), str(r.events()[n:][-6:]))
         r.key(U, (CTRL,))		# (that window closed: the page's again in front)
         time.sleep(2)
         r.key(Q, (CTRL,))

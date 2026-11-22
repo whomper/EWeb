@@ -46,9 +46,9 @@ GATE2, EXT = 18298 + OFF, 18299 + OFF	# webgate with --browser, and its extensio
 # AERA-Gateway's webgate, for the gateway's cases: EWeb's copy of the
 # gateway (gateway/, from AERA-Gateway), or WEBGATE=path/webgate.py
 WEBGATE = os.environ.get("WEBGATE") or os.path.join(HERE, "..", "..", "gateway", "webgate.py")
-# aerapens for it (make -C common/tools/pens), behind a socket as on the Pi
+# aerapens for it (make -C common/tools/pens, or PENS=path/aerapens), behind a socket as on the Pi
 # (tests/net/penssock.py)
-PENS = os.path.join(HERE, "..", "..", "common", "tools", "pens", "build", "aerapens")
+PENS = os.environ.get("PENS") or os.path.join(HERE, "..", "..", "common", "tools", "pens", "build", "aerapens")
 # aerajsc (EWeb's tools/jsc, built by make itest), behind a socket as on the Pi
 AERAJSC = os.path.join(HERE, "..", "..", "build", "host", "aerajsc")
 srv = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), work, "--http", str(HTTP),

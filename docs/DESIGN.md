@@ -5350,6 +5350,20 @@ written over (the SD card: a file each time costs seconds). Not in the ST editio
 `view_source`, `source_answer` and `source_window` in `ui/main.c`; `make hatarigui`'s browse
 group checks the window and the file's bytes (windows-1255's, not the page's text).
 
+**From memory (22 Nov 2026).** Erez: "It seems showing page source downloads the page again.
+Can't it just present the page from memory?" It fetched nothing, but it looked like a load: the
+file written, read back ("Reading the file..."), parsed, then parsed again in the page's
+encoding. Now EWeb's own window is made from the page in memory: `br_source` (`src/browse`) builds
+a copy of `br.src` as a text file is built (`build_plain`), in the encoding the page was read in,
+once, at the address `view-source:URL`; `load_post` loads such an address again (Back and
+Forward: the cache's of any age; Reload: anew) as the text of URL's answer (`as_source`), and
+leaves it out of the history list. Only when the window's page has changed while the desktop
+answered does the file come into it. The file is still written before the desktop is asked
+(AV_STARTPROG needs it there, and common's AV has no way to ask whether a desktop is listening
+without asking it: asked of the hub). `make hatarigui`'s browse group: the window
+`view-source:`, `window 2 of`, no "Reading the file" or "Opening", one page built, read in
+windows-1255, and Reload shows it again.
+
 ## The FireBee edition: EWEBFB.PRG (12 Nov 2026)
 
 The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code

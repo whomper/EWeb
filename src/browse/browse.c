@@ -2510,6 +2510,11 @@ static void preview(browser *b, const char *data, long len, long whole, const ch
 
 /* the next build is a text file's (text/plain): its bytes are the text */
 static int build_plain;
+#ifndef EW_ST
+static int as_source;	/* load_post: a view-source: address, the answer shown as its text */
+#else
+#define as_source 0
+#endif
 
 int br_building;
 unsigned long br_translation_runs;
@@ -3646,6 +3651,17 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		b->refresh_run = 0;
 	if (has_scheme(url, "javascript") || has_scheme(url, "data"))
 		return BR_STOPPED;	/* nothing EWeb can do with it */
+#ifndef EW_ST
+	if (strncmp(url, "view-source:", 12) == 0 && !as_source && post == NULL &&
+	    (has_scheme(url + 12, "http") || has_scheme(url + 12, "https") || has_scheme(url + 12, "file"))) {
+		/* View > Page source's, come again (br_source): the page
+		   fetched as Back, Forward or Reload would, shown as its text */
+		as_source = 1;
+		r = load_post(b, url + 12, mode, NULL);
+		as_source = 0;
+		return r;
+	}
+#endif
 	if (strncmp(url, "about:search?", 13) == 0 && b->search != NULL && b->search[0]) {
 		/* the home page's search box: its words to the search engine */
 		char raw[1024], words[1024], to[4096];
@@ -3814,7 +3830,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	if (f->attach && f->status >= 200 && f->status < 300) {
 		sb_free(&src);
 		return download(b, f);
-	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
+	} else if (!as_source &&
+		   (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0)) {
 		char q[512];
 		int google = google_wall(b, f, q, sizeof q);
 		if (google || cf_wall(f)) {
@@ -3838,8 +3855,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			lay_recheck = 0;
 			encodable = 1;
 		}
-	} else if (strncmp(f->mime, "text/", 5) == 0) {
-		/* a text file: sniffed as a page is, but for a <meta> */
+	} else if (as_source || strncmp(f->mime, "text/", 5) == 0) {
+		/* a text file: sniffed as a page is, but for a <meta>; and a
+		   page's source (view-source:) */
 		build_plain = 1;
 		as_seen(f->url, url);
 		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, 0, &d, &p);
@@ -3899,6 +3917,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	{
 		char shown[4096];
 		shown_at(f->url, url, shown, sizeof shown);
+#ifndef EW_ST
+		if (as_source) {
+			char inner[sizeof shown];
+			str_copy(inner, shown, sizeof inner);
+			strcpy(shown, "view-source:");
+			str_copy(shown + 12, inner, sizeof shown - 12);
+			str_copy(f->mime, "text/plain", sizeof f->mime);
+		}
+#endif
 		show(b, d, p, shown, f->security, f->status, mode == NAV_NEW || mode == NAV_HISTORY);
 		if (f->stale && b->note[0] == 0)
 			snprintf(b->note, sizeof b->note, "%s",
@@ -3911,7 +3938,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			hist_push(b, shown);
 		else
 			hist_set_url(b, shown);
-		hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
+		if (!as_source)
+			hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
 		b->at = b->cur;
 		enc_set(b, f->charset, enc, encodable);
 		/* translated by webgate: the page shown is the translation (memory
@@ -4028,6 +4056,57 @@ const char *br_fallback(const char *url)
 	}
 	return "windows-1252";
 }
+
+#ifndef EW_ST
+/* View > Page source in a window of EWeb's own (Erez, 22 Nov 2026: "Can't
+   it just present the page from memory?"): from's bytes as they came, read
+   in the encoding its page was read in, made b's page as a text file is
+   (build_plain), nothing written, read or fetched. Its address is
+   view-source:URL, which load_post loads again as the text of URL's answer
+   (Back, Forward: the cache's of any age; Reload: anew) */
+int br_source(browser *b, const browser *from)
+{
+	char url[sizeof b->url], cs[sizeof b->charset];
+	char *copy;
+	long len = from->src_len;
+	doc *d;
+	page *p;
+	int r;
+	if (from->src == NULL || len <= 0)
+		return BR_STOPPED;
+	strcpy(url, "view-source:");
+	str_copy(url + 12, from->url, sizeof url - 12);
+	str_copy(cs, from->d != NULL && from->d->charset[0] ? from->d->charset : from->charset, sizeof cs);
+	if ((copy = malloc((size_t) len)) == NULL)
+		return BR_STOPPED;
+	memcpy(copy, from->src, (size_t) len);	/* (from may be b, whose page goes) */
+	conn_stop = 0;
+	b->ms_fetch = 0;
+	build_plain = 1;
+	r = build(b, copy, len, cs, url, 0, &d, &p);
+	build_plain = 0;
+	if (r && conn_stop) {
+		pg_free(p);
+		doc_free(d);
+		r = 0;
+	}
+	if (!r) {
+		conn_stop = 0;
+		free(copy);
+		return BR_STOPPED;
+	}
+	show(b, d, p, url, "", 200, 1);
+	b->src = copy;
+	b->src_len = len;
+	str_copy(b->mime, "text/plain", sizeof b->mime);
+	hist_push(b, url);
+	b->at = b->cur;
+	enc_set(b, cs, "", 1);	/* (View > Encoding reads it again in another) */
+	keep_trim(b);
+	b->scroll_to = -1;
+	return BR_SHOWN;
+}
+#endif
 
 int br_encoding(browser *b, const char *name)
 {
