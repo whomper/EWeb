@@ -2467,6 +2467,7 @@ static void save_page(void)
    bytes the server sent. One file, written over each time */
 static char source_path[320];
 static int source_asked;	/* asked of the desktop, its answer not come */
+static char source_enc[24];	/* the page's encoding, its text read in it */
 
 static void source_window(void)
 {
@@ -2484,6 +2485,13 @@ static void source_window(void)
 	}
 	log_event("source shown here");
 	to_window(txt, "");
+	/* (read in the page's encoding, as View > Encoding would: a text
+	   file says none, and windows-1255's Hebrew came out as Western) */
+	if (source_enc[0] && strstr(br.url, "source.txt") != NULL && !loading) {
+		log_event("encoding %s", source_enc);
+		loading_on();
+		loaded(br_encoding(&br, source_enc));
+	}
 }
 
 /* the desktop's answer: "1" its editor started, "0" it couldn't */
@@ -2525,6 +2533,8 @@ static void view_source(void)
 		alert(1, "[3][EWeb can't write the file:|is the disk locked or full?][ OK ]");
 		return;
 	}
+	/* (UTF-8's text is found as such: not read twice) */
+	str_copy(source_enc, br.d != NULL && (br.d->charset[0] | 32) != 'u' ? br.d->charset : "", sizeof source_enc);
 	log_event("source %ld", br.src_len);
 	if (av_startprog(source_path, NULL) == 0)
 		source_asked = 1;

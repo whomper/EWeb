@@ -1249,6 +1249,7 @@ def browse():
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
         r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 9 * 16 + 8)	# Page source
         ev = r.wait(r"shown .*source\.txt ", 120)
+        time.sleep(3)		# (read again in the page's encoding)
         r.shot(17)
         src = b""
         for root, _, files in os.walk(hd):
@@ -1259,6 +1260,8 @@ def browse():
               ev is not None and "source shown here" in r.events()[n:] and b"\xf9\xec\xe5\xed" in src and
               b"<" in src and len([e for e in r.events() if e.startswith("window ")]) >= 1,
               "%r %r %r" % (ev, r.events()[n:][-6:], src[:80]))
+        check("source: its text read in the page's encoding (windows-1255)",
+              "encoding windows-1255" in r.events()[n:], str(r.events()[n:][-8:]))
         r.key(U, (CTRL,))		# (that window closed: the page's again in front)
         time.sleep(2)
         r.key(Q, (CTRL,))
