@@ -24,4 +24,4 @@ cnn              https://www.cnn.com/                          # 73 pictures, on
 office           https://www.office.com/                       # its menus shown as lists
 bing             https://www.bing.com/                         # its picture lost
 google           https://www.google.com/                       # the apps icon as three discs
-gdrive-file      https://drive.google.com/file/d/1zBiqexXBSozZFF17MPI5hDThAnToJwtn/view   # EWeb's own page for a Drive file (24 Nov 2026)
+gdrive-sample    https://drive.google.com/file/d/1AERAsampleFileNotARealDriveIdXyZ/view   # EWeb's own page for a Drive file: a sample page made for the test, no real file (24 Nov 2026)
