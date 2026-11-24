@@ -854,6 +854,23 @@ static const char *url_path(const char *url)
 	return h + strcspn(h, "/?#");
 }
 
+#ifndef EW_ST
+/* where w is in s's n bytes; NULL */
+static const char *find_text(const char *s, long n, const char *w)
+{
+	size_t wl = strlen(w);
+	const char *e = s + n - (long) wl + 1;
+	for (; s < e; s++) {
+		s = memchr(s, w[0], (size_t) (e - s));
+		if (s == NULL)
+			return NULL;
+		if (memcmp(s, w, wl) == 0)
+			return s;
+	}
+	return NULL;
+}
+#endif
+
 static int has_text(const char *s, long n, const char *w)
 {
 	size_t wl = strlen(w);
@@ -1060,6 +1077,82 @@ static int cf_wall(const FETCH *f)
 {
 	return f->challenge || ((f->status == 403 || f->status == 503) && has_text(f->data, f->len, "_cf_chl_opt"));
 }
+
+#ifndef EW_ST	/* (the ST edition stays as 1.0 has it: bug fixes only) */
+/* a Google Drive file's page (drive.google.com/file/d/ID/...): all it
+   shows is made by a script of 4.6 MB, far past what EWeb runs. 1, its
+   ID and the file's name (its og:title, else its title less " - Google
+   Drive"; entities undone), or 0 */
+static int drive_file(const FETCH *f, char *id, int idsize, char *name, int nsize)
+{
+	static const char at[] = "https://drive.google.com/file/d/";
+	const char *u = f->url + sizeof at - 1, *t, *e, *v;
+	int k = 0;
+	if (strncmp(f->url, at, sizeof at - 1) != 0 || f->status != 200 || f->data == NULL)
+		return 0;
+	while (((*u >= '0' && *u <= '9') || ((*u | 32) >= 'a' && (*u | 32) <= 'z') || *u == '-' || *u == '_') &&
+	       k < idsize - 1)
+		id[k++] = *u++;
+	id[k] = 0;
+	if (k < 10 || (*u != 0 && *u != '/' && *u != '?'))
+		return 0;
+	name[0] = 0;
+	e = f->data + f->len;
+	if ((t = find_text(f->data, f->len, "<meta property=\"og:title\" content=\"")) != NULL) {
+		v = t + 35;
+		t = memchr(v, '"', (size_t) (e - v));
+	} else if ((t = find_text(f->data, f->len, "<title>")) != NULL) {
+		v = t + 7;
+		t = find_text(v, (long) (e - v), " - Google Drive</title>");
+	}
+	if (t != NULL && t > v) {
+		/* (the five entities a page writes a name with) */
+		static const char *const ent[][2] = { { "&amp;", "&" }, { "&lt;", "<" }, { "&gt;", ">" },
+						      { "&quot;", "\"" }, { "&#39;", "'" } };
+		int o = 0;
+		while (v < t && o < nsize - 1) {
+			size_t j;
+			for (j = 0; j < sizeof ent / sizeof ent[0]; j++)
+				if ((size_t) (t - v) >= strlen(ent[j][0]) && !memcmp(v, ent[j][0], strlen(ent[j][0])))
+					break;
+			if (j < sizeof ent / sizeof ent[0]) {
+				name[o++] = ent[j][1][0];
+				v += strlen(ent[j][0]);
+			} else {
+				name[o++] = *v++;
+			}
+		}
+		name[o] = 0;
+	}
+	return 1;
+}
+
+/* EWeb's own page for a Drive file (decided 24 Nov 2026): its name and a
+   link to Google's plain download of it, which needs no script (a big
+   file comes first to Google's "can't scan it for viruses" page, a form
+   EWeb sends) */
+static void drive_page(SBUF *s, const char *url, const char *id, const char *name)
+{
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
+	esc(s, name[0] ? name : "A Google Drive file");
+	sb_adds(s, "</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "</head><body><h1>");
+	esc(s, name[0] ? name : "A Google Drive file");
+	sb_adds(s, "</h1><p class=addr>");
+	esc(s, url);
+	sb_adds(s, "</p><p><a href=\"https://drive.usercontent.google.com/download?id=");
+	esc(s, id);
+	sb_adds(s, "&amp;export=download\">Download</a></p>"
+		   "<p class=small>Google Drive's own page for a file is made by a script far bigger than "
+		   "EWeb runs; this page of EWeb's stands in for it. A file Drive shares with anyone "
+		   "comes straight away; a very big one first asks whether to download it without "
+		   "Google's virus check; one that isn't shared asks to sign in.</p>");
+	if (http_gateway[0])
+		sb_adds(s, "<p class=small>Drive's page itself: View &gt; Through the Gateway's browser.</p>");
+	sb_adds(s, "</body></html>");
+}
+#endif
 
 static void cf_page(SBUF *s, const char *url, int check)
 {
@@ -3837,12 +3930,20 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	} else if (!as_source &&
 		   (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0)) {
 		char q[512];
-		int google = google_wall(b, f, q, sizeof q);
-		if (google || cf_wall(f)) {
+		int google = google_wall(b, f, q, sizeof q), drive = 0;
+#ifndef EW_ST
+		char did[80], dname[256];
+		drive = !google && drive_file(f, did, sizeof did, dname, sizeof dname);
+#endif
+		if (google || drive || cf_wall(f)) {
 			/* EWeb's own page in its place, which goes nowhere (and
 			   runs no script) */
 			if (google)
 				wall_page(b, &src, f->url, q);
+#ifndef EW_ST
+			else if (drive)
+				drive_page(&src, f->url, did, dname);
+#endif
 			else
 				cf_page(&src, f->url, f->check);
 			f->refresh[0] = 0;

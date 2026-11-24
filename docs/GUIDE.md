@@ -908,6 +908,10 @@ there at once; where the window was, when you quit:
   the check itself and EWeb shows the page; when the check wants a click,
   the page's **Live view** link shows the Gateway's screen to tick it, and
   then ^R loads the page
+- **A Google Drive file's link** shows a page of EWeb's own with the
+  file's name and **Download**: Drive's own page is made by a script far
+  too big for EWeb. A file shared with anyone downloads at once; a very
+  big one first asks whether to download it without Google's virus check
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
   `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right;
