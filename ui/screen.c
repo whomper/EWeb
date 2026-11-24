@@ -24,7 +24,8 @@
  * order (as EHypView's colour.c); in 256 colours EWeb sets its own first
  * (PALETTE=1, Erez's decision of 23 Oct 2026: TOS's have no pale tints):
  * the pixel values TOS's sixteen pens don't draw with (16 to 254) get a
- * 6x6x6 cube and 23 greys, and TOS's are given back at the end.
+ * 6x6x5 cube, 23 greys and the progress bar's blues (pagecol.c), the
+ * rest the page's own colours, and TOS's are given back at the end.
  */
 #include <stdlib.h>
 #include <string.h>

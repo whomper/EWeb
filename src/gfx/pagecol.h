@@ -21,8 +21,9 @@
 #include "layout.h"
 
 #define EW_OWN 239
-#define EW_FIXED 203			/* a 6 x 6 x 5 cube (180) and 23 greys */
-#define EW_PAGE (EW_OWN - EW_FIXED)	/* 36 */
+#define EW_BLUES 14			/* the progress bar's blues past the cube's */
+#define EW_FIXED (203 + EW_BLUES)	/* a 6 x 6 x 5 cube (180), 23 greys, the blues: 217 */
+#define EW_PAGE (EW_OWN - EW_FIXED)	/* 22 */
 #define EW_PIC_PENS (16 + EW_FIXED)	/* pixel values 0..218: the pictures' */
 
 /* EWeb's colour k of EW_FIXED, 0..255 a part */

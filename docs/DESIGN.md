@@ -3118,6 +3118,14 @@ gradients' page and the pictures are smooth. `make hatarigui`'s `screens` group 
 Falcon in 256 colours starts in EWeb's colours and gives TOS's back at the end, and runs it with
 `PALETTE=0`, its screenshots side by side.
 
+**The progress bar's blues (24 Nov 2026).** The family's progress bar (common's `progbar`) picks,
+for each of its 16 steps from navy to sky blue, the nearest blue pen. EWeb's palette had six of
+those blues (in its cube), so EWeb's bars (the page's load at the window's foot, the quit's box,
+the download's) showed six steps where the family's other programs show sixteen. The fixed
+colours now end with the fourteen of the bar's blues the cube lacks (`src/gfx/pagecol.c`,
+`EW_BLUES`), taken from the page's own colours (36 to 22, `EW_PAGE`): the pictures keep all their
+colours and gain those blues, the greys and the toolbar's icons stay as they were.
+
 ## Inline blocks (23 Oct 2026)
 
 Stage 2's first part. A box with `display: inline-block`, `inline-flex`, `inline-grid` or

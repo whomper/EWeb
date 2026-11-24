@@ -3,8 +3,8 @@
 /*
  * fixpen.c - the pen for one of EWeb's own pictures (the toolbar's icons,
  * the throbber) with EWeb's colours on: the nearest of the pens whose
- * colours stay (the system's 16 and pagecol.c's fixed 203, as a page's
- * pictures take, pic_pal_init), none of the 36 that each page sets. The
+ * colours stay (the system's 16 and pagecol.c's fixed EW_FIXED, as a page's
+ * pictures take, pic_pal_init), none of the EW_PAGE that each page sets. The
  * icons' looks are made once and kept; with screen.c's pen() a pixel on a
  * page's pen changed colour with the next page, and was black where that
  * page set none (Erez's Stop icon, 20 Nov 2026). Each colour is kept whole:
