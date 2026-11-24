@@ -3126,6 +3126,18 @@ colours now end with the fourteen of the bar's blues the cube lacks (`src/gfx/pa
 `EW_BLUES`), taken from the page's own colours (36 to 22, `EW_PAGE`): the pictures keep all their
 colours and gain those blues, the greys and the toolbar's icons stay as they were.
 
+**Given back while another program's window is on top (24 Nov 2026; the guidelines' 5.2).** The
+owner's choice of three (the hub's options): EWeb gives the pens it set back to the colours they
+had while another program's window is on top, and sets its own again when one of EWeb's windows
+is (`scr_top` in `ui/screen.c`). The main loop looks at the top window after each message, click or
+mouse event, and twice a second while EWeb's colours are on (`LEND_POLL`: an accessory's window
+opened from EWeb's Desk menu sends EWeb nothing); a page's own colours set meanwhile wait for the
+top. Nothing is decoded or laid out again: EWeb's window shows its page in the other's colours
+until it is on top. What colours the other program left are the ones given back the next time.
+Moving EWeb's pens into 192-255 (the rest of 5.2) is a later phase. `make hatarigui`'s screens
+group checks it on the Falcon in 256 colours with `TOPACC.ACC` (`tests/hatari/topacc.c`, a test
+accessory, not a program of the family), its screenshots 08 and 09.
+
 ## Inline blocks (23 Oct 2026)
 
 Stage 2's first part. A box with `display: inline-block`, `inline-flex`, `inline-grid` or

@@ -1858,7 +1858,12 @@ def swap_colours(r, name):
 def screens():
     for name, spec, tc in (("falcon256", "Falcon:256", False), ("truecolour", "Falcon:16", True),
                            ("ttmed", "TT:ttmed", False), ("ttmono", "TT:mono", False)):
-        r = Run(name, spec, hd_for(name, r"C:\TABLES.HTM"), truecolour=tc)
+        hd = hd_for(name, r"C:\TABLES.HTM")
+        if name == "falcon256":
+            # another program's window (a test accessory, not one of the
+            # family's: the guidelines' 1.2) to put over EWeb's (5.2)
+            shutil.copy(os.path.join(ROOT, "build/hatari/TOPACC.ACC"), os.path.join(hd, "TOPACC.ACC"))
+        r = Run(name, spec, hd, truecolour=tc)
         try:
             ready = r.wait(r"ready ", 120)
             ev = r.wait(r"shown ", 120)
@@ -1878,7 +1883,22 @@ def screens():
                       "256 colours (EWeb's)" in ready, ready or "no ready line")
             time.sleep(2)
             r.shot(0)
-            # the page of pictures, from the disk: dithered to the screen's
+            if name == "falcon256":
+                # another program's window on top: EWeb's colours given
+                # back to the system's while it is, and set again when
+                # EWeb's window is on top once more (the guidelines' 5.2;
+                # decided 24 Nov 2026). TOPACC.ACC opens its window when
+                # C:\TOPON.TXT comes and closes it at C:\TOPOFF.TXT
+                open(os.path.join(hd, "TOPON.TXT"), "w").close()
+                lent = r.wait(r"colours lent", 30)
+                time.sleep(1)
+                r.shot(8)
+                open(os.path.join(hd, "TOPOFF.TXT"), "w").close()
+                back = r.wait(r"colours on top", 30)
+                time.sleep(1)
+                r.shot(9)
+                check("screens: falcon256 gives its colours back under another's window, and takes them again",
+                      lent is not None and back is not None, str(r.events()[-6:]))
             # colours (true colour: as they are)
             r.key(L, (CTRL,))
             r.type("file:///C:/PICS.HTM")

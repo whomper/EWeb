@@ -65,6 +65,8 @@ static short scr_info[272], scr_have;	/* vq_scrninfo's answer */
 static short saved[256][3];		/* in 256 colours, the pens EWeb set, as they were */
 static unsigned char set_pen[256];	/* which ones */
 static int own;				/* EWeb's colours are on the screen */
+static int lent;			/* ... given back: another program's window on top (scr_top) */
+static short mine[256][3];		/* while lent, EWeb's colours to set again */
 static short page_vdi[EW_PAGE];		/* the VDI's pen for the page's colour k (pixel EW_PIC_PENS + k) */
 static uint32_t page_rgb[EW_PAGE];	/* what is on them, 0xRRGGBB */
 static int page_n;			/* how many are the page's */
@@ -186,6 +188,7 @@ static void own_pens(int on)
 		}
 	}
 	own = on;
+	lent = 0;
 	page_n = 0;
 	memset(page_rgb, 0, sizeof page_rgb);
 #ifndef EW_ST
@@ -239,7 +242,10 @@ int scr_page_colours(const struct page *p)
 		rgb[0] = (short) (((want[k] >> 16 & 255) * 1000L + 127) / 255);
 		rgb[1] = (short) (((want[k] >> 8 & 255) * 1000L + 127) / 255);
 		rgb[2] = (short) (((want[k] & 255) * 1000L + 127) / 255);
-		vs_color(vdi_h, page_vdi[k], rgb);
+		if (lent)
+			memcpy(mine[page_vdi[k]], rgb, sizeof rgb);	/* (set when EWeb is on top again) */
+		else
+			vs_color(vdi_h, page_vdi[k], rgb);
 		pal[EW_PIC_PENS + k][0] = (unsigned char) (want[k] >> 16);
 		pal[EW_PIC_PENS + k][1] = (unsigned char) (want[k] >> 8);
 		pal[EW_PIC_PENS + k][2] = (unsigned char) want[k];
@@ -251,6 +257,38 @@ int scr_page_colours(const struct page *p)
 	img_page_colours((const uint8_t (*)[3]) &pal[EW_PIC_PENS], n, EW_PIC_PENS);
 	return 1;
 #endif
+}
+
+/* another program's window on top (ours 0) or one of EWeb's (1), with
+   EWeb's colours on: the pens EWeb set given back while another's window
+   is on top, and set again when one of EWeb's is (the guidelines' 5.2;
+   decided 24 Nov 2026). The colours on them meanwhile are the other
+   program's: kept as the ones to give back the next time. The pictures
+   and the page stay made of EWeb's (nothing decoded again): its window
+   shows them in the other's colours until it is on top */
+void scr_top(int ours)
+{
+	short i;
+	if (!own || ncol != 256 || truecolour || ours == !lent)
+		return;
+	for (i = 16; i < 256; i++) {
+		if (!set_pen[i])
+			continue;
+		if (ours) {
+			vq_color(vdi_h, i, saved[i]);
+			vs_color(vdi_h, i, mine[i]);
+		} else {
+			vq_color(vdi_h, i, mine[i]);
+			vs_color(vdi_h, i, saved[i]);
+		}
+	}
+	lent = !ours;
+	log_event("colours %s", ours ? "on top: EWeb's again" : "lent: another's window on top");
+}
+
+int scr_lending(void)
+{
+	return own && ncol == 256 && !truecolour;
 }
 
 void scr_palette(void)

@@ -189,6 +189,8 @@ void atari_text(const char *utf8, char *out, int size);
    monochrome to the Falcon's true colour */
 int scr_init(void);			/* 0: a screen EWeb can't draw on */
 void scr_palette(void);			/* PALETTE= changed: EWeb's colours set or TOS's back */
+void scr_top(int ours);			/* whose window is on top: EWeb's colours given back or set again */
+int scr_lending(void);			/* EWeb's colours are on: scr_top has work */
 /* the page's own colours on EWeb's last pens (pagecol.h; 256 colours,
    EWeb's): 1 if they changed (what was drawn in them is to be drawn
    again) */

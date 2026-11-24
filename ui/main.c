@@ -2214,6 +2214,7 @@ static void live_view(void)
    or Return comes, each send a new picture; Backspace takes back a letter
    not sent yet, else goes there, as Tab does; Esc ends it for the page */
 #define LIVE_PAUSE 700		/* ms */
+#define LEND_POLL 500		/* ms: the top window looked at, EWeb's colours on (5.2) */
 static char live_buf[200];
 static int live_n;
 static unsigned long live_t;
@@ -3491,6 +3492,9 @@ static int app_run(void)
 	AEVENT ev;
 	short hover_x = -1, hover_y = -1;
 	int tipped = 0;		/* a toolbar tip waits for the pointer to rest (D18) */
+#ifndef EW_ST
+	int lendpoll = 0;	/* EWeb's colours on: the top window looked at by the timer too */
+#endif
 
 	MAIN_PAD(PAD_APP_RUN);
 
@@ -3819,8 +3823,14 @@ static int app_run(void)
 			if (!(more || due >= 0 || rib || wait <= 1 || tipped) || lw < wait)
 				wait = lw;
 		}
+		/* EWeb's own 256 colours on: whose window is on top looked at
+		   twice a second too (an accessory's window opened from the Desk
+		   menu sends EWeb nothing: 5.2, below) */
+		lendpoll = scr_lending();
+		if (lendpoll && (!(more || due >= 0 || rib || wait <= 1 || tipped || live_n > 0) || wait > LEND_POLL))
+			wait = LEND_POLL;
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
-				    (more || due >= 0 || rib || wait <= 1 || tipped || live_n > 0 ? MU_TIMER : 0),
+				    (more || due >= 0 || rib || wait <= 1 || tipped || live_n > 0 || lendpoll ? MU_TIMER : 0),
 #else
 		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_M1 |
 				    (more || due >= 0 || rib || wait <= 1 || tipped ? MU_TIMER : 0),
@@ -3838,6 +3848,15 @@ static int app_run(void)
 		tip_tick(which, hover_x, hover_y, win_tip);
 #endif
 		handle(which & ~MU_TIMER, msg, &ev, &hover_x, &hover_y);
+#ifndef EW_ST
+		if (scr_lending() && (which & (MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER))) {
+			/* whose window is on top: EWeb's colours only while it
+			   is one of EWeb's (5.2); the desktop's (no window) EWeb's */
+			short top, d;
+			wind_get(0, WF_TOP, &top, &d, &d, &d);
+			scr_top(top <= 0 || win_of(top) != NULL);
+		}
+#endif
 		win_page_colours();	/* (a new page in front: its own colours, 256 colours) */
 		/* keys already waiting (an arrow held: the AES's repeats came
 		   while the last step was drawn) taken before drawing, so that

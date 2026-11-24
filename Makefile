@@ -1317,9 +1317,36 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
-hatarigui: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
+hatarigui: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender \
+	   build/hatari/TOPACC.ACC
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
+
+# TOPACC.ACC: another program's window over EWeb's (gui_test.py's
+# screens group, the guidelines' 5.2), a test accessory as common's
+# tests/av THING.ACC is built
+TOPACC_CF := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+	     -fno-tree-loop-distribute-patterns -fno-store-merging -fdisable-tree-bswap -fno-asynchronous-unwind-tables \
+	     -Wall -nostdinc -isystem $(shell m68k-linux-gnu-gcc -print-file-name=include) \
+	     -Icommon/atari/include -Icommon/atari
+build/hatari/TOPACC.ACC: build/hatari/topacc.elf common/tools/elf2tos.py
+	python3 common/tools/elf2tos.py $< $@
+build/hatari/topacc.elf: build/hatari/crt0.o build/hatari/topacc.o build/hatari/gem.o build/hatari/tos.o \
+			 build/hatari/libc.o build/hatari/nf.o
+	m68k-linux-gnu-gcc -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+build/hatari/topacc.o: tests/hatari/topacc.c
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc $(TOPACC_CF) -Wextra -Werror -c -o $@ $<
+build/hatari/%.o: common/atari/%.c
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc $(TOPACC_CF) -c -o $@ $<
+build/hatari/crt0.o: common/atari/crt0.S
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc -m68000 -DSTACK_SIZE=4096 -c -o $@ $<
+build/hatari/nf.o: common/atari/nf.S
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc -m68000 -c -o $@ $<
 
 # the app's icon, from the family's drawing (common/icons/EWEB.txt, the
 # guidelines' 5.5): the desktop icon's RSC files (EWEBNV.RSC for NVDI's own
