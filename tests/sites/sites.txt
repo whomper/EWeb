@@ -21,3 +21,6 @@ demozoo          https://demozoo.org/                          # the login menu'
 atarimania       https://www.atarimania.com/                   # the 8% teal glow
 webdriveruni     https://webdriveruniversity.com/              -- -J
 cnn              https://www.cnn.com/                          # 73 pictures, on the DFB1
+office           https://www.office.com/                       # its menus shown as lists
+bing             https://www.bing.com/                         # its picture lost
+google           https://www.google.com/                       # the apps icon as three discs

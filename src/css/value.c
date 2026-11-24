@@ -1620,6 +1620,10 @@ static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 		return 1;
 	}
 	case VP_LEN:
+		/* (width's min-content, max-content and fit-content: none
+		   in LibCSS 0.9) */
+		if (EC_UNLIKELY(c->opts & EC_COMPAT_KEYWORDS) && prop >= EP_WIDTH && prop <= EP_MAX_HEIGHT)
+			lf &= ~LF_CONTENT;
 		return length(c, t, n, i, lf, d);
 	case VP_COLOR:
 		return color(t, n, i, d);

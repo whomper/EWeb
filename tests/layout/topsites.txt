@@ -1,0 +1,48 @@
+page 608 x 346, background ffffff, 45 items, 2 links, title "Top sites"
+text 7,17 18x13 #000000 cond10 link 0 "one"
+text 7,29 19x13 #000000 cond10 link 0 "first"
+fill 6,6 74x1 #cc0000
+fill 6,31 74x1 #cc0000
+fill 6,7 1x24 #cc0000
+fill 79,7 1x24 #cc0000
+text 81,17 17x13 #000000 cond10 link 0 "two"
+text 81,29 34x13 #000000 cond10 link 0 "second"
+fill 80,6 74x1 #cc0000
+fill 80,31 74x1 #cc0000
+fill 80,7 1x24 #cc0000
+fill 153,7 1x24 #cc0000
+text 155,17 26x13 #000000 cond10 link 0 "three"
+text 155,29 23x13 #000000 cond10 link 0 "third"
+fill 154,6 74x1 #cc0000
+fill 154,31 74x1 #cc0000
+fill 154,7 1x24 #cc0000
+fill 227,7 1x24 #cc0000
+text 293,42 59x13 #000000 cond10 link 0 "next column"
+text 6,54 37x13 #000000 cond10 link 0 "row two"
+text 293,54 32x13 #000000 cond10 link 0 "beside"
+fill 6,58 111x12 #dddddd
+text 6,68 111x13 #000000 cond10 link 0 "as wide as these words"
+fill 6,72 33x60 #dddddd
+text 6,82 11x13 #000000 cond10 link 0 "as"
+text 6,94 33x13 #000000 cond10 link 0 "narrow"
+text 6,106 11x13 #000000 cond10 link 0 "as"
+text 6,118 27x13 #000000 cond10 link 0 "these"
+text 6,130 28x13 #000000 cond10 link 0 "words"
+fill 6,134 76x12 #dddddd
+text 6,144 76x13 #000000 cond10 link 0 "fits these words"
+fill 6,148 36x60 #dddddd
+text 6,158 10x13 #000000 cond10 link 0 "at"
+text 6,170 24x13 #000000 cond10 link 0 "most"
+text 6,182 12x13 #000000 cond10 link 0 "its"
+text 6,194 36x13 #000000 cond10 link 0 "longest"
+text 6,206 23x13 #000000 cond10 link 0 "word"
+fill 6,210 160x12 #eeeeee
+text 6,220 49x13 #000000 cond10 bold link 0 "Headlines"
+text 55,220 96x13 #000000 cond10 link 0 "Catch up on the day"
+fill 6,222 32x32 #eeeeff
+image 12,228 20x20 link 1 "" data:image/svg+xml;eweb=40f73540-87
+fill 6,222 32x32 #00000000 link 1
+image 6,254 40x40 link 0 "" data:image/svg+xml;eweb=e658eb42-83
+text 6,328 23x13 #000000 cond10 link 0 "after"
+link 1 file://./tests/layout/topsites.html#apps
+link 2 file://./tests/layout/topsites.html#hidden

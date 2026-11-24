@@ -251,6 +251,10 @@ static int match_compound(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, 
 			break;
 		case S_NEVER:
 			return 0;
+		case S_DEFINED:
+			if (e->flags & EC_NODE_UNDEFINED)
+				return 0;
+			break;
 		case S_HOVER:
 			if (!(e->flags & EC_NODE_HOVER))
 				return 0;

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- The faults the top-20 survey found (24 Nov 2026), each small:
+     github.com's marquee, a grid of width max-content whose items name
+     their rows (grid-row: 1 / span 2) and flow column by column, each in
+     a column of its own, side by side (CSS Grid 1, 8.5); width
+     max-content, min-content and fit-content (CSS Sizing 3, 3.1);
+     cnn.com's card, a grid of minmax(0, max-content) as wide as its
+     text; google.com's apps icon, an inline <svg> of a viewBox alone,
+     as wide as the room in its button (24 of 40 less 8 on each side);
+     office.com's header, custom elements hidden while not :defined -->
+<html>
+<head>
+<title>Top sites</title>
+<style>
+body { font-size: 13px; margin: 8px; }
+.marquee { display: grid; grid-auto-flow: column; width: max-content; margin: 0; padding: 0; list-style: none; }
+.marquee li { grid-row: 1 / span 2; display: grid; grid-template-rows: subgrid; border: 1px solid #c00; width: 90px; }
+.flow { display: grid; grid-auto-flow: column; }
+.flow p { margin: 0; }
+.w { background: #ddd; margin: 2px 0; }
+.card { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); width: max-content; max-width: 200px; background: #eee; }
+.apps { display: inline-block; box-sizing: border-box; width: 40px; height: 40px; padding: 8px; background: #eef; }
+x-menu:not(:defined) { visibility: hidden; }
+</style>
+</head>
+<body>
+<ul class="marquee">
+<li><span>one</span><span>first</span></li>
+<li><span>two</span><span>second</span></li>
+<li><span>three</span><span>third</span></li>
+</ul>
+<div class="flow"><p style="grid-row: 2">row two</p><p style="grid-row: 1">next column</p><p style="grid-row: 2">beside</p></div>
+<div class="w" style="width: max-content">as wide as these words</div>
+<div class="w" style="width: min-content">as narrow as these words</div>
+<div class="w" style="width: fit-content">fits these words</div>
+<div class="w" style="width: 300px; max-width: min-content">at most its longest word</div>
+<div class="card"><b>Headlines</b><span>Catch up on the day</span></div>
+<a class="apps" href="#apps"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg></a>
+<div style="width: 50px"><svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg></div>
+<x-menu><a href="#hidden">a menu its script makes</a></x-menu>
+<p>after</p>
+</body>
+</html>

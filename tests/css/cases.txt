@@ -165,6 +165,23 @@ a:visited { margin-right: 9px }
 #f color #008000
 #l color #0000ee
 
+
+=== :defined: a custom element none has defined isn't (HTML 4.13, 4.16.3; office.com's header)
+--- css
+x-menu:not(:defined) { visibility: hidden }
+:defined { margin-left: 5px }
+p:not(:defined), a-b c { color: green }
+--- html
+<x-menu id=m><p id=p>x</p></x-menu><div id=d>y</div><a-b><c id=c>z</c></a-b><xmenu id=n>w</xmenu>
+--- expect
+#m visibility hidden
+#m margin-left 0px
+#p visibility hidden
+#p margin-left 5px
+#d visibility visible
+#d margin-left 5px
+#c color #008000
+#n margin-left 5px
 === :visited: colours only; :link on a visited link as if not visited, but for colours (Selectors 4, 8.2; CSS's privacy rules)
 --- css
 a:link { color: #0000ee; margin-right: 3px }

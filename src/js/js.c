@@ -4027,6 +4027,22 @@ static JSValue win_open(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 	return JS_NewBool(ctx, ok);
 }
 
+/* customElements.define's name: the elements of it :defined from the
+   next styling (doc_define) */
+static JSValue win_define(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	ejs *j = J(ctx);
+	size_t n;
+	const char *s = argc > 0 ? JS_ToCStringLen(ctx, &n, argv[0]) : NULL;
+	(void) this_val;
+	if (s == NULL)
+		return JS_UNDEFINED;
+	if (doc_define(j->d, s, n))
+		touch(j);
+	JS_FreeCString(ctx, s);
+	return JS_UNDEFINED;
+}
+
 /* the window it opened: what its document.write gives (the page it
    shows, when it opened about:blank) */
 static JSValue win_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4167,6 +4183,7 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_DEF("postMessage", 2, node_noop),
 	JS_CFUNC_DEF("__ewOpen", 2, win_open),
 	JS_CFUNC_DEF("__ewWrite", 1, win_write),
+	JS_CFUNC_DEF("__ewDefine", 1, win_define),
 	JS_CFUNC_DEF("addEventListener", 3, add_listener),
 	JS_CFUNC_DEF("removeEventListener", 3, remove_listener),
 	JS_CFUNC_DEF("dispatchEvent", 1, dispatch_event),
@@ -4226,10 +4243,10 @@ static const char prelude[] =
 	   to a part of a page). Without them a page's script stopped at
 	   customElements, and everything after it (webdriveruniversity.com's
 	   AI Playground) */
-	"var ce={};function up(e,c){try{Object.setPrototypeOf(e,c.prototype);"
+	"var ce={},cd=g.__ewDefine;delete g.__ewDefine;function up(e,c){try{Object.setPrototypeOf(e,c.prototype);"
 	"if(typeof e.connectedCallback=='function')e.connectedCallback()}catch(x){console.error(String(x))}}"
 	"g.customElements={define:function(n,c){n=String(n).toLowerCase();if(ce[n])throw new Error("
-	"'customElements: '+n+' is defined already');ce[n]=c;var a=d.getElementsByTagName(n),l=[],i;"
+	"'customElements: '+n+' is defined already');ce[n]=c;cd(n);var a=d.getElementsByTagName(n),l=[],i;"
 	"for(i=0;i<a.length;i++)l.push(a[i]);for(i=0;i<l.length;i++)up(l[i],c)},get:function(n){"
 	"return ce[String(n).toLowerCase()]},whenDefined:function(n){return Promise.resolve(ce[String(n)."
 	"toLowerCase()])},upgrade:function(){}};"
