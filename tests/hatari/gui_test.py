@@ -290,6 +290,24 @@ class Run:
                 self.send("hatari-event keypress %s" % c)
             time.sleep(0.15)
 
+    def regs(self):
+        """the Falcon's 256 colour registers (VIDEL, $FF9800: R, G, 0, B
+        a pen), read through Hatari's debugger: a list of (r, g, b)"""
+        mark = "> m $ff9800-$ff9c00"
+        n0 = open(self.log, errors="replace").read().count(mark)
+        self.send("hatari-debug m $ff9800-$ff9c00")
+        for _ in range(40):
+            t = open(self.log, errors="replace").read()
+            if t.count(mark) > n0 and "\n00FF9BF0:" in t.rsplit(mark, 1)[1]:
+                break
+            time.sleep(0.25)
+        b = []
+        for line in t.rsplit(mark, 1)[1].split("\n"):
+            m = re.match(r"00FF9[89AB][0-9A-F]0: ((?:[0-9a-f]{2} ){16})", line)
+            if m:
+                b += [int(x, 16) for x in m.group(1).split()]
+        return [(b[i], b[i + 1], b[i + 3]) for i in range(0, min(len(b), 1024), 4)]
+
     def shot(self, n):
         path = os.path.join(OUT, "%s-%02d.png" % (self.name, n))
         self.send("hatari-debug screenshot %s" % path)
@@ -1883,22 +1901,7 @@ def screens():
                       "256 colours (EWeb's)" in ready, ready or "no ready line")
             time.sleep(2)
             r.shot(0)
-            if name == "falcon256":
-                # another program's window on top: EWeb's colours given
-                # back to the system's while it is, and set again when
-                # EWeb's window is on top once more (the guidelines' 5.2;
-                # decided 24 Nov 2026). TOPACC.ACC opens its window when
-                # C:\TOPON.TXT comes and closes it at C:\TOPOFF.TXT
-                open(os.path.join(hd, "TOPON.TXT"), "w").close()
-                lent = r.wait(r"colours lent", 30)
-                time.sleep(1)
-                r.shot(8)
-                open(os.path.join(hd, "TOPOFF.TXT"), "w").close()
-                back = r.wait(r"colours on top", 30)
-                time.sleep(1)
-                r.shot(9)
-                check("screens: falcon256 gives its colours back under another's window, and takes them again",
-                      lent is not None and back is not None, str(r.events()[-6:]))
+            # the page of pictures, from the disk: dithered to the screen's
             # colours (true colour: as they are)
             r.key(L, (CTRL,))
             r.type("file:///C:/PICS.HTM")
@@ -1908,6 +1911,8 @@ def screens():
             check("screens: %s pictures" % name, ev is not None and len(dec) == 5, "\n".join(r.events()[-10:]))
             time.sleep(2)
             r.shot(1)
+            if name == "falcon256":
+                lent_regs = lend_colours(r, hd, name)
             # translucent colours and opacity, mixed with what is under them
             # through the screen's palette (looked at in its screenshot)
             r.key(L, (CTRL,))
@@ -1966,11 +1971,51 @@ def screens():
             if name == "falcon256":
                 check("screens: falcon256 gives TOS's colours back", r.wait(r"colours given back", 30) is not None,
                       str(r.events()[-4:]))
+                time.sleep(2)
+                tos = r.regs()
+                # under another's window the pens EWeb sets (pixel values
+                # 16 to 254) held TOS's colours exactly, as after the quit
+                bad = [i for i in range(16, 255) if lent_regs and lent_regs[i] != tos[i]]
+                check("screens: falcon256's pens 16-254 under another's window are TOS's, as after the quit",
+                      lent_regs is not None and len(tos) == 256 and not bad,
+                      "differ at %s" % bad[:12])
         finally:
             r.end()
         if name == "falcon256":
             cached_pictures(name, spec, dec)
     system_colours()
+
+
+def lend_colours(r, hd, name):
+    """another program's window on top (TOPACC.ACC, a test accessory, not
+    one of the family's: the guidelines' 1.2) over the page of pictures:
+    EWeb's colours given back to the system's while it is, and set again
+    when EWeb's window is on top once more (the guidelines' 5.2; decided
+    24 Nov 2026). The Falcon's colour registers read through Hatari's
+    debugger on top, under the other window and on top again (after
+    EPlay's palkeep); under the other window they are compared with TOS's
+    after the quit (screens()). Each change's time is in its event.
+    Returns the registers under the other window, or None"""
+    on = r.regs()
+    open(os.path.join(hd, "TOPON.TXT"), "w").close()
+    lent = r.wait(r"colours lent", 30)
+    time.sleep(1)
+    under = r.regs()
+    r.shot(8)
+    open(os.path.join(hd, "TOPOFF.TXT"), "w").close()
+    back = r.wait(r"colours on top", 30)
+    time.sleep(1)
+    again = r.regs()
+    r.shot(9)
+    changed = sum(1 for i in range(16, 255) if on[i] != under[i]) if len(on) == len(under) == 256 else 0
+    check("screens: %s gives its colours back under another's window (%s), and takes them again (%s)" %
+          (name, lent.split("(")[-1].rstrip(")") if lent else "?", back.split("(")[-1].rstrip(")") if back else "?"),
+          lent is not None and back is not None, str(r.events()[-6:]))
+    check("screens: %s's pens on top again are as before, the pictures' and the page's (%d changed under the "
+          "other window)" % (name, changed),
+          len(on) == 256 and again == on and changed > 100, "differ at %s" %
+          [i for i in range(256) if len(on) == len(again) == 256 and on[i] != again[i]][:12])
+    return under if lent is not None and len(under) == 256 else None
 
 
 def system_colours():

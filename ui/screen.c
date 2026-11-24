@@ -269,8 +269,10 @@ int scr_page_colours(const struct page *p)
 void scr_top(int ours)
 {
 	short i;
+	unsigned long t;
 	if (!own || ncol != 256 || truecolour || ours == !lent)
 		return;
+	t = pf_ms();
 	for (i = 16; i < 256; i++) {
 		if (!set_pen[i])
 			continue;
@@ -283,7 +285,7 @@ void scr_top(int ours)
 		}
 	}
 	lent = !ours;
-	log_event("colours %s", ours ? "on top: EWeb's again" : "lent: another's window on top");
+	log_event("colours %s (%lu ms)", ours ? "on top: EWeb's again" : "lent: another's window on top", pf_ms() - t);
 }
 
 int scr_lending(void)
