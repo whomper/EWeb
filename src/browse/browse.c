@@ -4792,10 +4792,23 @@ static int jh_fetch(void *ud, const char *site, const char *url, const char *met
 		    const char *ctype, char **data, long *len, int *status, char *mime, int msize)
 {
 	browser *b = ud;
-	FETCH *f = malloc(sizeof *f);
+	FETCH *f;
 	FSUBMIT post;
 	int r;
-	if (f == NULL)
+	if (has_scheme(url, "data")) {
+		/* its bytes are in its address (Facebook's scripts): the
+		   type before its ; or , */
+		const char *t = url + 5, *e = t + strcspn(t, ";,");
+		if ((*data = data_url(url, len)) == NULL)
+			return 0;
+		*status = 200;
+		if (e - t >= msize)
+			e = t + msize - 1;
+		memcpy(mime, t, (size_t) (e - t));
+		mime[e - t] = 0;
+		return 1;
+	}
+	if ((f = malloc(sizeof *f)) == NULL)
 		return 0;
 	memset(&post, 0, sizeof post);
 	if (strcmp(method, "POST") == 0) {

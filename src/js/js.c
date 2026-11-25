@@ -3571,7 +3571,9 @@ static void at_target(ejs *j, JSValueConst ev, jsev *e, dnode *n, int capture, i
 			return;
 		}
 		h = JS_GetPropertyStr(ctx, thisv, prop);
-		if (JS_IsUndefined(h) && attr != NULL) {
+		/* (null: the window's own, set by the prelude, until a
+		   script sets one) */
+		if ((JS_IsUndefined(h) || JS_IsNull(h)) && attr != NULL) {
 			SB b = { 0 };
 			jb_str(&b, "(function(event){");
 			jb_str(&b, attr);
@@ -4043,6 +4045,27 @@ static JSValue win_define(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 	return JS_UNDEFINED;
 }
 
+/* URL's parse (the URL Standard, in UTF-8): href joined to base (the
+   document's when null), "" where it is no address */
+static JSValue win_url(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	ejs *j = J(ctx);
+	const char *h = argc > 0 ? JS_ToCString(ctx, argv[0]) : NULL;
+	const char *b = argc > 1 && !JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1]) ? JS_ToCString(ctx, argv[1]) : NULL;
+	char *out = malloc(URL_MAX);
+	JSValue r;
+	(void) this_val;
+	if (out != NULL)
+		out[0] = 0;
+	if (out != NULL && h != NULL && j->h.resolve != NULL)
+		j->h.resolve(j->h.ud, b != NULL ? b : j->base, h, out, URL_MAX, 1);
+	r = JS_NewString(ctx, out != NULL ? out : "");
+	free(out);
+	JS_FreeCString(ctx, h);
+	JS_FreeCString(ctx, b);
+	return r;
+}
+
 /* the window it opened: what its document.write gives (the page it
    shows, when it opened about:blank) */
 static JSValue win_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
@@ -4123,11 +4146,94 @@ static const char *const part_src[] = {
 	"{x.response=null}}else x.response=r[1]}x.readyState=4;x._e('readystatechange');"
 	"x._e(r?'load':'error');x._e('loadend')}if(x._a)setTimeout(done,0);else done()};"
 	"X.UNSENT=0;X.OPENED=1;X.HEADERS_RECEIVED=2;X.LOADING=3;X.DONE=4;g.XMLHttpRequest=X})(globalThis)",
+	/* 2: Image, the observers, AbortController, ReadableStream: the
+	   least a page's scripts look for (the top-20 survey, 24 Nov 2026:
+	   YouTube, Amazon, Wikipedia, mail.ru, LinkedIn, x.com stopped at
+	   one). A MutationObserver is told of no change (EWeb's DOM keeps
+	   no records); an IntersectionObserver sees every target on the
+	   screen once, so pictures a page loads when seen are loaded; a
+	   stream gives what its start enqueues */
+	"(function(g){function I(w,h){var e=document.createElement('img');if(w!==undefined)e.width=w;"
+	"if(h!==undefined)e.height=h;return e}I.prototype=HTMLImageElement.prototype;g.Image=I;"
+	"function MO(f){this._f=f}MO.prototype={observe:function(){},disconnect:function(){},"
+	"takeRecords:function(){return[]}};g.MutationObserver=MO;"
+	"function IO(f,o){this._f=f;this._t=[];this.root=o&&o.root||null;this.rootMargin=o&&o.rootMargin||'0px';"
+	"this.thresholds=[0]}IO.prototype={observe:function(t){var s=this;if(s._t.indexOf(t)>=0)return;"
+	"s._t.push(t);setTimeout(function(){if(s._t.indexOf(t)<0)return;var r=t.getBoundingClientRect();"
+	"s._f([{target:t,isIntersecting:true,intersectionRatio:1,boundingClientRect:r,intersectionRect:r,"
+	"rootBounds:null,time:Date.now()}],s)},0)},unobserve:function(t){var i=this._t.indexOf(t);"
+	"if(i>=0)this._t.splice(i,1)},disconnect:function(){this._t=[]},takeRecords:function(){return[]}};"
+	"g.IntersectionObserver=IO;function RO(){}RO.prototype={observe:function(){},unobserve:function(){},"
+	"disconnect:function(){}};g.ResizeObserver=RO;"
+	"function er(m,n){var e=new Error(m);e.name=n;return e}"
+	"function AS(){this.aborted=false;this.reason=undefined;this.onabort=null;this._l=[]}"
+	"AS.prototype={addEventListener:function(t,f){if(t=='abort')this._l.push(f)},removeEventListener:"
+	"function(t,f){var i=this._l.indexOf(f);if(i>=0)this._l.splice(i,1)},throwIfAborted:function(){"
+	"if(this.aborted)throw this.reason},_a:function(r){if(this.aborted)return;this.aborted=true;"
+	"this.reason=r===undefined?er('signal is aborted','AbortError'):r;var e={type:'abort',target:this},i;"
+	"if(typeof this.onabort=='function')this.onabort(e);for(i=0;i<this._l.length;i++)this._l[i].call(this,e)}};"
+	"AS.abort=function(r){var s=new AS;s._a(r);return s};AS.timeout=function(m){var s=new AS;"
+	"setTimeout(function(){s._a(er('signal timed out','TimeoutError'))},m);return s};g.AbortSignal=AS;"
+	"function AC(){this.signal=new AS}AC.prototype.abort=function(r){this.signal._a(r)};g.AbortController=AC;"
+	"function RS(u){var q=[],w=[],end=false,s=this;function pump(){while(w.length&&(q.length||end))"
+	"w.shift()(q.length?{value:q.shift(),done:false}:{value:undefined,done:true})}"
+	"function stop(){end=true;q=[];pump();return Promise.resolve()}"
+	"var c={enqueue:function(v){q.push(v);pump()},close:function(){end=true;pump()},error:function(){end=true;"
+	"pump()},desiredSize:1};this.locked=false;this.cancel=stop;this.getReader=function(){s.locked=true;"
+	"return{read:function(){return new Promise(function(y){w.push(y);pump()})},releaseLock:function(){"
+	"s.locked=false},cancel:stop,closed:Promise.resolve()}};if(u&&typeof u.start=='function')u.start(c)}"
+	"g.ReadableStream=RS;function PO(){}PO.prototype={observe:function(){},disconnect:function(){},"
+	"takeRecords:function(){return[]}};PO.supportedEntryTypes=[];g.PerformanceObserver=PO})(globalThis)",
+	/* 3: URL and URLSearchParams (the URL Standard; LinkedIn's
+	   scripts): parsed by EWeb's URL code (__ewURL), cut into its parts
+	   here; the query as it came until searchParams is changed */
+	"(function(g){function dc(s){try{return decodeURIComponent(s.replace(/\\+/g,' '))}catch(e){return s}}"
+	"function ec(s){return encodeURIComponent(s).replace(/%20/g,'+')}"
+	"function Q(s){var a,i,e,k;this._p=[];if(s&&typeof s=='object'){if(s instanceof Q)s=s.toString();"
+	"else{if(Array.isArray(s))for(i=0;i<s.length;i++)this._p.push([String(s[i][0]),String(s[i][1])]);"
+	"else for(k in s)this._p.push([k,String(s[k])]);return}}s=s==null?'':String(s);if(s[0]=='?')s=s.slice(1);"
+	"a=s?s.split('&'):[];for(i=0;i<a.length;i++){if(!a[i])continue;e=a[i].indexOf('=');"
+	"this._p.push(e<0?[dc(a[i]),'']:[dc(a[i].slice(0,e)),dc(a[i].slice(e+1))])}}"
+	"function ch(q){q._m=1}Q.prototype={get:function(k){for(var i=0;i<this._p.length;i++)"
+	"if(this._p[i][0]==k)return this._p[i][1];return null},getAll:function(k){return this._p.filter(function(p)"
+	"{return p[0]==k}).map(function(p){return p[1]})},has:function(k){return this.get(k)!==null},"
+	"append:function(k,v){this._p.push([String(k),String(v)]);ch(this)},'delete':function(k){"
+	"this._p=this._p.filter(function(p){return p[0]!=k});ch(this)},set:function(k,v){var i,f=-1;k=String(k);"
+	"for(i=0;i<this._p.length;i++)if(this._p[i][0]==k){if(f<0){f=i;this._p[i][1]=String(v)}else"
+	"{this._p.splice(i,1);i--}}if(f<0)this._p.push([k,String(v)]);ch(this)},sort:function(){this._p.sort("
+	"function(a,b){return a[0]<b[0]?-1:a[0]>b[0]?1:0});ch(this)},forEach:function(f,t){var s=this;"
+	"this._p.forEach(function(p){f.call(t,p[1],p[0],s)})},keys:function(){return this._p.map(function(p)"
+	"{return p[0]})[Symbol.iterator]()},values:function(){return this._p.map(function(p){return p[1]})"
+	"[Symbol.iterator]()},entries:function(){return this._p.map(function(p){return[p[0],p[1]]})"
+	"[Symbol.iterator]()},toString:function(){return this._p.map(function(p){return ec(p[0])+'='+ec(p[1])})"
+	".join('&')},get size(){return this._p.length}};Q.prototype[Symbol.iterator]=Q.prototype.entries;"
+	"g.URLSearchParams=Q;var abs=/^[a-zA-Z][a-zA-Z0-9+.-]*:/;"
+	"function U(u,b){u=String(u);if(b!==undefined){b=String(b instanceof U?b.href:b);if(!abs.test(b))"
+	"throw new TypeError('Invalid base URL')}else if(!abs.test(u))throw new TypeError('Invalid URL');"
+	"var h=__ewURL(u,b===undefined?null:b);if(!h)throw new TypeError('Invalid URL');this._s(h)}"
+	"U.prototype={_s:function(h){var m=/^([a-zA-Z][a-zA-Z0-9+.-]*:)(?:\\/\\/(?:([^:@\\/]*)(?::([^@\\/]*))?@)?"
+	"(\\[[^\\]]*\\]|[^:\\/?#]*)(?::(\\d*))?)?([^?#]*)(\\?[^#]*)?(#.*)?$/.exec(h)||[];this.protocol=m[1]||'';"
+	"this._sl=h.slice(this.protocol.length,this.protocol.length+2)=='//';this.username=m[2]||'';"
+	"this.password=m[3]||'';this.hostname=m[4]||'';this.port=m[5]||'';this.pathname=m[6]||'';"
+	"this._q=m[7]&&m[7]!='?'?m[7]:'';this.hash=m[8]&&m[8]!='#'?m[8]:'';this.searchParams=new Q(this._q)},"
+	"get host(){return this.hostname+(this.port?':'+this.port:'')},get origin(){return this._sl?"
+	"this.protocol+'//'+this.host:'null'},get search(){var p=this.searchParams;return p._m?(p._p.length?"
+	"'?'+p:''):this._q},set search(v){v=String(v);this._q=v&&v[0]!='?'?'?'+v:v=='?'?'':v;"
+	"this.searchParams=new Q(this._q)},get href(){return this.protocol+(this._sl?'//'+(this.username?"
+	"this.username+(this.password?':'+this.password:'')+'@':'')+this.host:'')+this.pathname+this.search+"
+	"this.hash},set href(v){var h=__ewURL(String(v),null);if(!h)throw new TypeError('Invalid URL');"
+	"this._s(h)},toString:function(){return this.href},toJSON:function(){return this.href}};"
+	"U.createObjectURL=function(){return'blob:'+location.origin+'/'+Math.random().toString(36).slice(2)};"
+	"U.revokeObjectURL=function(){};U.canParse=function(u,b){try{new U(u,b);return true}catch(e)"
+	"{return false}};g.URL=U})(globalThis)",
 };
 /* the names each part defines */
-static const char *const part_names[][5] = {
+static const char *const part_names[][9] = {
 	{ "localStorage", "sessionStorage", NULL },
 	{ "fetch", "Headers", "Response", "XMLHttpRequest", NULL },
+	{ "Image", "MutationObserver", "IntersectionObserver", "ResizeObserver", "AbortController", "AbortSignal",
+	  "ReadableStream", "PerformanceObserver", NULL },
+	{ "URL", "URLSearchParams", NULL },
 };
 
 /* a name the script sets itself replaces the part's */
@@ -4184,6 +4290,7 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_DEF("__ewOpen", 2, win_open),
 	JS_CFUNC_DEF("__ewWrite", 1, win_write),
 	JS_CFUNC_DEF("__ewDefine", 1, win_define),
+	JS_CFUNC_DEF("__ewURL", 2, win_url),
 	JS_CFUNC_DEF("addEventListener", 3, add_listener),
 	JS_CFUNC_DEF("removeEventListener", 3, remove_listener),
 	JS_CFUNC_DEF("dispatchEvent", 1, dispatch_event),
@@ -4203,6 +4310,16 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CGETSET_MAGIC_DEF("Headers", lazy_get, lazy_set, 0x11),
 	JS_CGETSET_MAGIC_DEF("Response", lazy_get, lazy_set, 0x12),
 	JS_CGETSET_MAGIC_DEF("XMLHttpRequest", lazy_get, lazy_set, 0x13),
+	JS_CGETSET_MAGIC_DEF("Image", lazy_get, lazy_set, 0x20),
+	JS_CGETSET_MAGIC_DEF("MutationObserver", lazy_get, lazy_set, 0x21),
+	JS_CGETSET_MAGIC_DEF("IntersectionObserver", lazy_get, lazy_set, 0x22),
+	JS_CGETSET_MAGIC_DEF("ResizeObserver", lazy_get, lazy_set, 0x23),
+	JS_CGETSET_MAGIC_DEF("AbortController", lazy_get, lazy_set, 0x24),
+	JS_CGETSET_MAGIC_DEF("AbortSignal", lazy_get, lazy_set, 0x25),
+	JS_CGETSET_MAGIC_DEF("ReadableStream", lazy_get, lazy_set, 0x26),
+	JS_CGETSET_MAGIC_DEF("PerformanceObserver", lazy_get, lazy_set, 0x27),
+	JS_CGETSET_MAGIC_DEF("URL", lazy_get, lazy_set, 0x30),
+	JS_CGETSET_MAGIC_DEF("URLSearchParams", lazy_get, lazy_set, 0x31),
 };
 
 static const JSCFunctionListEntry console_funcs[] = {
@@ -4226,7 +4343,41 @@ static const char prelude[] =
 	"g.matchMedia=function(q){return{matches:false,media:String(q),onchange:null,addListener:function(){},"
 	"removeListener:function(){},addEventListener:function(){},removeEventListener:function(){}}};"
 	"g.getSelection=function(){return{rangeCount:0,toString:function(){return''},removeAllRanges:"
-	"function(){}}};if(!g.performance)g.performance={now:function(){return Date.now()}};"
+	"function(){}}};"
+	/* performance: its now, marks of none, and the load's times as one
+	   moment (Bing's and YouTube's scripts read them) */
+	"if(!g.performance){var t0=Date.now(),pt={},pn='navigationStart fetchStart domainLookupStart "
+	"domainLookupEnd connectStart connectEnd requestStart responseStart responseEnd domLoading'.split(' '),"
+	"i;for(i=0;i<pn.length;i++)pt[pn[i]]=t0;'domInteractive domContentLoadedEventStart "
+	"domContentLoadedEventEnd domComplete loadEventStart loadEventEnd'.split(' ').forEach(function(k){pt[k]=0});"
+	"g.performance={timeOrigin:t0,timing:pt,navigation:{type:0,redirectCount:0},now:function(){"
+	"return Date.now()-t0},mark:function(){},measure:function(){},clearMarks:function(){},clearMeasures:"
+	"function(){},getEntries:function(){return[]},getEntriesByName:function(){return[]},getEntriesByType:"
+	"function(t){return t=='navigation'?[{name:String(location.href),entryType:'navigation',startTime:0,"
+	"type:'navigate',responseStart:0,responseEnd:0,domInteractive:0,domContentLoadedEventEnd:0,"
+	"loadEventEnd:0,duration:0}]:[]}}}"
+	/* NodeList and HTMLCollection: EWeb's lists are arrays (Apple's
+	   scripts add forEach to NodeList's prototype) */
+	/* the window's on... properties, null until set (Bing's scripts
+	   read onload) */
+	"'load unload beforeunload error resize scroll message popstate hashchange focus blur pageshow pagehide "
+	"online offline storage'.split(' ').forEach(function(k){if(!(('on'+k)in g))g['on'+k]=null});"
+	/* NodeFilter and a TreeWalker (DOM 6.1; YouTube's scripts): nextNode
+	   and parentNode, a node iterator the same */
+	"g.NodeFilter={FILTER_ACCEPT:1,FILTER_REJECT:2,FILTER_SKIP:3,SHOW_ALL:0xFFFFFFFF,SHOW_ELEMENT:1,"
+	"SHOW_ATTRIBUTE:2,SHOW_TEXT:4,SHOW_CDATA_SECTION:8,SHOW_PROCESSING_INSTRUCTION:64,SHOW_COMMENT:128,"
+	"SHOW_DOCUMENT:256,SHOW_DOCUMENT_TYPE:512,SHOW_DOCUMENT_FRAGMENT:1024};"
+	"Document.prototype.createNodeIterator=Document.prototype.createTreeWalker=function(r,w,f){"
+	"w=w===undefined?0xFFFFFFFF:w>>>0;function ok(n){if(!(w&(1<<(n.nodeType-1))))return 3;if(!f)return 1;"
+	"return typeof f=='function'?f(n):f.acceptNode(n)}function nx(n,s){if(!s&&n.firstChild)return n.firstChild;"
+	"while(n&&n!==r){if(n.nextSibling)return n.nextSibling;n=n.parentNode}return null}"
+	"var t={root:r,whatToShow:w,filter:f||null,currentNode:r,nextNode:function(){var n=t.currentNode,s=0,a;"
+	"for(;;){n=nx(n,s);if(!n)return null;a=ok(n);if(a==1)return t.currentNode=n;s=a==2}},parentNode:"
+	"function(){var n=t.currentNode;while(n&&n!==r){n=n.parentNode;if(n&&ok(n)==1)return t.currentNode=n}"
+	"return null},detach:function(){}};return t};"
+	"g.NodeList=function(){throw new TypeError('Illegal constructor')};NodeList.prototype=Array.prototype;"
+	"g.HTMLCollection=function(){throw new TypeError('Illegal constructor')};"
+	"HTMLCollection.prototype=Array.prototype;"
 	/* document.implementation: a document of detached nodes (jQuery parses its HTML in one) */
 	"var d=g.document;d.implementation={hasFeature:function(){return true},createHTMLDocument:function(t){"
 	"var h=d.createElement('html'),e=d.createElement('head'),b=d.createElement('body');h.appendChild(e);"
@@ -4510,6 +4661,15 @@ static int setup(ejs *j)
 		"HTMLTextAreaElement", "HTMLButtonElement", "HTMLScriptElement", "HTMLTableElement",
 		"HTMLLIElement", "HTMLUListElement", "HTMLParagraphElement", "HTMLBodyElement",
 		"HTMLIFrameElement", "HTMLCanvasElement", "HTMLTemplateElement", "HTMLDetailsElement", "SVGElement",
+		"HTMLMediaElement", "HTMLVideoElement", "HTMLAudioElement", "HTMLHeadElement", "HTMLLinkElement",
+		"HTMLMetaElement", "HTMLStyleElement", "HTMLHeadingElement", "HTMLLabelElement",
+		"HTMLSourceElement", "HTMLPictureElement", "HTMLTrackElement", "HTMLHtmlElement", "HTMLBRElement",
+		"HTMLHRElement", "HTMLPreElement", "HTMLOListElement", "HTMLDListElement", "HTMLTableRowElement",
+		"HTMLTableCellElement", "HTMLTableSectionElement", "HTMLFieldSetElement", "HTMLLegendElement",
+		"HTMLOptGroupElement", "HTMLObjectElement", "HTMLEmbedElement", "HTMLDialogElement", "HTMLTitleElement",
+		"HTMLUnknownElement", "HTMLSlotElement", "HTMLProgressElement", "HTMLAreaElement", "HTMLMapElement",
+		"HTMLQuoteElement", "HTMLTimeElement", "HTMLDataElement", "HTMLOutputElement", "HTMLBaseElement",
+		"SVGSVGElement", "SVGGraphicsElement",
 		NULL };
 	static const char *const ev_names[] = { "CustomEvent", "UIEvent", "MouseEvent", "KeyboardEvent",
 						 "FocusEvent", "InputEvent", "SubmitEvent", "PointerEvent", NULL };
@@ -4778,11 +4938,18 @@ static void run_script(ejs *j, dnode *n)
 		char mime[96];
 		int status = 0;
 		int got;
-		if (*src == 0 || j->h.fetch == NULL || j->h.resolve == NULL || (name = malloc(URL_MAX)) == NULL)
+		int data = (src[0] | 32) == 'd' && (src[1] | 32) == 'a' && (src[2] | 32) == 't' && (src[3] | 32) == 'a' &&
+			   src[4] == ':';
+		if (*src == 0 || j->h.fetch == NULL || j->h.resolve == NULL)
 			return;
-		j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
+		/* a data: address as it is (it may be longer than URL_MAX):
+		   its bytes are in it, nothing fetched (Facebook's scripts) */
+		if ((name = data ? strdup(src) : malloc(URL_MAX)) == NULL)
+			return;
+		if (!data)
+			j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
 		got = name[0] != 0;
-		if (got && j->h.fetch_script != NULL)
+		if (got && j->h.fetch_script != NULL && !data)
 			got = j->h.fetch_script(j->h.ud, j->url, name, JS_GetBytecodeTag(), &code, &len, &status, mime,
 						sizeof mime);
 		else if (got)

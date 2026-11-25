@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- what the top-20 survey's scripts stopped at (25 Nov 2026), each a
+     small check: new Image(w, h); a MutationObserver that is told of
+     nothing; an IntersectionObserver that sees its target once (a
+     picture loaded when seen); AbortController and AbortSignal; a
+     ReadableStream read to its end; performance.timing and the
+     navigation entry; NodeList's prototype; HTMLVideoElement; a script
+     whose src is a data: address, base64 and escaped; a TreeWalker
+     over elements, one subtree rejected; the window's onload null while
+     the body's onload attribute still runs; PerformanceObserver; URL
+     and URLSearchParams (LinkedIn's) -->
+<!-- args: -T 200 -->
+<!-- expect: "image 16x8 IMG true" -->
+<!-- expect: "mutation [] none" -->
+<!-- expect: "seen lazy" -->
+<!-- expect: "abort AbortError true reason-given" -->
+<!-- expect: "stream ab done" -->
+<!-- expect: "timing number number 0 navigate" -->
+<!-- expect: "nodelist function true" -->
+<!-- expect: "video function" -->
+<!-- expect: "data base64 escaped" -->
+<!-- expect: "walker P,P,B" -->
+<!-- expect: "window null object function" -->
+<!-- expect: "body onload ran" -->
+<!-- expect: "url https://ex.example:8080/b/c?q=1&r=a+b#h ex.example:8080 /b/c a b 1" -->
+<!-- expect: "url2 https://ex.example/a/d.html?x=%26 https://ex.example invalid" -->
+<!-- expect: "params a=1&b=x+y&a=3 1,3 true" -->
+<html><head><title>APIs</title></head><body onload="put('bl', 'body onload ran')">
+<div id="tw"><p>a</p><div class="no"><p>hidden</p></div><p>b <b>c</b></p></div>
+<p id="wk">-</p><p id="ur">-</p><p id="u2">-</p><p id="qp">-</p><p id="wn">-</p><p id="bl">-</p>
+<p id="img">-</p><p id="mo">-</p><p id="io">-</p><p id="ab">-</p><p id="rs">-</p>
+<p id="pf">-</p><p id="nl">-</p><p id="vd">-</p><p id="du">-</p>
+<img id="lazy" data-src="x.png">
+<script>
+function put(id, t) { document.getElementById(id).textContent = t; }
+var i = new Image(16, 8);
+put('img', 'image ' + i.width + 'x' + i.height + ' ' + i.tagName + ' ' + (i instanceof HTMLElement));
+var mo = new MutationObserver(function () { put('mo', 'told'); });
+mo.observe(document.body, { childList: true, subtree: true });
+document.body.appendChild(document.createElement('div'));
+put('mo', 'mutation ' + JSON.stringify(mo.takeRecords()) + ' none');
+mo.disconnect();
+var io = new IntersectionObserver(function (es, o) {
+  es.forEach(function (e) { if (e.isIntersecting) { put('io', 'seen ' + e.target.id); o.unobserve(e.target); } });
+});
+io.observe(document.getElementById('lazy'));
+var ac = new AbortController(), heard = 0;
+ac.signal.addEventListener('abort', function () { heard++; });
+ac.abort();
+var s2 = AbortSignal.abort('reason-given');
+put('ab', 'abort ' + ac.signal.reason.name + ' ' + (ac.signal.aborted && heard === 1) + ' ' + s2.reason);
+var rs = new ReadableStream({ start: function (c) { c.enqueue('a'); c.enqueue('b'); c.close(); } });
+var rd = rs.getReader(), got = '';
+(function next() {
+  rd.read().then(function (r) { if (r.done) put('rs', 'stream ' + got + ' done'); else { got += r.value; next(); } });
+})();
+var t = performance.timing, n = performance.getEntriesByType('navigation')[0];
+put('pf', 'timing ' + typeof t.navigationStart + ' ' + typeof performance.now() + ' ' + n.responseStart + ' ' + n.type);
+if (!NodeList.prototype.forEach) NodeList.prototype.forEach = Array.prototype.forEach;
+put('nl', 'nodelist ' + typeof NodeList.prototype.forEach + ' ' + (document.querySelectorAll('p') instanceof NodeList));
+put('vd', 'video ' + typeof HTMLVideoElement);
+var tw = document.createTreeWalker(document.getElementById('tw'), NodeFilter.SHOW_ELEMENT,
+  { acceptNode: function (n) { return n.className == 'no' ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; } });
+var seen = [], nd;
+while ((nd = tw.nextNode())) seen.push(nd.tagName);
+put('wk', 'walker ' + seen.join(','));
+put('wn', 'window ' + window.onload + ' ' + typeof HTMLSourceElement.prototype + ' ' + typeof new PerformanceObserver(function () {}).observe);
+var u = new URL('https://ex.example:8080/b/c?q=1&r=a+b#h');
+put('ur', 'url ' + u.href + ' ' + u.host + ' ' + u.pathname + ' ' + u.searchParams.get('r') + ' ' + u.searchParams.get('q'));
+var v = new URL('d.html', 'https://ex.example/a/b.html'), bad = 'valid';
+v.searchParams.set('x', '&');
+try { new URL('no scheme'); } catch (e) { bad = 'invalid'; }
+put('u2', 'url2 ' + v + ' ' + v.origin + ' ' + bad);
+var qp = new URLSearchParams('?a=1&b=x%20y');
+qp.append('a', '3');
+put('qp', 'params ' + qp + ' ' + qp.getAll('a') + ' ' + qp.has('b'));
+var du = [];
+</script>
+<script src="data:text/javascript;base64,ZHUucHVzaCgnYmFzZTY0Jyk7"></script>
+<script src="data:text/javascript,du.push(%27escaped%27);put(%27du%27,%27data%20%27+du.join(%27%20%27));"></script>
+</body></html>
