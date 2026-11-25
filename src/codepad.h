@@ -6,7 +6,7 @@
  * it in its object at the last release's places modulo 256, so that the
  * 68030's caches see the code that didn't change as they did and the
  * paired speed run times the change, not where it moved the code (1.23's
- * way, DESIGN.md, Where the code lies). cond is never true but the
+ * way; DESIGN.md, Code layout and the 68030's caches). cond is never true but the
  * compiler can't know it (an argument against a value it never has); the
  * sizes are codepads.h's, for EWEB.PRG alone (EWEBST.PRG, the FireBee's
  * and the host builds have none).

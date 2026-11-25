@@ -2130,10 +2130,12 @@ static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
 		return NULL;
 	}
 	img_size(im, w, h);
+#ifndef EW_ST	/* (the ST edition, frozen) */
 	if (img_ratio(im)) {
 		*w = -*w;	/* (proportions alone, as image_cb's: LAYOUT_OPT.svg) */
 		*h = -*h;
 	}
+#endif
 	return im;
 }
 

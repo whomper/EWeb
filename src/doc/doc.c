@@ -826,6 +826,7 @@ static void svg_hints(dnode *n)
 	}
 }
 
+#ifndef EW_ST
 /* a custom element's name (the HTML Standard's "valid custom element
    name": a lower-case letter first, a hyphen in it) that no script has
    defined (doc_define) */
@@ -842,6 +843,7 @@ static int custom_undefined(const doc *d, const ec_atom *name)
 			return 0;
 	return 1;
 }
+#endif
 
 int doc_define(doc *d, const char *name, size_t len)
 {
@@ -879,8 +881,10 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 	n->e.nattr = n->nattr;
 	if (n->tag == T_A && HA(n, href) != NULL)
 		n->e.flags |= EC_NODE_LINK;
+#ifndef EW_ST	/* (the ST edition, frozen: no :defined) */
 	else if (n->tag == T_OTHER && n->ns == DN_NS_HTML && custom_undefined(d, n->e.name))
 		n->e.flags |= EC_NODE_UNDEFINED;
+#endif
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
 	else if (n->type == DN_ELEMENT && n->tag == T_SVG && n->ns == DN_NS_SVG && n->e.hint == NULL &&

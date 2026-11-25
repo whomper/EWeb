@@ -6014,8 +6014,10 @@ static int out_of_flow(const box *c)
 	       (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED);
 }
 
+#ifndef EW_ST
 /* the box content_width measures: its content, not its own width */
 static box *measure_content;
+#endif
 
 /* a block's widest: its border box with margins, nothing broken */
 static int32_t measure(L *l, box *b)
@@ -6029,6 +6031,7 @@ static int32_t measure(L *l, box *b)
 	}
 	if (stopped(l))
 		return 0;	/* (a table's or a flexbox's sizing measures every box under it: polls too) */
+#ifndef EW_ST	/* (the ST edition, frozen: no content keywords) */
 	if (b == measure_content) {
 		measure_content = NULL;
 		w = AUTO;
@@ -6041,6 +6044,10 @@ static int32_t measure(L *l, box *b)
 	} else if (!b->anon) {
 		w = len(l, b->st, EP_WIDTH, AUTO);
 	}
+#else
+	if (!b->anon)
+		w = len(l, b->st, EP_WIDTH, AUTO);
+#endif
 	if (l->minw && w == AUTO && !b->anon && b->n != NULL && EC_K(b->st, EP_WIDTH) == EK_PCT &&
 	    (b->n->tag == T_INPUT || b->n->tag == T_SELECT || b->n->tag == T_TEXTAREA)) {
 		/* a field of a width in percent: at its narrowest, no wider than
@@ -6077,6 +6084,7 @@ static int32_t measure(L *l, box *b)
 			inner = 0;
 	} else if (b->inl) {
 		inner = inline_measure(l, b);
+#ifndef EW_ST	/* (the ST edition, frozen) */
 	} else if (b->grid && EC_K(b->st, EP_GRID_TEMPLATE_COLUMNS) != EK_PTR &&
 		   EC_K(b->st, EP_GRID_AUTO_FLOW) == EK_INT && (EC_V(b->st, EP_GRID_AUTO_FLOW).i & EC_FLOW_COLUMN)) {
 		/* column by column, no columns of its own: side by side, an
@@ -6103,6 +6111,7 @@ static int32_t measure(L *l, box *b)
 		}
 		if (r > 0)
 			inner += colw + (k ? g : 0);
+#endif
 	} else if (b->grid && EC_K(b->st, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR) {
 		/* its columns' lengths, the others as wide as its widest item */
 		const ec_tracks *t = EC_V(b->st, EP_GRID_TEMPLATE_COLUMNS).p;
@@ -6129,8 +6138,13 @@ static int32_t measure(L *l, box *b)
 				   (minmax(0, max-content) is as wide as its item:
 				   cnn.com's video cards, width max-content, measured
 				   nothing for it and cut their titles) */
+#ifndef EW_ST
 				v = t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
 				    t->t[k].mn.k == EC_TR_LEN && dev(l, t->t[k].mn.v) > widest ? dev(l, t->t[k].mn.v) : widest;
+#else
+				v = t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
+				    t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest;
+#endif
 			}
 			inner += v + (k ? g : 0);
 		}
@@ -6352,6 +6366,7 @@ static int32_t cap_max(L *l, box *c, int32_t v, int32_t w)
 	return v > mx ? mx : v;
 }
 
+#ifndef EW_ST	/* (the ST edition, frozen: no content keywords) */
 /* width, min-width or max-width (p) of min-content, max-content or
    fit-content (CSS Sizing 3, 3.1 and 3.2): the content box's width from
    what it holds, given extra (its margins, borders and padding) and avail
@@ -6377,6 +6392,7 @@ static int32_t content_width(L *l, box *b, int p, int32_t avail, int32_t extra)
 		mx = avail > mn ? avail : mn;
 	return mx > 0 ? mx : 0;
 }
+#endif
 
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
@@ -8426,6 +8442,7 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 				continue;
 			if (sc > ncols)
 				sc = ncols;
+#ifndef EW_ST
 			if (g->r0 >= 0 && (flow & EC_FLOW_COLUMN)) {
 				/* its row set, column by column: from the cursor's
 				   column, the next one when the row is above the
@@ -8445,7 +8462,9 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 				g->c0 = cc;
 				g->c1 = cc + sc;
 				cr = g->r1;
-			} else if (g->r0 >= 0) {
+			} else
+#endif
+			if (g->r0 >= 0) {
 				/* its row set: the first columns free there */
 				for (cc2 = 0; cc2 + sc <= ncols && !gocc_fits(&occ, g->r0, cc2, sr, sc); cc2++)
 					;
@@ -8872,6 +8891,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			w -= bl + br + pl + pr;
 		if (wauto)
 			w = cbw - ml - mr - bl - br - pl - pr;
+#ifndef EW_ST
 		if (wauto && !b->anon && EC_K(s, EP_WIDTH) == EK_KW && EC_V(s, EP_WIDTH).i != KW_AUTO) {
 			int32_t cw = content_width(l, b, EP_WIDTH, w, ml + mr + bl + br + pl + pr);
 			if (cw != AUTO) {
@@ -8879,6 +8899,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				wauto = 0;
 			}
 		}
+#endif
 		if (wauto && b->ctl && b->n != NULL && b->n->tag == T_BUTTON && !b->ib) {
 			/* a button of elements as a block: as wide as its
 			   content, as browsers' buttons are (HTML 15.5.3), its
@@ -8892,6 +8913,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (!b->anon) {
 			mx = len(l, s, EP_MAX_WIDTH, cbw);
 			mn = len(l, s, EP_MIN_WIDTH, cbw);
+#ifndef EW_ST
 			if ((EC_K(s, EP_MAX_WIDTH) == EK_KW && EC_V(s, EP_MAX_WIDTH).i != KW_NONE) ||
 			    (EC_K(s, EP_MIN_WIDTH) == EK_KW && EC_V(s, EP_MIN_WIDTH).i != KW_AUTO)) {
 				/* of their content (content-box widths: box-sizing
@@ -8906,6 +8928,7 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				if (cn != AUTO && w < cn)
 					w = cn;
 			}
+#endif
 			if (mx != AUTO) {
 				if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 					mx -= bl + br + pl + pr;
