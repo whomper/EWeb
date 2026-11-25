@@ -562,8 +562,11 @@ try:
         # amazon.com's scripts' 520 were cut before HTTP/1.1, and refused):
         # all of it reaches the server
         long_q = "".join("%05d" % i for i in range(140))
-        rc, out = browse("http://localhost:%d/site/echo?q=%s" % (HTTP, long_q))
-        check("the browser: an address of 700 bytes reaches the server whole", rc == 0 and long_q in out, out[:600])
+        # (the echo's title holds it whole; the browser's title is cut for
+        # the window: the page as it came, from ewget)
+        rc, out = run("-o", "long.htm", "http://localhost:%d/site/echo?q=%s" % (HTTP, long_q))
+        got = saved("long.htm").decode("latin-1") if rc == 0 else ""
+        check("ewget: an address of 700 bytes reaches the server whole", long_q in got, out[-600:] + got[:300])
         # Google's JavaScript wall (as www.google.com): EWeb's own page in
         # its place, with the same words on the search engine set (-q)
         goo = "http://www.google.com:%d/" % HTTP
