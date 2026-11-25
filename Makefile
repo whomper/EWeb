@@ -871,7 +871,11 @@ build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"2
 $(tos_EWB) $(tos_EC) $(GEM_OBJ) build/prof/tos/main.o: src/codepad.h src/codepads.h
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
-              $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset filepick dirlist))
+              $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
+# the family's file dialog (guidelines 5.12; EWEB.PRG's: the ST edition is
+# frozen and keeps the AES's selector), linked last, so that the code before
+# it stays at 1.26's places
+FP_OBJ     := build/tos/gem/common/filepick.o build/tos/gem/common/dirlist.o
 GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
@@ -930,7 +934,7 @@ GEM_RT := $(subst build/tos/rt/crt0.o,build/tos/rt/crt0_gem.o,$(tos_RT))
 build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) \
 		build/tos/js/js_ovl.o build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o \
 		build/tos/gem/common/cpucheck.o \
-		$(DEEP_OBJ)
+		$(DEEP_OBJ) $(FP_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -Wl,-Map,$@.map -o $@ $(filter %.o,$^) -lgcc
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
@@ -971,9 +975,7 @@ ST_HOT := build/st/ewb/layout/layout.o build/st/ewb/layout/find.o build/st/ewb/d
           $(patsubst src/css/%.c,build/st/ec/%.o,$(EC_SRC)) \
           build/st/gem/screen.o build/st/pic/pic.o build/st/pic/png.o build/st/rt/libc.o
 $(ST_HOT): ST_O2 := -O2
-# (the family's file dialog, guidelines 5.12, is EWEB.PRG's: the ST edition
-# is frozen and keeps the AES's file selector)
-STGEM_OBJ  := $(filter-out %/filepick.o %/dirlist.o,$(subst build/tos/,build/st/,$(GEM_OBJ)))
+STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
 STGEM_OBJ_PAD = $(subst build/st/gem/win.o,build/st/gem/win.o build/st/rt/pad_stwin.o,$(STGEM_OBJ))
 # (-DDLG_CPU: common's dialogs drawn partly by the CPU, for the 68000 only:
 # EWEB.PRG runs on a 68030 and leaves it out)
@@ -1070,7 +1072,7 @@ build/prof/eweb.elf: build/tos/eweb.elf build/prof/tos/gem.o build/prof/tos/main
 	@mkdir -p build/prof/tos/pads; test -f build/prof/tos/pads/pads.txt || cp tools/profpads-tos.txt build/prof/tos/pads/pads.txt
 	$(PROFPAD_TOS) $(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) $(patsubst build/tos/gem/main.o,build/prof/tos/main.o,$(patsubst build/tos/gem/common/gem.o,build/prof/tos/gem.o,$(filter %.o,$(GEM_RT_PAD) \
 		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ)))) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ) $(FP_OBJ)))) -lgcc
 build/prof/ewebst.elf: build/st/ewebst.elf build/prof/st/gem.o build/prof/st/main.o common/tools/profpad.py common/atari/codepad.S
 	$(PROFPAD_ST) $(M68KCC) $(ST_LDFLAGS) $(ST_PAD_LD) $(patsubst build/st/gem/main.o,build/prof/st/main.o,$(patsubst build/st/gem/common/gem.o,build/prof/st/gem.o,$(filter %.o,$(st_RT_PAD) \
 		$(STGEM_OBJ_PAD) $(st_EWB) $(st_EC) $(st_PU) $(STNET_OBJ_PAD) $(STPIC_OBJ) build/st/js/js_none.o $(ST_DEEP_OBJ)))) -lgcc
@@ -1086,7 +1088,7 @@ build/dltest/tos/main.o: ui/main.c ui/*.h $(EWB_HDRS) VERSION
 build/dltest/eweb.elf: build/tos/eweb.elf build/dltest/tos/main.o
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -o $@ $(patsubst build/tos/gem/main.o,build/dltest/tos/main.o,$(filter %.o,$(GEM_RT_PAD) \
 		$(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(tos_PU) $(TOSNET_OBJ_PAD) $(TOSPIC_OBJ_PAD) build/tos/js/js_ovl.o \
-		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ))) -lgcc
+		build/tos/js/js_imports.o build/tos/gem/common/dspjpeg.o build/tos/gem/common/cpucheck.o $(DEEP_OBJ) $(FP_OBJ))) -lgcc
 build/dltest/EWEB.PRG: build/dltest/eweb.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
