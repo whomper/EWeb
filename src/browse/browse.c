@@ -1085,6 +1085,7 @@ static int cf_wall(const FETCH *f)
    name with undone */
 static void copy_ent(const char *v, const char *t, char *out, int size)
 {
+	CODE_PAD((uintptr_t) v == 1, CP_BROWSE_COPY_ENT);
 	static const char *const ent[][2] = { { "&amp;", "&" }, { "&lt;", "<" }, { "&gt;", ">" },
 					      { "&quot;", "\"" }, { "&#39;", "'" } };
 	int o = 0;
@@ -1164,6 +1165,7 @@ static void drive_page(SBUF *s, const char *url, const char *id, const char *nam
    has none) */
 static void og_meta(const FETCH *f, const char *name, char *out, int size)
 {
+	CODE_PAD((uintptr_t) f == 1, CP_BROWSE_OG_META);
 	char key[48];
 	const char *t, *v, *e = f->data + f->len;
 	snprintf(key, sizeof key, "<meta property=\"og:%s\" content=\"", name);
@@ -1180,6 +1182,7 @@ static void og_meta(const FETCH *f, const char *name, char *out, int size)
    play. 1 and its ID (11 letters), or 0 */
 static int yt_video(const FETCH *f, char *id)
 {
+	CODE_PAD((uintptr_t) f == 1, CP_BROWSE_YT_VIDEO);
 	static const char *const at[] = { "https://www.youtube.com/", "https://m.youtube.com/",
 					   "https://youtube.com/" };
 	const char *u = NULL, *v;
@@ -1210,6 +1213,7 @@ static int yt_video(const FETCH *f, char *id)
    with the Gateway its live view, where the Pi's browser plays it */
 static void yt_page(SBUF *s, const FETCH *f, const char *id)
 {
+	CODE_PAD((uintptr_t) s == 1, CP_BROWSE_YT_PAGE);
 	char title[256], what[600];
 	og_meta(f, "title", title, sizeof title);
 	og_meta(f, "description", what, sizeof what);
@@ -1876,6 +1880,7 @@ typedef struct {
 
 static int pack_get(void *u, unsigned char *buf, long n)
 {
+	CODE_PAD((uintptr_t) u == 1, CP_BROWSE_PACK_GET);
 	PACKSRC *s = u;
 	long k = (long) (s->end - s->p);
 	if (k > n)
@@ -2308,6 +2313,7 @@ static int size_shown(const ew_img *im, int32_t w, int32_t h)
    trimming keeps */
 static void shown_imgs(const browser *b)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_SHOWN_IMGS);
 	int i;
 	img_current(NULL);
 	page_shown_imgs(b->p);
@@ -3081,6 +3087,7 @@ static int picture_page(SBUF *s, FETCH *f, int anew);
 static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len, const char *charset,
 		      const char *url, int plain)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_FRAME_DOC);
 	int32_t w = b->width;
 	html_opts o;
 	ec_media m;
@@ -3171,6 +3178,7 @@ static void frames_bury(br_frames *fs)
    1 done (b->p is to be laid out again), 0 stopped (Esc): as it was */
 static int frame_load(browser *b, int k, const FSUBMIT *post, int fresh)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_FRAME_LOAD);
 	br_frames *fs = b->d != NULL ? b->d->frames : NULL;
 	br_frame *f;
 	FETCH *fe;
@@ -3505,6 +3513,7 @@ static void preview(browser *b, const char *data, long len, long whole, const ch
 
 void br_preview_step(browser *b)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_BR_PREVIEW_STEP);
 	const HTTPRESP *rs = pv_rs;
 	SBUF plain;
 	if (pv_body == NULL || rs == NULL || b->pv_tried || pv_building || br_building || conn_stop ||
@@ -4899,6 +4908,7 @@ void br_scripts_too_much(const browser *b, const char *url)
 static int jh_fetch(void *ud, const char *site, const char *url, const char *method, const char *body, long blen,
 		    const char *ctype, char **data, long *len, int *status, char *mime, int msize)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_JH_FETCH);
 	browser *b = ud;
 	FETCH *f;
 	FSUBMIT post;
@@ -5006,6 +5016,7 @@ static int jh_fetch_script(void *ud, const char *site, const char *url, const ch
    (its key its source's sums) */
 static int jh_code_get(void *ud, const char *key, char **data, long *len)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_JH_CODE_GET);
 	DC_GOT g;
 	(void) ud;
 	if (!dc_get(key, &g))
@@ -5849,6 +5860,7 @@ static int b64(int c)
    NULL if it isn't one */
 static char *data_url(const char *url, long *len)
 {
+	CODE_PAD((uintptr_t) url == 1, CP_BROWSE_DATA_URL);
 	const char *comma = strchr(url, ','), *p;
 	char *out, *o;
 	int base64;
@@ -6771,6 +6783,7 @@ static int save_out(SAVING *s)
 
 static int save_sink(void *ud, const char *data, long n)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_SAVE_SINK);
 	SAVING *s = ud;
 	while (n > 0) {
 		long k = s->size - s->n < n ? s->size - s->n : n;
@@ -6798,6 +6811,7 @@ static int save_sink(void *ud, const char *data, long n)
    of the front end, and the file made */
 static int save_head(void *ud, HTTPRESP *rs)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_SAVE_HEAD);
 	SAVING *s = ud;
 	browser *b = s->b;
 	const char *v = http_header_at(rs, "Content-Disposition");
@@ -6845,6 +6859,7 @@ static int save_head(void *ud, HTTPRESP *rs)
 
 int br_save_url(browser *b, const char *url, const char *given, char *path, int size, char *err, int errlen)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_BR_SAVE_URL);
 	HTTPREQ rq;
 	HTTPRESP *rs;
 	SBUF body;

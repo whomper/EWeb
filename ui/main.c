@@ -915,6 +915,7 @@ static void drop(SBUF *s, const char *key)
    couldn't be written */
 int settings_save(void)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_SETTINGS_SAVE);
 	char path[256], v[40];
 	SBUF s;
 	int ok;
@@ -1572,6 +1573,7 @@ static void loading_on(void)
    meanwhile (a save starts only between loads: no idle) */
 static int ask_save(const char *title, const char *name, char *full, int size)
 {
+	CODE_PAD((uintptr_t) title == 1, CP_MAIN_ASK_SAVE);
 	static char dir[FP_PATH], recent[FP_RECENT][FP_PATH], ext[8];
 	static DL_TYPE types[2];
 	FP_SPEC spec;

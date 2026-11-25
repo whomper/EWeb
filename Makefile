@@ -274,7 +274,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 PAD_main := 166
 PAD_RO_main := 194
 PAD_BSS_main := 38
-PAD_browse := 64
+PAD_browse := 160
 PAD_RO_browse := 188
 PAD_BSS_browse := 236
 PAD_font := 144
@@ -296,7 +296,7 @@ PAD_RO_layout := 92
 # against 1.19's ELF and map; the stock Falcon under NVDI had its home
 # page 630 -> 640 ms, the ST its news page and a line scrolled 10 ms
 # slower)
-PAD_libc := 0
+PAD_libc := 80
 PAD_RO_libc := 232
 PAD_net := 78
 PAD_BSS_layout := 224
@@ -308,7 +308,7 @@ PAD_BSS_layout := 224
 # the ST's rows were level) put EWEB.PRG back at 1.20's places modulo 256,
 # worked out with common/tools/profpad.py against 1.20's ELF and map, each
 # after the pads before it
-PAD_nf := 192
+PAD_nf := 112
 PAD_RO_nf := 256
 PAD_DATA_nf := 256
 PAD_BSS_nf := 256
@@ -330,7 +330,7 @@ PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
 PAD_av := 82
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 142
+PAD_charset := 128
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -346,7 +346,7 @@ PAD_gem := 170
 PAD_RO_gem := 256
 PAD_DATA_gem := 256
 PAD_BSS_gem := 256
-PAD_conn := 168
+PAD_conn := 232
 PAD_RO_conn := 256
 PAD_DATA_conn := 256
 PAD_BSS_conn := 256
@@ -379,6 +379,12 @@ PAD_RO_alert := 256
 PAD_DATA_alert := 254
 PAD_BSS_alert := 256
 PAD_dialog := 168
+# (1.27: popup.o's code grew, common bfc4656; dialog.o after it at 1.26's places)
+PAD_popup := 80
+# (1.27: tls_ovl.o's, ovl.o's and util.o's code grew, common bfc4656)
+PAD_tlsovl := 230
+PAD_ovl := 120
+PAD_util := 208
 PAD_RO_dialog := 256
 PAD_DATA_dialog := 256
 PAD_BSS_dialog := 216
@@ -406,14 +412,14 @@ PAD_pic := 162
 PAD_RO_pic := 64
 PAD_DATA_pic := 256
 PAD_BSS_pic := 256
-PAD_onstack := 256
+PAD_onstack := 0
 PAD_RO_onstack := 256
 PAD_DATA_onstack := 256
 PAD_BSS_onstack := 256
 PAD_STR_onstack := 53
 # (and three more once common's c0fa029 put libc.o back as 1.21's and changed
 # the About box: profpad's sizes again, after the pads before them)
-PAD_libc4 := 256
+PAD_libc4 := 80
 PAD_RO_libc4 := 256
 PAD_DATA_libc4 := 256
 PAD_BSS_libc4 := 8
@@ -421,7 +427,7 @@ PAD_aboutbox2 := 12
 PAD_RO_aboutbox2 := 256
 PAD_DATA_aboutbox2 := 256
 PAD_BSS_aboutbox2 := 256
-PAD_alert2 := 256
+PAD_alert2 := 190
 PAD_RO_alert2 := 256
 PAD_DATA_alert2 := 254
 PAD_BSS_alert2 := 256
@@ -438,7 +444,7 @@ PAD_BSS_alert2 := 256
 PAD_win := 0
 PAD_RO_win := 4
 PAD_BSS_win := 252
-PAD_fixpen := 156
+PAD_fixpen := 24
 # 1.24's: none now (main.c pads its own changed functions, MAIN_PAD)
 # (profpad's size against 1.23's ELF and map; the other changed objects
 # carry their own never-run bytes, below)
@@ -458,7 +464,7 @@ build/st/rt/pad_%.o: common/atari/codepad.S Makefile
 	$(M68KCC) -m68000 -DPAD_NAME=pad_$* -DPAD_TEXT=$(PAD_$*) -DPAD_RO=$(or $(PAD_RO_$*),0) \
 		-DPAD_BSS=$(or $(PAD_BSS_$*),0) -c $< -o $@
 ST_PAD_LD := -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_stwin_bss
-CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_main_ro -Wl,-u,pad_main_bss \
+CONNPAD_LD := -Wl,-u,pad_libc -Wl,-u,pad_popup -Wl,-u,pad_tlsovl -Wl,-u,pad_ovl -Wl,-u,pad_util -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_main_ro -Wl,-u,pad_main_bss \
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
@@ -884,18 +890,22 @@ GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad
               build/tos/gem/common/settings.o,build/tos/gem/common/settings.o build/tos/rt/pad_settings.o build/tos/rt/pad_settings2.o,$(subst \
               build/tos/gem/common/aboutbox.o,build/tos/gem/common/aboutbox.o build/tos/rt/pad_aboutbox.o build/tos/rt/pad_aboutbox2.o,$(subst \
               build/tos/gem/common/alert.o,build/tos/gem/common/alert.o build/tos/rt/pad_alert.o build/tos/rt/pad_alert2.o,$(subst \
+              build/tos/gem/common/popup.o,build/tos/gem/common/popup.o build/tos/rt/pad_popup.o,$(subst \
               build/tos/gem/common/dialog.o,build/tos/gem/common/dialog.o build/tos/rt/pad_dialog.o,$(subst \
               build/tos/gem/common/offdraw.o,build/tos/gem/common/offdraw.o build/tos/rt/pad_offdraw.o,$(subst \
               build/tos/gem/common/click.o,build/tos/gem/common/click.o build/tos/rt/pad_click.o,$(subst \
               build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(subst \
-              build/tos/gem/common/charset.o,build/tos/gem/common/charset.o build/tos/rt/pad_charset.o,$(GEM_OBJ))))))))))))))
+              build/tos/gem/common/charset.o,build/tos/gem/common/charset.o build/tos/rt/pad_charset.o,$(GEM_OBJ)))))))))))))))
 GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$(subst \
              build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o build/tos/rt/pad_libc4.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
 TOSNET_OBJ_PAD = $(subst build/tos/net/net_tos.o,build/tos/net/net_tos.o build/tos/rt/pad_net.o,$(subst \
+                 build/tos/net/tls_ovl.o,build/tos/net/tls_ovl.o build/tos/rt/pad_tlsovl.o,$(subst \
+                 build/tos/net/ovl.o,build/tos/net/ovl.o build/tos/rt/pad_ovl.o,$(subst \
+                 build/tos/net/util.o,build/tos/net/util.o build/tos/rt/pad_util.o,$(subst \
                  build/tos/net/conn.o,build/tos/net/conn.o build/tos/rt/pad_conn.o,$(subst \
                  build/tos/rt/connpad.o,build/tos/rt/connpad.o build/tos/rt/pad_connpad.o,$(subst \
-                 build/tos/net/inflate.o,build/tos/net/inflate.o build/tos/rt/pad_inflate.o,$(TOSNET_OBJ)))))
+                 build/tos/net/inflate.o,build/tos/net/inflate.o build/tos/rt/pad_inflate.o,$(TOSNET_OBJ))))))))
 st_RT_PAD = $(subst build/st/rt/libc.o,build/st/rt/libc.o build/st/rt/pad_libc.o,$(st_RT))
 STNET_OBJ_PAD = $(subst build/st/net/net_tos.o,build/st/net/net_tos.o build/st/rt/pad_net.o,$(STNET_OBJ))
 tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/tos/rt/pad_font.o,$(subst \

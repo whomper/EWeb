@@ -12,8 +12,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "ui.h"
+#include "codepad.h"
 #include "charset.h"
 #include "dialog.h"
 #include "dlgbuild.h"
@@ -148,6 +150,7 @@ static void settings_drawn_now(OBJECT *t, short band)
 
 static void page_general(SETTINGS *s, short x, short y, void *user)
 {
+	CODE_PAD((uintptr_t) s == 1, CP_DIALOGS_PAGE_GENERAL);
 	(void) y, (void) user;
 	set_tick(s, x, set_y(s, 0), "Show pages' pictures", &s_on[T_PICTURES]);
 	set_text(s, x + 3, set_y(s, 1), "(off: only their words, for a slow line)");
@@ -433,6 +436,7 @@ static int settings_check(SETTINGS *s, void *user)
 /* 1 when the settings changed (they are in opt, and on the disk) */
 int dlg_settings(void)
 {
+	CODE_PAD(set_open < -30000, CP_DIALOGS_DLG_SETTINGS);
 	static const SET_PAGE pages[] = {
 		{ "General", page_general }, { "Secure", page_secure },
 #ifndef EW_ST
