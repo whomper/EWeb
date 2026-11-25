@@ -87,7 +87,7 @@
   // live view's picture: the links and fields in the view (CSS px from its
   // corner), so that EWeb shows the pointing hand over them, and whether a
   // field has the keyboard, so that what is typed on the Atari goes there
-  // (Erez, 21 Nov 2026)
+  // (decided 21 Nov 2026)
   const CLICKS = "a[href], button, input:not([type=hidden]), select, textarea, summary, label, " +
                  "[onclick], [role=button], [role=link], [role=tab], [role=menuitem], [contenteditable]";
   function areas() {

@@ -296,7 +296,7 @@ class ProxyTest(unittest.TestCase):
         self.assertFalse(webgate.picture_want("fit=640; deep=0")["deep"])
 
     def test_picture_want_soft(self):
-        # soft=N, EWeb's exact form last (Erez, 22 Nov 2026): 1 to 15, else the whole dither
+        # soft=N, EWeb's exact form last (decided 22 Nov 2026): 1 to 15, else the whole dither
         ask = "fit=608; size=192x128; pens=16; pal=1a2b3c4d; ed=lj; soft=%s"
         self.assertEqual(webgate.picture_want(ask % "12")["soft"], 12)
         self.assertEqual(webgate.picture_want(ask % "8")["soft"], 8)
@@ -1134,7 +1134,7 @@ class LiveTest(unittest.TestCase):
         # click on one at its middle) and a field with the keyboard said, so
         # that EWeb shows the pointing hand and sends what is typed there;
         # the picture the page was made with is the one shot.jpg gives
-        # (Erez, 21 Nov 2026)
+        # (decided 21 Nov 2026)
         webgate.BRIDGE.shown = "https://example.com/"
         self.shot_areas = {"areas": [[100, 50, 300, 60], [0, 0, 1, 1]], "typing": True, "dpr": 2}
         r, data, w = self.ask("http://webgate/live?pic=1")
@@ -1570,7 +1570,7 @@ class BrowserProxyTest(unittest.TestCase):
 
     def test_tunnel_and_page_with_allow_local(self):
         webgate.Config.allow_local = True
-        webgate.Config.allow = ["192.168.1.50"]       # the Atari's: not the browser's concern
+        webgate.Config.allow = ["192.168.1.60"]       # the Atari's: not the browser's concern
         try:
             s = socket.create_connection(("127.0.0.1", self.ext.server_address[1]), timeout=10)
             self.addCleanup(s.close)
@@ -1618,7 +1618,7 @@ class BrowserProxyTest(unittest.TestCase):
 
     def test_names_that_answer_home(self):
         webgate.Config.allow_local = False
-        for answer in (["192.168.1.10"], ["93.184.216.34", "192.168.1.10"]):     # home, and mixed
+        for answer in (["192.168.1.50"], ["93.184.216.34", "192.168.1.50"]):     # home, and mixed
             calls, fake = self.resolver(answer)
             c1, c2 = self.conn(), self.conn()
             c1.connect()                # to webgate, before the stand-in answers every name
@@ -1637,7 +1637,7 @@ class BrowserProxyTest(unittest.TestCase):
         """public at the check, private a moment later: webgate connects to
         what it checked, and asks once"""
         webgate.Config.allow_local = False
-        calls, fake = self.resolver(["93.184.216.34"], ["192.168.1.10"])
+        calls, fake = self.resolver(["93.184.216.34"], ["192.168.1.50"])
         dialled = []
         a, b = socket.socketpair()
         self.addCleanup(a.close)

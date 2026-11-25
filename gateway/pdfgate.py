@@ -22,9 +22,9 @@ back the converted PDF, the same file EConvert would have written
   with one line "pdfgate: why". The options are all optional (name: the
   PDF's own name, as the result records it; "in.pdf"); anything else is
   refused (400). thumbs=1 (the only value) gives each page a preview, a
-  /Thumb (EPDF 2.33; Erez, 15 Nov 2026: off unless asked). pages is none,
+  /Thumb (EPDF 2.33; decided 15 Nov 2026: off unless asked). pages is none,
   mono, colour or colouronly (EPDF 2.8,
-  Erez, 10 Nov 2026: only the pages with colour get /Colour, the others
+  decided 10 Nov 2026: only the pages with colour get /Colour, the others
   keep their /Mono; needs EPDF 2.8's aerapdf or later). pens=HEX (6 lower-case
   hex digits a pen, 2 to 256 pens, by the Atari's hardware register),
   column=N (64-4096) and aspect=N (4-64): Faster display (EPDF 2.41), each
@@ -34,7 +34,7 @@ back the converted PDF, the same file EConvert would have written
 
     GET /version   ->  "aerapdf EPDF-COMMIT"   (which converter answers)
 
-translate=CODE (Erez, 8 Nov 2026; EPDF's docs/PI-GATEWAY.md): the
+translate=CODE (decided 8 Nov 2026; EPDF's docs/PI-GATEWAY.md): the
 converted PDF also carries each page's text translated into CODE, by
 translategate on this machine (aerapdf runs translateclient, its
 translator, once a page; the text never leaves the Gateway). The 102s
@@ -99,8 +99,8 @@ OPTIONS = {
     "double": (None, ("0", "1")),
     "name": (None, None),               # the PDF's own name, kept in the result's AERA entry
     "translate": ("--translate", None),     # a language, ISO 639-1
-    "thumbs": ("--thumbs", ("1",)),         # each page's preview (EPDF 2.33; Erez, 15 Nov 2026)
-    # Faster display (EPDF 2.41; Erez, 17 Nov 2026): the Atari's screen's
+    "thumbs": ("--thumbs", ("1",)),         # each page's preview (EPDF 2.33; decided 15 Nov 2026)
+    # Faster display (EPDF 2.41; decided 17 Nov 2026): the Atari's screen's
     # pens by hardware register (2 to 256, 6 hex digits each), EPDF's text
     # column in pixels and a pixel's height to its width x 16; each picture
     # also comes in those pens at the size EPDF shows it
