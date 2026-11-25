@@ -95,7 +95,9 @@ Pages:
                  x-gzip, always, as Apache sends one), backup (octet-stream,
                  Content-Encoding gzip, named backup.tgz), notes.html.gz (a
                  page, packed: shown), inline (a text file named but shown),
-                 denied (a 403 that says attachment: shown), bad (a header
+                 denied (a 403 that says attachment: shown), cut.bin and
+                 cutnr.bin (/chunked's bytes, 700 KB an answer, then the
+                 connection ends: the first takes ranges), bad (a header
                  that isn't RFC 6266's: shown), apache.tar.gz (a .tar.gz as
                  Apache sends one: application/x-tar with Content-Encoding
                  x-gzip, no Content-Disposition), inline.html (a page with
@@ -902,6 +904,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 try:
                     for k in range(0, len(HELD), 65536):
                         self.connection.sendall(HELD[k:k + 65536])
+                except OSError:
+                    pass
+        elif p in ("/site/dl/cut.bin", "/site/dl/cutnr.bin"):
+            # a big file whose connection ends part-way, as a server ends a
+            # slow line's after minutes: cut.bin takes ranges (each answer
+            # 700 KB at most, so it takes three asks), cutnr.bin doesn't
+            name = p[9:]
+            DL_COUNT[name] = DL_COUNT.get(name, 0) + 1
+            rng = self.headers.get("Range", "") if name == "cut.bin" else ""
+            start = int(rng[6:].split("-")[0]) if rng.startswith("bytes=") else 0
+            self.send_response(206 if start else 200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(BIG) - start))
+            if name == "cut.bin":
+                self.send_header("Accept-Ranges", "bytes")
+            if start:
+                self.send_header("Content-Range", "bytes %d-%d/%d" % (start, len(BIG) - 1, len(BIG)))
+            self.end_headers()
+            self.close_connection = True
+            if self.command != "HEAD":
+                try:
+                    self.wfile.write(BIG[start:start + 700 * 1024])
+                    self.wfile.flush()
                 except OSError:
                     pass
         elif p == "/site/dl/count":

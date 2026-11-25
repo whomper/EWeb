@@ -6647,6 +6647,8 @@ typedef struct {
 	const char *given;	/* the link's download attribute, or NULL */
 	char *path;
 	int pathsize;
+	int ranges;		/* its server takes ranges (Accept-Ranges: bytes), as it was sent */
+	long from;		/* asked again from here (Range), the file open; 0: from its start */
 } SAVING;
 
 static int save_out(SAVING *s)
@@ -6694,6 +6696,13 @@ static int save_head(void *ud, HTTPRESP *rs)
 	char cd[256], name[16];
 	int t = -1;
 	cd[0] = 0;
+	if (s->from > 0) {
+		/* the rest, asked for: its bytes must start where the file
+		   ends (Content-Range: bytes FROM-...), else nothing is added */
+		v = http_header_at(rs, "Content-Range");
+		return rs->status == 206 && rs->encoding == 0 && v != NULL && strncmp(v, "bytes ", 6) == 0 &&
+		       strtol(v + 6, NULL, 10) == s->from;
+	}
 	if (v != NULL)
 		t = http_disposition(v, cd, sizeof cd);
 	str_copy(b->dl.url, rs->url.href, sizeof b->dl.url);
@@ -6708,6 +6717,9 @@ static int save_head(void *ud, HTTPRESP *rs)
 	br_save_total = v != NULL && rs->encoding == 0 ? strtol(v, NULL, 10) : -1;
 	if (br_save_total < 0)
 		br_save_total = -1;
+	v = http_header_at(rs, "Accept-Ranges");
+	s->ranges = rs->status == 200 && rs->encoding == 0 && br_save_total > 0 && v != NULL &&
+		    strncmp(v, "bytes", 5) == 0;
 	if (s->path[0] == 0) {
 		if (b->save_as == NULL || !b->save_as(b->ud, name, s->path, s->pathsize)) {
 			s->cancelled = 1;
@@ -6729,8 +6741,8 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 	HTTPRESP *rs;
 	SBUF body;
 	SAVING s;
-	char host[128];
-	int ok, tries = 0, made = 0;
+	char host[128], range[48];
+	int ok, tries = 0, made = 0, again = 0;
 
 	br_saved = 0;
 	br_save_total = -1;
@@ -6775,11 +6787,30 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 		net_busy++;
 		ok = http_request(&rq, rs, &body, err, errlen);
 		net_busy--;
+		if (!ok && s.ranges && s.h >= 0 && !s.failed && !s.cancelled && !conn_stop && br_saved > s.from &&
+		    br_saved < br_save_total && again < 64) {
+			/* lost part-way (a big file over a slow line: a server
+			   may end a connection that has been open for minutes):
+			   the rest asked for, from where the file ends (RFC 9110,
+			   14.2), as long as each try brings more */
+			if (!save_out(&s))
+				break;
+			s.from = br_saved;
+			snprintf(range, sizeof range, "Range: bytes=%ld-\r\n", s.from);
+			rq.headers = range;
+			again++;
+			err[0] = 0;
+			http_resp_free(rs);
+			sb_free(&body);
+			sb_init(&body);
+			say(b, "Asking %s for the rest...", host);
+			continue;
+		}
 		/* lost once the file selector had been up, the answer unread
 		   meanwhile: its server may have given up waiting (nginx and
 		   Apache end a connection that takes nothing for 60 s), so it is
 		   asked for once more, into the file chosen */
-		if (ok || !s.asked || s.h < 0 || s.failed || conn_stop || tries++)
+		if (ok || !s.asked || s.h < 0 || s.failed || conn_stop || s.from > 0 || tries++)
 			break;
 		pf_close(s.h);
 		s.h = -1;
@@ -6797,6 +6828,9 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 		snprintf(err, (size_t) errlen, "The server answered %d %.60s.", rs->status, rs->reason);
 		ok = 0;
 	}
+	if (!ok && s.from > 0 && !conn_stop && !s.failed && br_saved == s.from)
+		snprintf(err, (size_t) errlen, "The connection was lost after %ld KB, and %.100s wouldn't send the rest.",
+			 s.from >> 10, host);
 	if (ok && s.h >= 0)
 		ok = save_out(&s);
 	if (s.failed == 2)

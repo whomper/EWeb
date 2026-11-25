@@ -630,6 +630,14 @@ try:
         check("the browser: a file opened, streamed, its size", rc == 0 and data == server.SMALL and
               "saved link: 0 %d SMALL.ZIP \n" % len(server.SMALL) in out and
               "save size: %d\n" % len(server.SMALL) in out, out)
+        # a big file's connection lost part-way: the rest asked for where
+        # the server takes ranges (three asks), else the save fails whole
+        rc, data, out = save("-stream", "http://localhost:%d/site/dl/cut.bin" % HTTP)
+        check("the browser: a file streamed, lost part-way, the rest asked for", rc == 0 and data == server.BIG and
+              "saved link: 0 %d CUT.BIN \n" % len(server.BIG) in out, out)
+        rc, data, out = save("-stream", "http://localhost:%d/site/dl/cutnr.bin" % HTTP)
+        check("the browser: a file streamed, lost part-way, no ranges: not saved", data is None and
+              "connection lost" in out, out)
         rc, data, out = save("-stream", "http://localhost:%d/site/dl/report" % HTTP)
         check("the browser: an attachment opened, streamed", rc == 0 and data == server.REPORT and
               "saved link: 0 %d REPORT20.TXT \n" % len(server.REPORT) in out, out)
