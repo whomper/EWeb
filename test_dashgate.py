@@ -169,11 +169,11 @@ class ServicesTest(unittest.TestCase):
         st = dashgate.Stats()
         st.take("dav", "ecalgate", "c 192.168.1.31 ok")
         found = {"dav": {"state": "running", "since": time.time() - 90, "args": ["--port", "8181"]}}
-        d = dashgate.status(st, "192.168.1.20:8888", found, None, {8181: [("192.168.1.31", "x")]})
+        d = dashgate.status(st, "192.168.1.50:8888", found, None, {8181: [("192.168.1.31", "x")]})
         dav = [s for s in d["services"] if s["key"] == "dav"][0]
         self.assertEqual((dav["ports"], dav["total"], dav["live"]), ([8181], 1, 1))
         self.assertEqual([s["state"] for s in d["services"] if s["key"] == "mail"], ["not installed"])
-        self.assertEqual(d["gateway"]["address"], "192.168.1.20")
+        self.assertEqual(d["gateway"]["address"], "192.168.1.50")
         self.assertTrue(d["ataris"][0]["live"])
         self.assertAlmostEqual(d["gateway"]["since"], time.time() - 90, delta=5)
         json.dumps(d)

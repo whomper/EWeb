@@ -494,7 +494,7 @@ class AccessTests(Base):
             gw.shutdown()
 
     def test_parse_login(self):
-        self.assertEqual(eftpgate.parse_login("sftp:erez@my.server.net"), ("sftp", "erez", "my.server.net", 22))
+        self.assertEqual(eftpgate.parse_login("sftp:demo@my.server.net"), ("sftp", "demo", "my.server.net", 22))
         self.assertEqual(eftpgate.parse_login("ftps:me@home.org@ftp.x.org:2121"),
                          ("ftps", "me@home.org", "ftp.x.org", 2121))
         self.assertEqual(eftpgate.parse_login("FTPS-IMPLICIT:a@b"), ("ftps-implicit", "a", "b", 990))

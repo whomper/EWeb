@@ -13,7 +13,7 @@ let wanted = null;          // {id, url} being opened
 // the browser's view sized to w x h for live view: the window made a
 // normal one at the screen's top left, as big as that view and Chromium's
 // bar; then a moment for the page to lay itself out again. Returns where
-// the view is on the screen [ox, oy] (Erez, 30 Oct 2026: the picture as
+// the view is on the screen [ox, oy] (decided 30 Oct 2026: the picture as
 // wide as EWeb's page and three of its screens tall, at 1:1)
 async function fit(tab, w, h) {
   let win = await chrome.windows.get(tab.windowId);
@@ -149,7 +149,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 // Chromium stops an extension's background (a service worker) after 30 s
 // in which no event came and no extension call was made, and a fetch
 // waiting on /next is neither: so the browser stopped answering webgate a
-// minute after its last page (Erez's live view, 30 Oct 2026). A cheap
+// minute after its last page (the live view, 30 Oct 2026). A cheap
 // call every 20 s keeps it going; if it is stopped all the same, the alarm
 // starts it again within a minute, and this script with it.
 setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
