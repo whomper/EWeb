@@ -90,6 +90,18 @@ int main(void)
 	if (Fopen("C:\\FPSYS.TXT", 0) >= 0)		/* the setting "Use the system file selector", for run.py */
 		filepick_system = 1;
 	nf_debug("FPT open\n");
+#ifndef FP_OLD
+	if (Fopen("C:\\FPSAVE.TXT", 0) >= 0) {	/* save mode (filepick_save), for save.py */
+		static const DL_TYPE pl[] = { { "Playlists", "M3U" }, { "All files", "" } };
+		static const FP_SPEC sspec = { "Save the list as a playlist", "Save", "No folder saved in yet", "FPT", pl, 2 };
+		static char name[64] = "PLAYLIST.M3U", path[FP_PATH + 64];
+		n = filepick_save(&sspec, dir, recent, name, sizeof(name), path, sizeof(path), idle);
+		snprintf(b, sizeof(b), "FPT saved %d %s\n", n, n ? path : "-");
+		nf_debug(b);
+		appl_exit();
+		return 0;
+	}
+#endif
 #ifdef FP_OLD
 	n = addfiles_run(dir, recent, take, idle);
 #else

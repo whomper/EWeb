@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""All the AERA accessories at once (Erez, 19 Oct 2026): ECal, EContact,
+"""All the AERA accessories at once (decided 19 Oct 2026): ECal, EContact,
 EHypView and EMail's EMail check (EMAILCHK.ACC), their latest releases
-(getrelease.py), loaded together on a Falcon with TT RAM, as on Erez's own.
-Not on a 4 MB machine, ST or Falcon-4 (Erez, 4 Nov 2026: the accessories are not run there; the
+(getrelease.py), loaded together on a Falcon with TT RAM, as on the reference configuration.
+Not on a 4 MB machine, ST or Falcon-4 (decided 4 Nov 2026: the accessories are not run there; the
 4 MB machines stay targets for the programs, each on its own): the script says so and stops.
 
     common/tests/family/acc_all.py WORK [MACHINE] [--nvdi [--font]] [--display :N] [--use FILE]...
@@ -14,12 +14,12 @@ MACHINE is Falcon (the DFB1: 14 MB + TT RAM, TOS 4.04, ECAL.ACC and ECONTACT.ACC
 Falcon by default, or another machine with more than 4 MB (TT); ST-1 (1 MB, TOS 1.04) takes
 ECALST.ACC and ECONTST.ACC, the ST editions, while a release has them; there each accessory
 has a run of its own (WORK/NAME), as 1 MB holds a program and one accessory, not four. --nvdi boots
-with Erez's NVDI (machines.py, m.nvdi()); --font gives EHypView one of
-his Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
+with the NVDI copy (machines.py, m.nvdi()); --font gives EHypView one of
+NVDI's Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
 candidate's accessory (ECAL.ACC, say) or --prg's program (EMAIL.PRG) in place of the release's
 of that name, for the hub's run before the release; the report names it. --accs names the accessories (all four by default);
 --prg APP starts that program's latest release (EMAIL.PRG; APP:FILE[:MORE...] for another
-edition and the files it needs, as EWeb:EWEBST.PRG:EWEB.FNT on an ST) first, as Erez works: the accessories
+edition and the files it needs, as EWeb:EWEBST.PRG:EWEB.FNT on an ST) first, as on the reference configuration: the accessories
 are then opened from its own Desk menu, and at the end the program is quit (^Q) and must give
 the desktop back; the program's own accessory (EHYPVIEW.ACC with --prg EHypView) is left
 out, since it hands over to the program. The Atari boots to the desktop,
@@ -31,8 +31,8 @@ window drew), Hatari still runs at the end, and no CRASH.LOG anywhere.
 Each accessory's own log (LOG=1 is the apps' default where they have
 one) is copied next to the shots. --again boots the same WORK/hd once
 more, with the same arguments: the accessories' INFs as the first boot
-left them, so each takes what it measured (MEMKB), as on Erez's machine
-from the second boot on, not a first boot's share. Run by the hub on Erez's TOS images;
+left them, so each takes what it measured (MEMKB), as on the reference machine
+from the second boot on, not a first boot's share. Run by the hub on real TOS images;
 on EmuTOS it runs too (AERA_TOS=emutos).
 """
 import os
@@ -78,7 +78,7 @@ if not rest:
 work = os.path.abspath(rest[0])
 machine = rest[1] if len(rest) > 1 else "Falcon"
 if machine.split(":")[0] in ("ST", "Falcon-4"):
-    sys.exit("acc_all: the accessories are not run on a 4 MB machine (%s): Erez, 4 Nov 2026. "
+    sys.exit("acc_all: the accessories are not run on a 4 MB machine (%s): decided 4 Nov 2026. "
              "Run it on Falcon (TT RAM)." % machine)
 st = machine.startswith("ST")
 if machine.split(":")[0] == "ST-1" and len(accs) > 1:

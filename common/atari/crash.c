@@ -380,7 +380,7 @@ static void sup_install(void)
 	   which has no FPU instruction (no AERA program has one in its
 	   TEXT; EWeb's are in EWEBJS.OVL); any other goes on to the handler
 	   before ours at once. The one it was is named for the app's log
-	   (crash_vectors): 0.57's 11 bombs on Erez's Falcon left no
+	   (crash_vectors): 0.57's 11 bombs on a real Falcon left no
 	   CRASH.LOG, vector 11 not being TOS's there */
 	int i, tos1 = tos1x(), own11 = tos_default(11, 7) || tos_default(11, 3);
 	if (tos1)

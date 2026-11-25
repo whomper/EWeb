@@ -448,7 +448,7 @@ static int cpu_icon(const unsigned char *px, const unsigned char *map, const sho
  * mask a pen it has, each blitted once, transparent, in that pen (map[]
  * or pens[] turning its pens into the screen's). As runs of VDI fills it
  * took a stock Falcon some 300 fills; now one vrt_cpyfm a colour (the
- * guidelines' Speed, Erez, 26 Oct 2026). */
+ * guidelines' Speed, decided 26 Oct 2026). */
 static void icon_pens(const unsigned char *px, const unsigned char *map, const short *pens,
 		      short x, short y, short sx, short sy)
 {
@@ -898,7 +898,7 @@ static void box_piece(short x, short y, short w, short h)
 
 /* ---- the box drawn in memory and shown at once ----
  * It is many fills, lines and texts; drawn on the screen, a stock machine
- * showed them appearing one by one (Erez, 26 Oct 2026). TOS's VDI draws at
+ * showed them appearing one by one (decided 26 Oct 2026). TOS's VDI draws at
  * the logical screen's base, so while the box is drawn that base is put in
  * a buffer holding the box's rows (the screen under it first), and the
  * buffer is copied to the screen in one raster copy. Only under TOS's own
