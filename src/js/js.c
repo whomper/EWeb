@@ -116,6 +116,8 @@ typedef struct ejs {
 	JSValue node_proto, elem_proto, text_proto, doc_proto, frag_proto, style_proto, cl_proto, ev_proto,
 		comp_proto, loc_obj;
 	uint8_t parts;			/* the prelude's parts made (lazy_get) */
+	uint8_t in_mo, mo_all;		/* observers being told; told of the whole page (jobs) */
+	unsigned long mo_seen;		/* edits when the observers were last told */
 	uint8_t stopped;		/* Esc while a script was compiled */
 	struct {
 		char *s;
@@ -285,13 +287,38 @@ static void arm(ejs *j, unsigned long ms)
 	j->relayouts = 0;
 }
 
-/* the promise jobs waiting */
+/* the promise jobs waiting; then, where the page has MutationObservers
+   (the prelude's part 2) and its document changed since they were last
+   told (or mo_all: the parser's adding the rest of the page after its
+   scripts, which EWeb parses before it runs them), each told once, at
+   this checkpoint (DOM 4.3: a record a target, childList, of no nodes
+   named: Tailwind's script builds its sheet from the document when told) */
 static void jobs(ejs *j)
 {
 	JSContext *c;
 	while (!j->over && JS_IsJobPending(j->rt))
 		if (JS_ExecutePendingJob(j->rt, &c) < 0)
 			report(j);
+	if ((j->parts & 4) && !j->in_mo && !j->over && (j->mo_all || j->edits != j->mo_seen)) {
+		JSValue g = JS_GetGlobalObject(j->ctx), mo = JS_GetPropertyStr(j->ctx, g, "MutationObserver");
+		JSValue f = JS_IsObject(mo) ? JS_GetPropertyStr(j->ctx, mo, "_d") : JS_UNDEFINED;
+		j->in_mo = 1;
+		j->mo_all = 0;
+		j->mo_seen = j->edits;
+		if (JS_IsFunction(j->ctx, f)) {
+			JSValue r = JS_Call(j->ctx, f, mo, 0, NULL);
+			if (JS_IsException(r))
+				report(j);
+			JS_FreeValue(j->ctx, r);
+			while (!j->over && JS_IsJobPending(j->rt))
+				if (JS_ExecutePendingJob(j->rt, &c) < 0)
+					report(j);
+		}
+		JS_FreeValue(j->ctx, f);
+		JS_FreeValue(j->ctx, mo);
+		JS_FreeValue(j->ctx, g);
+		j->in_mo = 0;
+	}
 }
 
 /* ---------------------------------------------------------------- nodes and their objects */
@@ -4149,14 +4176,19 @@ static const char *const part_src[] = {
 	/* 2: Image, the observers, AbortController, ReadableStream: the
 	   least a page's scripts look for (the top-20 survey, 24 Nov 2026:
 	   YouTube, Amazon, Wikipedia, mail.ru, LinkedIn, x.com stopped at
-	   one). A MutationObserver is told of no change (EWeb's DOM keeps
-	   no records); an IntersectionObserver sees every target on the
+	   one). A MutationObserver is told that its target changed, with
+	   no nodes named (EWeb's DOM keeps no records: jobs); an IntersectionObserver sees every target on the
 	   screen once, so pictures a page loads when seen are loaded; a
 	   stream gives what its start enqueues */
 	"(function(g){function I(w,h){var e=document.createElement('img');if(w!==undefined)e.width=w;"
 	"if(h!==undefined)e.height=h;return e}I.prototype=HTMLImageElement.prototype;g.Image=I;"
-	"function MO(f){this._f=f}MO.prototype={observe:function(){},disconnect:function(){},"
-	"takeRecords:function(){return[]}};g.MutationObserver=MO;"
+	"var mo=[];function MO(f){this._f=f;this._t=[]}MO.prototype={observe:function(t){"
+	"if(this._t.indexOf(t)<0)this._t.push(t);if(mo.indexOf(this)<0)mo.push(this)},disconnect:function(){"
+	"this._t=[];var i=mo.indexOf(this);if(i>=0)mo.splice(i,1)},takeRecords:function(){return[]}};"
+	"MO._d=function(){mo.slice().forEach(function(o){if(!o._t.length)return;var r=o._t.map(function(t)"
+	"{return{type:'childList',target:t,addedNodes:[],removedNodes:[],previousSibling:null,nextSibling:null,"
+	"attributeName:null,attributeNamespace:null,oldValue:null}});try{o._f.call(o,r,o)}catch(e)"
+	"{console.error(String(e))}})};g.MutationObserver=MO;"
 	"function IO(f,o){this._f=f;this._t=[];this.root=o&&o.root||null;this.rootMargin=o&&o.rootMargin||'0px';"
 	"this.thresholds=[0]}IO.prototype={observe:function(t){var s=this;if(s._t.indexOf(t)>=0)return;"
 	"s._t.push(t);setTimeout(function(){if(s._t.indexOf(t)<0)return;var r=t.getBoundingClientRect();"
@@ -4375,6 +4407,18 @@ static const char prelude[] =
 	"for(;;){n=nx(n,s);if(!n)return null;a=ok(n);if(a==1)return t.currentNode=n;s=a==2}},parentNode:"
 	"function(){var n=t.currentNode;while(n&&n!==r){n=n.parentNode;if(n&&ok(n)==1)return t.currentNode=n}"
 	"return null},detach:function(){}};return t};"
+	/* a classList walked as its tokens (for...of, forEach: Tailwind's
+	   script; DOM 7.1) */
+	"(function(p){function a(t){var v=String(t.value).trim(),r=[],l=v?v.split(/\\s+/):[],i;"
+	"for(i=0;i<l.length;i++)if(r.indexOf(l[i])<0)r.push(l[i]);return r}"
+	"p[Symbol.iterator]=p.values=function(){return a(this)[Symbol.iterator]()};"
+	"p.keys=function(){return a(this).keys()};p.entries=function(){return a(this).entries()};"
+	"p.forEach=function(f,t){var s=this;a(this).forEach(function(v,i){f.call(t,v,i,s)})};"
+	"p.toString=function(){return String(this.value)}})(Object.getPrototypeOf(document.createElement('b').classList));"
+	/* ShadowRoot: a class of its own (EWeb's shadow roots are elements:
+	   none is one), for the pages' instanceof (Alpine.js) */
+	"g.ShadowRoot=function(){throw new TypeError('Illegal constructor')};"
+	"ShadowRoot.prototype=Object.create(DocumentFragment.prototype);"
 	"g.NodeList=function(){throw new TypeError('Illegal constructor')};NodeList.prototype=Array.prototype;"
 	"g.HTMLCollection=function(){throw new TypeError('Illegal constructor')};"
 	"HTMLCollection.prototype=Array.prototype;"
@@ -4948,6 +4992,19 @@ static void run_script(ejs *j, dnode *n)
 			return;
 		if (!data)
 			j->h.resolve(j->h.ud, j->base, src, name, URL_MAX, 0);
+		if (!strncmp(name, "https://cdn.tailwindcss.com", 27) && (name[27] == 0 || name[27] == '/' ||
+									   name[27] == '?')) {
+			/* Tailwind's in-browser compiler, which writes a page's
+			   sheet from its classes as it loads: 1.3 billion 68030
+			   instructions for atariuptodate.de's 610 (count68k),
+			   past the page's budget on every Atari, which would then
+			   drop all its scripts. Left out, as a script that didn't
+			   load: the page's others run */
+			say(j, "not run", "Tailwind's compiler, too slow for an Atari");
+			free(name);
+			fire(j, n, "error", 0, 0);
+			return;
+		}
 		got = name[0] != 0;
 		if (got && j->h.fetch_script != NULL && !data)
 			got = j->h.fetch_script(j->h.ud, j->url, name, JS_GetBytecodeTag(), &code, &len, &status, mime,
@@ -5087,6 +5144,8 @@ int js_page(doc *d, const char *url, const char *base, const js_host *h)
 	}
 	if (!j->over) {
 		j->write_after = NULL;
+		j->mo_all = 1;		/* (the rest of the page, as the parser would add it) */
+		jobs(j);
 		fire(j, d->root, "readystatechange", 0, 0);
 		fire(j, d->root, "DOMContentLoaded", 1, 0);
 		sheet_loads(j);

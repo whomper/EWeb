@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- what atariuptodate.de's scripts need (25 Nov 2026): a MutationObserver
+     told once the parser has added the rest of the page after its script,
+     and again after a timer changes the document (not when nothing did);
+     a classList walked with for...of and forEach; ShadowRoot for
+     instanceof (Alpine.js); Tailwind's in-browser compiler left out (too
+     slow for an Atari), its error fired, the page's other scripts run -->
+<!-- args: -T 300 -->
+<!-- expect: "told after the parse HTML childList" -->
+<!-- expect: "told after the edit yes" -->
+<!-- expect: "classes a,b,c a b c" -->
+<!-- expect: "shadow function false" -->
+<!-- expect: "tailwind error, after it yes" -->
+<!-- expect: js not run: Tailwind's compiler, too slow for an Atari -->
+<html><head><title>Observers</title>
+<script>
+var told = 0, first = null, parsed = 0, edited = 0;
+function put(id, t) { document.getElementById(id).textContent = t; }
+var mo = new MutationObserver(function (r) {
+  told++;
+  if (!first)
+    first = r[0];
+  if (document.getElementById('tw'))
+    parsed = 1;
+  if (window.added)
+    edited = 1;
+});
+mo.observe(document.documentElement, { childList: true, subtree: true });
+</script>
+<script src="https://cdn.tailwindcss.com" onerror="window.twerr = 1"></script>
+</head><body>
+<p id="mo">-</p><p id="mo2">-</p><p id="cl" class="a b  c a">-</p><p id="sr">-</p><p id="tw">-</p>
+<script>
+var c = document.getElementById('cl'), l = [], f = [];
+for (var x of c.classList) l.push(x);
+c.classList.forEach(function (v) { f.push(v); });
+put('cl', 'classes ' + l.join(',') + ' ' + f.join(' '));
+put('sr', 'shadow ' + typeof ShadowRoot + ' ' + (document.body instanceof ShadowRoot));
+put('tw', 'tailwind ' + (window.twerr ? 'error' : 'none') + ', after it yes');
+setTimeout(function () { window.added = 1; document.body.appendChild(document.createElement('div')); }, 50);
+setTimeout(function () {
+  mo.disconnect();
+  put('mo', 'told after the parse ' + (parsed ? first.target.nodeName + ' ' + first.type : 'no'));
+  put('mo2', 'told after the edit ' + (edited ? 'yes' : 'no'));
+}, 200);
+</script>
+</body></html>

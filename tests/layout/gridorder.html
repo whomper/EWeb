@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- grid items placed in order-modified document order (CSS Grid 1, 8.5):
+     atariuptodate.de's side column, order 2, comes after its main
+     column, order 1, though it is written first; the same order kept as
+     written; and in two columns the order still decides the places -->
+<html>
+<head>
+<title>Grid order</title>
+<style>
+body { font-size: 13px; margin: 8px; }
+.g { display: grid; gap: 4px; margin-bottom: 12px; }
+.two { grid-template-columns: 1fr 1fr; }
+.g > * { background: #ddd; padding: 2px; }
+.a { order: 2; }
+.b { order: 1; }
+.c { order: -1; }
+</style>
+</head>
+<body>
+<div class="g"><aside class="a">side, written first</aside><main class="b">main, order 1</main></div>
+<div class="g two"><p>one</p><p class="a">two, order 2</p><p>three</p><p class="c">four, order -1</p></div>
+</body>
+</html>

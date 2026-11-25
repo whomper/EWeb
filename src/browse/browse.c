@@ -3005,6 +3005,21 @@ static doc *frame_doc(browser *b, const br_frame *f, const char *data, long len,
 	o.fallback = br_fallback(url);
 	o.plaintext = plain;
 	o.drop_scripts = 1;		/* (a frame's run none) */
+#ifndef EW_ST
+	/* one with no script of its own, where its site's scripts would
+	   run: as a page whose scripts ran, its <noscript>s hidden (nothing
+	   is lost, as it has none to run: docs.dev-docs.org's main frame,
+	   "This site requires JavaScript!") */
+	if (!plain && br_scripts_for(b, url)) {
+		long k;
+		for (k = 0; k + 7 <= len; k++)
+			if (data[k] == '<' && (data[k + 1] | 32) == 's' && (data[k + 2] | 32) == 'c' &&
+			    (data[k + 3] | 32) == 'r' && (data[k + 4] | 32) == 'i' && (data[k + 5] | 32) == 'p' &&
+			    (data[k + 6] | 32) == 't')
+				break;
+		o.scripting = k + 7 > len;
+	}
+#endif
 	br_building = BRB_PARSE;
 	doc_poll = build_turn;
 	ec_poll = gem_turn;

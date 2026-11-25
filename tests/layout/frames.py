@@ -17,6 +17,8 @@ and -M back.
 - an iframe page: a link whose target is a named iframe loads it there;
 - a link or a form whose target is _blank, or a name no frame has, goes
   to another window (ewrender shows it in its stead);
+- a frame's <noscript>, with scripts on: hidden where the frame has no
+  script of its own (docs.dev-docs.org's), kept where it has one;
 - the ST edition (EWRENDERST) the same as EWEB.PRG's.
 
     tests/layout/frames.py EWRENDER EWEB.FNT [EWRENDERST]"""
@@ -161,6 +163,17 @@ def edition(ewr, fnt, name):
 
 ewr, fnt = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 edition(ewr, fnt, "EWEB.PRG")
+# a frame's <noscript> (EWEB.PRG only: the ST edition runs no scripts):
+# with scripts on, hidden in a frame with no script of its own, kept in
+# one with a script (a frame runs none); with them off, shown in both
+ns = os.path.join(HERE, "frames", "noscript.html")
+o = run(ewr, fnt, ns, more=["-J"])
+check("EWEB.PRG: scripts on, a script-free frame's <noscript> hidden, a scripted one's kept",
+      not has(o, "Plain frame needs") and has(o, "Plain frame's words") and has(o, "Scripted frame needs"),
+      "\n".join(o[:12]))
+o = run(ewr, fnt, ns)
+check("EWEB.PRG: scripts off, every frame's <noscript> shown",
+      has(o, "Plain frame needs") and has(o, "Scripted frame needs"), "\n".join(o[:12]))
 if len(sys.argv) > 3:
     edition(os.path.abspath(sys.argv[3]), fnt, "the ST edition")
 if fails:

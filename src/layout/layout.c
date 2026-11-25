@@ -8427,6 +8427,22 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 		g->aa = g_align(c->anon ? KW_AUTO : kw(c->st, EP_ALIGN_SELF), ai);
 		n++;
 	}
+#ifndef EW_ST
+	/* in order-modified document order (CSS Grid 1, 8.5; Flexbox 5.4's
+	   order: Tailwind's order-2 on a page's side column, which comes
+	   after the main one on a narrow screen), the same order as written */
+	for (i = 1; i < n; i++) {
+		GITEM t = it[i];
+		int o = t.b->anon || EC_K(t.b->st, EP_ORDER) != EK_INT ? 0 : EC_V(t.b->st, EP_ORDER).i;
+		for (j = i; j > 0; j--) {
+			const box *p = it[j - 1].b;
+			if ((p->anon || EC_K(p->st, EP_ORDER) != EK_INT ? 0 : EC_V(p->st, EP_ORDER).i) <= o)
+				break;
+			it[j] = it[j - 1];
+		}
+		it[j] = t;
+	}
+#endif
 	/* placing: those with both lines; then auto-placement in order (row
 	   by row, or column by column), each from where the last went */
 	occ.cols = ncols;

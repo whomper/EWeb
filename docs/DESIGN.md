@@ -1888,6 +1888,15 @@ handler costs 4.3 million 68030 instructions (about 0.6-0.9 s on the DFB1), the 
 (each 3-6%) as it builds JavaScript's standard objects, not the prelude. The saving to try next is
 one runtime and context kept for the pages of a site, or made once and copied.
 
+**Tailwind's in-browser compiler (25 Nov 2026).** `cdn.tailwindcss.com` writes a page's sheet from
+its classes as it loads, when a MutationObserver tells it the document changed (EWeb's observers are
+told once the parse's rest is in, and at each checkpoint after the document changed: `jobs` in
+`src/js/js.c`). On atariuptodate.de's 610 classes that is 1.3 billion 68030 instructions on top of
+the page's other 450 million (`jsbench`, `count68k.sh`; QuickJS's interpreter, not EWeb's DOM, per
+`prof68k.py`), past the page's 15 s budget on every Atari, which would then drop all its scripts.
+So EWeb leaves that one script out (`run_script`), as a script that didn't load, and the page's
+others run (Alpine.js folds atariuptodate.de's menus); the page shows without Tailwind's styles.
+
 ## The stack (21 Oct 2026)
 
 EWeb bombed on the reference Falcon on Wikipedia's Falcon article, through the gateway and in Falcon mode,
