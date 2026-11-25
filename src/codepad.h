@@ -16,7 +16,8 @@
 
 #if (defined EW_TOS || defined NSBENCH_TOS) && !defined EW_ST && !defined __mcoldfire__ && !defined __mc68060__
 #include "codepads.h"
-#define CODE_PAD(cond, n) do { if (__builtin_expect((cond), 0)) __asm__ __volatile__(".skip " n); } while (0)
+/* (.fill, as .skip, but a size of 0 is nothing without as's warning) */
+#define CODE_PAD(cond, n) do { if (__builtin_expect((cond), 0)) __asm__ __volatile__(".fill " n ",1,0"); } while (0)
 #else
 #define CODE_PAD(cond, n) do { } while (0)
 #endif
