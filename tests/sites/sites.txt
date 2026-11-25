@@ -27,3 +27,4 @@ google           https://www.google.com/                       # the apps icon a
 gdrive-sample    https://drive.google.com/file/d/1AERAsampleFileNotARealDriveIdXyZ/view   # EWeb's own page for a Drive file: a sample page made for the test, no real file (24 Nov 2026)
 atariuptodate    https://www.atariuptodate.de/en/              -- -J   # Tailwind's compiler left out, Alpine's menus folded (25 Nov 2026)
 devdocs          https://docs.dev-docs.org/                    -- -J   # a frameset: its script-free frame's <noscript> hidden (25 Nov 2026)
+yt-sample        https://www.youtube.com/watch?v=AERAsample1   # EWeb's own page for a YouTube video: a sample page made for the test, no real video (25 Nov 2026)

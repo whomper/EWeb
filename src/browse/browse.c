@@ -1081,6 +1081,28 @@ static int cf_wall(const FETCH *f)
 }
 
 #ifndef EW_ST	/* (the ST edition stays as 1.0 has it: bug fixes only) */
+/* the text from v to t into out, the five entities a page writes a
+   name with undone */
+static void copy_ent(const char *v, const char *t, char *out, int size)
+{
+	static const char *const ent[][2] = { { "&amp;", "&" }, { "&lt;", "<" }, { "&gt;", ">" },
+					      { "&quot;", "\"" }, { "&#39;", "'" } };
+	int o = 0;
+	while (v < t && o < size - 1) {
+		size_t j;
+		for (j = 0; j < sizeof ent / sizeof ent[0]; j++)
+			if ((size_t) (t - v) >= strlen(ent[j][0]) && !memcmp(v, ent[j][0], strlen(ent[j][0])))
+				break;
+		if (j < sizeof ent / sizeof ent[0]) {
+			out[o++] = ent[j][1][0];
+			v += strlen(ent[j][0]);
+		} else {
+			out[o++] = *v++;
+		}
+	}
+	out[o] = 0;
+}
+
 /* a Google Drive file's page (drive.google.com/file/d/ID/...): all it
    shows is made by a script of 4.6 MB, far past what EWeb runs. 1, its
    ID and the file's name (its og:title, else its title less " - Google
@@ -1107,25 +1129,8 @@ static int drive_file(const FETCH *f, char *id, int idsize, char *name, int nsiz
 		v = t + 7;
 		t = find_text(v, (long) (e - v), " - Google Drive</title>");
 	}
-	if (t != NULL && t > v) {
-		/* (the five entities a page writes a name with) */
-		static const char *const ent[][2] = { { "&amp;", "&" }, { "&lt;", "<" }, { "&gt;", ">" },
-						      { "&quot;", "\"" }, { "&#39;", "'" } };
-		int o = 0;
-		while (v < t && o < nsize - 1) {
-			size_t j;
-			for (j = 0; j < sizeof ent / sizeof ent[0]; j++)
-				if ((size_t) (t - v) >= strlen(ent[j][0]) && !memcmp(v, ent[j][0], strlen(ent[j][0])))
-					break;
-			if (j < sizeof ent / sizeof ent[0]) {
-				name[o++] = ent[j][1][0];
-				v += strlen(ent[j][0]);
-			} else {
-				name[o++] = *v++;
-			}
-		}
-		name[o] = 0;
-	}
+	if (t != NULL && t > v)
+		copy_ent(v, t, name, nsize);
 	return 1;
 }
 
@@ -1153,6 +1158,90 @@ static void drive_page(SBUF *s, const char *url, const char *id, const char *nam
 	if (http_gateway[0])
 		sb_adds(s, "<p class=small>Drive's page itself: View &gt; Through the Gateway's browser.</p>");
 	sb_adds(s, "</body></html>");
+}
+
+/* a page's <meta property="og:NAME" content="..."> into out ("" if it
+   has none) */
+static void og_meta(const FETCH *f, const char *name, char *out, int size)
+{
+	char key[48];
+	const char *t, *v, *e = f->data + f->len;
+	snprintf(key, sizeof key, "<meta property=\"og:%s\" content=\"", name);
+	out[0] = 0;
+	if ((t = find_text(f->data, f->len, key)) != NULL) {
+		v = t + strlen(key);
+		if ((t = memchr(v, '"', (size_t) (e - v))) != NULL)
+			copy_ent(v, t, out, size);
+	}
+}
+
+/* a YouTube video's page (www.youtube.com/watch?v=ID, m.youtube.com's,
+   /shorts/ID): made by scripts far past EWeb's, and a video EWeb can't
+   play. 1 and its ID (11 letters), or 0 */
+static int yt_video(const FETCH *f, char *id)
+{
+	static const char *const at[] = { "https://www.youtube.com/", "https://m.youtube.com/",
+					   "https://youtube.com/" };
+	const char *u = NULL, *v;
+	size_t i;
+	int k = 0;
+	if (f->status != 200 || f->data == NULL)
+		return 0;
+	for (i = 0; i < sizeof at / sizeof at[0] && u == NULL; i++)
+		if (strncmp(f->url, at[i], strlen(at[i])) == 0)
+			u = f->url + strlen(at[i]);
+	if (u == NULL)
+		return 0;
+	if (strncmp(u, "shorts/", 7) == 0)
+		v = u + 7;
+	else if (strncmp(u, "watch?", 6) == 0 && ((v = strstr(u, "?v=")) != NULL || (v = strstr(u, "&v=")) != NULL))
+		v += 3;
+	else
+		return 0;
+	while (((*v >= '0' && *v <= '9') || ((*v | 32) >= 'a' && (*v | 32) <= 'z') || *v == '-' || *v == '_') &&
+	       k < 11)
+		id[k++] = *v++;
+	id[k] = 0;
+	return k == 11 && (*v == 0 || *v == '&' || *v == '?' || *v == '#' || *v == '/');
+}
+
+/* EWeb's own page for a YouTube video (decided 25 Nov 2026): its title,
+   its picture and what it says of itself (the page's og: tags), and
+   with the Gateway its live view, where the Pi's browser plays it */
+static void yt_page(SBUF *s, const FETCH *f, const char *id)
+{
+	char title[256], what[600];
+	og_meta(f, "title", title, sizeof title);
+	og_meta(f, "description", what, sizeof what);
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
+	esc(s, title[0] ? title : "A YouTube video");
+	sb_adds(s, "</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "</head><body><h1>");
+	esc(s, title[0] ? title : "A YouTube video");
+	sb_adds(s, "</h1><p class=addr>");
+	esc(s, f->url);
+	sb_adds(s, "</p><p><img src=\"https://i.ytimg.com/vi/");
+	esc(s, id);
+	sb_adds(s, "/hqdefault.jpg\" width=480 height=360 alt=\"\"></p>");
+	if (what[0]) {
+		sb_adds(s, "<p>");
+		esc(s, what);
+		sb_adds(s, "</p>");
+	}
+	if (http_gateway[0]) {
+		char live[4200];
+		br_live_url(f->url, live, sizeof live);
+		sb_adds(s, "<p><a href=\"");
+		esc(s, live);
+		sb_adds(s, "\">Watch it in live view</a>: the Gateway's browser plays it, and live view shows "
+			   "its screen.</p>");
+	} else {
+		sb_adds(s, "<p class=small>EWeb can't play a video. With the Gateway (Settings &gt; Secure), "
+			   "live view shows the Gateway's browser playing it.</p>");
+	}
+	sb_adds(s, "<p class=small>YouTube's own page for a video is made by scripts far bigger than EWeb "
+		   "runs; this page of EWeb's stands in for it.</p></body></html>");
 }
 #endif
 
@@ -3957,6 +4046,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 #ifndef EW_ST
 		char did[80], dname[256];
 		drive = !google && drive_file(f, did, sizeof did, dname, sizeof dname);
+		if (!google && !drive && yt_video(f, did))
+			drive = 2;
 #endif
 		if (google || drive || cf_wall(f)) {
 			/* EWeb's own page in its place, which goes nowhere (and
@@ -3964,6 +4055,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			if (google)
 				wall_page(b, &src, f->url, q);
 #ifndef EW_ST
+			else if (drive == 2)
+				yt_page(&src, f, did);
 			else if (drive)
 				drive_page(&src, f->url, did, dname);
 #endif
