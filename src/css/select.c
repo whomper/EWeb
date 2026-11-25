@@ -15,6 +15,7 @@
  * Declarations are applied from the most important down, each property
  * once, so nothing is written and then overwritten. */
 #include "ec_int.h"
+#include "../codepad.h"
 
 #define MAX_HITS	2048
 #define CACHE_SIZE	1024
@@ -186,6 +187,7 @@ static int match_from(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, int 
 static int match_compound(ec_ctx *c, const ec_sel *s, int ci, const ec_node *e, int level,
 		int *mf)
 {
+	CODE_PAD((uintptr_t) e == 1, CP_SELECT_MATCH_COMPOUND);
 	const ec_simple *x = &s->simple[s->comp[ci].first], *end = x + s->comp[ci].n;
 
 	for (; x < end; x++) {

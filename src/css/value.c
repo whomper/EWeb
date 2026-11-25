@@ -4,6 +4,7 @@
  * shorthands expanded. Absolute units become px here, so computing a
  * style only has the relative ones left to do. */
 #include "ec_int.h"
+#include "../codepad.h"
 
 /* the keyword lists, each ending in 0 */
 #define EC_L_ENUM(id, ...) KL_##id,
@@ -1597,6 +1598,7 @@ static int deco_bit(int kw)
 /* one value for a longhand at t[*i] */
 static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 {
+	CODE_PAD(prop < -30000, CP_VALUE_ONE);
 	unsigned lf = ptab[prop].flags;
 
 	if (*i >= n)

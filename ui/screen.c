@@ -37,6 +37,7 @@
 #include "pagecol.h"
 #include "tcpix.h"
 #include "c2p.h"
+#include "codepad.h"
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
@@ -171,6 +172,7 @@ static void own_pens(int on)
 	short i, rgb[3];
 	if (on == own || ncol != 256)
 		return;
+	CODE_PAD(on < -30000, CP_SCREEN_OWN_PENS);	/* (after the test GCC inlines in its callers) */
 	for (i = 16; i < 256; i++) {
 		short px = scr_have ? (short) (scr_info[16 + i] & 255) : std_pixel(i);
 		if (px < 16 || px > 254)
@@ -199,6 +201,7 @@ static void own_pens(int on)
 /* each pixel value's colour, and the pictures' pens from them */
 static void read_pens(void)
 {
+	CODE_PAD(ncol < -30000, CP_SCREEN_READ_PENS);
 	short rgb[3], i;
 	for (i = 0; i < ncol; i++)
 		pal[i][0] = pal[i][1] = pal[i][2] = 0;
@@ -290,11 +293,13 @@ void scr_top(int ours)
 
 int scr_lending(void)
 {
+	CODE_PAD(ncol < -30000, CP_SCREEN_SCR_LENDING);
 	return own && ncol == 256 && !truecolour;
 }
 
 void scr_palette(void)
 {
+	CODE_PAD(ncol < -30000, CP_SCREEN_SCR_PALETTE);
 	if (ncol != 256 || truecolour || opt.palette == own)
 		return;
 	own_pens(opt.palette);

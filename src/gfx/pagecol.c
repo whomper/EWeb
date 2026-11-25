@@ -8,9 +8,11 @@
 
 #include "pagecol.h"
 #include "ecss.h"
+#include "codepad.h"
 
 void ew_own_colour(int k, uint8_t rgb[3])
 {
+	CODE_PAD(k < -30000, CP_PAGECOL_EW_OWN_COLOUR);
 	/* the greys past the cube's six, more of them light (pages'
 	   backgrounds) */
 	static const uint8_t grey[23] = { 13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191,

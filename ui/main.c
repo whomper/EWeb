@@ -52,6 +52,7 @@ extern langs_job translate_job;
 #include "dspjpeg.h"
 #include "js_ovl.h"
 #endif
+#include "codepad.h"
 
 /* the stack's size (the Makefile's, crt0's too) and the room kept under
    the floor (DESIGN.md, The stack) */
@@ -2157,6 +2158,7 @@ void submit(struct fctl *from, struct fctl *by, int32_t x, int32_t y)
    page's scripts get its toggle event after, with their timers) */
 void details(dnode *det)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_DETAILS);
 	unsigned long t = pf_ms();
 	int ok;
 	if (loading)
@@ -2331,6 +2333,7 @@ int pictures_soft;
 
 void pictures_dsp_init(void)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_PICTURES_DSP_INIT);
 #ifndef EW_ST
 	pic_dsp = opt.picdsp && dspjpeg_present() ? &dspjpeg_port : NULL;
 	/* the softer colours (IMG_SOFT; Erez, 22 Nov 2026) where the DSP
@@ -2489,6 +2492,7 @@ static unsigned long source_shows;	/* and its page then (browser.shows) */
 
 static void source_window(void)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_SOURCE_WINDOW);
 	char txt[320];
 	size_t n = strlen(source_path);
 	ewin *w, *from;
@@ -2560,6 +2564,7 @@ static int source_ours(const char *what)
 
 static void view_source(void)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_VIEW_SOURCE);
 	char dir[256];
 	if (br.src == NULL)
 		return;
@@ -2669,6 +2674,7 @@ void save_link(int link)
 
 void command(int cmd)
 {
+	CODE_PAD(cmd < -30000, CP_MAIN_COMMAND);
 	if (loading && cmd != C_STOP && cmd != C_ABOUT && cmd != C_KEYS && cmd != C_HELP && cmd != C_COPY)
 		return;
 	/* what is due drawn first, whole: the part of the page a menu covered
@@ -3487,6 +3493,7 @@ int app_main(void)
 static int app_run(void)
 #endif
 {
+	CODE_PAD(loading < -30000, CP_MAIN_APP_RUN);
 	short work_out[57], msg[8], d;
 	char path[256], first[256];
 	AEVENT ev;

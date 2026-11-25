@@ -13,6 +13,7 @@
 #include "doc.h"
 #include "form.h"
 #include "html.h"
+#include "codepad.h"
 
 /* ---------------------------------------------------------------- memory */
 
@@ -844,6 +845,7 @@ static int custom_undefined(const doc *d, const ec_atom *name)
 
 int doc_define(doc *d, const char *name, size_t len)
 {
+	CODE_PAD((uintptr_t) d == 1, CP_DOC_DOC_DEFINE);
 	const ec_atom *a, **v;
 	uint16_t k;
 	if (d->css == NULL || (a = ec_intern_used(d->css, name, len)) == NULL)
@@ -863,6 +865,7 @@ int doc_define(doc *d, const char *name, size_t len)
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
+	CODE_PAD((uintptr_t) n == 1, CP_DOC_FINISH_ONE);
 	dnode *c, *prev = NULL;
 	uint16_t idx = 0;
 	int empty = 1;

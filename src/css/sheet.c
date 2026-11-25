@@ -8,6 +8,7 @@
  * matches an element (ec_parse_block). Each selector is indexed under
  * its subject's rarest part: id, class, tag or attribute name. */
 #include "ec_int.h"
+#include "../codepad.h"
 
 #define MAX_PRELUDE	4096
 #define MAX_VALUE	512
@@ -730,6 +731,7 @@ out:
 static const ec_sellist *sellist(ec_ctx *c, const ec_tok *t, int i, int n, int forgiving,
 		uint32_t *maxspec, int *never_all)
 {
+	CODE_PAD(i < -30000, CP_SHEET_SELLIST);
 	const ec_sel *sels[256];
 	int ns = 0, start = i, depth = 0, nnever = 0;
 	ec_sellist *l;

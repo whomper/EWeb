@@ -24,6 +24,7 @@
 
 #include "layout.h"
 #include "form.h"
+#include "codepad.h"
 
 #define AUTO INT32_MIN
 #define MAXCOLS 64			/* a table's columns that line up; more go as they come */
@@ -2125,6 +2126,7 @@ static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps)
 
 static void build_element(L *l, box *parent, dnode *c)
 {
+	CODE_PAD((uintptr_t) c == 1, CP_LAYOUT_BUILD_ELEMENT);
 	const ec_style *st = c->e.style;
 	int d;
 	box *b;
@@ -6018,6 +6020,7 @@ static box *measure_content;
 /* a block's widest: its border box with margins, nothing broken */
 static int32_t measure(L *l, box *b)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_LAYOUT_MEASURE);
 	int32_t w = AUTO, inner = 0, mx;
 	box *c;
 	if (EC_DEEP()) {
@@ -8221,6 +8224,7 @@ static int gocc_take(GOCC *o, int r, int c, int nr, int nc)
    implicit grid grows there); 0 if out of memory */
 static int gocc_widen(GOCC *o, int nc)
 {
+	CODE_PAD(nc < -30000, CP_LAYOUT_GOCC_WIDEN);
 	unsigned char *m;
 	int r;
 	if (nc <= o->cols)
@@ -8340,6 +8344,7 @@ static void grid_fit(GTRACK *t, int n, int32_t room, int fill_auto)
 static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef,
 						     int32_t *first)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_LAYOUT_GRID_LAYOUT);
 	const ec_style *s = b->st;
 	const ec_tracks *tc = EC_K(s, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_COLUMNS).p : NULL;
 	const ec_tracks *tr = EC_K(s, EP_GRID_TEMPLATE_ROWS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_ROWS).p : NULL;
@@ -8746,6 +8751,7 @@ static int32_t room_left(const box *b, int32_t room, int auto_l, int auto_r)
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first)
 {
+	CODE_PAD(x == -0x7fffffffL, CP_LAYOUT_LAYOUT_BLOCK);
 	const ec_style *s = b->st;
 	int32_t ml = 0, mr = 0, mt = 0, mb = 0, bl = 0, br = 0, bt = 0, bb = 0, pl = 0, pr = 0, pt = 0, pb = 0;
 	int32_t w, ch = 0, cx, cy, hp, mn, mx, fb = AUTO;
@@ -9628,6 +9634,7 @@ static void page_overflow(page *p)
    else the page's width), the canvas's picture (cbg) aside */
 static void index_items(page *p, int wide, long cbg)
 {
+	CODE_PAD(wide < -30000, CP_LAYOUT_INDEX_ITEMS);
 	long i, k, n = 0, bottom = p->height;
 	int32_t right = p->width;
 	p->wide = wide;

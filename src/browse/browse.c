@@ -558,6 +558,7 @@ static void history_page(SBUF *s, int pg)
 /* ---------------------------------------------------------------- the home page */
 
 #include "home.h"		/* (build/gen, tools/mkhome.py from home.html) */
+#include "codepad.h"
 
 /* the tip of the day */
 static const char *const tips[] = {
@@ -858,6 +859,7 @@ static const char *url_path(const char *url)
 /* where w is in s's n bytes; NULL */
 static const char *find_text(const char *s, long n, const char *w)
 {
+	CODE_PAD(n < -30000, CP_BROWSE_FIND_TEXT);
 	size_t wl = strlen(w);
 	const char *e = s + n - (long) wl + 1;
 	for (; s < e; s++) {
@@ -1341,6 +1343,7 @@ static int fetch_packed;
 
 static int packed_head(void *ud, HTTPRESP *rs)
 {
+	CODE_PAD((uintptr_t) rs == 1, CP_BROWSE_PACKED_HEAD);
 	(void) ud;
 	if (rs->encoding == 1 || rs->encoding == 2)
 		rs->packed = 1;
@@ -2104,6 +2107,7 @@ static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h
    same icon a page shows many times is one picture) */
 static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
 {
+	CODE_PAD((uintptr_t) w == 1, CP_BROWSE_SVG_CB);
 	browser *b = ud;
 	char key[64];
 	size_t len;
@@ -2195,6 +2199,7 @@ static void page_shown_imgs(const page *p)
 /* img_size_shown: a page shown (a window's) shows im at w x h */
 static int size_shown(const ew_img *im, int32_t w, int32_t h)
 {
+	CODE_PAD((uintptr_t) im == 1, CP_BROWSE_SIZE_SHOWN);
 	int k;
 	long i;
 	for (k = 0; k < br_n; k++) {
@@ -3732,6 +3737,7 @@ static void as_seen(const char *furl, const char *url)
 
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_LOAD_POST);
 	FETCH *f;
 	SBUF src;
 	doc *d;
@@ -4171,6 +4177,7 @@ const char *br_fallback(const char *url)
    (Back, Forward: the cache's of any age; Reload: anew) */
 int br_source(browser *b, const browser *from)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_BR_SOURCE);
 	char url[sizeof b->url], cs[sizeof b->charset];
 	char *copy;
 	long len = from->src_len;
@@ -4409,6 +4416,7 @@ const char *br_link_download(const browser *b, int link)
    host and port; http and https only, the rest have none to share) */
 static int same_origin(const char *a, const char *c)
 {
+	CODE_PAD((uintptr_t) a == 1, CP_BROWSE_SAME_ORIGIN);
 	URL *u = malloc(2 * sizeof *u);
 	int r = u != NULL && url_parse(&u[0], a, NULL) && url_parse(&u[1], c, NULL) && u[0].special &&
 		u[1].special && u[0].tls == u[1].tls && u[0].port == u[1].port && u[0].hostlen == u[1].hostlen &&
@@ -4935,12 +4943,14 @@ static void jh_cookie_set(void *ud, const char *url, const char *line)
 
 static int jh_ask(void *ud, int kind, const char *text, char *out, int size)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_JH_ASK);
 	browser *b = ud;
 	return b->ask != NULL ? b->ask(b->ud, kind, text, out, size) : 1;
 }
 
 static void jh_log(void *ud, const char *line)
 {
+	CODE_PAD((uintptr_t) line == 1, CP_BROWSE_JH_LOG);
 	browser *b = ud;
 	if (b->log != NULL)
 		b->log(b->ud, line);
@@ -4948,6 +4958,7 @@ static void jh_log(void *ud, const char *line)
 
 static void jh_console(void *ud, const char *line)
 {
+	CODE_PAD((uintptr_t) line == 1, CP_BROWSE_JH_CONSOLE);
 	browser *b = ud;
 	if (b->console != NULL)
 		b->console(b->ud, line);
@@ -5862,6 +5873,7 @@ static long next_item(browser *b, int32_t top, int32_t height)
    tracker's), isn't fetched */
 static int frame_waiting(const browser *b, int sets)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_FRAME_WAITING);
 	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
 	int k;
 	if (fs == NULL || b->pic_stopped)
@@ -6017,6 +6029,7 @@ static int shown_size(const browser *b, const ew_img *im, int32_t *w, int32_t *h
 static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t rw, int32_t rh, char *fit, int fsize,
 		   char *variant, int vsize)
 {
+	CODE_PAD(rw < -30000, CP_BROWSE_PIC_ASK);
 	int pens = !has_scheme(url, "file") && pens_wanted(b);
 	int32_t w = rw, h = rh, page = b->width > 0 ? b->width : 640;
 	char size[32] = "";
@@ -6283,6 +6296,7 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 
 static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1)
 {
+	CODE_PAD(top < -0x7fffffffL, CP_BROWSE_PICTURES_STEP);
 	long k, i;
 	int fk;
 	ew_img *im;

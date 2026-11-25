@@ -274,7 +274,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 PAD_main := 166
 PAD_RO_main := 194
 PAD_BSS_main := 38
-PAD_browse := 32
+PAD_browse := 64
 PAD_RO_browse := 188
 PAD_BSS_browse := 236
 PAD_font := 144
@@ -328,7 +328,9 @@ PAD_dialogs := 196
 PAD_RO_dialogs := 244
 PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
-PAD_av := 128
+PAD_av := 82
+# 1.26's: the objects after common's text.o (which grew) at 1.25's places
+PAD_charset := 142
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -400,7 +402,7 @@ PAD_layout2 := 32
 PAD_RO_layout2 := 256
 PAD_DATA_layout2 := 256
 PAD_BSS_layout2 := 256
-PAD_pic := 106
+PAD_pic := 162
 PAD_RO_pic := 64
 PAD_DATA_pic := 256
 PAD_BSS_pic := 256
@@ -461,7 +463,7 @@ CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_m
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
 		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
-		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3,\
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3 charset,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -863,6 +865,10 @@ build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
 # whole number of 256s (src/layout/layout.c NEVER_PAD, ui/win.c, src/browse)
 build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"' -DPAD_FIT_LIST='"20"'
 build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"' -DBR_BUILD_PAD='"144"'
+# 1.26's never-run pads (src/codepad.h, their sizes src/codepads.h): each
+# object that has them made again when a size changes (EWB_HDRS is
+# expanded before NET_HDRS, src/*.h, is known)
+$(tos_EWB) $(tos_EC) $(GEM_OBJ) build/prof/tos/main.o: src/codepad.h src/codepads.h
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
@@ -877,7 +883,8 @@ GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad
               build/tos/gem/common/dialog.o,build/tos/gem/common/dialog.o build/tos/rt/pad_dialog.o,$(subst \
               build/tos/gem/common/offdraw.o,build/tos/gem/common/offdraw.o build/tos/rt/pad_offdraw.o,$(subst \
               build/tos/gem/common/click.o,build/tos/gem/common/click.o build/tos/rt/pad_click.o,$(subst \
-              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(GEM_OBJ)))))))))))))
+              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(subst \
+              build/tos/gem/common/charset.o,build/tos/gem/common/charset.o build/tos/rt/pad_charset.o,$(GEM_OBJ))))))))))))))
 GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$(subst \
              build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o build/tos/rt/pad_libc4.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
