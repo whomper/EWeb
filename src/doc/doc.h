@@ -113,6 +113,9 @@ typedef struct doc {
 	   with scripting, which they were (doc_sheets_key) */
 	int32_t span_lo, span_hi;
 	uint32_t sheets_key;
+	/* the custom elements' names its scripts defined (doc_define) */
+	const ec_atom **defined;
+	uint16_t ndefined;
 } doc;
 
 /* Parses an HTML page. charset is the HTTP answer's (confident), or
@@ -172,6 +175,11 @@ void dn_remove_attr(doc *d, dnode *n, const char *name);
 /* after a script changed the tree: the element links, flags and hints
    the CSS engine reads, and the form controls, made again */
 void doc_refresh(doc *d);
+/* a custom element's name (lower case) a script defined, its elements
+   :defined from the next doc_refresh on (the HTML Standard's 4.13: a
+   custom element is undefined, EC_NODE_UNDEFINED, till then); 0 if out
+   of memory */
+int doc_define(doc *d, const char *name, size_t len);
 /* the same for a tree that isn't the document's (top: an element a script
    made, a fragment, another document's root, and what is under it), for
    matching selectors in it: querySelector on an element not yet put in

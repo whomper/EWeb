@@ -1084,7 +1084,7 @@ int main(int argc, char **argv)
 	const char *search = NULL, *boxes[8];
 	int nboxes = 0;
 	int dump = 0, show_tree = 0, verbose = 0, band = 0, parts = 0, nopics = 0, snapshot = 0, pens = -1, penlist = 0, i, r;
-	int colours = 0, own_pal = 0, deep = 0, planes = 0, wide_sans = 0;
+	int colours = 0, own_pal = 0, deep = 0, planes = 0, wide_sans = 0, soft = -1;
 	static PIC_PAL pal;
 	const char *next = NULL, *prev = NULL, *xl_arg = NULL, *gw_to = NULL;
 	char where[4096];
@@ -1149,6 +1149,8 @@ int main(int argc, char **argv)
 			deep = 1;	/* 32 bits a pixel */
 		else if (!strcmp(argv[i], "--wide-sans"))
 			wide_sans = 1;	/* Arial's kind in DejaVu Sans (EWEB.INF's NARROW=0) */
+		else if (!strcmp(argv[i], "--soft") && i + 1 < argc)
+			soft = atoi(argv[++i]);	/* the pictures' dither's share, sixteenths (0: whole) */
 		else if (!strcmp(argv[i], "--own"))
 			own_pal = 1;	/* -p 256 with EWeb's own colours and the page's (pagecol.h) */
 		else if (!strcmp(argv[i], "-p") && i + 1 < argc)
@@ -1272,7 +1274,7 @@ int main(int argc, char **argv)
 			break;
 	}
 	if (i >= argc) {
-		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [--deep] [--wide-sans] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
+		fprintf(stderr, "ewrender [-w W] [-z ZOOM] [-X TEXT%%] [-f FNT] [-o OUT.PNG] [-d] [-t] [-v] [-c CACERT] [-y TOP] [-H H] [-B] [-i] [-E] [-Q 0|1] [-Jn] [--deep] [--wide-sans] [--soft N] [-N URL] [-L WIDTH] [-Y WIDTH] [-D BYTES] [-e ENCODING] "
 			"[-p 2|4|16|256] PAGE|URL [SHEET...]\n");
 		return 2;
 	}
@@ -1343,6 +1345,7 @@ int main(int argc, char **argv)
 	if (band || penlist || colours) {
 		pic_pal_init(&pal, own_pal && colours == 256 ? EW_PIC_PENS : colours ? colours : 16,
 			     (const unsigned char (*)[3]) scr_pal);
+		pic_pal_soft(&pal, soft >= 0 ? soft : IMG_SOFT(pal.n));	/* (as EWEB.PRG; --soft N) */
 		img_pal = &pal;
 	}
 	if (prev != NULL) {

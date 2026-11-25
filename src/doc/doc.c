@@ -13,6 +13,7 @@
 #include "doc.h"
 #include "form.h"
 #include "html.h"
+#include "codepad.h"
 
 /* ---------------------------------------------------------------- memory */
 
@@ -825,9 +826,48 @@ static void svg_hints(dnode *n)
 	}
 }
 
+#ifndef EW_ST
+/* a custom element's name (the HTML Standard's "valid custom element
+   name": a lower-case letter first, a hyphen in it) that no script has
+   defined (doc_define) */
+static int custom_undefined(const doc *d, const ec_atom *name)
+{
+	size_t len;
+	const char *s;
+	uint16_t k;
+	if (name == NULL || (s = ec_atom_text(name, &len)) == NULL || len < 2 || s[0] < 'a' || s[0] > 'z' ||
+	    memchr(s, '-', len) == NULL)
+		return 0;
+	for (k = 0; k < d->ndefined; k++)
+		if (d->defined[k] == name)
+			return 0;
+	return 1;
+}
+#endif
+
+int doc_define(doc *d, const char *name, size_t len)
+{
+	CODE_PAD((uintptr_t) d == 1, CP_DOC_DOC_DEFINE);
+	const ec_atom *a, **v;
+	uint16_t k;
+	if (d->css == NULL || (a = ec_intern_used(d->css, name, len)) == NULL)
+		return 0;
+	for (k = 0; k < d->ndefined; k++)
+		if (d->defined[k] == a)
+			return 1;
+	if (d->ndefined == 0xffff || (v = doc_alloc(d, ((size_t) d->ndefined + 1) * sizeof *v)) == NULL)
+		return 0;
+	if (d->ndefined > 0)
+		memcpy(v, d->defined, d->ndefined * sizeof *v);
+	v[d->ndefined++] = a;
+	d->defined = v;
+	return 1;
+}
+
 /* one element: its links, flags and hints, and its children's links */
 static void finish_one(doc *d, dnode *n, dnode *parent)
 {
+	CODE_PAD((uintptr_t) n == 1, CP_DOC_FINISH_ONE);
 	dnode *c, *prev = NULL;
 	uint16_t idx = 0;
 	int empty = 1;
@@ -841,6 +881,10 @@ static void finish_one(doc *d, dnode *n, dnode *parent)
 	n->e.nattr = n->nattr;
 	if (n->tag == T_A && HA(n, href) != NULL)
 		n->e.flags |= EC_NODE_LINK;
+#ifndef EW_ST	/* (the ST edition, frozen: no :defined) */
+	else if (n->tag == T_OTHER && n->ns == DN_NS_HTML && custom_undefined(d, n->e.name))
+		n->e.flags |= EC_NODE_UNDEFINED;
+#endif
 	if (n->type == DN_ELEMENT && n->ns == DN_NS_HTML && n->e.hint == NULL)
 		hints(n);
 	else if (n->type == DN_ELEMENT && n->tag == T_SVG && n->ns == DN_NS_SVG && n->e.hint == NULL &&

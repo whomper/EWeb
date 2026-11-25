@@ -23,18 +23,18 @@ it, and how EWeb gets past CAPTCHAs.
 | File names | **Lowercase** (2 Nov 2026; the guidelines' 6.6) | On MiNT's ext2 `EWEB.INF` and `eweb.inf` are two files, and a tester's programs missed their own. Every file EWeb opens or makes by a name of its own is lowercase (`eweb.inf`, `eweb.log`, `eweb.key`, `cookies.txt`, `history.txt`, `bookmark.htm`, `cache\` with `ewebnn.pak`, `ewebnn.lst` and `eweb.idx`, `eweb.fnt`, `ewebjs.ovl`, `tls.ovl`, `cacert.pem`, `roots.dat`, `seed.dat`, `sigs.dat`, `eweb.hyp`, common's `crash.log`), and so is every file of a release and its zip, `eweb-x.y.zip` (`make dist`), and the file selector's mask (`*.htm`, which a case-sensitive drive needs to show `bookmark.htm` and saved pages); a fresh start, so nothing looks for an earlier install's capital names (an ext2 user deletes the old folder and installs anew). Names shown to the user (`EWEB.INF` in texts and the help), AES names, and the names of pages saved or downloaded stay as they are. The measuring tools (`EWGET.TTP` and the others), not shipped, keep theirs. |
 | User experience | **The first measure of quality** (4 Nov 2026) | What the user feels comes before everything else, scrolling first: as smooth and as fast as each machine allows. Each change is measured by what is seen (the screen whole after a line, a page, a held key, a drag), not only by how soon EWeb answers. |
 | ST edition | **Frozen after 1.0** (4 Nov 2026); **its speed worked on again** (13 Nov 2026), **then stopped** (13 Nov 2026) | `EWEBST.PRG` stays in every release as 1.0 has it, with bug fixes only: no new features. On 13 Nov 2026 it was made faster ("reasonable for people to use instead of the other options out there": The ST edition's speed, released in 1.7); later that day you stopped the performance work ("stop with the performance improvements", through the hub): a speed change now ships only if no row is slower beyond one tick (the guidelines' Speed). Its rigs (`make hatarigui`'s `st` group, the 1040 ST with the family's accessories, the 68000 checks) run for a release, not for each change; the family's rules for the ST are taken as an app in maintenance takes them, with its next release if one comes. The Falcon edition was never held back by it (the ST edition is a build of its own, without TLS, scripts, the DSP or WebP); what this frees is the time each round gave the ST. |
-| A long draw | **Whole on the Falcon and TT, as 0.69; in pieces on the ST** (Erez, 4 and 7 Nov 2026) | On 7 Nov 2026, after a day's work to make pieces as fast as whole (full-height runs, bands ending between lines, pieces one after another while no key waits: none closed the gap; per piece the screen taken, the mouse hidden and the window's rectangles walked again, about 10 ms of a stock Falcon's), Erez: "lets do this only for the ST". The 8 MHz ST draws a long page in pieces (its window answered after 0.76 s on the news page, against 3.3 s whole; the page done 12 to 17 % later); `EWEB.PRG` draws whole (`win_whole_only`: 0 in the ST edition). Before that: | Performance never goes backwards (Erez: "Performance must not go backwards or bad, just for the better always"). The family's rule of 4 Nov (a draw over 300 ms in pieces of at most 100 ms, keys answered between) made EWeb's pages finish later than 0.69's whole draw: on the stock Falcon (Falcon-4:16) 5 to 14 % (home 610 ms against 569, news 1090 against 954), on an 8 MHz ST in 300 ms pieces (Erez's choice for the ST) 9 to 18 %, in 100 ms ones 58 to 105 %. So EWeb draws whole, and the drawing is made faster until a page in pieces finishes no later than 0.69's whole; then the pieces are switched on (`win_whole_only` in `ui/win.c`). The pieces' code stays, measured by the speed build's `DRAWPIECES=1` (`tests/hatari/speed.py --pieces`; `AESWHOLE`, the time to the finished picture): whole or pieces told before the draw by the dearest rows lately, an ST's pieces up to 300 ms in bands of 32 rows. |
-| A window a page's script opens | **From a click or a key of the user's** (Erez, 7 Nov 2026: "yes, allow window.open from a click") | As browsers: `window.open` opens a window while the user's click or key is handled; at other times (as the page loads, from a timer) it is null, as a blocker of pop-ups answers. What the script writes into the `about:blank` it opened is that window's page, with its opener's site. (webdriveruniversity.com's AI Playground, New Tab; DESIGN.md, The AI Playground in use.) |
-| The mouse over a page | **Its scripts hear it; a click is the hover** (Erez, 8 Nov 2026: of hover as on a PC, a click as the hover, or none) | A page's scripts are told of the mouse as browsers tell them (mouseover, mouseout, mouseenter, mouseleave as it goes from element to element; mousedown, mouseup, click, dblclick; a drag whose press a script takes: mousemove with the button held), which costs nothing on a page that doesn't listen. What a page's CSS shows with the mouse over an element (`.menu:hover .submenu`, a hover menu) a click on that element shows, until the next click elsewhere, as on a phone: a page is laid out again only for a click that opens or closes such a thing, never as the mouse moves (on the stock Falcon a layout is 0.1 to 0.5 s on a small page, seconds on a big one). A :hover that only colours the element under the mouse is left out. (webdriveruniversity.com's Actions and Scrolling; DESIGN.md, The mouse.) |
-| Colours in 16 and 256 colours | **Solid steps, the page's own colours, softer mixing, the Gateway's palette** (Erez, 8 Nov 2026, from his photos of yaary.music in 256 colours) | A CSS gradient is painted in solid steps, each the screen's nearest colour, not as a 4 x 4 mix of pens (its dots, and the text on them dotted); a gradient that is partly transparent is mixed with what is under it. In 256 colours some of EWeb's own palette entries go to the page's own colours (its buttons, cards, gradients), the pictures using the rest. **A picture's pixels near a page colour take it** (Erez, 16 Nov 2026, from pouet.net, whose background tile of nearly the page's blue came as a cloud of dots over the page's solid blue): within 8 of it in each part (12 for a 2 x 2 block's mean where only the picture's pens are kept: the disk cache's, the Pi's), in a copy of its pens made for the page in front (`img_page_colours`, `var_snap` in `src/browse/img.c`; its own pens unchanged, the disk cache keeps those); photos keep their dither but where they come that near. Its cost with 1.19's layout fixes, against 1.18 (paired, the minimum of each), accepted by Erez for 1.19 (17 Nov 2026, "Release now"): pages whole 6 ms later, the news page on `Falcon-4:16` 814 -> 820 ms, the home page and the sample page under NVDI at 256 colours 644 -> 650 and 559 -> 565. Pictures' error diffusion is softer (less grain, a little flatter), everywhere, Direct too. Through the Gateway, a page's 239 colours are chosen from all its pictures (lazy ones too: EWeb names them all to webgate at once) and its CSS before the first picture is sent, a second or two later than now; Direct keeps the fixed colours (it can't know the pictures in advance). |
+| A long draw | **Whole on the Falcon and TT, as 0.69; in pieces on the ST** (the owner, 4 and 7 Nov 2026) | On 7 Nov 2026, after a day's work to make pieces as fast as whole (full-height runs, bands ending between lines, pieces one after another while no key waits: none closed the gap; per piece the screen taken, the mouse hidden and the window's rectangles walked again, about 10 ms of a stock Falcon's), then decided for the ST alone. The 8 MHz ST draws a long page in pieces (its window answered after 0.76 s on the news page, against 3.3 s whole; the page done 12 to 17 % later); `EWEB.PRG` draws whole (`win_whole_only`: 0 in the ST edition). Before that: | Performance never goes backwards (decided 7 Nov 2026: only ever better). The family's rule of 4 Nov (a draw over 300 ms in pieces of at most 100 ms, keys answered between) made EWeb's pages finish later than 0.69's whole draw: on the stock Falcon (Falcon-4:16) 5 to 14 % (home 610 ms against 569, news 1090 against 954), on an 8 MHz ST in 300 ms pieces (the owner's choice for the ST) 9 to 18 %, in 100 ms ones 58 to 105 %. So EWeb draws whole, and the drawing is made faster until a page in pieces finishes no later than 0.69's whole; then the pieces are switched on (`win_whole_only` in `ui/win.c`). The pieces' code stays, measured by the speed build's `DRAWPIECES=1` (`tests/hatari/speed.py --pieces`; `AESWHOLE`, the time to the finished picture): whole or pieces told before the draw by the dearest rows lately, an ST's pieces up to 300 ms in bands of 32 rows. |
+| A window a page's script opens | **From a click or a key of the user's** (decided 7 Nov 2026) | As browsers: `window.open` opens a window while the user's click or key is handled; at other times (as the page loads, from a timer) it is null, as a blocker of pop-ups answers. What the script writes into the `about:blank` it opened is that window's page, with its opener's site. (webdriveruniversity.com's AI Playground, New Tab; DESIGN.md, The AI Playground in use.) |
+| The mouse over a page | **Its scripts hear it; a click is the hover** (decided 8 Nov 2026: of hover as on a PC, a click as the hover, or none) | A page's scripts are told of the mouse as browsers tell them (mouseover, mouseout, mouseenter, mouseleave as it goes from element to element; mousedown, mouseup, click, dblclick; a drag whose press a script takes: mousemove with the button held), which costs nothing on a page that doesn't listen. What a page's CSS shows with the mouse over an element (`.menu:hover .submenu`, a hover menu) a click on that element shows, until the next click elsewhere, as on a phone: a page is laid out again only for a click that opens or closes such a thing, never as the mouse moves (on the stock Falcon a layout is 0.1 to 0.5 s on a small page, seconds on a big one). A :hover that only colours the element under the mouse is left out. (webdriveruniversity.com's Actions and Scrolling; DESIGN.md, The mouse.) |
+| Colours in 16 and 256 colours | **Solid steps, the page's own colours, softer mixing, the Gateway's palette** (decided 8 Nov 2026, from his photos of yaary.music in 256 colours) | A CSS gradient is painted in solid steps, each the screen's nearest colour, not as a 4 x 4 mix of pens (its dots, and the text on them dotted); a gradient that is partly transparent is mixed with what is under it. In 256 colours some of EWeb's own palette entries go to the page's own colours (its buttons, cards, gradients), the pictures using the rest. **A picture's pixels near a page colour take it** (decided 16 Nov 2026, from pouet.net, whose background tile of nearly the page's blue came as a cloud of dots over the page's solid blue): within 8 of it in each part (12 for a 2 x 2 block's mean where only the picture's pens are kept: the disk cache's, the Pi's), in a copy of its pens made for the page in front (`img_page_colours`, `var_snap` in `src/browse/img.c`; its own pens unchanged, the disk cache keeps those); photos keep their dither but where they come that near. Its cost with 1.19's layout fixes, against 1.18 (paired, the minimum of each), accepted by the owner for 1.19 (17 Nov 2026, "Release now"): pages whole 6 ms later, the news page on `Falcon-4:16` 814 -> 820 ms, the home page and the sample page under NVDI at 256 colours 644 -> 650 and 559 -> 565. Pictures' error diffusion is softer (less grain, a little flatter), everywhere, Direct too. Through the Gateway, a page's 239 colours are chosen from all its pictures (lazy ones too: EWeb names them all to webgate at once) and its CSS before the first picture is sent, a second or two later than now; Direct keeps the fixed colours (it can't know the pictures in advance). |
 | TT-RAM | **All of it but a share left for other programs, a setting** (4 Nov 2026; Phase 2) | The program and its memory are already in TT-RAM without EWeb's code knowing (common's heap asks for TT-RAM first). Its fixed ceilings go (pages kept for Back and Forward a quarter of the free TT-RAM up to 24 MB, pictures an eighth up to 16 MB, eight windows): EWeb keeps pages and pictures until the free TT-RAM comes down to the share left for others, then lets the oldest go, and gives memory back when something needs it. The share is a setting, a percentage of the TT-RAM, 50 by default (Settings > General; `TTLEAVE=` in `eweb.inf`). A machine without TT-RAM (the stock Falcon, the ST) is as before. |
 | A 4 MB Falcon with NVDI | **Its memory diet** (4 Nov 2026; Phase 2; done 11 Nov 2026, A big page on a 4 MB Falcon under NVDI, below) | A stock 4 MB Falcon with NVDI left EWeb about 1.2 MB for a page (the heap stays near 880 KB, 318 KB of ST RAM free: the hub's rig), and the news test page needed about 1.5 MB at its peak (parsed 450 KB, styled 832 KB: its computed styles 192 KB, the sheet's rules 114 KB; laid out 1.17 MB, the layout's boxes 112 KB more while it works), so it said it hadn't the memory there (0.66 to 1.2). Without NVDI it fitted. Since 11 Nov 2026 the gui rig's 130 KB page shows there at the first try, 405 KB of the heap free after it: the stack taken from GEMDOS (96 KB on such a machine), the CSS engine's buffers taken while used, the text shared with the document, smaller boxes, the source given back. |
-| Downloads | **A download box** (Erez, 9 Nov 2026: the file's name, the option to cancel, progress by its size) | Every file saved as it comes is in a dialog of its own (`dl_box` in `ui/dialogs.c`, a window under MiNT and MagiC, 3.5): its name, the family's progress bar by its Content-Length (none for a chunked answer: the KB alone), the KB so far and of how many, and Cancel (Esc, Undo, its closer). A file a link opens (EWeb shows it neither as a page nor as a picture, or its server says attachment) is no longer gathered in memory first: the page's fetch stops at its headers and `br_save_url` asks for it again into the file chosen (`browser.stream_files`, `BR_SAVE`), so it can be bigger than the memory, at the cost of a second request (a second handshake on a secure site). A form's answer to save (POST) and a picture EWeb can't decode stay as before (in memory, then saved). For a file opened, where it goes is asked and the box opened before that second request, so the box shows through its connection and handshake, and Esc or Cancel there leaves no file and no connection open. A press on the box off Cancel waits for its release (or the AES keeps the button held); Cancel is taken when let go over it (5.8). The ST edition is as 1.0 has it. Tests: `make itest` (`ewrender -stream`); `make hatarigui` (browse: Cancel on `/trickle` with its size, Esc on `/chunked`, Esc in the second secure handshake with every connection closed, a link clicked after each, `/site/small.zip` with its size); under FreeMiNT + XaAES `tests/hatari/xaaes_dl.sh` with `build/dltest/EWEB.PRG` (`-DEW_TEST_DL`, the box fed with no network: FAKESTNG doesn't reach Hatari's serial line under FreeMiNT), moved by its title bar, its closer and Esc as Cancel. |
-| What follows 1.3 | **The scripts note and inline SVG, then the FireBee edition and full 32-bit drawing; the ST's slower rows on Sunday** (Erez, 11 Nov 2026) | After 1.3 (the 4 MB + NVDI memory diet): first the two items left from after 1.0, "this page needs its scripts" on the info line with one click to run them, and inline SVG coloured by the page's CSS classes with `width="100%"` sized to its box; then the focus is the FireBee edition (below) and full 32-bit drawing on every high-performance machine (Screens deeper than the Falcon's: a CT60, a SuperVidel, ARAnyM, not the FireBee alone); then the TT-RAM share setting and the TLS handshake. `EWEBST.PRG` under NVDI on the ST was slower than 1.2 in three of the speed rig's rows (3 pages up 1,510 to 1,755 ms, the home page finished 1,679 to 1,770, Settings closed 95 to 120), all within their times: logged, not holding 1.3 back, and looked at again on Sunday 15 Nov 2026. |
-| A FireBee edition | **After the family's UI rework and alignment, for EWeb and EPDF** (Erez, 9 Nov 2026, through the hub; AERA-Atari's standards/PARKED.md) | A question to Erez: can EWeb be built for the FireBee (ColdFire V4e)? It could be a third edition: the cross-compiler builds for it (`-mcpu=5475`) and QEMU's `cfv4e` could run its tests and counts; it would need C or ColdFire versions of common's assembly (`crt0.S`, `crash.S`, `inflate_fast.S`, `mont030.S`, `sting.S`, `nf.S`), no DSP (the ST edition's paths), scripts built for the ColdFire's FPU (doubles only, not the 68882's), a check of its screen modes, and a tester with a FireBee (Hatari has no ColdFire). Several days. Erez: decide after 1.0. A FireBee owner offered (9 Nov 2026) to test EWeb and the family's other programs built for the ColdFire and report back: most of the family runs on the FireBee as it is (in its 68000 emulation; EFTP "works really well"), and a ColdFire build would be faster and run natively under FireTOS. The hub plans common/'s part with EWeb when the time comes (ColdFire versions of its assembly, TLS without the DSP); EWeb's own open point is `EWEBJS.OVL` on the ColdFire's doubles-only FPU. It may not delay the UI work or 1.0. **Decided 10 Nov 2026 (Erez, through the hub; AERA-Atari 6891fc2, PARKED.md, a written exception to guideline 7.4):** the FireBee build ships in the same release as the others, a third file (ColdFire, `-mcpu=5475`; its name EWeb's to choose) beside `EWEB.PRG` and `EWEBST.PRG`; the release workflow builds all three and the zip carries them; each About box says which build it is; a build started on the wrong machine refuses with an alert, so the ColdFire build's first instructions must be ones a 68030 runs too (common's `cpucheck.c`, EWeb first, as it builds that layer); one Makefile target set: `make dist` makes all three, and with no ColdFire compiler still the other two. Starts after 1.0 and the family's UI rework. The FireBee's systems (firebee.org, through the hub; AERA-Atari 3a822e8): FireTOS (TOS 4.04 for the ColdFire, with a STinG-compatible network and cf68klib, which emulates the 68k instructions the ColdFire lacks: `EWEB.PRG` runs there today, slowly), FireTOS with FreeMiNT, and EmuTOS for the ColdFire (no cf68klib: only a ColdFire build runs there). So the third file is tested under all three, and has no 68k-only instruction anywhere, common's assembly included. **Numbers to beat** (the hub, 10 Nov 2026): 1.0's zip carries `firebee/` (`NSBENCH.TTP` on the news page with EWeb's CSS, `EWGET.TTP` fetching https://www.example.com/ twice, `README.TXT`) for the FireBee tester to run under FireTOS's cf68klib; each tool's log starts with the machine block (common's `atari/machine.c` and `guard.S` since 1.3; interrupts off while the guard holds the vectors since 1.2, after a FireBee tester's hang) (the cookies, TOS's version and date, MiNT, the CACR), each read guarded so a refusal says "no answer". |
-| The Gateway's name | **Gateway** (Erez, 7 Nov 2026; the guidelines' 7.3) | The user sees "Gateway", never "Pi" or "Pi gateway": the status line, Settings > Secure, View > Through the Gateway's browser, the alerts, EWeb's own pages, the help guide and the README. "Raspberry Pi" stays where the hardware is meant (setting it up). The INF keys (`GATE=`, `GATEPORT=`) and the code's names stay; this document keeps the old words where it records what was done then. |
-| Work handed to the Gateway | **Three phases on the status line** (Erez, 7 Nov 2026; the guidelines' 7.3) | While a page comes through the Gateway the status line says "Sending to the Gateway...", "The Gateway is loading the page..." and "Receiving from the Gateway... N KB" (the proposed words), then what EWeb said before. `http.c` calls common's `conn_phase` (send, wait, receive with the answer's length, done) for every request to the Gateway; `ui/main.c` shows them for the page itself only (not its stylesheets or pictures, whose own progress the status line has), a phase drawn when it changed and the last draw was 100 ms ago or more. EWGET prints them (`Gateway: send N, wait, receive N, done`) and `make itest` checks their order. |
-| Sans-serif text | **DejaVu Sans Condensed where a page asks for Arial's kind** (Erez, 13 Nov 2026: C), **with a setting to turn it off** (Erez, 16 Nov 2026: "some testers don't like it") | Arial's widths, so that pages made for Arial lay out as made; DejaVu Sans for the faces as wide as it and for EWeb's own pages. `EWEB.FNT` 3.6 MB (was 2.7). Settings > General > Narrow letters for pages made for Arial (`NARROW=`, on by default; `EWEB.PRG` only, the ST edition being frozen): off, those pages are in DejaVu Sans (`LAYOUT_OPT.wide_sans`; a page kept for Back is laid out again when the setting differs). Its cost on `Falcon-4:16` against 1.17 (paired, the minimum of each), accepted by Erez for 1.18 (16 Nov 2026, "Release now"): Settings opened 160 -> 170 ms and closed 45 -> 55 (the dialog two rows taller), the home page shown 465 -> 475 and the pictures' page 395 -> 405 (the same work, drawn as before: where the code now lies); the ST edition is 1.17's program. Fonts, below. |
+| Downloads | **A download box** (decided 9 Nov 2026: the file's name, the option to cancel, progress by its size) | Every file saved as it comes is in a dialog of its own (`dl_box` in `ui/dialogs.c`, a window under MiNT and MagiC, 3.5): its name, the family's progress bar by its Content-Length (none for a chunked answer: the KB alone), the KB so far and of how many, and Cancel (Esc, Undo, its closer). A file a link opens (EWeb shows it neither as a page nor as a picture, or its server says attachment) is no longer gathered in memory first: the page's fetch stops at its headers and `br_save_url` asks for it again into the file chosen (`browser.stream_files`, `BR_SAVE`), so it can be bigger than the memory, at the cost of a second request (a second handshake on a secure site). A form's answer to save (POST) and a picture EWeb can't decode stay as before (in memory, then saved). For a file opened, where it goes is asked and the box opened before that second request, so the box shows through its connection and handshake, and Esc or Cancel there leaves no file and no connection open. A press on the box off Cancel waits for its release (or the AES keeps the button held); Cancel is taken when let go over it (5.8). The ST edition is as 1.0 has it. Tests: `make itest` (`ewrender -stream`); `make hatarigui` (browse: Cancel on `/trickle` with its size, Esc on `/chunked`, Esc in the second secure handshake with every connection closed, a link clicked after each, `/site/small.zip` with its size); under FreeMiNT + XaAES `tests/hatari/xaaes_dl.sh` with `build/dltest/EWEB.PRG` (`-DEW_TEST_DL`, the box fed with no network: FAKESTNG doesn't reach Hatari's serial line under FreeMiNT), moved by its title bar, its closer and Esc as Cancel. |
+| What follows 1.3 | **The scripts note and inline SVG, then the FireBee edition and full 32-bit drawing; the ST's slower rows on Sunday** (decided 11 Nov 2026) | After 1.3 (the 4 MB + NVDI memory diet): first the two items left from after 1.0, "this page needs its scripts" on the info line with one click to run them, and inline SVG coloured by the page's CSS classes with `width="100%"` sized to its box; then the focus is the FireBee edition (below) and full 32-bit drawing on every high-performance machine (Screens deeper than the Falcon's: a CT60, a SuperVidel, ARAnyM, not the FireBee alone); then the TT-RAM share setting and the TLS handshake. `EWEBST.PRG` under NVDI on the ST was slower than 1.2 in three of the speed rig's rows (3 pages up 1,510 to 1,755 ms, the home page finished 1,679 to 1,770, Settings closed 95 to 120), all within their times: logged, not holding 1.3 back, and looked at again on Sunday 15 Nov 2026. |
+| A FireBee edition | **After the family's UI rework and alignment, for EWeb and EPDF** (decided 9 Nov 2026, through the hub; AERA-Atari's standards/PARKED.md) | A question to the owner: can EWeb be built for the FireBee (ColdFire V4e)? It could be a third edition: the cross-compiler builds for it (`-mcpu=5475`) and QEMU's `cfv4e` could run its tests and counts; it would need C or ColdFire versions of common's assembly (`crt0.S`, `crash.S`, `inflate_fast.S`, `mont030.S`, `sting.S`, `nf.S`), no DSP (the ST edition's paths), scripts built for the ColdFire's FPU (doubles only, not the 68882's), a check of its screen modes, and a tester with a FireBee (Hatari has no ColdFire). Several days. The owner: decide after 1.0. A FireBee owner offered (9 Nov 2026) to test EWeb and the family's other programs built for the ColdFire and report back: most of the family runs on the FireBee as it is (in its 68000 emulation; EFTP "works really well"), and a ColdFire build would be faster and run natively under FireTOS. The hub plans common/'s part with EWeb when the time comes (ColdFire versions of its assembly, TLS without the DSP); EWeb's own open point is `EWEBJS.OVL` on the ColdFire's doubles-only FPU. It may not delay the UI work or 1.0. **Decided 10 Nov 2026 (the owner, through the hub; AERA-Atari 6891fc2, PARKED.md, a written exception to guideline 7.4):** the FireBee build ships in the same release as the others, a third file (ColdFire, `-mcpu=5475`; its name EWeb's to choose) beside `EWEB.PRG` and `EWEBST.PRG`; the release workflow builds all three and the zip carries them; each About box says which build it is; a build started on the wrong machine refuses with an alert, so the ColdFire build's first instructions must be ones a 68030 runs too (common's `cpucheck.c`, EWeb first, as it builds that layer); one Makefile target set: `make dist` makes all three, and with no ColdFire compiler still the other two. Starts after 1.0 and the family's UI rework. The FireBee's systems (firebee.org, through the hub; AERA-Atari 3a822e8): FireTOS (TOS 4.04 for the ColdFire, with a STinG-compatible network and cf68klib, which emulates the 68k instructions the ColdFire lacks: `EWEB.PRG` runs there today, slowly), FireTOS with FreeMiNT, and EmuTOS for the ColdFire (no cf68klib: only a ColdFire build runs there). So the third file is tested under all three, and has no 68k-only instruction anywhere, common's assembly included. **Numbers to beat** (the hub, 10 Nov 2026): 1.0's zip carries `firebee/` (`NSBENCH.TTP` on the news page with EWeb's CSS, `EWGET.TTP` fetching https://www.example.com/ twice, `README.TXT`) for the FireBee tester to run under FireTOS's cf68klib; each tool's log starts with the machine block (common's `atari/machine.c` and `guard.S` since 1.3; interrupts off while the guard holds the vectors since 1.2, after a FireBee tester's hang) (the cookies, TOS's version and date, MiNT, the CACR), each read guarded so a refusal says "no answer". |
+| The Gateway's name | **Gateway** (decided 7 Nov 2026; the guidelines' 7.3) | The user sees "Gateway", never "Pi" or "Pi gateway": the status line, Settings > Secure, View > Through the Gateway's browser, the alerts, EWeb's own pages, the help guide and the README. "Raspberry Pi" stays where the hardware is meant (setting it up). The INF keys (`GATE=`, `GATEPORT=`) and the code's names stay; this document keeps the old words where it records what was done then. |
+| Work handed to the Gateway | **Three phases on the status line** (decided 7 Nov 2026; the guidelines' 7.3) | While a page comes through the Gateway the status line says "Sending to the Gateway...", "The Gateway is loading the page..." and "Receiving from the Gateway... N KB" (the proposed words), then what EWeb said before. `http.c` calls common's `conn_phase` (send, wait, receive with the answer's length, done) for every request to the Gateway; `ui/main.c` shows them for the page itself only (not its stylesheets or pictures, whose own progress the status line has), a phase drawn when it changed and the last draw was 100 ms ago or more. EWGET prints them (`Gateway: send N, wait, receive N, done`) and `make itest` checks their order. |
+| Sans-serif text | **DejaVu Sans Condensed where a page asks for Arial's kind** (decided 13 Nov 2026: C), **with a setting to turn it off** (decided 16 Nov 2026: some testers don't like it) | Arial's widths, so that pages made for Arial lay out as made; DejaVu Sans for the faces as wide as it and for EWeb's own pages. `EWEB.FNT` 3.6 MB (was 2.7). Settings > General > Narrow letters for pages made for Arial (`NARROW=`, on by default; `EWEB.PRG` only, the ST edition being frozen): off, those pages are in DejaVu Sans (`LAYOUT_OPT.wide_sans`; a page kept for Back is laid out again when the setting differs). Its cost on `Falcon-4:16` against 1.17 (paired, the minimum of each), accepted by the owner for 1.18 (16 Nov 2026, "Release now"): Settings opened 160 -> 170 ms and closed 45 -> 55 (the dialog two rows taller), the home page shown 465 -> 475 and the pictures' page 395 -> 405 (the same work, drawn as before: where the code now lies); the ST edition is 1.17's program. Fonts, below. |
 | System | **Plain TOS with STinG** | EWeb is one program with its own event loop: STinG connections that don't block, pages loaded in small steps between GEM events, the program and its data in TT-RAM when there is some. There are no threads and no memory protection, so the code has to be careful with memory. |
 
 ## Why not a full modern browser
@@ -441,7 +441,7 @@ together, in the cascade's order.
 | The test server's long page, the same | 195 ms | 115 ms |
 | The first page of a run, the same | 90-105 ms | 140 ms |
 
-The Hatari figures are the same on EmuTOS 1.4 and on Erez's TOS 4.04 (`common/tools/machines.py`
+The Hatari figures are the same on EmuTOS 1.4 and on the reference TOS 4.04 (`common/tools/machines.py`
 takes it from `~/.aera/tos`). Checked: every page of the set gives the same display list alone and
 after another page (after `NEWS.HTM` with its 83 KB stylesheet too), the kept layouts are
 unchanged, and `make csscmp` finds the same differences as before.
@@ -674,7 +674,7 @@ corrupted ST-RAM (where TOS, the desktop and the accessories live). So from 0.10
 read or write of a sector or more from TT-RAM through 8 KB of its own in ST-RAM (`atari/plat_tos.c`),
 says so on its "files" line with the `_FRB` cookie, and has the family's crash recorder
 (`common/atari/crash.c`): a crash in EWGET is written to `CRASH.LOG`; one in the system after it
-ended is found in TOS's record at the next start. Erez's runs of 0.11 (19 Oct 2026): HDDRIVER sets
+ended is found in TOS's record at the next start. The owner's runs of 0.11 (19 Oct 2026): HDDRIVER sets
 `_FRB` (it bounces TT-RAM itself), four runs without junk, and the bombs still came, after EWGET had
 ended (a white screen, no `CRASH.LOG`): not the files' DMA. The family's rule since (the guidelines'
 6.5): with `_FRB`, TT-RAM goes to and from the disk as it is, in 32 KB pieces; without, through
@@ -685,7 +685,7 @@ leaves the DSP the key exchange's signature (0.44 s for P-256) and X25519 (0.48 
 first visit the certificates' checks too. The product (`dsp/ec.a56`) is mostly the overhead around
 its columns.
 
-**Session secrets stay off the disk** (Erez, 14 Nov 2026): a TLS session is resumed only within the
+**Session secrets stay off the disk** (decided 14 Nov 2026): a TLS session is resumed only within the
 session of the program that made it (common's `tls.c`, in memory); its master secret is never
 written out, though a resumed handshake to atari-home.de took 1.2 s against 7.4 s for a full one on
 the emulated stock Falcon. What may be kept between sessions is what isn't secret: signatures
@@ -707,7 +707,7 @@ TLS.OVL 1.16's `conn.c` grew by 892 bytes of code and 42 of strings, and the sam
 longest stretch under NVDI went from 605 to 615 ms; `atari/connpad.S` (room linked after `conn.o`,
 never run) puts what follows back at 1.11's places modulo 256, and every row on the Falcon under
 NVDI came back within a tick. Two rows of 1.12 stayed two ticks over 1.11 and were released so
-(Erez, 14 Nov 2026): the ST's About box opened 155 to 165 ms and the stock Falcon's home page 520 to
+(decided 14 Nov 2026): the ST's About box opened 155 to 165 ms and the stock Falcon's home page 520 to
 530 ms. Both follow placement rather than work: 1.11's `charset.c` padded to the new one's size is
 165 ms too, its loop the same instructions. Pads to put them back failed: after `charset.o` on the
 ST (the About box unchanged, three rows 15 to 50 ms slower); after `text.o` and `charset.o` on the
@@ -757,8 +757,8 @@ releases.
 - **Fonts** (`tools/mkfont.py`, `src/gfx/font.c`): `EWEB.FNT` holds DejaVu Sans, Serif and Sans
   Mono, each regular, bold, italic and bold italic, at 9 to 32 pixels (12 sizes): 144 faces of 398
   characters (Latin-1, Latin Extended-A, Hebrew, punctuation and signs), 1.8 MB unpacked; each face
-  is DEFLATE'd in the file, 705 KB in all (Erez's decision, 19 Oct 2026: packed, every size kept).
-  Since 24 Oct 2026 (Erez's choice, A: not Armenian, Georgian or the rarer symbols) each face has
+  is DEFLATE'd in the file, 705 KB in all (the owner's decision, 19 Oct 2026: packed, every size kept).
+  Since 24 Oct 2026 (the owner's choice, A: not Armenian, Georgian or the rarer symbols) each face has
   four more blocks of characters, `EWFNT3`: more Latin (Latin Extended-B, Vietnamese, Welsh, the
   combining accents, which take no room and are drawn over the letter before), 398 characters;
   Greek, 135; Cyrillic, 120; the common symbols (arrows, mathematics, currencies, fractions,
@@ -780,7 +780,7 @@ releases.
   sidebar). DejaVu Sans stays for the faces as wide as it (DejaVu, Vera, Verdana, Tahoma, Geneva)
   and for EWeb's own pages, which name it; an `EWEB.FNT` without the fourth family draws those
   pages in DejaVu Sans (`font_get`). The condensed letters are rougher at the smallest sizes. Its
-  cost (measured paired against 1.8, accepted by Erez for 1.9): each condensed face is unpacked the first
+  cost (measured paired against 1.8, accepted by the owner for 1.9): each condensed face is unpacked the first
   time a page uses it, about 250 ms on the 8 MHz ST once a session (the sample page's longest stretch
   245 to 285 ms, finished 655 to 684); 2.6 KB more at start for the larger table of faces.
   EWeb opens the file once at start and keeps it
@@ -886,13 +886,13 @@ releases.
   the page and its stylesheets over HTTP and HTTPS or from the disk, a memory cache (4 MB) for Back
   and for a site's stylesheets (a page that came after a redirect under both addresses), 50 pages
   of history with where each was scrolled, a page's anchors, and EWeb's own pages (the home page,
-  below; "can't open", with the reason). The pages nearest in the history stay laid out (Erez's request,
+  below; "can't open", with the reason). The pages nearest in the history stay laid out (the owner's request,
   19 Oct 2026): Back and Forward show them at once, laid out again only for another window width,
   within a quarter of the free TT RAM up to 24 MB (else an eighth of the free ST RAM up to 2 MB),
   a page counted as eight times its source; the farthest go first. In the GUI rig a Back went from
   about 1 s (fetch from the cache, parse, style, layout) to 0.45 s, all of it drawing.
-- **The home page** (`about:start`, Erez's request of 24 Oct 2026: "nice visuals, the EWeb logo
-  and great links out of the box"; simpler the same day, a row a group, no boxes): AERA's look,
+- **The home page** (`about:start`, the owner's request of 24 Oct 2026: good visuals, the EWeb logo
+  and useful links from the start; simpler the same day, a row a group, no boxes): AERA's look,
   black with light copper labels, the EWeb globe (the family's drawing) and wordmark (Oxanium), the
   AERA logo at the foot. `src/browse/home.html` is made into C strings at build time by
   `tools/mkhome.py`, its pictures put in as `data:` addresses (2.4 KB of them), and EWeb fills in
@@ -984,7 +984,7 @@ releases.
   a site over the network through FAKESTNG, a link clicked with the mouse, Undo, an address typed
   with an anchor, a secure page (the TLS handshake on the emulated 68030 and DSP), Esc stopping a
   download, and a page in 256 colours, true colour, TT medium and TT monochrome.
-- **The disk** (the guidelines' 6.5, Erez's rule of 18 Oct 2026: every open costs real time on his
+- **The disk** (the guidelines' 6.5, the owner's rule of 18 Oct 2026: every open costs real time on his
   disks). Measured with Hatari's GEMDOS trace (`make hatarifiles`, `tests/hatari/disk_files.py`),
   opens (`Fopen` and `Fcreate`) and lookups (`Fsfirst`) per case:
 
@@ -1009,7 +1009,7 @@ releases.
   in 32 KB pieces (`atari/plat_tos.c`): as they are where the disk driver sets `_FRB`, else
   through 32 KB in ST-RAM; a 1 MB download is 32 writes (it was 128 of 8 KB). `EWGET.TTP`'s log
   (`-l`) is written once a run, not at each milestone.
-- **Where its files are** (Erez, 28 Oct 2026: started from EMail's link, EWeb didn't find its
+- **Where its files are** (decided 28 Oct 2026: started from EMail's link, EWeb didn't find its
   fonts). Every file of EWeb's own (`EWEB.FNT`, `EWEB.INF`, the cache, the overlays, the cookies,
   the bookmarks, the history) is in the program's folder, taken once at start from common's
   `app_dir()`: the folder of the command the AES started it with (`shel_read`), not the current
@@ -1105,7 +1105,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
 - **JPEG on the DSP (20 Oct 2026; the owner's rules: the DSP takes what it does faster, and it is
   made fast for the stock Falcon, "as I want others to enjoy this", not for his DFB1X):** the
   first version (0.16) had the 68030 unpack the Huffman codes and the DSP transform and make the
-  colours. Erez's `PICBENCH.LOG`s showed it was the 68030's half that a stock Falcon waited on
+  colours. The owner's `PICBENCH.LOG`s showed it was the 68030's half that a stock Falcon waited on
   (8.49 s on the 68030 alone, 2.57 s with the DSP; at 192 x 128, 5.88 s and 3.11 s), and the
   DSP's that a DFB1X did (2.11 s and 1.10 s). So now the DSP (`common/dsp/jpeg.a56`) decodes a
   baseline JPEG itself: `pic.c` lets libjpeg read the headers and sends the scan's bytes as the DSP
@@ -1152,7 +1152,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   The 32 MHz columns' "with the DSP" figures are too good: Hatari runs the DSP at the 68030's pace,
   some three times its room there (EPlay's finding, 1 Nov 2026); the stock Falcon's columns are the
   ones to go by, and DSP figures are taken on `Falcon-4` only from then on.
-  Hatari runs a stock Falcon about 1.8 times as fast as Erez's (4.56 s against 8.49 s on the
+  Hatari runs a stock Falcon about 1.8 times as fast as the owner's (4.56 s against 8.49 s on the
   68030, 1.40 s against 2.57 s with the DSP), so his should take about 1.1 s for the photo with
   the DSP. What is left: the 68030 reading each pixel through the host port (a status read and
   two byte reads a word) and the DSP's own work: the Huffman codes, the transform, and shrinking
@@ -1218,7 +1218,7 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   ends in `.avif`, `.svgz`, `.jxl`, `.heic` or `.tif` (and `.webp` in the ST edition) isn't
   fetched at all, and any picture's answer whose type is one of those (or text: a site's "not
   found") is left unread after its headers (`HTTPREQ.refuse`, its connection closed).
-  **WebP in `EWEB.PRG`** (Erez's option C, 24 Oct 2026): it decodes a WebP itself, with Google's
+  **WebP in `EWEB.PRG`** (the owner's option C, 24 Oct 2026): it decodes a WebP itself, with Google's
   libwebp 1.6.0 (its decoder only, in AERA-Atari's `common/`, `-DPIC_LIBWEBP`; `common/README.md`),
   lossy or lossless, with alpha, of up to 1,048,576 pixels (`WEBP_MAX_PX` in `img.c`: a bigger one
   is left out, its place framed; an animated one too). A lossy WebP takes about 193 68030
@@ -1237,8 +1237,8 @@ EContact: `common/src/pic.c` and its decoders, which EContact's photos can move 
   (`img.c`) lays it out at that size, so the page is the same either way, and the disk cache keeps
   it with the size in it. A JPEG, PNG or GIF the page can show as it is comes as it is.
   On a true-colour screen (the Falcon's 16 bits, NVDI's true colour too: no palette, `img_pal`
-  NULL) the request adds `deep=1` (Erez, 8 Nov 2026: "When the screen is true color or above, the
-  gateway should treat it as such"): a picture made smaller keeps all its colours, a PNG not cut
+  NULL) the request adds `deep=1` (decided 8 Nov 2026: a true-colour screen is treated as one by
+  the Gateway): a picture made smaller keeps all its colours, a PNG not cut
   to 256 and a JPEG of quality 90. Measured against the same picture fetched directly (ewrender,
   a 640 window, RGB565): a picture no wider than the window is the same to the pixel either way;
   a 1200x360 gradient PNG with transparency shown at the window's width differed in 97.9% of its
@@ -1378,7 +1378,7 @@ the HTML Standard:
   or 303 answer fetched with GET; a POST's answer isn't cached; Back to it, once it isn't kept,
   fetches its address with GET rather than sending again). Return in a field sends the form by its
   first submit button, or without one when the field is the form's only one (implicit submission).
-- **A file sent** (Erez, 7 Nov 2026; webdriveruniversity.com's File Upload): a click on a file field
+- **A file sent** (decided 7 Nov 2026; webdriveruniversity.com's File Upload): a click on a file field
   opens the file selector (`choose_file` in `ui/win.c`, from the last file's folder, common's
   `fsel_settle` after it), the file chosen is the control's (`fctl.file`, `form_set_file`), its
   name drawn from its start in a control as wide as a field of 20, and `input` and `change` go to
@@ -1511,12 +1511,12 @@ What comes is gathered in memory. Once a sixteenth of the cache (1 MB at most) h
 is added to the pack when EWeb is idle, about 64 KB a turn of the main loop (`dc_write_step`), not
 while a page or its pictures come; less where the disk takes longer than 50 ms for it (4 KB at
 least, back to 64 KB as it speeds up), and a big answer (a page's 3 MB of HTML) a step's worth at a
-time, pending in memory till the last of it is on the disk (2 Nov 2026: on Erez's SD card each
+time, pending in memory till the last of it is on the disk (2 Nov 2026: on the reference SD card each
 answer was one write, GEM held 8 to 11 s a step for minutes after iamexpat.de's pictures had come); it is written at once only past what memory may hold (`dc_hold`:
 a quarter of the RAM free at the start, 1 to 8 MB). Less waits for quit: browsing page after page
 opens nothing (a reset loses only what is fetched again). An answer written goes from memory (its
 index entry stays), and the quit writes only what is still waiting. (Until 31 Oct 2026 the 1 MB was
-written as it filled, in one stretch: on Erez's Falcon the disk stopped yaary.music's pictures'
+written as it filled, in one stretch: on the reference Falcon the disk stopped yaary.music's pictures'
 download each time, a page of photos filling it every few pictures with their decoded pens.) The pack is opened when a job (a page and its stylesheets, a page's pictures)
 first reads from it, and closed when the job ends; its head is checked against the index the first
 time a run opens it. The pack's first bytes and the index carry the same number, so an index from
@@ -1598,7 +1598,7 @@ holds pictures ready to show.
   piece in 44 writes and its list, 0.6 s in Hatari. Untick it, and the cache is written a step
   at a time at idle as before.
 - **The size** is `CACHE=` in `EWEB.INF`, Settings > General's Disk cache, MB (512 at most since
-  29 Oct 2026, a field of three digits: Erez wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
+  29 Oct 2026, a field of three digits: the owner wanted more than 64; 0: none); without it 32 MB (8 until 21 Oct 2026: a page of 45 photos and their decoded pixels took
   more than that, so its first pictures were gone by its last, and gone again on the next visit),
   2 MB on a machine without TT RAM.
 
@@ -1637,7 +1637,7 @@ cookie) and EWGET through it in Hatari (`make hatarinet`), from EWeb's copy of A
 
 ## Gateway mode: the Pi's browser, snapshots and live view (20 Oct 2026)
 
-webgate's `--browser` (AERA-Gateway 1.2 has it; the recipe leaves it out until Erez decides on
+webgate's `--browser` (AERA-Gateway 1.2 has it; the recipe leaves it out until the owner decides on
 Chromium and Xvfb for the Pi) hands an address to an ordinary Chromium on the Pi with webgate-ext
 loaded, no automation protocol: the extension long-polls webgate on 127.0.0.1:8281, opens the page,
 and once it has been quiet for 800 ms (8 s at most) sends it back as plain HTML: no scripts or
@@ -1654,9 +1654,9 @@ requests into it as far as an address shows it (the owner session's review). Tes
 unit tests with a stand-in extension and xdotool, a real Chromium in Xvfb (click, type, a script
 run, "As a page"; the home network refused and blocked), and `make itest`'s two cases through
 `ewrender -R` and the live page with a stand-in extension. Measured here: Chromium 597 MB on the
-disk, 385 MB of memory with one simple page; Erez's Pi is probably a Pi 4.
+disk, 385 MB of memory with one simple page; the owner's Pi is probably a Pi 4.
 
-**Live view at the window's width, three screens tall** (Erez, 30 Oct 2026). The 608-pixel picture
+**Live view at the window's width, three screens tall** (decided 30 Oct 2026). The 608-pixel picture
 of a 1024-pixel screen was narrower than his window, its text small, and every scroll a trip to the
 Pi (a key, a second's settle, the page and a new picture: 3–4 s). He chose the picture as wide as
 EWeb's window and three of its screens tall, which EWeb scrolls itself; only past the third screen,
@@ -1664,7 +1664,7 @@ or after a click, does a new one come. Live view's address names the window's pa
 (`http://webgate/live?url=...&w=W&h=H`, `br_live_size` and `br_live_url`); webgate keeps it, and
 the Pi's browser lays the page out at that width, its window resized by webgate-ext to the picture's
 size, so a click is at the picture's own pixel. Measured with Chromium (JPEG at 0.7): 800×1800 is
-138 KB (yaary.music), 186 KB (BBC News) and 261 KB (Wikipedia), 2–4 s at Erez's 50–70 KB/s; one
+138 KB (yaary.music), 186 KB (BBC News) and 261 KB (Wikipedia), 2–4 s at the owner's 50–70 KB/s; one
 800×600 screen 53–73 KB; the old 608 pixels 32–49 KB. Those pages laid out 1800 high look as they
 should (no full-height part stretched). webgate's side is AERA-Gateway 1.16: the picture
 W − 10 wide, 3 × (H − 40) − 30 high (the Go to row), clamped; webgate-ext 1.5 takes the window out of
@@ -1680,7 +1680,7 @@ page, fills the window. An image button's `width` and `height` are its size befo
 as a picture's are (the HTML Standard, 15.4.3; `hints` in `src/doc/doc.c`,
 `tests/layout/pictures.html`), so live view's picture is asked for once, at the size it is shown;
 without them EWeb guessed, and asked again at the right size: a second shot of the Pi's screen.
-**Fully decoded** (Erez, 30 Oct 2026: "no time spent on the ST"): the picture comes as the
+**Fully decoded** (decided 30 Oct 2026: no decoding time on the ST): the picture comes as the
 screen's pens, like every picture through the Pi, when webgate honours `X-Gateway-Picture` on
 `/live/shot.jpg` (AERA-Gateway 1.17: tested with a stand-in, the pens made at 792×1680, the same
 as EWeb's own decode to the bit, 3 ms to show; `make itest` checks them). Pens are bigger than the JPEG: a byte a
@@ -1758,7 +1758,7 @@ on 20 Oct 2026 (Pictures, above), drawing is for later.
 
 ## The throbber (20 Oct 2026)
 
-Erez's choice of six animations of the AERA mark's pyramid A: **Orbit**, made more of at his
+The owner's choice of six animations of the AERA mark's pyramid A: **Orbit**, made more of at his
 asking. A star goes round the A on a tilted ellipse with a short trail, behind it at the back of its
 round, lighting the A's edge as it passes in front, over a field of 22 faint stars that pulse
 slowly (never brighter than the A's shadow side, so they don't take the eye). It goes round while a
@@ -1840,21 +1840,21 @@ the DOM grows past "lean".
   turn, that time not counted as the script's. Clicks, typing, ticks and choices in forms, and a form sent are events; a click's default
   (a link followed, a form sent) waits for its listeners, which may cancel it. Modules aren't run
   (no loader); their `nomodule` fallbacks are.
-- **The budget** (the design: 100-200 KB, a few seconds; since 26 Oct 2026, Erez's choice, pages of
+- **The budget** (the design: 100-200 KB, a few seconds; since 26 Oct 2026, the owner's choice, pages of
   jQuery and its friends, their scripts kept compiled: below): 1 MB of script (or of its compiled
   code) a page and 15 seconds for its scripts, `DOMContentLoaded` and `load` (the time a script
   waits for the network or for an answer to an alert not counted, nor compiling or reading its
   code), 2 seconds for each event or timer after, 8 MB of heap and 96 KB of the 128 KB stack. A page over its budget is parsed again and shown without scripts, with its
   `<noscript>` parts. An event or timer over its 2 seconds is stopped; the page stays.
 - **Off by default, on per site** (the design): Options > Run this site's scripts, kept in
-  `EWEB.INF` as `SCRIPTS=`, the host names. Since 24 Oct 2026 a setting too (Erez, who found
+  `EWEB.INF` as `SCRIPTS=`, the host names. Since 24 Oct 2026 a setting too (the owner, who found
   choosing each site a chore; his choice of the default): Settings > Scripts, `RUNSCRIPTS=`,
   on no site (0), on the sites chosen (1, as it starts), on every site but those left out (2,
   `NOSCRIPTS=`, the same menu item unticked). On every site, a site whose scripts were too much
   (`JS_TOO_MUCH`) is left out until EWeb quits (the newest 16, `br_scripts_too_much`), so its
   pages aren't made twice; the menu item tries it again. A page with scripts pays for them even
   when it needs none: it shows once they have come and run, without a preview, and QuickJS's
-  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default (Erez kept it on 10 Nov 2026, after the Gateway's dashboard showed him only empty boxes: a page made by its scripts looks empty and nothing said why). **Done after 1.3** (his choice of 10 Nov 2026): when a page's scripts didn't run because its site isn't chosen (a Falcon with an FPU) and the page looks empty (under 200 bytes of text shown) or its text asks for JavaScript ("enable", "required", "need", "turn on", ... with "JavaScript" in one run: a `<noscript>`'s), the status line says "This page needs its scripts: click here to run this site's scripts.", and a click on it is Options > Run this site's scripts (`wants_scripts` in `src/browse`, `browser.needs_scripts`; `win_mouse`; `tests/js/needs.py`, ewrender `-Jn`); nothing changes on other pages. A page whose site isn't chosen is parsed as before; one
+  start (below) is 0.6-0.9 s on the DFB1 for each; so the sites chosen stays the default (the owner kept it on 10 Nov 2026, after the Gateway's dashboard showed him only empty boxes: a page made by its scripts looks empty and nothing said why). **Done after 1.3** (his choice of 10 Nov 2026): when a page's scripts didn't run because its site isn't chosen (a Falcon with an FPU) and the page looks empty (under 200 bytes of text shown) or its text asks for JavaScript ("enable", "required", "need", "turn on", ... with "JavaScript" in one run: a `<noscript>`'s), the status line says "This page needs its scripts: click here to run this site's scripts.", and a click on it is Options > Run this site's scripts (`wants_scripts` in `src/browse`, `browser.needs_scripts`; `win_mouse`; `tests/js/needs.py`, ewrender `-Jn`); nothing changes on other pages. A page whose site isn't chosen is parsed as before; one
   with no script and no `on...` attribute gets no runtime either (QuickJS's start costs 1.14
   million 68030 instructions).
 - **`<noscript>`** is shown when scripts don't run: the HTML Standard hides it only with scripting.
@@ -1890,7 +1890,7 @@ one runtime and context kept for the pages of a site, or made once and copied.
 
 ## The stack (21 Oct 2026)
 
-EWeb bombed on Erez's Falcon on Wikipedia's Falcon article, through the gateway and in Falcon mode,
+EWeb bombed on the reference Falcon on Wikipedia's Falcon article, through the gateway and in Falcon mode,
 while pictures came or the page scrolled: 2, 3, 4 or 11 bombs, different each time, and only a cold
 boot brought the machine back. Measured in Hatari on TOS 4.04: the stack (crt0's, in the BSS, right
 after the program's data) held 128 KB, and the layout took about 940 bytes of it for each level a
@@ -2572,7 +2572,7 @@ was gone too). Now, after CSS Images 3 and 4:
     make its colour (Knoll's pattern dither, 30 lines: each the screen's nearest, `ui/screen.c`'s
     cached `pen()`, to the colour plus the error the pens before it left, sorted by brightness, so
     light and dark spread evenly over the thresholds); on a monochrome screen they are the fills'
-    grey pattern. **Since 8 Nov 2026 (Erez's photos of yaary.music in 256 colours: its button and
+    grey pattern. **Since 8 Nov 2026 (the owner's photos of yaary.music in 256 colours: its button and
     cards dotted, and the text on them) an entry is the screen's nearest pen, solid**: a gradient
     in steps (smoothed where the page's colours are in the palette: Decisions, Colours in 16 and
     256 colours). A row of one entry that is partly transparent (`grad_run`: the cards' 92% alpha)
@@ -2630,7 +2630,7 @@ was gone too). Now, after CSS Images 3 and 4:
     its last pixel under became, so a background of one colour costs a look-up a pixel), as
     translucent fills are. Until then an entry was drawn where its alpha was above the transposed
     thresholds, as pictures at an opacity are, and a faint glow (atarimania.com's 8% teal over its
-    navy, in 256 colours on Erez's Falcon) came out as a grid of bright dots, one pixel in 16 the
+    navy, in 256 colours on the reference Falcon) came out as a grid of bright dots, one pixel in 16 the
     glow's own nearest pen. On a monochrome screen it is still drawn so, the fills' grey patterns.
   - **Where it can't be drawn**, its stops' average (premultiplied), never nothing: a repeating
     gradient of no length (CSS Images 3, 3.6 says so), one whose stops can't be placed (`approx`,
@@ -2997,7 +2997,7 @@ Standard (4.11 the elements, 15.5.4 their rendering) and as browsers show them:
 
 ## Size, speed and memory (23 Oct 2026)
 
-Erez asked whether EWeb is getting heavy. `EWEB.PRG` 0.27 is 1,856 KB; from the link map, its code
+The owner asked whether EWeb is getting heavy. `EWEB.PRG` 0.27 is 1,856 KB; from the link map, its code
 and data:
 
 | Part | Size |
@@ -3037,11 +3037,11 @@ left 1.54 MB and showed them (8.4 s and 11.1 s; a 176 KB WSJ page still didn't f
 family's three accessories loaded (ECal, EContact, EHypView: about 2.4 MB of a 4 MB Falcon, the
 family's known limit) about 1.1 MB is left for a program: TOS won't start `EWEB.PRG` in any of
 these forms, and `EWEBST.PRG` starts with 319 KB free. The rigs had never run `EWEB.PRG` on the
-4 MB Falcon. Erez's answer: one `EWEB.PRG` for every Falcon (below).
+4 MB Falcon. The owner's answer: one `EWEB.PRG` for every Falcon (below).
 
 ## One EWEB.PRG for every Falcon (23 Oct 2026)
 
-Erez's decision (Decisions): the stock 4 MB Falcon is a target of `EWEB.PRG`'s, with the same
+The owner's decision (Decisions): the stock 4 MB Falcon is a target of `EWEB.PRG`'s, with the same
 program as his DFB1's. What it took:
 
 - **JavaScript in a file of its own, `EWEBJS.OVL`** (`atari/js_ovl.h`): QuickJS, musl's maths and
@@ -3098,7 +3098,7 @@ three accessories loaded, a 4 MB Falcon has about 1.1 MB left for a program, and
 
 ## EWeb's own 256 colours (23 Oct 2026)
 
-Erez's decision (Decisions): in 256 colours EWeb sets colours of its own while it runs
+The owner's decision (Decisions): in 256 colours EWeb sets colours of its own while it runs
 (`ui/screen.c`, `PALETTE=1`, Settings > General > EWeb's own colours in 256 colours). The pixel
 values TOS's sixteen pens don't draw with (16 to 254: VDI pens 16 to 254, as `vq_scrninfo` or TOS's
 order says) get a 6x6x6 cube (each part 0, 51, 102, 153, 204 or 255) and 23 greys between the cube's,
@@ -3117,6 +3117,26 @@ shows its pale yellow background and a pink red, where TOS's colours drew both g
 gradients' page and the pictures are smooth. `make hatarigui`'s `screens` group checks that the
 Falcon in 256 colours starts in EWeb's colours and gives TOS's back at the end, and runs it with
 `PALETTE=0`, its screenshots side by side.
+
+**The progress bar's blues (24 Nov 2026).** The family's progress bar (common's `progbar`) picks,
+for each of its 16 steps from navy to sky blue, the nearest blue pen. EWeb's palette had six of
+those blues (in its cube), so EWeb's bars (the page's load at the window's foot, the quit's box,
+the download's) showed six steps where the family's other programs show sixteen. The fixed
+colours now end with the fourteen of the bar's blues the cube lacks (`src/gfx/pagecol.c`,
+`EW_BLUES`), taken from the page's own colours (36 to 22, `EW_PAGE`): the pictures keep all their
+colours and gain those blues, the greys and the toolbar's icons stay as they were.
+
+**Given back while another program's window is on top (24 Nov 2026; the guidelines' 5.2).** The
+owner's choice of three (the hub's options): EWeb gives the pens it set back to the colours they
+had while another program's window is on top, and sets its own again when one of EWeb's windows
+is (`scr_top` in `ui/screen.c`). The main loop looks at the top window after each message, click or
+mouse event, and twice a second while EWeb's colours are on (`LEND_POLL`: an accessory's window
+opened from EWeb's Desk menu sends EWeb nothing); a page's own colours set meanwhile wait for the
+top. Nothing is decoded or laid out again: EWeb's window shows its page in the other's colours
+until it is on top. What colours the other program left are the ones given back the next time.
+Moving EWeb's pens into 192-255 (the rest of 5.2) is a later phase. `make hatarigui`'s screens
+group checks it on the Falcon in 256 colours with `TOPACC.ACC` (`tests/hatari/topacc.c`, a test
+accessory, not a program of the family), its screenshots 08 and 09.
 
 ## Inline blocks (23 Oct 2026)
 
@@ -3208,7 +3228,11 @@ keyboard (there they move the cursor, as before). The page's column at the windo
 and back (links, controls, a field's cursor, summaries, a script's click); what stays on the
 screen is moved with `vro_cpyfm` and only the new columns are drawn, as up and down; a control
 given the keyboard is brought into view sideways too. A new page starts at its left; one laid
-out again keeps its place, within its new width.
+out again keeps its place, within its new width. The canvas's picture (the root's or the body's
+background), placed in the window's width, is painted on to the page's right where its tiles go
+(CSS Backgrounds 3, 2.11.2; `index_items`): until 1.26 it stopped at the window's first width,
+so forum.atari-home.de's wrapper of 925 CSS pixels showed its last column on the plain colour
+(decided 22 Nov 2026; `tests/layout/widecanvas.html`).
 
 Tested by `make hatarigui`'s `wide` group (the Falcon in 16 colours, TOS 4.04): a table 1400
 pixels wide; Right moves it sideways (the log's `sideways LEFT of MAX`), Shift+Right to its end,
@@ -3435,7 +3459,7 @@ collapses every table) under AddressSanitizer and UBSan.
 
 ## Google's JavaScript wall (23 Oct 2026)
 
-Erez's report: google.com, words typed into its field, and the next page said to turn on JavaScript
+The owner's report: google.com, words typed into its field, and the next page said to turn on JavaScript
 to keep searching, with Options > Run this site's scripts ticked. Since January 2025 Google shows
 its results only to a browser that first runs a check of its own; without it, a `/search` page's
 `<noscript>` goes on to `/httpservice/retry/enablejs`, the page that says so, and `/sorry/` is its
@@ -3443,7 +3467,7 @@ CAPTCHA. EWeb's little JavaScript (QuickJS on its lean DOM) doesn't pass the che
 on or off a search ends there; making it pass would mean chasing a check made to tell the big
 browsers from the rest, which changes as Google likes.
 
-Erez's rule (23 Oct 2026): EWeb relies on the Pi as little as it needs to and is self-contained. So
+The owner's rule (23 Oct 2026): EWeb relies on the Pi as little as it needs to and is self-contained. So
 EWeb answers the wall itself (`src/browse`, `google_wall`): a page from Google's search (its host
 `google.TLD`, `www.` or not, `co.` and `com.` before a country's) that is the wall, the "turn on
 JavaScript" page or the CAPTCHA, is shown as a page of EWeb's own in its place, which says why and
@@ -3460,7 +3484,7 @@ search engine set, and a `/search` with results left as it is).
 
 ## Direct connection (24 Oct 2026)
 
-Erez's decision for the family (the guidelines' 7.4): what was "Falcon mode", TLS on the Atari
+The owner's decision for the family (the guidelines' 7.4): what was "Falcon mode", TLS on the Atari
 itself, is called **Direct connection** everywhere the user sees it (the Options menu, Settings'
 Secure page, alerts, the guide, the README), since a TT, or any Atari with a 68020 or better, does it
 too. `EWEB.INF` keeps `FALCON=`, its note naming the Direct connection, so settings carry over. The
@@ -3985,7 +4009,7 @@ Stage 5's third part: `EWEB.PRG` opens more windows than one, as a browser does.
   no more to be had, in the window itself. A form that posts to another window is answered in
   its own. ^U (File > Close window) closes the window in front; the last one quits; ^W (File >
   Next window, `win_next`) tops EWeb's next window, in turn (the guidelines' 3.2 of 27 Oct
-  2026). The window in front is the one whose place `WINDOW=` keeps. **The Window menu** (Erez,
+  2026). The window in front is the one whose place `WINDOW=` keeps. **The Window menu** (the owner,
   14 Nov 2026: "the open windows list also accessible in menu just like any multi window
   applications"), a title of EWeb's own after Bookmarks (the guidelines' 3.1), lists the windows,
   the oldest first, by their pages' titles (else the address's host, else "New window"), cut to
@@ -4028,7 +4052,7 @@ the Pi's: its round trip to a server on the internet and its own decoding.
   `/prefetch` answers otherwise: EWeb doesn't ask again that run, and its pictures come as before.
   The protocol is EWeb's (AERA-Gateway's owner session commits webgate's side: `Prefetch` in
   `webgate.py`, its tests in `test_webgate.py`), released in AERA-Gateway 1.10 (25 Oct 2026, with
-  Erez's yes); EWeb's `gateway/` copy is 1.10's.
+  the owner's yes); EWeb's `gateway/` copy is 1.10's.
 - **Measured**, ewrender through webgate on this machine: a page of 8 pictures each half a second
   in coming (`/site/lazy.html`, as a far server's) took 4.5 s, now 1.3 s; yaary.music's 17
   pictures through the internet 4.8 s, now 2.9 s. On the Pi, whose pens take longer than this
@@ -4055,7 +4079,7 @@ in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate'
   narrowest and widest are found in one pass and kept for the layout (`L.mc`: a table asks for
   each cell's in turn), but not a block with floats or inline blocks in it, whose measuring
   nests (`tests/layout/deep.py`); `len()`'s calc() and percentages are apart.
-- **webdriveruniversity.com** (Erez's choice of a site of test forms, 26 Oct 2026), in Direct
+- **webdriveruniversity.com** (the owner's choice of a site of test forms, 26 Oct 2026), in Direct
   mode (EWeb's own TLS, against the release's roots) and compared with Chromium:
   - an absolutely placed box with `bottom` (a footer, a bar) is placed once its containing
     block's height is known (`bottom_place`, `L.bots`), and so is one with a `top` in % in a
@@ -4076,7 +4100,7 @@ in under 3 s and "made ahead"; with one that doesn't, all 8 as before); webgate'
     those three cost 356 million instructions (about 70 s on the DFB1; jQuery alone 79 M,
     15 s), over 90% of it QuickJS compiling them; read back as bytecode they cost about a
     twentieth (jQuery 68 M to compile, 3.8 M to read; jQuery UI 232 M and 7.0 M), and
-    bytecode made on another machine reads on the 68030. Erez chose to keep them compiled
+    bytecode made on another machine reads on the 68030. The owner chose to keep them compiled
     (below).
 
 Tests: `tests/layout/absbottom.html` (bottoms, % tops and heights, styled controls; its list
@@ -4260,7 +4284,7 @@ page asks `../api/user.json`):
   picture whose other side the page didn't set keeps its proportions. Test:
   `tests/layout/replmin.html`.
 
-- **A window a page's script opens** (Erez, 7 Nov 2026: "yes, allow window.open from a click"):
+- **A window a page's script opens** (decided 7 Nov 2026: from a click):
   `window.open` while a click or a key of the user's is handled (as browsers' transient
   activation; `ejs.active` in `js_event` and `js_key`) opens a window as a link for one does: a
   new one for `_blank` or no name, the window of that name for another, this one for `_self`,
@@ -4280,7 +4304,7 @@ content; both work since 9 Nov (below, The last pass).
 **The mouse (8 Nov 2026; webdriveruniversity.com's Actions and Scrolling).** A page's scripts had a
 click and nothing else of the mouse, and `:hover` never matched; Actions' drag and drop, double
 click, hover menus and click-and-hold, and Scrolling's boxes that count the mouse, did nothing.
-Erez chose (Decisions, The mouse over a page): scripts hear the mouse, a click is the hover.
+The owner chose (Decisions, The mouse over a page): scripts hear the mouse, a click is the hover.
 
 - **The events** (UI Events' MouseEvent: `js_mouse` in `src/js/js.c`, in `EWEBJS.OVL`'s table):
   pageX and clientX alike (scripts see the page unscrolled, scrollY 0), in CSS px as the page's
@@ -4357,7 +4381,7 @@ machine's only way out is an HTTPS proxy (a 502 here; on the Gateway it comes). 
 Tests: `tests/js/dragdrop.html` (ewrender `-K drag:ID:@TO`, a drag to another element's
 middle), `tests/js/shadow.html`.
 
-**The family's UI rules of 9 Nov 2026** (Erez's 54 decisions; AERA-Atari's `standards/ui`,
+**The family's UI rules of 9 Nov 2026** (the owner's 54 decisions; AERA-Atari's `standards/ui`,
 DECISIONS-2026-11-09.md). EWeb's part, the first round:
 
 - The page's menu greys Back and Forward when they can't be used (`~`, popup.h's); it put a tick
@@ -4370,7 +4394,7 @@ DECISIONS-2026-11-09.md). EWeb's part, the first round:
 - The quit box's bar is the family's progress bar (common's `progbar_fill`, C22), drawn as it
   grows, the new part only.
 - Settings refuses a number out of its range with an alert that says what to type, the dialog
-  open and the cursor in that field, nothing changed silently (D30; Erez's words, 9 Nov 2026:
+  open and the cursor in that field, nothing changed silently (D30; the alerts' words as approved, 9 Nov 2026:
   "The text size is a number from 50 to 200 (per cent).", "The Gateway's port is a number from
   1 to 65535.", "The disk cache can be at most 512 MB: type 512 or less."; `settings_bad` in
   `ui/dialogs.c`). The ST edition has it too: it is a fault the rule names, not a feature.
@@ -4393,7 +4417,7 @@ common), Insert opening the context menu (D17), an alert's padding (C19).
 
 ## Scripts kept compiled (26 Oct 2026)
 
-Erez's choice (26 Oct 2026): a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
+decided 26 Oct 2026: a page's scripts kept as QuickJS's bytecode, compiled by the Pi when
 EWeb goes through it, and by EWeb itself, once, in Direct mode. Compiling is nearly all of what a
 library costs the 68030 (jQuery 3.4.1, 88 KB: 68 million instructions to compile, 3.8 million to
 read back; jQuery UI, 509 KB: 232 and 7.0 million), so a page of them comes in a fifth of the time.
@@ -4456,11 +4480,11 @@ dropped).
 
 ## Speed on the stock machines (26 Oct 2026)
 
-Erez's rule for the family (the guidelines' Speed): the stock machines set the speed, an 8 MHz ST
+The owner's rule for the family (the guidelines' Speed): the stock machines set the speed, an 8 MHz ST
 and a stock Falcon, not the DFB1. `make hatarispeed` (`tests/hatari/speed.py`, on common's
 `tests/speed`) does the user's actions on each and reads the longest stretch between EWeb's event
 calls (`AESGAP`, from common's `gem.c` built with `AES_PROFILE=20` into `build/prof`), each named
-by what EWeb was doing (`gap_event`, `gap_tag`, `gap_stage` in `ui/`). The first round, on Erez's
+by what EWeb was doing (`gap_event`, `gap_tag`, `gap_stage` in `ui/`). The first round, on the owner's
 TOS (4.04 on the Falcon, 1.04 on the ST), before and after the fixes below (ms; the guidelines' time
 in brackets; a page's load is a long job, held to Esc's 100 ms):
 
@@ -4491,12 +4515,12 @@ Where the time went, and what changed:
   time (`fill_pattern`, `src/gfx/canvas.c`): the same pixels in 2, 4 and 16 colours, a page drawn in
   2.6 s on the ST rather than 7.5.
 - **The start.** The window opened and showed the desktop inside it until the home page was
-  made, then was drawn white a band at a time, then the page (on Erez's Falcon, the video of
+  made, then was drawn white a band at a time, then the page (on the reference Falcon, the video of
   26 Oct, 8 s of the desktop in it). Its redraw is now handled before the first page is read, and
   with no page yet it is a VDI fill, at once.
 - **The toolbar.** Its pictures were kept only beside TT RAM, so on a stock Falcon each draw
   unpacked and converted every icon again, and a button under the mouse showed each step: cleared,
-  framed, a hole, then the icon (Erez's second video). Each button is now made whole in memory,
+  framed, a hole, then the icon (the owner's second video). Each button is now made whole in memory,
   for each of its looks (as it is, greyed, raised and lit, sunk: `scr_button_dev`), kept (4 to 30
   KB of ST RAM) and put on the screen in one copy; the toolbar's ground is filled around the
   buttons, not under them.
@@ -4574,7 +4598,7 @@ ST, at a page shown, a page scrolled, the start.
   brings in is drawn at the next turn, so a line scrolled is its copy. A dialog's loop and a held
   button draw whole (`win_sync`, `sync_draw`). What the user sees is as before, band by band, but a
   key, a click or Esc is answered between the bands.
-- **A held arrow or key** (Erez, 1 Nov 2026: in 0.57 the lines repeated down the window while an
+- **A held arrow or key** (decided 1 Nov 2026: in 0.57 the lines repeated down the window while an
   arrow was held, and Page Up and Down jumped). The AES sends the next `WM_ARROWED` as soon as EWeb
   asks for an event, so the main loop's turn that draws the rows a step brought in never came, and
   each step's copy moved those undrawn rows along with the rest. Now a scroll with rows still due
@@ -4611,7 +4635,7 @@ ST, at a page shown, a page scrolled, the start.
   page's white), the guidelines' "its window drawn"; the home page after it is made and shown as
   any page, a load. Before, the rig ran the start to the home page shown.
 
-The rig on Erez's TOS (ms, the guidelines' time in brackets; a load is held to Esc's 100):
+The rig on the reference TOS (ms, the guidelines' time in brackets; a load is held to Esc's 100):
 
 | action | Falcon-4:16, 0.55 | now | ST:mono, 0.55 | now |
 |---|---|---|---|---|
@@ -4638,16 +4662,16 @@ EWeb draws anything, and a band of 16 rows of the news page is about 250 ms (the
 s, 3.3 in bands of 32 but slices of 450 ms; 3.5 s in one stretch before); its loads' stretches are
 0.85 to 1.9 s (a picture's TJpgDec row of blocks, a style or layout step).
 
-**The ST's floor (Erez, 31 Oct 2026: option A of four).** For 1.0 the ST edition's figures above
+**The ST's floor (decided 31 Oct 2026: option A of four).** For 1.0 the ST edition's figures above
 are its floor, recorded rather than met: on `ST:mono` (TOS 1.04, the news page, a window across the
 screen) a line scrolled 295 ms (TOS's slider and copy about 105 ms of it), a page scrolled 275 ms,
 the window drawn whole in 3.9 s in slices of 16 rows, loads' longest stretches 0.85 to 1.9 s. The
 other options were a smaller window by default on the ST (still not 50 ms) and the page's text in
 the system font there, drawn by the VDI (about five times as fast a band, a plainer page); the
-last stays a possible core for 1.1, only if Erez asks for it. The stock Falcon was held to the
+last stays a possible core for 1.1, only if the owner asks for it. The stock Falcon was held to the
 guidelines' times until 8 Nov 2026 (below).
 
-**The stock Falcon's floor (Erez, 8 Nov 2026: option B of two).** For 1.0 the stock Falcon's
+**The stock Falcon's floor (decided 8 Nov 2026: option B of two).** For 1.0 the stock Falcon's
 figures of 0.77 are its floor too, recorded rather than met, and the rule stays the goal after
 1.0. On `Falcon-4:16` (TOS 4.04) four actions are over their 100 ms, each a page's load, whose
 longest stretch is the window's first drawing: the home page 565 ms, the sample page 455, the
@@ -4679,17 +4703,17 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   size); the status bar set while a page loads waits for the next turn too, and a redraw of the
   bars alone no longer draws the page's next slices with it (the status bar as the news page's
   pictures ended drew three: 130 ms). A slice is 30 ms (40 on the ST) of bands of 8 rows (16);
-  on a machine with TT or Fast RAM (`fast_machine`: Erez's DFB1, a TT) a redraw over half the
+  on a machine with TT or Fast RAM (`fast_machine`: the reference DFB1, a TT) a redraw over half the
   window (a page shown, uncovered) is drawn in slices of 55 ms till it is done, a scroll meanwhile
   going back to 30 (`due_big`), and a small one (about 32 rows across the window: a field typed in,
   a link pressed) whole in one (`DUE_WHOLE`); on a stock Falcon or an ST that is 16 rows
   (`DUE_WHOLE_STOCK`) and the slices stay 30 and 40 ms, the speed rig's limits there (a 55 ms
   slice put the stock Falcon's news page and line over), and a scroll's rows are never drawn
-  whole (`due_scroll`). Erez's DFB1 drew the home
+  whole (`due_scroll`). the reference DFB1 drew the home
   page a band at a time for seconds and a typed letter's field in bands, its letters a part at a
   time (his clips of 2 Nov 2026): in Hatari's Falcon in 256 colours the home page's window was 12
   slices of 25 to 35 rows (the copy to the screen most of each), now 5 of 50 to 100.
-- **The page kept off the screen (2 Nov 2026).** Still, on Erez's DFB1 the rows a Page Down
+- **The page kept off the screen (2 Nov 2026).** Still, on the reference DFB1 the rows a Page Down
   brought in came down the window band by band for a second (his clip of 0.61 on iamexpat.de):
   each slice was made off the screen but put on it as soon as it was made. Now the page around
   the window is kept in the screen's own form (`pic` in `ui/win.c`, `scr_store` in
@@ -4699,7 +4723,7 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   while EWeb waits (`win_ahead`, `win_draw_ahead` from the main loop: 30 ms slices, the window's
   own first, then below, then above), and a scroll whose rows are kept is one copy to the screen.
   A part to draw is made into the bands and put on the screen in one go when all of it is made, so
-  the window never shows a half-drawn page (Erez: "drawn off screen and then blitted"). A redraw
+  the window never shows a half-drawn page (drawn off screen, then copied whole). A redraw
   that changes the look (anything but the AES's and a scroll's own), a picture come
   (`win_page_drawn`, off the window too), the selection, a pressed link, another page, place across
   or window size forget them.
@@ -4738,7 +4762,7 @@ found with the rig's parts (`AESPART`, taken down to 5 ms while looking) and giv
   turn (`dithering` in `img.c`).
 - **Settings**: `rsrc_obfix_all` fixes the dialog's objects in one call (`d_end`).
 
-The rig on Erez's TOS (ms, longest stretch; the guidelines' time in brackets, a load held to Esc's
+The rig on the reference TOS (ms, longest stretch; the guidelines' time in brackets, a load held to Esc's
 100), with AERA-Atari's `pic.c` change (`89822cf`, in common since `07366f829`):
 
 | action | Falcon-4:16, 0.56 | now | ST:mono, 0.56 | now |
@@ -4875,22 +4899,22 @@ the pieces).
 And `br_shed` (the kept page given back when a page doesn't fit) and `br_relaying` (a
 relayout's changed bands) were set inside `main.c`'s `AES_PROFILE`: from 0.62 to 0.70 only
 `build/prof`'s `EWEB.PRG`, the speed rig's, had them. Now every Falcon build has them. That
-wasn't what kept iamexpat.de from Erez's 14 MB Falcon: its 3.3 MB of HTML from the disk shows on
+wasn't what kept iamexpat.de from the owner's 14 MB Falcon: its 3.3 MB of HTML from the disk shows on
 the emulated `Falcon-14:256` with 0.70 as released too (7884 rows, 192 links, in 18 to 20 s, the
 heap's peak 8.9 MB and 265 KB of ST RAM left), the kept page given back while it loads
 (`win_pic_busy`). Through the network the packed 750 KB and the unpacked page come on top of
 that, and NVDI and the accessories take their share: his `EWEB.LOG` says which part runs out.
 
-**The Hebrew keyboard (5 Nov 2026; Erez: "just like other AERA applications").** As ECal's,
-EContact's and EFTP's: F10 switches it (no menu item since 7 Nov 2026: Erez, the guidelines'
+**The Hebrew keyboard (decided 5 Nov 2026: as the other AERA programs have it).** As ECal's,
+EContact's and EFTP's: F10 switches it (no menu item since 7 Nov 2026: the owner, the guidelines'
 5.3; Options > Hebrew keyboard until then), the letter keys
 then type the Israeli SI-1452 layout's letters (the family's table, `key_char` in `ui/main.c`)
 in a page's fields, the address and the scripts' key events. It starts off, F10 alone
-switches it (Erez, 8 Nov 2026, the guidelines' 5.3: no Settings > Start with the Hebrew
+switches it (decided 8 Nov 2026, the guidelines' 5.3: no Settings > Start with the Hebrew
 keyboard, no `HEBREW=` in `EWEB.INF`, as it was from 5 to 8 Nov). `EWEB.PRG` only (the ST edition is frozen). The dialogs type
 Hebrew through common's `dlg_do` and `key_char`. Its badge ("עב", common's `hebrew_badge_right`:
 3 pixels in from the right, centred up and down) is at the right end of the main window's info
-line, in place of the words "Hebrew keyboard (F10)" (Erez, 6 Nov 2026: in every app), and of a
+line, in place of the words "Hebrew keyboard (F10)" (decided 6 Nov 2026: in every app), and of a
 dialog's title band; F10 draws each window's line again (`win_hebrew_changed`) and an open
 dialog's band. `make hatarigui`'s browse group types shin into the search field with F10 on,
 checks what was sent, and that the info line's foot changes with F10 on and is as before with
@@ -4929,12 +4953,12 @@ Paired with 0.70 on one machine (A B A B, common's `speedcmp.py`, 7 Nov 2026): 2
 or faster, four up by a 5 ms step (noise), and one slower: Settings closed 40 to 55 ms (its time
 300). On the 4 MB Falcon with the news page and its kept bands, 81 KB is free as Settings opens,
 too little for common's `dlg_under` to keep the 470 by 326 pixels it covers, so the page under it
-is drawn again as it closes. Erez (7 Nov 2026): a small difference like that isn't worth the
+is drawn again as it closes. The owner (7 Nov 2026): a small difference like that isn't worth the
 work; it stays.
 
 ## A big site's stylesheet (26 Oct 2026)
 
-Erez's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
+The owner's stock Falcon (14 MB, 6.3 MB taken before EWeb started) ran out of memory on ynet.co.il.
 Its one stylesheet is 3.36 MB, 974 KB gzip'd: 10,500 rules for every page of the site, of which
 about 3,400 have a subject whose id, class or tag the front page has. EWeb 0.43 fetched it whole,
 unpacked it up to the 2 MB a sheet could be and then dropped it, the page unstyled: the fetch's
@@ -4945,11 +4969,11 @@ buffers on top of the parsed page were the peak. Had it been read, the copy of i
 - **A page sent packed** (gzip or deflate, kept so in the caches) is unpacked a piece at a time
   with GEM's turns between, at most every 100 ms (`http_unpack` in `src/net/http.c`, common's
   `inflate_piece`): iamexpat.de's 750 KB, 3.3 MB of HTML, was one stretch of 9.3 s in Hatari's DFB1
-  and its article's 497 KB one of 6.4 s, GEM held (Erez's "full CPU", 2 Nov 2026); now no stretch
+  and its article's 497 KB one of 6.4 s, GEM held (the CPU taken whole, 2 Nov 2026); now no stretch
   of either is over 0.42 s and their fetches take as long as before (52.3 s and 34.9 s with the
   pictures; a turn every 40 ms made them 3 s longer); Esc stops it. Where there isn't the memory
   for a page or its unpacking the message says so (it said "too big"), the failure is in EWEB.LOG,
-  and the log's first lines give the RAM free at the start (Erez's 0.60 failed to unpack
+  and the log's first lines give the RAM free at the start (the owner's 0.60 failed to unpack
   iamexpat.de on his DFB1, 2 Nov 2026, not seen in Hatari).
 - **A sheet read as it comes** (`ec_sheet_begin`, `ec_sheet_feed`, `ec_sheet_end`): a `<link>`'s
   sheet sent gzip'd is kept packed by `fetch` (`fetch_packed`; in the memory and disk caches too,
@@ -5091,16 +5115,16 @@ CSS parse 0.3% less. `ectest -p` gives every case the page's names first and pru
 and a case of its own counts what is left out.
 
 The family's `EWEB.LOG` (`LOG=1`, 0 as it starts): `conn.c`'s log of each connection, a secure
-one's handshake step by step, each line written as it comes (Erez, 15 Nov 2026: "apps should
-write log at once as otherwise it may be ineffective to trace errors"; until 1.12 a page's lines
+one's handshake step by step, each line written as it comes (decided 15 Nov 2026: a log is written as it comes, or it
+can't trace a fault; until 1.12 a page's lines
 were held in memory and written once it and its pictures had come, so a hang lost them), and at
 the end with the slowest stretches (`aes_slowest`); a crash's report goes after it. It costs an
 open and a write a line, only while it is on (`make hatarifiles` counts the log's opens apart).
 NatFeats, EWeb's events on an emulator's console for the rigs, are probed only where `EWEB.INF`
-has `NATFEATS=1`, which only the rigs write (Erez, 15 Nov 2026: common's `nf.S`): on a real
+has `NATFEATS=1`, which only the rigs write (decided 15 Nov 2026: common's `nf.S`): on a real
 Atari the probe's illegal instruction never runs. A Vampire V4SA's Atari core, its VBR away
 from 0, hung EWeb at the start on it (nf.S now takes the vector at VBR + 0x10 too). No
-address's query, cookie or form field (7.3). Erez's demozoo.org failure (the connection lost in
+address's query, cookie or form field (7.3). The owner's demozoo.org failure (the connection lost in
 the handshake, Direct, 0.43) didn't happen on the emulated stock Falcon, whose disk costs
 nothing: common's `conn.c` now reads TLS.OVL, the roots, the seed and SIGS.DAT before it opens a
 connection (TLS.OVL 1.10), and `make hatarigui`'s falcon4 group loads a secure page from a
@@ -5108,7 +5132,7 @@ server with an ECDSA certificate on the stock Falcon.
 
 ## A big page's memory, and ynet.co.il in a narrow window (27 Oct 2026)
 
-Erez on his DFB1 (128 MB TT RAM, through the Pi): cnn.com and its 73 pictures left 109 MB of TT
+The owner on his DFB1 (128 MB TT RAM, through the Pi): cnn.com and its 73 pictures left 109 MB of TT
 RAM taken, none of it back when he went on to another page. On the emulated Falcon (Falcon:256,
 cnn.com through a webgate here): the page shown at a heap of 26.5 MB, its document 14.2 MB and its
 CSS 2.9 MB; its 71 pictures took it to 51.8 MB (peak 53.7 MB). The heap took GEMDOS blocks each as
@@ -5136,14 +5160,14 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   history, the cache's last answers, its index`, ms; the answers apart since 29 Oct 2026): on
   the emulated disk 305 ms, 250 of them the cache's index. Quit frees nothing (TOS takes the
   program's memory back at once).
-- **Files written over in place (29 Oct 2026).** Erez's log after Wikipedia: cookies 2,935 ms,
+- **Files written over in place (29 Oct 2026).** The owner's log after Wikipedia: cookies 2,935 ms,
   history 2,905, the cache's index 24,225, on his SD card, for files of a few hundred bytes to a
   few hundred KB. Each was a safe save (`pf_save`: NAME.IN$ made and written, NAME removed, the
   new one renamed), so each save was a new file whose clusters GEMDOS finds by reading the FAT
   from its start, and the FAT and the folder written again. Counted from Hatari's IDE trace
   (EmuTOS, a 256 MB FAT16 disk half full): a safe save of 644 bytes is 60 disk commands, 50 of
   them reading the FAT, of 300 KB 83; the same file written over in place 4 and 24. 2.9 s for
-  60 is about 48 ms a command on Erez's card. So the index, the cookies and the history are kept
+  60 is about 48 ms a command on the owner's card. So the index, the cookies and the history are kept
   in two slots each (`src/net/slots.c`): NAME and its twin (`EWEB.ID2`, `COOKIES.TX2`,
   `HISTORY.TX2`), each a head (`EWS1 GEN LEN`) and its data; a save writes over the slot that
   isn't the newer one, its data first and its head last, so a reset in the middle leaves the
@@ -5155,14 +5179,14 @@ large as all before it (common's `libc.c`), so that peak took a 64 MB block and 
   time of use was written for nothing: the ring forgets by place, not by use); and a cookie whose
   end alone moved (Wikipedia's on every page) is no change while the one on the disk has a day
   left. Bookmarks and `EWEB.INF` stay safe saves: they change at the user's hand, rarely.
-- **The quit's box (29 Oct 2026, Erez: the user should see what happens).** Closing EWeb: each
+- **The quit's box (29 Oct 2026, the owner: the user should see what happens).** Closing EWeb: each
   step said as it starts (connections and windows, the settings, the cookies, the history, the
   cache's pages and pictures, its list), a bar of how far it is, each step weighed by what it
   writes (a file's few disk commands; the cache's answers 1 a 32 KB, its list 1 a hundred
   answers); a step with nothing to write is left out; held 300 ms full after a quit of more than
   half a second. `quit_box` in `ui/dialogs.c` (a dialog without buttons, `dlg_open`: a window
   under MiNT and MagiC); `make hatarigui`'s falcon4 group checks its steps from the log. The bar
-  moves within the cache's two steps too (30 Oct 2026, Erez: it stood still the whole save, then
+  moves within the cache's two steps too (30 Oct 2026, the owner: it stood still the whole save, then
   the box closed): the pack's write and the list's go in pieces (32 KB and 16 KB: `dc_progress`,
   `slot_progress`), the list's making told every 64 answers, and `quit_bar` redraws the bar alone
   as it grows; `make hatarigui`'s gateway group checks it moves within the cache's step (on its
@@ -5191,14 +5215,14 @@ ynet's front page was 135 px high and its parts over each other because of two m
   px, its third line below it, as in Chromium). Where EWeb's fonts are taller than a page's, its
   text now runs out of a box of fixed height as it would in other browsers.
 
-**Stop** is lit while what Esc stops is coming, the page's pictures too (Erez: it went grey
+**Stop** is lit while what Esc stops is coming, the page's pictures too (the owner: it went grey
 while they were decoded): `ewin.stopper`, set with the throbber, its button alone redrawn when it
 changes; pressed while pictures come it stops them as Esc does (`make hatarigui`'s browse group,
 `/site/lazy.html`).
 
 ## Translation (8 Nov 2026)
 
-Erez approved the family's translation service for EWeb ("Yes to all of it", 8 Nov 2026; AERA-Atari's
+the family's translation service was approved for EWeb whole (8 Nov 2026; AERA-Atari's
 `standards/TRANSLATION-SERVICE.md`, which holds the whole decision). For EWeb:
 
 - **The switch:** a checked **View > Translate** for every page (`TRANSLATE=` in `EWEB.INF`, off as it
@@ -5257,7 +5281,7 @@ Erez approved the family's translation service for EWeb ("Yes to all of it", 8 N
 
 ## Scripts on the 68060 and the FireBee (12 Nov 2026)
 
-Erez asked (12 Nov 2026) for a stronger JavaScript engine on the 68060 and the FireBee. No engine
+The owner asked (12 Nov 2026) for a stronger JavaScript engine on the 68060 and the FireBee. No engine
 stronger than QuickJS fits: the browsers' engines get their speed from compiling to machine code
 at run time, which none does for a 68k or a ColdFire, and without it they are larger, slower
 interpreters; Duktape, JerryScript and MuJS are weaker. So, his go of the same day: QuickJS made
@@ -5274,7 +5298,7 @@ the most of on each processor, and QuickJS-ng measured against it before any cha
   takes of the TT RAM, 8 MB at least (`JS_MAX_MEMORY`, all a page's scripts had). The time budget
   (`JS_PAGE_MS` 15 s, `JS_EVENT_MS` 2 s) is the clock's: a faster processor already does more in
   it, so it isn't changed.
-- **`EWEB60.PRG`, the 68060's EWeb** (Erez, 12 Nov 2026: one `EWEB.PRG` for every processor if
+- **`EWEB60.PRG`, the 68060's EWeb** (decided 12 Nov 2026: one `EWEB.PRG` for every processor if
   the stock Falcon loses no more than 3%, else a program of the 68060's own). Built for the 68030,
   `EWEB.PRG` has 621 of those 64-bit forms itself (`objdump -m m68k:68030`; the default 68000
   decoding hides them): a CT60's TOS loads the 68060's support package, which emulates them,
@@ -5317,13 +5341,13 @@ the most of on each processor, and QuickJS-ng measured against it before any cha
 
 ## The TT RAM left for others (12 Nov 2026)
 
-Erez's decision of 4 Nov 2026 (Decisions, TT-RAM), made: `mem_limits` in `ui/main.c` takes the TT
+decided 4 Nov 2026 (Decisions, TT-RAM), made: `mem_limits` in `ui/main.c` takes the TT
 RAM free as `EWEB.PRG` starts (the program is already in it), leaves `TTLEAVE=` per cent of it for
 other programs (Settings > General > TT RAM left for others, 0 to 90, 50 as it starts; the line is
 shown only with TT RAM), and gives half the rest to the pages kept for Back and Forward
 (`br_keep_max`, shared by the windows) and a quarter to the pictures' files and decoded pixels
 (`img_max`); the last quarter is the page being made. At 50 per cent that is a quarter and an
-eighth of the TT RAM, as before, without the 24 MB and 16 MB ceilings: on Erez's DFB1 (128 MB,
+eighth of the TT RAM, as before, without the 24 MB and 16 MB ceilings: on the reference DFB1 (128 MB,
 about 125 free as EWeb starts) about 31 and 16 MB where they were 24 and 16; at 10 per cent, 56
 and 28 MB.
 What is kept past a smaller setting goes as the next page is kept (the oldest first), as it
@@ -5335,7 +5359,7 @@ others'). `make hatarigui`'s `falcon` group checks the log's `memory:` line on t
 
 ## A page's source (21 Nov 2026)
 
-A tester missed it (through the hub, 21 Nov 2026), and Erez chose as proposed: **View > Page
+A tester missed it (through the hub, 21 Nov 2026), and the owner chose as proposed: **View > Page
 source**, no new key; the source as it came (`br.src`, the bytes the server sent, before scripts)
 written to `cache\source.htm` and handed to the desktop with AV_STARTPROG (common's
 `av_startprog`, the hub's 7158a13), which opens it in the editor it names; where there is no AV
@@ -5346,15 +5370,29 @@ written over (the SD card: a file each time costs seconds). Not in the ST editio
 `view_source`, `source_answer` and `source_window` in `ui/main.c`; `make hatarigui`'s browse
 group checks the window and the file's bytes (windows-1255's, not the page's text).
 
+**From memory (decided 22 Nov 2026).** Page source looked as if it loaded the page again; it is now
+shown from the page in memory. It fetched nothing, but it looked like a load: the
+file written, read back ("Reading the file..."), parsed, then parsed again in the page's
+encoding. Now EWeb's own window is made from the page in memory: `br_source` (`src/browse`) builds
+a copy of `br.src` as a text file is built (`build_plain`), in the encoding the page was read in,
+once, at the address `view-source:URL`; `load_post` loads such an address again (Back and
+Forward: the cache's of any age; Reload: anew) as the text of URL's answer (`as_source`), and
+leaves it out of the history list. Only when the window's page has changed while the desktop
+answered does the file come into it. The file is written only where a desktop answers (common's
+`av_has_server`, the hub's 727146e, which sends it nothing): on TOS's own desktop nothing goes
+to the SD card. `make hatarigui`'s browse group: the window
+`view-source:`, `window 2 of`, no "Reading the file" or "Opening", one page built, read in
+windows-1255, and Reload shows it again.
+
 ## The FireBee edition: EWEBFB.PRG (12 Nov 2026)
 
-The third build Erez decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code
+The third build the owner decided on 10 Nov 2026 (above, A FireBee edition): `EWEBFB.PRG`, ColdFire code
 (`-mcpu=5475`, the FireBee's MCF5474 V4e), with its TLS as `tlsfb.ovl` beside it, in the same
 release as `EWEB.PRG` and `EWEBST.PRG`.
 
 The zip's `firebee/` folder (1.0 to 1.5: `NSBENCH.TTP` and `EWGET.TTP` with their presets, the news
 page and a note asking a FireBee owner to measure `EWEB.PRG` under FireTOS's 68k emulation) is
-dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Erez, 12 Nov 2026).
+dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (decided 12 Nov 2026).
 
 - **common's part** (drafted by EWeb's session on AERA-Atari's `hub/firebee`, ten commits, synced
   here before the hub merged it: ec0cf9ee): each of common's assembly files has a ColdFire path
@@ -5391,13 +5429,12 @@ dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Er
   STE: EWEBST.PRG." and Return goes back to the desktop. The program's own run (GEM, STinG, the
   screen, speed) is the tester's FireBee's, under FireTOS, FireTOS + MiNT and EmuTOS (common's
   `tests/coldfire/README.md`, What only a real FireBee can prove).
-- **Its own package (22 Nov 2026):** the guidelines' 7.4 (Erez: "Shall we just create two
-  packages, one for FireBee and the other for standard ST? ... EUpdate can then download the right
-  package based on the running platform", the same names in both). `make dist` makes
+- **Its own package (22 Nov 2026):** the guidelines' 7.4 (decided 22 Nov 2026: two
+  packages, one for the FireBee and one for the other Ataris, which EUpdate picks by the machine,
+  the same names in both). `make dist` makes
   `eweb-x.y.zip` for the ST, TT and Falcon and `eweb-x.y-firebee.zip`, and a release publishes those
-  two and nothing else (Erez: "Remove all files from root and just have two ZIP files, one for each
-  platform"); the FireBee's holds the same names (Erez: "rename all other FB files into their
-  standard filename"): `EWEBFB.PRG` as `eweb.prg`, `EWEBJSFB.OVL` as `ewebjs.ovl`, `TLSFB.OVL` as
+  two and nothing else (no loose files beside the two zips); the FireBee's holds the
+  same names: `EWEBFB.PRG` as `eweb.prg`, `EWEBJSFB.OVL` as `ewebjs.ovl`, `TLSFB.OVL` as
   `tls.ovl` (common's `tls_ovl.c` in a ColdFire build takes the name as it is; a 68000 program on a
   FireBee, from before the packages, still looks for `tlsfb.ovl`), the fonts, the guide, the
   certificates and the icons. As both overlays are `ewebjs.ovl` now, the ColdFire's says another ABI
@@ -5413,7 +5450,7 @@ dropped from 1.6: it confused testers, and `EWEBFB.PRG` is the FireBee's now (Er
 Up to 1.0 EWeb drew on 2 to 256 colours and the Falcon's 16-bit true colour only, and any other
 screen got "EWeb can't draw pages on this screen". A graphics card's (a CT60's or CTPCI's Radeon,
 a SuperVidel, a Nova or ET4000 on a TT or Mega STE), a FireBee's and ARAnyM's with fVDI are 15,
-24 or 32 bits a pixel. Erez's decision (11 Nov 2026): **first EWeb works on those screens**,
+24 or 32 bits a pixel. decided 11 Nov 2026: **first EWeb works on those screens**,
 drawing in 16 bits and widening each pixel as it goes to the screen; **drawing in true 32 bits**
 (pictures and gradients at 8 bits a colour, no banding) comes with the FireBee work, and is for
 the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee alone: done on
@@ -5475,7 +5512,7 @@ the fast machines without a FireBee too (a CT60, ARAnyM), not for the FireBee al
 
 ## A big page on a 4 MB Falcon under NVDI (11 Nov 2026)
 
-The hub's run of the 1.3 candidate with Erez's NVDI on the stock Falcon (`Falcon-4:16`) found the gui
+The hub's run of the 1.3 candidate with the reference NVDI on the stock Falcon (`Falcon-4:16`) found the gui
 rig's big page (`big_page()`, 130 KB, 2,403 elements, 300 links) said "EWeb can't show this page", as
 1.2 did: EWEB.PRG started with 798 KB free there (1.2: 802 KB, common's new code 4 KB), and the
 page needed about 1.5 MB at its peak. Where the peak went (`drawbench -m` on the 68030 with an
@@ -5513,18 +5550,18 @@ lets go), laid out 1,137 KB to 961 KB. EWEB.PRG's BSS 625 KB to 218 KB.
 The speed rig against 1.2 (`speed.py`, 11 Nov 2026): on `Falcon-4:16` without NVDI every row the
 same within 15 ms but Settings opened (140 to 165 ms) and the About box opened (105 to 155 ms), both
 then over their 150; with common's About box of e130cbf synced in (1.3's head) 160 and 150 ms, and
-under NVDI (Erez's own setup) 95 and 70 (1.2: 120 and 135). **Accepted for 1.3** (Erez, 11 Nov 2026,
+under NVDI (the owner's own setup) 95 and 70 (1.2: 120 and 135). **Accepted for 1.3** (decided 11 Nov 2026,
 through the hub: "approve"): Settings opened 160 ms and the About box 150 ms on `Falcon-4:16`
-without NVDI; and (Erez, 12 Nov 2026) under NVDI on the 4 MB Falcon, where 1.2 couldn't show the rig's news
+without NVDI; and (decided 12 Nov 2026) under NVDI on the 4 MB Falcon, where 1.2 couldn't show the rig's news
 page at all: a line scrolled 155 ms and a page 810 ms, and what Settings or the About box uncovers
 430 to 470 ms, when the page's kept copy (`pic`) doesn't fit beside it (the page drawn afresh), 40,
-45 and about 50 ms when it does. **Kept as it is (Erez, 12 Nov 2026, through the hub: option
+45 and about 50 ms when it does. **Kept as it is (decided 12 Nov 2026, through the hub: option
 B):** the kept copy of the news page needs 331 KB, and 114 KB is what fits beside it on the 4 MB
 Falcon under NVDI after the page is made (218 KB free in the heap, 16 KB from GEMDOS). Smaller
 pieces and as many rows as fit (146 KB kept) made a page scrolled slower, 970 ms against 845, and
 were not kept. The lever is the page's stylesheet rules, 345 KB: given back after styling
 (option A), the copy would fit, but each restyle (a window sized, a font changed, a script's
-change) would read the sheets again, about 3.5 s. Erez kept 1.3's behaviour; not to be asked
+change) would read the sheets again, about 3.5 s. The owner kept 1.3's behaviour; not to be asked
 again unless the memory picture changes. Under NVDI 1.2 couldn't load the rig's news page
 (its "can't show" page in 365 ms, nothing to scroll), so its rows there aren't a comparison. On
 `ST:mono` under NVDI the three rows of What follows 1.3 (above), and an arrow held down 2,160 to
@@ -5541,7 +5578,7 @@ again unless the memory picture changes. Under NVDI 1.2 couldn't load the rig's 
 
 ## The planes on the 68030 (15 Nov 2026)
 
-1.13's round on Erez's TOS and NVDI (the speed rig's `Falcon-4:256 --nvdi`): 1.12 couldn't show
+1.13's round on the reference TOS and NVDI (the speed rig's `Falcon-4:256 --nvdi`): 1.12 couldn't show
 the rig's news page there (both runs: "can't show this page", peak 967,996, 6,960 free); 1.13
 shows it (17,601 high, peak 880,564, 38,564 free), its first layout failing sooner and the retry
 fitting. `drawbench -m` gives both the same heap (laid out 1,128,580, peak 1,344,624), so it is
@@ -5560,7 +5597,7 @@ stack (1.13's) are gone, and so is the 8 KB table for 256 colours. `tests/screen
 checks both against the words made a bit at a time (6,024,576 checks, host and qemu-m68k). The ST
 edition keeps its tables and its monochrome loop.
 
-The speed rig, 1.13 against this (Erez's TOS 4.04 and 1.04, NVDI 5.03; A B B A, the least of each
+The speed rig, 1.13 against this (the reference TOS 4.04 and 1.04, NVDI 5.03; A B B A, the least of each
 row; ms):
 
 | | 1.13 | now |
@@ -5620,7 +5657,7 @@ about it:
   and BSS after each back at 1.15's places modulo 256.
 - **A sheet short of memory on a page's first load** (`build1`): the pages kept for Back given back
   and the sheets added once more, as `readd_sheets` did; still short, the page is shown and the
-  status bar says "Not enough memory for all of this page's styles." (Erez's words to approve).
+  status bar says "Not enough memory for all of this page's styles." (its words as approved).
 - **A page that doesn't fit with its sheets at all**: on build()'s last try, styled again without
   them and laid out plain, with the same note, rather than "EWeb can't show this page".
 - **The speed rig** (`tests/hatari/speed.py`) fails a run whose page couldn't be shown, left a face
@@ -5630,11 +5667,11 @@ about it:
 
 To show the page whole there with room to spare means about 350 KB less at its peak (the tree, the
 styles: `ec_style` is 538 bytes on the 68030, a value for every property, and the layout): a phase of
-its own, put to Erez.
+its own, put to the owner.
 
 ## A big page's memory, 1.17 (16 Nov 2026)
 
-The phase Erez approved on 15 Nov 2026: the news page whole on `Falcon-4:256` under NVDI with 64 KB to
+The phase the owner approved on 15 Nov 2026: the news page whole on `Falcon-4:256` under NVDI with 64 KB to
 spare at its peak. Each step measured with drawbench `-m -4` (68030, the Atari's allocator, the CSS
 arenas' 16 KB pieces of a stock 4 MB Falcon), the news page with its sheet; the page laid out the
 same at every step (608 x 9,574, 1,593 items, drawn the same to the pixel):
@@ -5675,7 +5712,7 @@ news page under NVDI still comes with its sheet short (47 KB of its styles, 12.6
 prelude's fix), laid out twice (22.5 s). Its peak is 963 KB, all the heap can have there after the
 two pages before it: the heap took 1,018 KB from GEMDOS and 14 KB of ST RAM is left.
 
-**The target restated** (Erez, 16 Nov 2026, through the hub): the news page whole as the first page
+**The target restated** (decided 16 Nov 2026, through the hub): the news page whole as the first page
 after the start, measured on `Falcon-4:256` under NVDI (`speed.py --news-first`). 1.17 doesn't reach
 it: the page comes 9,332 rows high of 9,829, laid out twice, its peak 965 KB with 15 KB of ST RAM
 left (the heap took 1,035 KB from GEMDOS). After the home page the page kept off the screen took
@@ -5712,8 +5749,8 @@ moved where its scrolls' pieces end; `EWEB.PRG` keeps them.
 
 ## The ST edition's speed (13 Nov 2026)
 
-Erez, 13 Nov 2026: "Focus on the ST version and optimize it as best as you can. I want the ST edition
-to be reasonable for people to use instead of the other options out there." The freeze after 1.0
+Decided 13 Nov 2026: the ST edition made as fast as it can be, a reasonable choice beside the other
+browsers there. The freeze after 1.0
 (Decisions) stays for features; the ST edition's speed is worked on again. Measured on the
 cycle-exact 8 MHz ST in Hatari (TOS 1.04, monochrome) with the speed rig (`speed.py ST:mono`) and,
 for each part of making a page, `PAGEST.TTP` (`tests/bench/pagebench.c`: the news page parsed,
@@ -5796,7 +5833,40 @@ files are about 100 KB more code (text 716,516 to 821,184 bytes), so the About b
 
 `PAGEST.TTP`, the news page (816 elements, 1,000 rules, 2,873 rows): drawn 23.2 s (8.1 ms a row) to
 14.0 s (4.9 ms a row, the byte a pixel's `to_planes` not counted in either); parsed 6.6 s, styled
-16.3 s to 13.9 s, laid out 16.4 s to 15.8 s. The styling and the layout were to be next; the performance work stopped there (Erez, 13 Nov 2026).
+16.3 s to 13.9 s, laid out 16.4 s to 15.8 s. The styling and the layout were to be next; the performance work stopped there (decided 13 Nov 2026).
+
+## Softer picture colours (22 Nov 2026)
+
+decided 22 Nov 2026: pictures dithered softer, common's `pic_pal_soft` (EContact's
+photos, 21 Nov): each pixel passes on 12 sixteenths of its error on 16 pens or fewer, 8 on more
+(`IMG_SOFT` in `src/browse/img.h`), so a colour the screen has no near pen for is a little off
+instead of grainy. Where (his second answer, the same day): where the Falcon's DSP dithers, and
+on the CPUs fast enough (the FireBee, a 68040, 68060 or 68080: `_CPU` 40 or more), by
+`pictures_dsp_init` in `ui/main.c` (`pictures_soft`); not on a 68030 alone (a TT, a Falcon with
+`PICDSP=0`), and not in `EWEBST.PRG`, which is frozen. ewrender draws as the DSP's Falcon does
+(`--soft N` for another share, 0 the whole dither).
+
+**Measured** (`PICBENCH.TTP` on the stock Falcon, `Falcon-4:256`; the photo, `tests/bench/mkphoto.py`,
+480 x 320 in 16 colours and 192 x 128 in 256; its new SOFT argument, 16 the whole dither):
+
+| | 16 colours, whole | 16, soft 12 | 256 colours, whole | 256, soft 8 |
+|---|---|---|---|---|
+| the DSP's dither | 1,135 ms | 1,100 ms | 225 ms | 215 ms |
+| the 68030's dither | 5,345 ms | 9,960 ms | 820 ms | 1,555 ms |
+
+The DSP's is no slower (a little faster); the 68030's takes nearly twice as long, which is why a
+68030 alone keeps the whole dither until common's soft rows are faster there (asked of the hub).
+
+The speed rig on `Falcon-4:16` (A B B A against 1.25, the minimum of each): every row within a tick
+but two. The home page shown is 460 to 470 ms in each run, but its drawing is the same (375 ms) and
+so is the whole (455 ms): one 5 ms part more counted in the stretch. An arrow held 3 s, up, is 900
+against 1.25's own 920 and 865. `ST:mono` is unchanged: `EWEBST.PRG` has no soft dither.
+
+**Through the Gateway** (Pens from the Pi): EWeb names its share in `X-Gateway-Picture`
+(`soft=N`), and the disk cache keeps the pens by it (`s12`); a webgate whose aerapens takes it
+answers `X-Gateway-Soft: N`. Until AERA-Gateway's webgate and common's aerapens have it, the Pi's
+pens are the whole dither's and are shown as they come, and `make itest` holds them to a page drawn
+so (`--soft 0`) where the webgate in use doesn't name `X-Gateway-Soft`.
 
 ## The design
 
@@ -5981,7 +6051,7 @@ doesn't rely on tricking anything.
 | Press-and-hold, sliders, puzzle pieces | Hold or drag with the Falcon mouse |
 | Invisible checks (reCAPTCHA v3) | Nothing; your real mouse movement is passed on |
 
-**Built for Cloudflare's check (24 Oct 2026),** after Erez met it on Atari-Forum: EWeb knows the
+**Built for Cloudflare's check (24 Oct 2026),** after the owner met it on Atari-Forum: EWeb knows the
 check (`cf-mitigated: challenge`, or its options on a 403 or 503) and shows its own page in its place,
 which goes nowhere and runs no script, with the Internet Archive's copy. Through the gateway with its
 browser, webgate (AERA-Gateway) opens such a page in the browser, whose extension waits through the
@@ -6119,7 +6189,7 @@ lists of text; EWeb spends its time in the style and layout those pages need (ya
    edition, `EWEBST.PRG` (68000 code, `-fdisable-tree-bswap`): like the family's other ST
    editions it leaves TLS to the Pi gateway, which is how an ST reaches the secure web.
 5. **JavaScript:** QuickJS with the lean DOM. *Done (20 Oct 2026):* above, with an FPU.
-6. **The web as sites make it** (Erez's go, 22 Oct 2026), in five stages. *Stage 1 done (0.27):*
+6. **The web as sites make it** (the owner's go, 22 Oct 2026), in five stages. *Stage 1 done (0.27):*
    refresh, stylesheets by media, encodings, downloads' names, translucency, gradients, legacy
    centring, details and summary (above). Then, after the 1 MB ST target (dropped) and EWeb's own
    256-colour palette (Decisions): **2.** the layout's core: `inline-block` (done, above), boxes that scroll

@@ -558,6 +558,7 @@ static void history_page(SBUF *s, int pg)
 /* ---------------------------------------------------------------- the home page */
 
 #include "home.h"		/* (build/gen, tools/mkhome.py from home.html) */
+#include "codepad.h"
 
 /* the tip of the day */
 static const char *const tips[] = {
@@ -854,6 +855,24 @@ static const char *url_path(const char *url)
 	return h + strcspn(h, "/?#");
 }
 
+#ifndef EW_ST
+/* where w is in s's n bytes; NULL */
+static const char *find_text(const char *s, long n, const char *w)
+{
+	CODE_PAD(n < -30000, CP_BROWSE_FIND_TEXT);
+	size_t wl = strlen(w);
+	const char *e = s + n - (long) wl + 1;
+	for (; s < e; s++) {
+		s = memchr(s, w[0], (size_t) (e - s));
+		if (s == NULL)
+			return NULL;
+		if (memcmp(s, w, wl) == 0)
+			return s;
+	}
+	return NULL;
+}
+#endif
+
 static int has_text(const char *s, long n, const char *w)
 {
 	size_t wl = strlen(w);
@@ -1007,9 +1026,9 @@ void br_live_url(const char *url, char *out, int size)
 	char wh[32];			/* (1.23's: the ST edition's code as it was) */
 #endif
 	/* the picture as wide as the window, three of its screens tall: the
-	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026);
+	   Pi's browser lays the page out at that width (decided 30 Oct 2026);
 	   pic=1: the page made with its picture, its links over it and whether
-	   a field there has the keyboard (webgate's live_shot; Erez, 21 Nov 2026) */
+	   a field there has the keyboard (webgate's live_shot; decided 21 Nov 2026) */
 #ifndef EW_ST
 	if (live_w > 0 && live_h > 0)
 		snprintf(wh, sizeof wh, "w=%ld&h=%ld&pic=1", (long) live_w, (long) live_h);
@@ -1060,6 +1079,82 @@ static int cf_wall(const FETCH *f)
 {
 	return f->challenge || ((f->status == 403 || f->status == 503) && has_text(f->data, f->len, "_cf_chl_opt"));
 }
+
+#ifndef EW_ST	/* (the ST edition stays as 1.0 has it: bug fixes only) */
+/* a Google Drive file's page (drive.google.com/file/d/ID/...): all it
+   shows is made by a script of 4.6 MB, far past what EWeb runs. 1, its
+   ID and the file's name (its og:title, else its title less " - Google
+   Drive"; entities undone), or 0 */
+static int drive_file(const FETCH *f, char *id, int idsize, char *name, int nsize)
+{
+	static const char at[] = "https://drive.google.com/file/d/";
+	const char *u = f->url + sizeof at - 1, *t, *e, *v;
+	int k = 0;
+	if (strncmp(f->url, at, sizeof at - 1) != 0 || f->status != 200 || f->data == NULL)
+		return 0;
+	while (((*u >= '0' && *u <= '9') || ((*u | 32) >= 'a' && (*u | 32) <= 'z') || *u == '-' || *u == '_') &&
+	       k < idsize - 1)
+		id[k++] = *u++;
+	id[k] = 0;
+	if (k < 10 || (*u != 0 && *u != '/' && *u != '?'))
+		return 0;
+	name[0] = 0;
+	e = f->data + f->len;
+	if ((t = find_text(f->data, f->len, "<meta property=\"og:title\" content=\"")) != NULL) {
+		v = t + 35;
+		t = memchr(v, '"', (size_t) (e - v));
+	} else if ((t = find_text(f->data, f->len, "<title>")) != NULL) {
+		v = t + 7;
+		t = find_text(v, (long) (e - v), " - Google Drive</title>");
+	}
+	if (t != NULL && t > v) {
+		/* (the five entities a page writes a name with) */
+		static const char *const ent[][2] = { { "&amp;", "&" }, { "&lt;", "<" }, { "&gt;", ">" },
+						      { "&quot;", "\"" }, { "&#39;", "'" } };
+		int o = 0;
+		while (v < t && o < nsize - 1) {
+			size_t j;
+			for (j = 0; j < sizeof ent / sizeof ent[0]; j++)
+				if ((size_t) (t - v) >= strlen(ent[j][0]) && !memcmp(v, ent[j][0], strlen(ent[j][0])))
+					break;
+			if (j < sizeof ent / sizeof ent[0]) {
+				name[o++] = ent[j][1][0];
+				v += strlen(ent[j][0]);
+			} else {
+				name[o++] = *v++;
+			}
+		}
+		name[o] = 0;
+	}
+	return 1;
+}
+
+/* EWeb's own page for a Drive file (decided 24 Nov 2026): its name and a
+   link to Google's plain download of it, which needs no script (a big
+   file comes first to Google's "can't scan it for viruses" page, a form
+   EWeb sends) */
+static void drive_page(SBUF *s, const char *url, const char *id, const char *name)
+{
+	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
+	esc(s, name[0] ? name : "A Google Drive file");
+	sb_adds(s, "</title>");
+	sb_adds(s, own_style);
+	sb_adds(s, "</head><body><h1>");
+	esc(s, name[0] ? name : "A Google Drive file");
+	sb_adds(s, "</h1><p class=addr>");
+	esc(s, url);
+	sb_adds(s, "</p><p><a href=\"https://drive.usercontent.google.com/download?id=");
+	esc(s, id);
+	sb_adds(s, "&amp;export=download\">Download</a></p>"
+		   "<p class=small>Google Drive's own page for a file is made by a script far bigger than "
+		   "EWeb runs; this page of EWeb's stands in for it. A file Drive shares with anyone "
+		   "comes straight away; a very big one first asks whether to download it without "
+		   "Google's virus check; one that isn't shared asks to sign in.</p>");
+	if (http_gateway[0])
+		sb_adds(s, "<p class=small>Drive's page itself: View &gt; Through the Gateway's browser.</p>");
+	sb_adds(s, "</body></html>");
+}
+#endif
 
 static void cf_page(SBUF *s, const char *url, int check)
 {
@@ -1190,7 +1285,7 @@ static int gzip_file(const HTTPRESP *rs, const char *name)
    that comes (one its server says to save, or of a type EWeb shows
    neither as a page nor as a picture) is cut off at its headers and saved
    as it comes by br_save_url (BR_SAVE), with no limit to its size, not
-   gathered in memory first (Erez, 9 Nov 2026: the download dialog) */
+   gathered in memory first (decided 9 Nov 2026: the download dialog) */
 static int page_stream;
 
 /* fetch's HTTPREQ.head for a page: its Content-Disposition, and a gzip
@@ -1248,6 +1343,7 @@ static int fetch_packed;
 
 static int packed_head(void *ud, HTTPRESP *rs)
 {
+	CODE_PAD((uintptr_t) rs == 1, CP_BROWSE_PACKED_HEAD);
 	(void) ud;
 	if (rs->encoding == 1 || rs->encoding == 2)
 		rs->packed = 1;
@@ -1347,7 +1443,7 @@ static char *upload_file(const char *path, long *len)
 	return load_file(path, len);
 }
 
-/* known trackers' hosts (Erez, 1 Nov 2026: left out by default), each
+/* known trackers' hosts (decided 1 Nov 2026: left out by default), each
    with the names under it */
 static const char *const tracker_hosts[] = {
 	"googletagmanager.com", "google-analytics.com", "analytics.google.com"
@@ -2011,6 +2107,7 @@ static void *image_cb(void *ud, const char *src, int css, int32_t *w, int32_t *h
    same icon a page shows many times is one picture) */
 static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
 {
+	CODE_PAD((uintptr_t) w == 1, CP_BROWSE_SVG_CB);
 	browser *b = ud;
 	char key[64];
 	size_t len;
@@ -2033,6 +2130,12 @@ static void *svg_cb(void *ud, dnode *n, uint32_t color, int32_t *w, int32_t *h)
 		return NULL;
 	}
 	img_size(im, w, h);
+#ifndef EW_ST	/* (the ST edition, frozen) */
+	if (img_ratio(im)) {
+		*w = -*w;	/* (proportions alone, as image_cb's: LAYOUT_OPT.svg) */
+		*h = -*h;
+	}
+#endif
 	return im;
 }
 
@@ -2098,6 +2201,7 @@ static void page_shown_imgs(const page *p)
 /* img_size_shown: a page shown (a window's) shows im at w x h */
 static int size_shown(const ew_img *im, int32_t w, int32_t h)
 {
+	CODE_PAD((uintptr_t) im == 1, CP_BROWSE_SIZE_SHOWN);
 	int k;
 	long i;
 	for (k = 0; k < br_n; k++) {
@@ -2510,6 +2614,11 @@ static void preview(browser *b, const char *data, long len, long whole, const ch
 
 /* the next build is a text file's (text/plain): its bytes are the text */
 static int build_plain;
+#ifndef EW_ST
+static int as_source;	/* load_post: a view-source: address, the answer shown as its text */
+#else
+#define as_source 0
+#endif
 
 int br_building;
 unsigned long br_translation_runs;
@@ -2838,7 +2947,7 @@ parse:
 		/* out of memory styling or laying it out with its sheets, on the
 		   last try (the news page on a 4 MB Falcon under NVDI at 256
 		   colours): styled again without them, a plain page and the note
-		   (Erez's words), never "EWeb can't show this page" for a page
+		   (as decided), never "EWeb can't show this page" for a page
 		   that fits so; parsed once, its source may be gone */
 		build_plain_css = 1;
 		ec_drop_sheets(d->css);
@@ -3630,6 +3739,7 @@ static void as_seen(const char *furl, const char *url)
 
 static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_LOAD_POST);
 	FETCH *f;
 	SBUF src;
 	doc *d;
@@ -3646,6 +3756,17 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		b->refresh_run = 0;
 	if (has_scheme(url, "javascript") || has_scheme(url, "data"))
 		return BR_STOPPED;	/* nothing EWeb can do with it */
+#ifndef EW_ST
+	if (strncmp(url, "view-source:", 12) == 0 && !as_source && post == NULL &&
+	    (has_scheme(url + 12, "http") || has_scheme(url + 12, "https") || has_scheme(url + 12, "file"))) {
+		/* View > Page source's, come again (br_source): the page
+		   fetched as Back, Forward or Reload would, shown as its text */
+		as_source = 1;
+		r = load_post(b, url + 12, mode, NULL);
+		as_source = 0;
+		return r;
+	}
+#endif
 	if (strncmp(url, "about:search?", 13) == 0 && b->search != NULL && b->search[0]) {
 		/* the home page's search box: its words to the search engine */
 		char raw[1024], words[1024], to[4096];
@@ -3767,7 +3888,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		   loaded again on a small machine): they go, and once more (not
 		   a form sent, which the server may have had; nor one whose room
 		   was made already, unpacking it: it came, and fetched again it
-		   comes the same, iamexpat.de's 772 KB twice on Erez's 0.69) */
+		   comes the same, iamexpat.de's 772 KB twice on the owner's 0.69) */
 		gone = b->p == NULL;
 		r = fetch(b, url, b->typed ? NULL : b->url,
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
@@ -3814,14 +3935,23 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	if (f->attach && f->status >= 200 && f->status < 300) {
 		sb_free(&src);
 		return download(b, f);
-	} else if (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0) {
+	} else if (!as_source &&
+		   (f->mime[0] == 0 || strcmp(f->mime, "text/html") == 0 || strcmp(f->mime, "application/xhtml+xml") == 0)) {
 		char q[512];
-		int google = google_wall(b, f, q, sizeof q);
-		if (google || cf_wall(f)) {
+		int google = google_wall(b, f, q, sizeof q), drive = 0;
+#ifndef EW_ST
+		char did[80], dname[256];
+		drive = !google && drive_file(f, did, sizeof did, dname, sizeof dname);
+#endif
+		if (google || drive || cf_wall(f)) {
 			/* EWeb's own page in its place, which goes nowhere (and
 			   runs no script) */
 			if (google)
 				wall_page(b, &src, f->url, q);
+#ifndef EW_ST
+			else if (drive)
+				drive_page(&src, f->url, did, dname);
+#endif
 			else
 				cf_page(&src, f->url, f->check);
 			f->refresh[0] = 0;
@@ -3838,8 +3968,9 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			lay_recheck = 0;
 			encodable = 1;
 		}
-	} else if (strncmp(f->mime, "text/", 5) == 0) {
-		/* a text file: sniffed as a page is, but for a <meta> */
+	} else if (as_source || strncmp(f->mime, "text/", 5) == 0) {
+		/* a text file: sniffed as a page is, but for a <meta>; and a
+		   page's source (view-source:) */
 		build_plain = 1;
 		as_seen(f->url, url);
 		r = build(b, f->data, f->len, enc[0] ? enc : f->charset, f->url, 0, &d, &p);
@@ -3899,6 +4030,15 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 	{
 		char shown[4096];
 		shown_at(f->url, url, shown, sizeof shown);
+#ifndef EW_ST
+		if (as_source) {
+			char inner[sizeof shown];
+			str_copy(inner, shown, sizeof inner);
+			strcpy(shown, "view-source:");
+			str_copy(shown + 12, inner, sizeof shown - 12);
+			str_copy(f->mime, "text/plain", sizeof f->mime);
+		}
+#endif
 		show(b, d, p, shown, f->security, f->status, mode == NAV_NEW || mode == NAV_HISTORY);
 		if (f->stale && b->note[0] == 0)
 			snprintf(b->note, sizeof b->note, "%s",
@@ -3911,7 +4051,8 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			hist_push(b, shown);
 		else
 			hist_set_url(b, shown);
-		hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
+		if (!as_source)
+			hg_add(shown, d->title, ck_now());	/* (its title: it is there already, as_seen) */
 		b->at = b->cur;
 		enc_set(b, f->charset, enc, encodable);
 		/* translated by webgate: the page shown is the translation (memory
@@ -4028,6 +4169,58 @@ const char *br_fallback(const char *url)
 	}
 	return "windows-1252";
 }
+
+#ifndef EW_ST
+/* View > Page source in a window of EWeb's own, from the page in memory
+   (decided 22 Nov 2026): from's bytes as they came, read
+   in the encoding its page was read in, made b's page as a text file is
+   (build_plain), nothing written, read or fetched. Its address is
+   view-source:URL, which load_post loads again as the text of URL's answer
+   (Back, Forward: the cache's of any age; Reload: anew) */
+int br_source(browser *b, const browser *from)
+{
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_BR_SOURCE);
+	char url[sizeof b->url], cs[sizeof b->charset];
+	char *copy;
+	long len = from->src_len;
+	doc *d;
+	page *p;
+	int r;
+	if (from->src == NULL || len <= 0)
+		return BR_STOPPED;
+	strcpy(url, "view-source:");
+	str_copy(url + 12, from->url, sizeof url - 12);
+	str_copy(cs, from->d != NULL && from->d->charset[0] ? from->d->charset : from->charset, sizeof cs);
+	if ((copy = malloc((size_t) len)) == NULL)
+		return BR_STOPPED;
+	memcpy(copy, from->src, (size_t) len);	/* (from may be b, whose page goes) */
+	conn_stop = 0;
+	b->ms_fetch = 0;
+	build_plain = 1;
+	r = build(b, copy, len, cs, url, 0, &d, &p);
+	build_plain = 0;
+	if (r && conn_stop) {
+		pg_free(p);
+		doc_free(d);
+		r = 0;
+	}
+	if (!r) {
+		conn_stop = 0;
+		free(copy);
+		return BR_STOPPED;
+	}
+	show(b, d, p, url, "", 200, 1);
+	b->src = copy;
+	b->src_len = len;
+	str_copy(b->mime, "text/plain", sizeof b->mime);
+	hist_push(b, url);
+	b->at = b->cur;
+	enc_set(b, cs, "", 1);	/* (View > Encoding reads it again in another) */
+	keep_trim(b);
+	b->scroll_to = -1;
+	return BR_SHOWN;
+}
+#endif
 
 int br_encoding(browser *b, const char *name)
 {
@@ -4225,6 +4418,7 @@ const char *br_link_download(const browser *b, int link)
    host and port; http and https only, the rest have none to share) */
 static int same_origin(const char *a, const char *c)
 {
+	CODE_PAD((uintptr_t) a == 1, CP_BROWSE_SAME_ORIGIN);
 	URL *u = malloc(2 * sizeof *u);
 	int r = u != NULL && url_parse(&u[0], a, NULL) && url_parse(&u[1], c, NULL) && u[0].special &&
 		u[1].special && u[0].tls == u[1].tls && u[0].port == u[1].port && u[0].hostlen == u[1].hostlen &&
@@ -4751,12 +4945,14 @@ static void jh_cookie_set(void *ud, const char *url, const char *line)
 
 static int jh_ask(void *ud, int kind, const char *text, char *out, int size)
 {
+	CODE_PAD((uintptr_t) ud == 1, CP_BROWSE_JH_ASK);
 	browser *b = ud;
 	return b->ask != NULL ? b->ask(b->ud, kind, text, out, size) : 1;
 }
 
 static void jh_log(void *ud, const char *line)
 {
+	CODE_PAD((uintptr_t) line == 1, CP_BROWSE_JH_LOG);
 	browser *b = ud;
 	if (b->log != NULL)
 		b->log(b->ud, line);
@@ -4764,6 +4960,7 @@ static void jh_log(void *ud, const char *line)
 
 static void jh_console(void *ud, const char *line)
 {
+	CODE_PAD((uintptr_t) line == 1, CP_BROWSE_JH_CONSOLE);
 	browser *b = ud;
 	if (b->console != NULL)
 		b->console(b->ud, line);
@@ -5678,6 +5875,7 @@ static long next_item(browser *b, int32_t top, int32_t height)
    tracker's), isn't fetched */
 static int frame_waiting(const browser *b, int sets)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_BROWSE_FRAME_WAITING);
 	const br_frames *fs = b->d != NULL ? b->d->frames : NULL;
 	int k;
 	if (fs == NULL || b->pic_stopped)
@@ -5833,12 +6031,13 @@ static int shown_size(const browser *b, const ew_img *im, int32_t *w, int32_t *h
 static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t rw, int32_t rh, char *fit, int fsize,
 		   char *variant, int vsize)
 {
+	CODE_PAD(rw < -30000, CP_BROWSE_PIC_ASK);
 	int pens = !has_scheme(url, "file") && pens_wanted(b);
 	int32_t w = rw, h = rh, page = b->width > 0 ? b->width : 640;
 	char size[32] = "";
 	if (pens && ((w > 0 && h > 0) || shown_size(b, im, &w, &h))) {
 		if (w > page)
-			/* never pens wider than the window (Erez, 29 Oct 2026: a
+			/* never pens wider than the window (decided 29 Oct 2026: a
 			   layout gone wrong asked the Pi for yaary.music's
 			   portrait at 1,651 x 2,201, 3.6 MB of pens, and a little
 			   larger at each picture that came): no wider than the
@@ -5848,23 +6047,29 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 			snprintf(size, sizeof size, "size=%ldx%ld; ", (long) w, (long) h);
 	}
 	if (pens) {
-		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s\r\n",
+		/* soft=N: the dither's share (pic_pal_soft), so the Pi's pens are
+		   the screen's own; a webgate that doesn't know it leaves it out */
+		char soft[12] = "";
+		if (img_pal->soft)
+			snprintf(soft, sizeof soft, "; soft=%d", img_pal->soft);
+		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld; %spens=%d; pal=%08lx; ed=%s%s\r\n",
 			 (long) page, size, img_pal->n, img_pal_crc(),
 #ifdef EW_ST
-			 "tj"
+			 "tj",
 #else
-			 "lj"
+			 "lj",
 #endif
-			 );
+			 soft);
 		if (size[0])
-			snprintf(variant, vsize, "pens=%d,%08lx,%s", img_pal->n, img_pal_crc(), size + 5);
+			snprintf(variant, vsize, "pens=%d,%08lx,s%d,%s", img_pal->n, img_pal_crc(), img_pal->soft, size + 5);
 		else
-			snprintf(variant, vsize, "pens=%d,%08lx,fit%ld", img_pal->n, img_pal_crc(), (long) page);
+			snprintf(variant, vsize, "pens=%d,%08lx,s%d,fit%ld", img_pal->n, img_pal_crc(), img_pal->soft,
+				 (long) page);
 		variant[strcspn(variant, ";")] = 0;
 	} else {
 		/* deep=1: a screen of no palette (true colour) shows every colour
 		   of a picture the Pi makes smaller, so it keeps them (a PNG not
-		   cut to 256, a JPEG of quality 90: Erez, 8 Nov 2026, the pictures
+		   cut to 256, a JPEG of quality 90: the owner, 8 Nov 2026, the pictures
 		   through the Gateway as exact as direct) */
 		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld%s\r\n", (long) page, img_pal == NULL ? "; deep=1" : "");
 		variant[0] = 0;
@@ -6093,6 +6298,7 @@ int br_pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32
 
 static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, int32_t *y1)
 {
+	CODE_PAD(top < -0x7fffffffL, CP_BROWSE_PICTURES_STEP);
 	long k, i;
 	int fk;
 	ew_img *im;
@@ -6189,7 +6395,7 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 			/* laid out again during the fetch (GEM's turns: a window
 			   sized, fulled or moved to the screen's edge): d was the
 			   old page's, freed with it; its size is read again from
-			   the new one at the next step (Erez's bombs of 1 Nov 2026,
+			   the new one at the next step (the owner's bombs of 1 Nov 2026,
 			   pictures through the Pi fetched again at their size) */
 			if (b->p != p0)
 				return BRP_LAYOUT;

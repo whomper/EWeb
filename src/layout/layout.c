@@ -24,6 +24,7 @@
 
 #include "layout.h"
 #include "form.h"
+#include "codepad.h"
 
 #define AUTO INT32_MIN
 #define MAXCOLS 64			/* a table's columns that line up; more go as they come */
@@ -743,10 +744,10 @@ static int32_t font_px(L *l, const ec_style *s)
    of, else the generic family. Sans faces as wide as Arial and the generic
    sans-serif (Arial or Helvetica where most pages are made) are DejaVu
    Sans Condensed, of Arial's widths; DejaVu Sans itself, and Verdana's
-   kind as wide as it, DejaVu Sans (Erez's choice C, 13 Nov 2026: pages made
+   kind as wide as it, DejaVu Sans (the owner's choice C, 13 Nov 2026: pages made
    for Arial lay out as made; EWeb's own pages name DejaVu Sans). DejaVu
    Sans for them too with wide (LAYOUT_OPT.wide_sans: EWEB.INF's NARROW=0,
-   Settings > General; Erez, 16 Nov 2026) */
+   Settings > General; decided 16 Nov 2026) */
 #ifdef EW_ST
 #define FAM_ARIAL(wide) FF_COND	/* (frozen: 1.17's, Arial's kind narrow) */
 static int family_of(const ec_family *f)
@@ -2125,6 +2126,7 @@ static void pseudo(L *l, box *parent, dnode *n, const ec_style *ps)
 
 static void build_element(L *l, box *parent, dnode *c)
 {
+	CODE_PAD((uintptr_t) c == 1, CP_LAYOUT_BUILD_ELEMENT);
 	const ec_style *st = c->e.style;
 	int d;
 	box *b;
@@ -2146,8 +2148,11 @@ static void build_element(L *l, box *parent, dnode *c)
 		void *h = l->p->opt.svg != NULL ? l->p->opt.svg(l->p->opt.ud, c, color(st, EP_COLOR) & 0xffffff, &iw, &ih)
 						 : NULL;
 		box *in = parent;
+		int ratio = iw < 0 && ih < 0;	/* a viewBox and no size: its proportions, as an <img>'s */
 		if (h == NULL)
 			return;
+		if (ratio)
+			iw = -iw, ih = -ih;
 		if (block_level(d)) {
 			in = new_box(l, BX_BLOCK, c, st, parent);
 			if (in == NULL)
@@ -2161,6 +2166,7 @@ static void build_element(L *l, box *parent, dnode *c)
 			bxw(l, in->last)->img = h;
 			bxw(l, in->last)->iw = iw;
 			bxw(l, in->last)->ih = ih;
+			in->last->ratio = (uint8_t) ratio;	/* (google.com's apps icon, 24 px in its button, was 300) */
 		}
 		return;
 	}
@@ -6008,9 +6014,15 @@ static int out_of_flow(const box *c)
 	       (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED);
 }
 
+#ifndef EW_ST
+/* the box content_width measures: its content, not its own width */
+static box *measure_content;
+#endif
+
 /* a block's widest: its border box with margins, nothing broken */
 static int32_t measure(L *l, box *b)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_LAYOUT_MEASURE);
 	int32_t w = AUTO, inner = 0, mx;
 	box *c;
 	if (EC_DEEP()) {
@@ -6019,8 +6031,23 @@ static int32_t measure(L *l, box *b)
 	}
 	if (stopped(l))
 		return 0;	/* (a table's or a flexbox's sizing measures every box under it: polls too) */
+#ifndef EW_ST	/* (the ST edition, frozen: no content keywords) */
+	if (b == measure_content) {
+		measure_content = NULL;
+		w = AUTO;
+	} else if (!b->anon && !l->minw && EC_K(b->st, EP_WIDTH) == EK_KW && EC_V(b->st, EP_WIDTH).i == KW_MIN_CONTENT) {
+		/* width: min-content: its narrowest, measured at its widest too */
+		l->minw = 1;
+		w = measure(l, b);
+		l->minw = 0;
+		return w;
+	} else if (!b->anon) {
+		w = len(l, b->st, EP_WIDTH, AUTO);
+	}
+#else
 	if (!b->anon)
 		w = len(l, b->st, EP_WIDTH, AUTO);
+#endif
 	if (l->minw && w == AUTO && !b->anon && b->n != NULL && EC_K(b->st, EP_WIDTH) == EK_PCT &&
 	    (b->n->tag == T_INPUT || b->n->tag == T_SELECT || b->n->tag == T_TEXTAREA)) {
 		/* a field of a width in percent: at its narrowest, no wider than
@@ -6050,13 +6077,41 @@ static int32_t measure(L *l, box *b)
 		   none at its narrowest takes none, its alt text too: the
 		   EFTP page's icon, 75% of a grid's 140px column, made the
 		   column as wide as its alt text, and was drawn 782 px wide
-		   (Erez, 8 Nov 2026)) */
+		   (decided 8 Nov 2026)) */
 		if (inner <= 0 && !compressible(l, b->first))
 			inner = inline_measure(l, b);
 		else if (inner < 0)
 			inner = 0;
 	} else if (b->inl) {
 		inner = inline_measure(l, b);
+#ifndef EW_ST	/* (the ST edition, frozen) */
+	} else if (b->grid && EC_K(b->st, EP_GRID_TEMPLATE_COLUMNS) != EK_PTR &&
+		   EC_K(b->st, EP_GRID_AUTO_FLOW) == EK_INT && (EC_V(b->st, EP_GRID_AUTO_FLOW).i & EC_FLOW_COLUMN)) {
+		/* column by column, no columns of its own: side by side, an
+		   item to a column, or as many as its explicit rows hold, the
+		   column as wide as its widest (one that names its rows a
+		   column of its own: grid_layout's placing); github.com's
+		   marquee */
+		int rows = EC_K(b->st, EP_GRID_TEMPLATE_ROWS) == EK_PTR ?
+			   ((const ec_tracks *) EC_V(b->st, EP_GRID_TEMPLATE_ROWS).p)->n : 1, r = 0, k = 0;
+		int32_t colw = 0, g = gap(l, b->st, EP_COLUMN_GAP, AUTO);
+		for (c = b->first; c != NULL; c = c->next) {
+			int32_t m;
+			if (out_of_flow(c))
+				continue;
+			m = measure(l, c);
+			if (r >= rows || (r > 0 && !c->anon && EC_K(c->st, EP_GRID_ROW_START) != EK_KW)) {
+				inner += colw + (k++ ? g : 0);
+				colw = 0;
+				r = 0;
+			}
+			r++;
+			if (m > colw)
+				colw = m;
+		}
+		if (r > 0)
+			inner += colw + (k ? g : 0);
+#endif
 	} else if (b->grid && EC_K(b->st, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR) {
 		/* its columns' lengths, the others as wide as its widest item */
 		const ec_tracks *t = EC_V(b->st, EP_GRID_TEMPLATE_COLUMNS).p;
@@ -6078,8 +6133,18 @@ static int32_t measure(L *l, box *b)
 				if (t->t[k].mn.k != EC_TR_LEN && t->t[k].mx.k == EC_TR_LEN && dev(l, t->t[k].mx.v) < v)
 					v = dev(l, t->t[k].mx.v);
 			} else {
+				/* at its widest its maximum: a length, else its
+				   widest item, no less than a minimum length
+				   (minmax(0, max-content) is as wide as its item:
+				   cnn.com's video cards, width max-content, measured
+				   nothing for it and cut their titles) */
+#ifndef EW_ST
+				v = t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
+				    t->t[k].mn.k == EC_TR_LEN && dev(l, t->t[k].mn.v) > widest ? dev(l, t->t[k].mn.v) : widest;
+#else
 				v = t->t[k].mx.k == EC_TR_LEN ? dev(l, t->t[k].mx.v) :
 				    t->t[k].mn.k == EC_TR_LEN ? dev(l, t->t[k].mn.v) : widest;
+#endif
 			}
 			inner += v + (k ? g : 0);
 		}
@@ -6300,6 +6365,34 @@ static int32_t cap_max(L *l, box *c, int32_t v, int32_t w)
 	      len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w) : extras(l, c);
 	return v > mx ? mx : v;
 }
+
+#ifndef EW_ST	/* (the ST edition, frozen: no content keywords) */
+/* width, min-width or max-width (p) of min-content, max-content or
+   fit-content (CSS Sizing 3, 3.1 and 3.2): the content box's width from
+   what it holds, given extra (its margins, borders and padding) and avail
+   (its room, the content box's): fit-content its widest but no wider
+   than avail, nor narrower than its narrowest; AUTO for other values.
+   (github.com's marquee: a grid of width max-content, its columns each
+   an item's width) */
+static int32_t content_width(L *l, box *b, int p, int32_t avail, int32_t extra)
+{
+	int k = EC_K(b->st, p) == EK_KW ? EC_V(b->st, p).i : 0, was = l->minw;
+	int32_t mx, mn;
+	if (k != KW_MIN_CONTENT && k != KW_MAX_CONTENT && k != KW_FIT_CONTENT)
+		return AUTO;
+	l->minw = 1;
+	measure_content = b;
+	mn = measure(l, b) - extra;
+	l->minw = 0;
+	measure_content = b;
+	mx = k == KW_MIN_CONTENT ? mn : measure(l, b) - extra;
+	measure_content = NULL;
+	l->minw = was;
+	if (k == KW_FIT_CONTENT && mx > avail)
+		mx = avail > mn ? avail : mn;
+	return mx > 0 ? mx : 0;
+}
+#endif
 
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
@@ -8143,6 +8236,25 @@ static int gocc_take(GOCC *o, int r, int c, int nr, int nc)
 	return 1;
 }
 
+/* nc columns at least, those added on the right (column by column, an
+   implicit grid grows there); 0 if out of memory */
+static int gocc_widen(GOCC *o, int nc)
+{
+	CODE_PAD(nc < -30000, CP_LAYOUT_GOCC_WIDEN);
+	unsigned char *m;
+	int r;
+	if (nc <= o->cols)
+		return 1;
+	if ((m = calloc((size_t) (o->rows ? o->rows : 1) * nc, 1)) == NULL)
+		return 0;
+	for (r = 0; r < o->rows; r++)
+		memcpy(m + r * nc, o->m + r * o->cols, (size_t) o->cols);
+	free(o->m);
+	o->m = m;
+	o->cols = nc;
+	return 1;
+}
+
 /* justify-self or align-self, auto being the container's -items, normal
    stretch, start-ish start */
 static int g_align(int a, int items)
@@ -8248,6 +8360,7 @@ static void grid_fit(GTRACK *t, int n, int32_t room, int fill_auto)
 static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t hdef,
 						     int32_t *first)
 {
+	CODE_PAD((uintptr_t) b == 1, CP_LAYOUT_GRID_LAYOUT);
 	const ec_style *s = b->st;
 	const ec_tracks *tc = EC_K(s, EP_GRID_TEMPLATE_COLUMNS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_COLUMNS).p : NULL;
 	const ec_tracks *tr = EC_K(s, EP_GRID_TEMPLATE_ROWS) == EK_PTR ? EC_V(s, EP_GRID_TEMPLATE_ROWS).p : NULL;
@@ -8329,6 +8442,28 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 				continue;
 			if (sc > ncols)
 				sc = ncols;
+#ifndef EW_ST
+			if (g->r0 >= 0 && (flow & EC_FLOW_COLUMN)) {
+				/* its row set, column by column: from the cursor's
+				   column, the next one when the row is above the
+				   cursor's, on till it fits, more columns on the right
+				   as needed (CSS Grid 1, 8.5's step 4 with the axes
+				   swapped; github.com's marquee, a row of items each
+				   in rows 1 and 2) */
+				if (g->r0 < cr)
+					cc++;
+				for (;; cc++) {
+					if (!gocc_widen(&occ, cc + sc))
+						break;
+					ncols = occ.cols;
+					if (gocc_fits(&occ, g->r0, cc, sr, sc))
+						break;
+				}
+				g->c0 = cc;
+				g->c1 = cc + sc;
+				cr = g->r1;
+			} else
+#endif
 			if (g->r0 >= 0) {
 				/* its row set: the first columns free there */
 				for (cc2 = 0; cc2 + sc <= ncols && !gocc_fits(&occ, g->r0, cc2, sr, sc); cc2++)
@@ -8374,15 +8509,9 @@ static __attribute__((noinline)) int32_t grid_layout(L *l, box *b, int32_t x, in
 					}
 					if (cc + sc > ncols) {
 						/* past the columns there are: more on the right */
-						int nc = cc + sc;
-						unsigned char *m = calloc((size_t) (occ.rows ? occ.rows : 1) * nc, 1);
-						if (m == NULL)
+						if (!gocc_widen(&occ, cc + sc))
 							break;
-						for (r = 0; r < occ.rows; r++)
-							memcpy(m + r * nc, occ.m + r * occ.cols, (size_t) occ.cols);
-						free(occ.m);
-						occ.m = m;
-						occ.cols = ncols = nc;
+						ncols = occ.cols;
 					}
 					if (gocc_fits(&occ, cr, cc, sr, sc))
 						break;
@@ -8641,6 +8770,7 @@ static int32_t room_left(const box *b, int32_t room, int auto_l, int auto_r)
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first)
 {
+	CODE_PAD(x == -0x7fffffffL, CP_LAYOUT_LAYOUT_BLOCK);
 	const ec_style *s = b->st;
 	int32_t ml = 0, mr = 0, mt = 0, mb = 0, bl = 0, br = 0, bt = 0, bb = 0, pl = 0, pr = 0, pt = 0, pb = 0;
 	int32_t w, ch = 0, cx, cy, hp, mn, mx, fb = AUTO;
@@ -8761,6 +8891,15 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 			w -= bl + br + pl + pr;
 		if (wauto)
 			w = cbw - ml - mr - bl - br - pl - pr;
+#ifndef EW_ST
+		if (wauto && !b->anon && EC_K(s, EP_WIDTH) == EK_KW && EC_V(s, EP_WIDTH).i != KW_AUTO) {
+			int32_t cw = content_width(l, b, EP_WIDTH, w, ml + mr + bl + br + pl + pr);
+			if (cw != AUTO) {
+				w = cw;
+				wauto = 0;
+			}
+		}
+#endif
 		if (wauto && b->ctl && b->n != NULL && b->n->tag == T_BUTTON && !b->ib) {
 			/* a button of elements as a block: as wide as its
 			   content, as browsers' buttons are (HTML 15.5.3), its
@@ -8774,6 +8913,22 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		if (!b->anon) {
 			mx = len(l, s, EP_MAX_WIDTH, cbw);
 			mn = len(l, s, EP_MIN_WIDTH, cbw);
+#ifndef EW_ST
+			if ((EC_K(s, EP_MAX_WIDTH) == EK_KW && EC_V(s, EP_MAX_WIDTH).i != KW_NONE) ||
+			    (EC_K(s, EP_MIN_WIDTH) == EK_KW && EC_V(s, EP_MIN_WIDTH).i != KW_AUTO)) {
+				/* of their content (content-box widths: box-sizing
+				   doesn't reach them) */
+				int32_t room = cbw - ml - mr - bl - br - pl - pr, ex = ml + mr + bl + br + pl + pr;
+				int32_t cx = content_width(l, b, EP_MAX_WIDTH, room, ex);
+				int32_t cn = content_width(l, b, EP_MIN_WIDTH, room, ex);
+				if (cx != AUTO && w > cx) {
+					w = cx;
+					wauto = 0;
+				}
+				if (cn != AUTO && w < cn)
+					w = cn;
+			}
+#endif
 			if (mx != AUTO) {
 				if (kw(s, EP_BOX_SIZING) == KW_BORDER_BOX)
 					mx -= bl + br + pl + pr;
@@ -9502,6 +9657,7 @@ static void page_overflow(page *p)
    else the page's width), the canvas's picture (cbg) aside */
 static void index_items(page *p, int wide, long cbg)
 {
+	CODE_PAD(wide < -30000, CP_LAYOUT_INDEX_ITEMS);
 	long i, k, n = 0, bottom = p->height;
 	int32_t right = p->width;
 	p->wide = wide;
@@ -9527,6 +9683,20 @@ static void index_items(page *p, int wide, long cbg)
 	/* (no further than something put far off to the right; not for the
 	   few pixels a width rounded up goes past the window) */
 	p->right = right > RIGHT_MAX ? RIGHT_MAX : right <= p->width + RIGHT_SLACK ? p->width : right;
+	if (cbg >= 0 && p->right > p->width) {
+		/* the canvas's picture is placed in the window's width but
+		   painted over the whole canvas (CSS Backgrounds 3, 2.11.2):
+		   on to the page's right where its tiles go (forum.atari-home.de's
+		   925 px, sideways; decided 22 Nov 2026) */
+		dl_item *d = &p->items[cbg];
+		if (d->flags == DLF_TILE && d->tile != NULL && d->x + d->w >= p->width) {
+			int32_t x1 = d->tile->rx ? p->right : d->x + d->tile->dx + d->tile->w;
+			if (x1 > p->right)
+				x1 = p->right;
+			if (x1 > d->x + d->w)
+				d->w = x1 - d->x;
+		}
+	}
 	p->nstrips = bottom / PAGE_STRIP + 1;
 	p->strip = calloc((size_t) p->nstrips + 1, sizeof *p->strip);
 	if (p->strip == NULL)

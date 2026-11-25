@@ -190,17 +190,17 @@ typedef struct browser {
 	const char *search;	/* words typed: this with %s for them ("" for none) */
 	/* scripts (src/js): may they run at all here (an FPU, EWEB.PRG), on
 	   which sites (script_mode: 0 none, 1 those in script_sites, 2 every
-	   site but those in noscript_sites; Erez, 24 Oct 2026: a setting, the
+	   site but those in noscript_sites; decided 24 Oct 2026: a setting, the
 	   sites chosen by default), the lists host names with spaces between
 	   ("*" all, "file" pages on the disk) */
 	int trackers;		/* 1: known trackers' parts fetched too (br_tracker); 0
-				   left out, the default (Erez, 1 Nov 2026) */
+				   left out, the default (decided 1 Nov 2026) */
 	int scripts;
 	int script_mode;
 	/* the page shown needs its scripts, which didn't run (its site isn't
 	   chosen): it looks empty, or it says it needs JavaScript; its note
 	   (BR_SCRIPTS_NOTE) is on the status line, a click there runs them
-	   (Erez, 10 Nov 2026) */
+	   (decided 10 Nov 2026) */
 	int needs_scripts;
 	const char *script_sites, *noscript_sites;
 #define BR_SCRIPTS_NOTE "This page needs its scripts: click here to run this site's scripts."
@@ -346,6 +346,9 @@ const char *br_link_download(const browser *b, int link);
    BR_STOPPED when it can't be (not encodable, a name not offered) and
    the page stays */
 int br_encoding(browser *b, const char *name);
+/* View > Page source: from's page as it came, shown as its text in b
+   (view-source:URL), from memory: BR_SHOWN, or BR_STOPPED */
+int br_source(browser *b, const browser *from);
 /* the encodings View > Encoding offers: those EWeb decodes whose
    letters EWEB.FNT has (no Greek, Cyrillic, Arabic or Thai), each by
    its name as html_encoding gives it and as d->charset has it */
@@ -460,7 +463,7 @@ int br_js_moves(browser *b);
    (draggable="true") for its scripts: the drag that follows is then
    HTML's (br_js_mouse's dragstart, dragover, drop, dragend), 1 if so */
 int br_js_draggable(browser *b, int32_t x, int32_t y);
-/* a click at (x, y) (-1: none) as EWeb's hover (Erez, 8 Nov 2026): the
+/* a click at (x, y) (-1: none) as EWeb's hover (decided 8 Nov 2026): the
    element under it, and those it is in, are :hover's until the next
    click, so that what a page shows when the mouse is over an element (a
    menu: ec_hover_reveal) a click shows; 1 if the page was laid out

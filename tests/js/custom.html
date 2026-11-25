@@ -5,7 +5,9 @@
      Playground has them: the class defined, the page's element upgraded
      and its connectedCallback run, its shadow root filled and looked in,
      the page's script going on after customElements.define; an error in
-     a callback reported, the definition kept -->
+     a callback reported, the definition kept; an element hidden while
+     it isn't :defined shown once its class is (office.com's header),
+     one never defined left hidden -->
 <!-- expect: console: Error: meant -->
 <!-- expect: "upgraded yes" -->
 <!-- expect: "shadow Go" -->
@@ -13,7 +15,11 @@
 <!-- expect: "after define" -->
 <!-- expect: "twice refused" -->
 <!-- expect: "bad kept" -->
-<html><head><title>Custom elements</title></head><body>
+<!-- expect: "made by its class" -->
+<!-- absent: "never made" -->
+<html><head><title>Custom elements</title>
+<style>wdu-late:not(:defined), wdu-never:not(:defined) { display: none }</style></head><body>
+<wdu-late>made by its class</wdu-late><wdu-never>never made</wdu-never>
 <wdu-x id="a"></wdu-x><wdu-bad id="b"></wdu-bad>
 <p id="up">-</p><p id="sh">-</p><p id="def">-</p><p id="aft">-</p><p id="tw">-</p><p id="bad">-</p>
 <script>
@@ -28,6 +34,7 @@
   customElements.define('wdu-x', X);
   class Bad extends HTMLElement { connectedCallback() { throw new Error('meant'); } }
   customElements.define('wdu-bad', Bad);
+  customElements.define('wdu-late', class extends HTMLElement {});
 })();
 var a = document.getElementById('a');
 document.getElementById('up').textContent = 'upgraded ' + (a.getAttribute('data-up') === '1' ? 'yes' : 'no');

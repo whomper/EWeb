@@ -4,6 +4,7 @@
  * shorthands expanded. Absolute units become px here, so computing a
  * style only has the relative ones left to do. */
 #include "ec_int.h"
+#include "../codepad.h"
 
 /* the keyword lists, each ending in 0 */
 #define EC_L_ENUM(id, ...) KL_##id,
@@ -1597,6 +1598,7 @@ static int deco_bit(int kw)
 /* one value for a longhand at t[*i] */
 static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 {
+	CODE_PAD(prop < -30000, CP_VALUE_ONE);
 	unsigned lf = ptab[prop].flags;
 
 	if (*i >= n)
@@ -1620,6 +1622,15 @@ static int one(ec_ctx *c, int prop, const ec_tok *t, int n, int *i, ec_decl *d)
 		return 1;
 	}
 	case VP_LEN:
+		/* (width's min-content, max-content and fit-content: none
+		   in LibCSS 0.9, nor in the ST edition, frozen) */
+#ifdef EW_ST
+		if (prop >= EP_WIDTH && prop <= EP_MAX_HEIGHT)
+			lf &= ~LF_CONTENT;
+#else
+		if (EC_UNLIKELY(c->opts & EC_COMPAT_KEYWORDS) && prop >= EP_WIDTH && prop <= EP_MAX_HEIGHT)
+			lf &= ~LF_CONTENT;
+#endif
 		return length(c, t, n, i, lf, d);
 	case VP_COLOR:
 		return color(t, n, i, d);

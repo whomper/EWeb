@@ -7,7 +7,7 @@
  * (plat_tos.c, the 200 Hz clock); tests/bench/picbench.py runs them in
  * Hatari.
  *
- *     PICBENCH.TTP [FILE WIDTH HEIGHT [COLOURS [TIMES [WHICH]]]]
+ *     PICBENCH.TTP [FILE WIDTH HEIGHT [COLOURS [TIMES [WHICH [SOFT]]]]]
  *
  * decodes FILE at WIDTH x HEIGHT (0 0: its own size), then dithers it to
  * COLOURS pens (2: black and white, 4: the Falcon's four, 16: the ST's
@@ -15,7 +15,8 @@
  * TIMES times, and prints each step's time. PICBENCH decodes and dithers
  * on the 68030 and then, on a Falcon, with the DSP (after its checks,
  * which aren't timed; WHICH 1: the 68030's alone, 2: the DSP's alone, for
- * a profiler). In PICBST, a JPEG that TJpgDec can't read (progressive)
+ * a profiler). The dither is EWeb's (IMG_SOFT: softer in PICBENCH, whole
+ * in PICBST); SOFT gives its share in sixteenths (16: whole). In PICBST, a JPEG that TJpgDec can't read (progressive)
  * is read by jpegdc: its open and read are timed too. Without arguments
  * it takes PHOTO.JPG (tests/bench/mkphoto.py) at its size dithered to 16
  * colours and at 192 x 128 to 256, as a release has it.
@@ -31,6 +32,7 @@
 
 #include "plat.h"
 #include "pic.h"
+#include "img.h"	/* IMG_SOFT: the dither EWeb asks for */
 #include "inflate.h"
 #ifdef PIC_LIBJPEG
 #include "dspjpeg.h"
@@ -44,6 +46,7 @@ static unsigned long ms(unsigned long t)
 }
 
 static int which;		/* 0 both ways, 1 the 68030's, 2 the DSP's */
+static int soft = -1;		/* the dither's share, sixteenths; -1: EWeb's (IMG_SOFT) */
 
 /* pens made on the Pi: inflated, timed */
 static int inflate_bench(const char *file, int w, int h, int times)
@@ -113,8 +116,10 @@ static int bench(const char *file, int w, int h, int colours, int times)
 		pic_pal_init(&pal, 256, (const unsigned char (*)[3]) c256);
 	} else
 		colours = 0;
-	out("%s: %lu bytes, %s, at %dx%d, %d colours\n", file, (unsigned long) len,
-	    pic_kind_name(pic_kind((const unsigned char *) data, (long) len)), w, h, colours);
+	if (colours)
+		pic_pal_soft(&pal, soft >= 0 ? soft : IMG_SOFT(colours));	/* (as EWeb's screen: ui/screen.c) */
+	out("%s: %lu bytes, %s, at %dx%d, %d colours, soft %d\n", file, (unsigned long) len,
+	    pic_kind_name(pic_kind((const unsigned char *) data, (long) len)), w, h, colours, pal.soft ? pal.soft : 16);
 #ifdef PIC_LIBJPEG
 	static int checked;
 	if (!checked && dspjpeg_present()) {
@@ -219,6 +224,7 @@ int picbench(int argc, char **argv)
 {
 	int r;
 	which = argc > 6 ? atoi(argv[6]) : 0;
+	soft = argc > 7 ? atoi(argv[7]) : -1;
 	if (argc >= 4 && strlen(argv[1]) > 2 && !strcmp(argv[1] + strlen(argv[1]) - 2, ".Z"))
 		return inflate_bench(argv[1], atoi(argv[2]), atoi(argv[3]), argc > 5 ? atoi(argv[5]) : 1);
 	if (argc >= 4)

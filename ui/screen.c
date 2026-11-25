@@ -22,9 +22,10 @@
  * The pens' colours are the screen's as they are, each pixel value's VDI
  * colour from vq_scrninfo where the VDI answers it, else TOS's standard
  * order (as EHypView's colour.c); in 256 colours EWeb sets its own first
- * (PALETTE=1, Erez's decision of 23 Oct 2026: TOS's have no pale tints):
+ * (PALETTE=1, decided 23 Oct 2026: TOS's have no pale tints):
  * the pixel values TOS's sixteen pens don't draw with (16 to 254) get a
- * 6x6x6 cube and 23 greys, and TOS's are given back at the end.
+ * 6x6x5 cube, 23 greys and the progress bar's blues (pagecol.c), the
+ * rest the page's own colours, and TOS's are given back at the end.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,7 @@
 #include "pagecol.h"
 #include "tcpix.h"
 #include "c2p.h"
+#include "codepad.h"
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
@@ -64,6 +66,8 @@ static short scr_info[272], scr_have;	/* vq_scrninfo's answer */
 static short saved[256][3];		/* in 256 colours, the pens EWeb set, as they were */
 static unsigned char set_pen[256];	/* which ones */
 static int own;				/* EWeb's colours are on the screen */
+static int lent;			/* ... given back: another program's window on top (scr_top) */
+static short mine[256][3];		/* while lent, EWeb's colours to set again */
 static short page_vdi[EW_PAGE];		/* the VDI's pen for the page's colour k (pixel EW_PIC_PENS + k) */
 static uint32_t page_rgb[EW_PAGE];	/* what is on them, 0xRRGGBB */
 static int page_n;			/* how many are the page's */
@@ -168,6 +172,7 @@ static void own_pens(int on)
 	short i, rgb[3];
 	if (on == own || ncol != 256)
 		return;
+	CODE_PAD(on < -30000, CP_SCREEN_OWN_PENS);	/* (after the test GCC inlines in its callers) */
 	for (i = 16; i < 256; i++) {
 		short px = scr_have ? (short) (scr_info[16 + i] & 255) : std_pixel(i);
 		if (px < 16 || px > 254)
@@ -185,6 +190,7 @@ static void own_pens(int on)
 		}
 	}
 	own = on;
+	lent = 0;
 	page_n = 0;
 	memset(page_rgb, 0, sizeof page_rgb);
 #ifndef EW_ST
@@ -195,6 +201,7 @@ static void own_pens(int on)
 /* each pixel value's colour, and the pictures' pens from them */
 static void read_pens(void)
 {
+	CODE_PAD(ncol < -30000, CP_SCREEN_READ_PENS);
 	short rgb[3], i;
 	for (i = 0; i < ncol; i++)
 		pal[i][0] = pal[i][1] = pal[i][2] = 0;
@@ -213,6 +220,7 @@ static void read_pens(void)
 	   EWeb's colours the fixed ones alone, so that a picture's pens stay
 	   when the page's colours change (pagecol.h) */
 	pic_pal_init(&pic_pal, own ? EW_PIC_PENS : ncol, (const unsigned char (*)[3]) pal);
+	pic_pal_soft(&pic_pal, pictures_soft ? IMG_SOFT(pic_pal.n) : 0);	/* (pictures_dsp_init) */
 }
 
 int scr_page_colours(const struct page *p)
@@ -237,7 +245,10 @@ int scr_page_colours(const struct page *p)
 		rgb[0] = (short) (((want[k] >> 16 & 255) * 1000L + 127) / 255);
 		rgb[1] = (short) (((want[k] >> 8 & 255) * 1000L + 127) / 255);
 		rgb[2] = (short) (((want[k] & 255) * 1000L + 127) / 255);
-		vs_color(vdi_h, page_vdi[k], rgb);
+		if (lent)
+			memcpy(mine[page_vdi[k]], rgb, sizeof rgb);	/* (set when EWeb is on top again) */
+		else
+			vs_color(vdi_h, page_vdi[k], rgb);
 		pal[EW_PIC_PENS + k][0] = (unsigned char) (want[k] >> 16);
 		pal[EW_PIC_PENS + k][1] = (unsigned char) (want[k] >> 8);
 		pal[EW_PIC_PENS + k][2] = (unsigned char) want[k];
@@ -251,8 +262,44 @@ int scr_page_colours(const struct page *p)
 #endif
 }
 
+/* another program's window on top (ours 0) or one of EWeb's (1), with
+   EWeb's colours on: the pens EWeb set given back while another's window
+   is on top, and set again when one of EWeb's is (the guidelines' 5.2;
+   decided 24 Nov 2026). The colours on them meanwhile are the other
+   program's: kept as the ones to give back the next time. The pictures
+   and the page stay made of EWeb's (nothing decoded again): its window
+   shows them in the other's colours until it is on top */
+void scr_top(int ours)
+{
+	short i;
+	unsigned long t;
+	if (!own || ncol != 256 || truecolour || ours == !lent)
+		return;
+	t = pf_ms();
+	for (i = 16; i < 256; i++) {
+		if (!set_pen[i])
+			continue;
+		if (ours) {
+			vq_color(vdi_h, i, saved[i]);
+			vs_color(vdi_h, i, mine[i]);
+		} else {
+			vq_color(vdi_h, i, mine[i]);
+			vs_color(vdi_h, i, saved[i]);
+		}
+	}
+	lent = !ours;
+	log_event("colours %s (%lu ms)", ours ? "on top: EWeb's again" : "lent: another's window on top", pf_ms() - t);
+}
+
+int scr_lending(void)
+{
+	CODE_PAD(ncol < -30000, CP_SCREEN_SCR_LENDING);
+	return own && ncol == 256 && !truecolour;
+}
+
 void scr_palette(void)
 {
+	CODE_PAD(ncol < -30000, CP_SCREEN_SCR_PALETTE);
 	if (ncol != 256 || truecolour || opt.palette == own)
 		return;
 	own_pens(opt.palette);
@@ -999,7 +1046,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
    in the screen's own form in ST RAM, rows of it drawn at rest; a scroll
    is then a copy from it to the screen, and rows not kept yet are made
    here and put on the screen at once, never seen a band at a time
-   (Erez's clip, 2 Nov 2026). Only where a row of the screen's form is a
+   (the owner's clip, 2 Nov 2026). Only where a row of the screen's form is a
    row of memory: the Atari's interleaved planes, packed bytes, true
    colour (vr_trnfm's other forms aren't known to be) */
 /* the kept rows in pieces, each piece_rows rows (a whole number of 16:
@@ -1114,7 +1161,7 @@ int scr_store(short w, short n)
 /* n rows w wide kept, as scr_store, but only where they leave the
    system's ST RAM half free and a megabyte more (more of the page than
    the window and one either side, drawn at rest: a stock Falcon draws a
-   window of a page in about half a second, and Erez's 14 MB scrolled
+   window of a page in about half a second, and the owner's 14 MB scrolled
    past three windows in a second or two, 4 Nov 2026); not from the heap */
 int scr_store_ample(short w, short n)
 {

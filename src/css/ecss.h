@@ -296,6 +296,9 @@ typedef struct ec_node {
 #define EC_NODE_VISITED	4		/* a link (EC_NODE_LINK) whose address has been visited */
 #define EC_NODE_HOVER	8		/* :hover's: the element clicked last and those it is in (EWeb's
 					   hover, by a click: ec_hover_reveal) */
+#define EC_NODE_UNDEFINED 16		/* a custom element no script has defined: not :defined (the
+					   HTML Standard's 4.16.3; a page hides them till its scripts
+					   make them, office.com's header) */
 
 /* ------------------------------------------------------------ the engine */
 

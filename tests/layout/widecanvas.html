@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- forum.atari-home.de (Simple Machines' theme; decided 22 Nov 2026): a
+     wrapper of min-width 925px makes the page wider than the window, which
+     scrolls sideways to its last column; the body's picture, placed in the
+     window's width (center top) and wider than it, is painted over the whole canvas (CSS
+     Backgrounds 3, 2.11.2), so on to the page's right, not cut at the
+     window's edge. -->
+<html><head><title>widecanvas</title>
+<style>
+body { background: #0d1216 url(img/tall.png) no-repeat center top; background-size: 1100px 100px; margin: 0 auto; padding: 15px 0 }
+#wrapper { margin: 0 auto; min-width: 925px; max-width: 925px; background: #fefefe }
+table { width: 100% }
+td.stats { width: 15%; text-align: center }
+td.lastpost { width: 24% }
+</style></head>
+<body><div id="wrapper"><table><tr>
+<td class="info">Hardware (Classic 16-/32-Bit)</td>
+<td class="stats">58.379 Beitr&auml;ge</td>
+<td class="lastpost">Letzter Beitrag von someone, am Sa 22.11.2026</td>
+</tr></table></div></body></html>

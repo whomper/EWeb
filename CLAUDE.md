@@ -20,7 +20,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   When a change touches one of these, do it the guideline's way, even if the old code here did it
   differently.
-- **Speed is set by the stock machines** (Erez, 26 Oct 2026; the guidelines' "Speed"): an 8 MHz ST
+- **Speed is set by the stock machines** (decided 26 Oct 2026; the guidelines' "Speed"): an 8 MHz ST
   and a stock Falcon (`ST`, `ST-1`, `Falcon-4`), not the DFB1. Design and code for them: draw only
   what changed, keep the 68000's slow operations out of inner loops, do work once. A change to
   drawing, a loop over the data or the start gives its `AESGAP` stretches on `ST` and `Falcon-4`,
@@ -38,32 +38,31 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   A build must leave every tracked file unchanged and shows the version in `VERSION` as it is (there is
   no `-dev` label). Don't
   commit built programs, help files or certificates (`binary/`, `dist/`). Never reuse a number.
-- **Only formal releases leave the build machine.** Erez gets vX.Y releases made by the Release workflow from
+- **Only formal releases leave the build machine.** The owner gets vX.Y releases made by the Release workflow from
   `main`, nothing else: no test builds, no CI artifacts, no builds from a branch.
   Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, fix
-  forward: a new release with the next number, before any other work; never a rollback (Erez, 7 Nov 2026).
-- **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), through the
-  regression gate (Erez, 17 Nov 2026: "we need to be extra careful with regression issues as there are
-  users of our software. This means testing across all configurations" and "make sure we don't loose
-  performance"; guidelines 1.2, AERA-Atari's standards/TEST-MATRIX.md gate table). Every code
+  forward: a new release with the next number, before any other work; never a rollback (decided 7 Nov 2026).
+- **Releases go out without asking the owner** (his decision, 23 Oct 2026; guidelines 1.2), through the
+  regression gate (decided 17 Nov 2026: EWeb has users, so every configuration is tested and no
+  speed is lost; guidelines 1.2, AERA-Atari's standards/TEST-MATRIX.md gate table). Every code
   candidate, in this order:
   1. this repo's checks pass;
-  2. the rigs this file asks for pass on every row of the gate table EWeb runs on, on Erez's TOS
-     images and NVDI (EmuTOS is no evidence for a release): Erez's configuration, Falcon-4:16 without
+  2. the rigs this file asks for pass on every row of the gate table EWeb runs on, on the reference TOS
+     images and NVDI (EmuTOS is no evidence for a release): the reference configuration (Falcon-4:256, TOS 4.04, NVDI), Falcon-4:16 without
      NVDI, Falcon true colour, TT, MiNT+XaAES (plain, ct60, ext2), a 68060, the FireBee stand-in, ST
      mono and colour (and ST-1), STE, each network path (Direct, the Gateway, MiNTnet), and one boot
      with NatFeats off; each row named in the report with `describe()`, and why for a row not run;
   3. the paired speed run against the last release (A B B A, the minimum of each), at the shipped
-     layout (`build/prof`, common's `profpad.py`), on Erez's configuration, `Falcon-4:16` and
-     `ST:mono`: no row slower beyond a tick; fix it first, and only Erez accepts one;
+     layout (`build/prof`, common's `profpad.py`), on the reference configuration (Falcon-4:256, TOS 4.04, NVDI), `Falcon-4:16` and
+     `ST:mono`: no row slower beyond a tick; fix it first, and only the owner accepts one;
   4. the candidate commit and the results sent to the hub, whose family check (the real programs
      together) answers go or the faults it found;
-  5. only then the release. Then give Erez the link in one line, with anything he has to do, and
+  5. only then the release. Then give the owner the link in one line, with anything he has to do, and
      send the hub the link.
 
   A fault a user reports becomes a case in the rigs, in the release that fixes it (as
   `tests/aranym/mintnet.py` for 1.20's).
-- **Who decides what** (Erez, 31 Oct 2026; the guidelines' "Who decides what"). Erez's part, put
+- **Who decides what** (decided 31 Oct 2026; the guidelines' "Who decides what"). The owner's part, put
   to him before the work as a decision with a short context:
   - new programs and ideas, their core capabilities, and how they work with the other programs;
   - the user experience: the look, the layout, the way through a task, the words, the icons, the
@@ -77,7 +76,7 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   How it is made is the team's, without asking: code, structure, shared code, tests, measurements,
   fixes, docs and releases inside an approved phase.
-- **No app tests itself with another AERA program or accessory** (Erez, 8 Nov 2026; the guidelines'
+- **No app tests itself with another AERA program or accessory** (decided 8 Nov 2026; the guidelines'
   1.2): its tests and rigs run it alone, with nothing else of the family loaded beside it, started by
   it or fetched for it. Shared code taken as source (`common/`, `gateway/`) is the app's own. The
   hub's family checks run the programs together.
@@ -92,13 +91,13 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   - real addresses from the owner's network: use `192.168.1.x`, `PI_IP`, `ATARI_IP`
   - passwords, session keys, `.KEY` / `.INF` files from a test run
   - photos that still carry EXIF/GPS data
-- **README:** a front page, not the manual (the guidelines' 1.4, Erez, 9 Nov 2026): about 600 words and
+- **README:** a front page, not the manual (the guidelines' 1.4, decided 9 Nov 2026): about 600 words and
   100 lines, in the template's order (the sentence, up to ten one-line Highlights, the screenshot,
   Getting started, The Gateway in one paragraph, Building, Source in a few lines, Tests in one line,
   Licence, the family footer). The rest goes in `docs/` (FEATURES.md, GATEWAY.md, SOURCE.md, TESTS.md,
   GUIDE.md, DESIGN.md), linked. Use British English.
 
-## Talking with Erez
+## Talking with the owner
 
 His rule for the whole family (from the hub, 18 Oct 2026): no progress or in-between messages; write
 to him only when he has to decide something, with a short context and the decision. Analysis and
@@ -138,13 +137,13 @@ hub stay complete, with the evidence.
   cycles go and `--draw` from the drawing's start only.
   **The stock machines' speed** (the bullet above): `make hatarispeed` (`tests/hatari/speed.py` on
   common's `tests/speed`) does the user's actions on the stock Falcon (`Falcon-4:16`, `--nvdi` under
-  Erez's NVDI) and the 8 MHz ST (`ST:mono`) and prints each one's longest stretch between event
+  the reference NVDI) and the 8 MHz ST (`ST:mono`) and prints each one's longest stretch between event
   calls against the guidelines' time, from `build/prof`'s `EWEB.PRG` and `EWEBST.PRG` (common's
   `gem.c` with `AES_PROFILE=20`, linked at the shipped programs' places modulo 256 by `common/tools/profpad.py`,
   which fails the build where it can't; `--prg DIR` times another build, the one before a change). Its
   `AESGAP` lines in the Hatari log name each stretch (`gap_event`, `gap_tag`, `gap_stage` in `ui/`).
   The rigs read EWeb's events through NatFeats, which EWEB.PRG probes only where `EWEB.INF` has
-  `NATFEATS=1` (Erez, 15 Nov 2026: common's `nf.S`): every rig that reads them writes that line;
+  `NATFEATS=1` (decided 15 Nov 2026: common's `nf.S`): every rig that reads them writes that line;
   the measuring tools (`tests/bench/plat_tos.c`, `tests/net/main_tos.c`) and the speed build have
   `nf_on` 1.
 - **Before pushing:** `make` and `make test` (AddressSanitizer and UBSan on the sample and news pages, the
@@ -153,9 +152,8 @@ hub stay complete, with the evidence.
   Hubbub against the Web Platform Tests' tree-construction tests, here and as 68030 code: EWeb's
   must keep all but the six scripted ones), and after one to libparserutils' input, `make hebtest68k`
   too.
-- **Every page Erez sends to be fixed becomes a test** (Erez, 21 Nov 2026: "all web pages I am
-  sending you to fix are also added to a test scenario ... that will verify we are not screwing
-  HTMLs"), in the same commit as the fix: a small fresh page that shows the fault, in `tests/layout`
+- **Every page the owner sends to be fixed becomes a test** (decided 21 Nov 2026: each such
+  page is kept in a test that shows the layout isn't broken again), in the same commit as the fix: a small fresh page that shows the fault, in `tests/layout`
   (or the test of the part it is in), and the site itself, a line in `tests/sites/sites.txt` recorded
   with `tests/sites/run.py ... --record NAME` (`tests/sites/replay.py`: every answer kept, replayed
   with nothing fetched) into the private EWeb-sites repository (`SITES=`, `../eweb-sites/sites`;
@@ -182,7 +180,7 @@ hub stay complete, with the evidence.
   hatarinet` run it from EWeb's read-only `gateway/` copy (`tools/sync-gateway.sh`; `WEBGATE=` for another).
   Its `--browser` (snapshots: View > Through the Pi's browser, `SNAPSHOT=`, ewrender `-R`; live view:
   `http://webgate/live`) is tested by `make itest` with a stand-in for webgate-ext.
-  Every Hatari rig boots the family's machines (`common/tools/machines.py`): Erez's TOS 4.04 from
+  Every Hatari rig boots the family's machines (`common/tools/machines.py`): the reference TOS 4.04 from
   `~/.aera/tos` when it is there (never in git, never sent anywhere), else EmuTOS 1.4, which is no
   evidence for a release: the regression gate (above) runs them on his TOS images and NVDI.
 - **The browser** is `EWEB.PRG`: `ui/` (its GEM side, after EFTP's: the window and toolbar in
@@ -200,7 +198,7 @@ hub stay complete, with the evidence.
   after changing where EWeb finds its own files (`work_dir`, common's `app_dir`),
   `tests/hatari/appdir.py` (EWeb started by another program: common's test launcher, as a
   program that opens a link starts it). EWeb's tests run EWeb alone, with no other AERA program or
-  accessory loaded, started or fetched (Erez, 8 Nov 2026, the guidelines' 1.2): the hub's family
+  accessory loaded, started or fetched (decided 8 Nov 2026, the guidelines' 1.2): the hub's family
   checks run them together.
   **Screens deeper than the Falcon's** (a card's 15, 24 or 32 bits under NVDI or fVDI; DESIGN.md):
   the page drawn in 5-6-5 and each row widened to the screen's form (`ui/tcpix.c`, `make` in
@@ -274,7 +272,7 @@ hub stay complete, with the evidence.
   the disk, a download: a file a link opens streamed too, `browser.stream_files`, in the download
   box `dl_box` of `ui/dialogs.c`) is `src/browse` with `ui/main.c`: `make itest` (`/site/files.html`,
   ewrender `-stream`) and `make hatarigui` after changing it, and XaAES for the box.
-- **The TT RAM** (Erez, 4 Nov 2026): all but `TTLEAVE=` per cent (Settings > General, 50) keeps
+- **The TT RAM** (decided 4 Nov 2026): all but `TTLEAVE=` per cent (Settings > General, 50) keeps
   pages and pictures (`mem_limits` in `ui/main.c`: `br_keep_max`, `img_max`; DESIGN.md, The TT
   RAM left for others): after changing it, `make hatarigui` (its `falcon` group) and `make
   hatarifiles`.
@@ -285,7 +283,7 @@ hub stay complete, with the evidence.
   a job's answers added in one write, each answer tagged),
   used by `fetch()` in `src/browse`. The index, `COOKIES.TXT` and `HISTORY.TXT` are each two
   slots written over in place (`src/net/slots.c`, its tests in `dctest.c`; the rigs read them
-  with `tests/net/slots.py`): a new file each quit cost Erez's SD card seconds a file. After changing it: `make test` (`tests/browse/dctest.c`),
+  with `tests/net/slots.py`): a new file each quit cost the reference SD card seconds a file. After changing it: `make test` (`tests/browse/dctest.c`),
   `make itest` (`/site/cache/`), `make hatarifiles`.
 - **Pictures** are `src/browse/img.c` (each address once, its file kept, decoded at each size a
   page shows it, fetched after the page by `br_pictures_step`; which one an `<img>` shows, from
@@ -298,7 +296,8 @@ hub stay complete, with the evidence.
   (`common/dsp/jpeg.a56`, `common/atari/dspjpeg.c`;
   `PICDSP=`), and so is the dither to 3 pens or more (`common/dsp/dither.a56`, the very pens of
   the 68030's: `make testdsp` there compares them), made fast for the stock Falcon (the owner's
-  rule, 20 Oct 2026): after changing them,
+  rule, 20 Oct 2026); softer (`IMG_SOFT`, `pictures_soft`: the DSP and the fast CPUs, the owner 22 Nov
+  2026; DESIGN.md, Softer picture colours): after changing them,
   `make testdsp` there too (Hatari's DSP core), and `PICBENCH.TTP` on the emulated stock Falcon
   (`tests/bench/picbench.py --machine Falcon-4:256`, `--profile` for where its time goes). `make test` has `tests/browse/trim.py` (a picture at two sizes
   in little memory, ewrender `-D`); `make itest` loads
@@ -341,21 +340,21 @@ hub stay complete, with the evidence.
   meant for speed.
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them): Sans, Serif,
-  Sans Mono and Sans Condensed, the last for pages that ask for Arial's kind (Erez, 13 Nov 2026:
+  Sans Mono and Sans Condensed, the last for pages that ask for Arial's kind (decided 13 Nov 2026:
   `family_of` in `src/layout/layout.c`; EWeb's own pages name DejaVu Sans), unless `NARROW=0`
-  (Settings > General, EWEB.PRG; Erez, 16 Nov 2026: `LAYOUT_OPT.wide_sans`, ewrender `--wide-sans`;
+  (Settings > General, EWEB.PRG; decided 16 Nov 2026: `LAYOUT_OPT.wide_sans`, ewrender `--wide-sans`;
   after changing it, `make test`'s `tests/layout/narrow.py`).
 - **The help file** is `docs/GUIDE.md` (`tools/mkhelp.py`, EFTP's) with the family's front page
   (`docs/front.json`, `common/tools/helpfront.py`); `make help HCP=...`. Its window picture
   `docs/help/WINDOW.IMG` is a Hatari capture of the start page in 16 colours (`helpfront.py
   thumb`): take it again when the window changes. **The README's picture** `docs/screenshot.png`
   (and every picture of EWeb on GitHub) is from the 256-colour Falcon showing a site of the modern
-  web, not EWeb's own page (Erez, 25 Oct 2026): `tools/screenshot.py URL` (Hatari, a webgate here;
+  web, not EWeb's own page (decided 25 Oct 2026): `tools/screenshot.py URL` (Hatari, a webgate here;
   yaary.music now), kept as a palette PNG of the screen's exact colours.
-- **The ST edition** is frozen after 1.0 (Erez, 4 Nov 2026; DESIGN.md, Decisions): bug fixes only,
+- **The ST edition** is frozen after 1.0 (decided 4 Nov 2026; DESIGN.md, Decisions): bug fixes only,
   no new features; its rigs run for a release, not for each change, and a new feature stays out of
-  it (`EW_ST`). Its speed was worked on (Erez, 13 Nov 2026; released in 1.7; DESIGN.md, The ST
-  edition's speed), then the performance work stopped (Erez, 13 Nov 2026): a speed change ships only
+  it (`EW_ST`). Its speed was worked on (decided 13 Nov 2026; released in 1.7; DESIGN.md, The ST
+  edition's speed), then the performance work stopped (decided 13 Nov 2026): a speed change ships only
   if no row is slower beyond one tick; for one, `PAGEST.TTP` and `speed.py ST:mono` before and after, and the monochrome
   screen drawn straight into its plane (`canvas.bpp` 1, `cv_page_planes`; after changing it, `make
   test`'s `tests/layout/planes.py`). It is `EWEBST.PRG` (`make binary/EWEBST.PRG`): the same sources as 68000 code
@@ -364,8 +363,8 @@ hub stay complete, with the evidence.
   with `m68k-linux-gnu-objdump -d -m m68k:68000` for `.short` in code. `make test` runs common's
   `oddaccess.py` over the 68000 builds (a word or long at an odd stack offset is an address error
   there; an initialised `char` array on the stack gets `__attribute__((aligned(4)))` or a `strcpy`). It ran on a 1 MB ST up
-  to 0.27; Erez dropped that target on 23 Oct 2026 (DESIGN.md, Decisions): its floor is the 4 MB
-  1040 ST, on its own (Erez, 4 Nov 2026: the family's accessories are no longer run beside a
+  to 0.27; the owner dropped that target on 23 Oct 2026 (DESIGN.md, Decisions): its floor is the 4 MB
+  1040 ST, on its own (decided 4 Nov 2026: the family's accessories are no longer run beside a
   program on a 4 MB machine; the hub's `acc_all.py` runs on `Falcon` only). `EW_ST`
   keeps the arenas' pieces small, and a page that doesn't fit gives back the kept pages and the
   fonts and is tried once more. `make hatarigui`'s `st` group runs it on the 1040 ST (TOS 1.04) and
@@ -385,15 +384,15 @@ hub stay complete, with the evidence.
   scripts' maths or cfmath.c, `make cftest` (`tests/coldfire/run.sh`, `qemu-m68k -cpu cfv4e`, and the 68030's
   overlay's numbers, at double precision, under `-cpu m68030`: `atari/js_fpu.h`).
   DESIGN.md, The FireBee edition.
-- **A release** carries what EWeb needs and nothing else (Erez, 24 Oct 2026), as two zips and no
-  loose files (the guidelines' 7.4; Erez, 22 Nov 2026), from `make dist`: `eweb-x.y.zip` with
+- **A release** carries what EWeb needs and nothing else (decided 24 Oct 2026), as two zips and no
+  loose files (the guidelines' 7.4; decided 22 Nov 2026), from `make dist`: `eweb-x.y.zip` with
   `EWEB.PRG`, `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`,
   `EWEB.HYP`, `CACERT.PEM`, `ROOTS.DAT` and the icon (`icons/`: `make icons`, from the family's
   drawing `common/icons/EWEB.txt`), and `eweb-x.y-firebee.zip` with the same names, its `EWEB.PRG`,
   `EWEBJS.OVL` and `TLS.OVL` the ColdFire builds (`EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`). The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
-  by `make` for the tests and DESIGN.md's figures, not shipped (when Erez is to run one on his
+  by `make` for the tests and DESIGN.md's figures, not shipped (when the owner is to run one on his
   Atari, it goes in that release, and its notes say so). The zip's `firebee/` folder of them (1.0 to 1.5, for a FireBee tester) is
-  gone: it confused testers (Erez, 12 Nov 2026). Their first log lines are still common's machine
+  gone: it confused testers (decided 12 Nov 2026). Their first log lines are still common's machine
   block (`common/atari/machine.c`, `guard.S`: each read guarded, each line written before the next). `tests/bench/mkpage.py` makes the
   news page and `tests/bench/mkphoto.py` the photo, the same bytes every time; when they change,
   measure them again and change their figures in DESIGN.md.
@@ -422,7 +421,7 @@ hub stay complete, with the evidence.
   (`tests/js/run.py`, ewrender `-J`, `-K ID` clicks, `-T MS` timers, `-u ID=TEXT` typed with its key events,
   `-K hover:ID`, `dbl:ID`, `down:ID`, `up:ID`, `drag:ID:DX,DY` (or `drag:ID:@TO`, an HTML drag when ID is `draggable`) the mouse, `tap:ID` a click as the hover), `make itest`
   (`/site/script.html`), `make hatarigui` (its `scripts` group, the Falcon with its 68882, with and without `EWEBJS.OVL`).
-  `EWEB.PRG` runs on the stock 4 MB Falcon (Erez, 23 Oct 2026): `make hatarigui`'s `falcon4` group.
+  `EWEB.PRG` runs on the stock 4 MB Falcon (decided 23 Oct 2026): `make hatarigui`'s `falcon4` group.
   On a 68060 EWeb loads `EWEBJS60.OVL` (the overlay as `-m68060` code, `build/t060/`; one
   `js_imports` for both, `tools/mkovl.py`), `EWEBJS.OVL` where it isn't there; the scripts' heap
   is `js_max_memory` (`mem_limits`). The 68060 has its own program, `EWEB60.PRG` (`make

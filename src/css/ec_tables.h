@@ -48,11 +48,11 @@
 	P(RIGHT,               "right",               VP_LEN,    LF_AUTO,             EK_KW,    KW_AUTO) \
 	P(BOTTOM,              "bottom",              VP_LEN,    LF_AUTO,             EK_KW,    KW_AUTO) \
 	P(LEFT,                "left",                VP_LEN,    LF_AUTO,             EK_KW,    KW_AUTO) \
-	P(WIDTH,               "width",               VP_LEN,    LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
+	P(WIDTH,               "width",               VP_LEN,    LF_AUTO | LF_NN | LF_CONTENT,     EK_KW,    KW_AUTO) \
 	P(HEIGHT,              "height",              VP_LEN,    LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
-	P(MIN_WIDTH,           "min-width",           VP_LEN,    LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
+	P(MIN_WIDTH,           "min-width",           VP_LEN,    LF_AUTO | LF_NN | LF_CONTENT,     EK_KW,    KW_AUTO) \
 	P(MIN_HEIGHT,          "min-height",          VP_LEN,    LF_AUTO | LF_NN,     EK_KW,    KW_AUTO) \
-	P(MAX_WIDTH,           "max-width",           VP_LEN,    LF_NONE | LF_NN,     EK_KW,    KW_NONE) \
+	P(MAX_WIDTH,           "max-width",           VP_LEN,    LF_NONE | LF_NN | LF_CONTENT,     EK_KW,    KW_NONE) \
 	P(MAX_HEIGHT,          "max-height",          VP_LEN,    LF_NONE | LF_NN,     EK_KW,    KW_NONE) \
 	P(MARGIN_TOP,          "margin-top",          VP_LEN,    LF_AUTO,             EK_PX,    0) \
 	P(MARGIN_RIGHT,        "margin-right",        VP_LEN,    LF_AUTO,             EK_PX,    0) \

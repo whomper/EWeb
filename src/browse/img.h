@@ -64,6 +64,16 @@ int img_is_record(const char *data, long len);
 int img_refetched(ew_img *im);
 /* its file is pens from the Pi (img_decode only unpacks them) */
 int img_is_pens(const ew_img *im);
+/* the share of each pixel's error the pictures' dither passes on, in
+   sixteenths, for n pens (common's pic_pal_soft): softer colours, less
+   grain where the screen has no near colour (decided 22 Nov 2026; EContact's
+   shares, 12 on 16 pens or fewer, 8 on more); 0, Floyd-Steinberg whole,
+   in the ST edition, which is frozen */
+#ifdef EW_ST
+#define IMG_SOFT(n) 0
+#else
+#define IMG_SOFT(n) ((n) <= 16 ? 12 : 8)
+#endif
 /* the CRC-32 of the screen's colours (img_pal's), as the Pi keeps them */
 unsigned long img_pal_crc(void);
 /* it didn't come: shown by its alt text from now on */

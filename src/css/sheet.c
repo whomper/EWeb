@@ -8,6 +8,7 @@
  * matches an element (ec_parse_block). Each selector is indexed under
  * its subject's rarest part: id, class, tag or attribute name. */
 #include "ec_int.h"
+#include "../codepad.h"
 
 #define MAX_PRELUDE	4096
 #define MAX_VALUE	512
@@ -272,6 +273,13 @@ static const char *const never_pc[] = {
 	"indeterminate", "closed", "local-link", "blank", "user-error", NULL
 };
 
+/* :defined: a custom element's (S_DEFINED); in the ST edition, frozen,
+   always true, as 1.25 has it */
+#ifdef EW_ST
+#define PC_DEFINED (-1)
+#else
+#define PC_DEFINED S_DEFINED
+#endif
 static const struct { const char *s; int op; } simple_pc[] = {
 	{ "root", S_ROOT }, { "scope", S_ROOT }, { "empty", S_EMPTY },
 	{ "first-child", S_FIRST_CHILD }, { "last-child", S_LAST_CHILD },
@@ -280,7 +288,7 @@ static const struct { const char *s; int op; } simple_pc[] = {
 	{ "link", S_LINK }, { "any-link", S_ANY_LINK }, { "visited", S_VISITED }, { "enabled", S_ENABLED },
 	{ "disabled", S_DISABLED }, { "checked", S_CHECKED }, { "required", S_REQUIRED },
 	{ "optional", S_OPTIONAL }, { "read-write", S_READ_WRITE }, { "read-only", S_READ_ONLY },
-	{ "placeholder-shown", S_PLACEHOLDER_SHOWN }, { "open", S_OPEN }, { "defined", -1 }, { NULL, 0 }
+	{ "placeholder-shown", S_PLACEHOLDER_SHOWN }, { "open", S_OPEN }, { "defined", PC_DEFINED }, { NULL, 0 }
 };
 
 static const char *const known_pe[] = {
@@ -388,14 +396,16 @@ static int pseudo(ec_ctx *c, sbuild *b, const ec_tok *t, int *i, int n)
 				b->never = 1;
 				return add_simple(b, S_NEVER) != NULL;
 			}
-			if (o < 0 || o == S_REQUIRED || o == S_OPTIONAL || o == S_READ_WRITE ||
+			if (o == PC_DEFINED || o == S_REQUIRED || o == S_OPTIONAL || o == S_READ_WRITE ||
 					o == S_READ_ONLY || o == S_PLACEHOLDER_SHOWN ||
 					!strcmp(name, "any-link") || !strcmp(name, "scope"))
 				return 0;
 		}
 		b->b++;
+#ifdef EW_ST
 		if (simple_pc[op].op < 0)
-			return 1;		/* always true */
+			return 1;		/* always true (the ST edition's :defined) */
+#endif
 		pc_attrs(c, simple_pc[op].op);
 		if (simple_pc[op].op == S_VISITED || simple_pc[op].op == S_LINK) {
 			/* :link matches every link, as if none were visited;
@@ -732,6 +742,7 @@ out:
 static const ec_sellist *sellist(ec_ctx *c, const ec_tok *t, int i, int n, int forgiving,
 		uint32_t *maxspec, int *never_all)
 {
+	CODE_PAD(i < -30000, CP_SHEET_SELLIST);
 	const ec_sel *sels[256];
 	int ns = 0, start = i, depth = 0, nnever = 0;
 	ec_sellist *l;

@@ -472,9 +472,10 @@ HTML before any script ran. EWeb writes it to `source.htm` in the
 the editor it names for that kind of file (a desktop that speaks the AV
 protocol, such as Thing, Jinnee or Teradesk). Where there is no such
 desktop, or it can't open the file, EWeb shows the source itself in a
-window of its own, as plain lines (`source.txt`), where **Edit >
-Find...** works. The file is written over each time. The ST edition
-has no such menu item.
+new window, as plain lines, straight from the page it already has: it
+reads nothing again and fetches nothing. Its address is `view-source:`
+and the page's, and **Edit > Find...** works there. The file is written
+over each time. The ST edition has no such menu item.
 
 ## Encodings
 
@@ -907,6 +908,10 @@ there at once; where the window was, when you quit:
   the check itself and EWeb shows the page; when the check wants a click,
   the page's **Live view** link shows the Gateway's screen to tick it, and
   then ^R loads the page
+- **A Google Drive file's link** shows a page of EWeb's own with the
+  file's name and **Download**: Drive's own page is made by a script far
+  too big for EWeb. A file shared with anyone downloads at once; a very
+  big one first asks whether to download it without Google's virus check
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
   `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right;

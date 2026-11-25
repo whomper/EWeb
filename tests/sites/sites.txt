@@ -1,23 +1,27 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 #
-# The sites Erez sent to be fixed, each recorded once in the private
+# The sites the owner sent to be fixed, each recorded once in the private
 # EWeb-sites repository and laid out from its recording by make sites
-# (tests/sites/run.py; Erez, 21 Nov 2026). A new one: a line here, then
+# (tests/sites/run.py; decided 21 Nov 2026). A new one: a line here, then
 # tests/sites/run.py ... --record NAME, look at it, and commit both repos.
 #
 # NAME           ADDRESS                                       -- ewrender's options
 atariscne        https://atariscne.org/news/                   # 21 Nov 2026
 atariscne-home   https://atariscne.org/
 atari-home       https://www.atari-home.de/                    # the V4SA tester's (reporting.swiftconsult.de times out)
-atari-home-forum https://forum.atari-home.de/                  # Erez, 22 Nov 2026 (atari-home.de/forum: its /forum/ is a blog post)
+atari-home-forum https://forum.atari-home.de/                  # the owner, 22 Nov 2026 (atari-home.de/forum: its /forum/ is a blog post)
 pouet-prod       https://www.pouet.net/prod.php?which=93080    # the background tile near the page's blue (16 Nov 2026)
 pouet-prodlist   https://www.pouet.net/prodlist.php
 apollo           https://www.apollo-computer.com/              # table cells at their narrowest
-yaary            https://yaary.music/                          # Erez's photos in 256 colours (8 Nov 2026)
+yaary            https://yaary.music/                          # the owner's photos in 256 colours (8 Nov 2026)
 yaary-16         https://yaary.music/                          -- -p 16 -w 320
 iamexpat         https://www.iamexpat.de/                      # pictures with Vary, GEM held (Nov 2026)
 demozoo          https://demozoo.org/                          # the login menu's z-index; typing on a stock Falcon
 atarimania       https://www.atarimania.com/                   # the 8% teal glow
 webdriveruni     https://webdriveruniversity.com/              -- -J
 cnn              https://www.cnn.com/                          # 73 pictures, on the DFB1
+office           https://www.office.com/                       # its menus shown as lists
+bing             https://www.bing.com/                         # its picture lost
+google           https://www.google.com/                       # the apps icon as three discs
+gdrive-sample    https://drive.google.com/file/d/1AERAsampleFileNotARealDriveIdXyZ/view   # EWeb's own page for a Drive file: a sample page made for the test, no real file (24 Nov 2026)

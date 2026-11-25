@@ -3,7 +3,7 @@
 /*
  * pagecol.h - EWeb's own 256 colours (Settings > Display > EWeb's
  * colours: ui/screen.c), and the page's own colours on some of them
- * (Erez, 8 Nov 2026: a page's buttons, cards and gradients in their own
+ * (decided 8 Nov 2026: a page's buttons, cards and gradients in their own
  * colours, not the nearest of a fixed set).
  *
  * Pixel values 16 to 254 are EWeb's (0 to 15 and 255 the system's):
@@ -21,8 +21,9 @@
 #include "layout.h"
 
 #define EW_OWN 239
-#define EW_FIXED 203			/* a 6 x 6 x 5 cube (180) and 23 greys */
-#define EW_PAGE (EW_OWN - EW_FIXED)	/* 36 */
+#define EW_BLUES 14			/* the progress bar's blues past the cube's */
+#define EW_FIXED (203 + EW_BLUES)	/* a 6 x 6 x 5 cube (180), 23 greys, the blues: 217 */
+#define EW_PAGE (EW_OWN - EW_FIXED)	/* 22 */
 #define EW_PIC_PENS (16 + EW_FIXED)	/* pixel values 0..218: the pictures' */
 
 /* EWeb's colour k of EW_FIXED, 0..255 a part */

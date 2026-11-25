@@ -8,21 +8,34 @@
 
 #include "pagecol.h"
 #include "ecss.h"
+#include "codepad.h"
 
 void ew_own_colour(int k, uint8_t rgb[3])
 {
+	CODE_PAD(k < -30000, CP_PAGECOL_EW_OWN_COLOUR);
 	/* the greys past the cube's six, more of them light (pages'
 	   backgrounds) */
 	static const uint8_t grey[23] = { 13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191,
 					  212, 220, 226, 231, 235, 238, 241, 244, 247, 250, 253 };
+	/* the family's progress bar's blues (common's progbar: navy to sky
+	   blue in 16 steps) that the cube lacks, so that EWeb's bars show
+	   the steps the family's other programs show (24 Nov 2026; the
+	   cube's #6699bf and #99ccff are its 11th and 16th) */
+	static const uint8_t blue[EW_BLUES][3] = {
+		{ 0, 10, 84 }, { 11, 23, 96 }, { 21, 36, 107 }, { 32, 49, 118 }, { 42, 62, 130 },
+		{ 53, 75, 141 }, { 63, 88, 152 }, { 74, 101, 164 }, { 84, 114, 175 }, { 95, 126, 187 },
+		{ 116, 152, 209 }, { 126, 165, 221 }, { 137, 178, 232 }, { 148, 191, 244 }
+	};
 	if (k < 180) {
 		/* 6 levels of red and green, 5 of blue (the eye's least: the 36
 		   pens it gives up are the page's) */
 		rgb[0] = (uint8_t) (k / 30 * 51);
 		rgb[1] = (uint8_t) (k / 5 % 6 * 51);
 		rgb[2] = (uint8_t) (k % 5 * 255 / 4);
-	} else if (k < EW_FIXED) {
+	} else if (k < 203) {
 		rgb[0] = rgb[1] = rgb[2] = grey[k - 180];
+	} else if (k < EW_FIXED) {
+		memcpy(rgb, blue[k - 203], 3);
 	} else {
 		rgb[0] = rgb[1] = rgb[2] = 0;
 	}

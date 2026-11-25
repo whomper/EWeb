@@ -226,7 +226,7 @@ build/tos/gem/main.o build/st/gem/main.o: Makefile
 # the stock Falcon's page loads go 3% slower or faster with it; 6 Nov 2026,
 # DESIGN.md, Code aligned to the 68030's cache. Not the ST edition's)
 # EWEB.PRG's CPU: the 68030 (-m68020-60 made the stock Falcon's held arrow
-# 3.4% slower, more than Erez's 3%: 12 Nov 2026); the 68060 has its own
+# 3.4% slower, more than the owner's 3%: 12 Nov 2026); the 68060 has its own
 # EWEB60.PRG (tools/mkfirebee.py --68060; DESIGN.md, Scripts on the 68060
 # and the FireBee)
 TOS_CPU := -m68030
@@ -274,7 +274,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 PAD_main := 166
 PAD_RO_main := 194
 PAD_BSS_main := 38
-PAD_browse := 32
+PAD_browse := 64
 PAD_RO_browse := 188
 PAD_BSS_browse := 236
 PAD_font := 144
@@ -302,7 +302,7 @@ PAD_net := 78
 PAD_BSS_layout := 224
 # 1.21's changes (common's log hold in conn.c and gem.c, nf.S, tos.c,
 # inflate.c's inline z_take, Settings' and av.c's, ui/dialogs.c and
-# ui/main.c) moved what follows each; the stock Falcon's and Erez's pages
+# ui/main.c) moved what follows each; the stock Falcon's and the owner's pages
 # loaded 10 to 20 ms slower than 1.20's (the pair's A B B A), and at
 # 1.20's places the same code was level with it. These pads (Falcon only:
 # the ST's rows were level) put EWEB.PRG back at 1.20's places modulo 256,
@@ -328,7 +328,9 @@ PAD_dialogs := 196
 PAD_RO_dialogs := 244
 PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
-PAD_av := 128
+PAD_av := 82
+# 1.26's: the objects after common's text.o (which grew) at 1.25's places
+PAD_charset := 142
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -400,7 +402,7 @@ PAD_layout2 := 32
 PAD_RO_layout2 := 256
 PAD_DATA_layout2 := 256
 PAD_BSS_layout2 := 256
-PAD_pic := 106
+PAD_pic := 162
 PAD_RO_pic := 64
 PAD_DATA_pic := 256
 PAD_BSS_pic := 256
@@ -461,7 +463,7 @@ CONNPAD_LD := -Wl,-u,connpad_text -Wl,-u,connpad_ro -Wl,-u,pad_main -Wl,-u,pad_m
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
 		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
-		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3,\
+		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3 charset,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
 	@mkdir -p $(@D)
@@ -606,7 +608,7 @@ binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
 	cp $< $@
 
-# EWEBFB.PRG, the FireBee's (ColdFire, -mcpu=5475; Erez, 10 Nov 2026): the
+# EWEBFB.PRG, the FireBee's (ColdFire, -mcpu=5475; decided 10 Nov 2026): the
 # same sources as EWEB.PRG, made from its own rules by tools/mkfirebee.py
 # (DESIGN.md, A FireBee edition), and its TLS.OVL as ColdFire code
 # (common/tlsovl's make CPU=5475: no DSP), tlsfb.ovl beside it. CF_CC: the
@@ -863,6 +865,10 @@ build/st/ewb/layout/layout.o: EWB_FLAGS += -DLAYOUT_PAD='"194"'
 # whole number of 256s (src/layout/layout.c NEVER_PAD, ui/win.c, src/browse)
 build/tos/ewb/layout/layout.o: EWB_FLAGS += -DPAD_IMAGE_ITEM='"194"' -DPAD_CTL_AT='"118"' -DPAD_MAP_ITEMS='"54"' -DPAD_MAP_NAMED='"28"' -DPAD_BUILD_EL='"232"' -DPAD_LINK_ATTRS='"176"' -DPAD_NAMED='"172"' -DPAD_AREA_COORDS='"174"' -DPAD_FIT_LIST='"20"'
 build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"232"' -DBR_BUILD_PAD='"144"'
+# 1.26's never-run pads (src/codepad.h, their sizes src/codepads.h): each
+# object that has them made again when a size changes (EWB_HDRS is
+# expanded before NET_HDRS, src/*.h, is known)
+$(tos_EWB) $(tos_EC) $(GEM_OBJ) build/prof/tos/main.o: src/codepad.h src/codepads.h
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
               $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
@@ -877,7 +883,8 @@ GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad
               build/tos/gem/common/dialog.o,build/tos/gem/common/dialog.o build/tos/rt/pad_dialog.o,$(subst \
               build/tos/gem/common/offdraw.o,build/tos/gem/common/offdraw.o build/tos/rt/pad_offdraw.o,$(subst \
               build/tos/gem/common/click.o,build/tos/gem/common/click.o build/tos/rt/pad_click.o,$(subst \
-              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(GEM_OBJ)))))))))))))
+              build/tos/gem/common/gem.o,build/tos/gem/common/gem.o build/tos/rt/pad_gem.o,$(subst \
+              build/tos/gem/common/charset.o,build/tos/gem/common/charset.o build/tos/rt/pad_charset.o,$(GEM_OBJ))))))))))))))
 GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$(subst \
              build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o build/tos/rt/pad_libc4.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
@@ -928,7 +935,7 @@ build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
-# EWEB60.PRG, the 68060's (a CT60's; Erez, 12 Nov 2026): EWEB.PRG's objects
+# EWEB60.PRG, the 68060's (a CT60's; decided 12 Nov 2026): EWEB.PRG's objects
 # made again with -m68060 by tools/mkfirebee.py --68060, common's ll64.c
 # ahead of libgcc, none of the 64-bit multiplies and divides the 68060
 # hasn't left; the scripts' overlays are EWEB.PRG's
@@ -953,7 +960,7 @@ STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
 STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 # the ST edition is -Os (its code was for a 1 MB ST), but the files a
-# page's making and drawing spend their time in are -O2 (Erez, 13 Nov
+# page's making and drawing spend their time in are -O2 (the owner, 13 Nov
 # 2026: the ST edition as fast as it can be): 8 to 12% faster on every
 # row of the speed rig with all of it -O2, 227 KB more; these about 115 KB
 # of it (the layout, the HTML parser and the document, the CSS engine,
@@ -1090,9 +1097,9 @@ hatarispeed: build/prof/EWEB.PRG build/prof/EWEBST.PRG binary/EWEBJS.OVL binary/
 # PICBENCH.TTP as EWEB.PRG does (libjpeg-turbo; on the 68030, then with
 # the DSP). tests/bench/picbench.py runs them on the family's machines in
 # Hatari
-build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h
+build/st/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/src/jpegdc.h src/browse/img.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+	$(M68KCC) $(STNET_CFLAGS) $(STPIC_INC) -DNSBENCH_TOS -Itests/bench -Isrc/browse -c $< -o $@
 build/st/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(STNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBST"' -DBENCH_TITLE='"picbench"' \
@@ -1122,9 +1129,9 @@ build/st/pagebench.elf: $(st_RT) build/st/bench/pagebench.o build/st/bench/plat_
 binary/PAGEST.TTP: build/st/pagebench.elf common/tools/elf2tos.py
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
-build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h
+build/tos/bench/picbench.o: tests/bench/picbench.c tests/bench/plat.h common/src/pic.h common/atari/dspjpeg.h src/browse/img.h
 	@mkdir -p $(@D)
-	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -c $< -o $@
+	$(M68KCC) $(TOSNET_CFLAGS) $(PIC_INC) -DNSBENCH_TOS -Itests/bench -Isrc/browse -c $< -o $@
 build/tos/bench/plat_pic.o: tests/bench/plat_tos.c tests/bench/plat.h
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) -DNSBENCH_TOS $(NET_VER) -DBENCH_NAME='"PICBENCH"' -DBENCH_TITLE='"picbench"' \
@@ -1317,9 +1324,36 @@ fuzz: $(addprefix build/fuzz/fuzz_,$(FUZZERS))
 # EWEB.PRG on the family's machines in Hatari: pages over the network
 # (FAKESTNG), links, Back, an address typed, TLS, Esc; and a page in each
 # screen mode (tests/hatari/gui_test.py; Xvfb and xdotool for the mouse)
-hatarigui: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender
+hatarigui: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT build/host/ewrender \
+	   build/hatari/TOPACC.ACC
 	python3 tests/hatari/gui_test.py build/gui
 .PHONY: hatarigui
+
+# TOPACC.ACC: another program's window over EWeb's (gui_test.py's
+# screens group, the guidelines' 5.2), a test accessory as common's
+# tests/av THING.ACC is built
+TOPACC_CF := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+	     -fno-tree-loop-distribute-patterns -fno-store-merging -fdisable-tree-bswap -fno-asynchronous-unwind-tables \
+	     -Wall -nostdinc -isystem $(shell m68k-linux-gnu-gcc -print-file-name=include) \
+	     -Icommon/atari/include -Icommon/atari
+build/hatari/TOPACC.ACC: build/hatari/topacc.elf common/tools/elf2tos.py
+	python3 common/tools/elf2tos.py $< $@
+build/hatari/topacc.elf: build/hatari/crt0.o build/hatari/topacc.o build/hatari/gem.o build/hatari/tos.o \
+			 build/hatari/libc.o build/hatari/nf.o
+	m68k-linux-gnu-gcc -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+build/hatari/topacc.o: tests/hatari/topacc.c
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc $(TOPACC_CF) -Wextra -Werror -c -o $@ $<
+build/hatari/%.o: common/atari/%.c
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc $(TOPACC_CF) -c -o $@ $<
+build/hatari/crt0.o: common/atari/crt0.S
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc -m68000 -DSTACK_SIZE=4096 -c -o $@ $<
+build/hatari/nf.o: common/atari/nf.S
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc -m68000 -c -o $@ $<
 
 # the app's icon, from the family's drawing (common/icons/EWEB.txt, the
 # guidelines' 5.5): the desktop icon's RSC files (EWEBNV.RSC for NVDI's own
@@ -1331,7 +1365,7 @@ icons:
 	    --headers ui --docs docs
 .PHONY: icons
 
-# EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: Erez's
+# EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: the owner's
 # TOS 4.04 from ~/.aera/tos, else EmuTOS), through FAKESTNG, against
 # tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
 # emulated DSP
@@ -1403,8 +1437,8 @@ build/m68k/ewh5test: build/m68k/h5/ewh5test.o $(call EWH5_OBJ,m68k) $(m68k_EC) $
 cftest:
 	tests/coldfire/run.sh
 
-# the sites Erez sent to be fixed, laid out from their recordings in the
-# private EWeb-sites repository (tests/sites; Erez, 21 Nov 2026)
+# the sites the owner sent to be fixed, laid out from their recordings in the
+# private EWeb-sites repository (tests/sites; decided 21 Nov 2026)
 SITES ?= ../eweb-sites/sites
 .PHONY: sites
 sites: build/host/ewrender build/asan/ewrender binary/EWEB.FNT
@@ -1659,11 +1693,11 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 # certificates, the desktop icon) and the measuring tools
 build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 	python3 tests/bench/mkphoto.py build/photo
-# the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
+# the release: what EWeb needs, nothing else (decided 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped (the zip's firebee/
-# folder of them, 1.0 to 1.5, dropped: it confused testers; Erez, 12 Nov 2026)
-# Two packages and nothing else (the guidelines' 7.4; Erez, 22 Nov 2026:
+# folder of them, 1.0 to 1.5, dropped: it confused testers; decided 12 Nov 2026)
+# Two packages and nothing else (the guidelines' 7.4; decided 22 Nov 2026:
 # "Remove all files from root and just have two ZIP files, one for each
 # platform" and "rename all other FB files into their standard filename"):
 # eweb-x.y.zip for the ST, TT and Falcon, and eweb-x.y-firebee.zip with

@@ -1,0 +1,7 @@
+page 608 x 46, background 0d1216, 5 items, 0 links, title "widecanvas"
+wider: to 740 (the window scrolls sideways)
+background 0,0 740x46 tile -136,0 880x80 file://./tests/layout/img/tall.png
+fill 0,12 740x22 #fefefe
+text 3,28 170x17 #000000 cond13 link 0 "Hardware (Classic 16-/32-Bit)"
+text 318,28 92x17 #000000 cond13 link 0 "58.379 Beiträge"
+text 456,28 281x17 #000000 cond13 link 0 "Letzter Beitrag von someone, am Sa 22.11.2026"

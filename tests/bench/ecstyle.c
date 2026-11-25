@@ -186,6 +186,14 @@ static ec_node *build(ec_ctx *c, node *n, ec_node *parent)
 		if (ecs_visited && lwc_string_length(href) >= 8 && memcmp(lwc_string_data(href), "visited:", 8) == 0)
 			e->flags |= EC_NODE_VISITED;
 	}
+	{
+		/* a custom element's name, none defined (no scripts): not :defined,
+		   as src/doc/doc.c's custom_undefined */
+		const char *nm = lwc_string_data(n->name);
+		size_t nl = lwc_string_length(n->name);
+		if (nl >= 2 && nm[0] >= 'a' && nm[0] <= 'z' && memchr(nm, '-', nl) != NULL)
+			e->flags |= EC_NODE_UNDEFINED;
+	}
 	for (ch = n->first; ch != NULL; ch = ch->next) {
 		if (ch->type == N_TEXT && ch->len > 0)
 			empty = 0;

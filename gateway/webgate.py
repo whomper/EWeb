@@ -49,7 +49,10 @@ or 1.3) and hands the answer back as it comes:
     systemd starts one a connection, as its own user, with little memory
     and time); X-Gateway-Pens names it ("aerapens COMMON BUILD"), and the
     log says which once. Without it, or when it fails or is too slow, the
-    picture comes as above.
+    picture comes as above. soft=N (1 to 15; EWeb, Erez 22 Nov 2026) asks
+    for the softer dither, N sixteenths of each pixel's error passed on
+    (common's pic_pal_soft, the request's byte 7), and the answer says
+    "X-Gateway-Soft: N"; without it, the whole dither, Floyd-Steinberg.
   - a page's pictures made ahead: EWeb POSTs http://webgate/prefetch, a
     line a picture, "URL<TAB>X-Gateway-Picture<TAB>Cookie" (the cookie
     may be left out), the window's first, after "Referer: " and "Accept: "
@@ -607,11 +610,14 @@ def pens_ask(request):
     return sock_ask(Config.pens_socket, request, PENS_TIME, PENS_ANSWER_MAX)
 
 
-def pens_request(ed, n, w, h, rgb=b"", data=b""):
+def pens_request(ed, n, w, h, rgb=b"", data=b"", soft=0):
     """aerapens' request (AERA-Atari, common/tools/pens/aerapens.c): ed
-    "l" (EWEB.PRG's decoders), "t" (EWEBST.PRG's) or "v" (which it is)"""
-    return (b"AEPQ\1" + ed.encode() + bytes([n - 1 if n else 0, 0]) + w.to_bytes(2, "big") + h.to_bytes(2, "big") +
-            len(data).to_bytes(4, "big") + rgb + data)
+    "l" (EWEB.PRG's decoders), "t" (EWEBST.PRG's) or "v" (which it is);
+    soft, byte 7: the dither's share of each pixel's error in sixteenths
+    (pic_pal_soft, 1 to 15; 0 the whole of it, Floyd-Steinberg; AERA-Atari
+    e6d2e16)"""
+    return (b"AEPQ\1" + ed.encode() + bytes([n - 1 if n else 0, soft]) + w.to_bytes(2, "big") +
+            h.to_bytes(2, "big") + len(data).to_bytes(4, "big") + rgb + data)
 
 
 def pens_line(answer):
@@ -639,7 +645,7 @@ def make_pens(data, want):
     if data is None:
         return None
     w, h = want["size"] or (want["fit"], 0)
-    a = pens_ask(pens_request("l" if want["ed"] == "lj" else "t", want["pens"], w, h, rgb, data))
+    a = pens_ask(pens_request("l" if want["ed"] == "lj" else "t", want["pens"], w, h, rgb, data, want["soft"]))
     got = pens_line(a) if a else None
     if got is None:
         return None
@@ -892,6 +898,8 @@ def picture_answer(resp, conn, u, port, want):
         headers += [("Content-Type", made[1]), ("X-Gateway-Picture", made[2])]
     if pens:
         headers.append(("X-Gateway-Pens", pens[2]))    # which aerapens made them, for tracing
+        if want["soft"]:
+            headers.append(("X-Gateway-Soft", str(want["soft"])))   # made with that share (byte 7)
     tls = tls_of(conn)
     if tls:
         headers.append(("X-Gateway-TLS", tls))
@@ -901,9 +909,11 @@ def picture_answer(resp, conn, u, port, want):
 def picture_want(value):
     """X-Gateway-Picture: fit=WIDTH (0: none), and for pens size=WxH
     (None: fit wide at most), pens=N, pal=CRC (8 hex digits), ed=lj or
-    tj, deep=1 (a true-colour screen: make_picture): a dict; pens 0 when
-    they weren't asked for, or not right"""
-    want = {"fit": 0, "size": None, "pens": 0, "pal": None, "ed": "lj", "deep": False}
+    tj, deep=1 (a true-colour screen: make_picture), soft=N (the pens'
+    dither softer: N sixteenths of each pixel's error passed on, 1 to 15;
+    EWeb, Erez 22 Nov 2026): a dict; pens 0 when they weren't asked for, or
+    not right; soft 0 for the whole dither"""
+    want = {"fit": 0, "size": None, "pens": 0, "pal": None, "ed": "lj", "deep": False, "soft": 0}
     for part in (value or "").split(";"):
         k, _, v = part.strip().partition("=")
         if k == "fit" and v.isdigit() and 16 <= int(v) <= 4096:
@@ -920,6 +930,8 @@ def picture_want(value):
             want["ed"] = v
         elif k == "deep":
             want["deep"] = v == "1"
+        elif k == "soft" and v.isdigit() and 1 <= int(v) <= 15:
+            want["soft"] = int(v)
     if not want["fit"] or want["pal"] is None:
         want["pens"] = 0
     return want
@@ -1477,7 +1489,8 @@ class Handler(BaseHTTPRequestHandler):
             pens = make_pens(r["pic"], want) if want["pens"] else None
             if pens:
                 self.send_body(200, pens[0], "application/x-aera-pens",
-                               [("X-Gateway-Picture", pens[1]), ("X-Gateway-Pens", pens[2])])
+                               [("X-Gateway-Picture", pens[1]), ("X-Gateway-Pens", pens[2])] +
+                               ([("X-Gateway-Soft", str(want["soft"]))] if want["soft"] else []))
             else:
                 self.send_body(200, r["pic"], "image/jpeg")
             return

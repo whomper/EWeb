@@ -32,21 +32,21 @@ typedef struct {
 					   SCRIPTS= (1), every site but those in NOSCRIPTS= (2) */
 	char noscripts[512];		/* NOSCRIPTS=: the sites left out when every site's run */
 	short log;			/* LOG=: EWEB.LOG next to the program, the connections' log (1), none (0) */
-	short trackers;			/* TRACKERS=1: known trackers' parts fetched too (0: left out, Erez's default of 1 Nov 2026) */
-	short cachequit;		/* CACHEQUIT=: the disk cache written only at quit (1, Erez's default of
+	short trackers;			/* TRACKERS=1: known trackers' parts fetched too (0: left out, the owner's default of 1 Nov 2026) */
+	short cachequit;		/* CACHEQUIT=: the disk cache written only at quit (1, the owner's default of
 					   3 Nov 2026), or a step at a time while EWeb is idle (0) */
 	short translate;		/* TRANSLATE=: pages translated (1; View > Translate), as
-					   they come (0); Erez, 8 Nov 2026 (AERA-Atari's
+					   they come (0); decided 8 Nov 2026 (AERA-Atari's
 					   standards/TRANSLATION-SERVICE.md) */
 	char translate_to[8];		/* TRANSLATETO=: into which language ("en") */
 	unsigned short translate_port;	/* TRANSLATEPORT=: translategate's port on the Gateway (8480;
 					   written only when another, as for the rigs) */
 #ifndef EW_ST
 	short ttleave;			/* TTLEAVE=: per cent of the TT RAM left for other programs
-					   (Erez, 4 Nov 2026: 50; 0 to 90) */
+					   (decided 4 Nov 2026: 50; 0 to 90) */
 	short narrow;			/* NARROW=: pages that ask for Arial's kind in DejaVu Sans
 					   Condensed (1, 13 Nov 2026's way), or in DejaVu Sans (0):
-					   some testers didn't like the narrow letters (Erez, 16 Nov
+					   some testers didn't like the narrow letters (the owner, 16 Nov
 					   2026) */
 #endif
 } EWOPT;
@@ -56,10 +56,10 @@ extern long tt_free;		/* the TT RAM free at the start (0: none; mem_limits) */
 #endif
 extern EWOPT opt;
 /* the Hebrew keyboard (F10 alone, as the family's apps; no menu item:
-   Erez, 7 Nov 2026): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */
+   The owner, 7 Nov 2026): common's hebkey (hebrew_kbd, set_hebrew_kbd, key_char) */
 #include "hebkey.h"
 void dlg_hebrew_changed(void);	/* the open dialog's badge again (dialogs.c) */
-#define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: Erez wanted more, 29 Oct 2026) */
+#define CACHE_MAX_MB	512	/* the most CACHE= may ask for (64 until 0.51: the owner wanted more, 29 Oct 2026) */
 long cache_mb(void);		/* the disk cache's size now, MB */
 
 /* common/ui/dsp.c, common/ui/dsp_ec.c */
@@ -67,7 +67,8 @@ void falcon_dsp_init(void);
 const char *falcon_dsp_state(void);	/* "DSP" or "68030" */
 void falcon_dsp_ec_init(void);
 const char *falcon_dsp_ec_state(void);
-void pictures_dsp_init(void);		/* main.c: pic_dsp, from PICDSP= */
+void pictures_dsp_init(void);		/* main.c: pic_dsp, from PICDSP=, and pictures_soft */
+extern int pictures_soft;		/* main.c: the pictures' softer dither (IMG_SOFT) used */
 
 #ifdef EW_GEM
 /* ---------------------------------------------------------------- the GEM program, EWEB.PRG */
@@ -188,6 +189,8 @@ void atari_text(const char *utf8, char *out, int size);
    monochrome to the Falcon's true colour */
 int scr_init(void);			/* 0: a screen EWeb can't draw on */
 void scr_palette(void);			/* PALETTE= changed: EWeb's colours set or TOS's back */
+void scr_top(int ours);			/* whose window is on top: EWeb's colours given back or set again */
+int scr_lending(void);			/* EWeb's colours are on: scr_top has work */
 /* the page's own colours on EWeb's last pens (pagecol.h; 256 colours,
    EWeb's): 1 if they changed (what was drawn in them is to be drawn
    again) */
@@ -366,13 +369,13 @@ int  falcon_mode_set(int on);		/* 0 (and an alert why) when it can't */
 
 /* dialogs.c */
 int  dlg_settings(void);		/* 1: changed (in opt) */
-/* the quit's box (Erez, 29 Oct 2026): what EWeb is saving and how far it
+/* the quit's box (decided 29 Oct 2026): what EWeb is saving and how far it
    is (permille), opened by its first call; quit_box_close at the end */
 void quit_box(const char *what, int permille);
 void quit_box_close(void);
 /* the bar alone, further on within a step (drawn only when it grows) */
 void quit_bar(int permille);
-/* the download's box (Erez, 9 Nov 2026): the file's name, total its size
+/* the download's box (decided 9 Nov 2026): the file's name, total its size
    (-1 unknown); dl_box_step with what has come; dl_box_event 1 when its
    Cancel (or Esc, Undo, its closer) was used */
 void dl_box(const char *name, long total);

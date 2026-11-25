@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """mktbicons.py - the toolbar's icons (Back, Forward, Reload, Home, Search,
-Stop) in the platinum look (Erez's choice, 24 Oct 2026, C of three drawn):
+Stop) in the platinum look (the owner's choice, 24 Oct 2026, C of three drawn):
 graphite shading, light at the top, a dark edge, and red for Stop alone.
 Drawn in a 30 x 25 grid 16 times bigger and reduced: 30 x 25 pixels for
 the screens with the 16-pixel font (TB_TALL), 30 x 12 for the 200-line
@@ -42,13 +42,17 @@ SYS16 = [(255, 255, 255), (0xbb, 0xbb, 0xbb), (0x88, 0x88, 0x88), (0, 0, 0), (25
 def own256():
     """the pens that keep their colours with EWeb's colours on: the 16
     system colours, then src/gfx/pagecol.c's fixed ones (a cube of 6 reds,
-    6 greens and 5 blues, and 23 greys); the page's own 36 after them change
-    with each page, and the icons take none of them (ui/screen.c, fixed_pen)"""
+    6 greens and 5 blues, 23 greys and the progress bar's 14 blues); the
+    page's own 22 after them change with each page, and the icons take none
+    of them (ui/screen.c, fixed_pen)"""
     grey = [13, 26, 38, 64, 77, 89, 115, 128, 140, 166, 179, 191, 212, 220, 226, 231, 235, 238, 241, 244, 247, 250, 253]
     out = list(PAL256[:16])
     for k in range(180):
         out.append((k // 30 * 51, k // 5 % 6 * 51, k % 5 * 255 // 4))
     out += [(g, g, g) for g in grey]
+    out += [(0, 10, 84), (11, 23, 96), (21, 36, 107), (32, 49, 118), (42, 62, 130), (53, 75, 141), (63, 88, 152),
+            (74, 101, 164), (84, 114, 175), (95, 126, 187), (116, 152, 209), (126, 165, 221), (137, 178, 232),
+            (148, 191, 244)]
     return out
 
 

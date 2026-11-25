@@ -295,6 +295,17 @@ class ProxyTest(unittest.TestCase):
         self.assertFalse(webgate.picture_want("fit=640")["deep"])
         self.assertFalse(webgate.picture_want("fit=640; deep=0")["deep"])
 
+    def test_picture_want_soft(self):
+        # soft=N, EWeb's exact form last (Erez, 22 Nov 2026): 1 to 15, else the whole dither
+        ask = "fit=608; size=192x128; pens=16; pal=1a2b3c4d; ed=lj; soft=%s"
+        self.assertEqual(webgate.picture_want(ask % "12")["soft"], 12)
+        self.assertEqual(webgate.picture_want(ask % "8")["soft"], 8)
+        for v in ("0", "16", "x", "-3", ""):
+            self.assertEqual(webgate.picture_want(ask % v)["soft"], 0, v)
+        self.assertEqual(webgate.picture_want("fit=608; pens=16; pal=1a2b3c4d")["soft"], 0)
+        self.assertEqual(webgate.pens_request("l", 16, 1, 1, soft=12)[7], 12)
+        self.assertEqual(webgate.pens_request("l", 16, 1, 1)[7], 0)
+
     @unittest.skipUnless(PICS, "needs Pillow")
     def test_picture_turned_upright(self):
         r, data = self.picture("turned.jpg", fit=64)
@@ -582,6 +593,12 @@ class PensTest(ProxyTest):
         self.assertEqual(q[:16], b"AEPQ\1l\x0f\0" + (300).to_bytes(2, "big") + (200).to_bytes(2, "big") +
                          len(PICS["big.jpg"][0]).to_bytes(4, "big"))
         self.assertEqual(q[16:], ST16 + PICS["big.jpg"][0])
+        self.assertIsNone(r.getheader("X-Gateway-Soft"))       # the whole dither: byte 7 is 0
+        # soft=12: the share in byte 7, and the answer says so
+        r, data = self.pens("big.jpg", "fit=600; size=300x200; pens=16; pal=%s; ed=lj; soft=12" % crc)
+        self.assertEqual((r.getheader("Content-Type"), r.getheader("X-Gateway-Soft")),
+                         ("application/x-aera-pens", "12"))
+        self.assertEqual(self.fake.last[7], 12)
         # without size=: fit wide at most; EWEBST.PRG's decoders
         r, data = self.pens("big.jpg", "fit=96; pens=16; pal=%s; ed=tj" % crc)
         self.assertEqual((data[8:12], self.fake.last[5:6], self.fake.last[8:12]),
@@ -1201,6 +1218,11 @@ class LiveTest(unittest.TestCase):
         self.assertIn("pens 300x200", r.getheader("X-Gateway-Picture"))
         self.assertEqual(r.getheader("X-Gateway-Pens"), "aerapens 0123456789ab test")
         self.assertEqual(data[:4], b"EWPN")
+        self.assertIsNone(r.getheader("X-Gateway-Soft"))
+        # soft=8: the share passed on, and said
+        ask += "; soft=8"
+        r, data = shot()
+        self.assertEqual((r.getheader("X-Gateway-Soft"), fake.last[7]), ("8", 8))
         # no pens asked for: the JPEG as it came
         r, data, _ = self.ask("http://webgate/live/shot.jpg?n=8")
         self.assertEqual((r.status, r.getheader("Content-Type"), data), (200, "image/jpeg", PICS["big.jpg"][0]))
