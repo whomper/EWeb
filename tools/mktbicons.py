@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """mktbicons.py - the toolbar's icons (Back, Forward, Reload, Home, Search,
-Stop) in the platinum look (Erez's choice, 24 Oct 2026, C of three drawn):
+Stop) in the platinum look (the owner's choice, 24 Oct 2026, C of three drawn):
 graphite shading, light at the top, a dark edge, and red for Stop alone.
 Drawn in a 30 x 25 grid 16 times bigger and reduced: 30 x 25 pixels for
 the screens with the 16-pixel font (TB_TALL), 30 x 12 for the 200-line

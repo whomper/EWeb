@@ -226,7 +226,7 @@ build/tos/gem/main.o build/st/gem/main.o: Makefile
 # the stock Falcon's page loads go 3% slower or faster with it; 6 Nov 2026,
 # DESIGN.md, Code aligned to the 68030's cache. Not the ST edition's)
 # EWEB.PRG's CPU: the 68030 (-m68020-60 made the stock Falcon's held arrow
-# 3.4% slower, more than Erez's 3%: 12 Nov 2026); the 68060 has its own
+# 3.4% slower, more than the owner's 3%: 12 Nov 2026); the 68060 has its own
 # EWEB60.PRG (tools/mkfirebee.py --68060; DESIGN.md, Scripts on the 68060
 # and the FireBee)
 TOS_CPU := -m68030
@@ -302,7 +302,7 @@ PAD_net := 78
 PAD_BSS_layout := 224
 # 1.21's changes (common's log hold in conn.c and gem.c, nf.S, tos.c,
 # inflate.c's inline z_take, Settings' and av.c's, ui/dialogs.c and
-# ui/main.c) moved what follows each; the stock Falcon's and Erez's pages
+# ui/main.c) moved what follows each; the stock Falcon's and the owner's pages
 # loaded 10 to 20 ms slower than 1.20's (the pair's A B B A), and at
 # 1.20's places the same code was level with it. These pads (Falcon only:
 # the ST's rows were level) put EWEB.PRG back at 1.20's places modulo 256,
@@ -608,7 +608,7 @@ binary/TLS.OVL: common/tlsovl/tls.ovl
 	@mkdir -p binary
 	cp $< $@
 
-# EWEBFB.PRG, the FireBee's (ColdFire, -mcpu=5475; Erez, 10 Nov 2026): the
+# EWEBFB.PRG, the FireBee's (ColdFire, -mcpu=5475; decided 10 Nov 2026): the
 # same sources as EWEB.PRG, made from its own rules by tools/mkfirebee.py
 # (DESIGN.md, A FireBee edition), and its TLS.OVL as ColdFire code
 # (common/tlsovl's make CPU=5475: no DSP), tlsfb.ovl beside it. CF_CC: the
@@ -935,7 +935,7 @@ build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(
 binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
-# EWEB60.PRG, the 68060's (a CT60's; Erez, 12 Nov 2026): EWEB.PRG's objects
+# EWEB60.PRG, the 68060's (a CT60's; decided 12 Nov 2026): EWEB.PRG's objects
 # made again with -m68060 by tools/mkfirebee.py --68060, common's ll64.c
 # ahead of libgcc, none of the 64-bit multiplies and divides the 68060
 # hasn't left; the scripts' overlays are EWEB.PRG's
@@ -960,7 +960,7 @@ STNET_OBJ  := $(patsubst src/net/%.c,build/st/net/%.o,$(NET_SRC)) \
 STPIC_INC  := -DNO_GETENV -DNO_PUTENV -DAERA_NO_FLOAT -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include
 STPIC_OBJ  := $(addprefix build/st/pic/,pic.o png.o jpegdc.o tjpgd.o gif.o lzw.o)
 # the ST edition is -Os (its code was for a 1 MB ST), but the files a
-# page's making and drawing spend their time in are -O2 (Erez, 13 Nov
+# page's making and drawing spend their time in are -O2 (the owner, 13 Nov
 # 2026: the ST edition as fast as it can be): 8 to 12% faster on every
 # row of the speed rig with all of it -O2, 227 KB more; these about 115 KB
 # of it (the layout, the HTML parser and the document, the CSS engine,
@@ -1365,7 +1365,7 @@ icons:
 	    --headers ui --docs docs
 .PHONY: icons
 
-# EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: Erez's
+# EWGET.TTP on the family's emulated Falcon (common/tools/machines.py: the owner's
 # TOS 4.04 from ~/.aera/tos, else EmuTOS), through FAKESTNG, against
 # tests/net/server.py: TLS on the 68030, RSA and the elliptic curves on the
 # emulated DSP
@@ -1437,8 +1437,8 @@ build/m68k/ewh5test: build/m68k/h5/ewh5test.o $(call EWH5_OBJ,m68k) $(m68k_EC) $
 cftest:
 	tests/coldfire/run.sh
 
-# the sites Erez sent to be fixed, laid out from their recordings in the
-# private EWeb-sites repository (tests/sites; Erez, 21 Nov 2026)
+# the sites the owner sent to be fixed, laid out from their recordings in the
+# private EWeb-sites repository (tests/sites; decided 21 Nov 2026)
 SITES ?= ../eweb-sites/sites
 .PHONY: sites
 sites: build/host/ewrender build/asan/ewrender binary/EWEB.FNT
@@ -1693,11 +1693,11 @@ binary/EWEB.HYP: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help
 # certificates, the desktop icon) and the measuring tools
 build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 	python3 tests/bench/mkphoto.py build/photo
-# the release: what EWeb needs, nothing else (Erez, 24 Oct 2026). The
+# the release: what EWeb needs, nothing else (decided 24 Oct 2026). The
 # measuring tools (NSBENCH.TTP, PICBENCH.TTP, EWGET.TTP) and their pages
 # are made by make and used by the tests, not shipped (the zip's firebee/
-# folder of them, 1.0 to 1.5, dropped: it confused testers; Erez, 12 Nov 2026)
-# Two packages and nothing else (the guidelines' 7.4; Erez, 22 Nov 2026:
+# folder of them, 1.0 to 1.5, dropped: it confused testers; decided 12 Nov 2026)
+# Two packages and nothing else (the guidelines' 7.4; decided 22 Nov 2026:
 # "Remove all files from root and just have two ZIP files, one for each
 # platform" and "rename all other FB files into their standard filename"):
 # eweb-x.y.zip for the ST, TT and Falcon, and eweb-x.y-firebee.zip with

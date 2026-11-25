@@ -3989,7 +3989,7 @@ static JSValue win_null(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 }
 
 /* window.open's own part (the prelude's open makes the window it gives):
-   only while a click or a key of the user's is handled (Erez, 7 Nov
+   only while a click or a key of the user's is handled (the owner, 7 Nov
    2026: a page may open a window from a click; at other times null, as
    a blocker of pop-ups answers). url ("" about:blank) and target: _self,
    _top and _parent this window's navigation; _blank or none a new

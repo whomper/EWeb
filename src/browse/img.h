@@ -66,7 +66,7 @@ int img_refetched(ew_img *im);
 int img_is_pens(const ew_img *im);
 /* the share of each pixel's error the pictures' dither passes on, in
    sixteenths, for n pens (common's pic_pal_soft): softer colours, less
-   grain where the screen has no near colour (Erez, 22 Nov 2026; EContact's
+   grain where the screen has no near colour (decided 22 Nov 2026; EContact's
    shares, 12 on 16 pens or fewer, 8 on more); 0, Floyd-Steinberg whole,
    in the ST edition, which is frozen */
 #ifdef EW_ST

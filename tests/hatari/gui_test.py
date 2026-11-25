@@ -208,7 +208,7 @@ class Run:
         for p in (self.fifo,):
             if os.path.exists(p):
                 os.remove(p)
-        # EWeb alone: no other AERA program or accessory beside it (Erez,
+        # EWeb alone: no other AERA program or accessory beside it (the owner,
         # 8 Nov 2026, the guidelines' 1.2; the hub's family checks run them
         # together)
         self.m = machines.Machine(spec, hd)
@@ -377,7 +377,7 @@ def held_scroll(r, group, name, settle):
     in order, but for the rows the last step brought in; 0.57 drew those
     only at a turn of the main loop that never came while it was held,
     and moved them along with the rest at each step, the same lines
-    repeated down the window (Erez, 1 Nov 2026). Each band of 16 rows
+    repeated down the window (decided 1 Nov 2026). Each band of 16 rows
     with text in most of them must be the window's only such band"""
     mark = len(r.events())
     r.key(L, (CTRL,))
@@ -608,7 +608,7 @@ def browse():
 
     def downloads():
         # 2 MB that come slowly over the serial line, a file EWeb doesn't
-        # show: the file selector, then the download's box (Erez, 9 Nov
+        # show: the file selector, then the download's box (the owner, 9 Nov
         # 2026: its name, a bar by its size, Cancel) as it comes; Esc stops
         # it, nothing is left on the disk, and the page before stays; the
         # box's Cancel stops it too
@@ -754,7 +754,7 @@ def browse():
         time.sleep(2)
         r.shot(7)
         # the toolbar's Stop lit while a page's pictures come, and pressed
-        # it stops them as Esc does (Erez, 27 Oct 2026: it was lit only
+        # it stops them as Esc does (decided 27 Oct 2026: it was lit only
         # while the page itself came)
         r.key(L, (CTRL,))
         r.type("127.0.0.1:%d/site/lazy.html" % HTTP)
@@ -837,7 +837,7 @@ def browse():
         time.sleep(2)
         nexts = [e for e in r.events()[mark:] if e == "next window"]
         check("windows: ^W tops the next window, in turn", len(nexts) == 2, "\n".join(r.events()[mark:]))
-        # the Window menu (Erez, 14 Nov 2026): EWeb's windows, the oldest
+        # the Window menu (decided 14 Nov 2026): EWeb's windows, the oldest
         # first, the one in front ticked (the newest, after two ^W);
         # choosing one brings it to the front
         mark = len(r.events())
@@ -897,7 +897,7 @@ def browse():
         # a picture button three screens tall (webgate's live view's):
         # clicked near its top, the place sent is there. The page went to
         # the button's end first, and the place was worked out after it
-        # (Erez, 20 Nov 2026: the Pi's browser was clicked on the page's foot)
+        # (decided 20 Nov 2026: the Pi's browser was clicked on the page's foot)
         r.key(L, (CTRL,))
         r.type("127.0.0.1:%d/site/tall.html" % HTTP)
         r.key(RETURN)
@@ -949,9 +949,9 @@ def browse():
             ev = r.wait(r"shown ", 120)
             check("forms: Back to the form", ev is not None and ev.startswith("shown %sform.html " % site),
                   str(r.events()))
-            # the Hebrew keyboard (F10, as the family's apps: Erez, 5 Nov
+            # the Hebrew keyboard (F10, as the family's apps: the owner, 5 Nov
             # 2026): 'a' types shin, sent as UTF-8; F10 again, off. Its
-            # badge at the info line's right end while it is on (Erez,
+            # badge at the info line's right end while it is on (the owner,
             # 6 Nov 2026), gone when it is off
             r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 0, right=True))
             time.sleep(1)
@@ -979,7 +979,7 @@ def browse():
             # the login: its name typed, Tab to the password, Tab to the
             # box, Space ticks it; its button clicked sends it with POST
             r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 2))
-            r.type("erez")
+            r.type("alex")
             r.key(TAB)
             r.type("pw")
             r.key(TAB)
@@ -992,7 +992,7 @@ def browse():
             r.mouse.click(*ctl_point(site + "form.html", area, int(m.group(5)), 7))
             ev = r.wait(r"shown ", 120)
             check("forms: a login sent with POST", ev is not None and ev.startswith("shown %secho " % site) and
-                  ev.endswith("title POST|application/x-www-form-urlencoded|user=erez&pw=pw&keep=on&lang=en"
+                  ev.endswith("title POST|application/x-www-form-urlencoded|user=alex&pw=pw&keep=on&lang=en"
                               "&note=a&login=Log+in"), str(r.events()))
             r.shot(10)
             # a file sent: Back to the form, its file control clicked (the
@@ -1260,10 +1260,9 @@ def browse():
               "encoding windows-1255" in evs and ev.startswith("shown %senc/w1255.html " % site) and
               ev.endswith("title \u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"), str(evs[-6:]))
         r.shot(16)
-        # View > Page source (Erez, 21 Nov 2026): TOS's desktop speaks no
+        # View > Page source (decided 21 Nov 2026): TOS's desktop speaks no
         # AV, so EWeb shows it itself, in a window of its own, from the page
-        # in memory (Erez, 22 Nov 2026: "Can't it just present the page from
-        # memory?"): view-source:URL, read in the page's encoding
+        # in memory (decided 22 Nov 2026): view-source:URL, read in the page's encoding
         # (windows-1255, chosen above), nothing read back or fetched
         n = len(r.events())
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
@@ -1406,7 +1405,7 @@ def scripts_run(site):
               sv is not None and got == "saved %d" % len(server.SMALL) and os.path.exists(path) and
               open(path, "rb").read() == server.SMALL, str(r.events()))
         r.shot(4)
-        # window.open from a click (Erez, 7 Nov 2026): a new window, the
+        # window.open from a click (decided 7 Nov 2026): a new window, the
         # page its script wrote shown in it; ^U closes it
         r.key(L, (CTRL,))
         r.type("127.0.0.1:%d/site/popup.html" % HTTP)
@@ -1576,7 +1575,7 @@ def big_page():
 
 def falcon4():
     """EWEB.PRG on the stock Falcon (16 MHz, no FPU, 4 MB of ST RAM, no TT
-    RAM, TOS 4.04; Erez, 23 Oct 2026: one EWEB.PRG for every Falcon): the
+    RAM, TOS 4.04; decided 23 Oct 2026: one EWEB.PRG for every Falcon): the
     window drawn in bands, a page as big as most of the page set's from the
     disk and loaded again, scripts off (no FPU: EWEBJS.OVL never loaded),
     the pictures' page, then ^Q"""
@@ -1598,7 +1597,7 @@ def falcon4():
         r.shot(0)
         # one click on the window's own track below its slider: one page
         # on, one WM_ARROWED (TOS 4.04's AES sends each such click twice;
-        # common's evnt_multi_ drops the echo: the guidelines' 5.1, Erez's
+        # common's evnt_multi_ drops the echo: the guidelines' 5.1, the owner's
         # "still jumping two positions", 28 Oct 2026)
         a = re.search(r" area (\d+) (\d+) (\d+) (\d+) ", ev or "")
         if a:
@@ -1625,7 +1624,7 @@ def falcon4():
             check("falcon4: one click on the window's track, one page down", False, ev or "no page")
             check("falcon4: one click on the window's down arrow, one line down", False, ev or "no page")
         # Options > Write a log (the family's, as ECal's and EContact's):
-        # the log begins at once, LOG=1 kept in EWEB.INF (Erez, 29 Oct 2026)
+        # the log begins at once, LOG=1 kept in EWEB.INF (decided 29 Oct 2026)
         r.mouse.move(8 * len(" EWeb  File  Edit  View  Bookmarks  Window  Opt"), 5)	# the Options menu
         time.sleep(1)
         r.shot(2)
@@ -1665,7 +1664,7 @@ def falcon4():
             time.sleep(0.5)
         check("falcon4: EWEB.LOG from the menu's Write a log, to the quit",
               ": the log started" in log and "quit:" in log, log[-400:])
-        # the quit's box (Erez, 29 Oct 2026): each step said, the bar
+        # the quit's box (decided 29 Oct 2026): each step said, the bar
         # going up to the end
         steps = [e for e in r.events() if e.startswith("quit box ")]
         at = [int(e.split()[2]) for e in steps]
@@ -1683,7 +1682,7 @@ def falcon4_secure():
     at the start, from a server with an ECDSA certificate (P-256, signed
     with P-384, as Cloudflare's sites have): TLS.OVL loaded and the roots,
     the seed and SIGS.DAT read before the connection is opened, the
-    curves on the DSP (Erez's demozoo.org, 26 Oct 2026: no rig had a
+    curves on the DSP (the owner's demozoo.org, 26 Oct 2026: no rig had a
     stock Falcon's secure page)"""
     work = os.path.join(OUT, "server4")
     os.makedirs(work, exist_ok=True)
@@ -1735,7 +1734,7 @@ def dialogs():
             r = Run(name, spec, hd, windowed=True, prg=prg)
             try:
                 if tos is None and not r.m.real:
-                    skip("dialogs: %s needs Erez's TOS in ~/.aera/tos" % name)
+                    skip("dialogs: %s needs the reference TOS in ~/.aera/tos" % name)
                     continue
                 check("dialogs: %s starts" % r.m.describe(), r.wait(r"shown ", 300) is not None, str(r.events()[-3:]))
                 # the 8 MHz ST takes seconds to draw the page again once a
@@ -2151,7 +2150,7 @@ def fb_cpu(spec, prg="EWEBFB.PRG", says="says it is the FireBee's"):
 
 
 def st():
-    """EWEBST.PRG, the ST edition, on Erez's 1040 ST (68000 at 8 MHz, 4 MB,
+    """EWEBST.PRG, the ST edition, on the owner's 1040 ST (68000 at 8 MHz, 4 MB,
     TOS 1.04): a page and its pictures from the disk in monochrome and in
     medium resolution, and the pages of
     translucent colours and opacity (tests/layout/alpha.html) and of CSS
@@ -2327,7 +2326,7 @@ def st():
 
 
 def gateway():
-    """EWEB.PRG on Erez's Falcon in 256 colours, through AERA-Gateway's
+    """EWEB.PRG on the reference Falcon in 256 colours, through AERA-Gateway's
     webgate (the Direct connection off) on a page as superbooth.com's, its big
     pictures made smaller by the Pi (PENS=0: JPEG and PNG, decoded on the
     DSP) and as the screen's pens (PENS=1, aerapens behind its socket):
@@ -2404,7 +2403,7 @@ def gateway():
                       re.search(r"^TRANSLATE=0\r?$", inf, re.M) is not None, "\n".join(tr))
                 if not pens:
                     # the quit's bar moving as the cache's pictures are
-                    # written, not standing still the whole step (Erez,
+                    # written, not standing still the whole step (the owner,
                     # 30 Oct 2026): a step for them, the bar on within it
                     steps = [e for e in r.events() if e.startswith("quit box ")]
                     at = [int(e.split()[2]) for e in steps]
@@ -2427,7 +2426,7 @@ def gateway():
 def live():
     """live view (webgate --browser, its extension a stand-in here: a
     picture, one link in its view, a field with the keyboard), EWEB.PRG on
-    the Falcon in 256 colours through the Gateway (Erez, 21 Nov 2026): the
+    the Falcon in 256 colours through the Gateway (decided 21 Nov 2026): the
     link is a link over the picture (the status line names it as the
     pointer comes over it, the pointing hand); what is typed goes to the
     Pi's browser (xdotool, a stand-in that writes down what it is told);
@@ -2550,7 +2549,7 @@ def live():
 
 
 def falcon():
-    """EWEB.PRG on Erez's Falcon in 256 colours with a Direct connection (TLS on the
+    """EWEB.PRG on the reference Falcon in 256 colours with a Direct connection (TLS on the
     68030 and the DSP, no gateway), a secure page as a Wikipedia
     article's with its pictures from another secure host (its SVG drawn
     here): the DSP turns
@@ -2569,7 +2568,7 @@ def falcon():
     r = Run("falconwiki", "Falcon:256", hd, network=True)
     try:
         ev = r.wait(r"shown ", 1200)
-        # the TT RAM (Erez, 4 Nov 2026): all but TTLEAVE= per cent of what
+        # the TT RAM (decided 4 Nov 2026): all but TTLEAVE= per cent of what
         # was free at the start (50 as it starts), half the rest for the
         # pages kept, a quarter for the pictures, no ceiling
         mem = [e for e in r.events() if e.startswith("memory: ")]

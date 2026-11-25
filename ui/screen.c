@@ -22,7 +22,7 @@
  * The pens' colours are the screen's as they are, each pixel value's VDI
  * colour from vq_scrninfo where the VDI answers it, else TOS's standard
  * order (as EHypView's colour.c); in 256 colours EWeb sets its own first
- * (PALETTE=1, Erez's decision of 23 Oct 2026: TOS's have no pale tints):
+ * (PALETTE=1, decided 23 Oct 2026: TOS's have no pale tints):
  * the pixel values TOS's sixteen pens don't draw with (16 to 254) get a
  * 6x6x5 cube, 23 greys and the progress bar's blues (pagecol.c), the
  * rest the page's own colours, and TOS's are given back at the end.
@@ -1046,7 +1046,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
    in the screen's own form in ST RAM, rows of it drawn at rest; a scroll
    is then a copy from it to the screen, and rows not kept yet are made
    here and put on the screen at once, never seen a band at a time
-   (Erez's clip, 2 Nov 2026). Only where a row of the screen's form is a
+   (the owner's clip, 2 Nov 2026). Only where a row of the screen's form is a
    row of memory: the Atari's interleaved planes, packed bytes, true
    colour (vr_trnfm's other forms aren't known to be) */
 /* the kept rows in pieces, each piece_rows rows (a whole number of 16:
@@ -1161,7 +1161,7 @@ int scr_store(short w, short n)
 /* n rows w wide kept, as scr_store, but only where they leave the
    system's ST RAM half free and a megabyte more (more of the page than
    the window and one either side, drawn at rest: a stock Falcon draws a
-   window of a page in about half a second, and Erez's 14 MB scrolled
+   window of a page in about half a second, and the owner's 14 MB scrolled
    past three windows in a second or two, 4 Nov 2026); not from the heap */
 int scr_store_ample(short w, short n)
 {

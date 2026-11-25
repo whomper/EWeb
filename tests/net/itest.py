@@ -156,7 +156,7 @@ def snapshots():
             # the browser's links over its picture, an image map (EWeb's
             # pointing hand over them; a click on one, at its middle), and
             # a field there with the keyboard said in the page (what is
-            # typed in EWeb goes there): Erez, 21 Nov 2026
+            # typed in EWeb goes there): the owner, 21 Nov 2026
             prox = urllib.request.build_opener(urllib.request.ProxyHandler({"http": "http://" + g}))
             src = prox.open(live + "&pic=1").read().decode("utf-8", "replace")
             area = re.search(r'<area shape=rect coords="(\d+),(\d+),(\d+),(\d+)" href="http://webgate/live/click'
@@ -172,7 +172,7 @@ def snapshots():
                   is not None, out)
         if "LIVE_ROW" in open(WEBGATE).read():
             # the window's size named (EWeb's br_live_url): the picture as
-            # wide as its page, three of its screens tall (Erez, 30 Oct 2026)
+            # wide as its page, three of its screens tall (decided 30 Oct 2026)
             del shots[:]
             p = subprocess.run([ewrender, "-f", font, "-W", g, "-v", "-d", live + "&w=800&h=600"], cwd=work,
                                capture_output=True, text=True, timeout=120)
@@ -182,7 +182,7 @@ def snapshots():
                   and (790, 790, 1650) in shots, out + "asked: %r" % shots)
         if pens and "live view's picture as pens" in open(WEBGATE).read():
             # with pens asked for, the screen's own pens: nothing for the
-            # Atari to decode (Erez, 30 Oct 2026)
+            # Atari to decode (decided 30 Oct 2026)
             # (a window 800 px wide: 1000 CSS px, the picture shown at 792)
             p = subprocess.run([ewrender, "-f", font, "-w", "800", "-W", g, "-E", "-Q", "1", "-v", "-d",
                                 live + "&w=1000&h=750"], cwd=work, capture_output=True, text=True, timeout=120)
@@ -621,7 +621,7 @@ try:
         check("the browser: a link's file saved", rc == 0 and data == server.BIG and
               "saved link: 0 %d CHUNKED \n" % len(server.BIG) in out, out)
         # a file a link opens, saved as it comes (EWEB.PRG's download box,
-        # Erez 9 Nov 2026): cut off at its headers, fetched again into the
+        # decided 9 Nov 2026): cut off at its headers, fetched again into the
         # file, its size as the server says (none for a chunked one)
         rc, data, out = save("-stream", "http://localhost:%d/chunked" % HTTP)
         check("the browser: a file opened, streamed (chunked: no size)", rc == 0 and data == server.BIG and
@@ -873,7 +873,7 @@ try:
               [(k, "decoded" if k == "anim.gif" else "from the cache", v) for k, v in want.items()]) and
               outs[1].split("\nlink ")[0].count("\nimage ") == outs[0].split("\nlink ")[0].count("\nimage "),
               outs[1])
-        # their files not kept beside them (Erez, 3 Nov 2026): pics.html's
+        # their files not kept beside them (decided 3 Nov 2026): pics.html's
         # pictures kept an hour (/site/freshpics/), each decoded one a record
         # in the pack (img.c, dc_stub), the small GIF's file kept (decoded
         # each time); the next run shows them from the records and the
@@ -962,10 +962,10 @@ try:
               and url == "http://localhost:%d/site/echo?q=hello+world&go=Find" % HTTP, out)
         rc, title, url, out = send("-F", "q=x", "-S", "-")
         check("forms: Return in the field", rc == 0 and title == "GET||q=x&go=Find", out)
-        rc, title, url, out = send("-F", "user=erez", "-F", "pw=p&ss", "-F", "keep", "-F", "lang=he",
+        rc, title, url, out = send("-F", "user=alex", "-F", "pw=p&ss", "-F", "keep", "-F", "lang=he",
                                    "-F", "note=line 1\nline 2", "-S", "login")
         check("forms: a login sent with POST", rc == 0 and title ==
-              "POST|application/x-www-form-urlencoded|user=erez&pw=p%26ss&keep=on&lang=he"
+              "POST|application/x-www-form-urlencoded|user=alex&pw=p%26ss&keep=on&lang=he"
               "&note=line+1%0D%0Aline+2&login=Log+in"
               and url == "http://localhost:%d/site/echo" % HTTP, out)
         rc, title, url, out = send("-F", "title=hi", "-S", "up")
@@ -981,16 +981,16 @@ try:
         rc, title, url, out = send("-S", "s")
         check("forms: a POST answered with 303 is fetched with GET", rc == 0 and title == "GET||after=1"
               and url == "http://localhost:%d/site/echo?after=1" % HTTP, out)
-        rc, title, url, out = send("-F", "user=erez", "-S", "login", "-b")
+        rc, title, url, out = send("-F", "user=alex", "-S", "login", "-b")
         check("forms: Back shows the form as it was filled", rc == 0 and re.search(r'^back: 0 "Forms"', out, re.M)
-              and re.search(r'^control \S+ \S+ #000000 text "erez"$', out, re.M), out)
+              and re.search(r'^control \S+ \S+ #000000 text "alex"$', out, re.M), out)
         # what is typed and kept never reaches the log (7.3): a login sent
         # with GET and with POST, its cookie, all with the log on
         log = os.path.join(work, "FORM.LOG")
         if os.path.exists(log):
             os.remove(log)
         for how in ("get", "post"):
-            p = subprocess.run([ewrender, "-f", font, "-d", "-l", log, "-F", "user=erez", "-F", "pw=s3cr3tpw",
+            p = subprocess.run([ewrender, "-f", font, "-d", "-l", log, "-F", "user=alex", "-F", "pw=s3cr3tpw",
                                 "-S", "login" if how == "post" else "go"] +
                                (["-F", "q=s3cr3tq"] if how == "get" else []) + [form],
                                cwd=work, capture_output=True, text=True, timeout=120)
@@ -999,7 +999,7 @@ try:
                             cwd=work, capture_output=True, text=True, timeout=120)
         text = open(log, errors="replace").read() if os.path.exists(log) else ""
         check("the log keeps no field, query, body or cookie", text != "" and "/site/echo" in text and
-              not any(w in text for w in ("s3cr3t", "user=erez", "sid=xyz", "Cookie", "erez")),
+              not any(w in text for w in ("s3cr3t", "user=alex", "sid=xyz", "Cookie", "alex")),
               text[-2000:])
         # cookies: set and sent back, a 303's cookie on the next request,
         # the lasting one kept in a file for the next run, another site's
@@ -1285,7 +1285,7 @@ try:
                           out0 + out1)
                     # the window sized while big.png is fetched again at the
                     # size shown: the page laid out again under that fetch,
-                    # its old items freed (Erez's bombs, 1 Nov 2026: the step
+                    # its old items freed (the owner's bombs, 1 Nov 2026: the step
                     # read the old item's size after the fetch)
                     rc2, out2, _ = drawn("", "-W", g, "-Q", "1", "-Y", "400@again")
                     check("the gateway: the window sized while a picture is fetched again at its size",

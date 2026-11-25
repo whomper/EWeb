@@ -1026,9 +1026,9 @@ void br_live_url(const char *url, char *out, int size)
 	char wh[32];			/* (1.23's: the ST edition's code as it was) */
 #endif
 	/* the picture as wide as the window, three of its screens tall: the
-	   Pi's browser lays the page out at that width (Erez, 30 Oct 2026);
+	   Pi's browser lays the page out at that width (decided 30 Oct 2026);
 	   pic=1: the page made with its picture, its links over it and whether
-	   a field there has the keyboard (webgate's live_shot; Erez, 21 Nov 2026) */
+	   a field there has the keyboard (webgate's live_shot; decided 21 Nov 2026) */
 #ifndef EW_ST
 	if (live_w > 0 && live_h > 0)
 		snprintf(wh, sizeof wh, "w=%ld&h=%ld&pic=1", (long) live_w, (long) live_h);
@@ -1285,7 +1285,7 @@ static int gzip_file(const HTTPRESP *rs, const char *name)
    that comes (one its server says to save, or of a type EWeb shows
    neither as a page nor as a picture) is cut off at its headers and saved
    as it comes by br_save_url (BR_SAVE), with no limit to its size, not
-   gathered in memory first (Erez, 9 Nov 2026: the download dialog) */
+   gathered in memory first (decided 9 Nov 2026: the download dialog) */
 static int page_stream;
 
 /* fetch's HTTPREQ.head for a page: its Content-Disposition, and a gzip
@@ -1443,7 +1443,7 @@ static char *upload_file(const char *path, long *len)
 	return load_file(path, len);
 }
 
-/* known trackers' hosts (Erez, 1 Nov 2026: left out by default), each
+/* known trackers' hosts (decided 1 Nov 2026: left out by default), each
    with the names under it */
 static const char *const tracker_hosts[] = {
 	"googletagmanager.com", "google-analytics.com", "analytics.google.com"
@@ -2947,7 +2947,7 @@ parse:
 		/* out of memory styling or laying it out with its sheets, on the
 		   last try (the news page on a 4 MB Falcon under NVDI at 256
 		   colours): styled again without them, a plain page and the note
-		   (Erez's words), never "EWeb can't show this page" for a page
+		   (as decided), never "EWeb can't show this page" for a page
 		   that fits so; parsed once, its source may be gone */
 		build_plain_css = 1;
 		ec_drop_sheets(d->css);
@@ -3888,7 +3888,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		   loaded again on a small machine): they go, and once more (not
 		   a form sent, which the server may have had; nor one whose room
 		   was made already, unpacking it: it came, and fetched again it
-		   comes the same, iamexpat.de's 772 KB twice on Erez's 0.69) */
+		   comes the same, iamexpat.de's 772 KB twice on the owner's 0.69) */
 		gone = b->p == NULL;
 		r = fetch(b, url, b->typed ? NULL : b->url,
 			  mode == NAV_RELOAD || mode == NAV_REFRESH ? 1 : mode == NAV_HISTORY ? 2 : 0, NULL, 0, 1, post, f);
@@ -4171,8 +4171,8 @@ const char *br_fallback(const char *url)
 }
 
 #ifndef EW_ST
-/* View > Page source in a window of EWeb's own (Erez, 22 Nov 2026: "Can't
-   it just present the page from memory?"): from's bytes as they came, read
+/* View > Page source in a window of EWeb's own, from the page in memory
+   (decided 22 Nov 2026): from's bytes as they came, read
    in the encoding its page was read in, made b's page as a text file is
    (build_plain), nothing written, read or fetched. Its address is
    view-source:URL, which load_post loads again as the text of URL's answer
@@ -6037,7 +6037,7 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 	char size[32] = "";
 	if (pens && ((w > 0 && h > 0) || shown_size(b, im, &w, &h))) {
 		if (w > page)
-			/* never pens wider than the window (Erez, 29 Oct 2026: a
+			/* never pens wider than the window (decided 29 Oct 2026: a
 			   layout gone wrong asked the Pi for yaary.music's
 			   portrait at 1,651 x 2,201, 3.6 MB of pens, and a little
 			   larger at each picture that came): no wider than the
@@ -6069,7 +6069,7 @@ static int pic_ask(const browser *b, const ew_img *im, const char *url, int32_t 
 	} else {
 		/* deep=1: a screen of no palette (true colour) shows every colour
 		   of a picture the Pi makes smaller, so it keeps them (a PNG not
-		   cut to 256, a JPEG of quality 90: Erez, 8 Nov 2026, the pictures
+		   cut to 256, a JPEG of quality 90: the owner, 8 Nov 2026, the pictures
 		   through the Gateway as exact as direct) */
 		snprintf(fit, fsize, "X-Gateway-Picture: fit=%ld%s\r\n", (long) page, img_pal == NULL ? "; deep=1" : "");
 		variant[0] = 0;
@@ -6395,7 +6395,7 @@ static int pictures_step(browser *b, int32_t top, int32_t height, int32_t *y0, i
 			/* laid out again during the fetch (GEM's turns: a window
 			   sized, fulled or moved to the screen's edge): d was the
 			   old page's, freed with it; its size is read again from
-			   the new one at the next step (Erez's bombs of 1 Nov 2026,
+			   the new one at the next step (the owner's bombs of 1 Nov 2026,
 			   pictures through the Pi fetched again at their size) */
 			if (b->p != p0)
 				return BRP_LAYOUT;

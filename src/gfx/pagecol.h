@@ -3,7 +3,7 @@
 /*
  * pagecol.h - EWeb's own 256 colours (Settings > Display > EWeb's
  * colours: ui/screen.c), and the page's own colours on some of them
- * (Erez, 8 Nov 2026: a page's buttons, cards and gradients in their own
+ * (decided 8 Nov 2026: a page's buttons, cards and gradients in their own
  * colours, not the nearest of a fixed set).
  *
  * Pixel values 16 to 254 are EWeb's (0 to 15 and 255 the system's):

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """tests/bench/picbench.c on one of the family's machines in Hatari
-(common/tools/machines.py: Erez's TOS when ~/.aera/tos has it, else
+(common/tools/machines.py: the reference TOS when ~/.aera/tos has it, else
 EmuTOS), cycle-exact: a picture decoded as EWeb decodes it, and dithered,
 each step timed. On an ST, PICBST.TTP (`make binary/PICBST.TTP`: as
 EWEBST.PRG); on a Falcon, PICBENCH.TTP (`make binary/PICBENCH.TTP`: as

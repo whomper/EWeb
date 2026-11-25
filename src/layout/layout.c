@@ -744,10 +744,10 @@ static int32_t font_px(L *l, const ec_style *s)
    of, else the generic family. Sans faces as wide as Arial and the generic
    sans-serif (Arial or Helvetica where most pages are made) are DejaVu
    Sans Condensed, of Arial's widths; DejaVu Sans itself, and Verdana's
-   kind as wide as it, DejaVu Sans (Erez's choice C, 13 Nov 2026: pages made
+   kind as wide as it, DejaVu Sans (the owner's choice C, 13 Nov 2026: pages made
    for Arial lay out as made; EWeb's own pages name DejaVu Sans). DejaVu
    Sans for them too with wide (LAYOUT_OPT.wide_sans: EWEB.INF's NARROW=0,
-   Settings > General; Erez, 16 Nov 2026) */
+   Settings > General; decided 16 Nov 2026) */
 #ifdef EW_ST
 #define FAM_ARIAL(wide) FF_COND	/* (frozen: 1.17's, Arial's kind narrow) */
 static int family_of(const ec_family *f)
@@ -6077,7 +6077,7 @@ static int32_t measure(L *l, box *b)
 		   none at its narrowest takes none, its alt text too: the
 		   EFTP page's icon, 75% of a grid's 140px column, made the
 		   column as wide as its alt text, and was drawn 782 px wide
-		   (Erez, 8 Nov 2026)) */
+		   (decided 8 Nov 2026)) */
 		if (inner <= 0 && !compressible(l, b->first))
 			inner = inline_measure(l, b);
 		else if (inner < 0)
@@ -9687,7 +9687,7 @@ static void index_items(page *p, int wide, long cbg)
 		/* the canvas's picture is placed in the window's width but
 		   painted over the whole canvas (CSS Backgrounds 3, 2.11.2):
 		   on to the page's right where its tiles go (forum.atari-home.de's
-		   925 px, sideways; Erez, 22 Nov 2026) */
+		   925 px, sideways; decided 22 Nov 2026) */
 		dl_item *d = &p->items[cbg];
 		if (d->flags == DLF_TILE && d->tile != NULL && d->x + d->w >= p->width) {
 			int32_t x1 = d->tile->rx ? p->right : d->x + d->tile->dx + d->tile->w;

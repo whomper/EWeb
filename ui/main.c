@@ -115,7 +115,7 @@ int loading;
    shown once its picture (the Pi's browser's screen) is in, the one
    before kept on the screen meanwhile with the busy pointer: shown at
    once, it was white with the picture's alt text until the picture came
-   (Erez, 21 Nov 2026) */
+   (decided 21 Nov 2026) */
 #ifndef EW_ST	/* (live view's hold and typing: not in the frozen ST edition) */
 int live_hold;
 static int live_shown;		/* the page on the screen is live view's */
@@ -203,7 +203,7 @@ static const MBAR_ITEM m_view[] = {
 	{ "Actual size", "^0", C_ACTUAL },
 	{ "Encoding...", 0, C_ENCODING },
 #ifndef EW_ST
-	{ "Page source", 0, C_SOURCE },	/* (Erez, 21 Nov 2026; the ST edition is frozen) */
+	{ "Page source", 0, C_SOURCE },	/* (decided 21 Nov 2026; the ST edition is frozen) */
 #endif
 	{ "-", 0, 0 },
 	{ "Show pictures", 0, C_PICTURES },
@@ -223,7 +223,7 @@ static char bm_text[BM_MENU][40];
 static unsigned bm_seen;
 #ifndef EW_ST
 /* Window: EWeb's open windows, the oldest first, by their pages' titles,
-   the one in front ticked; choosing one brings it to the front (Erez,
+   the one in front ticked; choosing one brings it to the front (the owner,
    14 Nov 2026: "the open windows list also accessible in menu just like
    any multi window applications"). Close window and Next window stay in
    File (the guidelines' 3.1). Made again when the list's words change
@@ -243,7 +243,7 @@ static const MBAR_ITEM m_opts[] = {
 	{ "Run this site's scripts", 0, C_SCRIPTS },
 #endif
 	{ "Write a log", 0, C_LOG },	/* EWEB.LOG, as ECal's and EContact's */
-	/* (the Hebrew keyboard is F10's alone, no menu item: Erez, 7 Nov
+	/* (the Hebrew keyboard is F10's alone, no menu item: the owner, 7 Nov
 	   2026, the guidelines' 5.3) */
 	{ "-", 0, 0 },
 	{ "Use this page as home", 0, C_SETHOME },
@@ -584,7 +584,7 @@ void menu_update(void)
 #ifndef EW_ST
 /* the room for pages kept for Back and Forward and for pictures (their
    files and decoded pixels; the heap takes TT RAM first), shared by the
-   windows. With TT RAM (Erez, 4 Nov 2026): all of what was free at the
+   windows. With TT RAM (decided 4 Nov 2026): all of what was free at the
    start but TTLEAVE= per cent of it, left for other programs, half for
    the pages and a quarter for the pictures (the rest for the page being
    made); at the 50 per cent the setting starts at, a quarter and an
@@ -767,7 +767,7 @@ long cache_mb(void)
 }
 
 /* the connections' log (LOG=1, Options > Write a log): EWEB.LOG next to
-   the program, each line written as it comes (common's conn.c, Erez, 15
+   the program, each line written as it comes (common's conn.c, the owner, 15
    Nov 2026: a crash or a freeze leaves the log up to its last line;
    conn_log_hold no longer holds anything); off (0): no more. 1 at the
    start, 2 from the menu */
@@ -781,11 +781,11 @@ static void log_start(int on)
 		snprintf(line, sizeof line, on == 2 ? "EWeb %s: the log started" : "EWeb %s started", EWEB_VERSION);
 		conn_log("EWeb", " -- ", line, (long) strlen(line));
 		/* a vector the crash catcher left to another handler or chained
-		   after one (common's crash_vectors: 0.57's 11 bombs on Erez's
+		   after one (common's crash_vectors: 0.57's 11 bombs on the owner's
 		   Falcon left no CRASH.LOG, vector 11 not being TOS's there) */
 		{
 			/* the memory TOS has for EWeb (the largest blocks): a page
-			   that "doesn't fit" says why (Erez, 2 Nov 2026) */
+			   that "doesn't fit" says why (decided 2 Nov 2026) */
 			long st = (long) Mxalloc(-1L, 0), tt = (long) Mxalloc(-1L, 1);
 			if (st < 0)
 				st = (long) Malloc(-1L), tt = 0;
@@ -821,7 +821,7 @@ static void cache_open(void)
 	cache_when();
 }
 
-/* when the disk cache is written (CACHEQUIT=). At quit (Erez's default
+/* when the disk cache is written (CACHEQUIT=). At quit (the owner's default
    of 3 Nov 2026: his SD card ran all the while he browsed, the cache's
    steps at idle): what comes is held in memory, as much as the cache's
    size and a quarter of the memory free, written only past that and at
@@ -1141,7 +1141,7 @@ static long ram_free(void)
 
 /* a page and its pictures in: the heap's blocks all free again (the
    pages before it, their fetches and decoding) go back to TOS, the
-   system's and other programs' again (Erez's 128 MB TT RAM Falcon held
+   system's and other programs' again (the owner's 128 MB TT RAM Falcon held
    109 MB after one big page, 27 Oct 2026) */
 static void trim(void)
 {
@@ -1441,7 +1441,7 @@ static void idle(void)
 				   fulled or moved to the screen's edge is laid out
 				   again, which may fetch its sheets for the new width:
 				   not inside the picture's fetch, with the pictures
-				   every window shares; Erez's bombs, 1 Nov 2026) */
+				   every window shares; the owner's bombs, 1 Nov 2026) */
 				put_off(MU_MESAG, msg, &ev);
 			} else {
 				win_message(msg);
@@ -1612,7 +1612,7 @@ static int save_where(void *ud, const char *name, char *path, int size)
 	graf_mouse(BUSYBEE, 0);
 #ifndef EW_ST
 	if (r) {
-		/* the download's box, as it comes (Erez, 9 Nov 2026) */
+		/* the download's box, as it comes (decided 9 Nov 2026) */
 		const char *f = strrchr(path, '\\');
 		under_selector();
 		dl_box(f != NULL ? f + 1 : path, br_save_total);
@@ -2211,7 +2211,7 @@ static void live_view(void)
 
 #ifndef EW_ST
 /* live view, a field of the Pi's browser with the keyboard (its page's
-   br_live_typing): what is typed goes there, straight in (Erez, 21 Nov
+   br_live_typing): what is typed goes there, straight in (the owner, 21 Nov
    2026). Letters are gathered and sent once the keys pause (LIVE_PAUSE)
    or Return comes, each send a new picture; Backspace takes back a letter
    not sent yet, else goes there, as Tab does; Esc ends it for the page */
@@ -2336,7 +2336,7 @@ void pictures_dsp_init(void)
 	CODE_PAD(loading < -30000, CP_MAIN_PICTURES_DSP_INIT);
 #ifndef EW_ST
 	pic_dsp = opt.picdsp && dspjpeg_present() ? &dspjpeg_port : NULL;
-	/* the softer colours (IMG_SOFT; Erez, 22 Nov 2026) where the DSP
+	/* the softer colours (IMG_SOFT; decided 22 Nov 2026) where the DSP
 	   dithers, at no cost, and on a CPU that does them fast (the
 	   FireBee, a 68040, 68060 or 68080); not on a 68030 alone (a TT), where
 	   a photo's dither took twice as long (picbench: 5.3 s to 10 s) */
@@ -2476,12 +2476,12 @@ static void save_page(void)
 }
 
 #ifndef EW_ST
-/* View > Page source (Erez, 21 Nov 2026): the page as it came, written to
+/* View > Page source (decided 21 Nov 2026): the page as it came, written to
    cache\source.htm and opened by the desktop (AV_STARTPROG) in the editor
    it names for it; where there is no desktop to ask, or it couldn't, shown
    in a new window of EWeb's own as its lines, where Find works: from the
-   page in memory (br_source, view-source:URL; Erez, 22 Nov 2026: "Can't it
-   just present the page from memory?"), else, the page gone from its
+   page in memory (br_source, view-source:URL; decided 22 Nov 2026), else,
+   the page gone from its
    window meanwhile, the file made cache\source.txt. Not after scripts:
    the bytes the server sent. One file, written over each time */
 static char source_path[320];
@@ -3304,7 +3304,7 @@ static void pictures(void)
 	if (pic_dsp_bad) {
 		/* (the DSP refused to write a picture where the system hadn't
 		   given memory: the CPU made it; common's dspjpeg.c, after
-		   Erez's crash of 7 Nov 2026) */
+		   the owner's crash of 7 Nov 2026) */
 		log_event("dsp: bad destination $%08lx", pic_dsp_bad);
 		pic_dsp_bad = 0;
 	}
@@ -3370,7 +3370,7 @@ static void throb_all(void)
    and the rest): the folder of the command the AES started it with
    (common's app_dir, the guidelines' 6.1), not the current folder, which
    TOS 1.04 and 4.04 leave as the desktop's when another program starts
-   EWeb (Erez, 28 Oct 2026: EWeb didn't find its fonts). Without its last
+   EWeb (decided 28 Oct 2026: EWeb didn't find its fonts). Without its last
    backslash, as path_join takes it */
 static void work_dir(char *out, int size)
 {
@@ -3446,7 +3446,7 @@ int main(void)
    this and goes, where the 68030 code from appl_init on would die */
 #ifdef __mcoldfire__
 /* (EWEBFB.PRG's main() is common's cpucheck_cf.S: the _CF_ cookie, else this) */
-/* (the guidelines' 7.4, Erez, 22 Nov 2026: the FireBee's EWEB.PRG is in a
+/* (the guidelines' 7.4, decided 22 Nov 2026: the FireBee's EWEB.PRG is in a
    package of its own, the same names inside, so each names the other) */
 const char cpu_alert[] = "[3][EWEB.PRG is for the FireBee.|On an ST, a TT or a Falcon,|install EWeb's standard|package.][ Quit ]";
 #else
@@ -3602,7 +3602,7 @@ static int app_run(void)
 	/* the TLS code, the family's TLS.OVL beside it: read at the first
 	   Direct connection (never through the Pi) */
 	/* (the FireBee's package has the ColdFire's TLS.OVL as tls.ovl too:
-	   the guidelines' 7.4, Erez, 22 Nov 2026) */
+	   the guidelines' 7.4, decided 22 Nov 2026) */
 	path_join(tls_ovl_path, sizeof tls_ovl_path, opt.workdir, "tls.ovl");
 #endif
 	{
@@ -3635,7 +3635,7 @@ static int app_run(void)
 	   its profiled build gave the kept page back for a page that didn't
 	   fit, and the releases kept up to 16 windows of ST RAM while a big
 	   page was refused for want of memory) */
-	/* (the Hebrew keyboard starts off, F10 alone switches it: Erez, 8 Nov
+	/* (the Hebrew keyboard starts off, F10 alone switches it: the owner, 8 Nov
 	   2026, the guidelines' 5.3; an old HEBREW= line is left unread) */
 	hebrew_kbd_hook = hebkbd_changed;
 	br_shed = win_pic_drop;
@@ -3756,7 +3756,7 @@ static int app_run(void)
 		/* the window drawn whole before the first page is read: its
 		   redraw handled now, not when the page's making first lets
 		   GEM in (on a stock Falcon the desktop showed in it for 8 s,
-		   Erez, 26 Oct 2026) */
+		   the owner, 26 Oct 2026) */
 		short msg[8];
 		AEVENT ev;
 		int n = 0;
@@ -3878,7 +3878,7 @@ static int app_run(void)
 				handle(MU_KEYBD, msg, &ev2, &hover_x, &hover_y);
 			win_scroll_batch(0);
 		}
-		/* what is due drawn whole, now (Erez, 4 Nov 2026: drawing is not
+		/* what is due drawn whole, now (decided 4 Nov 2026: drawing is not
 		   a job sliced between turns; the guidelines' Speed) */
 		drew = !quit && win_due();
 		if (drew)
@@ -3977,11 +3977,11 @@ static int app_run(void)
 	}
 	graf_mouse(BUSYBEE, 0);
 	{
-		/* each step timed, for the log (Erez's quit was slow on his
+		/* each step timed, for the log (the owner's quit was slow on his
 		   real disk, 27 Oct 2026) */
 		unsigned long t0 = pf_ms(), tw, ts, tc, th, tf, td;
 		char line[200];
-		/* the quit's box (Erez, 29 Oct 2026): each step said as it
+		/* the quit's box (decided 29 Oct 2026): each step said as it
 		   starts, the bar by what each has to write (a file's few
 		   disk commands; the cache's answers by their size) */
 		long pend, answers, total, done = 0;
@@ -4024,7 +4024,7 @@ static int app_run(void)
 		quit_step("history written");
 		th = pf_ms();
 		/* the bar moving as the cache's writes go on, not only between
-		   the steps (Erez, 30 Oct 2026: it stood still the whole save) */
+		   the steps (decided 30 Oct 2026: it stood still the whole save) */
 		dc_progress = quit_told;
 		if (wfl)
 			QUIT_STEP("Storing the cache's pages and pictures...", wfl);
