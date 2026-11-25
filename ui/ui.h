@@ -44,6 +44,9 @@ typedef struct {
 #ifndef EW_ST
 	short ttleave;			/* TTLEAVE=: per cent of the TT RAM left for other programs
 					   (decided 4 Nov 2026: 50; 0 to 90) */
+	short sysfsel;			/* SYSFSEL=: saving through the AES's file selector (1), not
+					   the family's file dialog (0, the default; guidelines 5.12,
+					   decided 25 Nov 2026) */
 	short narrow;			/* NARROW=: pages that ask for Arial's kind in DejaVu Sans
 					   Condensed (1, 13 Nov 2026's way), or in DejaVu Sans (0):
 					   some testers didn't like the narrow letters (the owner, 16 Nov

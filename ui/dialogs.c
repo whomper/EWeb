@@ -52,7 +52,7 @@ static void db_start(short w, short h)
    common's badge (hebrew_badge: ayin and bet) at its title band's right
    end, as the family's dialogs do (hebrew_badge_right, placed as the main
    window's info line has it); in a dialog window the title is the AES's,
-   and the main window's info line shows it (Erez, 6 Nov 2026) */
+   and the main window's info line shows it (decided 6 Nov 2026) */
 static OBJECT *badge_tree;
 static short badge_band = -1;
 
@@ -108,13 +108,13 @@ void dlg_hebrew_changed(void)
    language; Cancel puts them back (settings.c) */
 enum { T_PICTURES, T_FALCON, T_DSP, T_PICDSP, T_PALETTE, T_CACHEQUIT, T_TRANSLATE, T_LOG,
 #ifndef EW_ST
-       T_NARROW,
+       T_NARROW, T_SYSFSEL,
 #endif
        NTICK };
 static short s_on[NTICK];
 #ifndef EW_ST
 /* scripts: on no site, the sites chosen, every site (RUNSCRIPTS= 0, 1, 2;
-   three radio buttons, Erez, 17 Nov 2026: D24) */
+   three radio buttons, decided 17 Nov 2026: D24) */
 static short s_scripts;
 #endif
 /* the search address and the gateway hold as much as their settings,
@@ -165,14 +165,16 @@ static void page_general(SETTINGS *s, short x, short y, void *user)
 	set_tick(s, x, set_y(s, 8), "Pictures on the DSP (a Falcon's)", &s_on[T_PICDSP]);
 	set_tick(s, x, set_y(s, 9), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
 	/* (off: pages made for Arial in DejaVu Sans, not its narrow face:
-	   some testers didn't like the narrow letters, Erez, 16 Nov 2026) */
+	   some testers didn't like the narrow letters, decided 16 Nov 2026) */
 	set_tick(s, x, set_y(s, 10), "Narrow letters for pages made for Arial", &s_on[T_NARROW]);
-	/* (Erez, 4 Nov 2026: the rest of the TT RAM keeps pages and
+	/* (decided 4 Nov 2026: the rest of the TT RAM keeps pages and
 	   pictures; shown where there is TT RAM) */
+	/* (the family's file dialog is the default: guidelines 5.12) */
+	set_tick(s, x, set_y(s, 11), "Use the system file selector", &s_on[T_SYSFSEL]);
 	if (tt_free > 0) {
-		set_text(s, x, set_y(s, 11), "TT RAM left for others");
-		f_tt = set_field(s, x + 23, set_y(s, 11), s_tt, 2, '9');
-		set_text(s, x + 26, set_y(s, 11), "%  (0 to 90)");
+		set_text(s, x, set_y(s, 12), "TT RAM left for others");
+		f_tt = set_field(s, x + 23, set_y(s, 12), s_tt, 2, '9');
+		set_text(s, x + 26, set_y(s, 12), "%  (0 to 90)");
 	}
 #else
 	set_tick(s, x, set_y(s, 8), "EWeb's own colours in 256 colours", &s_on[T_PALETTE]);
@@ -187,7 +189,7 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 			   !tls_available ? "Not in the ST edition: EWEB.PRG has it" :
 			   "Needs a 68020 or better (TT, Falcon)";
 	(void) y, (void) user;
-	/* (plain, as the menu's: Erez, 17 Nov 2026, D9) */
+	/* (plain, as the menu's: decided 17 Nov 2026, D9) */
 	set_tick(s, x, set_y(s, 0), "Direct connection", &s_on[T_FALCON]);
 	set_tick(s, x + 3, set_y(s, 1), "Check certificates on the DSP", &s_on[T_DSP]);
 	set_text(s, x + 3, set_y(s, 2), note);
@@ -208,7 +210,7 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 static void page_scripts(SETTINGS *s, short x, short y, void *user)
 {
 	(void) y, (void) user;
-	/* (Erez's words, 17 Nov 2026: D24, three of 13 wide) */
+	/* (decided 17 Nov 2026: D24, three of 13 wide) */
 	static const char *const which[] = { "Off", "Chosen sites", "Every site" };
 	set_text(s, x, set_y(s, 0), "Run pages' scripts (JavaScript)");
 	set_radio(s, x, set_y(s, 1), 13, which, 3, &s_scripts);
@@ -225,7 +227,7 @@ static void page_scripts(SETTINGS *s, short x, short y, void *user)
 /* ---------------------------------------------------------------- Translate */
 
 /* EWeb's Translate page (EWEB.PRG; AERA-Atari's
-   standards/TRANSLATION-SERVICE.md, Erez, 8 Nov 2026): on or off (as View >
+   standards/TRANSLATION-SERVICE.md, decided 8 Nov 2026): on or off (as View >
    Translate), the language pages are translated into, from those the
    Gateway has installed (asked for when the button is pressed, never
    before: with Translate off nothing goes to the Gateway), and common's
@@ -391,7 +393,7 @@ static void page_translate(SETTINGS *s, short x, short y, void *user)
 }
 #endif
 
-/* a number typed out of its range (the UI standards' D30, Erez's words of
+/* a number typed out of its range (the UI standards' D30, decided
    9 Nov 2026): the alert that says what to type, its page shown; OK
    refused, nothing changed silently (settings.c's check) */
 static int settings_check(SETTINGS *s, void *user)
@@ -449,6 +451,7 @@ int dlg_settings(void)
 #ifndef EW_ST
 	s_scripts = opt.runscripts;
 	s_on[T_NARROW] = opt.narrow;
+	s_on[T_SYSFSEL] = opt.sysfsel;
 	s_on[T_TRANSLATE] = opt.translate;
 	str_copy(s_to, opt.translate_to, sizeof s_to);
 #endif
@@ -470,9 +473,9 @@ int dlg_settings(void)
 	   two for EWEB.PRG's narrow letters' tick) */
 	d.height = 20;
 #ifndef EW_ST
-	d.height = 22;
+	d.height = 24;		/* (and two for the file selector's tick, guidelines 5.12) */
 	if (tt_free > 0)
-		d.height = 24;
+		d.height = 26;
 #endif
 	d.check = settings_check;
 	gap_tag("dialog: made");
@@ -505,6 +508,7 @@ int dlg_settings(void)
 	opt.cachequit = s_on[T_CACHEQUIT];
 #ifndef EW_ST
 	opt.narrow = s_on[T_NARROW];
+	opt.sysfsel = s_on[T_SYSFSEL];
 	opt.translate = s_on[T_TRANSLATE];
 	if (s_to[0])
 		str_copy(opt.translate_to, s_to, sizeof opt.translate_to);
@@ -576,7 +580,7 @@ static int ask(const char *title, const char *text, char *answer, int size)
 /* ---------------------------------------------------------------- the quit's box */
 
 /* what quitting does, said while it does it, with a bar of how far it
-   is (Erez, 29 Oct 2026: on a slow disk a quit took half a minute, the
+   is (decided 29 Oct 2026: on a slow disk a quit took half a minute, the
    screen as it was). No buttons: it closes when the work is done */
 static char q_what[44];
 static short q_open, q_text, q_frame, q_at;
@@ -657,10 +661,10 @@ void quit_box_close(void)
 	q_open = 0;
 }
 
-#ifndef EW_ST	/* the ST edition stays as 1.0 has it (Erez, 4 Nov 2026) */
+#ifndef EW_ST	/* the ST edition stays as 1.0 has it (decided 4 Nov 2026) */
 /* ---------------------------------------------------------------- the download's box */
 
-/* a file saved as it comes (Erez, 9 Nov 2026): its name, a bar of how
+/* a file saved as it comes (decided 9 Nov 2026): its name, a bar of how
    much of it has come by its size (the family's progress bar, 5.9), the
    KB so far and of how many, and Cancel (Esc and Undo too: 3.5). In a
    window where the AES runs several programs (3.5), drawn over the screen

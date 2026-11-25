@@ -247,7 +247,7 @@ not yet followed.
 ## Saving pages and files
 
 - **File > Save page as** (**^S**) saves the page shown as it came, in
-  the file selector's folder, with a name made from its address
+  the folder chosen in the save dialog, with a name made from its address
   (`INDEX.HTM` for a site's front page). Its pictures and stylesheets
   stay on the server; open the file again with ^O. A page as big as the
   memory left on a stock Falcon is shown without its source kept, and
@@ -270,13 +270,19 @@ not yet followed.
   comes, in the download box, and the page you were on stays. (A file
   sent back by a form is saved once it has all come, without the box.)
 
-The file selector offers a name: the one the site or the link gives the
-file when there is one (so `download.php?id=12` comes as `GAME.ZIP`),
-else one made from its address, made to fit the Atari's disks (eight
-letters and three, in capitals, only the characters TOS takes, `.tar.gz`
-as `.TGZ`). If there is a file of that name already, EWeb asks before
-replacing it. A packed archive (`.gz`, `.tgz`) is saved as it came, not
-unpacked.
+EWeb asks where to save in the family's save dialog, the same in every
+AERA program: the folders and the files of the file's type (Web pages,
+or the type its name has; All files shows the rest), the last folders
+saved in, and the name in Save as. Return or Save saves; Return on a
+folder chosen opens it. The name offered is the one the site or the link
+gives the file when there is one (so `download.php?id=12` comes as
+`GAME.ZIP`), else one made from its address, made to fit the Atari's
+disks (eight letters and three, in capitals, only the characters TOS
+takes, `.tar.gz` as `.TGZ`). If there is a file of that name already,
+the dialog asks before replacing it. A packed archive (`.gz`, `.tgz`)
+is saved as it came, not unpacked. Settings > General > Use the system
+file selector asks with the system's own file selector instead (the ST
+edition always does).
 
 ## The cache
 
@@ -850,6 +856,8 @@ there at once; where the window was, when you quit:
   Falcon), 0 for the 68030 alone
 - `NARROW=` 1 to show pages made for Arial in narrow letters of its
   widths (DejaVu Sans Condensed), 0 for DejaVu Sans (Settings > General)
+- `SYSFSEL=` 1 to save files through the system's file selector, 0 (as
+  it starts) through the family's save dialog (Settings > General)
 - `PALETTE=` in 256 colours, 1 for EWeb's own colours while it runs
   (a colour cube and greys, with the pale tints pages' backgrounds and
   pictures need; the system's first 16 stay, and its own come back when

@@ -871,7 +871,7 @@ build/tos/ewb/browse/browse.o: EWB_FLAGS += -DBR_LIVE_PAD='"6"' -DBR_URL_PAD='"2
 $(tos_EWB) $(tos_EC) $(GEM_OBJ) build/prof/tos/main.o: src/codepad.h src/codepads.h
 build/st/gem/common/langs.o: STGEM_CFLAGS += -DEW_NO_CUR
 GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
-              $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset))
+              $(addprefix build/tos/gem/common/,$(addsuffix .o,$(GEM_COMMON) gem bidi charset filepick dirlist))
 GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
@@ -971,7 +971,9 @@ ST_HOT := build/st/ewb/layout/layout.o build/st/ewb/layout/find.o build/st/ewb/d
           $(patsubst src/css/%.c,build/st/ec/%.o,$(EC_SRC)) \
           build/st/gem/screen.o build/st/pic/pic.o build/st/pic/png.o build/st/rt/libc.o
 $(ST_HOT): ST_O2 := -O2
-STGEM_OBJ  := $(subst build/tos/,build/st/,$(GEM_OBJ))
+# (the family's file dialog, guidelines 5.12, is EWEB.PRG's: the ST edition
+# is frozen and keeps the AES's file selector)
+STGEM_OBJ  := $(filter-out %/filepick.o %/dirlist.o,$(subst build/tos/,build/st/,$(GEM_OBJ)))
 STGEM_OBJ_PAD = $(subst build/st/gem/win.o,build/st/gem/win.o build/st/rt/pad_stwin.o,$(STGEM_OBJ))
 # (-DDLG_CPU: common's dialogs drawn partly by the CPU, for the 68000 only:
 # EWEB.PRG runs on a 68030 and leaves it out)

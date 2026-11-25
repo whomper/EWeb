@@ -34,6 +34,7 @@ extern langs_job translate_job;
 #include "dcache.h"
 #include "dd.h"
 #include "dialog.h"
+#include "filepick.h"
 #include "panebar.h"
 #include "font.h"
 #include "help.h"
@@ -85,10 +86,10 @@ short ap_id;
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
-	       , 50, 1
+	       , 50, 0, 1
 #endif
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-	   translate_to, translate_port, ttleave, narrow) */
+	   translate_to, translate_port, ttleave, sysfsel, narrow) */
 int loading;
 /* 1.24's never-run pads: each function 1.24 changed made the size that
    keeps main.o's code after it at 1.23's places modulo 256, the shipped
@@ -724,6 +725,8 @@ static void settings_load(void)
 			opt.ttleave = (short) (atoi(eq) < 0 ? 0 : atoi(eq) > 90 ? 90 : atoi(eq));
 		else if (!strcmp(line, "NARROW"))
 			opt.narrow = atoi(eq) != 0;
+		else if (!strcmp(line, "SYSFSEL"))
+			opt.sysfsel = atoi(eq) != 0;
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -982,6 +985,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.narrow);
 	put(&s, "NARROW", v, "1 = pages that ask for Arial or Helvetica in narrow letters of their widths "
 	    "(DejaVu Sans Condensed), 0 = in DejaVu Sans");
+	snprintf(v, sizeof v, "%d", opt.sysfsel);
+	put(&s, "SYSFSEL", v, "1 = files are saved through the system's file selector, 0 = through the "
+	    "family's file dialog (Settings > General)");
 #endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -1556,9 +1562,50 @@ static void loading_on(void)
 	menu_update();
 }
 
+#ifndef EW_ST
+/* a file to save (guidelines 5.12, decided 25 Nov 2026): the family's file
+   dialog (common's filepick_save), in the folder last saved to, with name
+   proposed and the folders and files of its type, its extension added and
+   a file there replaced only when the dialog's question says so; or, with
+   Settings' "Use the system file selector" (SYSFSEL=1), the AES's, with the
+   same question. *full the path chosen; 0: cancelled. Nothing runs
+   meanwhile (a save starts only between loads: no idle) */
+static int ask_save(const char *title, const char *name, char *full, int size)
+{
+	static char dir[FP_PATH], recent[FP_RECENT][FP_PATH], ext[8];
+	static DL_TYPE types[2];
+	FP_SPEC spec;
+	char fname[64];
+	const char *dot = strrchr(name, '.');
+	int n = 0;
+	if (!dir[0])
+		snprintf(dir, sizeof dir, "%s%s", opt.workdir,
+			 opt.workdir[0] && opt.workdir[strlen(opt.workdir) - 1] == '\\' ? "" : "\\");
+	/* the type its name has (HTM: web pages), then every file */
+	if (dot != NULL && dot[1] && strlen(dot + 1) < sizeof ext) {
+		str_copy(ext, dot + 1, sizeof ext);
+		types[n].name = !strcmp(ext, "HTM") || !strcmp(ext, "HTML") ? "Web pages" : ext;
+		types[n].exts = !strcmp(ext, "HTM") || !strcmp(ext, "HTML") ? "HTM HTML" : ext;
+		n++;
+	}
+	types[n].name = "All files";
+	types[n].exts = "";
+	n++;
+	memset(&spec, 0, sizeof spec);
+	spec.title = title;
+	spec.ok = "Save";
+	spec.none = "No folder saved in yet";
+	spec.log = "EWEB";
+	spec.types = types;
+	spec.ntypes = n;
+	str_copy(fname, name, sizeof fname);
+	filepick_system = opt.sysfsel;
+	return filepick_save(&spec, dir, recent, fname, sizeof fname, full, size, NULL);
+}
+#else
 /* a file to save: the file selector, in the folder last saved to, with
    name; *full the path chosen. 0: cancelled, or a file there not to be
-   replaced */
+   replaced (the ST edition, frozen: the AES's selector) */
 static int ask_save(const char *title, const char *name, char *full, int size)
 {
 	static char path[256];
@@ -1579,6 +1626,7 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 	return !pf_exists(full) ||
 	       alert(2, "[2][There is a file of that name.|Replace it?][Replace|Cancel]") == 1;
 }
+#endif
 
 #ifndef EW_ST
 /* before the download's box: the button the file selector left let go

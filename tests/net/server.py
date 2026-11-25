@@ -371,8 +371,8 @@ SITE_TWO = (b"<!DOCTYPE html><html><head><title>Two</title></head><body><p>Back 
             b"<a href=/site/>the first</a>.</p><div style='height: 2000px'></div><p id=end>The end</p>"
             b"</body></html>\n")
 # a picture button three screens tall, as webgate's live view's (/site/tall.html):
-# a click near its top is sent from there (Erez, 20 Nov 2026: the page went to
-# the button's end first, and the place was worked out after it)
+# a click near its top is sent from there (a fault of 20 Nov 2026: the page went
+# to the button's end first, and the place was worked out after it)
 TALL_PAGE = (b"<!DOCTYPE html><html><head><title>Tall</title></head><body style='margin:4px'>"
              b"<form action=/site/echo><input type=image name=at width=400 height=1500 src=logo.png "
              b"alt='the picture button'></form><p>after</p></body></html>\n")
