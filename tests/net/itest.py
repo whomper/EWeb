@@ -558,6 +558,12 @@ try:
                       "st.png?q=%D7%90 x?q=%E0", p.stdout + p.stderr + "seen: " + seen)
         rc, out = browse("http://localhost:1/")
         check("the browser: nobody listening", rc == 0 and "EWeb can't open this page" in out, out)
+        # an address longer than a request line once could be (511 bytes:
+        # amazon.com's scripts' 520 were cut before HTTP/1.1, and refused):
+        # all of it reaches the server
+        long_q = "".join("%05d" % i for i in range(140))
+        rc, out = browse("http://localhost:%d/site/echo?q=%s" % (HTTP, long_q))
+        check("the browser: an address of 700 bytes reaches the server whole", rc == 0 and long_q in out, out[:600])
         # Google's JavaScript wall (as www.google.com): EWeb's own page in
         # its place, with the same words on the search engine set (-q)
         goo = "http://www.google.com:%d/" % HTTP

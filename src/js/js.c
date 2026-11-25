@@ -2337,7 +2337,79 @@ static JSValue cl_value(JSContext *ctx, JSValueConst this_val)
 	return JS_NewString(ctx, s ? s : "");
 }
 
+static JSValue cl_string(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	return cl_value(ctx, this_val);
+}
+
+/* a classList walked as its tokens (DOM 7.1: for...of, forEach, keys,
+   values, entries; Tailwind's script): an array of them, each once, and
+   its own way (magic 0 values, 1 keys, 2 entries, 3 forEach) */
+static JSValue cl_walk(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic)
+{
+	static const char *const how[] = { "values", "keys", "entries", "forEach" };
+	dnode *n = JS_GetOpaque(this_val, cl_class);
+	const char *s = n ? dn_attr(n, "class") : NULL;
+	JSValue a = JS_NewArray(ctx), f, r;
+	uint32_t k = 0;
+	while (s != NULL && *s) {
+		const char *e;
+		uint32_t i;
+		JSValue v;
+		while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r' || *s == '\f')
+			s++;
+		for (e = s; *e && *e != ' ' && *e != '\t' && *e != '\n' && *e != '\r' && *e != '\f'; e++)
+			;
+		if (e == s)
+			break;
+		v = JS_NewStringLen(ctx, s, (size_t) (e - s));
+		for (i = 0; i < k; i++) {	/* (each token once) */
+			JSValue o = JS_GetPropertyUint32(ctx, a, i);
+			int same = JS_StrictEq(ctx, o, v);
+			JS_FreeValue(ctx, o);
+			if (same)
+				break;
+		}
+		if (i == k)
+			JS_SetPropertyUint32(ctx, a, k++, v);
+		else
+			JS_FreeValue(ctx, v);
+		s = e;
+	}
+	if (magic == 3) {
+		/* forEach(f, this): f(token, index, the list) */
+		uint32_t i;
+		for (i = 0; i < k && argc > 0 && JS_IsFunction(ctx, argv[0]); i++) {
+			JSValue args[3];
+			args[0] = JS_GetPropertyUint32(ctx, a, i);
+			args[1] = JS_NewUint32(ctx, i);
+			args[2] = JS_DupValue(ctx, this_val);
+			r = JS_Call(ctx, argv[0], argc > 1 ? argv[1] : JS_UNDEFINED, 3, args);
+			JS_FreeValue(ctx, args[0]);
+			JS_FreeValue(ctx, args[2]);
+			if (JS_IsException(r)) {
+				JS_FreeValue(ctx, a);
+				return r;
+			}
+			JS_FreeValue(ctx, r);
+		}
+		JS_FreeValue(ctx, a);
+		return JS_UNDEFINED;
+	}
+	f = JS_GetPropertyStr(ctx, a, how[magic]);
+	r = JS_Call(ctx, f, a, 0, NULL);
+	JS_FreeValue(ctx, f);
+	JS_FreeValue(ctx, a);
+	return r;
+}
+
 static const JSCFunctionListEntry cl_funcs[] = {
+	JS_CFUNC_MAGIC_DEF("[Symbol.iterator]", 0, cl_walk, 0),
+	JS_CFUNC_MAGIC_DEF("values", 0, cl_walk, 0),
+	JS_CFUNC_MAGIC_DEF("keys", 0, cl_walk, 1),
+	JS_CFUNC_MAGIC_DEF("entries", 0, cl_walk, 2),
+	JS_CFUNC_MAGIC_DEF("forEach", 1, cl_walk, 3),
+	JS_CFUNC_DEF("toString", 0, cl_string),
 	JS_CFUNC_MAGIC_DEF("add", 1, cl_call, CL_ADD),
 	JS_CFUNC_MAGIC_DEF("remove", 1, cl_call, CL_REMOVE),
 	JS_CFUNC_MAGIC_DEF("toggle", 2, cl_call, CL_TOGGLE),
@@ -4214,7 +4286,10 @@ static const char *const part_src[] = {
 	"pump()},desiredSize:1};this.locked=false;this.cancel=stop;this.getReader=function(){s.locked=true;"
 	"return{read:function(){return new Promise(function(y){w.push(y);pump()})},releaseLock:function(){"
 	"s.locked=false},cancel:stop,closed:Promise.resolve()}};if(u&&typeof u.start=='function')u.start(c)}"
-	"g.ReadableStream=RS;function PO(){}PO.prototype={observe:function(){},disconnect:function(){},"
+	"g.ReadableStream=RS;g.crypto={getRandomValues:function(a){var n=a.BYTES_PER_ELEMENT||1,m=Math.pow(2,8*n),i;"
+	"for(i=0;i<a.length;i++)a[i]=Math.floor(Math.random()*m);return a},randomUUID:function(){"
+	"return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;"
+	"return(c=='x'?r:r&3|8).toString(16)})}};function PO(){}PO.prototype={observe:function(){},disconnect:function(){},"
 	"takeRecords:function(){return[]}};PO.supportedEntryTypes=[];g.PerformanceObserver=PO})(globalThis)",
 	/* 3: URL and URLSearchParams (the URL Standard; LinkedIn's
 	   scripts): parsed by EWeb's URL code (__ewURL), cut into its parts
@@ -4258,14 +4333,115 @@ static const char *const part_src[] = {
 	"U.createObjectURL=function(){return'blob:'+location.origin+'/'+Math.random().toString(36).slice(2)};"
 	"U.revokeObjectURL=function(){};U.canParse=function(u,b){try{new U(u,b);return true}catch(e)"
 	"{return false}};g.URL=U})(globalThis)",
+	/* 4: what EWeb's nodes lack that pages' scripts read (the top-20 survey,
+	   atariuptodate.de): NodeFilter and a TreeWalker, reflected attributes, a
+	   video's methods, baseURI, tabIndex, ShadowRoot, NodeList; made when a
+	   script first touches one (their names are stubs on the prototypes:
+	   lazy_pget), as compiling them for every page cost the 68030 5.6
+	   million instructions a page with scripts */
+	"(function(g){"
+	/* NodeFilter and a TreeWalker (DOM 6.1; YouTube's scripts): nextNode
+	   and parentNode, a node iterator the same */
+	"g.NodeFilter={FILTER_ACCEPT:1,FILTER_REJECT:2,FILTER_SKIP:3,SHOW_ALL:0xFFFFFFFF,SHOW_ELEMENT:1,"
+	"SHOW_ATTRIBUTE:2,SHOW_TEXT:4,SHOW_CDATA_SECTION:8,SHOW_PROCESSING_INSTRUCTION:64,SHOW_COMMENT:128,"
+	"SHOW_DOCUMENT:256,SHOW_DOCUMENT_TYPE:512,SHOW_DOCUMENT_FRAGMENT:1024};"
+	"Document.prototype.createNodeIterator=Document.prototype.createTreeWalker=function(r,w,f){"
+	"w=w===undefined?0xFFFFFFFF:w>>>0;function ok(n){if(!(w&(1<<(n.nodeType-1))))return 3;if(!f)return 1;"
+	"return typeof f=='function'?f(n):f.acceptNode(n)}function nx(n,s){if(!s&&n.firstChild)return n.firstChild;"
+	"while(n&&n!==r){if(n.nextSibling)return n.nextSibling;n=n.parentNode}return null}"
+	"var t={root:r,whatToShow:w,filter:f||null,currentNode:r,nextNode:function(){var n=t.currentNode,s=0,a;"
+	"for(;;){n=nx(n,s);if(!n)return null;a=ok(n);if(a==1)return t.currentNode=n;s=a==2}},parentNode:"
+	"function(){var n=t.currentNode;while(n&&n!==r){n=n.parentNode;if(n&&ok(n)==1)return t.currentNode=n}"
+	"return null},detach:function(){}};return t};"
+	/* what Apple's scripts read: document's
+	   contentType and lastModified, a node's baseURI (the base's, else
+	   the page's address), an element's tabIndex (its attribute, else
+	   0 for what takes the focus, -1 for the rest) */
+	"Object.defineProperty(Document.prototype,'contentType',{get:function(){return'text/html'},configurable:true});"
+	"Object.defineProperty(Document.prototype,'lastModified',{get:function(){var t=new Date(),p=function(n)"
+	"{return(n<10?'0':'')+n};return p(t.getMonth()+1)+'/'+p(t.getDate())+'/'+t.getFullYear()+' '+p(t.getHours())"
+	"+':'+p(t.getMinutes())+':'+p(t.getSeconds())},configurable:true});"
+	"Object.defineProperty(Node.prototype,'baseURI',{get:function(){var b=document.querySelector('base[href]');"
+	"try{return b?new URL(b.getAttribute('href'),String(location.href)).href:String(location.href)}catch(e)"
+	"{return String(location.href)}},configurable:true});"
+	"Object.defineProperty(Element.prototype,'tabIndex',{get:function(){var v=this.getAttribute('tabindex');"
+	"if(v!==null&&/^\\s*-?\\d+\\s*$/.test(v))return parseInt(v,10);return/^(A|AREA|BUTTON|INPUT|SELECT|"
+	"TEXTAREA|IFRAME|SUMMARY)$/.test(this.nodeName)?0:-1},set:function(v){this.setAttribute('tabindex',"
+	"String(v|0))},configurable:true});"
+	/* attributes reflected as properties (HTML 2.6.1), where EWeb's
+	   elements have none of their own: strings, numbers (width, height,
+	   maxLength), a link's address in parts (4.6.3's HTMLHyperlinkElementUtils,
+	   through URL), relList, a picture's natural size as its attributes',
+	   and a control's validity (valueMissing alone: EWeb checks no
+	   pattern or range). Apple's locale switcher read hreflang */
+	"(function(p){function df(k,o){o.configurable=true;Object.defineProperty(p,k,o)}"
+	"[['hreflang','hreflang'],['crossOrigin','crossorigin'],['as','as'],['sizes','sizes'],['download','download'],"
+	"['ping','ping'],['referrerPolicy','referrerpolicy'],['loading','loading'],['decoding','decoding'],"
+	"['srcset','srcset'],['currentSrc','src']].forEach(function(x){df(x[0],{get:function(){var v=this.getAttribute(x[1]);"
+	"return v===null?'':v},set:function(v){this.setAttribute(x[1],String(v))}})});"
+	"[['width',0],['height',0],['maxLength',-1],['naturalWidth',0,'width'],['naturalHeight',0,'height']].forEach("
+	"function(x){df(x[0],{get:function(){var v=parseInt(this.getAttribute(x[2]||x[0].toLowerCase()),10);"
+	"return isNaN(v)?x[1]:v},set:function(v){this.setAttribute(x[2]||x[0].toLowerCase(),String(v|0))}})});"
+	"df('complete',{get:function(){return true}});"
+	"['origin','protocol','username','password','host','hostname','port','pathname','search','hash'].forEach(function(k){"
+	"df(k,{get:function(){var h=this.getAttribute('href');if(h===null)return'';try{return new URL(h,document.baseURI)[k]}"
+	"catch(e){return''}},set:function(v){var h=this.getAttribute('href');try{var u=new URL(h===null?'':h,"
+	"document.baseURI);u[k]=String(v);this.setAttribute('href',u.href)}catch(e){}}})});"
+	"df('relList',{get:function(){var e=this,l=function(){var v=(e.getAttribute('rel')||'').trim();"
+	"return v?v.split(/\\s+/):[]};return{get length(){return l().length},get value(){return e.getAttribute('rel')||''},"
+	"item:function(i){return l()[i]||null},contains:function(t){return l().indexOf(String(t))>=0},"
+	"supports:function(){return false},forEach:function(f,t){l().forEach(f,t)},toString:function(){"
+	"return e.getAttribute('rel')||''}}}});"
+	"df('willValidate',{get:function(){return/^(INPUT|SELECT|TEXTAREA)$/.test(this.nodeName)&&"
+	"!this.hasAttribute('disabled')&&!this.hasAttribute('readonly')}});"
+	"df('validity',{get:function(){var m=this.hasAttribute('required')&&!this.value;return{valueMissing:m,"
+	"typeMismatch:false,patternMismatch:false,tooLong:false,tooShort:false,rangeUnderflow:false,rangeOverflow:false,"
+	"stepMismatch:false,badInput:false,customError:false,valid:!m}}});"
+	"df('labels',{get:function(){var r=[],i,l=this.id?document.querySelectorAll('label[for=\"'+this.id+'\"]'):[];"
+	"for(i=0;i<l.length;i++)r.push(l[i]);var c=this.closest&&this.closest('label');if(c&&r.indexOf(c)<0)r.push(c);"
+	"return r}})})(Element.prototype);"
+	/* a video's or an audio's methods (HTML 4.8.11): EWeb plays none, so
+	   play() is refused, as a browser that can't play the media refuses
+	   it, canPlayType() says "", pause() and load() do nothing (Cloudflare's
+	   hero video); on every element, as EWeb's share one prototype, not
+	   enumerated */
+	"(function(p){function d(k,f){Object.defineProperty(p,k,{value:f,writable:true,configurable:true})}"
+	"d('play',function(){var e=new Error('EWeb plays no media');e.name='NotSupportedError';"
+	"return Promise.reject(e)});d('pause',function(){});d('load',function(){});"
+	"d('canPlayType',function(){return''})})(Element.prototype);"
+	/* ShadowRoot: a class of its own (EWeb's shadow roots are elements:
+	   none is one), for the pages' instanceof (Alpine.js) */
+	"g.ShadowRoot=function(){throw new TypeError('Illegal constructor')};"
+	"ShadowRoot.prototype=Object.create(DocumentFragment.prototype);"
+	"g.NodeList=function(){throw new TypeError('Illegal constructor')};NodeList.prototype=Array.prototype;"
+	"g.HTMLCollection=function(){throw new TypeError('Illegal constructor')};"
+	"HTMLCollection.prototype=Array.prototype;"
+	"})(globalThis)",
+	/* 5: performance */
+	"(function(g){"
+	/* performance: its now, marks of none, and the load's times as one
+	   moment (Bing's and YouTube's scripts read them) */
+	"if(!g.performance){var t0=Date.now(),pt={},pn='navigationStart fetchStart domainLookupStart "
+	"domainLookupEnd connectStart connectEnd requestStart responseStart responseEnd domLoading'.split(' '),"
+	"i;for(i=0;i<pn.length;i++)pt[pn[i]]=t0;'domInteractive domContentLoadedEventStart "
+	"domContentLoadedEventEnd domComplete loadEventStart loadEventEnd'.split(' ').forEach(function(k){pt[k]=0});"
+	"g.performance={timeOrigin:t0,timing:pt,navigation:{type:0,redirectCount:0},now:function(){"
+	"return Date.now()-t0},mark:function(){},measure:function(){},clearMarks:function(){},clearMeasures:"
+	"function(){},getEntries:function(){return[]},getEntriesByName:function(){return[]},getEntriesByType:"
+	"function(t){return t=='navigation'?[{name:String(location.href),entryType:'navigation',startTime:0,"
+	"type:'navigate',responseStart:0,responseEnd:0,domInteractive:0,domContentLoadedEventEnd:0,"
+	"loadEventEnd:0,duration:0}]:[]}}}"
+	"})(globalThis)",
 };
 /* the names each part defines */
-static const char *const part_names[][9] = {
+static const char *const part_names[][10] = {
 	{ "localStorage", "sessionStorage", NULL },
 	{ "fetch", "Headers", "Response", "XMLHttpRequest", NULL },
 	{ "Image", "MutationObserver", "IntersectionObserver", "ResizeObserver", "AbortController", "AbortSignal",
-	  "ReadableStream", "PerformanceObserver", NULL },
+	  "ReadableStream", "PerformanceObserver", "crypto", NULL },
 	{ "URL", "URLSearchParams", NULL },
+	{ "NodeFilter", "ShadowRoot", "NodeList", "HTMLCollection", NULL },
+	{ "performance", NULL },
 };
 
 /* a name the script sets itself replaces the part's */
@@ -4277,28 +4453,88 @@ static JSValue lazy_set(JSContext *ctx, JSValueConst this_val, JSValueConst v, i
 	return JS_UNDEFINED;
 }
 
+static int load_part(JSContext *ctx, int part);
+
 static JSValue lazy_get(JSContext *ctx, JSValueConst this_val, int magic)
 {
-	ejs *j = J(ctx);
-	int part = magic >> 4;
-	JSValue g = JS_GetGlobalObject(ctx), r;
-	if (!(j->parts & (1 << part))) {
-		int i;
-		j->parts |= (uint8_t) (1 << part);
-		/* the names become plain properties, then the part sets them */
-		for (i = 0; part_names[part][i] != NULL; i++)
-			JS_DefinePropertyValueStr(ctx, g, part_names[part][i], JS_UNDEFINED, JS_PROP_C_W_E);
-		r = JS_Eval(ctx, part_src[part], strlen(part_src[part]), "<eweb>", JS_EVAL_TYPE_GLOBAL);
-		if (JS_IsException(r)) {
-			JS_FreeValue(ctx, g);
-			return r;
-		}
-		JS_FreeValue(ctx, r);
-	}
-	r = JS_GetPropertyStr(ctx, g, part_names[part][magic & 15]);
+	JSValue g, r;
+	if (!load_part(ctx, magic >> 4))
+		return JS_EXCEPTION;
+	g = JS_GetGlobalObject(ctx);
+	r = JS_GetPropertyStr(ctx, g, part_names[magic >> 4][magic & 15]);
 	JS_FreeValue(ctx, g);
 	return r;
 }
+
+/* the names part 4 gives EWeb's prototypes, each a stub until then:
+   Element.prototype's, Node.prototype's, Document.prototype's (X(n, name),
+   n the stub's magic) */
+#define ELEM_STUBS(X) X(0, "hreflang") X(1, "crossOrigin") X(2, "as") X(3, "sizes") X(4, "download") \
+	X(5, "ping") X(6, "referrerPolicy") X(7, "loading") X(8, "decoding") X(9, "srcset") X(10, "currentSrc") \
+	X(11, "width") X(12, "height") X(13, "maxLength") X(14, "naturalWidth") X(15, "naturalHeight") \
+	X(16, "complete") X(17, "origin") X(18, "protocol") X(19, "username") X(20, "password") X(21, "host") \
+	X(22, "hostname") X(23, "port") X(24, "pathname") X(25, "search") X(26, "hash") X(27, "relList") \
+	X(28, "willValidate") X(29, "validity") X(30, "labels") X(31, "tabIndex") X(32, "play") X(33, "pause") \
+	X(34, "load") X(35, "canPlayType")
+#define NODE_STUBS(X) X(36, "baseURI")
+#define DOC_STUBS(X) X(37, "contentType") X(38, "lastModified") X(39, "createTreeWalker") X(40, "createNodeIterator")
+#define STUB_NAME(n, name) name,
+static const char *const pstub_names[] = { ELEM_STUBS(STUB_NAME) NODE_STUBS(STUB_NAME) DOC_STUBS(STUB_NAME) };
+#undef STUB_NAME
+
+/* a part made: its names' plain properties first (lazy_set's), then its
+   code. 0: an exception */
+static int load_part(JSContext *ctx, int part)
+{
+	ejs *j = J(ctx);
+	JSValue g, r;
+	int i;
+	if (j->parts & (1 << part))
+		return 1;
+	j->parts |= (uint8_t) (1 << part);
+	g = JS_GetGlobalObject(ctx);
+	for (i = 0; part_names[part][i] != NULL; i++)
+		JS_DefinePropertyValueStr(ctx, g, part_names[part][i], JS_UNDEFINED, JS_PROP_C_W_E);
+	JS_FreeValue(ctx, g);
+	r = JS_Eval(ctx, part_src[part], strlen(part_src[part]), "<eweb>", JS_EVAL_TYPE_GLOBAL);
+	if (JS_IsException(r))
+		return 0;
+	JS_FreeValue(ctx, r);
+	return 1;
+}
+
+/* a prototype's stub (pstub_names): part 4 made, which puts the real
+   property in its place, then that read. Called again once it is made
+   (a name it didn't give): nothing */
+static JSValue lazy_pget(JSContext *ctx, JSValueConst this_val, int magic)
+{
+	if (J(ctx)->parts & (1 << 4))
+		return JS_UNDEFINED;
+	if (!load_part(ctx, 4))
+		return JS_EXCEPTION;
+	return JS_GetPropertyStr(ctx, this_val, pstub_names[magic]);
+}
+
+/* set before part 4: made, then set; while it is made (its code setting a
+   prototype's name): a plain property of what was set */
+static JSValue lazy_pset(JSContext *ctx, JSValueConst this_val, JSValueConst v, int magic)
+{
+	if (J(ctx)->parts & (1 << 4)) {
+		JS_DefinePropertyValueStr(ctx, this_val, pstub_names[magic], JS_DupValue(ctx, v), JS_PROP_C_W_E);
+		return JS_UNDEFINED;
+	}
+	if (!load_part(ctx, 4))
+		return JS_EXCEPTION;
+	if (JS_SetPropertyStr(ctx, this_val, pstub_names[magic], JS_DupValue(ctx, v)) < 0)
+		return JS_EXCEPTION;
+	return JS_UNDEFINED;
+}
+
+#define PSTUB(n, name) JS_CGETSET_MAGIC_DEF(name, lazy_pget, lazy_pset, n),
+static const JSCFunctionListEntry elem_lazy[] = { ELEM_STUBS(PSTUB) };
+static const JSCFunctionListEntry node_lazy[] = { NODE_STUBS(PSTUB) };
+static const JSCFunctionListEntry doc_lazy[] = { DOC_STUBS(PSTUB) };
+#undef PSTUB
 
 static const JSCFunctionListEntry win_funcs[] = {
 	JS_CFUNC_MAGIC_DEF("setTimeout", 2, set_timer, 0),
@@ -4350,8 +4586,14 @@ static const JSCFunctionListEntry win_funcs[] = {
 	JS_CGETSET_MAGIC_DEF("AbortSignal", lazy_get, lazy_set, 0x25),
 	JS_CGETSET_MAGIC_DEF("ReadableStream", lazy_get, lazy_set, 0x26),
 	JS_CGETSET_MAGIC_DEF("PerformanceObserver", lazy_get, lazy_set, 0x27),
+	JS_CGETSET_MAGIC_DEF("crypto", lazy_get, lazy_set, 0x28),
 	JS_CGETSET_MAGIC_DEF("URL", lazy_get, lazy_set, 0x30),
 	JS_CGETSET_MAGIC_DEF("URLSearchParams", lazy_get, lazy_set, 0x31),
+	JS_CGETSET_MAGIC_DEF("NodeFilter", lazy_get, lazy_set, 0x40),
+	JS_CGETSET_MAGIC_DEF("ShadowRoot", lazy_get, lazy_set, 0x41),
+	JS_CGETSET_MAGIC_DEF("NodeList", lazy_get, lazy_set, 0x42),
+	JS_CGETSET_MAGIC_DEF("HTMLCollection", lazy_get, lazy_set, 0x43),
+	JS_CGETSET_MAGIC_DEF("performance", lazy_get, lazy_set, 0x50),
 };
 
 static const JSCFunctionListEntry console_funcs[] = {
@@ -4376,52 +4618,6 @@ static const char prelude[] =
 	"removeListener:function(){},addEventListener:function(){},removeEventListener:function(){}}};"
 	"g.getSelection=function(){return{rangeCount:0,toString:function(){return''},removeAllRanges:"
 	"function(){}}};"
-	/* performance: its now, marks of none, and the load's times as one
-	   moment (Bing's and YouTube's scripts read them) */
-	"if(!g.performance){var t0=Date.now(),pt={},pn='navigationStart fetchStart domainLookupStart "
-	"domainLookupEnd connectStart connectEnd requestStart responseStart responseEnd domLoading'.split(' '),"
-	"i;for(i=0;i<pn.length;i++)pt[pn[i]]=t0;'domInteractive domContentLoadedEventStart "
-	"domContentLoadedEventEnd domComplete loadEventStart loadEventEnd'.split(' ').forEach(function(k){pt[k]=0});"
-	"g.performance={timeOrigin:t0,timing:pt,navigation:{type:0,redirectCount:0},now:function(){"
-	"return Date.now()-t0},mark:function(){},measure:function(){},clearMarks:function(){},clearMeasures:"
-	"function(){},getEntries:function(){return[]},getEntriesByName:function(){return[]},getEntriesByType:"
-	"function(t){return t=='navigation'?[{name:String(location.href),entryType:'navigation',startTime:0,"
-	"type:'navigate',responseStart:0,responseEnd:0,domInteractive:0,domContentLoadedEventEnd:0,"
-	"loadEventEnd:0,duration:0}]:[]}}}"
-	/* NodeList and HTMLCollection: EWeb's lists are arrays (Apple's
-	   scripts add forEach to NodeList's prototype) */
-	/* the window's on... properties, null until set (Bing's scripts
-	   read onload) */
-	"'load unload beforeunload error resize scroll message popstate hashchange focus blur pageshow pagehide "
-	"online offline storage'.split(' ').forEach(function(k){if(!(('on'+k)in g))g['on'+k]=null});"
-	/* NodeFilter and a TreeWalker (DOM 6.1; YouTube's scripts): nextNode
-	   and parentNode, a node iterator the same */
-	"g.NodeFilter={FILTER_ACCEPT:1,FILTER_REJECT:2,FILTER_SKIP:3,SHOW_ALL:0xFFFFFFFF,SHOW_ELEMENT:1,"
-	"SHOW_ATTRIBUTE:2,SHOW_TEXT:4,SHOW_CDATA_SECTION:8,SHOW_PROCESSING_INSTRUCTION:64,SHOW_COMMENT:128,"
-	"SHOW_DOCUMENT:256,SHOW_DOCUMENT_TYPE:512,SHOW_DOCUMENT_FRAGMENT:1024};"
-	"Document.prototype.createNodeIterator=Document.prototype.createTreeWalker=function(r,w,f){"
-	"w=w===undefined?0xFFFFFFFF:w>>>0;function ok(n){if(!(w&(1<<(n.nodeType-1))))return 3;if(!f)return 1;"
-	"return typeof f=='function'?f(n):f.acceptNode(n)}function nx(n,s){if(!s&&n.firstChild)return n.firstChild;"
-	"while(n&&n!==r){if(n.nextSibling)return n.nextSibling;n=n.parentNode}return null}"
-	"var t={root:r,whatToShow:w,filter:f||null,currentNode:r,nextNode:function(){var n=t.currentNode,s=0,a;"
-	"for(;;){n=nx(n,s);if(!n)return null;a=ok(n);if(a==1)return t.currentNode=n;s=a==2}},parentNode:"
-	"function(){var n=t.currentNode;while(n&&n!==r){n=n.parentNode;if(n&&ok(n)==1)return t.currentNode=n}"
-	"return null},detach:function(){}};return t};"
-	/* a classList walked as its tokens (for...of, forEach: Tailwind's
-	   script; DOM 7.1) */
-	"(function(p){function a(t){var v=String(t.value).trim(),r=[],l=v?v.split(/\\s+/):[],i;"
-	"for(i=0;i<l.length;i++)if(r.indexOf(l[i])<0)r.push(l[i]);return r}"
-	"p[Symbol.iterator]=p.values=function(){return a(this)[Symbol.iterator]()};"
-	"p.keys=function(){return a(this).keys()};p.entries=function(){return a(this).entries()};"
-	"p.forEach=function(f,t){var s=this;a(this).forEach(function(v,i){f.call(t,v,i,s)})};"
-	"p.toString=function(){return String(this.value)}})(Object.getPrototypeOf(document.createElement('b').classList));"
-	/* ShadowRoot: a class of its own (EWeb's shadow roots are elements:
-	   none is one), for the pages' instanceof (Alpine.js) */
-	"g.ShadowRoot=function(){throw new TypeError('Illegal constructor')};"
-	"ShadowRoot.prototype=Object.create(DocumentFragment.prototype);"
-	"g.NodeList=function(){throw new TypeError('Illegal constructor')};NodeList.prototype=Array.prototype;"
-	"g.HTMLCollection=function(){throw new TypeError('Illegal constructor')};"
-	"HTMLCollection.prototype=Array.prototype;"
 	/* document.implementation: a document of detached nodes (jQuery parses its HTML in one) */
 	"var d=g.document;d.implementation={hasFeature:function(){return true},createHTMLDocument:function(t){"
 	"var h=d.createElement('html'),e=d.createElement('head'),b=d.createElement('body');h.appendChild(e);"
@@ -4765,6 +4961,10 @@ static int setup(ejs *j)
 	j->doc_proto = JS_NewObjectProto(ctx, j->node_proto);
 	LIST(j->doc_proto, doc_funcs);
 	LIST(j->doc_proto, parent_funcs);
+	/* (part 4's names, stubs till a script first touches one) */
+	LIST(j->elem_proto, elem_lazy);
+	LIST(j->node_proto, node_lazy);
+	LIST(j->doc_proto, doc_lazy);
 	j->frag_proto = JS_NewObjectProto(ctx, j->node_proto);
 	LIST(j->frag_proto, parent_funcs);
 	j->style_proto = JS_NewObject(ctx);
@@ -4806,7 +5006,24 @@ static int setup(ejs *j)
 	JS_SetPropertyStr(ctx, o, "onLine", JS_TRUE);
 	JS_SetPropertyStr(ctx, o, "javaEnabled", JS_NewCFunction2(ctx, (JSCFunction *) win_null, "javaEnabled", 0,
 								      JS_CFUNC_generic, 0));
+	{
+		/* navigator.languages (Apple's scripts) */
+		JSValue l = JS_NewArray(ctx);
+		JS_SetPropertyUint32(ctx, l, 0, JS_NewString(ctx, "en"));
+		JS_SetPropertyStr(ctx, o, "languages", l);
+	}
 	JS_SetPropertyStr(ctx, g, "navigator", o);
+	{
+		/* the window's on... properties, null until set (Bing's scripts
+		   read onload; a body's onload attribute still runs: dispatch) */
+		static const char *const on[] = { "onload", "onunload", "onbeforeunload", "onerror", "onresize",
+						  "onscroll", "onmessage", "onpopstate", "onhashchange", "onfocus",
+						  "onblur", "onpageshow", "onpagehide", "ononline", "onoffline",
+						  "onstorage" };
+		size_t k;
+		for (k = 0; k < sizeof on / sizeof on[0]; k++)
+			JS_DefinePropertyValueStr(ctx, g, on[k], JS_NULL, JS_PROP_C_W_E);
+	}
 	o = JS_NewObject(ctx);
 	JS_SetPropertyStr(ctx, o, "width", JS_NewInt32(ctx, 640));
 	JS_SetPropertyStr(ctx, o, "height", JS_NewInt32(ctx, 480));

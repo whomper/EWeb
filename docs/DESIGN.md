@@ -1888,6 +1888,16 @@ handler costs 4.3 million 68030 instructions (about 0.6-0.9 s on the DFB1), the 
 (each 3-6%) as it builds JavaScript's standard objects, not the prelude. The saving to try next is
 one runtime and context kept for the pages of a site, or made once and copied.
 
+**What 1.27 added, and its cost (25 Nov 2026).** The top-20 survey's sites stopped at names EWeb's
+scripts lacked (Image, the observers, AbortController, URL, crypto, performance.timing, reflected
+attributes such as `hreflang`, a video's `play()`...). Compiled with the prelude for every page with
+scripts they cost the 68030 5.6 million instructions more at each page's start (`jsbench -n`: 7.2
+million in 1.26, 12.8 million), so they are made when a script first asks: the window's names are
+getters (`lazy_get`), the prototypes' names stubs (`lazy_pget`), each part compiled once, on its
+first use (parts 2 to 5 in `src/js/js.c`), and the small ones are C (classList's walk, the window's
+`on...` properties, `navigator.languages`). A page's start is now 7.8 million: the 0.6 million more
+are the names themselves (about 60 new element classes and stubs, each an atom and a property).
+
 **Tailwind's in-browser compiler (25 Nov 2026).** `cdn.tailwindcss.com` writes a page's sheet from
 its classes as it loads, when a MutationObserver tells it the document changed (EWeb's observers are
 told once the parse's rest is in, and at each checkpoint after the document changed: `jobs` in

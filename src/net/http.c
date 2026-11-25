@@ -503,10 +503,17 @@ static int exchange1(const HTTPREQ *rq, const char *method, const URL *u, HTTPRE
 	url_hostport(u, hostport, sizeof(hostport));
 	sb_init(&req);
 	sb_init(&line);
-	if (http_gateway[0])	/* to the gateway: the whole address (proxy form) */
-		sb_printf(&req, "%s %s://%s%s HTTP/1.1\r\n", method, u->tls ? "https" : "http", hostport, target);
-	else
-		sb_printf(&req, "%s %s HTTP/1.1\r\n", method, target);
+	/* piece by piece: sb_printf cuts a line at 511 bytes, and an address
+	   may be longer (amazon.com's scripts' 520: the request line cut
+	   before its HTTP/1.1, which the server refused) */
+	sb_adds(&req, method);
+	sb_adds(&req, " ");
+	if (http_gateway[0]) {	/* to the gateway: the whole address (proxy form) */
+		sb_adds(&req, u->tls ? "https://" : "http://");
+		sb_adds(&req, hostport);
+	}
+	sb_adds(&req, target);
+	sb_adds(&req, " HTTP/1.1\r\n");
 	{
 		/* the log has the path, not the query: a form sent with GET
 		   puts its fields there, and sites their tokens (7.3) */
@@ -515,12 +522,16 @@ static int exchange1(const HTTPREQ *rq, const char *method, const URL *u, HTTPRE
 		snprintf(shown, sizeof(shown), "%s %.*s%s HTTP/1.1", method, (int)q, target, target[q] ? "?..." : "");
 		conn_log("HTTP", " >> ", shown, (long)strlen(shown));
 	}
-	sb_printf(&req, "Host: %s\r\nUser-Agent: %s\r\nAccept: %s\r\nAccept-Language: %s\r\n"
-		  "Accept-Encoding: %s\r\n", hostport, http_user_agent,
-		  rq->accept ? rq->accept : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+	sb_adds(&req, "Host: ");
+	sb_adds(&req, hostport);
+	sb_printf(&req, "\r\nUser-Agent: %s\r\nAccept: %s\r\nAccept-Language: %s\r\nAccept-Encoding: %s\r\n",
+		  http_user_agent, rq->accept ? rq->accept : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		  http_accept_language, rq->sink ? "identity" : "gzip, deflate");
-	if (rq->referrer && *rq->referrer)
-		sb_printf(&req, "Referer: %s\r\n", rq->referrer);
+	if (rq->referrer && *rq->referrer) {
+		sb_adds(&req, "Referer: ");
+		sb_adds(&req, rq->referrer);
+		sb_adds(&req, "\r\n");
+	}
 	if (http_cookie_out != NULL)
 		http_cookie_out(rq, u, method, &req);
 	if (rq->headers)
