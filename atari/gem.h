@@ -162,7 +162,7 @@ static inline int key_ctrl(short kstate, short key)
 #endif
 #define K_CAPS   0x10
 
-/* A Shift key typed while the program was busy (Erez's task #139, 9 Nov
+/* A Shift key typed while the program was busy (task #139, 9 Nov
  * 2026). On TOS the AES gives kstate as it is when the program reads the
  * key, so Shift typed during a long draw is gone: 0x4838 arrives with
  * kstate 0. evnt_multi_ (gem.c) now puts the state of the moment the key
