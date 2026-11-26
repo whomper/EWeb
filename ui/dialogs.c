@@ -828,6 +828,17 @@ void dl_box_step(long got)
 	d_at = w;
 }
 
+/* a press's release waited for, a tenth of a second at a time while
+   the button is down: a release that came before the wait (a quick
+   click) is never waited for (the box hung with its Stop pressed) */
+static void d_release(short mb)
+{
+	short m[8], mx, my, ks;
+	AEVENT e;
+	while ((mb & 1) && !(evnt_multi_(MU_BUTTON | MU_TIMER, 1, 1, 0, 100, m, &e) & MU_BUTTON))
+		graf_mkstate(&mx, &my, &mb, &ks);
+}
+
 /* the box's own events: 1 Stop (pressed, or Esc, Undo, its closer) */
 int dl_box_event(short which, const AEVENT *ev)
 {
@@ -846,20 +857,12 @@ int dl_box_event(short which, const AEVENT *ev)
 			   the button held */
 			tree[d_cancel].ob_state |= SELECTED;
 			dlg_draw(tree, d_cancel);
-			if (mb & 1) {
-				short m[8];
-				AEVENT e;
-				evnt_multi_(MU_BUTTON, 1, 1, 0, 0, m, &e);
-			}
+			d_release(mb);
 			return 1;
 		}
 		/* a press elsewhere: its release waited for here, or the AES
 		   keeps the button held and no later click comes */
-		if (mb & 1) {
-			short m[8];
-			AEVENT e;
-			evnt_multi_(MU_BUTTON, 1, 1, 0, 0, m, &e);
-		}
+		d_release(mb);
 	}
 	return 0;
 }
