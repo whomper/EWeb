@@ -292,7 +292,7 @@ PAD_BSS_core := 252
 PAD_select := 168
 PAD_RO_select := 85
 PAD_BSS_select := 252
-PAD_sheet := 96
+PAD_sheet := 208
 PAD_BSS_sheet := 252
 PAD_RO_layout := 92
 # 1.20's MiNTnet connect (common's net_tos.c: 178 bytes of code, 24 of
