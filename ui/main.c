@@ -1631,16 +1631,18 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 #endif
 
 #ifndef EW_ST
-/* before the download's box: the button the file selector left let go
-   (fsel_settle), and what it covered drawn again now; on TOS the box is
-   over the screen and nothing is drawn under it while the file comes. A
-   message that isn't a redraw is put back for the loop */
+/* before the download's box: what the file selector covered drawn again
+   now; on TOS the box is over the screen and nothing is drawn under it
+   while the file comes. A message that isn't a redraw is put back for the
+   loop. (The AES's selector's button is settled by filepick_save itself;
+   a second fsel_settle after the family's picker, closed by a key, cost
+   TOS 4.04 the next press: the GUI rig's downloads, 3 runs in 4) */
 static void under_selector(void)
 {
 	short msg[8];
 	AEVENT ev;
 	int n = 0;
-	fsel_settle();
+	CODE_PAD(conn_stop < 0, CP_MAIN_UNDER_SELECTOR);
 	while (n++ < 16 && (evnt_multi_(MU_MESAG | MU_TIMER, 1, 1, 1, 0, msg, &ev) & MU_MESAG)) {
 		if (msg[0] != WM_REDRAW) {
 			appl_write(appl_id(), 16, msg);
