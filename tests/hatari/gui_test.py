@@ -235,6 +235,7 @@ class Run:
                 open(inf, "w", newline="").write(t)
         if network:
             args += self.m.network()
+        args += os.environ.get("GUI_HATARI_ARGS", "").split()
         env = self.m.env()
         if windowed:
             env["DISPLAY"] = DISPLAY
