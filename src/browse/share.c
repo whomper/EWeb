@@ -118,7 +118,9 @@ void share_page(SBUF *s, const share *sh, int gateway)
 	esc(s, sh->host);
 	sb_adds(s, "</div><div class=ruler></div>");
 	if (sh->n == 0) {
-		sb_adds(s, "<p>Nothing to show: the folder is empty, or isn't shared with everyone.</p>");
+		sb_adds(s, "<p>");
+		sb_adds(s, sh->empty != NULL ? sh->empty : "Nothing to show: the folder is empty, or isn't shared with everyone.");
+		sb_adds(s, "</p>");
 	} else {
 		sb_adds(s, "<table>");
 		for (i = 0; i < sh->n; i++) {
@@ -147,7 +149,8 @@ void share_page(SBUF *s, const share *sh, int gateway)
 	}
 	sb_adds(s, "</div><div class=note>");
 	esc(s, sh->service);
-	sb_adds(s, "'s own page needs scripts far bigger than EWeb runs; EWeb shows the files itself.");
+	sb_adds(s, sh->n ? "'s own page needs scripts far bigger than EWeb runs; EWeb shows the files itself." :
+		"'s own page needs scripts far bigger than EWeb runs.");
 	if (sh->note != NULL) {
 		sb_adds(s, " ");
 		sb_adds(s, sh->note);

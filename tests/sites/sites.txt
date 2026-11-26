@@ -28,4 +28,7 @@ google           https://www.google.com/                       # the apps icon a
 gdrive-sample    https://drive.google.com/file/d/1AERAsampleFileNotARealDriveIdXyZ/view   # EWeb's own page for a Drive file: a sample page made for the test, no real file (24 Nov 2026)
 atariuptodate    https://www.atariuptodate.de/en/              -- -J   # Tailwind's compiler left out, Alpine's menus folded (25 Nov 2026)
 devdocs          https://docs.dev-docs.org/                    -- -J   # a frameset: its script-free frame's <noscript> hidden (25 Nov 2026)
+gdrive-folder    https://drive.google.com/drive/folders/15uNXeRBIhVvZJIhL4yTw4IsStMhUaaxl   # a public folder (gdown's test files): EWeb's shared-files page with its folders, files and Google documents (26 Nov 2026)
+dropbox-folder   https://www.dropbox.com/sh/o8g1530jle17spa/AADRntSHl_jLInmrmSwsX-Qsa?dl=0   # a public folder (OpenFace's models): its name and Download all as a zip (26 Nov 2026)
+icloud-file      https://www.icloud.com/iclouddrive/084x1Kofe7Bm8XzVewiTpHLsQ   # the owner's: its name, and why it can't be downloaded here (26 Nov 2026)
 yt-sample        https://www.youtube.com/watch?v=AERAsample1   # EWeb's own page for a YouTube video: a sample page made for the test, no real video (25 Nov 2026)

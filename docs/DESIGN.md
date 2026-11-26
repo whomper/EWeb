@@ -1912,10 +1912,21 @@ others run (Alpine.js folds atariuptodate.de's menus).
 shares is made by scripts far bigger than EWeb runs, so EWeb shows its own page in their place:
 `src/browse/share.c` (`share_page`), in the home page's look (black, light copper for the label and
 the buttons' words, copper for the ruler and the buttons' frames), a row an item with its type, name,
-size and Download (a folder: Open), and Download all where the service gives one. Google Drive's file
-page is the first (`drive_page`: its name from `og:title`, the download from
-`drive.usercontent.google.com`); folders and Dropbox, Box and iCloud Drive follow once tried on real
-shared links. Laid out from 320 pixels wide, read in 16 colours (the gdrive-sample site case).
+size and Download (a folder: Open), and Download all where the service gives one. Each is tried on a
+real public share (the sites `gdrive-sample`, `gdrive-folder`, `dropbox-folder`, `icloud-file`):
+- **Google Drive**: a file (`drive_page`: its name from `og:title`, the download from
+  `drive.usercontent.google.com`); a folder (`drive_folder`: Google's embedded view of it,
+  `embeddedfolderview?id=`, a plain page with each entry's ID, name and date; Drive gives no sizes
+  there, so the date is shown; a folder opens this page again; Google's documents as Word's,
+  Excel's or PowerPoint's file through `export?format=`).
+- **Dropbox** (`dropbox_share`): the name from the page's title; a file is its address with `dl=1`,
+  a folder's files one ZIP file the same way (Download all). Its list is given only to its scripts,
+  by a private call with a session token, which EWeb doesn't make.
+- **iCloud Drive** (`icloud_share`): its page has the item's name and nothing more; the file is given
+  only to its scripts through Apple's services, so the page says EWeb can't download it, and names
+  the Gateway's browser.
+- **Box**: not yet; no public shared link found to try it on.
+Laid out from 320 pixels wide, read in 16 colours.
 
 **Tailwind's utilities made by EWeb (26 Nov 2026).** Without the compiler such a page had none of
 Tailwind's styles (atariuptodate.de's header and menus came as plain lists). EWeb now writes the

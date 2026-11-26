@@ -28,6 +28,7 @@ typedef struct share {
 	char page[1024];		/* the service's own page (the address shown) */
 	char all[640];			/* Download all's address, "" none */
 	const char *note;		/* a line under the list, NULL none */
+	const char *empty;		/* said in place of the list when it has none, NULL: the default */
 	int n;
 	share_item it[SHARE_MAX];
 } share;

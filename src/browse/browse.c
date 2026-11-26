@@ -1162,6 +1162,221 @@ static void drive_page(SBUF *s, const char *url, const char *id, const char *nam
 	free(sh);
 }
 
+static int fetch(browser *b, const char *url, const char *site, int fresh, const char *accept, long maxbody,
+		 int keep, const FSUBMIT *post, FETCH *f);
+
+/* an ID as Google writes them (letters, digits, - and _) at u: its length */
+static int g_id(const char *u, char *id, int size)
+{
+	int k = 0;
+	while (((*u >= '0' && *u <= '9') || ((*u | 32) >= 'a' && (*u | 32) <= 'z') || *u == '-' || *u == '_') &&
+	       k < size - 1)
+		id[k++] = *u++;
+	id[k] = 0;
+	return k;
+}
+
+/* the page's <title> between pre and post (either "" for none),
+   entities undone, into out ("" if it isn't so) */
+static void title_part(const FETCH *f, const char *pre, const char *post, char *out, int size)
+{
+	const char *t = find_text(f->data, f->len, "<title>"), *e, *v;
+	out[0] = 0;
+	if (t == NULL)
+		return;
+	v = t + 7;
+	if ((e = find_text(v, (long) (f->data + f->len - v), "</title>")) == NULL)
+		return;
+	if (pre[0] && (e - v < (long) strlen(pre) || strncmp(v, pre, strlen(pre)) != 0))
+		return;
+	v += strlen(pre);
+	if (post[0]) {
+		long n = (long) strlen(post);
+		if (e - v < n || strncmp(e - n, post, (size_t) n) != 0)
+			return;
+		e -= n;
+	}
+	if (e > v)
+		copy_ent(v, e, out, size);
+}
+
+/* a Google Drive folder's page (drive.google.com/drive/folders/ID, or
+   /drive/u/N/folders/ID): 1 and its ID */
+static int drive_folder_id(const FETCH *f, char *id, int size)
+{
+	static const char at[] = "https://drive.google.com/drive/";
+	const char *u = f->url + sizeof at - 1;
+	int k;
+	if (strncmp(f->url, at, sizeof at - 1) != 0 || f->status != 200 || f->data == NULL)
+		return 0;
+	if (u[0] == 'u' && u[1] == '/') {	/* (u/0/folders/ID: a signed-in account's) */
+		for (u += 2; *u >= '0' && *u <= '9'; u++)
+			;
+		if (*u++ != '/')
+			return 0;
+	}
+	if (strncmp(u, "folders/", 8) != 0)
+		return 0;
+	k = g_id(u + 8, id, size);
+	return k >= 10 && (u[8 + k] == 0 || u[8 + k] == '/' || u[8 + k] == '?');
+}
+
+/* a Drive folder's files (DESIGN.md, Shared files): its page is a
+   script's, but Google's embedded view of the folder
+   (drive.google.com/embeddedfolderview?id=ID) is a plain page of it: each
+   entry's ID, address, name and date. A folder opens as a folder (this
+   page again), a file downloads from drive.usercontent.google.com, a
+   Google document as Word's, Excel's or PowerPoint's file */
+static int drive_folder(browser *b, const FETCH *f, const char *id, share *sh)
+{
+	char url[256];
+	FETCH *g = malloc(sizeof *g);
+	const char *p, *e;
+	if (g == NULL)
+		return 0;
+	sh->service = "Google Drive";
+	str_copy(sh->host, "drive.google.com", sizeof sh->host);
+	str_copy(sh->page, f->url, sizeof sh->page);
+	title_part(f, "", " - Google Drive", sh->title, sizeof sh->title);
+	snprintf(url, sizeof url, "https://drive.google.com/embeddedfolderview?id=%s", id);
+	if (!fetch(b, url, f->url, 0, "text/html,*/*;q=0.1", 1L << 20, 1, NULL, g) || g->status != 200 ||
+	    g->data == NULL) {
+		free(g->data);
+		free(g);
+		return 0;
+	}
+	if (!sh->title[0])
+		title_part(g, "", "", sh->title, sizeof sh->title);
+	p = g->data;
+	e = g->data + g->len;
+	while (sh->n < SHARE_MAX && (p = find_text(p, (long) (e - p), "<div class=\"flip-entry\" id=\"entry-")) != NULL) {
+		share_item *it = &sh->it[sh->n];
+		char eid[96], href[512];
+		const char *h, *q, *t, *next;
+		p += 35;
+		g_id(p, eid, sizeof eid);
+		next = find_text(p, (long) (e - p), "<div class=\"flip-entry\" id=\"entry-");
+		if (next == NULL)
+			next = e;
+		if ((h = find_text(p, (long) (next - p), "<a href=\"")) == NULL ||
+		    (q = memchr(h + 9, '"', (size_t) (next - h - 9))) == NULL)
+			continue;
+		copy_ent(h + 9, q, href, sizeof href);
+		if ((t = find_text(q, (long) (next - q), "flip-entry-title\">")) == NULL ||
+		    (q = memchr(t + 18, '<', (size_t) (next - t - 18))) == NULL)
+			continue;
+		copy_ent(t + 18, q, it->name, sizeof it->name);
+		if ((t = find_text(q, (long) (next - q), "flip-entry-last-modified\"><div>")) != NULL &&
+		    (q = memchr(t + 32, '<', (size_t) (next - t - 32))) != NULL)
+			copy_ent(t + 32, q, it->size, sizeof it->size);	/* (its date: Drive gives no size) */
+		if (strstr(href, "drive.google.com/drive/folders/") != NULL) {
+			it->folder = 1;
+			str_copy(it->url, href, sizeof it->url);
+		} else if (strstr(href, "drive.google.com/file/d/") != NULL) {
+			share_type(it->type, sizeof it->type, it->name);
+			snprintf(it->url, sizeof it->url,
+				 "https://drive.usercontent.google.com/download?id=%s&export=download", eid);
+		} else if (strstr(href, "docs.google.com/") != NULL) {
+			const char *kind = strstr(href, "/document/") ? "document" :
+					   strstr(href, "/spreadsheets/") ? "spreadsheets" :
+					   strstr(href, "/presentation/") ? "presentation" : NULL;
+			const char *fmt = kind == NULL ? NULL : kind[0] == 'd' ? "docx" : kind[0] == 's' ? "xlsx" : "pptx";
+			if (kind != NULL) {
+				snprintf(it->url, sizeof it->url, "https://docs.google.com/%s/d/%s/export?format=%s", kind,
+					 eid, fmt);
+				share_type(it->type, sizeof it->type, it->name);
+				if (!it->type[0])
+					str_copy(it->type, fmt[0] == 'd' ? "DOCX" : fmt[0] == 'x' ? "XLSX" : "PPTX",
+						 sizeof it->type);
+			} else {
+				str_copy(it->url, href, sizeof it->url);
+			}
+		} else {
+			str_copy(it->url, href, sizeof it->url);
+		}
+		sh->n++;
+		p = next;
+	}
+	free(g->data);
+	free(g);
+	sh->note = "Drive gives a folder's files without their sizes: the date beside each is when it last changed.";
+	return 1;
+}
+
+/* a Dropbox shared link (www.dropbox.com/scl/fi/... or /s/... a file,
+   /scl/fo/... or /sh/... a folder): its page is a script's, and lists
+   nothing without it; its name is in the page's title ("Dropbox - NAME -
+   Simplify your life"), and the same address with dl=1 is the file, or
+   the folder's files in one zip (Dropbox's own help: "force a download") */
+static int dropbox_share(const FETCH *f, share *sh)
+{
+	static const char at[] = "https://www.dropbox.com/";
+	const char *u = f->url + sizeof at - 1, *q;
+	int folder;
+	size_t n;
+	share_item *it;
+	if (strncmp(f->url, at, sizeof at - 1) != 0 || f->status != 200 || f->data == NULL)
+		return 0;
+	if (!strncmp(u, "scl/fi/", 7) || !strncmp(u, "s/", 2))
+		folder = 0;
+	else if (!strncmp(u, "scl/fo/", 7) || !strncmp(u, "sh/", 3))
+		folder = 1;
+	else
+		return 0;
+	sh->service = "Dropbox";
+	str_copy(sh->host, "www.dropbox.com", sizeof sh->host);
+	str_copy(sh->page, f->url, sizeof sh->page);
+	title_part(f, "Dropbox - ", " - Simplify your life", sh->title, sizeof sh->title);
+	/* the address with dl=1 in place of dl=0, or added */
+	{
+		char dl[4200];
+		q = strstr(f->url, "dl=0");
+		if (q != NULL && (q[-1] == '?' || q[-1] == '&') && (q[4] == 0 || q[4] == '&')) {
+			n = (size_t) (q - f->url);
+			snprintf(dl, sizeof dl, "%.*sdl=1%s", (int) n, f->url, q + 4);
+		} else {
+			snprintf(dl, sizeof dl, "%s%sdl=1", f->url, strchr(f->url, '?') ? "&" : "?");
+		}
+		if (folder) {
+			str_copy(sh->all, dl, sizeof sh->all);
+			sh->empty = "Dropbox lists a folder's files only to its own scripts. Download all brings every "
+				    "file in it, as one ZIP file.";
+			return 1;
+		}
+		it = &sh->it[0];
+		str_copy(it->name, sh->title[0] ? sh->title : "The file", sizeof it->name);
+		share_type(it->type, sizeof it->type, it->name);
+		str_copy(it->url, dl, sizeof it->url);
+		sh->n = 1;
+	}
+	return 1;
+}
+
+/* an iCloud Drive shared link (www.icloud.com/iclouddrive/ID, which
+   comes to drive.icloud.com/shared/ID): its page has the item's name
+   (og:title) and nothing else; the file itself is given only to iCloud's
+   own scripts, through Apple's services, so EWeb says so (and names the
+   Gateway's browser, where the page itself works) */
+static int icloud_share(const FETCH *f, share *sh)
+{
+	const char *t, *v, *e;
+	if (strncmp(f->url, "https://drive.icloud.com/shared/", 32) != 0 &&
+	    strncmp(f->url, "https://www.icloud.com/iclouddrive/", 35) != 0)
+		return 0;
+	if (f->status != 200 || f->data == NULL)
+		return 0;
+	sh->service = "iCloud Drive";
+	str_copy(sh->host, "icloud.com", sizeof sh->host);
+	str_copy(sh->page, f->url, sizeof sh->page);
+	e = f->data + f->len;
+	if ((t = find_text(f->data, f->len, "<meta property=\"og:title\" content=\"")) != NULL &&
+	    (v = t + 35, (t = memchr(v, '"', (size_t) (e - v))) != NULL) && t > v)
+		copy_ent(v, t, sh->title, sizeof sh->title);
+	sh->empty = "iCloud gives a shared file only to its own page's scripts, through Apple's services, so "
+		    "EWeb can't download it here.";
+	return 1;
+}
+
 /* a page's <meta property="og:NAME" content="..."> into out ("" if it
    has none) */
 static void og_meta(const FETCH *f, const char *name, char *out, int size)
@@ -4154,9 +4369,26 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		int google = google_wall(b, f, q, sizeof q), drive = 0;
 #ifndef EW_ST
 		char did[80], dname[256];
+		share *sh = NULL;
 		drive = !google && drive_file(f, did, sizeof did, dname, sizeof dname);
 		if (!google && !drive && yt_video(f, did))
 			drive = 2;
+		/* a Drive folder, a Dropbox or an iCloud Drive link: EWeb's
+		   shared-files page */
+		if (!google && !drive &&
+		    (drive_folder_id(f, did, sizeof did) || !strncmp(f->url, "https://www.dropbox.com/", 24) ||
+		     !strncmp(f->url, "https://drive.icloud.com/shared/", 32) ||
+		     !strncmp(f->url, "https://www.icloud.com/iclouddrive/", 35)) &&
+		    (sh = calloc(1, sizeof *sh)) != NULL) {
+			if ((!strncmp(f->url, "https://drive.google.com/", 25) && drive_folder(b, f, did, sh)) ||
+			    (!strncmp(f->url, "https://www.dropbox.com/", 24) && dropbox_share(f, sh)) ||
+			    icloud_share(f, sh))
+				drive = 3;
+			else {
+				free(sh);
+				sh = NULL;
+			}
+		}
 #endif
 		if (google || drive || cf_wall(f)) {
 			/* EWeb's own page in its place, which goes nowhere (and
@@ -4164,7 +4396,11 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			if (google)
 				wall_page(b, &src, f->url, q);
 #ifndef EW_ST
-			else if (drive == 2)
+			else if (drive == 3) {
+				share_page(&src, sh, http_gateway[0] != 0);
+				free(sh);
+				sh = NULL;
+			} else if (drive == 2)
 				yt_page(&src, f, did);
 			else if (drive)
 				drive_page(&src, f->url, did, dname);
