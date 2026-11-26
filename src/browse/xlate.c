@@ -28,6 +28,7 @@
 #include "conn.h"
 #include "plat.h"
 #include "util.h"
+#include "codepad.h"
 
 #ifndef EW_ST
 
@@ -383,6 +384,8 @@ int br_translate_step(browser *b, int32_t top, int32_t height, char *err, int er
 void br_translate_progress(browser *b, long *done, long *total, char *from, int fromlen)
 {
 	struct xlate *x = current(b);
+	/* (doc.o's code, next, at 1.26's places modulo 256: never run) */
+	CODE_PAD((uintptr_t) b == 1, CP_XLATE_BR_TRANSLATE_PROGRESS);
 	*done = x != NULL ? x->done_bytes : 0;
 	*total = x != NULL ? x->bytes : 0;
 	if (from != NULL)
