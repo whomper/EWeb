@@ -1937,7 +1937,10 @@ page whose head loads `cdn.tailwindcss.com`, from its elements' classes and the 
 values) and given Tailwind's own rule: the data is Tailwind 3.4.17's (MIT), kept in
 `src/css/tw.txt` by `tools/mktw.py --from-tailwind` (node and Tailwind, once, never at build time)
 as what EWeb's CSS engine reads: its base sheet, the palette and 16 colour families, 114 families of
-the theme's scales, 315 single rules; `build/gen/tw_data.h` is made from it. `make test`'s `twtest`
+the theme's scales, 315 single rules; `build/gen/tw_data.h` is made from it, packed (raw DEFLATE:
+42.6 KB of tables in 9.7 KB of `EWEB.PRG`), and `tw_load` unpacks it on the first such page and keeps it.
+Unpacked in the program it had grown `EWEB.PRG` by 53 KB (to 1.43 MB: with the font no longer on a
+1.44 MB floppy, `tests/hatari/appdir.py`'s; that rig's Falcon floppy is now 2.88 MB). `make test`'s `twtest`
 holds 270 classes to what Tailwind itself makes of them (`tests/browse/twcases.txt`, `mktw.py
 --cases`). The head's children alone are looked at for the script, so another page costs nothing.
 It is `EWEB.PRG`'s (the ST edition is frozen). Its first page showed a fault of the CSS engine's: a

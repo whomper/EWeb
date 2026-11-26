@@ -18,7 +18,8 @@ own home page (EWeb 0.48 on the ST's TOS 1.04). Two cases on each machine:
           as a floppy holds), on a 1.44 MB floppy (18 sectors a track): an
           800 KB one no longer holds EWEBST.PRG (877 KB in 1.21), and
           Hatari's ST and STE read the bigger one (what is tested is where
-          EWeb looks, not the drive).
+          EWeb looks, not the drive); a Falcon's is 2.88 MB (36 sectors),
+          since EWEB.PRG (1.40 MB in 1.27) and the font outgrew 1.44.
   C:      EWeb in C:\\APP with the whole EWEB.FNT (the launcher made to
           start C:\\APP\\PROBE.PRG), A:\\APP still the current folder: EWeb
           started on C:, whose folder (the root) isn't EWeb's.
@@ -78,7 +79,9 @@ def run(w, spec, prg, fnt, on_c):
     args = ["hatari", "--fast-boot", "yes", "--natfeats", "yes", "--log-level", "warn", "--cmd-fifo", fifo] + m.args()
     big = not on_c
     img = os.path.join(w, "a.st")
-    mtools("mformat", "-i", img, "-t", "80", "-h", "2", "-s", "18" if big else "10", "-C", "::")
+    # (a Falcon's: 2.88 MB, as EWEB.PRG with the font outgrew 1.44 MB in 1.27)
+    sectors = ("36" if m.name.startswith("Falcon") else "18") if big else "10"
+    mtools("mformat", "-i", img, "-t", "80", "-h", "2", "-s", sectors, "-C", "::")
     mtools("mmd", "-i", img, "::/APP")
     for src, name in files:
         if on_c:

@@ -201,11 +201,11 @@ def from_tailwind(src):
         f.write("\n".join(out) + "\n")
 
 
-def cstr(s):
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
 def to_header(txt, outh):
+    """the tables, NUL-separated in sections and packed with raw DEFLATE
+    (tw.c unpacks them on the first page that needs them: 55 KB of
+    EWEB.PRG kept to about 10)"""
+    import zlib
     base, pal, cfam, secs, fams, rules = [], [], [], {}, [], []
     for line in open(txt, encoding="utf-8"):
         line = line.rstrip("\n")
@@ -231,36 +231,35 @@ def to_header(txt, outh):
     cfam = [(rank[a],) + tuple(r) for a, *r in cfam]
     fams = [(rank[a],) + tuple(r) for a, *r in fams]
     rules = [(n, rank[i], su, b) for n, i, su, b in rules]
-    o = ["/* made by tools/mktw.py from src/css/tw.txt: Tailwind 3's utilities (MIT,",
-         "   Copyright (c) Tailwind Labs, Inc.) as EWeb reads them */", ""]
-    o.append("static const char tw_base[] =")
-    o += ["\t%s" % cstr(b) for b in base]
-    o.append(";")
     pal.sort()
-    o.append("static const struct tw_col { const char *name; unsigned char r, g, b; } tw_pal[] = {")
-    o += ["\t{%s, %d, %d, %d}," % (cstr(n), r, g, b) for n, r, g, b in pal]
-    o.append("};")
-    o.append("static const struct tw_tok { const char *tok, *val; } tw_toks[] = {")
-    starts = {}
-    k = 0
-    for s in sec_names:
-        starts[s] = (k, len(secs[s]))
-        for t, v in sorted(secs[s]):
-            o.append("\t{%s, %s}," % (cstr(t), cstr(v)))
-            k += 1
-    o.append("};")
+    starts, toks = {}, []
+    for sec in sec_names:
+        starts[sec] = (len(toks), len(secs[sec]))
+        toks += sorted(secs[sec])
     cfam.sort(key=lambda x: (x[1], x[0]))
-    o.append("static const struct tw_cfam { const char *pre, *suf, *plain, *opa; unsigned short order; } tw_cfams[] = {")
-    o += ["\t{%s, %s, %s, %s, %d}," % (cstr(p), cstr(s), cstr(a), cstr(b), i) for i, p, s, a, b in cfam]
-    o.append("};")
     fams.sort(key=lambda x: (x[1], x[0]))
-    o.append("static const struct tw_fam { const char *pre, *suf, *body; unsigned short order, tok, ntok; } tw_fams[] = {")
-    o += ["\t{%s, %s, %s, %d, %d, %d}," % (cstr(p), cstr(s), cstr(b), i, starts[sec][0], starts[sec][1])
-          for i, p, s, sec, b in fams]
-    o.append("};")
     rules.sort()
-    o.append("static const struct tw_rule { const char *name, *suf, *body; unsigned short order; } tw_rules[] = {")
-    o += ["\t{%s, %s, %s, %d}," % (cstr(n), cstr(s), cstr(b), i) for n, i, s, b in rules]
+    # the blob: the counts, the base sheet, then each table's fields as
+    # strings, each 0-ended
+    out = [str(len(pal)), str(len(toks)), str(len(cfam)), str(len(fams)), str(len(rules)), "".join(base)]
+    for n, r, g, b in pal:
+        out += [n, str(r), str(g), str(b)]
+    for t, v in toks:
+        out += [t, v]
+    for i, p, su, a, b in cfam:
+        out += [p, su, a, b, str(i)]
+    for i, p, su, sec, b in fams:
+        out += [p, su, b, str(i), str(starts[sec][0]), str(starts[sec][1])]
+    for n, i, su, b in rules:
+        out += [n, su, b, str(i)]
+    blob = ("\0".join(out) + "\0").encode("utf-8")
+    co = zlib.compressobj(9, zlib.DEFLATED, -15)
+    packed = co.compress(blob) + co.flush()
+    o = ["/* made by tools/mktw.py from src/css/tw.txt: Tailwind 3's utilities (MIT,",
+         "   Copyright (c) Tailwind Labs, Inc.) as EWeb reads them, packed (raw DEFLATE) */", "",
+         "#define TW_UNPACKED %d" % len(blob), "static const unsigned char tw_packed[%d] = {" % len(packed)]
+    for k in range(0, len(packed), 16):
+        o.append("\t" + ", ".join("%d" % x for x in packed[k:k + 16]) + ",")
     o.append("};")
     with open(outh, "w", encoding="utf-8") as f:
         f.write("\n".join(o) + "\n")

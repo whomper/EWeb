@@ -15,7 +15,114 @@
 #include "tw.h"
 
 #ifndef EW_ST
+#include "inflate.h"
 #include "tw_data.h"
+
+/* the tables, unpacked from tw_packed (tools/mktw.py) on the first page
+   that needs them: sorted as the binary searches below need them, their
+   strings in the unpacked blob, kept until EWeb quits */
+static const char *tw_base;
+static struct tw_col { const char *name; unsigned char r, g, b; } *tw_pal;
+static struct tw_tok { const char *tok, *val; } *tw_toks;
+static struct tw_cfam { const char *pre, *suf, *plain, *opa; unsigned short order; } *tw_cfams;
+static struct tw_fam { const char *pre, *suf, *body; unsigned short order, tok, ntok; } *tw_fams;
+static struct tw_rule { const char *name, *suf, *body; unsigned short order; } *tw_rules;
+static int tw_pal_n, tw_toks_n, tw_cfams_n, tw_fams_n, tw_rules_n;
+static int tw_state;		/* 0 not yet, 1 unpacked, -1 couldn't be */
+
+static const char *tw_next(const char **p, const char *end)
+{
+	const char *s = *p;
+	const char *z = memchr(s, 0, (size_t) (end - s));
+	if (z == NULL)
+		return NULL;
+	*p = z + 1;
+	return s;
+}
+
+static int tw_num(const char **p, const char *end)
+{
+	const char *s = tw_next(p, end);
+	return s != NULL ? atoi(s) : -1;
+}
+
+static int tw_load(void)
+{
+	SBUF b;
+	const char *p, *end;
+	int i, ok = 1;
+	if (tw_state)
+		return tw_state > 0;
+	tw_state = -1;
+	sb_init(&b);
+	if (inflate_raw(tw_packed, (long) sizeof tw_packed, &b, TW_UNPACKED + 16) != 1 || b.len != TW_UNPACKED) {
+		sb_free(&b);
+		return 0;
+	}
+	p = b.s;
+	end = b.s + b.len;
+	tw_pal_n = tw_num(&p, end);
+	tw_toks_n = tw_num(&p, end);
+	tw_cfams_n = tw_num(&p, end);
+	tw_fams_n = tw_num(&p, end);
+	tw_rules_n = tw_num(&p, end);
+	tw_base = tw_next(&p, end);
+	tw_pal = malloc(sizeof *tw_pal * (size_t) (tw_pal_n + 1));
+	tw_toks = malloc(sizeof *tw_toks * (size_t) (tw_toks_n + 1));
+	tw_cfams = malloc(sizeof *tw_cfams * (size_t) (tw_cfams_n + 1));
+	tw_fams = malloc(sizeof *tw_fams * (size_t) (tw_fams_n + 1));
+	tw_rules = malloc(sizeof *tw_rules * (size_t) (tw_rules_n + 1));
+	if (tw_base == NULL || tw_pal == NULL || tw_toks == NULL || tw_cfams == NULL || tw_fams == NULL ||
+	    tw_rules == NULL || tw_pal_n < 0 || tw_toks_n < 0 || tw_cfams_n < 0 || tw_fams_n < 0 || tw_rules_n < 0)
+		ok = 0;
+	for (i = 0; ok && i < tw_pal_n; i++) {
+		tw_pal[i].name = tw_next(&p, end);
+		tw_pal[i].r = (unsigned char) tw_num(&p, end);
+		tw_pal[i].g = (unsigned char) tw_num(&p, end);
+		tw_pal[i].b = (unsigned char) tw_num(&p, end);
+		ok = tw_pal[i].name != NULL;
+	}
+	for (i = 0; ok && i < tw_toks_n; i++) {
+		tw_toks[i].tok = tw_next(&p, end);
+		tw_toks[i].val = tw_next(&p, end);
+		ok = tw_toks[i].val != NULL;
+	}
+	for (i = 0; ok && i < tw_cfams_n; i++) {
+		tw_cfams[i].pre = tw_next(&p, end);
+		tw_cfams[i].suf = tw_next(&p, end);
+		tw_cfams[i].plain = tw_next(&p, end);
+		tw_cfams[i].opa = tw_next(&p, end);
+		tw_cfams[i].order = (unsigned short) tw_num(&p, end);
+		ok = tw_cfams[i].opa != NULL;
+	}
+	for (i = 0; ok && i < tw_fams_n; i++) {
+		tw_fams[i].pre = tw_next(&p, end);
+		tw_fams[i].suf = tw_next(&p, end);
+		tw_fams[i].body = tw_next(&p, end);
+		tw_fams[i].order = (unsigned short) tw_num(&p, end);
+		tw_fams[i].tok = (unsigned short) tw_num(&p, end);
+		tw_fams[i].ntok = (unsigned short) tw_num(&p, end);
+		ok = tw_fams[i].body != NULL && tw_fams[i].tok + tw_fams[i].ntok <= tw_toks_n;
+	}
+	for (i = 0; ok && i < tw_rules_n; i++) {
+		tw_rules[i].name = tw_next(&p, end);
+		tw_rules[i].suf = tw_next(&p, end);
+		tw_rules[i].body = tw_next(&p, end);
+		tw_rules[i].order = (unsigned short) tw_num(&p, end);
+		ok = tw_rules[i].body != NULL;
+	}
+	if (!ok) {
+		free(tw_pal);
+		free(tw_toks);
+		free(tw_cfams);
+		free(tw_fams);
+		free(tw_rules);
+		sb_free(&b);
+		return 0;
+	}
+	tw_state = 1;		/* (the blob's strings stay: b.s is kept) */
+	return 1;
+}
 
 #define N(a) ((int) (sizeof(a) / sizeof((a)[0])))
 
@@ -151,7 +258,7 @@ static int cmp_rule(const void *k, const void *e)
 
 /* the first of a sorted table's entries whose pre is n (len bytes) */
 #define FIND_PRE(tab, n, len, out) do { \
-	int lo_ = 0, hi_ = N(tab); \
+	int lo_ = 0, hi_ = tab##_n; \
 	while (lo_ < hi_) { \
 		int mid_ = (lo_ + hi_) / 2, r_ = strncmp((tab)[mid_].pre, (n), (len)); \
 		if (r_ == 0 && (tab)[mid_].pre[len]) r_ = 1; \
@@ -167,7 +274,7 @@ static int pre_is(const char *pre, const char *n, size_t len)
 
 static const struct tw_col *colour(const char *s, size_t n)
 {
-	int lo = 0, hi = N(tw_pal);
+	int lo = 0, hi = tw_pal_n;
 	while (lo < hi) {
 		int mid = (lo + hi) / 2, r = strncmp(tw_pal[mid].name, s, n);
 		if (r == 0 && tw_pal[mid].name[n])
@@ -341,11 +448,11 @@ static void utility(tw_list *L, tw_cls *c, const char *u, size_t n)
 	key.s = u;
 	key.len = n;
 	/* one of Tailwind's rules (some have more than one: placeholder's) */
-	r = bsearch(&key, tw_rules, (size_t) N(tw_rules), sizeof tw_rules[0], cmp_rule);
+	r = bsearch(&key, tw_rules, (size_t) tw_rules_n, sizeof tw_rules[0], cmp_rule);
 	if (r != NULL) {
 		while (r > tw_rules && cmp_rule(&key, r - 1) == 0)
 			r--;
-		for (; r < tw_rules + N(tw_rules) && cmp_rule(&key, r) == 0; r++)
+		for (; r < tw_rules + tw_rules_n && cmp_rule(&key, r) == 0; r++)
 			rule(L, c, r->suf, r->order, r->body, NULL, NULL, NULL, NULL);
 		return;
 	}
@@ -373,12 +480,12 @@ static void utility(tw_list *L, tw_cls *c, const char *u, size_t n)
 					snprintf(tri, sizeof tri, "%d %d %d", rgb[0], rgb[1], rgb[2]);
 					snprintf(hex, sizeof hex, "#%02x%02x%02x", rgb[0], rgb[1], rgb[2]);
 					FIND_PRE(tw_cfams, u, pl, at);
-					for (i = at; i < N(tw_cfams) && pre_is(tw_cfams[i].pre, u, pl); i++)
+					for (i = at; i < tw_cfams_n && pre_is(tw_cfams[i].pre, u, pl); i++)
 						rule(L, c, tw_cfams[i].suf, tw_cfams[i].order, tw_cfams[i].plain, NULL, tri, hex, NULL);
 					return;
 				}
 				FIND_PRE(tw_cfams, u, pl, at);
-				for (i = at; i < N(tw_cfams) && pre_is(tw_cfams[i].pre, u, pl); i++) {
+				for (i = at; i < tw_cfams_n && pre_is(tw_cfams[i].pre, u, pl); i++) {
 					/* the opacity form: rgb($C / $A) and $H as the value */
 					char body[256];
 					const char *b = tw_cfams[i].opa, *p;
@@ -407,7 +514,7 @@ static void utility(tw_list *L, tw_cls *c, const char *u, size_t n)
 				return;
 			}
 			FIND_PRE(tw_fams, u, pl, at);
-			if (at < N(tw_fams) && pre_is(tw_fams[at].pre, u, pl))
+			if (at < tw_fams_n && pre_is(tw_fams[at].pre, u, pl))
 				rule(L, c, tw_fams[at].suf, tw_fams[at].order, tw_fams[at].body, val, NULL, NULL, NULL);
 			return;
 		}
@@ -439,7 +546,7 @@ static void utility(tw_list *L, tw_cls *c, const char *u, size_t n)
 				if (op >= 0)
 					snprintf(al, sizeof al, op == 100 ? "1" : op % 10 ? "0.%02d" : "0.%d", op % 10 ? op : op / 10);
 				FIND_PRE(tw_cfams, u, pl, at);
-				for (i = at; i < N(tw_cfams) && pre_is(tw_cfams[i].pre, u, pl); i++) {
+				for (i = at; i < tw_cfams_n && pre_is(tw_cfams[i].pre, u, pl); i++) {
 					rule(L, c, tw_cfams[i].suf, tw_cfams[i].order, op >= 0 ? tw_cfams[i].opa : tw_cfams[i].plain,
 					     NULL, rgb, hex, op >= 0 ? al : NULL);
 					made = 1;
@@ -450,7 +557,7 @@ static void utility(tw_list *L, tw_cls *c, const char *u, size_t n)
 		}
 		/* a token of a family's scale */
 		FIND_PRE(tw_fams, u, pl, at);
-		for (i = at; i < N(tw_fams) && pre_is(tw_fams[i].pre, u, pl); i++) {
+		for (i = at; i < tw_fams_n && pre_is(tw_fams[i].pre, u, pl); i++) {
 			int j;
 			for (j = tw_fams[i].tok; j < tw_fams[i].tok + tw_fams[i].ntok; j++)
 				if (strlen(tw_toks[j].tok) == tl && !strncmp(tw_toks[j].tok, t, tl)) {
@@ -548,6 +655,8 @@ char *tw_sheet(tw_name *names, int n, size_t *len)
 	tw_list L;
 	tw_buf out;
 	int i, m;
+	if (!tw_load())
+		return NULL;
 	memset(&L, 0, sizeof L);
 	memset(&out, 0, sizeof out);
 	nmq = 0;

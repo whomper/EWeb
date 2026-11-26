@@ -573,9 +573,10 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
 		-Icommon/src -o $@ $(filter %.c,$^)
 # Tailwind's utilities made by EWeb (src/browse/tw.c), held to Tailwind's
-build/asan/twtest: tests/browse/twtest.c src/browse/tw.c src/browse/tw.h $(GEN)/tw_data.h
+build/asan/twtest: tests/browse/twtest.c src/browse/tw.c src/browse/tw.h $(GEN)/tw_data.h common/src/inflate.c \
+		common/src/util.c
 	@mkdir -p $(@D)
-	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc/browse -I$(GEN) \
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse -Icommon/src -I$(GEN) \
 		-o $@ $(filter %.c,$^)
 # EWEB.FNT's advances as the layout measures them (src/gfx/font.c)
 build/asan/fonttest: tests/layout/fonttest.c src/gfx/font.c src/gfx/font.h common/src/inflate.c common/src/util.c \
