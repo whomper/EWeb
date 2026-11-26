@@ -189,11 +189,12 @@ class Mouse:
 
     def click_here(self, button="1"):
         """a click where the pointer is, then a pixel's move there and
-        back: under the network's load Hatari's IKBD can lose the release's
-        packet, and TOS then holds the button down until the next packet
-        (an AES trace: graf_mkstate said held for 158 s after a click on
-        the download box's Stop); the move's packets carry the button's
-        state, as a real mouse's next ones would"""
+        back. This is the rig's, not a fix in EWeb: after a pointer
+        correction (the emulated pointer off the host's) Hatari can lose
+        the release's packet, and TOS then holds the button down until the
+        next packet (an AES trace: graf_mkstate said held for 158 s after a
+        click on the download box's Stop). The move's packets carry the
+        button's state, as a real mouse's next ones would"""
         self.xdo("click", button)
         time.sleep(0.1)
         self.xdo("mousemove_relative", "1", "0")
