@@ -28,6 +28,7 @@
 #include "tls.h"
 #include "plat.h"
 #include "util.h"
+#include "tw.h"
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -2070,6 +2071,101 @@ static ec_media media_of(const browser *b)
 	return m;
 }
 
+#ifndef EW_ST
+/* a page that loads Tailwind's in-browser compiler (which EWeb leaves
+   out: src/js): the sheet it would have written, made by EWeb from the
+   page's classes, those its elements have and those an Alpine.js
+   :class names in quotes (tw.c; DESIGN.md, Tailwind's utilities made by
+   EWeb). After the page's own sheets, as the compiler adds its <style>
+   to the end of the head */
+static void tw_add(doc *d)
+{
+	dnode *n = d->root;
+	tw_name *v = NULL;
+	int k = 0, cap = 0, has = 0;
+	char *css;
+	size_t len;
+	/* its <script> in the head, where Tailwind says to put it: only the
+	   head's children looked at, so that every other page costs nothing */
+	if (d->html != NULL)
+		for (n = d->html->first; n != NULL && !has; n = n->next)
+			if (n->type == DN_ELEMENT && n->tag == T_HEAD) {
+				dnode *h;
+				const char *src;
+				for (h = n->first; h != NULL && !has; h = h->next)
+					has = h->type == DN_ELEMENT && h->tag == T_SCRIPT &&
+					      (src = dn_attr(h, "src")) != NULL && tw_script(src);
+			}
+	if (!has)
+		return;
+	n = d->root;
+	while (n != NULL) {
+		if (n->type == DN_ELEMENT) {
+			const char *a;
+			int i;
+			for (i = 0; i < n->ncls + 2; i++) {
+				const char *s;
+				size_t l;
+				if (i < n->ncls) {
+					s = ec_atom_text(n->cls[i], &l);
+					if (k == cap) {
+						tw_name *p = realloc(v, sizeof *v * (size_t) (cap = cap ? cap * 2 : 512));
+						if (p == NULL)
+							goto out;
+						v = p;
+					}
+					v[k].s = s;
+					v[k++].len = l;
+					continue;
+				}
+				/* :class="{'rotate-90': open}": the words in quotes */
+				if ((a = dn_attr(n, i == n->ncls ? ":class" : "x-bind:class")) == NULL)
+					continue;
+				while ((a = strpbrk(a, "'`")) != NULL) {
+					char q = *a++;
+					const char *e = strchr(a, q);
+					if (e == NULL)
+						break;
+					while (a < e) {
+						const char *w;
+						while (a < e && *a == ' ')
+							a++;
+						w = a;
+						while (a < e && *a != ' ')
+							a++;
+						if (a > w) {
+							if (k == cap) {
+								tw_name *p = realloc(v, sizeof *v * (size_t) (cap = cap ? cap * 2 : 512));
+								if (p == NULL)
+									goto out;
+								v = p;
+							}
+							v[k].s = w;
+							v[k++].len = (size_t) (a - w);
+						}
+					}
+					a = e + 1;
+				}
+			}
+		}
+		if (n->first != NULL) {
+			n = n->first;
+		} else {
+			while (n != NULL && n->next == NULL)
+				n = n->parent;
+			if (n != NULL)
+				n = n->next;
+		}
+	}
+	if ((css = tw_sheet(v, k, &len)) != NULL) {
+		ec_sheet(d->css, css, len, EC_ORIGIN_AUTHOR);
+		free(css);
+	}
+out:
+	free(v);
+}
+#endif
+
 /* the page's sheets into its CSS context, in the cascade's order: the
    UA's (when it isn't on the base), the one that hides <noscript> when
    scripts run, the page's in document order (doc_sheets: a <link>'s
@@ -2097,6 +2193,10 @@ static void add_sheets(browser *b, doc *d, const char *base, int fresh, int quie
 	ec_prune(d->css, !d->scripting);
 	doc_sheets(d, sheet_cb, &sh);
 	ec_set_importer(d->css, NULL, NULL);	/* (sh goes) */
+#ifndef EW_ST
+	if (!build_plain_css)
+		tw_add(d);
+#endif
 	if (b->extra_css != NULL)
 		ec_sheet(d->css, b->extra_css, strlen(b->extra_css), EC_ORIGIN_AUTHOR);
 	ec_media_span(d->css, &d->span_lo, &d->span_hi);

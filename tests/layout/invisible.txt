@@ -1,0 +1,4 @@
+page 608 x 239, background ffffff, 3 items, 0 links, title "Invisible pictures"
+text 6,32 248x17 #000000 sans13 link 0 "News text the pictures must not cover."
+text 6,217 44x17 #000000 sans13 link 0 "shown "
+image 50,185 32x32 link 0 "" data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs=

@@ -438,3 +438,8 @@ hub stay complete, with the evidence.
   without a reason); after a change meant for speed, count it (`tools/count68k.sh`,
   `tests/bench/measure.py -E ewcss`) and change DESIGN.md's figures. `EC_COMPAT_*` options exist
   only for csscmp.
+- **Tailwind's utilities** (a page that loads Tailwind's in-browser compiler, which EWeb doesn't run)
+  are made by `src/browse/tw.c` from the page's classes, on Tailwind 3's data in `src/css/tw.txt`
+  (`tools/mktw.py`; DESIGN.md, Tailwind's utilities made by EWeb). After changing them: `make test`
+  (`twtest`, `tests/layout/tailwind.html`) and `make sites` (atariuptodate); after taking Tailwind's
+  data again, `tools/mktw.py --cases` too.

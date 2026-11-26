@@ -1,0 +1,1244 @@
+# Tailwind 3.4.17's utilities as EWeb reads them: tools/mktw.py --from-tailwind.
+# The data is Tailwind's: MIT licence, Copyright (c) Tailwind Labs, Inc.
+# B selector<TAB>body: the base sheet (preflight); P colour rgb hex: the palette;
+# C order prefix suffix plain opacity: a colour family ($C r g b, $H #hex, $A alpha);
+# S section token value: a scale; F order prefix suffix section body: its family ($V);
+# R order name suffix body: one rule. order: Tailwind's, for the cascade.
+B	*, ::before, ::after	--tw-border-spacing-x: 0; --tw-border-spacing-y: 0; --tw-translate-x: 0; --tw-translate-y: 0; --tw-rotate: 0; --tw-skew-x: 0; --tw-skew-y: 0; --tw-scale-x: 1; --tw-scale-y: 1; --tw-gradient-from-position: ; --tw-gradient-via-position: ; --tw-gradient-to-position: ; --tw-contain-size: ; --tw-contain-layout: ; --tw-contain-paint: ; --tw-contain-style: 
+B	::backdrop	--tw-border-spacing-x: 0; --tw-border-spacing-y: 0; --tw-translate-x: 0; --tw-translate-y: 0; --tw-rotate: 0; --tw-skew-x: 0; --tw-skew-y: 0; --tw-scale-x: 1; --tw-scale-y: 1; --tw-gradient-from-position: ; --tw-gradient-via-position: ; --tw-gradient-to-position: ; --tw-contain-size: ; --tw-contain-layout: ; --tw-contain-paint: ; --tw-contain-style: 
+B	*, ::before, ::after	box-sizing: border-box; border-width: 0; border-style: solid; border-color: #e5e7eb
+B	::before, ::after	--tw-content: ''
+B	html, :host	line-height: 1.5; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"
+B	body	margin: 0; line-height: inherit
+B	hr	height: 0; color: inherit; border-top-width: 1px
+B	abbr:where([title])	text-decoration: underline dotted
+B	h1, h2, h3, h4, h5, h6	font-size: inherit; font-weight: inherit
+B	a	color: inherit; text-decoration: inherit
+B	b, strong	font-weight: bolder
+B	code, kbd, samp, pre	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 1em
+B	small	font-size: 80%
+B	sub, sup	font-size: 75%; line-height: 0; position: relative; vertical-align: baseline
+B	sub	bottom: -0.25em
+B	sup	top: -0.5em
+B	table	text-indent: 0; border-color: inherit; border-collapse: collapse
+B	button, input, optgroup, select, textarea	font-family: inherit; font-size: 100%; font-weight: inherit; line-height: inherit; letter-spacing: inherit; color: inherit; margin: 0; padding: 0
+B	button, select	text-transform: none
+B	button, input:where([type='button']), input:where([type='reset']), input:where([type='submit'])	background-color: transparent; background-image: none
+B	progress	vertical-align: baseline
+B	::-webkit-inner-spin-button, ::-webkit-outer-spin-button	height: auto
+B	::-webkit-file-upload-button	font: inherit
+B	summary	display: list-item
+B	blockquote, dl, dd, h1, h2, h3, h4, h5, h6, hr, figure, p, pre	margin: 0
+B	fieldset	margin: 0; padding: 0
+B	legend	padding: 0
+B	ol, ul, menu	list-style: none; margin: 0; padding: 0
+B	dialog	padding: 0
+B	input::-moz-placeholder, textarea::-moz-placeholder	opacity: 1; color: #9ca3af
+B	input::placeholder, textarea::placeholder	opacity: 1; color: #9ca3af
+B	img, svg, video, canvas, audio, iframe, embed, object	display: block; vertical-align: middle
+B	img, video	max-width: 100%; height: auto
+B	[hidden]:where(:not([hidden="until-found"]))	display: none
+P	amber-100	254 243 199	#fef3c7
+P	amber-200	253 230 138	#fde68a
+P	amber-300	252 211 77	#fcd34d
+P	amber-400	251 191 36	#fbbf24
+P	amber-50	255 251 235	#fffbeb
+P	amber-500	245 158 11	#f59e0b
+P	amber-600	217 119 6	#d97706
+P	amber-700	180 83 9	#b45309
+P	amber-800	146 64 14	#92400e
+P	amber-900	120 53 15	#78350f
+P	amber-950	69 26 3	#451a03
+P	black	0 0 0	#000000
+P	blue-100	219 234 254	#dbeafe
+P	blue-200	191 219 254	#bfdbfe
+P	blue-300	147 197 253	#93c5fd
+P	blue-400	96 165 250	#60a5fa
+P	blue-50	239 246 255	#eff6ff
+P	blue-500	59 130 246	#3b82f6
+P	blue-600	37 99 235	#2563eb
+P	blue-700	29 78 216	#1d4ed8
+P	blue-800	30 64 175	#1e40af
+P	blue-900	30 58 138	#1e3a8a
+P	blue-950	23 37 84	#172554
+P	cyan-100	207 250 254	#cffafe
+P	cyan-200	165 243 252	#a5f3fc
+P	cyan-300	103 232 249	#67e8f9
+P	cyan-400	34 211 238	#22d3ee
+P	cyan-50	236 254 255	#ecfeff
+P	cyan-500	6 182 212	#06b6d4
+P	cyan-600	8 145 178	#0891b2
+P	cyan-700	14 116 144	#0e7490
+P	cyan-800	21 94 117	#155e75
+P	cyan-900	22 78 99	#164e63
+P	cyan-950	8 51 68	#083344
+P	emerald-100	209 250 229	#d1fae5
+P	emerald-200	167 243 208	#a7f3d0
+P	emerald-300	110 231 183	#6ee7b7
+P	emerald-400	52 211 153	#34d399
+P	emerald-50	236 253 245	#ecfdf5
+P	emerald-500	16 185 129	#10b981
+P	emerald-600	5 150 105	#059669
+P	emerald-700	4 120 87	#047857
+P	emerald-800	6 95 70	#065f46
+P	emerald-900	6 78 59	#064e3b
+P	emerald-950	2 44 34	#022c22
+P	fuchsia-100	250 232 255	#fae8ff
+P	fuchsia-200	245 208 254	#f5d0fe
+P	fuchsia-300	240 171 252	#f0abfc
+P	fuchsia-400	232 121 249	#e879f9
+P	fuchsia-50	253 244 255	#fdf4ff
+P	fuchsia-500	217 70 239	#d946ef
+P	fuchsia-600	192 38 211	#c026d3
+P	fuchsia-700	162 28 175	#a21caf
+P	fuchsia-800	134 25 143	#86198f
+P	fuchsia-900	112 26 117	#701a75
+P	fuchsia-950	74 4 78	#4a044e
+P	gray-100	243 244 246	#f3f4f6
+P	gray-200	229 231 235	#e5e7eb
+P	gray-300	209 213 219	#d1d5db
+P	gray-400	156 163 175	#9ca3af
+P	gray-50	249 250 251	#f9fafb
+P	gray-500	107 114 128	#6b7280
+P	gray-600	75 85 99	#4b5563
+P	gray-700	55 65 81	#374151
+P	gray-800	31 41 55	#1f2937
+P	gray-900	17 24 39	#111827
+P	gray-950	3 7 18	#030712
+P	green-100	220 252 231	#dcfce7
+P	green-200	187 247 208	#bbf7d0
+P	green-300	134 239 172	#86efac
+P	green-400	74 222 128	#4ade80
+P	green-50	240 253 244	#f0fdf4
+P	green-500	34 197 94	#22c55e
+P	green-600	22 163 74	#16a34a
+P	green-700	21 128 61	#15803d
+P	green-800	22 101 52	#166534
+P	green-900	20 83 45	#14532d
+P	green-950	5 46 22	#052e16
+P	indigo-100	224 231 255	#e0e7ff
+P	indigo-200	199 210 254	#c7d2fe
+P	indigo-300	165 180 252	#a5b4fc
+P	indigo-400	129 140 248	#818cf8
+P	indigo-50	238 242 255	#eef2ff
+P	indigo-500	99 102 241	#6366f1
+P	indigo-600	79 70 229	#4f46e5
+P	indigo-700	67 56 202	#4338ca
+P	indigo-800	55 48 163	#3730a3
+P	indigo-900	49 46 129	#312e81
+P	indigo-950	30 27 75	#1e1b4b
+P	lime-100	236 252 203	#ecfccb
+P	lime-200	217 249 157	#d9f99d
+P	lime-300	190 242 100	#bef264
+P	lime-400	163 230 53	#a3e635
+P	lime-50	247 254 231	#f7fee7
+P	lime-500	132 204 22	#84cc16
+P	lime-600	101 163 13	#65a30d
+P	lime-700	77 124 15	#4d7c0f
+P	lime-800	63 98 18	#3f6212
+P	lime-900	54 83 20	#365314
+P	lime-950	26 46 5	#1a2e05
+P	neutral-100	245 245 245	#f5f5f5
+P	neutral-200	229 229 229	#e5e5e5
+P	neutral-300	212 212 212	#d4d4d4
+P	neutral-400	163 163 163	#a3a3a3
+P	neutral-50	250 250 250	#fafafa
+P	neutral-500	115 115 115	#737373
+P	neutral-600	82 82 82	#525252
+P	neutral-700	64 64 64	#404040
+P	neutral-800	38 38 38	#262626
+P	neutral-900	23 23 23	#171717
+P	neutral-950	10 10 10	#0a0a0a
+P	orange-100	255 237 213	#ffedd5
+P	orange-200	254 215 170	#fed7aa
+P	orange-300	253 186 116	#fdba74
+P	orange-400	251 146 60	#fb923c
+P	orange-50	255 247 237	#fff7ed
+P	orange-500	249 115 22	#f97316
+P	orange-600	234 88 12	#ea580c
+P	orange-700	194 65 12	#c2410c
+P	orange-800	154 52 18	#9a3412
+P	orange-900	124 45 18	#7c2d12
+P	orange-950	67 20 7	#431407
+P	pink-100	252 231 243	#fce7f3
+P	pink-200	251 207 232	#fbcfe8
+P	pink-300	249 168 212	#f9a8d4
+P	pink-400	244 114 182	#f472b6
+P	pink-50	253 242 248	#fdf2f8
+P	pink-500	236 72 153	#ec4899
+P	pink-600	219 39 119	#db2777
+P	pink-700	190 24 93	#be185d
+P	pink-800	157 23 77	#9d174d
+P	pink-900	131 24 67	#831843
+P	pink-950	80 7 36	#500724
+P	purple-100	243 232 255	#f3e8ff
+P	purple-200	233 213 255	#e9d5ff
+P	purple-300	216 180 254	#d8b4fe
+P	purple-400	192 132 252	#c084fc
+P	purple-50	250 245 255	#faf5ff
+P	purple-500	168 85 247	#a855f7
+P	purple-600	147 51 234	#9333ea
+P	purple-700	126 34 206	#7e22ce
+P	purple-800	107 33 168	#6b21a8
+P	purple-900	88 28 135	#581c87
+P	purple-950	59 7 100	#3b0764
+P	red-100	254 226 226	#fee2e2
+P	red-200	254 202 202	#fecaca
+P	red-300	252 165 165	#fca5a5
+P	red-400	248 113 113	#f87171
+P	red-50	254 242 242	#fef2f2
+P	red-500	239 68 68	#ef4444
+P	red-600	220 38 38	#dc2626
+P	red-700	185 28 28	#b91c1c
+P	red-800	153 27 27	#991b1b
+P	red-900	127 29 29	#7f1d1d
+P	red-950	69 10 10	#450a0a
+P	rose-100	255 228 230	#ffe4e6
+P	rose-200	254 205 211	#fecdd3
+P	rose-300	253 164 175	#fda4af
+P	rose-400	251 113 133	#fb7185
+P	rose-50	255 241 242	#fff1f2
+P	rose-500	244 63 94	#f43f5e
+P	rose-600	225 29 72	#e11d48
+P	rose-700	190 18 60	#be123c
+P	rose-800	159 18 57	#9f1239
+P	rose-900	136 19 55	#881337
+P	rose-950	76 5 25	#4c0519
+P	sky-100	224 242 254	#e0f2fe
+P	sky-200	186 230 253	#bae6fd
+P	sky-300	125 211 252	#7dd3fc
+P	sky-400	56 189 248	#38bdf8
+P	sky-50	240 249 255	#f0f9ff
+P	sky-500	14 165 233	#0ea5e9
+P	sky-600	2 132 199	#0284c7
+P	sky-700	3 105 161	#0369a1
+P	sky-800	7 89 133	#075985
+P	sky-900	12 74 110	#0c4a6e
+P	sky-950	8 47 73	#082f49
+P	slate-100	241 245 249	#f1f5f9
+P	slate-200	226 232 240	#e2e8f0
+P	slate-300	203 213 225	#cbd5e1
+P	slate-400	148 163 184	#94a3b8
+P	slate-50	248 250 252	#f8fafc
+P	slate-500	100 116 139	#64748b
+P	slate-600	71 85 105	#475569
+P	slate-700	51 65 85	#334155
+P	slate-800	30 41 59	#1e293b
+P	slate-900	15 23 42	#0f172a
+P	slate-950	2 6 23	#020617
+P	stone-100	245 245 244	#f5f5f4
+P	stone-200	231 229 228	#e7e5e4
+P	stone-300	214 211 209	#d6d3d1
+P	stone-400	168 162 158	#a8a29e
+P	stone-50	250 250 249	#fafaf9
+P	stone-500	120 113 108	#78716c
+P	stone-600	87 83 78	#57534e
+P	stone-700	68 64 60	#44403c
+P	stone-800	41 37 36	#292524
+P	stone-900	28 25 23	#1c1917
+P	stone-950	12 10 9	#0c0a09
+P	teal-100	204 251 241	#ccfbf1
+P	teal-200	153 246 228	#99f6e4
+P	teal-300	94 234 212	#5eead4
+P	teal-400	45 212 191	#2dd4bf
+P	teal-50	240 253 250	#f0fdfa
+P	teal-500	20 184 166	#14b8a6
+P	teal-600	13 148 136	#0d9488
+P	teal-700	15 118 110	#0f766e
+P	teal-800	17 94 89	#115e59
+P	teal-900	19 78 74	#134e4a
+P	teal-950	4 47 46	#042f2e
+P	violet-100	237 233 254	#ede9fe
+P	violet-200	221 214 254	#ddd6fe
+P	violet-300	196 181 253	#c4b5fd
+P	violet-400	167 139 250	#a78bfa
+P	violet-50	245 243 255	#f5f3ff
+P	violet-500	139 92 246	#8b5cf6
+P	violet-600	124 58 237	#7c3aed
+P	violet-700	109 40 217	#6d28d9
+P	violet-800	91 33 182	#5b21b6
+P	violet-900	76 29 149	#4c1d95
+P	violet-950	46 16 101	#2e1065
+P	white	255 255 255	#ffffff
+P	yellow-100	254 249 195	#fef9c3
+P	yellow-200	254 240 138	#fef08a
+P	yellow-300	253 224 71	#fde047
+P	yellow-400	250 204 21	#facc15
+P	yellow-50	254 252 232	#fefce8
+P	yellow-500	234 179 8	#eab308
+P	yellow-600	202 138 4	#ca8a04
+P	yellow-700	161 98 7	#a16207
+P	yellow-800	133 77 14	#854d0e
+P	yellow-900	113 63 18	#713f12
+P	yellow-950	66 32 6	#422006
+P	zinc-100	244 244 245	#f4f4f5
+P	zinc-200	228 228 231	#e4e4e7
+P	zinc-300	212 212 216	#d4d4d8
+P	zinc-400	161 161 170	#a1a1aa
+P	zinc-50	250 250 250	#fafafa
+P	zinc-500	113 113 122	#71717a
+P	zinc-600	82 82 91	#52525b
+P	zinc-700	63 63 70	#3f3f46
+P	zinc-800	39 39 42	#27272a
+P	zinc-900	24 24 27	#18181b
+P	zinc-950	9 9 11	#09090b
+C	3909	divide	> :not([hidden]) ~ :not([hidden])	--tw-divide-opacity: 1; border-color: rgb($C / var(--tw-divide-opacity, 1))	border-color: rgb($C / $A)
+C	9550	border	-	--tw-border-opacity: 1; border-color: rgb($C / var(--tw-border-opacity, 1))	border-color: rgb($C / $A)
+C	14921	border-x	-	--tw-border-opacity: 1; border-left-color: rgb($C / var(--tw-border-opacity, 1)); border-right-color: rgb($C / var(--tw-border-opacity, 1))	border-left-color: rgb($C / $A); border-right-color: rgb($C / $A)
+C	20292	border-y	-	--tw-border-opacity: 1; border-top-color: rgb($C / var(--tw-border-opacity, 1)); border-bottom-color: rgb($C / var(--tw-border-opacity, 1))	border-top-color: rgb($C / $A); border-bottom-color: rgb($C / $A)
+C	25663	border-b	-	--tw-border-opacity: 1; border-bottom-color: rgb($C / var(--tw-border-opacity, 1))	border-bottom-color: rgb($C / $A)
+C	36405	border-l	-	--tw-border-opacity: 1; border-left-color: rgb($C / var(--tw-border-opacity, 1))	border-left-color: rgb($C / $A)
+C	41776	border-r	-	--tw-border-opacity: 1; border-right-color: rgb($C / var(--tw-border-opacity, 1))	border-right-color: rgb($C / $A)
+C	52518	border-t	-	--tw-border-opacity: 1; border-top-color: rgb($C / var(--tw-border-opacity, 1))	border-top-color: rgb($C / $A)
+C	57910	bg	-	--tw-bg-opacity: 1; background-color: rgb($C / var(--tw-bg-opacity, 1))	background-color: rgb($C / $A)
+C	63311	from	-	--tw-gradient-from: $H var(--tw-gradient-from-position); --tw-gradient-to: rgb($C / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)	--tw-gradient-from: rgb($C / $A) var(--tw-gradient-from-position); --tw-gradient-to: rgb($C / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)
+C	68703	via	-	--tw-gradient-to: rgb($C / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), $H var(--tw-gradient-via-position), var(--tw-gradient-to)	--tw-gradient-to: rgb($C / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), rgb($C / $A) var(--tw-gradient-via-position), var(--tw-gradient-to)
+C	74095	to	-	--tw-gradient-to: $H var(--tw-gradient-to-position)	--tw-gradient-to: rgb($C / $A) var(--tw-gradient-to-position)
+C	79519	fill	-	fill: $H	fill: rgb($C / $A)
+C	84891	stroke	-	stroke: $H	stroke: rgb($C / $A)
+C	90745	text	-	--tw-text-opacity: 1; color: rgb($C / var(--tw-text-opacity, 1))	color: rgb($C / $A)
+C	101532	placeholder	::placeholder	--tw-placeholder-opacity: 1; color: rgb($C / var(--tw-placeholder-opacity, 1))	color: rgb($C / $A)
+F	12	-inset	-	flexBasis	inset: -$V
+F	54	inset	-	flexBasis	inset: $V
+F	97	-inset-x	-	flexBasis	left: -$V; right: -$V
+F	139	-inset-y	-	flexBasis	top: -$V; bottom: -$V
+F	181	inset-x	-	flexBasis	left: $V; right: $V
+F	224	inset-y	-	flexBasis	top: $V; bottom: $V
+F	267	-bottom	-	flexBasis	bottom: -$V
+F	351	-left	-	flexBasis	left: -$V
+F	393	-right	-	flexBasis	right: -$V
+F	477	-top	-	flexBasis	top: -$V
+F	519	bottom	-	flexBasis	bottom: $V
+F	605	left	-	flexBasis	left: $V
+F	648	right	-	flexBasis	right: $V
+F	734	top	-	flexBasis	top: $V
+F	780	-z	-	zIndex	z-index: -$V
+F	785	z	-	zIndex	z-index: $V
+F	792	-order	-	order	order: -$V
+F	807	order	-	order	order: $V
+F	822	col	-	gridColumn	grid-column: $V
+F	836	-col-start	-	gridColumnEnd	grid-column-start: -$V
+F	849	col-start	-	gridColumnEnd	grid-column-start: $V
+F	863	-col-end	-	gridColumnEnd	grid-column-end: -$V
+F	876	col-end	-	gridColumnEnd	grid-column-end: $V
+F	890	row	-	gridColumn	grid-row: $V
+F	904	-row-start	-	gridColumnEnd	grid-row-start: -$V
+F	917	row-start	-	gridColumnEnd	grid-row-start: $V
+F	931	-row-end	-	gridColumnEnd	grid-row-end: -$V
+F	944	row-end	-	gridColumnEnd	grid-row-end: $V
+F	969	-m	-	borderSpacing	margin: -$V
+F	1004	m	-	flexBasis	margin: $V
+F	1040	-mx	-	borderSpacing	margin-left: -$V; margin-right: -$V
+F	1075	-my	-	borderSpacing	margin-top: -$V; margin-bottom: -$V
+F	1110	mx	-	flexBasis	margin-left: $V; margin-right: $V
+F	1146	my	-	flexBasis	margin-top: $V; margin-bottom: $V
+F	1182	-mb	-	borderSpacing	margin-bottom: -$V
+F	1252	-ml	-	borderSpacing	margin-left: -$V
+F	1287	-mr	-	borderSpacing	margin-right: -$V
+F	1357	-mt	-	borderSpacing	margin-top: -$V
+F	1392	mb	-	flexBasis	margin-bottom: $V
+F	1464	ml	-	flexBasis	margin-left: $V
+F	1500	mr	-	flexBasis	margin-right: $V
+F	1572	mt	-	flexBasis	margin-top: $V
+F	1641	size	-	flexBasis	width: $V; height: $V
+F	1707	h	-	height	height: $V
+F	1766	max-h	-	maxHeight	max-height: $V
+F	1810	min-h	-	height	min-height: $V
+F	1853	w	-	width	width: $V
+F	1923	min-w	-	flexBasis	min-width: $V
+F	1962	max-w	-	maxWidth	max-width: $V
+F	2019	flex	-	flex	flex: $V
+F	2031	basis	-	flexBasis	flex-basis: $V
+F	2100	border-spacing	-	borderSpacing	--tw-border-spacing-x: $V; --tw-border-spacing-y: $V; border-spacing: var(--tw-border-spacing-x) var(--tw-border-spacing-y)
+F	2135	border-spacing-x	-	borderSpacing	--tw-border-spacing-x: $V; border-spacing: var(--tw-border-spacing-x) var(--tw-border-spacing-y)
+F	2170	border-spacing-y	-	borderSpacing	--tw-border-spacing-y: $V; border-spacing: var(--tw-border-spacing-x) var(--tw-border-spacing-y)
+F	2214	-translate-x	-	flexBasis	--tw-translate-x: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2256	-translate-y	-	flexBasis	--tw-translate-y: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2298	translate-x	-	flexBasis	--tw-translate-x: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2340	translate-y	-	flexBasis	--tw-translate-y: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2382	-rotate	-	rotate	--tw-rotate: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2391	rotate	-	rotate	--tw-rotate: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2400	-skew-x	-	rotate	--tw-skew-x: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2406	-skew-y	-	rotate	--tw-skew-y: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2412	skew-x	-	rotate	--tw-skew-x: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2418	skew-y	-	rotate	--tw-skew-y: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2425	-scale	-	backdropBrightness	--tw-scale-x: -$V; --tw-scale-y: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2434	scale	-	backdropBrightness	--tw-scale-x: $V; --tw-scale-y: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2445	-scale-x	-	backdropBrightness	--tw-scale-x: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2455	-scale-y	-	backdropBrightness	--tw-scale-y: -$V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2464	scale-x	-	backdropBrightness	--tw-scale-x: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	2474	scale-y	-	backdropBrightness	--tw-scale-y: $V; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+F	3571	grid-cols	-	gridTemplateColumns	grid-template-columns: $V
+F	3585	grid-rows	-	gridTemplateColumns	grid-template-rows: $V
+F	3645	gap	-	borderSpacing	gap: $V
+F	3680	gap-x	-	borderSpacing	column-gap: $V
+F	3715	gap-y	-	borderSpacing	row-gap: $V
+F	3750	-space-x	> :not([hidden]) ~ :not([hidden])	borderSpacing	--tw-space-x-reverse: 0; margin-right: calc(-$V * var(--tw-space-x-reverse)); margin-left: calc(-$V * calc(1 - var(--tw-space-x-reverse)))
+F	3785	-space-y	> :not([hidden]) ~ :not([hidden])	borderSpacing	--tw-space-y-reverse: 0; margin-top: calc(-$V * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc(-$V * var(--tw-space-y-reverse))
+F	3820	space-x	> :not([hidden]) ~ :not([hidden])	borderSpacing	--tw-space-x-reverse: 0; margin-right: calc($V * var(--tw-space-x-reverse)); margin-left: calc($V * calc(1 - var(--tw-space-x-reverse)))
+F	3855	space-y	> :not([hidden]) ~ :not([hidden])	borderSpacing	--tw-space-y-reverse: 0; margin-top: calc($V * calc(1 - var(--tw-space-y-reverse))); margin-bottom: calc($V * var(--tw-space-y-reverse))
+F	3893	divide-x	> :not([hidden]) ~ :not([hidden])	borderWidth	--tw-divide-x-reverse: 0; border-right-width: calc($V * var(--tw-divide-x-reverse)); border-left-width: calc($V * calc(1 - var(--tw-divide-x-reverse)))
+F	3898	divide-y	> :not([hidden]) ~ :not([hidden])	borderWidth	--tw-divide-y-reverse: 0; border-top-width: calc($V * calc(1 - var(--tw-divide-y-reverse))); border-bottom-width: calc($V * var(--tw-divide-y-reverse))
+F	9280	divide-opacity	> :not([hidden]) ~ :not([hidden])	backdropOpacity	--tw-divide-opacity: $V
+F	9500	border	-	borderWidth	border-width: $V
+F	9505	border-x	-	borderWidth	border-left-width: $V; border-right-width: $V
+F	9510	border-y	-	borderWidth	border-top-width: $V; border-bottom-width: $V
+F	9515	border-b	-	borderWidth	border-bottom-width: $V
+F	9525	border-l	-	borderWidth	border-left-width: $V
+F	9530	border-r	-	borderWidth	border-right-width: $V
+F	9540	border-t	-	borderWidth	border-top-width: $V
+F	57889	border-opacity	-	backdropOpacity	--tw-border-opacity: $V
+F	63281	bg-opacity	-	backdropOpacity	--tw-bg-opacity: $V
+F	63302	bg	-	backgroundImage	background-image: $V
+F	68682	from	-	gradientColorStopPositions	--tw-gradient-from-position: $V
+F	74074	via	-	gradientColorStopPositions	--tw-gradient-via-position: $V
+F	79466	to	-	gradientColorStopPositions	--tw-gradient-to-position: $V
+F	79501	bg	-	backgroundPosition	background-position: $V
+F	80025	fill	-	fill	fill: $V
+F	85397	stroke	-	fill	stroke: $V
+F	90280	p	-	borderSpacing	padding: $V
+F	90315	px	-	borderSpacing	padding-left: $V; padding-right: $V
+F	90350	py	-	borderSpacing	padding-top: $V; padding-bottom: $V
+F	90385	pb	-	borderSpacing	padding-bottom: $V
+F	90455	pl	-	borderSpacing	padding-left: $V
+F	90490	pr	-	borderSpacing	padding-right: $V
+F	90560	pt	-	borderSpacing	padding-top: $V
+F	90601	-indent	-	borderSpacing	text-indent: -$V
+F	90636	indent	-	borderSpacing	text-indent: $V
+F	90696	font	-	fontWeight	font-weight: $V
+F	90719	leading	-	lineHeight	line-height: $V
+F	90733	-tracking	-	letterSpacing	letter-spacing: -$V
+F	90739	tracking	-	letterSpacing	letter-spacing: $V
+F	96116	text-opacity	-	backdropOpacity	--tw-text-opacity: $V
+F	106903	placeholder-opacity	::placeholder	backdropOpacity	--tw-placeholder-opacity: $V
+F	117667	opacity	-	backdropOpacity	opacity: $V
+S	backdropBrightness	0	0
+S	backdropBrightness	50	.5
+S	backdropBrightness	75	.75
+S	backdropBrightness	90	.9
+S	backdropBrightness	95	.95
+S	backdropBrightness	100	1
+S	backdropBrightness	105	1.05
+S	backdropBrightness	110	1.1
+S	backdropBrightness	125	1.25
+S	backdropBrightness	150	1.5
+S	backdropBrightness	200	2
+S	backdropOpacity	0	0
+S	backdropOpacity	5	0.05
+S	backdropOpacity	10	0.1
+S	backdropOpacity	15	0.15
+S	backdropOpacity	20	0.2
+S	backdropOpacity	25	0.25
+S	backdropOpacity	30	0.3
+S	backdropOpacity	35	0.35
+S	backdropOpacity	40	0.4
+S	backdropOpacity	45	0.45
+S	backdropOpacity	50	0.5
+S	backdropOpacity	55	0.55
+S	backdropOpacity	60	0.6
+S	backdropOpacity	65	0.65
+S	backdropOpacity	70	0.7
+S	backdropOpacity	75	0.75
+S	backdropOpacity	80	0.8
+S	backdropOpacity	85	0.85
+S	backdropOpacity	90	0.9
+S	backdropOpacity	95	0.95
+S	backdropOpacity	100	1
+S	backgroundImage	none	none
+S	backgroundImage	gradient-to-t	linear-gradient(to top, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-tr	linear-gradient(to top right, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-r	linear-gradient(to right, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-br	linear-gradient(to bottom right, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-b	linear-gradient(to bottom, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-bl	linear-gradient(to bottom left, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-l	linear-gradient(to left, var(--tw-gradient-stops))
+S	backgroundImage	gradient-to-tl	linear-gradient(to top left, var(--tw-gradient-stops))
+S	backgroundPosition	bottom	bottom
+S	backgroundPosition	center	center
+S	backgroundPosition	left	left
+S	backgroundPosition	left-bottom	left bottom
+S	backgroundPosition	left-top	left top
+S	backgroundPosition	right	right
+S	backgroundPosition	right-bottom	right bottom
+S	backgroundPosition	right-top	right top
+S	backgroundPosition	top	top
+S	borderSpacing	0	0px
+S	borderSpacing	1	0.25rem
+S	borderSpacing	2	0.5rem
+S	borderSpacing	3	0.75rem
+S	borderSpacing	4	1rem
+S	borderSpacing	5	1.25rem
+S	borderSpacing	6	1.5rem
+S	borderSpacing	7	1.75rem
+S	borderSpacing	8	2rem
+S	borderSpacing	9	2.25rem
+S	borderSpacing	10	2.5rem
+S	borderSpacing	11	2.75rem
+S	borderSpacing	12	3rem
+S	borderSpacing	14	3.5rem
+S	borderSpacing	16	4rem
+S	borderSpacing	20	5rem
+S	borderSpacing	24	6rem
+S	borderSpacing	28	7rem
+S	borderSpacing	32	8rem
+S	borderSpacing	36	9rem
+S	borderSpacing	40	10rem
+S	borderSpacing	44	11rem
+S	borderSpacing	48	12rem
+S	borderSpacing	52	13rem
+S	borderSpacing	56	14rem
+S	borderSpacing	60	15rem
+S	borderSpacing	64	16rem
+S	borderSpacing	72	18rem
+S	borderSpacing	80	20rem
+S	borderSpacing	96	24rem
+S	borderSpacing	px	1px
+S	borderSpacing	0.5	0.125rem
+S	borderSpacing	1.5	0.375rem
+S	borderSpacing	2.5	0.625rem
+S	borderSpacing	3.5	0.875rem
+S	borderWidth	0	0px
+S	borderWidth	2	2px
+S	borderWidth	4	4px
+S	borderWidth	8	8px
+S	fill	none	none
+S	fill	inherit	inherit
+S	fill	current	currentColor
+S	fill	transparent	transparent
+S	fill	black	#000
+S	fill	white	#fff
+S	flex	1	1 1 0%
+S	flex	auto	1 1 auto
+S	flex	initial	0 1 auto
+S	flex	none	none
+S	flexBasis	0	0px
+S	flexBasis	1	0.25rem
+S	flexBasis	2	0.5rem
+S	flexBasis	3	0.75rem
+S	flexBasis	4	1rem
+S	flexBasis	5	1.25rem
+S	flexBasis	6	1.5rem
+S	flexBasis	7	1.75rem
+S	flexBasis	8	2rem
+S	flexBasis	9	2.25rem
+S	flexBasis	10	2.5rem
+S	flexBasis	11	2.75rem
+S	flexBasis	12	3rem
+S	flexBasis	14	3.5rem
+S	flexBasis	16	4rem
+S	flexBasis	20	5rem
+S	flexBasis	24	6rem
+S	flexBasis	28	7rem
+S	flexBasis	32	8rem
+S	flexBasis	36	9rem
+S	flexBasis	40	10rem
+S	flexBasis	44	11rem
+S	flexBasis	48	12rem
+S	flexBasis	52	13rem
+S	flexBasis	56	14rem
+S	flexBasis	60	15rem
+S	flexBasis	64	16rem
+S	flexBasis	72	18rem
+S	flexBasis	80	20rem
+S	flexBasis	96	24rem
+S	flexBasis	auto	auto
+S	flexBasis	px	1px
+S	flexBasis	0.5	0.125rem
+S	flexBasis	1.5	0.375rem
+S	flexBasis	2.5	0.625rem
+S	flexBasis	3.5	0.875rem
+S	flexBasis	1/2	50%
+S	flexBasis	1/3	33.333333%
+S	flexBasis	2/3	66.666667%
+S	flexBasis	1/4	25%
+S	flexBasis	2/4	50%
+S	flexBasis	3/4	75%
+S	flexBasis	1/5	20%
+S	flexBasis	2/5	40%
+S	flexBasis	3/5	60%
+S	flexBasis	4/5	80%
+S	flexBasis	1/6	16.666667%
+S	flexBasis	2/6	33.333333%
+S	flexBasis	3/6	50%
+S	flexBasis	4/6	66.666667%
+S	flexBasis	5/6	83.333333%
+S	flexBasis	1/12	8.333333%
+S	flexBasis	2/12	16.666667%
+S	flexBasis	3/12	25%
+S	flexBasis	4/12	33.333333%
+S	flexBasis	5/12	41.666667%
+S	flexBasis	6/12	50%
+S	flexBasis	7/12	58.333333%
+S	flexBasis	8/12	66.666667%
+S	flexBasis	9/12	75%
+S	flexBasis	10/12	83.333333%
+S	flexBasis	11/12	91.666667%
+S	flexBasis	full	100%
+S	fontWeight	thin	100
+S	fontWeight	extralight	200
+S	fontWeight	light	300
+S	fontWeight	normal	400
+S	fontWeight	medium	500
+S	fontWeight	semibold	600
+S	fontWeight	bold	700
+S	fontWeight	extrabold	800
+S	fontWeight	black	900
+S	gradientColorStopPositions	0%	0%
+S	gradientColorStopPositions	5%	5%
+S	gradientColorStopPositions	10%	10%
+S	gradientColorStopPositions	15%	15%
+S	gradientColorStopPositions	20%	20%
+S	gradientColorStopPositions	25%	25%
+S	gradientColorStopPositions	30%	30%
+S	gradientColorStopPositions	35%	35%
+S	gradientColorStopPositions	40%	40%
+S	gradientColorStopPositions	45%	45%
+S	gradientColorStopPositions	50%	50%
+S	gradientColorStopPositions	55%	55%
+S	gradientColorStopPositions	60%	60%
+S	gradientColorStopPositions	65%	65%
+S	gradientColorStopPositions	70%	70%
+S	gradientColorStopPositions	75%	75%
+S	gradientColorStopPositions	80%	80%
+S	gradientColorStopPositions	85%	85%
+S	gradientColorStopPositions	90%	90%
+S	gradientColorStopPositions	95%	95%
+S	gradientColorStopPositions	100%	100%
+S	gridColumn	auto	auto
+S	gridColumn	span-1	span 1 / span 1
+S	gridColumn	span-2	span 2 / span 2
+S	gridColumn	span-3	span 3 / span 3
+S	gridColumn	span-4	span 4 / span 4
+S	gridColumn	span-5	span 5 / span 5
+S	gridColumn	span-6	span 6 / span 6
+S	gridColumn	span-7	span 7 / span 7
+S	gridColumn	span-8	span 8 / span 8
+S	gridColumn	span-9	span 9 / span 9
+S	gridColumn	span-10	span 10 / span 10
+S	gridColumn	span-11	span 11 / span 11
+S	gridColumn	span-12	span 12 / span 12
+S	gridColumn	span-full	1 / -1
+S	gridColumnEnd	1	1
+S	gridColumnEnd	2	2
+S	gridColumnEnd	3	3
+S	gridColumnEnd	4	4
+S	gridColumnEnd	5	5
+S	gridColumnEnd	6	6
+S	gridColumnEnd	7	7
+S	gridColumnEnd	8	8
+S	gridColumnEnd	9	9
+S	gridColumnEnd	10	10
+S	gridColumnEnd	11	11
+S	gridColumnEnd	12	12
+S	gridColumnEnd	13	13
+S	gridColumnEnd	auto	auto
+S	gridTemplateColumns	1	repeat(1, minmax(0, 1fr))
+S	gridTemplateColumns	2	repeat(2, minmax(0, 1fr))
+S	gridTemplateColumns	3	repeat(3, minmax(0, 1fr))
+S	gridTemplateColumns	4	repeat(4, minmax(0, 1fr))
+S	gridTemplateColumns	5	repeat(5, minmax(0, 1fr))
+S	gridTemplateColumns	6	repeat(6, minmax(0, 1fr))
+S	gridTemplateColumns	7	repeat(7, minmax(0, 1fr))
+S	gridTemplateColumns	8	repeat(8, minmax(0, 1fr))
+S	gridTemplateColumns	9	repeat(9, minmax(0, 1fr))
+S	gridTemplateColumns	10	repeat(10, minmax(0, 1fr))
+S	gridTemplateColumns	11	repeat(11, minmax(0, 1fr))
+S	gridTemplateColumns	12	repeat(12, minmax(0, 1fr))
+S	gridTemplateColumns	none	none
+S	gridTemplateColumns	subgrid	subgrid
+S	height	0	0px
+S	height	1	0.25rem
+S	height	2	0.5rem
+S	height	3	0.75rem
+S	height	4	1rem
+S	height	5	1.25rem
+S	height	6	1.5rem
+S	height	7	1.75rem
+S	height	8	2rem
+S	height	9	2.25rem
+S	height	10	2.5rem
+S	height	11	2.75rem
+S	height	12	3rem
+S	height	14	3.5rem
+S	height	16	4rem
+S	height	20	5rem
+S	height	24	6rem
+S	height	28	7rem
+S	height	32	8rem
+S	height	36	9rem
+S	height	40	10rem
+S	height	44	11rem
+S	height	48	12rem
+S	height	52	13rem
+S	height	56	14rem
+S	height	60	15rem
+S	height	64	16rem
+S	height	72	18rem
+S	height	80	20rem
+S	height	96	24rem
+S	height	auto	auto
+S	height	px	1px
+S	height	0.5	0.125rem
+S	height	1.5	0.375rem
+S	height	2.5	0.625rem
+S	height	3.5	0.875rem
+S	height	1/2	50%
+S	height	1/3	33.333333%
+S	height	2/3	66.666667%
+S	height	1/4	25%
+S	height	2/4	50%
+S	height	3/4	75%
+S	height	1/5	20%
+S	height	2/5	40%
+S	height	3/5	60%
+S	height	4/5	80%
+S	height	1/6	16.666667%
+S	height	2/6	33.333333%
+S	height	3/6	50%
+S	height	4/6	66.666667%
+S	height	5/6	83.333333%
+S	height	full	100%
+S	height	screen	100vh
+S	height	svh	100svh
+S	height	lvh	100lvh
+S	height	dvh	100dvh
+S	height	min	min-content
+S	height	max	max-content
+S	height	fit	fit-content
+S	letterSpacing	tighter	-0.05em
+S	letterSpacing	tight	-0.025em
+S	letterSpacing	normal	0em
+S	letterSpacing	wide	0.025em
+S	letterSpacing	wider	0.05em
+S	letterSpacing	widest	0.1em
+S	lineHeight	3	.75rem
+S	lineHeight	4	1rem
+S	lineHeight	5	1.25rem
+S	lineHeight	6	1.5rem
+S	lineHeight	7	1.75rem
+S	lineHeight	8	2rem
+S	lineHeight	9	2.25rem
+S	lineHeight	10	2.5rem
+S	lineHeight	none	1
+S	lineHeight	tight	1.25
+S	lineHeight	snug	1.375
+S	lineHeight	normal	1.5
+S	lineHeight	relaxed	1.625
+S	lineHeight	loose	2
+S	maxHeight	0	0px
+S	maxHeight	1	0.25rem
+S	maxHeight	2	0.5rem
+S	maxHeight	3	0.75rem
+S	maxHeight	4	1rem
+S	maxHeight	5	1.25rem
+S	maxHeight	6	1.5rem
+S	maxHeight	7	1.75rem
+S	maxHeight	8	2rem
+S	maxHeight	9	2.25rem
+S	maxHeight	10	2.5rem
+S	maxHeight	11	2.75rem
+S	maxHeight	12	3rem
+S	maxHeight	14	3.5rem
+S	maxHeight	16	4rem
+S	maxHeight	20	5rem
+S	maxHeight	24	6rem
+S	maxHeight	28	7rem
+S	maxHeight	32	8rem
+S	maxHeight	36	9rem
+S	maxHeight	40	10rem
+S	maxHeight	44	11rem
+S	maxHeight	48	12rem
+S	maxHeight	52	13rem
+S	maxHeight	56	14rem
+S	maxHeight	60	15rem
+S	maxHeight	64	16rem
+S	maxHeight	72	18rem
+S	maxHeight	80	20rem
+S	maxHeight	96	24rem
+S	maxHeight	px	1px
+S	maxHeight	0.5	0.125rem
+S	maxHeight	1.5	0.375rem
+S	maxHeight	2.5	0.625rem
+S	maxHeight	3.5	0.875rem
+S	maxHeight	none	none
+S	maxHeight	full	100%
+S	maxHeight	screen	100vh
+S	maxHeight	svh	100svh
+S	maxHeight	lvh	100lvh
+S	maxHeight	dvh	100dvh
+S	maxHeight	min	min-content
+S	maxHeight	max	max-content
+S	maxHeight	fit	fit-content
+S	maxWidth	0	0px
+S	maxWidth	1	0.25rem
+S	maxWidth	2	0.5rem
+S	maxWidth	3	0.75rem
+S	maxWidth	4	1rem
+S	maxWidth	5	1.25rem
+S	maxWidth	6	1.5rem
+S	maxWidth	7	1.75rem
+S	maxWidth	8	2rem
+S	maxWidth	9	2.25rem
+S	maxWidth	10	2.5rem
+S	maxWidth	11	2.75rem
+S	maxWidth	12	3rem
+S	maxWidth	14	3.5rem
+S	maxWidth	16	4rem
+S	maxWidth	20	5rem
+S	maxWidth	24	6rem
+S	maxWidth	28	7rem
+S	maxWidth	32	8rem
+S	maxWidth	36	9rem
+S	maxWidth	40	10rem
+S	maxWidth	44	11rem
+S	maxWidth	48	12rem
+S	maxWidth	52	13rem
+S	maxWidth	56	14rem
+S	maxWidth	60	15rem
+S	maxWidth	64	16rem
+S	maxWidth	72	18rem
+S	maxWidth	80	20rem
+S	maxWidth	96	24rem
+S	maxWidth	px	1px
+S	maxWidth	0.5	0.125rem
+S	maxWidth	1.5	0.375rem
+S	maxWidth	2.5	0.625rem
+S	maxWidth	3.5	0.875rem
+S	maxWidth	none	none
+S	maxWidth	xs	20rem
+S	maxWidth	sm	24rem
+S	maxWidth	md	28rem
+S	maxWidth	lg	32rem
+S	maxWidth	xl	36rem
+S	maxWidth	2xl	42rem
+S	maxWidth	3xl	48rem
+S	maxWidth	4xl	56rem
+S	maxWidth	5xl	64rem
+S	maxWidth	6xl	72rem
+S	maxWidth	7xl	80rem
+S	maxWidth	full	100%
+S	maxWidth	min	min-content
+S	maxWidth	max	max-content
+S	maxWidth	fit	fit-content
+S	maxWidth	prose	65ch
+S	maxWidth	screen-sm	640px
+S	maxWidth	screen-md	768px
+S	maxWidth	screen-lg	1024px
+S	maxWidth	screen-xl	1280px
+S	maxWidth	screen-2xl	1536px
+S	order	1	1
+S	order	2	2
+S	order	3	3
+S	order	4	4
+S	order	5	5
+S	order	6	6
+S	order	7	7
+S	order	8	8
+S	order	9	9
+S	order	10	10
+S	order	11	11
+S	order	12	12
+S	order	first	-9999
+S	order	last	9999
+S	order	none	0
+S	rotate	0	0deg
+S	rotate	1	1deg
+S	rotate	2	2deg
+S	rotate	3	3deg
+S	rotate	6	6deg
+S	rotate	12	12deg
+S	rotate	45	45deg
+S	rotate	90	90deg
+S	rotate	180	180deg
+S	width	0	0px
+S	width	1	0.25rem
+S	width	2	0.5rem
+S	width	3	0.75rem
+S	width	4	1rem
+S	width	5	1.25rem
+S	width	6	1.5rem
+S	width	7	1.75rem
+S	width	8	2rem
+S	width	9	2.25rem
+S	width	10	2.5rem
+S	width	11	2.75rem
+S	width	12	3rem
+S	width	14	3.5rem
+S	width	16	4rem
+S	width	20	5rem
+S	width	24	6rem
+S	width	28	7rem
+S	width	32	8rem
+S	width	36	9rem
+S	width	40	10rem
+S	width	44	11rem
+S	width	48	12rem
+S	width	52	13rem
+S	width	56	14rem
+S	width	60	15rem
+S	width	64	16rem
+S	width	72	18rem
+S	width	80	20rem
+S	width	96	24rem
+S	width	auto	auto
+S	width	px	1px
+S	width	0.5	0.125rem
+S	width	1.5	0.375rem
+S	width	2.5	0.625rem
+S	width	3.5	0.875rem
+S	width	1/2	50%
+S	width	1/3	33.333333%
+S	width	2/3	66.666667%
+S	width	1/4	25%
+S	width	2/4	50%
+S	width	3/4	75%
+S	width	1/5	20%
+S	width	2/5	40%
+S	width	3/5	60%
+S	width	4/5	80%
+S	width	1/6	16.666667%
+S	width	2/6	33.333333%
+S	width	3/6	50%
+S	width	4/6	66.666667%
+S	width	5/6	83.333333%
+S	width	1/12	8.333333%
+S	width	2/12	16.666667%
+S	width	3/12	25%
+S	width	4/12	33.333333%
+S	width	5/12	41.666667%
+S	width	6/12	50%
+S	width	7/12	58.333333%
+S	width	8/12	66.666667%
+S	width	9/12	75%
+S	width	10/12	83.333333%
+S	width	11/12	91.666667%
+S	width	full	100%
+S	width	screen	100vw
+S	width	svw	100svw
+S	width	lvw	100lvw
+S	width	dvw	100dvw
+S	width	min	min-content
+S	width	max	max-content
+S	width	fit	fit-content
+S	zIndex	0	0
+S	zIndex	10	10
+S	zIndex	20	20
+S	zIndex	30	30
+S	zIndex	40	40
+S	zIndex	50	50
+S	zIndex	auto	auto
+R	0	sr-only	-	position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0
+R	1	not-sr-only	-	position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal
+R	2	pointer-events-none	-	pointer-events: none
+R	3	pointer-events-auto	-	pointer-events: auto
+R	4	visible	-	visibility: visible
+R	5	invisible	-	visibility: hidden
+R	6	collapse	-	visibility: collapse
+R	7	static	-	position: static
+R	8	fixed	-	position: fixed
+R	9	absolute	-	position: absolute
+R	10	relative	-	position: relative
+R	11	sticky	-	position: sticky
+R	779	-z-0	-	z-index: 0
+R	804	-order-first	-	order: 9999
+R	806	-order-none	-	order: 0
+R	958	float-start	-	float: inline-start
+R	959	float-end	-	float: inline-end
+R	960	float-right	-	float: right
+R	961	float-left	-	float: left
+R	962	float-none	-	float: none
+R	963	clear-start	-	clear: inline-start
+R	964	clear-end	-	clear: inline-end
+R	965	clear-left	-	clear: left
+R	966	clear-right	-	clear: right
+R	967	clear-both	-	clear: both
+R	968	clear-none	-	clear: none
+R	1608	box-border	-	box-sizing: border-box
+R	1609	box-content	-	box-sizing: content-box
+R	1616	line-clamp-none	-	overflow: visible; display: block
+R	1617	block	-	display: block
+R	1618	inline-block	-	display: inline-block
+R	1619	inline	-	display: inline
+R	1620	flex	-	display: flex
+R	1621	inline-flex	-	display: inline-flex
+R	1622	table	-	display: table
+R	1623	inline-table	-	display: inline-table
+R	1624	table-caption	-	display: table-caption
+R	1625	table-cell	-	display: table-cell
+R	1626	table-column	-	display: table-column
+R	1627	table-column-group	-	display: table-column-group
+R	1628	table-footer-group	-	display: table-footer-group
+R	1629	table-header-group	-	display: table-header-group
+R	1630	table-row-group	-	display: table-row-group
+R	1631	table-row	-	display: table-row
+R	1632	flow-root	-	display: flow-root
+R	1633	grid	-	display: grid
+R	1634	inline-grid	-	display: inline-grid
+R	1635	contents	-	display: contents
+R	1636	list-item	-	display: list-item
+R	1637	hidden	-	display: none
+R	1638	aspect-auto	-	aspect-ratio: auto
+R	1639	aspect-square	-	aspect-ratio: 1 / 1
+R	1640	aspect-video	-	aspect-ratio: 16 / 9
+R	1702	size-fit	-	width: -moz-fit-content; width: fit-content; height: -moz-fit-content; height: fit-content
+R	1704	size-max	-	width: -moz-max-content; width: max-content; height: -moz-max-content; height: max-content
+R	1705	size-min	-	width: -moz-min-content; width: min-content; height: -moz-min-content; height: min-content
+R	1758	h-fit	-	height: -moz-fit-content; height: fit-content
+R	1761	h-max	-	height: -moz-max-content; height: max-content
+R	1762	h-min	-	height: -moz-min-content; height: min-content
+R	1801	max-h-fit	-	max-height: -moz-fit-content; max-height: fit-content
+R	1804	max-h-max	-	max-height: -moz-max-content; max-height: max-content
+R	1805	max-h-min	-	max-height: -moz-min-content; max-height: min-content
+R	1845	min-h-fit	-	min-height: -moz-fit-content; min-height: fit-content
+R	1848	min-h-max	-	min-height: -moz-max-content; min-height: max-content
+R	1849	min-h-min	-	min-height: -moz-min-content; min-height: min-content
+R	1915	w-fit	-	width: -moz-fit-content; width: fit-content
+R	1918	w-max	-	width: -moz-max-content; width: max-content
+R	1919	w-min	-	width: -moz-min-content; width: min-content
+R	1957	min-w-fit	-	min-width: -moz-fit-content; min-width: fit-content
+R	1959	min-w-max	-	min-width: -moz-max-content; min-width: max-content
+R	1960	min-w-min	-	min-width: -moz-min-content; min-width: min-content
+R	2002	max-w-fit	-	max-width: -moz-fit-content; max-width: fit-content
+R	2005	max-w-max	-	max-width: -moz-max-content; max-width: max-content
+R	2007	max-w-min	-	max-width: -moz-min-content; max-width: min-content
+R	2023	flex-shrink	-	flex-shrink: 1
+R	2024	flex-shrink-0	-	flex-shrink: 0
+R	2025	shrink	-	flex-shrink: 1
+R	2026	shrink-0	-	flex-shrink: 0
+R	2027	flex-grow	-	flex-grow: 1
+R	2028	flex-grow-0	-	flex-grow: 0
+R	2029	grow	-	flex-grow: 1
+R	2030	grow-0	-	flex-grow: 0
+R	2094	table-auto	-	table-layout: auto
+R	2095	table-fixed	-	table-layout: fixed
+R	2098	border-collapse	-	border-collapse: collapse
+R	2099	border-separate	-	border-collapse: separate
+R	2424	-scale-0	-	--tw-scale-x: 0; --tw-scale-y: 0; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2444	-scale-x-0	-	--tw-scale-x: 0; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2454	-scale-y-0	-	--tw-scale-y: 0; transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2484	transform	-	transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2485	transform-cpu	-	transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2486	transform-gpu	-	transform: translate3d(var(--tw-translate-x), var(--tw-translate-y), 0) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))
+R	2487	transform-none	-	transform: none
+R	2488	animate-bounce	-	animation: bounce 1s infinite
+R	2489	animate-none	-	animation: none
+R	2490	animate-ping	-	animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite
+R	2491	animate-pulse	-	animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite
+R	2492	animate-spin	-	animation: spin 1s linear infinite
+R	3504	list-inside	-	list-style-position: inside
+R	3505	list-outside	-	list-style-position: outside
+R	3506	list-decimal	-	list-style-type: decimal
+R	3507	list-disc	-	list-style-type: disc
+R	3508	list-none	-	list-style-type: none
+R	3509	list-image-none	-	list-style-image: none
+R	3558	auto-cols-auto	-	grid-auto-columns: auto
+R	3559	auto-cols-fr	-	grid-auto-columns: minmax(0, 1fr)
+R	3560	auto-cols-max	-	grid-auto-columns: max-content
+R	3561	auto-cols-min	-	grid-auto-columns: min-content
+R	3562	grid-flow-row	-	grid-auto-flow: row
+R	3563	grid-flow-col	-	grid-auto-flow: column
+R	3564	grid-flow-dense	-	grid-auto-flow: dense
+R	3565	grid-flow-row-dense	-	grid-auto-flow: row dense
+R	3566	grid-flow-col-dense	-	grid-auto-flow: column dense
+R	3567	auto-rows-auto	-	grid-auto-rows: auto
+R	3568	auto-rows-fr	-	grid-auto-rows: minmax(0, 1fr)
+R	3569	auto-rows-max	-	grid-auto-rows: max-content
+R	3570	auto-rows-min	-	grid-auto-rows: min-content
+R	3599	flex-row	-	flex-direction: row
+R	3600	flex-row-reverse	-	flex-direction: row-reverse
+R	3601	flex-col	-	flex-direction: column
+R	3602	flex-col-reverse	-	flex-direction: column-reverse
+R	3603	flex-wrap	-	flex-wrap: wrap
+R	3604	flex-wrap-reverse	-	flex-wrap: wrap-reverse
+R	3605	flex-nowrap	-	flex-wrap: nowrap
+R	3619	content-normal	-	align-content: normal
+R	3620	content-center	-	align-content: center
+R	3621	content-start	-	align-content: flex-start
+R	3622	content-end	-	align-content: flex-end
+R	3623	content-between	-	align-content: space-between
+R	3624	content-around	-	align-content: space-around
+R	3625	content-evenly	-	align-content: space-evenly
+R	3626	content-baseline	-	align-content: baseline
+R	3627	content-stretch	-	align-content: stretch
+R	3628	items-start	-	align-items: flex-start
+R	3629	items-end	-	align-items: flex-end
+R	3630	items-center	-	align-items: center
+R	3631	items-baseline	-	align-items: baseline
+R	3632	items-stretch	-	align-items: stretch
+R	3633	justify-normal	-	justify-content: normal
+R	3634	justify-start	-	justify-content: flex-start
+R	3635	justify-end	-	justify-content: flex-end
+R	3636	justify-center	-	justify-content: center
+R	3637	justify-between	-	justify-content: space-between
+R	3638	justify-around	-	justify-content: space-around
+R	3639	justify-evenly	-	justify-content: space-evenly
+R	3640	justify-stretch	-	justify-content: stretch
+R	3641	justify-items-start	-	justify-items: start
+R	3642	justify-items-end	-	justify-items: end
+R	3643	justify-items-center	-	justify-items: center
+R	3644	justify-items-stretch	-	justify-items: stretch
+R	3890	space-y-reverse	> :not([hidden]) ~ :not([hidden])	--tw-space-y-reverse: 1
+R	3891	space-x-reverse	> :not([hidden]) ~ :not([hidden])	--tw-space-x-reverse: 1
+R	3892	divide-x	> :not([hidden]) ~ :not([hidden])	--tw-divide-x-reverse: 0; border-right-width: calc(1px * var(--tw-divide-x-reverse)); border-left-width: calc(1px * calc(1 - var(--tw-divide-x-reverse)))
+R	3897	divide-y	> :not([hidden]) ~ :not([hidden])	--tw-divide-y-reverse: 0; border-top-width: calc(1px * calc(1 - var(--tw-divide-y-reverse))); border-bottom-width: calc(1px * var(--tw-divide-y-reverse))
+R	3902	divide-y-reverse	> :not([hidden]) ~ :not([hidden])	--tw-divide-y-reverse: 1
+R	3903	divide-x-reverse	> :not([hidden]) ~ :not([hidden])	--tw-divide-x-reverse: 1
+R	3904	divide-solid	> :not([hidden]) ~ :not([hidden])	border-style: solid
+R	3905	divide-dashed	> :not([hidden]) ~ :not([hidden])	border-style: dashed
+R	3906	divide-dotted	> :not([hidden]) ~ :not([hidden])	border-style: dotted
+R	3907	divide-double	> :not([hidden]) ~ :not([hidden])	border-style: double
+R	3908	divide-none	> :not([hidden]) ~ :not([hidden])	border-style: none
+R	4415	divide-current	> :not([hidden]) ~ :not([hidden])	border-color: currentColor
+R	5868	divide-inherit	> :not([hidden]) ~ :not([hidden])	border-color: inherit
+R	8531	divide-transparent	> :not([hidden]) ~ :not([hidden])	border-color: transparent
+R	9306	self-auto	-	align-self: auto
+R	9307	self-start	-	align-self: flex-start
+R	9308	self-end	-	align-self: flex-end
+R	9309	self-center	-	align-self: center
+R	9310	self-stretch	-	align-self: stretch
+R	9311	self-baseline	-	align-self: baseline
+R	9312	justify-self-auto	-	justify-self: auto
+R	9313	justify-self-start	-	justify-self: start
+R	9314	justify-self-end	-	justify-self: end
+R	9315	justify-self-center	-	justify-self: center
+R	9316	justify-self-stretch	-	justify-self: stretch
+R	9317	overflow-auto	-	overflow: auto
+R	9318	overflow-hidden	-	overflow: hidden
+R	9319	overflow-clip	-	overflow: clip
+R	9320	overflow-visible	-	overflow: visible
+R	9321	overflow-scroll	-	overflow: scroll
+R	9322	overflow-x-auto	-	overflow-x: auto
+R	9323	overflow-y-auto	-	overflow-y: auto
+R	9324	overflow-x-hidden	-	overflow-x: hidden
+R	9325	overflow-y-hidden	-	overflow-y: hidden
+R	9326	overflow-x-clip	-	overflow-x: clip
+R	9327	overflow-y-clip	-	overflow-y: clip
+R	9328	overflow-x-visible	-	overflow-x: visible
+R	9329	overflow-y-visible	-	overflow-y: visible
+R	9330	overflow-x-scroll	-	overflow-x: scroll
+R	9331	overflow-y-scroll	-	overflow-y: scroll
+R	9343	truncate	-	overflow: hidden; white-space: nowrap
+R	9350	whitespace-normal	-	white-space: normal
+R	9351	whitespace-nowrap	-	white-space: nowrap
+R	9352	whitespace-pre	-	white-space: pre
+R	9353	whitespace-pre-line	-	white-space: pre-line
+R	9354	whitespace-pre-wrap	-	white-space: pre-wrap
+R	9355	whitespace-break-spaces	-	white-space: break-spaces
+R	9360	break-normal	-	overflow-wrap: normal
+R	9361	break-words	-	overflow-wrap: break-word
+R	9499	border	-	border-width: 1px
+R	9504	border-x	-	border-left-width: 1px; border-right-width: 1px
+R	9509	border-y	-	border-top-width: 1px; border-bottom-width: 1px
+R	9514	border-b	-	border-bottom-width: 1px
+R	9524	border-l	-	border-left-width: 1px
+R	9529	border-r	-	border-right-width: 1px
+R	9539	border-t	-	border-top-width: 1px
+R	9544	border-solid	-	border-style: solid
+R	9545	border-dashed	-	border-style: dashed
+R	9546	border-dotted	-	border-style: dotted
+R	9547	border-double	-	border-style: double
+R	9548	border-hidden	-	border-style: hidden
+R	9549	border-none	-	border-style: none
+R	10056	border-current	-	border-color: currentColor
+R	11509	border-inherit	-	border-color: inherit
+R	14172	border-transparent	-	border-color: transparent
+R	15427	border-x-current	-	border-left-color: currentColor; border-right-color: currentColor
+R	16880	border-x-inherit	-	border-left-color: inherit; border-right-color: inherit
+R	19543	border-x-transparent	-	border-left-color: transparent; border-right-color: transparent
+R	20798	border-y-current	-	border-top-color: currentColor; border-bottom-color: currentColor
+R	22251	border-y-inherit	-	border-top-color: inherit; border-bottom-color: inherit
+R	24914	border-y-transparent	-	border-top-color: transparent; border-bottom-color: transparent
+R	26169	border-b-current	-	border-bottom-color: currentColor
+R	27622	border-b-inherit	-	border-bottom-color: inherit
+R	30285	border-b-transparent	-	border-bottom-color: transparent
+R	36911	border-l-current	-	border-left-color: currentColor
+R	38364	border-l-inherit	-	border-left-color: inherit
+R	41027	border-l-transparent	-	border-left-color: transparent
+R	42282	border-r-current	-	border-right-color: currentColor
+R	43735	border-r-inherit	-	border-right-color: inherit
+R	46398	border-r-transparent	-	border-right-color: transparent
+R	53024	border-t-current	-	border-top-color: currentColor
+R	54477	border-t-inherit	-	border-top-color: inherit
+R	57140	border-t-transparent	-	border-top-color: transparent
+R	58416	bg-current	-	background-color: currentColor
+R	59869	bg-inherit	-	background-color: inherit
+R	62532	bg-transparent	-	background-color: transparent
+R	63817	from-current	-	--tw-gradient-from: currentColor var(--tw-gradient-from-position); --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)
+R	65270	from-inherit	-	--tw-gradient-from: inherit var(--tw-gradient-from-position); --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)
+R	67933	from-transparent	-	--tw-gradient-from: transparent var(--tw-gradient-from-position); --tw-gradient-to: rgb(0 0 0 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)
+R	69209	via-current	-	--tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), currentColor var(--tw-gradient-via-position), var(--tw-gradient-to)
+R	70662	via-inherit	-	--tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), inherit var(--tw-gradient-via-position), var(--tw-gradient-to)
+R	73325	via-transparent	-	--tw-gradient-to: rgb(0 0 0 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), transparent var(--tw-gradient-via-position), var(--tw-gradient-to)
+R	74601	to-current	-	--tw-gradient-to: currentColor var(--tw-gradient-to-position)
+R	76054	to-inherit	-	--tw-gradient-to: inherit var(--tw-gradient-to-position)
+R	78717	to-transparent	-	--tw-gradient-to: transparent var(--tw-gradient-to-position)
+R	79491	bg-auto	-	background-size: auto
+R	79492	bg-contain	-	background-size: contain
+R	79493	bg-cover	-	background-size: cover
+R	79497	bg-clip-border	-	background-clip: border-box
+R	79498	bg-clip-padding	-	background-clip: padding-box
+R	79499	bg-clip-content	-	background-clip: content-box
+R	79500	bg-clip-text	-	background-clip: text
+R	79510	bg-repeat	-	background-repeat: repeat
+R	79511	bg-no-repeat	-	background-repeat: no-repeat
+R	79512	bg-repeat-x	-	background-repeat: repeat-x
+R	79513	bg-repeat-y	-	background-repeat: repeat-y
+R	79514	bg-repeat-round	-	background-repeat: round
+R	79515	bg-repeat-space	-	background-repeat: space
+R	90595	text-left	-	text-align: left
+R	90596	text-center	-	text-align: center
+R	90597	text-right	-	text-align: right
+R	90598	text-justify	-	text-align: justify
+R	90599	text-start	-	text-align: start
+R	90600	text-end	-	text-align: end
+R	90671	align-baseline	-	vertical-align: baseline
+R	90672	align-top	-	vertical-align: top
+R	90673	align-middle	-	vertical-align: middle
+R	90674	align-bottom	-	vertical-align: bottom
+R	90675	align-text-top	-	vertical-align: text-top
+R	90676	align-text-bottom	-	vertical-align: text-bottom
+R	90677	align-sub	-	vertical-align: sub
+R	90678	align-super	-	vertical-align: super
+R	90679	font-mono	-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
+R	90680	font-sans	-	font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"
+R	90681	font-serif	-	font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif
+R	90682	text-2xl	-	font-size: 1.5rem; line-height: 2rem
+R	90683	text-3xl	-	font-size: 1.875rem; line-height: 2.25rem
+R	90684	text-4xl	-	font-size: 2.25rem; line-height: 2.5rem
+R	90685	text-5xl	-	font-size: 3rem; line-height: 1
+R	90686	text-6xl	-	font-size: 3.75rem; line-height: 1
+R	90687	text-7xl	-	font-size: 4.5rem; line-height: 1
+R	90688	text-8xl	-	font-size: 6rem; line-height: 1
+R	90689	text-9xl	-	font-size: 8rem; line-height: 1
+R	90690	text-base	-	font-size: 1rem; line-height: 1.5rem
+R	90691	text-lg	-	font-size: 1.125rem; line-height: 1.75rem
+R	90692	text-sm	-	font-size: 0.875rem; line-height: 1.25rem
+R	90693	text-xl	-	font-size: 1.25rem; line-height: 1.75rem
+R	90694	text-xs	-	font-size: 0.75rem; line-height: 1rem
+R	90704	uppercase	-	text-transform: uppercase
+R	90705	lowercase	-	text-transform: lowercase
+R	90706	capitalize	-	text-transform: capitalize
+R	90707	normal-case	-	text-transform: none
+R	90708	italic	-	font-style: italic
+R	90709	not-italic	-	font-style: normal
+R	90734	-tracking-tight	-	letter-spacing: 0.025em
+R	90735	-tracking-tighter	-	letter-spacing: 0.05em
+R	91251	text-current	-	color: currentColor
+R	92704	text-inherit	-	color: inherit
+R	95367	text-transparent	-	color: transparent
+R	96137	underline	-	text-decoration-line: underline
+R	96138	overline	-	text-decoration-line: overline
+R	96139	line-through	-	text-decoration-line: line-through
+R	96140	no-underline	-	text-decoration-line: none
+R	102038	placeholder-current	::placeholder	color: currentColor
+R	103491	placeholder-inherit	::placeholder	color: inherit
+R	106154	placeholder-transparent	::placeholder	color: transparent
+R	139432	contain-none	-	contain: none
+R	139433	contain-content	-	contain: content
+R	139434	contain-strict	-	contain: strict
+R	139435	contain-size	-	--tw-contain-size: size; contain: var(--tw-contain-size) var(--tw-contain-layout) var(--tw-contain-paint) var(--tw-contain-style)
+R	139436	contain-inline-size	-	--tw-contain-size: inline-size; contain: var(--tw-contain-size) var(--tw-contain-layout) var(--tw-contain-paint) var(--tw-contain-style)
+R	139437	contain-layout	-	--tw-contain-layout: layout; contain: var(--tw-contain-size) var(--tw-contain-layout) var(--tw-contain-paint) var(--tw-contain-style)
+R	139438	contain-paint	-	--tw-contain-paint: paint; contain: var(--tw-contain-size) var(--tw-contain-layout) var(--tw-contain-paint) var(--tw-contain-style)
+R	139439	contain-style	-	--tw-contain-style: style; contain: var(--tw-contain-size) var(--tw-contain-layout) var(--tw-contain-paint) var(--tw-contain-style)
+R	139440	content-none	-	--tw-content: none; content: var(--tw-content)

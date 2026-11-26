@@ -4432,6 +4432,12 @@ static void image_item(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t h,
 {
 	dl_item *d;
 	NEVER_PAD(w < -100000, PAD_IMAGE_ITEM);
+	/* a picture whose own visibility is hidden isn't drawn, as its text
+	   isn't (an inline one's item is passed over; a block or a flex
+	   item's comes here: atarimania.com's Systems panel, invisible
+	   below the page, drew its pictures over the news) */
+	if (!b->anon && kw(b->st, EP_VISIBILITY) != KW_VISIBLE)
+		return;
 	if (b->frame) {
 		frame_items(l, b, x, y, w, h);
 		return;

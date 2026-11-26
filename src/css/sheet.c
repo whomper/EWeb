@@ -2335,8 +2335,18 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 				continue;
 			if ((cd->name = ec_intern(c, ns, nl)) == NULL)
 				continue;	/* (no memory for its name: left out) */
-			cd->val = vs ? vs : "";
-			cd->len = vs ? (uint32_t) (ve - vs) : 0;
+			/* its own copy, as a var() declaration's (ec_text_compact) */
+			cd->val = "";
+			cd->len = 0;
+			if (vs && ve > vs) {
+				char *txt = ec_alloc(c->pmem, (size_t) (ve - vs) + 1);
+				if (txt == NULL)
+					continue;
+				memcpy(txt, vs, (size_t) (ve - vs));
+				txt[ve - vs] = 0;
+				cd->val = txt;
+				cd->len = (uint32_t) (ve - vs);
+			}
 			cd->hasvar = hasvar;
 			if (c->opts & EC_OPT_NO_VAR)
 				continue;
@@ -2355,12 +2365,19 @@ int ec_parse_decls(ec_ctx *c, const char *s, size_t len, ec_decl **out, int *cus
 			uint8_t p[16];
 			int np;
 			ec_pend *pd;
+			char *txt;
 			if (c->opts & EC_OPT_NO_VAR)
 				continue;
 			pd = ec_alloc(c->pmem, sizeof *pd);
-			if (pd == NULL)
+			/* its own copy of the value: the block's text it is in goes
+			   once the block is parsed (ec_text_compact), and a
+			   restyle after that substitutes it again */
+			txt = pd != NULL ? ec_alloc(c->pmem, (size_t) (ve - vs) + 1) : NULL;
+			if (txt == NULL)
 				continue;
-			pd->txt = vs;
+			memcpy(txt, vs, (size_t) (ve - vs));
+			txt[ve - vs] = 0;
+			pd->txt = txt;
 			pd->len = ve - vs;
 			pd->prop = prop;
 			if (prop < EC_NPROP) {

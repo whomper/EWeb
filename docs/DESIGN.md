@@ -1905,7 +1905,24 @@ told once the parse's rest is in, and at each checkpoint after the document chan
 the page's other 450 million (`jsbench`, `count68k.sh`; QuickJS's interpreter, not EWeb's DOM, per
 `prof68k.py`), past the page's 15 s budget on every Atari, which would then drop all its scripts.
 So EWeb leaves that one script out (`run_script`), as a script that didn't load, and the page's
-others run (Alpine.js folds atariuptodate.de's menus); the page shows without Tailwind's styles.
+others run (Alpine.js folds atariuptodate.de's menus).
+
+**Tailwind's utilities made by EWeb (26 Nov 2026).** Without the compiler such a page had none of
+Tailwind's styles (atariuptodate.de's header and menus came as plain lists). EWeb now writes the
+sheet the compiler would have, itself (`src/browse/tw.c`, `tw_add` in `src/browse/browse.c`): for a
+page whose head loads `cdn.tailwindcss.com`, from its elements' classes and the classes an Alpine.js
+`:class` names in quotes, scripts on or off. Each class is read as Tailwind 3 reads it (variants
+`sm:` to `2xl:`, `dark:`, `hover:` and the other states, `group-hover:`, `rtl:`; `!`; arbitrary
+values) and given Tailwind's own rule: the data is Tailwind 3.4.17's (MIT), kept in
+`src/css/tw.txt` by `tools/mktw.py --from-tailwind` (node and Tailwind, once, never at build time)
+as what EWeb's CSS engine reads: its base sheet, the palette and 16 colour families, 114 families of
+the theme's scales, 315 single rules; `build/gen/tw_data.h` is made from it. `make test`'s `twtest`
+holds 270 classes to what Tailwind itself makes of them (`tests/browse/twcases.txt`, `mktw.py
+--cases`). The head's children alone are looked at for the script, so another page costs nothing.
+It is `EWEB.PRG`'s (the ST edition is frozen). Its first page showed a fault of the CSS engine's: a
+declaration waiting for `var()` and a custom property's value pointed into the rule's text, which
+`ec_text_compact` lets go once read, so a restyle after that (a script's `getComputedStyle`) read
+freed memory; each now has its own copy (`tests/js/varstyle.html`).
 
 ## The stack (21 Oct 2026)
 

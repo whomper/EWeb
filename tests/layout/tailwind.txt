@@ -1,0 +1,24 @@
+page 608 x 295, background cad8b7, 23 items, 2 links, title "Tailwind"
+fill 0,0 608x45 #1f2937
+text 13,27 40x19 #ffffff cond16 bold link 1 "Atari"
+text 53,27 81x19 #ea580c cond16 bold link 1 "UpToDate"
+fill 13,11 121x22 #00000000 link 1
+fill 339,11 256x23 #f9fafb
+fill 339,11 256x1 #d1d5db
+fill 339,33 256x1 #d1d5db
+fill 339,12 1x21 #d1d5db
+fill 594,12 1x21 #d1d5db
+text 13,81 112x29 #111827 cond24 bold link 0 "Welcome"
+text 13,114 266x17 #111827 cond13 link 0 "A list of programs, styled by its classes alone."
+fill 13,133 582x149 #ffffff
+text 26,162 69x19 #111827 cond16 bold link 0 "Updated"
+fill 26,174 556x28 #f3f4f6
+text 32,192 32x14 #111827 cond11 bold link 0 "Name"
+text 314,192 43x14 #111827 cond11 bold link 0 "Version"
+text 32,221 45x14 #2563eb cond11 link 2 "HighWire"
+fill 26,202 282x1 #e5e7eb
+text 314,221 24x14 #111827 cond11 link 0 "0.5.0"
+fill 308,202 274x1 #e5e7eb
+fill 26,237 53x32 #e5e7eb
+link 1 file://./tests/layout/tailwind.html#
+link 2 file://./tests/layout/tailwind.html#

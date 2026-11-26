@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<!-- invisible.html - pictures in a box whose visibility is hidden aren't
+     drawn, as its text isn't (26 Nov 2026: atarimania.com's Systems
+     panel, invisible, drew its menu's pictures over the news): a flex
+     item's, a block's, an inline one's; a visible child of the hidden
+     box is drawn, as browsers draw it. Below the text, only the picture
+     marked "shown" may be drawn. -->
+<html><head><meta charset=utf-8><title>Invisible pictures</title>
+<style>
+body { font: 16px "DejaVu Sans", sans-serif; margin: 8px }
+.panel { visibility: hidden }
+.panel ul { display: grid; grid-template-columns: 1fr 1fr 1fr; list-style: none; padding: 0 }
+.panel button { display: flex; flex-direction: column; align-items: center }
+.panel img, p img { width: 40px; height: 40px }
+.shown { visibility: visible }
+</style></head><body>
+<p>News text the pictures must not cover.</p>
+<div class="panel">
+ <ul><li><button><img src="data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs=">Arcade</button></li>
+     <li><button><img src="data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs=">2600</button></li></ul>
+ <div><img style="display:block;width:40px;height:40px" src="data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs="></div>
+ <p>inline <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs="> picture</p>
+ <p class="shown">shown <img src="data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///ywAAAAAAQABAAACAkQBADs="></p>
+</div>
+</body></html>

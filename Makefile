@@ -131,6 +131,11 @@ $(GEN)/home.h: tools/mkhome.py src/browse/home.html src/browse/home/eweb.png src
 	@mkdir -p $(@D)
 	python3 tools/mkhome.py src/browse/home.html $@
 
+# Tailwind 3's utilities, as EWeb reads them (src/browse/tw.c)
+$(GEN)/tw_data.h: tools/mktw.py src/css/tw.txt
+	@mkdir -p $(@D)
+	python3 tools/mktw.py src/css/tw.txt $@
+
 # the HTML parser's named character references (src/doc/html.c)
 $(GEN)/entities.h: tools/mkentities.py src/doc/entities.txt
 	@mkdir -p $(@D)
@@ -190,6 +195,7 @@ build/$(1)/ec/%.o: src/css/%.c src/css/*.h
 	$(2) $$(filter-out -w,$(3)) $$(EC_FLAGS) $$(ST_O2) -c $$< -o $$@
 build/$(1)/ewb/doc/html.o: $(GEN)/entities.h
 build/$(1)/ewb/browse/browse.o: $(GEN)/home.h
+build/$(1)/ewb/browse/tw.o: $(GEN)/tw_data.h
 build/$(1)/ewb/%.o: src/%.c $$(EWB_HDRS) VERSION
 	@mkdir -p $$(@D)
 	$(2) $$(filter-out -w,$(3)) $(if $(filter tos st,$(1)),-DEW_TOS) $$(EWB_FLAGS) $$(NSINC) $$(ST_O2) -c $$< -o $$@
@@ -566,6 +572,11 @@ build/asan/bmtest: tests/browse/bmtest.c src/browse/bookmark.c src/browse/bookma
 	@mkdir -p $(@D)
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc -Isrc/browse \
 		-Icommon/src -o $@ $(filter %.c,$^)
+# Tailwind's utilities made by EWeb (src/browse/tw.c), held to Tailwind's
+build/asan/twtest: tests/browse/twtest.c src/browse/tw.c src/browse/tw.h $(GEN)/tw_data.h
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(NET_WARN) -Isrc/browse -I$(GEN) \
+		-o $@ $(filter %.c,$^)
 # EWEB.FNT's advances as the layout measures them (src/gfx/font.c)
 build/asan/fonttest: tests/layout/fonttest.c src/gfx/font.c src/gfx/font.h common/src/inflate.c common/src/util.c \
 		common/src/futil.c tests/host/plat_posix.c
@@ -1574,7 +1585,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # places modulo 256, common/tools/profpad.py)
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest \
+		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/twtest \
 		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/c2ptest build/m68k/c2ptest build/asan/cfmathtest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o \
 		build/prof/EWEB.PRG build/prof/EWEBST.PRG
@@ -1583,6 +1594,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
 	build/asan/bmtest build/asan
+	build/asan/twtest tests/browse/twcases.txt
 	build/asan/hgtest build/asan
 	build/asan/fonttest binary/EWEB.FNT
 	build/asan/dctest build/asan

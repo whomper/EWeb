@@ -18,6 +18,7 @@ yaary            https://yaary.music/                          # the owner's pho
 yaary-16         https://yaary.music/                          -- -p 16 -w 320
 iamexpat         https://www.iamexpat.de/                      # pictures with Vary, GEM held (Nov 2026)
 demozoo          https://demozoo.org/                          # the login menu's z-index; typing on a stock Falcon
+demozoo-js       https://demozoo.org/                          -- -J   # with its scripts: the login menu closed, as the site means (26 Nov 2026)
 atarimania       https://www.atarimania.com/                   # the 8% teal glow
 webdriveruni     https://webdriveruniversity.com/              -- -J
 cnn              https://www.cnn.com/                          # 73 pictures, on the DFB1
