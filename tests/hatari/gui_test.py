@@ -184,8 +184,20 @@ class Mouse:
 
     def click(self, x, y, button="1"):
         self.move(x, y)
-        self.xdo("click", button)
+        self.click_here(button)
         time.sleep(0.4)
+
+    def click_here(self, button="1"):
+        """a click where the pointer is, then a pixel's move there and
+        back: under the network's load Hatari's IKBD can lose the release's
+        packet, and TOS then holds the button down until the next packet
+        (an AES trace: graf_mkstate said held for 158 s after a click on
+        the download box's Stop); the move's packets carry the button's
+        state, as a real mouse's next ones would"""
+        self.xdo("click", button)
+        time.sleep(0.1)
+        self.xdo("mousemove_relative", "1", "0")
+        self.xdo("mousemove_relative", "--", "-1", "0")
 
     def drag(self, x0, y0, x1, y1):
         """pressed at one place, let go at another"""
@@ -564,7 +576,7 @@ def browse():
             r.mouse.move(tx, ty)
             time.sleep(2)
             for _ in range(3):
-                r.mouse.xdo("click", "1")
+                r.mouse.click_here()
                 got = r.wait(r"download box (click|closed)", 20)
                 if got and got.startswith("download box closed"):
                     closed = got
