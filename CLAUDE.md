@@ -42,6 +42,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `main`, nothing else: no test builds, no CI artifacts, no builds from a branch.
   Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, fix
   forward: a new release with the next number, before any other work; never a rollback (decided 7 Nov 2026).
+- **Fewer releases, each carrying more** (decided 26 Nov 2026; guidelines 1.2): no release for every single
+  fix or feature. Changes gather on `main` and go out together when a body of work is complete, as one
+  candidate through the gate and the hub's family check. Only a data-loss, security or crash fault goes
+  out on its own at once, with only that fix.
 - **Releases go out without asking the owner** (his decision, 23 Oct 2026; guidelines 1.2), through the
   regression gate (decided 17 Nov 2026: EWeb has users, so every configuration is tested and no
   speed is lost; guidelines 1.2, AERA-Atari's standards/TEST-MATRIX.md gate table). Every code
