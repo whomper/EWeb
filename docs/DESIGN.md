@@ -1907,6 +1907,15 @@ the page's other 450 million (`jsbench`, `count68k.sh`; QuickJS's interpreter, n
 So EWeb leaves that one script out (`run_script`), as a script that didn't load, and the page's
 others run (Alpine.js folds atariuptodate.de's menus).
 
+**Shared files (26 Nov 2026; the look the owner's, 26 Nov 2026).** A file or folder a cloud drive
+shares is made by scripts far bigger than EWeb runs, so EWeb shows its own page in their place:
+`src/browse/share.c` (`share_page`), in the home page's look (black, light copper for the label and
+the buttons' words, copper for the ruler and the buttons' frames), a row an item with its type, name,
+size and Download (a folder: Open), and Download all where the service gives one. Google Drive's file
+page is the first (`drive_page`: its name from `og:title`, the download from
+`drive.usercontent.google.com`); folders and Dropbox, Box and iCloud Drive follow once tried on real
+shared links. Laid out from 320 pixels wide, read in 16 colours (the gdrive-sample site case).
+
 **Tailwind's utilities made by EWeb (26 Nov 2026).** Without the compiler such a page had none of
 Tailwind's styles (atariuptodate.de's header and menus came as plain lists). EWeb now writes the
 sheet the compiler would have, itself (`src/browse/tw.c`, `tw_add` in `src/browse/browse.c`): for a

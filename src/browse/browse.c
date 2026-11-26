@@ -29,6 +29,7 @@
 #include "plat.h"
 #include "util.h"
 #include "tw.h"
+#include "share.h"
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -1136,30 +1137,29 @@ static int drive_file(const FETCH *f, char *id, int idsize, char *name, int nsiz
 	return 1;
 }
 
-/* EWeb's own page for a Drive file (decided 24 Nov 2026): its name and a
-   link to Google's plain download of it, which needs no script (a big
-   file comes first to Google's "can't scan it for viruses" page, a form
-   EWeb sends) */
+/* EWeb's own page for a Drive file (decided 24 Nov 2026; its look 26 Nov
+   2026: share.c): its name and a link to Google's plain download of it,
+   which needs no script (a big file comes first to Google's "can't scan
+   it for viruses" page, a form EWeb sends) */
 static void drive_page(SBUF *s, const char *url, const char *id, const char *name)
 {
-	sb_adds(s, "<!DOCTYPE html><html><head><meta charset=utf-8><title>");
-	esc(s, name[0] ? name : "A Google Drive file");
-	sb_adds(s, "</title>");
-	sb_adds(s, own_style);
-	sb_adds(s, "</head><body><h1>");
-	esc(s, name[0] ? name : "A Google Drive file");
-	sb_adds(s, "</h1><p class=addr>");
-	esc(s, url);
-	sb_adds(s, "</p><p><a href=\"https://drive.usercontent.google.com/download?id=");
-	esc(s, id);
-	sb_adds(s, "&amp;export=download\">Download</a></p>"
-		   "<p class=small>Google Drive's own page for a file is made by a script far bigger than "
-		   "EWeb runs; this page of EWeb's stands in for it. A file Drive shares with anyone "
-		   "comes straight away; a very big one first asks whether to download it without "
-		   "Google's virus check; one that isn't shared asks to sign in.</p>");
-	if (http_gateway[0])
-		sb_adds(s, "<p class=small>Drive's page itself: View &gt; Through the Gateway's browser.</p>");
-	sb_adds(s, "</body></html>");
+	share *sh = calloc(1, sizeof *sh);
+	share_item *it;
+	if (sh == NULL)
+		return;		/* (an empty page: out of memory) */
+	sh->service = "Google Drive";
+	str_copy(sh->host, "drive.google.com", sizeof sh->host);
+	str_copy(sh->title, name[0] ? name : "A Google Drive file", sizeof sh->title);
+	str_copy(sh->page, url, sizeof sh->page);
+	sh->n = 1;
+	it = &sh->it[0];
+	str_copy(it->name, name[0] ? name : "The file", sizeof it->name);
+	share_type(it->type, sizeof it->type, it->name);
+	snprintf(it->url, sizeof it->url, "https://drive.usercontent.google.com/download?id=%s&export=download", id);
+	sh->note = "A very big file first asks whether to download it without Google's virus check; "
+		   "one that isn't shared with everyone asks to sign in.";
+	share_page(s, sh, http_gateway[0] != 0);
+	free(sh);
 }
 
 /* a page's <meta property="og:NAME" content="..."> into out ("" if it
