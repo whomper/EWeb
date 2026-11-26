@@ -83,6 +83,8 @@ static long stack_size;				/* and its bytes */
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar;
 short ap_id;
+static int user_quit;		/* Quit, or the last window closed: the user's (4.6's --back) */
+
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
@@ -2756,6 +2758,7 @@ void command(int cmd)
 		/* the window in front; the last: EWeb quits (the guidelines' ^U) */
 		if (win_count() <= 1) {
 			quit = 1;
+			user_quit = 1;
 			break;
 		}
 		log_event("window closed");
@@ -2795,7 +2798,7 @@ void command(int cmd)
 		else
 			win_status("");
 		break;
-	case C_QUIT: quit = 1; break;
+	case C_QUIT: quit = 1; user_quit = 1; break;
 	case C_CUT: win_clip(CLIP_CUT); break;
 	case C_COPY: win_clip(CLIP_COPY); break;
 	case C_PASTE: win_clip(CLIP_PASTE); break;
@@ -3456,11 +3459,27 @@ static void crash_quit(const char *what)
 /* the command line: an address or a file to open first, the basepage's
    or the ARGV way's (MiNT, MagiC: common's cmd_line, the guidelines' 4.3),
    without the quotes cmd_line puts round a name with a space */
+/* the program to start again when the user quits (the guidelines' 4.6:
+   EMail starts EWeb for a link with --back=PATH after the address, and
+   comes back at the same message with --resume); "" none */
+static char back_path[256];
+
 static void command_line(char *out, int size)
 {
 	const char *s = cmd_line();
+	char *b;
 	int len;
 	snprintf(out, size, "%s", s);
+	/* --back=PATH (maybe in quotes), taken off before the address is read */
+	if ((b = strstr(out, "--back=")) != NULL && (b == out || b[-1] == ' ')) {
+		char *p = b + 7;
+		int q = *p == '"';
+		snprintf(back_path, sizeof back_path, "%s", p + q);
+		if (q && strchr(back_path, '"') != NULL)
+			*strchr(back_path, '"') = 0;
+		str_trim(back_path);
+		*b = 0;
+	}
 	str_trim(out);
 	len = (int) strlen(out);
 	if (len >= 2 && out[0] == '"' && out[len - 1] == '"') {
@@ -4115,6 +4134,13 @@ static int app_run(void)
 		const char *o = crash_over();
 		snprintf(line, sizeof line, "crash catcher off; hooked over it: %s", o[0] ? o : "none");
 		quit_step(line);
+	}
+	/* the caller started again (4.6): on the user's quit, on a single-
+	   tasking AES (where EWeb took its place), if it is still there */
+	if (user_quit && back_path[0] && aes_count() == 1 && !get_cookie(0x4D616758L) && pf_exists(back_path)) {
+		static const char tail[] = "\011 --resume";	/* (its length first: 9) */
+		shel_write(1, 1, 0, back_path, (char *) tail);
+		quit_step("the caller started again");
 	}
 	appl_exit();
 	quit_step("out of the AES");
