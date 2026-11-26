@@ -1568,8 +1568,8 @@ static void loading_on(void)
    dialog (common's filepick_save), in the folder last saved to, with name
    proposed and the folders and files of its type, its extension added and
    a file there replaced only when the dialog's question says so; or, with
-   Settings' "Use the system file selector" (SYSFSEL=1), the AES's, with the
-   same question. *full the path chosen; 0: cancelled. Nothing runs
+   Settings' "Use the system file selector" (SYSFSEL=1), and always on plain
+   TOS, the AES's, with the same question. *full the path chosen; 0: cancelled. Nothing runs
    meanwhile (a save starts only between loads: no idle) */
 static int ask_save(const char *title, const char *name, char *full, int size)
 {
@@ -1601,7 +1601,10 @@ static int ask_save(const char *title, const char *name, char *full, int size)
 	spec.types = types;
 	spec.ntypes = n;
 	str_copy(fname, name, sizeof fname);
-	filepick_system = opt.sysfsel;
+	/* on plain TOS the AES's always, for now (decided 26 Nov 2026): after
+	   the family's dialogs there a press can stay held for the AES (common's
+	   dialog.c, its TOS path); where dialogs are windows, as set */
+	filepick_system = opt.sysfsel || !dlg_windowed();
 	return filepick_save(&spec, dir, recent, fname, sizeof fname, full, size, NULL);
 }
 #else

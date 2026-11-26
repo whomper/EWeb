@@ -282,7 +282,8 @@ takes, `.tar.gz` as `.TGZ`). If there is a file of that name already,
 the dialog asks before replacing it. A packed archive (`.gz`, `.tgz`)
 is saved as it came, not unpacked. Settings > General > Use the system
 file selector asks with the system's own file selector instead (the ST
-edition always does).
+edition always does, and for now so does EWeb on plain TOS; under MiNT
+or MagiC the family's dialog is used unless the setting is on).
 
 ## The cache
 
@@ -857,7 +858,8 @@ there at once; where the window was, when you quit:
 - `NARROW=` 1 to show pages made for Arial in narrow letters of its
   widths (DejaVu Sans Condensed), 0 for DejaVu Sans (Settings > General)
 - `SYSFSEL=` 1 to save files through the system's file selector, 0 (as
-  it starts) through the family's save dialog (Settings > General)
+  it starts) through the family's save dialog (Settings > General); on
+  plain TOS EWeb saves through the system's for now, whatever it says
 - `PALETTE=` in 256 colours, 1 for EWeb's own colours while it runs
   (a colour cube and greys, with the pale tints pages' backgrounds and
   pictures need; the system's first 16 stay, and its own come back when
