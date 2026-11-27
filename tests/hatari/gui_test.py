@@ -109,7 +109,8 @@ def hd_for(name, home, inf=""):
         # memory the run has that much less
         machines.write_prg(os.path.join(hd, "AUTO", "EAT.PRG"), bytes.fromhex(
             "3F3C0000" "2F3C%08X" % (int(os.environ["EAT_KB"]) * 1024) + "3F3C0031" "4E41"))
-    for f in ("EWEB.PRG", "EWEB60.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT", "EWEBFB.PRG"):   # named as a release has them (6.6)
+    for f in ("EWEB.PRG", "EWEB60.PRG", "EWEBJS.OVL", "EWEBJS60.OVL", "EWEBTW.OVL", "TLS.OVL", "EWEBST.PRG", "EWEB.FNT",
+              "EWEBFB.PRG"):   # named as a release has them (6.6)
         if os.path.exists(os.path.join(ROOT, "binary", f)):
             shutil.copy(os.path.join(ROOT, "binary", f), os.path.join(hd, f if f.endswith(".PRG") else f.lower()))
     shutil.copy(os.path.join(ROOT, "tests/layout/tables.html"), os.path.join(hd, "TABLES.HTM"))
