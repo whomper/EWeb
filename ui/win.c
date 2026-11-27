@@ -4138,28 +4138,35 @@ static void save_place(void)
 	wind_get(cur->h, WF_CURRXYWH, &opt.win_x, &opt.win_y, &opt.win_w, &opt.win_h);
 }
 
+#ifndef EW_ST
+static int32_t layout_w(void);
+#else
+#define layout_w win_page_w
+#endif
+
 /* the window's size changed: the page laid out for its width again */
 static void resized(void)
 {
+	CODE_PAD(cur == NULL, CP_WIN_RESIZED);
 	int32_t old_w = br.width, old_h = br.height;
 	get_work();
 	due_moved(0, 0);	/* (what is due, within the page's new area) */
 	save_place();
 	br.height = win_page_h();
-	if (br.p != NULL && (win_page_w() != old_w || (br.p->frameset && win_page_h() != old_h))) {
+	if (br.p != NULL && (layout_w() != old_w || (br.p->frameset && win_page_h() != old_h))) {
 		/* (a frameset is as tall as the window: its frames laid out again) */
 		/* the same place in the text, as near as it can be; the busy
 		   bee, as the page's sheets may be fetched for the new width */
 		int32_t h0 = br.p->height;
 		if (!loading)
 			graf_mouse(BUSYBEE, 0);
-		br_relayout(&br, win_page_w());
+		br_relayout(&br, layout_w());
 		if (!loading)
 			graf_mouse(ARROW, 0);
 		if (h0 > 0)
 			cur->top = (int32_t) ((int64_t) cur->top * br.p->height / h0);
 	}
-	br.width = win_page_w();
+	br.width = layout_w();
 	br_live_size(br.width, br.height, br.zoom);
 	if (cur->top > max_top())
 		cur->top = max_top();
@@ -4516,6 +4523,41 @@ static void message(const short *msg)
 		break;
 	}
 }
+
+#ifndef EW_ST
+/* the width a page is laid out at: the window's, or for a site ticked in
+   View > Desktop width (wide.c), 1024 CSS px, wider than the window, which
+   scrolls sideways (decided 27 Nov 2026) */
+static int32_t layout_w(void)
+{
+	int32_t w = win_page_w(), d = (int32_t) (1024L * br.zoom / 1024);
+	return wide_site(br.url) && d > w ? d : w;
+}
+
+/* the page shown laid out at its site's width, if it isn't: as a page
+   is shown (draw 0: its drawing follows), and when the tick changes */
+void win_fit_width(int draw)
+{
+	CODE_PAD(cur == NULL, CP_WIN_WIN_FIT_WIDTH);
+	int32_t w = layout_w();
+	if (br.p == NULL || w == br.width || br.p->frameset)
+		return;
+	graf_mouse(BUSYBEE, 0);
+	br_relayout(&br, w);
+	graf_mouse(ARROW, 0);
+	br.width = w;
+	br_live_size(br.width, br.height, br.zoom);
+	if (cur->top > max_top())
+		cur->top = max_top();
+	if (cur->left > max_left())
+		cur->left = max_left();
+	log_event("laid out %ld wide", (long) w);
+	if (draw) {
+		sliders();
+		win_redraw_page();
+	}
+}
+#endif
 
 /* the last whole draw's time, and the last scroll's, once each (the speed
    build's AESDRAW and AESSCROLL lines, their only caller): last in the

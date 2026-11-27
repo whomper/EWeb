@@ -32,3 +32,5 @@ gdrive-folder    https://drive.google.com/drive/folders/15uNXeRBIhVvZJIhL4yTw4Is
 dropbox-folder   https://www.dropbox.com/sh/o8g1530jle17spa/AADRntSHl_jLInmrmSwsX-Qsa?dl=0   # a public folder (OpenFace's models): its name and Download all as a zip (26 Nov 2026)
 icloud-file      https://www.icloud.com/iclouddrive/084x1Kofe7Bm8XzVewiTpHLsQ   # the owner's: its name, and why it can't be downloaded here (26 Nov 2026)
 yt-sample        https://www.youtube.com/watch?v=AERAsample1   # EWeb's own page for a YouTube video: a sample page made for the test, no real video (25 Nov 2026)
+bandcamp-album   https://erezyaary.bandcamp.com/album/darklight   # EWeb's own page for a Bandcamp album: its tracks, each with Play for EPlay (27 Nov 2026)
+bandcamp-artist  https://erezyaary.bandcamp.com/   # Bandcamp's own layout: wide floats and flex items not shrunk to the window, the player's triangle (27 Nov 2026)

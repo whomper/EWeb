@@ -266,3 +266,32 @@ count 60
 set http://example.com/ c60=60
 count 60
 get http://example.com/c0 c1=1; c2=2; c3=3; c4=4; c5=5; c6=6; c7=7; c8=8; c9=9; c10=10; c11=11; c12=12; c13=13; c14=14; c15=15; c16=16; c17=17; c18=18; c19=19; c20=20; c21=21; c22=22; c23=23; c24=24; c25=25; c26=26; c27=27; c28=28; c29=29; c30=30; c31=31; c32=32; c33=33; c34=34; c35=35; c36=36; c37=37; c38=38; c39=39; c40=40; c41=41; c42=42; c43=43; c44=44; c45=45; c46=46; c47=47; c48=48; c49=49; c50=50; c51=51; c52=52; c53=53; c54=54; c55=55; c56=56; c57=57; c58=58; c59=59; c60=60
+
+# File > Import cookies... (ck_import, decided 27 Nov 2026): a Netscape
+# cookies.txt, tools/safari-cookies.py's, each line as its site's own
+# Set-Cookie would be
+
+case imported: a domain cookie for its subdomains, a host's for its host, HttpOnly kept from scripts
+import 2 1 # Netscape HTTP Cookie File\n#HttpOnly_.example.com\tTRUE\t/\tTRUE\t1800000000\tsid\tabc\nwww.example.com\tFALSE\t/\tFALSE\t1800000000\ttheme\tdark\n
+get https://forums.example.com/ sid=abc
+get https://www.example.com/ sid=abc; theme=dark
+get http://forums.example.com/ -
+get https://example.com/x sid=abc
+count 2
+
+case imported: an expired line and malformed ones passed over, another site counted
+import 1 1 .example.com\tTRUE\t/\tFALSE\t1700000000\told\tgone\nnot a cookie line\n\tTRUE\t/\tFALSE\t1800000000\tnohost\tx\n.example.org\tTRUE\t/\tFALSE\t1800000000\to\t1\n
+get https://example.org/ o=1
+get https://example.com/ -
+count 1
+
+case imported: a lasting one is kept on reload, a session one (expires 0) isn't
+import 2 1 .example.com\tTRUE\t/\tFALSE\t0\ts\t1\n.example.com\tTRUE\t/\tFALSE\t1800000000\tl\t2\n
+get https://example.com/ s=1; l=2
+reload
+get https://example.com/ l=2
+
+case imported: a public suffix as the domain is the host's alone, as a server's Set-Cookie (5.7): never sent to a site under it
+import 1 1 .com\tTRUE\t/\tFALSE\t1800000000\tbad\t1\n
+get https://example.com/ -
+get https://www.example.com/ -

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Floats and column items wider than their room</title><style>
+/* a float of a width of its own wider than its block keeps it (CSS 2.1,
+   10.3.5), and so do the floats in it: the text column beside the
+   picture on the right, not pushed under it (a music shop's album page,
+   27 Nov 2026) */
+body { font-family: sans-serif; background: #fff; margin: 0 }
+.narrow { width: 500px; background: #eee }
+.both { float: left; width: 756px; background: #ddd }
+.title { float: left } .title h3 { width: 385px; margin: 0 }
+.cover { float: right; width: 350px; height: 120px; background: #048 }
+.text { float: left; width: 376px; background: #fe9 }
+/* a column flex item of a width of its own wider than the column keeps
+   it, from the column's left (CSS Flexbox 1, 9.4); auto margins centre
+   one that is narrower (8.1) */
+.col { display: flex; flex-direction: column; background: #efe }
+.page { width: 915px; padding: 0 30px; margin: 0 auto; background: #cdf }
+.mid { width: 200px; height: 12px; margin: 4px auto; background: #c30 }
+.end { width: 200px; height: 12px; margin-left: auto; background: #3a3 }
+.fit { float: left; background: #fcc }
+</style></head><body>
+<div class="narrow"><div class="both">
+<div class="title"><h2>A title</h2><h3>by someone</h3></div>
+<div class="cover"></div>
+<div class="text">The text column runs beside the picture, below the title.</div>
+</div></div>
+<div style="clear: both"></div>
+<div class="col"><div class="page">A page wider than the window, at the column's left.</div></div>
+<div class="col"><div class="mid"></div><div class="end"></div></div>
+<div class="narrow" style="width: 200px"><div class="fit">a float of an auto width, shrunk to fit its block's width</div></div>
+</body></html>

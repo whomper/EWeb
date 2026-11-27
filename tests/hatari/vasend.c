@@ -7,8 +7,10 @@
  * (EWeb's tests run EWeb alone: the guidelines' 1.2): started at boot, it
  * finds "EWEB    " and sends it VA_START with C:\VAURL.TXT's first line,
  * then waits until C:\VAEND.TXT appears and ends, which under plain TOS
- * closes the accessory's windows (AC_CLOSE). It says each on the
- * emulator's console through NatFeats ("VASEND sent", "VASEND end").
+ * closes the accessory's windows (AC_CLOSE). With C:\VATERM.TXT (a number
+ * of ms) it sends AP_TERM that long after VA_START. It says each on the
+ * emulator's console through NatFeats ("VASEND sent", "VASEND sent
+ * AP_TERM", "VASEND end").
  *
  *   make build/hatari/VASEND.PRG
  */
@@ -54,6 +56,23 @@ int main(void)
 		msg[4] = (short) (unsigned long) url;
 		appl_write(ew, 16, msg);
 		say("VASEND sent");
+		h = Fopen("C:\\VATERM.TXT", 0);
+		if (h >= 0) {
+			/* then AP_TERM, N ms later, while the page is made (the
+			   accessory passes it over: the guidelines' 2.2) */
+			char t[16];
+			long k = Fread((short) h, sizeof t - 1, t), ms = 0, i;
+			Fclose((short) h);
+			for (i = 0; i < k && t[i] >= '0' && t[i] <= '9'; i++)
+				ms = ms * 10 + t[i] - '0';
+			evnt_timer_((unsigned long) ms);
+			memset(msg, 0, sizeof msg);
+			msg[0] = 50;	/* AP_TERM */
+			msg[1] = id;
+			msg[5] = 50;	/* (AP_TERM: the reason) */
+			appl_write(ew, 16, msg);
+			say("VASEND sent AP_TERM");
+		}
 	} else {
 		say("VASEND no EWEB");
 	}

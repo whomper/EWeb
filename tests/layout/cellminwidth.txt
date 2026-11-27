@@ -1,0 +1,16 @@
+page 608 x 86, background ffffff, 15 items, 0 links, title "A cell's min-width"
+fill 16,9 200x8 #eeeeee
+fill 16,9 200x1 #888888
+fill 16,16 200x1 #888888
+fill 16,10 1x6 #888888
+fill 215,10 1x6 #888888
+fill 226,8 16x10 #333333
+fill 244,8 16x10 #333333
+fill 8,22 44x16 #ffdd99
+text 8,35 44x17 #000000 cond13 link 0 "percent"
+text 54,35 37x17 #000000 cond13 link 0 "beside"
+fill 8,42 96x16 #99ddff
+text 16,55 63x17 #000000 cond13 link 0 "border-box"
+text 106,55 37x17 #000000 cond13 link 0 "beside"
+fill 8,62 216x16 #ccffcc
+text 8,75 113x17 #000000 cond13 link 0 "wider than its table"

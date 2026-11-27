@@ -336,7 +336,7 @@ PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
 PAD_av := 30
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 140
+PAD_charset := 132
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -352,7 +352,7 @@ PAD_gem := 124
 PAD_RO_gem := 256
 PAD_DATA_gem := 256
 PAD_BSS_gem := 256
-PAD_conn := 232
+PAD_conn := 120
 PAD_RO_conn := 256
 PAD_DATA_conn := 256
 PAD_BSS_conn := 256
@@ -410,7 +410,7 @@ PAD_doc2 := 112
 PAD_RO_doc2 := 256
 PAD_DATA_doc2 := 256
 PAD_BSS_doc2 := 252
-PAD_layout2 := 32
+PAD_layout2 := 192
 PAD_RO_layout2 := 256
 PAD_DATA_layout2 := 256
 PAD_BSS_layout2 := 256
@@ -923,7 +923,8 @@ GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
 # it stays at 1.26's places
 FP_OBJ     := build/tos/gem/common/filepick.o build/tos/gem/common/dirlist.o
 # the accessory's parts (EWEB.ACC: DESIGN.md, The accessory), last too
-FP_OBJ     += build/tos/gem/acc.o build/tos/gem/stpool.o build/tos/gem/common/accmem.o build/tos/gem/common/twin.o
+FP_OBJ     += build/tos/gem/acc.o build/tos/gem/stpool.o build/tos/gem/common/accmem.o build/tos/gem/common/twin.o \
+              build/tos/gem/ckimport.o build/tos/gem/wide.o build/tos/ewb/browse/bandcamp.o build/tos/gem/play.o
 GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
@@ -954,7 +955,7 @@ tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/to
               build/tos/ewb/browse/browse.o,build/tos/ewb/browse/browse.o build/tos/rt/pad_browse.o,$(subst \
               build/tos/ewb/doc/doc.o,build/tos/ewb/doc/doc.o build/tos/rt/pad_doc.o build/tos/rt/pad_doc2.o,$(subst \
               build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o build/tos/rt/pad_layout2.o,$(filter-out \
-              build/tos/ewb/browse/tw.o,$(tos_EWB)))))) build/tos/tw/tw_ovl.o build/tos/tw/tw_imports.o
+              build/tos/ewb/browse/tw.o build/tos/ewb/browse/bandcamp.o,$(tos_EWB)))))) build/tos/tw/tw_ovl.o build/tos/tw/tw_imports.o
 tos_EC_PAD = $(subst build/tos/ec/sheet.o,build/tos/ec/sheet.o build/tos/rt/pad_sheet.o,$(subst \
              build/tos/ec/select.o,build/tos/ec/select.o build/tos/rt/pad_select.o,$(subst \
              build/tos/ec/core.o,build/tos/ec/core.o build/tos/rt/pad_core.o,$(tos_EC))))
@@ -1244,6 +1245,10 @@ build/asan/enctest: $(ENC_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) bui
 # which sites' scripts run: the setting, the lists, those too much
 # (tests/browse/sitetest.c: br_scripts_site, whatever the FPU)
 SITE_SRC := tests/browse/sitetest.c tests/host/dsp_none.c $(HOSTNET_SRC)
+build/asan/bctest: tests/browse/bctest.c src/browse/bandcamp.c src/browse/bandcamp.h common/src/util.c
+	@mkdir -p $(@D)
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Isrc -Isrc/browse -Icommon/src \
+		-o $@ tests/browse/bctest.c src/browse/bandcamp.c common/src/util.c
 build/asan/sitetest: $(SITE_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
 		build/asan/pic.a build/asan/js/js_none.o
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(SITE_SRC) \
@@ -1628,7 +1633,7 @@ build/news/NEWS.HTM build/news/NEWS.CSS: tests/bench/mkpage.py
 # places modulo 256, common/tools/profpad.py)
 test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest build/asan/csscmp build/asan/streamtest \
 		build/asan/nettest $(addprefix build/asan/replay_,$(FUZZERS)) build/news/NEWS.HTM \
-		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/twtest \
+		build/asan/ewrender build/asanst/ewrender build/asan/formtest build/asan/cookietest build/asan/bmtest build/asan/twtest build/asan/bctest \
 		build/asan/hgtest build/asan/fonttest build/asan/dctest build/asan/pentest build/asan/rftest build/asan/enctest build/asan/sitetest build/asan/dltest build/asan/tctest build/asan/c2ptest build/m68k/c2ptest build/asan/cfmathtest binary/EWEB.FNT \
 		build/asan/svgrender build/st/ewebst.elf build/st/picbench.elf build/tos/gem/common/cpucheck.o \
 		build/prof/EWEB.PRG build/prof/EWEBST.PRG
@@ -1636,6 +1641,8 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/streamtest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
+	python3 tests/cookies/safari.py
+	build/asan/bctest
 	build/asan/bmtest build/asan
 	build/asan/twtest tests/browse/twcases.txt
 	build/asan/hgtest build/asan

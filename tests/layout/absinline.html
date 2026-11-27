@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>absinline</title>
+<style>
+body { margin: 8px; font: 13px sans-serif; width: 360px }
+.row { position: relative; background: #eee }
+.row span { display: inline-block; width: 40px; height: 40px; background: #468 }
+.more { position: absolute; width: 60px; height: 40px; background: #c84; color: #fff; text-align: center }
+.box { position: absolute; display: block; width: 50px; height: 20px; background: #8a4 }
+p { margin: 6px 0 }
+</style></head><body>
+<!-- an inline element made absolute, no offsets, after a row of
+     inline-blocks: placed at the row's end (the static position), not
+     on the next line over the text that follows -->
+<div class=row><span></span><span></span><span></span><a class=more href="#">18</a></div>
+<p>Text after the row, below it, not under the box.</p>
+<!-- a div made absolute: block-level, placed below the row, as before -->
+<div class=row><span></span><span></span><div class=box></div></div>
+<p>More text.</p>
+<!-- offsets given: placed by them -->
+<div class=row><span></span><a class=more style="left:200px;top:0" href="#">x</a></div>
+<p>The end.</p>
+</body></html>

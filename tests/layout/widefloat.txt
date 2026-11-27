@@ -1,0 +1,21 @@
+page 608 x 196, background ffffff, 19 items, 0 links, title "Floats and column items wider than their room"
+wider: to 780 (the window scrolls sideways)
+fill 0,0 400x0 #eeeeee
+fill 0,0 605x105 #dddddd
+text 0,33 58x22 #000000 cond18 bold link 0 "A title"
+text 0,68 87x17 #000000 cond14 bold link 0 "by someone"
+fill 325,0 280x96 #004488
+fill 0,73 301x32 #ffee99
+text 0,86 296x17 #000000 cond13 link 0 "The text column runs beside the picture, below the"
+text 0,102 27x17 #000000 cond13 link 0 "title."
+fill 0,105 608x16 #eeffee
+fill 0,105 780x16 #ccddff
+text 24,118 301x17 #000000 cond13 link 0 "A page wider than the window, at the column's left."
+fill 0,121 608x26 #eeffee
+fill 224,124 160x10 #cc3300
+fill 448,137 160x10 #33aa33
+fill 0,147 160x0 #eeeeee
+fill 0,147 160x48 #ffcccc
+text 0,160 140x17 #000000 cond13 link 0 "a float of an auto width,"
+text 0,176 132x17 #000000 cond13 link 0 "shrunk to fit its block's"
+text 0,192 32x17 #000000 cond13 link 0 "width"

@@ -61,5 +61,8 @@ int ck_same_site(const char *a, const char *b);
    key) and back */
 char *ck_text(long *len);
 void ck_load(const char *s, long len);
+/* a Netscape cookies.txt put into the store as its sites' Set-Cookie
+   would (File > Import cookies...): the count taken, *sites their sites */
+int ck_import(const char *text, long len, int *sites);
 
 #endif

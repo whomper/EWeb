@@ -352,6 +352,9 @@ typedef struct {
 					   (background-clip: text): the colour that text is
 					   drawn in when its own is transparent; 0: none */
 	int32_t last_base;		/* the last line's baseline laid out (an inline-block's) */
+	int32_t line_end, line_top;	/* the last line laid out: where its content ends, its top */
+	const box *line_box;		/* and the block it is in (an inline-level absolute box's
+					   static place: block_children) */
 	long last_k;			/* its line's first item (moved with it: shift_range, cell_shift) */
 	uint16_t ovf, cbovf;		/* the items' clip (dl_item.clip) now, and the
 					   containing block's (cbx): a positioned box's */
@@ -459,7 +462,8 @@ static int32_t dev(L *l, ec_fx v)
 	}
 }
 
-static inline int kw(const ec_style *s, int p)
+/* (always inlined, as 1.28 had them: a call here is on the layout's every box) */
+static inline __attribute__((always_inline)) int kw(const ec_style *s, int p)
 {
 	uint8_t k;
 	const ec_v *v = ec_vk(s, p, &k);
@@ -524,7 +528,7 @@ static __attribute__((noinline)) int32_t len_kv(L *l, int k, const ec_v *v, int3
 
 /* (inline: most callers name p, and its value's place is then known
    when compiled, not looked up) */
-static inline int32_t len(L *l, const ec_style *s, int p, int32_t base)
+static inline __attribute__((always_inline)) int32_t len(L *l, const ec_style *s, int p, int32_t base)
 {
 	uint8_t k;
 	const ec_v *v = ec_vk(s, p, &k);
@@ -1269,6 +1273,59 @@ static long fill(L *l, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t argb
 	return l->p->nitems - 1;
 }
 
+#ifndef EW_ST	/* (the ST edition, frozen) */
+/* a box's borders where each side meets the next on the diagonal of
+   their corner (CSS Backgrounds 3, 4.4), for a box with no room inside
+   them (width or height 0; bx, by, bw, bh its border box) whose sides aren't all one colour: the CSS triangle, a wide side
+   between two transparent ones (Bandcamp's play button, 27 Nov 2026).
+   Each side a run of 1-pixel strips, those of one length as one fill;
+   c the sides' colours (top, right, bottom, left). 1 if drawn so, 0
+   to be drawn as four rectangles. (Not stretched with the box: none
+   is, having no room for its content) */
+static int mitred(L *l, int32_t bx, int32_t by, int32_t bw, int32_t bh, const int32_t *bd, const uint32_t *c)
+{
+	int s, i;
+	for (s = 0; s < 4; s++)
+		if (bd[s] > 0 && bd[(s + 1) & 3] > 0 && c[s] != c[(s + 1) & 3])
+			break;
+	if (s == 4)
+		return 0;
+	for (s = 0; s < 4; s++) {
+		/* strip i of side s (from its outer edge in) runs between
+		   the diagonals of its corners: a and b its neighbours */
+		int32_t t = bd[s], a = bd[(s + 3) & 3], b = bd[(s + 1) & 3], len = s & 1 ? bh : bw;
+		int32_t p0 = -1, p1 = -1, run = 0;
+		if (t <= 0 || (c[s] >> 24) == 0)
+			continue;
+		for (i = 0; i <= t; i++) {
+			int32_t q0 = 0, q1 = 0;
+			if (i < t) {
+				q0 = (int32_t) ((int64_t) a * (2 * i + 1) / (2 * t));
+				q1 = len - (int32_t) ((int64_t) b * (2 * i + 1) / (2 * t));
+			}
+			if (i < t && q0 == p0 && q1 == p1) {
+				run++;
+				continue;
+			}
+			if (run > 0 && p1 > p0) {
+				/* strips i - run .. i - 1: across from p0 to p1 */
+				int32_t o = i - run;
+				switch (s) {
+				case 0: fill(l, bx + p0, by + o, p1 - p0, run, c[s]); break;
+				case 1: fill(l, bx + bw - i, by + p0, run, p1 - p0, c[s]); break;
+				case 2: fill(l, bx + bw - p1, by + bh - i, p1 - p0, run, c[s]); break;
+				default: fill(l, bx + o, by + bh - p1, run, p1 - p0, c[s]); break;
+				}
+			}
+			p0 = q0;
+			p1 = q1;
+			run = 1;
+		}
+	}
+	return 1;
+}
+#endif
+
 /* a link laid out as a block (a card, a menu's button: display block,
    inline-block, flex...): its border box, where a click anywhere is one
    on the link, as in a browser, not only on its words and pictures; an
@@ -1472,7 +1529,7 @@ static int stopped(L *l)
 /* b's own (struct bxt), made the first time one of its fields is set (in
    the boxes' arena, given back with them); out of memory, a place to
    write that nothing reads, and the layout fails */
-static struct bxt *bxw(L *l, box *b)
+static inline __attribute__((always_inline)) struct bxt *bxw(L *l, box *b)
 {
 	static struct bxt lost;
 	if (b->x == NULL) {
@@ -5351,7 +5408,7 @@ static void unstash(L *l, const STASH *s)
 	l->cw = s->cw;
 }
 
-static int32_t float_width(L *l, box *c, int32_t w);
+static int32_t float_width(L *l, box *c, int32_t w, int fit);
 static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t wf);
 static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int fixed_w,
 			    int32_t *mb_out, int32_t *first);
@@ -5366,7 +5423,7 @@ static int32_t item_float_w(L *l, long k, int32_t w)
 	if (l->it[k].len != 0)
 		return (int32_t) l->it[k].len;
 	stash(l, &s);
-	wf = float_width(l, c, w);
+	wf = float_width(l, c, w, 0);
 	unstash(l, &s);
 	l->it[k].len = (uint32_t) wf;
 	return wf;
@@ -5407,7 +5464,7 @@ static void ib_layout(L *l, long k, int32_t w)
 	l->alpha = l->it[k].alpha;
 	l->ctl_in = l->it[k].ctl;
 	stash(l, &s);
-	wf = float_width(l, c, w);
+	wf = float_width(l, c, w, 1);
 	l->last_base = AUTO;
 	l->mov++;
 	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
@@ -5730,6 +5787,9 @@ static int32_t lines(L *l, const box *b, int32_t x, int32_t y, int32_t w, int32_
 			*first = base;
 		l->last_base = base;
 		l->last_k = l->p->nitems;
+		l->line_end = lx + off + lw;
+		l->line_top = cy;
+		l->line_box = b;
 		visual_order(l, i, end, bidi, ord);
 		l->line0 = !b->ib;	/* (an inline-block's runs part of its line's) */
 		/* positions, backgrounds, then the text */
@@ -6400,6 +6460,22 @@ static int32_t content_width(L *l, box *b, int p, int32_t avail, int32_t extra)
 }
 #endif
 
+/* v (a cell's margin box's width) no narrower than its min-width in px
+   asks: as browsers do, though CSS 2.1 leaves it undefined (17.5.2;
+   Bandcamp's player, its progress bar's cell of min-width 270px drawn
+   3px wide, its buttons crowded on the play button, 27 Nov 2026). Not
+   in percent, whose base a column's width can't be */
+static int32_t cell_floor(L *l, box *c, int32_t v)
+{
+	int32_t mn;
+	if (c->anon || kw(c->st, EP_DISPLAY) != KW_TABLE_CELL || (mn = len(l, c->st, EP_MIN_WIDTH, AUTO)) == AUTO ||
+	    mn <= 0)
+		return v;
+	mn += kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX ?
+	      len0(l, c->st, EP_MARGIN_LEFT, AUTO) + len0(l, c->st, EP_MARGIN_RIGHT, AUTO) : extras(l, c);
+	return v < mn ? mn : v;
+}
+
 static int32_t cell_pref(L *l, box *c, int32_t w)
 {
 	int32_t cw = c->anon ? AUTO : len(l, c->st, EP_WIDTH, w);
@@ -6411,7 +6487,7 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 					    EC_K(c->st, EP_MARGIN_RIGHT) == EK_PCT || EC_K(c->st, EP_MARGIN_RIGHT) == EK_CALC))
 			m += len0(l, c->st, EP_MARGIN_LEFT, w) - len0(l, c->st, EP_MARGIN_LEFT, AUTO) +
 			     len0(l, c->st, EP_MARGIN_RIGHT, w) - len0(l, c->st, EP_MARGIN_RIGHT, AUTO);
-		return cap_max(l, c, m, w);
+		return cell_floor(l, c, cap_max(l, c, m, w));
 	}
 	if (kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX)
 		cw += len0(l, c->st, EP_MARGIN_LEFT, w) + len0(l, c->st, EP_MARGIN_RIGHT, w);
@@ -6426,7 +6502,7 @@ static int32_t cell_pref(L *l, box *c, int32_t w)
 		   them 18). A float's, a flex or grid item's or a positioned
 		   box's width is its width, its content overflowing it
 		   (10.2), and costs no second measure */
-		int32_t m = cell_min(l, c);
+		int32_t m = cell_floor(l, c, cell_min(l, c));
 		/* at its narrowest a cell is its content's narrowest, its width
 		   in px or in percent what its column would have, not a least:
 		   a table narrower than its cells' widths takes from each, as
@@ -7219,12 +7295,16 @@ static int32_t row_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_t
 	return h;
 }
 
-/* a float's width in a block w wide: the width it asks for, or its
-   widest within w */
-static int32_t float_width(L *l, box *c, int32_t w)
+/* a float's width in a block w wide: the width it asks for, wider than
+   w or not (CSS 2.1, 10.3.5: Bandcamp's two columns of 756px in a body
+   narrower, the left one pushed under the cover, 27 Nov 2026), or its
+   widest within w; an inline-block's (fit) within w whatever it asks
+   (as it was: a button of width 100% and padding, border-box in
+   browsers' sheets but not EWeb's, would push the page wider) */
+static int32_t float_width(L *l, box *c, int32_t w, int fit)
 {
 	int32_t wf = cell_pref(l, c, w), mn;
-	if (wf > w)
+	if (wf > w && (fit || c->anon || EC_K(c->st, EP_WIDTH) == EK_KW))
 		wf = w;
 	if (!c->anon && (mn = len(l, c->st, EP_MIN_WIDTH, w)) != AUTO) {
 		/* its min-width, which wins (CSS 2.1, 10.4): the border box's
@@ -7249,7 +7329,7 @@ static void place_float(L *l, box *c, int32_t x, int32_t w, int32_t y, int32_t w
 	long k0 = l->p->nitems, b0 = nblocks(l), f0 = l->nlater, f1, lk = l->last_k;
 	FLT *fl;
 	if (wf == AUTO)
-		wf = float_width(l, c, w);
+		wf = float_width(l, c, w, 0);
 	l->mov++;
 	hf = layout_block(l, c, 0, 0, wf, 1, &mb, &f);
 	l->mov--;
@@ -7955,13 +8035,30 @@ static int32_t flex_layout(L *l, box *b, int32_t x, int32_t y, int32_t w, int32_
 			it[i].align = fl_align(&it[i], ai);
 			it[i].grow = anon || EC_K(cs, EP_FLEX_GROW) != EK_NUM ? 0 : EC_V(cs, EP_FLEX_GROW).i;
 			if (!(it[i].align == KW_STRETCH && (anon || EC_K(cs, EP_WIDTH) == EK_KW))) {
+				int ml = !anon && EC_K(cs, EP_MARGIN_LEFT) == EK_KW && kw(cs, EP_MARGIN_LEFT) == KW_AUTO;
+				int mr = !anon && EC_K(cs, EP_MARGIN_RIGHT) == EK_KW && kw(cs, EP_MARGIN_RIGHT) == KW_AUTO;
 				iw = cell_pref(l, it[i].b, w);
-				if (iw > w)
+				/* an auto width shrinks to fit; a width of its own is
+				   kept, wider than the column or not (CSS Flexbox 1,
+				   9.4: its cross size definite; Bandcamp's page body
+				   of 915px in a column as wide as the window, its
+				   columns squeezed under the cover, 27 Nov 2026) */
+				if (iw > w && (anon || EC_K(cs, EP_WIDTH) == EK_KW))
 					iw = w;
-				if (it[i].align == KW_CENTER)
+				if (ml || mr)
+					/* auto margins take the room left before
+					   align-self does (8.1), none when there is
+					   none (9.6, step 13) */
+					ox = ml && mr ? (w - iw) / 2 : ml ? w - iw : 0;
+				else if (it[i].align == KW_CENTER)
 					ox = (w - iw) / 2;
 				else if ((it[i].align == KW_FLEX_END) != rtl)
 					ox = w - iw;
+				/* too wide, kept from the left (the alignment's
+				   safe overflow, Box Alignment 3, 4.4): what is
+				   left of the page can't be scrolled to */
+				if (ox < 0)
+					ox = 0;
 			}
 			it[i].k0 = l->p->nitems;
 			bh = layout_block(l, it[i].b, x + ox, y + cy, iw, 1, &mb, &f);
@@ -9233,7 +9330,8 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				num = st ? atoi(st) + 1 : cnt + 1;
 			}
 		}
-		for (c = b->first; c != NULL && !l->fail; c = c->next) {
+		box *prevc = NULL;
+		for (c = b->first; c != NULL && !l->fail; prevc = c, c = c->next) {
 			int32_t cmt = c->anon ? 0 : len0(l, c->st, EP_MARGIN_TOP, w), cmb = 0, cf = AUTO, h, top;
 			if (c->list == LB_ITEM) {
 				/* (not a summary: the HTML Standard's counter-increment:
@@ -9248,8 +9346,21 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 				continue;
 			}
 			if (!c->anon && (kw(c->st, EP_POSITION) == KW_ABSOLUTE || kw(c->st, EP_POSITION) == KW_FIXED)) {
-				/* out of the flow altogether */
-				place_abs(l, c, cx, edge + (prev_mb > 0 ? prev_mb : 0));
+				/* out of the flow altogether: where it would have been
+				   (CSS 2.1 10.3.7's static position); an element inline
+				   by HTML's default (its display made block by its
+				   position: CSS 2.1 9.7) after a run of text, at that
+				   run's last line's end, as browsers place it (a
+				   Bandcamp page's "18 releases" after its row of covers) */
+				int tg = c->n != NULL ? c->n->tag : T_OTHER;
+				if (prevc != NULL && prevc->anon && l->line_box == prevc &&
+				    (tg == T_A || tg == T_IMG || tg == T_BUTTON || tg == T_LABEL || tg == T_INPUT ||
+				     tg == T_SELECT || tg == T_TEXTAREA) &&
+				    len(l, c->st, EP_LEFT, w) == AUTO && len(l, c->st, EP_RIGHT, w) == AUTO &&
+				    len(l, c->st, EP_TOP, w) == AUTO && len(l, c->st, EP_BOTTOM, w) == AUTO)
+					place_abs(l, c, l->line_end, l->line_top);
+				else
+					place_abs(l, c, cx, edge + (prev_mb > 0 ? prev_mb : 0));
 				continue;
 			}
 			top = edge + collapse(prev_mb, cmt) - cmt;
@@ -9360,7 +9471,21 @@ static int32_t layout_block(L *l, box *b, int32_t x, int32_t y, int32_t cbw, int
 		}
 		{
 			int32_t bx = x + ml, by = y + mt, bw = bl + pl + w + pr + br, bh = bt + pt + ch + pb + bb;
-			if (vis) {
+			int drawn = 0;
+#ifndef EW_ST
+			uint32_t sc4[4];
+			int32_t bw4[4];
+			if (vis && !collapsed && (pl + w + pr <= 0 || pt + ch + pb <= 0)) {
+				/* (no room inside: its sides may meet on the diagonals) */
+				bw4[0] = bt, bw4[1] = br, bw4[2] = bb, bw4[3] = bl;
+				sc4[0] = fade(ov ? ov[0].c : color(s, EP_BORDER_TOP_COLOR), l->alpha);
+				sc4[1] = fade(ov ? ov[1].c : color(s, EP_BORDER_RIGHT_COLOR), l->alpha);
+				sc4[2] = fade(ov ? ov[2].c : color(s, EP_BORDER_BOTTOM_COLOR), l->alpha);
+				sc4[3] = fade(ov ? ov[3].c : color(s, EP_BORDER_LEFT_COLOR), l->alpha);
+				drawn = mitred(l, bx, by, bw, bh, bw4, sc4);
+			}
+#endif
+			if (vis && !drawn) {
 				bd[0] = fill(l, bx, by, bw, bt, fade(ov ? ov[0].c : color(s, EP_BORDER_TOP_COLOR), l->alpha));
 				bd[1] = fill(l, bx, by + bh - bb, bw, bb,
 					     fade(ov ? ov[2].c : color(s, EP_BORDER_BOTTOM_COLOR), l->alpha));

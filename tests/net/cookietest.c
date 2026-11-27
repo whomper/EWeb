@@ -20,6 +20,8 @@
  *   key FILE                  the values in the text encrypted with the
  *                             key in FILE (made when it isn't there)
  *   hidden TEXT               TEXT isn't in the text written out
+ *   import N S TEXT           a Netscape cookies.txt (\t, \n) imported:
+ *                             N lines taken, for S sites
  *
  * Prints each failure, then how many cases passed.
  */
@@ -70,6 +72,29 @@ int main(int argc, char **argv)
 			t_now = 1760000000LL;
 		} else if (!strcmp(a, "now")) {
 			t_now = atoll(b);
+		} else if (!strcmp(a, "import")) {
+			/* import N SITES TEXT: a cookies.txt (\t a tab, \n a line's
+			   end) through ck_import, N lines taken for SITES sites */
+			long want_n = strtol(b, &c, 10), want_s = strtol(c, &c, 10), k = 0;
+			int got_s = 0, got_n;
+			static char text[4096];
+			if (*c == ' ')
+				c++;
+			for (; *c && k < (long) sizeof text - 1; c++)
+				if (c[0] == '\\' && c[1] == 't')
+					text[k++] = '\t', c++;
+				else if (c[0] == '\\' && c[1] == 'n')
+					text[k++] = '\n', c++;
+				else
+					text[k++] = *c;
+			text[k] = 0;
+			got_n = ck_import(text, k, &got_s);
+			if (got_n != want_n || got_s != want_s) {
+				fprintf(stderr, "FAIL %s: import took %d for %d sites, not %ld for %ld\n", name, got_n,
+					got_s, want_n, want_s);
+				failed++;
+				ok = 0;
+			}
 		} else if (!strcmp(a, "set") || !strcmp(a, "set3")) {
 			CKCTX x = { 1, 1, NULL, 0 };
 			char *site = NULL;

@@ -12,8 +12,8 @@ The README's Highlights, at length (as the README had them until 9 Nov 2026). Th
   followed with a click, scrolling with the sliders and the keys (a page
   wider than the window sideways too), 50 pages of
   history, the page's text to the clipboard, larger and smaller text. Words
-  typed in the address go to FrogFind, the search engine made for vintage
-  computers (Settings > General for another). A page that sends you on
+  typed in the address go to DuckDuckGo Lite (Settings > General for another,
+  such as FrogFind, the search engine made for vintage computers). A page that sends you on
   (`<meta http-equiv=refresh>`, the Refresh header) goes on when its time
   comes, as the status line says; Esc stays.
 - **EWeb's own engine**: EWeb's HTML parser (the HTML Standard's, nearly three
@@ -86,6 +86,9 @@ The README's Highlights, at length (as the README had them until 9 Nov 2026). Th
   Cancel;
   under the name the site gives it (RFC 6266), made to fit a TOS disk,
   archives as they came.
+- **Pages of EWeb's own for sites made by scripts**: a YouTube video, a
+  Google Drive file or folder, and a Bandcamp album with its tracks, each
+  played in EPlay with one click (Play, Play the album).
 - **EWeb's own fonts** (`EWEB.FNT`): DejaVu Sans, Serif and Mono in four
   styles and twelve sizes, the same on every Atari, with or without GDOS:
   Latin (Vietnamese and Romanian too), Hebrew, Greek, Cyrillic and the

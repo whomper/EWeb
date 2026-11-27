@@ -1,0 +1,23 @@
+page 608 x 180, background ffffff, 19 items, 2 links, title "absinline"
+drawn: 7-7 12-12 18-18 0-6 8-11 13-17
+fill 6,6 288x34 #eeeeee
+fill 6,6 32x32 #446688
+fill 38,6 32x32 #446688
+fill 70,6 32x32 #446688
+fill 102,6 48x32 #cc8844
+text 120,16 12x13 #ffffff cond10 link 1 "18"
+fill 102,6 48x32 #00000000 link 1
+text 6,55 224x13 #000000 cond10 link 0 "Text after the row, below it, not under the box."
+fill 6,62 288x34 #eeeeee
+fill 6,62 32x32 #446688
+fill 38,62 32x32 #446688
+fill 6,96 40x16 #88aa44
+text 6,111 49x13 #000000 cond10 link 0 "More text."
+fill 6,118 288x34 #eeeeee
+fill 6,118 32x32 #446688
+fill 166,118 48x32 #cc8844
+text 187,128 5x13 #ffffff cond10 link 2 "x"
+fill 166,118 48x32 #00000000 link 2
+text 6,167 41x13 #000000 cond10 link 0 "The end."
+link 1 file://./tests/layout/absinline.html#
+link 2 file://./tests/layout/absinline.html#

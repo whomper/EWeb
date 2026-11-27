@@ -19,6 +19,8 @@ xdotool on Hatari's window (Xvfb), EWeb's events read through NatFeats.
           ends, so the AES closes the window (AC_CLOSE): what is due
           written with nothing shown, and the accessory opens again
           from the Desk menu, its memory its own
+  apterm  the same with AP_TERM sent while the page is made (the news
+          page): passed over, the page shown, the window kept (2.2)
   nottram the stock Falcon (Falcon-4, no TT RAM): nothing taken at boot,
           the Desk entry's alert says it needs TT RAM
 
@@ -39,7 +41,7 @@ import machines  # noqa: E402
 DISPLAY = ":97"
 CTRL, U, RETURN = 0x1D, 0x16, 0x1C
 work = os.path.abspath(sys.argv[1])
-groups = sys.argv[2:] or ["ttram", "tt", "vastart", "nottram"]
+groups = sys.argv[2:] or ["ttram", "tt", "vastart", "apterm", "nottram"]
 failed = 0
 
 
@@ -230,12 +232,20 @@ def ttram(spec="Falcon:256", name="ttram"):
         r.end()
 
 
-def vastart():
-    hd = hd_for("vastart")
+def vastart(apterm=False):
+    name = "apterm" if apterm else "vastart"
+    hd = hd_for(name)
     shutil.copy(os.path.join(ROOT, "build", "hatari", "VASEND.PRG"), os.path.join(hd, "VASEND.PRG"))
+    page = "NEWS.HTM" if apterm else "text.htm"
+    if apterm:
+        # a page that takes a while to make (tests/bench/mkpage.py's news
+        # page): AP_TERM comes in the middle
+        subprocess.run([sys.executable, os.path.join(ROOT, "tests", "bench", "mkpage.py"), hd], check=True)
+        with open(os.path.join(hd, "VATERM.TXT"), "w") as f:
+            f.write("300")
     with open(os.path.join(hd, "VAURL.TXT"), "w", newline="") as f:
-        f.write("file:///C:/text.htm\r\n")
-    r = Run("vastart", "Falcon:256", hd, auto="C:\\VASEND.PRG")
+        f.write("file:///C:/%s\r\n" % page)
+    r = Run(name, "Falcon:256", hd, auto="C:\\VASEND.PRG")
     desc = r.m.describe()
 
     def told(pattern, timeout):
@@ -248,9 +258,13 @@ def vastart():
         return False
     try:
         check(told(r"VASEND sent", 240), "%s: the program found EWeb and sent VA_START" % desc)
-        shown = r.wait(r"shown file:///C:/text\.htm", 120)
+        shown = r.wait(r"shown file:///C:/%s" % re.escape(page), 120)
         r.shot(1)
         check(shown is not None, "%s: VA_START opens the window on its address" % desc)
+        if apterm:
+            check(told(r"VASEND sent AP_TERM", 10) and r.wait(r"accessory closed", 5) is None and
+                  not any(e.startswith("quit step") for e in r.events()),
+                  "%s: AP_TERM while the page was made passed over: the page shown, the window kept" % desc)
         open(os.path.join(hd, "VAEND.TXT"), "w").close()
         check(told(r"VASEND end", 60), "%s: the program ends" % desc)
         closed = r.wait(r"accessory closed", 60)
@@ -291,7 +305,8 @@ os.makedirs(work, exist_ok=True)
 xv = machines.xvfb(DISPLAY)
 try:
     for g in groups:
-        {"ttram": ttram, "tt": lambda: ttram("TT:ttmed", "tt"), "vastart": vastart, "nottram": nottram}[g]()
+        {"ttram": ttram, "tt": lambda: ttram("TT:ttmed", "tt"), "vastart": vastart, "apterm": lambda: vastart(True),
+         "nottram": nottram}[g]()
 finally:
     machines.xvfb_stop(xv)
 print("acc: all passed" if not failed else "acc: %d failed" % failed)

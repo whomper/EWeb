@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>Borders meeting on their corners' diagonals</title><style>
+/* a box of no size whose sides aren't one colour: each side to its
+   corners' diagonals (CSS Backgrounds 3, 4.4), the CSS triangle (a
+   play button's, an ::after of no size in a box: a music shop's album
+   page, 27 Nov 2026) */
+body { font-family: sans-serif; background: #fff; margin: 8px }
+.play { width: 54px; height: 50px; background: #fff; border: 1px solid #d9d9d9 }
+.play:after { content: ''; display: block; width: 0; height: 0; margin: 14px 0 0 18px;
+              border-top: 11px inset transparent; border-bottom: 11px inset transparent;
+              border-left: 20px solid #222; border-right: 0 }
+.down { width: 0; height: 0; border: 12px solid transparent; border-top-color: #c00; border-bottom: 0 }
+.four { width: 0; height: 0; border-style: solid; border-width: 10px 20px; border-color: #c00 #0a0 #00c #fc0 }
+.wide { width: 60px; height: 0; border-bottom: 15px solid #06c; border-left: 15px solid transparent;
+        border-right: 15px solid transparent }
+.same { width: 0; height: 0; border: 8px solid #888 }
+</style></head><body>
+<div class="play"></div>
+<p><span class="down" style="display: inline-block"></span> a caret
+<div class="four"></div>
+<div class="wide"></div>
+<div class="same"></div>
+</body></html>

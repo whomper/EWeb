@@ -104,9 +104,10 @@ address and press Return:
   connection send it on to `https://` themselves
 - a file on your disks: `C:\PAGES\INDEX.HTM`; **^O** picks one with
   the file selector
-- words to search for, such as `atari falcon`: they go to FrogFind,
-  a search engine made for vintage computers (another can be set in
-  [Settings](#settings))
+- words to search for, such as `atari falcon`: they go to DuckDuckGo
+  Lite, DuckDuckGo's page of text and links (another, such as FrogFind,
+  the search engine made for vintage computers, can be set in
+  [Settings](#settings); the ST edition's is FrogFind)
 
 **Esc** in the address field puts back the address of the page shown,
 as in any browser.
@@ -237,6 +238,30 @@ cookies and can't set any.
 
 Options > Forget cookies forgets them all at once, the file too: you are
 logged out of every site.
+
+### Cookies from a Mac's Safari
+
+A site you are logged in to on a Mac can have you logged in in EWeb too:
+its cookies come from Safari in a file, which EWeb reads.
+
+1. On the Mac, copy `safari-cookies.py` (in EWeb's source, `tools/`) and
+   run it in the Terminal with the sites you want, e.g.
+   `python3 safari-cookies.py atariage.com`. It names the sites' cookies
+   it found and writes them to `safari-cookies.txt`. With no site named
+   it writes nothing: there is no "all".
+2. The first time, the Mac may not let the Terminal read Safari's
+   cookies: the tool says so. Then System Settings > Privacy & Security >
+   Full Disk Access, switch Terminal on, quit the Terminal, open it and
+   run the tool again.
+3. Copy `safari-cookies.txt` to the Atari (a floppy, the network, a card).
+4. In EWeb, File > Import cookies... and choose the file. EWeb says how
+   many cookies it took for how many sites, and offers to delete the
+   file: Delete, as it holds your logins in clear text. The cookies are
+   kept in `COOKIES.TXT`, encrypted, as EWeb's own are.
+
+Some sites tie a login to the computer it was made on and will ask you
+to log in again. Safari's cookies that last only until Safari quits
+aren't in its file, so they don't come.
 
 ## Bookmarks
 
@@ -484,6 +509,14 @@ and a tip. Bookmarks and History at its foot list all of them.
 their size and stay as they were decoded, so nothing is fetched or
 decoded again (a page's pixel is 0.8 of the screen's, so that pages
 made for wider screens fit the Falcon's 640).
+
+View > Desktop width lays the pages of the site you are on out as on a
+desktop's wide screen (1024 pixels of the page), for a site that
+otherwise gives a narrow window its narrow layout: its menu folded, one
+column, buttons it leaves out. The page is then wider than the window
+and scrolls sideways; the text keeps its size. The tick is kept for the
+site, so its pages come that way from then on; untick it for the
+narrow layout again (not in the ST edition).
 
 Pages made for Arial or Helvetica are shown in narrow letters of
 Arial's widths (DejaVu Sans Condensed), so that they lay out as they
@@ -865,7 +898,8 @@ there at once; where the window was, when you quit:
 
 - `HOME=` the start page (empty: EWeb's own)
 - `SEARCH=` where words typed in the address go, `%s` for the words
-  (FrogFind: `http://frogfind.com/?q=%s`)
+  (DuckDuckGo Lite, as it starts: `https://lite.duckduckgo.com/lite/?q=%s`;
+  FrogFind: `http://frogfind.com/?q=%s`)
 - `ZOOM=` the size of the text, per cent (50 to 200)
 - `FALCON=` 1 for a Direct connection (secure pages on this Atari), 0 for the
   Gateway
@@ -923,11 +957,13 @@ there at once; where the window was, when you quit:
 - **"EWeb can't open this page"** with the reason: the address is wrong,
   the site is down, or the network isn't there (is STinG loaded?).
   ^R tries again
+- **TOS says there isn't enough memory for EWEBST.PRG**: the ST edition
+  needs 4 MB
 - **"Google wants JavaScript that EWeb doesn't run"**: Google's search
   shows its results only to browsers that first run a check of its own,
   which EWeb's little JavaScript doesn't pass. The page has a link that
   searches for the same words with the search engine in Settings
-  (FrogFind unless you chose another), which needs no JavaScript; words
+  (DuckDuckGo Lite unless you chose another), which needs no JavaScript; words
   typed in the address go there too
 - **"This site lets in only browsers that pass Cloudflare's check"**:
   the site has Cloudflare's check ("Just a moment...") in front of it, a
@@ -941,6 +977,15 @@ there at once; where the window was, when you quit:
   file's name and **Download**: Drive's own page is made by a script far
   too big for EWeb. A file shared with anyone downloads at once; a very
   big one first asks whether to download it without Google's virus check
+- **A Bandcamp album's or track's page** shows a page of EWeb's own with
+  the cover, the title, the artist and the tracks, each with **Play**, and
+  **Play the album**: Bandcamp's own page is made by scripts far too big
+  for EWeb. Play hands the tracks, from the one chosen on, to EPlay, which
+  streams them as Bandcamp's own player does (128 kbit/s MP3). EPlay is to
+  be running first on plain TOS; under MiNT or MagiC EWeb starts it when
+  it finds `EPLAY.PRG` (in EWeb's folder, a folder of `PATH` or the boot
+  drive's root). The list of tracks is `eweb.m3u` in EWeb's folder (not
+  in the ST edition)
 - **"EWeb's fonts are missing"**: put `EWEB.FNT` next to `EWEB.PRG`
 - **A secure site fails**: check that `TLS.OVL`, `CACERT.PEM` and
   `ROOTS.DAT` are next to `EWEB.PRG`, and the Atari's clock is right;

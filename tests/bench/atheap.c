@@ -55,6 +55,13 @@ long Mfree(void *p)
 	return 0;
 }
 
+/* (common's libc.c calls it for an accessory's memory, which the bench
+   never is: as the heap's own test has it) */
+long Supexec(long (*f)(void))
+{
+	return f();
+}
+
 void *malloc(size_t n)
 {
 	return heap_malloc(n);

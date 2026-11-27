@@ -51,6 +51,8 @@ typedef struct {
 					   Condensed (1, 13 Nov 2026's way), or in DejaVu Sans (0):
 					   some testers didn't like the narrow letters (the owner, 16 Nov
 					   2026) */
+	char wide[256];			/* WIDE=: the sites laid out 1024 CSS px wide (View >
+					   Desktop width, decided 27 Nov 2026; wide.c) */
 	char folder[200];		/* FOLDER=: EWeb's folder, written by EWEB.PRG, where EWEB.ACC
 					   finds its files (the guidelines' 6.1: EWEB.INF in the boot
 					   drive's root) */
@@ -65,6 +67,12 @@ void acc_boot(short *work_out);			/* acc.c: EWEB.ACC */
 void acc_wait(char *first, int size);
 int acc_locate(void);
 void acc_menu(short x, short y);	/* the toolbar's menu (3.1) */
+void cookies_import(void);		/* ckimport.c: File > Import cookies... */
+void play_tracks(const char *about);	/* play.c: a Bandcamp page's Play, to EPlay */
+int wide_site(const char *url);		/* wide.c: url's site laid out 1024 CSS px wide */
+int wide_can(const char *url);		/* an http or https address (a site to tick) */
+void wide_set(const char *url, int on);
+void win_fit_width(int draw);		/* win.c: the page laid out at its site's width */
 #endif
 extern int win_handles_gone;	/* win.c: the AES closed the windows (AC_CLOSE) */
 #ifndef EW_ST
@@ -376,7 +384,7 @@ enum {
 	C_PICTURES, C_TRANSLATE,
 	C_SETTINGS, C_FALCON, C_SCRIPTS, C_LOG, C_SETHOME, C_COOKIES, C_CACHE, C_HISTORY, C_FORGETHG,
 	C_HELP, C_KEYS,
-	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV, C_SOURCE,
+	C_BMADD, C_BMSHOW, C_FIND, C_FINDNEXT, C_FINDPREV, C_SOURCE, C_IMPORT, C_WIDE,
 	C_BM			/* C_BM + i: the Bookmarks menu's ith bookmark (BM_MENU of them) */
 };
 void command(int cmd);

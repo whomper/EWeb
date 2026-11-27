@@ -5,7 +5,8 @@
  * value from an answer to one of a few addresses (by the line's first
  * byte), then the Cookie header for each, and the lasting ones written
  * out as the file's text, read back and written again: the same text
- * must come out.
+ * must come out. The input is then imported as a Netscape cookies.txt
+ * too (ck_import), and the same holds.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -49,6 +50,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		sb_init(&h);
 		ck_get(&u[i], &x, &h);
 		sb_free(&h);
+	}
+	{
+		/* the input as a cookies.txt too (File > Import cookies...,
+		   ck_import: d itself, not s, which the loop above cut up) */
+		int sites;
+		ck_import((const char *) d, (long) n, &sites);
 	}
 	t1 = ck_text(&l1);
 	ck_clear();

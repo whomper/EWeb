@@ -30,6 +30,7 @@
 #include "util.h"
 #include "tw.h"
 #include "share.h"
+#include "bandcamp.h"
 
 #ifndef EWEB_VERSION
 #define EWEB_VERSION ""
@@ -968,7 +969,7 @@ static void wall_page(const browser *b, SBUF *s, const char *url, const char *q)
 		sb_adds(s, "</a>, the search engine in Settings, which needs no JavaScript (words typed "
 			   "in the address go there too).</p>");
 	} else {
-		sb_adds(s, "<p>A search engine set in Settings (General), such as FrogFind, needs no "
+		sb_adds(s, "<p>A search engine set in Settings (General), such as DuckDuckGo Lite, needs no "
 			   "JavaScript: words typed in the address go there.</p>");
 	}
 	if (http_gateway[0])
@@ -4211,6 +4212,13 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		str_copy(b->elsewhere, url, sizeof b->elsewhere);
 		return BR_ELSEWHERE;
 	}
+#ifndef EW_ST
+	if (strncmp(url, "about:play?", 11) == 0) {
+		/* a Bandcamp page's Play: EPlay gets the tracks (the front end) */
+		str_copy(b->elsewhere, url, sizeof b->elsewhere);
+		return BR_ELSEWHERE;
+	}
+#endif
 	if (b->can_open != NULL && !b->can_open(b->ud, url))
 		return BR_STOPPED;	/* the page shown stays */
 	/* the encoding chosen by hand for the page (View > Encoding): kept
@@ -4371,8 +4379,14 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		char did[80], dname[256];
 		share *sh = NULL;
 		drive = !google && drive_file(f, did, sizeof did, dname, sizeof dname);
+		bc_album *bca = NULL;
 		if (!google && !drive && yt_video(f, did))
 			drive = 2;
+		/* a Bandcamp album's or track's: EWeb's page, its tracks for
+		   EPlay (decided 27 Nov 2026) */
+		if (!google && !drive && f->status == 200 && f->data != NULL && bc_page(f->url) &&
+		    (bca = bc_read(f->url, f->data, f->len)) != NULL)
+			drive = 4;
 		/* a Drive folder, a Dropbox or an iCloud Drive link: EWeb's
 		   shared-files page */
 		if (!google && !drive &&
@@ -4402,6 +4416,11 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 				sh = NULL;
 			} else if (drive == 2)
 				yt_page(&src, f, did);
+			else if (drive == 4) {
+				char cover[1024];
+				og_meta(f, "image", cover, sizeof cover);
+				bc_html(&src, bca, cover, own_style);
+			}
 			else if (drive)
 				drive_page(&src, f->url, did, dname);
 #endif

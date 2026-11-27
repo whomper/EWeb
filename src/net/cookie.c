@@ -872,3 +872,82 @@ long ck_count(void)
 	ensure();
 	return count;
 }
+
+/* a Netscape cookies.txt (tools/safari-cookies.py's, decided 27 Nov 2026:
+   File > Import cookies...): each line "domain TAB subdomains TAB path TAB
+   secure TAB expires TAB name TAB value", HttpOnly as "#HttpOnly_" before
+   the domain, put through ck_set as the site's own Set-Cookie would be (its
+   limits, its prefixes, Secure only from a secure address, SameSite unset:
+   Lax). Expired lines and malformed ones are passed over; expires 0 is a
+   cookie for this run only. *sites: the sites the cookies are for; the
+   count of lines taken */
+int ck_import(const char *text, long len, int *sites)
+{
+	const char *p = text, *end = text + len;
+	char seen[64][200];
+	int nseen = 0, taken = 0;
+	long long now = ck_now();
+	CKCTX x;
+	memset(&x, 0, sizeof x);
+	x.top = 1;
+	x.safe = 1;
+	while (p < end) {
+		const char *eol = memchr(p, '\n', (size_t) (end - p));
+		const char *f[7], *q;
+		size_t fl[7];
+		int n = 0, http_only = 0;
+		size_t ll = (size_t) ((eol ? eol : end) - p);
+		if (ll > 0 && p[ll - 1] == '\r')
+			ll--;
+		if (ll >= 10 && memcmp(p, "#HttpOnly_", 10) == 0) {
+			http_only = 1;
+			p += 10;
+			ll -= 10;
+		}
+		if (ll > 0 && *p != '#') {
+			const char *s = p, *e = p + ll;
+			for (q = s; n < 7 && q <= e; q++)
+				if (q == e || *q == '\t') {
+					f[n] = s;
+					fl[n++] = (size_t) (q - s);
+					s = q + 1;
+				}
+		}
+		if (n == 7 && fl[0] > 0 && fl[0] < 200 && fl[2] > 0 && fl[2] < 500 && fl[5] > 0 && fl[5] + fl[6] < 3800) {
+			char host[200], line[4200], addr[260];
+			long long exp = ll_parse(f[4]);
+			int sub = fl[1] == 4 && memcmp(f[1], "TRUE", 4) == 0;
+			int secure = fl[3] == 4 && memcmp(f[3], "TRUE", 4) == 0;
+			memcpy(host, f[0] + (f[0][0] == '.'), fl[0] - (f[0][0] == '.'));
+			host[fl[0] - (f[0][0] == '.')] = 0;
+			if (host[0] && (exp == 0 || exp > now)) {
+				URL u;
+				int k = snprintf(line, sizeof line, "%.*s=%.*s; Path=%.*s", (int) fl[5], f[5], (int) fl[6], f[6],
+						 (int) fl[2], f[2]);
+				if (sub)
+					k += snprintf(line + k, sizeof line - k, "; Domain=%s", host);
+				if (exp > 0)
+					k += snprintf(line + k, sizeof line - k, "; Max-Age=%lld", exp - now);
+				if (secure)
+					k += snprintf(line + k, sizeof line - k, "; Secure");
+				if (http_only)
+					snprintf(line + k, sizeof line - k, "; HttpOnly");
+				snprintf(addr, sizeof addr, "https://%s/", host);
+				if (url_parse(&u, addr, NULL)) {
+					const char *st = site_of(host);
+					int i;
+					ck_set(&u, line, &x);
+					taken++;
+					for (i = 0; i < nseen && strcmp(seen[i], st) != 0; i++)
+						;
+					if (i == nseen && nseen < 64)
+						snprintf(seen[nseen++], sizeof seen[0], "%s", st);
+				}
+			}
+		}
+		p = eol ? eol + 1 : end;
+	}
+	if (sites != NULL)
+		*sites = nseen;
+	return taken;
+}

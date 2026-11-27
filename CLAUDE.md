@@ -241,9 +241,13 @@ hub stay complete, with the evidence.
   hatarigui`.
 - **Cookies** are `src/net/cookie.c` (RFC 6265bis; hooked into `http.c` by `src/browse`), kept in
   `COOKIES.TXT` next to `EWEB.PRG`, values encrypted with `EWEB.KEY` (common's `secret.c`): read
-  once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). After changing
-  them: `make test` (`tests/net/cookies.txt`), `make fuzz` for a while (`fuzz_cookie`), `make itest`
-  (`/site/cookie/`), `make hatarifiles`.
+  once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). A Mac's Safari cookies come in by
+  File > Import cookies... (decided 27 Nov 2026): `tools/safari-cookies.py` on the Mac (Python's standard
+  library; Safari's `Cookies.binarycookies` to Netscape's `safari-cookies.txt`, the sites named only,
+  never `cookies.txt`), `ck_import` in `cookie.c` (each line as its site's Set-Cookie), `ui/ckimport.c`
+  (the family's file dialog, EWeb's own store refused, then the offer to delete the file). After changing
+  them: `make test` (`tests/net/cookies.txt`, `tests/cookies/safari.py`), `make fuzz` for a while
+  (`fuzz_cookie`, which imports its input too), `make itest` (`/site/cookie/`), `make hatarifiles`.
 - **Bookmarks** are `src/browse/bookmark.c` (`BOOKMARK.HTM` next to `EWEB.PRG`, Netscape's bookmark
   file; read once a start for the Bookmarks menu, one safe save at each change), listed on
   `about:bookmarks` (`src/browse`). After changing them: `make test` (`tests/browse/bmtest.c`),
@@ -352,6 +356,15 @@ hub stay complete, with the evidence.
   (`fuzz_svg`; keep what it finds in `tests/fuzz/found/svg`), and count it
   (`build/m68k/svgrender -n`, `tools/count68k.sh`, soft float as `EWEB.PRG`) when the change is
   meant for speed.
+- **A Bandcamp album** (decided 27 Nov 2026: "Album to EPlay") is EWeb's own page: `src/browse/bandcamp.c`
+  (`bc_page`, `bc_read` from the page's `data-tralbum`, `bc_html`, `bc_m3u`; the albums last shown kept for
+  their Play), its Play `about:play?a=ID&from=N` to `ui/play.c` (`play_tracks`: `eweb.m3u` in EWeb's folder,
+  VA_START to "EPLAY   " or "EPLAYST ", else under MiNT or MagiC `EPLAY.PRG` started where shel_find
+  would look); not in the ST edition. After changing it: `make test` (`tests/browse/bctest.c`), `make
+  sites` (bandcamp-album, bandcamp-artist).
+- **View > Desktop width** (decided 27 Nov 2026): the sites in `WIDE=` (`ui/wide.c`) laid out 1024 CSS
+  pixels wide, the window scrolling sideways (`layout_w`, `win_fit_width` in `ui/win.c`, called as a page
+  is shown); not in the ST edition. After changing it: `make hatarigui` (browse).
 - **`EWEB.FNT`** is made by `tools/mkfont.py` from DejaVu with the Pillow in `tools/requirements.txt`
   (pinned: its FreeType draws the glyphs, and `tests/layout`'s lists depend on them): Sans, Serif,
   Sans Mono and Sans Condensed, the last for pages that ask for Arial's kind (decided 13 Nov 2026:

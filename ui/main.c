@@ -93,13 +93,23 @@ short gl_wchar, gl_hchar;
 short ap_id;
 static int user_quit;		/* Quit, or the last window closed: the user's (4.6's --back) */
 
-EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
+#define FROGFIND "http://frogfind.com/?q=%s"
+/* words typed in the address: DuckDuckGo Lite (decided 27 Nov 2026), the
+   ST edition's FrogFind still (frozen, and http: no TLS of its own) */
+#ifndef EW_ST
+#define DDG_LITE "https://lite.duckduckgo.com/lite/?q=%s"
+#define SEARCH_DEFAULT DDG_LITE
+#else
+#define SEARCH_DEFAULT FROGFIND
+#endif
+
+EWOPT opt = { 1, 1, "", SEARCH_DEFAULT, 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
-	       , 50, 0, 1, ""
+	       , 50, 0, 1, "", ""
 #endif
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-	   translate_to, translate_port, ttleave, sysfsel, narrow, folder) */
+	   translate_to, translate_port, ttleave, sysfsel, narrow, wide, folder) */
 int loading;
 /* 1.24's never-run pads: each function 1.24 changed made the size that
    keeps main.o's code after it at 1.23's places modulo 256, the shipped
@@ -184,7 +194,7 @@ typedef struct {
 static LATER_EV later[LATER];
 static int nlater;
 
-#define FROGFIND "http://frogfind.com/?q=%s"
+
 
 /* ---------------------------------------------------------------- the menu bar */
 
@@ -197,6 +207,9 @@ static const MBAR_ITEM m_file[] = {
 	{ "Open address...", "^L", C_OPENURL },
 	{ "Open file...", "^O", C_OPENFILE },
 	{ "Save page as...", "^S", C_SAVE },
+#ifndef EW_ST
+	{ "Import cookies...", 0, C_IMPORT },	/* (a Mac's Safari's: decided 27 Nov 2026) */
+#endif
 	{ "-", 0, 0 },
 	{ "Reload", "^R", C_RELOAD },
 	{ "Stop", "Esc", C_STOP },
@@ -227,6 +240,9 @@ static const MBAR_ITEM m_view[] = {
 	{ "Larger text", "^+", C_LARGER },
 	{ "Smaller text", "^-", C_SMALLER },
 	{ "Actual size", "^0", C_ACTUAL },
+#ifndef EW_ST
+	{ "Desktop width", 0, C_WIDE },	/* (this site laid out 1024 wide: decided 27 Nov 2026) */
+#endif
 	{ "Encoding...", 0, C_ENCODING },
 #ifndef EW_ST
 	{ "Page source", 0, C_SOURCE },	/* (decided 21 Nov 2026; the ST edition is frozen) */
@@ -541,6 +557,7 @@ static void scripts_toggle(void)
 
 void menu_update(void)
 {
+	CODE_PAD(loading < -30000, CP_MAIN_MENU_UPDATE);
 	int addr = win_address_has_focus();
 #ifndef EW_ST
 	bm_menu();		/* (a window opened, closed or its page's title changed: the Window menu) */
@@ -564,6 +581,11 @@ void menu_update(void)
 	enable(C_HISTORY, !loading);
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
+#ifndef EW_ST
+	enable(C_IMPORT, !loading);
+	enable(C_WIDE, !loading && wide_can(br.url));
+	menu_set(1, obj_of(C_WIDE), wide_site(br.url));
+#endif
 	enable(C_SAVE, !loading && br.src != NULL);
 	enable(C_CUT, addr);
 	enable(C_PASTE, addr);
@@ -720,8 +742,13 @@ static void settings_load(void)
 		*eq++ = 0;
 		if (!strcmp(line, "HOME"))
 			str_copy(opt.home, eq, sizeof opt.home);
-		else if (!strcmp(line, "SEARCH"))
+		else if (!strcmp(line, "SEARCH")) {
 			str_copy(opt.search, eq, sizeof opt.search);
+#ifndef EW_ST
+			if (!strcmp(opt.search, FROGFIND))
+				str_copy(opt.search, DDG_LITE, sizeof opt.search);	/* (the old default: the new, 27 Nov 2026) */
+#endif
+		}
 		else if (!strcmp(line, "ZOOM"))
 			opt.zoom = (short) atoi(eq);
 		else if (!strcmp(line, "DSP"))
@@ -773,6 +800,8 @@ static void settings_load(void)
 			opt.sysfsel = atoi(eq) != 0;
 		else if (!strcmp(line, "FOLDER"))
 			str_copy(opt.folder, eq, sizeof opt.folder);
+		else if (!strcmp(line, "WIDE"))
+			str_copy(opt.wide, eq, sizeof opt.wide);
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -986,7 +1015,12 @@ int settings_save(void)
 	}
 	drop(&s, "DIALOGS3D");
 	put(&s, "HOME", opt.home, "the start page: an address, or nothing for EWeb's own");
+#ifndef EW_ST
+	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (DuckDuckGo Lite: " DDG_LITE
+	    "; FrogFind: " FROGFIND ")");
+#else
 	put(&s, "SEARCH", opt.search, "words typed in the address go here, %s for them (FrogFind: " FROGFIND ")");
+#endif
 	snprintf(v, sizeof v, "%d", opt.zoom);
 	put(&s, "ZOOM", v, "the size of the text, per cent (Larger text, Smaller text)");
 	snprintf(v, sizeof v, "%d", opt.falcon);
@@ -1035,6 +1069,9 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.sysfsel);
 	put(&s, "SYSFSEL", v, "1 = files are saved through the system's file selector, 0 = through the "
 	    "family's file dialog (Settings > General)");
+	if (opt.wide[0])
+		put(&s, "WIDE", opt.wide, "the sites laid out 1024 pixels wide, as on a desktop's screen, scrolling "
+		    "sideways (View > Desktop width), their names with spaces between");
 	put(&s, "FOLDER", opt.folder, "EWeb's folder, with EWEB.PRG, its fonts, cache and bookmarks "
 	    "(EWEB.PRG writes it; EWEB.ACC finds its files there)");
 #endif
@@ -1406,7 +1443,7 @@ static void dl_idle(void)
 		conn_stop = 1;
 		log_event("download cancelled at %ld", br_saved);
 	}
-	if ((which & MU_MESAG) && msg[0] == AP_TERM) {
+	if ((which & MU_MESAG) && msg[0] == AP_TERM && !is_acc) {	/* (an accessory never ends: 2.2) */
 		conn_stop = 1;
 		quit = 1;
 	}
@@ -1458,6 +1495,7 @@ static void idle(void)
 {
 	short msg[8], which;
 	AEVENT ev;
+	CODE_PAD(loading < -30000, CP_MAIN_IDLE);
 #ifndef EW_ST
 	if (dl_box_up()) {
 		dl_idle();
@@ -1490,7 +1528,7 @@ static void idle(void)
 				} else {
 					put_off(MU_MESAG, msg, &ev);
 				}
-			} else if (msg[0] == AP_TERM || msg[0] == WM_CLOSED || msg[0] == WM_SIZED ||
+			} else if ((msg[0] == AP_TERM && !is_acc) || msg[0] == WM_CLOSED || msg[0] == WM_SIZED ||
 				   msg[0] == WM_FULLED || msg[0] == WM_UNICONIFY || msg[0] == WM_MOVED) {
 				/* (the window may be the pictures'; a window sized,
 				   fulled or moved to the screen's edge is laid out
@@ -1545,6 +1583,8 @@ static void idle(void)
 			menu_tnormal(mb.tree, msg[3], 1);
 			break;
 		case AP_TERM:
+			if (is_acc)
+				break;	/* (an accessory never ends: 2.2) */
 			conn_stop = 1;
 			quit = 1;
 			break;
@@ -1780,6 +1820,7 @@ static void loaded(int r)
 	int fresh = r == BR_SHOWN || br.shows != cur->drawn, pv = br.pv_p != NULL;
 	int32_t pv_top = win_top();
 	MAIN_PAD(PAD_LOADED);
+	CODE_PAD(loading < -30000, CP_MAIN_LOADED);
 #ifndef EW_ST
 	int hold = fresh && r == BR_SHOWN && live_shown && !pv && is_live(br.url) && br_pictures_pending(&br);
 #else
@@ -1806,6 +1847,9 @@ static void loaded(int r)
 	if (fresh) {
 		unsigned long ms_drawn = pf_ms();
 		char shown[440];
+#ifndef EW_ST
+		win_fit_width(0);	/* (View > Desktop width: before it is drawn) */
+#endif
 		cur->drawn = br.shows;
 #ifndef EW_ST
 		live_hold = hold;
@@ -1925,6 +1969,14 @@ static void loaded(int r)
 		win_toolbar();
 		break;
 	case BR_ELSEWHERE:
+#ifndef EW_ST
+		if (strncmp(br.elsewhere, "about:play?", 11) == 0) {
+			play_tracks(br.elsewhere);	/* (a Bandcamp page's Play: EPlay) */
+			win_address(br.url);
+			win_toolbar();
+			break;
+		}
+#endif
 		/* mailto: to EMail, as the family hands each other work */
 		if (!av_send("EMAIL", br.elsewhere))
 			alert(1, "[1][A mail address: EWeb hands|these to EMail, which isn't|running.][ OK ]");
@@ -2401,7 +2453,8 @@ static int live_key(short kstate, short key)
 #endif
 
 /* the search engine's own page: the search address up to its question
-   (FrogFind's http://frogfind.com/?q=%s: http://frogfind.com/) */
+   (DuckDuckGo Lite's https://lite.duckduckgo.com/lite/?q=%s:
+   https://lite.duckduckgo.com/lite/) */
 static void search_home(void)
 {
 	char u[256];
@@ -2813,6 +2866,18 @@ void command(int cmd)
 	case C_NEXTWIN: win_next(); break;
 	case C_OPENURL: win_address_focus(1); break;
 	case C_OPENFILE: open_file(); break;
+#ifndef EW_ST
+	case C_IMPORT: cookies_import(); break;
+	case C_WIDE:
+		/* a setting: on the disk at once (6.5); the page laid out again */
+		if (wide_can(br.url)) {
+			wide_set(br.url, !wide_site(br.url));
+			settings_save();
+			log_event("desktop width %s", wide_site(br.url) ? "on" : "off");
+			win_fit_width(1);
+		}
+		break;
+#endif
 	case C_SAVE: save_page(); break;
 	case C_RELOAD:
 		loading_on();

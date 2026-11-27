@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Copyright (C) 2026 AERA | Erez Yaary -->
+<html><head><meta charset=utf-8><title>A cell's min-width</title><style>
+/* a cell's min-width in px is its column's least, as in browsers (CSS
+   2.1 leaves it undefined, 17.5.2): a player's progress bar in a cell of
+   min-width 270px, its buttons in the cells after it (a music shop's
+   album page, 27 Nov 2026); in percent it is ignored */
+body { font-family: sans-serif; background: #fff; margin: 8px }
+td { padding: 0; border: none }
+.bar { min-width: 270px }
+.bar div { height: 8px; margin: 0 10px; border: 1px solid #888; background: #eee }
+.btn { width: 20px; height: 12px; background: #333 }
+.pc { min-width: 90%; background: #fd9 }
+.bb { min-width: 120px; padding: 0 10px; box-sizing: border-box; background: #9df }
+</style></head><body>
+<table><tr><td class="bar"><div></div></td><td><div class="btn"></div></td><td><div class="btn"></div></td></tr></table>
+<table><tr><td class="pc">percent</td><td>beside</td></tr></table>
+<table><tr><td class="bb">border-box</td><td>beside</td></tr></table>
+<table style="width: 100px"><tr><td class="bar" style="background: #cfc">wider than its table</td></tr></table>
+</body></html>
