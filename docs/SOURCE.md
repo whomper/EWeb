@@ -54,14 +54,14 @@ icons/                the desktop icon (EWEB.RSC, EWEBNV.RSC, EWEB.ICN, EWEBMK.I
                       the family's drawing, common/icons/EWEB.txt (common/tools/appicon.py)
 atari/                the C library pieces NetSurf and QuickJS need beyond common/ (libc_extra.c;
                       include/js, js_libc.c), the ST edition's 64-bit arithmetic (ll68000.c),
-                      plat_tos.c, and EWEBJS.OVL's loader (js_ovl.c)
+                      plat_tos.c, and EWEBJS.OVL's and EWEBTW.OVL's loaders (js_ovl.c, tw_ovl.c)
 third_party/netsurf/  NetSurf's libparserutils, libwapcaplet, libhubbub, libcss (MIT; EWEB.PRG takes only
                       libparserutils: Hubbub and LibCSS are the yardsticks of nsbench, h5test and csscmp)
 third_party/quickjs/  QuickJS, the JavaScript engine (MIT)
 third_party/libm/     musl's maths functions, for QuickJS on the Atari (MIT)
 tools/                mkfont.py (EWEB.FNT), mkhelp.py (EWEB.HYP), mkentities.py (the HTML parser's
                       named characters), mktbicons.py and mkthrobber.py (the toolbar's pictures and
-                      throbber), mkhome.py (the home page), mkovl.py (EWEBJS.OVL), bump.py (a release), sync-common.sh and
+                      throbber), mkhome.py (the home page), mkovl.py (EWEBJS.OVL, EWEBTW.OVL), bump.py (a release), sync-common.sh and
                       sync-gateway.sh, and QEMU with plugins for counting 68030 instructions
                       (build-qemu.sh, count68k.sh, prof68k.py)
 common/               the AERA shared code (git subtree of AERA-Atari): don't edit here

@@ -390,10 +390,11 @@ hub stay complete, with the evidence.
   DESIGN.md, The FireBee edition.
 - **A release** carries what EWeb needs and nothing else (decided 24 Oct 2026), as two zips and no
   loose files (the guidelines' 7.4; decided 22 Nov 2026), from `make dist`: `eweb-x.y.zip` with
-  `EWEB.PRG`, `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`,
+  `EWEB.PRG`, `EWEB60.PRG`, `EWEBJS.OVL`, `EWEBJS60.OVL`, `EWEBTW.OVL`, `TLS.OVL`, `EWEBST.PRG`, `EWEB.FNT`,
   `EWEB.HYP`, `CACERT.PEM`, `ROOTS.DAT` and the icon (`icons/`: `make icons`, from the family's
   drawing `common/icons/EWEB.txt`), and `eweb-x.y-firebee.zip` with the same names, its `EWEB.PRG`,
-  `EWEBJS.OVL` and `TLS.OVL` the ColdFire builds (`EWEBFB.PRG`, `EWEBJSFB.OVL`, `TLSFB.OVL`). The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
+  `EWEBJS.OVL`, `EWEBTW.OVL` and `TLS.OVL` the ColdFire builds (`EWEBFB.PRG`, `EWEBJSFB.OVL`, `EWEBTWFB.OVL`,
+  `TLSFB.OVL`). The measuring tools (`NSBENCH.TTP`, `PICBENCH.TTP`, `EWGET.TTP`) and their pages are made
   by `make` for the tests and DESIGN.md's figures, not shipped (when the owner is to run one on his
   Atari, it goes in that release, and its notes say so). The zip's `firebee/` folder of them (1.0 to 1.5, for a FireBee tester) is
   gone: it confused testers (decided 12 Nov 2026). Their first log lines are still common's machine
@@ -444,6 +445,9 @@ hub stay complete, with the evidence.
   only for csscmp.
 - **Tailwind's utilities** (a page that loads Tailwind's in-browser compiler, which EWeb doesn't run)
   are made by `src/browse/tw.c` from the page's classes, on Tailwind 3's data in `src/css/tw.txt`
-  (`tools/mktw.py`; DESIGN.md, Tailwind's utilities made by EWeb). After changing them: `make test`
-  (`twtest`, `tests/layout/tailwind.html`) and `make sites` (atariuptodate); after taking Tailwind's
-  data again, `tools/mktw.py --cases` too.
+  (`tools/mktw.py`; DESIGN.md, Tailwind's utilities made by EWeb). On the Atari they are `EWEBTW.OVL`,
+  a file of their own loaded the first time a page needs them (decided 27 Nov 2026: `atari/tw_ovl.c`,
+  `atari/tw_ovl.h`, `tools/mkovl.py --tw`; 68020 to 68060 code for `EWEB.PRG` and `EWEB60.PRG`,
+  `EWEBTWFB.OVL` the FireBee's; none in the ST edition). After changing them: `make test`
+  (`twtest`, `tests/layout/tailwind.html`), `make sites` (atariuptodate) and `tests/hatari/twovl.py`;
+  after taking Tailwind's data again, `tools/mktw.py --cases` too.

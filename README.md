@@ -34,12 +34,13 @@ folder of its own.
 | `EWEB.FNT` | the fonts |
 | `EWEBJS.OVL` | JavaScript (needs an FPU) |
 | `EWEBJS60.OVL` | JavaScript on a 68060 (a CT60), used there in `EWEBJS.OVL`'s place |
+| `EWEBTW.OVL` | the styles of pages made with Tailwind, read when one is shown |
 | `TLS.OVL`, `CACERT.PEM`, `ROOTS.DAT` | secure connections made on the Atari |
 | `EWEB.HYP` | the guide (the Help key) |
 | `icons/` | the desktop icon |
 
 A release is two zips: `eweb-x.y.zip`, these files, and `eweb-x.y-firebee.zip` for the FireBee
-(in testing), with the same names, its `EWEB.PRG`, `EWEBJS.OVL` and `TLS.OVL` built for the ColdFire.
+(in testing), with the same names, its `EWEB.PRG`, `EWEBJS.OVL`, `EWEBTW.OVL` and `TLS.OVL` built for the ColdFire.
 
 1. With STinG or MiNTnet running, double-click `EWEB.PRG` (`EWEB60.PRG` with a 68060, `EWEBST.PRG` on an ST;
    on a FireBee, `EWEB.PRG` from its own package).

@@ -109,7 +109,7 @@ GENERATED := $(GEN)/libparserutils/aliases.inc $(GEN)/libhubbub/entities.inc \
 
 # ---------------------------------------------------------------- targets
 
-all: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
+all: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/EWEBTW.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/NSBENCH.TTP binary/EWGET.TTP \
      binary/ROOTS.DAT
 
 bench: build/host/nsbench build/host/ewget
@@ -287,7 +287,7 @@ PAD_font := 144
 PAD_BSS_font := 52
 PAD_doc := 130
 PAD_layout := 104
-PAD_core := 36
+PAD_core := 244
 PAD_BSS_core := 252
 PAD_select := 168
 PAD_RO_select := 85
@@ -336,7 +336,7 @@ PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
 PAD_av := 82
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 136
+PAD_charset := 138
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -632,7 +632,7 @@ binary/TLS.OVL: common/tlsovl/tls.ovl
 # (common/tlsovl's make CPU=5475: no DSP), tlsfb.ovl beside it. CF_CC: the
 # cross compiler builds for a ColdFire (make dist leaves both out if not)
 CF_CC := $(shell $(M68KCC) -mcpu=5475 -E -x c /dev/null >/dev/null 2>&1 && echo yes)
-binary/EWEBFB.PRG binary/EWEBJSFB.OVL &: binary/EWEB.PRG tools/mkfirebee.py common/atari/cpucheck_cf.S common/atari/ll64.c \
+binary/EWEBFB.PRG binary/EWEBJSFB.OVL binary/EWEBTWFB.OVL &: binary/EWEB.PRG tools/mkfirebee.py common/atari/cpucheck_cf.S common/atari/ll64.c \
 		atari/cfmath.c
 	@mkdir -p binary
 	python3 tools/mkfirebee.py $@
@@ -856,6 +856,34 @@ build/tos/js/js_ovl.o: atari/js_ovl.c $(JS_OVL_HDRS)
 	@mkdir -p $(@D)
 	$(M68KCC) $(TOSNET_CFLAGS) $(EWB_INC) $(NSINC) $(NET_WARN) -DJS_ABI=$(JS_ABI) -c $< -o $@
 
+# EWEBTW.OVL: Tailwind's utilities (src/browse/tw.c and its packed tables)
+# in a file of their own, loaded the first time a page made with Tailwind
+# needs them (atari/tw_ovl.h; decided 27 Nov 2026: in EWEB.PRG they cost a
+# stock 4 MB Falcon a kept page). 68020 to 68060 code: one file for
+# EWEB.PRG and EWEB60.PRG, each with its own tw_imports.
+TW_ABI := $(shell cat VERSION src/browse/tw.h atari/tw_ovl.h | cksum | cut -d' ' -f1)UL
+TW_CFLAGS = $(subst -m68030,-m68020-60,$(TOS_CFLAGS)) -Wall -Wextra -Wno-unused-parameter -Werror -Isrc/browse \
+            -Icommon/src -Iatari -I$(GEN)
+build/tos/tw/tw.o: src/browse/tw.c src/browse/tw.h $(GEN)/tw_data.h
+	@mkdir -p $(@D)
+	$(M68KCC) $(filter-out -w,$(TW_CFLAGS)) -c $< -o $@
+build/tos/tw/tw_ovl_head.o: atari/tw_ovl_head.c atari/tw_ovl.h src/browse/tw.h VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(filter-out -w,$(TW_CFLAGS)) -DTW_ABI=$(TW_ABI) -c $< -o $@
+build/tos/ewebtw.elf: build/tos/tw/tw_ovl_head.o build/tos/tw/tw.o atari/ovl.ld
+	$(M68KCC) -m68020-60 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/ovl.ld -Wl,-e,tw_ovl_head \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -Wl,--unresolved-symbols=ignore-all \
+		-o $@ $(filter %.o,$^) -lgcc
+binary/EWEBTW.OVL $(GEN)/tw_imports.c &: build/tos/ewebtw.elf tools/mkovl.py common/tools/elf2tos.py
+	@mkdir -p binary $(GEN)
+	python3 tools/mkovl.py --tw build/tos/ewebtw.elf binary/EWEBTW.OVL $(GEN)/tw_imports.c
+build/tos/tw/tw_imports.o: $(GEN)/tw_imports.c
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOS_CFLAGS) -fno-builtin -c $< -o $@
+build/tos/tw/tw_ovl.o: atari/tw_ovl.c atari/tw_ovl.h src/browse/tw.h VERSION
+	@mkdir -p $(@D)
+	$(M68KCC) $(TOSNET_CFLAGS) $(EWB_INC) $(NSINC) $(NET_WARN) -Iatari -DTW_ABI=$(TW_ABI) -c $< -o $@
+
 # EWEB.PRG, the browser: the GEM window (ui/), common/'s GEM building
 # blocks, the browser's core (src/doc, layout, gfx, browse), the CSS
 # engine, Hubbub, and the network as EWGET.TTP has it
@@ -923,7 +951,8 @@ STNET_OBJ_PAD = $(subst build/st/net/net_tos.o,build/st/net/net_tos.o build/st/r
 tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/tos/rt/pad_font.o,$(subst \
               build/tos/ewb/browse/browse.o,build/tos/ewb/browse/browse.o build/tos/rt/pad_browse.o,$(subst \
               build/tos/ewb/doc/doc.o,build/tos/ewb/doc/doc.o build/tos/rt/pad_doc.o build/tos/rt/pad_doc2.o,$(subst \
-              build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o build/tos/rt/pad_layout2.o,$(tos_EWB)))))
+              build/tos/ewb/layout/layout.o,build/tos/ewb/layout/layout.o build/tos/rt/pad_layout.o build/tos/rt/pad_layout2.o,$(filter-out \
+              build/tos/ewb/browse/tw.o,$(tos_EWB)))))) build/tos/tw/tw_ovl.o build/tos/tw/tw_imports.o
 tos_EC_PAD = $(subst build/tos/ec/sheet.o,build/tos/ec/sheet.o build/tos/rt/pad_sheet.o,$(subst \
              build/tos/ec/select.o,build/tos/ec/select.o build/tos/rt/pad_select.o,$(subst \
              build/tos/ec/core.o,build/tos/ec/core.o build/tos/rt/pad_core.o,$(tos_EC))))
@@ -958,7 +987,7 @@ build/tos/eweb.elf: $(GEM_RT_PAD) $(GEM_OBJ_PAD) $(tos_EWB_PAD) $(tos_EC_PAD) $(
 		build/tos/gem/common/cpucheck.o \
 		$(DEEP_OBJ) $(FP_OBJ)
 	$(M68KCC) $(TOS_LDFLAGS) $(CONNPAD_LD) -Wl,-Map,$@.map -o $@ $(filter %.o,$^) -lgcc
-binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL
+binary/EWEB.PRG: build/tos/eweb.elf common/tools/elf2tos.py binary/EWEBJS.OVL binary/EWEBTW.OVL
 	@mkdir -p binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 # EWEB60.PRG, the 68060's (a CT60's; decided 12 Nov 2026): EWEB.PRG's objects
@@ -1728,22 +1757,23 @@ build/photo/PHOTO.JPG: tests/bench/mkphoto.py
 # "Remove all files from root and just have two ZIP files, one for each
 # platform" and "rename all other FB files into their standard filename"):
 # eweb-x.y.zip for the ST, TT and Falcon, and eweb-x.y-firebee.zip with
-# the same names, its eweb.prg, ewebjs.ovl and tls.ovl the ColdFire builds
-# (EWEBFB.PRG, EWEBJSFB.OVL, TLSFB.OVL), with the fonts, the guide, the
+# the same names, its eweb.prg, ewebjs.ovl, ewebtw.ovl and tls.ovl the ColdFire
+# builds (EWEBFB.PRG, EWEBJSFB.OVL, EWEBTWFB.OVL, TLSFB.OVL), with the fonts, the guide, the
 # certificates and the icons. EUpdate fetches the one for its machine.
-FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL TLSFB.OVL)
+FB_DIST := $(if $(CF_CC),EWEBFB.PRG EWEBJSFB.OVL EWEBTWFB.OVL TLSFB.OVL)
 SHARED_DIST := EWEB.FNT EWEB.HYP CACERT.PEM ROOTS.DAT
-dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
+dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL binary/EWEBTW.OVL binary/TLS.OVL binary/EWEBST.PRG binary/EWEB.FNT binary/EWEB.HYP \
 		binary/CACERT.PEM binary/ROOTS.DAT $(addprefix binary/,$(FB_DIST))
 	rm -rf dist
 	mkdir -p dist/zip/icons
-	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL TLS.OVL EWEBST.PRG $(SHARED_DIST); do \
+	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL EWEBTW.OVL TLS.OVL EWEBST.PRG $(SHARED_DIST); do \
 		cp binary/$$f dist/zip/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	$(if $(CF_CC),mkdir -p dist/fb && cp -r dist/zip/icons dist/fb/ && \
 		for f in $(SHARED_DIST); do cp binary/$$f dist/fb/$$(echo $$f | tr A-Z a-z) || exit 1; done && \
 		cp binary/EWEBFB.PRG dist/fb/eweb.prg && cp binary/EWEBJSFB.OVL dist/fb/ewebjs.ovl && \
+		cp binary/EWEBTWFB.OVL dist/fb/ewebtw.ovl && \
 		cp binary/TLSFB.OVL dist/fb/tls.ovl && \
 		(cd dist/fb && zip -q -9 -r ../eweb-$(VERSION_STR)-firebee.zip .))
 	rm -rf dist/fb

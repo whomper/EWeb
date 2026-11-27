@@ -13,6 +13,8 @@ and each cross-compiler command is run again for the ColdFire:
 - common's cpucheck.c (68000 code, which a ColdFire may not run) becomes
   cpucheck_cf.S, the same bytes for the 68000 and the ColdFire: the _CF_
   cookie, or ui/main.c's cpu_alert;
+- Tailwind's overlay, EWEBTW.OVL, likewise (EWEBTWFB.OVL beside OUT.PRG,
+  with EWEBFB.PRG's tw_imports from it);
 - the scripts' overlay, EWEBJS.OVL, is made for the ColdFire as well
   (EWEBJSFB.OVL beside OUT.PRG: QuickJS and musl's maths in the FPU's
   doubles, -mcpu=5475 in -m68881's place), from its own rules in the same
@@ -158,6 +160,7 @@ def main():
     target = args[0]
     lines = run("make -n -B build/tos/eweb.elf").replace("\\\n", " ").splitlines()
     compiles, link, ovl_link, imports = [], None, None, None
+    tw_link, tw_imports = None, None
     for line in lines:
         if not line.startswith(CC + " "):
             continue
@@ -167,16 +170,22 @@ def main():
         if "-c" in words:
             if "js_imports" in words[words.index("-c") + 1]:
                 imports = words  # (made from the ColdFire's overlay, below)
+            elif "tw_imports" in words[words.index("-c") + 1]:
+                tw_imports = words  # (EWEBTW.OVL's: the same)
             else:
                 compiles.append(words)
         elif "-o" in words and words[words.index("-o") + 1] == "build/tos/eweb.elf":
             link = words
         elif "-o" in words and words[words.index("-o") + 1] == "build/tos/ewebjs.elf":
             ovl_link = words
-    if link is None or ovl_link is None or imports is None:
-        sys.exit("mkfirebee: make gave no link of build/tos/eweb.elf, of its overlay or its imports")
+        elif "-o" in words and words[words.index("-o") + 1] == "build/tos/ewebtw.elf":
+            tw_link = words
+    if link is None or ovl_link is None or imports is None or tw_link is None or tw_imports is None:
+        sys.exit("mkfirebee: make gave no link of build/tos/eweb.elf, of its overlays or their imports")
     if MCPU == "-m68060":
-        return m68060(target, compiles + [imports], link)
+        # (EWEBTW.OVL is 68020 to 68060 code: EWEB60.PRG takes EWEB.PRG's,
+        # its own tw_imports from the same list)
+        return m68060(target, compiles + [imports, tw_imports], link)
     objs = []
     for words in compiles:
         src = words[words.index("-c") + 1]
@@ -200,6 +209,15 @@ def main():
     run(" ".join(["python3", "tools/mkovl.py", "build/cf/ewebjs.elf", shlex.quote(ovl), "build/cf/gen/js_imports.c"]))
     src = imports[imports.index("-c") + 1]
     words = cpu([w if w != src else "build/cf/gen/js_imports.c" for w in imports])
+    run(" ".join(shlex.quote(w) for w in words))
+    # Tailwind's overlay, EWEBTWFB.OVL (atari/tw_ovl.h), and its imports
+    words = cpu([w for w in tw_link if w != "-lgcc"]) + ["build/cf/rt/ll64.o"]
+    run(" ".join(shlex.quote(w) for w in words))
+    twovl = os.path.join(os.path.dirname(target) or ".", "EWEBTWFB.OVL")
+    run(" ".join(["python3", "tools/mkovl.py", "--tw", "build/cf/ewebtw.elf", shlex.quote(twovl),
+                  "build/cf/gen/tw_imports.c"]))
+    src = tw_imports[tw_imports.index("-c") + 1]
+    words = cpu([w if w != src else "build/cf/gen/tw_imports.c" for w in tw_imports])
     run(" ".join(shlex.quote(w) for w in words))
     # (and what EWEBJSFB.OVL takes from it beyond ll64.c: atari/cfmath.c)
     run(" ".join([CC, MCPU, "-O2", "-ffreestanding", "-fno-builtin", "-fno-pic", "-fno-pie",

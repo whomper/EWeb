@@ -52,6 +52,9 @@ extern langs_job translate_job;
 #ifndef EW_ST
 #include "dspjpeg.h"
 #include "js_ovl.h"
+#ifndef EW_ST
+#include "tw_ovl.h"
+#endif
 #endif
 #include "codepad.h"
 
@@ -3805,6 +3808,12 @@ static int app_run(void)
 	}
 	js_ovl_at(path);
 	scripts_ok = js_built && (get_cookie(0x5F465055L) >> 16) != 0;
+#endif
+#ifndef EW_ST
+	/* Tailwind's utilities: EWEBTW.OVL next to the program, loaded the
+	   first time a page made with Tailwind needs them (tw_ovl.h) */
+	path_join(path, sizeof path, opt.workdir, "ewebtw.ovl");
+	tw_ovl_at(path);
 #endif
 	gap_tag("start: window");
 	if (new_window() == NULL) {

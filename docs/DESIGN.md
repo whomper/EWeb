@@ -1939,6 +1939,15 @@ values) and given Tailwind's own rule: the data is Tailwind 3.4.17's (MIT), kept
 as what EWeb's CSS engine reads: its base sheet, the palette and 16 colour families, 114 families of
 the theme's scales, 315 single rules; `build/gen/tw_data.h` is made from it, packed (raw DEFLATE:
 42.6 KB of tables in 9.7 KB of `EWEB.PRG`), and `tw_load` unpacks it on the first such page and keeps it.
+On the Atari Tailwind's part is `EWEBTW.OVL`, a file of its own beside `EWEB.PRG` (decided 27 Nov 2026):
+in the program it took 41 KB of 1.27's growth's place in a stock 4 MB Falcon's ST RAM, and with 41 KB
+less free under NVDI in 256 colours EWeb kept one page fewer, so Back, the About box and Settings
+closed and a page scrolled were 10 to 25 ms slower than 1.26 (the paired speed run; without the
+Tailwind code they were 1.26's). The overlay is made as `EWEBJS.OVL` is (`tools/mkovl.py --tw`,
+`atari/tw_ovl.c`'s loader): 68020 to 68060 code, so one file serves `EWEB.PRG` and `EWEB60.PRG`,
+each with its own `tw_imports`; the FireBee's `EWEBTWFB.OVL` (`tools/mkfirebee.py`) is `ewebtw.ovl` in its
+zip. It is loaded the first time a page whose head loads Tailwind is shown (0.6 s on a stock
+Falcon), and kept; missing, the page shows unstyled (`tests/hatari/twovl.py`).
 Unpacked in the program it had grown `EWEB.PRG` by 53 KB (to 1.43 MB: with the font no longer on a
 1.44 MB floppy, `tests/hatari/appdir.py`'s; that rig's Falcon floppy is now 2.88 MB). `make test`'s `twtest`
 holds 270 classes to what Tailwind itself makes of them (`tests/browse/twcases.txt`, `mktw.py

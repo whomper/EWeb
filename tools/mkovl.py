@@ -4,7 +4,10 @@
 """EWEBJS.OVL from the overlay's ELF (atari/js_ovl.h, atari/ovl.ld), and
 the C file of the addresses EWEB.PRG gives it:
 
-    mkovl.py OVL.ELF EWEBJS.OVL [OVL2.ELF EWEBJS2.OVL ...] JS_IMPORTS.C
+    mkovl.py [--tw] OVL.ELF EWEBJS.OVL [OVL2.ELF EWEBJS2.OVL ...] JS_IMPORTS.C
+
+(--tw: EWEBTW.OVL, Tailwind's utilities, atari/tw_ovl.h: its imports' part
+"EWTI" and the C file's list tw_imports, the same form otherwise)
 
 (more than one overlay: each one EWEB.PRG may load, the 68030's and the
 68060's, with one list of imports, all of theirs, in each)
@@ -36,7 +39,7 @@ SHN_ABS = 0xFFF1
 SHF_ALLOC = 2
 HEAD = """/* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
-/* Made by tools/mkovl.py: what EWEBJS.OVL takes from EWEB.PRG, in its order. */
+/* Made by tools/mkovl.py: what %s takes from EWEB.PRG, in its order. */
 """
 
 
@@ -127,6 +130,10 @@ def main():
     # ELF OVL [ELF OVL ...] JS_IMPORTS.C: overlays for one EWEB.PRG (the
     # 68030's and the 68060's) share one list of imports, all theirs
     args = sys.argv[1:]
+    tw = args[:1] == ["--tw"]
+    if tw:
+        args = args[1:]
+    magic, table, what = (b"EWTI", "tw_imports", "EWEBTW.OVL") if tw else (b"EWJI", "js_imports", "EWEBJS.OVL")
     if len(args) < 3 or len(args) % 2 != 1:
         sys.exit(__doc__)
     ovls = [(args[i], args[i + 1], load(args[i])) for i in range(0, len(args) - 1, 2)]
@@ -134,7 +141,7 @@ def main():
     index = {n: i for i, n in enumerate(names)}
     crc = zlib.crc32("\n".join(names).encode()) & 0xFFFFFFFF
     for elf, out, (image, fixups, places, tsize, dsize, bsize) in ovls:
-        imp = bytearray(b"EWJI" + struct.pack(">II", crc, len(places)))
+        imp = bytearray(magic + struct.pack(">II", crc, len(places)))
         for off, n, k in sorted(places):
             imp += struct.pack(">IHH", off, index[n], k)
         hdr = struct.pack(">HIIIIIIH", 0x601A, tsize, dsize, bsize, 0, 0, 7, 0)
@@ -143,13 +150,13 @@ def main():
         print("%s: text %d, data %d, bss %d, %d fixups, %d imports at %d places" %
               (out, tsize, dsize, bsize, len(fixups), len(set(n for _, n, _ in places)), len(places)))
     with open(args[-1], "w") as f:
-        f.write(HEAD + "\n")  # (no headers: each is named here as bytes, functions too)
+        f.write(HEAD % what + "\n")  # (no headers: each is named here as bytes, functions too)
         for n in names:
             f.write("extern char %s[];\n" % n)
-        f.write("\nconst void *const js_imports[] = {\n")
+        f.write("\nconst void *const %s[] = {\n" % table)
         for n in names:
             f.write("\t%s,\n" % n)
-        f.write("};\nconst unsigned long js_imports_n = %d, js_imports_crc = 0x%08xUL;\n" % (len(names), crc))
+        f.write("};\nconst unsigned long %s_n = %d, %s_crc = 0x%08xUL;\n" % (table, len(names), table, crc))
 
 
 if __name__ == "__main__":
