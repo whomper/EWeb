@@ -1274,7 +1274,7 @@ def browse():
                                                                           "\u00f2\u00e5\u00ec\u00ed"),
               str(r.events()))
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
-        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 8 * 16 + 8)	# Encoding...
+        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 9 * 16 + 8)	# Encoding... (Desktop width above it since 1.29)
         time.sleep(1)
         for _ in range(5):		# Auto, UTF-8, Western twice, Hebrew (Windows-1255)
             r.key(DOWN)
@@ -1292,7 +1292,7 @@ def browse():
         # (windows-1255, chosen above), nothing read back or fetched
         n = len(r.events())
         r.mouse.move(16 + 8 * len(" EWeb  File  Edit  Vi"), 5)	# the View menu, dropped
-        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 9 * 16 + 8)	# Page source
+        r.mouse.click(16 + 8 * len(" EWeb  File  Edit  View"), 19 + 10 * 16 + 8)	# Page source
         ev = r.wait(r"shown view-source:", 120)
         time.sleep(2)
         r.shot(17)
@@ -1978,7 +1978,7 @@ def screens():
                 ev = r.wait(r"settings shown", 60)
                 time.sleep(2)  # (drawn and waiting for keys)
                 r.key(TAB)
-                for _ in range(30):
+                for _ in range(45):	# (DuckDuckGo Lite's address, 38, since 1.29)
                     r.key(BACKSPACE)
                 long_search = "http://search.example.com/the/words/typed/in/the/address/go/here/s"
                 r.type(long_search)
