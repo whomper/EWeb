@@ -244,15 +244,20 @@ logged out of every site.
 A site you are logged in to on a Mac can have you logged in in EWeb too:
 its cookies come from Safari in a file, which EWeb reads.
 
-1. On the Mac, copy `safari-cookies.py` (in EWeb's source, `tools/`) and
-   run it in the Terminal with the sites you want, e.g.
-   `python3 safari-cookies.py atariage.com`. It names the sites' cookies
-   it found and writes them to `safari-cookies.txt`. With no site named
-   it writes nothing: there is no "all".
-2. The first time, the Mac may not let the Terminal read Safari's
-   cookies: the tool says so. Then System Settings > Privacy & Security >
-   Full Disk Access, switch Terminal on, quit the Terminal, open it and
-   run the tool again.
+1. On the Mac, download the page
+   https://github.com/whomper/EWeb/raw/v1.29/tools/safari-cookies.html
+   and open it in any browser there (Safari too). It says where Safari's
+   cookie file is: Open Safari's cookie file..., ⇧⌘G, paste the path it
+   shows, Return. Everything happens in the page: nothing is sent
+   anywhere, and no cookie's value is shown.
+2. Tick the sites (Select all, or a search and Select these N; the
+   `login` mark shows a site's logins) and Save safari-cookies.txt: it
+   goes to the Downloads folder. If the Mac says the page may not open
+   Safari's file, quit Safari first, or allow it once in System Settings
+   > Privacy & Security. In the Terminal instead, the same:
+   `python3 safari-cookies.py atariage.com` (from
+   https://github.com/whomper/EWeb/raw/v1.29/tools/safari-cookies.py,
+   with the sites named; the first time, Full Disk Access for Terminal).
 3. Copy `safari-cookies.txt` to the Atari (a floppy, the network, a card).
 4. In EWeb, File > Import cookies... and choose the file. EWeb says how
    many cookies it took for how many sites, and offers to delete the

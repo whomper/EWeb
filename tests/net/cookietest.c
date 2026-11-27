@@ -88,10 +88,42 @@ int main(int argc, char **argv)
 				else
 					text[k++] = *c;
 			text[k] = 0;
-			got_n = ck_import(text, k, &got_s);
+			{
+				/* in pieces of a line each, as ui/ckimport.c reads a
+				   file: the counts are the whole's */
+				long at = 0;
+				got_n = 0;
+				ck_import_start();
+				while (at < k) {
+					char *e = memchr(text + at, '\n', (size_t) (k - at));
+					long l = e != NULL ? (long) (e - (text + at)) + 1 : k - at;
+					got_n += ck_import(text + at, l, &got_s);
+					at += l;
+				}
+			}
 			if (got_n != want_n || got_s != want_s) {
 				fprintf(stderr, "FAIL %s: import took %d for %d sites, not %ld for %ld\n", name, got_n,
 					got_s, want_n, want_s);
+				failed++;
+				ok = 0;
+			}
+		} else if (!strcmp(a, "importmany")) {
+			/* importmany N: a cookie on each of N sites, in pieces of
+			   100 lines: N taken for N sites (1.29's count stopped at 64) */
+			long want = strtol(b, NULL, 10), i, at = 0;
+			int got_s = 0, got_n = 0;
+			static char text[200000];
+			ck_import_start();
+			for (i = 0; i < want; i++) {
+				at += snprintf(text + at, sizeof text - (size_t) at,
+					       ".site%ld.com\tTRUE\t/\tFALSE\t1800000000\ts\t%ld\n", i, i);
+				if (i % 100 == 99 || i == want - 1) {
+					got_n += ck_import(text, at, &got_s);
+					at = 0;
+				}
+			}
+			if (got_n != want || got_s != want) {
+				fprintf(stderr, "FAIL %s: importmany took %d for %d sites, not %ld\n", name, got_n, got_s, want);
 				failed++;
 				ok = 0;
 			}

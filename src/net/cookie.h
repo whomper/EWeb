@@ -64,5 +64,8 @@ void ck_load(const char *s, long len);
 /* a Netscape cookies.txt put into the store as its sites' Set-Cookie
    would (File > Import cookies...): the count taken, *sites their sites */
 int ck_import(const char *text, long len, int *sites);
+/* (a file read in pieces, whole lines each: ck_import_start first, *sites
+   then the sites of all the pieces so far) */
+void ck_import_start(void);
 
 #endif

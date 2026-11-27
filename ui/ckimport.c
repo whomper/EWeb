@@ -23,6 +23,8 @@
 #include "filepick.h"
 #include "cookie.h"
 
+#define IMP_PIECE 32768L
+
 static char ck_dir[FP_PATH], ck_recent[FP_RECENT][FP_PATH], ck_path[FP_PATH + 16];
 
 static void take(const char *path)
@@ -35,9 +37,9 @@ void cookies_import(void)
 	static DL_TYPE types[2];
 	FP_SPEC spec;
 	const char *base;
-	char *data;
-	long len;
-	int n, sites = 0;
+	char *data = NULL;
+	long have;
+	int n, h, skip, sites = 0;
 	types[0].name = "Cookie files";
 	types[0].exts = "TXT";
 	types[1].name = "All files";
@@ -60,12 +62,54 @@ void cookies_import(void)
 		alert(1, "[1][That is EWeb's own cookie file.|Choose the file made on|the Mac (safari-cookies.txt).][ OK ]");
 		return;
 	}
-	if ((data = pf_load(ck_path, &len)) == NULL) {
+	/* read in pieces of IMP_PIECE, whole lines each (a line cut by a
+	   piece's end carried to the next), so that a file of any size takes
+	   only that (an export of every site Safari has was 860 KB) */
+	if ((h = pf_open(ck_path, 0)) < 0 || (data = malloc(IMP_PIECE)) == NULL) {
+		if (h >= 0)
+			pf_close(h);
 		alert(1, "[3][EWeb can't read that file.][ OK ]");
 		return;
 	}
-	n = ck_import(data, len, &sites);
+	ck_import_start();
+	n = 0;
+	have = 0;
+	skip = 0;
+	for (;;) {
+		long got = pf_read(h, data + have, IMP_PIECE - have), use;
+		if (got <= 0) {
+			if (have > 0 && !skip)
+				n += ck_import(data, have, &sites);	/* (the last line, without its end) */
+			break;
+		}
+		have += got;
+		if (skip) {
+			/* a line longer than a piece (no cookie is): passed over to its end */
+			char *e = memchr(data, '\n', (size_t) have);
+			if (e == NULL) {
+				have = 0;
+				continue;
+			}
+			have -= (long) (e + 1 - data);
+			memmove(data, e + 1, (size_t) have);
+			skip = 0;
+		}
+		for (use = have; use > 0 && data[use - 1] != '\n'; use--)
+			;
+		if (use == 0) {
+			if (have == IMP_PIECE) {
+				have = 0;
+				skip = 1;
+			}
+			continue;
+		}
+		n += ck_import(data, use, &sites);
+		have -= use;
+		memmove(data, data + use, (size_t) have);
+	}
+	pf_close(h);
 	free(data);
+	ck_import_start();	/* (its table of sites given back) */
 	log_event("cookies imported %d for %d sites", n, sites);
 	if (n == 0) {
 		alert(1, "[1][There are no cookies in that|file that EWeb can use.][ OK ]");

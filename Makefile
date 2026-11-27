@@ -1642,6 +1642,7 @@ test: build/host/aerajsc build/asan/nsbench build/asan/hebtest build/asan/ectest
 	build/asan/nettest
 	build/asan/cookietest tests/net/cookies.txt
 	python3 tests/cookies/safari.py
+	python3 tests/cookies/page.py
 	build/asan/bctest
 	build/asan/bmtest build/asan
 	build/asan/twtest tests/browse/twcases.txt

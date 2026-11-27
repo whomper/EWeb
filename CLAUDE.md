@@ -242,11 +242,14 @@ hub stay complete, with the evidence.
 - **Cookies** are `src/net/cookie.c` (RFC 6265bis; hooked into `http.c` by `src/browse`), kept in
   `COOKIES.TXT` next to `EWEB.PRG`, values encrypted with `EWEB.KEY` (common's `secret.c`): read
   once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). A Mac's Safari cookies come in by
-  File > Import cookies... (decided 27 Nov 2026): `tools/safari-cookies.py` on the Mac (Python's standard
-  library; Safari's `Cookies.binarycookies` to Netscape's `safari-cookies.txt`, the sites named only,
-  never `cookies.txt`), `ck_import` in `cookie.c` (each line as its site's Set-Cookie), `ui/ckimport.c`
-  (the family's file dialog, EWeb's own store refused, then the offer to delete the file). After changing
-  them: `make test` (`tests/net/cookies.txt`, `tests/cookies/safari.py`), `make fuzz` for a while
+  File > Import cookies... (decided 27 Nov 2026): `tools/safari-cookies.html` on the Mac (a page in any
+  browser, nothing sent anywhere: Safari's `Cookies.binarycookies` read in it, the sites ticked, Select all
+  and Unselect, saved as Netscape's `safari-cookies.txt`; the owner's choices of 27 Nov 2026) or
+  `tools/safari-cookies.py` in the Terminal (Python's standard library, the sites named only, never
+  `cookies.txt`), `ck_import` in `cookie.c` (each line as its site's Set-Cookie; `ck_import_start` for a
+  file in pieces), `ui/ckimport.c` (the family's file dialog, EWeb's own store refused, the file read in
+  32 KB pieces, then the offer to delete it). After changing them: `make test` (`tests/net/cookies.txt`,
+  `tests/cookies/safari.py`, `tests/cookies/page.py`: the page in Chromium), `make fuzz` for a while
   (`fuzz_cookie`, which imports its input too), `make itest` (`/site/cookie/`), `make hatarifiles`.
 - **Bookmarks** are `src/browse/bookmark.c` (`BOOKMARK.HTM` next to `EWEB.PRG`, Netscape's bookmark
   file; read once a start for the Bookmarks menu, one safe save at each change), listed on

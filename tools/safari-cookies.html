@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cookies for EWeb</title>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later
+     Copyright (C) 2026 AERA | Erez Yaary
+     Safari's cookies for EWeb's File > Import cookies...: open this file in any browser on the Mac,
+     pick Safari's cookie file, tick the sites, Save. Everything happens in this page: nothing is
+     sent anywhere, and no cookie's value is shown. -->
+<style>
+:root {
+  --bg: #f7f4f0; --panel: #fff; --text: #1b1714; --muted: #6f655d; --line: #e2dbd3;
+  --accent: #b87333; --accent-text: #fff; --login: #8a4fd1; --sel: #fbeee2;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f0d0c; --panel: #181513; --text: #ece6df; --muted: #9c918a; --line: #2c2521;
+          --accent: #e2a76f; --accent-text: #140d0a; --login: #c9a6f0; --sel: #2a1f17; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 20px; }
+h1 { font-size: 26px; margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; }
+.step { font-weight: 600; }
+code { font: 13px ui-monospace, Menlo, monospace; background: var(--sel); padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+button, .file { font: 600 15px inherit; font-family: inherit; border-radius: 8px; padding: 9px 16px; cursor: pointer;
+         border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); }
+button.ghost { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+input[type=file] { display: none; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+input[type=search] { flex: 1 1 220px; font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
+                     background: var(--panel); color: var(--text); }
+select { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+     border-bottom: 1px solid var(--line); padding: 6px 8px; }
+td { border-bottom: 1px solid var(--line); padding: 7px 8px; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.on { background: var(--sel); }
+tr { cursor: pointer; }
+.login { color: var(--login); font-size: 12px; margin-left: 6px; white-space: nowrap; }
+.err { color: #c0392b; }
+#list { max-height: 60vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+[hidden] { display: none !important; }
+@media (max-width: 560px) { .hide-s { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Safari's cookies for EWeb</h1>
+    <p class="muted">Choose the sites whose logins EWeb on your Atari is to have. Everything happens in this page, on this Mac: nothing is sent anywhere.</p>
+  </div>
+
+  <section class="card" id="pick">
+    <p class="step">1. Open Safari's cookie file</p>
+    <p>Click the button. In the window that opens, press <b>⇧⌘G</b>, paste this and press Return:</p>
+    <p><code id="path">~/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies</code>
+       <button class="ghost" id="copy" type="button">Copy</button></p>
+    <div class="bar"><label class="file" for="f">Open Safari's cookie file…</label>
+      <input type="file" id="f"><span id="fname" class="muted"></span></div>
+    <p class="muted">If the Mac says you may not open it, quit Safari first, or allow it once in System Settings &gt; Privacy &amp; Security.</p>
+    <p class="err" id="err" hidden></p>
+  </section>
+
+  <section class="card" id="choose" hidden>
+    <p class="step">2. Tick the sites</p>
+    <div class="bar">
+      <input type="search" id="q" placeholder="Search sites" aria-label="Search sites">
+      <select id="sort" aria-label="Sort">
+        <option value="used">Last used first</option>
+        <option value="name">By name</option>
+        <option value="count">Most cookies first</option>
+      </select>
+      <button class="ghost" id="selall" type="button">Select all</button>
+      <button class="ghost" id="unsel" type="button">Unselect</button>
+    </div>
+    <div id="list"><table>
+      <thead><tr><th style="width:36px"></th><th>Site</th><th class="n">Cookies</th><th class="n hide-s">Last used</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="muted"><span class="login">login</span> marks a site with cookies only a browser sends and only over a secure connection: usually a login.</p>
+  </section>
+
+  <section class="card" id="save" hidden>
+    <p class="step">3. Save the file for the Atari</p>
+    <div class="bar"><button id="go" type="button" disabled>Save safari-cookies.txt</button>
+      <span id="sum" class="muted">Ticked: none</span></div>
+    <p id="done" hidden></p>
+    <p class="muted">Copy <b>safari-cookies.txt</b> to the Atari and open it with EWeb's <b>File &gt; Import cookies…</b>; let EWeb delete it afterwards. The file holds your logins in plain text until then. Some sites tie a login to the computer it was made on and will ask you to log in again; cookies Safari keeps only until it quits aren't in its file.</p>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* Safari's Cookies.binarycookies: "cook", the page count and each page's
+   size (big-endian); each page 0x00000100, its cookie count and their
+   offsets (little-endian); each cookie its size, flags (1 Secure, 4
+   HttpOnly), the offsets of its domain, name, path and value (from the
+   cookie's start) and its expiry and creation as seconds since 2001
+   (little-endian doubles). */
+const MAC_EPOCH = 978307200;
+function parseBinaryCookies(buf) {
+  const v = new DataView(buf), u8 = new Uint8Array(buf);
+  const tag = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+  if (tag !== "cook") throw new Error("This isn't Safari's cookie file (Cookies.binarycookies).");
+  const pages = v.getUint32(4), sizes = [];
+  for (let i = 0; i < pages; i++) sizes.push(v.getUint32(8 + 4 * i));
+  const str = at => { let e = at; while (e < u8.length && u8[e]) e++; return new TextDecoder().decode(u8.subarray(at, e)); };
+  const out = [];
+  let p = 8 + 4 * pages;
+  for (const size of sizes) {
+    const n = v.getUint32(p + 4, true);
+    for (let k = 0; k < n; k++) {
+      const c = p + v.getUint32(p + 8 + 4 * k, true);
+      const flags = v.getUint32(c + 8, true);
+      out.push({
+        domain: str(c + v.getUint32(c + 16, true)),
+        name: str(c + v.getUint32(c + 20, true)),
+        path: str(c + v.getUint32(c + 24, true)),
+        value: str(c + v.getUint32(c + 28, true)),
+        secure: !!(flags & 1), httponly: !!(flags & 4),
+        expires: Math.round(v.getFloat64(c + 40, true) + MAC_EPOCH),
+        created: Math.round(v.getFloat64(c + 48, true) + MAC_EPOCH)
+      });
+    }
+    p += size;
+  }
+  return out;
+}
+
+/* a site: its registrable domain, the last two labels, three under a
+   country's second level (co.uk, com.au...) */
+const SECOND = new Set(["co", "com", "net", "org", "ac", "gov", "edu", "or", "ne", "go"]);
+function site(domain) {
+  const d = domain.replace(/^\./, "").toLowerCase(), l = d.split(".");
+  if (l.length <= 2 || /^[\d.]+$/.test(d)) return d;
+  const n = l[l.length - 2].length <= 3 && SECOND.has(l[l.length - 2]) && l[l.length - 1].length === 2 ? 3 : 2;
+  return l.slice(-n).join(".");
+}
+
+let cookies = [], sites = [], ticked = new Set();
+const esc = t => t.replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+const $ = id => document.getElementById(id);
+
+$("copy").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("path").textContent);
+$("f").onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $("err").hidden = true;
+  try {
+    const now = Date.now() / 1000;
+    cookies = parseBinaryCookies(await file.arrayBuffer()).filter(c => c.expires > now && c.domain);
+    const by = new Map();
+    for (const c of cookies) {
+      const s = site(c.domain);
+      const o = by.get(s) || { name: s, count: 0, used: 0, login: false };
+      o.count++; o.used = Math.max(o.used, c.created); o.login = o.login || (c.secure && c.httponly);
+      by.set(s, o);
+    }
+    sites = [...by.values()];
+    ticked = new Set();
+    $("fname").textContent = `${cookies.length} cookies for ${sites.length} sites`;
+    $("choose").hidden = $("save").hidden = false;
+    $("done").hidden = true;
+    draw();
+  } catch (x) {
+    $("err").textContent = x.message || "Can't read that file.";
+    $("err").hidden = false;
+  }
+};
+
+function shown() {
+  const q = $("q").value.trim().toLowerCase(), s = $("sort").value;
+  const l = sites.filter(o => !q || o.name.includes(q));
+  l.sort(s === "name" ? (a, b) => a.name.localeCompare(b.name)
+       : s === "count" ? (a, b) => b.count - a.count : (a, b) => b.used - a.used);
+  return l;
+}
+function draw() {
+  const l = shown(), f = new DocumentFragment();
+  for (const o of l) {
+    const tr = document.createElement("tr");
+    tr.className = ticked.has(o.name) ? "on" : "";
+    const d = new Date(o.used * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    tr.innerHTML = `<td><input type="checkbox" aria-label="${esc(o.name)}"${ticked.has(o.name) ? " checked" : ""}></td>
+      <td>${esc(o.name)}${o.login ? '<span class="login">login</span>' : ""}</td><td class="n">${o.count}</td><td class="n hide-s">${d}</td>`;
+    tr.onclick = ev => { if (ev.target.tagName !== "INPUT") tr.querySelector("input").click(); };
+    tr.querySelector("input").onchange = ev => { ev.target.checked ? ticked.add(o.name) : ticked.delete(o.name); draw(); };
+    f.appendChild(tr);
+  }
+  $("rows").replaceChildren(f);
+  /* with a search, the two act on the sites shown */
+  const q = !!$("q").value.trim();
+  $("selall").textContent = q ? `Select these ${l.length}` : "Select all";
+  $("unsel").textContent = q ? `Unselect these ${l.length}` : "Unselect all";
+  $("selall").disabled = !l.length || l.every(o => ticked.has(o.name));
+  $("unsel").disabled = !l.some(o => ticked.has(o.name));
+  sum();
+}
+function sum() {
+  const n = cookies.filter(c => ticked.has(site(c.domain))).length;
+  $("sum").textContent = ticked.size ? `Ticked: ${ticked.size} site${ticked.size > 1 ? "s" : ""}, ${n} cookie${n > 1 ? "s" : ""}` : "Ticked: none";
+  $("go").disabled = !ticked.size;
+}
+$("q").oninput = draw;
+$("sort").onchange = draw;
+$("selall").onclick = () => { shown().forEach(o => ticked.add(o.name)); draw(); };
+$("unsel").onclick = () => { shown().forEach(o => ticked.delete(o.name)); draw(); };
+
+/* the Netscape cookie file EWeb's Import reads: domain, subdomains,
+   path, secure, expiry (Unix seconds), name, value, tab-separated;
+   HttpOnly as the #HttpOnly_ prefix */
+$("go").onclick = () => {
+  const lines = ["# Netscape HTTP Cookie File", "# Safari's cookies for EWeb: import with File > Import cookies..., then delete this file", ""];
+  let n = 0;
+  for (const c of cookies) {
+    if (!ticked.has(site(c.domain))) continue;
+    const dom = c.domain.toLowerCase();
+    lines.push([(c.httponly ? "#HttpOnly_" : "") + dom, dom.startsWith(".") ? "TRUE" : "FALSE", c.path || "/",
+                c.secure ? "TRUE" : "FALSE", c.expires, c.name, c.value].join("\t"));
+    n++;
+  }
+  const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/plain" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: "safari-cookies.txt" });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  $("done").textContent = `Saved ${n} cookies for ${ticked.size} site${ticked.size > 1 ? "s" : ""} as safari-cookies.txt in your Downloads folder.`;
+  $("done").hidden = false;
+};
+</script>
+</body>
+</html>

@@ -881,11 +881,42 @@ long ck_count(void)
    Lax). Expired lines and malformed ones are passed over; expires 0 is a
    cookie for this run only. *sites: the sites the cookies are for; the
    count of lines taken */
+/* the sites an import took cookies for, as hashes of their names (a file
+   read in pieces: ck_import_start, then ck_import for each; 1.29's count
+   stopped at 64, a table of the names) */
+#define IMP_SITES 2048
+static unsigned long *imp_site;
+static int imp_sites;
+
+void ck_import_start(void)
+{
+	free(imp_site);
+	imp_site = NULL;
+	imp_sites = 0;
+}
+
+static void imp_count(const char *st)
+{
+	unsigned long h = 5381;
+	int i;
+	while (*st)
+		h = h * 33 + (unsigned char) *st++;
+	h |= 1;
+	if (imp_site == NULL && (imp_site = calloc(IMP_SITES, sizeof *imp_site)) == NULL)
+		return;
+	for (i = (int) (h % IMP_SITES); imp_site[i] != 0; i = (i + 1) % IMP_SITES)
+		if (imp_site[i] == h)
+			return;
+	if (imp_sites < IMP_SITES - 1) {
+		imp_site[i] = h;
+		imp_sites++;
+	}
+}
+
 int ck_import(const char *text, long len, int *sites)
 {
 	const char *p = text, *end = text + len;
-	char seen[64][200];
-	int nseen = 0, taken = 0;
+	int taken = 0;
 	long long now = ck_now();
 	CKCTX x;
 	memset(&x, 0, sizeof x);
@@ -934,20 +965,15 @@ int ck_import(const char *text, long len, int *sites)
 					snprintf(line + k, sizeof line - k, "; HttpOnly");
 				snprintf(addr, sizeof addr, "https://%s/", host);
 				if (url_parse(&u, addr, NULL)) {
-					const char *st = site_of(host);
-					int i;
 					ck_set(&u, line, &x);
 					taken++;
-					for (i = 0; i < nseen && strcmp(seen[i], st) != 0; i++)
-						;
-					if (i == nseen && nseen < 64)
-						snprintf(seen[nseen++], sizeof seen[0], "%s", st);
+					imp_count(site_of(host));
 				}
 			}
 		}
 		p = eol ? eol + 1 : end;
 	}
 	if (sites != NULL)
-		*sites = nseen;
+		*sites = imp_sites;
 	return taken;
 }

@@ -55,6 +55,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		/* the input as a cookies.txt too (File > Import cookies...,
 		   ck_import: d itself, not s, which the loop above cut up) */
 		int sites;
+		ck_import_start();
 		ck_import((const char *) d, (long) n, &sites);
 	}
 	t1 = ck_text(&l1);
