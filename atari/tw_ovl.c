@@ -11,10 +11,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <tos.h>
 
 #include "tw_ovl.h"
 #include "plat.h"
+#include "codepad.h"
 
 #ifndef TW_ABI
 #error "TW_ABI: the Makefile gives it"
@@ -179,6 +181,8 @@ bad:
 
 char *tw_sheet(tw_name *names, int n, size_t *len)
 {
+	/* (the CSS engine's code, next, at 1.26's places modulo 256: never run) */
+	CODE_PAD((uintptr_t) names == 1, CP_TW_OVL_TW_SHEET);
 	if (ovl == NULL && !failed) {
 		int r = load();
 		if (r == 0)
