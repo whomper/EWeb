@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "tos.h"
 #include "crash.h"
 
@@ -627,7 +628,7 @@ void crash_install(const char *workdir, const char *name, const char *version)
 	if (get_cookie(0x4D616758L))		/* MagX */
 		return;
 	if (!rep) {
-		mem = (char *)Malloc(CRASH_STACK + REP_SIZE);
+		mem = (char *)acc_core(CRASH_STACK + REP_SIZE, -1);
 		if ((long)mem <= 0)
 			return;
 		crash_stack_top = ((long)mem + CRASH_STACK) & ~3L;
@@ -730,7 +731,7 @@ int crash_test(short scan)
 	} else if (scan == 0x3f) {	/* F5: the same outside the program: the bombs */
 		/* tst.l $FFFFFA40; rts, in memory of its own */
 		static const unsigned short sup_out[] = { 0x4AB9, 0xFFFF, 0xFA40, 0x4E75 };
-		unsigned short *m = Malloc(sizeof sup_out);
+		unsigned short *m = acc_core(sizeof sup_out, -1);
 		if ((long)m <= 0)
 			return 1;
 		memcpy(m, sup_out, sizeof sup_out);

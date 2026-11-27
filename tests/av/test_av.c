@@ -23,6 +23,8 @@ long get_cookie(long id) { (void)id; return 0; }		/* plain TOS */
 static unsigned long now_ms = 1000;
 unsigned long tos_ms(void) { return now_ms; }
 void *Mxalloc(long size, short mode) { (void)size; (void)mode; return 0; }
+
+void *acc_core(long n, int mode) { return Mxalloc(n, (short)mode); }
 short appl_id(void) { return 1; }
 
 short appl_find(const char *name)

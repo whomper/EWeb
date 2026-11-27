@@ -11,9 +11,10 @@ Not on a 4 MB machine, ST or Falcon-4 (decided 4 Nov 2026: the accessories are n
                                    [--accs ECal,EContact] [--prg EMail] [--again]
 
 MACHINE is Falcon (the DFB1: 14 MB + TT RAM, TOS 4.04, ECAL.ACC and ECONTACT.ACC),
-Falcon by default, or another machine with more than 4 MB (TT); ST-1 (1 MB, TOS 1.04) takes
-ECALST.ACC and ECONTST.ACC, the ST editions, while a release has them; there each accessory
-has a run of its own (WORK/NAME), as 1 MB holds a program and one accessory, not four. --nvdi boots
+Falcon by default, or another machine with more than 4 MB (TT); ST-2 (2 MB, TOS 1.04) is the ST:
+there each accessory has a run of its own (WORK/NAME). Not on ST-1: no family accessory runs on a
+1 MB ST (decided 26 Nov 2026; each shows common's acc_small_alert from its Desk entry and takes no
+memory, which the app's own rig checks there). --nvdi boots
 with the NVDI copy (machines.py, m.nvdi()); --font gives EHypView one of
 NVDI's Bitstream fonts (FONT=Courier 10 Pitch, 10 pt), loaded at its boot. --use FILE puts a
 candidate's accessory (ECAL.ACC, say) or --prg's program (EMAIL.PRG) in place of the release's
@@ -77,13 +78,16 @@ if not rest:
     sys.exit(__doc__)
 work = os.path.abspath(rest[0])
 machine = rest[1] if len(rest) > 1 else "Falcon"
+if machine.split(":")[0] == "ST-1":
+    sys.exit("acc_all: no family accessory runs on a 1 MB ST (decided 26 Nov 2026). "
+             "Run the ST's accessory checks on ST-2.")
 if machine.split(":")[0] in ("ST", "Falcon-4"):
     sys.exit("acc_all: the accessories are not run on a 4 MB machine (%s): decided 4 Nov 2026. "
              "Run it on Falcon (TT RAM)." % machine)
 st = machine.startswith("ST")
-if machine.split(":")[0] == "ST-1" and len(accs) > 1:
-    # 1 MB holds a program and one accessory, not four (Hatari: "Program too large", 17 Nov 2026): each
-    # accessory in a run of its own, in WORK/NAME, the same arguments otherwise
+if machine.split(":")[0] == "ST-2" and len(accs) > 1:
+    # an ST: each accessory in a run of its own (1 MB held a program and one accessory, not four:
+    # Hatari "Program too large", 17 Nov 2026), in WORK/NAME, the same arguments otherwise
     import subprocess
     bad = []
     for a in accs:
@@ -93,10 +97,10 @@ if machine.split(":")[0] == "ST-1" and len(accs) > 1:
             argv[argv.index("--accs") + 1] = a
         else:
             argv += ["--accs", a]
-        print("== ST-1: %s alone" % a, flush=True)
+        print("== ST-2: %s alone" % a, flush=True)
         if subprocess.call([sys.executable, os.path.abspath(__file__)] + argv):
             bad.append(a)
-    print("ST-1, one accessory a run: " + ("all passed" if not bad else "failed: " + ", ".join(bad)), flush=True)
+    print("ST-2, one accessory a run: " + ("all passed" if not bad else "failed: " + ", ".join(bad)), flush=True)
     sys.exit(1 if bad else 0)
 
 fails = 0
