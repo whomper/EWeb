@@ -219,11 +219,12 @@ def ttram(spec="Falcon:256", name="ttram"):
                 time.sleep(1.5)
                 r.shot(4)
                 # its first title, File (below About EWeb...), then its
-                # Close window (the ninth row: two lines above it)
+                # Close window (the tenth row: two lines above it; Import cookies...
+                # before them since 1.29)
                 r.mouse.click(x - w, y + h + 8 + 18 * 1)
                 time.sleep(1.5)
                 r.shot(5)
-                r.mouse.click(x - w, y + h + 8 + 18 * 8)
+                r.mouse.click(x - w, y + h + 8 + 18 * 9)
                 check(r.wait(r"accessory closed", 60) is not None,
                       "%s: the toolbar's menu: File > Close window closes it" % desc)
             else:
