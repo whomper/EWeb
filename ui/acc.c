@@ -143,6 +143,7 @@ void acc_wait(char *first, int size)
 		if (msg[0] == AC_OPEN) {
 			if (twin_pass(""))
 				continue;	/* EWEB.PRG runs: its window to the front (2.3) */
+			log_event("accessory opened from the Desk menu");
 			return;
 		}
 		if (av_message(msg, &va) == AV_START) {
@@ -150,6 +151,7 @@ void acc_wait(char *first, int size)
 				continue;	/* EWEB.PRG opens it */
 			if (av_arg(va, first, size) == 0)
 				first[0] = 0;	/* (none: the home page) */
+			log_event("accessory opened by VA_START%s", first[0] ? " with an address" : "");
 			return;
 		}
 	}
