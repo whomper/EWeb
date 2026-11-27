@@ -13,6 +13,7 @@ xdotool on Hatari's window (Xvfb), EWeb's events read through NatFeats.
           leaving it resident, the Desk entry again, a page shown after it,
           the toolbar's menu (its first title's list), and the file opened
           again from the toolbar menu's File > Close window
+  tt      the same on the TT (TOS 3.06, 16 MB of TT RAM), ttmed
   vastart a program (VASEND.PRG, the rig's: build/hatari) hands it an
           address with VA_START: the window opens on it; the program
           ends, so the AES closes the window (AC_CLOSE): what is due
@@ -38,7 +39,7 @@ import machines  # noqa: E402
 DISPLAY = ":97"
 CTRL, U, RETURN = 0x1D, 0x16, 0x1C
 work = os.path.abspath(sys.argv[1])
-groups = sys.argv[2:] or ["ttram", "vastart", "nottram"]
+groups = sys.argv[2:] or ["ttram", "tt", "vastart", "nottram"]
 failed = 0
 
 
@@ -184,9 +185,9 @@ def desk_entry(r):
     r.mouse.click(*ENTRY)
 
 
-def ttram():
-    hd = hd_for("ttram")
-    r = Run("ttram", "Falcon:256", hd)
+def ttram(spec="Falcon:256", name="ttram"):
+    hd = hd_for(name)
+    r = Run(name, spec, hd)
     desc = r.m.describe()
     try:
         boot = r.wait(r"accessory: heap", 240)
@@ -290,7 +291,7 @@ os.makedirs(work, exist_ok=True)
 xv = machines.xvfb(DISPLAY)
 try:
     for g in groups:
-        {"ttram": ttram, "vastart": vastart, "nottram": nottram}[g]()
+        {"ttram": ttram, "tt": lambda: ttram("TT:ttmed", "tt"), "vastart": vastart, "nottram": nottram}[g]()
 finally:
     machines.xvfb_stop(xv)
 print("acc: all passed" if not failed else "acc: %d failed" % failed)
