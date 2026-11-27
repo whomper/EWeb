@@ -37,6 +37,7 @@
 #include "inflate.h"
 #include "plat.h"
 #include "tbicons.h"
+#include "codepad.h"
 #include "throbber.h"
 
 ewin *wins;			/* every window, the newest first */
@@ -77,6 +78,7 @@ static int enabled(int i)
    eight letters of the address), each in the middle of the row */
 static void layout(void)
 {
+	CODE_PAD(cur == NULL, CP_WIN_LAYOUT);
 	short x, i, ih, bh, th;
 	tall = gl_hchar >= 16;
 	ih = tall ? TB_TALL : TB_SHORT;
@@ -586,6 +588,7 @@ static void draw_menu_button(void)
 
 static void draw_toolbar(GRECT *clip)
 {
+	CODE_PAD(clip == NULL, CP_WIN_DRAW_TOOLBAR);
 	GRECT r = cur->r_tool;
 	int i;
 	if (!rect_and(&r, clip))
@@ -1574,6 +1577,7 @@ void win_draw_due(void)
    page in slices (draw_due) */
 static void redraw(const GRECT *area, int parts)
 {
+	CODE_PAD(area == NULL, CP_WIN_REDRAW);
 	GRECT r, a, pg;
 	int paged = 0;
 	if (cur->h <= 0)
@@ -3767,6 +3771,7 @@ static int html_drag(short mx, short my)
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
 {
 	int i, l;
+	CODE_PAD(mx == -12345, CP_WIN_WIN_MOUSE);
 	if (cur->h <= 0 || wind_find(mx, my) != cur->h || cur->iconified)
 		return 0;
 	if (mx < -30000)	/* (never: WIN_MOUSE_PAD) */
@@ -4237,6 +4242,7 @@ int win_handles_gone;
 
 void win_close(void)
 {
+	CODE_PAD(cur == NULL, CP_WIN_WIN_CLOSE);
 	const ewin *o;
 	if (cur->h <= 0)
 		return;

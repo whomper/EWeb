@@ -280,7 +280,7 @@ build/tos/rt/connpad.o: atari/connpad.S
 PAD_main := 166
 PAD_RO_main := 194
 PAD_BSS_main := 38
-PAD_browse := 160
+PAD_browse := 64
 PAD_RO_browse := 188
 PAD_BSS_browse := 236
 PAD_font := 144
@@ -314,7 +314,7 @@ PAD_BSS_layout := 224
 # the ST's rows were level) put EWEB.PRG back at 1.20's places modulo 256,
 # worked out with common/tools/profpad.py against 1.20's ELF and map, each
 # after the pads before it
-PAD_nf := 112
+PAD_nf := 176
 PAD_RO_nf := 256
 PAD_DATA_nf := 256
 PAD_BSS_nf := 256
@@ -322,11 +322,11 @@ PAD_libc2 := 256
 PAD_RO_libc2 := 252
 PAD_DATA_libc2 := 256
 PAD_BSS_libc2 := 256
-PAD_tos := 80
+PAD_tos := 48
 PAD_RO_tos := 256
 PAD_DATA_tos := 256
 PAD_BSS_tos := 256
-PAD_main2 := 140
+PAD_main2 := 146
 PAD_RO_main2 := 244
 PAD_DATA_main2 := 256
 PAD_BSS_main2 := 256
@@ -334,9 +334,9 @@ PAD_dialogs := 0
 PAD_RO_dialogs := 244
 PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
-PAD_av := 82
+PAD_av := 30
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 140
+PAD_charset := 128
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -348,7 +348,7 @@ PAD_settings := 56
 PAD_RO_settings := 256
 PAD_DATA_settings := 256
 PAD_BSS_settings := 256
-PAD_gem := 170
+PAD_gem := 124
 PAD_RO_gem := 256
 PAD_DATA_gem := 256
 PAD_BSS_gem := 256
@@ -394,7 +394,7 @@ PAD_util := 208
 PAD_RO_dialog := 256
 PAD_DATA_dialog := 256
 PAD_BSS_dialog := 216
-PAD_offdraw := 224
+PAD_offdraw := 234
 PAD_RO_offdraw := 128
 PAD_DATA_offdraw := 256
 PAD_BSS_offdraw := 4
@@ -414,7 +414,7 @@ PAD_layout2 := 32
 PAD_RO_layout2 := 256
 PAD_DATA_layout2 := 256
 PAD_BSS_layout2 := 256
-PAD_pic := 162
+PAD_pic := 78
 PAD_RO_pic := 64
 PAD_DATA_pic := 256
 PAD_BSS_pic := 256
@@ -425,11 +425,11 @@ PAD_BSS_onstack := 256
 PAD_STR_onstack := 53
 # (and three more once common's c0fa029 put libc.o back as 1.21's and changed
 # the About box: profpad's sizes again, after the pads before them)
-PAD_libc4 := 80
+PAD_libc4 := 48
 PAD_RO_libc4 := 256
 PAD_DATA_libc4 := 256
 PAD_BSS_libc4 := 8
-PAD_aboutbox2 := 12
+PAD_aboutbox2 := 32
 PAD_RO_aboutbox2 := 256
 PAD_DATA_aboutbox2 := 256
 PAD_BSS_aboutbox2 := 256
@@ -923,7 +923,7 @@ GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
 # it stays at 1.26's places
 FP_OBJ     := build/tos/gem/common/filepick.o build/tos/gem/common/dirlist.o
 # the accessory's parts (EWEB.ACC: DESIGN.md, The accessory), last too
-FP_OBJ     += build/tos/gem/stpool.o build/tos/gem/common/accmem.o build/tos/gem/common/twin.o
+FP_OBJ     += build/tos/gem/acc.o build/tos/gem/stpool.o build/tos/gem/common/accmem.o build/tos/gem/common/twin.o
 GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \

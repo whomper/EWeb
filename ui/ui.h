@@ -60,6 +60,12 @@ typedef struct {
 extern int win_menu_button;	/* win.c: the toolbar has the accessory's menu */
 extern void (*win_menu_hook)(short x, short y);
 #endif
+#ifndef EW_ST
+void acc_boot(short *work_out);			/* acc.c: EWEB.ACC */
+void acc_wait(char *first, int size);
+int acc_locate(void);
+void acc_menu(short x, short y);	/* the toolbar's menu (3.1) */
+#endif
 extern int win_handles_gone;	/* win.c: the AES closed the windows (AC_CLOSE) */
 #ifndef EW_ST
 void mem_limits(void);		/* the kept pages' and pictures' room, from TTLEAVE= (main.c) */

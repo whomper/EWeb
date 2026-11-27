@@ -619,6 +619,7 @@ int quit_box_off;
 void quit_box(const char *what, int permille)
 {
 	short x, y, w, h;
+	CODE_PAD(permille == -12345, CP_DIALOGS_QUIT_BOX);
 	if (quit_box_off)
 		return;
 	if (permille < 0)

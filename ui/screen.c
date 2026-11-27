@@ -95,6 +95,7 @@ static short std_pixel(short i)
 
 static void *st_alloc(long n)
 {
+	CODE_PAD(n == -12345, CP_SCREEN_ST_ALLOC);
 	void *p;
 #ifndef EW_ST
 	if (st_pool_on())
@@ -109,6 +110,7 @@ static void *st_alloc(long n)
 /* a block st_alloc gave back */
 static void st_release(void *p)
 {
+	CODE_PAD((uintptr_t) p == 1, CP_SCREEN_ST_RELEASE);
 #ifndef EW_ST
 	if (st_pool_on()) {
 		st_pool_free(p);
@@ -142,6 +144,7 @@ static long dev_row(long words)
 /* the buffers for n rows: 1, or 0 (none taken) */
 static int bufs(short n)
 {
+	CODE_PAD(n == -12345, CP_SCREEN_BUFS);
 	/* the standard planes for vr_trnfm only where the screen has its own format */
 	int std = !truecolour && format != 0 && !(format == 2 && planes == 8);
 	long st = n > BAND ? (truecolour ? dev_row(band_w / 16) * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
@@ -826,11 +829,13 @@ long scr_dev_size(short w, short h)
 
 void *scr_dev_alloc(long n)
 {
+	CODE_PAD(n == -12345, CP_SCREEN_SCR_DEV_ALLOC);
 	return st_alloc(n);
 }
 
 void scr_dev_free(void *p)
 {
+	CODE_PAD((uintptr_t) p == 1, CP_SCREEN_SCR_DEV_FREE);
 	if (p != NULL)
 		st_release(p);
 }
@@ -1105,6 +1110,7 @@ static short piece_left(short r)
 
 static void store_free(void)
 {
+	CODE_PAD(store_rows < -30000, CP_SCREEN_STORE_FREE);
 	short k;
 	for (k = 0; k < npieces; k++) {
 		if (store_heap)
@@ -1205,6 +1211,7 @@ int scr_store(short w, short n)
    past three windows in a second or two, 4 Nov 2026); not from the heap */
 int scr_store_ample(short w, short n)
 {
+	CODE_PAD(n == -12345, CP_SCREEN_SCR_STORE_AMPLE);
 	long row, size, free_st;
 	scr_store(0, 0);
 	if (w <= 0 || n <= 0 || !(truecolour || format == 0 || (format == 2 && planes == 8)))

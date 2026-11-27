@@ -16,6 +16,7 @@
 #include "util.h"
 #include "text.h"
 #include "dialog.h"
+#include "codepad.h"
 #ifndef EW_ST
 #include "stpool.h"
 #endif
@@ -57,6 +58,7 @@ static unsigned short *st_buf;
 
 void *st_ram(long n)
 {
+	CODE_PAD(n == -12345, CP_DRAW_ST_RAM);
 	if (!st_buf) {
 		void *p;
 #ifndef EW_ST
