@@ -1011,7 +1011,7 @@ static void buf_free(void *p)
 	if (_is_acc)
 		free(p);
 	else
-		Mfree(p);
+		acc_free(p);
 }
 
 /* the box's rows' edge words in planes g (2 to 8), from the screen's
@@ -1061,9 +1061,9 @@ static int draw_off(void (*draw)(int framed))
 			buf = 0;
 		}
 	} else {
-		buf = Mxalloc(size + 2 * GUARD, 0);	/* ST RAM, where the blitter reaches */
+		buf = acc_core(size + 2 * GUARD, 0);	/* ST RAM, where the blitter reaches */
 		if ((long)buf == -32 || !buf)	/* no Mxalloc: Malloc's is ST RAM */
-			buf = Malloc(size + 2 * GUARD);
+			buf = acc_core(size + 2 * GUARD, -1);
 		if ((long)buf <= 0)
 			buf = 0;
 	}
