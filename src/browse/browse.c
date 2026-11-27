@@ -7107,9 +7107,24 @@ typedef struct {
 	long from;		/* asked again from here (Range), the file open; 0: from its start */
 } SAVING;
 
+/* 1: the file saved to is opened for each buffer's write and closed again
+   (EWEB.ACC: an accessory's file is the program's in front, which may end
+   while the answer comes; the guidelines' 2.2) */
+int br_save_shut;
+#define SAVE_SHUT 0x7fff	/* s->h: the file made, and closed between writes */
+
 static int save_out(SAVING *s)
 {
-	if (s->n > 0 && pf_write(s->h, s->buf, s->n) != s->n) {
+	if (s->n > 0 && s->h == SAVE_SHUT) {
+		int h = pf_open(s->path, PF_APPEND);
+		long w = h >= 0 ? pf_write(h, s->buf, s->n) : -1;
+		if (h >= 0)
+			pf_close(h);
+		if (w != s->n) {
+			s->failed = 1;
+			return 0;
+		}
+	} else if (s->n > 0 && pf_write(s->h, s->buf, s->n) != s->n) {
 		s->failed = 1;
 		return 0;
 	}
@@ -7189,6 +7204,10 @@ static int save_head(void *ud, HTTPRESP *rs)
 	if (s->h < 0) {
 		s->failed = 2;
 		return 0;
+	}
+	if (br_save_shut) {
+		pf_close(s->h);
+		s->h = SAVE_SHUT;
 	}
 	return 1;
 }
@@ -7271,7 +7290,8 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 		   asked for once more, into the file chosen */
 		if (ok || !s.asked || s.h < 0 || s.failed || conn_stop || s.from > 0 || tries++)
 			break;
-		pf_close(s.h);
+		if (s.h != SAVE_SHUT)
+			pf_close(s.h);
 		s.h = -1;
 		made = 1;
 		s.asked = 0;
@@ -7296,7 +7316,7 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
 		snprintf(err, (size_t) errlen, "EWeb can't write %.150s.", path);
 	else if (s.failed)
 		snprintf(err, (size_t) errlen, "The disk is full, or %.150s can't be written.", path);
-	if (s.h >= 0)
+	if (s.h >= 0 && s.h != SAVE_SHUT)
 		pf_close(s.h);
 	sb_free(&body);
 	http_resp_free(rs);

@@ -43,6 +43,11 @@ static char *bounce;			/* in ST-RAM; (char *)-1: none to be had */
 static long bounce_len;
 static int direct = -1;			/* big_direct(), asked once */
 
+#ifndef EW_ST
+/* where ST RAM comes from instead of GEMDOS (the accessory's: ui/stpool.c); NULL: GEMDOS */
+void *(*pf_st_alloc)(long n);
+#endif
+
 /* the ST-RAM buffer's size, 0 when there is none or none is needed (it
    is made the first time) */
 long pf_bounce_size(void)
@@ -52,11 +57,24 @@ long pf_bounce_size(void)
 	if (direct)
 		return 0;
 	if (!bounce) {
-		long b = (long)Mxalloc(PIECE, 0);	/* ST-RAM only */
+		long b;
 		bounce_len = PIECE;
-		if (b <= 0) {
-			b = (long)Mxalloc(8192, 0);
-			bounce_len = 8192;
+#ifndef EW_ST
+		if (pf_st_alloc != NULL) {
+			/* the accessory: from its own ST RAM (ui/stpool.c) */
+			b = (long)pf_st_alloc(PIECE);
+			if (b <= 0) {
+				b = (long)pf_st_alloc(8192);
+				bounce_len = 8192;
+			}
+		} else
+#endif
+		{
+			b = (long)Mxalloc(PIECE, 0);	/* ST-RAM only */
+			if (b <= 0) {
+				b = (long)Mxalloc(8192, 0);
+				bounce_len = 8192;
+			}
 		}
 		bounce = b > 0 ? (char *)b : (char *)-1;
 	}

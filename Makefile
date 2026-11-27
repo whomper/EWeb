@@ -922,6 +922,8 @@ GEM_OBJ    := $(addprefix build/tos/gem/,$(addsuffix .o,$(GEM_UI))) \
 # frozen and keeps the AES's selector), linked last, so that the code before
 # it stays at 1.26's places
 FP_OBJ     := build/tos/gem/common/filepick.o build/tos/gem/common/dirlist.o
+# the accessory's parts (EWEB.ACC: DESIGN.md, The accessory), last too
+FP_OBJ     += build/tos/gem/stpool.o build/tos/gem/common/accmem.o build/tos/gem/common/twin.o
 GEM_OBJ_PAD = $(subst build/tos/gem/main.o,build/tos/gem/main.o build/tos/rt/pad_main3.o build/tos/rt/pad_main.o build/tos/rt/pad_main2.o,$(subst \
               build/tos/gem/win.o,build/tos/gem/win.o build/tos/rt/pad_win.o,$(subst \
               build/tos/gem/dialogs.o,build/tos/gem/dialogs.o build/tos/rt/pad_dialogs.o,$(subst \
@@ -1400,6 +1402,17 @@ build/hatari/topacc.elf: build/hatari/crt0.o build/hatari/topacc.o build/hatari/
 build/hatari/topacc.o: tests/hatari/topacc.c
 	@mkdir -p $(@D)
 	m68k-linux-gnu-gcc $(TOPACC_CF) -Wextra -Werror -c -o $@ $<
+# VASEND.PRG: an address handed to EWEB.ACC (VA_START), then the program
+# ends (AC_CLOSE): tests/hatari/acc.py, a test program as TOPACC.ACC
+build/hatari/VASEND.PRG: build/hatari/vasend.elf common/tools/elf2tos.py
+	python3 common/tools/elf2tos.py $< $@
+build/hatari/vasend.elf: build/hatari/crt0.o build/hatari/vasend.o build/hatari/gem.o build/hatari/tos.o \
+			 build/hatari/libc.o build/hatari/nf.o
+	m68k-linux-gnu-gcc -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+		-Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+build/hatari/vasend.o: tests/hatari/vasend.c
+	@mkdir -p $(@D)
+	m68k-linux-gnu-gcc $(TOPACC_CF) -Wextra -Werror -c -o $@ $<
 build/hatari/%.o: common/atari/%.c
 	@mkdir -p $(@D)
 	m68k-linux-gnu-gcc $(TOPACC_CF) -c -o $@ $<
@@ -1768,6 +1781,7 @@ dist: binary/EWEB.PRG binary/EWEB60.PRG binary/EWEBJS.OVL binary/EWEBJS60.OVL bi
 	mkdir -p dist/zip/icons
 	for f in EWEB.PRG EWEB60.PRG EWEBJS.OVL EWEBJS60.OVL EWEBTW.OVL TLS.OVL EWEBST.PRG $(SHARED_DIST); do \
 		cp binary/$$f dist/zip/$$(echo $$f | tr A-Z a-z) || exit 1; done
+	cp binary/EWEB.PRG dist/zip/eweb.acc	# (the accessory: the same file, guidelines 2.1)
 	for f in EWEB.RSC EWEBNV.RSC EWEB.ICN EWEBMK.ICN; do \
 		cp icons/$$f dist/zip/icons/$$(echo $$f | tr A-Z a-z) || exit 1; done
 	$(if $(CF_CC),mkdir -p dist/fb && cp -r dist/zip/icons dist/fb/ && \

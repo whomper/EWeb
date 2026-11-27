@@ -520,6 +520,7 @@ int br_save_url(browser *b, const char *url, const char *given, char *path, int 
    end may set less on a small machine), how many the last brought, and
    how many its server said it has (Content-Length; -1 it didn't say) */
 extern long br_save_buf, br_saved, br_save_total;
+extern int br_save_shut;	/* 1: the file closed between its writes (EWEB.ACC) */
 
 /* the memory cache's size (pages and stylesheets kept for Back and for
    the next page of a site), bytes */

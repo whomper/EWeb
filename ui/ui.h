@@ -51,8 +51,16 @@ typedef struct {
 					   Condensed (1, 13 Nov 2026's way), or in DejaVu Sans (0):
 					   some testers didn't like the narrow letters (the owner, 16 Nov
 					   2026) */
+	char folder[200];		/* FOLDER=: EWeb's folder, written by EWEB.PRG, where EWEB.ACC
+					   finds its files (the guidelines' 6.1: EWEB.INF in the boot
+					   drive's root) */
 #endif
 } EWOPT;
+#ifndef EW_ST
+extern int win_menu_button;	/* win.c: the toolbar has the accessory's menu */
+extern void (*win_menu_hook)(short x, short y);
+#endif
+extern int win_handles_gone;	/* win.c: the AES closed the windows (AC_CLOSE) */
 #ifndef EW_ST
 void mem_limits(void);		/* the kept pages' and pictures' room, from TTLEAVE= (main.c) */
 extern long tt_free;		/* the TT RAM free at the start (0: none; mem_limits) */
@@ -105,6 +113,9 @@ typedef struct ewin {
 	char info[160];			/* the status bar's text as set (Atari text) */
 	char title[160];
 	GRECT but[WIN_BUTTONS];
+#ifndef EW_ST
+	GRECT r_menu;			/* the accessory's toolbar menu, w 0: none (main.c's acc_menu) */
+#endif
 	int hot, sunk;			/* the button under the mouse, the one held down; -1 none */
 	int pressed;			/* the page's link held down (1 + its index), 0 none (5.8) */
 	/* the address field: Atari text (a URL is ASCII), the cursor, the

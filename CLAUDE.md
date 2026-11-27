@@ -193,7 +193,17 @@ hub stay complete, with the evidence.
   `EWEB.INF` next to the program and the idle loop that lets Esc stop a load), on `src/browse`
   (addresses, loading, history, EWeb's own pages), `src/doc` (EWeb's HTML parser `html.c`, the
   document's memory, the UA sheet, HTML's hints), `src/layout` (fresh: boxes, lines, floats, tables, flexbox, grid, a display list) and `src/gfx` (`EWEB.FNT`,
-  drawing into memory). It is a program only for now; an accessory edition, `EWEB.ACC`, comes after 1.27 (decided 26 Nov 2026; DESIGN.md, Decisions). `tests/host/ewrender.c` draws a page or
+  drawing into memory). **The accessory** `EWEB.ACC` is the same file (decided 26 Nov 2026; DESIGN.md, The accessory: EWEB.ACC),
+  told apart by crt0's `_is_acc`, only where there is TT RAM (decided 27 Nov 2026; elsewhere common's
+  `acc_tt_alert` on AC_OPEN, nothing taken): its heap from TT RAM before the first event call (`acc_boot`
+  in `ui/main.c`, common's `accmem.c`; all but `TTLEAVE=`), its ST RAM a pool of its own (`ui/stpool.c`:
+  `st_alloc` in `screen.c`, `pf_st_alloc` in `atari/plat_tos.c`), a session from AC_OPEN or VA_START
+  (`acc_wait`) to the last window closed or AC_CLOSE (`win_handles_gone`, `quit_box_off`), no file open
+  across an event call (`dc_keep_shut`, `br_save_shut`), the toolbar's menu for the menu bar (`acc_menu`,
+  win.c's `win_menu_button`; titles, then items: decided 27 Nov 2026), `EWEB.INF` in the boot drive's root
+  with `FOLDER=` (the guidelines' 6.1, the program's too), `twin.c` beside EWEB.PRG. After changing it:
+  `tests/hatari/acc.py` (the Falcon with TT RAM: the Desk entry, ^U, the toolbar's menu, VA_START from
+  `VASEND.PRG` and AC_CLOSE; the stock Falcon's alert). `tests/host/ewrender.c` draws a page or
   URL as EWeb would (a PNG, or `-d` the display list). After changing the layout or the document:
   `make test` (`tests/layout`: when a list changes on purpose, look at the pages with ewrender, then
   `tests/layout/run.py EWRENDER FNT --update`); after the GEM side, `make hatarigui` (Hatari, Xvfb,

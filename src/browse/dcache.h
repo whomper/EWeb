@@ -111,4 +111,6 @@ long dc_count(long *bytes);
 /* the clock: UTC seconds since 1970 (the tests set their own) */
 extern long long (*dc_now)(void);
 
+extern int dc_keep_shut;	/* 1: no piece left open between calls (EWEB.ACC) */
+
 #endif

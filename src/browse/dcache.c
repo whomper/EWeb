@@ -228,6 +228,10 @@ static void forget_all(void)
 	memset(pgen, 0, sizeof pgen);
 }
 
+/* 1: no piece left open between calls (EWEB.ACC: a file an accessory opens
+   is the program's in front, which may end meanwhile; the guidelines' 2.2) */
+int dc_keep_shut;
+
 static void close_pak(void)
 {
 	if (pak >= 0)
@@ -939,6 +943,8 @@ int dc_get(const char *key, DC_GOT *g)
 			return 0;
 		}
 		memmove(d, d + TAG, (size_t) e->len);
+		if (dc_keep_shut)
+			close_pak();
 	}
 	d[e->len] = 0;
 	memset(g, 0, sizeof *g);
@@ -1179,6 +1185,8 @@ void dc_write_step(void)
 	}
 	if (pending <= 0) {
 		writing = 0;
+		close_pak();
+	} else if (dc_keep_shut) {
 		close_pak();
 	}
 }

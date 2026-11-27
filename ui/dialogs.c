@@ -613,9 +613,14 @@ static short q_part(int permille)
 	return (short) ((long) permille * PB_FULL / 1000);
 }
 
+/* nothing shown (the accessory's AC_CLOSE: the program in front is ending) */
+int quit_box_off;
+
 void quit_box(const char *what, int permille)
 {
 	short x, y, w, h;
+	if (quit_box_off)
+		return;
 	if (permille < 0)
 		permille = 0;
 	if (permille > 1000)

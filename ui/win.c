@@ -85,6 +85,17 @@ static void layout(void)
 	cur->r_tool = cur->work;
 	cur->r_tool.h = th;
 	x = cur->work.x + 4;
+#ifndef EW_ST
+	cur->r_menu.w = 0;
+	if (win_menu_button) {
+		/* the accessory's menu first (the guidelines' 3.1) */
+		cur->r_menu.x = x;
+		cur->r_menu.y = cur->work.y + 2;
+		cur->r_menu.w = TB_W + 6;
+		cur->r_menu.h = bh;
+		x += cur->r_menu.w + 2;
+	}
+#endif
 	for (i = 0; i < NBUT; i++) {
 		cur->but[i].x = x;
 		cur->but[i].y = cur->work.y + 2;
@@ -557,6 +568,22 @@ int win_progress_shown(void)
 	return shown;
 }
 
+#ifndef EW_ST
+int win_menu_button;
+void (*win_menu_hook)(short x, short y);
+
+/* the accessory's menu button: a frame and the Atari font's three bars */
+static void draw_menu_button(void)
+{
+	GRECT r = cur->r_menu;
+	if (r.w <= 0)
+		return;
+	fill(&r, 0);
+	frame(&r, 1);
+	text_at(r.x + (r.w - gl_wchar) / 2, r.y + (r.h - gl_hchar) / 2, "\xF0", 1, 1, TX_LTR | TX_WHITE);
+}
+#endif
+
 static void draw_toolbar(GRECT *clip)
 {
 	GRECT r = cur->r_tool;
@@ -587,6 +614,9 @@ static void draw_toolbar(GRECT *clip)
 	}
 	for (i = 0; i < NBUT; i++)
 		draw_button(i, &r);
+#ifndef EW_ST
+	draw_menu_button();
+#endif
 	draw_addr();
 	draw_throbber(&r);
 	hline(cur->r_tool.x, cur->r_tool.x + cur->r_tool.w - 1, cur->r_tool.y + cur->r_tool.h - 1);
@@ -3741,6 +3771,13 @@ int win_mouse(short mx, short my, short button, short clicks, short kstate)
 		return 0;
 	if (mx < -30000)	/* (never: WIN_MOUSE_PAD) */
 		__asm__ __volatile__(".skip " WIN_MOUSE_PAD);
+#ifndef EW_ST
+	if (cur->r_menu.w > 0 && rect_hit(&cur->r_menu, mx, my)) {
+		if ((button & 3) && win_menu_hook != NULL)
+			win_menu_hook(cur->r_menu.x, cur->r_menu.y + cur->r_menu.h);
+		return 1;
+	}
+#endif
 	for (i = 0; i < NBUT; i++) {
 		if (!rect_hit(&cur->but[i], mx, my))
 			continue;
@@ -4194,15 +4231,21 @@ int win_open(void)
 	return 1;
 }
 
+/* the AES closed EWeb's windows itself (the accessory's AC_CLOSE): none
+   to close or ask about */
+int win_handles_gone;
+
 void win_close(void)
 {
 	const ewin *o;
 	if (cur->h <= 0)
 		return;
-	if (!cur->iconified)
-		save_place();
-	wind_close(cur->h);
-	wind_delete(cur->h);
+	if (!win_handles_gone) {
+		if (!cur->iconified)
+			save_place();
+		wind_close(cur->h);
+		wind_delete(cur->h);
+	}
 	cur->h = -1;
 	for (o = wins; o != NULL && o->h <= 0; o = o->next)
 		;

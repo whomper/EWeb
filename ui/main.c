@@ -57,6 +57,11 @@ extern langs_job translate_job;
 #endif
 #endif
 #include "codepad.h"
+#ifndef EW_ST
+#include "stpool.h"
+#include "accmem.h"
+#include "twin.h"
+#endif
 
 /* the stack's size (the Makefile's, crt0's too) and the room kept under
    the floor (DESIGN.md, The stack) */
@@ -91,10 +96,10 @@ static int user_quit;		/* Quit, or the last window closed: the user's (4.6's --b
 EWOPT opt = { 1, 1, "", "http://frogfind.com/?q=%s", 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
-	       , 50, 0, 1
+	       , 50, 0, 1, ""
 #endif
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-	   translate_to, translate_port, ttleave, sysfsel, narrow) */
+	   translate_to, translate_port, ttleave, sysfsel, narrow, folder) */
 int loading;
 /* 1.24's never-run pads: each function 1.24 changed made the size that
    keeps main.o's code after it at 1.23's places modulo 256, the shipped
@@ -139,6 +144,17 @@ static void live_release(void)
 }
 #endif
 static short quit;
+#ifndef EW_ST
+/* EWEB.ACC (DESIGN.md, The accessory: EWEB.ACC): the same file as EWEB.PRG,
+   started by TOS as an accessory (crt0's _is_acc) */
+extern short _is_acc;
+extern void *(*pf_st_alloc)(long n);	/* atari/plat_tos.c */
+extern int quit_box_off;		/* ui/dialogs.c */
+static short is_acc;
+static short acc_closed;		/* AC_CLOSE: the AES closed EWeb's windows */
+#else
+#define is_acc 0
+#endif
 
 /* the language pages are translated into, NULL with Translate off (the ST
    edition has no translation: frozen, DESIGN.md) */
@@ -400,8 +416,10 @@ static void bm_menu(void)
 		mb = old;		/* no memory: the menu as it was */
 		return;
 	}
-	menu_bar(old.tree, 0);
-	menu_bar(mb.tree, 1);
+	if (!is_acc) {		/* (the accessory has none: its toolbar's menu reads mb) */
+		menu_bar(old.tree, 0);
+		menu_bar(mb.tree, 1);
+	}
 	mbar_free(&old);
 	memset(menu_was, 0, sizeof menu_was);	/* (a new tree, as made) */
 	memset(menu_obj, 0, sizeof menu_obj);
@@ -652,7 +670,13 @@ static EWOPT opt_kept;
 
 static void inf_path(char *out, int size)
 {
+#ifndef EW_ST
+	/* in the boot drive's root, where the accessory finds it (the
+	   guidelines' 6.1; FOLDER= names EWeb's folder) */
+	snprintf(out, size, "%c:\\eweb.inf", 'A' + boot_drive());
+#else
 	path_join(out, size, opt.workdir, "eweb.inf");
+#endif
 }
 
 static void settings_load(void)
@@ -661,6 +685,16 @@ static void settings_load(void)
 	long len;
 	inf_path(path, sizeof path);
 	data = pf_load(path, &len);
+#ifndef EW_ST
+	if (data == NULL && !is_acc) {
+		/* an EWEB.INF left next to EWEB.PRG by 1.27 or before: copied
+		   to the root, once (6.1) */
+		char old[256];
+		path_join(old, sizeof old, opt.workdir, "eweb.inf");
+		if (strcasecmp(old, path) && (data = pf_load(old, &len)) != NULL)
+			pf_save(path, data, len);
+	}
+#endif
 	if (data == NULL)
 		return;
 	inf_text = malloc(len + 1);
@@ -732,6 +766,8 @@ static void settings_load(void)
 			opt.narrow = atoi(eq) != 0;
 		else if (!strcmp(line, "SYSFSEL"))
 			opt.sysfsel = atoi(eq) != 0;
+		else if (!strcmp(line, "FOLDER"))
+			str_copy(opt.folder, eq, sizeof opt.folder);
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -994,6 +1030,8 @@ int settings_save(void)
 	snprintf(v, sizeof v, "%d", opt.sysfsel);
 	put(&s, "SYSFSEL", v, "1 = files are saved through the system's file selector, 0 = through the "
 	    "family's file dialog (Settings > General)");
+	put(&s, "FOLDER", opt.folder, "EWeb's folder, with EWEB.PRG, its fonts, cache and bookmarks "
+	    "(EWEB.PRG writes it; EWEB.ACC finds its files there)");
 #endif
 	snprintf(v, sizeof v, "%d", opt.trackers);
 	put(&s, "TRACKERS", v, "1: a page's parts from known trackers (Google Tag Manager, Google Analytics) "
@@ -3179,8 +3217,26 @@ static void handle(short which, short *msg, AEVENT *pev, short *hover_x, short *
 			menu_tnormal(mb.tree, msg[3], 1);
 			break;
 		case AP_TERM:
-			quit = 1;
+			if (!is_acc)	/* (an accessory never ends: 2.2) */
+				quit = 1;
 			break;
+#ifndef EW_ST
+		case AC_OPEN:
+			if (is_acc)
+				av_start("");	/* the window to the front */
+			break;
+		case AC_CLOSE:
+			if (is_acc) {
+				/* the program in front ended: the AES closed
+				   EWeb's windows (2.2); what is due written,
+				   nothing shown */
+				acc_closed = 1;
+				win_handles_gone = 1;
+				quit_box_off = 1;
+				quit = 1;
+			}
+			break;
+#endif
 		default: {
 			DROP dr;
 			/* a file dropped is opened, as VA_START's */
@@ -3518,6 +3574,223 @@ static void av_start(const char *s)
 	}
 }
 
+
+#ifndef EW_ST
+/* ---------------------------------------------------------------- the accessory */
+
+/* EWEB.INF's lines the accessory needs before its heap is taken (TTLEAVE=,
+   HEAPKB=, FOLDER=): the file read once into a buffer of its own, nothing
+   malloc'd (the guidelines' 2.1) */
+static char acc_inf[8192];
+static int acc_inf_read;
+
+static void acc_peek(const char *key, char *out, int size)
+{
+	char path[64];
+	const char *t, *k;
+	int kl = (int) strlen(key);
+	out[0] = 0;
+	if (!acc_inf_read) {
+		int h;
+		acc_inf_read = 1;
+		inf_path(path, sizeof path);
+		if ((h = pf_open(path, PF_READ)) >= 0) {
+			long n = pf_read(h, acc_inf, sizeof acc_inf - 1);
+			pf_close(h);
+			acc_inf[n > 0 ? n : 0] = 0;
+		}
+	}
+	for (t = acc_inf; (k = strstr(t, key)) != NULL; t = k + kl)
+		if (k == acc_inf || k[-1] == '\n') {
+			int n = (int) strcspn(k + kl, "\r\n");
+			str_copy(out, k + kl, n + 1 < size ? n + 1 : size);
+			return;
+		}
+}
+
+/* no TT RAM: nothing taken, nothing read; the Desk menu's entry says so
+   (decided 27 Nov 2026; common's acc_tt_alert). An accessory never ends */
+static void acc_no_room(void)
+{
+	for (;;) {
+		short msg[8];
+		AEVENT ev;
+		evnt_multi_(MU_MESAG, 0, 0, 0, 0, msg, &ev);
+		if (msg[0] == AC_OPEN)
+			acc_tt_alert("EWeb", "EWEB.ACC");
+	}
+}
+
+/* before the first event call: the Desk menu's entry, the heap from TT
+   RAM (all but TTLEAVE= per cent of it, as EWEB.PRG keeps pages and
+   pictures in; HEAPKB= the user's; at most half: common's accmem.c) and
+   the ST RAM the screen needs (ui/stpool.c) */
+static void acc_boot(short *work_out)
+{
+	char v[200];
+	long tt, st, kb, pool, screen;
+	int leave = 50;
+	menu_register(ap_id, "  EWeb");
+	acc_peek("NATFEATS=", v, sizeof v);
+	nf_on = atoi(v) != 0;	/* (the rigs': settings_load reads it again) */
+	if (acc_no_ttram()) {
+		log_event("accessory: no TT RAM, nothing taken");
+		acc_no_room();
+	}
+	acc_peek("TTLEAVE=", v, sizeof v);
+	if (v[0])
+		leave = atoi(v) < 0 ? 0 : atoi(v) > 90 ? 90 : atoi(v);
+	acc_peek("HEAPKB=", v, sizeof v);
+	kb = atol(v);
+	tt = (long) Mxalloc(-1L, 1);
+	if (kb <= 0)
+		kb = tt / 100 * (100 - leave) >> 10;
+	acc_heap_take(kb << 10, kb << 10, kb, 0);
+	/* ST RAM: the screen's height of bands (and the standard form's
+	   copy where the screen has its own), a window's page kept off the
+	   screen, the toolbar's pictures: four screens and 256 KB, a quarter
+	   of the free ST RAM at most */
+	st = (long) Mxalloc(-1L, 0);
+	screen = (long) (work_out[0] + 1) * (work_out[1] + 1) / 8 * (planes > 8 ? 16 : planes);
+	pool = 4 * screen + (256L << 10);
+	if (pool > st / 4)
+		pool = st / 4;
+	if (st_pool_init(pool))
+		pf_st_alloc = st_pool_alloc;
+	/* no file left open across an event call (2.2) */
+	dc_keep_shut = 1;
+	br_save_shut = 1;
+	acc_peek("FOLDER=", opt.workdir, sizeof opt.workdir);
+	str_trim(opt.workdir);
+	{
+		int n = (int) strlen(opt.workdir);
+		if (n > 3 && opt.workdir[n - 1] == '\\')
+			opt.workdir[n - 1] = 0;
+	}
+	log_event("accessory: heap %ld KB in %s RAM, ST RAM %ld KB of its own, ST RAM free %ld KB, folder %s",
+		  acc_heap_bytes >> 10, acc_heap_tt ? "TT" : "ST", st_pool_size() >> 10, (long) Mxalloc(-1L, 0) >> 10,
+		  opt.workdir[0] ? opt.workdir : "(none)");
+}
+
+/* waiting, the window closed: for the Desk menu's entry (AC_OPEN) or an
+   address from another program (VA_START, 4.1). *first the address ("":
+   the home page) */
+static void acc_wait(char *first, int size)
+{
+	first[0] = 0;
+	for (;;) {
+		short msg[8];
+		AEVENT ev;
+		const char *va;
+		evnt_multi_(MU_MESAG, 0, 0, 0, 0, msg, &ev);
+		if (msg[0] == AC_CLOSE) {
+			twin_reset();	/* (the program in front changed) */
+			continue;
+		}
+		if (msg[0] == AC_OPEN) {
+			if (twin_pass(""))
+				continue;	/* EWEB.PRG runs: its window to the front (2.3) */
+			return;
+		}
+		if (av_message(msg, &va) == AV_START) {
+			if (twin_pass(va))
+				continue;	/* EWEB.PRG opens it */
+			if (av_arg(va, first, size) == 0)
+				first[0] = 0;	/* (none: the home page) */
+			return;
+		}
+	}
+}
+
+/* the toolbar's menu (the accessory has no menu bar: the guidelines' 3.1;
+   decided 27 Nov 2026: the menu bar's titles first, About EWeb... at their
+   head, then the title's items in the same place, with the bar's words,
+   keys, ticks and greyed items). Quit is left out: Close window (^U), or
+   ^Q, closes the accessory's windows */
+static void acc_menu(short x, short y)
+{
+	const char *lab[16];
+	char text[40][48];
+	const char *items[40];
+	int cmds[40], i, n = 0, k;
+	char titles[12][16];
+	lab[n++] = "About EWeb...";
+	for (i = 1; bar[i].title != NULL && n < 16; i++) {
+		const char *t = bar[i].title;
+		while (*t == ' ')
+			t++;
+		str_copy(titles[n], t, sizeof titles[n]);
+		str_trim(titles[n]);
+		lab[n] = titles[n];
+		n++;
+	}
+	k = popup_m(x, y, lab, (short) n);
+	if (k == 0) {
+		command(C_ABOUT);
+		return;
+	}
+	if (k < 1)
+		return;
+	{
+		const MBAR_ITEM *m = bar[k].items;
+		int keyw = 0, w = 0;
+		for (i = 0; m[i].text != NULL; i++) {
+			if ((int) strlen(m[i].text) > w)
+				w = (int) strlen(m[i].text);
+			if (m[i].key && (int) strlen(m[i].key) > keyw)
+				keyw = (int) strlen(m[i].key);
+		}
+		n = 0;
+		for (i = 0; m[i].text != NULL && n < 40; i++) {
+			short o, st = 0;
+			char key[12];
+			if (m[i].cmd == C_QUIT)
+				continue;
+			if (!strcmp(m[i].text, "-")) {
+				items[n] = "-";
+				cmds[n++] = 0;
+				continue;
+			}
+			o = mbar_object(&mb, m[i].cmd);
+			if (o > 0)
+				st = mb.tree[o].ob_state;
+			str_copy(key, m[i].key ? m[i].key : "", sizeof key);	/* (\x01: Shift, as the bar) */
+			snprintf(text[n], sizeof text[n], "%s%-*s%s%s", (st & DISABLED) ? "~" : (st & CHECKED) ? "\x08" : "",
+				 w, m[i].text, keyw ? "  " : "", key);
+			items[n] = text[n];
+			cmds[n++] = m[i].cmd;
+		}
+		k = popup_m(x, y, items, (short) n);
+		if (k >= 0 && k < n && cmds[k])
+			command(cmds[k]);
+	}
+}
+
+/* EWeb's folder unknown (no FOLDER= in EWEB.INF, or it is gone): where
+   EWEB.FNT is, chosen in the file selector (as ECal's locate_folder); 0:
+   cancelled */
+static int acc_locate(void)
+{
+	char path[256], name[20] = "", f[256];
+	short button = 0;
+	for (;;) {
+		char *e;
+		if (alert(1, "[2][Where is EWeb's folder, with|EWEB.PRG and EWEB.FNT?|(Start EWEB.PRG once and|EWEB.ACC finds it.)][Locate...|Cancel]") != 1)
+			return 0;
+		snprintf(path, sizeof path, "%c:\\*.*", 'A' + boot_drive());
+		if (!fsel_exinput(path, name, &button, "EWeb's folder: pick EWEB.FNT") || !button)
+			continue;
+		if ((e = strrchr(path, '\\')) != NULL)
+			*e = 0;
+		path_join(f, sizeof f, path, "eweb.fnt");
+		if (pf_exists(f)) {
+			str_copy(opt.workdir, path, sizeof opt.workdir);
+			return 1;
+		}
+	}
+}
+#endif
+
 #ifdef EW_ST
 int main(void)
 #else
@@ -3539,6 +3812,11 @@ const char cpu_cf_alert[] = "[3][EWEB60.PRG is for a 68060|Falcon or TT. On the 
 #else
 const char cpu_cf_alert[] = "[3][EWEB.PRG is for the Falcon|and the TT. On the FireBee,|install EWeb's FireBee|package.][ Quit ]";
 #endif
+/* EWEB.ACC on the wrong machine: its Desk entry, and these when it is
+   opened (common's cpucheck.c; the guidelines' 2.2: nothing said at boot) */
+const char cpu_acc_name[] = "  EWeb";
+const char cpu_acc_alert[] = "[3][EWEB.ACC needs a Falcon or|a TT with TT RAM.|Remove EWEB.ACC|from the boot drive.][ OK ]";
+const char cpu_cf_acc_alert[] = "[3][EWEB.ACC is for the Falcon|and the TT. On the FireBee,|EWeb is a program: remove|EWEB.ACC from the boot drive.][ OK ]";
 #endif
 
 static int app_run(void);
@@ -3554,7 +3832,8 @@ int app_main(void)
 {
 	long most = (long) Mxalloc(-1L, 3);
 	long want = most >= EW_STACK_AMPLE ? EW_STACK : EW_STACK_SMALL;
-	char *s = most >= want + 64L * 1024 ? Mxalloc(want, 3) : NULL;
+	/* (an accessory's its own on plain TOS: common's acc_core) */
+	char *s = most >= want + 64L * 1024 ? acc_core(want, 3) : NULL;
 	if ((long) s <= 0) {
 		/* none: crt0's (the cascade and the layout stop the sooner) */
 		stack_size = EW_BSS_STACK;
@@ -3619,8 +3898,29 @@ static int app_run(void)
 	}
 	scr_w = work_out[0] + 1;
 	scr_h = work_out[1] + 1;
-	vq_extnd(vdi_h, 1, work_out);
-	planes = work_out[4];
+	{
+		short w0 = work_out[0], w1 = work_out[1];
+		vq_extnd(vdi_h, 1, work_out);
+		planes = work_out[4];
+#ifndef EW_ST
+		is_acc = _is_acc;
+		if (is_acc) {
+			/* the accessory: its memory now, the rest at the first
+			   opening (2.2's quiet start) */
+			short wo[2];
+			wo[0] = w0;
+			wo[1] = w1;
+			acc_boot(wo);
+			win_menu_button = 1;
+			win_menu_hook = acc_menu;
+			av_twin_here = twin_answered;	/* (EWEB.PRG's late answer: 2.3) */
+			acc_wait(first, sizeof first);
+		}
+#else
+		(void) w0;
+		(void) w1;
+#endif
+	}
 	if (!screen_check("EWeb", scr_w)) {	/* not in ST low */
 		v_clsvwk(vdi_h);
 		appl_exit();
@@ -3634,12 +3934,45 @@ static int app_run(void)
 	graf_mouse(BUSYBEE, 0);
 
 	pf_size_open = pf_open_size;	/* a file read: opened, not looked up first (6.5) */
-	work_dir(opt.workdir, sizeof opt.workdir);
-	crash_install(opt.workdir, "EWeb", EWEB_VERSION);
-	crash_cleanup = crash_quit;
+#ifndef EW_ST
+	if (is_acc) {
+		/* the accessory: FOLDER= (acc_boot), else asked; no crash
+		   catcher (the program's alone: its vectors would outlive the
+		   program in front) */
+		char f[256];
+		path_join(f, sizeof f, opt.workdir, "eweb.fnt");
+		while (!opt.workdir[0] || !pf_exists(f)) {
+			graf_mouse(ARROW, 0);
+			if (!acc_locate()) {
+				acc_wait(first, sizeof first);
+				continue;
+			}
+			path_join(f, sizeof f, opt.workdir, "eweb.fnt");
+		}
+	} else
+#endif
+	{
+		work_dir(opt.workdir, sizeof opt.workdir);
+		crash_install(opt.workdir, "EWeb", EWEB_VERSION);
+		crash_cleanup = crash_quit;
+	}
 	gap_tag("start: help, av");
 	help_init();
 	av_init("EWEB");
+#ifndef EW_ST
+	/* EWEB.PRG beside EWEB.ACC (2.3): where the AES lists its programs
+	   (MiNT, MagiC), the program hands the accessory its address and goes */
+	twin_init("EWEB|EWEB60");
+	if (!is_acc) {
+		char c[256];
+		command_line(c, sizeof c);
+		if (twin_handover(c)) {
+			v_clsvwk(vdi_h);
+			appl_exit();
+			return 0;
+		}
+	}
+#endif
 	notify_init("EWEB    ");	/* notifications through BGEM.NG (4.5) */
 	notify_clicked = notified;
 	notify_ask();
@@ -3647,6 +3980,10 @@ static int app_run(void)
 	dlg_redraw_hook = dialog_redraw;
 	gap_tag("start: settings");
 	settings_load();
+#ifndef EW_ST
+	if (!is_acc)
+		str_copy(opt.folder, opt.workdir, sizeof opt.folder);	/* FOLDER=, for the accessory (6.1) */
+#endif
 	gap_tag("start: screen");
 	if (!scr_init()) {
 		graf_mouse(ARROW, 0);
@@ -3759,6 +4096,9 @@ static int app_run(void)
 		appl_exit();
 		return 1;
 	}
+#ifndef EW_ST
+	if (!is_acc)		/* (the accessory's commands are its toolbar's menu: 3.1) */
+#endif
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 
@@ -3820,8 +4160,18 @@ static int app_run(void)
 	tw_ovl_at(path);
 #endif
 	gap_tag("start: window");
+#ifndef EW_ST
+acc_session:
+#endif
 	if (new_window() == NULL) {
 		graf_mouse(ARROW, 0);
+#ifndef EW_ST
+		if (is_acc) {
+			alert(1, "[3][EWeb can't open its window:|the AES has no more, or|memory is short.][ OK ]");
+			scr_exit();
+			goto acc_closed_now;
+		}
+#endif
 		alert(1, "[3][EWeb can't open its window:|the AES has no more, or|memory is short.][ Quit ]");
 		menu_bar(mb.tree, 0);
 		scr_exit();
@@ -3852,7 +4202,8 @@ static int app_run(void)
 #ifdef EW_TEST_DL
 	test_dl();
 #endif
-	command_line(first, sizeof first);
+	if (!is_acc)
+		command_line(first, sizeof first);	/* (the accessory's: VA_START's, acc_wait) */
 	if (first[0])
 		go(first);
 	else
@@ -4134,6 +4485,30 @@ static int app_run(void)
 	}
 	if (opt.log)
 		conn_log_hold(0);	/* the rest of the log, once */
+#ifndef EW_ST
+	if (is_acc) {
+		/* the accessory stays: its windows gone, its colours given back,
+		   its memory kept; the next opening starts a session again */
+		ewin *w;
+		win_pic_drop();		/* (the kept page's ST RAM: the next session's bands) */
+		while ((w = wins) != NULL)
+			win_free(w);
+		if (scr_exit())
+			log_event("colours given back");
+acc_closed_now:
+		win_handles_gone = 0;
+		quit_box_off = 0;
+		acc_closed = 0;
+		quit = 0;
+		user_quit = 0;
+		log_event("accessory closed");
+		conn_log_flush();
+		acc_wait(first, sizeof first);
+		scr_init();
+		bar_pens();
+		goto acc_session;
+	}
+#endif
 	menu_bar(mb.tree, 0);
 	av_exit();
 	font_free();

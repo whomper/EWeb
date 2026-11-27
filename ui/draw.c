@@ -16,6 +16,9 @@
 #include "util.h"
 #include "text.h"
 #include "dialog.h"
+#ifndef EW_ST
+#include "stpool.h"
+#endif
 
 void clip_on(GRECT *r)
 {
@@ -55,7 +58,13 @@ static unsigned short *st_buf;
 void *st_ram(long n)
 {
 	if (!st_buf) {
-		void *p = Mxalloc(sizeof(st_fallback), 0);
+		void *p;
+#ifndef EW_ST
+		if (st_pool_on())
+			p = st_pool_alloc(sizeof(st_fallback));	/* the accessory's own */
+		else
+#endif
+		p = Mxalloc(sizeof(st_fallback), 0);
 		st_buf = (long) p > 0 ? p : st_fallback;
 	}
 	return n <= (long) sizeof(st_fallback) ? st_buf : 0;

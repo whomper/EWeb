@@ -46,6 +46,7 @@ The files are in the latest release on EWeb's GitHub page
 
 ```
 EWEB.PRG      the program (Falcon, TT)
+EWEB.ACC      the same, as a desk accessory (a Falcon or TT with TT RAM)
 EWEB60.PRG    the program for a 68060 (a CT60)
 EWEBST.PRG    the ST edition (ST, STE: secure sites through the gateway)
 EWEB.FNT      its fonts (needed: EWeb draws pages with them)
@@ -56,7 +57,7 @@ TLS.OVL       secure sites in a Direct connection: the code (the family's)
 EWEB.HYP      this guide, for EHypView or ST-Guide (the Help key opens it)
 CACERT.PEM    secure sites: the root certificates
 ROOTS.DAT     the same, read ahead of time
-EWEB.INF      settings (EWeb writes it)
+EWEB.INF      settings, in the boot drive's root (EWeb writes it)
 SEED.DAT      secure sites: randomness kept for the next start
 SIGS.DAT      secure sites: certificate checks remembered
 COOKIES.TXT   cookies kept from one day to the next (EWeb writes it)
@@ -66,13 +67,32 @@ CACHE\        the disk cache: EWEB00.PAK... and their lists, EWEB.IDX (EWeb writ
 CRASH.LOG     what happened, if EWeb ever crashes
 ```
 
-EWeb keeps everything in the folder it is started from. Start it from
+EWeb keeps everything in the folder it is started from, but for its
+settings, `EWEB.INF`, which are in the boot drive's root (where the
+accessory finds them; one left next to EWEB.PRG is copied there). Start it from
 the desktop with a double click; drop a page (an `.HTM` file) on it, or
 on its window, to open that page. Other programs can hand it an address
 or a file to show (VA_START), and a mail address (a `mailto:` link) goes
 to EMail, when it is running. The Help key opens this guide in the
 viewer your system's `STGUIDE=` names (MiNT's and MagiC's custom), else
 in EHypView, ST-Guide or HypView.
+
+## EWeb as a desk accessory
+
+On a Falcon or a TT with TT RAM, EWeb can also be a desk accessory:
+copy `EWEB.ACC` to the root of the boot drive and start EWEB.PRG once,
+so that `EWEB.INF` there names EWeb's folder (`FOLDER=`). From then on
+EWeb is in the Desk menu of every program: a link opened in EMail shows
+in EWeb's window while EMail stays where it was. Closing the window
+(^U) leaves the accessory in memory for the next time.
+
+The accessory takes its memory when the Atari starts: as much of the TT
+RAM as EWEB.PRG would use for pages and pictures (Settings > General:
+the TT RAM left for others; `HEAPKB=` in `EWEB.INF` to name it in KB),
+and a little ST RAM for the screen. It has no menu bar: the button with
+three lines at the left of the toolbar opens the menus, About EWeb...
+at their head. On a machine without TT RAM it takes nothing and says so
+when it is opened; remove it from the boot drive there.
 
 ## Opening pages
 

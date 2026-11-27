@@ -5975,8 +5975,11 @@ bytes free beside two small probes, 1,122,928 with it.
 - **The start** (2.2, a quiet start): `appl_init`, `menu_register("  EWeb")`, the VDI workstation, the
   INF's lines it needs, the heap; nothing else until the first AC_OPEN, which reads the settings, the
   font, the bookmarks and opens the window.
-- **No menu bar** (3.1): the toolbar's ≡ menu has the menu bar's commands, About first, and Close ^U
-  in place of Quit.
+- **No menu bar** (3.1): a ≡ button before Back opens the menu bar's titles, About EWeb... at their
+  head; a title opens its items in the same place, with the bar's words, keys, ticks and greyed items
+  (decided 27 Nov 2026: titles, then items, as EWeb's menu bar has about 60 commands, more than one
+  list fits down a 480-line screen). Quit is left out: Close window (^U) closes the window, and ^Q
+  closes them all; the accessory stays.
 - **Its life** (2.2): AC_OPEN opens the window or tops it; AC_CLOSE forgets the windows the AES closed
   and writes what is due; AP_TERM is passed over; closing the last window leaves it resident.
 - **Beside EWEB.PRG** (2.3, `twin.c`): under MiNT or MagiC a started EWEB.PRG hands its address to the
@@ -5984,6 +5987,14 @@ bytes free beside two small probes, 1,122,928 with it.
 - **A link from another program** comes as `VA_START` (4.1), as for the program, and opens a window.
 - **Direct connections**: a TLS key exchange only for a page the user asked for (2.2); pictures and
   frames of that page follow it.
+- **What another program's ending leaves**: the heap and the ST RAM pool are taken through libc's
+  `acc_core`, the accessory's own on plain TOS, so a program that ends doesn't take them with it
+  (`tests/hatari/acc.py`'s `vastart`: VASEND.PRG hands the accessory an address, ends, and the
+  accessory opens again from the Desk menu).
+- **The ST RAM pool** is four times the screen and 256 KB (1.45 MB at 640x480 in 256 colours), a
+  quarter of the free ST RAM at most: the screen's height of bands, the toolbar's pictures, the disk's
+  bounce buffer and a window's page kept off the screen. Measured on the Falcon with 14 MB of ST RAM
+  (TOS 4.04, NVDI): with 1 MB the second opening had room for the bands and not the kept page (672 KB).
 
 ## The design
 

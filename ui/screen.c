@@ -38,6 +38,9 @@
 #include "tcpix.h"
 #include "c2p.h"
 #include "codepad.h"
+#ifndef EW_ST
+#include "stpool.h"
+#endif
 
 #define BAND 32			/* rows drawn and copied at a time, short of memory */
 
@@ -92,10 +95,27 @@ static short std_pixel(short i)
 
 static void *st_alloc(long n)
 {
-	void *p = Mxalloc(n, 0);
+	void *p;
+#ifndef EW_ST
+	if (st_pool_on())
+		return st_pool_alloc(n);	/* the accessory's, taken at its start */
+#endif
+	p = Mxalloc(n, 0);
 	if ((long) p == -32)		/* TOS 1.x: no Mxalloc, and no other RAM */
 		p = Malloc(n);
 	return (long) p > 0 ? p : NULL;
+}
+
+/* a block st_alloc gave back */
+static void st_release(void *p)
+{
+#ifndef EW_ST
+	if (st_pool_on()) {
+		st_pool_free(p);
+		return;
+	}
+#endif
+	Mfree(p);
 }
 
 static int c2p_init(void);
@@ -104,9 +124,9 @@ static void free_bufs(void)
 {
 	free(chunky);
 	if (std_buf != NULL)
-		Mfree(std_buf);
+		st_release(std_buf);
 	if (dev_buf != NULL)
-		Mfree(dev_buf);
+		st_release(dev_buf);
 	if (wide)
 		free(tc_buf);
 	chunky = NULL;
@@ -125,6 +145,13 @@ static int bufs(short n)
 	/* the standard planes for vr_trnfm only where the screen has its own format */
 	int std = !truecolour && format != 0 && !(format == 2 && planes == 8);
 	long st = n > BAND ? (truecolour ? dev_row(band_w / 16) * n : (std ? 2 : 1) * (band_w / 8 * planes * n)) : 0;
+#ifndef EW_ST
+	if (st > 0 && st_pool_on()) {
+		/* the accessory: its own ST RAM, the rest the system's */
+		if (st_pool_largest() < st * (std ? 2 : 1) + 1024)
+			return 0;
+	} else
+#endif
 	if (st > 0) {
 		/* ST RAM left for the rest of the system: 256 KB at least; and
 		   2 MB for the pages (a 4 MB Falcon draws in bands: the screen's
@@ -805,7 +832,7 @@ void *scr_dev_alloc(long n)
 void scr_dev_free(void *p)
 {
 	if (p != NULL)
-		Mfree(p);
+		st_release(p);
 }
 
 int scr_rgb_dev(const unsigned char *pix, const unsigned long *col, short ncol, short w, short h, void *dev)
@@ -1083,7 +1110,7 @@ static void store_free(void)
 		if (store_heap)
 			free(piece[k]);
 		else
-			Mfree(piece[k]);
+			st_release(piece[k]);
 		piece[k] = NULL;
 	}
 	npieces = 0;
@@ -1105,6 +1132,19 @@ int scr_store(short w, short n)
 	size = row * n;
 	free_st = (long) Mxalloc(-1, 0);
 	store_row = row;
+#ifndef EW_ST
+	if (st_pool_on()) {
+		/* the accessory: from its own ST RAM, where it has room */
+		store_heap = 0;
+		if (st_pool_largest() < size || (piece[0] = st_alloc(size)) == NULL) {
+			log_event("kept page: no room for %ld KB, the accessory's ST RAM %ld KB", size >> 10,
+				  st_pool_largest() >> 10);
+			return 0;
+		}
+		npieces = 1;
+		piece_rows = n;
+	} else
+#endif
 	if ((long) Mxalloc(-1, 1) > 0) {
 		/* TT or Fast RAM, where the heap is: ST RAM of its own, a
 		   megabyte left for the rest at least */
@@ -1172,6 +1212,11 @@ int scr_store_ample(short w, short n)
 	row = format == 2 && !truecolour ? ((w + 15) / 16) * 16L : dev_row((w + 15) / 16);
 	size = row * n;
 	free_st = (long) Mxalloc(-1, 0);
+#ifndef EW_ST
+	if (st_pool_on())
+		free_st = st_pool_largest() >= size ? -1 : 0;	/* (its own: no more than it has) */
+	if (free_st != -1)
+#endif
 	if (free_st == -32 || free_st < 2 * size + (1L << 20))
 		return 0;
 	if (!scr_store(w, n))
