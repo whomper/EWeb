@@ -3483,6 +3483,10 @@ static void command_line(char *out, int size)
 		str_trim(back_path);
 		*b = 0;
 	}
+	/* any other " --" argument after the address (a later caller's): not
+	   part of it (EMail 2.31's --back reached EWeb 1.26 as the address) */
+	if ((b = strstr(out, " --")) != NULL)
+		*b = 0;
 	str_trim(out);
 	len = (int) strlen(out);
 	if (len >= 2 && out[0] == '"' && out[len - 1] == '"') {

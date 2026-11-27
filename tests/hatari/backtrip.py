@@ -12,7 +12,10 @@ machine:
   back    EWeb shows about:bookmarks (the address read without --back),
           ^Q, and the caller says it was started with --resume;
   gone    the same with --back naming a program that isn't there: EWeb
-          quits, nothing is started, no alert.
+          quits, nothing is started, no alert;
+  other   an argument EWeb doesn't know after the address (--zzzz=...):
+          the address shown alone (EMail 2.31's --back reached EWeb 1.26 as
+          part of the address), nothing started at the quit.
 
     make && python3 tests/hatari/backtrip.py WORK [MACHINE...]
     (Falcon-4, EWEB.PRG on TOS 4.04, and ST, EWEBST.PRG on TOS 1.04, by default)
@@ -40,7 +43,7 @@ def lines(log, tag):
     return [l.strip() for l in open(log, errors="replace") if l.startswith(tag)]
 
 
-def run(w, spec, gone):
+def run(w, spec, gone, other=False):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
@@ -49,6 +52,8 @@ def run(w, spec, gone):
     code = open(os.path.join(work, "caller", "CALLER.PRG"), "rb").read()
     if gone:
         code = code.replace(b"--back=C:\\CALLER.PRG", b"--back=C:\\NOTHER.PRG")
+    if other:
+        code = code.replace(b"--back=C:\\CALLER.PRG", b"--zzzz=C:\\CALLER.PRG")
     open(os.path.join(hd, "CALLER.PRG"), "wb").write(code)
     shutil.copy(os.path.join(ROOT, "binary", "EWEB.PRG" if falcon else "EWEBST.PRG"), os.path.join(hd, "EWEB.PRG"))
     shutil.copy(os.path.join(ROOT, "binary", "EWEB.FNT"), os.path.join(hd, "eweb.fnt"))
@@ -83,7 +88,7 @@ def run(w, spec, gone):
         alerted = any("alert" in l for l in lines(log, "EWEB "))
     p.kill()
     p.wait()
-    print("%s %s on %s: shown %s, resumed %s" % ("gone" if gone else "back", "EWEB.PRG" if falcon else "EWEBST.PRG",
+    print("%s %s on %s: shown %s, resumed %s" % ("other" if other else "gone" if gone else "back", "EWEB.PRG" if falcon else "EWEBST.PRG",
                                                 m.describe(), (shown or "-")[:40], resumed), flush=True)
     return shown, resumed, alerted
 
@@ -100,5 +105,8 @@ for spec in specs:
     shown, resumed, alerted = run(os.path.join(w, "gone"), spec, True)
     check(shown is not None and not resumed and not alerted,
           "%s: --back naming a program that isn't there: quits, nothing started, no alert" % spec)
+    shown, resumed, alerted = run(os.path.join(w, "other"), spec, False, True)
+    check(shown is not None and shown.startswith("EWEB shown about:bookmarks") and not resumed,
+          "%s: an argument EWeb doesn't know after the address: the address alone shown" % spec)
 print("all passed" if not failed else "%d failed" % failed)
 sys.exit(1 if failed else 0)
