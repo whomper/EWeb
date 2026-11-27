@@ -1948,6 +1948,10 @@ Tailwind code they were 1.26's). The overlay is made as `EWEBJS.OVL` is (`tools/
 each with its own `tw_imports`; the FireBee's `EWEBTWFB.OVL` (`tools/mkfirebee.py`) is `ewebtw.ovl` in its
 zip. It is loaded the first time a page whose head loads Tailwind is shown (0.6 s on a stock
 Falcon), and kept; missing, the page shows unstyled (`tests/hatari/twovl.py`).
+With it the paired run against 1.26 had the reference configuration and ST:mono within a tick; on
+Falcon-4:16 (no NVDI) the home, sample and news pages loaded 10 to 15 ms later (2 to 3%), the profile
+showing no new work, the same drawing functions (fill_px, unfilter, to_planes, memset) a little slower,
+the 68030's caches meeting 1.27's moved code and data: accepted by the owner for 1.27 (27 Nov 2026).
 Unpacked in the program it had grown `EWEB.PRG` by 53 KB (to 1.43 MB: with the font no longer on a
 1.44 MB floppy, `tests/hatari/appdir.py`'s; that rig's Falcon floppy is now 2.88 MB). `make test`'s `twtest`
 holds 270 classes to what Tailwind itself makes of them (`tests/browse/twcases.txt`, `mktw.py

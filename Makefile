@@ -336,7 +336,7 @@ PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
 PAD_av := 82
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 138
+PAD_charset := 140
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
