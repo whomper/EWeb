@@ -6468,7 +6468,8 @@ static int32_t content_width(L *l, box *b, int p, int32_t avail, int32_t extra)
 static int32_t cell_floor(L *l, box *c, int32_t v)
 {
 	int32_t mn;
-	if (c->anon || kw(c->st, EP_DISPLAY) != KW_TABLE_CELL || (mn = len(l, c->st, EP_MIN_WIDTH, AUTO)) == AUTO ||
+	if (c->anon || (EC_K(c->st, EP_MIN_WIDTH) == EK_KW && EC_V(c->st, EP_MIN_WIDTH).i == KW_AUTO) ||
+	    kw(c->st, EP_DISPLAY) != KW_TABLE_CELL || (mn = len(l, c->st, EP_MIN_WIDTH, AUTO)) == AUTO ||
 	    mn <= 0)
 		return v;
 	mn += kw(c->st, EP_BOX_SIZING) == KW_BORDER_BOX ?

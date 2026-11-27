@@ -555,6 +555,13 @@ static void scripts_toggle(void)
 
 #endif
 
+#ifndef EW_ST
+/* View > Desktop width's state for the page shown (menu_update) */
+static const void *wide_of;
+static unsigned long wide_at;
+static char wide_ok, wide_on;
+#endif
+
 void menu_update(void)
 {
 	CODE_PAD(loading < -30000, CP_MAIN_MENU_UPDATE);
@@ -583,8 +590,16 @@ void menu_update(void)
 	enable(C_OPENFILE, !loading);
 #ifndef EW_ST
 	enable(C_IMPORT, !loading);
-	enable(C_WIDE, !loading && wide_can(br.url));
-	menu_set(1, obj_of(C_WIDE), wide_site(br.url));
+	if (wide_of != &br || wide_at != br.shows) {
+		/* (once a page shown: the site's host found at each event was
+		   10 to 15 ms more of the stock Falcon's About box and Back) */
+		wide_of = &br;
+		wide_at = br.shows;
+		wide_ok = (char) wide_can(br.url);
+		wide_on = (char) wide_site(br.url);
+	}
+	enable(C_WIDE, !loading && wide_ok);
+	menu_set(1, obj_of(C_WIDE), wide_on);
 #endif
 	enable(C_SAVE, !loading && br.src != NULL);
 	enable(C_CUT, addr);
@@ -2875,6 +2890,7 @@ void command(int cmd)
 			settings_save();
 			log_event("desktop width %s", wide_site(br.url) ? "on" : "off");
 			win_fit_width(1);
+			wide_of = NULL;
 		}
 		break;
 #endif
