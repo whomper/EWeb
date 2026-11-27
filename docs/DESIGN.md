@@ -5941,6 +5941,50 @@ answers `X-Gateway-Soft: N`. Until AERA-Gateway's webgate and common's aerapens 
 pens are the whole dither's and are shown as they come, and `make itest` holds them to a page drawn
 so (`--soft 0`) where the webgate in use doesn't name `X-Gateway-Soft`.
 
+## The accessory: EWEB.ACC (27 Nov 2026)
+
+Decided 26 Nov 2026: EWeb as a desk accessory, so that a link EMail opens shows in EWeb while EMail
+stays. Decided 27 Nov 2026: only where there is TT RAM (Decisions, An accessory), and the accessory may
+take the TT RAM it needs. EWEB.ACC is EWEB.PRG under another name (the guidelines' 2.1), told apart by
+crt0's `_is_acc`; the ST edition and the FireBee's stay programs.
+
+**Measured** (a probe accessory of EWEB.PRG's size and flags, 1.56 MB, PRGFLAGS 7; TOS 4.04 with NVDI,
+nothing else loaded): on the Falcon with 128 MB of TT RAM the image loads into TT RAM (its basepage at
+0x0126bb78) and ST RAM stays as it was, 14,307,980 bytes free with it and without; with PRGFLAGS 0 it
+goes to ST RAM and takes 1,602,616 bytes. On the 4 MB Falcon it takes 1.5 MB of ST RAM at boot: 2,694,924
+bytes free beside two small probes, 1,122,928 with it.
+
+**What changes from the program** (the guidelines' section 2):
+- **Memory.** Before its first event call the accessory takes one heap from TT RAM (`acc_heap_take`,
+  through libc's `acc_core`, so the block is the accessory's own on plain TOS): all but `TTLEAVE=` per
+  cent of the free TT RAM, as EWEB.PRG's pages and pictures have (`mem_limits`), and `HEAPKB=` where the
+  user sets it. It holds the pages, the pictures, the fonts and the three overlays (EWEBJS.OVL,
+  EWEBTW.OVL, TLS.OVL), which `malloc` from it. `mem_limits` sizes the kept pages, the pictures and the
+  scripts from the heap, not from what GEMDOS has free. ST RAM is taken once too, a small pool for
+  what must be there (the screen's bands, the toolbar's and the throbber's pictures, the disk's bounce
+  buffer, the About box's icon); the page kept off the screen (`pic`) only where that pool has room
+  for it. Without TT RAM (`acc_no_ttram`) it takes nothing, and on AC_OPEN shows
+  `acc_tt_alert("EWeb", "EWEB.ACC")`.
+- **Files.** None is open across an event call (2.2): a download streamed to the disk opens its file,
+  appends what came and closes it at each step; the disk cache closes its piece at the end of each
+  `dc_write_step`; the log is closed before each event call. The cookies, the history, the cache's
+  index and the settings are written when the window closes (AC_CLOSE, ^U, the closer), not at a quit.
+- **Settings** in `X:\eweb.inf` at the boot drive's root, with `FOLDER=` naming EWeb's folder (6.1);
+  EWEB.PRG writes `FOLDER=`, and an `eweb.inf` left next to EWEB.PRG is copied to the root the first
+  time. The accessory finds its fonts, overlays, cache, cookies, bookmarks and history in `FOLDER=`.
+- **The start** (2.2, a quiet start): `appl_init`, `menu_register("  EWeb")`, the VDI workstation, the
+  INF's lines it needs, the heap; nothing else until the first AC_OPEN, which reads the settings, the
+  font, the bookmarks and opens the window.
+- **No menu bar** (3.1): the toolbar's ≡ menu has the menu bar's commands, About first, and Close ^U
+  in place of Quit.
+- **Its life** (2.2): AC_OPEN opens the window or tops it; AC_CLOSE forgets the windows the AES closed
+  and writes what is due; AP_TERM is passed over; closing the last window leaves it resident.
+- **Beside EWEB.PRG** (2.3, `twin.c`): under MiNT or MagiC a started EWEB.PRG hands its address to the
+  accessory and quits; under plain TOS the accessory stands aside while EWEB.PRG runs.
+- **A link from another program** comes as `VA_START` (4.1), as for the program, and opens a window.
+- **Direct connections**: a TLS key exchange only for a page the user asked for (2.2); pictures and
+  frames of that page follow it.
+
 ## The design
 
 ### Every Falcon, fastest on an accelerated one
