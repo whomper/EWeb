@@ -889,7 +889,7 @@ dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
   checks certificates, the Gateway's address and port (8280), Write
   a log (as Options > Write a log: `EWEB.LOG` beside the program), and
-  the cookie jar's size (`EWEB.PRG`; 192 KB as it comes, 64 to 2048).
+  the cookie jar's size (`EWEB.PRG`; 192 KB as it comes, 64 to 1024).
 - **Scripts** (`EWEB.PRG`): on which sites pages' scripts run: Off,
   Chosen sites (the sites you choose) or Every site (see
   [Pages made by scripts](#pages-made-by-scripts)).

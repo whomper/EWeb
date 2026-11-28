@@ -216,7 +216,7 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 	/* (decided 28 Nov 2026: the least used go first when it is full) */
 	set_text(s, x, set_y(s, 9), "Cookie jar");
 	f_ckb = set_field(s, x + 11, set_y(s, 9), s_ckb, 4, '9');
-	set_text(s, x + 16, set_y(s, 9), "KB  (64 to 2048)");
+	set_text(s, x + 16, set_y(s, 9), "KB  (64 to 1024)");
 #endif
 }
 
@@ -428,8 +428,8 @@ static int settings_check(SETTINGS *s, void *user)
 	} else if (!s_tt[0] || atol(s_tt) > 90) {
 		bad = "[1][The TT RAM left for other|programs is a number from|0 to 90 (per cent).][ OK ]";
 		field = f_tt;
-	} else if (!s_ckb[0] || atol(s_ckb) < 64 || atol(s_ckb) > 2048) {
-		bad = "[1][The cookie jar's size is a|number from 64 to 2048 (KB).][ OK ]";
+	} else if (!s_ckb[0] || atol(s_ckb) < 64 || atol(s_ckb) > 1024) {
+		bad = "[1][The cookie jar's size is a|number from 64 to 1024 (KB).][ OK ]";
 		page = 1;
 		field = f_ckb;
 #endif

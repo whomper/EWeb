@@ -822,7 +822,7 @@ static void settings_load(void)
 		else if (!strcmp(line, "WIDE"))
 			str_copy(opt.wide, eq, sizeof opt.wide);
 		else if (!strcmp(line, "COOKIEKB"))
-			opt.cookiekb = (short) (atoi(eq) <= 0 ? 0 : atoi(eq) < 64 ? 64 : atoi(eq) > 2048 ? 2048 : atoi(eq));
+			opt.cookiekb = (short) (atoi(eq) <= 0 ? 0 : atoi(eq) < 64 ? 64 : atoi(eq) > 1024 ? 1024 : atoi(eq));
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -1083,7 +1083,7 @@ int settings_save(void)
 #ifndef EW_ST
 	if (opt.cookiekb > 0) {
 		snprintf(v, sizeof v, "%d", opt.cookiekb);
-		put(&s, "COOKIEKB", v, "the cookie jar's size, KB (Settings > Secure; 64 to 2048, 192 as it "
+		put(&s, "COOKIEKB", v, "the cookie jar's size, KB (Settings > Secure; 64 to 1024, 192 as it "
 		    "comes): the least used cookies go first when it is full");
 	}
 	snprintf(v, sizeof v, "%d", opt.ttleave);
