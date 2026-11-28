@@ -192,6 +192,19 @@ hidden s3cr3t-login-token
 reload
 get https://example.com/ sid=s3cr3t-login-token
 
+case encrypted values are opened only when sent: the others written back as they were read
+key build/asan/COOKIETEST.KEY
+set https://a.example.com/ a=first-site-token; Max-Age=3600; Secure
+set https://b.example.org/ b=second-site-token; Max-Age=3600; Secure
+reload
+reload=
+get https://a.example.com/ a=first-site-token
+hidden first-site-token
+hidden second-site-token
+reload
+get https://b.example.org/ b=second-site-token
+get https://a.example.com/ a=first-site-token
+
 case sites without the Public Suffix List
 same www.example.co.il mail.example.co.il 1
 same example.co.il www.example.co.il 1

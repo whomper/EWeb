@@ -28,6 +28,7 @@ struct ck {
 	long long created, used;
 	unsigned long seq;		/* the order they were made in: created is in seconds */
 	unsigned char host_only, secure, http_only, same;
+	unsigned char sealed;		/* value still encrypted as COOKIES.TXT has it (plain() opens it) */
 };
 
 static ck *all;
@@ -312,6 +313,78 @@ static char *dup(const char *s, size_t n)
 	return d;
 }
 
+/* an encrypted value's room (taken when needed: 8 KB kept for the rest
+   otherwise) */
+#define ENC_SIZE (sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1)
+
+/* a hex digit's value + 1, 0 for none (made at the first sealed value) */
+static unsigned char hexv[256];
+
+/* a sealed value (COOKIES.TXT's "{E}" and its bytes in hex) kept as its
+   bytes, half the hex's room: two bytes of their count, then them; 0
+   when the text isn't one */
+static char *seal_pack(const char *text, size_t n)
+{
+	size_t t = strlen(SECRET_TAG), k, i;
+	const unsigned char *x;
+	unsigned char *b;
+	if (hexv['0'] == 0)
+		for (i = 0; i < 22; i++)
+			hexv[(unsigned char) "0123456789ABCDEFabcdef"[i]] = (unsigned char) ((i < 16 ? i : i - 6) + 1);
+	if (n <= t || (n - t) % 2 != 0 || (n - t) / 2 > 6 + SECRET_MAX || (b = malloc(2 + (n - t) / 2)) == NULL)
+		return NULL;
+	k = (n - t) / 2;
+	b[0] = (unsigned char) (k >> 8);
+	b[1] = (unsigned char) k;
+	x = (const unsigned char *) text + t;
+	for (i = 0; i < k; i++, x += 2) {
+		unsigned h = hexv[x[0]], l = hexv[x[1]];
+		if (h == 0 || l == 0) {
+			free(b);
+			return NULL;
+		}
+		b[2 + i] = (unsigned char) ((h - 1) << 4 | (l - 1));
+	}
+	return (char *) b;
+}
+
+/* and back to its text, into out (ENC_SIZE) */
+static void seal_text(const char *v, char *out)
+{
+	static const char hexd[] = "0123456789ABCDEF";
+	const unsigned char *b = (const unsigned char *) v;
+	size_t k = (size_t) b[0] << 8 | b[1], i, o = strlen(SECRET_TAG);
+	memcpy(out, SECRET_TAG, o);
+	for (i = 0; i < k; i++) {
+		out[o++] = hexd[b[2 + i] >> 4];
+		out[o++] = hexd[b[2 + i] & 15];
+	}
+	out[o] = 0;
+}
+
+/* a cookie's value, decrypted the first time it is used: a start reads
+   only the file's text (3,000 cookies decrypted at once were 114 M 68030
+   instructions, half a minute of a stock Falcon's start); NULL when it
+   can't be (no key, or not EWeb's) */
+static const char *plain(ck *c)
+{
+	char *dec, *v;
+	if (!c->sealed)
+		return c->value;
+	if (!have_key() || (dec = malloc(SECRET_MAX + 1 + ENC_SIZE)) == NULL)
+		return NULL;
+	seal_text(c->value, dec + SECRET_MAX + 1);
+	v = secret_decode(dec + SECRET_MAX + 1, dec, SECRET_MAX + 1) ? dup(dec, strlen(dec)) : NULL;
+	memset(dec, 0, SECRET_MAX + 1);
+	free(dec);
+	if (v == NULL)
+		return NULL;
+	free(c->value);
+	c->value = v;
+	c->sealed = 0;
+	return v;
+}
+
 static void ensure(void)
 {
 	char *d;
@@ -569,13 +642,14 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 			c->seq = o->seq;
 			if (!o->expiry && !c->expiry)
 				drop(pp);
-			else if (o->expiry && c->expiry > now && o->expiry == c->expiry && strcmp(o->value, c->value) == 0 &&
+			else if (o->expiry && c->expiry > now && o->expiry == c->expiry && plain(o) != NULL &&
+				 strcmp(o->value, c->value) == 0 &&
 				 o->secure == c->secure && o->same == c->same && o->http_only == c->http_only) {
 				o->used = now;		/* the same again: nothing to write */
 				ck_free(c);
 				return;
 			} else if (o->expiry && o->expiry > now + 86400 && c->expiry > now + 86400 &&
-				   strcmp(o->value, c->value) == 0 && o->secure == c->secure && o->same == c->same &&
+				   plain(o) != NULL && strcmp(o->value, c->value) == 0 && o->secure == c->secure && o->same == c->same &&
 				   o->http_only == c->http_only) {
 				/* only its end moved (Wikipedia's on every page): the new
 				   one kept, but no file written for it while the one on
@@ -641,6 +715,8 @@ int ck_get(const URL *u, const CKCTX *x, SBUF *out)
 			continue;
 		if ((c->same == SS_LAX || c->same == SS_DEFAULT) && !same && !(x != NULL && x->top && x->safe))
 			continue;
+		if (plain(c) == NULL)
+			continue;	/* (not to be opened: not sent) */
 		list[n++] = c;
 	}
 	/* longer paths first, then the older */
@@ -706,9 +782,6 @@ void ck_file(const char *path, const char *key)
 	loaded = 0;
 }
 
-/* an encrypted value's room (taken when needed: 8 KB kept for the rest
-   otherwise) */
-#define ENC_SIZE (sizeof SECRET_TAG + 2 * (6 + SECRET_MAX) + 1)
 
 char *ck_text(long *len)
 {
@@ -724,7 +797,7 @@ char *ck_text(long *len)
 			char e[24], k[24];
 			/* without a key, a value that starts as an encrypted one
 			   does would be read back as one (and lost): not kept */
-			if (!(keyfile[0] && c->value[0] && have_key()) &&
+			if (!c->sealed && !(keyfile[0] && c->value[0] && have_key()) &&
 			    strncmp(c->value, SECRET_TAG, strlen(SECRET_TAG)) == 0)
 				continue;
 			ll_str(c->expiry, e);
@@ -736,7 +809,15 @@ char *ck_text(long *len)
 			sb_printf(&s, "\t%d\t%s\t", c->secure, e);
 			sb_adds(&s, c->name);
 			sb_addc(&s, '\t');
-			if (keyfile[0] && c->value[0] && have_key()) {
+			if (c->sealed && keyfile[0] && have_key()) {
+				/* as it was read: not opened since */
+				if (enc == NULL && (enc = malloc(ENC_SIZE)) == NULL) {
+					sb_free(&s);
+					return NULL;
+				}
+				seal_text(c->value, enc);
+				sb_adds(&s, enc);
+			} else if (keyfile[0] && c->value[0] && have_key()) {
 				/* encrypted, as the apps keep passwords (without a key
 				   secret.c leaves it as it is and says so) */
 				if (enc == NULL && (enc = malloc(ENC_SIZE)) == NULL) {
@@ -760,7 +841,6 @@ void ck_load(const char *s, long len)
 	const char *p = s, *e = s + len;
 	long long now = ck_now();
 	ck **tail = &all;
-	char *dec = NULL;	/* a value decrypted: taken when one is */
 	while (*tail != NULL)
 		tail = &(*tail)->next;
 	/* in the file's order, after those already here */
@@ -781,10 +861,8 @@ void ck_load(const char *s, long len)
 			for (i = 0; i < 10; i++)
 				n[i] = (size_t) ((i < 9 ? f[i + 1] - 1 : end) - f[i]);
 			c = calloc(1, sizeof *c);
-			if (c == NULL) {
-				free(dec);
+			if (c == NULL)
 				return;
-			}
 			c->domain = dup(f[0], n[0]);
 			c->host_only = (unsigned char) (f[1][0] == '1');
 			c->path = dup(f[2], n[2]);
@@ -793,13 +871,11 @@ void ck_load(const char *s, long len)
 			c->name = dup(f[5], n[5]);
 			c->value = dup(f[6], n[6]);
 			if (c->value != NULL && strncmp(c->value, SECRET_TAG, strlen(SECRET_TAG)) == 0) {
-				/* encrypted: read with the key, else the cookie goes */
-				char *v = c->value;
-				if (dec == NULL)
-					dec = malloc(SECRET_MAX + 1);
-				c->value = dec != NULL && have_key() && secret_decode(v, dec, SECRET_MAX + 1) ?
-					   dup(dec, strlen(dec)) : NULL;
-				free(v);
+				/* encrypted: kept so, opened when first used (plain);
+				   without a key the cookie goes */
+				free(c->value);
+				c->value = have_key() ? seal_pack(f[6], n[6]) : NULL;
+				c->sealed = 1;
 			}
 			c->http_only = (unsigned char) (f[7][0] == '1');
 			c->same = (unsigned char) (f[8][0] - '0');
@@ -816,7 +892,6 @@ void ck_load(const char *s, long len)
 		}
 		p = nl ? nl + 1 : e;
 	}
-	free(dec);
 	trim(NULL);
 	loaded = 1;
 }

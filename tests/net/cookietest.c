@@ -185,6 +185,23 @@ int main(int argc, char **argv)
 			ck_clear();
 			ck_load(t, len);
 			free(t);
+		} else if (!strcmp(a, "reload=")) {
+			/* reload, and the text written out after it the text
+			   before: values not used since are written as they were
+			   read, not decrypted and encrypted again (a fresh nonce
+			   would change them) */
+			long len, len2;
+			char *t = ck_text(&len), *t2;
+			ck_clear();
+			ck_load(t, len);
+			t2 = ck_text(&len2);
+			if (len != len2 || memcmp(t, t2, (size_t) len) != 0) {
+				fprintf(stderr, "FAIL %s: the text written out changed over a reload\n", name);
+				failed++;
+				ok = 0;
+			}
+			free(t);
+			free(t2);
 		} else if (!strcmp(a, "key")) {
 			ck_file(NULL, b);
 		} else if (!strcmp(a, "hidden")) {

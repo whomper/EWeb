@@ -240,7 +240,8 @@ hub stay complete, with the evidence.
   (`tests/forms/cases.txt`, worked out from the standard), `make itest` (`/site/form.html`), `make
   hatarigui`.
 - **Cookies** are `src/net/cookie.c` (RFC 6265bis; hooked into `http.c` by `src/browse`), kept in
-  `COOKIES.TXT` next to `EWEB.PRG`, values encrypted with `EWEB.KEY` (common's `secret.c`): read
+  `COOKIES.TXT` next to `EWEB.PRG`, values encrypted with `EWEB.KEY` (common's `secret.c`), each kept sealed as its bytes and decrypted
+  only when first sent (`plain`: 3,000 decrypted at a start were 114 M 68030 instructions): read
   once when needed, written once at quit (6.5). EWEB.PRG's log has no query, cookie or field (7.3). A Mac's Safari cookies come in by
   File > Import cookies... (decided 27 Nov 2026): `tools/safari-cookies.html` on the Mac (a page in any
   browser, nothing sent anywhere: Safari's `Cookies.binarycookies` read in it, the sites ticked, Select all
