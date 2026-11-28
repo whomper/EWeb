@@ -21,8 +21,8 @@ jobs:
           # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
           # (AERA-Atari's template fa930c9)
           printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gperf fonts-dejavu-core fonts-dejavu-extra
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y gperf fonts-dejavu-core fonts-dejavu-extra
           python3 -m pip install --break-system-packages -r tools/requirements.txt
       - name: make test
         run: make test
@@ -39,8 +39,8 @@ jobs:
           # unreachable in turn (EContact): three mirrors, the runner's apt takes the next that answers, IPv4
           # (AERA-Atari's template fa930c9)
           printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu gperf fonts-dejavu-core fonts-dejavu-extra
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y gcc-m68k-linux-gnu gperf fonts-dejavu-core fonts-dejavu-extra
           python3 -m pip install --break-system-packages -r tools/requirements.txt
       - name: Build the programs
         run: make
