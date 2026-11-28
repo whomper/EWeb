@@ -31,6 +31,7 @@ struct ck {
 	unsigned char sealed;		/* value still encrypted as COOKIES.TXT has it (plain() opens it) */
 	long size;			/* its bytes in the store (ck_size), counted in bytes */
 	unsigned long dh;		/* its domain's hash (dhash): told apart before strcmp */
+	unsigned char pending;		/* set by an import not yet ended (ck_import_end) */
 };
 
 static ck *all;
@@ -38,6 +39,13 @@ static unsigned long seq;
 static long count;
 static long bytes;			/* the store's cookies' bytes (ck_max_bytes) */
 static long trimmed;			/* cookies the limits dropped since ck_import_start */
+/* an import (ck_import_start to ck_import_end): its cookies pending, the
+   older ones it replaced or squeezed out kept aside, so that one stopped
+   leaves the store as it was (the owner, 28 Nov 2026: "Import stopped: no
+   cookies were added") */
+static int imp_on, imp_setting;
+static long pbytes;			/* the pending cookies' bytes */
+static ck *aside;			/* the older ones put aside by it */
 long ck_max_bytes;
 static int changed;			/* lasting cookies changed since the file was read */
 static int loaded;			/* the file was read */
@@ -305,8 +313,26 @@ static void drop(ck **pp)
 	if (c->expiry)
 		changed = 1;
 	bytes -= c->size;
+	if (c->pending)
+		pbytes -= c->size;
 	ck_free(c);
 	count--;
+}
+
+/* c out of the list: put aside if an import is setting it and it is older
+   than the import, else dropped */
+static void lose(ck **pp)
+{
+	ck *c = *pp;
+	if (!imp_setting || c->pending) {
+		drop(pp);
+		return;
+	}
+	*pp = c->next;
+	bytes -= c->size;
+	count--;
+	c->next = aside;
+	aside = c;
 }
 
 /* what a cookie takes in the store: its strings, a sealed value as its
@@ -335,6 +361,8 @@ static void counted(ck *c)
 	c->dh = dhash(c->domain);
 	c->size = ck_size(c);
 	bytes += c->size;
+	if (c->pending)
+		pbytes += c->size;
 	count++;
 }
 
@@ -418,8 +446,12 @@ static const char *plain(ck *c)
 	c->value = v;
 	c->sealed = 0;
 	bytes -= c->size;
+	if (c->pending)
+		pbytes -= c->size;
 	c->size = ck_size(c);
 	bytes += c->size;
+	if (c->pending)
+		pbytes += c->size;
 	return v;
 }
 
@@ -472,7 +504,7 @@ static void trim(const char *domain)
 				}
 			if (old == NULL || n <= CK_PER_DOMAIN)
 				return;
-			drop(old);
+			lose(old);
 			trimmed++;
 		}
 	}
@@ -481,18 +513,23 @@ static void trim(const char *domain)
 			drop(pp);
 		else
 			pp = &(*pp)->next;
-	if (count <= CK_MAX && (ck_max_bytes <= 0 || bytes <= ck_max_bytes))
+	if (imp_setting ? count <= CK_MAX && (ck_max_bytes <= 0 || pbytes <= ck_max_bytes) :
+			  count <= CK_MAX && (ck_max_bytes <= 0 || bytes <= ck_max_bytes))
 		return;
 	list = malloc((size_t) count * sizeof *list);
 	if (list == NULL)
 		return;
 	n = 0;
 	for (pp = &all; *pp != NULL; pp = &(*pp)->next)
-		list[n++] = *pp;
+		if (!imp_setting || (*pp)->pending)
+			list[n++] = *pp;
 	qsort(list, (size_t) n, sizeof *list, by_use);
 	{
-		long left = count, sz = bytes;
-		for (i = 0; i < n && (left > CK_MAX || (ck_max_bytes > 0 && sz > ck_max_bytes)); i++) {
+		/* (an import's own to nine tenths of the jar: sorted again only
+		   after a tenth more, not at each of its lines) */
+		long left = count, sz = imp_setting ? pbytes : bytes,
+		     cap = imp_setting && ck_max_bytes > 0 ? ck_max_bytes / 10 * 9 : ck_max_bytes;
+		for (i = 0; i < n && (left > CK_MAX || (cap > 0 && sz > cap)); i++) {
 			sz -= list[i]->size;
 			left--;
 			list[i]->size = -1 - list[i]->size;	/* (marked to go: its size kept, negated) */
@@ -727,7 +764,7 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 			c->created = o->created;
 			c->seq = o->seq;
 			if (!o->expiry && !c->expiry)
-				drop(pp);
+				lose(pp);
 			else if (o->expiry && c->expiry > now && o->expiry == c->expiry && plain(o) != NULL &&
 				 strcmp(o->value, c->value) == 0 &&
 				 o->secure == c->secure && o->same == c->same && o->http_only == c->http_only) {
@@ -746,7 +783,7 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 				ck_free(c);
 				return;
 			} else
-				drop(pp);
+				lose(pp);
 			break;
 		}
 	}
@@ -756,6 +793,7 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 	}
 	c->next = all;
 	all = c;
+	c->pending = (unsigned char) imp_setting;
 	counted(c);
 	if (c->expiry)
 		changed = 1;
@@ -1021,6 +1059,13 @@ void ck_clear(void)
 		all = c->next;
 		ck_free(c);
 	}
+	while (aside != NULL) {
+		ck *c = aside;
+		aside = c->next;
+		ck_free(c);
+	}
+	imp_on = 0;
+	pbytes = 0;
 	count = 0;
 	bytes = 0;
 	changed = 0;
@@ -1057,6 +1102,9 @@ static int imp_sites;
 
 void ck_import_start(void)
 {
+	if (imp_on)
+		ck_import_end(1);
+	imp_on = 1;
 	trimmed = 0;
 	free(imp_site);
 	imp_site = NULL;
@@ -1091,6 +1139,7 @@ int ck_import(const char *text, long len, int *sites)
 	x.top = 1;
 	x.safe = 1;
 	defer_trim = 1;
+	imp_setting = imp_on;
 	while (p < end) {
 		const char *eol = memchr(p, '\n', (size_t) (end - p));
 		const char *f[7], *q;
@@ -1143,7 +1192,13 @@ int ck_import(const char *text, long len, int *sites)
 		p = eol ? eol + 1 : end;
 	}
 	defer_trim = 0;
-	trim(NULL);		/* (the piece's over the limits: the least used go, in one sort) */
+	/* (over the limits: the least used go, in one sort; an import's own
+	   only, and only when they are over, not at each piece) */
+	if (!imp_on)
+		trim(NULL);
+	else if (count > CK_MAX || (ck_max_bytes > 0 && pbytes > ck_max_bytes))
+		trim(NULL);
+	imp_setting = 0;
 	if (sites != NULL)
 		*sites = imp_sites;
 	return taken;
@@ -1162,4 +1217,39 @@ void ck_trim(void)
 long ck_import_dropped(void)
 {
 	return trimmed;
+}
+
+/* an import ended: kept (its cookies the store's, the older ones put aside
+   by it gone, the store held to its limits) or stopped (its cookies
+   dropped, those put aside back: the store as it was) */
+void ck_import_end(int keep)
+{
+	ck **pp, *c;
+	if (!imp_on)
+		return;
+	imp_on = 0;
+	for (pp = &all; *pp != NULL;)
+		if ((*pp)->pending && !keep) {
+			drop(pp);
+		} else {
+			(*pp)->pending = 0;
+			pp = &(*pp)->next;
+		}
+	pbytes = 0;
+	while ((c = aside) != NULL) {
+		aside = c->next;
+		if (keep) {
+			if (c->expiry)
+				changed = 1;
+			ck_free(c);
+		} else {
+			c->next = all;
+			all = c;
+			counted(c);
+		}
+	}
+	if (keep)
+		trim(NULL);
+	free(imp_site);
+	imp_site = NULL;
 }

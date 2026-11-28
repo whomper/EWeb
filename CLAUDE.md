@@ -250,9 +250,13 @@ hub stay complete, with the evidence.
   and Unselect, saved as Netscape's `safari-cookies.txt`; the owner's choices of 27 Nov 2026) or
   `tools/safari-cookies.py` in the Terminal (Python's standard library, the sites named only, never
   `cookies.txt`), `ck_import` in `cookie.c` (each line as its site's Set-Cookie; `ck_import_start` for a
-  file in pieces), `ui/ckimport.c` (the family's file dialog, EWeb's own store refused, the file read in
-  32 KB pieces, then the offer to delete it). After changing them: `make test` (`tests/net/cookies.txt`,
-  `tests/cookies/safari.py`, `tests/cookies/page.py`: the page in Chromium), `make fuzz` for a while
+  file in pieces; `ck_import_end` keeps it or, stopped, puts the store back as it was: its cookies `pending`,
+  the older ones it replaced or squeezed out kept `aside`), `ui/ckimport.c` (the family's file dialog, EWeb's own
+  store refused, the file read in 32 KB pieces, its lines in turns of the event loop, `busy_turn` in `ui/main.c`,
+  "Importing the cookies... N%" and the bar in the status line, Esc, Undo or Stop stopping it; the owner, 28 Nov
+  2026; then the offer to delete the file). After changing them: `make test` (`tests/net/cookies.txt`,
+  `tests/cookies/safari.py`, `tests/cookies/page.py`: the page in Chromium), `make hatarigui` (browse: the
+  import stopped with Esc, then whole), `make fuzz` for a while
   (`fuzz_cookie`, which imports its input too), `make itest` (`/site/cookie/`), `make hatarifiles`.
 - **Bookmarks** are `src/browse/bookmark.c` (`BOOKMARK.HTM` next to `EWEB.PRG`, Netscape's bookmark
   file; read once a start for the Bookmarks menu, one safe save at each change), listed on

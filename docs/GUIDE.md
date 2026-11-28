@@ -261,7 +261,9 @@ its cookies come from Safari in a file, which EWeb reads.
    https://github.com/whomper/EWeb/raw/v1.29/tools/safari-cookies.py,
    with the sites named; the first time, Full Disk Access for Terminal).
 3. Copy `safari-cookies.txt` to the Atari (a floppy, the network, a card).
-4. In EWeb, File > Import cookies... and choose the file. EWeb says how
+4. In EWeb, File > Import cookies... and choose the file. The status
+   line shows how far it has come ("Importing the cookies... 45%");
+   Esc (or Undo, or Stop) stops it, and then no cookie is added. EWeb says how
    many cookies it took for how many sites, and offers to delete the
    file: Delete, as it holds your logins in clear text. The cookies are
    kept in `COOKIES.TXT`, encrypted, as EWeb's own are.

@@ -21,9 +21,13 @@
 #include "util.h"
 #include "alert.h"
 #include "filepick.h"
+extern short _is_acc;
 #include "cookie.h"
+#include "conn.h"
+#include "progbar.h"
 
 #define IMP_PIECE 32768L
+#define IMP_TURN 30		/* ms of lines a turn of the event loop (the guidelines' Speed) */
 
 static char ck_dir[FP_PATH], ck_recent[FP_RECENT][FP_PATH], ck_path[FP_PATH + 16];
 
@@ -38,8 +42,8 @@ void cookies_import(void)
 	FP_SPEC spec;
 	const char *base;
 	char *data = NULL;
-	long have;
-	int n, h, skip, sites = 0;
+	long have, total, pos;
+	int n, h, skip, shown, stopped, sites = 0;
 	long dropped;
 	types[0].name = "Cookie files";
 	types[0].exts = "TXT";
@@ -65,21 +69,43 @@ void cookies_import(void)
 	}
 	/* read in pieces of IMP_PIECE, whole lines each (a line cut by a
 	   piece's end carried to the next), so that a file of any size takes
-	   only that (an export of every site Safari has was 860 KB) */
+	   only that (an export of every site Safari has was 860 KB); the
+	   lines in turns of the event loop, the bar moving in the status
+	   line, Esc, Undo or Stop stopping it with nothing added (the owner,
+	   28 Nov 2026: "Can you make a progress bar for the import?"); the
+	   accessory's file shut across each turn (no file open across an
+	   event call: 2.2), opened again at its place for the next piece */
 	if ((h = pf_open(ck_path, 0)) < 0 || (data = malloc(IMP_PIECE)) == NULL) {
 		if (h >= 0)
 			pf_close(h);
 		alert(1, "[3][EWeb can't read that file.][ OK ]");
 		return;
 	}
-	graf_mouse(BUSYBEE, 0);	/* (a file of every site Safari has: half a minute of a stock Falcon) */
-	win_status("Importing the cookies...");
+	total = pf_open_size(h);
+	if (total <= 0)
+		total = 1;
+	graf_mouse(BUSYBEE, 0);
+	conn_stop = 0;
+	shown = -1;
 	ck_import_start();
 	n = 0;
 	have = 0;
 	skip = 0;
+	pos = 0;
+	stopped = 0;
 	for (;;) {
-		long got = pf_read(h, data + have, IMP_PIECE - have), use;
+		long got, use, at;
+		if (h < 0 && ((h = pf_open(ck_path, 0)) < 0 || pf_seek(h, pos) != pos)) {
+			got = -1;	/* (gone meanwhile: what was read is kept) */
+		} else {
+			got = pf_read(h, data + have, IMP_PIECE - have);
+			if (got > 0)
+				pos += got;
+			if (_is_acc) {
+				pf_close(h);
+				h = -1;
+			}
+		}
 		if (got <= 0) {
 			if (have > 0 && !skip)
 				n += ck_import(data, have, &sites);	/* (the last line, without its end) */
@@ -106,16 +132,48 @@ void cookies_import(void)
 			}
 			continue;
 		}
-		n += ck_import(data, use, &sites);
+		/* the piece's lines, IMP_TURN ms of them a turn */
+		for (at = 0; at < use && !stopped;) {
+			unsigned long t0 = pf_ms();
+			int pc;
+			while (at < use && (long) (pf_ms() - t0) < IMP_TURN) {
+				char *e = memchr(data + at, '\n', (size_t) (use - at));
+				long l = (long) (e - (data + at)) + 1;
+				n += ck_import(data + at, l, &sites);
+				at += l;
+			}
+			pc = (int) ((pos - (have - at)) * 100 / total);
+			if (pc > 99)
+				pc = 99;
+			if (pc != shown) {
+				char s[48];
+				shown = pc;
+				snprintf(s, sizeof s, "Importing the cookies... %d%%", pc);
+				win_status(s);
+				win_progress(0, (int) ((long) PB_FULL * pc / 100));
+			}
+			if (busy_turn())
+				stopped = 1;
+		}
+		if (stopped)
+			break;
 		have -= use;
 		memmove(data, data + use, (size_t) have);
 	}
-	pf_close(h);
+	if (h >= 0)
+		pf_close(h);
 	free(data);
-	graf_mouse(ARROW, 0);
-	win_status("");
+	ck_import_end(!stopped);	/* (kept: the jar held to its size; stopped: the store as it was) */
 	dropped = ck_import_dropped();
-	ck_import_start();	/* (its table of sites given back) */
+	conn_stop = 0;
+	graf_mouse(ARROW, 0);
+	win_progress(-1, 0);
+	win_status("");
+	if (stopped) {
+		log_event("cookies: the import stopped, none added");
+		alert(1, "[1][Import stopped: no cookies|were added.][ OK ]");
+		return;
+	}
 	log_event("cookies imported %d for %d sites", n, sites);
 	if (n == 0) {
 		alert(1, "[1][There are no cookies in that|file that EWeb can use.][ OK ]");

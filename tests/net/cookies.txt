@@ -355,3 +355,27 @@ import 15 1 .i0.example.org\tTRUE\t/\tFALSE\t1800000000\tk0\txxxxxxxxxxxxxxxxxxx
 bytes<= 1024
 get https://i14.example.org/ k14=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 get https://i0.example.org/ -
+
+case a stopped import leaves the store as it was: a cookie it would replace, one it would add, the jar's older ones
+jar 1
+set https://keep.example.com/ sid=old-login; Max-Age=3600
+set https://other.example.org/ o=1; Max-Age=3600
+importstop .keep.example.com\tTRUE\t/\tFALSE\t1800000000\tsid\tnew-login\n.added.example.net\tTRUE\t/\tFALSE\t1800000000\ta\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n
+get https://keep.example.com/ sid=old-login
+get https://added.example.net/ -
+count 2
+
+case a kept import over a full jar drops the older cookies, its own kept
+jar 1
+set https://o0.example.com/ o0=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o1.example.com/ o1=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o2.example.com/ o2=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o3.example.com/ o3=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o4.example.com/ o4=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o5.example.com/ o5=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o6.example.com/ o6=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+set https://o7.example.com/ o7=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+import 6 1 .n0.example.org\tTRUE\t/\tFALSE\t1800000000\tn0\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.n1.example.org\tTRUE\t/\tFALSE\t1800000000\tn1\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.n2.example.org\tTRUE\t/\tFALSE\t1800000000\tn2\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.n3.example.org\tTRUE\t/\tFALSE\t1800000000\tn3\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.n4.example.org\tTRUE\t/\tFALSE\t1800000000\tn4\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.n5.example.org\tTRUE\t/\tFALSE\t1800000000\tn5\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n
+get https://n5.example.org/ n5=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+bytes<= 1024
+get https://o0.example.com/ -

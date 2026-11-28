@@ -4426,3 +4426,14 @@ acc_closed_now:
 /* ---------------------------------------------------------------- the accessory */
 
 #endif
+
+/* a turn of the event loop while EWeb is busy with a task of its own (File >
+   Import cookies...): redraws and the windows' messages taken, the rest
+   put off; 1 when Esc, Undo or Stop asked it to stop, or EWeb is to quit.
+   Last in the file: what comes before it keeps its place (codepads.h) */
+int busy_turn(void)
+{
+	idle();
+	return quit || conn_stop;
+}
+

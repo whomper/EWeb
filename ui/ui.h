@@ -70,6 +70,7 @@ void acc_wait(char *first, int size);
 int acc_locate(void);
 void acc_menu(short x, short y);	/* the toolbar's menu (3.1) */
 void cookies_import(void);		/* ckimport.c: File > Import cookies... */
+int busy_turn(void);			/* main.c: a turn of the event loop while busy; 1 when asked to stop */
 void play_tracks(const char *about);	/* play.c: a Bandcamp page's Play, to EPlay */
 int wide_site(const char *url);		/* wide.c: url's site laid out 1024 CSS px wide */
 int wide_can(const char *url);		/* an http or https address (a site to tick) */

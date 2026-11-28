@@ -96,7 +96,8 @@ BACKSPACE, LEFT, RIGHT = 0x0E, 0x4B, 0x4D
 
 # the keys for a URL's characters on the US keyboard: Hatari's keypress
 # takes letters and digits as they are
-KEYS = {":": (SHIFT, 0x27), "/": (None, 0x35), ".": (None, 0x34), "#": (SHIFT, 0x04), "-": (None, 0x0C)}
+KEYS = {":": (SHIFT, 0x27), "/": (None, 0x35), ".": (None, 0x34), "#": (SHIFT, 0x04), "-": (None, 0x0C),
+        "*": (SHIFT, 0x09)}
 
 
 def hd_for(name, home, inf=""):
@@ -1315,6 +1316,47 @@ def browse():
               ev is not None and ev.startswith("shown view-source:%senc/w1255.html " % site), str(r.events()[n:][-6:]))
         r.key(U, (CTRL,))		# (that window closed: the page's again in front)
         time.sleep(2)
+        # File > Import cookies... (1.30; the owner, 28 Nov 2026): the
+        # lines in turns of the event loop, "Importing the cookies... N%"
+        # and the bar in the status line; Esc stops it with nothing added,
+        # then a whole import, its alert's Delete taking the file away
+        with open(os.path.join(hd, "IMPORT.TXT"), "w", newline="\n") as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            for i in range(400):
+                f.write(".site%03d.example.org\tTRUE\t/\tFALSE\t1900000000\tk%d\t%s\n" % (i, i, "v" * 60))
+
+        def import_file():
+            n0 = len(r.events())
+            r.mouse.move(16 + 8 * len(" EWeb  Fi"), 5)	# the File menu, dropped
+            r.mouse.click(16 + 8 * len(" EWeb  File"), 19 + 4 * 16 + 8)	# Import cookies...
+            ev = r.wait(r"geom ", 60)
+            time.sleep(2)
+            r.type("IMP*")			# (the mask: IMPORT.TXT alone)
+            time.sleep(1)
+            r.key(DOWN)
+            r.key(RETURN)
+            return ev, n0
+        ev, n0 = import_file()
+        st = r.wait(r"status Importing the cookies\.\.\. [1-9]", 120)
+        r.key(ESC)
+        stop = r.wait(r"cookies: the import stopped", 120)
+        time.sleep(2)
+        r.shot(18)
+        r.key(RETURN)			# (the alert: Import stopped)
+        check("cookies: File > Import cookies... shows its bar in the status line, and Esc stops it",
+              ev is not None and st is not None and stop is not None, str(r.events()[n0:][-8:]))
+        time.sleep(2)
+        ev, n0 = import_file()
+        done = r.wait(r"cookies imported ", 600)
+        time.sleep(2)
+        r.shot(19)
+        r.key(RETURN)			# (the alert: Delete the file)
+        dele = r.wait(r"cookies: the imported file deleted", 60)
+        evs = r.events()[n0:]
+        pcs = set(e for e in evs if e.startswith("status Importing the cookies... "))
+        check("cookies: a whole import, its percentages moving, every site's, the file deleted",
+              done == "cookies imported 400 for 1 sites" and len(pcs) >= 3 and dele is not None and
+              not os.path.exists(os.path.join(hd, "IMPORT.TXT")), "%r %r %r" % (done, sorted(pcs)[:4], evs[-6:]))
         r.key(Q, (CTRL,))
         check("browse: ^Q quits", r.wait(r"quit$", 60) is not None, str(r.events()))
         hist = ""

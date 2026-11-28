@@ -101,6 +101,7 @@ int main(int argc, char **argv)
 					got_n += ck_import(text + at, l, &got_s);
 					at += l;
 				}
+				ck_import_end(1);
 			}
 			if (got_n != want_n || got_s != want_s) {
 				fprintf(stderr, "FAIL %s: import took %d for %d sites, not %ld for %ld\n", name, got_n,
@@ -123,6 +124,7 @@ int main(int argc, char **argv)
 					at = 0;
 				}
 			}
+			ck_import_end(1);
 			if (got_n != want || got_s != want) {
 				fprintf(stderr, "FAIL %s: importmany took %d for %d sites, not %ld\n", name, got_n, got_s, want);
 				failed++;
@@ -203,6 +205,35 @@ int main(int argc, char **argv)
 			}
 			free(t);
 			free(t2);
+		} else if (!strcmp(a, "importstop")) {
+			/* importstop TEXT: an import of TEXT stopped half way (its
+			   lines in, then ck_import_end(0)): the store's text after it
+			   the text before, cookie for cookie (File > Import cookies...,
+			   Esc: "no cookies were added") */
+			static char text[4096];
+			long k = 0, len0, len1;
+			int s = 0;
+			char *t0, *t1;
+			for (; *b && k < (long) sizeof text - 1; b++)
+				if (b[0] == '\\' && b[1] == 't')
+					text[k++] = '\t', b++;
+				else if (b[0] == '\\' && b[1] == 'n')
+					text[k++] = '\n', b++;
+				else
+					text[k++] = *b;
+			text[k] = 0;
+			t0 = ck_text(&len0);
+			ck_import_start();
+			ck_import(text, k, &s);
+			ck_import_end(0);
+			t1 = ck_text(&len1);
+			if (len0 != len1 || memcmp(t0, t1, (size_t) len0) != 0) {
+				fprintf(stderr, "FAIL %s: the store changed by a stopped import\n", name);
+				failed++;
+				ok = 0;
+			}
+			free(t0);
+			free(t1);
 		} else if (!strcmp(a, "jar")) {
 			ck_max_bytes = atol(b) * 1024L;	/* jar KB: the cookie jar's size, 0 none */
 		} else if (!strcmp(a, "bytes<=")) {

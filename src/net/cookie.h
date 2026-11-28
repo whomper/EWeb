@@ -74,6 +74,9 @@ int ck_import(const char *text, long len, int *sites);
 /* (a file read in pieces, whole lines each: ck_import_start first, *sites
    then the sites of all the pieces so far) */
 void ck_import_start(void);
+/* (an import begun by ck_import_start is pending until this: keep 1, its
+   cookies the store's; 0, stopped, the store as it was before it) */
+void ck_import_end(int keep);
 long ck_import_dropped(void);
 
 #endif

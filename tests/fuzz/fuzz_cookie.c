@@ -57,6 +57,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 		int sites;
 		ck_import_start();
 		ck_import((const char *) d, (long) n, &sites);
+		ck_import_end(n & 1);	/* (kept or stopped, by the input's length) */
 	}
 	t1 = ck_text(&l1);
 	ck_clear();
