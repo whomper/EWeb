@@ -253,7 +253,7 @@ hub stay complete, with the evidence.
   file in pieces; `ck_import_end` keeps it or, stopped, puts the store back as it was: its cookies `pending`,
   the older ones it replaced or squeezed out kept `aside`), `ui/ckimport.c` (the family's file dialog, EWeb's own
   store refused, the file read in 32 KB pieces, its lines in turns of the event loop, `busy_turn` in `ui/main.c`,
-  "Importing the cookies... N%" and the bar in the status line, Esc, Undo or Stop stopping it; the owner, 28 Nov
+  "Importing cookies... N%" and the bar in the status line, Esc, Undo or Stop stopping it; the owner, 28 Nov
   2026; then the offer to delete the file). After changing them: `make test` (`tests/net/cookies.txt`,
   `tests/cookies/safari.py`, `tests/cookies/page.py`: the page in Chromium), `make hatarigui` (browse: the
   import stopped with Esc, then whole), `make fuzz` for a while

@@ -1317,7 +1317,7 @@ def browse():
         r.key(U, (CTRL,))		# (that window closed: the page's again in front)
         time.sleep(2)
         # File > Import cookies... (1.30; the owner, 28 Nov 2026): the
-        # lines in turns of the event loop, "Importing the cookies... N%"
+        # lines in turns of the event loop, "Importing cookies... N%"
         # and the bar in the status line; Esc stops it with nothing added,
         # then a whole import, its alert's Delete taking the file away
         with open(os.path.join(hd, "IMPORT.TXT"), "w", newline="\n") as f:
@@ -1337,7 +1337,7 @@ def browse():
             r.key(RETURN)
             return ev, n0
         ev, n0 = import_file()
-        st = r.wait(r"status Importing the cookies\.\.\. [1-9]", 120)
+        st = r.wait(r"status Importing cookies\.\.\. [1-9]", 120)
         r.key(ESC)
         stop = r.wait(r"cookies: the import stopped", 120)
         time.sleep(2)
@@ -1353,7 +1353,7 @@ def browse():
         r.key(RETURN)			# (the alert: Delete the file)
         dele = r.wait(r"cookies: the imported file deleted", 60)
         evs = r.events()[n0:]
-        pcs = set(e for e in evs if e.startswith("status Importing the cookies... "))
+        pcs = set(e for e in evs if e.startswith("status Importing cookies... "))
         check("cookies: a whole import, its percentages moving, every site's, the file deleted",
               done == "cookies imported 400 for 1 sites" and len(pcs) >= 3 and dele is not None and
               not os.path.exists(os.path.join(hd, "IMPORT.TXT")), "%r %r %r" % (done, sorted(pcs)[:4], evs[-6:]))

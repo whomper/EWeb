@@ -148,7 +148,7 @@ void cookies_import(void)
 			if (pc != shown) {
 				char s[48];
 				shown = pc;
-				snprintf(s, sizeof s, "Importing the cookies... %d%%", pc);
+				snprintf(s, sizeof s, "Importing cookies... %d%%", pc);
 				win_status(s);
 				win_progress(0, (int) ((long) PB_FULL * pc / 100));
 			}
