@@ -1251,10 +1251,10 @@ build/asan/enctest: $(ENC_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) bui
 # which sites' scripts run: the setting, the lists, those too much
 # (tests/browse/sitetest.c: br_scripts_site, whatever the FPU)
 SITE_SRC := tests/browse/sitetest.c tests/host/dsp_none.c $(HOSTNET_SRC)
-build/asan/bctest: tests/browse/bctest.c src/browse/bandcamp.c src/browse/bandcamp.h common/src/util.c
+build/asan/bctest: tests/browse/bctest.c src/browse/bandcamp.c src/browse/bandcamp.h common/src/util.c src/net/url.c
 	@mkdir -p $(@D)
-	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Isrc -Isrc/browse -Icommon/src \
-		-o $@ tests/browse/bctest.c src/browse/bandcamp.c common/src/util.c
+	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined -Wall -Wextra -Werror -Isrc -Isrc/browse -Isrc/net \
+		-Icommon/src -o $@ tests/browse/bctest.c src/browse/bandcamp.c common/src/util.c src/net/url.c
 build/asan/sitetest: $(SITE_SRC) $(asan_EWB) $(asan_EC) $(asan_PU) $(NET_HDRS) build/host/libbearssl.a \
 		build/asan/pic.a build/asan/js/js_none.o
 	$(HOSTCC) -O1 -g -std=gnu99 $(SAN) -fno-sanitize-recover=undefined $(EWB_FLAGS) $(NSINC) -o $@ $(SITE_SRC) \

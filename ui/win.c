@@ -21,6 +21,7 @@
 
 #include "ui.h"
 #include "progbar.h"
+#include "bandcamp.h"
 #include "canvas.h"
 #include "charset.h"
 #include "click.h"
@@ -3507,9 +3508,28 @@ static void context_menu(short mx, short my)
 {
 	int l = link_at(mx, my);
 	if (l >= 0) {
-		static const char *const items[] = { "Open the link", "Open it in a new window  Ctrl-click",
-						     "Save the link's file...  Alt-click", "Copy the link's address" };
-		short r = popup_m(mx, my, items, 4);
+		static const char *items[] = { "Open the link", "Open it in a new window  Ctrl-click",
+					       "Save the link's file...  Alt-click", "Copy the link's address",
+					       "Play in EPlay" };
+		short r;
+#ifndef EW_ST
+		/* (a link to audio EPlay plays: Play in EPlay, 1.30; the owner,
+		   28 Nov 2026) */
+		char lu[1024];
+		bc_album *one = NULL;
+		int play = 0;
+		br_link_url(&br, l, lu, sizeof lu);
+		play = au_playable(lu);
+		r = popup_m(mx, my, items, play ? 5 : 4);
+		if (r == 4 && (one = au_one(lu, NULL)) != NULL) {
+			char about[48];
+			snprintf(about, sizeof about, "about:play?a=%d&from=0", one->id);
+			play_tracks(about);
+			return;
+		}
+#else
+		r = popup_m(mx, my, items, 4);
+#endif
 		if (r == 0) {
 			follow(l);
 		} else if (r == 1) {

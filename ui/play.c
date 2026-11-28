@@ -76,7 +76,7 @@ void play_tracks(const char *about)
 	SBUF s;
 	int n;
 	if (al == NULL) {
-		alert(1, "[1][The album's tracks have gone|from memory: load its page|again (^R), then Play.][ OK ]");
+		alert(1, "[1][The tracks have gone from|memory: load the page again|(^R), then Play.][ OK ]");
 		return;
 	}
 	sb_init(&s);
@@ -103,12 +103,12 @@ void play_tracks(const char *about)
 			memcpy(tail + 1, m3u, (size_t) k);
 			tail[k + 1] = 0;
 			shel_write(1, 1, get_cookie(0x4D616758L) ? 100 : 1, prog, tail);
-			win_status("EPlay is starting with the album.");
+			win_status(al->album ? "EPlay is starting with the album." : "EPlay is starting.");
 			log_event("play: EPlay started");
 			return;
 		}
-		alert(1, "[1][EPlay plays Bandcamp's tracks,|and EWeb can't find it: start|EPlay first, then Play again.][ OK ]");
+		alert(1, "[1][EPlay plays this page's audio,|and EWeb can't find it: start|EPlay first, then Play again.][ OK ]");
 		return;
 	}
-	alert(1, "[1][EPlay plays Bandcamp's tracks.|Start EPlay first, then|Play again.][ OK ]");
+	alert(1, "[1][EPlay plays this page's audio.|Start EPlay first, then|Play again.][ OK ]");
 }

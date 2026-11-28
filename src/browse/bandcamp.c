@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "bandcamp.h"
+#include "url.h"
 
 /* the albums last shown, the newest first: a Play on a page kept for Back
    finds its own (each by its page's address) */
@@ -175,6 +176,19 @@ int bc_page(const char *url)
 	return 1;
 }
 
+/* a, kept, the newest first (the same page's replaced) */
+static void keep(bc_album *a)
+{
+	int i, k = BC_KEPT - 1;
+	for (i = 0; i < BC_KEPT; i++)
+		if (kept[i] != NULL && strcmp(kept[i]->page, a->page) == 0)
+			k = i;
+	free(kept[k]);
+	for (i = k; i > 0; i--)
+		kept[i] = kept[i - 1];
+	kept[0] = a;
+}
+
 bc_album *bc_read(const char *url, const char *data, long len)
 {
 	char *j = attr_value(data, len, "data-tralbum");
@@ -225,17 +239,8 @@ bc_album *bc_read(const char *url, const char *data, long len)
 		free(a);
 		return NULL;
 	}
-	/* kept, the newest first (the same page's replaced) */
-	{
-		int i, k = BC_KEPT - 1;
-		for (i = 0; i < BC_KEPT; i++)
-			if (kept[i] != NULL && strcmp(kept[i]->page, url) == 0)
-				k = i;
-		free(kept[k]);
-		for (i = k; i > 0; i--)
-			kept[i] = kept[i - 1];
-		kept[0] = a;
-	}
+	a->album = 1;
+	keep(a);
 	return a;
 }
 
@@ -259,8 +264,10 @@ int bc_m3u(const bc_album *a, int from, SBUF *out)
 			char n2[40];
 			snprintf(n2, sizeof n2, "#EXTINF:%ld,", a->t[i].seconds > 0 ? a->t[i].seconds : -1L);
 			sb_adds(out, n2);	/* (sb_printf cuts long lines) */
-			sb_adds(out, a->artist);
-			sb_adds(out, " - ");
+			if (a->artist[0]) {
+				sb_adds(out, a->artist);
+				sb_adds(out, " - ");
+			}
 			sb_adds(out, a->t[i].title);
 			sb_adds(out, "\r\n");
 		}
@@ -339,3 +346,342 @@ void bc_html(SBUF *s, const bc_album *a, const char *cover, const char *style)
 		   "player streams them (128 kbit/s MP3). Bandcamp's own page is made by scripts far bigger than "
 		   "EWeb runs; this page of EWeb's stands in for it.</p></body></html>");
 }
+
+/* ---------------------------------------------------------------- a page's audio */
+
+/* the place after "key" and its colon (spaces allowed, as JSON-LD has
+   them) at or after p, before end; NULL none */
+static const char *ld_key(const char *p, const char *end, const char *key)
+{
+	size_t k = strlen(key);
+	for (; p + k + 2 < end; p++)
+		if (*p == '"' && memcmp(p + 1, key, k) == 0 && p[k + 1] == '"') {
+			const char *q = p + k + 2;
+			while (q < end && (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n'))
+				q++;
+			if (q < end && *q == ':') {
+				for (q++; q < end && (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n'); q++)
+					;
+				return q;
+			}
+		}
+	return NULL;
+}
+
+/* an ISO 8601 duration (PT3M20S, PT1H2M) in seconds; 0 none */
+static long iso_secs(const char *s)
+{
+	long n = 0, v = 0;
+	if (*s != 'P')
+		return 0;
+	for (s++; *s && *s != '"'; s++)
+		if (*s >= '0' && *s <= '9')
+			v = v * 10 + (*s - '0');
+		else if (*s == 'H')
+			n += v * 3600, v = 0;
+		else if (*s == 'M')
+			n += v * 60, v = 0;
+		else if (*s == 'S')
+			n += v, v = 0;
+		else if (*s == '.')
+			while (s[1] >= '0' && s[1] <= '9')
+				s++;
+	return n;
+}
+
+/* how EPlay takes an address: 1 it plays it (MP3, WAV, AIFF, an .m3u),
+   2 audio it doesn't (Ogg, Opus, AAC, M4A, FLAC, HLS: the Gateway's), 0 not
+   audio by its name (its type, when given, says: type) */
+static int au_kind(const char *u, const char *type)
+{
+	static const char *const yes[] = { ".mp3", ".wav", ".aif", ".aiff", ".m3u" };
+	static const char *const other[] = { ".ogg", ".oga", ".opus", ".aac", ".m4a", ".flac", ".m3u8", ".pls" };
+	const char *e = u + strcspn(u, "?#");
+	size_t i;
+	for (i = 0; i < sizeof yes / sizeof yes[0]; i++) {
+		size_t k = strlen(yes[i]);
+		if ((size_t) (e - u) > k && strncasecmp(e - k, yes[i], k) == 0)
+			return 1;
+	}
+	for (i = 0; i < sizeof other / sizeof other[0]; i++) {
+		size_t k = strlen(other[i]);
+		if ((size_t) (e - u) > k && strncasecmp(e - k, other[i], k) == 0)
+			return 2;
+	}
+	if (type != NULL && strncasecmp(type, "audio/", 6) == 0)
+		return strncasecmp(type + 6, "mpeg", 4) == 0 || strncasecmp(type + 6, "mp3", 3) == 0 ||
+		       strncasecmp(type + 6, "wav", 3) == 0 || strncasecmp(type + 6, "x-wav", 5) == 0 ||
+		       strncasecmp(type + 6, "aiff", 4) == 0 || strncasecmp(type + 6, "x-aiff", 6) == 0 ? 1 : 2;
+	return 0;
+}
+
+/* an address from the page (its HTML's entities undone: &amp;) joined to
+   the page's, into out */
+static int au_join(const URL *base, const char *s, size_t n, char *out, int size)
+{
+	char raw[1024], *o = raw;
+	static URL u;		/* (4 KB: not on the stack) */
+	size_t i;
+	for (i = 0; i < n && o < raw + sizeof raw - 1; i++) {
+		if (s[i] == '&' && i + 4 < n && memcmp(s + i, "&amp;", 5) == 0) {
+			*o++ = '&';
+			i += 4;
+		} else {
+			*o++ = s[i];
+		}
+	}
+	*o = 0;
+	if (!url_parse(&u, raw, base) || !u.special || (int) strlen(u.href) >= size)
+		return 0;
+	memcpy(out, u.href, strlen(u.href) + 1);
+	return 1;
+}
+
+/* a track to the list: its address once; kind 2 counted, not taken */
+static void au_add(bc_album *a, const char *url, int kind, const char *title, long secs)
+{
+	int i;
+	if (kind == 0 || !url[0])
+		return;
+	for (i = 0; i < a->n; i++)
+		if (strcmp(a->t[i].url, url) == 0)
+			return;
+	if (kind == 2) {
+		a->others++;
+		return;
+	}
+	if (a->n >= BC_TRACKS)
+		return;
+	snprintf(a->t[a->n].url, sizeof a->t[a->n].url, "%s", url);
+	snprintf(a->t[a->n].title, sizeof a->t[a->n].title, "%s", title && title[0] ? title : "");
+	if (!a->t[a->n].title[0]) {
+		/* (its file's name, without its folder or its query) */
+		const char *e = url + strcspn(url, "?#"), *b = e;
+		while (b > url && b[-1] != '/')
+			b--;
+		snprintf(a->t[a->n].title, sizeof a->t[a->n].title, "%.*s", (int) (e - b), b);
+	}
+	a->t[a->n].seconds = secs;
+	a->n++;
+}
+
+/* an attribute's value in the tag from p to e: where and how long; NULL none */
+static const char *tag_attr(const char *p, const char *e, const char *name, size_t *len)
+{
+	size_t k = strlen(name);
+	for (; p + k + 1 < e; p++)
+		if ((p[-1] == ' ' || p[-1] == '\t' || p[-1] == '\n' || p[-1] == '\r') && strncasecmp(p, name, k) == 0 &&
+		    p[k] == '=') {
+			const char *v = p + k + 1, *ve;
+			char q = *v == '"' || *v == '\'' ? *v++ : 0;
+			for (ve = v; ve < e && (q ? *ve != q : *ve != ' ' && *ve != '>'); ve++)
+				;
+			*len = (size_t) (ve - v);
+			return v;
+		}
+	return NULL;
+}
+
+/* the schema.org recordings in a JSON-LD block, from p to e */
+static void au_ld(bc_album *a, const URL *base, const char *p, const char *e)
+{
+	const char *t = ld_key(p, e, "@type"), *v;
+	int album = t != NULL && (strncmp(t, "\"MusicAlbum\"", 12) == 0 || strncmp(t, "\"MusicPlaylist\"", 15) == 0);
+	if (t == NULL || (!album && strncmp(t, "\"MusicRecording\"", 16) != 0))
+		return;
+	if (album) {
+		if ((v = ld_key(p, e, "name")) != NULL && *v == '"' && !a->title[0])
+			json_str(v, a->title, sizeof a->title);
+		if ((v = ld_key(p, e, "byArtist")) != NULL && (v = ld_key(v, e, "name")) != NULL && *v == '"' && !a->artist[0])
+			json_str(v, a->artist, sizeof a->artist);
+	}
+	/* each recording: its name, its duration, its audio's address */
+	for (v = p; (v = ld_key(v, e, "@type")) != NULL; v++) {
+		const char *o, *oe, *f;
+		char name[128], url[1024], u[512];
+		long secs = 0;
+		if (strncmp(v, "\"MusicRecording\"", 16) != 0)
+			continue;
+		for (o = v; o > p && *o != '{'; o--)
+			;
+		if (*o != '{' || (oe = json_end(o)) == NULL || oe > e)
+			continue;
+		name[0] = url[0] = 0;
+		if ((f = ld_key(o, oe, "name")) != NULL && *f == '"')
+			json_str(f, name, sizeof name);
+		if ((f = ld_key(o, oe, "duration")) != NULL && *f == '"')
+			secs = iso_secs(f + 1);
+		if ((f = ld_key(o, oe, "contentUrl")) != NULL && *f == '"')
+			json_str(f, url, sizeof url);
+		else if ((f = ld_key(o, oe, "audio")) != NULL && *f == '"')
+			json_str(f, url, sizeof url);
+		if (url[0] && au_join(base, url, strlen(url), u, sizeof u)) {
+			char ty[40];
+			ty[0] = 0;
+			if ((f = ld_key(o, oe, "encodingFormat")) != NULL && *f == '"')
+				json_str(f, ty, sizeof ty);
+			au_add(a, u, au_kind(u, ty[0] ? ty : NULL), name, secs);
+		}
+		v = oe - 1;
+	}
+	if (album && a->n > 0)
+		a->album = 1;
+}
+
+/* 1 when the page may have audio: "audio", "Audio" (og:audio, <audio>,
+   audio/..., AudioObject), "Music" (schema.org's) or ".mp3", ".wav",
+   ".aif", ".m3u" in it; the rest of the page's scan only then (memchr's
+   pace: every page is looked at) */
+static int au_maybe(const char *data, long len)
+{
+	const char *p = data, *end = data + len;
+	while (p < end && (p = memchr(p, 'u', (size_t) (end - p))) != NULL) {
+		if (p >= data + 1 && p + 3 < end && (p[-1] == 'a' || p[-1] == 'A') && p[1] == 'd' && p[2] == 'i' &&
+		    p[3] == 'o')
+			return 1;
+		if (p >= data + 1 && p + 3 < end && p[-1] == 'M' && p[1] == 's' && p[2] == 'i' && p[3] == 'c')
+			return 1;
+		p++;
+	}
+	for (p = data; p < end && (p = memchr(p, '.', (size_t) (end - p))) != NULL; p++)
+		if (p + 3 < end && ((p[1] == 'm' && p[2] == 'p' && p[3] == '3') || (p[1] == 'w' && p[2] == 'a' && p[3] == 'v') ||
+				    (p[1] == 'a' && p[2] == 'i' && p[3] == 'f') || (p[1] == 'm' && p[2] == '3' && p[3] == 'u') ||
+				    (p[1] == 'M' && p[2] == 'P' && p[3] == '3')))
+			return 1;
+	return 0;
+}
+
+bc_album *au_find(const char *url, const char *data, long len)
+{
+	static URL base;	/* (4 KB: not on the stack) */
+	const char *p, *end = data + len;
+	bc_album *a;
+	if (bc_page(url))
+		return bc_read(url, data, len);
+	if (!au_maybe(data, len))
+		return NULL;
+	if (!url_parse(&base, url, NULL))
+		return NULL;
+	a = calloc(1, sizeof *a);
+	if (a == NULL)
+		return NULL;
+	snprintf(a->page, sizeof a->page, "%s", url);
+	for (p = data; p < end; p++) {
+		const char *te;
+		size_t n;
+		if (*p != '<')
+			continue;
+		for (te = p; te < end && *te != '>'; te++)
+			;
+		if (te >= end)
+			break;
+		if (strncasecmp(p, "<script", 7) == 0) {
+			const char *ty = tag_attr(p + 1, te, "type", &n), *se;
+			for (se = te; se + 9 <= end && strncasecmp(se, "</script", 8) != 0; se++)
+				;
+			if (ty != NULL && n == 19 && strncasecmp(ty, "application/ld+json", 19) == 0)
+				au_ld(a, &base, te + 1, se);
+			p = se;
+		} else if (strncasecmp(p, "<meta", 5) == 0) {
+			const char *pr = tag_attr(p + 1, te, "property", &n), *c;
+			size_t cn;
+			char u[512];
+			if (pr != NULL && ((n == 8 && strncasecmp(pr, "og:audio", 8) == 0) ||
+					   (n == 12 && strncasecmp(pr, "og:audio:url", 12) == 0) ||
+					   (n == 19 && strncasecmp(pr, "og:audio:secure_url", 19) == 0)) &&
+			    (c = tag_attr(p + 1, te, "content", &cn)) != NULL && au_join(&base, c, cn, u, sizeof u))
+				au_add(a, u, au_kind(u, "audio/"), NULL, 0);
+		} else if (strncasecmp(p, "<audio", 6) == 0 || strncasecmp(p, "<source", 7) == 0) {
+			const char *s = tag_attr(p + 1, te, "src", &n), *ty;
+			size_t tn;
+			char u[512], tb[40];
+			tb[0] = 0;
+			if ((ty = tag_attr(p + 1, te, "type", &tn)) != NULL)
+				snprintf(tb, sizeof tb, "%.*s", (int) tn, ty);
+			if (s != NULL && au_join(&base, s, n, u, sizeof u) &&
+			    (p[1] == 'a' || p[1] == 'A' || au_kind(u, tb[0] ? tb : NULL)))
+				au_add(a, u, au_kind(u, tb[0] ? tb : "audio/"), NULL, 0);
+		} else if ((p[1] == 'a' || p[1] == 'A') && (p[2] == ' ' || p[2] == '\t' || p[2] == '\n')) {
+			const char *h = tag_attr(p + 1, te, "href", &n), *ty, *ae, *q;
+			size_t tn;
+			char u[512], tb[40], text[128];
+			int k, o = 0;
+			tb[0] = 0;
+			if ((ty = tag_attr(p + 1, te, "type", &tn)) != NULL)
+				snprintf(tb, sizeof tb, "%.*s", (int) tn, ty);
+			if (h == NULL || !au_join(&base, h, n, u, sizeof u) || (k = au_kind(u, tb[0] ? tb : NULL)) == 0)
+				continue;
+			/* its words, the tags in them left out */
+			for (ae = te + 1; ae + 4 <= end && strncasecmp(ae, "</a", 3) != 0; ae++)
+				;
+			for (q = te + 1; q < ae && o < (int) sizeof text - 1; q++) {
+				if (*q == '<') {
+					while (q < ae && *q != '>')
+						q++;
+					continue;
+				}
+				if (*q == '\n' || *q == '\r' || *q == '\t' || (*q == ' ' && (o == 0 || text[o - 1] == ' ')))
+					continue;
+				text[o++] = *q;
+			}
+			while (o > 0 && text[o - 1] == ' ')
+				o--;
+			text[o] = 0;
+			au_add(a, u, k, text, 0);
+		}
+		p = te;
+	}
+	if (a->n == 0) {
+		free(a);
+		return NULL;
+	}
+	{
+		static int next_id = 1000000;
+		a->id = ++next_id;
+	}
+	keep(a);
+	return a;
+}
+
+int au_bar(SBUF *out, const bc_album *a, const char *data, long len)
+{
+	const char *p, *end = data + len, *te;
+	char line[256];
+	for (p = data; p + 5 < end; p++)
+		if (*p == '<' && strncasecmp(p, "<body", 5) == 0 && (p[5] == '>' || p[5] == ' ' || p[5] == '\t' || p[5] == '\n'))
+			break;
+	if (p + 5 >= end)
+		return 0;
+	for (te = p; te < end && *te != '>'; te++)
+		;
+	if (te >= end)
+		return 0;
+	sb_add(out, data, te + 1 - data);
+	snprintf(line, sizeof line,
+		 "<div style=\"margin:0;padding:4px 8px;background:#fbeee2;color:#1b1714;font:13px sans-serif;"
+		 "border-bottom:1px solid #b87333\">%d audio %s on this page &middot; "
+		 "<a href=\"about:play?a=%d&amp;from=0\" style=\"color:#b87333\">Play in EPlay</a></div>",
+		 a->n, a->n == 1 ? "track" : "tracks", a->id);
+	sb_adds(out, line);
+	sb_add(out, te + 1, end - (te + 1));
+	return 1;
+}
+
+int au_playable(const char *url)
+{
+	return au_kind(url, NULL) == 1;
+}
+
+bc_album *au_one(const char *url, const char *title)
+{
+	bc_album *a = calloc(1, sizeof *a);
+	static int next_id = 2000000;
+	if (a == NULL)
+		return NULL;
+	snprintf(a->page, sizeof a->page, "%s", url);
+	au_add(a, url, 1, title, 0);
+	a->id = ++next_id;
+	keep(a);
+	return a;
+}
+

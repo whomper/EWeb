@@ -4382,10 +4382,13 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 		bc_album *bca = NULL;
 		if (!google && !drive && yt_video(f, did))
 			drive = 2;
-		/* a Bandcamp album's or track's: EWeb's page, its tracks for
-		   EPlay (decided 27 Nov 2026) */
-		if (!google && !drive && f->status == 200 && f->data != NULL && bc_page(f->url) &&
-		    (bca = bc_read(f->url, f->data, f->len)) != NULL)
+		/* a page's audio (au_find: Bandcamp's, a schema.org album,
+		   og:audio, <audio>, links to audio files): an album EWeb's own
+		   page, its tracks for EPlay (decided 27 Nov 2026), else a line
+		   at the page's top to play it in EPlay (1.30; the owner, 28 Nov
+		   2026: "something that is generic") */
+		if (!google && !drive && f->status == 200 && f->data != NULL && !as_source &&
+		    (bca = au_find(f->url, f->data, f->len)) != NULL && bca->album)
 			drive = 4;
 		/* a Drive folder, a Dropbox or an iCloud Drive link: EWeb's
 		   shared-files page */
@@ -4429,6 +4432,22 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			f->refresh[0] = 0;
 			r = build(b, src.s, src.len, "utf-8", f->url, 0, &d, &p);
 		} else {
+#ifndef EW_ST
+			SBUF bar;
+			sb_init(&bar);
+			if (bca != NULL && strncasecmp(enc[0] ? enc : f->charset, "utf-16", 6) != 0 &&
+			    au_bar(&bar, bca, f->data, f->len)) {
+				/* (the page with the line: the page's own source kept
+				   as it came, for View > Page source and the cache) */
+				lay_recheck = mode == NAV_REFRESH;
+				as_seen(f->url, url);
+				r = build(b, bar.s, bar.len, enc[0] ? enc : f->charset, f->url, mode == NAV_RELOAD, &d, &p);
+				sb_free(&bar);
+				lay_recheck = 0;
+				encodable = 1;
+			} else
+#endif
+			{
 			lay_recheck = mode == NAV_REFRESH;
 			as_seen(f->url, url);
 			build_may_free = f->data;
@@ -4439,6 +4458,7 @@ static int load_post(browser *b, const char *url, int mode, const FSUBMIT *post)
 			}
 			lay_recheck = 0;
 			encodable = 1;
+			}
 		}
 	} else if (as_source || strncmp(f->mime, "text/", 5) == 0) {
 		/* a text file: sniffed as a page is, but for a <meta>; and a
