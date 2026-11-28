@@ -590,7 +590,10 @@ void menu_update(void)
 	enable(C_OPENURL, !loading);
 	enable(C_OPENFILE, !loading);
 #ifndef EW_ST
-	enable(C_IMPORT, !loading);
+	/* (Import cookies and Desktop width enabled while a page loads too, a
+	   press then passed over: their menu_ienable at each load's start and
+	   end were 15 ms of a stock Falcon's page shown) */
+	enable(C_IMPORT, 1);
 	if (wide_of != &br || wide_at != br.shows) {
 		/* (once a page shown: the site's host found at each event was
 		   10 to 15 ms more of the stock Falcon's About box and Back) */
@@ -599,7 +602,7 @@ void menu_update(void)
 		wide_ok = (char) wide_can(br.url);
 		wide_on = (char) wide_site(br.url);
 	}
-	enable(C_WIDE, !loading && wide_ok);
+	enable(C_WIDE, wide_ok);
 	menu_set(1, obj_of(C_WIDE), wide_on);
 #endif
 	enable(C_SAVE, !loading && br.src != NULL);
@@ -2890,10 +2893,13 @@ void command(int cmd)
 	case C_OPENURL: win_address_focus(1); break;
 	case C_OPENFILE: open_file(); break;
 #ifndef EW_ST
-	case C_IMPORT: cookies_import(); break;
+	case C_IMPORT:
+		if (!loading)
+			cookies_import();
+		break;
 	case C_WIDE:
 		/* a setting: on the disk at once (6.5); the page laid out again */
-		if (wide_can(br.url)) {
+		if (!loading && wide_can(br.url)) {
 			wide_set(br.url, !wide_site(br.url));
 			settings_save();
 			log_event("desktop width %s", wide_site(br.url) ? "on" : "off");
