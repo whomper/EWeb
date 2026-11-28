@@ -197,6 +197,7 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 			   !tls_available ? "Not in the ST edition: EWEB.PRG has it" :
 			   "Needs a 68020 or better (TT, Falcon)";
 	(void) y, (void) user;
+	CODE_PAD((uintptr_t) s == 1, CP_DIALOGS_PAGE_SECURE);
 	/* (plain, as the menu's: decided 17 Nov 2026, D9) */
 	set_tick(s, x, set_y(s, 0), "Direct connection", &s_on[T_FALCON]);
 	set_tick(s, x + 3, set_y(s, 1), "Check certificates on the DSP", &s_on[T_DSP]);
@@ -415,6 +416,7 @@ static int settings_check(SETTINGS *s, void *user)
 	const char *bad = NULL;
 	short page = 0, field = f_zoom;
 	long v;
+	CODE_PAD((uintptr_t) s == 1, CP_DIALOGS_SETTINGS_CHECK);
 	(void) user;
 	v = atol(s_zoom);
 	if (!s_zoom[0] || v < 50 || v > 200)

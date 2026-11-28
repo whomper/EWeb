@@ -336,7 +336,7 @@ PAD_DATA_dialogs := 256
 PAD_BSS_dialogs := 254
 PAD_av := 30
 # 1.26's: the objects after common's text.o (which grew) at 1.25's places
-PAD_charset := 128
+PAD_charset := 136
 PAD_RO_av := 256
 PAD_DATA_av := 256
 PAD_BSS_av := 256
@@ -352,7 +352,7 @@ PAD_gem := 124
 PAD_RO_gem := 256
 PAD_DATA_gem := 256
 PAD_BSS_gem := 256
-PAD_conn := 120
+PAD_conn := 232
 PAD_RO_conn := 256
 PAD_DATA_conn := 256
 PAD_BSS_conn := 256
@@ -361,6 +361,11 @@ PAD_RO_connpad := 256
 PAD_DATA_connpad := 252
 PAD_BSS_connpad := 236
 PAD_inflate := 220
+# 1.29's: the network code after cookie.c (which grew: the cookie jar) at 1.28's places
+PAD_cookie := 98
+PAD_RO_cookie := 256
+PAD_DATA_cookie := 256
+PAD_BSS_cookie := 256
 PAD_RO_inflate := 256
 PAD_DATA_inflate := 256
 PAD_BSS_inflate := 256
@@ -474,7 +479,7 @@ CONNPAD_LD := -Wl,-u,pad_libc -Wl,-u,pad_popup -Wl,-u,pad_tlsovl -Wl,-u,pad_ovl 
 		-Wl,-u,pad_browse -Wl,-u,pad_browse_ro -Wl,-u,pad_browse_bss -Wl,-u,pad_font -Wl,-u,pad_font_bss \
 		-Wl,-u,pad_doc -Wl,-u,pad_layout -Wl,-u,pad_core -Wl,-u,pad_core_bss -Wl,-u,pad_select \
 		-Wl,-u,pad_select_ro -Wl,-u,pad_select_bss -Wl,-u,pad_sheet -Wl,-u,pad_sheet_bss -Wl,-u,pad_layout_ro \
-		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate \
+		-Wl,-u,pad_layout_bss -Wl,-u,pad_libc_ro -Wl,-u,pad_net -Wl,-u,pad_onstack_str $(foreach p,nf libc2 tos main2 dialogs av clip settings gem conn connpad inflate cookie \
 		libc3 aboutbox alert dialog offdraw click settings2 doc2 layout2 pic onstack libc4 aboutbox2 alert2 win fixpen main3 charset,\
 		-Wl,-u,pad_$(p) -Wl,-u,pad_$(p)_ro -Wl,-u,pad_$(p)_data -Wl,-u,pad_$(p)_bss)
 build/tos/rt/%.o: common/atari/%.c
@@ -943,12 +948,13 @@ GEM_RT_PAD = $(subst build/tos/rt/nf.o,build/tos/rt/nf.o build/tos/rt/pad_nf.o,$
              build/tos/rt/libc.o,build/tos/rt/libc.o build/tos/rt/pad_libc.o build/tos/rt/pad_libc2.o build/tos/rt/pad_libc3.o build/tos/rt/pad_libc4.o,$(subst \
              build/tos/rt/tos.o,build/tos/rt/tos.o build/tos/rt/pad_tos.o,$(GEM_RT))))
 TOSNET_OBJ_PAD = $(subst build/tos/net/net_tos.o,build/tos/net/net_tos.o build/tos/rt/pad_net.o,$(subst \
+                 build/tos/net/cookie.o,build/tos/net/cookie.o build/tos/rt/pad_cookie.o,$(subst \
                  build/tos/net/tls_ovl.o,build/tos/net/tls_ovl.o build/tos/rt/pad_tlsovl.o,$(subst \
                  build/tos/net/ovl.o,build/tos/net/ovl.o build/tos/rt/pad_ovl.o,$(subst \
                  build/tos/net/util.o,build/tos/net/util.o build/tos/rt/pad_util.o,$(subst \
                  build/tos/net/conn.o,build/tos/net/conn.o build/tos/rt/pad_conn.o,$(subst \
                  build/tos/rt/connpad.o,build/tos/rt/connpad.o build/tos/rt/pad_connpad.o,$(subst \
-                 build/tos/net/inflate.o,build/tos/net/inflate.o build/tos/rt/pad_inflate.o,$(TOSNET_OBJ))))))))
+                 build/tos/net/inflate.o,build/tos/net/inflate.o build/tos/rt/pad_inflate.o,$(TOSNET_OBJ)))))))))
 st_RT_PAD = $(subst build/st/rt/libc.o,build/st/rt/libc.o build/st/rt/pad_libc.o,$(st_RT))
 STNET_OBJ_PAD = $(subst build/st/net/net_tos.o,build/st/net/net_tos.o build/st/rt/pad_net.o,$(STNET_OBJ))
 tos_EWB_PAD = $(subst build/tos/ewb/gfx/font.o,build/tos/ewb/gfx/font.o build/tos/rt/pad_font.o,$(subst \
