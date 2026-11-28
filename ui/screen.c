@@ -1090,6 +1090,7 @@ void scr_page(const page *p, const GRECT *area, int32_t px, int32_t py)
 #define PIECE_ROWS 64
 #define PIECES_MAX 128
 static unsigned char *piece[PIECES_MAX];
+static unsigned char piece_st[PIECES_MAX];	/* a heap store's piece from the system's ST RAM (st_alloc) */
 static short npieces, piece_rows;
 static unsigned char *store;		/* (piece[0]: kept rows there are) */
 static int store_heap;			/* from the heap (malloc): a machine with no TT RAM */
@@ -1113,11 +1114,12 @@ static void store_free(void)
 	CODE_PAD(store_rows < -30000, CP_SCREEN_STORE_FREE);
 	short k;
 	for (k = 0; k < npieces; k++) {
-		if (store_heap)
+		if (store_heap && !piece_st[k])
 			free(piece[k]);
 		else
 			st_release(piece[k]);
 		piece[k] = NULL;
+		piece_st[k] = 0;
 	}
 	npieces = 0;
 	store = NULL;
@@ -1185,6 +1187,15 @@ int scr_store(short w, short n)
 			if (piece[k] != NULL && (long) Mxalloc(-1, 0) < free_st) {
 				free(piece[k]);
 				piece[k] = NULL;
+			}
+			/* (what the heap hasn't, from the system's ST RAM while 256
+			   KB stay free there, as a whole store would: the news page's
+			   331 KB on a stock Falcon fell to 221 KB, a page scrolled 50
+			   ms to 70, for 4 KB less of the heap's free room, 1.29) */
+			if (piece[k] == NULL && (long) Mxalloc(-1, 0) >= row * PIECE_ROWS + 256L * 1024 &&
+			    (piece[k] = st_alloc(row * PIECE_ROWS)) != NULL) {
+				piece_st[k] = 1;
+				free_st = (long) Mxalloc(-1, 0);	/* (the heap's next pieces told against it) */
 			}
 			if (piece[k] == NULL)
 				break;
