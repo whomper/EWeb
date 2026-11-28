@@ -22,6 +22,7 @@
 #include "settings.h"
 #include "field.h"
 #include "http.h"
+#include "cookie.h"
 #include "tls.h"
 #include "util.h"
 #include "alert.h"
@@ -126,6 +127,10 @@ static short f_zoom, f_cache, f_gport;	/* their fields' objects (set_focus: a re
 #ifndef EW_ST
 static char s_tt[3];
 static short f_tt;
+#ifndef EW_ST
+static char s_ckb[5];
+static short f_ckb;
+#endif
 #endif
 static int set_open;	/* the dialog drawn once: its place told (for the rigs) */
 
@@ -206,6 +211,12 @@ static void page_secure(SETTINGS *s, short x, short y, void *user)
 	/* in the menu and here, as every app has it (D8) */
 	set_tick(s, x, set_y(s, 7), "Write a log", &s_on[T_LOG]);
 	set_text(s, x + 3, set_y(s, 8), "EWEB.LOG: each connection, step by step");
+#ifndef EW_ST
+	/* (decided 28 Nov 2026: the least used go first when it is full) */
+	set_text(s, x, set_y(s, 9), "Cookie jar");
+	f_ckb = set_field(s, x + 11, set_y(s, 9), s_ckb, 4, '9');
+	set_text(s, x + 16, set_y(s, 9), "KB  (64 to 2048)");
+#endif
 }
 
 #ifndef EW_ST
@@ -415,6 +426,10 @@ static int settings_check(SETTINGS *s, void *user)
 	} else if (!s_tt[0] || atol(s_tt) > 90) {
 		bad = "[1][The TT RAM left for other|programs is a number from|0 to 90 (per cent).][ OK ]";
 		field = f_tt;
+	} else if (!s_ckb[0] || atol(s_ckb) < 64 || atol(s_ckb) > 2048) {
+		bad = "[1][The cookie jar's size is a|number from 64 to 2048 (KB).][ OK ]";
+		page = 1;
+		field = f_ckb;
 #endif
 	} else if (!s_gport[0] || (v = atol(s_gport)) < 1 || v > 65535) {
 		bad = "[1][The Gateway's port is a|number from 1 to 65535.][ OK ]";
@@ -466,6 +481,7 @@ int dlg_settings(void)
 	snprintf(s_cache, sizeof s_cache, "%ld", cache_mb());
 #ifndef EW_ST
 	snprintf(s_tt, sizeof s_tt, "%d", opt.ttleave);
+	snprintf(s_ckb, sizeof s_ckb, "%d", opt.cookiekb > 0 ? opt.cookiekb : CK_JAR_KB);
 #endif
 	memset(&d, 0, sizeof d);
 	d.title = "Settings";
@@ -504,6 +520,11 @@ int dlg_settings(void)
 	if (atoi(s_tt) != opt.ttleave) {
 		opt.ttleave = (short) atoi(s_tt);	/* (in range: settings_check) */
 		mem_limits();
+	}
+	if (atoi(s_ckb) != (opt.cookiekb > 0 ? opt.cookiekb : CK_JAR_KB)) {
+		opt.cookiekb = (short) atoi(s_ckb);	/* (in range: settings_check; kept once changed) */
+		ck_max_bytes = opt.cookiekb * 1024L;
+		ck_trim();			/* (smaller: the least used go now) */
 	}
 #endif
 	opt.dsp = s_on[T_DSP];

@@ -37,9 +37,9 @@ PLACES = ("~/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.bi
 
 
 class Cookie:
-    def __init__(self, domain, name, path, value, expires, secure, httponly):
+    def __init__(self, domain, name, path, value, expires, secure, httponly, created=0):
         self.domain, self.name, self.path, self.value = domain, name, path, value
-        self.expires, self.secure, self.httponly = expires, secure, httponly
+        self.expires, self.secure, self.httponly, self.created = expires, secure, httponly, created
 
 
 def _cstr(page, at):
@@ -65,10 +65,11 @@ def parse(data):
         for off in offsets:
             c = page[off:]
             csize, _, flags, _, d_off, n_off, p_off, v_off = struct.unpack("<8i", c[:32])
-            expiry = struct.unpack("<d", c[40:48])[0]
+            expiry, created = struct.unpack("<dd", c[40:56])
             body = c[:csize]
             out.append(Cookie(_cstr(body, d_off), _cstr(body, n_off), _cstr(body, p_off), _cstr(body, v_off),
-                              int(expiry + MAC_EPOCH), bool(flags & FLAG_SECURE), bool(flags & FLAG_HTTPONLY)))
+                              int(expiry + MAC_EPOCH), bool(flags & FLAG_SECURE), bool(flags & FLAG_HTTPONLY),
+                              int(created + MAC_EPOCH)))
     return out
 
 
@@ -133,6 +134,9 @@ def main(argv=None):
         mine = [c for c in cookies if applies(c.domain, site) and c.expires > now]
         print("%s: %d cookie%s" % (site, len(mine), "" if len(mine) == 1 else "s"))
         taken += [c for c in mine if c not in taken]
+    # the oldest first: EWeb's cookie jar, when it is full, keeps those
+    # imported last (decided 28 Nov 2026)
+    taken.sort(key=lambda c: c.created)
     with open(a.out, "w", newline="\n") as f:
         f.write(netscape(taken))
     print("%d cookies written to %s. Copy it to the Atari, import it with EWeb's File > Import cookies...,"

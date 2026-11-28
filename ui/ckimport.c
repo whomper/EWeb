@@ -40,6 +40,7 @@ void cookies_import(void)
 	char *data = NULL;
 	long have;
 	int n, h, skip, sites = 0;
+	long dropped;
 	types[0].name = "Cookie files";
 	types[0].exts = "TXT";
 	types[1].name = "All files";
@@ -71,6 +72,8 @@ void cookies_import(void)
 		alert(1, "[3][EWeb can't read that file.][ OK ]");
 		return;
 	}
+	graf_mouse(BUSYBEE, 0);	/* (a file of every site Safari has: half a minute of a stock Falcon) */
+	win_status("Importing the cookies...");
 	ck_import_start();
 	n = 0;
 	have = 0;
@@ -109,14 +112,23 @@ void cookies_import(void)
 	}
 	pf_close(h);
 	free(data);
+	graf_mouse(ARROW, 0);
+	win_status("");
+	dropped = ck_import_dropped();
 	ck_import_start();	/* (its table of sites given back) */
 	log_event("cookies imported %d for %d sites", n, sites);
 	if (n == 0) {
 		alert(1, "[1][There are no cookies in that|file that EWeb can use.][ OK ]");
 		return;
 	}
-	if (alert(1, "[2][Imported %d cookies for %d %s.|Delete the file you|imported from?][Delete|Keep]", n, sites,
-		  sites == 1 ? "site" : "sites") == 1) {
+	log_event("cookies: %ld dropped by the jar's size", dropped);
+	/* (the cookie jar's size, Settings > Secure: the least used went,
+	   the newest kept: decided 28 Nov 2026) */
+	if ((dropped > 0 ?
+	     alert(1, "[2][Imported %d cookies for %d %s.|The cookie jar was full: the|%ld least used went (Settings|> Secure makes it larger).|Delete the imported file?][Delete|Keep]",
+		   n, sites, sites == 1 ? "site" : "sites", dropped) :
+	     alert(1, "[2][Imported %d cookies for %d %s.|Delete the file you|imported from?][Delete|Keep]", n, sites,
+		   sites == 1 ? "site" : "sites")) == 1) {
 		if (pf_remove(ck_path) != 0)
 			alert(1, "[3][EWeb couldn't delete the file:|is the disk locked?][ OK ]");
 		else

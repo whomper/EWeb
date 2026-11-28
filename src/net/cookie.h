@@ -18,6 +18,11 @@
 /* the cookies kept: as many as a browser keeps */
 #define CK_MAX        3000
 #define CK_PER_DOMAIN 60
+/* the store's size in bytes, its cookies' strings and records (the cookie
+   jar's size, Settings > Secure, COOKIEKB=; decided 28 Nov 2026): the least
+   used go first when it is over; 0 no limit but CK_MAX */
+extern long ck_max_bytes;
+#define CK_JAR_KB     192
 
 /* how a request came about, for SameSite and other sites' cookies */
 typedef struct {
@@ -46,6 +51,8 @@ int ck_unsaved(void);
 /* every cookie forgotten, the file too */
 void ck_clear(void);
 long ck_count(void);
+long ck_bytes(void);
+void ck_trim(void);		/* the store's size, as ck_max_bytes counts it */
 
 /* the time, UTC seconds since 1970 (from the clock and tls_tz_minutes);
    tests set their own */
@@ -67,5 +74,6 @@ int ck_import(const char *text, long len, int *sites);
 /* (a file read in pieces, whole lines each: ck_import_start first, *sites
    then the sites of all the pieces so far) */
 void ck_import_start(void);
+long ck_import_dropped(void);
 
 #endif

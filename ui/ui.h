@@ -56,6 +56,8 @@ typedef struct {
 	char folder[200];		/* FOLDER=: EWeb's folder, written by EWEB.PRG, where EWEB.ACC
 					   finds its files (the guidelines' 6.1: EWEB.INF in the boot
 					   drive's root) */
+	short cookiekb;			/* COOKIEKB=: the cookie jar's size, KB, 64 to 2048 (0: CK_JAR_KB,
+					   192; decided 28 Nov 2026; written only when changed) */
 #endif
 } EWOPT;
 #ifndef EW_ST

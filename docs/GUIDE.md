@@ -234,7 +234,9 @@ next to `EWEB.PRG` (their values encrypted with the key in `EWEB.KEY`),
 written when you quit EWeb, so that you stay logged
 in from one day to the next; the others last until you quit. A picture
 or stylesheet from another site (an advert's, a tracker's) gets no
-cookies and can't set any.
+cookies and can't set any. The cookie jar holds 192 KB (Settings >
+Secure makes it larger or smaller, `EWEB.PRG`); when it is full, the
+cookies used least go first.
 
 Options > Forget cookies forgets them all at once, the file too: you are
 logged out of every site.
@@ -885,8 +887,9 @@ dialogs do, and **Undo** (or Cancel) closes it with nothing changed.
   colours. Dialogs and alerts have the 3D look wherever the system has
   one (TOS 4, MagiC, XaAES, EmuTOS 1.4 on a Falcon).
 - **Secure:** Direct connection (TLS on this Atari), whether the DSP
-  checks certificates, the Gateway's address and port (8280), and Write
-  a log (as Options > Write a log: `EWEB.LOG` beside the program).
+  checks certificates, the Gateway's address and port (8280), Write
+  a log (as Options > Write a log: `EWEB.LOG` beside the program), and
+  the cookie jar's size (`EWEB.PRG`; 192 KB as it comes, 64 to 2048).
 - **Scripts** (`EWEB.PRG`): on which sites pages' scripts run: Off,
   Chosen sites (the sites you choose) or Every site (see
   [Pages made by scripts](#pages-made-by-scripts)).

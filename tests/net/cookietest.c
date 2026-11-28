@@ -69,6 +69,7 @@ int main(int argc, char **argv)
 			snprintf(name, sizeof name, "%s", b);
 			ck_clear();
 			ck_file(NULL, NULL);
+			ck_max_bytes = 0;
 			t_now = 1760000000LL;
 		} else if (!strcmp(a, "now")) {
 			t_now = atoll(b);
@@ -202,6 +203,14 @@ int main(int argc, char **argv)
 			}
 			free(t);
 			free(t2);
+		} else if (!strcmp(a, "jar")) {
+			ck_max_bytes = atol(b) * 1024L;	/* jar KB: the cookie jar's size, 0 none */
+		} else if (!strcmp(a, "bytes<=")) {
+			if (ck_bytes() > atol(b)) {
+				fprintf(stderr, "FAIL %s: the store is %ld bytes, more than %s\n", name, ck_bytes(), b);
+				failed++;
+				ok = 0;
+			}
 		} else if (!strcmp(a, "key")) {
 			ck_file(NULL, b);
 		} else if (!strcmp(a, "hidden")) {

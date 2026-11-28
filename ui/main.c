@@ -106,10 +106,11 @@ static int user_quit;		/* Quit, or the last window closed: the user's (4.6's --b
 EWOPT opt = { 1, 1, "", SEARCH_DEFAULT, 100, 0, 0, 0, 0, "", 1, "", HTTP_GATEWAY_PORT, 0, "", -1, 1, 1, 1,
 	       1, "", 0, 1, 1, 0, "en", 8480
 #ifndef EW_ST
-	       , 50, 0, 1, "", ""
+	       , 50, 0, 1, "", "", 0
 #endif
 };	/* (runscripts, noscripts, log, trackers, cachequit, translate,
-	   translate_to, translate_port, ttleave, sysfsel, narrow, wide, folder) */
+	   translate_to, translate_port, ttleave, sysfsel, narrow, wide, folder,
+	   cookiekb) */
 int loading;
 /* 1.24's never-run pads: each function 1.24 changed made the size that
    keeps main.o's code after it at 1.23's places modulo 256, the shipped
@@ -817,6 +818,8 @@ static void settings_load(void)
 			str_copy(opt.folder, eq, sizeof opt.folder);
 		else if (!strcmp(line, "WIDE"))
 			str_copy(opt.wide, eq, sizeof opt.wide);
+		else if (!strcmp(line, "COOKIEKB"))
+			opt.cookiekb = (short) (atoi(eq) <= 0 ? 0 : atoi(eq) < 64 ? 64 : atoi(eq) > 2048 ? 2048 : atoi(eq));
 #endif
 #ifdef AES_PROFILE
 		else if (!strcmp(line, "DRAWWHOLE"))
@@ -1075,6 +1078,11 @@ int settings_save(void)
 	}
 #endif
 #ifndef EW_ST
+	if (opt.cookiekb > 0) {
+		snprintf(v, sizeof v, "%d", opt.cookiekb);
+		put(&s, "COOKIEKB", v, "the cookie jar's size, KB (Settings > Secure; 64 to 2048, 192 as it "
+		    "comes): the least used cookies go first when it is full");
+	}
 	snprintf(v, sizeof v, "%d", opt.ttleave);
 	put(&s, "TTLEAVE", v, "per cent of the TT RAM left for other programs (Settings > General; 0 to 90): "
 	    "EWeb keeps pages for Back and pictures in the rest");
@@ -3898,6 +3906,9 @@ static int app_run(void)
 		path_join(key, sizeof key, opt.workdir, "eweb.key");
 		ck_file(ck, key);
 		secret_warn = key_warn;
+#ifndef EW_ST
+		ck_max_bytes = (opt.cookiekb > 0 ? opt.cookiekb : CK_JAR_KB) * 1024L;
+#endif
 	}
 	gap_tag("start: cache");
 	cache_open();

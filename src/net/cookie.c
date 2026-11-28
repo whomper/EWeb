@@ -29,11 +29,16 @@ struct ck {
 	unsigned long seq;		/* the order they were made in: created is in seconds */
 	unsigned char host_only, secure, http_only, same;
 	unsigned char sealed;		/* value still encrypted as COOKIES.TXT has it (plain() opens it) */
+	long size;			/* its bytes in the store (ck_size), counted in bytes */
+	unsigned long dh;		/* its domain's hash (dhash): told apart before strcmp */
 };
 
 static ck *all;
 static unsigned long seq;
 static long count;
+static long bytes;			/* the store's cookies' bytes (ck_max_bytes) */
+static long trimmed;			/* cookies the limits dropped since ck_import_start */
+long ck_max_bytes;
 static int changed;			/* lasting cookies changed since the file was read */
 static int loaded;			/* the file was read */
 static char file[256];
@@ -299,8 +304,38 @@ static void drop(ck **pp)
 	*pp = c->next;
 	if (c->expiry)
 		changed = 1;
+	bytes -= c->size;
 	ck_free(c);
 	count--;
+}
+
+/* what a cookie takes in the store: its strings, a sealed value as its
+   bytes, and its record */
+static long ck_size(const ck *c)
+{
+	long v = c->sealed ? 2 + ((long) (unsigned char) c->value[0] << 8 | (unsigned char) c->value[1]) :
+			     (long) strlen(c->value);
+	return (long) sizeof *c + (long) (strlen(c->name) + strlen(c->domain) + strlen(c->path)) + v + 4;
+}
+
+/* a domain's hash: a store's scan compares it before the names (an
+   import of 4,000 cookies into a full jar was half strcmp, 294 M 68030
+   instructions of 574 M) */
+static unsigned long dhash(const char *s)
+{
+	unsigned long h = 5381;
+	while (*s)
+		h = h * 33 + (unsigned char) *s++;
+	return h;
+}
+
+/* c counted in the store, just linked in */
+static void counted(ck *c)
+{
+	c->dh = dhash(c->domain);
+	c->size = ck_size(c);
+	bytes += c->size;
+	count++;
 }
 
 static char *dup(const char *s, size_t n)
@@ -382,6 +417,9 @@ static const char *plain(ck *c)
 	free(c->value);
 	c->value = v;
 	c->sealed = 0;
+	bytes -= c->size;
+	c->size = ck_size(c);
+	bytes += c->size;
 	return v;
 }
 
@@ -400,29 +438,75 @@ static void ensure(void)
 }
 
 /* the expired go; then, past the limits, the least recently used */
+/* the least used first, of those used alike the one set first */
+static int by_use(const void *a, const void *b)
+{
+	const ck *x = *(ck *const *) a, *y = *(ck *const *) b;
+	return x->used != y->used ? (x->used < y->used ? -1 : 1) : x->seq < y->seq ? -1 : x->seq > y->seq;
+}
+
+static int defer_trim;			/* an import: the store held to its limits after each piece */
+
+/* the store held to its limits: a domain's CK_PER_DOMAIN, or (domain NULL)
+   the expired dropped and then the least used until CK_MAX and
+   ck_max_bytes hold, those found in one sort (a drop at a time, each a
+   scan of the store, was 123 M 68030 instructions of an import's 278 M) */
 static void trim(const char *domain)
 {
 	long long now = ck_now();
-	ck **pp, **old;
-	long n;
+	ck **pp, **old, **list;
+	long n, i;
+	if (domain != NULL) {
+		unsigned long h = dhash(domain);
+		for (;;) {
+			n = 0;
+			old = NULL;
+			for (pp = &all; *pp != NULL; pp = &(*pp)->next)
+				if ((*pp)->dh == h && strcmp((*pp)->domain, domain) == 0 &&
+				    !((*pp)->expiry && (*pp)->expiry <= now)) {
+					n++;
+					/* (<=: of those used alike, the one set first, the
+					   list's newest first: an import's are all used alike) */
+					if (old == NULL || (*pp)->used <= (*old)->used)
+						old = pp;
+				}
+			if (old == NULL || n <= CK_PER_DOMAIN)
+				return;
+			drop(old);
+			trimmed++;
+		}
+	}
 	for (pp = &all; *pp != NULL;)
 		if ((*pp)->expiry && (*pp)->expiry <= now)
 			drop(pp);
 		else
 			pp = &(*pp)->next;
-	for (;;) {
-		n = 0;
-		old = NULL;
-		for (pp = &all; *pp != NULL; pp = &(*pp)->next)
-			if (domain == NULL || strcmp((*pp)->domain, domain) == 0) {
-				n++;
-				if (old == NULL || (*pp)->used < (*old)->used)
-					old = pp;
-			}
-		if (old == NULL || n <= (domain ? CK_PER_DOMAIN : CK_MAX))
-			return;
-		drop(old);
+	if (count <= CK_MAX && (ck_max_bytes <= 0 || bytes <= ck_max_bytes))
+		return;
+	list = malloc((size_t) count * sizeof *list);
+	if (list == NULL)
+		return;
+	n = 0;
+	for (pp = &all; *pp != NULL; pp = &(*pp)->next)
+		list[n++] = *pp;
+	qsort(list, (size_t) n, sizeof *list, by_use);
+	{
+		long left = count, sz = bytes;
+		for (i = 0; i < n && (left > CK_MAX || (ck_max_bytes > 0 && sz > ck_max_bytes)); i++) {
+			sz -= list[i]->size;
+			left--;
+			list[i]->size = -1 - list[i]->size;	/* (marked to go: its size kept, negated) */
+		}
 	}
+	for (pp = &all; *pp != NULL;)
+		if ((*pp)->size < 0) {
+			(*pp)->size = -1 - (*pp)->size;
+			drop(pp);
+			trimmed++;
+		} else {
+			pp = &(*pp)->next;
+		}
+	free(list);
 }
 
 static int is_ctl(unsigned char c)
@@ -615,6 +699,7 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 		ck_free(c);
 		return;
 	}
+	c->dh = dhash(c->domain);
 	c->host_only = (unsigned char) !has_domain;
 	c->secure = (unsigned char) secure;
 	c->http_only = (unsigned char) http_only;
@@ -632,7 +717,8 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 	/* the one it replaces keeps its age */
 	for (pp = &all; *pp != NULL; pp = &(*pp)->next) {
 		ck *o = *pp;
-		if (strcmp(o->name, c->name) == 0 && strcmp(o->domain, c->domain) == 0 && o->host_only == c->host_only &&
+		if (o->dh == c->dh && strcmp(o->name, c->name) == 0 && strcmp(o->domain, c->domain) == 0 &&
+		    o->host_only == c->host_only &&
 		    strcmp(o->path, c->path) == 0) {
 			if (x != NULL && x->script && o->http_only) {
 				ck_free(c);	/* nor replace one */
@@ -670,11 +756,11 @@ void ck_set(const URL *u, const char *line, const CKCTX *x)
 	}
 	c->next = all;
 	all = c;
-	count++;
+	counted(c);
 	if (c->expiry)
 		changed = 1;
 	trim(c->domain);
-	if (count > CK_MAX)
+	if (!defer_trim && (count > CK_MAX || (ck_max_bytes > 0 && bytes > ck_max_bytes)))
 		trim(NULL);
 }
 
@@ -887,7 +973,7 @@ void ck_load(const char *s, long len)
 			} else {
 				*tail = c;
 				tail = &c->next;
-				count++;
+				counted(c);
 			}
 		}
 		p = nl ? nl + 1 : e;
@@ -936,10 +1022,16 @@ void ck_clear(void)
 		ck_free(c);
 	}
 	count = 0;
+	bytes = 0;
 	changed = 0;
 	loaded = 1;
 	if (file[0])
 		slot_remove(file);
+}
+
+long ck_bytes(void)
+{
+	return bytes;
 }
 
 long ck_count(void)
@@ -965,6 +1057,7 @@ static int imp_sites;
 
 void ck_import_start(void)
 {
+	trimmed = 0;
 	free(imp_site);
 	imp_site = NULL;
 	imp_sites = 0;
@@ -997,6 +1090,7 @@ int ck_import(const char *text, long len, int *sites)
 	memset(&x, 0, sizeof x);
 	x.top = 1;
 	x.safe = 1;
+	defer_trim = 1;
 	while (p < end) {
 		const char *eol = memchr(p, '\n', (size_t) (end - p));
 		const char *f[7], *q;
@@ -1048,7 +1142,24 @@ int ck_import(const char *text, long len, int *sites)
 		}
 		p = eol ? eol + 1 : end;
 	}
+	defer_trim = 0;
+	trim(NULL);		/* (the piece's over the limits: the least used go, in one sort) */
 	if (sites != NULL)
 		*sites = imp_sites;
 	return taken;
+}
+
+/* the store held to ck_max_bytes again, after it was made smaller (the
+   least used go now) */
+void ck_trim(void)
+{
+	if (count > 0)
+		trim(NULL);
+}
+
+/* the cookies the limits dropped since ck_import_start: an import's own
+   or older ones, to keep the store within CK_MAX and ck_max_bytes */
+long ck_import_dropped(void)
+{
+	return trimmed;
 }

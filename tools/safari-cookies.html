@@ -221,7 +221,9 @@ $("unsel").onclick = () => { shown().forEach(o => ticked.delete(o.name)); draw()
 $("go").onclick = () => {
   const lines = ["# Netscape HTTP Cookie File", "# Safari's cookies for EWeb: import with File > Import cookies..., then delete this file", ""];
   let n = 0;
-  for (const c of cookies) {
+  /* the oldest first: EWeb's cookie jar, when it is full, keeps those
+     imported last */
+  for (const c of [...cookies].sort((a, b) => a.created - b.created)) {
     if (!ticked.has(site(c.domain))) continue;
     const dom = c.domain.toLowerCase();
     lines.push([(c.httponly ? "#HttpOnly_" : "") + dom, dom.startsWith(".") ? "TRUE" : "FALSE", c.path || "/",

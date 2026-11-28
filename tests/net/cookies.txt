@@ -312,3 +312,46 @@ get https://www.example.com/ -
 case imported: a file of many sites read in pieces, each site counted (the count stopped at 64 before)
 importmany 700
 count 700
+
+case the cookie jar's size: over it, the least used go first, the newest kept (decided 28 Nov 2026)
+jar 1
+now 1760000000
+set https://s0.example.com/ c0=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000001
+set https://s1.example.com/ c1=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000002
+set https://s2.example.com/ c2=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000003
+set https://s3.example.com/ c3=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000004
+set https://s4.example.com/ c4=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000005
+set https://s5.example.com/ c5=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000006
+set https://s6.example.com/ c6=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000007
+set https://s7.example.com/ c7=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000008
+set https://s8.example.com/ c8=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000009
+set https://s9.example.com/ c9=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000010
+set https://s10.example.com/ c10=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000011
+set https://s11.example.com/ c11=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000012
+set https://s12.example.com/ c12=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000013
+set https://s13.example.com/ c13=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+now 1760000014
+set https://s14.example.com/ c14=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; Max-Age=3600
+bytes<= 1024
+get https://s14.example.com/ c14=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+get https://s0.example.com/ -
+
+case the cookie jar's size: an import over it keeps the cookies imported last
+jar 1
+import 15 1 .i0.example.org\tTRUE\t/\tFALSE\t1800000000\tk0\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i1.example.org\tTRUE\t/\tFALSE\t1800000000\tk1\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i2.example.org\tTRUE\t/\tFALSE\t1800000000\tk2\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i3.example.org\tTRUE\t/\tFALSE\t1800000000\tk3\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i4.example.org\tTRUE\t/\tFALSE\t1800000000\tk4\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i5.example.org\tTRUE\t/\tFALSE\t1800000000\tk5\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i6.example.org\tTRUE\t/\tFALSE\t1800000000\tk6\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i7.example.org\tTRUE\t/\tFALSE\t1800000000\tk7\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i8.example.org\tTRUE\t/\tFALSE\t1800000000\tk8\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i9.example.org\tTRUE\t/\tFALSE\t1800000000\tk9\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i10.example.org\tTRUE\t/\tFALSE\t1800000000\tk10\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i11.example.org\tTRUE\t/\tFALSE\t1800000000\tk11\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i12.example.org\tTRUE\t/\tFALSE\t1800000000\tk12\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i13.example.org\tTRUE\t/\tFALSE\t1800000000\tk13\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n.i14.example.org\tTRUE\t/\tFALSE\t1800000000\tk14\txxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n
+bytes<= 1024
+get https://i14.example.org/ k14=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+get https://i0.example.org/ -
